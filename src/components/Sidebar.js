@@ -6,32 +6,27 @@
 const Sidebar = {
 
   NAV_ITEMS: [
-    // Sektion: Huvud
     { section: 'Huvudmeny' },
-    { id: 'pg-dash',     icon: '⊞',  label: 'Dashboard',     page: 'pg-dash' },
-    { id: 'pg-ao',       icon: '📋',  label: 'Arbetsorder',   page: 'pg-ao',   badgeKey: 'aoNew' },
-    { id: 'pg-crm',      icon: '👥',  label: 'Kunder',        page: 'pg-crm' },
-    { id: 'pg-offer',    icon: '📄',  label: 'Offerter',      page: 'pg-offer' },
-    { id: 'pg-invoices', icon: '💰',  label: 'Fakturering',   page: 'pg-invoices' },
-    // Sektion: Fastigheter
+    { id: 'pg-dash',       icon: 'dashboard',        label: 'Dashboard' },
+    { id: 'pg-ao',         icon: 'clipboard-list',   label: 'Arbetsorder',  badgeKey: 'aoNew' },
+    { id: 'pg-crm',        icon: 'users',            label: 'Kunder' },
+    { id: 'pg-offer',      icon: 'file-text',        label: 'Offerter' },
+    { id: 'pg-invoices',   icon: 'receipt',          label: 'Fakturering' },
     { section: 'Fastigheter' },
-    { id: 'pg-objects',  icon: '🏢',  label: 'Fastigheter',   page: 'pg-objects' },
-    { id: 'pg-contracts',icon: '📝',  label: 'Kontrakt',      page: 'pg-contracts' },
-    { id: 'pg-rondering',icon: '🔍',  label: 'Rondering',     page: 'pg-rondering' },
-    // Sektion: Tid & Administration
+    { id: 'pg-objects',    icon: 'building-2',       label: 'Fastigheter' },
+    { id: 'pg-contracts',  icon: 'file-check',       label: 'Kontrakt' },
+    { id: 'pg-rondering',  icon: 'clipboard-check',  label: 'Rondering' },
     { section: 'Tid & Admin' },
-    { id: 'pg-tid',      icon: '⏱',  label: 'Tid & stämpla', page: 'pg-tid' },
-    { id: 'pg-calendar', icon: '📅',  label: 'Kalender',      page: 'pg-calendar' },
-    { id: 'pg-reports',  icon: '📊',  label: 'Rapporter',     page: 'pg-reports' },
-    // Sektion: Register
+    { id: 'pg-tid',        icon: 'clock',            label: 'Tid & stämpla' },
+    { id: 'pg-calendar',   icon: 'calendar',         label: 'Kalender' },
+    { id: 'pg-reports',    icon: 'bar-chart-2',      label: 'Rapporter' },
     { section: 'Register' },
-    { id: 'pg-articles',    icon: '📦', label: 'Artiklar',      page: 'pg-articles' },
-    { id: 'pg-pricegroups', icon: '💲', label: 'Prisgrupper',   page: 'pg-pricegroups' },
-    { id: 'pg-payroll',     icon: '💼', label: 'Löneunderlag',  page: 'pg-payroll' },
-    // Sektion: System
+    { id: 'pg-articles',   icon: 'package',          label: 'Artiklar' },
+    { id: 'pg-pricegroups',icon: 'dollar-sign',      label: 'Prisgrupper' },
+    { id: 'pg-payroll',    icon: 'wallet',           label: 'Löneunderlag' },
     { section: 'System' },
-    { id: 'pg-staff',    icon: '👤',  label: 'Personal',      page: 'pg-staff' },
-    { id: 'pg-admin',    icon: '⚙️',  label: 'Admin',         page: 'pg-admin' }
+    { id: 'pg-staff',      icon: 'user-cog',         label: 'Personal' },
+    { id: 'pg-admin',      icon: 'settings',         label: 'Admin' }
   ],
 
   render() {
@@ -42,13 +37,13 @@ const Sidebar = {
     const initials = user
       ? (user.firstName || 'A').charAt(0) + (user.lastName || '').charAt(0)
       : 'VF';
-    const userName   = user ? `${user.firstName} ${user.lastName}`.trim() : 'VIFT';
-    const userRole   = user ? user.role : '';
+    const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'VIFT';
+    const userRole = user ? cap(user.role) : '';
 
     let html = `
       <div class="nav-brand">
         <div class="nav-brand-logo">
-          <span style="font-size:18px;font-weight:900;color:var(--navy);">VIFT</span>
+          <span style="font-size:20px;font-weight:900;color:var(--navy);letter-spacing:-0.5px;">VIFT</span>
         </div>
         <div class="nav-brand-name">Fastighetsservice & Förvaltning</div>
       </div>`;
@@ -63,8 +58,8 @@ const Sidebar = {
       }
       const badge = this._getBadge(item.badgeKey);
       html += `
-        <button class="ni" id="nav-${item.id}" onclick="Router.showPage('${item.page}')">
-          <span class="ico">${item.icon}</span>
+        <button class="ni" id="nav-${item.id}" onclick="Router.showPage('${item.id}')">
+          <span class="ico">${ic(item.icon)}</span>
           <span class="lbl">${item.label}</span>
           ${badge ? `<span class="nbdg">${badge}</span>` : ''}
         </button>`;
@@ -77,10 +72,11 @@ const Sidebar = {
       <div class="nav-user">
         <div class="nav-user-row" onclick="Sidebar.userMenu()">
           <div class="nav-user-avatar">${initials}</div>
-          <div>
+          <div style="flex:1;min-width:0;">
             <div class="nav-user-name">${userName}</div>
-            ${userRole ? `<div class="nav-user-role">${cap(userRole)}</div>` : ''}
+            ${userRole ? `<div class="nav-user-role">${userRole}</div>` : ''}
           </div>
+          <span style="color:rgba(255,255,255,.35);">${ic('log-out', 14)}</span>
         </div>
       </div>`;
 
@@ -106,30 +102,34 @@ const Sidebar = {
   },
 
   toggle() {
-    const nav = document.getElementById('bottom-nav');
-    if (nav.classList.contains('open')) {
-      this.close();
-    } else {
-      this.open();
-    }
+    document.getElementById('bottom-nav').classList.contains('open')
+      ? this.close() : this.open();
   },
 
   userMenu() {
     Modal.open({
       title: state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}` : 'Användare',
-      body: `<p style="font-size:13px;color:var(--mt);margin-bottom:12px;">Roll: ${state.currentUser ? cap(state.currentUser.role) : '—'}</p>`,
+      body: `<p style="font-size:13px;color:var(--mt);margin-bottom:4px;">Roll: ${state.currentUser ? cap(state.currentUser.role) : '—'}</p>
+             <p style="font-size:13px;color:var(--mt);">Inloggad: ${state.currentUser ? state.currentUser.username : '—'}</p>`,
       buttons: [
         { label: 'Logga ut', cls: 'btn bd bfull', onClick: () => { Modal.close(); Auth.logout(); } },
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        { label: 'Avbryt',   cls: 'btn bs',        onClick: () => Modal.close() }
       ]
     });
+  },
+
+  updateBadges() {
+    const badge = this._getBadge('aoNew');
+    const el = document.querySelector('#nav-pg-ao .nbdg');
+    if (badge && el) { el.textContent = badge; el.style.display = ''; }
+    else if (el)     { el.style.display = 'none'; }
   },
 
   _getBadge(key) {
     if (!key) return null;
     if (key === 'aoNew') {
-      const count = (state.workOrders || []).filter(o => o.status === 'nytt').length;
-      return count > 0 ? count : null;
+      const n = (state.workOrders || []).filter(o => o.status === 'nytt').length;
+      return n > 0 ? n : null;
     }
     return null;
   }

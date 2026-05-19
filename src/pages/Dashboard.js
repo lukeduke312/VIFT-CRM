@@ -30,7 +30,7 @@ const Dashboard = {
       <div class="dash-full">
         <div class="card">
           <div class="card-header">
-            <h3>⚡ Kräver åtgärd</h3>
+            <h3>${ic('alert-triangle',14)} Kräver åtgärd</h3>
             <span class="bdg bdg-red">${todos.length}</span>
           </div>
           <div class="card-body" style="padding:8px 10px;">
@@ -47,12 +47,12 @@ const Dashboard = {
           <div class="card-header"><h3>Snabbknappar</h3></div>
           <div class="card-body">
             <div class="quick-grid">
-              ${this._quickBtn('📋', 'Ny order',   "Dashboard.newWorkOrder()")}
-              ${this._quickBtn('📄', 'Ny offert',  "Router.showPage('pg-offer')")}
-              ${this._quickBtn('👥', 'Ny kund',    "Dashboard.newCustomer()")}
-              ${this._quickBtn('🔍', 'Rondering',  "Router.showPage('pg-rondering')")}
-              ${this._quickBtn('⏱', 'Stämpla',    "Router.showPage('pg-tid')")}
-              ${this._quickBtn('💰', 'Fakturering',"Router.showPage('pg-invoices')")}
+              ${this._quickBtn('clipboard-list', 'Ny order',   "WorkOrdersPage.openCreate()")}
+              ${this._quickBtn('file-text',      'Ny offert',  "Router.showPage('pg-offer')")}
+              ${this._quickBtn('users',          'Ny kund',    "CustomersPage.openCreate()")}
+              ${this._quickBtn('clipboard-check','Rondering',  "Router.showPage('pg-rondering')")}
+              ${this._quickBtn('clock',          'Stämpla',    "Router.showPage('pg-tid')")}
+              ${this._quickBtn('receipt',        'Fakturering',"Router.showPage('pg-invoices')")}
             </div>
           </div>
         </div>
@@ -61,7 +61,7 @@ const Dashboard = {
       <!-- Idag -->
       <div>
         <div class="card">
-          <div class="card-header"><h3>📅 Idag</h3></div>
+          <div class="card-header"><h3>${ic('calendar',14)} Idag</h3></div>
           <div class="card-body" style="padding:6px 14px;">
             ${this._renderToday()}
           </div>
@@ -72,12 +72,12 @@ const Dashboard = {
       <div>
         <div class="card">
           <div class="card-header">
-            <h3>🎯 Säljchanser</h3>
+            <h3>${ic('target',14)} Säljchanser</h3>
             ${active.length > 0 ? `<span class="bdg bdg-orange">${active.length}</span>` : ''}
           </div>
           <div class="card-body" style="padding:8px 10px;">
             ${active.length === 0
-              ? '<div class="empty" style="padding:16px;"><span class="empty-ico">🎯</span><p>Inga aktiva säljchanser</p></div>'
+              ? `<div class="empty" style="padding:16px;">${ic('target',28)}<p>Inga aktiva säljchanser</p></div>`
               : active.slice(0, 4).map(o => SalesService.renderDashCard(o)).join('')
             }
             ${active.length > 4
@@ -90,7 +90,7 @@ const Dashboard = {
       <!-- Offerter väntar svar -->
       <div>
         <div class="card">
-          <div class="card-header"><h3>📄 Offerter väntar svar</h3></div>
+          <div class="card-header"><h3>${ic('file-text',14)} Offerter väntar svar</h3></div>
           <div class="card-body" style="padding:6px 14px;">
             ${this._renderPendingOffers()}
           </div>
@@ -100,7 +100,7 @@ const Dashboard = {
       <!-- Arbetspool -->
       <div>
         <div class="card">
-          <div class="card-header"><h3>🗂 Arbetspool</h3></div>
+          <div class="card-header"><h3>${ic('clipboard-list',14)} Arbetspool</h3></div>
           <div class="card-body" style="padding:6px 14px;">
             ${this._renderPool()}
           </div>
@@ -110,7 +110,7 @@ const Dashboard = {
       <!-- Senaste aktivitet -->
       <div>
         <div class="card">
-          <div class="card-header"><h3>🕐 Senaste aktivitet</h3></div>
+          <div class="card-header"><h3>${ic('activity',14)} Senaste aktivitet</h3></div>
           <div class="card-body" style="padding:8px 10px;">
             ${ActivityService.renderList(acts)}
           </div>
@@ -143,7 +143,7 @@ const Dashboard = {
     const akut = aos.filter(a => a.priority === 'akut' && !['klar','fakturerad','avbruten'].includes(a.status));
     if (akut.length > 0) {
       todos.push({
-        icon: '🚨', iconCls: 'red',
+        icon: 'alert-triangle', iconCls: 'red',
         title: 'Akuta ordrar kräver åtgärd',
         sub: akut.map(a => a.title).join(', '),
         badge: akut.length, badgeCls: '',
@@ -155,7 +155,7 @@ const Dashboard = {
     const readyBill = aos.filter(a => a.status === 'klar' && !a.invoiceId);
     if (readyBill.length > 0) {
       todos.push({
-        icon: '💰', iconCls: 'green',
+        icon: 'receipt', iconCls: 'green',
         title: 'Ordrar redo för fakturering',
         sub: `${readyBill.length} klar${readyBill.length === 1 ? '' : 'a'} order${readyBill.length === 1 ? '' : 'ar'} saknar fakturaunderlag`,
         badge: readyBill.length, badgeCls: 'blue',
@@ -169,7 +169,7 @@ const Dashboard = {
     );
     if (staleOffers.length > 0) {
       todos.push({
-        icon: '📄', iconCls: 'orange',
+        icon: 'file-text', iconCls: 'orange',
         title: 'Offert utan svar i 7+ dagar',
         sub: staleOffers.map(o => {
           const cu = getCu(o.customerId);
@@ -184,11 +184,11 @@ const Dashboard = {
     const salesCount = SalesService.getActive().length;
     if (salesCount > 0) {
       todos.push({
-        icon: '🎯', iconCls: 'purple',
+        icon: 'target', iconCls: 'purple',
         title: 'Säljchanser att agera på',
         sub: `${salesCount} aktiv${salesCount === 1 ? '' : 'a'} säljchans${salesCount === 1 ? '' : 'er'}`,
         badge: salesCount, badgeCls: 'purple',
-        onClick: "document.getElementById('dash-sales').scrollIntoView({behavior:'smooth'})"
+        onClick: "Router.showPage('pg-offer')"
       });
     }
 
@@ -198,7 +198,7 @@ const Dashboard = {
     );
     if (late.length > 0) {
       todos.push({
-        icon: '⚠️', iconCls: 'orange',
+        icon: 'alert-triangle', iconCls: 'orange',
         title: 'Försenade arbetsorder',
         sub: late.map(a => a.title).slice(0, 2).join(', ') + (late.length > 2 ? ` +${late.length - 2} till` : ''),
         badge: late.length, badgeCls: 'orange',
@@ -220,7 +220,7 @@ const Dashboard = {
   _renderTodo(t) {
     return `
       <div class="todo-item" onclick="${t.onClick}">
-        <div class="todo-icon ${t.iconCls}">${t.icon}</div>
+        <div class="todo-icon ${t.iconCls}">${ic(t.icon, 16)}</div>
         <div class="todo-text">
           <div class="todo-title">${t.title}</div>
           ${t.sub ? `<div class="todo-sub">${t.sub}</div>` : ''}
@@ -229,10 +229,10 @@ const Dashboard = {
       </div>`;
   },
 
-  _quickBtn(icon, label, onclick) {
+  _quickBtn(iconName, label, onclick) {
     return `
       <button class="quick-btn" onclick="${onclick}">
-        <div class="quick-icon">${icon}</div>
+        <div class="quick-icon">${ic(iconName, 22)}</div>
         <span class="quick-label">${label}</span>
       </button>`;
   },
@@ -244,7 +244,7 @@ const Dashboard = {
     );
 
     if (todayAOs.length === 0) {
-      return '<div class="empty" style="padding:12px 0;"><span class="empty-ico">📅</span><p>Inga planerade ordrar idag</p></div>';
+      return `<div class="empty" style="padding:12px 0;">${ic('calendar',28)}<p>Inga planerade ordrar idag</p></div>`;
     }
 
     return todayAOs.map(ao => {
@@ -267,7 +267,7 @@ const Dashboard = {
   _renderPendingOffers() {
     const pending = (state.offers || []).filter(o => ['skickad','väntar'].includes(o.status));
     if (pending.length === 0) {
-      return '<div class="empty" style="padding:12px 0;"><span class="empty-ico">📄</span><p>Inga offerter väntar svar</p></div>';
+      return `<div class="empty" style="padding:12px 0;">${ic('file-text',28)}<p>Inga offerter väntar svar</p></div>`;
     }
     return pending.slice(0, 4).map(o => {
       const cu = getCu(o.customerId);
@@ -288,7 +288,7 @@ const Dashboard = {
   _renderPool() {
     const pool = (state.workOrders || []).filter(a => a.status === 'pool');
     if (pool.length === 0) {
-      return '<div class="empty" style="padding:12px 0;"><span class="empty-ico">🗂</span><p>Arbetspoolen är tom</p></div>';
+      return `<div class="empty" style="padding:12px 0;">${ic('clipboard-list',28)}<p>Arbetspoolen är tom</p></div>`;
     }
     return pool.slice(0, 4).map(ao => {
       const cu = getCu(ao.customerId);
@@ -313,14 +313,12 @@ const Dashboard = {
   },
 
   newWorkOrder() {
-    // Placeholder – fylls ut i Fas 2
-    showToast('Ny arbetsorder – kommer i nästa fas');
     Router.showPage('pg-ao');
+    setTimeout(() => WorkOrdersPage.openCreate(), 50);
   },
 
   newCustomer() {
-    // Placeholder – fylls ut i Fas 2
-    showToast('Ny kund – kommer i nästa fas');
     Router.showPage('pg-crm');
+    setTimeout(() => CustomersPage.openCreate(), 50);
   }
 };
