@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>VIFT System</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- CSS — ett system, inga konflikter -->
+<link rel="stylesheet" href="src/styles/tokens.css">
+<link rel="stylesheet" href="src/styles/reset.css">
+<link rel="stylesheet" href="src/styles/layout.css">
+<link rel="stylesheet" href="src/styles/components.css">
+<link rel="stylesheet" href="src/styles/forms.css">
+<link rel="stylesheet" href="src/styles/dashboard.css">
+<link rel="stylesheet" href="src/styles/responsive.css">
+</head>
+<body>
+
+<!-- ── Login-skärm ──────────────────────── -->
+<div id="login-screen" style="
+  position:fixed;inset:0;z-index:9000;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  background:linear-gradient(160deg,var(--navy) 0%,var(--blue) 65%,#1E6BB8 100%);
+  padding:24px;padding-bottom:env(safe-area-inset-bottom);">
+
+  <div style="text-align:center;margin-bottom:28px;">
+    <div style="background:#fff;border-radius:14px;padding:12px 24px;display:inline-block;margin-bottom:16px;">
+      <span style="font-size:22px;font-weight:900;color:var(--navy);letter-spacing:-0.5px;">VIFT</span>
+    </div>
+    <div style="color:rgba(255,255,255,.8);font-size:13px;font-weight:600;">Fastighetsservice & Förvaltning</div>
+  </div>
+
+  <div style="width:100%;max-width:340px;background:#fff;border-radius:20px;padding:24px 20px;">
+    <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:20px;text-align:center;">Logga in</h2>
+
+    <div class="fg">
+      <label>Användarnamn</label>
+      <input type="text" id="login-user" placeholder="admin" autocomplete="username"
+        onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
+    </div>
+    <div class="fg" style="margin-top:8px;">
+      <label>Lösenord</label>
+      <input type="password" id="login-pass" placeholder="••••"
+        autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') App.login()">
+    </div>
+
+    <div id="login-err" style="color:var(--rd);font-size:12px;font-weight:700;text-align:center;margin:6px 0;display:none;"></div>
+
+    <button class="btn bp bfull" style="margin-top:12px;padding:12px;" onclick="App.login()">
+      Logga in
+    </button>
+
+    <p style="font-size:11px;color:var(--mt);text-align:center;margin-top:12px;">
+      Demo: <strong>admin</strong> / <strong>1234</strong>
+    </p>
+  </div>
+</div>
+
+<!-- ── Applikation ──────────────────────── -->
+<div id="app" style="display:none;">
+
+  <!-- Sidebar-overlay (mobil) -->
+  <div id="sidebar-overlay" onclick="Sidebar.close()"></div>
+
+  <!-- Sidebar / #bottom-nav (enda nav-systemet) -->
+  <nav id="bottom-nav"></nav>
+
+  <!-- Page area -->
+  <div id="page-area">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <button class="topbar-hamburger" onclick="Sidebar.toggle()" aria-label="Meny">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title">
+        <h1 id="topbar-title">Dashboard</h1>
+        <p id="topbar-sub">Översikt & åtgärder</p>
+      </div>
+    </div>
+
+    <!-- Scrollbart innehåll -->
+    <div id="content-scroll">
+
+      <!-- Dashboard -->
+      <div class="page active" id="pg-dash">
+        <div class="con dash-grid" id="dash-content"></div>
+      </div>
+
+      <!-- Arbetsorder -->
+      <div class="page" id="pg-ao">
+        <div class="con">
+          <div class="swrap">
+            <span class="sico">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input type="search" placeholder="Sök order, kund, adress…">
+          </div>
+          <div id="pg-ao-content"></div>
+        </div>
+      </div>
+
+      <!-- AO-detalj -->
+      <div class="page" id="pg-ao-detail">
+        <div class="con" id="pg-ao-detail-content"></div>
+      </div>
+
+      <!-- Kunder -->
+      <div class="page" id="pg-crm">
+        <div class="con">
+          <div class="swrap">
+            <span class="sico">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input type="search" placeholder="Sök kund, org.nr, telefon…">
+          </div>
+          <div id="pg-crm-content"></div>
+        </div>
+      </div>
+
+      <!-- Kundkort -->
+      <div class="page" id="pg-crm-detail">
+        <div class="con">
+          <button class="btn bs bsm" onclick="Router.showPage('pg-crm')" style="align-self:flex-start;margin-bottom:4px;">← Tillbaka</button>
+          <div id="pg-crm-detail-content"></div>
+        </div>
+      </div>
+
+      <!-- Fastigheter -->
+      <div class="page" id="pg-objects">
+        <div class="con">
+          <div class="swrap">
+            <span class="sico">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input type="search" placeholder="Sök fastighet, adress…">
+          </div>
+          <div id="pg-objects-content"></div>
+        </div>
+      </div>
+
+      <!-- Fastighetskort -->
+      <div class="page" id="pg-obj-detail">
+        <div class="con">
+          <button class="btn bs bsm" onclick="Router.showPage('pg-objects')" style="align-self:flex-start;margin-bottom:4px;">← Tillbaka</button>
+          <div id="pg-obj-detail-content">
+            <div class="ibox">Fullständigt fastighetskort byggs i Fas 4.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Offerter -->
+      <div class="page" id="pg-offer">
+        <div class="con" id="pg-offer-content"></div>
+      </div>
+
+      <!-- Offert-detalj -->
+      <div class="page" id="pg-offer-detail">
+        <div class="con">
+          <button class="btn bs bsm" onclick="Router.showPage('pg-offer')" style="align-self:flex-start;margin-bottom:4px;">← Tillbaka</button>
+          <div id="pg-offer-detail-content"></div>
+        </div>
+      </div>
+
+      <!-- Fakturering -->
+      <div class="page" id="pg-invoices">
+        <div class="con" id="pg-invoices-content"></div>
+      </div>
+
+      <!-- Fakturaunderlag detalj -->
+      <div class="page" id="pg-inv-detail">
+        <div class="con">
+          <button class="btn bs bsm" onclick="Router.showPage('pg-invoices')" style="align-self:flex-start;margin-bottom:4px;">← Tillbaka</button>
+          <div id="pg-inv-detail-content">
+            <div class="ibox">Fakturaunderlag byggs i Fas 2.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tid & stämpla -->
+      <div class="page" id="pg-tid">
+        <div class="con" id="pg-tid-content"></div>
+      </div>
+
+      <!-- Kalender -->
+      <div class="page" id="pg-calendar">
+        <div class="con" id="pg-calendar-content">
+          <div class="ibox">Kalendervy byggs i Fas 4.</div>
+        </div>
+      </div>
+
+      <!-- Kontrakt -->
+      <div class="page" id="pg-contracts">
+        <div class="con" id="pg-contracts-content">
+          <div class="ibox">Kontrakthantering byggs i Fas 4.</div>
+        </div>
+      </div>
+
+      <!-- Rondering -->
+      <div class="page" id="pg-rondering">
+        <div class="con" id="pg-rondering-content">
+          <div class="ibox">Ronderingssystem byggs i Fas 5.</div>
+        </div>
+      </div>
+
+      <!-- Artiklar -->
+      <div class="page" id="pg-articles">
+        <div class="con" id="pg-articles-content"></div>
+      </div>
+
+      <!-- Prisgrupper -->
+      <div class="page" id="pg-pricegroups">
+        <div class="con" id="pg-pricegroups-content"></div>
+      </div>
+
+      <!-- Löneunderlag -->
+      <div class="page" id="pg-payroll">
+        <div class="con" id="pg-payroll-content">
+          <div class="ibox">Löneunderlag byggs i Fas 4.</div>
+        </div>
+      </div>
+
+      <!-- Rapporter -->
+      <div class="page" id="pg-reports">
+        <div class="con" id="pg-reports-content">
+          <div class="ibox">Rapporter byggs i Fas 4.</div>
+        </div>
+      </div>
+
+      <!-- Personal -->
+      <div class="page" id="pg-staff">
+        <div class="con" id="pg-staff-content"></div>
+      </div>
+
+      <!-- Admin -->
+      <div class="page" id="pg-admin">
+        <div class="con" id="pg-admin-content"></div>
+      </div>
+
+    </div><!-- /content-scroll -->
+  </div><!-- /page-area -->
+</div><!-- /app -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Modal-root -->
+<div id="modal-root"></div>
+
+<!-- ── JavaScript — laddningsordning ──────── -->
+
+<!-- 1. Data-lager -->
+<script src="src/data/storage.js"></script>
+<script src="src/data/schema.js"></script>
+<script src="src/data/seedData.js"></script>
+<script src="src/data/state.js"></script>
+
+<!-- 2. Services -->
+<script src="src/services/ActivityService.js"></script>
+<script src="src/services/SalesService.js"></script>
+<script src="src/services/AuthService.js"></script>
+
+<!-- 3. Components -->
+<script src="src/components/Modal.js"></script>
+<script src="src/components/Sidebar.js"></script>
+
+<!-- 4. Pages -->
+<script src="src/pages/Router.js"></script>
+<script src="src/pages/Dashboard.js"></script>
+<script src="src/pages/PageShells.js"></script>
+
+<!-- 5. App bootstrap -->
+<script>
+const App = {
+
+  init() {
+    // Ladda state från localStorage
+    initState();
+
+    // Försök återställa session
+    const loggedIn = Auth.init();
+
+    if (loggedIn) {
+      this.showApp();
+    } else {
+      this.showLogin();
+    }
+  },
+
+  showLogin() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    // Fokusera användarnamn
+    setTimeout(() => {
+      const el = document.getElementById('login-user');
+      if (el) el.focus();
+    }, 100);
+  },
+
+  showApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+
+    // Rendera sidebar
+    Sidebar.render();
+
+    // Visa dashboard
+    Router.showPage('pg-dash');
+  },
+
+  login() {
+    const username = (document.getElementById('login-user').value || '').trim();
+    const password = document.getElementById('login-pass').value || '';
+    const errEl    = document.getElementById('login-err');
+
+    if (!username || !password) {
+      errEl.textContent = 'Fyll i användarnamn och lösenord';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const result = Auth.login(username, password);
+    if (result.ok) {
+      errEl.style.display = 'none';
+      this.showApp();
+    } else {
+      errEl.textContent = result.error;
+      errEl.style.display = 'block';
+      document.getElementById('login-pass').value = '';
+      document.getElementById('login-pass').focus();
+    }
+  }
+};
+
+// Starta appen
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+
+</body>
+</html>

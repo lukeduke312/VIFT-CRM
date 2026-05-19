@@ -1,0 +1,98 @@
+/**
+ * Router — sidnavigering
+ * Hanterar aktivering av sidor och topbar-titel
+ */
+
+const Router = {
+
+  PAGE_TITLES: {
+    'pg-dash':        { title: 'Dashboard',            sub: 'Översikt & åtgärder' },
+    'pg-ao':          { title: 'Arbetsorder',           sub: 'Alla ordrar' },
+    'pg-ao-detail':   { title: 'Arbetsorder',           sub: 'Detalj' },
+    'pg-crm':         { title: 'Kunder',                sub: 'Kundregister' },
+    'pg-crm-detail':  { title: 'Kundkort',              sub: '' },
+    'pg-objects':     { title: 'Fastigheter',           sub: 'Fastighetsregister' },
+    'pg-obj-detail':  { title: 'Fastighetskort',        sub: '' },
+    'pg-offer':       { title: 'Offerter',              sub: 'Offerthantering' },
+    'pg-offer-detail':{ title: 'Offert',                sub: 'Detalj' },
+    'pg-invoices':    { title: 'Fakturering',           sub: 'Fakturaunderlag' },
+    'pg-inv-detail':  { title: 'Fakturaunderlag',       sub: 'Detalj' },
+    'pg-tid':         { title: 'Tid & stämpla',         sub: 'Tidregistrering' },
+    'pg-calendar':    { title: 'Kalender',              sub: '' },
+    'pg-contracts':   { title: 'Kontrakt',              sub: 'Avtalsregister' },
+    'pg-rondering':   { title: 'Rondering',             sub: 'Ronderingsrapporter' },
+    'pg-articles':    { title: 'Artiklar',              sub: 'Artikelregister' },
+    'pg-pricegroups': { title: 'Prisgrupper',           sub: 'Timpris & prisgrupper' },
+    'pg-payroll':     { title: 'Löneunderlag',          sub: 'Tidrapport per personal' },
+    'pg-reports':     { title: 'Rapporter',             sub: 'Statistik & analys' },
+    'pg-staff':       { title: 'Personal',              sub: 'Personalregister' },
+    'pg-admin':       { title: 'Admin',                 sub: 'Systeminställningar' }
+  },
+
+  currentPage: null,
+  currentParams: {},
+
+  showPage(pageId, params = {}) {
+    // Stäng sidebar på mobil
+    if (window.innerWidth < 1024) Sidebar.close();
+
+    // Deaktivera gamla sidan
+    document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
+
+    // Aktivera nya sidan
+    const page = document.getElementById(pageId);
+    if (!page) {
+      console.warn(`[Router] Sida inte hittad: ${pageId}`);
+      return;
+    }
+    page.classList.add('active');
+
+    // Uppdatera topbar
+    const meta = this.PAGE_TITLES[pageId] || { title: pageId, sub: '' };
+    document.getElementById('topbar-title').textContent = meta.title;
+    document.getElementById('topbar-sub').textContent   = meta.sub;
+
+    // Uppdatera sidebar aktiv-markering
+    Sidebar.setActive(pageId);
+
+    // Uppdatera state
+    this.currentPage   = pageId;
+    this.currentParams = params;
+    state.currentPage  = pageId;
+
+    // Kör sidans render-funktion om den finns
+    const renderers = {
+      'pg-dash':        () => Dashboard.render(),
+      'pg-ao':          () => WorkOrdersPage.render(),
+      'pg-crm':         () => CustomersPage.render(),
+      'pg-crm-detail':  () => CustomerDetailPage.render(params),
+      'pg-objects':     () => PropertiesPage.render(),
+      'pg-offer':       () => OffersPage.render(),
+      'pg-invoices':    () => InvoicesPage.render(),
+      'pg-tid':         () => TimePage.render(),
+      'pg-articles':    () => ArticlesPage.render(),
+      'pg-pricegroups': () => PriceGroupsPage.render(),
+      'pg-staff':       () => StaffPage.render(),
+      'pg-admin':       () => AdminPage.render()
+    };
+
+    const renderer = renderers[pageId];
+    if (renderer) {
+      try {
+        renderer();
+      } catch (e) {
+        console.error(`[Router] Render-fel för ${pageId}:`, e);
+        page.querySelector('.con').innerHTML = `
+          <div class="empty">
+            <span class="empty-ico">⚠️</span>
+            <h3>Sidan kunde inte laddas</h3>
+            <p>${e.message}</p>
+          </div>`;
+      }
+    }
+
+    // Scrolla till topp
+    const scroll = document.getElementById('content-scroll');
+    if (scroll) scroll.scrollTop = 0;
+  }
+};

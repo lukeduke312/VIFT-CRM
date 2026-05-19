@@ -1,0 +1,194 @@
+/* ═══════════════════════════════════════════
+   DASHBOARD — KPI, att-göra, snabbknappar
+   ═══════════════════════════════════════════ */
+
+/* ── KPI-rutor ────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (min-width: 600px)  { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1024px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); gap: 12px; } }
+
+.kpi-card {
+  background: #fff;
+  border-radius: var(--rs);
+  padding: 13px;
+  border: 1px solid var(--br);
+  border-left: 4px solid var(--sky);
+  cursor: pointer;
+  transition: all .12s;
+}
+.kpi-card:hover { box-shadow: var(--shm); }
+.kpi-card.red    { border-left-color: var(--rd); }
+.kpi-card.green  { border-left-color: var(--gr); }
+.kpi-card.orange { border-left-color: var(--or); }
+.kpi-card.purple { border-left-color: var(--pu); }
+
+.kpi-number {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--navy);
+  line-height: 1;
+}
+.kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--mt);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+/* ── Att göra-lista ───────────────────── */
+.todo-list { display: flex; flex-direction: column; gap: 6px; }
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: var(--rs);
+  border: 1px solid var(--br);
+  cursor: pointer;
+  transition: all .12s;
+}
+.todo-item:hover { border-color: var(--sky); box-shadow: 0 2px 8px rgba(43,127,212,.09); }
+.todo-item.urgent { border-color: var(--rd); background: var(--lrd); }
+.todo-item.warning { border-color: #fca5a5; }
+
+.todo-icon {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.todo-icon.red    { background: var(--lrd); color: var(--rd); }
+.todo-icon.orange { background: var(--lor); color: var(--or); }
+.todo-icon.blue   { background: #dbeafe;   color: #1e40af; }
+.todo-icon.purple { background: var(--lpu); color: var(--pu); }
+.todo-icon.green  { background: var(--lgr); color: var(--gr); }
+.todo-icon.yellow { background: var(--lyl); color: var(--yl); }
+
+.todo-text { flex: 1; min-width: 0; }
+.todo-title { font-size: 13px; font-weight: 700; color: var(--tx); }
+.todo-sub   { font-size: 11px; color: var(--mt); margin-top: 1px; }
+
+.todo-badge {
+  background: var(--rd);
+  color: #fff;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  min-width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.todo-badge.orange { background: var(--or); }
+.todo-badge.blue   { background: var(--sky); }
+.todo-badge.purple { background: var(--pu); }
+
+/* ── Snabbknappar ─────────────────────── */
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+@media (min-width: 480px)  { .quick-grid { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 1024px) { .quick-grid { grid-template-columns: repeat(6, 1fr); gap: 10px; } }
+
+.quick-btn {
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px 6px;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid var(--br);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all .12s;
+}
+.quick-btn:hover { border-color: var(--sky); box-shadow: 0 2px 10px rgba(43,127,212,.12); transform: translateY(-1px); }
+.quick-btn:active { transform: scale(.95); }
+
+.quick-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--acc);
+  color: var(--navy);
+  display: flex; align-items: center; justify-content: center;
+}
+.quick-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--navy);
+  line-height: 1.2;
+  text-align: center;
+}
+
+/* ── Dashboard cards (sektioner) ──────── */
+.dash-section { }
+
+.sales-card {
+  background: #fff;
+  border-radius: var(--rs);
+  padding: 11px 13px;
+  border: 1px solid var(--br);
+  border-left: 4px solid var(--sky);
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all .12s;
+}
+.sales-card:last-child { margin-bottom: 0; }
+.sales-card:hover { box-shadow: var(--shm); }
+.sales-card.high   { border-left-color: var(--rd); }
+.sales-card.medium { border-left-color: var(--or); }
+
+.sales-title { font-size: 13px; font-weight: 700; color: var(--tx); }
+.sales-meta  { font-size: 11px; color: var(--mt); margin-top: 3px; }
+.sales-tip   { font-size: 12px; color: var(--navy); margin-top: 6px; line-height: 1.4; font-style: italic; }
+
+.sales-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ── Activity log ─────────────────────── */
+.act-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--bg);
+}
+.act-item:last-child { border-bottom: none; }
+
+.act-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--sky);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.act-dot.green  { background: var(--gr); }
+.act-dot.red    { background: var(--rd); }
+.act-dot.orange { background: var(--or); }
+.act-dot.purple { background: var(--pu); }
+
+.act-text { font-size: 13px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
+.act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
+
+/* ── Desktop 2-col dashboard ──────────── */
+@media (min-width: 1024px) {
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .dash-full { grid-column: 1 / -1; }
+}

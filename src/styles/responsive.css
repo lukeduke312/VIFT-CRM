@@ -1,0 +1,43 @@
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — ett ställe, inga konflikter
+   Alla media queries samlade här
+   ═══════════════════════════════════════════════════ */
+
+/* ── Mobil base (< 480px) ────────────── */
+@media (max-width: 479px) {
+  .con { padding: 12px 10px; gap: 10px; }
+  .card-body { padding: 10px 12px; }
+  .modal-sheet { padding: 14px 12px; }
+  .kpi-number { font-size: 24px; }
+}
+
+/* ── Tablet (768px+) ─────────────────── */
+@media (min-width: 768px) {
+  .con { padding: 16px 18px; gap: 14px; }
+  .topbar { padding: 13px 20px; padding-top: calc(13px + env(safe-area-inset-top)); }
+  .modal-overlay { align-items: center; }
+  .modal-sheet { border-radius: 16px; max-width: 560px; }
+}
+
+/* ── Mid-tablet (900px+) ─────────────── */
+@media (min-width: 900px) {
+  .con { padding: 18px 22px; }
+}
+
+/* ── Desktop (1024px+) ───────────────── */
+@media (min-width: 1024px) {
+  .con { padding: 22px 30px; padding-bottom: 40px; }
+  .modal-sheet { max-width: 600px; }
+  .topbar { padding: 14px 28px; }
+}
+
+/* ── Wide desktop (1280px+) ──────────── */
+@media (min-width: 1280px) {
+  .con { max-width: 1320px; }
+}
+
+/* ── XL desktop (1440px+) ────────────── */
+@media (min-width: 1440px) {
+  .con { padding: 24px 36px; }
+  .topbar { padding: 16px 36px; }
+}
