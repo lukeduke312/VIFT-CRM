@@ -251,6 +251,7 @@ const WorkOrderDetailPage = {
           <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}</div>
           <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+t.comment:''}</div>
           ${t.priceGroupName ? `<div style="font-size:11px;color:var(--sky);">${t.priceGroupName} – ${fmt(t.hourRate)} kr/tim ex moms</div>` : ''}
+          ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
           ${!t.billable ? `<span style="font-size:10px;color:var(--mt);font-style:italic;">Ej debiterbar</span>` : ''}
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -417,7 +418,7 @@ const WorkOrderDetailPage = {
   openAddMaterial() {
     const articles = (state.articles||[]).filter(a=>a.active);
     const artListHtml = articles.length ? articles.map(a => `
-      <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${a.vatRate||25}"
+      <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${a.vatRate||25}" data-cat="${a.category||''}"
         onclick="WorkOrderDetailPage._matSelectArticle(this)"
         style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .1s;"
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
@@ -436,9 +437,14 @@ const WorkOrderDetailPage = {
           <div style="margin-bottom:12px;">
             <div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Välj från artikelregister</div>
             <div class="fg" style="margin-bottom:6px;">
-              <input id="art-search" placeholder="Sök artikel…" oninput="WorkOrderDetailPage._matSearch(this.value)" autocomplete="off">
+              <input id="art-search" placeholder="Sök artikel…" oninput="WorkOrderDetailPage._matFilterArticles()" autocomplete="off">
             </div>
-            <div id="art-list" style="max-height:160px;overflow-y:auto;border:1.5px solid var(--br);border-radius:9px;padding:4px;">${artListHtml}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+              ${[{v:'',l:'Alla'},{v:'kemikalier',l:'Kemikalier'},{v:'material',l:'Byggmaterial'},{v:'forbruk',l:'Förbrukning'},{v:'arbete',l:'Arbete'},{v:'kostnad',l:'Kostnad'}].map(c =>
+                `<button type="button" class="chip ${c.v===''?'on':''}" data-cat="${c.v||'all'}" onclick="WorkOrderDetailPage._matSetCat('${c.v}',this)">${c.l}</button>`
+              ).join('')}
+            </div>
+            <div id="art-list" style="max-height:180px;overflow-y:auto;border:1.5px solid var(--br);border-radius:9px;padding:4px;">${artListHtml}</div>
           </div>
           <div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Eller ange manuellt</div>` : ''}
         <div class="fg"><label>Benämning <span style="color:var(--rd)">*</span></label>
@@ -468,13 +474,30 @@ const WorkOrderDetailPage = {
     setTimeout(() => document.getElementById('art-search')?.focus(), 80);
   },
 
-  _matSearch(q) {
-    const rows = document.querySelectorAll('#art-list .art-row');
-    const lq = q.toLowerCase();
-    rows.forEach(row => {
-      const name = (row.dataset.name||'').toLowerCase();
-      row.style.display = (!lq || name.includes(lq)) ? '' : 'none';
+  _matCatFilter: '',
+
+  _matSetCat(cat, btn) {
+    this._matCatFilter = cat;
+    document.querySelectorAll('#art-cat-filter-chips .chip, .art-cat-chip').forEach(b => b.classList.remove('on'));
+    document.querySelectorAll(`[data-cat="${cat||'all'}"]`).forEach(b => b.classList.add('on'));
+    if (btn) { document.querySelectorAll('.chip[data-cat]').forEach(b => b.classList.remove('on')); btn.classList.add('on'); }
+    this._matFilterArticles();
+  },
+
+  _matFilterArticles() {
+    const q   = (document.getElementById('art-search')?.value || '').toLowerCase();
+    const cat = this._matCatFilter;
+    document.querySelectorAll('#art-list .art-row').forEach(row => {
+      const name   = (row.dataset.name || '').toLowerCase();
+      const rowCat = row.dataset.cat || '';
+      const matchQ   = !q   || name.includes(q);
+      const matchCat = !cat || rowCat === cat;
+      row.style.display = (matchQ && matchCat) ? '' : 'none';
     });
+  },
+
+  _matSearch(q) {
+    this._matFilterArticles();
   },
 
   _matSelectArticle(el) {
@@ -727,6 +750,15 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: 'Registrera tid',
       body: `
+        ${(state.currentUser && ['admin','chef'].includes(state.currentUser.role)) ? `
+        <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Admin</span></label>
+          <select id="t-staff">
+            <option value="">— Inloggad användare (${state.currentUser ? state.currentUser.firstName : ''}) —</option>
+            ${(state.staff||[]).filter(s=>s.active).map(s=>
+              `<option value="${s.id}:${s.firstName} ${s.lastName}">${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`
+            ).join('')}
+          </select>
+        </div>` : ''}
         <div class="g2">
           <div class="fg"><label>Datum</label><input type="date" id="t-date" value="${tdy()}"></div>
           <div class="fg"><label>Prisgrupp</label>
@@ -788,11 +820,14 @@ const WorkOrderDetailPage = {
       comment:     document.getElementById('t-comment')?.value.trim() || '',
       billable:    document.getElementById('t-billable')?.checked !== false
     };
+    const staffSel = document.getElementById('t-staff')?.value || '';
+    const [overrideStaffId, overrideStaffName] = staffSel ? staffSel.split(':') : ['', ''];
     if (existingId) {
+      if (overrideStaffId) { data.staffId = overrideStaffId; data.staffName = overrideStaffName; }
       TimeService.update(existingId, data);
       showToast('Tid uppdaterad');
     } else {
-      const result = TimeService.saveManual({ ...data, aoId: this.aoId });
+      const result = TimeService.saveManual({ ...data, aoId: this.aoId, staffId: overrideStaffId || undefined, staffName: overrideStaffName || undefined });
       if (!result.ok) { showToast(result.error); return; }
       showToast('Tid registrerad');
     }

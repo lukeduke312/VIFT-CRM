@@ -213,13 +213,11 @@ const WorkOrdersPage = {
     const priorities = [{v:'akut',l:'Akut'},{v:'hög',l:'Hög'},{v:'normal',l:'Normal'},{v:'låg',l:'Låg'}];
     const prio = d.priority || 'normal';
 
-    // Staff multi-select picker
+    // Staff modal picker
     const sel = d.staff || [];
-    const staffTags = sel.map(id => {
+    const staffChips = sel.map(id => {
       const s = getStaff(id);
-      return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.
-        <button onclick="WorkOrdersPage._wizToggleStaff('${id}');event.stopPropagation();">${ic('x',9)}</button>
-      </span>` : '';
+      return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
     }).join('');
 
     return `
@@ -258,18 +256,12 @@ const WorkOrdersPage = {
 
       <div class="fg">
         <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Personal (valfritt)</label>
-        <div class="mpicker" id="staff-mpicker" style="margin-top:6px;">
-          <div class="mpicker-ctrl" onclick="WorkOrdersPage._wizStaffPickerToggle()">
-            <div id="mpicker-tags">
-              ${staffTags || '<span class="mpicker-ph">Välj personal…</span>'}
-            </div>
-            ${ic('chevron-down',14)}
-          </div>
-          <div class="mpicker-dd" id="staff-mpicker-dd" style="display:none;">
-            <input class="mpicker-search" id="staff-mpicker-search" placeholder="Sök personal…"
-              oninput="WorkOrdersPage._wizStaffSearch(this.value)" onclick="event.stopPropagation()">
-            <div id="staff-mpicker-list">${this._staffListItems(state.staff||[])}</div>
-          </div>
+        <button type="button" class="btn bs bfull" style="justify-content:flex-start;gap:8px;margin-top:6px;padding:11px 14px;font-size:13px;"
+          onclick="WorkOrdersPage._openStaffModal()">
+          ${ic('users',15)} ${sel.length ? sel.length + ' person' + (sel.length > 1 ? 'er' : '') + ' vald' : 'Välj personal…'}
+        </button>
+        <div id="wiz-staff-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+          ${staffChips}
         </div>
       </div>`;
   },
@@ -328,86 +320,94 @@ const WorkOrdersPage = {
   },
 
   _bindWizStep2() {
-    // Restore staff display if already selected
-    this._wizUpdateStaffDisplay();
-    // Close picker on outside click
-    this._wizClickOutsideFn = (e) => {
-      if (!e.target.closest('#staff-mpicker')) {
-        const dd = document.getElementById('staff-mpicker-dd');
-        const ctrl = document.querySelector('#staff-mpicker .mpicker-ctrl');
-        if (dd) dd.style.display = 'none';
-        if (ctrl) ctrl.classList.remove('open');
-      }
-    };
-    document.addEventListener('click', this._wizClickOutsideFn);
+    this._wizUpdateStaffChips();
   },
 
   _bindWizStep3() {
     this._renderWizChecklist();
   },
 
-  /* ── Staff multi-select picker ─────────── */
-  _wizStaffPickerToggle() {
-    const dd  = document.getElementById('staff-mpicker-dd');
-    const ctrl = document.querySelector('#staff-mpicker .mpicker-ctrl');
-    if (!dd) return;
-    const open = dd.style.display !== 'none';
-    dd.style.display = open ? 'none' : '';
-    if (ctrl) ctrl.classList.toggle('open', !open);
-    if (!open) {
-      const s = document.getElementById('staff-mpicker-search');
-      if (s) { s.value = ''; this._wizStaffSearch(''); setTimeout(() => s.focus(), 40); }
-    }
+  /* ── Staff modal picker ────────────────── */
+  _openStaffModal() {
+    Modal.open({
+      title: 'Välj personal',
+      body: `
+        <div class="fg" style="margin-bottom:8px;">
+          <input id="spm-search" placeholder="Sök namn eller titel…"
+            oninput="WorkOrdersPage._spmSearch(this.value)" autocomplete="off">
+        </div>
+        <div id="spm-list" style="max-height:380px;overflow-y:auto;">
+          ${this._spmItems(state.staff || [])}
+        </div>`,
+      buttons: [
+        { label: 'Klar', cls: 'btn bp', onClick: () => {
+          Modal.close();
+          this._wizUpdateStaffChips();
+        }}
+      ]
+    });
+    setTimeout(() => document.getElementById('spm-search')?.focus(), 80);
   },
 
-  _wizStaffSearch(q) {
-    const listEl = document.getElementById('staff-mpicker-list');
-    if (!listEl) return;
-    const lq = q.toLowerCase();
-    const staff = (state.staff||[]).filter(s =>
-      s.active && (!q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(lq))
-    );
-    listEl.innerHTML = this._staffListItems(staff);
-  },
-
-  _staffListItems(staffArr) {
-    const active = (staffArr||[]).filter(s => s.active);
-    if (!active.length) return `<p style="padding:10px 14px;color:var(--mt);font-size:13px;">Ingen personal</p>`;
+  _spmItems(staffArr) {
+    const active = (staffArr || []).filter(s => s.active);
+    const sel = this._wiz.data.staff || [];
+    if (!active.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Ingen aktiv personal</p>`;
     return active.map(s => {
-      const isSel = (this._wiz.data.staff||[]).includes(s.id);
-      return `<div class="mpicker-item ${isSel?'sel':''}" onclick="WorkOrdersPage._wizToggleStaff('${s.id}');event.stopPropagation();">
-        <div class="mpicker-cb">${isSel?ic('check',11):''}</div>
-        <span>${s.firstName} ${s.lastName}</span>
-        ${s.title?`<span style="font-size:11px;color:var(--mt);font-weight:400;">${s.title}</span>`:''}
-      </div>`;
+      const isSel = sel.includes(s.id);
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 4px;cursor:pointer;border-bottom:1px solid var(--bg);transition:background .1s;"
+          onclick="WorkOrdersPage._spmToggle('${s.id}')"
+          onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+          <div style="width:24px;height:24px;border-radius:6px;border:2px solid ${isSel?'var(--navy)':'var(--br)'};
+            background:${isSel?'var(--navy)':'transparent'};color:${isSel?'#fff':'transparent'};
+            display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            ${ic('check',13)}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:700;color:var(--tx);">${s.firstName} ${s.lastName}</div>
+            ${s.title?`<div style="font-size:12px;color:var(--mt);">${s.title}</div>`:''}
+          </div>
+        </div>`;
     }).join('');
   },
 
-  _wizToggleStaff(staffId) {
+  _spmToggle(staffId) {
     const staff = this._wiz.data.staff = this._wiz.data.staff || [];
     const i = staff.indexOf(staffId);
     if (i > -1) staff.splice(i, 1);
     else staff.push(staffId);
-    this._wizUpdateStaffDisplay();
+    this._spmSearch(document.getElementById('spm-search')?.value || '');
   },
 
-  _wizUpdateStaffDisplay() {
-    const tagsEl = document.getElementById('mpicker-tags');
-    if (!tagsEl) return;
+  _spmSearch(q) {
+    const lq = q.toLowerCase();
+    const listEl = document.getElementById('spm-list');
+    if (!listEl) return;
+    const filtered = (state.staff||[]).filter(s =>
+      s.active && (!q || `${s.firstName} ${s.lastName} ${s.title||''}`.toLowerCase().includes(lq))
+    );
+    listEl.innerHTML = this._spmItems(filtered);
+  },
+
+  _spmRemove(staffId) {
+    const staff = this._wiz.data.staff = this._wiz.data.staff || [];
+    const i = staff.indexOf(staffId);
+    if (i > -1) staff.splice(i, 1);
+    this._wizUpdateStaffChips();
+  },
+
+  _wizUpdateStaffChips() {
+    const chipsEl = document.getElementById('wiz-staff-chips');
+    if (!chipsEl) return;
     const sel = this._wiz.data.staff || [];
-    if (!sel.length) {
-      tagsEl.innerHTML = '<span class="mpicker-ph">Välj personal…</span>';
-    } else {
-      tagsEl.innerHTML = sel.map(id => {
-        const s = getStaff(id);
-        return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.
-          <button onclick="WorkOrdersPage._wizToggleStaff('${id}');event.stopPropagation();">${ic('x',9)}</button>
-        </span>` : '';
-      }).join('');
-    }
-    // Also update the list items to reflect new selection state
-    const q = document.getElementById('staff-mpicker-search')?.value || '';
-    this._wizStaffSearch(q);
+    chipsEl.innerHTML = sel.map(id => {
+      const s = getStaff(id);
+      return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
+    }).join('');
+    // Update button label in step 2 if visible
+    const openBtn = document.querySelector('.wiz-staff-btn');
+    if (openBtn) openBtn.textContent = sel.length ? `${sel.length} person${sel.length > 1 ? 'er' : ''} vald` : 'Välj personal…';
   },
 
   /* ── Wizard helpers ────────────────────── */
@@ -523,11 +523,6 @@ const WorkOrdersPage = {
   },
 
   _wizCollectStep2() {
-    // Clean up click-outside listener
-    if (this._wizClickOutsideFn) {
-      document.removeEventListener('click', this._wizClickOutsideFn);
-      this._wizClickOutsideFn = null;
-    }
     const d = this._wiz.data;
     const isPlan = d.status === 'planerad';
     if (isPlan) {
@@ -561,13 +556,6 @@ const WorkOrdersPage = {
   },
 
   _wizBack() {
-    if (this._wiz.step === 2) {
-      // Clean up click-outside listener if going back from step 2
-      if (this._wizClickOutsideFn) {
-        document.removeEventListener('click', this._wizClickOutsideFn);
-        this._wizClickOutsideFn = null;
-      }
-    }
     if (this._wiz.step > 1) {
       this._wiz.step--;
       this._showWizard();

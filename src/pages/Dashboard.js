@@ -16,103 +16,100 @@ const Dashboard = {
 
     el.innerHTML = `
       <!-- KPI-rutor -->
-      <div class="dash-full">
-        <div class="kpi-grid">
-          ${this._renderKPI(kpis.activeOrders,    'Aktiva ordrar',      'blue',   'pg-ao')}
-          ${this._renderKPI(kpis.doneThisMonth,   'Klara denna månad',  'green',  'pg-ao')}
-          ${this._renderKPI(kpis.openOffers,      'Offerter ute',       '',       'pg-offer')}
-          ${this._renderKPI(kpis.workPool,        'Arbetspool',         'purple', 'pg-ao')}
-        </div>
+      <div class="kpi-grid">
+        ${this._renderKPI(kpis.activeOrders,    'Aktiva ordrar',      'blue',   'pg-ao')}
+        ${this._renderKPI(kpis.doneThisMonth,   'Klara denna månad',  'green',  'pg-ao')}
+        ${this._renderKPI(kpis.openOffers,      'Offerter ute',       '',       'pg-offer')}
+        ${this._renderKPI(kpis.workPool,        'Arbetspool',         'purple', 'pg-ao')}
       </div>
 
       <!-- Att göra / Kräver åtgärd -->
       ${todos.length > 0 ? `
-      <div class="dash-full">
-        <div class="card">
-          <div class="card-header">
-            <h3>${ic('alert-triangle',14)} Kräver åtgärd</h3>
-            <span class="bdg bdg-red">${todos.length}</span>
-          </div>
-          <div class="card-body" style="padding:8px 10px;">
-            <div class="todo-list">
-              ${todos.map(t => this._renderTodo(t)).join('')}
-            </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('alert-triangle',14)} Kräver åtgärd</h3>
+          <span class="bdg bdg-red">${todos.length}</span>
+        </div>
+        <div class="card-body" style="padding:8px 10px;">
+          <div class="todo-list">
+            ${todos.map(t => this._renderTodo(t)).join('')}
           </div>
         </div>
       </div>` : ''}
 
       <!-- Snabbknappar -->
-      <div class="dash-full">
-        <div class="card">
-          <div class="card-header"><h3>Snabbknappar</h3></div>
-          <div class="card-body">
-            <div class="quick-grid">
-              ${this._quickBtn('clipboard-list', 'Ny order',   "WorkOrdersPage.openCreate()")}
-              ${this._quickBtn('file-text',      'Ny offert',  "Router.showPage('pg-offer')")}
-              ${this._quickBtn('users',          'Ny kund',    "CustomersPage.openCreate()")}
-              ${this._quickBtn('clipboard-check','Rondering',  "Router.showPage('pg-rondering')")}
-              ${this._quickBtn('clock',          'Stämpla',    "Router.showPage('pg-tid')")}
-              ${this._quickBtn('receipt',        'Fakturering',"Router.showPage('pg-invoices')")}
+      <div class="card">
+        <div class="card-header"><h3>Snabbknappar</h3></div>
+        <div class="card-body">
+          <div class="quick-grid">
+            ${this._quickBtn('clipboard-list', 'Ny order',   "WorkOrdersPage.openCreate()")}
+            ${this._quickBtn('file-text',      'Ny offert',  "Router.showPage('pg-offer')")}
+            ${this._quickBtn('users',          'Ny kund',    "CustomersPage.openCreate()")}
+            ${this._quickBtn('clipboard-check','Rondering',  "Router.showPage('pg-rondering')")}
+            ${this._quickBtn('clock',          'Stämpla',    "Router.showPage('pg-tid')")}
+            ${this._quickBtn('receipt',        'Fakturering',"Router.showPage('pg-invoices')")}
+          </div>
+        </div>
+      </div>
+
+      <!-- 2-kolumns dashboard-grid -->
+      <div class="dash-grid">
+        <!-- Idag -->
+        <div>
+          <div class="card">
+            <div class="card-header"><h3>${ic('calendar',14)} Idag</h3></div>
+            <div class="card-body" style="padding:6px 14px;">
+              ${this._renderToday()}
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Idag -->
-      <div>
-        <div class="card">
-          <div class="card-header"><h3>${ic('calendar',14)} Idag</h3></div>
-          <div class="card-body" style="padding:6px 14px;">
-            ${this._renderToday()}
+        <!-- Offerter väntar svar -->
+        <div>
+          <div class="card">
+            <div class="card-header"><h3>${ic('file-text',14)} Offerter väntar svar</h3></div>
+            <div class="card-body" style="padding:6px 14px;">
+              ${this._renderPendingOffers()}
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Säljchanser -->
-      <div>
-        <div class="card">
-          <div class="card-header">
-            <h3>${ic('target',14)} Säljchanser</h3>
-            ${active.length > 0 ? `<span class="bdg bdg-orange">${active.length}</span>` : ''}
-          </div>
-          <div class="card-body" style="padding:8px 10px;">
-            ${active.length === 0
-              ? `<div class="empty" style="padding:16px;">${ic('target',28)}<p>Inga aktiva säljchanser</p></div>`
-              : active.slice(0, 4).map(o => SalesService.renderDashCard(o)).join('')
-            }
-            ${active.length > 4
-              ? `<button class="btn bs bfull" style="margin-top:8px;" onclick="Dashboard.showAllSales()">Visa alla ${active.length} säljchanser</button>`
-              : ''}
-          </div>
-        </div>
-      </div>
-
-      <!-- Offerter väntar svar -->
-      <div>
-        <div class="card">
-          <div class="card-header"><h3>${ic('file-text',14)} Offerter väntar svar</h3></div>
-          <div class="card-body" style="padding:6px 14px;">
-            ${this._renderPendingOffers()}
+        <!-- Säljchanser -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <h3>${ic('target',14)} Säljchanser</h3>
+              ${active.length > 0 ? `<span class="bdg bdg-orange">${active.length}</span>` : ''}
+            </div>
+            <div class="card-body" style="padding:8px 10px;">
+              ${active.length === 0
+                ? `<div class="empty" style="padding:16px;">${ic('target',28)}<p>Inga aktiva säljchanser</p></div>`
+                : active.slice(0, 4).map(o => SalesService.renderDashCard(o)).join('')
+              }
+              ${active.length > 4
+                ? `<button class="btn bs bfull" style="margin-top:8px;" onclick="Dashboard.showAllSales()">Visa alla ${active.length} säljchanser</button>`
+                : ''}
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Arbetspool -->
-      <div>
-        <div class="card">
-          <div class="card-header"><h3>${ic('clipboard-list',14)} Arbetspool</h3></div>
-          <div class="card-body" style="padding:6px 14px;">
-            ${this._renderPool()}
+        <!-- Arbetspool -->
+        <div>
+          <div class="card">
+            <div class="card-header"><h3>${ic('clipboard-list',14)} Arbetspool</h3></div>
+            <div class="card-body" style="padding:6px 14px;">
+              ${this._renderPool()}
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Senaste aktivitet -->
-      <div>
-        <div class="card">
-          <div class="card-header"><h3>${ic('activity',14)} Senaste aktivitet</h3></div>
-          <div class="card-body" style="padding:8px 10px;">
-            ${ActivityService.renderList(acts)}
+        <!-- Senaste aktivitet - full width -->
+        <div class="dash-full">
+          <div class="card">
+            <div class="card-header"><h3>${ic('activity',14)} Senaste aktivitet</h3></div>
+            <div class="card-body" style="padding:8px 10px;">
+              ${ActivityService.renderList(acts)}
+            </div>
           </div>
         </div>
       </div>

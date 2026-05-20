@@ -7,8 +7,7 @@
 @media (max-width: 479px) {
   .con { padding: 12px 10px; gap: 10px; }
   .card-body { padding: 10px 12px; }
-  .modal-sheet { padding: 14px 12px; }
-  .kpi-number { font-size: 24px; }
+.kpi-number { font-size: 24px; }
 }
 
 /* ── Tablet (768px+) ─────────────────── */
@@ -33,7 +32,7 @@
 
 /* ── Wide desktop (1280px+) ──────────── */
 @media (min-width: 1280px) {
-  .con { max-width: 1320px; }
+  .con { max-width: 1320px; margin: 0 auto; }
 }
 
 /* ── XL desktop (1440px+) ────────────── */

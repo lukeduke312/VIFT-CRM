@@ -47,6 +47,15 @@ const TimePage = {
             <div class="fg"><label>Starttid</label><input type="time" id="mt-start" value="08:00"></div>
             <div class="fg"><label>Sluttid</label><input type="time" id="mt-end" value="16:00"></div>
           </div>
+          ${(state.currentUser && ['admin','chef'].includes(state.currentUser.role)) ? `
+          <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Admin</span></label>
+            <select id="mt-staff">
+              <option value="">— Inloggad användare (${state.currentUser.firstName}) —</option>
+              ${(state.staff||[]).filter(s=>s.active).map(s=>
+                `<option value="${s.id}:${s.firstName} ${s.lastName}">${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`
+              ).join('')}
+            </select>
+          </div>` : ''}
           <div class="g2">
             <div class="fg"><label>Kund (valfritt)</label>
               <select id="mt-customer" onchange="TimePage._customerChanged()">
@@ -184,6 +193,8 @@ const TimePage = {
   },
 
   saveManual() {
+    const staffSel = document.getElementById('mt-staff')?.value || '';
+    const [overrideStaffId, overrideStaffName] = staffSel ? staffSel.split(':') : ['', ''];
     const result = TimeService.saveManual({
       date:         document.getElementById('mt-date')?.value || '',
       startStr:     document.getElementById('mt-start')?.value || '',
@@ -192,7 +203,9 @@ const TimePage = {
       customerId:   document.getElementById('mt-customer')?.value || '',
       priceGroupId: document.getElementById('mt-pg')?.value || '',
       comment:      document.getElementById('mt-comment')?.value.trim() || '',
-      billable:     document.getElementById('mt-billable')?.checked !== false
+      billable:     document.getElementById('mt-billable')?.checked !== false,
+      staffId:      overrideStaffId || undefined,
+      staffName:    overrideStaffName || undefined
     });
     if (!result.ok) { showToast(result.error); return; }
     showToast('Tid sparad');
@@ -216,6 +229,7 @@ const TimePage = {
               ${ao?' · '+ao.id+' '+ao.title:''}
               ${t.priceGroupName?' · '+t.priceGroupName:''}
             </div>
+            ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
           </div>
           <span class="bdg ${t.billable?'bdg-green':'bdg-grey'}">${t.billable?'Deb.':'Intern'}</span>
           <div style="display:flex;gap:4px;">

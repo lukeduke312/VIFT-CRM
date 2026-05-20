@@ -78,7 +78,8 @@ const TimeService = {
   /* Manuell tidsregistrering */
   saveManual(data) {
     const { date, startStr, endStr, aoId, customerId, priceGroupId,
-            comment, billable, internal } = data;
+            comment, billable, internal,
+            staffId: overrideStaffId, staffName: overrideStaffName } = data;
 
     if (!date || !startStr || !endStr) return { ok: false, error: 'Datum, starttid och sluttid krävs' };
 
@@ -95,8 +96,10 @@ const TimeService = {
       id:            newId(state.timeEntries, 'TID'),
       aoId:          aoId || '',
       customerId:    resolvedCustomer,
-      staffId:       state.currentUser ? state.currentUser.id : '',
-      staffName:     state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '',
+      staffId:          overrideStaffId || (state.currentUser ? state.currentUser.id : ''),
+      staffName:        overrideStaffName || (state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : ''),
+      registeredById:   (overrideStaffId && state.currentUser && overrideStaffId !== state.currentUser.id) ? state.currentUser.id : '',
+      registeredByName: (overrideStaffId && state.currentUser && overrideStaffId !== state.currentUser.id) ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '',
       date,
       startStr,
       endStr,

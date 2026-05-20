@@ -530,15 +530,41 @@ const SeedData = {
   contracts: [],
   inspections: [],
   articles: [
-    { id: 'ART-001', articleNumber: '1001', name: 'Fogmassa Sikaflex 291i',  category: 'material', unit: 'st',   buyPrice: 75,  sellPrice: 145, vatRate: 25, active: true },
-    { id: 'ART-002', articleNumber: '1002', name: 'Silikon transparent 300ml', category: 'material', unit: 'st', buyPrice: 45,  sellPrice: 89,  vatRate: 25, active: true },
-    { id: 'ART-003', articleNumber: '1003', name: 'Skruv 6×50 (förpackning)', category: 'material', unit: 'förp.', buyPrice: 38, sellPrice: 72, vatRate: 25, active: true },
-    { id: 'ART-004', articleNumber: '1004', name: 'Expansionsbult M8×60',    category: 'material', unit: 'st',   buyPrice: 10,  sellPrice: 25,  vatRate: 25, active: true },
-    { id: 'ART-005', articleNumber: '1005', name: 'Rörkoppling 15mm',        category: 'material', unit: 'st',   buyPrice: 32,  sellPrice: 68,  vatRate: 25, active: true },
-    { id: 'ART-006', articleNumber: '1006', name: 'Plastfilm skyddsfilm 4m', category: 'material', unit: 'm',    buyPrice: 6,   sellPrice: 15,  vatRate: 25, active: true },
-    { id: 'ART-007', articleNumber: '2001', name: 'Arbetstid standard',      category: 'arbete',   unit: 'tim',  buyPrice: 0,   sellPrice: 695, vatRate: 25, active: true },
-    { id: 'ART-008', articleNumber: '2002', name: 'Akut/jourarbetstid',      category: 'arbete',   unit: 'tim',  buyPrice: 0,   sellPrice: 1250, vatRate: 25, active: true },
-    { id: 'ART-009', articleNumber: '3001', name: 'Resekostnad',             category: 'kostnad',  unit: 'km',   buyPrice: 0,   sellPrice: 5,   vatRate: 25, active: true }
+    // ── Kemikalier ──────────────────────────────────────────
+    { id: 'ART-001', articleNumber: '1001', name: 'Fogmassa Sikaflex 291i',     category: 'kemikalier', unit: 'st',   buyPrice: 75,   sellPrice: 145,  vatRate: 25, active: true },
+    { id: 'ART-002', articleNumber: '1002', name: 'Silikon transparent 300ml',  category: 'kemikalier', unit: 'st',   buyPrice: 45,   sellPrice: 89,   vatRate: 25, active: true },
+    { id: 'ART-010', articleNumber: '1010', name: 'Avfettning 1L',              category: 'kemikalier', unit: 'st',   buyPrice: 55,   sellPrice: 110,  vatRate: 25, active: true },
+    { id: 'ART-011', articleNumber: '1011', name: 'Rostskyddsfärg 0,5L',        category: 'kemikalier', unit: 'st',   buyPrice: 120,  sellPrice: 245,  vatRate: 25, active: true },
+    { id: 'ART-012', articleNumber: '1012', name: 'Fogskum PU 750ml',           category: 'kemikalier', unit: 'st',   buyPrice: 68,   sellPrice: 135,  vatRate: 25, active: true },
+    { id: 'ART-013', articleNumber: '1013', name: 'Akrylspackel 300ml',         category: 'kemikalier', unit: 'st',   buyPrice: 38,   sellPrice: 75,   vatRate: 25, active: true },
+
+    // ── Byggmaterial ────────────────────────────────────────
+    { id: 'ART-003', articleNumber: '1020', name: 'Skruv 6×50 (förpackning 50st)', category: 'material', unit: 'förp.', buyPrice: 38, sellPrice: 72, vatRate: 25, active: true },
+    { id: 'ART-004', articleNumber: '1021', name: 'Expansionsbult M8×60',       category: 'material', unit: 'st',   buyPrice: 10,   sellPrice: 25,   vatRate: 25, active: true },
+    { id: 'ART-005', articleNumber: '1022', name: 'Rörkoppling 15mm',           category: 'material', unit: 'st',   buyPrice: 32,   sellPrice: 68,   vatRate: 25, active: true },
+    { id: 'ART-014', articleNumber: '1023', name: 'Kopplingsrör 22mm × 1m',     category: 'material', unit: 'st',   buyPrice: 85,   sellPrice: 165,  vatRate: 25, active: true },
+    { id: 'ART-015', articleNumber: '1024', name: 'Kulventil 15mm',             category: 'material', unit: 'st',   buyPrice: 95,   sellPrice: 195,  vatRate: 25, active: true },
+    { id: 'ART-016', articleNumber: '1025', name: 'Golvbrunn plastrens',        category: 'material', unit: 'st',   buyPrice: 110,  sellPrice: 220,  vatRate: 25, active: true },
+    { id: 'ART-017', articleNumber: '1026', name: 'Drevmassa branddrev 10m',    category: 'material', unit: 'rul',  buyPrice: 145,  sellPrice: 290,  vatRate: 25, active: true },
+    { id: 'ART-018', articleNumber: '1027', name: 'Gummitätning 20mm × 5m',     category: 'material', unit: 'rul',  buyPrice: 55,   sellPrice: 110,  vatRate: 25, active: true },
+
+    // ── Förbrukningsmaterial ────────────────────────────────
+    { id: 'ART-006', articleNumber: '1030', name: 'Plastfilm skyddsfilm 4m',    category: 'forbruk', unit: 'm',    buyPrice: 6,    sellPrice: 15,   vatRate: 25, active: true },
+    { id: 'ART-019', articleNumber: '1031', name: 'Maskeringstejp 50mm',        category: 'forbruk', unit: 'rul',  buyPrice: 22,   sellPrice: 45,   vatRate: 25, active: true },
+    { id: 'ART-020', articleNumber: '1032', name: 'Kabelstrumpa 10m',           category: 'forbruk', unit: 'st',   buyPrice: 35,   sellPrice: 70,   vatRate: 25, active: true },
+    { id: 'ART-021', articleNumber: '1033', name: 'Engångshandskar (100-pack)', category: 'forbruk', unit: 'förp.', buyPrice: 45,  sellPrice: 90,   vatRate: 25, active: true },
+    { id: 'ART-022', articleNumber: '1034', name: 'Sliprondell 125mm (10-pack)',category: 'forbruk', unit: 'förp.', buyPrice: 65,  sellPrice: 130,  vatRate: 25, active: true },
+
+    // ── Arbete ──────────────────────────────────────────────
+    { id: 'ART-007', articleNumber: '2001', name: 'Arbetstid standard',         category: 'arbete', unit: 'tim',  buyPrice: 0,    sellPrice: 695,  vatRate: 25, active: true },
+    { id: 'ART-008', articleNumber: '2002', name: 'Akut/jourarbetstid',         category: 'arbete', unit: 'tim',  buyPrice: 0,    sellPrice: 1250, vatRate: 25, active: true },
+    { id: 'ART-023', articleNumber: '2003', name: 'Övertid (OB)',               category: 'arbete', unit: 'tim',  buyPrice: 0,    sellPrice: 895,  vatRate: 25, active: true },
+    { id: 'ART-024', articleNumber: '2004', name: 'Helgtid',                    category: 'arbete', unit: 'tim',  buyPrice: 0,    sellPrice: 995,  vatRate: 25, active: true },
+
+    // ── Kostnader ───────────────────────────────────────────
+    { id: 'ART-009', articleNumber: '3001', name: 'Resekostnad km',             category: 'kostnad', unit: 'km',   buyPrice: 0,   sellPrice: 5,    vatRate: 25, active: true },
+    { id: 'ART-025', articleNumber: '3002', name: 'Parkeringskostnad',          category: 'kostnad', unit: 'gång', buyPrice: 0,   sellPrice: 0,    vatRate: 25, active: true },
+    { id: 'ART-026', articleNumber: '3003', name: 'Utrustning/verktyg hyra',    category: 'kostnad', unit: 'dag',  buyPrice: 0,   sellPrice: 0,    vatRate: 25, active: true },
   ],
   invoices: []
 };

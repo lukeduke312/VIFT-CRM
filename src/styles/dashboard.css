@@ -182,7 +182,12 @@
 .act-text { font-size: 13px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
 .act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
 
-/* ── Desktop 2-col dashboard ──────────── */
+/* ── Dashboard 2-col grid ──────────────── */
+.dash-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 @media (min-width: 1024px) {
   .dash-grid {
     display: grid;
@@ -190,5 +195,5 @@
     gap: 16px;
     align-items: start;
   }
-  .dash-full { grid-column: 1 / -1; }
+  .dash-grid .dash-full { grid-column: 1 / -1; }
 }
