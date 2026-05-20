@@ -59,10 +59,10 @@ function initState() {
   state.salesOpportunities = s.get('salesOpps')    || SeedData.salesOpportunities;
   state.activityLog        = s.get('activityLog')  || SeedData.activityLog;
   state.settings           = s.get('settings')     || SeedData.settings;
-  state.timeEntries        = s.get('timeEntries')  || [];
-  state.contracts          = s.get('contracts')    || [];
-  state.articles           = s.get('articles')     || SeedData.articles || [];
-  state.recurringOrders    = s.get('recurringOrders') || [];
+  state.timeEntries        = s.get('timeEntries')     || SeedData.timeEntries || [];
+  state.contracts          = s.get('contracts')       || [];
+  state.articles           = s.get('articles')        || SeedData.articles || [];
+  state.recurringOrders    = s.get('recurringOrders') || SeedData.recurringOrders || [];
 
   // Stämpling-state
   state.stampActive    = !!s.get('stampActive');
