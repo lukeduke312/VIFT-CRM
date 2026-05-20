@@ -209,6 +209,19 @@
 .act-text { font-size: 12px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
 .act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
 
+/* ── Pair wrapper (Today + Pool, always 2-col) ── */
+.dw-pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 480px) {
+  .dw-pair { grid-template-columns: 1fr 1fr; gap: 12px; }
+}
+@media (min-width: 1024px) {
+  .dw-pair { gap: 14px; }
+}
+
 /* ── Legacy widget layout ──────────────── */
 .dw-full  { width: 100%; }
 .dw-row   { display: flex; gap: 14px; align-items: flex-start; }

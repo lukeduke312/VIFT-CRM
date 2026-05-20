@@ -78,6 +78,21 @@ const RecurringPage = {
           </div>`).join('')
         }</div></div>` : '';
 
+    const aoHistory = (state.workOrders||[]).filter(ao => ao.recurringOrderId === ro.id)
+      .sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+    const histHtml = aoHistory.length > 0
+      ? `<div style="margin-top:12px;">
+           <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Skapade arbetsorder (${aoHistory.length})</div>
+           ${aoHistory.slice(0,8).map(ao => {
+             var cuAo = getCu(ao.customerId);
+             return `<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+               <div><div style="font-size:13px;font-weight:700;">${ao.id} – ${ao.title}</div>
+               <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt||'')}</div></div>
+               ${sbdg(ao.status)}</div>`;
+           }).join('')}
+           ${aoHistory.length > 8 ? `<p style="font-size:11px;color:var(--mt);text-align:center;margin-top:4px;">+${aoHistory.length-8} till</p>` : ''}
+         </div>` : '';
+
     Modal.open({
       title: ro.title,
       wide: true,
@@ -94,7 +109,8 @@ const RecurringPage = {
         <div class="dr"><span class="dk">Intervall</span><span class="dv">${RecurringOrderService.intervalLabel(ro.interval)}${ro.interval==='eget'?' ('+ro.intervalDays+' dagar)':''}</span></div>
         <div class="dr"><span class="dk">Slutdatum</span><span class="dv">${ro.tillsvidare ? 'Tillsvidare' : (fmtDate(ro.endDate) || '—')}</span></div>
         ${ro.description ? `<div class="nbox" style="margin-top:8px;">${ro.description}</div>` : ''}
-        ${chkHtml}`,
+        ${chkHtml}
+        ${histHtml}`,
       buttons: [
         { label: 'Skapa AO nu', cls: 'btn bsu', onClick: () => {
           Modal.close();
@@ -132,10 +148,16 @@ const RecurringPage = {
     this._tempChecklist = ro ? (ro.checklist || []).map(c => ({ text: c.text })) : [];
 
     const intervals = RecurringOrderService.INTERVALS;
-    const staffHtml = (state.staff||[]).filter(s=>s.active).map(s => {
-      const sel = ro && (ro.staff||[]).includes(s.id) ? 'selected' : '';
-      return `<option value="${s.id}" ${sel}>${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`;
-    }).join('');
+    const activeStaff = (state.staff||[]).filter(s=>s.active);
+    const staffHtml = activeStaff.length === 0
+      ? '<p style="font-size:12px;color:var(--mt);margin:0;padding:4px 0;">Inga aktiva medarbetare registrerade</p>'
+      : activeStaff.map(s => {
+          const chk = ro && (ro.staff||[]).includes(s.id) ? 'checked' : '';
+          return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;border-radius:6px;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+            <input type="checkbox" class="ro-staff-cb" value="${s.id}" ${chk} style="width:15px;height:15px;accent-color:var(--sky);">
+            <span>${s.firstName} ${s.lastName}${s.title ? ' <span style="color:var(--mt);font-size:11px;">– ' + s.title + '</span>' : ''}</span>
+          </label>`;
+        }).join('');
 
     // Determine address mode for edit
     const roAddr = ro ? (ro.address || '') : '';
@@ -214,10 +236,9 @@ const RecurringPage = {
           <input type="date" id="ro-end" value="${ro ? ro.endDate||'' : ''}"></div>
 
         <div class="fg"><label>Personal</label>
-          <select id="ro-staff" multiple style="height:76px;">
+          <div style="border:1px solid var(--br);border-radius:8px;padding:4px;max-height:130px;overflow-y:auto;background:#fff;">
             ${staffHtml}
-          </select>
-          <span class="field-hint">Håll Ctrl/Cmd för att välja flera</span></div>
+          </div></div>
 
         <div class="fg"><label>Prisgrupp</label>
           <select id="ro-pg">
@@ -332,8 +353,8 @@ const RecurringPage = {
       address = document.getElementById('ro-address')?.value.trim() || '';
     }
 
-    const staffEl = document.getElementById('ro-staff');
-    const staff   = staffEl ? Array.from(staffEl.selectedOptions).map(o=>o.value) : [];
+    const staffCbs = document.querySelectorAll('.ro-staff-cb:checked');
+    const staff    = Array.from(staffCbs).map(cb => cb.value);
 
     const data = {
       title,

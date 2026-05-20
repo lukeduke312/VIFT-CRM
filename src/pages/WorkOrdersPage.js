@@ -631,6 +631,7 @@ const WorkOrdersPage = {
     });
     this._wiz.modalId = null;
     Modal.close();
+    Sidebar.updateBadges();
     showToast(`${ao.id} skapad`);
     Router.showPage('pg-ao-detail', { aoId: ao.id });
   },

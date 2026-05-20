@@ -241,6 +241,14 @@ const InvoiceDetailPage = {
 
       <!-- Tid -->
       <div id="il-tid" style="${vis('tid')}">
+        ${(state.priceGroups||[]).filter(p=>p.active).length > 0 ? `
+        <div class="fg"><label>Prisgrupp (auto-fyller timpris)</label>
+          <select id="il-pg-tid" onchange="InvoiceDetailPage._pgChanged()">
+            <option value="">— Välj prisgrupp —</option>
+            ${(state.priceGroups||[]).filter(p=>p.active).map(p =>
+              `<option value="${p.id}" data-rate="${p.hourRate||0}">${p.name} – ${fmt(p.hourRate||0)} kr/tim</option>`
+            ).join('')}
+          </select></div>` : ''}
         <div class="fg"><label>Beskrivning</label>
           <input id="il-desc-tid" value="${curType==='tid'?curDesc:''}" placeholder="Arbetstid – installation"></div>
         <div class="g2">
@@ -344,6 +352,15 @@ const InvoiceDetailPage = {
     const calc = document.getElementById('il-calc');
     if (calc) calc.style.display = 'none';
     if (type !== 'fri') this._calcLineTotals();
+  },
+
+  _pgChanged() {
+    const sel = document.getElementById('il-pg-tid');
+    if (!sel || !sel.value) return;
+    const opt  = sel.options[sel.selectedIndex];
+    const rate = parseFloat(opt.dataset.rate) || 0;
+    const priceEl = document.getElementById('il-price-tid');
+    if (priceEl) { priceEl.value = rate; this._calcLineTotals(); }
   },
 
   _articleSelected() {
@@ -492,7 +509,26 @@ const InvoiceDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
-    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); }, 80);
+    setTimeout(() => {
+      InvoiceDetailPage._calcLineTotals();
+      // Auto-select price group from linked work order
+      const inv = getInv(this.invoiceId);
+      if (inv && inv.workOrderId) {
+        const ao = (state.workOrders||[]).find(a => a.id === inv.workOrderId);
+        if (ao && ao.priceGroupId) {
+          const pgSel = document.getElementById('il-pg-tid');
+          if (pgSel) {
+            for (let i = 0; i < pgSel.options.length; i++) {
+              if (pgSel.options[i].value === ao.priceGroupId) {
+                pgSel.selectedIndex = i;
+                InvoiceDetailPage._pgChanged();
+                break;
+              }
+            }
+          }
+        }
+      }
+    }, 80);
   },
 
   openEditLine(lineId) {
