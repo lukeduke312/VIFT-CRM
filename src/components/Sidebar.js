@@ -11,7 +11,7 @@ const Sidebar = {
     { id: 'pg-ao',         icon: 'clipboard-list',   label: 'Arbetsorder',  badgeKey: 'aoNew' },
     { id: 'pg-crm',        icon: 'users',            label: 'Kunder' },
     { id: 'pg-offer',      icon: 'file-text',        label: 'Offerter' },
-    { id: 'pg-sales',      icon: 'target',           label: 'Säljchanser' },
+    { id: 'pg-sales',      icon: 'target',           label: 'Säljchanser',  badgeKey: 'salesNew' },
     { id: 'pg-invoices',   icon: 'receipt',          label: 'Fakturering' },
     { section: 'Fastigheter' },
     { id: 'pg-objects',    icon: 'building-2',       label: 'Fastigheter' },
@@ -119,16 +119,27 @@ const Sidebar = {
   },
 
   updateBadges() {
-    const badge = this._getBadge('aoNew');
-    const el = document.querySelector('#nav-pg-ao .nbdg');
-    if (badge && el) { el.textContent = badge; el.style.display = ''; }
-    else if (el)     { el.style.display = 'none'; }
+    [
+      { key: 'aoNew',    sel: '#nav-pg-ao .nbdg' },
+      { key: 'salesNew', sel: '#nav-pg-sales .nbdg' }
+    ].forEach(({ key, sel }) => {
+      const badge = this._getBadge(key);
+      const el = document.querySelector(sel);
+      if (badge && el) { el.textContent = badge; el.style.display = ''; }
+      else if (el)     { el.style.display = 'none'; }
+    });
   },
 
   _getBadge(key) {
     if (!key) return null;
     if (key === 'aoNew') {
       const n = (state.workOrders || []).filter(o => o.status === 'nytt').length;
+      return n > 0 ? n : null;
+    }
+    if (key === 'salesNew') {
+      const n = (state.salesOpportunities || []).filter(function(s) {
+        return ['new', 'contacted', 'contact_needed'].includes(s.status);
+      }).length;
       return n > 0 ? n : null;
     }
     return null;

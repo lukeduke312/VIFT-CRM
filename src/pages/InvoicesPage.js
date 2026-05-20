@@ -203,34 +203,69 @@ const InvoiceDetailPage = {
   },
 
   _lineFormHtml(line) {
-    const units = ['st','tim','m²','m','lm','gång','dag','månad','km'];
-    const vatRates = [0, 6, 12, 25];
-    const curVat   = line ? (line.vatRate != null ? line.vatRate : 25) : 25;
+    const vatRates  = [0, 6, 12, 25];
+    const curVat    = line ? (line.vatRate != null ? line.vatRate : 25) : 25;
+    const curUnit   = line ? (line.unit || 'st') : 'st';
+    const curStep   = unitStep(curUnit);
+    const curType   = line ? (line.source || 'Manuell') : 'Manuell';
+    const lineTypes = ['Manuell','Tid','Material','Övrigt','Fastpris','Fritext'];
+    const isFri     = curType === 'Fritext';
+
     return `
-      <div class="fg"><label>Beskrivning <span style="color:var(--rd)">*</span></label>
-        <input id="il-desc" value="${line ? line.description||'' : ''}" placeholder="T.ex. Arbetstid, Fogmassa…"></div>
-      <div class="g3">
-        <div class="fg"><label>Antal</label><input type="number" id="il-qty" value="${line ? line.qty||1 : 1}" min="0" step="0.01"></div>
-        <div class="fg"><label>Enhet</label>
-          <select id="il-unit">${units.map(u=>`<option value="${u}" ${line&&line.unit===u?'selected':''}>${u}</option>`).join('')}</select></div>
-        <div class="fg"><label>À-pris ex moms (kr)</label>
-          <input type="number" id="il-price" value="${line ? line.unitPrice||0 : 0}" min="0" oninput="InvoiceDetailPage._calcLineTotals()"></div>
+      <div class="fg"><label>Radtyp</label>
+        <select id="il-type" onchange="InvoiceDetailPage._typeChanged()">
+          ${lineTypes.map(t=>`<option value="${t}" ${t===curType?'selected':''}>${t}</option>`).join('')}
+        </select></div>
+
+      <div id="il-std-fields" style="${isFri?'display:none':''}">
+        <div class="fg"><label>Beskrivning <span style="color:var(--rd)">*</span></label>
+          <input id="il-desc" value="${line ? line.description||'' : ''}" placeholder="T.ex. Arbetstid, Fogmassa…"></div>
+        <div class="g3">
+          <div class="fg"><label>Antal</label>
+            <input type="number" id="il-qty" value="${line ? line.qty||1 : 1}" min="0" step="${curStep}"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+          <div class="fg"><label>Enhet</label>
+            <select id="il-unit" onchange="InvoiceDetailPage._unitChanged()">
+              ${unitsHtml(curUnit)}
+            </select></div>
+          <div class="fg"><label>À-pris ex moms (kr)</label>
+            <input type="number" id="il-price" value="${line ? line.unitPrice||0 : 0}" min="0"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Momssats</label>
+            <select id="il-vat" onchange="InvoiceDetailPage._calcLineTotals()">
+              ${vatRates.map(r=>`<option value="${r}" ${r===curVat?'selected':''}>${r}%</option>`).join('')}
+            </select></div>
+        </div>
+        <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;margin-top:4px;display:none;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><strong id="il-ex">0 kr</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><strong id="il-moms">0 kr</strong></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;color:var(--navy);"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
+        </div>
       </div>
-      <div class="g2">
-        <div class="fg"><label>Momssats</label>
-          <select id="il-vat" onchange="InvoiceDetailPage._calcLineTotals()">
-            ${vatRates.map(r=>`<option value="${r}" ${r===curVat?'selected':''}>${r}%</option>`).join('')}
-          </select></div>
-        <div class="fg"><label>Typ</label>
-          <select id="il-type">
-            ${['Manuell','Tid','Material','Fastpris'].map(t=>`<option value="${t}" ${line&&line.source===t?'selected':''}>${t}</option>`).join('')}
-          </select></div>
-      </div>
-      <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;display:none;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><span id="il-ex">0 kr</span></div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><span id="il-moms">0 kr</span></div>
-        <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
+
+      <div id="il-fri-fields" style="${isFri?'':'display:none'}">
+        <div class="fg"><label>Fritextrad</label>
+          <textarea id="il-freetext" rows="2" placeholder="Visas som informationsrad på fakturan">${line&&line.freetext||''}</textarea></div>
       </div>`;
+  },
+
+  _typeChanged() {
+    const type   = document.getElementById('il-type')?.value;
+    const isFri  = type === 'Fritext';
+    const stdEl  = document.getElementById('il-std-fields');
+    const friEl  = document.getElementById('il-fri-fields');
+    if (stdEl) stdEl.style.display = isFri ? 'none' : '';
+    if (friEl) friEl.style.display = isFri ? '' : 'none';
+    if (!isFri) this._calcLineTotals();
+  },
+
+  _unitChanged() {
+    const unit = document.getElementById('il-unit')?.value || 'st';
+    const qtyEl = document.getElementById('il-qty');
+    if (qtyEl) qtyEl.step = unitStep(unit);
+    this._calcLineTotals();
   },
 
   _calcLineTotals() {
@@ -241,11 +276,11 @@ const InvoiceDetailPage = {
     if (!calc) return;
     const ex = qty * price;
     const momsAmt = ex * vat / 100;
-    if (ex > 0 || price > 0) {
+    if (qty > 0 || price > 0) {
       calc.style.display = '';
       document.getElementById('il-ex').textContent   = fmt(ex) + ' kr';
-      document.getElementById('il-moms').textContent  = fmt(momsAmt) + ' kr';
-      document.getElementById('il-inkl').textContent  = fmt(ex + momsAmt) + ' kr';
+      document.getElementById('il-moms').textContent = fmt(momsAmt) + ' kr';
+      document.getElementById('il-inkl').textContent = fmt(ex + momsAmt) + ' kr';
     } else {
       calc.style.display = 'none';
     }
@@ -257,23 +292,32 @@ const InvoiceDetailPage = {
       body: this._lineFormHtml(null),
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => {
-          const desc = document.getElementById('il-desc')?.value.trim();
-          if (!desc) { showToast('Beskrivning krävs'); return; }
-          InvoiceService.addLine(this.invoiceId, {
-            description: desc,
-            qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
-            unit:     document.getElementById('il-unit')?.value||'st',
-            unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
-            vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
-            source:   document.getElementById('il-type')?.value||'Manuell'
-          });
+          const type = document.getElementById('il-type')?.value || 'Manuell';
+          if (type === 'Fritext') {
+            const freetext = document.getElementById('il-freetext')?.value.trim() || '';
+            InvoiceService.addLine(this.invoiceId, {
+              description: freetext, qty: 0, unit: 'st', unitPrice: 0, vatRate: 0,
+              source: 'Fritext', freetext
+            });
+          } else {
+            const desc = document.getElementById('il-desc')?.value.trim();
+            if (!desc) { showToast('Beskrivning krävs'); return; }
+            InvoiceService.addLine(this.invoiceId, {
+              description: desc,
+              qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
+              unit:     document.getElementById('il-unit')?.value||'st',
+              unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
+              vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
+              source:   type
+            });
+          }
           Modal.close();
           this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
-    setTimeout(() => InvoiceDetailPage._calcLineTotals(), 80);
+    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); InvoiceDetailPage._typeChanged(); }, 80);
   },
 
   openEditLine(lineId) {
@@ -285,23 +329,32 @@ const InvoiceDetailPage = {
       body: this._lineFormHtml(line),
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
-          const desc = document.getElementById('il-desc')?.value.trim();
-          if (!desc) { showToast('Beskrivning krävs'); return; }
-          InvoiceService.updateLine(this.invoiceId, lineId, {
-            description: desc,
-            qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
-            unit:     document.getElementById('il-unit')?.value||'st',
-            unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
-            vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
-            source:   document.getElementById('il-type')?.value||line.source||'Manuell'
-          });
+          const type = document.getElementById('il-type')?.value || line.source || 'Manuell';
+          if (type === 'Fritext') {
+            const freetext = document.getElementById('il-freetext')?.value.trim() || '';
+            InvoiceService.updateLine(this.invoiceId, lineId, {
+              description: freetext, qty: 0, unit: 'st', unitPrice: 0, vatRate: 0,
+              source: 'Fritext', freetext
+            });
+          } else {
+            const desc = document.getElementById('il-desc')?.value.trim();
+            if (!desc) { showToast('Beskrivning krävs'); return; }
+            InvoiceService.updateLine(this.invoiceId, lineId, {
+              description: desc,
+              qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
+              unit:     document.getElementById('il-unit')?.value||'st',
+              unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
+              vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
+              source:   type
+            });
+          }
           Modal.close();
           this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
-    setTimeout(() => InvoiceDetailPage._calcLineTotals(), 80);
+    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); InvoiceDetailPage._typeChanged(); }, 80);
   },
 
   deleteLine(lineId) {

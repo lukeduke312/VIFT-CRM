@@ -9,39 +9,30 @@ const Dashboard = {
     const el = document.getElementById('dash-content');
     if (!el) return;
 
-    const widgets = DashboardConfig.get()
-      .filter(function(w) { return w.visible; })
-      .sort(function(a, b) { return a.order - b.order; });
+    var kpi       = this._widgetKpi();
+    var todos     = this._widgetTodos();     // empty string if no todos
+    var sales     = this._widgetSales();
+    var today     = this._widgetToday();
+    var pool      = this._widgetPool();
+    var activity  = this._widgetActivity();
+    var quickbtns = this._widgetQuickbtns();
+    var offers    = this._widgetOffers();
+    var recurring = this._widgetRecurring(); // empty string if nothing due
 
-    var self    = this;
-    var html    = '';
-    var pair    = [];
+    var todosRow = todos
+      ? '<div class="dw-main">' + todos + '</div><div class="dw-side">' + sales + '</div>'
+      : '<div class="dw-full">' + sales + '</div>';
 
-    var flush = function() {
-      if (pair.length === 0) return;
-      if (pair.length === 1) {
-        html += '<div class="dw-full">' + self._renderWidget(pair[0]) + '</div>';
-      } else {
-        html += '<div class="dw-row">' +
-          '<div class="dw-half">' + self._renderWidget(pair[0]) + '</div>' +
-          '<div class="dw-half">' + self._renderWidget(pair[1]) + '</div>' +
-        '</div>';
-      }
-      pair = [];
-    };
-
-    widgets.forEach(function(w) {
-      if (w.size === 'full' || w.size === 'large') {
-        flush();
-        html += '<div class="dw-full">' + self._renderWidget(w) + '</div>';
-      } else {
-        pair.push(w);
-        if (pair.length === 2) flush();
-      }
-    });
-    flush();
-
-    el.innerHTML = html;
+    el.innerHTML = '<div class="dash-layout">' +
+      '<div class="dw-full">' + kpi + '</div>' +
+      todosRow +
+      '<div class="dw-third">' + today + '</div>' +
+      '<div class="dw-third">' + pool + '</div>' +
+      '<div class="dw-third">' + activity + '</div>' +
+      '<div class="dw-full">' + quickbtns + '</div>' +
+      '<div class="dw-full">' + offers + '</div>' +
+      (recurring ? '<div class="dw-full">' + recurring + '</div>' : '') +
+    '</div>';
   },
 
   _renderWidget(w) {

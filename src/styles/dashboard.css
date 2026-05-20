@@ -2,19 +2,51 @@
    DASHBOARD — KPI, att-göra, snabbknappar
    ═══════════════════════════════════════════ */
 
+/* ── Dashboard grid layout ────────────── */
+.dash-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+/* Tablet: 2 columns */
+@media (min-width: 700px) {
+  .dash-layout {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .dash-layout .dw-full  { grid-column: 1 / -1; }
+  .dash-layout .dw-main  { grid-column: 1; }
+  .dash-layout .dw-side  { grid-column: 2; }
+}
+
+/* Desktop: 3 columns */
+@media (min-width: 1024px) {
+  .dash-layout {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .dash-layout .dw-full  { grid-column: 1 / -1; }
+  .dash-layout .dw-main  { grid-column: span 2; }
+  .dash-layout .dw-side  { grid-column: 3; }
+  /* dw-third: each takes 1 of 3 columns naturally */
+}
+
 /* ── KPI-rutor ────────────────────────── */
 .kpi-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px;
 }
-@media (min-width: 600px)  { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1024px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); gap: 12px; } }
+@media (min-width: 480px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1024px) { .kpi-grid { gap: 10px; } }
 
 .kpi-card {
   background: #fff;
   border-radius: var(--rs);
-  padding: 13px;
+  padding: 11px 12px;
   border: 1px solid var(--br);
   border-left: 4px solid var(--sky);
   cursor: pointer;
@@ -28,7 +60,7 @@
 .kpi-card.purple { border-left-color: var(--pu); }
 
 .kpi-number {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 900;
   color: var(--navy);
   line-height: 1;
@@ -37,7 +69,7 @@
   font-size: 10px;
   font-weight: 700;
   color: var(--mt);
-  margin-top: 4px;
+  margin-top: 3px;
   text-transform: uppercase;
   letter-spacing: .4px;
 }
@@ -49,7 +81,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   background: #fff;
   border-radius: var(--rs);
   border: 1px solid var(--br);
@@ -61,10 +93,9 @@
 .todo-item.warning { border-color: #fca5a5; }
 
 .todo-icon {
-  width: 30px; height: 30px;
-  border-radius: 8px;
+  width: 28px; height: 28px;
+  border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
   flex-shrink: 0;
 }
 .todo-icon.red    { background: var(--lrd); color: var(--rd); }
@@ -75,17 +106,17 @@
 .todo-icon.yellow { background: var(--lyl); color: var(--yl); }
 
 .todo-text { flex: 1; min-width: 0; }
-.todo-title { font-size: 13px; font-weight: 700; color: var(--tx); }
-.todo-sub   { font-size: 11px; color: var(--mt); margin-top: 1px; }
+.todo-title { font-size: 12px; font-weight: 700; color: var(--tx); }
+.todo-sub   { font-size: 11px; color: var(--mt); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .todo-badge {
   background: var(--rd);
   color: #fff;
   border-radius: 100px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 2px 8px;
-  min-width: 22px;
+  padding: 2px 7px;
+  min-width: 20px;
   text-align: center;
   flex-shrink: 0;
 }
@@ -100,12 +131,12 @@
   gap: 8px;
 }
 @media (min-width: 480px)  { .quick-grid { grid-template-columns: repeat(6, 1fr); } }
-@media (min-width: 1024px) { .quick-grid { grid-template-columns: repeat(6, 1fr); gap: 10px; } }
+@media (min-width: 1024px) { .quick-grid { gap: 10px; } }
 
 .quick-btn {
   background: #fff;
   border-radius: 10px;
-  padding: 12px 6px;
+  padding: 11px 6px;
   text-align: center;
   cursor: pointer;
   border: 1px solid var(--br);
@@ -113,14 +144,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   transition: all .12s;
 }
 .quick-btn:hover { border-color: var(--sky); box-shadow: 0 2px 10px rgba(43,127,212,.12); transform: translateY(-1px); }
 .quick-btn:active { transform: scale(.95); }
 
 .quick-icon {
-  width: 32px; height: 32px;
+  width: 30px; height: 30px;
   border-radius: 8px;
   background: var(--acc);
   color: var(--navy);
@@ -134,42 +165,18 @@
   text-align: center;
 }
 
-/* ── Dashboard cards (sektioner) ──────── */
-.dash-section { }
-
-.sales-card {
-  background: #fff;
-  border-radius: var(--rs);
-  padding: 11px 13px;
-  border: 1px solid var(--br);
-  border-left: 4px solid var(--sky);
-  cursor: pointer;
-  margin-bottom: 8px;
-  transition: all .12s;
-}
-.sales-card:last-child { margin-bottom: 0; }
-.sales-card:hover { box-shadow: var(--shm); }
-.sales-card.high   { border-left-color: var(--rd); }
-.sales-card.medium { border-left-color: var(--or); }
-
-.sales-title { font-size: 13px; font-weight: 700; color: var(--tx); }
-.sales-meta  { font-size: 11px; color: var(--mt); margin-top: 3px; }
-.sales-tip   { font-size: 12px; color: var(--navy); margin-top: 6px; line-height: 1.4; font-style: italic; }
-
-.sales-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-
 /* ── Activity log ─────────────────────── */
 .act-item {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--bg);
 }
 .act-item:last-child { border-bottom: none; }
 
 .act-dot {
-  width: 8px; height: 8px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   background: var(--sky);
   flex-shrink: 0;
@@ -180,35 +187,20 @@
 .act-dot.orange { background: var(--or); }
 .act-dot.purple { background: var(--pu); }
 
-.act-text { font-size: 13px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
+.act-text { font-size: 12px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
 .act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
 
-/* ── Dashboard 2-col grid (legacy) ────── */
+/* ── Legacy widget layout ──────────────── */
+.dw-full  { width: 100%; }
+.dw-row   { display: flex; gap: 14px; align-items: flex-start; }
+.dw-half  { flex: 1; min-width: 0; }
+@media (max-width: 699px) { .dw-row { flex-direction: column; } }
+
+/* ── Legacy dash-grid ──────────────────── */
 .dash-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: flex; flex-direction: column; gap: 12px;
 }
 @media (min-width: 1024px) {
-  .dash-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    align-items: start;
-  }
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   .dash-grid .dash-full { grid-column: 1 / -1; }
-}
-
-/* ── Widget layout (dw-*) ──────────────── */
-.dw-full { width: 100%; }
-
-.dw-row {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-}
-.dw-half { flex: 1; min-width: 0; }
-
-@media (max-width: 767px) {
-  .dw-row { flex-direction: column; }
 }

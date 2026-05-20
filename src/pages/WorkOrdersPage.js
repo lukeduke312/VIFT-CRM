@@ -20,9 +20,14 @@ const WorkOrdersPage = {
           <input type="search" id="ao-search" placeholder="Sök order, kund, adress…"
             value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()">
         </div>
-        <button id="ao-view-btn" class="btn bs bsm" onclick="WorkOrdersPage.toggleView()" title="Byt vy">
-          ${ic(this.viewMode==='list'?'grid':'list', 14)}
-        </button>
+        <div style="display:flex;border:1.5px solid var(--br);border-radius:var(--rx);overflow:hidden;flex-shrink:0;">
+          <button class="btn bxs ${this.viewMode==='list'?'bp':'bghost'}" style="border-radius:0;border:none;gap:4px;" onclick="WorkOrdersPage.setView('list')">
+            ${ic('list',13)} Lista
+          </button>
+          <button class="btn bxs ${this.viewMode==='grid'?'bp':'bghost'}" style="border-radius:0;border-left:1.5px solid var(--br);border-right:none;border-top:none;border-bottom:none;gap:4px;" onclick="WorkOrdersPage.setView('grid')">
+            ${ic('grid',13)} Kort
+          </button>
+        </div>
         <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">
           ${ic('plus',14)} Ny order
         </button>
@@ -38,12 +43,14 @@ const WorkOrdersPage = {
     this.renderList();
   },
 
-  toggleView() {
-    this.viewMode = this.viewMode === 'list' ? 'grid' : 'list';
+  setView(mode) {
+    this.viewMode = mode;
     localStorage.setItem('view-ao', this.viewMode);
-    this.renderList();
-    const btn = document.getElementById('ao-view-btn');
-    if (btn) btn.innerHTML = ic(this.viewMode==='list'?'grid':'list', 14);
+    this.render();
+  },
+
+  toggleView() {
+    this.setView(this.viewMode === 'list' ? 'grid' : 'list');
   },
 
   setFilter(f) {

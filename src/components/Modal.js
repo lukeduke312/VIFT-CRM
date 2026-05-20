@@ -41,7 +41,7 @@ const Modal = {
       opts.buttons.forEach(btn => {
         const b = document.createElement('button');
         b.className = btn.cls || 'btn bs';
-        b.textContent = btn.label;
+        b.innerHTML = btn.label;
         b.onclick = btn.onClick;
         footer.appendChild(b);
       });
