@@ -17,6 +17,7 @@ const Sidebar = {
     { id: 'pg-contracts',  icon: 'file-check',       label: 'Kontrakt' },
     { id: 'pg-rondering',  icon: 'clipboard-check',  label: 'Rondering' },
     { section: 'Tid & Admin' },
+    { id: 'pg-recurring',  icon: 'refresh-cw',       label: 'Återkommande' },
     { id: 'pg-tid',        icon: 'clock',            label: 'Tid & stämpla' },
     { id: 'pg-calendar',   icon: 'calendar',         label: 'Kalender' },
     { id: 'pg-reports',    icon: 'bar-chart-2',      label: 'Rapporter' },
@@ -92,13 +93,11 @@ const Sidebar = {
   open() {
     document.getElementById('bottom-nav').classList.add('open');
     document.getElementById('sidebar-overlay').classList.add('open');
-    document.body.style.overflow = 'hidden';
   },
 
   close() {
     document.getElementById('bottom-nav').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('open');
-    document.body.style.overflow = '';
   },
 
   toggle() {

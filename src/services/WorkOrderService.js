@@ -45,7 +45,9 @@ const WorkOrderService = {
     return ao;
   },
 
-  markComplete(id) {
+  markComplete(id, completedBy) {
+    const ao = getAO(id);
+    if (ao && completedBy) ao.completedBy = completedBy;
     return this.setStatus(id, 'klar');
   },
 

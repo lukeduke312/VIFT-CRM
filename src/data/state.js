@@ -20,6 +20,7 @@ let state = {
   timeEntries: [],
   articles: [],
   priceGroups: [],
+  recurringOrders: [],
   salesOpportunities: [],
   activityLog: [],
   settings: {},
@@ -61,6 +62,7 @@ function initState() {
   state.timeEntries        = s.get('timeEntries')  || [];
   state.contracts          = s.get('contracts')    || [];
   state.articles           = s.get('articles')     || SeedData.articles || [];
+  state.recurringOrders    = s.get('recurringOrders') || [];
 
   // Stämpling-state
   state.stampActive    = !!s.get('stampActive');
@@ -84,8 +86,9 @@ function persist() {
   s.set('activityLog',  state.activityLog);
   s.set('settings',     state.settings);
   s.set('timeEntries',  state.timeEntries);
-  s.set('contracts',    state.contracts);
-  s.set('articles',     state.articles);
+  s.set('contracts',        state.contracts);
+  s.set('articles',         state.articles);
+  s.set('recurringOrders',  state.recurringOrders);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */

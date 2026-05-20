@@ -26,7 +26,8 @@ const Router = {
     'pg-payroll':     { title: 'Löneunderlag',          sub: 'Tidrapport per personal' },
     'pg-reports':     { title: 'Rapporter',             sub: 'Statistik & analys' },
     'pg-staff':       { title: 'Personal',              sub: 'Personalregister' },
-    'pg-admin':       { title: 'Admin',                 sub: 'Systeminställningar' }
+    'pg-admin':       { title: 'Admin',                 sub: 'Systeminställningar' },
+    'pg-recurring':   { title: 'Återkommande ärenden',  sub: 'Schemalagda serviceärenden' }
   },
 
   currentPage: null,
@@ -81,7 +82,8 @@ const Router = {
       'pg-articles':    () => ArticlesPage.render(),
       'pg-pricegroups': () => PriceGroupsPage.render(),
       'pg-staff':       () => StaffPage.render(),
-      'pg-admin':       () => AdminPage.render()
+      'pg-admin':       () => AdminPage.render(),
+      'pg-recurring':   () => RecurringPage.render()
     };
 
     const renderer = renderers[pageId];

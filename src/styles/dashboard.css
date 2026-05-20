@@ -21,6 +21,7 @@
   transition: all .12s;
 }
 .kpi-card:hover { box-shadow: var(--shm); }
+.kpi-card.blue   { border-left-color: var(--sky); }
 .kpi-card.red    { border-left-color: var(--rd); }
 .kpi-card.green  { border-left-color: var(--gr); }
 .kpi-card.orange { border-left-color: var(--or); }

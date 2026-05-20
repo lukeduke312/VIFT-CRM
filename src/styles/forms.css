@@ -114,6 +114,9 @@ select {
   box-shadow: 0 0 0 3px rgba(43,127,212,.1);
 }
 
+/* Search wrapper — icon must not overlap text */
+.swrap input { padding-left: 38px !important; }
+
 /* ── Error/help text ──────────────────── */
 .field-err {
   font-size: 11px;

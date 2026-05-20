@@ -175,37 +175,86 @@ const InvoiceDetailPage = {
     const lines = inv.lines || [];
     if (!lines.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Inga rader</p>`;
     return lines.map(l => {
-      const rowTotal = (l.qty||0) * (l.unitPrice||0);
+      const exVat  = (l.qty||0) * (l.unitPrice||0);
+      const vatAmt = exVat * ((l.vatRate||25) / 100);
+      const typeIcon = { Tid: 'clock', Material: 'package', Fastpris: 'file-check', Manuell: 'pencil', Manuell_rad: 'pencil' }[l.source] || 'file-text';
+      const typeCls  = { Tid: 'bdg-sky', Material: 'bdg-orange', Fastpris: 'bdg-green', Manuell: 'bdg-grey' }[l.source] || 'bdg-grey';
       return `
-        <div style="display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${l.description}</div>
-            <div style="font-size:11px;color:var(--mt);">${l.qty} ${l.unit} × ${fmt(l.unitPrice)} kr
-              <span class="bdg bdg-grey" style="font-size:9px;margin-left:4px;">${InvoiceService.sourceLabel(l)}</span>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
+          <div style="display:flex;align-items:flex-start;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${l.description}</div>
+              <div style="font-size:11px;color:var(--mt);">${l.qty} ${l.unit} × ${fmt(l.unitPrice)} kr
+                <span class="bdg ${typeCls}" style="font-size:9px;margin-left:4px;">${ic(typeIcon,9)} ${InvoiceService.sourceLabel(l)}</span>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:3px;font-size:11px;">
+                <span style="color:var(--mt);">Ex: <strong style="color:var(--tx)">${fmt(exVat)} kr</strong></span>
+                <span style="color:var(--mt);">Moms ${l.vatRate||25}%: ${fmt(vatAmt)} kr</span>
+                <span style="color:var(--navy);font-weight:700;">Inkl: ${fmt(exVat+vatAmt)} kr</span>
+              </div>
             </div>
-          </div>
-          <div style="font-size:13px;font-weight:700;flex-shrink:0;">${fmt(rowTotal)} kr</div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditLine('${l.id}')">${ic('pencil',12)}</button>
-            <button class="btn bxs bd" onclick="InvoiceDetailPage.deleteLine('${l.id}')">${ic('trash',12)}</button>
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditLine('${l.id}')">${ic('pencil',12)}</button>
+              <button class="btn bxs bd" onclick="InvoiceDetailPage.deleteLine('${l.id}')">${ic('trash',12)}</button>
+            </div>
           </div>
         </div>`;
     }).join('');
   },
 
+  _lineFormHtml(line) {
+    const units = ['st','tim','m²','m','lm','gång','dag','månad','km'];
+    const vatRates = [0, 6, 12, 25];
+    const curVat   = line ? (line.vatRate != null ? line.vatRate : 25) : 25;
+    return `
+      <div class="fg"><label>Beskrivning <span style="color:var(--rd)">*</span></label>
+        <input id="il-desc" value="${line ? line.description||'' : ''}" placeholder="T.ex. Arbetstid, Fogmassa…"></div>
+      <div class="g3">
+        <div class="fg"><label>Antal</label><input type="number" id="il-qty" value="${line ? line.qty||1 : 1}" min="0" step="0.01"></div>
+        <div class="fg"><label>Enhet</label>
+          <select id="il-unit">${units.map(u=>`<option value="${u}" ${line&&line.unit===u?'selected':''}>${u}</option>`).join('')}</select></div>
+        <div class="fg"><label>À-pris ex moms (kr)</label>
+          <input type="number" id="il-price" value="${line ? line.unitPrice||0 : 0}" min="0" oninput="InvoiceDetailPage._calcLineTotals()"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Momssats</label>
+          <select id="il-vat" onchange="InvoiceDetailPage._calcLineTotals()">
+            ${vatRates.map(r=>`<option value="${r}" ${r===curVat?'selected':''}>${r}%</option>`).join('')}
+          </select></div>
+        <div class="fg"><label>Typ</label>
+          <select id="il-type">
+            ${['Manuell','Tid','Material','Fastpris'].map(t=>`<option value="${t}" ${line&&line.source===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+      </div>
+      <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;display:none;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><span id="il-ex">0 kr</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><span id="il-moms">0 kr</span></div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
+      </div>`;
+  },
+
+  _calcLineTotals() {
+    const qty   = parseFloat(document.getElementById('il-qty')?.value) || 0;
+    const price = parseFloat(document.getElementById('il-price')?.value) || 0;
+    const vat   = parseFloat(document.getElementById('il-vat')?.value) || 0;
+    const calc  = document.getElementById('il-calc');
+    if (!calc) return;
+    const ex = qty * price;
+    const momsAmt = ex * vat / 100;
+    if (ex > 0 || price > 0) {
+      calc.style.display = '';
+      document.getElementById('il-ex').textContent   = fmt(ex) + ' kr';
+      document.getElementById('il-moms').textContent  = fmt(momsAmt) + ' kr';
+      document.getElementById('il-inkl').textContent  = fmt(ex + momsAmt) + ' kr';
+    } else {
+      calc.style.display = 'none';
+    }
+  },
+
   openAddLine() {
     Modal.open({
       title: 'Lägg till rad',
-      body: `
-        <div class="fg"><label>Beskrivning</label><input id="il-desc" placeholder="T.ex. Arbetstid, Material…"></div>
-        <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="il-qty" value="1" min="0" step="0.01"></div>
-          <div class="fg"><label>Enhet</label>
-            <select id="il-unit">
-              ${['st','tim','m²','m','gång','dag','månad'].map(u=>`<option value="${u}">${u}</option>`).join('')}
-            </select></div>
-          <div class="fg"><label>À-pris (kr)</label><input type="number" id="il-price" placeholder="0" min="0"></div>
-        </div>`,
+      body: this._lineFormHtml(null),
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => {
           const desc = document.getElementById('il-desc')?.value.trim();
@@ -214,7 +263,9 @@ const InvoiceDetailPage = {
             description: desc,
             qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
             unit:     document.getElementById('il-unit')?.value||'st',
-            unitPrice:parseFloat(document.getElementById('il-price')?.value)||0
+            unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
+            vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
+            source:   document.getElementById('il-type')?.value||'Manuell'
           });
           Modal.close();
           this._refresh();
@@ -222,6 +273,7 @@ const InvoiceDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+    setTimeout(() => InvoiceDetailPage._calcLineTotals(), 80);
   },
 
   openEditLine(lineId) {
@@ -230,23 +282,18 @@ const InvoiceDetailPage = {
     if (!line) return;
     Modal.open({
       title: 'Redigera rad',
-      body: `
-        <div class="fg"><label>Beskrivning</label><input id="il-desc" value="${line.description}"></div>
-        <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="il-qty" value="${line.qty}" min="0" step="0.01"></div>
-          <div class="fg"><label>Enhet</label>
-            <select id="il-unit">
-              ${['st','tim','m²','m','gång','dag','månad'].map(u=>`<option value="${u}" ${line.unit===u?'selected':''}>${u}</option>`).join('')}
-            </select></div>
-          <div class="fg"><label>À-pris (kr)</label><input type="number" id="il-price" value="${line.unitPrice}" min="0"></div>
-        </div>`,
+      body: this._lineFormHtml(line),
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const desc = document.getElementById('il-desc')?.value.trim();
+          if (!desc) { showToast('Beskrivning krävs'); return; }
           InvoiceService.updateLine(this.invoiceId, lineId, {
-            description: document.getElementById('il-desc')?.value.trim(),
-            qty:       parseFloat(document.getElementById('il-qty')?.value)||1,
-            unit:      document.getElementById('il-unit')?.value||'st',
-            unitPrice: parseFloat(document.getElementById('il-price')?.value)||0
+            description: desc,
+            qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
+            unit:     document.getElementById('il-unit')?.value||'st',
+            unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
+            vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
+            source:   document.getElementById('il-type')?.value||line.source||'Manuell'
           });
           Modal.close();
           this._refresh();
@@ -254,6 +301,7 @@ const InvoiceDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+    setTimeout(() => InvoiceDetailPage._calcLineTotals(), 80);
   },
 
   deleteLine(lineId) {

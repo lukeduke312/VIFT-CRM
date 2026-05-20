@@ -11,11 +11,11 @@
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
-<link rel="stylesheet" href="src/styles/layout.css?v=4">
-<link rel="stylesheet" href="src/styles/components.css?v=3">
-<link rel="stylesheet" href="src/styles/forms.css?v=4">
-<link rel="stylesheet" href="src/styles/dashboard.css?v=4">
-<link rel="stylesheet" href="src/styles/responsive.css?v=4">
+<link rel="stylesheet" href="src/styles/layout.css?v=5">
+<link rel="stylesheet" href="src/styles/components.css?v=4">
+<link rel="stylesheet" href="src/styles/forms.css?v=5">
+<link rel="stylesheet" href="src/styles/dashboard.css?v=5">
+<link rel="stylesheet" href="src/styles/responsive.css?v=5">
 </head>
 <body>
 
@@ -171,6 +171,11 @@
         <div class="con" id="pg-inv-detail-content"></div>
       </div>
 
+      <!-- Återkommande ärenden -->
+      <div class="page" id="pg-recurring">
+        <div class="con" id="pg-recurring-content"></div>
+      </div>
+
       <!-- Tid & stämpla -->
       <div class="page" id="pg-tid">
         <div class="con" id="pg-tid-content"></div>
@@ -245,32 +250,34 @@
 
 <!-- 1. Data-lager -->
 <script src="src/data/storage.js?v=2"></script>
-<script src="src/data/schema.js?v=3"></script>
+<script src="src/data/schema.js?v=4"></script>
 <script src="src/data/seedData.js?v=4"></script>
-<script src="src/data/state.js?v=3"></script>
+<script src="src/data/state.js?v=4"></script>
 
 <!-- 2. Services -->
 <script src="src/services/ActivityService.js?v=2"></script>
 <script src="src/services/SalesService.js?v=2"></script>
 <script src="src/services/AuthService.js?v=2"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
-<script src="src/services/WorkOrderService.js?v=2"></script>
+<script src="src/services/WorkOrderService.js?v=3"></script>
 <script src="src/services/TimeService.js?v=4"></script>
 <script src="src/services/InvoiceService.js?v=2"></script>
+<script src="src/services/RecurringOrderService.js?v=1"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=2"></script>
 <script src="src/components/Modal.js?v=3"></script>
-<script src="src/components/Sidebar.js?v=2"></script>
+<script src="src/components/Sidebar.js?v=3"></script>
 
 <!-- 4. Pages -->
 <script src="src/pages/Router.js?v=2"></script>
-<script src="src/pages/Dashboard.js?v=4"></script>
+<script src="src/pages/Dashboard.js?v=5"></script>
 <script src="src/pages/CustomersPage.js?v=2"></script>
 <script src="src/pages/WorkOrdersPage.js?v=3"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=3"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=4"></script>
 <script src="src/pages/TimePage.js?v=4"></script>
-<script src="src/pages/InvoicesPage.js?v=2"></script>
+<script src="src/pages/InvoicesPage.js?v=3"></script>
+<script src="src/pages/RecurringPage.js?v=1"></script>
 <script src="src/pages/PageShells.js?v=2"></script>
 
 <!-- 5. App bootstrap -->

@@ -56,9 +56,11 @@ const Schema = {
     timeEntries: [],          // [timeEntryId, ...]  (refs till timeEntries)
     invoiceId: '',
     salesOpportunityId: '',
+    recurringOrderId: '',
     createdAt: '',
     updatedAt: '',
-    completedAt: ''
+    completedAt: '',
+    completedBy: ''
   }),
 
   offer: () => ({
@@ -222,6 +224,35 @@ const Schema = {
     description: '',
     active: true,
     createdAt: ''
+  }),
+
+  recurringOrder: () => ({
+    id: '',
+    title: '',
+    customerId: '',
+    propertyId: '',
+    address: '',
+    description: '',
+    contactPerson: '',
+    phone: '',
+    internalNote: '',
+    priority: 'normal',
+    priceType: 'ej_satt',
+    priceGroupId: '',
+    fixedPrice: 0,
+    staff: [],
+    // Intervall: dagligen | veckovis | varannan_vecka | månadsvis | kvartalsvis | årsvis | eget
+    interval: 'månadsvis',
+    intervalDays: 30,        // används om interval = 'eget'
+    startDate: '',
+    endDate: '',
+    tillsvidare: true,
+    checklist: [],           // [{text}] — mall, kopieras vid skapande
+    status: 'aktiv',         // aktiv | pausad | avslutad
+    nextDate: '',
+    lastCreatedDate: '',
+    createdAt: '',
+    updatedAt: ''
   }),
 
   article: () => ({

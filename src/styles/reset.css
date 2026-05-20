@@ -12,6 +12,7 @@ html, body {
   color: var(--tx);
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
 }
 
 button, input, select, textarea {

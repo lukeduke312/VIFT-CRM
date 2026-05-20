@@ -634,11 +634,35 @@ const WorkOrderDetailPage = {
   },
 
   markComplete() {
-    Modal.confirm(`Markera ordern som klar?`, () => {
-      WorkOrderService.markComplete(this.aoId);
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const chkTotal = (ao.checklist||[]).length;
+    const chkDone  = (ao.checklist||[]).filter(c=>c.done).length;
+    const incomplete = chkTotal > 0 && chkDone < chkTotal;
+
+    const doComplete = () => {
+      const completedBy = state.currentUser
+        ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim()
+        : '';
+      WorkOrderService.markComplete(this.aoId, completedBy);
       this.render({ aoId: this.aoId });
       showToast('Order markerad klar');
-    });
+    };
+
+    if (incomplete) {
+      Modal.open({
+        title: 'Ofullständig checklista',
+        body: `
+          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkDone} av ${chkTotal} checkpunkter är utförda</div>
+          <p style="font-size:13px;color:var(--mt);">Vill du ändå klarmarkera ordern?</p>`,
+        buttons: [
+          { label: 'Klarmarkera ändå', cls: 'btn bsu', onClick: () => { Modal.close(); doComplete(); } },
+          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        ]
+      });
+    } else {
+      Modal.confirm('Markera ordern som klar?', doComplete);
+    }
   },
 
   openStatusModal() {
@@ -671,8 +695,10 @@ const WorkOrderDetailPage = {
 
   _openClockOutModal() {
     const mins = Math.round((Date.now() - state.stampTimestamp) / 60000);
+    const ao = getAO(this.aoId);
+    const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Klocka ut',
@@ -744,8 +770,10 @@ const WorkOrderDetailPage = {
 
   /* ── Tid ───────────────────────────────── */
   openAddTime() {
+    const ao = getAO(this.aoId);
+    const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Registrera tid',
