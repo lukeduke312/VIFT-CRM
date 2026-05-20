@@ -257,7 +257,12 @@ const RecurringPage = {
     const addr = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
     const display = document.getElementById('ro-cu-addr-display');
     if (display) display.textContent = addr || '(ingen adress registrerad)';
-    // If customer-address mode is selected, nothing extra to do (address is resolved at save time)
+    // If "kundens adress" mode is selected, update address field too
+    const isCuMode = document.getElementById('ro-addr-cu')?.checked;
+    if (isCuMode) {
+      const addrInput = document.getElementById('ro-address');
+      if (addrInput) addrInput.value = addr;
+    }
   },
 
   _addrModeChanged() {

@@ -153,7 +153,7 @@
   background: #fff;
   border-radius: 16px 16px 0 0;
   width: 100%;
-  max-height: calc(92dvh - env(safe-area-inset-top));
+  max-height: calc(94dvh - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
   overflow: hidden;

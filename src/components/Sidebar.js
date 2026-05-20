@@ -120,13 +120,24 @@ const Sidebar = {
 
   updateBadges() {
     [
-      { key: 'aoNew',    sel: '#nav-pg-ao .nbdg' },
-      { key: 'salesNew', sel: '#nav-pg-sales .nbdg' }
-    ].forEach(({ key, sel }) => {
-      const badge = this._getBadge(key);
-      const el = document.querySelector(sel);
-      if (badge && el) { el.textContent = badge; el.style.display = ''; }
-      else if (el)     { el.style.display = 'none'; }
+      { key: 'aoNew',    navId: 'nav-pg-ao' },
+      { key: 'salesNew', navId: 'nav-pg-sales' }
+    ].forEach(({ key, navId }) => {
+      const badge  = this._getBadge(key);
+      const navBtn = document.getElementById(navId);
+      if (!navBtn) return;
+      let el = navBtn.querySelector('.nbdg');
+      if (badge) {
+        if (!el) {
+          el = document.createElement('span');
+          el.className = 'nbdg';
+          navBtn.appendChild(el);
+        }
+        el.textContent = badge;
+        el.style.display = '';
+      } else if (el) {
+        el.style.display = 'none';
+      }
     });
   },
 

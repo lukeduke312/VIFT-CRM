@@ -203,77 +203,210 @@ const InvoiceDetailPage = {
   },
 
   _lineFormHtml(line) {
-    const vatRates  = [0, 6, 12, 25];
-    const curVat    = line ? (line.vatRate != null ? line.vatRate : 25) : 25;
-    const curUnit   = line ? (line.unit || 'st') : 'st';
-    const curStep   = unitStep(curUnit);
-    const curType   = line ? (line.source || 'Manuell') : 'Manuell';
-    const lineTypes = ['Manuell','Tid','Material','Övrigt','Fastpris','Fritext'];
-    const isFri     = curType === 'Fritext';
+    const vatRates = [0, 6, 12, 25];
+    const vatOpts  = (sel) => vatRates.map(r => `<option value="${r}" ${r===sel?'selected':''}>${r}%</option>`).join('');
+
+    // Determine current type: map legacy source names to our type keys
+    const srcToType = { 'Tid':'tid', 'Material':'mat', 'Övrigt':'ovr', 'Fastpris':'fast', 'Fritext':'fri', 'Manuell':'ovr' };
+    const curSrc  = line ? (line.source || 'Manuell') : 'Manuell';
+    const curType = srcToType[curSrc] || 'ovr';
+
+    const curVat   = line ? (line.vatRate != null ? line.vatRate : 25) : 25;
+    const curUnit  = line ? (line.unit  || 'st') : 'st';
+    const curQty   = line ? (line.qty   != null ? line.qty : 1)  : 1;
+    const curPrice = line ? (line.unitPrice != null ? line.unitPrice : 0) : 0;
+    const curDesc  = line ? (line.description || '') : '';
+    const curFree  = line ? (line.freetext || '') : '';
+
+    const typeMap = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
+    const types = ['tid','mat','ovr','fast','fri'];
+    const typeLabels = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
+
+    const typeBtns = types.map(t =>
+      `<button type="button" class="btn ${t===curType?'bp':'bs'} bsm" style="flex:1;padding:7px 4px;font-size:11px;"
+        onclick="InvoiceDetailPage._setType('${t}')">${typeLabels[t]}</button>`
+    ).join('');
+
+    // Article picker options
+    const artOpts = (state.articles||[]).filter(a=>a.active).map(a =>
+      `<option value="${a.id}" data-name="${a.name||''}" data-unit="${a.unit||'st'}" data-price="${a.sellPrice||0}" data-vat="${a.vatRate||25}">${a.articleNumber?a.articleNumber+' – ':''}${a.name} (${fmt(a.sellPrice||0)} kr/${a.unit||'st'})</option>`
+    ).join('');
+
+    // Helper: show/hide based on curType
+    const vis = (t) => t === curType ? '' : 'display:none';
 
     return `
-      <div class="fg"><label>Radtyp</label>
-        <select id="il-type" onchange="InvoiceDetailPage._typeChanged()">
-          ${lineTypes.map(t=>`<option value="${t}" ${t===curType?'selected':''}>${t}</option>`).join('')}
-        </select></div>
+      <input type="hidden" id="il-type" value="${curType}">
+      <div style="display:flex;gap:5px;margin-bottom:12px;">${typeBtns}</div>
 
-      <div id="il-std-fields" style="${isFri?'display:none':''}">
-        <div class="fg"><label>Beskrivning <span style="color:var(--rd)">*</span></label>
-          <input id="il-desc" value="${line ? line.description||'' : ''}" placeholder="T.ex. Arbetstid, Fogmassa…"></div>
-        <div class="g3">
-          <div class="fg"><label>Antal</label>
-            <input type="number" id="il-qty" value="${line ? line.qty||1 : 1}" min="0" step="${curStep}"
-              oninput="InvoiceDetailPage._calcLineTotals()"></div>
-          <div class="fg"><label>Enhet</label>
-            <select id="il-unit" onchange="InvoiceDetailPage._unitChanged()">
-              ${unitsHtml(curUnit)}
-            </select></div>
-          <div class="fg"><label>À-pris ex moms (kr)</label>
-            <input type="number" id="il-price" value="${line ? line.unitPrice||0 : 0}" min="0"
-              oninput="InvoiceDetailPage._calcLineTotals()"></div>
-        </div>
+      <!-- Tid -->
+      <div id="il-tid" style="${vis('tid')}">
+        <div class="fg"><label>Beskrivning</label>
+          <input id="il-desc-tid" value="${curType==='tid'?curDesc:''}" placeholder="Arbetstid – installation"></div>
         <div class="g2">
-          <div class="fg"><label>Momssats</label>
-            <select id="il-vat" onchange="InvoiceDetailPage._calcLineTotals()">
-              ${vatRates.map(r=>`<option value="${r}" ${r===curVat?'selected':''}>${r}%</option>`).join('')}
-            </select></div>
+          <div class="fg"><label>Antal timmar</label>
+            <input type="number" id="il-qty-tid" value="${curType==='tid'?curQty:1}" min="0" step="0.25"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+          <div class="fg"><label>Timpris ex moms (kr)</label>
+            <input type="number" id="il-price-tid" value="${curType==='tid'?curPrice:0}" min="0"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
         </div>
-        <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;margin-top:4px;display:none;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><strong id="il-ex">0 kr</strong></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><strong id="il-moms">0 kr</strong></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;color:var(--navy);"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
-        </div>
+        <div class="fg"><label>Momssats</label>
+          <select id="il-vat-tid" onchange="InvoiceDetailPage._calcLineTotals()">${vatOpts(curType==='tid'?curVat:25)}</select></div>
       </div>
 
-      <div id="il-fri-fields" style="${isFri?'':'display:none'}">
+      <!-- Material -->
+      <div id="il-mat" style="${vis('mat')}">
+        ${artOpts ? `<div class="fg"><label>Välj artikel</label>
+          <select id="il-article" onchange="InvoiceDetailPage._articleSelected()">
+            <option value="">— Välj från artikelregister —</option>
+            ${artOpts}
+          </select></div>` : ''}
+        <div class="fg"><label>Beskrivning</label>
+          <input id="il-desc-mat" value="${curType==='mat'?curDesc:''}" placeholder="T.ex. Fogmassa, Kopparrör…"></div>
+        <div class="g3">
+          <div class="fg"><label>Antal</label>
+            <input type="number" id="il-qty-mat" value="${curType==='mat'?curQty:1}" min="0" step="${curType==='mat'?unitStep(curUnit):1}"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+          <div class="fg"><label>Enhet</label>
+            <select id="il-unit-mat" onchange="InvoiceDetailPage._unitChanged('mat')">${unitsHtml(curType==='mat'?curUnit:'st')}</select></div>
+          <div class="fg"><label>Á-pris ex moms (kr)</label>
+            <input type="number" id="il-price-mat" value="${curType==='mat'?curPrice:0}" min="0"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+        </div>
+        <div class="fg"><label>Momssats</label>
+          <select id="il-vat-mat" onchange="InvoiceDetailPage._calcLineTotals()">${vatOpts(curType==='mat'?curVat:25)}</select></div>
+      </div>
+
+      <!-- Övrigt -->
+      <div id="il-ovr" style="${vis('ovr')}">
+        <div class="fg"><label>Beskrivning</label>
+          <input id="il-desc-ovr" value="${curType==='ovr'?curDesc:''}" placeholder="T.ex. Restid, Utrustning…"></div>
+        <div class="g3">
+          <div class="fg"><label>Antal</label>
+            <input type="number" id="il-qty-ovr" value="${curType==='ovr'?curQty:1}" min="0" step="${curType==='ovr'?unitStep(curUnit):1}"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+          <div class="fg"><label>Enhet</label>
+            <select id="il-unit-ovr" onchange="InvoiceDetailPage._unitChanged('ovr')">${unitsHtml(curType==='ovr'?curUnit:'st')}</select></div>
+          <div class="fg"><label>Á-pris ex moms (kr)</label>
+            <input type="number" id="il-price-ovr" value="${curType==='ovr'?curPrice:0}" min="0"
+              oninput="InvoiceDetailPage._calcLineTotals()"></div>
+        </div>
+        <div class="fg"><label>Momssats</label>
+          <select id="il-vat-ovr" onchange="InvoiceDetailPage._calcLineTotals()">${vatOpts(curType==='ovr'?curVat:25)}</select></div>
+      </div>
+
+      <!-- Fastpris -->
+      <div id="il-fast" style="${vis('fast')}">
+        <div class="fg"><label>Beskrivning</label>
+          <input id="il-desc-fast" value="${curType==='fast'?curDesc:''}" placeholder="T.ex. Avtalat pris, Årsservice…"></div>
+        <div class="fg"><label>Fast pris ex moms (kr)</label>
+          <input type="number" id="il-price-fast" value="${curType==='fast'?curPrice:0}" min="0"
+            oninput="InvoiceDetailPage._calcLineTotals()"></div>
+        <div class="fg"><label>Momssats</label>
+          <select id="il-vat-fast" onchange="InvoiceDetailPage._calcLineTotals()">${vatOpts(curType==='fast'?curVat:25)}</select></div>
+      </div>
+
+      <!-- Fritext -->
+      <div id="il-fri" style="${vis('fri')}">
         <div class="fg"><label>Fritextrad</label>
-          <textarea id="il-freetext" rows="2" placeholder="Visas som informationsrad på fakturan">${line&&line.freetext||''}</textarea></div>
+          <textarea id="il-freetext" rows="3" placeholder="Visas som informationsrad på fakturan – ingen beräkning">${curFree}</textarea></div>
+      </div>
+
+      <!-- Live-kalkyl (döljs för Fritext) -->
+      <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;margin-top:6px;${curType==='fri'?'display:none':'display:none'}">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><strong id="il-ex">0 kr</strong></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><strong id="il-moms">0 kr</strong></div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;color:var(--navy);"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
       </div>`;
   },
 
-  _typeChanged() {
-    const type   = document.getElementById('il-type')?.value;
-    const isFri  = type === 'Fritext';
-    const stdEl  = document.getElementById('il-std-fields');
-    const friEl  = document.getElementById('il-fri-fields');
-    if (stdEl) stdEl.style.display = isFri ? 'none' : '';
-    if (friEl) friEl.style.display = isFri ? '' : 'none';
-    if (!isFri) this._calcLineTotals();
+  _setType(type) {
+    const hiddenInput = document.getElementById('il-type');
+    if (hiddenInput) hiddenInput.value = type;
+    const panels = ['tid','mat','ovr','fast','fri'];
+    panels.forEach(p => {
+      const el = document.getElementById('il-' + p);
+      if (el) el.style.display = p === type ? '' : 'none';
+    });
+    // Update type buttons
+    const typeLabels = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
+    const btnContainer = document.querySelector('#il-type + div');
+    if (btnContainer) {
+      btnContainer.querySelectorAll('button').forEach(btn => {
+        const btnType = Object.keys(typeLabels).find(k => typeLabels[k] === btn.textContent.trim());
+        if (btnType) {
+          btn.className = 'btn ' + (btnType === type ? 'bp' : 'bs') + ' bsm';
+          btn.style.cssText = 'flex:1;padding:7px 4px;font-size:11px;';
+        }
+      });
+    }
+    const calc = document.getElementById('il-calc');
+    if (calc) calc.style.display = 'none';
+    if (type !== 'fri') this._calcLineTotals();
   },
 
-  _unitChanged() {
-    const unit = document.getElementById('il-unit')?.value || 'st';
-    const qtyEl = document.getElementById('il-qty');
+  _articleSelected() {
+    const sel = document.getElementById('il-article');
+    if (!sel || !sel.value) return;
+    const opt = sel.options[sel.selectedIndex];
+    const name  = opt.dataset.name  || '';
+    const unit  = opt.dataset.unit  || 'st';
+    const price = parseFloat(opt.dataset.price) || 0;
+    const vat   = parseInt(opt.dataset.vat)     || 25;
+    const descEl  = document.getElementById('il-desc-mat');
+    const unitEl  = document.getElementById('il-unit-mat');
+    const priceEl = document.getElementById('il-price-mat');
+    const vatEl   = document.getElementById('il-vat-mat');
+    const qtyEl   = document.getElementById('il-qty-mat');
+    if (descEl)  descEl.value  = name;
+    if (priceEl) priceEl.value = price;
+    if (vatEl) {
+      for (let i = 0; i < vatEl.options.length; i++) {
+        if (parseInt(vatEl.options[i].value) === vat) { vatEl.selectedIndex = i; break; }
+      }
+    }
+    if (unitEl) {
+      for (let i = 0; i < unitEl.options.length; i++) {
+        if (unitEl.options[i].value === unit) { unitEl.selectedIndex = i; break; }
+      }
+    }
     if (qtyEl) qtyEl.step = unitStep(unit);
     this._calcLineTotals();
   },
 
+  _unitChanged(panelType) {
+    const t = panelType || 'ovr';
+    const unitEl = document.getElementById('il-unit-' + t);
+    const qtyEl  = document.getElementById('il-qty-'  + t);
+    if (unitEl && qtyEl) qtyEl.step = unitStep(unitEl.value);
+    this._calcLineTotals();
+  },
+
   _calcLineTotals() {
-    const qty   = parseFloat(document.getElementById('il-qty')?.value) || 0;
-    const price = parseFloat(document.getElementById('il-price')?.value) || 0;
-    const vat   = parseFloat(document.getElementById('il-vat')?.value) || 0;
-    const calc  = document.getElementById('il-calc');
-    if (!calc) return;
+    const type = document.getElementById('il-type')?.value || 'ovr';
+    const calc = document.getElementById('il-calc');
+    if (!calc || type === 'fri') { if(calc) calc.style.display='none'; return; }
+
+    let qty = 0, price = 0, vat = 0;
+    if (type === 'tid') {
+      qty   = parseFloat(document.getElementById('il-qty-tid')?.value)   || 0;
+      price = parseFloat(document.getElementById('il-price-tid')?.value) || 0;
+      vat   = parseFloat(document.getElementById('il-vat-tid')?.value)   || 0;
+    } else if (type === 'mat') {
+      qty   = parseFloat(document.getElementById('il-qty-mat')?.value)   || 0;
+      price = parseFloat(document.getElementById('il-price-mat')?.value) || 0;
+      vat   = parseFloat(document.getElementById('il-vat-mat')?.value)   || 0;
+    } else if (type === 'ovr') {
+      qty   = parseFloat(document.getElementById('il-qty-ovr')?.value)   || 0;
+      price = parseFloat(document.getElementById('il-price-ovr')?.value) || 0;
+      vat   = parseFloat(document.getElementById('il-vat-ovr')?.value)   || 0;
+    } else if (type === 'fast') {
+      qty   = 1;
+      price = parseFloat(document.getElementById('il-price-fast')?.value) || 0;
+      vat   = parseFloat(document.getElementById('il-vat-fast')?.value)   || 0;
+    }
+
     const ex = qty * price;
     const momsAmt = ex * vat / 100;
     if (qty > 0 || price > 0) {
@@ -286,38 +419,80 @@ const InvoiceDetailPage = {
     }
   },
 
+  _getLineData() {
+    const type = document.getElementById('il-type')?.value || 'ovr';
+    const typeToSource = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
+    const source = typeToSource[type] || 'Övrigt';
+
+    if (type === 'fri') {
+      const freetext = document.getElementById('il-freetext')?.value.trim() || '';
+      return { description: freetext || '(fritext)', qty: 0, unit: 'st', unitPrice: 0, vatRate: 0, source: 'Fritext', freetext };
+    }
+    if (type === 'tid') {
+      const desc = document.getElementById('il-desc-tid')?.value.trim();
+      if (!desc) { showToast('Beskrivning krävs'); return null; }
+      return {
+        description: desc,
+        qty:       parseFloat(document.getElementById('il-qty-tid')?.value)   || 1,
+        unit:      'tim',
+        unitPrice: parseFloat(document.getElementById('il-price-tid')?.value) || 0,
+        vatRate:   parseFloat(document.getElementById('il-vat-tid')?.value)   || 25,
+        source:    'Tid'
+      };
+    }
+    if (type === 'mat') {
+      const desc = document.getElementById('il-desc-mat')?.value.trim();
+      if (!desc) { showToast('Beskrivning krävs'); return null; }
+      return {
+        description: desc,
+        qty:       parseFloat(document.getElementById('il-qty-mat')?.value)   || 1,
+        unit:      document.getElementById('il-unit-mat')?.value              || 'st',
+        unitPrice: parseFloat(document.getElementById('il-price-mat')?.value) || 0,
+        vatRate:   parseFloat(document.getElementById('il-vat-mat')?.value)   || 25,
+        source:    'Material'
+      };
+    }
+    if (type === 'fast') {
+      const desc = document.getElementById('il-desc-fast')?.value.trim();
+      if (!desc) { showToast('Beskrivning krävs'); return null; }
+      return {
+        description: desc,
+        qty:       1,
+        unit:      'st',
+        unitPrice: parseFloat(document.getElementById('il-price-fast')?.value) || 0,
+        vatRate:   parseFloat(document.getElementById('il-vat-fast')?.value)   || 25,
+        source:    'Fastpris'
+      };
+    }
+    // ovr (Övrigt)
+    const desc = document.getElementById('il-desc-ovr')?.value.trim();
+    if (!desc) { showToast('Beskrivning krävs'); return null; }
+    return {
+      description: desc,
+      qty:       parseFloat(document.getElementById('il-qty-ovr')?.value)   || 1,
+      unit:      document.getElementById('il-unit-ovr')?.value              || 'st',
+      unitPrice: parseFloat(document.getElementById('il-price-ovr')?.value) || 0,
+      vatRate:   parseFloat(document.getElementById('il-vat-ovr')?.value)   || 25,
+      source:    'Övrigt'
+    };
+  },
+
   openAddLine() {
     Modal.open({
       title: 'Lägg till rad',
       body: this._lineFormHtml(null),
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => {
-          const type = document.getElementById('il-type')?.value || 'Manuell';
-          if (type === 'Fritext') {
-            const freetext = document.getElementById('il-freetext')?.value.trim() || '';
-            InvoiceService.addLine(this.invoiceId, {
-              description: freetext, qty: 0, unit: 'st', unitPrice: 0, vatRate: 0,
-              source: 'Fritext', freetext
-            });
-          } else {
-            const desc = document.getElementById('il-desc')?.value.trim();
-            if (!desc) { showToast('Beskrivning krävs'); return; }
-            InvoiceService.addLine(this.invoiceId, {
-              description: desc,
-              qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
-              unit:     document.getElementById('il-unit')?.value||'st',
-              unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
-              vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
-              source:   type
-            });
-          }
+          const data = InvoiceDetailPage._getLineData();
+          if (!data) return;
+          InvoiceService.addLine(this.invoiceId, data);
           Modal.close();
           this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
-    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); InvoiceDetailPage._typeChanged(); }, 80);
+    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); }, 80);
   },
 
   openEditLine(lineId) {
@@ -329,32 +504,16 @@ const InvoiceDetailPage = {
       body: this._lineFormHtml(line),
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
-          const type = document.getElementById('il-type')?.value || line.source || 'Manuell';
-          if (type === 'Fritext') {
-            const freetext = document.getElementById('il-freetext')?.value.trim() || '';
-            InvoiceService.updateLine(this.invoiceId, lineId, {
-              description: freetext, qty: 0, unit: 'st', unitPrice: 0, vatRate: 0,
-              source: 'Fritext', freetext
-            });
-          } else {
-            const desc = document.getElementById('il-desc')?.value.trim();
-            if (!desc) { showToast('Beskrivning krävs'); return; }
-            InvoiceService.updateLine(this.invoiceId, lineId, {
-              description: desc,
-              qty:      parseFloat(document.getElementById('il-qty')?.value)||1,
-              unit:     document.getElementById('il-unit')?.value||'st',
-              unitPrice:parseFloat(document.getElementById('il-price')?.value)||0,
-              vatRate:  parseFloat(document.getElementById('il-vat')?.value)||25,
-              source:   type
-            });
-          }
+          const data = InvoiceDetailPage._getLineData();
+          if (!data) return;
+          InvoiceService.updateLine(this.invoiceId, lineId, data);
           Modal.close();
           this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
-    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); InvoiceDetailPage._typeChanged(); }, 80);
+    setTimeout(() => { InvoiceDetailPage._calcLineTotals(); }, 80);
   },
 
   deleteLine(lineId) {

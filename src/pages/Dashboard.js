@@ -21,6 +21,8 @@ const Dashboard = {
 
     // Fixed layout — always render both todos and sales
     // Urgent row: todos (2/3) + sales (1/3) on desktop
+    // Middle row: today + pool (half each)
+    // Bottom row: offers (2/3) + activity (1/3) on desktop
     el.innerHTML = '<div class="dash-layout">' +
       '<div class="dw-full">' + kpi + '</div>' +
       '<div class="dw-main">' + todos + '</div>' +
@@ -28,8 +30,8 @@ const Dashboard = {
       '<div class="dw-half">' + today + '</div>' +
       '<div class="dw-half">' + pool + '</div>' +
       '<div class="dw-full">' + quickbtns + '</div>' +
-      '<div class="dw-half">' + offers + '</div>' +
-      '<div class="dw-half">' + activity + '</div>' +
+      '<div class="dw-main">' + offers + '</div>' +
+      '<div class="dw-side">' + activity + '</div>' +
       (recurring ? '<div class="dw-full">' + recurring + '</div>' : '') +
     '</div>';
   },
