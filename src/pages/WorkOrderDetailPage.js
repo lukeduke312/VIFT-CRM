@@ -77,7 +77,7 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
-      <!-- Material -->
+      <!-- Material & kostnader -->
       <div class="card">
         <div class="card-header">
           <h3>Material & kostnader</h3>
@@ -86,10 +86,7 @@ const WorkOrderDetailPage = {
         <div id="ao-materials" style="overflow:hidden;">
           ${this._renderMaterials(ao)}
         </div>
-        ${(ao.materials||[]).length > 0 ? `
-          <div style="padding:10px 14px;border-top:1px solid var(--br);display:flex;justify-content:flex-end;">
-            <span style="font-size:13px;font-weight:700;">Totalt: ${fmt(matTotal)} kr</span>
-          </div>` : ''}
+        ${(ao.materials||[]).length > 0 ? this._matTotals(ao) : ''}
       </div>
 
       <!-- Tidsposter -->
@@ -106,22 +103,14 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
-      <!-- Anteckningar -->
+      <!-- Tidslinje/logg -->
       <div class="card">
         <div class="card-header">
-          <h3>Anteckningar</h3>
-          <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddNote()">${ic('plus',13)}</button>
+          <h3>Tidslinje & logg</h3>
+          <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>
         </div>
-        <div id="ao-notes" style="overflow:hidden;">
-          ${this._renderNotes(ao)}
-        </div>
-      </div>
-
-      <!-- Aktivitetslogg -->
-      <div class="card">
-        <div class="card-header"><h3>Aktivitetslogg</h3></div>
-        <div class="card-body" style="padding:8px 10px;">
-          ${ActivityService.renderList(ActivityService.getByWorkOrder(ao.id, 10))}
+        <div id="ao-timeline" style="overflow:hidden;">
+          ${this._renderTimeline(ao)}
         </div>
       </div>
 
@@ -155,11 +144,11 @@ const WorkOrderDetailPage = {
   },
 
   _priceLabel(ao) {
-    if (ao.priceType === 'fastpris')  return `Fastpris: ${fmt(ao.fixedPrice)} kr`;
+    if (ao.priceType === 'fastpris')  return `Fastpris: ${fmt(ao.fixedPrice)} kr ex moms`;
     if (ao.priceType === 'timpris')   return 'Timpris';
     if (ao.priceType === 'prisgrupp') {
       const pg = (state.priceGroups||[]).find(p => p.id === ao.priceGroupId);
-      return pg ? `${pg.name} – ${fmt(pg.hourRate)} kr/tim` : 'Prisgrupp';
+      return pg ? `${pg.name} – ${fmt(pg.hourRate)} kr/tim ex moms` : 'Prisgrupp';
     }
     return 'Ej satt';
   },
@@ -195,21 +184,62 @@ const WorkOrderDetailPage = {
         </div>`).join('')}`;
   },
 
+  /* ── Material ─────────────────────────────── */
+  _matTotals(ao) {
+    const mats = ao.materials || [];
+    if (!mats.length) return '';
+    let exMoms = 0, momsAmt = 0;
+    mats.forEach(m => {
+      const ex = (m.qty||0) * (m.sellPrice||0);
+      const vat = m.vatRate != null ? m.vatRate : 25;
+      exMoms  += ex;
+      momsAmt += ex * vat / 100;
+    });
+    const inkl = exMoms + momsAmt;
+    return `
+      <div style="padding:10px 14px;border-top:1px solid var(--br);">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);margin-bottom:3px;">
+          <span>Totalt ex moms</span><span>${fmt(exMoms)} kr</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);margin-bottom:3px;">
+          <span>Moms (25%)</span><span>${fmt(momsAmt)} kr</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;">
+          <span>Totalt inkl moms</span><span>${fmt(inkl)} kr</span>
+        </div>
+      </div>`;
+  },
+
   _renderMaterials(ao) {
     const mats = ao.materials || [];
     if (!mats.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Inget material registrerat</p>`;
-    return mats.map(m => `
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${m.name}</div>
-          <div style="font-size:11px;color:var(--mt);">${m.qty} ${m.unit} · Ink-pris: ${fmt(m.buyPrice)} kr · Pris: ${fmt(m.sellPrice)} kr/st</div>
-        </div>
-        <div style="font-size:13px;font-weight:700;flex-shrink:0;">${fmt((m.qty||0)*(m.sellPrice||0))} kr</div>
-        <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',12)}</button>
-          <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteMaterial('${m.id}')">${ic('trash',12)}</button>
-        </div>
-      </div>`).join('');
+    return mats.map(m => {
+      const qty  = m.qty || 0;
+      const sell = m.sellPrice || 0;
+      const buy  = m.buyPrice || 0;
+      const vat  = m.vatRate != null ? m.vatRate : 25;
+      const exMoms  = qty * sell;
+      const momsAmt = exMoms * vat / 100;
+      const inklMoms = exMoms + momsAmt;
+      return `
+        <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
+          <div style="display:flex;align-items:flex-start;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;margin-bottom:3px;">${m.name}</div>
+              <div style="font-size:11px;color:var(--mt);">${qty} ${m.unit} × ${fmt(sell)} kr/st ex moms · ink-pris ${fmt(buy)} kr</div>
+              <div style="display:flex;gap:10px;margin-top:4px;font-size:11px;">
+                <span style="color:var(--mt);">Ex: <strong style="color:var(--tx)">${fmt(exMoms)} kr</strong></span>
+                <span style="color:var(--mt);">Moms: ${fmt(momsAmt)} kr</span>
+                <span style="color:var(--navy);font-weight:700;">Inkl: ${fmt(inklMoms)} kr</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
+              <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',12)}</button>
+              <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteMaterial('${m.id}')">${ic('trash',12)}</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
   },
 
   _renderTimeEntries(ao) {
@@ -220,7 +250,8 @@ const WorkOrderDetailPage = {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}</div>
           <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+t.comment:''}</div>
-          ${t.priceGroupName ? `<div style="font-size:11px;color:var(--sky);">${t.priceGroupName} – ${fmt(t.hourRate)} kr/tim</div>` : ''}
+          ${t.priceGroupName ? `<div style="font-size:11px;color:var(--sky);">${t.priceGroupName} – ${fmt(t.hourRate)} kr/tim ex moms</div>` : ''}
+          ${!t.billable ? `<span style="font-size:10px;color:var(--mt);font-style:italic;">Ej debiterbar</span>` : ''}
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0;">
           <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditTime('${t.id}')">${ic('pencil',12)}</button>
@@ -229,14 +260,347 @@ const WorkOrderDetailPage = {
       </div>`).join('');
   },
 
-  _renderNotes(ao) {
-    const notes = ao.notes || [];
-    if (!notes.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Inga anteckningar</p>`;
-    return notes.map(n => `
-      <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
-        <div style="font-size:12px;color:var(--mt);margin-bottom:4px;">${n.staffName} · ${relDate(n.timestamp)}</div>
-        <div style="font-size:13px;line-height:1.5;">${n.text}</div>
-      </div>`).join('');
+  /* ── Tidslinje/logg ───────────────────────── */
+  _renderTimeline(ao) {
+    const events = [];
+
+    // Notes
+    (ao.notes||[]).forEach(n => {
+      events.push({ type:'note', ts: n.timestamp||'', who: n.staffName||'', text: n.text||'', id: n.id });
+    });
+
+    // Log entries (manual log)
+    (ao.log||[]).forEach(l => {
+      events.push({ type: l.type||'log', ts: l.timestamp||'', who: l.userName||'', text: l.text||'', imageData: l.imageData||'', id: l.id });
+    });
+
+    // Time entries
+    TimeService.getByAO(ao.id).forEach(t => {
+      events.push({ type:'time', ts: t.createdAt||t.date||'', who: t.staffName||'', text: `${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` });
+    });
+
+    // Material additions
+    (ao.materials||[]).forEach(m => {
+      if (m.addedAt) {
+        events.push({ type:'material', ts: m.addedAt, who: '', text: `${m.qty} ${m.unit} ${m.name} tillagd` });
+      }
+    });
+
+    // Status changes from activity log
+    ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
+      if (a.type === 'status_change' || a.type === 'created') {
+        events.push({ type: a.type, ts: a.timestamp||'', who: '', text: a.description||'' });
+      }
+    });
+
+    if (!events.length) {
+      return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Ingen logg ännu</p>`;
+    }
+
+    // Sort descending (newest first)
+    events.sort((a,b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
+
+    const typeIcon = { note:'file-text', log:'activity', time:'clock', material:'package', status_change:'refresh-cw', created:'plus' };
+    const typeColor = { note:'var(--navy)', log:'var(--sky)', time:'var(--grn)', material:'var(--orn)', status_change:'var(--mt)', created:'var(--sky)' };
+
+    return `<div style="padding:8px 14px 4px;">` + events.map(ev => {
+      const col  = typeColor[ev.type] || 'var(--mt)';
+      const ico  = typeIcon[ev.type]  || 'activity';
+      return `
+        <div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start;">
+          <div style="width:28px;height:28px;border-radius:50%;background:${col}20;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${col};">${ic(ico,13)}</div>
+          <div style="flex:1;min-width:0;padding-top:4px;">
+            ${ev.who ? `<div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:2px;">${ev.who}${ev.ts?' · '+relDate(ev.ts):''}</div>` : (ev.ts ? `<div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${relDate(ev.ts)}</div>` : '')}
+            <div style="font-size:13px;line-height:1.5;word-break:break-word;">${ev.text}</div>
+            ${ev.imageData ? `<img src="${ev.imageData}" style="max-width:100%;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;" loading="lazy">` : ''}
+          </div>
+          ${ev.id && ev.type==='log' ? `<button class="btn bxs bd" style="flex-shrink:0;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>` : ''}
+        </div>`;
+    }).join('') + '</div>';
+  },
+
+  openAddLog() {
+    Modal.open({
+      title: 'Lägg till loggpost',
+      body: `
+        <div class="fg">
+          <label>Typ</label>
+          <select id="log-type">
+            <option value="log">Anteckning</option>
+            <option value="photo">Foto/bild</option>
+          </select>
+        </div>
+        <div class="fg"><label>Text / beskrivning</label>
+          <textarea id="log-text" rows="3" placeholder="Beskriv vad som hände eller vad bilden visar…"></textarea></div>
+        <div class="fg" id="log-img-wrap" style="display:none;">
+          <label>Bild (välj fil)</label>
+          <input type="file" id="log-img" accept="image/*" onchange="WorkOrderDetailPage._previewLogImg(this)">
+          <div id="log-img-preview" style="margin-top:6px;"></div>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveLog() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => {
+      const sel = document.getElementById('log-type');
+      if (sel) sel.addEventListener('change', () => {
+        const wrap = document.getElementById('log-img-wrap');
+        if (wrap) wrap.style.display = sel.value === 'photo' ? '' : 'none';
+      });
+      document.getElementById('log-text')?.focus();
+    }, 80);
+  },
+
+  _previewLogImg(input) {
+    const file = input.files && input.files[0];
+    const prev = document.getElementById('log-img-preview');
+    if (!file || !prev) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;border-radius:8px;max-height:160px;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  _saveLog() {
+    const text = document.getElementById('log-text')?.value.trim();
+    const type = document.getElementById('log-type')?.value || 'log';
+    if (!text) { showToast('Skriv en text'); return; }
+
+    const imgInput = document.getElementById('log-img');
+    const file = imgInput && imgInput.files && imgInput.files[0];
+
+    const finalize = (imageData) => {
+      const ao = getAO(this.aoId);
+      if (!ao) return;
+      if (!ao.log) ao.log = [];
+      const entry = {
+        id: 'LOG-' + Date.now(),
+        type: type,
+        text: text,
+        imageData: imageData || '',
+        visibility: 'intern',
+        userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
+        timestamp: new Date().toISOString()
+      };
+      ao.log.push(entry);
+      WorkOrderService.update(this.aoId, { log: ao.log });
+      Modal.close();
+      const aoUp = getAO(this.aoId);
+      if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+      showToast('Loggpost tillagd');
+    };
+
+    if (file && type === 'photo') {
+      const reader = new FileReader();
+      reader.onload = (e) => finalize(e.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      finalize('');
+    }
+  },
+
+  deleteLogEntry(logId) {
+    Modal.confirm('Ta bort loggpost?', () => {
+      const ao = getAO(this.aoId);
+      if (!ao) return;
+      ao.log = (ao.log||[]).filter(l => l.id !== logId);
+      WorkOrderService.update(this.aoId, { log: ao.log });
+      const aoUp = getAO(this.aoId);
+      if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+      showToast('Borttagen');
+    });
+  },
+
+  /* ── Material-modal ───────────────────────── */
+  openAddMaterial() {
+    const articles = (state.articles||[]).filter(a=>a.active);
+    const artListHtml = articles.length ? articles.map(a => `
+      <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${a.vatRate||25}"
+        onclick="WorkOrderDetailPage._matSelectArticle(this)"
+        style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .1s;"
+        onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;">${a.articleNumber ? a.articleNumber+' – ':'' }${a.name}</div>
+          <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr ex moms</div>
+        </div>
+        <div id="art-check-${a.id}" style="display:none;color:var(--grn);">${ic('check',14)}</div>
+      </div>`).join('') : '<p style="padding:8px;font-size:12px;color:var(--mt);">Inga artiklar i register</p>';
+
+    Modal.open({
+      title: 'Lägg till material',
+      wide: true,
+      body: `
+        ${articles.length ? `
+          <div style="margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Välj från artikelregister</div>
+            <div class="fg" style="margin-bottom:6px;">
+              <input id="art-search" placeholder="Sök artikel…" oninput="WorkOrderDetailPage._matSearch(this.value)" autocomplete="off">
+            </div>
+            <div id="art-list" style="max-height:160px;overflow-y:auto;border:1.5px solid var(--br);border-radius:9px;padding:4px;">${artListHtml}</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Eller ange manuellt</div>` : ''}
+        <div class="fg"><label>Benämning <span style="color:var(--rd)">*</span></label>
+          <input id="mat-name" placeholder="T.ex. Fogmassa Sikaflex"></div>
+        <div class="g3">
+          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="1" min="0.1" step="0.1" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Enhet</label>
+            <select id="mat-unit">
+              ${['st','tim','m²','m','lm','kg','liter','säck','rulle','dag','månad','gång','paket','par'].map(u=>`<option value="${u}">${u}</option>`).join('')}
+            </select></div>
+          <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+        </div>
+        <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+          <input type="number" id="mat-sell" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+        <input type="hidden" id="mat-vat" value="25">
+        <input type="hidden" id="mat-article-id" value="">
+        <div id="mat-calc" style="display:none;background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms 25%</span><span id="mat-moms">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">0 kr</span></div>
+        </div>`,
+      buttons: [
+        { label: 'Lägg till', cls: 'btn bp', onClick: () => this._saveMaterial(null) },
+        { label: 'Avbryt',   cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('art-search')?.focus(), 80);
+  },
+
+  _matSearch(q) {
+    const rows = document.querySelectorAll('#art-list .art-row');
+    const lq = q.toLowerCase();
+    rows.forEach(row => {
+      const name = (row.dataset.name||'').toLowerCase();
+      row.style.display = (!lq || name.includes(lq)) ? '' : 'none';
+    });
+  },
+
+  _matSelectArticle(el) {
+    // Toggle selection
+    const selected = el.classList.contains('selected');
+    document.querySelectorAll('#art-list .art-row').forEach(r => {
+      r.classList.remove('selected');
+      r.style.background = '';
+      const chk = document.getElementById('art-check-' + r.dataset.id);
+      if (chk) chk.style.display = 'none';
+    });
+    if (selected) {
+      // Deselect: clear fields
+      document.getElementById('mat-article-id').value = '';
+      document.getElementById('mat-name').value = '';
+      document.getElementById('mat-vat').value = '25';
+      return;
+    }
+    el.classList.add('selected');
+    el.style.background = 'var(--navy10,#f0f4ff)';
+    const chk = document.getElementById('art-check-' + el.dataset.id);
+    if (chk) chk.style.display = '';
+
+    document.getElementById('mat-article-id').value = el.dataset.id;
+    document.getElementById('mat-name').value = el.dataset.name || '';
+    document.getElementById('mat-vat').value  = el.dataset.vat || '25';
+    const buyEl  = document.getElementById('mat-buy');
+    const sellEl = document.getElementById('mat-sell');
+    const unitEl = document.getElementById('mat-unit');
+    if (buyEl)  buyEl.value  = el.dataset.buy  || '0';
+    if (sellEl) sellEl.value = el.dataset.sell || '0';
+    if (unitEl) {
+      for (let i = 0; i < unitEl.options.length; i++) {
+        if (unitEl.options[i].value === el.dataset.unit) { unitEl.selectedIndex = i; break; }
+      }
+    }
+    this._matUpdateCalc();
+  },
+
+  _matUpdateCalc() {
+    const qty  = parseFloat(document.getElementById('mat-qty')?.value) || 0;
+    const sell = parseFloat(document.getElementById('mat-sell')?.value) || 0;
+    const vat  = parseFloat(document.getElementById('mat-vat')?.value) || 25;
+    const calc = document.getElementById('mat-calc');
+    if (!calc) return;
+    const exV = qty * sell;
+    const momsV = exV * vat / 100;
+    if (exV > 0 || sell > 0) {
+      calc.style.display = '';
+      document.getElementById('mat-ex').textContent    = fmt(exV) + ' kr';
+      document.getElementById('mat-moms').textContent  = fmt(momsV) + ' kr';
+      document.getElementById('mat-inkl').textContent  = fmt(exV + momsV) + ' kr';
+    } else {
+      calc.style.display = 'none';
+    }
+  },
+
+  openEditMaterial(matId) {
+    const ao = getAO(this.aoId);
+    const m  = (ao.materials||[]).find(x=>x.id===matId);
+    if (!m) return;
+    const vat = m.vatRate != null ? m.vatRate : 25;
+    Modal.open({
+      title: 'Redigera material',
+      body: `
+        <div class="fg"><label>Benämning</label><input id="mat-name" value="${m.name}"></div>
+        <div class="g3">
+          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${m.qty}" min="0.1" step="0.1" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Enhet</label>
+            <select id="mat-unit">
+              ${['st','tim','m²','m','lm','kg','liter','säck','rulle','dag','månad','gång','paket','par'].map(u=>`<option value="${u}" ${m.unit===u?'selected':''}>${u}</option>`).join('')}
+            </select></div>
+          <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+        </div>
+        <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+          <input type="number" id="mat-sell" value="${m.sellPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+        <input type="hidden" id="mat-vat" value="${vat}">
+        <input type="hidden" id="mat-article-id" value="${m.articleId||''}">
+        <div id="mat-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms ${vat}%</span><span id="mat-moms">${fmt((m.qty||0)*(m.sellPrice||0)*vat/100)} kr</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">${fmt((m.qty||0)*(m.sellPrice||0)*(1+vat/100))} kr</span></div>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveMaterial(matId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _saveMaterial(existingId) {
+    const name = document.getElementById('mat-name')?.value.trim();
+    if (!name) { showToast('Benämning krävs'); return; }
+    const data = {
+      name,
+      qty:      parseFloat(document.getElementById('mat-qty')?.value) || 1,
+      unit:     document.getElementById('mat-unit')?.value || 'st',
+      buyPrice: parseFloat(document.getElementById('mat-buy')?.value)  || 0,
+      sellPrice:parseFloat(document.getElementById('mat-sell')?.value) || 0,
+      vatRate:  parseFloat(document.getElementById('mat-vat')?.value)  || 25,
+      articleId:document.getElementById('mat-article-id')?.value || '',
+      addedAt:  existingId ? undefined : new Date().toISOString()
+    };
+    if (existingId) {
+      WorkOrderService.updateMaterial(this.aoId, existingId, data);
+      showToast('Material uppdaterat');
+    } else {
+      WorkOrderService.addMaterial(this.aoId, data);
+      showToast('Material tillagt');
+    }
+    Modal.close();
+    const ao = getAO(this.aoId);
+    if (ao) {
+      document.getElementById('ao-materials').innerHTML = this._renderMaterials(ao);
+      const matTotEl = document.getElementById('ao-materials').nextElementSibling;
+      if (matTotEl && matTotEl.style !== undefined) matTotEl.outerHTML = this._matTotals(ao);
+    }
+  },
+
+  deleteMaterial(matId) {
+    Modal.confirm('Ta bort material?', () => {
+      WorkOrderService.deleteMaterial(this.aoId, matId);
+      const ao = getAO(this.aoId);
+      if (ao) document.getElementById('ao-materials').innerHTML = this._renderMaterials(ao);
+      showToast('Borttaget');
+    });
   },
 
   /* ── Åtgärder ──────────────────────────── */
@@ -285,7 +649,7 @@ const WorkOrderDetailPage = {
   _openClockOutModal() {
     const mins = Math.round((Date.now() - state.stampTimestamp) / 60000);
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Klocka ut',
@@ -355,120 +719,10 @@ const WorkOrderDetailPage = {
     if (ao) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
   },
 
-  /* ── Material ──────────────────────────── */
-  openAddMaterial() {
-    const artOptions = (state.articles||[]).filter(a=>a.active).map(a =>
-      `<option value="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}">${a.articleNumber ? a.articleNumber+' – ':'' }${a.name}</option>`
-    ).join('');
-
-    Modal.open({
-      title: 'Lägg till material',
-      body: `
-        ${(state.articles||[]).length > 0 ? `
-          <div class="fg"><label>Välj artikel (valfritt)</label>
-            <select id="mat-article" onchange="WorkOrderDetailPage._matArticleChosen()">
-              <option value="">— Välj artikel eller ange manuellt —</option>${artOptions}
-            </select></div>` : ''}
-        <div class="fg"><label>Benämning <span style="color:var(--rd)">*</span></label>
-          <input id="mat-name" placeholder="T.ex. Fogmassa Sikaflex"></div>
-        <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="1" min="0.1" step="0.1"></div>
-          <div class="fg"><label>Enhet</label>
-            <select id="mat-unit">
-              ${['st','tim','m²','m','lm','kg','liter','säck','rulle','dag','månad','gång','paket','par'].map(u=>`<option value="${u}">${u}</option>`).join('')}
-            </select></div>
-          <div class="fg"><label>Ink-pris</label><input type="number" id="mat-buy" placeholder="0" min="0"></div>
-        </div>
-        <div class="fg"><label>Försäljningspris (kr/enhet)</label>
-          <input type="number" id="mat-sell" placeholder="0" min="0"></div>`,
-      buttons: [
-        { label: 'Lägg till', cls: 'btn bp', onClick: () => this._saveMaterial(null) },
-        { label: 'Avbryt',   cls: 'btn bs', onClick: () => Modal.close() }
-      ]
-    });
-  },
-
-  _matArticleChosen() {
-    const sel = document.getElementById('mat-article');
-    const opt = sel.options[sel.selectedIndex];
-    if (!opt || !opt.value) return;
-    const nameEl = document.getElementById('mat-name');
-    const unitEl = document.getElementById('mat-unit');
-    const buyEl  = document.getElementById('mat-buy');
-    const sellEl = document.getElementById('mat-sell');
-    if (nameEl) nameEl.value = opt.dataset.name || '';
-    if (buyEl)  buyEl.value  = opt.dataset.buy  || '0';
-    if (sellEl) sellEl.value = opt.dataset.sell || '0';
-    if (unitEl) {
-      for (let i = 0; i < unitEl.options.length; i++) {
-        if (unitEl.options[i].value === opt.dataset.unit) { unitEl.selectedIndex = i; break; }
-      }
-    }
-  },
-
-  openEditMaterial(matId) {
-    const ao = getAO(this.aoId);
-    const m  = (ao.materials||[]).find(x=>x.id===matId);
-    if (!m) return;
-    Modal.open({
-      title: 'Redigera material',
-      body: `
-        <div class="fg"><label>Benämning</label><input id="mat-name" value="${m.name}"></div>
-        <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${m.qty}" min="0.1" step="0.1"></div>
-          <div class="fg"><label>Enhet</label>
-            <select id="mat-unit">
-              ${['st','tim','m²','m','lm','kg','liter','säck','rulle','dag','månad','gång','paket','par'].map(u=>`<option value="${u}" ${m.unit===u?'selected':''}>${u}</option>`).join('')}
-            </select></div>
-          <div class="fg"><label>Ink-pris</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0"></div>
-        </div>
-        <div class="fg"><label>Försäljningspris (kr/enhet)</label>
-          <input type="number" id="mat-sell" value="${m.sellPrice}" min="0"></div>`,
-      buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveMaterial(matId) },
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
-    });
-  },
-
-  _saveMaterial(existingId) {
-    const name = document.getElementById('mat-name')?.value.trim();
-    if (!name) { showToast('Benämning krävs'); return; }
-    const data = {
-      name,
-      qty:      parseFloat(document.getElementById('mat-qty')?.value) || 1,
-      unit:     document.getElementById('mat-unit')?.value || 'st',
-      buyPrice: parseFloat(document.getElementById('mat-buy')?.value)  || 0,
-      sellPrice:parseFloat(document.getElementById('mat-sell')?.value) || 0,
-      articleId:document.getElementById('mat-article')?.value || ''
-    };
-    if (existingId) {
-      WorkOrderService.updateMaterial(this.aoId, existingId, data);
-      showToast('Material uppdaterat');
-    } else {
-      WorkOrderService.addMaterial(this.aoId, data);
-      showToast('Material tillagt');
-    }
-    Modal.close();
-    const ao = getAO(this.aoId);
-    if (ao) {
-      document.getElementById('ao-materials').innerHTML = this._renderMaterials(ao);
-    }
-  },
-
-  deleteMaterial(matId) {
-    Modal.confirm('Ta bort material?', () => {
-      WorkOrderService.deleteMaterial(this.aoId, matId);
-      const ao = getAO(this.aoId);
-      if (ao) document.getElementById('ao-materials').innerHTML = this._renderMaterials(ao);
-      showToast('Borttaget');
-    });
-  },
-
   /* ── Tid ───────────────────────────────── */
   openAddTime() {
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Registrera tid',
@@ -495,7 +749,7 @@ const WorkOrderDetailPage = {
     const t = (state.timeEntries||[]).find(x=>x.id===entryId);
     if (!t) return;
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Redigera tid',
@@ -553,27 +807,6 @@ const WorkOrderDetailPage = {
       const ao = getAO(this.aoId);
       if (ao) document.getElementById('ao-timeentries').innerHTML = this._renderTimeEntries(ao);
       showToast('Tidspost borttagen');
-    });
-  },
-
-  /* ── Anteckningar ──────────────────────── */
-  openAddNote() {
-    Modal.open({
-      title: 'Lägg till anteckning',
-      body: `<div class="fg"><label>Anteckning</label>
-        <textarea id="note-text" rows="3" placeholder="Skriv din anteckning…"></textarea></div>`,
-      buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
-          const text = document.getElementById('note-text')?.value.trim();
-          if (!text) { showToast('Skriv en anteckning'); return; }
-          WorkOrderService.addNote(this.aoId, text);
-          Modal.close();
-          const ao = getAO(this.aoId);
-          if (ao) document.getElementById('ao-notes').innerHTML = this._renderNotes(ao);
-          showToast('Anteckning tillagd');
-        }},
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
     });
   },
 

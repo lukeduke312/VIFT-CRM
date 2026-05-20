@@ -5,10 +5,6 @@
 const Modal = {
   _stack: [],
 
-  /**
-   * Öppna en modal
-   * opts: { title, body, buttons, wide }
-   */
   open(opts) {
     const id = 'modal-' + Date.now();
 
@@ -21,20 +17,24 @@ const Modal = {
 
     const handle = document.createElement('div');
     handle.className = 'modal-handle';
-
-    const content = document.createElement('div');
+    sheet.appendChild(handle);
 
     if (opts.title) {
       const title = document.createElement('div');
       title.className = 'modal-title';
       title.textContent = opts.title;
-      content.appendChild(title);
+      sheet.appendChild(title);
     }
 
-    const body = document.createElement('div');
-    body.innerHTML = opts.body || '';
-    content.appendChild(body);
+    // Scrollable body
+    const bodyWrapper = document.createElement('div');
+    bodyWrapper.className = 'modal-body';
+    const bodyContent = document.createElement('div');
+    bodyContent.innerHTML = opts.body || '';
+    bodyWrapper.appendChild(bodyContent);
+    sheet.appendChild(bodyWrapper);
 
+    // Sticky footer
     if (opts.buttons && opts.buttons.length > 0) {
       const footer = document.createElement('div');
       footer.className = 'modal-footer';
@@ -45,20 +45,14 @@ const Modal = {
         b.onclick = btn.onClick;
         footer.appendChild(b);
       });
-      content.appendChild(footer);
+      sheet.appendChild(footer);
     }
 
-    sheet.appendChild(handle);
-    sheet.appendChild(content);
     overlay.appendChild(sheet);
     document.getElementById('modal-root').appendChild(overlay);
 
-    // Öppna med liten delay för animation
-    requestAnimationFrame(() => {
-      overlay.classList.add('open');
-    });
+    requestAnimationFrame(() => overlay.classList.add('open'));
 
-    // Stäng vid klick på overlay
     overlay.addEventListener('click', e => {
       if (e.target === overlay) Modal.close();
     });
@@ -67,9 +61,6 @@ const Modal = {
     return id;
   },
 
-  /**
-   * Stäng senaste modalen
-   */
   close() {
     const id = this._stack.pop();
     if (!id) return;
@@ -80,16 +71,10 @@ const Modal = {
     }
   },
 
-  /**
-   * Stäng alla modaler
-   */
   closeAll() {
     while (this._stack.length > 0) this.close();
   },
 
-  /**
-   * Bekräftelsedialog
-   */
   confirm(message, onConfirm, onCancel) {
     Modal.open({
       title: 'Bekräfta',

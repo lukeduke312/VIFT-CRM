@@ -60,7 +60,7 @@ function initState() {
   state.settings           = s.get('settings')     || SeedData.settings;
   state.timeEntries        = s.get('timeEntries')  || [];
   state.contracts          = s.get('contracts')    || [];
-  state.articles           = s.get('articles')     || [];
+  state.articles           = s.get('articles')     || SeedData.articles || [];
 
   // Stämpling-state
   state.stampActive    = !!s.get('stampActive');

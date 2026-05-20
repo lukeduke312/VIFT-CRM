@@ -6,7 +6,7 @@ const WorkOrdersPage = {
   q: '',
 
   /* ── Wizard-state ──────────────────────── */
-  _wiz: { step: 1, data: {} },
+  _wiz: { step: 1, data: {}, modalId: null },
 
   render() {
     const el = document.getElementById('pg-ao-content');
@@ -91,62 +91,79 @@ const WorkOrdersPage = {
 
   /* ── Skapa AO – wizard ─────────────────── */
   openCreate(prefillCustomerId = null) {
-    this._wiz = { step: 1, data: { customerId: prefillCustomerId || '' } };
+    this._wiz = { step: 1, data: { customerId: prefillCustomerId || '' }, modalId: null };
     this._showWizard();
   },
 
   _showWizard() {
     const wiz = this._wiz;
     const stepTitles = ['', 'Kund & jobb', 'Planering', 'Pris & utförande'];
-    const body = `
-      <div style="display:flex;gap:4px;margin-bottom:14px;">
-        ${[1,2,3].map(n => `
-          <div style="flex:1;height:4px;border-radius:4px;background:${n<=wiz.step?'var(--sky)':'var(--br)'};"></div>
-        `).join('')}
-      </div>
-      <div style="font-size:11px;color:var(--mt);margin-bottom:12px;">Steg ${wiz.step} av 3 – ${stepTitles[wiz.step]}</div>
-      <div id="wiz-body">${this._wizStep(wiz.step)}</div>`;
 
-    if (wiz.step === 1) {
-      Modal.open({
+    const progressHtml = `
+      <div style="display:flex;gap:4px;margin-bottom:14px;">
+        ${[1,2,3].map(n=>`<div style="flex:1;height:4px;border-radius:4px;background:${n<=wiz.step?'var(--sky)':'var(--br)'};"></div>`).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--mt);margin-bottom:12px;">Steg ${wiz.step} av 3 – ${stepTitles[wiz.step]}</div>`;
+
+    const stepBody = `${progressHtml}<div id="wiz-body">${this._wizStep(wiz.step)}</div>`;
+
+    // If modal already exists, update it; otherwise create new
+    const existingSheet = wiz.modalId ? document.getElementById(wiz.modalId)?.querySelector('.modal-sheet') : null;
+
+    if (!existingSheet) {
+      wiz.modalId = Modal.open({
         title: 'Ny arbetsorder',
-        wide:  true,
-        body,
-        buttons: [
-          { label: 'Nästa', cls: 'btn bp', onClick: () => this._wizNext() },
-          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-        ]
+        wide: true,
+        body: stepBody,
+        buttons: this._wizButtons(wiz.step)
       });
-      this._bindWizStep1();
     } else {
-      // Uppdatera befintlig modal
-      const sheet = document.querySelector('#modal-root .modal-overlay.open .modal-sheet');
-      if (sheet) {
-        sheet.querySelector('.modal-title').textContent = 'Ny arbetsorder';
-        sheet.querySelector('#wiz-body').parentElement.innerHTML =
-          `<div style="display:flex;gap:4px;margin-bottom:14px;">
-            ${[1,2,3].map(n=>`<div style="flex:1;height:4px;border-radius:4px;background:${n<=wiz.step?'var(--sky)':'var(--br)'};"></div>`).join('')}
-           </div>
-           <div style="font-size:11px;color:var(--mt);margin-bottom:12px;">Steg ${wiz.step} av 3 – ${stepTitles[wiz.step]}</div>
-           <div id="wiz-body">${this._wizStep(wiz.step)}</div>`;
-        const footer = sheet.querySelector('.modal-footer');
-        if (footer) {
-          footer.innerHTML = '';
-          const btns = wiz.step < 3
-            ? [['Tillbaka','btn bs'], ['Nästa','btn bp']]
-            : [['Tillbaka','btn bs'], ['Skapa order','btn bsu']];
-          btns.forEach(([lbl, cls], i) => {
-            const b = document.createElement('button');
-            b.className = cls;
-            b.textContent = lbl;
-            b.onclick = i === 0 ? () => this._wizBack() : (wiz.step < 3 ? () => this._wizNext() : () => this._wizSave());
-            footer.appendChild(b);
-          });
-        }
+      // Update body content
+      const bodyContent = existingSheet.querySelector('.modal-body > div');
+      if (bodyContent) bodyContent.innerHTML = stepBody;
+
+      // Update footer buttons
+      const footer = existingSheet.querySelector('.modal-footer');
+      if (footer) {
+        footer.innerHTML = '';
+        this._wizButtons(wiz.step).forEach(btn => {
+          const b = document.createElement('button');
+          b.className = btn.cls || 'btn bs';
+          b.textContent = btn.label;
+          b.onclick = btn.onClick;
+          footer.appendChild(b);
+        });
       }
-      if (wiz.step === 2) this._bindWizStep2();
-      if (wiz.step === 3) this._bindWizStep3();
     }
+
+    // Bind step-specific events
+    setTimeout(() => {
+      if (wiz.step === 1) this._bindWizStep1();
+      else if (wiz.step === 2) this._bindWizStep2();
+      else if (wiz.step === 3) this._bindWizStep3();
+    }, 60);
+  },
+
+  _wizButtons(step) {
+    if (step === 1) return [
+      { label: 'Nästa',  cls: 'btn bp', onClick: () => this._wizNext() },
+      { label: 'Avbryt', cls: 'btn bs', onClick: () => this._wizCancel() }
+    ];
+    if (step === 2) return [
+      { label: 'Nästa',    cls: 'btn bp', onClick: () => this._wizNext() },
+      { label: 'Tillbaka', cls: 'btn bs', onClick: () => this._wizBack() }
+    ];
+    return [
+      { label: 'Skapa order', cls: 'btn bsu', onClick: () => this._wizSave() },
+      { label: 'Tillbaka',    cls: 'btn bs',  onClick: () => this._wizBack() }
+    ];
+  },
+
+  _wizCancel() {
+    Modal.confirm('Avbryt arbetsorder?', () => {
+      this._wiz.modalId = null;
+      Modal.close();
+    });
   },
 
   _wizStep(step) {
@@ -191,83 +208,18 @@ const WorkOrdersPage = {
       </div>`;
   },
 
-  openNewCustomerFromWizard() {
-    const d = this._wiz.data;
-    d.title = document.getElementById('wiz-title')?.value.trim() || d.title || '';
-    d.description = document.getElementById('wiz-desc')?.value.trim() || d.description || '';
-
-    Modal.open({
-      title: 'Ny kund',
-      wide: true,
-      body: CustomersPage._formHtml(null),
-      buttons: [
-        { label: 'Skapa kund', cls: 'btn bp', onClick: () => {
-          const type = document.getElementById('cu-type')?.value || 'foretag';
-          const data = { type };
-          if (type === 'privat') {
-            data.firstName = document.getElementById('cu-firstname')?.value.trim() || '';
-            data.lastName  = document.getElementById('cu-lastname')?.value.trim() || '';
-            data.personnr  = document.getElementById('cu-personnr')?.value.trim() || '';
-            data.name = `${data.firstName} ${data.lastName}`.trim();
-            if (!data.firstName) { showToast('Förnamn krävs'); return; }
-          } else {
-            data.name = document.getElementById('cu-name')?.value.trim() || '';
-            if (!data.name) { showToast('Kundnamn krävs'); return; }
-            data.orgNr = document.getElementById('cu-orgnr')?.value.trim() || '';
-            data.contactPerson = document.getElementById('cu-contact')?.value.trim() || '';
-          }
-          data.phone   = document.getElementById('cu-phone')?.value.trim() || '';
-          data.email   = document.getElementById('cu-email')?.value.trim() || '';
-          data.address = document.getElementById('cu-address')?.value.trim() || '';
-          data.zip     = document.getElementById('cu-zip')?.value.trim() || '';
-          data.city    = document.getElementById('cu-city')?.value.trim() || '';
-          data.note    = document.getElementById('cu-note')?.value.trim() || '';
-
-          const cu = CustomerService.create(data);
-          Modal.close();
-
-          const sel = document.getElementById('wiz-customer');
-          if (sel) {
-            const opt = document.createElement('option');
-            opt.value = cu.id;
-            opt.textContent = CustomerService.displayName(cu);
-            opt.selected = true;
-            sel.appendChild(opt);
-            this._wiz.data.customerId = cu.id;
-            this._wizCustomerChanged();
-          }
-          showToast(`Kund ${CustomerService.displayName(cu)} skapad`);
-        }},
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
-    });
-
-    setTimeout(() => {
-      const sel = document.getElementById('cu-type');
-      if (sel) sel.addEventListener('change', () => CustomersPage._toggleTypeFields(sel.value));
-      CustomersPage._toggleTypeFields(document.getElementById('cu-type')?.value || 'foretag');
-    }, 60);
-  },
-
   _wizStep2Html(d) {
     const isPlan = d.status === 'planerad' || !!d.scheduledDate;
-    const priorities = [
-      {v:'akut', l:'Akut'}, {v:'hög', l:'Hög'}, {v:'normal', l:'Normal'}, {v:'låg', l:'Låg'}
-    ];
+    const priorities = [{v:'akut',l:'Akut'},{v:'hög',l:'Hög'},{v:'normal',l:'Normal'},{v:'låg',l:'Låg'}];
     const prio = d.priority || 'normal';
 
-    const staffHtml = (state.staff||[]).filter(s=>s.active).map(s => {
-      const sel = (d.staff||[]).includes(s.id);
-      return `<button type="button" class="chip ${sel?'on':''}" style="margin:3px;"
-        onclick="WorkOrdersPage._wizToggleStaff('${s.id}',!${sel})"
-        id="sc-${s.id}">${s.firstName} ${s.lastName}</button>`;
-    }).join('');
-
-    const selectedStaff = (d.staff||[]).map(id => {
+    // Staff multi-select picker
+    const sel = d.staff || [];
+    const staffTags = sel.map(id => {
       const s = getStaff(id);
-      return s ? `<span class="bdg bdg-blue" style="margin:2px;">${s.firstName} ${s.lastName.charAt(0)}.
-        <button style="background:none;border:none;cursor:pointer;padding:0 0 0 4px;color:inherit;"
-          onclick="WorkOrdersPage._wizRemoveStaff('${id}')">${ic('x',10)}</button></span>` : '';
+      return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.
+        <button onclick="WorkOrdersPage._wizToggleStaff('${id}');event.stopPropagation();">${ic('x',9)}</button>
+      </span>` : '';
     }).join('');
 
     return `
@@ -285,7 +237,7 @@ const WorkOrdersPage = {
         </div>
       </div>
 
-      <div id="wiz-schedule" style="display:${isPlan?'':'none'};">
+      <div id="wiz-schedule" style="${isPlan?'':'display:none;'}">
         <div class="g2">
           <div class="fg"><label>Datum</label><input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}"></div>
           <div class="g2">
@@ -305,9 +257,20 @@ const WorkOrdersPage = {
       </div>
 
       <div class="fg">
-        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Personal (valfri)</label>
-        ${selectedStaff ? `<div style="margin:6px 0;">${selectedStaff}</div>` : ''}
-        <div class="chips" style="margin-top:4px;">${staffHtml}</div>
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Personal (valfritt)</label>
+        <div class="mpicker" id="staff-mpicker" style="margin-top:6px;">
+          <div class="mpicker-ctrl" onclick="WorkOrdersPage._wizStaffPickerToggle()">
+            <div id="mpicker-tags">
+              ${staffTags || '<span class="mpicker-ph">Välj personal…</span>'}
+            </div>
+            ${ic('chevron-down',14)}
+          </div>
+          <div class="mpicker-dd" id="staff-mpicker-dd" style="display:none;">
+            <input class="mpicker-search" id="staff-mpicker-search" placeholder="Sök personal…"
+              oninput="WorkOrdersPage._wizStaffSearch(this.value)" onclick="event.stopPropagation()">
+            <div id="staff-mpicker-list">${this._staffListItems(state.staff||[])}</div>
+          </div>
+        </div>
       </div>`;
   },
 
@@ -316,6 +279,12 @@ const WorkOrdersPage = {
       `<option value="${p.id}" ${d.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
     const pt = d.priceType || 'ej_satt';
+    const hints = {
+      ej_satt:  'Pris sätts senare på arbetsordern eller vid fakturering.',
+      fastpris: 'Ange fast pris exkl. moms. Moms 25% tillkommer.',
+      timpris:  'Tid debiteras enligt registrerade tidsnoteringar.',
+      prisgrupp:'Tid debiteras enligt vald prisgrupp.'
+    };
     return `
       <div class="fg"><label>Prissättning</label>
         <div class="chips" style="margin-top:6px;">
@@ -326,17 +295,15 @@ const WorkOrdersPage = {
         </div>
       </div>
 
-      <div id="wiz-pt-hint" class="ibox" style="margin:8px 0;font-size:12px;">
-        ${pt==='ej_satt'?'Pris sätts senare på arbetsordern eller vid fakturering.':
-          pt==='fastpris'?'Ange fast pris exkl. moms.':
-          pt==='timpris'?'Tid debiteras enligt registrerade tidsnoteringar.':
-          'Tid debiteras enligt vald prisgrupp.'}
-      </div>
+      <div id="wiz-pt-hint" class="ibox" style="margin:8px 0;font-size:12px;">${hints[pt]}</div>
 
       <div id="wiz-fastpris-row" style="${pt==='fastpris'?'':'display:none'}">
         <div class="fg"><label>Fastpris ex. moms (kr)</label>
-          <input type="number" id="wiz-fastpris" value="${d.fixedPrice||''}" placeholder="0" min="0"></div>
-        ${d.fixedPrice ? `<div class="ibox" style="font-size:12px;">Inkl. moms (25%): ${fmt(Math.round((d.fixedPrice||0)*1.25))} kr</div>` : ''}
+          <input type="number" id="wiz-fastpris" value="${d.fixedPrice||''}" placeholder="0" min="0"
+            oninput="WorkOrdersPage._wizUpdateMoms()"></div>
+        <div id="wiz-moms-calc" class="ibox" style="font-size:12px;margin-top:4px;display:${d.fixedPrice?'':'none'};">
+          ${d.fixedPrice?`Moms 25%: ${fmt(Math.round(d.fixedPrice*0.25))} kr &nbsp;·&nbsp; Inkl. moms: ${fmt(Math.round(d.fixedPrice*1.25))} kr`:''}
+        </div>
       </div>
 
       <div id="wiz-prisgrupp-row" style="${pt==='prisgrupp'?'':'display:none'}">
@@ -356,22 +323,94 @@ const WorkOrdersPage = {
   },
 
   _bindWizStep1() {
-    setTimeout(() => {
-      const sel = document.getElementById('wiz-customer');
-      if (sel && this._wiz.data.customerId) this._wizCustomerChanged();
-    }, 50);
+    const sel = document.getElementById('wiz-customer');
+    if (sel && this._wiz.data.customerId) this._wizCustomerChanged();
   },
 
   _bindWizStep2() {
-    // Priority and plan mode are set via button clicks, already stored in data
+    // Restore staff display if already selected
+    this._wizUpdateStaffDisplay();
+    // Close picker on outside click
+    this._wizClickOutsideFn = (e) => {
+      if (!e.target.closest('#staff-mpicker')) {
+        const dd = document.getElementById('staff-mpicker-dd');
+        const ctrl = document.querySelector('#staff-mpicker .mpicker-ctrl');
+        if (dd) dd.style.display = 'none';
+        if (ctrl) ctrl.classList.remove('open');
+      }
+    };
+    document.addEventListener('click', this._wizClickOutsideFn);
   },
 
   _bindWizStep3() {
-    setTimeout(() => {
-      this._renderWizChecklist();
-    }, 50);
+    this._renderWizChecklist();
   },
 
+  /* ── Staff multi-select picker ─────────── */
+  _wizStaffPickerToggle() {
+    const dd  = document.getElementById('staff-mpicker-dd');
+    const ctrl = document.querySelector('#staff-mpicker .mpicker-ctrl');
+    if (!dd) return;
+    const open = dd.style.display !== 'none';
+    dd.style.display = open ? 'none' : '';
+    if (ctrl) ctrl.classList.toggle('open', !open);
+    if (!open) {
+      const s = document.getElementById('staff-mpicker-search');
+      if (s) { s.value = ''; this._wizStaffSearch(''); setTimeout(() => s.focus(), 40); }
+    }
+  },
+
+  _wizStaffSearch(q) {
+    const listEl = document.getElementById('staff-mpicker-list');
+    if (!listEl) return;
+    const lq = q.toLowerCase();
+    const staff = (state.staff||[]).filter(s =>
+      s.active && (!q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(lq))
+    );
+    listEl.innerHTML = this._staffListItems(staff);
+  },
+
+  _staffListItems(staffArr) {
+    const active = (staffArr||[]).filter(s => s.active);
+    if (!active.length) return `<p style="padding:10px 14px;color:var(--mt);font-size:13px;">Ingen personal</p>`;
+    return active.map(s => {
+      const isSel = (this._wiz.data.staff||[]).includes(s.id);
+      return `<div class="mpicker-item ${isSel?'sel':''}" onclick="WorkOrdersPage._wizToggleStaff('${s.id}');event.stopPropagation();">
+        <div class="mpicker-cb">${isSel?ic('check',11):''}</div>
+        <span>${s.firstName} ${s.lastName}</span>
+        ${s.title?`<span style="font-size:11px;color:var(--mt);font-weight:400;">${s.title}</span>`:''}
+      </div>`;
+    }).join('');
+  },
+
+  _wizToggleStaff(staffId) {
+    const staff = this._wiz.data.staff = this._wiz.data.staff || [];
+    const i = staff.indexOf(staffId);
+    if (i > -1) staff.splice(i, 1);
+    else staff.push(staffId);
+    this._wizUpdateStaffDisplay();
+  },
+
+  _wizUpdateStaffDisplay() {
+    const tagsEl = document.getElementById('mpicker-tags');
+    if (!tagsEl) return;
+    const sel = this._wiz.data.staff || [];
+    if (!sel.length) {
+      tagsEl.innerHTML = '<span class="mpicker-ph">Välj personal…</span>';
+    } else {
+      tagsEl.innerHTML = sel.map(id => {
+        const s = getStaff(id);
+        return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.
+          <button onclick="WorkOrdersPage._wizToggleStaff('${id}');event.stopPropagation();">${ic('x',9)}</button>
+        </span>` : '';
+      }).join('');
+    }
+    // Also update the list items to reflect new selection state
+    const q = document.getElementById('staff-mpicker-search')?.value || '';
+    this._wizStaffSearch(q);
+  },
+
+  /* ── Wizard helpers ────────────────────── */
   _wizCustomerChanged() {
     const sel = document.getElementById('wiz-customer');
     if (!sel) return;
@@ -387,36 +426,27 @@ const WorkOrdersPage = {
       if (ph   && !ph.value)   ph.value   = cu.phone || '';
     }
     document.getElementById('wiz-autofill').innerHTML = cu
-      ? `<div class="ibox" style="margin-bottom:8px;">${ic('check',14)} Kundinformation: ${CustomerService.displayName(cu)}</div>`
+      ? `<div class="ibox" style="margin-bottom:8px;">${ic('check',14)} ${CustomerService.displayName(cu)}</div>`
       : '';
   },
 
   _wizSetPlan(mode) {
     const isPlan = mode === 'direct';
-    document.getElementById('wiz-schedule').style.display = isPlan ? '' : 'none';
-    document.getElementById('btn-pool').className   = `btn ${!isPlan?'bp':'bs'} bfull`;
-    document.getElementById('btn-direct').className = `btn ${isPlan?'bp':'bs'} bfull`;
+    const sched = document.getElementById('wiz-schedule');
+    if (sched) sched.style.display = isPlan ? '' : 'none';
+    const pool   = document.getElementById('btn-pool');
+    const direct = document.getElementById('btn-direct');
+    if (pool)   pool.className   = `btn ${!isPlan?'bp':'bs'} bfull`;
+    if (direct) direct.className = `btn ${isPlan?'bp':'bs'} bfull`;
     this._wiz.data.status = isPlan ? 'planerad' : 'pool';
-    if (!isPlan) { this._wiz.data.scheduledDate = ''; }
+    if (!isPlan) { this._wiz.data.scheduledDate = ''; this._wiz.data.scheduledStart = ''; this._wiz.data.scheduledEnd = ''; }
   },
 
   _wizSetPrio(p) {
     this._wiz.data.priority = p;
-    document.querySelectorAll('[id^="prio-"]').forEach(b => {
-      b.classList.toggle('on', b.id === 'prio-'+p);
-    });
-  },
-
-  _wizToggleStaff(staffId, add) {
-    const staff = this._wiz.data.staff = this._wiz.data.staff || [];
-    if (add && !staff.includes(staffId)) staff.push(staffId);
-    if (!add) { const i = staff.indexOf(staffId); if (i > -1) staff.splice(i, 1); }
-    const btn = document.getElementById('sc-'+staffId);
-    if (btn) btn.classList.toggle('on', !!add);
-  },
-
-  _wizRemoveStaff(staffId) {
-    this._wizToggleStaff(staffId, false);
+    document.querySelectorAll('[id^="prio-"]').forEach(b =>
+      b.classList.toggle('on', b.id === 'prio-'+p)
+    );
   },
 
   _wizSetPriceType(pt) {
@@ -425,25 +455,27 @@ const WorkOrdersPage = {
       const b = document.getElementById('pt-'+t);
       if (b) b.classList.toggle('on', t === pt);
     });
-    const fp = document.getElementById('wiz-fastpris-row');
-    const pg = document.getElementById('wiz-prisgrupp-row');
+    const fp   = document.getElementById('wiz-fastpris-row');
+    const pg   = document.getElementById('wiz-prisgrupp-row');
     const hint = document.getElementById('wiz-pt-hint');
     if (fp) fp.style.display = pt === 'fastpris'  ? '' : 'none';
     if (pg) pg.style.display = pt === 'prisgrupp' ? '' : 'none';
-    if (hint) hint.innerHTML = pt==='ej_satt'?'Pris sätts senare på arbetsordern eller vid fakturering.':
-      pt==='fastpris'?'Ange fast pris exkl. moms.':
-      pt==='timpris'?'Tid debiteras enligt registrerade tidsnoteringar.':
-      'Tid debiteras enligt vald prisgrupp.';
+    const hints = {
+      ej_satt:'Pris sätts senare på arbetsordern eller vid fakturering.',
+      fastpris:'Ange fast pris exkl. moms. Moms 25% tillkommer.',
+      timpris:'Tid debiteras enligt registrerade tidsnoteringar.',
+      prisgrupp:'Tid debiteras enligt vald prisgrupp.'
+    };
+    if (hint) hint.textContent = hints[pt] || '';
   },
 
-  _wizPlanChange(mode) {
-    this._wizSetPlan(mode);
-  },
-
-  _wizPriceChange() {
-    const sel = document.getElementById('wiz-pricetype');
-    if (!sel) return;
-    this._wizSetPriceType(sel.value);
+  _wizUpdateMoms() {
+    const fp  = parseFloat(document.getElementById('wiz-fastpris')?.value) || 0;
+    const el  = document.getElementById('wiz-moms-calc');
+    if (!el) return;
+    if (!fp) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = `Moms 25%: ${fmt(Math.round(fp*0.25))} kr &nbsp;·&nbsp; Inkl. moms: ${fmt(Math.round(fp*1.25))} kr`;
   },
 
   _wizAddCL() {
@@ -474,6 +506,7 @@ const WorkOrdersPage = {
     this._renderWizChecklist();
   },
 
+  /* ── Wizard collect ────────────────────── */
   _wizCollectStep1() {
     const d = this._wiz.data;
     d.title         = (document.getElementById('wiz-title')?.value || '').trim();
@@ -490,6 +523,11 @@ const WorkOrdersPage = {
   },
 
   _wizCollectStep2() {
+    // Clean up click-outside listener
+    if (this._wizClickOutsideFn) {
+      document.removeEventListener('click', this._wizClickOutsideFn);
+      this._wizClickOutsideFn = null;
+    }
     const d = this._wiz.data;
     const isPlan = d.status === 'planerad';
     if (isPlan) {
@@ -498,9 +536,7 @@ const WorkOrdersPage = {
       d.scheduledEnd   = document.getElementById('wiz-end')?.value || '';
       if (!d.scheduledDate) { showToast('Välj datum'); return false; }
     } else {
-      d.scheduledDate  = '';
-      d.scheduledStart = '';
-      d.scheduledEnd   = '';
+      d.scheduledDate = ''; d.scheduledStart = ''; d.scheduledEnd = '';
     }
     if (!d.priority) d.priority = 'normal';
     return true;
@@ -511,26 +547,27 @@ const WorkOrdersPage = {
     d.priceType    = d.priceType    || 'ej_satt';
     d.fixedPrice   = parseFloat(document.getElementById('wiz-fastpris')?.value || '0') || 0;
     d.priceGroupId = document.getElementById('wiz-pg')?.value || '';
-    if (d.priceType === 'fastpris' && !d.fixedPrice) {
-      showToast('Ange fastpris'); return false;
-    }
-    if (d.priceType === 'prisgrupp' && !d.priceGroupId) {
-      showToast('Välj prisgrupp'); return false;
-    }
+    if (d.priceType === 'fastpris' && !d.fixedPrice) { showToast('Ange fastpris'); return false; }
+    if (d.priceType === 'prisgrupp' && !d.priceGroupId) { showToast('Välj prisgrupp'); return false; }
     return true;
   },
 
   _wizNext() {
     const step = this._wiz.step;
-    const ok = step === 1 ? this._wizCollectStep1()
-             : step === 2 ? this._wizCollectStep2()
-             : false;
+    const ok = step === 1 ? this._wizCollectStep1() : this._wizCollectStep2();
     if (!ok) return;
     this._wiz.step++;
     this._showWizard();
   },
 
   _wizBack() {
+    if (this._wiz.step === 2) {
+      // Clean up click-outside listener if going back from step 2
+      if (this._wizClickOutsideFn) {
+        document.removeEventListener('click', this._wizClickOutsideFn);
+        this._wizClickOutsideFn = null;
+      }
+    }
     if (this._wiz.step > 1) {
       this._wiz.step--;
       this._showWizard();
@@ -562,10 +599,74 @@ const WorkOrdersPage = {
       checklist:     (d.checklist || []).map(c => ({ ...c })),
       materials:     [],
       notes:         [],
+      log:           [],
       timeEntries:   []
     });
+    this._wiz.modalId = null;
     Modal.close();
     showToast(`${ao.id} skapad`);
     Router.showPage('pg-ao-detail', { aoId: ao.id });
+  },
+
+  /* ── Ny kund från wizard ───────────────── */
+  openNewCustomerFromWizard() {
+    // Save current step 1 fields before opening second modal
+    const titleEl = document.getElementById('wiz-title');
+    const descEl  = document.getElementById('wiz-desc');
+    if (titleEl) this._wiz.data.title = titleEl.value.trim();
+    if (descEl)  this._wiz.data.description = descEl.value.trim();
+
+    Modal.open({
+      title: 'Ny kund',
+      wide: true,
+      body: CustomersPage._formHtml(null),
+      buttons: [
+        { label: 'Skapa kund', cls: 'btn bp', onClick: () => {
+          const type = document.getElementById('cu-type')?.value || 'foretag';
+          const data = { type };
+          if (type === 'privat') {
+            data.firstName = (document.getElementById('cu-firstname')?.value || '').trim();
+            data.lastName  = (document.getElementById('cu-lastname')?.value || '').trim();
+            data.personnr  = (document.getElementById('cu-personnr')?.value || '').trim();
+            data.name = `${data.firstName} ${data.lastName}`.trim();
+            if (!data.firstName) { showToast('Förnamn krävs'); return; }
+          } else {
+            data.name = (document.getElementById('cu-name')?.value || '').trim();
+            if (!data.name) { showToast('Kundnamn krävs'); return; }
+            data.orgNr = (document.getElementById('cu-orgnr')?.value || '').trim();
+            data.contactPerson = (document.getElementById('cu-contact')?.value || '').trim();
+          }
+          data.phone   = (document.getElementById('cu-phone')?.value || '').trim();
+          data.email   = (document.getElementById('cu-email')?.value || '').trim();
+          data.address = (document.getElementById('cu-address')?.value || '').trim();
+          data.zip     = (document.getElementById('cu-zip')?.value || '').trim();
+          data.city    = (document.getElementById('cu-city')?.value || '').trim();
+
+          const cu = CustomerService.create(data);
+          Modal.close();
+
+          // Add new customer to wizard dropdown and select it
+          const wiz = document.getElementById(this._wiz.modalId);
+          const sel = wiz?.querySelector('#wiz-customer');
+          if (sel) {
+            const opt = document.createElement('option');
+            opt.value = cu.id;
+            opt.textContent = CustomerService.displayName(cu);
+            opt.selected = true;
+            sel.appendChild(opt);
+            this._wiz.data.customerId = cu.id;
+            this._wizCustomerChanged();
+          }
+          showToast(`Kund ${CustomerService.displayName(cu)} skapad`);
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+
+    setTimeout(() => {
+      const sel = document.getElementById('cu-type');
+      if (sel) sel.addEventListener('change', () => CustomersPage._toggleTypeFields(sel.value));
+      CustomersPage._toggleTypeFields(sel?.value || 'foretag');
+    }, 60);
   }
 };

@@ -50,8 +50,9 @@ const Schema = {
     scheduledStart: '',
     scheduledEnd: '',
     checklist: [],            // [{id, text, done}]
-    materials: [],            // [{id, articleId, name, qty, unit, buyPrice, sellPrice}]
+    materials: [],            // [{id, articleId, name, qty, unit, buyPrice, sellPrice, addedAt}]
     notes: [],                // [{id, text, imageData, staffName, timestamp}]
+    log: [],                  // [{id, type, text, imageData, visibility, userName, timestamp}]
     timeEntries: [],          // [timeEntryId, ...]  (refs till timeEntries)
     invoiceId: '',
     salesOpportunityId: '',

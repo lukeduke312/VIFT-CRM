@@ -529,6 +529,16 @@ const SeedData = {
   timeEntries: [],
   contracts: [],
   inspections: [],
-  articles: [],
+  articles: [
+    { id: 'ART-001', articleNumber: '1001', name: 'Fogmassa Sikaflex 291i',  category: 'material', unit: 'st',   buyPrice: 75,  sellPrice: 145, vatRate: 25, active: true },
+    { id: 'ART-002', articleNumber: '1002', name: 'Silikon transparent 300ml', category: 'material', unit: 'st', buyPrice: 45,  sellPrice: 89,  vatRate: 25, active: true },
+    { id: 'ART-003', articleNumber: '1003', name: 'Skruv 6×50 (förpackning)', category: 'material', unit: 'förp.', buyPrice: 38, sellPrice: 72, vatRate: 25, active: true },
+    { id: 'ART-004', articleNumber: '1004', name: 'Expansionsbult M8×60',    category: 'material', unit: 'st',   buyPrice: 10,  sellPrice: 25,  vatRate: 25, active: true },
+    { id: 'ART-005', articleNumber: '1005', name: 'Rörkoppling 15mm',        category: 'material', unit: 'st',   buyPrice: 32,  sellPrice: 68,  vatRate: 25, active: true },
+    { id: 'ART-006', articleNumber: '1006', name: 'Plastfilm skyddsfilm 4m', category: 'material', unit: 'm',    buyPrice: 6,   sellPrice: 15,  vatRate: 25, active: true },
+    { id: 'ART-007', articleNumber: '2001', name: 'Arbetstid standard',      category: 'arbete',   unit: 'tim',  buyPrice: 0,   sellPrice: 695, vatRate: 25, active: true },
+    { id: 'ART-008', articleNumber: '2002', name: 'Akut/jourarbetstid',      category: 'arbete',   unit: 'tim',  buyPrice: 0,   sellPrice: 1250, vatRate: 25, active: true },
+    { id: 'ART-009', articleNumber: '3001', name: 'Resekostnad',             category: 'kostnad',  unit: 'km',   buyPrice: 0,   sellPrice: 5,   vatRate: 25, active: true }
+  ],
   invoices: []
 };
