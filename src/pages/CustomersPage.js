@@ -95,6 +95,7 @@ const CustomersPage = {
 
   _formHtml(cu) {
     const v = (key, def='') => cu ? (cu[key] || def) : def;
+    const diffInv = cu && (cu.invoiceAddress || cu.invoiceZip || cu.invoiceCity);
     return `
       <div class="fg">
         <label>Kundtyp</label>
@@ -109,10 +110,8 @@ const CustomersPage = {
       <div id="cu-company-fields">
         <div class="fg"><label>Företags-/kundnamn <span style="color:var(--rd)">*</span></label>
           <input id="cu-name" value="${v('name')}" placeholder="BRF Solgläntan"></div>
-        <div class="g2">
-          <div class="fg"><label>Org.nr</label><input id="cu-orgnr" value="${v('orgNr')}" placeholder="556123-4567"></div>
-          <div class="fg"><label>Kontaktperson</label><input id="cu-contact" value="${v('contactPerson')}" placeholder="Anna Svensson"></div>
-        </div>
+        <div class="fg"><label>Org.nr</label><input id="cu-orgnr" value="${v('orgNr')}" placeholder="556123-4567"></div>
+        <div class="fg"><label>Kontaktperson</label><input id="cu-contact" value="${v('contactPerson')}" placeholder="Anna Svensson"></div>
       </div>
 
       <div id="cu-private-fields" style="display:none;">
@@ -122,6 +121,8 @@ const CustomersPage = {
           <div class="fg"><label>Efternamn <span style="color:var(--rd)">*</span></label>
             <input id="cu-lastname" value="${v('lastName')}" placeholder="Svensson"></div>
         </div>
+        <div class="fg"><label>Personnummer</label>
+          <input id="cu-personnr" value="${v('personnr')}" placeholder="YYYYMMDD-XXXX"></div>
       </div>
 
       <div class="g2">
@@ -133,6 +134,19 @@ const CustomersPage = {
         <div class="fg"><label>Postnummer</label><input id="cu-zip" value="${v('zip')}" placeholder="123 45"></div>
         <div class="fg"><label>Stad</label><input id="cu-city" value="${v('city')}" placeholder="Stockholm"></div>
       </div>
+
+      <div class="fg" style="margin-top:4px;">
+        <label><input type="checkbox" id="cu-diff-invoice" ${diffInv?'checked':''} style="width:16px;height:16px;margin-right:6px;"
+          onchange="CustomersPage._toggleInvoice()">Annan fakturaadress</label>
+      </div>
+      <div id="cu-inv-fields" style="${diffInv?'':'display:none'}">
+        <div class="fg"><label>Fakturaadress</label><input id="cu-inv-address" value="${v('invoiceAddress')}" placeholder="Fakturavägen 2"></div>
+        <div class="g2">
+          <div class="fg"><label>Postnummer</label><input id="cu-inv-zip" value="${v('invoiceZip')}" placeholder="123 45"></div>
+          <div class="fg"><label>Stad</label><input id="cu-inv-city" value="${v('invoiceCity')}" placeholder="Stockholm"></div>
+        </div>
+      </div>
+
       <div class="fg"><label>Anteckning</label>
         <textarea id="cu-note" rows="2" placeholder="Intern anteckning om kunden">${v('note')}</textarea></div>`;
   },
@@ -145,6 +159,12 @@ const CustomersPage = {
     else                    { co.style.display = '';     pr.style.display = 'none'; }
   },
 
+  _toggleInvoice() {
+    const checked = document.getElementById('cu-diff-invoice')?.checked;
+    const el = document.getElementById('cu-inv-fields');
+    if (el) el.style.display = checked ? '' : 'none';
+  },
+
   _save(id) {
     const type = document.getElementById('cu-type').value;
     const data = { type };
@@ -152,6 +172,7 @@ const CustomersPage = {
     if (type === 'privat') {
       data.firstName = (document.getElementById('cu-firstname').value || '').trim();
       data.lastName  = (document.getElementById('cu-lastname').value || '').trim();
+      data.personnr  = (document.getElementById('cu-personnr')?.value || '').trim();
       data.name      = `${data.firstName} ${data.lastName}`.trim();
       if (!data.firstName) { showToast('Förnamn krävs'); return; }
     } else {
@@ -168,11 +189,21 @@ const CustomersPage = {
     data.city    = document.getElementById('cu-city').value.trim();
     data.note    = document.getElementById('cu-note').value.trim();
 
+    if (document.getElementById('cu-diff-invoice')?.checked) {
+      data.invoiceAddress = (document.getElementById('cu-inv-address')?.value || '').trim();
+      data.invoiceZip     = (document.getElementById('cu-inv-zip')?.value || '').trim();
+      data.invoiceCity    = (document.getElementById('cu-inv-city')?.value || '').trim();
+    } else {
+      data.invoiceAddress = '';
+      data.invoiceZip     = '';
+      data.invoiceCity    = '';
+    }
+
     if (id) {
       CustomerService.update(id, data);
       showToast('Kund uppdaterad');
     } else {
-      const cu = CustomerService.create(data);
+      CustomerService.create(data);
       showToast('Kund skapad');
     }
     Modal.close();
@@ -268,30 +299,41 @@ const CustomerDetailPage = {
       ['E-post',      cu.email   || '—'],
       ['Adress',      [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') || '—'],
       cu.orgNr         ? ['Org.nr',          cu.orgNr]         : null,
+      cu.personnr      ? ['Personnummer',     cu.personnr]      : null,
       cu.contactPerson ? ['Kontaktperson',   cu.contactPerson] : null,
     ].filter(Boolean);
 
+    const diffInv = cu.invoiceAddress || cu.invoiceZip || cu.invoiceCity;
     const contacts = (cu.contacts || []);
     return `
       <div class="card">
         <div class="card-header"><h3>Kontaktuppgifter</h3></div>
         <div class="card-body">
           ${rows.map(([k,v]) => `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`).join('')}
+          ${diffInv ? `<div class="dr"><span class="dk">Fakturaadress</span><span class="dv">${[cu.invoiceAddress, cu.invoiceZip, cu.invoiceCity].filter(Boolean).join(', ')}</span></div>` : ''}
           ${cu.note ? `<div style="margin-top:10px;" class="ibox">${cu.note}</div>` : ''}
         </div>
       </div>
-      ${contacts.length > 0 ? `
-        <div class="card" style="margin-top:8px;">
-          <div class="card-header"><h3>Kontaktpersoner</h3></div>
-          <div class="card-body" style="padding:6px 14px;">
-            ${contacts.map(c => `
+      <div class="card" style="margin-top:8px;">
+        <div class="card-header">
+          <h3>Kontaktpersoner</h3>
+          <button class="btn bs bxs" onclick="CustomerDetailPage.openAddContact()">${ic('plus',13)}</button>
+        </div>
+        <div class="card-body" style="padding:6px 14px;">
+          ${contacts.length === 0 ? '<p style="font-size:13px;color:var(--mt);padding:4px 0;">Inga kontaktpersoner</p>' :
+            contacts.map((c, i) => `
               <div class="crow">
-                <div><div style="font-size:13px;font-weight:700;">${c.name}</div>
-                  <div style="font-size:11px;color:var(--mt);">${c.role||''}${c.phone?' · '+c.phone:''}</div></div>
-                <span style="font-size:12px;color:var(--mt);">${c.email||''}</span>
+                <div>
+                  <div style="font-size:13px;font-weight:700;">${c.name}${c.primary?' <span class="bdg bdg-blue" style="font-size:9px;">Primär</span>':''}</div>
+                  <div style="font-size:11px;color:var(--mt);">${c.role||''}${c.phone?' · '+c.phone:''}${c.email?' · '+c.email:''}</div>
+                </div>
+                <div style="display:flex;gap:4px;">
+                  <button class="btn bxs bs" onclick="CustomerDetailPage.openAddContact(${i})">${ic('pencil',12)}</button>
+                  <button class="btn bxs bd" onclick="CustomerDetailPage.removeContact(${i})">${ic('trash',12)}</button>
+                </div>
               </div>`).join('')}
-          </div>
-        </div>` : ''}`;
+        </div>
+      </div>`;
   },
 
   _tabAO(cu) {
@@ -350,5 +392,66 @@ const CustomerDetailPage = {
   _tabActivity(cu) {
     const acts = ActivityService.getByCustomer(cu.id, 20);
     return ActivityService.renderList(acts);
+  },
+
+  openAddContact(existingIdx) {
+    const cu = getCu(this.customerId);
+    if (!cu) return;
+    const c = existingIdx !== undefined ? (cu.contacts||[])[existingIdx] : null;
+    const v = (key) => c ? (c[key] || '') : '';
+    Modal.open({
+      title: c ? 'Redigera kontaktperson' : 'Lägg till kontaktperson',
+      body: `
+        <div class="fg"><label>Namn</label><input id="cc-name" value="${v('name')}" placeholder="Förnamn Efternamn"></div>
+        <div class="fg"><label>Roll / Titel</label><input id="cc-role" value="${v('role')}" placeholder="T.ex. VD, Förvaltare…"></div>
+        <div class="g2">
+          <div class="fg"><label>Telefon</label><input id="cc-phone" type="tel" value="${v('phone')}" placeholder="070-000 00 00"></div>
+          <div class="fg"><label>E-post</label><input id="cc-email" type="email" value="${v('email')}" placeholder="namn@exempel.se"></div>
+        </div>
+        <div class="fg">
+          <label><input type="checkbox" id="cc-primary" ${v('primary')?'checked':''} style="width:16px;height:16px;margin-right:6px;">Primär kontaktperson</label>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveContact(existingIdx) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _saveContact(existingIdx) {
+    const cu = getCu(this.customerId);
+    if (!cu) return;
+    const name = (document.getElementById('cc-name')?.value || '').trim();
+    if (!name) { showToast('Namn krävs'); return; }
+    const contact = {
+      name,
+      role:    (document.getElementById('cc-role')?.value || '').trim(),
+      phone:   (document.getElementById('cc-phone')?.value || '').trim(),
+      email:   (document.getElementById('cc-email')?.value || '').trim(),
+      primary: document.getElementById('cc-primary')?.checked || false
+    };
+    cu.contacts = cu.contacts || [];
+    if (existingIdx !== undefined) {
+      cu.contacts[existingIdx] = contact;
+    } else {
+      cu.contacts.push(contact);
+    }
+    cu.updatedAt = new Date().toISOString();
+    persist();
+    Modal.close();
+    this._renderFull(document.getElementById('pg-crm-detail-content'));
+    showToast('Kontaktperson sparad');
+  },
+
+  removeContact(idx) {
+    Modal.confirm('Ta bort kontaktperson?', () => {
+      const cu = getCu(this.customerId);
+      if (!cu) return;
+      cu.contacts = (cu.contacts || []).filter((_, i) => i !== idx);
+      cu.updatedAt = new Date().toISOString();
+      persist();
+      this._renderFull(document.getElementById('pg-crm-detail-content'));
+      showToast('Kontaktperson borttagen');
+    });
   }
 };

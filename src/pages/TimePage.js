@@ -148,6 +148,9 @@ const TimePage = {
 
   openClockOut() {
     const mins = Math.round((Date.now() - state.stampTimestamp) / 60000);
+    const aoId = state.stampAoId;
+    const ao = aoId ? getAO(aoId) : null;
+    const cu = ao ? getCu(ao.customerId) : null;
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
       `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
@@ -155,6 +158,8 @@ const TimePage = {
       title: 'Klocka ut',
       body: `
         <div class="ibox" style="margin-bottom:12px;">${ic('clock',14)} Tid: ${TimeService.fmtDuration(mins)}</div>
+        ${ao ? `<div class="dr"><span class="dk">AO</span><span class="dv">${ao.id} – ${ao.title}</span></div>` : ''}
+        ${cu ? `<div class="dr"><span class="dk">Kund</span><span class="dv">${CustomerService.displayName(cu)}</span></div>` : ''}
         <div class="fg"><label>Prisgrupp</label>
           <select id="co-pg"><option value="">— Ingen —</option>${pgOptions}</select></div>
         <div class="fg"><label>Kommentar</label>
@@ -170,7 +175,7 @@ const TimePage = {
             billable:     document.getElementById('co-billable')?.checked !== false
           });
           Modal.close();
-          showToast('Utloggad ✓');
+          showToast('Utloggad');
           TimePage.render();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -214,10 +219,63 @@ const TimePage = {
           </div>
           <span class="bdg ${t.billable?'bdg-green':'bdg-grey'}">${t.billable?'Deb.':'Intern'}</span>
           <div style="display:flex;gap:4px;">
+            <button class="btn bxs bs" onclick="TimePage.openEditEntry('${t.id}')">${ic('pencil',12)}</button>
             <button class="btn bxs bd" onclick="TimePage.deleteEntry('${t.id}')">${ic('trash',12)}</button>
           </div>
         </div>`;
     }).join('');
+  },
+
+  openEditEntry(id) {
+    const t = (state.timeEntries||[]).find(x=>x.id===id);
+    if (!t) return;
+    const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
+      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+    ).join('');
+    const cuOptions = (state.customers||[]).map(c =>
+      `<option value="${c.id}" ${t.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
+    ).join('');
+    const aoOptions = (state.workOrders||[]).filter(a=>!['avbruten'].includes(a.status)).map(a=>
+      `<option value="${a.id}" ${t.aoId===a.id?'selected':''}>${a.id} – ${a.title}</option>`
+    ).join('');
+
+    Modal.open({
+      title: 'Redigera tid',
+      body: `
+        <div class="g2">
+          <div class="fg"><label>Datum</label><input type="date" id="et-date" value="${t.date}"></div>
+          <div class="fg"><label>Prisgrupp</label>
+            <select id="et-pg"><option value="">— Ingen —</option>${pgOptions}</select></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Starttid</label><input type="time" id="et-start" value="${t.startStr}"></div>
+          <div class="fg"><label>Sluttid</label><input type="time" id="et-end" value="${t.endStr}"></div>
+        </div>
+        <div class="fg"><label>Kund</label>
+          <select id="et-customer"><option value="">— Ingen kund —</option>${cuOptions}</select></div>
+        <div class="fg"><label>Arbetsorder</label>
+          <select id="et-ao"><option value="">— Ingen AO —</option>${aoOptions}</select></div>
+        <div class="fg"><label>Kommentar</label><textarea id="et-comment" rows="2">${t.comment||''}</textarea></div>
+        <div class="fg"><label><input type="checkbox" id="et-billable" ${t.billable?'checked':''} style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label></div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          TimeService.update(id, {
+            date:         document.getElementById('et-date')?.value || t.date,
+            startStr:     document.getElementById('et-start')?.value || t.startStr,
+            endStr:       document.getElementById('et-end')?.value || t.endStr,
+            priceGroupId: document.getElementById('et-pg')?.value || '',
+            customerId:   document.getElementById('et-customer')?.value || '',
+            aoId:         document.getElementById('et-ao')?.value || '',
+            comment:      document.getElementById('et-comment')?.value.trim() || '',
+            billable:     document.getElementById('et-billable')?.checked !== false
+          });
+          Modal.close();
+          document.getElementById('time-list').innerHTML = this._renderList();
+          showToast('Tid uppdaterad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   },
 
   deleteEntry(id) {

@@ -250,7 +250,7 @@ const WorkOrderDetailPage = {
     Modal.confirm(`Markera ordern som klar?`, () => {
       WorkOrderService.markComplete(this.aoId);
       this.render({ aoId: this.aoId });
-      showToast('Order markerad klar ✓');
+      showToast('Order markerad klar');
     });
   },
 
@@ -308,7 +308,7 @@ const WorkOrderDetailPage = {
             billable: document.getElementById('co-billable')?.checked !== false
           });
           Modal.close();
-          showToast('Utloggad ✓');
+          showToast('Utloggad');
           this.render({ aoId: this.aoId });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }

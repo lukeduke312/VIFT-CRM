@@ -100,7 +100,7 @@ const ActivityService = {
    */
   renderList(entries) {
     if (!entries || entries.length === 0) {
-      return '<div class="empty" style="padding:16px;"><span class="empty-ico">📋</span><p>Ingen aktivitet ännu</p></div>';
+      return '<div class="empty" style="padding:16px;"><p>Ingen aktivitet ännu</p></div>';
     }
     return entries.map(e => this.renderEntry(e)).join('');
   },

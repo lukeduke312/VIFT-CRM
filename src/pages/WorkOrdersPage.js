@@ -170,7 +170,10 @@ const WorkOrdersPage = {
       <div class="fg"><label>Kund <span style="color:var(--rd)">*</span></label>
         <select id="wiz-customer" onchange="WorkOrdersPage._wizCustomerChanged()">
           <option value="">— Välj kund —</option>${cuOptions}
-        </select></div>
+        </select>
+        <button class="btn bs bxs" style="margin-top:4px;" onclick="WorkOrdersPage.openNewCustomerFromWizard()">
+          + Ny kund
+        </button></div>
       <div id="wiz-autofill"></div>
       <div class="fg"><label>Arbetsadress</label>
         <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"></div>
@@ -188,53 +191,123 @@ const WorkOrdersPage = {
       </div>`;
   },
 
+  openNewCustomerFromWizard() {
+    const d = this._wiz.data;
+    d.title = document.getElementById('wiz-title')?.value.trim() || d.title || '';
+    d.description = document.getElementById('wiz-desc')?.value.trim() || d.description || '';
+
+    Modal.open({
+      title: 'Ny kund',
+      wide: true,
+      body: CustomersPage._formHtml(null),
+      buttons: [
+        { label: 'Skapa kund', cls: 'btn bp', onClick: () => {
+          const type = document.getElementById('cu-type')?.value || 'foretag';
+          const data = { type };
+          if (type === 'privat') {
+            data.firstName = document.getElementById('cu-firstname')?.value.trim() || '';
+            data.lastName  = document.getElementById('cu-lastname')?.value.trim() || '';
+            data.personnr  = document.getElementById('cu-personnr')?.value.trim() || '';
+            data.name = `${data.firstName} ${data.lastName}`.trim();
+            if (!data.firstName) { showToast('Förnamn krävs'); return; }
+          } else {
+            data.name = document.getElementById('cu-name')?.value.trim() || '';
+            if (!data.name) { showToast('Kundnamn krävs'); return; }
+            data.orgNr = document.getElementById('cu-orgnr')?.value.trim() || '';
+            data.contactPerson = document.getElementById('cu-contact')?.value.trim() || '';
+          }
+          data.phone   = document.getElementById('cu-phone')?.value.trim() || '';
+          data.email   = document.getElementById('cu-email')?.value.trim() || '';
+          data.address = document.getElementById('cu-address')?.value.trim() || '';
+          data.zip     = document.getElementById('cu-zip')?.value.trim() || '';
+          data.city    = document.getElementById('cu-city')?.value.trim() || '';
+          data.note    = document.getElementById('cu-note')?.value.trim() || '';
+
+          const cu = CustomerService.create(data);
+          Modal.close();
+
+          const sel = document.getElementById('wiz-customer');
+          if (sel) {
+            const opt = document.createElement('option');
+            opt.value = cu.id;
+            opt.textContent = CustomerService.displayName(cu);
+            opt.selected = true;
+            sel.appendChild(opt);
+            this._wiz.data.customerId = cu.id;
+            this._wizCustomerChanged();
+          }
+          showToast(`Kund ${CustomerService.displayName(cu)} skapad`);
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+
+    setTimeout(() => {
+      const sel = document.getElementById('cu-type');
+      if (sel) sel.addEventListener('change', () => CustomersPage._toggleTypeFields(sel.value));
+      CustomersPage._toggleTypeFields(document.getElementById('cu-type')?.value || 'foretag');
+    }, 60);
+  },
+
   _wizStep2Html(d) {
+    const isPlan = d.status === 'planerad' || !!d.scheduledDate;
+    const priorities = [
+      {v:'akut', l:'Akut'}, {v:'hög', l:'Hög'}, {v:'normal', l:'Normal'}, {v:'låg', l:'Låg'}
+    ];
+    const prio = d.priority || 'normal';
+
     const staffHtml = (state.staff||[]).filter(s=>s.active).map(s => {
-      const checked = (d.staff||[]).includes(s.id);
-      return `<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1.5px solid ${checked?'var(--sky)':'var(--br)'};border-radius:8px;cursor:pointer;background:${checked?'var(--acc)':'#fff'};" id="staff-label-${s.id}">
-        <input type="checkbox" value="${s.id}" ${checked?'checked':''} style="width:16px;height:16px;"
-          onchange="WorkOrdersPage._wizToggleStaff('${s.id}',this.checked)">
-        <span style="font-size:13px;font-weight:600;">${s.firstName} ${s.lastName}</span>
-        <span style="font-size:11px;color:var(--mt);">${s.title||''}</span>
-      </label>`;
+      const sel = (d.staff||[]).includes(s.id);
+      return `<button type="button" class="chip ${sel?'on':''}" style="margin:3px;"
+        onclick="WorkOrdersPage._wizToggleStaff('${s.id}',!${sel})"
+        id="sc-${s.id}">${s.firstName} ${s.lastName}</button>`;
+    }).join('');
+
+    const selectedStaff = (d.staff||[]).map(id => {
+      const s = getStaff(id);
+      return s ? `<span class="bdg bdg-blue" style="margin:2px;">${s.firstName} ${s.lastName.charAt(0)}.
+        <button style="background:none;border:none;cursor:pointer;padding:0 0 0 4px;color:inherit;"
+          onclick="WorkOrdersPage._wizRemoveStaff('${id}')">${ic('x',10)}</button></span>` : '';
     }).join('');
 
     return `
-      <div class="fg"><label>Planering</label>
-        <div class="g2">
-          <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1.5px solid var(--br);border-radius:8px;cursor:pointer;" id="plan-pool-lbl">
-            <input type="radio" name="wiz-plan" value="pool" ${(!d.scheduledDate&&d.status!=='planerad')?'checked':''} onchange="WorkOrdersPage._wizPlanChange('pool')">
-            <span style="font-size:13px;font-weight:600;">Lägg i arbetspool</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1.5px solid var(--br);border-radius:8px;cursor:pointer;" id="plan-direct-lbl">
-            <input type="radio" name="wiz-plan" value="direct" ${d.scheduledDate?'checked':''} onchange="WorkOrdersPage._wizPlanChange('direct')">
-            <span style="font-size:13px;font-weight:600;">Planera direkt</span>
-          </label>
+      <div class="fg">
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Planering</label>
+        <div class="g2" style="margin-top:6px;">
+          <button type="button" class="btn ${!isPlan?'bp':'bs'} bfull" id="btn-pool"
+            onclick="WorkOrdersPage._wizSetPlan('pool')" style="padding:12px;font-size:13px;">
+            ${ic('clipboard-list',15)} Arbetspool
+          </button>
+          <button type="button" class="btn ${isPlan?'bp':'bs'} bfull" id="btn-direct"
+            onclick="WorkOrdersPage._wizSetPlan('direct')" style="padding:12px;font-size:13px;">
+            ${ic('calendar',15)} Planera direkt
+          </button>
         </div>
       </div>
-      <div id="wiz-schedule" style="${d.scheduledDate?'':'display:none'}">
+
+      <div id="wiz-schedule" style="display:${isPlan?'':'none'};">
         <div class="g2">
           <div class="fg"><label>Datum</label><input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}"></div>
-          <div class="fg"><label>Prioritet</label>
-            <select id="wiz-priority">
-              ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${(d.priority||'normal')===p?'selected':''}>${{akut:'Akut',hög:'Hög',normal:'Normal',låg:'Låg'}[p]}</option>`).join('')}
-            </select>
+          <div class="g2">
+            <div class="fg"><label>Starttid</label><input type="time" id="wiz-start" value="${d.scheduledStart||'08:00'}"></div>
+            <div class="fg"><label>Sluttid</label><input type="time" id="wiz-end" value="${d.scheduledEnd||'16:00'}"></div>
           </div>
         </div>
-        <div class="g2">
-          <div class="fg"><label>Starttid</label><input type="time" id="wiz-start" value="${d.scheduledStart||'08:00'}"></div>
-          <div class="fg"><label>Sluttid</label><input type="time" id="wiz-end" value="${d.scheduledEnd||'16:00'}"></div>
+      </div>
+
+      <div class="fg">
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Prioritet</label>
+        <div class="chips" style="margin-top:6px;">
+          ${priorities.map(p => `
+            <button type="button" class="chip ${prio===p.v?'on':''}" id="prio-${p.v}"
+              onclick="WorkOrdersPage._wizSetPrio('${p.v}')">${p.l}</button>`).join('')}
         </div>
       </div>
-      <div id="wiz-priority-pool" style="${d.scheduledDate?'display:none':''}">
-        <div class="fg"><label>Prioritet</label>
-          <select id="wiz-priority-p">
-            ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${(d.priority||'normal')===p?'selected':''}>${{akut:'Akut',hög:'Hög',normal:'Normal',låg:'Låg'}[p]}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div class="fg" style="margin-top:4px;"><label>Personal (välj en eller flera)</label>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">${staffHtml}</div>
+
+      <div class="fg">
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Personal (valfri)</label>
+        ${selectedStaff ? `<div style="margin:6px 0;">${selectedStaff}</div>` : ''}
+        <div class="chips" style="margin-top:4px;">${staffHtml}</div>
       </div>`;
   },
 
@@ -242,29 +315,42 @@ const WorkOrdersPage = {
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
       `<option value="${p.id}" ${d.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
+    const pt = d.priceType || 'ej_satt';
     return `
       <div class="fg"><label>Prissättning</label>
-        <select id="wiz-pricetype" onchange="WorkOrdersPage._wizPriceChange()">
-          <option value="ej_satt"   ${(d.priceType||'ej_satt')==='ej_satt'  ?'selected':''}>Ej satt</option>
-          <option value="fastpris"  ${d.priceType==='fastpris'              ?'selected':''}>Fastpris</option>
-          <option value="timpris"   ${d.priceType==='timpris'               ?'selected':''}>Timpris</option>
-          <option value="prisgrupp" ${d.priceType==='prisgrupp'             ?'selected':''}>Prisgrupp</option>
-        </select>
+        <div class="chips" style="margin-top:6px;">
+          <button type="button" class="chip ${pt==='ej_satt'?'on':''}" id="pt-ej_satt" onclick="WorkOrdersPage._wizSetPriceType('ej_satt')">Ej satt</button>
+          <button type="button" class="chip ${pt==='fastpris'?'on':''}" id="pt-fastpris" onclick="WorkOrdersPage._wizSetPriceType('fastpris')">Fastpris</button>
+          <button type="button" class="chip ${pt==='timpris'?'on':''}" id="pt-timpris" onclick="WorkOrdersPage._wizSetPriceType('timpris')">Timpris</button>
+          <button type="button" class="chip ${pt==='prisgrupp'?'on':''}" id="pt-prisgrupp" onclick="WorkOrdersPage._wizSetPriceType('prisgrupp')">Prisgrupp</button>
+        </div>
       </div>
-      <div id="wiz-fastpris-row" style="${d.priceType==='fastpris'?'':'display:none'}">
-        <div class="fg"><label>Fastpris (ex moms)</label>
+
+      <div id="wiz-pt-hint" class="ibox" style="margin:8px 0;font-size:12px;">
+        ${pt==='ej_satt'?'Pris sätts senare på arbetsordern eller vid fakturering.':
+          pt==='fastpris'?'Ange fast pris exkl. moms.':
+          pt==='timpris'?'Tid debiteras enligt registrerade tidsnoteringar.':
+          'Tid debiteras enligt vald prisgrupp.'}
+      </div>
+
+      <div id="wiz-fastpris-row" style="${pt==='fastpris'?'':'display:none'}">
+        <div class="fg"><label>Fastpris ex. moms (kr)</label>
           <input type="number" id="wiz-fastpris" value="${d.fixedPrice||''}" placeholder="0" min="0"></div>
+        ${d.fixedPrice ? `<div class="ibox" style="font-size:12px;">Inkl. moms (25%): ${fmt(Math.round((d.fixedPrice||0)*1.25))} kr</div>` : ''}
       </div>
-      <div id="wiz-prisgrupp-row" style="${d.priceType==='prisgrupp'?'':'display:none'}">
+
+      <div id="wiz-prisgrupp-row" style="${pt==='prisgrupp'?'':'display:none'}">
         <div class="fg"><label>Prisgrupp</label>
           <select id="wiz-pg"><option value="">— Välj prisgrupp —</option>${pgOptions}</select></div>
       </div>
-      <div class="fg"><label>Checklista (valfritt)</label>
+
+      <div class="fg" style="margin-top:4px;">
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Checklista (valfritt)</label>
         <div id="wiz-checklist" style="margin-top:4px;"></div>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <input id="wiz-cl-input" placeholder="Lägg till checkpunkt…" style="flex:1;"
             onkeydown="if(event.key==='Enter'){event.preventDefault();WorkOrdersPage._wizAddCL();}">
-          <button class="btn bs bsm" onclick="WorkOrdersPage._wizAddCL()">${ic('plus',14)}</button>
+          <button type="button" class="btn bs bsm" onclick="WorkOrdersPage._wizAddCL()">${ic('plus',14)} Lägg till</button>
         </div>
       </div>`;
   },
@@ -277,15 +363,11 @@ const WorkOrdersPage = {
   },
 
   _bindWizStep2() {
-    setTimeout(() => {
-      const plan = this._wiz.data.scheduledDate ? 'direct' : 'pool';
-      this._wizPlanChange(plan);
-    }, 50);
+    // Priority and plan mode are set via button clicks, already stored in data
   },
 
   _bindWizStep3() {
     setTimeout(() => {
-      this._wizPriceChange();
       this._renderWizChecklist();
     }, 50);
   },
@@ -309,34 +391,59 @@ const WorkOrdersPage = {
       : '';
   },
 
-  _wizPlanChange(mode) {
-    const sched = document.getElementById('wiz-schedule');
-    const pool  = document.getElementById('wiz-priority-pool');
-    if (!sched) return;
-    sched.style.display = mode === 'direct' ? '' : 'none';
-    pool.style.display  = mode === 'pool'   ? '' : 'none';
+  _wizSetPlan(mode) {
+    const isPlan = mode === 'direct';
+    document.getElementById('wiz-schedule').style.display = isPlan ? '' : 'none';
+    document.getElementById('btn-pool').className   = `btn ${!isPlan?'bp':'bs'} bfull`;
+    document.getElementById('btn-direct').className = `btn ${isPlan?'bp':'bs'} bfull`;
+    this._wiz.data.status = isPlan ? 'planerad' : 'pool';
+    if (!isPlan) { this._wiz.data.scheduledDate = ''; }
   },
 
-  _wizToggleStaff(staffId, checked) {
-    const staff = this._wiz.data.staff || [];
-    if (checked && !staff.includes(staffId)) staff.push(staffId);
-    if (!checked) { const i = staff.indexOf(staffId); if (i > -1) staff.splice(i, 1); }
-    this._wiz.data.staff = staff;
-    const lbl = document.getElementById('staff-label-' + staffId);
-    if (lbl) {
-      lbl.style.borderColor  = checked ? 'var(--sky)' : 'var(--br)';
-      lbl.style.background   = checked ? 'var(--acc)' : '#fff';
-    }
+  _wizSetPrio(p) {
+    this._wiz.data.priority = p;
+    document.querySelectorAll('[id^="prio-"]').forEach(b => {
+      b.classList.toggle('on', b.id === 'prio-'+p);
+    });
+  },
+
+  _wizToggleStaff(staffId, add) {
+    const staff = this._wiz.data.staff = this._wiz.data.staff || [];
+    if (add && !staff.includes(staffId)) staff.push(staffId);
+    if (!add) { const i = staff.indexOf(staffId); if (i > -1) staff.splice(i, 1); }
+    const btn = document.getElementById('sc-'+staffId);
+    if (btn) btn.classList.toggle('on', !!add);
+  },
+
+  _wizRemoveStaff(staffId) {
+    this._wizToggleStaff(staffId, false);
+  },
+
+  _wizSetPriceType(pt) {
+    this._wiz.data.priceType = pt;
+    ['ej_satt','fastpris','timpris','prisgrupp'].forEach(t => {
+      const b = document.getElementById('pt-'+t);
+      if (b) b.classList.toggle('on', t === pt);
+    });
+    const fp = document.getElementById('wiz-fastpris-row');
+    const pg = document.getElementById('wiz-prisgrupp-row');
+    const hint = document.getElementById('wiz-pt-hint');
+    if (fp) fp.style.display = pt === 'fastpris'  ? '' : 'none';
+    if (pg) pg.style.display = pt === 'prisgrupp' ? '' : 'none';
+    if (hint) hint.innerHTML = pt==='ej_satt'?'Pris sätts senare på arbetsordern eller vid fakturering.':
+      pt==='fastpris'?'Ange fast pris exkl. moms.':
+      pt==='timpris'?'Tid debiteras enligt registrerade tidsnoteringar.':
+      'Tid debiteras enligt vald prisgrupp.';
+  },
+
+  _wizPlanChange(mode) {
+    this._wizSetPlan(mode);
   },
 
   _wizPriceChange() {
     const sel = document.getElementById('wiz-pricetype');
     if (!sel) return;
-    const v = sel.value;
-    const fp = document.getElementById('wiz-fastpris-row');
-    const pg = document.getElementById('wiz-prisgrupp-row');
-    if (fp) fp.style.display = v === 'fastpris'  ? '' : 'none';
-    if (pg) pg.style.display = v === 'prisgrupp' ? '' : 'none';
+    this._wizSetPriceType(sel.value);
   },
 
   _wizAddCL() {
@@ -383,26 +490,33 @@ const WorkOrdersPage = {
   },
 
   _wizCollectStep2() {
-    const d      = this._wiz.data;
-    const isPlan = document.querySelector('input[name="wiz-plan"]:checked')?.value === 'direct';
-    d.status     = isPlan ? 'planerad' : 'pool';
+    const d = this._wiz.data;
+    const isPlan = d.status === 'planerad';
     if (isPlan) {
       d.scheduledDate  = document.getElementById('wiz-date')?.value || '';
       d.scheduledStart = document.getElementById('wiz-start')?.value || '';
       d.scheduledEnd   = document.getElementById('wiz-end')?.value || '';
-      d.priority       = document.getElementById('wiz-priority')?.value || 'normal';
+      if (!d.scheduledDate) { showToast('Välj datum'); return false; }
     } else {
       d.scheduledDate  = '';
-      d.priority       = document.getElementById('wiz-priority-p')?.value || 'normal';
+      d.scheduledStart = '';
+      d.scheduledEnd   = '';
     }
+    if (!d.priority) d.priority = 'normal';
     return true;
   },
 
   _wizCollectStep3() {
-    const d    = this._wiz.data;
-    d.priceType = document.getElementById('wiz-pricetype')?.value || 'ej_satt';
-    d.fixedPrice = parseFloat(document.getElementById('wiz-fastpris')?.value || 0) || 0;
+    const d = this._wiz.data;
+    d.priceType    = d.priceType    || 'ej_satt';
+    d.fixedPrice   = parseFloat(document.getElementById('wiz-fastpris')?.value || '0') || 0;
     d.priceGroupId = document.getElementById('wiz-pg')?.value || '';
+    if (d.priceType === 'fastpris' && !d.fixedPrice) {
+      showToast('Ange fastpris'); return false;
+    }
+    if (d.priceType === 'prisgrupp' && !d.priceGroupId) {
+      showToast('Välj prisgrupp'); return false;
+    }
     return true;
   },
 

@@ -10,7 +10,7 @@ const OffersPage = {
     if (!el) return;
     const offers = state.offers || [];
     el.innerHTML = offers.length === 0
-      ? '<div class="empty"><span class="empty-ico">📄</span><h3>Inga offerter</h3></div>'
+      ? `<div class="empty">${ic('file-text',36)}<h3>Inga offerter</h3></div>`
       : offers.map(o => {
           const cu = getCu(o.customerId);
           const cuName = cu ? (cu.name || `${cu.firstName} ${cu.lastName}`.trim()) : '—';
@@ -45,7 +45,7 @@ const PropertiesPage = {
     if (!el) return;
     const props = state.properties || [];
     el.innerHTML = props.length === 0
-      ? '<div class="empty"><span class="empty-ico">🏢</span><h3>Inga fastigheter</h3></div>'
+      ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
       : props.map(p => {
           const cu = getCu(p.customerId);
           const cuName = cu ? (cu.name || `${cu.firstName} ${cu.lastName}`.trim()) : '—';
@@ -79,7 +79,7 @@ const PriceGroupsPage = {
     if (!el) return;
     const pgs = state.priceGroups || [];
     el.innerHTML = pgs.length === 0
-      ? '<div class="empty"><span class="empty-ico">💲</span><h3>Inga prisgrupper</h3></div>'
+      ? `<div class="empty">${ic('dollar-sign',36)}<h3>Inga prisgrupper</h3></div>`
       : pgs.map(pg => `
           <div class="list-item">
             <div class="item-row">
@@ -100,7 +100,7 @@ const StaffPage = {
     if (!el) return;
     const staff = state.staff || [];
     el.innerHTML = staff.length === 0
-      ? '<div class="empty"><span class="empty-ico">👤</span><h3>Ingen personal</h3></div>'
+      ? `<div class="empty">${ic('user',36)}<h3>Ingen personal</h3></div>`
       : staff.map(s => `
           <div class="list-item">
             <div class="item-row">
@@ -146,15 +146,15 @@ const AdminPage = {
 };
 
 /* ── Shell-sidor utan rendering ───────── */
-const CalendarPage    = { render() { _renderShell('pg-calendar-content',    'Kalender',    '📅 Kalendervy med planerade ordrar byggs i Fas 4.'); } };
-const ContractsPage   = { render() { _renderShell('pg-contracts-content',   'Kontrakt',    '📝 Kontrakthantering byggs i Fas 4.'); } };
-const InspectionsPage = { render() { _renderShell('pg-rondering-content',   'Rondering',   '🔍 Ronderingssystem med mallar och avvikelser byggs i Fas 5.'); } };
-const PayrollPage     = { render() { _renderShell('pg-payroll-content',     'Löneunderlag','💼 Löneunderlag per person byggs i Fas 4.'); } };
-const ReportsPage     = { render() { _renderShell('pg-reports-content',     'Rapporter',   '📊 Statistik och rapporter byggs i Fas 4.'); } };
+const CalendarPage    = { render() { _renderShell('pg-calendar-content',    'Kalender',    'Kalendervy med planerade ordrar byggs i Fas 4.'); } };
+const ContractsPage   = { render() { _renderShell('pg-contracts-content',   'Kontrakt',    'Kontrakthantering byggs i Fas 4.'); } };
+const InspectionsPage = { render() { _renderShell('pg-rondering-content',   'Rondering',   'Ronderingssystem med mallar och avvikelser byggs i Fas 5.'); } };
+const PayrollPage     = { render() { _renderShell('pg-payroll-content',     'Löneunderlag','Löneunderlag per person byggs i Fas 4.'); } };
+const ReportsPage     = { render() { _renderShell('pg-reports-content',     'Rapporter',   'Statistik och rapporter byggs i Fas 4.'); } };
 
 /* ── Hjälpfunktioner ──────────────────── */
 function _shellEmpty(title, msg) {
-  return `<div class="empty"><span class="empty-ico">🔧</span><h3>${title}</h3><p>${msg}</p></div>`;
+  return `<div class="empty">${ic('settings',36)}<h3>${title}</h3><p>${msg}</p></div>`;
 }
 
 function _shellFull(title, msg) {

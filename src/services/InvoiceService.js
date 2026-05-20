@@ -80,8 +80,11 @@ const InvoiceService = {
   },
 
   /* Tomt fakturaunderlag */
-  createBlank(customerId = '') {
+  createBlank(customerId = '', opts = {}) {
     const inv = this._buildInvoice([], customerId, '', '');
+    if (opts.title) inv.title = opts.title;
+    if (opts.note)  inv.note  = opts.note;
+    if (opts.dueDate) inv.dueDate = opts.dueDate;
     state.invoices = state.invoices || [];
     state.invoices.unshift(inv);
     ActivityService.log('invoice_created', `Fakturaunderlag ${inv.id} skapat manuellt`,

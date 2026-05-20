@@ -63,16 +63,27 @@ const InvoicesPage = {
 
   createBlank() {
     Modal.open({
-      title: 'Ny faktura',
-      body: `<div class="fg"><label>Kund</label>
-        <select id="blank-cu">
-          <option value="">— Välj kund (valfritt) —</option>
-          ${(state.customers||[]).map(c=>`<option value="${c.id}">${CustomerService.displayName(c)}</option>`).join('')}
-        </select></div>`,
+      title: 'Ny faktura / redovisning',
+      wide: true,
+      body: `
+        <div class="fg"><label>Kund</label>
+          <select id="blank-cu">
+            <option value="">— Välj kund (valfritt) —</option>
+            ${(state.customers||[]).map(c=>`<option value="${c.id}">${CustomerService.displayName(c)}</option>`).join('')}
+          </select></div>
+        <div class="fg"><label>Rubrik</label>
+          <input id="blank-title" placeholder="T.ex. Tilläggsarbete, Extrakostnader…"></div>
+        <div class="fg"><label>Intern kommentar (visas ej på faktura)</label>
+          <textarea id="blank-note" rows="2" placeholder="Valfri anteckning…"></textarea></div>
+        <div class="fg"><label>Förfallodatum</label>
+          <input type="date" id="blank-due" value="${new Date(Date.now()+30*86400000).toISOString().split('T')[0]}"></div>`,
       buttons: [
         { label: 'Skapa', cls: 'btn bp', onClick: () => {
-          const cuId = document.getElementById('blank-cu')?.value || '';
-          const result = InvoiceService.createBlank(cuId);
+          const cuId  = document.getElementById('blank-cu')?.value || '';
+          const title = document.getElementById('blank-title')?.value.trim() || '';
+          const note  = document.getElementById('blank-note')?.value.trim() || '';
+          const due   = document.getElementById('blank-due')?.value || '';
+          const result = InvoiceService.createBlank(cuId, { title, note, dueDate: due });
           Modal.close();
           Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });
         }},
@@ -109,6 +120,7 @@ const InvoiceDetailPage = {
         <button class="btn bs bsm" onclick="Router.showPage('pg-invoices')">${ic('arrow-left',14)}</button>
         <div style="flex:1;">
           <div style="font-size:16px;font-weight:800;">${inv.id}</div>
+          ${inv.title ? `<div style="font-size:13px;color:var(--mt);">${inv.title}</div>` : ''}
           <div>${sbdg(inv.status)}</div>
         </div>
         <select class="btn bs bsm" style="font-weight:600;" onchange="InvoiceDetailPage.setStatus(this.value)">

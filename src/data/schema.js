@@ -9,6 +9,7 @@ const Schema = {
     type: 'foretag',          // privat | foretag | brf | fastighetsagare
     name: '',                 // företagsnamn
     orgNr: '',
+    personnr: '',
     firstName: '',            // för privatperson
     lastName: '',
     contactPerson: '',

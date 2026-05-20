@@ -90,12 +90,8 @@ const Router = {
         renderer();
       } catch (e) {
         console.error(`[Router] Render-fel för ${pageId}:`, e);
-        page.querySelector('.con').innerHTML = `
-          <div class="empty">
-            <span class="empty-ico">⚠️</span>
-            <h3>Sidan kunde inte laddas</h3>
-            <p>${e.message}</p>
-          </div>`;
+        const con = page.querySelector('.con') || page;
+        con.innerHTML = `<div style="padding:20px;"><div class="ibox" style="border-left:3px solid var(--rd);"><strong>Sidfel: ${pageId}</strong><br><code style="font-size:11px;word-break:break-all;">${e.message}</code></div></div>`;
       }
     }
 
