@@ -27,7 +27,8 @@ const Router = {
     'pg-reports':     { title: 'Rapporter',             sub: 'Statistik & analys' },
     'pg-staff':       { title: 'Personal',              sub: 'Personalregister' },
     'pg-admin':       { title: 'Admin',                 sub: 'Systeminställningar' },
-    'pg-recurring':   { title: 'Återkommande ärenden',  sub: 'Schemalagda serviceärenden' }
+    'pg-recurring':   { title: 'Återkommande ärenden',  sub: 'Schemalagda serviceärenden' },
+    'pg-sales':       { title: 'Säljchanser',           sub: 'CRM pipeline' }
   },
 
   currentPage: null,
@@ -83,7 +84,8 @@ const Router = {
       'pg-pricegroups': () => PriceGroupsPage.render(),
       'pg-staff':       () => StaffPage.render(),
       'pg-admin':       () => AdminPage.render(),
-      'pg-recurring':   () => RecurringPage.render()
+      'pg-recurring':   () => RecurringPage.render(),
+      'pg-sales':       () => SalesPage.render()
     };
 
     const renderer = renderers[pageId];

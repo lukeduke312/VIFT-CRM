@@ -58,6 +58,7 @@ const Modal = {
     });
 
     this._stack.push(id);
+    document.body.classList.add('modal-open');
     return id;
   },
 
@@ -68,6 +69,9 @@ const Modal = {
     if (el) {
       el.classList.remove('open');
       setTimeout(() => el.remove(), 250);
+    }
+    if (this._stack.length === 0) {
+      document.body.classList.remove('modal-open');
     }
   },
 

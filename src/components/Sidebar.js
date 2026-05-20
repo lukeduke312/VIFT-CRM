@@ -11,6 +11,7 @@ const Sidebar = {
     { id: 'pg-ao',         icon: 'clipboard-list',   label: 'Arbetsorder',  badgeKey: 'aoNew' },
     { id: 'pg-crm',        icon: 'users',            label: 'Kunder' },
     { id: 'pg-offer',      icon: 'file-text',        label: 'Offerter' },
+    { id: 'pg-sales',      icon: 'target',           label: 'Säljchanser' },
     { id: 'pg-invoices',   icon: 'receipt',          label: 'Fakturering' },
     { section: 'Fastigheter' },
     { id: 'pg-objects',    icon: 'building-2',       label: 'Fastigheter' },

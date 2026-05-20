@@ -128,19 +128,58 @@ const WorkOrderDetailPage = {
 
   _actionBtns(ao) {
     const btns = [];
-    if (ao.status === 'nytt' || ao.status === 'pool') {
-      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">Planera</button>`);
+    if (ao.status === 'nytt') {
+      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',14)} Planera</button>`);
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.setStatus('pool')">${ic('clipboard-list',14)} Till pool</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta</button>`);
+    }
+    if (ao.status === 'pool') {
+      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',14)} Planera</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta</button>`);
     }
     if (ao.status === 'planerad') {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">Starta</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta arbete</button>`);
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',14)} Omplanera</button>`);
     }
     if (ao.status === 'pågående') {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">Markera klar</button>`);
+      btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',14)} Pausa</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',14)} Klarmarkera</button>`);
     }
     if (!['klar','fakturerad','avbruten'].includes(ao.status)) {
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('more-vertical',14)}</button>`);
+      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('more-vertical',14)}</button>`);
     }
     return btns.join('');
+  },
+
+  openReschedule() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    Modal.open({
+      title: 'Omplanera',
+      body: `
+        <div class="g2">
+          <div class="fg"><label>Nytt datum</label><input type="date" id="rs-date" value="${ao.scheduledDate||tdy()}"></div>
+          <div class="g2">
+            <div class="fg"><label>Starttid</label><input type="time" id="rs-start" value="${ao.scheduledStart||'08:00'}"></div>
+            <div class="fg"><label>Sluttid</label><input type="time" id="rs-end" value="${ao.scheduledEnd||'16:00'}"></div>
+          </div>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const d = document.getElementById('rs-date')?.value;
+          if (!d) { showToast('Välj datum'); return; }
+          WorkOrderService.update(this.aoId, {
+            scheduledDate:  d,
+            scheduledStart: document.getElementById('rs-start')?.value || '',
+            scheduledEnd:   document.getElementById('rs-end')?.value || ''
+          });
+          Modal.close();
+          this.render({ aoId: this.aoId });
+          showToast('Omplanerad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   },
 
   _priceLabel(ao) {
@@ -450,10 +489,10 @@ const WorkOrderDetailPage = {
         <div class="fg"><label>Benämning <span style="color:var(--rd)">*</span></label>
           <input id="mat-name" placeholder="T.ex. Fogmassa Sikaflex"></div>
         <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="1" min="0.1" step="0.1" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="1" min="1" step="1" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Enhet</label>
-            <select id="mat-unit">
-              ${['st','tim','m²','m','lm','kg','liter','säck','rulle','dag','månad','gång','paket','par'].map(u=>`<option value="${u}">${u}</option>`).join('')}
+            <select id="mat-unit" onchange="WorkOrderDetailPage._matUnitChanged(this.value)">
+              ${unitsHtml('st')}
             </select></div>
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
@@ -533,8 +572,15 @@ const WorkOrderDetailPage = {
       for (let i = 0; i < unitEl.options.length; i++) {
         if (unitEl.options[i].value === el.dataset.unit) { unitEl.selectedIndex = i; break; }
       }
+      this._matUnitChanged(unitEl.value);
     }
     this._matUpdateCalc();
+  },
+
+  _matUnitChanged(unit) {
+    const step  = unitStep(unit);
+    const qtyEl = document.getElementById('mat-qty');
+    if (qtyEl) { qtyEl.step = step; qtyEl.min = step; }
   },
 
   _matUpdateCalc() {
@@ -565,10 +611,10 @@ const WorkOrderDetailPage = {
       body: `
         <div class="fg"><label>Benämning</label><input id="mat-name" value="${m.name}"></div>
         <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${m.qty}" min="0.1" step="0.1" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${m.qty}" min="${unitStep(m.unit||'st')}" step="${unitStep(m.unit||'st')}" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Enhet</label>
-            <select id="mat-unit">
-              ${['st','tim','m²','m','lm','kg','liter','säck','rulle','dag','månad','gång','paket','par'].map(u=>`<option value="${u}" ${m.unit===u?'selected':''}>${u}</option>`).join('')}
+            <select id="mat-unit" onchange="WorkOrderDetailPage._matUnitChanged(this.value)">
+              ${unitsHtml(m.unit||'st')}
             </select></div>
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>

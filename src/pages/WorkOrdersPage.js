@@ -4,6 +4,7 @@
 const WorkOrdersPage = {
   filter: 'alla',
   q: '',
+  viewMode: localStorage.getItem('view-ao') || 'list',
 
   /* ── Wizard-state ──────────────────────── */
   _wiz: { step: 1, data: {}, modalId: null },
@@ -19,6 +20,9 @@ const WorkOrdersPage = {
           <input type="search" id="ao-search" placeholder="Sök order, kund, adress…"
             value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()">
         </div>
+        <button id="ao-view-btn" class="btn bs bsm" onclick="WorkOrdersPage.toggleView()" title="Byt vy">
+          ${ic(this.viewMode==='list'?'grid':'list', 14)}
+        </button>
         <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">
           ${ic('plus',14)} Ny order
         </button>
@@ -32,6 +36,14 @@ const WorkOrdersPage = {
       </div>
       <div id="ao-list"></div>`;
     this.renderList();
+  },
+
+  toggleView() {
+    this.viewMode = this.viewMode === 'list' ? 'grid' : 'list';
+    localStorage.setItem('view-ao', this.viewMode);
+    this.renderList();
+    const btn = document.getElementById('ao-view-btn');
+    if (btn) btn.innerHTML = ic(this.viewMode==='list'?'grid':'list', 14);
   },
 
   setFilter(f) {
@@ -68,25 +80,45 @@ const WorkOrdersPage = {
       el.innerHTML = `<div class="empty"><p>Inga ordrar matchar</p></div>`;
       return;
     }
-    el.innerHTML = list.map(ao => {
-      const cu     = getCu(ao.customerId);
-      const cuName = cu ? CustomerService.displayName(cu) : '—';
-      const done   = (ao.checklist||[]).filter(c=>c.done).length;
-      const total  = (ao.checklist||[]).length;
-      return `
-        <div class="list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-          <div class="item-row">
-            <div style="flex:1;min-width:0;">
-              <div class="item-title">${ao.id} – ${ao.title}</div>
-              <div class="item-sub">${cuName}${ao.scheduledDate?' · '+ao.scheduledDate:''}${ao.scheduledStart?' '+ao.scheduledStart:''}</div>
-              ${total>0?`<div style="margin-top:4px;"><div class="pb"><div class="pbf" style="width:${Math.round(done/total*100)}%"></div></div></div>`:''}
+    if (this.viewMode === 'grid') {
+      el.innerHTML = `<div class="ao-grid">${list.map(ao => {
+        const cu     = getCu(ao.customerId);
+        const cuName = cu ? CustomerService.displayName(cu) : '—';
+        const done   = (ao.checklist||[]).filter(c=>c.done).length;
+        const total  = (ao.checklist||[]).length;
+        return `
+          <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
+              <div style="font-size:12px;font-weight:700;color:var(--navy);">${ao.id}</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
-              ${sbdg(ao.status)}${pbdg(ao.priority)}
+            <div style="font-size:13px;font-weight:700;margin-bottom:4px;line-height:1.3;">${ao.title}</div>
+            <div style="font-size:11px;color:var(--mt);">${cuName}</div>
+            ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);margin-top:2px;">${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart:''}</div>`:''}
+            ${total>0?`<div style="margin-top:6px;"><div class="pb"><div class="pbf" style="width:${Math.round(done/total*100)}%"></div></div><div style="font-size:10px;color:var(--mt);margin-top:2px;">${done}/${total} klara</div></div>`:''}
+          </div>`;
+      }).join('')}</div>`;
+    } else {
+      el.innerHTML = list.map(ao => {
+        const cu     = getCu(ao.customerId);
+        const cuName = cu ? CustomerService.displayName(cu) : '—';
+        const done   = (ao.checklist||[]).filter(c=>c.done).length;
+        const total  = (ao.checklist||[]).length;
+        return `
+          <div class="list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+            <div class="item-row">
+              <div style="flex:1;min-width:0;">
+                <div class="item-title">${ao.id} – ${ao.title}</div>
+                <div class="item-sub">${cuName}${ao.scheduledDate?' · '+ao.scheduledDate:''}${ao.scheduledStart?' '+ao.scheduledStart:''}</div>
+                ${total>0?`<div style="margin-top:4px;"><div class="pb"><div class="pbf" style="width:${Math.round(done/total*100)}%"></div></div></div>`:''}
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                ${sbdg(ao.status)}${pbdg(ao.priority)}
+              </div>
             </div>
-          </div>
-        </div>`;
-    }).join('');
+          </div>`;
+      }).join('');
+    }
   },
 
   /* ── Skapa AO – wizard ─────────────────── */

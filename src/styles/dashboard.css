@@ -183,7 +183,7 @@
 .act-text { font-size: 13px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
 .act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
 
-/* ── Dashboard 2-col grid ──────────────── */
+/* ── Dashboard 2-col grid (legacy) ────── */
 .dash-grid {
   display: flex;
   flex-direction: column;
@@ -197,4 +197,18 @@
     align-items: start;
   }
   .dash-grid .dash-full { grid-column: 1 / -1; }
+}
+
+/* ── Widget layout (dw-*) ──────────────── */
+.dw-full { width: 100%; }
+
+.dw-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.dw-half { flex: 1; min-width: 0; }
+
+@media (max-width: 767px) {
+  .dw-row { flex-direction: column; }
 }
