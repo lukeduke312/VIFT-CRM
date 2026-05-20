@@ -10,7 +10,7 @@ const Dashboard = {
     if (!el) return;
 
     var kpi       = this._widgetKpi();
-    var todos     = this._widgetTodos();     // empty string if no todos
+    var todos     = this._widgetTodos();
     var sales     = this._widgetSales();
     var today     = this._widgetToday();
     var pool      = this._widgetPool();
@@ -19,18 +19,17 @@ const Dashboard = {
     var offers    = this._widgetOffers();
     var recurring = this._widgetRecurring(); // empty string if nothing due
 
-    var todosRow = todos
-      ? '<div class="dw-main">' + todos + '</div><div class="dw-side">' + sales + '</div>'
-      : '<div class="dw-full">' + sales + '</div>';
-
+    // Fixed layout — always render both todos and sales
+    // Urgent row: todos (2/3) + sales (1/3) on desktop
     el.innerHTML = '<div class="dash-layout">' +
       '<div class="dw-full">' + kpi + '</div>' +
-      todosRow +
-      '<div class="dw-third">' + today + '</div>' +
-      '<div class="dw-third">' + pool + '</div>' +
-      '<div class="dw-third">' + activity + '</div>' +
+      '<div class="dw-main">' + todos + '</div>' +
+      '<div class="dw-side">' + sales + '</div>' +
+      '<div class="dw-half">' + today + '</div>' +
+      '<div class="dw-half">' + pool + '</div>' +
       '<div class="dw-full">' + quickbtns + '</div>' +
-      '<div class="dw-full">' + offers + '</div>' +
+      '<div class="dw-half">' + offers + '</div>' +
+      '<div class="dw-half">' + activity + '</div>' +
       (recurring ? '<div class="dw-full">' + recurring + '</div>' : '') +
     '</div>';
   },
@@ -69,11 +68,19 @@ const Dashboard = {
 
   _widgetTodos() {
     const todos = this._calcTodos();
-    if (todos.length === 0) return '';
+    if (todos.length === 0) {
+      return `
+        <div class="card">
+          <div class="card-header"><h3>${ic('check-circle',14)} Att göra</h3></div>
+          <div class="card-body" style="padding:12px 14px;">
+            <div class="empty" style="padding:16px 0;">${ic('check-circle',28)}<p>Inget att åtgärda just nu</p></div>
+          </div>
+        </div>`;
+    }
     return `
       <div class="card" style="border-left:3px solid var(--rd);">
         <div class="card-header">
-          <h3 style="color:var(--rd);">${ic('alert-triangle',14)} Kräver åtgärd</h3>
+          <h3 style="color:var(--rd);">${ic('alert-triangle',14)} Att göra</h3>
           <span class="bdg bdg-red">${todos.length}</span>
         </div>
         <div class="card-body" style="padding:6px 10px;">

@@ -676,6 +676,7 @@ const WorkOrderDetailPage = {
   setStatus(status) {
     WorkOrderService.setStatus(this.aoId, status);
     this.render({ aoId: this.aoId });
+    Sidebar.updateBadges();
     showToast(`Status: ${statusLabel(status)}`);
   },
 
@@ -692,6 +693,7 @@ const WorkOrderDetailPage = {
         : '';
       WorkOrderService.markComplete(this.aoId, completedBy);
       this.render({ aoId: this.aoId });
+      Sidebar.updateBadges();
       showToast('Order markerad klar');
     };
 

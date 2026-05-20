@@ -8,6 +8,7 @@
   grid-template-columns: 1fr;
   gap: 10px;
   width: 100%;
+  align-items: start;
 }
 
 /* Tablet: 2 columns */
@@ -15,11 +16,11 @@
   .dash-layout {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
-    align-items: start;
   }
   .dash-layout .dw-full  { grid-column: 1 / -1; }
   .dash-layout .dw-main  { grid-column: 1; }
   .dash-layout .dw-side  { grid-column: 2; }
+  .dash-layout .dw-half  { grid-column: span 1; }
 }
 
 /* Desktop: 3 columns */
@@ -30,8 +31,13 @@
   }
   .dash-layout .dw-full  { grid-column: 1 / -1; }
   .dash-layout .dw-main  { grid-column: span 2; }
-  .dash-layout .dw-side  { grid-column: 3; }
-  /* dw-third: each takes 1 of 3 columns naturally */
+  .dash-layout .dw-side  { grid-column: span 1; }
+  .dash-layout .dw-half  { grid-column: span 1; }
+}
+
+/* ── Tighter card padding on dashboard ── */
+.dash-layout .card-body {
+  padding: 8px 12px;
 }
 
 /* ── KPI-rutor ────────────────────────── */
@@ -46,7 +52,7 @@
 .kpi-card {
   background: #fff;
   border-radius: var(--rs);
-  padding: 11px 12px;
+  padding: 9px 10px;
   border: 1px solid var(--br);
   border-left: 4px solid var(--sky);
   cursor: pointer;
@@ -60,7 +66,7 @@
 .kpi-card.purple { border-left-color: var(--pu); }
 
 .kpi-number {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 900;
   color: var(--navy);
   line-height: 1;

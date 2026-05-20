@@ -110,12 +110,14 @@ const SalesPage = {
     const until = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
     SalesService.snooze(opId, until);
     SalesPage.render();
+    Sidebar.updateBadges();
     showToast('Uppskjuten 7 dagar');
   },
 
   markDone(opId) {
     SalesService.markDone(opId);
     SalesPage.render();
+    Sidebar.updateBadges();
     showToast('Markerad klar');
   },
 
@@ -123,6 +125,7 @@ const SalesPage = {
     Modal.confirm('Avfärda säljchansen?', function() {
       SalesService.markDone(opId);
       SalesPage.render();
+      Sidebar.updateBadges();
       showToast('Avfärdad');
     });
   }
