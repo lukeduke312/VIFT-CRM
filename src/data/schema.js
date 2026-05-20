@@ -3,6 +3,38 @@
  * Används av services för att skapa tomma objekt
  */
 
+/* ── Enheter ────────────────────────────────── */
+const UNITS = [
+  { value: 'st',        label: 'st',        step: 1,    type: 'count'  },
+  { value: 'tim',       label: 'tim',       step: 0.25, type: 'time'   },
+  { value: 'm',         label: 'm',         step: 0.01, type: 'length' },
+  { value: 'm²',        label: 'm²',        step: 0.01, type: 'area'   },
+  { value: 'm³',        label: 'm³',        step: 0.01, type: 'volume' },
+  { value: 'kg',        label: 'kg',        step: 0.1,  type: 'weight' },
+  { value: 'liter',     label: 'liter',     step: 0.1,  type: 'volume' },
+  { value: 'säck',      label: 'säck',      step: 1,    type: 'count'  },
+  { value: 'rulle',     label: 'rulle',     step: 1,    type: 'count'  },
+  { value: 'paket',     label: 'paket',     step: 1,    type: 'count'  },
+  { value: 'dag',       label: 'dag',       step: 1,    type: 'time'   },
+  { value: 'månad',     label: 'månad',     step: 1,    type: 'time'   },
+  { value: 'km',        label: 'km',        step: 1,    type: 'length' },
+  { value: 'resa',      label: 'resa',      step: 1,    type: 'count'  },
+  { value: 'tillfälle', label: 'tillfälle', step: 1,    type: 'count'  },
+  { value: 'fast pris', label: 'fast pris', step: 1,    type: 'fixed'  },
+  { value: 'lm',        label: 'lm',        step: 0.01, type: 'length' },
+];
+
+function unitStep(unit) {
+  const u = UNITS.find(function(x) { return x.value === unit; });
+  return u ? u.step : 1;
+}
+
+function unitsHtml(selectedUnit) {
+  return UNITS.map(function(u) {
+    return '<option value="' + u.value + '"' + (u.value === selectedUnit ? ' selected' : '') + '>' + u.label + '</option>';
+  }).join('');
+}
+
 const Schema = {
   customer: () => ({
     id: '',

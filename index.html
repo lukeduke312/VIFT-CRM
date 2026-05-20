@@ -11,10 +11,10 @@
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
-<link rel="stylesheet" href="src/styles/layout.css?v=5">
-<link rel="stylesheet" href="src/styles/components.css?v=4">
+<link rel="stylesheet" href="src/styles/layout.css?v=6">
+<link rel="stylesheet" href="src/styles/components.css?v=5">
 <link rel="stylesheet" href="src/styles/forms.css?v=5">
-<link rel="stylesheet" href="src/styles/dashboard.css?v=5">
+<link rel="stylesheet" href="src/styles/dashboard.css?v=6">
 <link rel="stylesheet" href="src/styles/responsive.css?v=5">
 </head>
 <body>
@@ -94,15 +94,7 @@
 
       <!-- Arbetsorder -->
       <div class="page" id="pg-ao">
-        <div class="con">
-          <div class="swrap">
-            <span class="sico">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </span>
-            <input type="search" placeholder="Sök order, kund, adress…">
-          </div>
-          <div id="pg-ao-content"></div>
-        </div>
+        <div class="con" id="pg-ao-content"></div>
       </div>
 
       <!-- AO-detalj -->
@@ -112,15 +104,7 @@
 
       <!-- Kunder -->
       <div class="page" id="pg-crm">
-        <div class="con">
-          <div class="swrap">
-            <span class="sico">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </span>
-            <input type="search" placeholder="Sök kund, org.nr, telefon…">
-          </div>
-          <div id="pg-crm-content"></div>
-        </div>
+        <div class="con" id="pg-crm-content"></div>
       </div>
 
       <!-- Kundkort -->
@@ -130,15 +114,7 @@
 
       <!-- Fastigheter -->
       <div class="page" id="pg-objects">
-        <div class="con">
-          <div class="swrap">
-            <span class="sico">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </span>
-            <input type="search" placeholder="Sök fastighet, adress…">
-          </div>
-          <div id="pg-objects-content"></div>
-        </div>
+        <div class="con" id="pg-objects-content"></div>
       </div>
 
       <!-- Fastighetskort -->
@@ -174,6 +150,11 @@
       <!-- Återkommande ärenden -->
       <div class="page" id="pg-recurring">
         <div class="con" id="pg-recurring-content"></div>
+      </div>
+
+      <!-- Säljchanser -->
+      <div class="page" id="pg-sales">
+        <div class="con" id="pg-sales-content"></div>
       </div>
 
       <!-- Tid & stämpla -->
@@ -250,9 +231,10 @@
 
 <!-- 1. Data-lager -->
 <script src="src/data/storage.js?v=2"></script>
-<script src="src/data/schema.js?v=4"></script>
+<script src="src/data/schema.js?v=5"></script>
 <script src="src/data/seedData.js?v=4"></script>
 <script src="src/data/state.js?v=4"></script>
+<script src="src/data/DashboardConfig.js?v=1"></script>
 
 <!-- 2. Services -->
 <script src="src/services/ActivityService.js?v=2"></script>
@@ -270,15 +252,16 @@
 <script src="src/components/Sidebar.js?v=3"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=2"></script>
-<script src="src/pages/Dashboard.js?v=5"></script>
-<script src="src/pages/CustomersPage.js?v=2"></script>
-<script src="src/pages/WorkOrdersPage.js?v=3"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=4"></script>
+<script src="src/pages/Router.js?v=3"></script>
+<script src="src/pages/Dashboard.js?v=6"></script>
+<script src="src/pages/CustomersPage.js?v=3"></script>
+<script src="src/pages/WorkOrdersPage.js?v=4"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=5"></script>
 <script src="src/pages/TimePage.js?v=4"></script>
 <script src="src/pages/InvoicesPage.js?v=3"></script>
 <script src="src/pages/RecurringPage.js?v=1"></script>
-<script src="src/pages/PageShells.js?v=2"></script>
+<script src="src/pages/SalesPage.js?v=1"></script>
+<script src="src/pages/PageShells.js?v=3"></script>
 
 <!-- 5. App bootstrap -->
 <script>
