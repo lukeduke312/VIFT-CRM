@@ -896,6 +896,24 @@ const SeedData = {
     'Låssmed','VVS-tekniker','Fastighetsskötare','Systemadministratör'
   ],
 
+  roles: [
+    {
+      id: 'admin', label: 'Admin', isBuiltin: true,
+      description: 'Full tillgång till alla funktioner och inställningar.',
+      permissions: ['all']
+    },
+    {
+      id: 'chef', label: 'Chef / Projektledare', isBuiltin: true,
+      description: 'Kan hantera arbetsorder, kunder, offerter och se rapporter. Kan ej ändra systeminställningar.',
+      permissions: ['ao_create','ao_view_all','ao_edit','invoice_view','invoice_create','customer_manage','offer_manage','reports_view','staff_view']
+    },
+    {
+      id: 'personal', label: 'Tekniker / Personal', isBuiltin: true,
+      description: 'Kan se och arbeta med tilldelade arbetsorder. Kan registrera tid och material.',
+      permissions: ['ao_view_own','ao_time','ao_material','ao_checklist']
+    }
+  ],
+
   articles: [
     // ── Kemikalier ──────────────────────────────────────────
     { id: 'ART-001', articleNumber: '1001', name: 'Fogmassa Sikaflex 291i',     category: 'kemikalier', unit: 'st',    buyPrice: 75,   sellPrice: 145,  vatRate: 25, active: true },

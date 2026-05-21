@@ -123,6 +123,16 @@ const WorkOrderDetailPage = {
         <div class="ibox" style="cursor:pointer;" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">
           ${ic('receipt',14)} Fakturaunderlag: ${ao.invoiceId} – klicka för att öppna
         </div>` : ''}
+
+      <!-- Återkommande -->
+      ${ao.recurringOrderId
+        ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
+             ${ic('refresh-cw',13)} Skapad från återkommande mall: ${ao.recurringOrderId}
+           </div>`
+        : `<button class="btn bghost bfull" style="margin-top:8px;" onclick="WorkOrderDetailPage.makeRecurring()">
+             ${ic('refresh-cw',14)} Gör till återkommande ärende
+           </button>`
+      }
     `;
   },
 
@@ -988,6 +998,14 @@ const WorkOrderDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+  },
+
+  /* ── Gör återkommande ─────────────────── */
+  makeRecurring() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    Router.showPage('pg-recurring');
+    setTimeout(() => RecurringPage.openFromAO(this.aoId), 150);
   },
 
   /* ── Skapa fakturaunderlag ─────────────── */

@@ -64,6 +64,7 @@ function initState() {
   state.contracts          = s.get('contracts')       || [];
   state.articles           = s.get('articles')        || SeedData.articles || [];
   state.titles             = s.get('titles')          || SeedData.titles  || [];
+  state.roles              = s.get('roles')           || SeedData.roles   || [];
   state.recurringOrders    = s.get('recurringOrders') || SeedData.recurringOrders || [];
 
   // Stämpling-state
@@ -91,6 +92,7 @@ function persist() {
   s.set('contracts',        state.contracts);
   s.set('articles',         state.articles);
   s.set('titles',           state.titles);
+  s.set('roles',            state.roles);
   s.set('recurringOrders',  state.recurringOrders);
 }
 

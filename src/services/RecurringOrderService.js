@@ -86,9 +86,11 @@ const RecurringOrderService = {
       staff:         ro.staff ? [...ro.staff] : [],
       scheduledDate: ro.nextDate || tdy(),
       checklist:     (ro.checklist || []).map(c => ({
-        id:   'c' + Date.now() + Math.random().toString(36).slice(2),
-        text: c.text,
-        done: false
+        id:          'c' + Date.now() + Math.random().toString(36).slice(2),
+        text:        c.text,
+        description: c.description || '',
+        avvikelse:   null,
+        done:        false
       })),
       recurringOrderId: ro.id
     };

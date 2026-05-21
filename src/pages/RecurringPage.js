@@ -3,6 +3,7 @@
  */
 const RecurringPage = {
   _tempChecklist: [],
+  _tempStaff: [],
 
   render() {
     const el = document.getElementById('pg-recurring-content');
@@ -65,6 +66,23 @@ const RecurringPage = {
     this._openForm(null);
   },
 
+  /* Pre-fill form from an existing AO to make it recurring */
+  openFromAO(aoId) {
+    const ao = getAO(aoId);
+    if (!ao) return;
+    const prefill = {
+      title:        ao.title,
+      description:  ao.description || '',
+      customerId:   ao.customerId || '',
+      address:      ao.address || '',
+      priority:     ao.priority || 'normal',
+      priceGroupId: ao.priceGroupId || '',
+      staff:        (ao.staff || []).slice(),
+      checklist:    (ao.checklist || []).map(c => ({ text: c.text, description: c.description || '' }))
+    };
+    this._openForm(null, prefill);
+  },
+
   openDetail(roId) {
     const ro = RecurringOrderService.getById(roId);
     if (!ro) return;
@@ -78,13 +96,17 @@ const RecurringPage = {
           </div>`).join('')
         }</div></div>` : '';
 
+    const staffNames = (ro.staff || []).map(id => {
+      const s = getStaff(id);
+      return s ? `${s.firstName} ${s.lastName}` : id;
+    });
+
     const aoHistory = (state.workOrders||[]).filter(ao => ao.recurringOrderId === ro.id)
       .sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
     const histHtml = aoHistory.length > 0
       ? `<div style="margin-top:12px;">
            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Skapade arbetsorder (${aoHistory.length})</div>
            ${aoHistory.slice(0,8).map(ao => {
-             var cuAo = getCu(ao.customerId);
              return `<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
                <div><div style="font-size:13px;font-weight:700;">${ao.id} – ${ao.title}</div>
                <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt||'')}</div></div>
@@ -104,11 +126,19 @@ const RecurringPage = {
         </div>
         <div class="dr"><span class="dk">Kund</span><span class="dv">${cu ? CustomerService.displayName(cu) : '—'}</span></div>
         ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${ro.address}</span></div>` : ''}
+        ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
         <div class="dr"><span class="dk">Nästa datum</span><span class="dv">${ro.nextDate ? fmtDate(ro.nextDate) : '—'}${days !== null && days <= 0 ? ` <span class="bdg bdg-red" style="font-size:10px;">Förfallen</span>` : ''}</span></div>
         ${ro.lastCreatedDate ? `<div class="dr"><span class="dk">Senast skapad</span><span class="dv">${fmtDate(ro.lastCreatedDate)}</span></div>` : ''}
         <div class="dr"><span class="dk">Intervall</span><span class="dv">${RecurringOrderService.intervalLabel(ro.interval)}${ro.interval==='eget'?' ('+ro.intervalDays+' dagar)':''}</span></div>
         <div class="dr"><span class="dk">Slutdatum</span><span class="dv">${ro.tillsvidare ? 'Tillsvidare' : (fmtDate(ro.endDate) || '—')}</span></div>
         ${ro.description ? `<div class="nbox" style="margin-top:8px;">${ro.description}</div>` : ''}
+        <div class="nbox" style="margin-top:8px;border-left:3px solid var(--sky);">
+          <strong style="font-size:11px;color:var(--navy);">Nästa arbetsorder</strong>
+          <p style="font-size:12px;color:var(--mt);margin-top:3px;">
+            Tryck på <strong>Skapa AO nu</strong> för att omedelbart skapa en arbetsorder från den här mallen.
+            Nästa datum räknas automatiskt framåt med valt intervall.
+          </p>
+        </div>
         ${chkHtml}
         ${histHtml}`,
       buttons: [
@@ -136,52 +166,50 @@ const RecurringPage = {
     const result = RecurringOrderService.createNextAO(roId);
     if (!result.ok) { showToast(result.error); return; }
     RecurringPage.render();
+    Sidebar.updateBadges();
     showToast(`${result.ao.id} skapad`);
     Router.showPage('pg-ao-detail', { aoId: result.ao.id });
   },
 
-  _openForm(roId) {
+  _openForm(roId, prefill) {
     const ro  = roId ? RecurringOrderService.getById(roId) : null;
     const isEdit = !!ro;
+    const pf  = prefill || {};
 
-    // Seed temp checklist
-    this._tempChecklist = ro ? (ro.checklist || []).map(c => ({ text: c.text })) : [];
+    // Seed temp arrays — preserve descriptions when editing, use prefill when creating from AO
+    this._tempChecklist = ro
+      ? (ro.checklist || []).map(c => ({ text: c.text, description: c.description || '' }))
+      : (pf.checklist || []).map(c => ({ text: c.text, description: c.description || '' }));
+    this._tempStaff = ro ? (ro.staff || []).slice() : (pf.staff || []).slice();
+
+    // Source values (edit = ro, new from AO = pf, blank = {})
+    const src = ro || pf;
 
     const intervals = RecurringOrderService.INTERVALS;
-    const activeStaff = (state.staff||[]).filter(s=>s.active);
-    const staffHtml = activeStaff.length === 0
-      ? '<p style="font-size:12px;color:var(--mt);margin:0;padding:4px 0;">Inga aktiva medarbetare registrerade</p>'
-      : activeStaff.map(s => {
-          const chk = ro && (ro.staff||[]).includes(s.id) ? 'checked' : '';
-          return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;border-radius:6px;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-            <input type="checkbox" class="ro-staff-cb" value="${s.id}" ${chk} style="width:15px;height:15px;accent-color:var(--sky);">
-            <span>${s.firstName} ${s.lastName}${s.title ? ' <span style="color:var(--mt);font-size:11px;">– ' + s.title + '</span>' : ''}</span>
-          </label>`;
-        }).join('');
 
-    // Determine address mode for edit
-    const roAddr = ro ? (ro.address || '') : '';
-    const cu0 = ro ? getCu(ro.customerId) : null;
+    // Address mode
+    const roAddr  = src.address || '';
+    const cu0     = src.customerId ? getCu(src.customerId) : null;
     const cu0Addr = cu0 ? [cu0.address, cu0.zip, cu0.city].filter(Boolean).join(', ') : '';
-    const addrIsCu = roAddr === cu0Addr || !roAddr;
+    const addrIsCu = (roAddr === cu0Addr || !roAddr);
     const addrMode = addrIsCu ? 'cu' : 'custom';
 
     Modal.open({
-      title: isEdit ? 'Redigera återkommande ärende' : 'Nytt återkommande ärende',
+      title: isEdit ? 'Redigera återkommande ärende' : (pf.title ? 'Gör återkommande' : 'Nytt återkommande ärende'),
       wide: true,
       body: `
         <div class="fg"><label>Titel <span style="color:var(--rd)">*</span></label>
-          <input id="ro-title" value="${ro ? ro.title : ''}" placeholder="T.ex. Månadsservice VVS, Kvartalskontroll"></div>
+          <input id="ro-title" value="${src.title || ''}" placeholder="T.ex. Månadsservice VVS, Kvartalskontroll"></div>
 
         <div class="g2">
           <div class="fg"><label>Kund</label>
             <select id="ro-cu" onchange="RecurringPage._customerChanged()">
               <option value="">— Välj kund —</option>
-              ${(state.customers||[]).map(c=>`<option value="${c.id}" ${ro&&ro.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
+              ${(state.customers||[]).map(c=>`<option value="${c.id}" ${src.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
             </select></div>
           <div class="fg"><label>Prioritet</label>
             <select id="ro-priority">
-              ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${ro&&ro.priority===p?'selected':''}>${priorityLabel(p)}</option>`).join('')}
+              ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${(src.priority||'normal')===p?'selected':''}>${priorityLabel(p)}</option>`).join('')}
             </select></div>
         </div>
 
@@ -205,7 +233,7 @@ const RecurringPage = {
         </div>
 
         <div class="fg"><label>Beskrivning</label>
-          <textarea id="ro-desc" rows="2" placeholder="Vad ska utföras vid varje tillfälle?">${ro ? ro.description||'' : ''}</textarea></div>
+          <textarea id="ro-desc" rows="2" placeholder="Vad ska utföras vid varje tillfälle?">${src.description || ''}</textarea></div>
 
         <div class="g2">
           <div class="fg"><label>Intervall</label>
@@ -235,15 +263,18 @@ const RecurringPage = {
           <label>Slutdatum</label>
           <input type="date" id="ro-end" value="${ro ? ro.endDate||'' : ''}"></div>
 
-        <div class="fg"><label>Personal</label>
-          <div style="border:1px solid var(--br);border-radius:8px;padding:4px;max-height:130px;overflow-y:auto;background:#fff;">
-            ${staffHtml}
-          </div></div>
+        <div class="fg">
+          <label>Personal</label>
+          <div id="ro-staff-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:4px 0;"></div>
+          <button type="button" class="btn bs bsm" style="margin-top:4px;" onclick="RecurringPage._openStaffPicker()">
+            ${ic('users',13)} Välj personal
+          </button>
+        </div>
 
         <div class="fg"><label>Prisgrupp</label>
           <select id="ro-pg">
             <option value="">— Ingen —</option>
-            ${(state.priceGroups||[]).filter(p=>p.active).map(p=>`<option value="${p.id}" ${ro&&ro.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`).join('')}
+            ${(state.priceGroups||[]).filter(p=>p.active).map(p=>`<option value="${p.id}" ${(src.priceGroupId||'')===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`).join('')}
           </select></div>
 
         <div class="fg">
@@ -269,10 +300,96 @@ const RecurringPage = {
     setTimeout(() => {
       RecurringPage._toggleCustomInterval();
       RecurringPage._renderChecklistItems();
+      RecurringPage._rpmUpdateChips();
       if (ro && !ro.tillsvidare) document.getElementById('ro-enddate-wrap').style.display = '';
       document.getElementById('ro-title')?.focus();
     }, 80);
   },
+
+  /* ── Staff picker (AO-style modal) ─────────── */
+
+  _openStaffPicker() {
+    const active = (state.staff||[]).filter(s => s.active);
+    Modal.open({
+      title: 'Välj personal',
+      wide: false,
+      body: `
+        <div class="fg" style="margin-bottom:8px;">
+          <input id="rpm-search" placeholder="Sök namn…" oninput="RecurringPage._rpmSearch(this.value)" autocomplete="off">
+        </div>
+        <div id="rpm-list" style="max-height:300px;overflow-y:auto;">
+          ${active.length ? this._rpmItems(active) : '<p style="font-size:12px;color:var(--mt);padding:8px 0;">Inga aktiva medarbetare registrerade</p>'}
+        </div>`,
+      buttons: [
+        { label: 'Klar', cls: 'btn bp', onClick: () => { Modal.close(); RecurringPage._rpmUpdateChips(); } },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('rpm-search')?.focus(), 80);
+  },
+
+  _rpmItems(staffArr) {
+    return staffArr.map(s => {
+      const sel = this._tempStaff.includes(s.id);
+      return `
+        <div class="crow" id="rpm-row-${s.id}" onclick="RecurringPage._rpmToggle('${s.id}')"
+          style="background:${sel ? 'var(--navy10,#eef2ff)' : ''};">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;">${s.firstName} ${s.lastName}</div>
+            ${s.title ? `<div style="font-size:11px;color:var(--mt);">${s.title}</div>` : ''}
+          </div>
+          <div id="rpm-chk-${s.id}" style="color:var(--grn);${sel ? '' : 'display:none'}">${ic('check-circle',16)}</div>
+        </div>`;
+    }).join('');
+  },
+
+  _rpmToggle(staffId) {
+    const idx = this._tempStaff.indexOf(staffId);
+    if (idx === -1) {
+      this._tempStaff.push(staffId);
+    } else {
+      this._tempStaff.splice(idx, 1);
+    }
+    const row = document.getElementById('rpm-row-' + staffId);
+    const chk = document.getElementById('rpm-chk-' + staffId);
+    const sel = this._tempStaff.includes(staffId);
+    if (row) row.style.background = sel ? 'var(--navy10,#eef2ff)' : '';
+    if (chk) chk.style.display    = sel ? '' : 'none';
+  },
+
+  _rpmSearch(q) {
+    const lq = q.toLowerCase();
+    document.querySelectorAll('#rpm-list .crow').forEach(row => {
+      const name = row.querySelector('[style*="font-weight:700"]')?.textContent || '';
+      row.style.display = !lq || name.toLowerCase().includes(lq) ? '' : 'none';
+    });
+  },
+
+  _rpmRemove(staffId) {
+    const idx = this._tempStaff.indexOf(staffId);
+    if (idx !== -1) this._tempStaff.splice(idx, 1);
+    this._rpmUpdateChips();
+  },
+
+  _rpmUpdateChips() {
+    const el = document.getElementById('ro-staff-chips');
+    if (!el) return;
+    if (!this._tempStaff.length) {
+      el.innerHTML = '<span style="font-size:12px;color:var(--mt);">Ingen personal vald</span>';
+      return;
+    }
+    el.innerHTML = this._tempStaff.map(id => {
+      const s = getStaff(id);
+      if (!s) return '';
+      return `
+        <span style="display:inline-flex;align-items:center;gap:4px;background:var(--navy10,#eef2ff);color:var(--navy);border-radius:20px;padding:3px 8px;font-size:12px;font-weight:600;">
+          ${s.firstName} ${s.lastName}
+          <button type="button" onclick="RecurringPage._rpmRemove('${id}')" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:var(--mt);">${ic('x',11)}</button>
+        </span>`;
+    }).join('');
+  },
+
+  /* ── Address helpers ──────────────────────── */
 
   _customerChanged() {
     const cuId = document.getElementById('ro-cu')?.value;
@@ -280,7 +397,6 @@ const RecurringPage = {
     const addr = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
     const display = document.getElementById('ro-cu-addr-display');
     if (display) display.textContent = addr || '(ingen adress registrerad)';
-    // If "kundens adress" mode is selected, update address field too
     const isCuMode = document.getElementById('ro-addr-cu')?.checked;
     if (isCuMode) {
       const addrInput = document.getElementById('ro-address');
@@ -305,6 +421,8 @@ const RecurringPage = {
     const wrap    = document.getElementById('ro-enddate-wrap');
     if (wrap) wrap.style.display = checked ? 'none' : '';
   },
+
+  /* ── Checklist helpers ────────────────────── */
 
   _addCheckItem() {
     const input = document.getElementById('ro-chk-input');
@@ -341,6 +459,8 @@ const RecurringPage = {
       </div>`).join('');
   },
 
+  /* ── Save ─────────────────────────────────── */
+
   _save(roId) {
     const title = document.getElementById('ro-title')?.value.trim();
     if (!title) { showToast('Titel krävs'); return; }
@@ -360,9 +480,6 @@ const RecurringPage = {
       address = document.getElementById('ro-address')?.value.trim() || '';
     }
 
-    const staffCbs = document.querySelectorAll('.ro-staff-cb:checked');
-    const staff    = Array.from(staffCbs).map(cb => cb.value);
-
     const data = {
       title,
       customerId:   document.getElementById('ro-cu')?.value || '',
@@ -376,7 +493,7 @@ const RecurringPage = {
       tillsvidare,
       endDate:      tillsvidare ? '' : (document.getElementById('ro-end')?.value || ''),
       priceGroupId: document.getElementById('ro-pg')?.value || '',
-      staff,
+      staff:        this._tempStaff.slice(),
       checklist:    this._tempChecklist.slice(),
       internalNote: document.getElementById('ro-note')?.value.trim() || '',
       status:       'aktiv'

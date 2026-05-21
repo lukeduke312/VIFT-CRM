@@ -520,8 +520,8 @@ const StaffPage = {
     const aktiva  = all.filter(s => s.active);
     const inaktiva = all.filter(s => !s.active);
     const list    = this._filter === 'aktiva' ? aktiva : inaktiva;
-    const roleColors = { admin:'bdg-red', chef:'bdg-orange', personal:'bdg-blue' };
-    const roleLabels = { admin:'Admin', chef:'Chef', personal:'Tekniker' };
+    const roleColor = (rid) => ({ admin:'bdg-red', chef:'bdg-orange', personal:'bdg-blue' }[rid] || 'bdg-grey');
+    const roleLabel = (rid) => { const r = (state.roles||[]).find(x=>x.id===rid); return r ? r.label : (rid || '—'); };
 
     el.innerHTML =
       `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
@@ -544,7 +544,7 @@ const StaffPage = {
                 </div>
               </div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-                <span class="bdg ${roleColors[s.role]||'bdg-grey'}">${roleLabels[s.role]||s.role}</span>
+                <span class="bdg ${roleColor(s.role)}">${roleLabel(s.role)}</span>
                 <span style="font-size:10px;color:var(--mt);">${s.email||''}</span>
               </div>
             </div>
@@ -553,7 +553,14 @@ const StaffPage = {
   },
 
   _formHtml(s) {
-    const ro = (v, r) => `<option value="${v}" ${s&&s.role===v?'selected':''}>${r}</option>`;
+    const roles = state.roles || [];
+    const fallbackRoles = [
+      { id:'personal', label:'Tekniker / Personal' },
+      { id:'chef',     label:'Chef / Projektledare' },
+      { id:'admin',    label:'Admin' }
+    ];
+    const roleOpts = (roles.length ? roles : fallbackRoles)
+      .map(r => `<option value="${r.id}" ${s&&s.role===r.id?'selected':''}>${r.label}</option>`).join('');
     return `
       <div class="g2">
         <div class="fg"><label>Förnamn <span style="color:var(--rd)">*</span></label>
@@ -577,11 +584,7 @@ const StaffPage = {
         <div class="fg"><label>Användarnamn <span style="color:var(--rd)">*</span></label>
           <input id="sf-uname" value="${s?s.username||'':''}" placeholder="användarnamn" autocomplete="off"></div>
         <div class="fg"><label>Roll / behörighet</label>
-          <select id="sf-role">
-            ${ro('personal','Tekniker / Personal')}
-            ${ro('chef','Chef / Projektledare')}
-            ${ro('admin','Admin')}
-          </select></div>
+          <select id="sf-role">${roleOpts}</select></div>
       </div>
       ${s ? `
       <div class="fg"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;font-weight:600;letter-spacing:0;cursor:pointer;">
@@ -717,6 +720,29 @@ const AdminPage = {
         </div>
       </div>
 
+      <!-- Roller & behörigheter -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Roller & behörigheter</h3>
+          <button class="btn bp bxs" onclick="AdminPage.openAddRole()">${ic('plus',13)} Ny roll</button>
+        </div>
+        <div class="card-body" style="padding:8px 14px;">
+          ${(state.roles||[]).length === 0
+            ? '<p style="font-size:12px;color:var(--mt);">Inga roller definierade</p>'
+            : (state.roles||[]).map(r => `
+              <div style="padding:8px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                <div>
+                  <div style="font-size:13px;font-weight:700;">${r.label}</div>
+                  ${r.description ? `<div style="font-size:11px;color:var(--mt);">${r.description}</div>` : ''}
+                </div>
+                ${r.isBuiltin
+                  ? `<span class="bdg bdg-grey" style="flex-shrink:0;">Inbyggd</span>`
+                  : `<button class="btn bxs bd" style="flex-shrink:0;" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`}
+              </div>`).join('')
+          }
+        </div>
+      </div>
+
       <!-- Register-shortcuts -->
       <div class="card">
         <div class="card-header"><h3>Register</h3></div>
@@ -820,6 +846,45 @@ const AdminPage = {
     if (!confirm(`Ta bort titeln "${state.titles[idx]}"?`)) return;
     state.titles.splice(idx, 1);
     persist(); AdminPage.render(); showToast('Borttagen');
+  },
+
+  openAddRole() {
+    Modal.open({
+      title: 'Ny anpassad roll',
+      body: `
+        <div class="fg"><label>Roll-ID (unik nyckel) <span style="color:var(--rd)">*</span></label>
+          <input id="role-id" placeholder="t.ex. konsult, vikarie, tekniker2…" autocomplete="off"
+            oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')"></div>
+        <div class="fg"><label>Visningsnamn <span style="color:var(--rd)">*</span></label>
+          <input id="role-label" placeholder="T.ex. Konsult, Vikarie…" autocomplete="off"></div>
+        <div class="fg"><label>Beskrivning</label>
+          <input id="role-desc" placeholder="Kort beskrivning av rollen och dess tillgång…"></div>`,
+      buttons: [
+        { label: 'Skapa roll', cls: 'btn bp', onClick: () => AdminPage._addRole() },
+        { label: 'Avbryt',    cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('role-id')?.focus(), 80);
+  },
+
+  _addRole() {
+    const id    = document.getElementById('role-id')?.value.trim();
+    const label = document.getElementById('role-label')?.value.trim();
+    if (!id || !label) { showToast('ID och visningsnamn krävs'); return; }
+    if ((state.roles||[]).some(r => r.id === id)) { showToast('Roll-ID används redan'); return; }
+    state.roles = state.roles || [];
+    state.roles.push({
+      id, label, isBuiltin: false,
+      description: document.getElementById('role-desc')?.value.trim() || '',
+      permissions: []
+    });
+    persist(); Modal.close(); AdminPage.render(); showToast(`Roll "${label}" skapad`);
+  },
+
+  removeRole(roleId) {
+    if (!confirm('Ta bort rollen? Personal som har denna roll behåller sin roll-ID men visningsnamnet försvinner.')) return;
+    state.roles = (state.roles||[]).filter(r => r.id !== roleId);
+    persist(); AdminPage.render(); showToast('Roll borttagen');
   }
 };
 
