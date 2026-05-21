@@ -570,16 +570,20 @@ const StaffPage = {
       </div>
       <div class="fg"><label>Titel / yrkesroll</label>
         ${(state.titles||[]).length > 0 ? `
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px;">
-            ${(state.titles||[]).map(t => {
-              const isSel = s && s.title === t;
-              return `<button type="button" class="chip title-chip-btn${isSel?' on':''}"
-                data-title="${t.replace(/"/g,'&quot;')}"
-                onclick="StaffPage._selectTitle(this.dataset.title)">${t}</button>`;
-            }).join('')}
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <div id="sf-title-display" style="flex:1;">
+              ${s && s.title
+                ? `<span class="chip on">${s.title}</span>`
+                : '<span style="font-size:12px;color:var(--mt);">Ingen titel vald</span>'}
+            </div>
+            <button type="button" class="btn bs bsm" onclick="StaffPage._openTitlePicker()">
+              ${ic('list',13)} Välj titel
+            </button>
           </div>
           <input type="hidden" id="sf-title" value="${s?s.title||'':''}">
-          ${s && s.title && !(state.titles||[]).includes(s.title) ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ Nuvarande titel "${s.title}" finns inte längre i titelregistret</div>` : ''}` :
+          ${s && s.title && !(state.titles||[]).includes(s.title)
+            ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ "${s.title}" finns inte i titelregistret</div>`
+            : ''}` :
           `<div class="nbox" style="font-size:12px;">Inga titlar registrerade. <button type="button" class="btn bghost bxs" style="margin-left:4px;" onclick="Modal.close();Router.showPage('pg-admin')">Gå till Admin ${ic('arrow-right',10)}</button></div>
           <input type="hidden" id="sf-title" value="${s?s.title||'':''}">`
         }</div>
@@ -621,11 +625,56 @@ const StaffPage = {
         <input type="password" id="sf-pw" placeholder="Minst 4 tecken" autocomplete="new-password"></div>`}`;
   },
 
-  _selectTitle(title) {
-    document.getElementById('sf-title').value = title;
-    document.querySelectorAll('.title-chip-btn').forEach(btn => {
-      btn.classList.toggle('on', btn.dataset.title === title);
+  _openTitlePicker() {
+    const titles = state.titles || [];
+    if (titles.length === 0) { showToast('Inga titlar. Gå till Admin → Titlar.'); return; }
+    Modal.open({
+      title: 'Välj titel',
+      body: `
+        <div class="fg" style="margin-bottom:8px;">
+          <input id="tp-search" placeholder="Sök titel…" autocomplete="off"
+            oninput="document.getElementById('tp-list').innerHTML=StaffPage._titlePickerItems(this.value)">
+        </div>
+        <div id="tp-list" style="max-height:280px;overflow-y:auto;">
+          ${this._titlePickerItems('')}
+        </div>`,
+      buttons: [
+        { label: 'Rensa val', cls: 'btn bw', onClick: () => StaffPage._selectTitleFromPicker('') },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
     });
+    setTimeout(() => document.getElementById('tp-search')?.focus(), 80);
+  },
+
+  _titlePickerItems(q) {
+    const titles = state.titles || [];
+    const cur = document.getElementById('sf-title')?.value || '';
+    const filtered = q ? titles.filter(t => t.toLowerCase().includes(q.toLowerCase())) : titles;
+    if (!filtered.length) return '<p style="font-size:12px;color:var(--mt);padding:8px 0;">Inga titlar matchar</p>';
+    return filtered.map(t => {
+      const isSel = cur === t;
+      const usageCount = (state.staff||[]).filter(s => s.title === t).length;
+      return `<div class="crow" onclick="StaffPage._selectTitleFromPicker('${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"
+        style="${isSel?'background:var(--navy10,#eef2ff);':''};cursor:pointer;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${t}</div>
+          ${usageCount > 0 ? `<div style="font-size:10px;color:var(--mt);">${usageCount} person${usageCount===1?'':'er'}</div>` : ''}
+        </div>
+        ${isSel ? `<span style="color:var(--grn);">${ic('check-circle',16)}</span>` : ''}
+      </div>`;
+    }).join('');
+  },
+
+  _selectTitleFromPicker(title) {
+    const inp = document.getElementById('sf-title');
+    if (inp) inp.value = title;
+    const display = document.getElementById('sf-title-display');
+    if (display) {
+      display.innerHTML = title
+        ? `<span class="chip on">${title}</span>`
+        : '<span style="font-size:12px;color:var(--mt);">Ingen titel vald</span>';
+    }
+    Modal.close();
   },
 
   _selectRole(roleId) {
@@ -726,11 +775,16 @@ const StaffPage = {
 
 /* ── Admin ────────────────────────────── */
 const AdminPage = {
+  _titleQ: '',
+
   render() {
     const el = document.getElementById('pg-admin-content');
     if (!el) return;
     const s = state.settings || {};
-    const titles = state.titles || [];
+    const allTitles = state.titles || [];
+    const titles = this._titleQ
+      ? allTitles.filter(t => t.toLowerCase().includes(this._titleQ.toLowerCase()))
+      : allTitles;
 
     el.innerHTML = `
       <!-- Företagsinformation -->
@@ -755,17 +809,35 @@ const AdminPage = {
           <h3>Titlar / yrkesroller</h3>
           <button class="btn bp bxs" onclick="AdminPage.openAddTitle()">${ic('plus',13)} Lägg till</button>
         </div>
+        <div style="padding:8px 14px 4px;border-bottom:1px solid var(--br);">
+          <div class="swrap">
+            <span class="sico">${ic('search',14)}</span>
+            <input type="search" placeholder="Sök titel…" value="${this._titleQ}"
+              oninput="AdminPage._titleQ=this.value;AdminPage.render()" style="font-size:12px;">
+          </div>
+        </div>
         <div class="card-body" style="padding:4px 14px;">
-          ${titles.length === 0 ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga titlar registrerade</p>' :
-            titles.map((t,i) => {
-              const usageCount = (state.staff||[]).filter(s=>s.title===t).length;
-              return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
-                <span style="flex:1;font-size:13px;font-weight:600;">${t}</span>
-                ${usageCount>0?`<span class="bdg bdg-grey" style="font-size:10px;">${usageCount} anv.</span>`:''}
-                <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${i})">${ic('pencil',11)}</button>
-                <button class="btn bxs bd" onclick="AdminPage.removeTitle(${i})" ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
-              </div>`;
-            }).join('')
+          ${allTitles.length === 0
+            ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga titlar registrerade</p>'
+            : titles.length === 0
+              ? `<p style="font-size:12px;color:var(--mt);padding:6px 0;">Ingen titel matchar "${this._titleQ}"</p>`
+              : titles.map(t => {
+                  const origIdx = allTitles.indexOf(t);
+                  const usageCount = (state.staff||[]).filter(s=>s.title===t).length;
+                  return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:13px;font-weight:600;">${t}</div>
+                      ${usageCount > 0
+                        ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.replace(/'/g,"\\'")}')">
+                            ${usageCount} person${usageCount===1?'':'er'} – Visa ${ic('arrow-right',9)}
+                          </div>`
+                        : '<div style="font-size:10px;color:var(--mt);">Ej använd</div>'}
+                    </div>
+                    <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${origIdx})">${ic('pencil',11)}</button>
+                    <button class="btn bxs bd" onclick="AdminPage.removeTitle(${origIdx})"
+                      ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
+                  </div>`;
+                }).join('')
           }
         </div>
       </div>
@@ -875,6 +947,23 @@ const AdminPage = {
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
+    });
+  },
+
+  showTitleStaff(title) {
+    const staffWithTitle = (state.staff||[]).filter(s => s.title === title);
+    if (!staffWithTitle.length) { showToast('Ingen personal med denna titel'); return; }
+    Modal.open({
+      title: `Personal med titel: ${title}`,
+      body: staffWithTitle.map(s => `
+        <div class="crow" onclick="Modal.close();Router.showPage('pg-staff')">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;">${s.firstName} ${s.lastName}</div>
+            <div style="font-size:11px;color:var(--mt);">${s.email||''}</div>
+          </div>
+          <span class="bdg ${s.active?'bdg-green':'bdg-grey'}">${s.active?'Aktiv':'Inaktiv'}</span>
+        </div>`).join(''),
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
     });
   },
 
@@ -1006,6 +1095,7 @@ const AdminPage = {
     this._PERMISSIONS.forEach(p => { permMap[p.id] = p.label; });
 
     const groupsHtml = this._PERM_GROUPS.map((g, gi) => {
+      const groupCheckedCount = g.perms.filter(pid => perms.includes(pid)).length;
       const rows = g.perms.map(pid => `
         <label style="display:flex;align-items:center;gap:8px;padding:6px 0 6px 12px;border-bottom:1px solid var(--bg);cursor:pointer;">
           <input type="checkbox" name="role-perm" value="${pid}" ${perms.includes(pid)?'checked':''}
@@ -1015,7 +1105,10 @@ const AdminPage = {
       return `
         <div style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--br);">
-            <span style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${g.label}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${g.label}</span>
+              <span class="bdg bdg-${groupCheckedCount>0?'sky':'grey'}" style="font-size:9px;">${groupCheckedCount}/${g.perms.length}</span>
+            </div>
             <button type="button" class="btn bghost bxs" style="font-size:10px;padding:2px 7px;"
               onclick="AdminPage._togglePermGroup(${gi})">Markera alla</button>
           </div>

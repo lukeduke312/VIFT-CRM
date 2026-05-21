@@ -21,8 +21,12 @@ const WorkOrderDetailPage = {
     const cu     = getCu(ao.customerId);
     const cuName = cu ? CustomerService.displayName(cu) : '—';
     const staff  = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; });
-    const chkDone = (ao.checklist||[]).filter(c=>c.done).length;
+    const chkOk   = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
+    const chkAvv  = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
     const chkTotal = (ao.checklist||[]).length;
+    const chkBadge = chkTotal > 0
+      ? `<span class="bdg bdg-${chkOk===chkTotal&&!chkAvv?'green':'blue'}">${chkOk}/${chkTotal} OK</span>${chkAvv>0?` <span class="bdg bdg-orange">${chkAvv} avv.</span>`:''}`
+      : '';
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
     const matTotal    = WorkOrderService.materialTotal(ao);
@@ -68,7 +72,7 @@ const WorkOrderDetailPage = {
         <div class="card-header">
           <h3>Checklista</h3>
           <div style="display:flex;align-items:center;gap:8px;">
-            <span id="ao-chk-counter">${chkTotal>0 ? `<span class="bdg bdg-blue">${chkDone}/${chkTotal}</span>` : ''}</span>
+            <span id="ao-chk-counter">${chkBadge}</span>
             <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>
           </div>
         </div>
@@ -221,26 +225,43 @@ const WorkOrderDetailPage = {
 
   _renderChecklist(ao) {
     const items = ao.checklist || [];
-    if (!items.length) return `<p style="padding:10px 0;color:var(--mt);font-size:13px;">Ingen checklista ännu</p>`;
-    const done = items.filter(c=>c.done).length;
-    const avvClsMap = { ok:'bdg-green', avvikelse:'bdg-red', ej_kontrollerbar:'bdg-grey' };
-    const avvLblMap = { ok:'OK', avvikelse:'Avvikelse', ej_kontrollerbar:'Ej kontr.' };
+    if (!items.length) return `<p style="padding:10px 0;color:var(--mt);font-size:13px;">Ingen checklista ännu. Tryck + för att lägga till.</p>`;
+    const okCount  = items.filter(c => c.done || c.avvikelse === 'ok').length;
+    const pct      = items.length ? Math.round(okCount / items.length * 100) : 0;
     return `
-      <div class="pb" style="margin-bottom:8px;"><div class="pbf" style="width:${items.length?Math.round(done/items.length*100):0}%"></div></div>
-      ${items.map((c, i) => `
-        <div class="chi" onclick="WorkOrderDetailPage.toggleCheck(${i})" style="align-items:flex-start;gap:8px;padding:10px 0;">
-          <div class="chc ${c.done?'done':''}" style="margin-top:2px;">${c.done?ic('check',11):''}</div>
-          <div style="flex:1;min-width:0;">
-            <div class="cht ${c.done?'done':''}" style="display:block;">${c.text}</div>
-            ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
-            ${c.avvikelse ? `<span class="bdg ${avvClsMap[c.avvikelse]||'bdg-grey'}" style="font-size:9px;margin-top:4px;display:inline-block;">${avvLblMap[c.avvikelse]||c.avvikelse}</span>` : ''}
+      <div class="pb" style="margin-bottom:8px;"><div class="pbf" style="width:${pct}%"></div></div>
+      ${items.map((c, i) => {
+        const isOk  = c.avvikelse === 'ok' || (c.done && !c.avvikelse);
+        const isAvv = c.avvikelse === 'avvikelse';
+        return `
+        <div style="border-bottom:1px solid var(--bg);padding:10px 0;">
+          <div style="display:flex;align-items:flex-start;gap:8px;">
+            <div style="flex-shrink:0;margin-top:2px;width:18px;height:18px;border-radius:50%;
+              background:${isOk?'var(--grn)':isAvv?'var(--rd)':'var(--br)'};
+              display:flex;align-items:center;justify-content:center;color:#fff;">
+              ${isOk?ic('check',11):isAvv?ic('alert-triangle',10):''}
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;${isOk?'text-decoration:line-through;color:var(--mt);':''}">${c.text}</div>
+              ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
+            </div>
           </div>
-          <div style="display:flex;gap:3px;flex-shrink:0;margin-top:1px;" onclick="event.stopPropagation()">
-            <button class="btn bxs ${c.avvikelse==='ok'?'bsu':'bs'}" title="OK" onclick="WorkOrderDetailPage.setAvvikelse(${i},'ok')" style="padding:3px 5px;">${ic('check',11)}</button>
-            <button class="btn bxs ${c.avvikelse==='avvikelse'?'bd':'bs'}" title="Avvikelse" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')" style="padding:3px 5px;">${ic('alert-triangle',11)}</button>
-            <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})" style="padding:3px 5px;">${ic('x',11)}</button>
+          <div style="display:flex;gap:5px;margin-top:7px;margin-left:26px;">
+            <button class="btn bxs ${isOk?'bsu':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'ok')"
+              style="font-size:10px;padding:3px 8px;display:flex;align-items:center;gap:3px;">
+              ${ic('check',10)} ${isOk ? 'OK ✓' : 'Markera OK'}
+            </button>
+            <button class="btn bxs ${isAvv?'bd':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')"
+              style="font-size:10px;padding:3px 8px;display:flex;align-items:center;gap:3px;">
+              ${ic('alert-triangle',10)} ${isAvv ? 'Avvikelse !' : 'Markera avvikelse'}
+            </button>
+            <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})"
+              style="font-size:10px;padding:3px 8px;" title="Ta bort punkt">
+              ${ic('trash',10)}
+            </button>
           </div>
-        </div>`).join('')}`;
+        </div>`;
+      }).join('')}`;
   },
 
   /* ── Material ─────────────────────────────── */
@@ -704,8 +725,9 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     if (!ao) return;
     const chkTotal = (ao.checklist||[]).length;
-    const chkDone  = (ao.checklist||[]).filter(c=>c.done).length;
-    const incomplete = chkTotal > 0 && chkDone < chkTotal;
+    const chkOkCnt = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
+    const chkAvvCnt= (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
+    const incomplete = chkTotal > 0 && (chkOkCnt + chkAvvCnt) < chkTotal;
 
     const doComplete = () => {
       const completedBy = state.currentUser
@@ -721,7 +743,7 @@ const WorkOrderDetailPage = {
       Modal.open({
         title: 'Ofullständig checklista',
         body: `
-          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkDone} av ${chkTotal} checkpunkter är utförda</div>
+          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade</div>
           <p style="font-size:13px;color:var(--mt);">Vill du ändå klarmarkera ordern?</p>`,
         buttons: [
           { label: 'Klarmarkera ändå', cls: 'btn bsu', onClick: () => { Modal.close(); doComplete(); } },
@@ -800,9 +822,13 @@ const WorkOrderDetailPage = {
   _updateChecklistCounter(ao) {
     const el = document.getElementById('ao-chk-counter');
     if (!el) return;
-    const total = (ao.checklist||[]).length;
-    const done  = (ao.checklist||[]).filter(c=>c.done).length;
-    el.innerHTML = total > 0 ? `<span class="bdg bdg-blue">${done}/${total}</span>` : '';
+    const items  = ao.checklist || [];
+    const total  = items.length;
+    const okCnt  = items.filter(c => c.done || c.avvikelse === 'ok').length;
+    const avvCnt = items.filter(c => c.avvikelse === 'avvikelse').length;
+    if (!total) { el.innerHTML = ''; return; }
+    el.innerHTML = `<span class="bdg bdg-${okCnt===total&&!avvCnt?'green':'blue'}">${okCnt}/${total} OK</span>`
+      + (avvCnt > 0 ? ` <span class="bdg bdg-orange">${avvCnt} avv.</span>` : '');
   },
 
   /* ── Checklista ────────────────────────── */
@@ -844,8 +870,11 @@ const WorkOrderDetailPage = {
   setAvvikelse(idx, status) {
     const ao = getAO(this.aoId);
     if (!ao || !ao.checklist || !ao.checklist[idx]) return;
+    const c = ao.checklist[idx];
     // Toggle: clicking same status clears it
-    ao.checklist[idx].avvikelse = ao.checklist[idx].avvikelse === status ? null : status;
+    const newStatus = c.avvikelse === status ? null : status;
+    c.avvikelse = newStatus;
+    c.done = (newStatus === 'ok');
     WorkOrderService.update(this.aoId, { checklist: ao.checklist });
     const aoUp = getAO(this.aoId);
     if (aoUp) {
