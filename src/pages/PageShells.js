@@ -570,12 +570,19 @@ const StaffPage = {
       </div>
       <div class="fg"><label>Titel / yrkesroll</label>
         ${(state.titles||[]).length > 0 ? `
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">
-            ${(state.titles||[]).map(t =>
-              `<button type="button" class="chip" onclick="document.getElementById('sf-title').value='${t.replace(/'/g,"\\'")}';">${t}</button>`
-            ).join('')}
-          </div>` : ''}
-        <input id="sf-title" value="${s?s.title||'':''}" placeholder="T.ex. Fastighetstekniker, Rörmokare…" autocomplete="off"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px;">
+            ${(state.titles||[]).map(t => {
+              const isSel = s && s.title === t;
+              return `<button type="button" class="chip title-chip-btn${isSel?' on':''}"
+                data-title="${t.replace(/"/g,'&quot;')}"
+                onclick="StaffPage._selectTitle(this.dataset.title)">${t}</button>`;
+            }).join('')}
+          </div>
+          <input type="hidden" id="sf-title" value="${s?s.title||'':''}">
+          ${s && s.title && !(state.titles||[]).includes(s.title) ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ Nuvarande titel "${s.title}" finns inte längre i titelregistret</div>` : ''}` :
+          `<div class="nbox" style="font-size:12px;">Inga titlar registrerade. <button type="button" class="btn bghost bxs" style="margin-left:4px;" onclick="Modal.close();Router.showPage('pg-admin')">Gå till Admin ${ic('arrow-right',10)}</button></div>
+          <input type="hidden" id="sf-title" value="${s?s.title||'':''}">`
+        }</div>
       <div class="g2">
         <div class="fg"><label>Telefon</label>
           <input id="sf-phone" value="${s?s.phone||'':''}" placeholder="070-XXX XX XX" type="tel"></div>
@@ -612,6 +619,13 @@ const StaffPage = {
       </div>` : `
       <div class="fg"><label>Lösenord <span style="color:var(--rd)">*</span></label>
         <input type="password" id="sf-pw" placeholder="Minst 4 tecken" autocomplete="new-password"></div>`}`;
+  },
+
+  _selectTitle(title) {
+    document.getElementById('sf-title').value = title;
+    document.querySelectorAll('.title-chip-btn').forEach(btn => {
+      btn.classList.toggle('on', btn.dataset.title === title);
+    });
   },
 
   _selectRole(roleId) {
@@ -974,17 +988,41 @@ const AdminPage = {
     { id:'sales_manage',     label:'Hantera säljchanser' }
   ],
 
+  _PERM_GROUPS: [
+    { label: 'Superadmin',         perms: ['all'] },
+    { label: 'Dashboard',          perms: ['dashboard_view'] },
+    { label: 'Arbetsorder',        perms: ['ao_view_all','ao_create','ao_complete'] },
+    { label: 'Kunder & Offerter',  perms: ['customer_manage','offer_manage'] },
+    { label: 'Fakturering',        perms: ['invoice_view','invoice_create'] },
+    { label: 'Personal & Admin',   perms: ['staff_view','staff_manage','admin_manage','article_manage'] },
+    { label: 'Övrigt',             perms: ['recurring_manage','sales_manage','reports_view'] }
+  ],
+
   openEditRole(roleId) {
     const r = (state.roles||[]).find(x => x.id === roleId);
     if (!r) return;
     const perms = r.permissions || [];
-    const permHtml = this._PERMISSIONS.map(p => `
-      <label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bg);cursor:pointer;">
-        <input type="checkbox" name="role-perm" value="${p.id}" ${perms.includes(p.id)?'checked':''}
-          style="width:16px;height:16px;flex-shrink:0;"
-          onchange="AdminPage._onPermChange(this)">
-        <span style="font-size:13px;">${p.label}</span>
-      </label>`).join('');
+    const permMap = {};
+    this._PERMISSIONS.forEach(p => { permMap[p.id] = p.label; });
+
+    const groupsHtml = this._PERM_GROUPS.map((g, gi) => {
+      const rows = g.perms.map(pid => `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 0 6px 12px;border-bottom:1px solid var(--bg);cursor:pointer;">
+          <input type="checkbox" name="role-perm" value="${pid}" ${perms.includes(pid)?'checked':''}
+            style="width:15px;height:15px;flex-shrink:0;" onchange="AdminPage._onPermChange(this)">
+          <span style="font-size:12px;">${permMap[pid]||pid}</span>
+        </label>`).join('');
+      return `
+        <div style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--br);">
+            <span style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${g.label}</span>
+            <button type="button" class="btn bghost bxs" style="font-size:10px;padding:2px 7px;"
+              onclick="AdminPage._togglePermGroup(${gi})">Markera alla</button>
+          </div>
+          ${rows}
+        </div>`;
+    }).join('');
+
     Modal.open({
       title: `Redigera roll: ${r.label}`,
       wide: true,
@@ -993,14 +1031,26 @@ const AdminPage = {
           <input id="role-edit-label" value="${r.label}" ${r.isBuiltin?'readonly style="background:var(--bg);"':''}></div>
         <div class="fg"><label>Beskrivning</label>
           <input id="role-edit-desc" value="${r.description||''}" placeholder="Kort beskrivning…"></div>
-        <div style="margin-top:8px;">
-          <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Behörigheter</div>
-          ${permHtml}
+        <div style="margin-top:4px;">
+          <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Behörigheter</div>
+          ${groupsHtml}
         </div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditRole(roleId) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
+    });
+  },
+
+  _togglePermGroup(groupIdx) {
+    const group = this._PERM_GROUPS[groupIdx];
+    if (!group) return;
+    const cbs = document.querySelectorAll('input[name="role-perm"]');
+    const groupCbs = Array.from(cbs).filter(cb => group.perms.includes(cb.value));
+    const allChecked = groupCbs.every(cb => cb.checked);
+    groupCbs.forEach(cb => {
+      cb.checked = !allChecked;
+      this._onPermChange(cb);
     });
   },
 

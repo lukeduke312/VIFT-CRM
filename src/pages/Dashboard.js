@@ -228,12 +228,18 @@ const Dashboard = {
   /* ── Säljchanser ──────────────────────────── */
   _widgetSales() {
     const active = SalesService.getActive();
+    // Sales opportunities use English priority keys; translate here
+    const prioSv  = { high:'Hög', medium:'Normal', low:'Låg', akut:'Akut', hög:'Hög', normal:'Normal', låg:'Låg' };
+    const prioCls = { high:'bdg-orange', medium:'bdg-sky', low:'bdg-grey', akut:'bdg-red', hög:'bdg-orange', normal:'bdg-sky', låg:'bdg-grey' };
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('target',14)} Säljchanser</h3>
         <div style="display:flex;gap:5px;align-items:center;">
           ${active.length > 0 ? `<span class="bdg bdg-purple">${active.length}</span>` : ''}
-          <button class="btn bghost bxs" onclick="Router.showPage('pg-sales')">${ic('arrow-right',12)}</button>
+          <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;"
+            onclick="Router.showPage('pg-sales')" title="Visa alla säljchanser">
+            Visa alla ${ic('arrow-right',10)}
+          </button>
         </div>
       </div>
       <div class="card-body">
@@ -242,20 +248,21 @@ const Dashboard = {
           : active.slice(0,3).map(opp => {
               var cu = getCu(opp.customerId);
               var cuName = cu ? (cu.name||(cu.firstName+' '+cu.lastName).trim()) : '—';
-              var val = opp.estimatedValue ? ` · ~${fmt(opp.estimatedValue)} kr` : '';
-              return `<div style="padding:7px 0;border-bottom:1px solid var(--bg);">
-                <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:5px;">
+              var val = opp.estimatedValue ? ` · ${fmt(opp.estimatedValue)} kr` : '';
+              var pBadge = `<span class="bdg ${prioCls[opp.priority]||'bdg-grey'}" style="font-size:9px;flex-shrink:0;">${prioSv[opp.priority]||opp.priority}</span>`;
+              var tip = opp.aiTip ? `<div style="font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💡 ${opp.aiTip}</div>` : '';
+              return `<div style="padding:6px 0;border-bottom:1px solid var(--bg);">
+                <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;">
                   <div style="flex:1;min-width:0;">
                     <div class="crow-title">${opp.title}</div>
                     <div class="crow-sub">${cuName}${val}</div>
-                    ${opp.aiTip ? `<div style="font-size:10px;color:var(--pu);margin-top:2px;line-height:1.4;">💡 ${opp.aiTip}</div>` : ''}
+                    ${tip}
                   </div>
-                  ${pbdg(opp.priority)}
+                  ${pBadge}
                 </div>
                 <div style="display:flex;gap:4px;">
-                  <button class="btn bxs bs" style="font-size:10px;padding:3px 8px;" onclick="event.stopPropagation();SalesService.openSnooze('${opp.id}')">Skjut upp</button>
-                  <button class="btn bxs bsu" style="font-size:10px;padding:3px 8px;" onclick="event.stopPropagation();SalesService.markDoneUI('${opp.id}')">Klar</button>
-                  <button class="btn bxs bp" style="font-size:10px;padding:3px 8px;" onclick="Router.showPage('pg-sales')">${ic('arrow-right',10)}</button>
+                  <button class="btn bxs bs" style="font-size:10px;padding:3px 7px;" onclick="event.stopPropagation();SalesService.openSnooze('${opp.id}')">Skjut upp</button>
+                  <button class="btn bxs bsu" style="font-size:10px;padding:3px 7px;" onclick="event.stopPropagation();SalesService.markDoneUI('${opp.id}')">Klar</button>
                 </div>
               </div>`;
             }).join('')}

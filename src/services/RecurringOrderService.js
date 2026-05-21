@@ -76,6 +76,7 @@ const RecurringOrderService = {
       customerId:    ro.customerId,
       propertyId:    ro.propertyId || '',
       address:       ro.address || '',
+      accessCode:    ro.accessCode || '',
       contactPerson: ro.contactPerson || '',
       phone:         ro.phone || '',
       internalNote:  ro.internalNote || '',

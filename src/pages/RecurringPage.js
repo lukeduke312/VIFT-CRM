@@ -126,6 +126,7 @@ const RecurringPage = {
         </div>
         <div class="dr"><span class="dk">Kund</span><span class="dv">${cu ? CustomerService.displayName(cu) : '—'}</span></div>
         ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${ro.address}</span></div>` : ''}
+        ${ro.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${ro.accessCode}</span></div>` : ''}
         ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
         <div class="dr"><span class="dk">Nästa datum</span><span class="dv">${ro.nextDate ? fmtDate(ro.nextDate) : '—'}${days !== null && days <= 0 ? ` <span class="bdg bdg-red" style="font-size:10px;">Förfallen</span>` : ''}</span></div>
         ${ro.lastCreatedDate ? `<div class="dr"><span class="dk">Senast skapad</span><span class="dv">${fmtDate(ro.lastCreatedDate)}</span></div>` : ''}
@@ -187,12 +188,23 @@ const RecurringPage = {
 
     const intervals = RecurringOrderService.INTERVALS;
 
-    // Address mode
+    // Address mode — parse stored address back into fields (best-effort)
     const roAddr  = src.address || '';
     const cu0     = src.customerId ? getCu(src.customerId) : null;
     const cu0Addr = cu0 ? [cu0.address, cu0.zip, cu0.city].filter(Boolean).join(', ') : '';
     const addrIsCu = (roAddr === cu0Addr || !roAddr);
     const addrMode = addrIsCu ? 'cu' : 'custom';
+
+    // Try to parse existing address string into street / zip / city
+    var parsedStreet = '', parsedZip = '', parsedCity = '';
+    if (addrMode === 'custom' && roAddr) {
+      var parts = roAddr.split(',').map(function(p){ return p.trim(); });
+      parsedStreet = parts[0] || '';
+      var rest = parts[1] || '';
+      var zipMatch = rest.match(/^(\d{3}\s?\d{2})\s+(.+)$/);
+      if (zipMatch) { parsedZip = zipMatch[1]; parsedCity = zipMatch[2]; }
+      else { parsedCity = rest; }
+    }
 
     Modal.open({
       title: isEdit ? 'Redigera återkommande ärende' : (pf.title ? 'Gör återkommande' : 'Nytt återkommande ärende'),
@@ -229,7 +241,19 @@ const RecurringPage = {
             </label>
           </div>
           <div id="ro-addr-custom-wrap" style="${addrMode==='custom'?'':'display:none'}">
-            <input id="ro-address" value="${addrMode==='custom' ? roAddr : ''}" placeholder="Gatuadress, postnummer, ort"></div>
+            <div class="fg" style="margin-bottom:6px;">
+              <label>Gatuadress</label>
+              <input id="ro-street" value="${parsedStreet}" placeholder="Storgatan 1"></div>
+            <div class="g2" style="margin-bottom:6px;">
+              <div class="fg"><label>Postnummer</label>
+                <input id="ro-zip" value="${parsedZip}" placeholder="123 45"></div>
+              <div class="fg"><label>Ort</label>
+                <input id="ro-city" value="${parsedCity}" placeholder="Stockholm"></div>
+            </div>
+            <div class="fg">
+              <label>Portkod / åtkomst</label>
+              <input id="ro-access" value="${src.accessCode||''}" placeholder="T.ex. 1234#"></div>
+          </div>
         </div>
 
         <div class="fg"><label>Beskrivning</label>
@@ -397,10 +421,15 @@ const RecurringPage = {
     const addr = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
     const display = document.getElementById('ro-cu-addr-display');
     if (display) display.textContent = addr || '(ingen adress registrerad)';
+    // If in custom mode, optionally pre-fill fields from the customer
     const isCuMode = document.getElementById('ro-addr-cu')?.checked;
-    if (isCuMode) {
-      const addrInput = document.getElementById('ro-address');
-      if (addrInput) addrInput.value = addr;
+    if (!isCuMode && cu) {
+      const street = document.getElementById('ro-street');
+      const zip    = document.getElementById('ro-zip');
+      const city   = document.getElementById('ro-city');
+      if (street && !street.value) street.value = cu.address || '';
+      if (zip    && !zip.value)    zip.value    = cu.zip     || '';
+      if (city   && !city.value)   city.value   = cu.city    || '';
     }
   },
 
@@ -469,15 +498,22 @@ const RecurringPage = {
     const interval    = document.getElementById('ro-interval')?.value || 'månadsvis';
     const days        = parseInt(document.getElementById('ro-days')?.value) || 30;
 
-    // Resolve address
+    // Resolve address from split fields
     const isCuAddr = document.getElementById('ro-addr-cu')?.checked;
     let address = '';
+    let accessCode = '';
     if (isCuAddr) {
       const cuId = document.getElementById('ro-cu')?.value;
       const cu   = cuId ? getCu(cuId) : null;
-      address = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
+      address    = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
+      accessCode = cu ? (cu.accessCode || '') : '';
     } else {
-      address = document.getElementById('ro-address')?.value.trim() || '';
+      const street = (document.getElementById('ro-street')?.value || '').trim();
+      const zip    = (document.getElementById('ro-zip')?.value    || '').trim();
+      const city   = (document.getElementById('ro-city')?.value   || '').trim();
+      accessCode   = (document.getElementById('ro-access')?.value || '').trim();
+      const zipCity = [zip, city].filter(Boolean).join(' ');
+      address = [street, zipCity].filter(Boolean).join(', ');
     }
 
     const data = {
@@ -492,6 +528,7 @@ const RecurringPage = {
       nextDate:     document.getElementById('ro-next')?.value || tdy(),
       tillsvidare,
       endDate:      tillsvidare ? '' : (document.getElementById('ro-end')?.value || ''),
+      accessCode,
       priceGroupId: document.getElementById('ro-pg')?.value || '',
       staff:        this._tempStaff.slice(),
       checklist:    this._tempChecklist.slice(),
