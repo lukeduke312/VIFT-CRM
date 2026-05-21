@@ -553,14 +553,15 @@ const StaffPage = {
   },
 
   _formHtml(s) {
-    const roles = state.roles || [];
+    const allRoles = state.roles || [];
+    const activeRoles = allRoles.filter(r => r.active !== false);
     const fallbackRoles = [
-      { id:'personal', label:'Tekniker / Personal' },
-      { id:'chef',     label:'Chef / Projektledare' },
-      { id:'admin',    label:'Admin' }
+      { id:'personal', label:'Tekniker / Personal', description:'', active:true },
+      { id:'chef',     label:'Chef / Projektledare', description:'', active:true },
+      { id:'admin',    label:'Admin', description:'', active:true }
     ];
-    const roleOpts = (roles.length ? roles : fallbackRoles)
-      .map(r => `<option value="${r.id}" ${s&&s.role===r.id?'selected':''}>${r.label}</option>`).join('');
+    const displayRoles = activeRoles.length ? activeRoles : fallbackRoles;
+    const activeTitles = (state.titles||[]).filter(t => t.active !== false);
     return `
       <div class="g2">
         <div class="fg"><label>Förnamn <span style="color:var(--rd)">*</span></label>
@@ -569,7 +570,7 @@ const StaffPage = {
           <input id="sf-last" value="${s?s.lastName:''}" placeholder="Efternamn" autocomplete="off"></div>
       </div>
       <div class="fg"><label>Titel / yrkesroll</label>
-        ${(state.titles||[]).length > 0 ? `
+        ${activeTitles.length > 0 ? `
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
             <div id="sf-title-display" style="flex:1;">
               ${s && s.title
@@ -581,10 +582,10 @@ const StaffPage = {
             </button>
           </div>
           <input type="hidden" id="sf-title" value="${s?s.title||'':''}">
-          ${s && s.title && !(state.titles||[]).includes(s.title)
-            ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ "${s.title}" finns inte i titelregistret</div>`
+          ${s && s.title && !activeTitles.some(t => t.name === s.title)
+            ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ "${s.title}" finns inte bland aktiva titlar</div>`
             : ''}` :
-          `<div class="nbox" style="font-size:12px;">Inga titlar registrerade. <button type="button" class="btn bghost bxs" style="margin-left:4px;" onclick="Modal.close();Router.showPage('pg-admin')">Gå till Admin ${ic('arrow-right',10)}</button></div>
+          `<div class="nbox" style="font-size:12px;">Inga aktiva titlar. <button type="button" class="btn bghost bxs" style="margin-left:4px;" onclick="Modal.close();Router.showPage('pg-admin')">Gå till Admin ${ic('arrow-right',10)}</button></div>
           <input type="hidden" id="sf-title" value="${s?s.title||'':''}">`
         }</div>
       <div class="g2">
@@ -599,7 +600,7 @@ const StaffPage = {
       <div class="fg"><label>Roll / behörighet</label>
         <input type="hidden" id="sf-role" value="${s?s.role||'personal':'personal'}">
         <div style="display:flex;flex-direction:column;gap:5px;margin-top:4px;">
-          ${(roles.length ? roles : fallbackRoles).map(r => {
+          ${displayRoles.map(r => {
             const isSel = s ? s.role === r.id : r.id === 'personal';
             return `<div onclick="StaffPage._selectRole('${r.id}')" id="sf-role-opt-${r.id}"
               style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid ${isSel?'var(--sky)':'var(--br)'};border-radius:var(--rs);cursor:pointer;transition:border-color .1s;">
@@ -626,8 +627,8 @@ const StaffPage = {
   },
 
   _openTitlePicker() {
-    const titles = state.titles || [];
-    if (titles.length === 0) { showToast('Inga titlar. Gå till Admin → Titlar.'); return; }
+    const titles = (state.titles || []).filter(t => t.active !== false);
+    if (titles.length === 0) { showToast('Inga aktiva titlar. Gå till Admin → Titlar.'); return; }
     Modal.open({
       title: 'Välj titel',
       body: `
@@ -647,18 +648,19 @@ const StaffPage = {
   },
 
   _titlePickerItems(q) {
-    const titles = state.titles || [];
+    const titles = (state.titles || []).filter(t => t.active !== false);
     const cur = document.getElementById('sf-title')?.value || '';
-    const filtered = q ? titles.filter(t => t.toLowerCase().includes(q.toLowerCase())) : titles;
-    if (!filtered.length) return '<p style="font-size:12px;color:var(--mt);padding:8px 0;">Inga titlar matchar</p>';
+    const filtered = q ? titles.filter(t => t.name.toLowerCase().includes(q.toLowerCase())) : titles;
+    if (!filtered.length) return '<p style="font-size:12px;color:var(--mt);padding:8px 0;">Inga aktiva titlar matchar</p>';
     return filtered.map(t => {
-      const isSel = cur === t;
-      const usageCount = (state.staff||[]).filter(s => s.title === t).length;
-      return `<div class="crow" onclick="StaffPage._selectTitleFromPicker('${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"
+      const isSel = cur === t.name;
+      const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
+      return `<div class="crow" onclick="StaffPage._selectTitleFromPicker('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"
         style="${isSel?'background:var(--navy10,#eef2ff);':''};cursor:pointer;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;">${t}</div>
-          ${usageCount > 0 ? `<div style="font-size:10px;color:var(--mt);">${usageCount} person${usageCount===1?'':'er'}</div>` : ''}
+          <div style="font-size:13px;font-weight:600;">${t.name}</div>
+          ${t.description ? `<div style="font-size:11px;color:var(--mt);">${t.description}</div>` : ''}
+          ${usageCount > 0 ? `<div style="font-size:10px;color:var(--sky);">${usageCount} person${usageCount===1?'':'er'}</div>` : ''}
         </div>
         ${isSel ? `<span style="color:var(--grn);">${ic('check-circle',16)}</span>` : ''}
       </div>`;
@@ -679,9 +681,9 @@ const StaffPage = {
 
   _selectRole(roleId) {
     document.getElementById('sf-role').value = roleId;
-    const roles = state.roles && state.roles.length ? state.roles : [
-      { id:'personal' }, { id:'chef' }, { id:'admin' }
-    ];
+    const roles = (state.roles && state.roles.length
+      ? state.roles.filter(r => r.active !== false)
+      : [{ id:'personal' }, { id:'chef' }, { id:'admin' }]);
     roles.forEach(r => {
       const opt = document.getElementById('sf-role-opt-' + r.id);
       const dot = document.getElementById('sf-role-dot-' + r.id);
@@ -822,18 +824,24 @@ const AdminPage = {
             : titles.length === 0
               ? `<p style="font-size:12px;color:var(--mt);padding:6px 0;">Ingen titel matchar "${this._titleQ}"</p>`
               : titles.map(t => {
-                  const origIdx = allTitles.indexOf(t);
-                  const usageCount = (state.staff||[]).filter(s=>s.title===t).length;
+                  const origIdx = allTitles.findIndex(x => x.id === t.id);
+                  const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
                   return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
                     <div style="flex:1;min-width:0;">
-                      <div style="font-size:13px;font-weight:600;">${t}</div>
+                      <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:13px;font-weight:600;">${t.name}</span>
+                        <span class="bdg ${t.active?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active?'Aktiv':'Inaktiv'}</span>
+                      </div>
+                      ${t.description ? `<div style="font-size:11px;color:var(--mt);">${t.description}</div>` : ''}
                       ${usageCount > 0
-                        ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.replace(/'/g,"\\'")}')">
+                        ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
                             ${usageCount} person${usageCount===1?'':'er'} – Visa ${ic('arrow-right',9)}
                           </div>`
                         : '<div style="font-size:10px;color:var(--mt);">Ej använd</div>'}
                     </div>
                     <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${origIdx})">${ic('pencil',11)}</button>
+                    <button class="btn bxs ${t.active?'bw':'bsu'}" onclick="AdminPage.toggleTitleActive(${origIdx})"
+                      style="font-size:10px;">${t.active?ic('eye-off',11):ic('eye',11)}</button>
                     <button class="btn bxs bd" onclick="AdminPage.removeTitle(${origIdx})"
                       ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
                   </div>`;
@@ -852,20 +860,24 @@ const AdminPage = {
           ${(state.roles||[]).length === 0
             ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga roller definierade</p>'
             : (state.roles||[]).map(r => {
-                const permCount = (r.permissions||[]).length;
+                const permCount  = (r.permissions||[]).length;
                 const staffCount = (state.staff||[]).filter(s=>s.role===r.id).length;
-                return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;">
+                const isActive   = r.active !== false;
+                return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;${isActive?'':'opacity:.65'}">
                   <div style="flex:1;min-width:0;">
-                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
                       <span style="font-size:13px;font-weight:700;">${r.label}</span>
+                      <span class="bdg ${isActive?'bdg-green':'bdg-grey'}" style="font-size:9px;">${isActive?'Aktiv':'Inaktiv'}</span>
                       ${r.isBuiltin?`<span class="bdg bdg-grey" style="font-size:9px;">Inbyggd</span>`:''}
-                      ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;">${staffCount} pers.</span>`:''}
+                      ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;cursor:pointer;" onclick="AdminPage.showRoleStaff('${r.id}')">${staffCount} pers.</span>`:''}
                     </div>
                     ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
                     <div style="font-size:10px;color:var(--sky);margin-top:2px;">${permCount===0?'Inga behörigheter':permCount+' behörighet'+(permCount===1?'':'er')+(r.permissions&&r.permissions.includes('all')?' (superadmin)':'')}</div>
                   </div>
                   <div style="display:flex;gap:4px;flex-shrink:0;">
                     <button class="btn bxs bs" onclick="AdminPage.openEditRole('${r.id}')">${ic('pencil',11)}</button>
+                    <button class="btn bxs ${isActive?'bw':'bsu'}" onclick="AdminPage.toggleRoleActive('${r.id}')"
+                      title="${isActive?'Inaktivera':'Aktivera'}" style="font-size:10px;">${isActive?ic('eye-off',11):ic('eye',11)}</button>
                     ${!r.isBuiltin?`<button class="btn bxs bd" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`:''}
                   </div>
                 </div>`;
@@ -950,6 +962,38 @@ const AdminPage = {
     });
   },
 
+  showRoleStaff(roleId) {
+    const role = (state.roles||[]).find(r => r.id === roleId);
+    const staffList = (state.staff||[]).filter(s => s.role === roleId);
+    if (!staffList.length) { showToast('Ingen personal med denna roll'); return; }
+    Modal.open({
+      title: `Personal med roll: ${role ? role.label : roleId}`,
+      body: staffList.map(s => `
+        <div class="crow">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;">${s.firstName} ${s.lastName}</div>
+            <div style="font-size:11px;color:var(--mt);">${s.title||''} ${s.email?'· '+s.email:''}</div>
+          </div>
+          <span class="bdg ${s.active?'bdg-green':'bdg-grey'}">${s.active?'Aktiv':'Inaktiv'}</span>
+        </div>`).join(''),
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
+    });
+  },
+
+  toggleRoleActive(roleId) {
+    const r = (state.roles||[]).find(x => x.id === roleId);
+    if (!r) return;
+    // Guard: don't deactivate the last active admin-level role
+    if (r.active !== false) {
+      const activeAdmins = (state.roles||[]).filter(x => x.active !== false && (x.permissions||[]).includes('all'));
+      if (activeAdmins.length <= 1 && (r.permissions||[]).includes('all')) {
+        showToast('Kan inte inaktivera – det finns bara en admin-roll'); return;
+      }
+    }
+    r.active = r.active === false ? true : false;
+    persist(); AdminPage.render(); showToast(r.active ? 'Roll aktiverad' : 'Roll inaktiverad');
+  },
+
   showTitleStaff(title) {
     const staffWithTitle = (state.staff||[]).filter(s => s.title === title);
     if (!staffWithTitle.length) { showToast('Ingen personal med denna titel'); return; }
@@ -970,9 +1014,13 @@ const AdminPage = {
   openAddTitle() {
     Modal.open({
       title: 'Lägg till titel',
-      body: `<div class="fg"><label>Titel / yrkesroll</label>
-        <input id="adm-title" placeholder="T.ex. Låssmed, VVS-tekniker…"
-          onkeydown="if(event.key==='Enter'){AdminPage._addTitle();event.preventDefault();}"></div>`,
+      body: `
+        <div class="fg"><label>Titel / yrkesroll <span style="color:var(--rd)">*</span></label>
+          <input id="adm-title" placeholder="T.ex. Låssmed, VVS-tekniker…"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('adm-title-desc')?.focus();}"></div>
+        <div class="fg"><label>Beskrivning (valfritt)</label>
+          <input id="adm-title-desc" placeholder="Kort beskrivning av yrkesrollen…"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();AdminPage._addTitle();}"></div>`,
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => AdminPage._addTitle() },
         { label: 'Avbryt',   cls: 'btn bs', onClick: () => Modal.close() }
@@ -982,22 +1030,28 @@ const AdminPage = {
   },
 
   _addTitle() {
-    const t = document.getElementById('adm-title')?.value.trim();
-    if (!t) { showToast('Ange en titel'); return; }
-    if ((state.titles||[]).some(x => x.toLowerCase() === t.toLowerCase())) { showToast('Finns redan'); return; }
+    const name = (document.getElementById('adm-title')?.value || '').trim();
+    if (!name) { showToast('Ange en titel'); return; }
+    if ((state.titles||[]).some(x => x.name.toLowerCase() === name.toLowerCase())) { showToast('Finns redan'); return; }
+    const desc = (document.getElementById('adm-title-desc')?.value || '').trim();
     state.titles = state.titles || [];
-    state.titles.push(t);
-    persist(); Modal.close(); AdminPage.render(); showToast(`"${t}" tillagd`);
+    const newId_ = 'TIT-' + String(Date.now()).slice(-6);
+    state.titles.push({ id: newId_, name, description: desc, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    persist(); Modal.close(); AdminPage.render(); showToast(`"${name}" tillagd`);
   },
 
   openEditTitle(idx) {
-    const current = (state.titles||[])[idx];
-    if (current === undefined) return;
+    const t = (state.titles||[])[idx];
+    if (!t) return;
     Modal.open({
       title: 'Redigera titel',
-      body: `<div class="fg"><label>Titel / yrkesroll</label>
-        <input id="adm-edit-title" value="${current}"
-          onkeydown="if(event.key==='Enter'){AdminPage._saveEditTitle(${idx});event.preventDefault();}"></div>`,
+      body: `
+        <div class="fg"><label>Titel / yrkesroll <span style="color:var(--rd)">*</span></label>
+          <input id="adm-edit-title" value="${t.name}"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('adm-edit-desc')?.focus();}"></div>
+        <div class="fg"><label>Beskrivning</label>
+          <input id="adm-edit-desc" value="${t.description||''}" placeholder="Kort beskrivning…"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();AdminPage._saveEditTitle(${idx});}"></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditTitle(idx) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -1007,20 +1061,37 @@ const AdminPage = {
   },
 
   _saveEditTitle(idx) {
-    const t = document.getElementById('adm-edit-title')?.value.trim();
-    if (!t) { showToast('Ange en titel'); return; }
-    const old = (state.titles||[])[idx];
-    if (t.toLowerCase() !== old.toLowerCase() && (state.titles||[]).some(x => x.toLowerCase() === t.toLowerCase())) {
+    const name = (document.getElementById('adm-edit-title')?.value || '').trim();
+    if (!name) { showToast('Ange en titel'); return; }
+    const t = (state.titles||[])[idx];
+    if (!t) return;
+    const oldName = t.name;
+    if (name.toLowerCase() !== oldName.toLowerCase() &&
+        (state.titles||[]).some((x, i) => i !== idx && x.name.toLowerCase() === name.toLowerCase())) {
       showToast('Titeln finns redan'); return;
     }
-    // Update any staff that had this title
-    (state.staff||[]).forEach(s => { if (s.title === old) s.title = t; });
-    state.titles[idx] = t;
+    // Update staff records that had the old name
+    (state.staff||[]).forEach(s => { if (s.title === oldName) s.title = name; });
+    t.name = name;
+    t.description = (document.getElementById('adm-edit-desc')?.value || '').trim();
+    t.updatedAt = new Date().toISOString();
     persist(); Modal.close(); AdminPage.render(); showToast('Titel uppdaterad');
   },
 
+  toggleTitleActive(idx) {
+    const t = (state.titles||[])[idx];
+    if (!t) return;
+    t.active = !t.active;
+    t.updatedAt = new Date().toISOString();
+    persist(); AdminPage.render(); showToast(t.active ? 'Titel aktiverad' : 'Titel inaktiverad');
+  },
+
   removeTitle(idx) {
-    if (!confirm(`Ta bort titeln "${state.titles[idx]}"?`)) return;
+    const t = (state.titles||[])[idx];
+    if (!t) return;
+    const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
+    if (usageCount > 0) { showToast(`Kan inte ta bort – används av ${usageCount} person${usageCount===1?'':'er'}`); return; }
+    if (!confirm(`Ta bort titeln "${t.name}"?`)) return;
     state.titles.splice(idx, 1);
     persist(); AdminPage.render(); showToast('Borttagen');
   },
@@ -1051,7 +1122,7 @@ const AdminPage = {
     if ((state.roles||[]).some(r => r.id === id)) { showToast('Roll-ID används redan'); return; }
     state.roles = state.roles || [];
     state.roles.push({
-      id, label, isBuiltin: false,
+      id, label, isBuiltin: false, active: true,
       description: document.getElementById('role-desc')?.value.trim() || '',
       permissions: []
     });
@@ -1172,7 +1243,9 @@ const AdminPage = {
   },
 
   removeRole(roleId) {
-    if (!confirm('Ta bort rollen? Personal som har denna roll behåller sin roll-ID men visningsnamnet försvinner.')) return;
+    const usageCount = (state.staff||[]).filter(s => s.role === roleId).length;
+    if (usageCount > 0) { showToast(`Kan inte ta bort – används av ${usageCount} person${usageCount===1?'':'er'}`); return; }
+    if (!confirm('Ta bort rollen?')) return;
     state.roles = (state.roles||[]).filter(r => r.id !== roleId);
     persist(); AdminPage.render(); showToast('Roll borttagen');
   }

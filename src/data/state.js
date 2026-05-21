@@ -67,6 +67,19 @@ function initState() {
   state.roles              = s.get('roles')           || SeedData.roles   || [];
   state.recurringOrders    = s.get('recurringOrders') || SeedData.recurringOrders || [];
 
+  // Migrate plain-string titles → rich objects
+  state.titles = state.titles.map(function(t, i) {
+    if (typeof t === 'string') {
+      return { id: 'TIT-' + String(i + 1).padStart(3, '0'), name: t, description: '', active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    }
+    return t;
+  });
+
+  // Ensure all roles have active field
+  state.roles = state.roles.map(function(r) {
+    return r.active !== undefined ? r : Object.assign({ active: true }, r);
+  });
+
   // Stämpling-state
   state.stampActive    = !!s.get('stampActive');
   state.stampTimestamp = s.get('stampTs') || null;

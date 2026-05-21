@@ -891,24 +891,36 @@ const SeedData = {
   inspections: [],
 
   titles: [
-    'Fastighetstekniker','Rörmokare','Elektriker','Projektledare','Förvaltare',
-    'Städare','Snickare','Målare','Drifttekniker','Väktare','Larmtekniker',
-    'Låssmed','VVS-tekniker','Fastighetsskötare','Systemadministratör'
+    { id:'TIT-001', name:'Fastighetstekniker', description:'Ansvarar för teknisk drift och underhåll av fastigheter.', active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-002', name:'Rörmokare',          description:'Utför rörinstallationer och VVS-arbeten.',                active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-003', name:'Elektriker',         description:'Utför elinstallationer och elarbeten.',                  active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-004', name:'Projektledare',      description:'Leder och koordinerar projekt och arbetslag.',            active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-005', name:'Förvaltare',         description:'Ansvarar för förvaltning av fastigheter och kunder.',    active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-006', name:'Städare',            description:'Utför städtjänster och lokalvård.',                      active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-007', name:'Snickare',           description:'Utför snickeri- och byggnadsarbeten.',                   active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-008', name:'Målare',             description:'Utför målnings- och ytbehandlingsarbeten.',              active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-009', name:'Drifttekniker',      description:'Hanterar driftsäkerhet och tekniska system.',            active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-010', name:'Väktare',            description:'Bevakning och säkerhetsarbete.',                         active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-011', name:'Larmtekniker',       description:'Installation och service av larmsystem.',                active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-012', name:'Låssmed',            description:'Installation och service av lås och passersystem.',      active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-013', name:'VVS-tekniker',       description:'Specialiserad VVS-kompetens.',                           active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-014', name:'Fastighetsskötare',  description:'Allmän skötsel och tillsyn av fastigheter.',             active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
+    { id:'TIT-015', name:'Systemadministratör',description:'Administrerar IT-system och CRM.',                       active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' }
   ],
 
   roles: [
     {
-      id: 'admin', label: 'Admin', isBuiltin: true,
+      id: 'admin', label: 'Admin', isBuiltin: true, active: true,
       description: 'Full tillgång till alla funktioner och inställningar.',
       permissions: ['all']
     },
     {
-      id: 'chef', label: 'Chef / Projektledare', isBuiltin: true,
+      id: 'chef', label: 'Chef / Projektledare', isBuiltin: true, active: true,
       description: 'Kan hantera arbetsorder, kunder, offerter och se rapporter. Kan ej ändra systeminställningar.',
       permissions: ['ao_create','ao_view_all','ao_edit','invoice_view','invoice_create','customer_manage','offer_manage','reports_view','staff_view']
     },
     {
-      id: 'personal', label: 'Tekniker / Personal', isBuiltin: true,
+      id: 'personal', label: 'Tekniker / Personal', isBuiltin: true, active: true,
       description: 'Kan se och arbeta med tilldelade arbetsorder. Kan registrera tid och material.',
       permissions: ['ao_view_own','ao_time','ao_material','ao_checklist']
     }
