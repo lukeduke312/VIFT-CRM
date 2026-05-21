@@ -187,12 +187,12 @@ const SalesService = {
           <input type="date" id="snooze-date" value="${def}" min="${tdy()}">
         </div>`,
       buttons: [
-        {
-          label: 'Skjut upp', cls: 'btn bp bfull', onClick: () => {
+        { label: 'Skjut upp', cls: 'btn bp bfull', onClick: () => {
             const d = document.getElementById('snooze-date').value;
             if (!d) { showToast('Välj datum'); return; }
             SalesService.snooze(id, d);
             Modal.close();
+            Sidebar.updateBadges();
             Dashboard.render();
             showToast('Säljchans uppskjuten');
           }
@@ -209,6 +209,7 @@ const SalesService = {
       `Markera "${opp.title}" som klar?`,
       () => {
         SalesService.markDone(id);
+        Sidebar.updateBadges();
         Dashboard.render();
         showToast('Säljchans markerad klar ✓');
       }

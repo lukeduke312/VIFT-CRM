@@ -569,10 +569,13 @@ const StaffPage = {
           <input id="sf-last" value="${s?s.lastName:''}" placeholder="Efternamn" autocomplete="off"></div>
       </div>
       <div class="fg"><label>Titel / yrkesroll</label>
-        <input id="sf-title" value="${s?s.title||'':''}" placeholder="T.ex. Fastighetstekniker, Rörmokare…" list="staff-titles-list" autocomplete="off">
-        <datalist id="staff-titles-list">
-          ${(state.titles||[]).map(t=>`<option>${t}</option>`).join('')}
-        </datalist></div>
+        ${(state.titles||[]).length > 0 ? `
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">
+            ${(state.titles||[]).map(t =>
+              `<button type="button" class="chip" onclick="document.getElementById('sf-title').value='${t.replace(/'/g,"\\'")}';">${t}</button>`
+            ).join('')}
+          </div>` : ''}
+        <input id="sf-title" value="${s?s.title||'':''}" placeholder="T.ex. Fastighetstekniker, Rörmokare…" autocomplete="off"></div>
       <div class="g2">
         <div class="fg"><label>Telefon</label>
           <input id="sf-phone" value="${s?s.phone||'':''}" placeholder="070-XXX XX XX" type="tel"></div>
@@ -580,11 +583,23 @@ const StaffPage = {
           <input id="sf-email" value="${s?s.email||'':''}" placeholder="namn@vift.se" type="email"></div>
       </div>
       <div style="border-top:1px solid var(--br);margin:4px 0;"></div>
-      <div class="g2">
-        <div class="fg"><label>Användarnamn <span style="color:var(--rd)">*</span></label>
-          <input id="sf-uname" value="${s?s.username||'':''}" placeholder="användarnamn" autocomplete="off"></div>
-        <div class="fg"><label>Roll / behörighet</label>
-          <select id="sf-role">${roleOpts}</select></div>
+      <div class="fg"><label>Användarnamn <span style="color:var(--rd)">*</span></label>
+        <input id="sf-uname" value="${s?s.username||'':''}" placeholder="användarnamn" autocomplete="off"></div>
+      <div class="fg"><label>Roll / behörighet</label>
+        <input type="hidden" id="sf-role" value="${s?s.role||'personal':'personal'}">
+        <div style="display:flex;flex-direction:column;gap:5px;margin-top:4px;">
+          ${(roles.length ? roles : fallbackRoles).map(r => {
+            const isSel = s ? s.role === r.id : r.id === 'personal';
+            return `<div onclick="StaffPage._selectRole('${r.id}')" id="sf-role-opt-${r.id}"
+              style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid ${isSel?'var(--sky)':'var(--br)'};border-radius:var(--rs);cursor:pointer;transition:border-color .1s;">
+              <div id="sf-role-dot-${r.id}" style="width:16px;height:16px;border-radius:50%;border:2px solid ${isSel?'var(--navy)':'var(--br)'};background:${isSel?'var(--navy)':'transparent'};flex-shrink:0;transition:all .1s;"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;">${r.label}</div>
+                ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
       </div>
       ${s ? `
       <div class="fg"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;font-weight:600;letter-spacing:0;cursor:pointer;">
@@ -597,6 +612,23 @@ const StaffPage = {
       </div>` : `
       <div class="fg"><label>Lösenord <span style="color:var(--rd)">*</span></label>
         <input type="password" id="sf-pw" placeholder="Minst 4 tecken" autocomplete="new-password"></div>`}`;
+  },
+
+  _selectRole(roleId) {
+    document.getElementById('sf-role').value = roleId;
+    const roles = state.roles && state.roles.length ? state.roles : [
+      { id:'personal' }, { id:'chef' }, { id:'admin' }
+    ];
+    roles.forEach(r => {
+      const opt = document.getElementById('sf-role-opt-' + r.id);
+      const dot = document.getElementById('sf-role-dot-' + r.id);
+      const isSel = r.id === roleId;
+      if (opt) opt.style.borderColor = isSel ? 'var(--sky)' : 'var(--br)';
+      if (dot) {
+        dot.style.borderColor = isSel ? 'var(--navy)' : 'var(--br)';
+        dot.style.background  = isSel ? 'var(--navy)' : 'transparent';
+      }
+    });
   },
 
   openCreate() {
@@ -709,13 +741,17 @@ const AdminPage = {
           <h3>Titlar / yrkesroller</h3>
           <button class="btn bp bxs" onclick="AdminPage.openAddTitle()">${ic('plus',13)} Lägg till</button>
         </div>
-        <div class="card-body" style="padding:8px 14px;">
-          ${titles.length === 0 ? '<p style="font-size:12px;color:var(--mt);">Inga titlar registrerade</p>' :
-            `<div style="display:flex;flex-wrap:wrap;gap:6px;">${titles.map((t,i) =>
-              `<span style="display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--br);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;">
-                ${t}
-                <button style="background:none;border:none;cursor:pointer;color:var(--mt);padding:0;line-height:1;" onclick="AdminPage.removeTitle(${i})">${ic('x',11)}</button>
-              </span>`).join('')}</div>`
+        <div class="card-body" style="padding:4px 14px;">
+          ${titles.length === 0 ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga titlar registrerade</p>' :
+            titles.map((t,i) => {
+              const usageCount = (state.staff||[]).filter(s=>s.title===t).length;
+              return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
+                <span style="flex:1;font-size:13px;font-weight:600;">${t}</span>
+                ${usageCount>0?`<span class="bdg bdg-grey" style="font-size:10px;">${usageCount} anv.</span>`:''}
+                <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${i})">${ic('pencil',11)}</button>
+                <button class="btn bxs bd" onclick="AdminPage.removeTitle(${i})" ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
+              </div>`;
+            }).join('')
           }
         </div>
       </div>
@@ -726,19 +762,28 @@ const AdminPage = {
           <h3>Roller & behörigheter</h3>
           <button class="btn bp bxs" onclick="AdminPage.openAddRole()">${ic('plus',13)} Ny roll</button>
         </div>
-        <div class="card-body" style="padding:8px 14px;">
+        <div class="card-body" style="padding:4px 14px;">
           ${(state.roles||[]).length === 0
-            ? '<p style="font-size:12px;color:var(--mt);">Inga roller definierade</p>'
-            : (state.roles||[]).map(r => `
-              <div style="padding:8px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-                <div>
-                  <div style="font-size:13px;font-weight:700;">${r.label}</div>
-                  ${r.description ? `<div style="font-size:11px;color:var(--mt);">${r.description}</div>` : ''}
-                </div>
-                ${r.isBuiltin
-                  ? `<span class="bdg bdg-grey" style="flex-shrink:0;">Inbyggd</span>`
-                  : `<button class="btn bxs bd" style="flex-shrink:0;" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`}
-              </div>`).join('')
+            ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga roller definierade</p>'
+            : (state.roles||[]).map(r => {
+                const permCount = (r.permissions||[]).length;
+                const staffCount = (state.staff||[]).filter(s=>s.role===r.id).length;
+                return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;">
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                      <span style="font-size:13px;font-weight:700;">${r.label}</span>
+                      ${r.isBuiltin?`<span class="bdg bdg-grey" style="font-size:9px;">Inbyggd</span>`:''}
+                      ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;">${staffCount} pers.</span>`:''}
+                    </div>
+                    ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
+                    <div style="font-size:10px;color:var(--sky);margin-top:2px;">${permCount===0?'Inga behörigheter':permCount+' behörighet'+(permCount===1?'':'er')+(r.permissions&&r.permissions.includes('all')?' (superadmin)':'')}</div>
+                  </div>
+                  <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <button class="btn bxs bs" onclick="AdminPage.openEditRole('${r.id}')">${ic('pencil',11)}</button>
+                    ${!r.isBuiltin?`<button class="btn bxs bd" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`:''}
+                  </div>
+                </div>`;
+              }).join('')
           }
         </div>
       </div>
@@ -842,6 +887,35 @@ const AdminPage = {
     persist(); Modal.close(); AdminPage.render(); showToast(`"${t}" tillagd`);
   },
 
+  openEditTitle(idx) {
+    const current = (state.titles||[])[idx];
+    if (current === undefined) return;
+    Modal.open({
+      title: 'Redigera titel',
+      body: `<div class="fg"><label>Titel / yrkesroll</label>
+        <input id="adm-edit-title" value="${current}"
+          onkeydown="if(event.key==='Enter'){AdminPage._saveEditTitle(${idx});event.preventDefault();}"></div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditTitle(idx) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('adm-edit-title')?.focus(), 80);
+  },
+
+  _saveEditTitle(idx) {
+    const t = document.getElementById('adm-edit-title')?.value.trim();
+    if (!t) { showToast('Ange en titel'); return; }
+    const old = (state.titles||[])[idx];
+    if (t.toLowerCase() !== old.toLowerCase() && (state.titles||[]).some(x => x.toLowerCase() === t.toLowerCase())) {
+      showToast('Titeln finns redan'); return;
+    }
+    // Update any staff that had this title
+    (state.staff||[]).forEach(s => { if (s.title === old) s.title = t; });
+    state.titles[idx] = t;
+    persist(); Modal.close(); AdminPage.render(); showToast('Titel uppdaterad');
+  },
+
   removeTitle(idx) {
     if (!confirm(`Ta bort titeln "${state.titles[idx]}"?`)) return;
     state.titles.splice(idx, 1);
@@ -879,6 +953,79 @@ const AdminPage = {
       permissions: []
     });
     persist(); Modal.close(); AdminPage.render(); showToast(`Roll "${label}" skapad`);
+  },
+
+  _PERMISSIONS: [
+    { id:'all',              label:'Alla behörigheter (superadmin)' },
+    { id:'dashboard_view',   label:'Se dashboard' },
+    { id:'ao_create',        label:'Skapa / redigera arbetsorder' },
+    { id:'ao_complete',      label:'Klarmarkera arbetsorder' },
+    { id:'ao_view_all',      label:'Se alla arbetsorder' },
+    { id:'customer_manage',  label:'Hantera kunder' },
+    { id:'offer_manage',     label:'Hantera offerter' },
+    { id:'invoice_view',     label:'Se fakturaunderlag' },
+    { id:'invoice_create',   label:'Skapa fakturaunderlag' },
+    { id:'article_manage',   label:'Hantera artiklar & prisgrupper' },
+    { id:'staff_view',       label:'Se personal' },
+    { id:'staff_manage',     label:'Hantera personal' },
+    { id:'admin_manage',     label:'Adminpanel & systeminställningar' },
+    { id:'reports_view',     label:'Se rapporter & löneunderlag' },
+    { id:'recurring_manage', label:'Hantera återkommande ärenden' },
+    { id:'sales_manage',     label:'Hantera säljchanser' }
+  ],
+
+  openEditRole(roleId) {
+    const r = (state.roles||[]).find(x => x.id === roleId);
+    if (!r) return;
+    const perms = r.permissions || [];
+    const permHtml = this._PERMISSIONS.map(p => `
+      <label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bg);cursor:pointer;">
+        <input type="checkbox" name="role-perm" value="${p.id}" ${perms.includes(p.id)?'checked':''}
+          style="width:16px;height:16px;flex-shrink:0;"
+          onchange="AdminPage._onPermChange(this)">
+        <span style="font-size:13px;">${p.label}</span>
+      </label>`).join('');
+    Modal.open({
+      title: `Redigera roll: ${r.label}`,
+      wide: true,
+      body: `
+        <div class="fg"><label>Visningsnamn</label>
+          <input id="role-edit-label" value="${r.label}" ${r.isBuiltin?'readonly style="background:var(--bg);"':''}></div>
+        <div class="fg"><label>Beskrivning</label>
+          <input id="role-edit-desc" value="${r.description||''}" placeholder="Kort beskrivning…"></div>
+        <div style="margin-top:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Behörigheter</div>
+          ${permHtml}
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditRole(roleId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _onPermChange(checkbox) {
+    if (checkbox.value === 'all' && checkbox.checked) {
+      document.querySelectorAll('input[name="role-perm"]').forEach(cb => { cb.checked = cb.value === 'all'; });
+    } else if (checkbox.value !== 'all' && checkbox.checked) {
+      const allCb = document.querySelector('input[name="role-perm"][value="all"]');
+      if (allCb) allCb.checked = false;
+    }
+  },
+
+  _saveEditRole(roleId) {
+    const idx = (state.roles||[]).findIndex(r => r.id === roleId);
+    if (idx < 0) return;
+    const label = document.getElementById('role-edit-label')?.value.trim();
+    if (!label) { showToast('Visningsnamn krävs'); return; }
+    const checked = Array.from(document.querySelectorAll('input[name="role-perm"]:checked')).map(cb => cb.value);
+    state.roles[idx] = {
+      ...state.roles[idx],
+      label,
+      description: document.getElementById('role-edit-desc')?.value.trim() || '',
+      permissions: checked
+    };
+    persist(); Modal.close(); AdminPage.render(); showToast('Roll uppdaterad');
   },
 
   removeRole(roleId) {
