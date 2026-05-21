@@ -114,6 +114,10 @@ function tdy() {
   return new Date().toISOString().split('T')[0];
 }
 
+function _ds(days) {
+  return new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
+}
+
 function fmt(n) {
   return Number(n || 0).toLocaleString('sv-SE');
 }

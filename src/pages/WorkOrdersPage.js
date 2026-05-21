@@ -9,9 +9,35 @@ const WorkOrdersPage = {
   /* ── Wizard-state ──────────────────────── */
   _wiz: { step: 1, data: {}, modalId: null },
 
-  render() {
+  _dashFilter: null, // extra filter from dashboard navigation
+
+  render(params) {
     const el = document.getElementById('pg-ao-content');
     if (!el) return;
+
+    // Handle filter params from dashboard navigation
+    if (params && params.filter) {
+      const tabMap = {
+        'akut':             'alla',
+        'active':           'alla',
+        'pool':             'pool',
+        'planerad':         'planerad',
+        'pågående':         'pågående',
+        'klar':             'klar',
+        'nytt':             'nytt',
+        'readyForInvoice':  'klar'
+      };
+      this.filter     = tabMap[params.filter] || 'alla';
+      this._dashFilter = params.filter;
+    }
+
+    const dashFilterLabels = {
+      akut:            'Akuta ordrar',
+      readyForInvoice: 'Redo för fakturering',
+      active:          'Aktiva ordrar',
+      pool:            'Arbetspool',
+    };
+    const chipLabel = this._dashFilter ? dashFilterLabels[this._dashFilter] : null;
 
     el.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
@@ -39,6 +65,7 @@ const WorkOrdersPage = {
           }</button>`
         ).join('')}
       </div>
+      ${chipLabel ? `<div style="margin-bottom:6px;"><span class="filter-chip">${ic('filter',11)} ${chipLabel} <button onclick="WorkOrdersPage._dashFilter=null;WorkOrdersPage.render()">×</button></span></div>` : ''}
       <div id="ao-list"></div>`;
     this.renderList();
   },
@@ -54,11 +81,15 @@ const WorkOrdersPage = {
   },
 
   setFilter(f) {
+    this._dashFilter = null; // clear dash-filter when user manually picks a tab
     this.filter = f;
     document.querySelectorAll('#pg-ao-content .ft').forEach(b => {
       const label = {alla:'Alla',nytt:'Nytt',pool:'Pool',planerad:'Planerad',pågående:'Pågående',klar:'Klar',fakturerad:'Fakturerad'}[f];
       b.classList.toggle('on', b.textContent.trim() === label);
     });
+    // Remove chip if visible
+    const chip = document.querySelector('#pg-ao-content .filter-chip');
+    if (chip) chip.closest('div').remove();
     this.renderList();
   },
 
@@ -67,6 +98,10 @@ const WorkOrdersPage = {
     if (!el) return;
     let list = state.workOrders || [];
     if (this.filter !== 'alla') list = list.filter(a => a.status === this.filter);
+    // Apply extra dash-filter refinements
+    if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId);
+    if (this._dashFilter === 'akut')  list = list.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));
+    if (this._dashFilter === 'active') list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
     if (this.q) {
       const ql = this.q.toLowerCase();
       list = list.filter(a => {

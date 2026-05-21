@@ -65,7 +65,7 @@ const Router = {
     // Kör sidans render-funktion om den finns
     const renderers = {
       'pg-dash':        () => Dashboard.render(),
-      'pg-ao':          () => WorkOrdersPage.render(),
+      'pg-ao':          () => WorkOrdersPage.render(params),
       'pg-ao-detail':   () => WorkOrderDetailPage.render(params),
       'pg-crm':         () => CustomersPage.render(),
       'pg-crm-detail':  () => CustomerDetailPage.render(params),
