@@ -31,35 +31,259 @@ const OffersPage = {
 
 /* ── Offert-detalj ────────────────────── */
 const OfferDetailPage = {
+  offerId: null,
+
   render(params) {
     const el = document.getElementById('pg-offer-detail-content');
     if (!el) return;
-    el.innerHTML = _shellEmpty('Offertdetalj', 'Fullständig offertvy med redigering byggs i Fas 2–3.');
+    const id = params && params.offerId;
+    this.offerId = id;
+    const off = id ? getOff(id) : null;
+    if (!off) {
+      el.innerHTML = `<div class="empty">${ic('file-text',32)}<h3>Offert hittades inte</h3></div>`;
+      return;
+    }
+    const cu = getCu(off.customerId);
+    const lines = off.lines || [];
+    const total = lines.reduce((s,l) => s+(l.total||0), 0);
+    const exVat = total;
+    const vat = Math.round(total * 0.25);
+    const statusOpts = ['utkast','skickad','väntar','godkänd','nekad','utgången'];
+
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+        <button class="btn bs bsm" onclick="Router.showPage('pg-offer')">${ic('arrow-left',14)}</button>
+        <div style="flex:1;">
+          <div style="font-size:16px;font-weight:800;">${off.id}</div>
+          <div>${sbdg(off.status)}</div>
+        </div>
+        <select class="btn bs bsm" style="font-weight:600;" onchange="OfferDetailPage.setStatus(this.value)">
+          ${statusOpts.map(s=>`<option value="${s}" ${off.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Offereras till</h3></div>
+        <div class="card-body">
+          <div class="dr"><span class="dk">Kund</span><span class="dv">${cu?CustomerService.displayName(cu):'—'}</span></div>
+          ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${cu.address||'—'}${cu.city?', '+cu.city:''}</span></div>` : ''}
+          <div class="dr"><span class="dk">Skapad</span><span class="dv">${fmtDate(off.createdAt)}</span></div>
+          ${off.validUntil ? `<div class="dr"><span class="dk">Giltig till</span><span class="dv">${fmtDate(off.validUntil)}</span></div>` : ''}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Offertrader</h3></div>
+        ${lines.length === 0 ? '<p style="padding:12px 14px;font-size:13px;color:var(--mt);">Inga rader</p>' :
+          lines.map(l => `
+            <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
+              <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${l.description||l.text||'—'}</div>
+              <div style="font-size:11px;color:var(--mt);">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||l.price||0)} kr ex moms</div>
+              <div style="font-size:12px;font-weight:700;color:var(--navy);margin-top:2px;">${fmt(l.total||0)} kr ex moms</div>
+            </div>`).join('')}
+        <div style="padding:12px 14px;border-top:2px solid var(--br);">
+          <div class="dr"><span class="dk">Summa ex. moms</span><span class="dv">${fmt(exVat)} kr</span></div>
+          <div class="dr"><span class="dk">Moms 25%</span><span class="dv">${fmt(vat)} kr</span></div>
+          <div class="dr" style="font-size:16px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
+            <span class="dk" style="color:var(--navy);">Totalt inkl. moms</span>
+            <span class="dv" style="color:var(--navy);">${fmt(exVat + vat)} kr</span>
+          </div>
+        </div>
+      </div>
+
+      ${off.note ? `<div class="nbox">${off.note}</div>` : ''}
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${off.status === 'utkast' ? `<button class="btn bp bsm" onclick="OfferDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
+        ${off.status === 'väntar' || off.status === 'skickad' ? `
+          <button class="btn bsu bsm" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',14)} Godkänd</button>
+          <button class="btn bd bsm" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',14)} Nekad</button>` : ''}
+        ${off.status === 'godkänd' ? `<button class="btn bsu bsm" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',14)} Skapa AO</button>` : ''}
+      </div>`;
+  },
+
+  setStatus(status) {
+    const off = getOff(this.offerId);
+    if (!off) return;
+    off.status = status; off.updatedAt = new Date().toISOString();
+    persist();
+    this.render({ offerId: this.offerId });
+    showToast(`Status: ${statusLabel(status)}`);
+  },
+
+  createAO() {
+    const off = getOff(this.offerId);
+    if (!off) return;
+    Router.showPage('pg-ao');
+    setTimeout(() => WorkOrdersPage.openCreate(off.customerId || null), 100);
+    showToast('Skapar arbetsorder från offert…');
   }
 };
 
 /* ── Fastigheter ──────────────────────── */
 const PropertiesPage = {
+  _q: '',
+
   render() {
     const el = document.getElementById('pg-objects-content');
     if (!el) return;
-    const props = state.properties || [];
-    el.innerHTML = props.length === 0
-      ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
-      : props.map(p => {
-          const cu = getCu(p.customerId);
-          const cuName = cu ? (cu.name || `${cu.firstName} ${cu.lastName}`.trim()) : '—';
-          return `
-            <div class="list-item" onclick="Router.showPage('pg-obj-detail', {propId: '${p.id}'})">
-              <div class="item-row">
-                <div>
-                  <div class="item-title">${p.name}</div>
-                  <div class="item-sub">${p.address}${p.city ? ', ' + p.city : ''} · ${cuName}</div>
+    let props = state.properties || [];
+    if (this._q) {
+      const q = this._q.toLowerCase();
+      props = props.filter(p =>
+        p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.city||'').toLowerCase().includes(q)
+      );
+    }
+    el.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <div class="swrap" style="flex:1;">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" placeholder="Sök fastighet…" value="${this._q}"
+            oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
+        </div>
+        <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
+      </div>` +
+      (props.length === 0
+        ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
+        : props.map(p => {
+            const cu = getCu(p.customerId);
+            const cuName = cu ? CustomerService.displayName(cu) : '—';
+            const aos = (state.workOrders||[]).filter(a => a.propertyId === p.id).length;
+            return `
+              <div class="list-item" onclick="PropertiesPage.openDetail('${p.id}')">
+                <div class="item-row">
+                  <div style="flex:1;min-width:0;">
+                    <div class="item-title">${p.name}</div>
+                    <div class="item-sub">${[p.address, p.zip, p.city].filter(Boolean).join(', ')} · ${cuName}</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                    ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
+                    <span class="bdg bdg-grey" style="font-size:9px;">${p.id}</span>
+                  </div>
                 </div>
-                <span class="bdg bdg-green">${p.id}</span>
-              </div>
-            </div>`;
-        }).join('');
+              </div>`;
+          }).join(''));
+  },
+
+  _formHtml(p) {
+    const v = (k, d='') => p ? (p[k]!=null?p[k]:d) : d;
+    return `
+      <div class="fg"><label>Namn / beteckning <span style="color:var(--rd)">*</span></label>
+        <input id="prop-name" value="${v('name')}" placeholder="T.ex. Solvägen 1, Fastighet A…"></div>
+      <div class="fg"><label>Ägare / kund</label>
+        <select id="prop-cu">
+          <option value="">— Välj kund —</option>
+          ${(state.customers||[]).map(c=>`<option value="${c.id}" ${v('customerId')===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
+        </select></div>
+      <div class="fg"><label>Gatuadress</label>
+        <input id="prop-addr" value="${v('address')}" placeholder="Storgatan 1"></div>
+      <div class="g2">
+        <div class="fg"><label>Postnummer</label><input id="prop-zip" value="${v('zip')}" placeholder="123 45"></div>
+        <div class="fg"><label>Stad</label><input id="prop-city" value="${v('city')}" placeholder="Stockholm"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Typ</label>
+          <select id="prop-type">
+            ${['Flerbostadshus','Kontorsfastighet','Industrifastighet','BRF','Villa','Butiksfastighet','Lager','Övrigt'].map(t=>`<option ${v('type')===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="fg"><label>Yta (m²)</label>
+          <input type="number" id="prop-area" value="${v('area',0)}" min="0" placeholder="0"></div>
+      </div>
+      <div class="fg"><label>Antal våningar</label>
+        <input type="number" id="prop-floors" value="${v('floors',1)}" min="1" max="50"></div>
+      <div class="fg"><label>Portkod / åtkomst</label>
+        <input id="prop-access" value="${v('accessCode')}" placeholder="T.ex. 1234#"></div>
+      <div class="fg"><label>Anteckning</label>
+        <textarea id="prop-note" rows="2" placeholder="Intern anteckning…">${v('note')}</textarea></div>`;
+  },
+
+  openCreate() {
+    Modal.open({
+      title: 'Ny fastighet',
+      wide: true,
+      body: this._formHtml(null),
+      buttons: [
+        { label: 'Skapa', cls: 'btn bp', onClick: () => PropertiesPage._save(null) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('prop-name')?.focus(), 80);
+  },
+
+  openDetail(propId) {
+    const p = (state.properties||[]).find(x=>x.id===propId);
+    if (!p) return;
+    const cu = getCu(p.customerId);
+    const aos = (state.workOrders||[]).filter(a => a.propertyId === p.id).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    Modal.open({
+      title: p.name,
+      wide: true,
+      body: `
+        <div class="dr"><span class="dk">Ägare</span><span class="dv">${cu?CustomerService.displayName(cu):'—'}</span></div>
+        <div class="dr"><span class="dk">Adress</span><span class="dv">${[p.address,p.zip,p.city].filter(Boolean).join(', ')||'—'}</span></div>
+        ${p.type?`<div class="dr"><span class="dk">Typ</span><span class="dv">${p.type}</span></div>`:''}
+        ${p.area?`<div class="dr"><span class="dk">Yta</span><span class="dv">${fmt(p.area)} m²</span></div>`:''}
+        ${p.floors?`<div class="dr"><span class="dk">Våningar</span><span class="dv">${p.floors}</span></div>`:''}
+        ${p.accessCode?`<div class="dr"><span class="dk">Portkod</span><span class="dv">${p.accessCode}</span></div>`:''}
+        ${p.note?`<div class="nbox" style="margin-top:8px;">${p.note}</div>`:''}
+        ${aos.length>0?`
+          <div style="margin-top:12px;">
+            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Arbetsorder (${aos.length})</div>
+            ${aos.slice(0,6).map(ao=>`<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+              <div><div style="font-size:13px;font-weight:700;">${ao.id} – ${ao.title}</div>
+              <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt)}</div></div>
+              ${sbdg(ao.status)}</div>`).join('')}
+            ${aos.length>6?`<p style="font-size:11px;color:var(--mt);text-align:center;margin-top:4px;">+${aos.length-6} till</p>`:''}
+          </div>`:''
+        }`,
+      buttons: [
+        { label: 'Redigera', cls: 'btn bs', onClick: () => { Modal.close(); PropertiesPage.openEdit(propId); }},
+        { label: 'Stäng', cls: 'btn bghost', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  openEdit(propId) {
+    const p = (state.properties||[]).find(x=>x.id===propId);
+    if (!p) return;
+    Modal.open({
+      title: `Redigera ${p.name}`,
+      wide: true,
+      body: this._formHtml(p),
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => PropertiesPage._save(propId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _save(propId) {
+    const name = document.getElementById('prop-name')?.value.trim();
+    if (!name) { showToast('Namn krävs'); return; }
+    const data = {
+      name,
+      customerId: document.getElementById('prop-cu')?.value || '',
+      address:    document.getElementById('prop-addr')?.value.trim() || '',
+      zip:        document.getElementById('prop-zip')?.value.trim() || '',
+      city:       document.getElementById('prop-city')?.value.trim() || '',
+      type:       document.getElementById('prop-type')?.value || '',
+      area:       parseFloat(document.getElementById('prop-area')?.value) || 0,
+      floors:     parseInt(document.getElementById('prop-floors')?.value) || 1,
+      accessCode: document.getElementById('prop-access')?.value.trim() || '',
+      note:       document.getElementById('prop-note')?.value.trim() || '',
+      updatedAt:  new Date().toISOString()
+    };
+    if (!propId) {
+      state.properties = state.properties || [];
+      state.properties.push({ ...data, id: newId(state.properties,'OBJ'), createdAt: new Date().toISOString() });
+      showToast(`${name} skapad`);
+    } else {
+      const idx = (state.properties||[]).findIndex(x=>x.id===propId);
+      if (idx < 0) return;
+      state.properties[idx] = { ...state.properties[idx], ...data };
+      showToast('Fastighet uppdaterad');
+    }
+    persist(); Modal.close(); this.render();
   }
 };
 
