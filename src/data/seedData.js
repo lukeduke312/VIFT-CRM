@@ -890,6 +890,12 @@ const SeedData = {
   contracts: [],
   inspections: [],
 
+  titles: [
+    'Fastighetstekniker','Rörmokare','Elektriker','Projektledare','Förvaltare',
+    'Städare','Snickare','Målare','Drifttekniker','Väktare','Larmtekniker',
+    'Låssmed','VVS-tekniker','Fastighetsskötare','Systemadministratör'
+  ],
+
   articles: [
     // ── Kemikalier ──────────────────────────────────────────
     { id: 'ART-001', articleNumber: '1001', name: 'Fogmassa Sikaflex 291i',     category: 'kemikalier', unit: 'st',    buyPrice: 75,   sellPrice: 145,  vatRate: 25, active: true },

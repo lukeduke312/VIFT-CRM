@@ -213,13 +213,23 @@ const WorkOrderDetailPage = {
     const items = ao.checklist || [];
     if (!items.length) return `<p style="padding:10px 0;color:var(--mt);font-size:13px;">Ingen checklista ännu</p>`;
     const done = items.filter(c=>c.done).length;
+    const avvClsMap = { ok:'bdg-green', avvikelse:'bdg-red', ej_kontrollerbar:'bdg-grey' };
+    const avvLblMap = { ok:'OK', avvikelse:'Avvikelse', ej_kontrollerbar:'Ej kontr.' };
     return `
       <div class="pb" style="margin-bottom:8px;"><div class="pbf" style="width:${items.length?Math.round(done/items.length*100):0}%"></div></div>
       ${items.map((c, i) => `
-        <div class="chi" onclick="WorkOrderDetailPage.toggleCheck(${i})">
-          <div class="chc ${c.done?'done':''}">${c.done?ic('check',11):''}</div>
-          <span class="cht ${c.done?'done':''}">${c.text}</span>
-          <button class="btn bxs bd" style="flex-shrink:0;" onclick="event.stopPropagation();WorkOrderDetailPage.removeCheck(${i})">${ic('x',12)}</button>
+        <div class="chi" onclick="WorkOrderDetailPage.toggleCheck(${i})" style="align-items:flex-start;gap:8px;padding:10px 0;">
+          <div class="chc ${c.done?'done':''}" style="margin-top:2px;">${c.done?ic('check',11):''}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="cht ${c.done?'done':''}" style="display:block;">${c.text}</div>
+            ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
+            ${c.avvikelse ? `<span class="bdg ${avvClsMap[c.avvikelse]||'bdg-grey'}" style="font-size:9px;margin-top:4px;display:inline-block;">${avvLblMap[c.avvikelse]||c.avvikelse}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:3px;flex-shrink:0;margin-top:1px;" onclick="event.stopPropagation()">
+            <button class="btn bxs ${c.avvikelse==='ok'?'bsu':'bs'}" title="OK" onclick="WorkOrderDetailPage.setAvvikelse(${i},'ok')" style="padding:3px 5px;">${ic('check',11)}</button>
+            <button class="btn bxs ${c.avvikelse==='avvikelse'?'bd':'bs'}" title="Avvikelse" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')" style="padding:3px 5px;">${ic('alert-triangle',11)}</button>
+            <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})" style="padding:3px 5px;">${ic('x',11)}</button>
+          </div>
         </div>`).join('')}`;
   },
 
@@ -781,9 +791,12 @@ const WorkOrderDetailPage = {
   openAddChecklist() {
     Modal.open({
       title: 'Lägg till checkpunkt',
-      body: `<div class="fg"><label>Text</label>
-        <input id="cl-text" placeholder="T.ex. Inspektera takbrunn…" autofocus
-          onkeydown="if(event.key==='Enter'){WorkOrderDetailPage.saveChecklist();event.preventDefault();}"></div>`,
+      body: `
+        <div class="fg"><label>Rubrik <span style="color:var(--rd)">*</span></label>
+          <input id="cl-text" placeholder="T.ex. Inspektera takbrunn…"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('cl-desc')?.focus();}"></div>
+        <div class="fg"><label>Beskrivning (valfritt)</label>
+          <textarea id="cl-desc" rows="2" placeholder="Mer information om vad som ska kontrolleras…"></textarea></div>`,
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => this.saveChecklist() },
         { label: 'Avbryt',   cls: 'btn bs', onClick: () => Modal.close() }
@@ -794,14 +807,27 @@ const WorkOrderDetailPage = {
 
   saveChecklist() {
     const text = document.getElementById('cl-text')?.value.trim();
-    if (!text) { showToast('Skriv en text'); return; }
-    WorkOrderService.addChecklist(this.aoId, text);
-    Modal.close();
+    if (!text) { showToast('Rubrik krävs'); return; }
+    const desc = document.getElementById('cl-desc')?.value.trim() || '';
     const ao = getAO(this.aoId);
-    if (ao) {
-      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
-      showToast('Checkpunkt tillagd');
-    }
+    if (!ao) return;
+    if (!ao.checklist) ao.checklist = [];
+    ao.checklist.push({ id: 'c' + Date.now(), text, description: desc, avvikelse: null, done: false });
+    WorkOrderService.update(this.aoId, { checklist: ao.checklist });
+    Modal.close();
+    const aoUp = getAO(this.aoId);
+    if (aoUp) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+    showToast('Checkpunkt tillagd');
+  },
+
+  setAvvikelse(idx, status) {
+    const ao = getAO(this.aoId);
+    if (!ao || !ao.checklist || !ao.checklist[idx]) return;
+    // Toggle: clicking same status clears it
+    ao.checklist[idx].avvikelse = ao.checklist[idx].avvikelse === status ? null : status;
+    WorkOrderService.update(this.aoId, { checklist: ao.checklist });
+    const aoUp = getAO(this.aoId);
+    if (aoUp) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
   },
 
   toggleCheck(idx) {

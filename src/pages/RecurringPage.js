@@ -71,10 +71,10 @@ const RecurringPage = {
     const cu = getCu(ro.customerId);
     const days = RecurringOrderService.daysUntilNext(ro);
     const chkHtml = (ro.checklist || []).length > 0
-      ? `<div class="fg"><label>Checklistemall</label><div style="margin-top:4px;">${
-          ro.checklist.map(c => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bg);">
-            <span style="color:var(--gr);">${ic('check-circle',13)}</span>
-            <span style="font-size:13px;">${c.text}</span>
+      ? `<div class="fg"><label>Checklistemall (${ro.checklist.length})</label><div style="margin-top:4px;">${
+          ro.checklist.map(c => `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--bg);">
+            <span style="color:var(--gr);flex-shrink:0;margin-top:2px;">${ic('check-circle',13)}</span>
+            <div><div style="font-size:13px;font-weight:600;">${c.text}</div>${c.description?`<div style="font-size:11px;color:var(--mt);">${c.description}</div>`:''}</div>
           </div>`).join('')
         }</div></div>` : '';
 
@@ -250,10 +250,12 @@ const RecurringPage = {
           <label>Checklistemall</label>
           <div id="ro-checklist-items" style="margin-bottom:8px;"></div>
           <div style="display:flex;gap:6px;">
-            <input id="ro-chk-input" placeholder="Ny kontrollpunkt…" style="flex:1;"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();RecurringPage._addCheckItem();}">
+            <input id="ro-chk-input" placeholder="Rubrik…" style="flex:1;"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('ro-chk-desc')?.focus();}">
             <button class="btn bs bsm" type="button" onclick="RecurringPage._addCheckItem()">Lägg till</button>
           </div>
+          <input id="ro-chk-desc" placeholder="Beskrivning (valfritt)…" style="margin-top:4px;"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();RecurringPage._addCheckItem();}">
         </div>
 
         <div class="fg"><label>Internanteckning</label>
@@ -306,10 +308,12 @@ const RecurringPage = {
 
   _addCheckItem() {
     const input = document.getElementById('ro-chk-input');
+    const desc  = document.getElementById('ro-chk-desc');
     const text  = input?.value.trim();
-    if (!text) return;
-    this._tempChecklist.push({ text });
+    if (!text) { input?.focus(); return; }
+    this._tempChecklist.push({ text, description: desc?.value.trim() || '' });
     input.value = '';
+    if (desc) desc.value = '';
     input.focus();
     this._renderChecklistItems();
   },
@@ -327,9 +331,12 @@ const RecurringPage = {
       return;
     }
     el.innerHTML = this._tempChecklist.map((item, idx) => `
-      <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid var(--br);background:#fff;border-radius:6px;margin-bottom:4px;border:1px solid var(--br);">
-        <span style="color:var(--gr);flex-shrink:0;">${ic('check-circle',14)}</span>
-        <span style="flex:1;font-size:13px;">${item.text}</span>
+      <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid var(--br);background:#fff;border-radius:6px;margin-bottom:4px;">
+        <span style="color:var(--gr);flex-shrink:0;margin-top:2px;">${ic('check-circle',14)}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${item.text}</div>
+          ${item.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${item.description}</div>` : ''}
+        </div>
         <button class="btn bxs bd" type="button" onclick="RecurringPage._removeCheckItem(${idx})" style="flex-shrink:0;">${ic('trash',11)}</button>
       </div>`).join('');
   },

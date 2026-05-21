@@ -18,26 +18,40 @@ const WorkOrdersPage = {
     // Handle filter params from dashboard navigation
     if (params && params.filter) {
       const tabMap = {
-        'akut':             'alla',
-        'active':           'alla',
-        'pool':             'pool',
-        'planerad':         'planerad',
-        'pågående':         'pågående',
-        'klar':             'klar',
-        'nytt':             'nytt',
-        'readyForInvoice':  'klar'
+        akut:'alla', active:'alla', pool:'pool', planerad:'planerad',
+        pågående:'pågående', klar:'klar', nytt:'nytt', readyForInvoice:'klar',
+        idag:'planerad', forsenad:'alla', mine:'alla'
       };
-      this.filter     = tabMap[params.filter] || 'alla';
+      this.filter      = tabMap[params.filter] || 'alla';
       this._dashFilter = params.filter;
     }
 
-    const dashFilterLabels = {
-      akut:            'Akuta ordrar',
-      readyForInvoice: 'Redo för fakturering',
-      active:          'Aktiva ordrar',
-      pool:            'Arbetspool',
+    // Compute quick-filter counts
+    const wos   = state.workOrders || [];
+    const today = tdy();
+    const myId  = state.currentUser ? state.currentUser.id : null;
+    const active = a => !['klar','fakturerad','avbruten'].includes(a.status);
+    const qfCounts = {
+      akut:           wos.filter(a => a.priority==='akut' && active(a)).length,
+      readyForInvoice:wos.filter(a => a.status==='klar' && !a.invoiceId).length,
+      idag:           wos.filter(a => a.scheduledDate===today && active(a)).length,
+      forsenad:       wos.filter(a => a.scheduledDate && a.scheduledDate<today && active(a)).length,
+      mine:           myId ? wos.filter(a => (a.staff||[]).includes(myId) && active(a)).length : 0
     };
-    const chipLabel = this._dashFilter ? dashFilterLabels[this._dashFilter] : null;
+
+    const qfBtns = [
+      { key:null,              label:'Alla filter',       cnt:null },
+      { key:'akut',            label:'Akuta',             cnt:qfCounts.akut },
+      { key:'readyForInvoice', label:'Redo fakturering',  cnt:qfCounts.readyForInvoice },
+      { key:'idag',            label:'Idag',              cnt:qfCounts.idag },
+      { key:'forsenad',        label:'Försenade',         cnt:qfCounts.forsenad },
+      { key:'mine',            label:'Mina ärenden',      cnt:qfCounts.mine }
+    ];
+    const qfHtml = qfBtns.map(b => {
+      const isOn = b.key === null ? !this._dashFilter : this._dashFilter === b.key;
+      const cntBadge = b.cnt ? ` <span style="font-size:10px;background:${isOn?'rgba(255,255,255,.35)':'var(--br)'};border-radius:999px;padding:0 5px;">${b.cnt}</span>` : '';
+      return `<button class="ft ${isOn?'on':''}" onclick="WorkOrdersPage.setQuickFilter(${b.key===null?'null':"'"+b.key+"'"})">${b.label}${cntBadge}</button>`;
+    }).join('');
 
     el.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
@@ -65,7 +79,10 @@ const WorkOrdersPage = {
           }</button>`
         ).join('')}
       </div>
-      ${chipLabel ? `<div style="margin-bottom:6px;"><span class="filter-chip">${ic('filter',11)} ${chipLabel} <button onclick="WorkOrdersPage._dashFilter=null;WorkOrdersPage.render()">×</button></span></div>` : ''}
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span style="font-size:10px;font-weight:700;color:var(--mt);white-space:nowrap;flex-shrink:0;">${ic('filter',11)}</span>
+        <div class="ftabs" style="margin-bottom:0;flex:1;">${qfHtml}</div>
+      </div>
       <div id="ao-list"></div>`;
     this.renderList();
   },
@@ -81,16 +98,13 @@ const WorkOrdersPage = {
   },
 
   setFilter(f) {
-    this._dashFilter = null; // clear dash-filter when user manually picks a tab
     this.filter = f;
-    document.querySelectorAll('#pg-ao-content .ft').forEach(b => {
-      const label = {alla:'Alla',nytt:'Nytt',pool:'Pool',planerad:'Planerad',pågående:'Pågående',klar:'Klar',fakturerad:'Fakturerad'}[f];
-      b.classList.toggle('on', b.textContent.trim() === label);
-    });
-    // Remove chip if visible
-    const chip = document.querySelector('#pg-ao-content .filter-chip');
-    if (chip) chip.closest('div').remove();
-    this.renderList();
+    this.render();
+  },
+
+  setQuickFilter(key) {
+    this._dashFilter = key === this._dashFilter ? null : key;
+    this.render();
   },
 
   renderList() {
@@ -98,10 +112,17 @@ const WorkOrdersPage = {
     if (!el) return;
     let list = state.workOrders || [];
     if (this.filter !== 'alla') list = list.filter(a => a.status === this.filter);
-    // Apply extra dash-filter refinements
+    // Apply quick-filter refinements
+    const _active = a => !['klar','fakturerad','avbruten'].includes(a.status);
     if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId);
-    if (this._dashFilter === 'akut')  list = list.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));
-    if (this._dashFilter === 'active') list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
+    if (this._dashFilter === 'akut')    list = list.filter(a => a.priority==='akut' && _active(a));
+    if (this._dashFilter === 'active')  list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
+    if (this._dashFilter === 'idag')    list = list.filter(a => a.scheduledDate===tdy() && _active(a));
+    if (this._dashFilter === 'forsenad')list = list.filter(a => a.scheduledDate && a.scheduledDate<tdy() && _active(a));
+    if (this._dashFilter === 'mine') {
+      const myId = state.currentUser ? state.currentUser.id : null;
+      if (myId) list = list.filter(a => (a.staff||[]).includes(myId) && _active(a));
+    }
     if (this.q) {
       const ql = this.q.toLowerCase();
       list = list.filter(a => {

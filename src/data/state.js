@@ -20,6 +20,7 @@ let state = {
   timeEntries: [],
   articles: [],
   priceGroups: [],
+  titles: [],
   recurringOrders: [],
   salesOpportunities: [],
   activityLog: [],
@@ -62,6 +63,7 @@ function initState() {
   state.timeEntries        = s.get('timeEntries')     || SeedData.timeEntries || [];
   state.contracts          = s.get('contracts')       || [];
   state.articles           = s.get('articles')        || SeedData.articles || [];
+  state.titles             = s.get('titles')          || SeedData.titles  || [];
   state.recurringOrders    = s.get('recurringOrders') || SeedData.recurringOrders || [];
 
   // Stämpling-state
@@ -88,6 +90,7 @@ function persist() {
   s.set('timeEntries',  state.timeEntries);
   s.set('contracts',        state.contracts);
   s.set('articles',         state.articles);
+  s.set('titles',           state.titles);
   s.set('recurringOrders',  state.recurringOrders);
 }
 
