@@ -68,7 +68,7 @@ const WorkOrderDetailPage = {
         <div class="card-header">
           <h3>Checklista</h3>
           <div style="display:flex;align-items:center;gap:8px;">
-            ${chkTotal>0 ? `<span class="bdg bdg-blue">${chkDone}/${chkTotal}</span>` : ''}
+            <span id="ao-chk-counter">${chkTotal>0 ? `<span class="bdg bdg-blue">${chkDone}/${chkTotal}</span>` : ''}</span>
             <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>
           </div>
         </div>
@@ -797,6 +797,14 @@ const WorkOrderDetailPage = {
     });
   },
 
+  _updateChecklistCounter(ao) {
+    const el = document.getElementById('ao-chk-counter');
+    if (!el) return;
+    const total = (ao.checklist||[]).length;
+    const done  = (ao.checklist||[]).filter(c=>c.done).length;
+    el.innerHTML = total > 0 ? `<span class="bdg bdg-blue">${done}/${total}</span>` : '';
+  },
+
   /* ── Checklista ────────────────────────── */
   openAddChecklist() {
     Modal.open({
@@ -826,7 +834,10 @@ const WorkOrderDetailPage = {
     WorkOrderService.update(this.aoId, { checklist: ao.checklist });
     Modal.close();
     const aoUp = getAO(this.aoId);
-    if (aoUp) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+    if (aoUp) {
+      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+      this._updateChecklistCounter(aoUp);
+    }
     showToast('Checkpunkt tillagd');
   },
 
@@ -837,19 +848,28 @@ const WorkOrderDetailPage = {
     ao.checklist[idx].avvikelse = ao.checklist[idx].avvikelse === status ? null : status;
     WorkOrderService.update(this.aoId, { checklist: ao.checklist });
     const aoUp = getAO(this.aoId);
-    if (aoUp) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+    if (aoUp) {
+      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+      this._updateChecklistCounter(aoUp);
+    }
   },
 
   toggleCheck(idx) {
     WorkOrderService.toggleChecklist(this.aoId, idx);
     const ao = getAO(this.aoId);
-    if (ao) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
+    if (ao) {
+      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
+      this._updateChecklistCounter(ao);
+    }
   },
 
   removeCheck(idx) {
     WorkOrderService.removeChecklist(this.aoId, idx);
     const ao = getAO(this.aoId);
-    if (ao) document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
+    if (ao) {
+      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
+      this._updateChecklistCounter(ao);
+    }
   },
 
   /* ── Tid ───────────────────────────────── */
