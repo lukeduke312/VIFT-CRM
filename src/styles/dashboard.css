@@ -5,15 +5,18 @@
 /* ── Dashboard grid ───────────────────────── */
 .dash-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   width: 100%;
   align-items: start;
+  min-width: 0;
 }
+/* Grid items must have min-width: 0 to prevent content blowout with 1fr */
+.dash-layout > * { min-width: 0; }
 
 /* Tablet: 2 columns */
 @media (min-width: 700px) {
-  .dash-layout { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dash-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
   .dash-layout .dw-full   { grid-column: 1 / -1; }
   .dash-layout .dw-main   { grid-column: 1; }
   .dash-layout .dw-side   { grid-column: 2; }
@@ -22,7 +25,7 @@
 
 /* Desktop: 3 columns */
 @media (min-width: 1024px) {
-  .dash-layout { grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .dash-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 14px; }
   .dash-layout .dw-full   { grid-column: 1 / -1; }
   .dash-layout .dw-main   { grid-column: span 2; }
   .dash-layout .dw-side   { grid-column: span 1; }
@@ -36,11 +39,11 @@
 /* ── KPI row ──────────────────────────────── */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0,1fr));
   gap: 8px;
 }
-@media (min-width: 480px)  { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 700px)  { .kpi-row { grid-template-columns: repeat(5, 1fr); gap: 10px; } }
+@media (min-width: 480px)  { .kpi-row { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (min-width: 700px)  { .kpi-row { grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; } }
 @media (min-width: 1024px) { .kpi-row { gap: 12px; } }
 
 .kpi-card {
@@ -123,10 +126,10 @@
 /* ── Quick buttons ────────────────────────── */
 .quick-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0,1fr));
   gap: 7px;
 }
-@media (min-width: 480px)  { .quick-row { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 480px)  { .quick-row { grid-template-columns: repeat(6, minmax(0,1fr)); } }
 @media (min-width: 1024px) { .quick-row { gap: 10px; } }
 
 .quick-btn {
@@ -169,9 +172,20 @@
 .act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
 
 /* ── Pair wrapper (always 2-col) ──────────── */
-.dw-pair { display: grid; grid-template-columns: 1fr; gap: 10px; }
-@media (min-width: 480px) { .dw-pair { grid-template-columns: 1fr 1fr; gap: 12px; } }
+.dw-pair { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; }
+@media (min-width: 480px) { .dw-pair { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; } }
 @media (min-width: 1024px) { .dw-pair { gap: 14px; } }
+
+/* ch3r = ch3 (alias for backwards compat) */
+.ch3r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0;
+}
 
 /* ── Legacy ───────────────────────────────── */
 .dw-full  { width: 100%; }

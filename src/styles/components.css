@@ -527,3 +527,158 @@
 
 /* ── Modal open — blockera bakgrundscroll ─ */
 body.modal-open { overflow: hidden; touch-action: none; }
+
+/* ── AO Quick-filter chips ─────────────────── */
+.qf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.qf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1.5px solid var(--br);
+  background: #fff;
+  color: var(--mt);
+  cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+}
+.qf-chip:hover { border-color: var(--sky); color: var(--navy); }
+.qf-chip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.qf-cnt {
+  background: var(--rd);
+  color: #fff;
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 0 4px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 15px;
+}
+.qf-chip.on .qf-cnt { background: rgba(255,255,255,.35); color: #fff; }
+.qf-clear {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--rd);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.qf-clear:hover { text-decoration: underline; }
+
+/* ── AO-detaljens status/action panel ────────── */
+.ao-action-panel {
+  background: #fff;
+  border: 1px solid var(--br);
+  border-radius: var(--rs);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.ao-action-panel-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ao-action-panel-badges {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.ao-action-panel-btns {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* ── Improved list-item for AO ───────────────── */
+.ao-list-item {
+  background: #fff;
+  border-radius: var(--rs);
+  padding: 10px 12px;
+  margin-bottom: 5px;
+  border: 1px solid var(--br);
+  border-left: 4px solid var(--br);
+  cursor: pointer;
+  transition: all .12s;
+  display: block;
+  width: 100%;
+  text-align: left;
+  box-sizing: border-box;
+}
+.ao-list-item:last-child { margin-bottom: 0; }
+.ao-list-item:active { transform: scale(.99); }
+@media (min-width: 1024px) {
+  .ao-list-item:hover { border-color: var(--sky); box-shadow: 0 2px 10px rgba(43,127,212,.1); }
+}
+.ao-list-item.p-akut   { border-left-color: var(--rd); }
+.ao-list-item.p-hog    { border-left-color: var(--or); }
+.ao-list-item.p-normal { border-left-color: var(--sky); }
+.ao-list-item.p-lag    { border-left-color: var(--br); }
+
+.ao-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.ao-item-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tx);
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+}
+.ao-item-id {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--mt);
+  margin-right: 4px;
+}
+.ao-item-sub {
+  font-size: 11px;
+  color: var(--mt);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ao-item-badges {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ao-item-progress {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--mt);
+  background: var(--bg);
+  border-radius: 100px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.ao-item-progress.done { color: var(--gr); background: var(--lgr); }
+.ao-item-progress.has-dev { color: var(--or); background: var(--lor); }

@@ -39,48 +39,43 @@ const WorkOrdersPage = {
       mine:           myId ? wos.filter(a => (a.staff||[]).includes(myId) && active(a)).length : 0
     };
 
-    const qfBtns = [
-      { key:null,              label:'Alla filter',       cnt:null },
-      { key:'akut',            label:'Akuta',             cnt:qfCounts.akut },
-      { key:'readyForInvoice', label:'Redo fakturering',  cnt:qfCounts.readyForInvoice },
-      { key:'idag',            label:'Idag',              cnt:qfCounts.idag },
-      { key:'forsenad',        label:'Försenade',         cnt:qfCounts.forsenad },
-      { key:'mine',            label:'Mina ärenden',      cnt:qfCounts.mine }
+    // Quick-filter chips: always visible, highlighted when active
+    const qfDefs = [
+      { key:'akut',            icon:'zap',       label:'Akuta',            cnt:qfCounts.akut },
+      { key:'readyForInvoice', icon:'receipt',   label:'Redo fakturering', cnt:qfCounts.readyForInvoice },
+      { key:'idag',            icon:'calendar',  label:'Idag',             cnt:qfCounts.idag },
+      { key:'forsenad',        icon:'clock',     label:'Försenade',        cnt:qfCounts.forsenad },
+      { key:'mine',            icon:'user',      label:'Mina ärenden',     cnt:qfCounts.mine }
     ];
-    const qfHtml = qfBtns.map(b => {
-      const isOn = b.key === null ? !this._dashFilter : this._dashFilter === b.key;
-      const cntBadge = b.cnt ? ` <span style="font-size:10px;background:${isOn?'rgba(255,255,255,.35)':'var(--br)'};border-radius:999px;padding:0 5px;">${b.cnt}</span>` : '';
-      return `<button class="ft ${isOn?'on':''}" onclick="WorkOrdersPage.setQuickFilter(${b.key===null?'null':"'"+b.key+"'"})">${b.label}${cntBadge}</button>`;
+    const anyQf = !!this._dashFilter;
+    const qfHtml = qfDefs.map(b => {
+      const isOn = this._dashFilter === b.key;
+      const cntHtml = b.cnt > 0 ? `<span class="qf-cnt">${b.cnt}</span>` : '';
+      return `<button class="qf-chip ${isOn?'on':''}" onclick="WorkOrdersPage.setQuickFilter('${b.key}')">${ic(b.icon,10)} ${b.label}${cntHtml}</button>`;
     }).join('');
+    const clearHtml = anyQf ? `<button class="qf-clear" onclick="WorkOrdersPage.setQuickFilter(null)">${ic('x',10)} Rensa</button>` : '';
 
     el.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
         <div class="swrap" style="flex:1;">
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="ao-search" placeholder="Sök order, kund, adress…"
             value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()">
         </div>
         <div style="display:flex;border:1.5px solid var(--br);border-radius:var(--rx);overflow:hidden;flex-shrink:0;">
-          <button class="btn bxs ${this.viewMode==='list'?'bp':'bghost'}" style="border-radius:0;border:none;gap:4px;" onclick="WorkOrdersPage.setView('list')">
-            ${ic('list',13)} Lista
-          </button>
-          <button class="btn bxs ${this.viewMode==='grid'?'bp':'bghost'}" style="border-radius:0;border-left:1.5px solid var(--br);border-right:none;border-top:none;border-bottom:none;gap:4px;" onclick="WorkOrdersPage.setView('grid')">
-            ${ic('grid',13)} Kort
-          </button>
+          <button class="btn bxs ${this.viewMode==='list'?'bp':'bghost'}" style="border-radius:0;border:none;padding:7px 9px;" title="Listvy" onclick="WorkOrdersPage.setView('list')">${ic('list',14)}</button>
+          <button class="btn bxs ${this.viewMode==='grid'?'bp':'bghost'}" style="border-radius:0;border-left:1.5px solid var(--br);border-right:none;border-top:none;border-bottom:none;padding:7px 9px;" title="Kortvy" onclick="WorkOrdersPage.setView('grid')">${ic('grid',14)}</button>
         </div>
-        ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
+        ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()" style="flex-shrink:0;">${ic('plus',14)} Ny order</button>` : ''}
       </div>
-      <div class="ftabs" style="margin-bottom:4px;">
+      <div class="ftabs" style="margin-bottom:8px;">
         ${['alla','nytt','pool','planerad','pågående','klar','fakturerad'].map(f =>
           `<button class="ft ${this.filter===f?'on':''}" onclick="WorkOrdersPage.setFilter('${f}')">${
             {alla:'Alla',nytt:'Nytt',pool:'Pool',planerad:'Planerad',pågående:'Pågående',klar:'Klar',fakturerad:'Fakturerad'}[f]
           }</button>`
         ).join('')}
       </div>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-        <span style="font-size:10px;font-weight:700;color:var(--mt);white-space:nowrap;flex-shrink:0;">${ic('filter',11)}</span>
-        <div class="ftabs" style="margin-bottom:0;flex:1;">${qfHtml}</div>
-      </div>
+      <div class="qf-row" style="margin-bottom:8px;">${qfHtml}${clearHtml}</div>
       <div id="ao-list"></div>`;
     this.renderList();
   },
@@ -101,7 +96,7 @@ const WorkOrdersPage = {
   },
 
   setQuickFilter(key) {
-    this._dashFilter = key === this._dashFilter ? null : key;
+    this._dashFilter = (key !== null && key === this._dashFilter) ? null : key;
     this.render();
   },
 
@@ -145,39 +140,57 @@ const WorkOrdersPage = {
       el.innerHTML = `<div class="ao-grid">${list.map(ao => {
         const cu     = getCu(ao.customerId);
         const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const done   = (ao.checklist||[]).filter(c=>c.done).length;
+        const chkOk  = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
+        const chkAvv = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
         const total  = (ao.checklist||[]).length;
+        const chkText = total > 0
+          ? `<span class="ao-item-progress ${chkOk===total&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${total} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
+          : '';
+        const readyForInvoice = ao.status==='klar' && !ao.invoiceId;
         return `
           <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
-              <div style="font-size:12px;font-weight:700;color:var(--navy);">${ao.id}</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
+              <div style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
             </div>
-            <div style="font-size:13px;font-weight:700;margin-bottom:4px;line-height:1.3;">${ao.title}</div>
-            <div style="font-size:11px;color:var(--mt);">${cuName}</div>
-            ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);margin-top:2px;">${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart:''}</div>`:''}
-            ${total>0?`<div style="margin-top:6px;"><div class="pb"><div class="pbf" style="width:${Math.round(done/total*100)}%"></div></div><div style="font-size:10px;color:var(--mt);margin-top:2px;">${done}/${total} klara</div></div>`:''}
+            <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
+            <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
+            ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);">${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart:''}</div>`:''}
+            ${readyForInvoice?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span></div>`:''}
+            ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
           </div>`;
       }).join('')}</div>`;
     } else {
       el.innerHTML = list.map(ao => {
         const cu     = getCu(ao.customerId);
         const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const done   = (ao.checklist||[]).filter(c=>c.done).length;
+        const chkOk  = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
+        const chkAvv = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
         const total  = (ao.checklist||[]).length;
+        const readyForInvoice = ao.status==='klar' && !ao.invoiceId;
+        const metaParts = [];
+        if (cuName !== '—') metaParts.push(cuName);
+        if (ao.scheduledDate) metaParts.push(ao.scheduledDate+(ao.scheduledStart?' '+ao.scheduledStart:''));
+        const metaHtml = metaParts.join(' · ');
+        const chkHtml = total > 0
+          ? `<span class="ao-item-progress ${chkOk===total&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${total} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
+          : '';
         return `
-          <div class="list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-            <div class="item-row">
+          <button class="ao-list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+            <div class="ao-item-top">
               <div style="flex:1;min-width:0;">
-                <div class="item-title">${ao.id} – ${ao.title}</div>
-                <div class="item-sub">${cuName}${ao.scheduledDate?' · '+ao.scheduledDate:''}${ao.scheduledStart?' '+ao.scheduledStart:''}</div>
-                ${total>0?`<div style="margin-top:4px;"><div class="pb"><div class="pbf" style="width:${Math.round(done/total*100)}%"></div></div></div>`:''}
+                <div class="ao-item-title"><span class="ao-item-id">${ao.id}</span>${ao.title}</div>
+                ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
               </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+              <div class="ao-item-badges">
                 ${sbdg(ao.status)}${pbdg(ao.priority)}
               </div>
             </div>
-          </div>`;
+            ${readyForInvoice || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+              ${readyForInvoice?`<span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span>`:''}
+              ${chkHtml}
+            </div>` : ''}
+          </button>`;
       }).join('');
     }
   },

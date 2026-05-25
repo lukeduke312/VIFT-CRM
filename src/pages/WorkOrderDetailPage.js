@@ -25,7 +25,7 @@ const WorkOrderDetailPage = {
     const chkAvv  = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
     const chkTotal = (ao.checklist||[]).length;
     const chkBadge = chkTotal > 0
-      ? `<span class="bdg bdg-${chkOk===chkTotal&&!chkAvv?'green':'blue'}">${chkOk}/${chkTotal} OK</span>${chkAvv>0?` <span class="bdg bdg-orange">${chkAvv} avv.</span>`:''}`
+      ? `<span class="bdg bdg-${chkOk===chkTotal&&!chkAvv?'green':chkAvv>0?'orange':'blue'}">${chkOk}/${chkTotal} OK${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
       : '';
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
@@ -33,25 +33,27 @@ const WorkOrderDetailPage = {
     const isStampedOnThis = state.stampActive && state.stampAoId === ao.id;
 
     el.innerHTML = `
-      <!-- Tillbaka + Åtgärder -->
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-        <button class="btn bs bsm" onclick="Router.showPage('pg-ao')">${ic('arrow-left',14)}</button>
-        <div style="flex:1;">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
+      <!-- Status/Action panel -->
+      <div class="ao-action-panel">
+        <div class="ao-action-panel-left">
+          <button class="btn bs bsm" onclick="Router.showPage('pg-ao')" title="Tillbaka till listan">${ic('arrow-left',14)}</button>
+          <span style="font-size:11px;font-weight:700;color:var(--mt);">${ao.id}</span>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <div class="ao-action-panel-badges">
+          ${sbdg(ao.status)} ${pbdg(ao.priority)}
+        </div>
+        <div class="ao-action-panel-btns">
           ${this._actionBtns(ao)}
+          ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>` : ''}
         </div>
       </div>
 
       <!-- Rubrik -->
       <div class="card">
-        <div class="card-header" style="justify-content:space-between;">
-          <h3 style="font-size:13px;font-weight:800;color:var(--navy);">${ao.id}</h3>
-          ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>` : ''}
+        <div class="card-header">
+          <h3 style="font-size:14px;font-weight:800;color:var(--navy);line-height:1.3;">${ao.title}</h3>
         </div>
         <div class="card-body">
-          <h2 style="font-size:16px;font-weight:800;margin-bottom:10px;">${ao.title}</h2>
           ${ao.description ? `<p style="font-size:13px;color:var(--mt);line-height:1.5;margin-bottom:10px;">${ao.description}</p>` : ''}
           <div class="dr"><span class="dk">Kund</span><span class="dv" style="cursor:pointer;color:var(--sky);" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu&&cu.id}'})">${cuName}</span></div>
           <div class="dr"><span class="dk">Adress</span><span class="dv">${ao.address||'—'}</span></div>
@@ -70,11 +72,11 @@ const WorkOrderDetailPage = {
       <!-- Checklista -->
       <div class="card">
         <div class="card-header">
-          <h3>Checklista</h3>
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+            <h3 style="margin:0;">${ic('clipboard-check',14)} Checklista</h3>
             <span id="ao-chk-counter">${chkBadge}</span>
-            <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>
           </div>
+          ${Auth.can('ao_checklist') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>` : ''}
         </div>
         <div class="card-body" style="padding:6px 14px;" id="ao-checklist">
           ${this._renderChecklist(ao)}
@@ -84,8 +86,8 @@ const WorkOrderDetailPage = {
       <!-- Material & kostnader -->
       <div class="card">
         <div class="card-header">
-          <h3>Material & kostnader</h3>
-          <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>
+          <h3>${ic('package',14)} Material & kostnader</h3>
+          ${Auth.can('ao_material') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>` : ''}
         </div>
         <div id="ao-materials" style="overflow:hidden;">
           ${this._renderMaterials(ao)}
@@ -96,11 +98,11 @@ const WorkOrderDetailPage = {
       <!-- Tidsposter -->
       <div class="card">
         <div class="card-header">
-          <h3>Arbetstid</h3>
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+            <h3 style="margin:0;">${ic('clock',14)} Arbetstid</h3>
             ${totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : ''}
-            <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>
           </div>
+          ${Auth.can('ao_time') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>` : ''}
         </div>
         <div id="ao-timeentries" style="overflow:hidden;">
           ${this._renderTimeEntries(ao)}
@@ -110,7 +112,7 @@ const WorkOrderDetailPage = {
       <!-- Tidslinje/logg -->
       <div class="card">
         <div class="card-header">
-          <h3>Tidslinje & logg</h3>
+          <h3>${ic('activity',14)} Tidslinje & logg</h3>
           <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>
         </div>
         <div id="ao-timeline" style="overflow:hidden;">
@@ -143,26 +145,33 @@ const WorkOrderDetailPage = {
   _actionBtns(ao) {
     const canEdit     = Auth.can('ao_edit');
     const canComplete = Auth.can('ao_complete');
+    const canInvoice  = Auth.can('invoice_create');
     const btns = [];
     if (canEdit && ao.status === 'nytt') {
-      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',14)} Planera</button>`);
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.setStatus('pool')">${ic('clipboard-list',14)} Till pool</button>`);
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
+      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',13)} Planera</button>`);
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.setStatus('pool')">${ic('inbox',13)} Till pool</button>`);
     }
     if (canEdit && ao.status === 'pool') {
-      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',14)} Planera</button>`);
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
+      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',13)} Planera</button>`);
     }
     if (canEdit && ao.status === 'planerad') {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta arbete</button>`);
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',14)} Omplanera</button>`);
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',13)} Omplanera</button>`);
     }
     if (ao.status === 'pågående') {
-      if (canEdit) btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',14)} Pausa</button>`);
-      if (canComplete) btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',14)} Klarmarkera</button>`);
+      if (canComplete) btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',13)} Klarmarkera</button>`);
+      if (canEdit) btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',13)} Pausa</button>`);
+    }
+    if (ao.status === 'klar' && !ao.invoiceId && canInvoice) {
+      btns.push(`<button class="btn bsu bsm" onclick="InvoicesPage.createFromAO('${ao.id}')">${ic('receipt',13)} Skapa fakturaunderlag</button>`);
+    }
+    if (ao.status === 'klar' && ao.invoiceId) {
+      btns.push(`<button class="btn bs bsm" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('file-text',13)} Visa fakturaunderlag</button>`);
     }
     if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status)) {
-      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('more-vertical',14)}</button>`);
+      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()" title="Fler statusval">${ic('more-horizontal',13)}</button>`);
     }
     return btns.join('');
   },
@@ -227,12 +236,8 @@ const WorkOrderDetailPage = {
 
   _renderChecklist(ao) {
     const items = ao.checklist || [];
-    if (!items.length) return `<p style="padding:10px 0;color:var(--mt);font-size:13px;">Ingen checklista ännu. Tryck + för att lägga till.</p>`;
-    const okCount  = items.filter(c => c.done || c.avvikelse === 'ok').length;
-    const pct      = items.length ? Math.round(okCount / items.length * 100) : 0;
-    return `
-      <div class="pb" style="margin-bottom:8px;"><div class="pbf" style="width:${pct}%"></div></div>
-      ${items.map((c, i) => {
+    if (!items.length) return `<div class="empty" style="padding:16px 0;gap:4px;">${ic('clipboard-check',24)}<p style="font-size:12px;color:var(--mt);text-align:center;">Ingen checklista.<br>Tryck + för att lägga till checkpunkter.</p></div>`;
+    return `${items.map((c, i) => {
         const isOk  = c.avvikelse === 'ok' || (c.done && !c.avvikelse);
         const isAvv = c.avvikelse === 'avvikelse';
         return `
@@ -832,8 +837,7 @@ const WorkOrderDetailPage = {
     const okCnt  = items.filter(c => c.done || c.avvikelse === 'ok').length;
     const avvCnt = items.filter(c => c.avvikelse === 'avvikelse').length;
     if (!total) { el.innerHTML = ''; return; }
-    el.innerHTML = `<span class="bdg bdg-${okCnt===total&&!avvCnt?'green':'blue'}">${okCnt}/${total} OK</span>`
-      + (avvCnt > 0 ? ` <span class="bdg bdg-orange">${avvCnt} avv.</span>` : '');
+    el.innerHTML = `<span class="bdg bdg-${okCnt===total&&!avvCnt?'green':avvCnt>0?'orange':'blue'}">${okCnt}/${total} OK${avvCnt>0?' · '+avvCnt+' avv.':''}</span>`;
   },
 
   /* ── Checklista ────────────────────────── */
