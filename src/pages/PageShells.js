@@ -785,7 +785,7 @@ const AdminPage = {
     const s = state.settings || {};
     const allTitles = state.titles || [];
     const titles = this._titleQ
-      ? allTitles.filter(t => t.toLowerCase().includes(this._titleQ.toLowerCase()))
+      ? allTitles.filter(t => typeof t === 'object' && t.name && t.name.toLowerCase().includes(this._titleQ.toLowerCase()))
       : allTitles;
 
     el.innerHTML = `
