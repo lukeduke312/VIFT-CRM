@@ -107,6 +107,7 @@ const Router = {
       'pg-crm':         () => CustomersPage.render(),
       'pg-crm-detail':  () => CustomerDetailPage.render(params),
       'pg-objects':     () => PropertiesPage.render(),
+      'pg-obj-detail':  () => PropertyDetailPage.render(params),
       'pg-offer':       () => OffersPage.render(),
       'pg-offer-detail':() => OfferDetailPage.render(params),
       'pg-invoices':    () => InvoicesPage.render(),

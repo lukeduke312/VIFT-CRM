@@ -211,36 +211,7 @@ const PropertiesPage = {
   },
 
   openDetail(propId) {
-    const p = (state.properties||[]).find(x=>x.id===propId);
-    if (!p) return;
-    const cu = getCu(p.customerId);
-    const aos = (state.workOrders||[]).filter(a => a.propertyId === p.id).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-    Modal.open({
-      title: p.name,
-      wide: true,
-      body: `
-        <div class="dr"><span class="dk">Ägare</span><span class="dv">${cu?CustomerService.displayName(cu):'—'}</span></div>
-        <div class="dr"><span class="dk">Adress</span><span class="dv">${[p.address,p.zip,p.city].filter(Boolean).join(', ')||'—'}</span></div>
-        ${p.type?`<div class="dr"><span class="dk">Typ</span><span class="dv">${p.type}</span></div>`:''}
-        ${p.area?`<div class="dr"><span class="dk">Yta</span><span class="dv">${fmt(p.area)} m²</span></div>`:''}
-        ${p.floors?`<div class="dr"><span class="dk">Våningar</span><span class="dv">${p.floors}</span></div>`:''}
-        ${p.accessCode?`<div class="dr"><span class="dk">Portkod</span><span class="dv">${p.accessCode}</span></div>`:''}
-        ${p.note?`<div class="nbox" style="margin-top:8px;">${p.note}</div>`:''}
-        ${aos.length>0?`
-          <div style="margin-top:12px;">
-            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Arbetsorder (${aos.length})</div>
-            ${aos.slice(0,6).map(ao=>`<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-              <div><div style="font-size:13px;font-weight:700;">${ao.id} – ${ao.title}</div>
-              <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt)}</div></div>
-              ${sbdg(ao.status)}</div>`).join('')}
-            ${aos.length>6?`<p style="font-size:11px;color:var(--mt);text-align:center;margin-top:4px;">+${aos.length-6} till</p>`:''}
-          </div>`:''
-        }`,
-      buttons: [
-        { label: 'Redigera', cls: 'btn bs', onClick: () => { Modal.close(); PropertiesPage.openEdit(propId); }},
-        { label: 'Stäng', cls: 'btn bghost', onClick: () => Modal.close() }
-      ]
-    });
+    Router.showPage('pg-obj-detail', { propId });
   },
 
   openEdit(propId) {

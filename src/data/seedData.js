@@ -129,13 +129,21 @@ const SeedData = {
     {
       id: 'OBJ-001', customerId: 'K-001', name: 'Solgläntan Hus A',
       address: 'Solvägen 1A', zip: '123 45', city: 'Stockholm',
-      propertyDesignation: 'Stockholm Haga 1:234', buildYear: '1965', apartments: 24,
+      type: 'Flerbostadshus',
+      propertyDesignation: 'Stockholm Haga 1:234', buildYear: '1965', apartments: 24, floors: 6, area: 2800,
       status: 'aktiv', note: 'Hiss finns. OVK utförd 2023.',
-      contacts: [],
+      contacts: [
+        { name: 'Anna Lindqvist', role: 'BRF-ordförande',     phone: '070-111 22 33', email: 'anna@solglantanbrf.se' },
+        { name: 'Lars Pettersson', role: 'Fastighetsskötare', phone: '070-444 55 66', email: '' }
+      ],
+      notes: [
+        { id: 'N001', text: 'Hiss inspekterad och godkänd 2023. Nästa besiktning planerad till 2024.', createdAt: '2024-01-15T09:00:00.000Z', createdBy: 'Admin' },
+        { id: 'N002', text: 'BRF önskar att vi prioriterar trapphusunderhåll inför sommaren.', createdAt: '2024-03-10T14:30:00.000Z', createdBy: 'Admin' }
+      ],
       technicalSystems: { heating: 'Fjärrvärme', ventilation: 'FTX', elevator: 'Schindler 2000', alarm: 'Bosch BA9000' },
       inspections: {
-        ovk: { lastDate: '2023-03-15', nextDate: '2026-03-15', status: 'godkänd' },
-        sba: { lastDate: '2023-11-20', nextDate: '2024-11-20', status: 'godkänd' },
+        ovk:  { lastDate: '2023-03-15', nextDate: '2026-03-15', status: 'godkänd' },
+        sba:  { lastDate: '2023-11-20', nextDate: '2024-11-20', status: 'godkänd' },
         hiss: { lastDate: '2023-06-10', nextDate: '2024-06-10', status: 'godkänd' }
       },
       documents: [], createdAt: '2024-01-10'
@@ -143,30 +151,45 @@ const SeedData = {
     {
       id: 'OBJ-002', customerId: 'K-002', name: 'Granitgatan 5',
       address: 'Granitgatan 5', zip: '111 11', city: 'Stockholm',
-      propertyDesignation: 'Stockholm Granit 2:1', buildYear: '1988', apartments: 0,
+      type: 'Kontorsfastighet',
+      propertyDesignation: 'Stockholm Granit 2:1', buildYear: '1988', apartments: 0, floors: 6, area: 4200,
       status: 'aktiv', note: 'Kontorsfastighet, 6 plan.',
-      contacts: [],
-      technicalSystems: { heating: 'Bergvärme', ventilation: 'CAV' },
+      contacts: [
+        { name: 'Marcus Svensson', role: 'Driftansvarig', phone: '08-222 33 44', email: 'marcus@fastighetsab.se' }
+      ],
+      notes: [],
+      technicalSystems: { heating: 'Bergvärme', ventilation: 'CAV', electricity: '3-fas 400V' },
       inspections: { ovk: { lastDate: '2022-05-01', nextDate: '2025-05-01', status: 'godkänd' } },
       documents: [], createdAt: '2024-01-20'
     },
     {
       id: 'OBJ-003', customerId: 'K-004', name: 'Björkdalen Hus B',
       address: 'Björkvägen 10B', zip: '135 79', city: 'Järfälla',
-      propertyDesignation: 'Järfälla Björk 3:45', buildYear: '1978', apartments: 18,
+      type: 'Flerbostadshus',
+      propertyDesignation: 'Järfälla Björk 3:45', buildYear: '1978', apartments: 18, floors: 4, area: 1900,
       status: 'aktiv', note: 'Äldre installation. Behöver genomgripande OVK.',
-      contacts: [],
-      technicalSystems: { heating: 'Fjärrvärme', ventilation: 'F' },
+      contacts: [
+        { name: 'Eva Björk', role: 'BRF-styrelseordförande', phone: '070-777 88 99', email: 'eva@bjorkdalenbrf.se' }
+      ],
+      notes: [
+        { id: 'N003', text: 'OVK kraftigt försenad sedan 2023. Styrelsen informerad. Åtgärd krävs snarast.', createdAt: _ds(-45) + 'T10:00:00.000Z', createdBy: 'Admin' }
+      ],
+      technicalSystems: { heating: 'Fjärrvärme', ventilation: 'F', water: 'Äldre stålrör, delvis åtgärdade 2015' },
       inspections: { ovk: { lastDate: '2020-09-01', nextDate: '2023-09-01', status: 'försenad' } },
       documents: [], createdAt: _ds(-60)
     },
     {
       id: 'OBJ-004', customerId: 'K-006', name: 'Parkgatan 8',
       address: 'Parkgatan 8', zip: '112 34', city: 'Stockholm',
-      propertyDesignation: 'Stockholm Park 5:12', buildYear: '2003', apartments: 32,
+      type: 'Flerbostadshus',
+      propertyDesignation: 'Stockholm Park 5:12', buildYear: '2003', apartments: 32, floors: 8, area: 5100,
       status: 'aktiv', note: 'Nyare fastighet, bra skick. Söker proaktiv partner.',
-      contacts: [],
-      technicalSystems: { heating: 'Fjärrvärme', ventilation: 'FTX', alarm: 'Texecom Premier' },
+      contacts: [
+        { name: 'Sofia Nilsson',   role: 'Förvaltare',    phone: '070-321 65 43', email: 'sofia@parkbrf.se' },
+        { name: 'Johan Eriksson',  role: 'Viceordförande', phone: '070-123 45 67', email: '' }
+      ],
+      notes: [],
+      technicalSystems: { heating: 'Fjärrvärme', ventilation: 'FTX', alarm: 'Texecom Premier', elevator: 'KONE MonoSpace' },
       inspections: { ovk: { lastDate: _ds(-400), nextDate: _ds(200), status: 'godkänd' } },
       documents: [], createdAt: _ds(-30)
     }
