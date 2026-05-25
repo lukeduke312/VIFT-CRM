@@ -362,6 +362,7 @@ const ArticlesPage = {
   },
 
   openCreate() {
+    if (!Auth.require('article_manage')) return;
     Modal.open({
       title: 'Ny artikel',
       body: this._formHtml(null),
@@ -460,6 +461,7 @@ const PriceGroupsPage = {
   },
 
   openCreate() {
+    if (!Auth.require('article_manage')) return;
     Modal.open({
       title: 'Ny prisgrupp',
       body: this._formHtml(null),
@@ -697,6 +699,7 @@ const StaffPage = {
   },
 
   openCreate() {
+    if (!Auth.require('staff_manage')) return;
     Modal.open({
       title: 'Ny personal',
       body: this._formHtml(null),
@@ -709,6 +712,7 @@ const StaffPage = {
   },
 
   openEdit(staffId) {
+    if (!Auth.require('staff_manage')) return;
     const s = (state.staff||[]).find(x => x.id === staffId);
     if (!s) return;
     Modal.open({
@@ -930,6 +934,7 @@ const AdminPage = {
   },
 
   openEditCompany() {
+    if (!Auth.require('admin_manage')) return;
     const s = state.settings || {};
     Modal.open({
       title: 'Företagsinformation',
@@ -1012,6 +1017,7 @@ const AdminPage = {
   },
 
   openAddTitle() {
+    if (!Auth.require('admin_manage')) return;
     Modal.open({
       title: 'Lägg till titel',
       body: `
@@ -1097,6 +1103,7 @@ const AdminPage = {
   },
 
   openAddRole() {
+    if (!Auth.require('admin_manage')) return;
     Modal.open({
       title: 'Ny anpassad roll',
       body: `
@@ -1148,10 +1155,34 @@ const AdminPage = {
     { id:'sales_manage',     label:'Hantera säljchanser' }
   ],
 
+  _PERM_LABELS: {
+    'all':              'Superadmin – full åtkomst',
+    'dashboard_view':   'Visa dashboard',
+    'ao_view_all':      'Visa alla arbetsordrar',
+    'ao_view_own':      'Visa egna arbetsordrar',
+    'ao_create':        'Skapa arbetsordrar',
+    'ao_edit':          'Redigera arbetsordrar',
+    'ao_complete':      'Avsluta/slutföra arbetsordrar',
+    'ao_time':          'Registrera tid',
+    'ao_material':      'Registrera material',
+    'ao_checklist':     'Hantera checklista',
+    'customer_manage':  'Hantera kunder & fastigheter',
+    'offer_manage':     'Hantera offerter',
+    'invoice_view':     'Visa fakturaunderlag',
+    'invoice_create':   'Skapa/redigera fakturaunderlag',
+    'staff_view':       'Visa personal',
+    'staff_manage':     'Hantera personal',
+    'admin_manage':     'Systeminställningar & roller',
+    'article_manage':   'Hantera artiklar & prisgrupper',
+    'recurring_manage': 'Hantera återkommande ärenden',
+    'sales_manage':     'Hantera säljchanser',
+    'reports_view':     'Visa rapporter & löneunderlag',
+  },
+
   _PERM_GROUPS: [
     { label: 'Superadmin',         perms: ['all'] },
     { label: 'Dashboard',          perms: ['dashboard_view'] },
-    { label: 'Arbetsorder',        perms: ['ao_view_all','ao_create','ao_complete'] },
+    { label: 'Arbetsorder',        perms: ['ao_view_all','ao_view_own','ao_create','ao_edit','ao_complete','ao_time','ao_material','ao_checklist'] },
     { label: 'Kunder & Offerter',  perms: ['customer_manage','offer_manage'] },
     { label: 'Fakturering',        perms: ['invoice_view','invoice_create'] },
     { label: 'Personal & Admin',   perms: ['staff_view','staff_manage','admin_manage','article_manage'] },
@@ -1162,8 +1193,7 @@ const AdminPage = {
     const r = (state.roles||[]).find(x => x.id === roleId);
     if (!r) return;
     const perms = r.permissions || [];
-    const permMap = {};
-    this._PERMISSIONS.forEach(p => { permMap[p.id] = p.label; });
+    const permMap = this._PERM_LABELS || {};
 
     const groupsHtml = this._PERM_GROUPS.map((g, gi) => {
       const groupCheckedCount = g.perms.filter(pid => perms.includes(pid)).length;

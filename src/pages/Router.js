@@ -35,6 +35,43 @@ const Router = {
   currentParams: {},
 
   showPage(pageId, params = {}) {
+    // ── Behörighetskontroll ──────────────────────────────────
+    if (!Auth.canViewPage(pageId)) {
+      showToast('Du saknar behörighet för den sidan');
+      // Visa "Ingen behörighet"-meddelande på dashboarden
+      document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
+      const dash = document.getElementById('pg-dash');
+      if (dash) {
+        dash.classList.add('active');
+        const meta = this.PAGE_TITLES['pg-dash'];
+        document.getElementById('topbar-title').textContent = meta.title;
+        document.getElementById('topbar-sub').textContent   = meta.sub;
+        Sidebar.setActive('pg-dash');
+        // Rendera dash med access-denied-banner om vi försökte gå till annan sida
+        if (pageId !== 'pg-dash') {
+          const pageMeta = this.PAGE_TITLES[pageId] || { title: pageId };
+          const el = document.getElementById('dash-content');
+          if (el) el.innerHTML = `
+            <div class="card" style="border-left:3px solid var(--rd);margin-bottom:12px;">
+              <div class="card-body" style="padding:16px;display:flex;align-items:center;gap:12px;">
+                <div style="font-size:24px;">🔒</div>
+                <div>
+                  <div style="font-weight:800;color:var(--rd);font-size:14px;">Ingen behörighet</div>
+                  <div style="font-size:12px;color:var(--mt);margin-top:2px;">
+                    Du har inte tillgång till <strong>${pageMeta.title}</strong>.
+                    Kontakta en administratör om du anser att detta är fel.
+                  </div>
+                </div>
+              </div>
+            </div>` + (el.innerHTML || '');
+          Dashboard.render();
+        } else {
+          Dashboard.render();
+        }
+      }
+      return;
+    }
+
     // Stäng sidebar på mobil
     if (window.innerWidth < 1024) Sidebar.close();
 

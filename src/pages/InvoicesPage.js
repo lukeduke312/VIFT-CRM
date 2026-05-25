@@ -55,6 +55,7 @@ const InvoicesPage = {
   },
 
   createFromAO(aoId) {
+    if (!Auth.require('invoice_create')) return;
     const result = InvoiceService.createFromAO(aoId);
     if (!result.ok) { showToast(result.error); return; }
     showToast(`${result.invoice.id} skapat`);
@@ -62,6 +63,7 @@ const InvoicesPage = {
   },
 
   createBlank() {
+    if (!Auth.require('invoice_create')) return;
     Modal.open({
       title: 'Ny faktura / redovisning',
       wide: true,
@@ -495,6 +497,7 @@ const InvoiceDetailPage = {
   },
 
   openAddLine() {
+    if (!Auth.require('invoice_create')) return;
     Modal.open({
       title: 'Lägg till rad',
       body: this._lineFormHtml(null),

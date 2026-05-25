@@ -48,7 +48,7 @@ const WorkOrderDetailPage = {
       <div class="card">
         <div class="card-header" style="justify-content:space-between;">
           <h3 style="font-size:13px;font-weight:800;color:var(--navy);">${ao.id}</h3>
-          <button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>
+          ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>` : ''}
         </div>
         <div class="card-body">
           <h2 style="font-size:16px;font-weight:800;margin-bottom:10px;">${ao.title}</h2>
@@ -141,25 +141,27 @@ const WorkOrderDetailPage = {
   },
 
   _actionBtns(ao) {
+    const canEdit     = Auth.can('ao_edit');
+    const canComplete = Auth.can('ao_complete');
     const btns = [];
-    if (ao.status === 'nytt') {
+    if (canEdit && ao.status === 'nytt') {
       btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',14)} Planera</button>`);
       btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.setStatus('pool')">${ic('clipboard-list',14)} Till pool</button>`);
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta</button>`);
     }
-    if (ao.status === 'pool') {
+    if (canEdit && ao.status === 'pool') {
       btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',14)} Planera</button>`);
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta</button>`);
     }
-    if (ao.status === 'planerad') {
+    if (canEdit && ao.status === 'planerad') {
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',14)} Starta arbete</button>`);
       btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',14)} Omplanera</button>`);
     }
     if (ao.status === 'pågående') {
-      btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',14)} Pausa</button>`);
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',14)} Klarmarkera</button>`);
+      if (canEdit) btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',14)} Pausa</button>`);
+      if (canComplete) btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',14)} Klarmarkera</button>`);
     }
-    if (!['klar','fakturerad','avbruten'].includes(ao.status)) {
+    if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status)) {
       btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('more-vertical',14)}</button>`);
     }
     return btns.join('');
@@ -496,6 +498,7 @@ const WorkOrderDetailPage = {
 
   /* ── Material-modal ───────────────────────── */
   openAddMaterial() {
+    if (!Auth.require('ao_material')) return;
     const articles = (state.articles||[]).filter(a=>a.active);
     const artListHtml = articles.length ? articles.map(a => `
       <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${a.vatRate||25}" data-cat="${a.category||''}"
@@ -715,6 +718,7 @@ const WorkOrderDetailPage = {
 
   /* ── Åtgärder ──────────────────────────── */
   setStatus(status) {
+    if (!Auth.require('ao_edit')) return;
     WorkOrderService.setStatus(this.aoId, status);
     this.render({ aoId: this.aoId });
     Sidebar.updateBadges();
@@ -722,6 +726,7 @@ const WorkOrderDetailPage = {
   },
 
   markComplete() {
+    if (!Auth.require('ao_complete')) return;
     const ao = getAO(this.aoId);
     if (!ao) return;
     const chkTotal = (ao.checklist||[]).length;
@@ -833,6 +838,7 @@ const WorkOrderDetailPage = {
 
   /* ── Checklista ────────────────────────── */
   openAddChecklist() {
+    if (!Auth.require('ao_checklist')) return;
     Modal.open({
       title: 'Lägg till checkpunkt',
       body: `
@@ -903,6 +909,7 @@ const WorkOrderDetailPage = {
 
   /* ── Tid ───────────────────────────────── */
   openAddTime() {
+    if (!Auth.require('ao_time')) return;
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>

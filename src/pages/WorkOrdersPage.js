@@ -68,9 +68,7 @@ const WorkOrdersPage = {
             ${ic('grid',13)} Kort
           </button>
         </div>
-        <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">
-          ${ic('plus',14)} Ny order
-        </button>
+        ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
       </div>
       <div class="ftabs" style="margin-bottom:4px;">
         ${['alla','nytt','pool','planerad','pågående','klar','fakturerad'].map(f =>
@@ -186,6 +184,7 @@ const WorkOrdersPage = {
 
   /* ── Skapa AO – wizard ─────────────────── */
   openCreate(prefillCustomerId = null) {
+    if (!Auth.require('ao_create')) return;
     this._wiz = { step: 1, data: { customerId: prefillCustomerId || '' }, modalId: null };
     this._showWizard();
   },

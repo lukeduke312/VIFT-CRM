@@ -51,6 +51,12 @@ const SeedData = {
       title: 'Elektriker', phone: '072-888 99 00', email: 'sofia@vift.se',
       username: 'sofia', password: '1234', role: 'personal', permissions: [],
       active: true, createdAt: '2024-04-05'
+    },
+    {
+      id: 'ST-006', firstName: 'Emma', lastName: 'Ekonom',
+      title: 'Ekonomiassistent', phone: '070-000 00 06', email: 'emma@vift.se',
+      username: 'emma', password: '1234', role: 'ekonomi', permissions: [],
+      active: true, createdAt: '2024-05-01'
     }
   ],
 
@@ -917,12 +923,17 @@ const SeedData = {
     {
       id: 'chef', label: 'Chef / Projektledare', isBuiltin: true, active: true,
       description: 'Kan hantera arbetsorder, kunder, offerter och se rapporter. Kan ej ändra systeminställningar.',
-      permissions: ['ao_create','ao_view_all','ao_edit','invoice_view','invoice_create','customer_manage','offer_manage','reports_view','staff_view']
+      permissions: ['dashboard_view','ao_view_all','ao_create','ao_edit','ao_complete','customer_manage','offer_manage','invoice_view','invoice_create','staff_view','reports_view','sales_manage','recurring_manage']
     },
     {
       id: 'personal', label: 'Tekniker / Personal', isBuiltin: true, active: true,
       description: 'Kan se och arbeta med tilldelade arbetsorder. Kan registrera tid och material.',
-      permissions: ['ao_view_own','ao_time','ao_material','ao_checklist']
+      permissions: ['dashboard_view','ao_view_all','ao_view_own','ao_time','ao_material','ao_checklist']
+    },
+    {
+      id: 'ekonomi', label: 'Ekonomi', isBuiltin: true, active: true,
+      description: 'Hanterar fakturering, rapporter och löneunderlag. Kan inte hantera personal eller systeminställningar.',
+      permissions: ['dashboard_view','ao_view_all','invoice_view','invoice_create','reports_view']
     }
   ],
 

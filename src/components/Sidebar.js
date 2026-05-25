@@ -51,13 +51,29 @@ const Sidebar = {
       </div>`;
 
     let inSection = false;
+    let sectionHasItems = false;
+    let pendingSection  = '';
+
     this.NAV_ITEMS.forEach(item => {
       if (item.section) {
-        if (inSection) html += '</div>';
-        html += `<div class="nav-section"><div class="nav-section-label">${item.section}</div>`;
+        // Close previous section if it had visible items
+        if (inSection && sectionHasItems) html += '</div>';
+        // Queue new section header — only written lazily when a visible item appears
+        pendingSection = `<div class="nav-section"><div class="nav-section-label">${item.section}</div>`;
         inSection = true;
+        sectionHasItems = false;
         return;
       }
+
+      // Skip pages the user cannot access
+      if (!Auth.canViewPage(item.id)) return;
+
+      // Lazily flush pending section header before first visible item
+      if (inSection && !sectionHasItems) {
+        html += pendingSection;
+        sectionHasItems = true;
+      }
+
       const badge = this._getBadge(item.badgeKey);
       html += `
         <button class="ni" id="nav-${item.id}" onclick="Router.showPage('${item.id}')">
@@ -67,7 +83,8 @@ const Sidebar = {
         </button>`;
     });
 
-    if (inSection) html += '</div>';
+    // Close the last section if it had items
+    if (inSection && sectionHasItems) html += '</div>';
 
     html += `
       <div class="nav-spacer"></div>
