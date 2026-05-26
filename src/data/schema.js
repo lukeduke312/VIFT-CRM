@@ -320,5 +320,60 @@ const Schema = {
     active: true,
     note: '',
     createdAt: ''
+  }),
+
+  ronderingsmall: () => ({
+    id: '',
+    name: '',
+    customerId: '',        // optional — lock to customer
+    propertyId: '',        // optional — lock to property
+    description: '',
+    interval: 'månadsvis', // dagligen|veckovis|varannan_vecka|månadsvis|kvartalsvis|årsvis|eget
+    intervalDays: 30,      // used when interval='eget'
+    active: true,
+    categories: [],        // [{id, name, sortOrder, points:[{id,title,description,requiresPhoto,canCreateAO,sortOrder}]}]
+    createdAt: '',
+    updatedAt: '',
+    createdBy: ''
+  }),
+
+  rondering: () => ({
+    id: '',
+    templateId: '',
+    templateName: '',      // snapshot of name at creation
+    customerId: '',
+    propertyId: '',
+    scheduledDate: '',
+    startedAt: '',
+    completedAt: '',
+    performedBy: '',       // staffId
+    performedByName: '',
+    status: 'planerad',    // planerad|pågående|slutförd|har_avvikelser
+    internalNote: '',
+    results: [],           // [{categoryId, categoryName, points:[{pointId, pointTitle, status:'ok'|'avvikelse'|'ej_aktuell'|'', comment, deviationId, checkedAt}]}]
+    deviationIds: [],      // [avvikelseId, ...]
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  avvikelse: () => ({
+    id: '',
+    ronderingId: '',
+    categoryId: '',
+    pointId: '',
+    categoryName: '',
+    pointTitle: '',
+    customerId: '',
+    propertyId: '',
+    title: '',
+    comment: '',
+    images: [],            // [{dataUrl, name}]
+    priority: 'normal',    // akut|hög|normal|låg
+    status: 'öppen',       // öppen|åtgärdad|avskriven
+    workOrderId: '',
+    createdBy: '',
+    createdByName: '',
+    createdAt: '',
+    updatedAt: ''
   })
 };

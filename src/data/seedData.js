@@ -919,6 +919,163 @@ const SeedData = {
   contracts: [],
   inspections: [],
 
+  ronderingsmallar: [
+    {
+      id: 'MALL-001',
+      name: 'Standard BRF-rondering',
+      customerId: '',
+      propertyId: '',
+      description: 'Komplett rondering för bostadsrättsföreningar med utomhus-, inomhus- och teknikkontroll.',
+      interval: 'månadsvis',
+      intervalDays: 30,
+      active: true,
+      categories: [
+        {
+          id: 'cat-1', name: 'Utomhusmiljö', sortOrder: 1,
+          points: [
+            { id: 'pt-1-1', title: 'Fasader', description: 'Kontrollera fasaders skick, sprickor, skador', requiresPhoto: false, canCreateAO: true, sortOrder: 1 },
+            { id: 'pt-1-2', title: 'Belysning utomhus', description: 'Kontrollera att all utomhusbelysning fungerar', requiresPhoto: false, canCreateAO: true, sortOrder: 2 },
+            { id: 'pt-1-3', title: 'Rent och snyggt', description: 'Skräp, ogräs, allmänt intryck', requiresPhoto: false, canCreateAO: false, sortOrder: 3 },
+            { id: 'pt-1-4', title: 'Hårdgjorda ytor', description: 'Asfalt, plattor, gångar — sprickor eller ojämnheter', requiresPhoto: false, canCreateAO: true, sortOrder: 4 },
+            { id: 'pt-1-5', title: 'Avfall/miljörum', description: 'Ordning i miljörum, kärl på plats', requiresPhoto: false, canCreateAO: false, sortOrder: 5 }
+          ]
+        },
+        {
+          id: 'cat-2', name: 'Inomhus', sortOrder: 2,
+          points: [
+            { id: 'pt-2-1', title: 'Entréer', description: 'Dörrautomatik, belysning, städning', requiresPhoto: false, canCreateAO: true, sortOrder: 1 },
+            { id: 'pt-2-2', title: 'Trapphus', description: 'Lampor, städning, skador på väggar/golv', requiresPhoto: false, canCreateAO: true, sortOrder: 2 },
+            { id: 'pt-2-3', title: 'Källare/förråd', description: 'Lås, belysning, ordning', requiresPhoto: false, canCreateAO: true, sortOrder: 3 },
+            { id: 'pt-2-4', title: 'Soprum/miljörum inomhus', description: 'Sortering, lukt, skick', requiresPhoto: false, canCreateAO: false, sortOrder: 4 }
+          ]
+        },
+        {
+          id: 'cat-3', name: 'Teknik', sortOrder: 3,
+          points: [
+            { id: 'pt-3-1', title: 'Undercentral', description: 'Läckor, larm, tryck och temperatur', requiresPhoto: false, canCreateAO: true, sortOrder: 1 },
+            { id: 'pt-3-2', title: 'Ventilation', description: 'Synliga filter, drift, ljudnivå', requiresPhoto: false, canCreateAO: true, sortOrder: 2 },
+            { id: 'pt-3-3', title: 'Brand/SBA', description: 'Nödbelysning, brandvarnare, utrymningsvägar fria', requiresPhoto: true, canCreateAO: true, sortOrder: 3 },
+            { id: 'pt-3-4', title: 'Lås/passersystem', description: 'Digitala lås, nyckelsystem, kodpaneler', requiresPhoto: false, canCreateAO: true, sortOrder: 4 }
+          ]
+        }
+      ],
+      createdAt: '2024-01-15T10:00:00.000Z',
+      updatedAt: '2024-01-15T10:00:00.000Z',
+      createdBy: 'ST-001'
+    }
+  ],
+
+  ronderingar: [
+    {
+      id: 'RON-001',
+      templateId: 'MALL-001',
+      templateName: 'Standard BRF-rondering',
+      customerId: 'K-001',
+      propertyId: '',
+      scheduledDate: _ds(-7),
+      startedAt: _ds(-7) + 'T09:00:00.000Z',
+      completedAt: _ds(-7) + 'T10:30:00.000Z',
+      performedBy: 'ST-002',
+      performedByName: 'Erik Andersson',
+      status: 'har_avvikelser',
+      internalNote: 'Genomförd utan problem. Två avvikelser noterade.',
+      results: [
+        {
+          categoryId: 'cat-1', categoryName: 'Utomhusmiljö',
+          points: [
+            { pointId: 'pt-1-1', pointTitle: 'Fasader', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T09:10:00.000Z' },
+            { pointId: 'pt-1-2', pointTitle: 'Belysning utomhus', status: 'avvikelse', comment: '', deviationId: 'AVV-001', checkedAt: _ds(-7) + 'T09:15:00.000Z' },
+            { pointId: 'pt-1-3', pointTitle: 'Rent och snyggt', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T09:20:00.000Z' },
+            { pointId: 'pt-1-4', pointTitle: 'Hårdgjorda ytor', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T09:25:00.000Z' },
+            { pointId: 'pt-1-5', pointTitle: 'Avfall/miljörum', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T09:30:00.000Z' }
+          ]
+        },
+        {
+          categoryId: 'cat-2', categoryName: 'Inomhus',
+          points: [
+            { pointId: 'pt-2-1', pointTitle: 'Entréer', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T09:40:00.000Z' },
+            { pointId: 'pt-2-2', pointTitle: 'Trapphus', status: 'avvikelse', comment: '', deviationId: 'AVV-002', checkedAt: _ds(-7) + 'T09:45:00.000Z' },
+            { pointId: 'pt-2-3', pointTitle: 'Källare/förråd', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T09:50:00.000Z' },
+            { pointId: 'pt-2-4', pointTitle: 'Soprum/miljörum inomhus', status: 'ej_aktuell', comment: 'Soprum renoveras', deviationId: null, checkedAt: _ds(-7) + 'T09:55:00.000Z' }
+          ]
+        },
+        {
+          categoryId: 'cat-3', categoryName: 'Teknik',
+          points: [
+            { pointId: 'pt-3-1', pointTitle: 'Undercentral', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T10:05:00.000Z' },
+            { pointId: 'pt-3-2', pointTitle: 'Ventilation', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T10:10:00.000Z' },
+            { pointId: 'pt-3-3', pointTitle: 'Brand/SBA', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T10:15:00.000Z' },
+            { pointId: 'pt-3-4', pointTitle: 'Lås/passersystem', status: 'ok', comment: '', deviationId: null, checkedAt: _ds(-7) + 'T10:20:00.000Z' }
+          ]
+        }
+      ],
+      deviationIds: ['AVV-001', 'AVV-002'],
+      createdAt: _ds(-8) + 'T08:00:00.000Z',
+      updatedAt: _ds(-7) + 'T10:30:00.000Z'
+    },
+    {
+      id: 'RON-002',
+      templateId: 'MALL-001',
+      templateName: 'Standard BRF-rondering',
+      customerId: 'K-001',
+      propertyId: '',
+      scheduledDate: _ds(7),
+      startedAt: '',
+      completedAt: '',
+      performedBy: 'ST-002',
+      performedByName: 'Erik Andersson',
+      status: 'planerad',
+      internalNote: '',
+      results: [],
+      deviationIds: [],
+      createdAt: _ds(-1) + 'T08:00:00.000Z',
+      updatedAt: _ds(-1) + 'T08:00:00.000Z'
+    }
+  ],
+
+  avvikelser: [
+    {
+      id: 'AVV-001',
+      ronderingId: 'RON-001',
+      categoryId: 'cat-1',
+      pointId: 'pt-1-2',
+      categoryName: 'Utomhusmiljö',
+      pointTitle: 'Belysning utomhus',
+      customerId: 'K-001',
+      propertyId: '',
+      title: 'Trasig belysning vid entré B',
+      comment: 'Armatur blinkar vid entré B, troligtvis dålig ström eller trasig ljuskälla.',
+      images: [],
+      priority: 'normal',
+      status: 'öppen',
+      workOrderId: '',
+      createdBy: 'ST-002',
+      createdByName: 'Erik Andersson',
+      createdAt: _ds(-7) + 'T09:15:00.000Z',
+      updatedAt: _ds(-7) + 'T09:15:00.000Z'
+    },
+    {
+      id: 'AVV-002',
+      ronderingId: 'RON-001',
+      categoryId: 'cat-2',
+      pointId: 'pt-2-2',
+      categoryName: 'Inomhus',
+      pointTitle: 'Trapphus',
+      customerId: 'K-001',
+      propertyId: '',
+      title: 'Skada på vägg trapphus plan 3',
+      comment: 'Hål i väggen, troligen uppkört av möbel vid flytt.',
+      images: [],
+      priority: 'låg',
+      status: 'öppen',
+      workOrderId: '',
+      createdBy: 'ST-002',
+      createdByName: 'Erik Andersson',
+      createdAt: _ds(-7) + 'T09:45:00.000Z',
+      updatedAt: _ds(-7) + 'T09:45:00.000Z'
+    }
+  ],
+
   titles: [
     { id:'TIT-001', name:'Fastighetstekniker', description:'Ansvarar för teknisk drift och underhåll av fastigheter.', active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
     { id:'TIT-002', name:'Rörmokare',          description:'Utför rörinstallationer och VVS-arbeten.',                active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },

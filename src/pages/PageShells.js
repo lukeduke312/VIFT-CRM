@@ -1255,7 +1255,7 @@ const AdminPage = {
 /* ── Shell-sidor utan rendering ───────── */
 const CalendarPage    = { render() { _renderShell('pg-calendar-content',    'Kalender',    'Kalendervy med planerade ordrar byggs i Fas 4.'); } };
 const ContractsPage   = { render() { _renderShell('pg-contracts-content',   'Kontrakt',    'Kontrakthantering byggs i Fas 4.'); } };
-const InspectionsPage = { render() { _renderShell('pg-rondering-content',   'Rondering',   'Ronderingssystem med mallar och avvikelser byggs i Fas 5.'); } };
+const InspectionsPage = { render() { RonderingPage.render(); } };
 const PayrollPage     = { render() { _renderShell('pg-payroll-content',     'Löneunderlag','Löneunderlag per person byggs i Fas 4.'); } };
 const ReportsPage     = { render() { _renderShell('pg-reports-content',     'Rapporter',   'Statistik och rapporter byggs i Fas 4.'); } };
 
