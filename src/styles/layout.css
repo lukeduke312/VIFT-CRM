@@ -49,22 +49,10 @@
   min-height: 0;             /* Krävs för att flex-child ska respektera höjdbegränsning */
   overflow-y: auto;
   overflow-x: hidden;
-  /* Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.22) transparent;
+  scrollbar-width: none;     /* Firefox — göm scrollbaren */
 }
 .nav-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.nav-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.nav-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,.22);
-  border-radius: 999px;
-}
-.nav-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,.40);
+  display: none;             /* Chrome / Safari / Edge — göm scrollbaren */
 }
 
 /* ── Page area ──────────────────────────────────── */
