@@ -184,7 +184,16 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding: 8px 16px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.15) transparent;
 }
+.modal-body::-webkit-scrollbar { width: 5px; }
+.modal-body::-webkit-scrollbar-track { background: transparent; }
+.modal-body::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.12);
+  border-radius: 999px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.22); }
 .modal-footer {
   flex-shrink: 0;
   display: flex;
