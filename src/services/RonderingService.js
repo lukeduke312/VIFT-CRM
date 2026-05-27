@@ -51,10 +51,11 @@ const RonderingService = {
 
   /* ── Ronderingar ─────────────────────── */
 
-  createFromMall(mallId, overrides) {
-    const mall = getMall(mallId);
-    if (!mall) return null;
-    const results = (mall.categories || []).map(cat => ({
+  // Creates a rondering from wizard data (step 1-4)
+  createRondering(data) {
+    const categories = data.categories || [];
+    // Build results skeleton from categories
+    const results = categories.map(cat => ({
       categoryId: cat.id,
       categoryName: cat.name,
       points: (cat.points || []).map(pt => ({
@@ -66,20 +67,66 @@ const RonderingService = {
         checkedAt: ''
       }))
     }));
-    const ron = Object.assign(Schema.rondering(), {
-      templateId: mall.id,
-      templateName: mall.name,
-      results,
-      customerId: mall.customerId || '',
-      propertyId: mall.propertyId || ''
-    }, overrides, {
+    const ron = Object.assign(Schema.rondering(), data, {
       id: newId(state.ronderingar, 'RON'),
+      results: results,
+      status: data.isDraft ? 'utkast' : 'planerad',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
     state.ronderingar.push(ron);
     persist();
     return ron;
+  },
+
+  // Save a rondering's categories as a new template
+  saveAsMall(ronderingId, mallName) {
+    const ron = getRon(ronderingId);
+    if (!ron) return null;
+    return this.createMall({
+      name: mallName,
+      description: ron.description || '',
+      categories: JSON.parse(JSON.stringify(ron.categories || [])),
+      customerId: ron.customerId || '',
+      interval: 'månadsvis',
+      active: true
+    });
+  },
+
+  // Load template categories into a rondering (overwrites categories)
+  loadTemplateIntoRondering(ronderingId, mallId) {
+    const ron = getRon(ronderingId);
+    const mall = getMall(mallId);
+    if (!ron || !mall) return null;
+    const cats = JSON.parse(JSON.stringify(mall.categories || []));
+    ron.categories = cats;
+    ron.templateId = mall.id;
+    ron.templateName = mall.name;
+    ron.results = cats.map(cat => ({
+      categoryId: cat.id,
+      categoryName: cat.name,
+      points: (cat.points || []).map(pt => ({
+        pointId: pt.id, pointTitle: pt.title,
+        status: '', comment: '', deviationId: null, checkedAt: ''
+      }))
+    }));
+    ron.updatedAt = new Date().toISOString();
+    persist();
+    return ron;
+  },
+
+  createFromMall(mallId, overrides) {
+    const mall = getMall(mallId);
+    if (!mall) return null;
+    const cats = JSON.parse(JSON.stringify(mall.categories || []));
+    return this.createRondering(Object.assign({
+      templateId: mall.id,
+      templateName: mall.name,
+      name: mall.name,
+      categories: cats,
+      customerId: mall.customerId || '',
+      propertyId: mall.propertyId || ''
+    }, overrides));
   },
 
   updateRondering(id, data) {
@@ -93,6 +140,18 @@ const RonderingService = {
   startRondering(id) {
     const ron = getRon(id);
     if (!ron) return null;
+    // Build results from categories if not already built
+    if (!ron.results || ron.results.length === 0) {
+      ron.results = (ron.categories || []).map(function(cat) {
+        return {
+          categoryId: cat.id,
+          categoryName: cat.name,
+          points: (cat.points || []).map(function(pt) {
+            return { pointId: pt.id, pointTitle: pt.title, status: '', comment: '', deviationId: null, checkedAt: '' };
+          })
+        };
+      });
+    }
     ron.status = 'pågående';
     ron.startedAt = new Date().toISOString();
     ron.updatedAt = new Date().toISOString();
