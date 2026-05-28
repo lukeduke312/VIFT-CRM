@@ -23,6 +23,8 @@ const ActivityService = {
       invoiceId:           meta.invoiceId           || '',
       salesOpportunityId:  meta.salesOpportunityId  || '',
       inspectionId:        meta.inspectionId        || '',
+      ronderingId:         meta.ronderingId         || '',
+      deviationId:         meta.deviationId         || '',
       userId:              (state.currentUser && state.currentUser.id) || ''
     };
 
@@ -122,8 +124,16 @@ const ActivityService = {
       sales_opportunity_snoozed: 'orange',
       sales_opportunity_order:   'green',
       sales_opportunity_quote:   'blue',
-      time_entry_created:   '',
-      inspection_completed: 'green'
+      time_entry_created:    '',
+      inspection_completed:  'green',
+      rondering_created:     'blue',
+      rondering_draft:       '',
+      rondering_started:     'blue',
+      rondering_completed:   'green',
+      point_ok:              'green',
+      point_ej_aktuell:      '',
+      deviation_created:     'red',
+      ao_from_deviation:     'purple'
     };
     return map[type] || '';
   },

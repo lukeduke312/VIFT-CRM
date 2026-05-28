@@ -58,7 +58,7 @@ const RonderingPage = {
         <input style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;"
           placeholder="Sök rondering..." value="${this._search}"
           oninput="RonderingPage._search=this.value;RonderingPage._renderTab()">
-        <select style="padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;background:var(--wh);"
+        <select style="padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;"
           onchange="RonderingPage._filterStatus=this.value;RonderingPage._renderTab()">
           ${statusOpts.map(o=>`<option value="${o.v}"${this._filterStatus===o.v?' selected':''}>${o.l}</option>`).join('')}
         </select>
@@ -71,19 +71,29 @@ const RonderingPage = {
             const prop = r.propertyId ? getObj(r.propertyId) : null;
             const stats = RonderingService.getStats(r.id);
             const nextOcc = (r.occasions||[]).filter(o=>o.date>=tdy()).sort((a,b)=>a.date>b.date?1:-1)[0];
+            const totalPts = (r.categories||[]).reduce((s,c)=>s+(c.points||[]).length, 0);
+            const planMins = (r.occasions||[]).reduce((s,o)=>s+(o.estimatedDuration||0),0) ||
+              (((r.recurringSetups||[])[0])||{}).estimatedDuration || 0;
+            const planTid = planMins > 0
+              ? (planMins >= 60 ? Math.floor(planMins/60)+'h'+(planMins%60?(planMins%60)+'min':'') : planMins+'min')
+              : '';
+            const priMap = {låg:'#64748b',normal:'var(--blue)',hög:'var(--orange)',akut:'var(--rd)'};
+            const priLbl = {låg:'Låg',normal:'Normal',hög:'Hög',akut:'Akut'};
             return `
               <div class="list-item" onclick="RonderingPage.openRondering('${r.id}')">
                 <div class="item-row">
                   <div style="flex:1;min-width:0;">
                     <div class="item-title">${r.name||r.templateName||r.id}</div>
                     <div class="item-sub">${cuName}${prop?' · '+prop.name:''}</div>
-                    <div style="font-size:11px;color:var(--mt);margin-top:2px;">
-                      ${nextOcc?ic('calendar',10)+' '+fmtDate(nextOcc.date):''}
-                      ${stats&&stats.total>0?' · '+stats.checked+'/'+stats.total+' punkter':''}
+                    <div style="font-size:11px;color:var(--mt);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;">
+                      ${nextOcc?'<span>'+ic('calendar',10)+' '+fmtDate(nextOcc.date)+'</span>':''}
+                      ${totalPts>0?'<span>'+totalPts+' punkter</span>':''}
+                      ${planTid?'<span>'+ic('clock',10)+' '+planTid+'</span>':''}
                     </div>
                   </div>
                   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
                     ${statusBadge(r.status)}
+                    ${r.priority&&r.priority!=='normal'?`<span style="font-size:9px;font-weight:700;color:${priMap[r.priority]||''};">${priLbl[r.priority]||''}</span>`:''}
                     ${(r.deviationIds||[]).length>0?`<span class="bdg bdg-red" style="font-size:9px;">${r.deviationIds.length} avv.</span>`:''}
                   </div>
                 </div>

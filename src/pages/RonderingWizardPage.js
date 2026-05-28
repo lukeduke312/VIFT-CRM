@@ -736,7 +736,8 @@ const RonderingWizardPage = {
         categoryName: cat.name,
         points: (cat.points || []).map(pt => {
           const ex = existingCat && (existingCat.points || []).find(p => p.pointId === pt.id);
-          return ex || { pointId: pt.id, pointTitle: pt.title, status: '', comment: '', deviationId: null, checkedAt: '' };
+          const base = { pointId: pt.id, pointTitle: pt.title, pointDesc: pt.description || '', canCreateAO: pt.canCreateAO !== false };
+          return ex ? Object.assign({}, ex, base) : Object.assign(base, { status: '', comment: '', deviationId: null, checkedAt: '' });
         })
       };
     });

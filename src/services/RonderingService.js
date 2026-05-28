@@ -61,6 +61,8 @@ const RonderingService = {
       points: (cat.points || []).map(pt => ({
         pointId: pt.id,
         pointTitle: pt.title,
+        pointDesc: pt.description || '',
+        canCreateAO: pt.canCreateAO !== false,
         status: '',
         comment: '',
         deviationId: null,
@@ -76,6 +78,9 @@ const RonderingService = {
     });
     state.ronderingar.push(ron);
     persist();
+    ActivityService.log('rondering_created', 'Rondering skapad: ' + ron.name, {
+      customerId: ron.customerId, propertyId: ron.propertyId, ronderingId: ron.id
+    });
     return ron;
   },
 
@@ -107,6 +112,7 @@ const RonderingService = {
       categoryName: cat.name,
       points: (cat.points || []).map(pt => ({
         pointId: pt.id, pointTitle: pt.title,
+        pointDesc: pt.description || '', canCreateAO: pt.canCreateAO !== false,
         status: '', comment: '', deviationId: null, checkedAt: ''
       }))
     }));
@@ -147,7 +153,11 @@ const RonderingService = {
           categoryId: cat.id,
           categoryName: cat.name,
           points: (cat.points || []).map(function(pt) {
-            return { pointId: pt.id, pointTitle: pt.title, status: '', comment: '', deviationId: null, checkedAt: '' };
+            return {
+              pointId: pt.id, pointTitle: pt.title,
+              pointDesc: pt.description || '', canCreateAO: pt.canCreateAO !== false,
+              status: '', comment: '', deviationId: null, checkedAt: ''
+            };
           })
         };
       });
@@ -156,6 +166,9 @@ const RonderingService = {
     ron.startedAt = new Date().toISOString();
     ron.updatedAt = new Date().toISOString();
     persist();
+    ActivityService.log('rondering_started', 'Rondering startad: ' + ron.name, {
+      customerId: ron.customerId, propertyId: ron.propertyId, ronderingId: ron.id
+    });
     return ron;
   },
 
@@ -176,6 +189,15 @@ const RonderingService = {
       ron.startedAt = ron.startedAt || new Date().toISOString();
     }
     persist();
+    if (status === 'ok') {
+      ActivityService.log('point_ok', 'Kontrollpunkt godkänd: ' + pt.pointTitle, {
+        customerId: ron.customerId, propertyId: ron.propertyId, ronderingId: ronderingId
+      });
+    } else if (status === 'ej_aktuell') {
+      ActivityService.log('point_ej_aktuell', 'Kontrollpunkt ej aktuell: ' + pt.pointTitle, {
+        customerId: ron.customerId, propertyId: ron.propertyId, ronderingId: ronderingId
+      });
+    }
     return ron;
   },
 
@@ -187,6 +209,9 @@ const RonderingService = {
     ron.completedAt = new Date().toISOString();
     ron.updatedAt = new Date().toISOString();
     persist();
+    ActivityService.log('rondering_completed', 'Rondering slutförd: ' + ron.name, {
+      customerId: ron.customerId, propertyId: ron.propertyId, ronderingId: ron.id
+    });
     return ron;
   },
 
@@ -220,6 +245,10 @@ const RonderingService = {
       ron.updatedAt = new Date().toISOString();
     }
     persist();
+    ActivityService.log('deviation_created', 'Avvikelse skapad: ' + avv.title, {
+      customerId: avv.customerId, propertyId: avv.propertyId,
+      ronderingId: ronderingId, deviationId: avv.id
+    });
     return avv;
   },
 
@@ -234,15 +263,25 @@ const RonderingService = {
   createAOFromAvvikelse(avvikelseId) {
     const avv = getAvv(avvikelseId);
     if (!avv) return null;
+    if (avv.workOrderId) return getAO(avv.workOrderId); // already created
     const cu = getCu(avv.customerId);
     const prop = getObj(avv.propertyId);
+    const ron = getRon(avv.ronderingId);
     const address = prop ? prop.address : (cu ? cu.address : '');
+    const ronName = ron ? (ron.name || ron.templateName || avv.ronderingId) : avv.ronderingId;
     const title = 'Avvikelse rondering – ' + avv.pointTitle;
-    const description = 'Vid rondering noterades avvikelse på kontrollpunkt: ' + avv.pointTitle + '.\n\nKommentar: ' + (avv.comment || '(ingen kommentar)');
+    const description = [
+      'Rondering: ' + ronName,
+      'Grupp: ' + (avv.categoryName || '—'),
+      'Kontrollpunkt: ' + (avv.pointTitle || '—'),
+      '',
+      'Avvikelse: ' + avv.title,
+      'Kommentar: ' + (avv.comment || '(ingen kommentar)')
+    ].join('\n');
     const notes = (avv.images || []).map(function(img) {
       return {
         id: 'n' + Date.now() + Math.random(),
-        text: 'Bild från avvikelse',
+        text: 'Bild från avvikelse: ' + avv.title,
         imageData: img.dataUrl,
         staffName: avv.createdByName,
         timestamp: avv.createdAt
@@ -256,12 +295,18 @@ const RonderingService = {
       address,
       priority: avv.priority,
       notes,
-      status: 'nytt'
+      status: 'nytt',
+      ronderingId: avv.ronderingId,
+      deviationId: avvikelseId
     });
     // Link AO back to avvikelse
     avv.workOrderId = ao.id;
     avv.updatedAt = new Date().toISOString();
     persist();
+    ActivityService.log('ao_from_deviation', 'AO skapad från avvikelse: ' + avv.title, {
+      customerId: avv.customerId, propertyId: avv.propertyId,
+      ronderingId: avv.ronderingId, deviationId: avvikelseId, workOrderId: ao.id
+    });
     return ao;
   },
 
