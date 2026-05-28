@@ -66,32 +66,25 @@ const RonderingWizardPage = {
   _renderWizard(el) {
     const steps = ['Ronderingsinfo', 'Kontrollpunkter', 'Tillfällen', 'Prissättning'];
 
-    // Step indicator: always show all 4 steps with labels
     const stepInd = `
       <div style="display:flex;align-items:flex-start;margin-bottom:20px;">
         ${steps.map((lbl, i) => {
-          const n = i + 1;
+          const n      = i + 1;
           const active = n === this._step;
           const done   = n < this._step;
           const circBg  = active ? 'var(--navy)' : done ? 'var(--green)' : '#e2e8f0';
           const circClr = (active || done) ? '#fff' : '#94a3b8';
           const lblClr  = active ? 'var(--navy)' : done ? 'var(--green)' : '#94a3b8';
-          const lblWt   = active ? '800' : '600';
           const lineClr = done ? 'var(--green)' : '#e2e8f0';
-          const step = `
-            <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;">
-              <div style="width:28px;height:28px;border-radius:50%;background:${circBg};color:${circClr};
-                display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;
-                flex-shrink:0;cursor:${done?'pointer':'default'};"
-                ${done ? `onclick="RonderingWizardPage._goToStep(${n})"` : ''}>
-                ${done ? ic('check', 12) : n}
-              </div>
-              <div style="font-size:9px;font-weight:${lblWt};color:${lblClr};margin-top:4px;text-align:center;line-height:1.3;padding:0 2px;">${lbl}</div>
-            </div>`;
-          const connector = i < steps.length - 1
-            ? `<div style="flex:0 0 16px;height:2px;background:${lineClr};margin-top:14px;"></div>`
+          const circ = `<div style="width:28px;height:28px;border-radius:50%;background:${circBg};color:${circClr};
+              display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${done?'14px':'12px'};
+              flex-shrink:0;cursor:${done?'pointer':'default'};"
+              ${done ? `onclick="RonderingWizardPage._goToStep(${n})"` : ''}>${done ? '✓' : n}</div>`;
+          const lbl2 = `<div style="font-size:9px;font-weight:700;color:${lblClr};margin-top:4px;text-align:center;line-height:1.3;padding:0 2px;">${lbl}</div>`;
+          const line = i < steps.length - 1
+            ? `<div style="flex:0 0 14px;height:2px;background:${lineClr};margin-top:14px;"></div>`
             : '';
-          return step + connector;
+          return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;">${circ}${lbl2}</div>${line}`;
         }).join('')}
       </div>`;
 
@@ -191,11 +184,12 @@ const RonderingWizardPage = {
           ${cats.length > 0 ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${cats.length} grupp${cats.length!==1?'er':''} · ${total} punkt${total!==1?'er':''}</div>` : ''}
         </div>
         ${mallar.length > 0 ? `
-          <select id="wiz-mall-select" style="padding:6px 8px;border:1px solid var(--br);border-radius:7px;font-size:12px;background:var(--wh);"
-            onchange="RonderingWizardPage._loadMall(this.value)">
-            <option value="">Ladda mall...</option>
-            ${mallar.map(m => `<option value="${m.id}">${this._esc(m.name)}</option>`).join('')}
-          </select>` : ''}
+          <div class="fg" style="margin:0;min-width:160px;max-width:200px;">
+            <select id="wiz-mall-select" onchange="RonderingWizardPage._loadMall(this.value)">
+              <option value="">Ladda mall...</option>
+              ${mallar.map(m => `<option value="${m.id}">${this._esc(m.name)}</option>`).join('')}
+            </select>
+          </div>` : ''}
       </div>
 
       ${cats.length === 0 ? `
@@ -220,13 +214,13 @@ const RonderingWizardPage = {
       <div class="card" style="margin-bottom:10px;" id="cat-block-${ci}">
         <div style="padding:10px 12px;border-bottom:1px solid var(--br);display:flex;gap:6px;align-items:center;background:#fafbfc;border-radius:10px 10px 0 0;">
           <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;">
-            <button class="btn bs" style="padding:1px 5px;line-height:1.4;" onclick="RonderingWizardPage._moveCat(${ci},-1)">${ic('chevron-up',11)}</button>
-            <button class="btn bs" style="padding:1px 5px;line-height:1.4;" onclick="RonderingWizardPage._moveCat(${ci},1)">${ic('chevron-down',11)}</button>
+            <button class="btn bs" style="padding:0 5px;line-height:1.6;font-size:10px;" onclick="RonderingWizardPage._moveCat(${ci},-1)">▲</button>
+            <button class="btn bs" style="padding:0 5px;line-height:1.6;font-size:10px;" onclick="RonderingWizardPage._moveCat(${ci},1)">▼</button>
           </div>
           <input type="text" placeholder="Grupprubrik *" value="${this._esc(cat.name)}"
             id="cat-name-${ci}" style="flex:1;padding:7px 9px;border:1px solid var(--br);border-radius:7px;font-size:13px;font-weight:700;background:var(--wh);">
           <div style="font-size:11px;color:var(--mt);white-space:nowrap;flex-shrink:0;">${pts.length} pt</div>
-          <button class="btn bd bsm" onclick="RonderingWizardPage._removeCat(${ci})">${ic('trash-2',13)}</button>
+          <button class="btn bd bsm" onclick="RonderingWizardPage._removeCat(${ci})" title="Ta bort grupp">${ic('trash-2',13)}</button>
         </div>
         <div style="padding:10px 12px;">
           <div id="cat-pts-${ci}">
@@ -243,24 +237,22 @@ const RonderingWizardPage = {
     return `
       <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:8px 10px;margin-bottom:6px;" id="pt-block-${ci}-${pi}">
         <div style="display:flex;gap:6px;align-items:flex-start;">
-          <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;padding-top:3px;">
-            <button class="btn bs" style="padding:1px 4px;line-height:1.4;" onclick="RonderingWizardPage._movePt(${ci},${pi},-1)">${ic('chevron-up',10)}</button>
-            <button class="btn bs" style="padding:1px 4px;line-height:1.4;" onclick="RonderingWizardPage._movePt(${ci},${pi},1)">${ic('chevron-down',10)}</button>
+          <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;padding-top:4px;">
+            <button class="btn bs" style="padding:0 4px;line-height:1.6;font-size:9px;" onclick="RonderingWizardPage._movePt(${ci},${pi},-1)">▲</button>
+            <button class="btn bs" style="padding:0 4px;line-height:1.6;font-size:9px;" onclick="RonderingWizardPage._movePt(${ci},${pi},1)">▼</button>
           </div>
           <div style="flex:1;min-width:0;">
             <input type="text" placeholder="Kontrollpunktens namn *" value="${this._esc(pt.title)}"
               id="pt-title-${ci}-${pi}" style="width:100%;padding:5px 8px;border:1px solid var(--br);border-radius:6px;font-size:12px;font-weight:600;margin-bottom:4px;box-sizing:border-box;">
             <input type="text" placeholder="Instruktion / beskrivning (valfri)" value="${this._esc(pt.description||'')}"
               id="pt-desc-${ci}-${pi}" style="width:100%;padding:4px 8px;border:1px solid var(--br);border-radius:6px;font-size:11px;color:var(--mt);margin-bottom:6px;box-sizing:border-box;">
-            <div style="font-size:10px;color:var(--mt);margin-bottom:5px;">Gäller vid avvikelse under utförande:</div>
-            <div style="display:flex;gap:14px;flex-wrap:wrap;">
-              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;font-weight:600;">
-                <input type="checkbox" id="pt-photo-${ci}-${pi}" ${pt.requiresPhoto?'checked':''}> Kräver foto
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;font-weight:600;">
-                <input type="checkbox" id="pt-ao-${ci}-${pi}" ${pt.canCreateAO!==false?'checked':''}> Kan skapa arbetsorder
-              </label>
-            </div>
+            <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="pt-ao-${ci}-${pi}" ${pt.canCreateAO!==false?'checked':''} style="margin-top:1px;">
+              <div>
+                <div style="font-size:11px;font-weight:600;">Tillåt arbetsorder vid avvikelse</div>
+                <div style="font-size:10px;color:var(--mt);margin-top:1px;">Möjliggör att skapa AO direkt från avvikelsen vid utförande</div>
+              </div>
+            </label>
           </div>
           <button class="btn bd bsm" style="flex-shrink:0;align-self:flex-start;" onclick="RonderingWizardPage._removePt(${ci},${pi})">${ic('x',12)}</button>
         </div>
@@ -281,11 +273,10 @@ const RonderingWizardPage = {
       (origCat.points || []).forEach((origPt, pi) => {
         const titleEl = document.getElementById('pt-title-' + ci + '-' + pi);
         if (!titleEl) { points.push(origPt); return; }
-        const title        = titleEl.value;
-        const desc         = (document.getElementById('pt-desc-'  + ci + '-' + pi)||{}).value || '';
-        const requiresPhoto= !!(document.getElementById('pt-photo-'+ ci + '-' + pi)||{}).checked;
-        const canCreateAO  = (document.getElementById('pt-ao-'    + ci + '-' + pi)||{}).checked !== false;
-        points.push({ id: origPt.id, title, description: desc, requiresPhoto, canCreateAO, sortOrder: pi });
+        const title       = titleEl.value;
+        const desc        = (document.getElementById('pt-desc-'+ ci + '-' + pi)||{}).value || '';
+        const canCreateAO = (document.getElementById('pt-ao-'  + ci + '-' + pi)||{}).checked !== false;
+        points.push({ id: origPt.id, title, description: desc, canCreateAO, sortOrder: pi });
       });
       cats.push({ id: origCat.id, name: catName, sortOrder: ci, points });
     });
@@ -327,7 +318,7 @@ const RonderingWizardPage = {
     if (!cat) return;
     cat.points.push({
       id: 'pt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      title: '', description: '', requiresPhoto: false, canCreateAO: true, sortOrder: cat.points.length
+      title: '', description: '', canCreateAO: true, sortOrder: cat.points.length
     });
     this._rerender2();
   },
@@ -378,7 +369,7 @@ const RonderingWizardPage = {
       Modal.open({
         title: 'Ladda mall',
         body: `<p style="font-size:13px;margin:0 0 8px;">Mall: <strong>${this._esc(mall.name)}</strong></p>
-          <p style="font-size:12px;color:var(--mt);margin:0;">Du har redan ${this._d.categories.length} grupp(er). Vad ska hända med befintliga?</p>`,
+          <p style="font-size:12px;color:var(--mt);margin:0;">Du har redan ${this._d.categories.length} grupp(er). Vad ska hända?</p>`,
         buttons: [
           { label: 'Ersätt befintliga',        cls: 'btn bd bfull', onClick: () => { Modal.close(); doLoad(true);  } },
           { label: 'Lägg till efter befintliga', cls: 'btn bs bfull', onClick: () => { Modal.close(); doLoad(false); } },
@@ -425,13 +416,12 @@ const RonderingWizardPage = {
       {v:'varannan_vecka',l:'Varannan vecka'},{v:'månadsvis',l:'Månadsvis'},
       {v:'kvartalsvis',l:'Kvartalsvis'},{v:'årsvis',l:'Årsvis'},{v:'eget',l:'Eget antal dagar'}
     ];
-
-    const fmtDur = (min) => min >= 60
-      ? (Math.floor(min/60)+'h'+(min%60?''+min%60+'min':''))
-      : (min+'min');
+    const fmtDur = (m) => !m ? '' : m >= 60
+      ? (Math.floor(m/60)+'h'+(m%60?''+(m%60)+'min':''))
+      : (m+'min');
 
     return `
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;border-bottom:1px solid var(--br);padding-bottom:6px;">Enstaka tillfällen</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--br);">Enstaka tillfällen</div>
       ${occs.length === 0 ? `<div style="font-size:12px;color:var(--mt);margin-bottom:8px;padding:10px;background:#f9fafb;border-radius:8px;">Inga enstaka tillfällen tillagda.</div>` : ''}
       ${occs.map((occ, oi) => `
         <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
@@ -448,7 +438,7 @@ const RonderingWizardPage = {
             <div class="fg"><label>Datum</label><input type="date" id="occ-date" value="${tdy()}"></div>
             <div class="fg"><label>Starttid</label><input type="time" id="occ-time" value="09:00"></div>
           </div>
-          <div class="fg"><label>Planerad tidsåtgång (minuter)</label>
+          <div class="fg"><label>Planerad tidsåtgång (min)</label>
             <input type="number" id="occ-duration" value="60" min="0" step="15" placeholder="60">
           </div>
           <div class="fg"><label>Tilldelad personal</label>
@@ -462,7 +452,7 @@ const RonderingWizardPage = {
         </div>
       </div>
 
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;border-bottom:1px solid var(--br);padding-bottom:6px;">Återkommande</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--br);">Återkommande</div>
       ${recs.length === 0 ? `<div style="font-size:12px;color:var(--mt);margin-bottom:8px;padding:10px;background:#f9fafb;border-radius:8px;">Inget återkommande upplägg tillagt.</div>` : ''}
       ${recs.map((rec, ri) => {
         const lbl = {dagligen:'Dagligen',veckovis:'Veckovis',varannan_vecka:'Varannan vecka',månadsvis:'Månadsvis',kvartalsvis:'Kvartalsvis',årsvis:'Årsvis',eget:'Var '+rec.intervalDays+' dag(ar)'}[rec.interval]||rec.interval;
@@ -470,7 +460,7 @@ const RonderingWizardPage = {
           <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
             <div style="flex:1;">
               <div style="font-size:13px;font-weight:700;">${lbl}${rec.time?' kl '+rec.time:''}</div>
-              <div style="font-size:11px;color:var(--mt);">Fr.o.m. ${fmtDate(rec.startDate)} · ${rec.tillsvidare?'Tills vidare':'T.o.m. '+fmtDate(rec.endDate)}${rec.estimatedDuration?' · '+fmtDur(rec.estimatedDuration):''} · ${rec.staffName||'Ej tilldelad'}</div>
+              <div style="font-size:11px;color:var(--mt);">Fr.o.m. ${fmtDate(rec.startDate)} · ${rec.tillsvidare?'Tills vidare':'T.o.m. '+(rec.endDate?fmtDate(rec.endDate):'')}${rec.estimatedDuration?' · '+fmtDur(rec.estimatedDuration):''} · ${rec.staffName||'Ej tilldelad'}</div>
             </div>
             <button class="btn bd bsm" onclick="RonderingWizardPage._removeRec(${ri})">${ic('x',12)}</button>
           </div>`;
@@ -488,7 +478,7 @@ const RonderingWizardPage = {
             <div class="fg"><label>Startdatum</label><input type="date" id="rec-start" value="${tdy()}"></div>
             <div class="fg"><label>Starttid</label><input type="time" id="rec-time" value="09:00"></div>
           </div>
-          <div class="fg"><label>Planerad tidsåtgång per tillfälle (minuter)</label>
+          <div class="fg"><label>Planerad tidsåtgång per tillfälle (min)</label>
             <input type="number" id="rec-duration" value="60" min="0" step="15" placeholder="60">
           </div>
           <div class="fg"><label>Tilldelad personal</label>
@@ -497,7 +487,7 @@ const RonderingWizardPage = {
               ${staff.map(s=>`<option value="${s.id}">${s.firstName} ${s.lastName}</option>`).join('')}
             </select>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;cursor:pointer;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="rec-tillsvidare" checked
               onchange="document.getElementById('rec-end-row').style.display=this.checked?'none':'block';">
             Tills vidare
@@ -603,7 +593,7 @@ const RonderingWizardPage = {
           </label>`).join('')}
       </div>
       ${pt === 'tim' ? `
-        <div class="fg"><label>Prisgrupp *</label>
+        <div class="fg"><label>Prisgrupp</label>
           <select id="wiz-pg" onchange="RonderingWizardPage._onPGChange(this.value)">
             <option value="">Välj prisgrupp...</option>
             ${priceGroups.map(pg=>`<option value="${pg.id}"${pg.id===this._d.priceGroupId?' selected':''}>${this._esc(pg.name)} – ${fmt(pg.hourRate)} kr/tim</option>`).join('')}
@@ -631,8 +621,7 @@ const RonderingWizardPage = {
   _vatHtml(ex) {
     ex = parseFloat(ex) || 0;
     const vat  = Math.round(ex * 0.25);
-    const inkl = ex + vat;
-    return `Ex moms: <strong>${fmt(ex)} kr</strong> &nbsp;·&nbsp; Moms 25%: <strong>${fmt(vat)} kr</strong> &nbsp;·&nbsp; Inkl moms: <strong>${fmt(inkl)} kr</strong>`;
+    return `Ex moms: <strong>${fmt(ex)} kr</strong> &nbsp;·&nbsp; Moms 25%: <strong>${fmt(vat)} kr</strong> &nbsp;·&nbsp; Inkl moms: <strong>${fmt(ex+vat)} kr</strong>`;
   },
 
   _liveVAT(val) {
@@ -661,13 +650,13 @@ const RonderingWizardPage = {
   // ── Read / sync DOM → state ───────────────────────────────────────────────
 
   _readStep1() {
-    this._d.name         = (document.getElementById('wiz-name')    || {}).value || '';
-    this._d.customerId   = (document.getElementById('wiz-cu')      || {}).value || '';
-    this._d.propertyId   = (document.getElementById('wiz-prop')    || {}).value || '';
-    this._d.priority     = (document.getElementById('wiz-priority')|| {}).value || 'normal';
-    this._d.description  = (document.getElementById('wiz-desc')    || {}).value || '';
-    this._d.internalNote = (document.getElementById('wiz-note')    || {}).value || '';
-    this._d.isDraft      = !!(document.getElementById('wiz-draft') || {}).checked;
+    this._d.name         = (document.getElementById('wiz-name')     || {}).value || '';
+    this._d.customerId   = (document.getElementById('wiz-cu')       || {}).value || '';
+    this._d.propertyId   = (document.getElementById('wiz-prop')     || {}).value || '';
+    this._d.priority     = (document.getElementById('wiz-priority') || {}).value || 'normal';
+    this._d.description  = (document.getElementById('wiz-desc')     || {}).value || '';
+    this._d.internalNote = (document.getElementById('wiz-note')     || {}).value || '';
+    this._d.isDraft      = !!(document.getElementById('wiz-draft')  || {}).checked;
   },
 
   _readStep4() {
@@ -690,7 +679,7 @@ const RonderingWizardPage = {
     if (this._step === 1) this._readStep1();
     else if (this._step === 2) this._syncStep2();
     else if (this._step === 4) this._readStep4();
-    // Step 3: pushed directly to _d.occasions / _d.recurringSetups on add
+    // Step 3: data pushed directly to _d.occasions / _d.recurringSetups on add/remove
   },
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -762,10 +751,8 @@ const RonderingWizardPage = {
   _saveDraft() {
     this._readCurrentStep();
     const d = this._d;
-    if (!d.name.trim() || !d.customerId) {
-      showToast('Ange minst namn och kund för att spara utkast');
-      return;
-    }
+    if (!d.name.trim()) { showToast('Ange namn på rondering för att spara utkast'); return; }
+    if (!d.customerId)  { showToast('Välj kund för att spara utkast'); return; }
     const cats = this._cleanCats();
     const data = Object.assign({}, d, { isDraft: true, categories: cats });
     if (this._editId) {
@@ -786,45 +773,53 @@ const RonderingWizardPage = {
     const d    = this._d;
     const cats = this._cleanCats();
 
+    // Validate — navigate to the failing step on error
     if (!d.name.trim()) {
-      showToast('Ange namn på rondering (steg 1)');
+      showToast('Ange namn på rondering');
       this._step = 1; this._reRenderWizard(); return;
     }
     if (!d.customerId) {
-      showToast('Välj kund (steg 1)');
+      showToast('Välj kund');
       this._step = 1; this._reRenderWizard(); return;
     }
-    if (cats.length === 0 || !cats.some(c => (c.points || []).length > 0)) {
-      showToast('Lägg till minst en grupp med kontrollpunkter (steg 2)');
+    if (cats.length === 0) {
+      showToast('Lägg till minst en grupp i steg 2');
       this._step = 2; this._reRenderWizard(); return;
     }
-    if (d.occasions.length === 0 && d.recurringSetups.length === 0) {
-      showToast('Lägg till minst ett tillfälle eller återkommande upplägg (steg 3)');
-      this._step = 3; this._reRenderWizard(); return;
+    if (!cats.some(c => (c.points || []).length > 0)) {
+      showToast('Lägg till minst en kontrollpunkt i steg 2');
+      this._step = 2; this._reRenderWizard(); return;
     }
+
+    // Occasions/recurring are optional — rondering can be saved and dates added later
 
     const saveData = Object.assign({}, d, { categories: cats });
 
-    if (this._editId) {
-      const existing = getRon(this._editId);
-      RonderingService.updateRondering(this._editId, Object.assign({}, saveData, {
-        results: this._buildResults(cats, existing),
-        status: saveData.isDraft ? 'utkast' : (existing && existing.status !== 'utkast' ? existing.status : 'planerad')
-      }));
-      showToast('Rondering sparad');
-    } else {
-      RonderingService.createRondering(saveData);
-      showToast('Rondering skapad');
+    try {
+      if (this._editId) {
+        const existing = getRon(this._editId);
+        RonderingService.updateRondering(this._editId, Object.assign({}, saveData, {
+          results: this._buildResults(cats, existing),
+          status: saveData.isDraft ? 'utkast' : (existing && existing.status !== 'utkast' ? existing.status : 'planerad')
+        }));
+        showToast('Rondering sparad');
+      } else {
+        RonderingService.createRondering(saveData);
+        showToast('Rondering skapad');
+      }
+      Router.showPage('pg-rondering');
+    } catch (e) {
+      console.error('[Wizard] Save failed:', e);
+      showToast('Fel vid sparande: ' + e.message);
     }
-    Router.showPage('pg-rondering');
   },
 
   _saveAndStart() {
     this._readCurrentStep();
-    const d = this._d;
+    const d    = this._d;
+    const cats = this._cleanCats();
     if (!d.name.trim()) { showToast('Ange namn (steg 1)'); return; }
     if (!d.customerId)  { showToast('Välj kund (steg 1)'); return; }
-    const cats = this._cleanCats();
     if (this._editId) {
       const existing = getRon(this._editId);
       RonderingService.updateRondering(this._editId, Object.assign({}, d, {
