@@ -66,27 +66,28 @@ const RonderingWizardPage = {
   _renderWizard(el) {
     const steps = ['Ronderingsinfo', 'Kontrollpunkter', 'Tillfällen', 'Prissättning'];
 
-    const stepInd = `
-      <div style="display:flex;align-items:flex-start;margin-bottom:20px;">
-        ${steps.map((lbl, i) => {
-          const n      = i + 1;
-          const active = n === this._step;
-          const done   = n < this._step;
-          const circBg  = active ? 'var(--navy)' : done ? 'var(--green)' : '#e2e8f0';
-          const circClr = (active || done) ? '#fff' : '#94a3b8';
-          const lblClr  = active ? 'var(--navy)' : done ? 'var(--green)' : '#94a3b8';
-          const lineClr = done ? 'var(--green)' : '#e2e8f0';
-          const circ = `<div style="width:28px;height:28px;border-radius:50%;background:${circBg};color:${circClr};
-              display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${done?'14px':'12px'};
-              flex-shrink:0;cursor:${done?'pointer':'default'};"
-              ${done ? `onclick="RonderingWizardPage._goToStep(${n})"` : ''}>${done ? '✓' : n}</div>`;
-          const lbl2 = `<div style="font-size:9px;font-weight:700;color:${lblClr};margin-top:4px;text-align:center;line-height:1.3;padding:0 2px;">${lbl}</div>`;
-          const line = i < steps.length - 1
-            ? `<div style="flex:0 0 14px;height:2px;background:${lineClr};margin-top:14px;"></div>`
-            : '';
-          return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;">${circ}${lbl2}</div>${line}`;
-        }).join('')}
-      </div>`;
+    const stepInd = (() => {
+      const items = steps.map((lbl, i) => {
+        const n      = i + 1;
+        const active = n === this._step;
+        const done   = n < this._step;
+        const circBg  = active ? 'var(--navy)' : done ? '#16a34a' : '#e5e7eb';
+        const circClr = (active || done) ? '#fff' : '#94a3b8';
+        const lblClr  = active ? 'var(--navy)' : done ? '#16a34a' : '#9ca3af';
+        const lineClr = done ? '#16a34a' : '#e5e7eb';
+        const circ = `<div style="width:26px;height:26px;border-radius:50%;background:${circBg};color:${circClr};
+            display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;
+            flex-shrink:0;${done ? 'cursor:pointer;' : ''}"
+            ${done ? `onclick="RonderingWizardPage._goToStep(${n})"` : ''}>${n}</div>`;
+        const label = `<div style="font-size:9px;font-weight:${active ? '700' : '600'};color:${lblClr};
+            margin-top:3px;text-align:center;line-height:1.2;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;">${lbl}</div>`;
+        const line = i < steps.length - 1
+          ? `<div style="flex:1;height:2px;background:${lineClr};margin-top:11px;min-width:6px;"></div>`
+          : '';
+        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;">${circ}${label}</div>${line}`;
+      });
+      return `<div style="display:flex;align-items:flex-start;margin-bottom:20px;">${items.join('')}</div>`;
+    })();
 
     let content = '';
     if (this._step === 1) content = this._renderStep1();
@@ -101,7 +102,7 @@ const RonderingWizardPage = {
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <button class="btn bs bsm" onclick="Router.back()">${ic('arrow-left', 14)}</button>
+        <button class="btn bs bsm" onclick="RonderingWizardPage._backOrPrev()">${ic('arrow-left', 14)}</button>
         <div style="flex:1;font-weight:800;font-size:15px;">${this._editId ? 'Redigera rondering' : 'Ny rondering'}</div>
         <button class="btn bs bsm" onclick="RonderingWizardPage._saveDraft()">Spara utkast</button>
       </div>
@@ -116,7 +117,7 @@ const RonderingWizardPage = {
       <div style="display:flex;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--br);">
         ${!isFirst
           ? `<button class="btn bs" style="flex:1;" onclick="RonderingWizardPage._prevStep()">${ic('arrow-left',13)} Tillbaka</button>`
-          : `<button class="btn bs" style="flex:1;" onclick="Router.back()">Avbryt</button>`}
+          : `<button class="btn bs" style="flex:1;" onclick="Router.showPage('pg-rondering')">Avbryt</button>`}
         ${isLast
           ? `<button class="btn bp" style="flex:2;" onclick="RonderingWizardPage._save()">${ic('save',14)} Spara rondering</button>`
           : `<button class="btn bp" style="flex:2;" onclick="RonderingWizardPage._nextStep()">Nästa ${ic('arrow-right',13)}</button>`}
@@ -246,12 +247,9 @@ const RonderingWizardPage = {
               id="pt-title-${ci}-${pi}" style="width:100%;padding:5px 8px;border:1px solid var(--br);border-radius:6px;font-size:12px;font-weight:600;margin-bottom:4px;box-sizing:border-box;">
             <input type="text" placeholder="Instruktion / beskrivning (valfri)" value="${this._esc(pt.description||'')}"
               id="pt-desc-${ci}-${pi}" style="width:100%;padding:4px 8px;border:1px solid var(--br);border-radius:6px;font-size:11px;color:var(--mt);margin-bottom:6px;box-sizing:border-box;">
-            <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;">
-              <input type="checkbox" id="pt-ao-${ci}-${pi}" ${pt.canCreateAO!==false?'checked':''} style="margin-top:1px;">
-              <div>
-                <div style="font-size:11px;font-weight:600;">Tillåt arbetsorder vid avvikelse</div>
-                <div style="font-size:10px;color:var(--mt);margin-top:1px;">Möjliggör att skapa AO direkt från avvikelsen vid utförande</div>
-              </div>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="pt-ao-${ci}-${pi}" ${pt.canCreateAO!==false?'checked':''} style="margin-top:0;">
+              <span style="font-size:11px;color:var(--mt);">Tillåt AO vid avvikelse</span>
             </label>
           </div>
           <button class="btn bd bsm" style="flex-shrink:0;align-self:flex-start;" onclick="RonderingWizardPage._removePt(${ci},${pi})">${ic('x',12)}</button>
@@ -716,6 +714,14 @@ const RonderingWizardPage = {
     this._readCurrentStep();
     this._step = n;
     this._reRenderWizard();
+  },
+
+  _backOrPrev() {
+    if (this._step > 1) {
+      this._prevStep();
+    } else {
+      Router.showPage('pg-rondering');
+    }
   },
 
   _reRenderWizard() {

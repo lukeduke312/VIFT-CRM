@@ -54,22 +54,27 @@ const RonderingUtforandePage = {
           <div style="background:${pct===100?'#16a34a':'var(--blue)'};width:${pct}%;height:8px;border-radius:4px;transition:width .4s ease;"></div>
         </div>
         <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;flex-wrap:wrap;">
-          <span style="color:#16a34a;font-weight:600;">${ic('check-circle',11)} ${stats?stats.ok:0} godkända</span>
-          <span style="color:#dc2626;font-weight:600;">${ic('alert-triangle',11)} ${stats?stats.avvs:0} avvikelser</span>
-          <span style="color:var(--mt);">${ic('minus-circle',11)} ${stats?stats.ejAktuell:0} ej aktuell</span>
+          <span style="color:#16a34a;font-weight:600;">✓ ${stats?stats.ok:0} godkända</span>
+          <span style="color:#dc2626;font-weight:600;">! ${stats?stats.avvs:0} avvikelser</span>
+          <span style="color:var(--mt);">— ${stats?stats.ejAktuell:0} ej aktuell</span>
         </div>
       </div>
 
       <!-- Categories and points -->
       ${(ron.results||[]).map((cat, ci) => this._renderCat(ron, cat, ci)).join('')}
 
-      <!-- Notes -->
-      <div style="background:var(--wh);border:1px solid var(--br);border-radius:10px;padding:12px 14px;margin-top:8px;">
-        <div style="font-weight:700;font-size:13px;margin-bottom:6px;">${ic('message-square',13)} Anteckningar</div>
-        <textarea id="ron-exec-note" rows="3" style="width:100%;padding:8px;border:1px solid var(--br);border-radius:8px;font-size:13px;resize:vertical;"
-          placeholder="Interna anteckningar...">${ron.internalNote||''}</textarea>
-        <button class="btn bs bsm" style="margin-top:6px;" onclick="RonderingUtforandePage._saveNote('${ron.id}')">Spara</button>
-      </div>
+      <!-- Notes (discrete) -->
+      <details style="margin-top:10px;">
+        <summary style="font-size:12px;font-weight:600;color:var(--mt);cursor:pointer;padding:6px 0;list-style:none;display:flex;align-items:center;gap:6px;">
+          ${ic('message-square',13)} Anteckningar${ron.internalNote ? ' ·' : ''}
+          ${ron.internalNote ? `<span style="font-size:11px;font-weight:400;color:var(--mt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">${ron.internalNote}</span>` : ''}
+        </summary>
+        <div style="margin-top:6px;">
+          <textarea id="ron-exec-note" rows="2" style="width:100%;padding:8px;border:1px solid var(--br);border-radius:8px;font-size:12px;resize:vertical;box-sizing:border-box;"
+            placeholder="Interna anteckningar...">${ron.internalNote||''}</textarea>
+          <button class="btn bs bsm" style="margin-top:4px;" onclick="RonderingUtforandePage._saveNote('${ron.id}')">Spara anteckning</button>
+        </div>
+      </details>
 
       <!-- Complete / remaining -->
       ${allDone ? `
@@ -85,17 +90,22 @@ const RonderingUtforandePage = {
   },
 
   _renderCat(ron, cat, ci) {
-    const pts    = cat.points || [];
-    const catDone = pts.filter(p=>p.status!=='').length;
-    const allDone = catDone === pts.length && pts.length > 0;
+    const pts     = cat.points || [];
+    const checked = pts.filter(p => p.status !== '').length;
+    const allDone = checked === pts.length && pts.length > 0;
+    const headBg  = allDone ? '#f0fdf4' : '#f8fafc';
+    const headBdr = allDone ? '#bbf7d0' : 'var(--br)';
+    const cntClr  = allDone ? '#16a34a' : 'var(--mt)';
     return `
       <div style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 0 6px;">
-          <span style="color:${allDone?'#16a34a':'var(--mt)'};">${ic(allDone?'check-circle':'circle',15)}</span>
-          <span style="font-weight:800;font-size:14px;color:var(--navy);">${cat.categoryName}</span>
-          <span style="font-size:11px;color:var(--mt);margin-left:auto;">${catDone}/${pts.length}</span>
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;
+            background:${headBg};border:1px solid ${headBdr};border-radius:10px 10px 0 0;">
+          <span style="font-weight:800;font-size:13px;color:var(--navy);flex:1;">${cat.categoryName}</span>
+          <span style="font-size:11px;font-weight:600;color:${cntClr};">
+            ${allDone ? '✓ Klar' : checked + '/' + pts.length}
+          </span>
         </div>
-        <div style="border:1px solid var(--br);border-radius:10px;overflow:hidden;background:var(--wh);">
+        <div style="border:1px solid ${headBdr};border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:var(--wh);">
           ${pts.map((pt, pi) => this._renderPt(ron, cat, pt, pi, pts.length)).join('')}
         </div>
       </div>`;
@@ -107,23 +117,25 @@ const RonderingUtforandePage = {
 
     if (pt.status === '') {
       return `
-        <div style="padding:14px;${hasBorder}" id="pt-row-${pt.pointId}">
-          <div style="font-size:13px;font-weight:700;margin-bottom:${pt.pointDesc?'3px':'8px'};">${pt.pointTitle}</div>
-          ${pt.pointDesc ? `<div style="font-size:11px;color:var(--mt);margin-bottom:8px;line-height:1.4;">${pt.pointDesc}</div>` : ''}
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <button style="padding:12px 8px;background:#dcfce7;border:2px solid #86efac;border-radius:10px;font-weight:800;font-size:13px;color:#15803d;cursor:pointer;"
+        <div class="ron-pt-row${hasBorder?' ron-pt-border':''}" id="pt-row-${pt.pointId}">
+          <div class="ron-pt-body">
+            <div class="ron-pt-title">${pt.pointTitle}</div>
+            ${pt.pointDesc ? `<div class="ron-pt-desc">${pt.pointDesc}</div>` : ''}
+          </div>
+          <div class="ron-pt-actions">
+            <button class="ron-pt-ok"
               onclick="RonderingUtforandePage.markOk('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-              ${ic('check-circle',16)} Godkänd
+              ${ic('check-circle',14)} Godkänd
             </button>
-            <button style="padding:12px 8px;background:#fef2f2;border:2px solid #fca5a5;border-radius:10px;font-weight:800;font-size:13px;color:#dc2626;cursor:pointer;"
+            <button class="ron-pt-avv"
               onclick="RonderingUtforandePage.openAvvModal('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-              ${ic('alert-triangle',16)} Avvikelse
+              ${ic('alert-triangle',14)} Avvikelse
+            </button>
+            <button class="ron-pt-ej"
+              onclick="RonderingUtforandePage.openEjAktuell('${ron.id}','${cat.categoryId}','${pt.pointId}')">
+              Ej aktuell
             </button>
           </div>
-          <button style="width:100%;margin-top:6px;padding:8px;background:#f9fafb;border:1px solid var(--br);border-radius:8px;font-size:11px;color:var(--mt);cursor:pointer;font-weight:600;"
-            onclick="RonderingUtforandePage.openEjAktuell('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-            Ej aktuell / ej kontrollerad
-          </button>
         </div>`;
     }
 

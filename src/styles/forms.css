@@ -25,12 +25,16 @@ textarea {
   border-radius: var(--rs);
   padding: 9px 11px;
   font-size: max(14px, 1em);
+  font-family: inherit;
   background: #fff;
   color: var(--tx);
   width: 100%;
+  min-height: 42px;
   appearance: none;
+  -webkit-appearance: none;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
 }
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
 select:focus,
@@ -114,6 +118,25 @@ select {
 .pin-input:focus {
   border-color: var(--sky);
   box-shadow: 0 0 0 3px rgba(43,127,212,.1);
+}
+
+/* ── Date and time inputs ─────────────── */
+input[type="date"],
+input[type="time"] {
+  padding-right: 10px;
+  font-variant-numeric: tabular-nums;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: .6;
+  cursor: pointer;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: .5;
 }
 
 /* Search wrapper — icon must not overlap text */
