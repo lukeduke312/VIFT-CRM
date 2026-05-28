@@ -34,30 +34,25 @@
   display: flex;
   flex-direction: column;
   z-index: 300;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;          /* Ingen scrollbar på yttre containern */
   transform: translateX(-100%);
   transition: transform .25s ease;
   flex-shrink: 0;
-  /* Diskret scrollbar */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.20) transparent;
-}
-#bottom-nav::-webkit-scrollbar {
-  width: 5px;
-}
-#bottom-nav::-webkit-scrollbar-track {
-  background: transparent;
-}
-#bottom-nav::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,.20);
-  border-radius: 999px;
-}
-#bottom-nav::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,.35);
 }
 #bottom-nav.open {
   transform: translateX(0);
+}
+
+/* ── Scrollbar endast på menylistan ─────────────── */
+.nav-scroll {
+  flex: 1;
+  min-height: 0;             /* Krävs för att flex-child ska respektera höjdbegränsning */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;     /* Firefox — göm scrollbaren */
+}
+.nav-scroll::-webkit-scrollbar {
+  display: none;             /* Chrome / Safari / Edge — göm scrollbaren */
 }
 
 /* ── Page area ──────────────────────────────────── */

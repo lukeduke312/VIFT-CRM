@@ -33,6 +33,9 @@ const Dashboard = {
       '<div class="dw-third">' + this._widgetOffers() + '</div>' +
       '<div class="dw-third">' + this._widgetActivity() + '</div>' +
 
+      // 6. Rondering
+      '<div class="dw-full">' + this._widgetRondering() + '</div>' +
+
       '</div>';
   },
 
@@ -308,6 +311,59 @@ const Dashboard = {
       <div class="card-header"><h3 class="ch3">${ic('activity',14)} Senaste händelser</h3></div>
       <div class="card-body">
         ${ActivityService.renderList(acts)}
+      </div>
+    </div>`;
+  },
+
+  /* ── Rondering ────────────────────────────── */
+  _widgetRondering() {
+    const today = tdy();
+    const ronderingarIdag = (state.ronderingar||[]).filter(r => r.scheduledDate === today && r.status === 'planerad');
+    const forsenade = (state.ronderingar||[]).filter(r => r.scheduledDate && r.scheduledDate < today && r.status === 'planerad');
+    const medAvvikelser = (state.ronderingar||[]).filter(r => r.status === 'har_avvikelser');
+    const oppnaAvvikelser = (state.avvikelser||[]).filter(a => a.status === 'öppen');
+    const akutaAvvikelser = oppnaAvvikelser.filter(a => a.priority === 'akut' || a.priority === 'hög');
+    const avvUanAO = oppnaAvvikelser.filter(a => !a.workOrderId);
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3 class="ch3">${ic('clipboard-check',14)} Rondering</h3>
+        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;"
+          onclick="Router.showPage('pg-rondering')">
+          Visa alla ${ic('arrow-right',10)}
+        </button>
+      </div>
+      <div class="card-body" style="padding:10px 14px;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+          <div style="background:#eff6ff;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;" onclick="Router.showPage('pg-rondering')">
+            <div style="font-size:22px;font-weight:900;color:#1d4ed8;">${(state.ronderingar||[]).filter(r=>r.status==='planerad').length}</div>
+            <div style="font-size:10px;color:#1d4ed8;font-weight:600;">Planerade</div>
+          </div>
+          <div style="background:#fef2f2;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;" onclick="Router.showPage('pg-rondering')">
+            <div style="font-size:22px;font-weight:900;color:#991b1b;">${oppnaAvvikelser.length}</div>
+            <div style="font-size:10px;color:#991b1b;font-weight:600;">Öppna avvikelser</div>
+          </div>
+          <div style="background:#f0fdf4;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">
+            <div style="font-size:22px;font-weight:900;color:#166534;">${(state.ronderingsmallar||[]).filter(m=>m.active).length}</div>
+            <div style="font-size:10px;color:#166534;font-weight:600;">Aktiva mallar</div>
+          </div>
+        </div>
+        ${forsenade.length > 0 ? `
+          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px;">
+            ${ic('alert-triangle',14)} <strong>${forsenade.length} försenad${forsenade.length===1?'':'e'} rondering${forsenade.length===1?'':'ar'}</strong> — planerade datum passerade
+            <button class="btn bp bsm" style="margin-left:auto;font-size:10px;" onclick="Router.showPage('pg-rondering')">Visa</button>
+          </div>` : ''}
+        ${akutaAvvikelser.length > 0 ? `
+          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px;">
+            ${ic('alert-triangle',14)} <strong>${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}</strong> — kräver åtgärd
+            <button class="btn bp bsm" style="margin-left:auto;font-size:10px;" onclick="Router.showPage('pg-rondering')">Visa</button>
+          </div>` : ''}
+        ${avvUanAO.length > 0 ? `
+          <div style="font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">${ic('plus',13)} Ny rondering</button>
+          <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">${ic('layout-template',13)} Mallar</button>
+        </div>
       </div>
     </div>`;
   },

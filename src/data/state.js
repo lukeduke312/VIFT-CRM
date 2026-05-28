@@ -25,6 +25,9 @@ let state = {
   salesOpportunities: [],
   activityLog: [],
   settings: {},
+  ronderingsmallar: [],
+  ronderingar: [],
+  avvikelser: [],
 
   // UI-state
   currentPage: 'dash',
@@ -66,6 +69,9 @@ function initState() {
   state.titles             = s.get('titles')          || SeedData.titles  || [];
   state.roles              = s.get('roles')           || SeedData.roles   || [];
   state.recurringOrders    = s.get('recurringOrders') || SeedData.recurringOrders || [];
+  state.ronderingsmallar   = s.get('ronderingsmallar') || SeedData.ronderingsmallar || [];
+  state.ronderingar        = s.get('ronderingar')      || SeedData.ronderingar      || [];
+  state.avvikelser         = s.get('avvikelser')       || SeedData.avvikelser       || [];
 
   // Migrate plain-string titles → rich objects
   state.titles = state.titles.map(function(t, i) {
@@ -107,6 +113,9 @@ function persist() {
   s.set('titles',           state.titles);
   s.set('roles',            state.roles);
   s.set('recurringOrders',  state.recurringOrders);
+  s.set('ronderingsmallar', state.ronderingsmallar);
+  s.set('ronderingar',      state.ronderingar);
+  s.set('avvikelser',       state.avvikelser);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */
@@ -127,6 +136,9 @@ function getInv(id)  { return state.invoices.find(i => i.id === id) || null; }
 function getObj(id)  { return state.properties.find(o => o.id === id) || null; }
 function getSO(id)   { return state.salesOpportunities.find(s => s.id === id) || null; }
 function getStaff(id){ return state.staff.find(s => s.id === id) || null; }
+function getMall(id)  { return state.ronderingsmallar.find(m => m.id === id) || null; }
+function getRon(id)   { return state.ronderingar.find(r => r.id === id) || null; }
+function getAvv(id)   { return state.avvikelser.find(a => a.id === id) || null; }
 
 function tdy() {
   return new Date().toISOString().split('T')[0];

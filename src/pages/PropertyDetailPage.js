@@ -98,23 +98,25 @@ const PropertyDetailPage = {
         <button class="ft ${this.activeTab==='tech'      ?'on':''}" onclick="PropertyDetailPage.switchTab('tech')">Teknisk info</button>
         <button class="ft ${this.activeTab==='ao'        ?'on':''}" onclick="PropertyDetailPage.switchTab('ao')">Arbetsorder${aos.length?` (${aos.length})`:''}</button>
         <button class="ft ${this.activeTab==='recurring' ?'on':''}" onclick="PropertyDetailPage.switchTab('recurring')">Återkommande${recs.length?` (${recs.length})`:''}</button>
+        <button class="ft ${this.activeTab==='rondering'  ?'on':''}" onclick="PropertyDetailPage.switchTab('rondering')">Rondering</button>
         <button class="ft ${this.activeTab==='images'    ?'on':''}" onclick="PropertyDetailPage.switchTab('images')">Bilder${images.length?` (${images.length})`:''}</button>
         <button class="ft ${this.activeTab==='notes'     ?'on':''}" onclick="PropertyDetailPage.switchTab('notes')">Anteckningar${notes.length?` (${notes.length})`:''}</button>
       </div>
 
-      <div id="prop-tab-overview"  ${this.activeTab!=='overview'  ?'style="display:none"':''}>${this._renderOverview(p, insp)}</div>
-      <div id="prop-tab-contact"   ${this.activeTab!=='contact'   ?'style="display:none"':''}>${this._renderContactTab(p, contacts)}</div>
-      <div id="prop-tab-tech"      ${this.activeTab!=='tech'      ?'style="display:none"':''}>${this._renderTechTab(tech, insp)}</div>
-      <div id="prop-tab-ao"        ${this.activeTab!=='ao'        ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
-      <div id="prop-tab-recurring" ${this.activeTab!=='recurring' ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
-      <div id="prop-tab-images"    ${this.activeTab!=='images'    ?'style="display:none"':''}>${this._renderImagesTab(p, images)}</div>
-      <div id="prop-tab-notes"     ${this.activeTab!=='notes'     ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>
+      <div id="prop-tab-overview"   ${this.activeTab!=='overview'   ?'style="display:none"':''}>${this._renderOverview(p, insp)}</div>
+      <div id="prop-tab-contact"    ${this.activeTab!=='contact'    ?'style="display:none"':''}>${this._renderContactTab(p, contacts)}</div>
+      <div id="prop-tab-tech"       ${this.activeTab!=='tech'       ?'style="display:none"':''}>${this._renderTechTab(tech, insp)}</div>
+      <div id="prop-tab-ao"         ${this.activeTab!=='ao'         ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
+      <div id="prop-tab-recurring"  ${this.activeTab!=='recurring'  ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
+      <div id="prop-tab-rondering"  ${this.activeTab!=='rondering'  ?'style="display:none"':''}><div id="tab-rondering">${this.activeTab==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
+      <div id="prop-tab-images"     ${this.activeTab!=='images'     ?'style="display:none"':''}>${this._renderImagesTab(p, images)}</div>
+      <div id="prop-tab-notes"      ${this.activeTab!=='notes'      ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>
     `;
   },
 
   switchTab(tab) {
     this.activeTab = tab;
-    const tabs = ['overview','contact','tech','ao','recurring','images','notes'];
+    const tabs = ['overview','contact','tech','ao','recurring','rondering','images','notes'];
     tabs.forEach(t => {
       const el = document.getElementById(`prop-tab-${t}`);
       if (el) el.style.display = t === tab ? '' : 'none';
@@ -122,6 +124,15 @@ const PropertyDetailPage = {
     document.querySelectorAll('#prop-tabs .ft').forEach((btn, i) => {
       btn.classList.toggle('on', i === tabs.indexOf(tab));
     });
+    // Lazy-render rondering tab
+    if (tab === 'rondering') {
+      const el = document.getElementById('tab-rondering');
+      if (el && !el.dataset.loaded) {
+        const p = getObj(this.propId);
+        if (p) el.innerHTML = this._renderRonderingTabContent(p);
+        el.dataset.loaded = '1';
+      }
+    }
   },
 
   /* ── Tab: Översikt ─────────────────────────────────────── */
@@ -443,6 +454,51 @@ const PropertyDetailPage = {
         ${ic('info',12)} Bilder lagras lokalt. Riktig filuppladdning aktiveras i Fas 4 (backend).
       </div>
     `;
+  },
+
+  /* ── Tab: Rondering ───────────────────────────────────── */
+
+  _renderRonderingTabContent(p) {
+    const ronderingar = (state.ronderingar||[]).filter(function(r) {
+      return r.propertyId === p.id || r.customerId === p.customerId;
+    }).sort(function(a,b) { return new Date(b.createdAt)-new Date(a.createdAt); }).slice(0,10);
+    const avvikelser = (state.avvikelser||[]).filter(function(a) { return a.propertyId === p.id; });
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-weight:700;font-size:14px;">Ronderingar</div>
+        <button class="btn bp bsm" onclick="RonderingPage.openNewRonderingFromProperty('${p.customerId}','${p.id}')">Ny rondering</button>
+      </div>
+      ${ronderingar.length === 0
+        ? `<div class="ibox">Inga ronderingar kopplade till denna fastighet ännu.</div>`
+        : ronderingar.map(function(r) {
+            const statusCls = {planerad:'bdg-blue',pågående:'bdg-orange',slutförd:'bdg-green',har_avvikelser:'bdg-red'}[r.status]||'bdg-grey';
+            const statusLbl = {planerad:'Planerad',pågående:'Pågående',slutförd:'Slutförd',har_avvikelser:'Har avvikelser'}[r.status]||r.status;
+            const page = (r.status==='slutförd'||r.status==='har_avvikelser') ? 'pg-rondering-rapport' : 'pg-rondering-utfor';
+            return `
+              <div class="list-item" onclick="Router.showPage('${page}',{ronderingId:'${r.id}'})">
+                <div class="item-row">
+                  <div>
+                    <div class="item-title">${r.templateName}</div>
+                    <div class="item-sub">${fmtDate(r.scheduledDate||r.createdAt)} · ${r.performedByName||'—'}</div>
+                  </div>
+                  <span class="bdg ${statusCls}">${statusLbl}</span>
+                </div>
+              </div>`;
+          }).join('')
+      }
+      ${avvikelser.filter(function(a){return a.status==='öppen';}).length > 0 ? `
+        <div style="margin-top:16px;font-weight:700;font-size:14px;margin-bottom:8px;">Öppna avvikelser (${avvikelser.filter(function(a){return a.status==='öppen';}).length})</div>
+        ${avvikelser.filter(function(a){return a.status==='öppen';}).map(function(avv){ return `
+          <div class="list-item">
+            <div class="item-row">
+              <div>
+                <div class="item-title">${avv.title}</div>
+                <div class="item-sub">${avv.categoryName} · ${fmtDate(avv.createdAt)}</div>
+              </div>
+              ${pbdg(avv.priority)}
+            </div>
+          </div>`;}).join('')}` : ''}`;
   },
 
   /* ── Tab: Anteckningar ─────────────────────────────────── */
