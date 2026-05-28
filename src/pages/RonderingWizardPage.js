@@ -9,7 +9,7 @@ const RonderingWizardPage = {
 
   _d: {
     name: '', customerId: '', propertyId: '', description: '',
-    internalNote: '', isDraft: false,
+    internalNote: '', isDraft: false, priority: 'normal',
     categories: [],
     templateId: '', templateName: '',
     occasions: [],
@@ -27,7 +27,7 @@ const RonderingWizardPage = {
       this._editId = params.ronderingId || null;
       this._d = {
         name: '', customerId: params.customerId || '', propertyId: params.propertyId || '',
-        description: '', internalNote: '', isDraft: false,
+        description: '', internalNote: '', isDraft: false, priority: 'normal',
         categories: [], templateId: '', templateName: '',
         occasions: [], recurringSetups: [],
         pricingType: '', priceGroupId: '', priceGroupName: '', hourRate: 0, fixedPrice: 0, debiterbar: true
@@ -43,6 +43,7 @@ const RonderingWizardPage = {
             description: ron.description || '',
             internalNote: ron.internalNote || '',
             isDraft: ron.isDraft || false,
+            priority: ron.priority || 'normal',
             categories: JSON.parse(JSON.stringify(ron.categories || [])),
             templateId: ron.templateId || '',
             templateName: ron.templateName || '',
@@ -65,27 +66,32 @@ const RonderingWizardPage = {
   _renderWizard(el) {
     const steps = ['Ronderingsinfo', 'Kontrollpunkter', 'Tillfällen', 'Prissättning'];
 
+    // Step indicator: always show all 4 steps with labels
     const stepInd = `
-      <div style="display:flex;align-items:flex-start;margin-bottom:20px;overflow-x:auto;padding-bottom:2px;">
+      <div style="display:flex;align-items:flex-start;margin-bottom:20px;">
         ${steps.map((lbl, i) => {
           const n = i + 1;
           const active = n === this._step;
           const done   = n < this._step;
-          const bg  = active ? 'var(--navy)' : done ? 'var(--green)' : 'var(--br)';
-          const clr = (active || done) ? '#fff' : 'var(--mt)';
-          const lblClr = active ? 'var(--navy)' : done ? 'var(--green)' : 'var(--mt)';
-          return `
-            <div style="display:flex;align-items:center;flex-shrink:0;">
-              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:${done?'pointer':'default'};"
+          const circBg  = active ? 'var(--navy)' : done ? 'var(--green)' : '#e2e8f0';
+          const circClr = (active || done) ? '#fff' : '#94a3b8';
+          const lblClr  = active ? 'var(--navy)' : done ? 'var(--green)' : '#94a3b8';
+          const lblWt   = active ? '800' : '600';
+          const lineClr = done ? 'var(--green)' : '#e2e8f0';
+          const step = `
+            <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;">
+              <div style="width:28px;height:28px;border-radius:50%;background:${circBg};color:${circClr};
+                display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;
+                flex-shrink:0;cursor:${done?'pointer':'default'};"
                 ${done ? `onclick="RonderingWizardPage._goToStep(${n})"` : ''}>
-                <div style="width:30px;height:30px;border-radius:50%;background:${bg};color:${clr};
-                  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;">
-                  ${done ? ic('check', 13) : n}
-                </div>
-                <div style="font-size:9px;font-weight:700;color:${lblClr};white-space:nowrap;text-align:center;">${lbl}</div>
+                ${done ? ic('check', 12) : n}
               </div>
-              ${i < steps.length - 1 ? `<div style="width:26px;height:2px;background:${done?'var(--green)':'var(--br)'};margin:0 2px;margin-bottom:14px;flex-shrink:0;"></div>` : ''}
+              <div style="font-size:9px;font-weight:${lblWt};color:${lblClr};margin-top:4px;text-align:center;line-height:1.3;padding:0 2px;">${lbl}</div>
             </div>`;
+          const connector = i < steps.length - 1
+            ? `<div style="flex:0 0 16px;height:2px;background:${lineClr};margin-top:14px;"></div>`
+            : '';
+          return step + connector;
         }).join('')}
       </div>`;
 
@@ -110,7 +116,7 @@ const RonderingWizardPage = {
       <div id="wizard-step-content">${content}</div>
       ${canStart ? `
         <div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;display:flex;align-items:center;gap:10px;">
-          <span style="color:#16a34a;font-size:12px;flex:1;">${ic('clipboard-check',14)} Rondering klar att utföra</span>
+          <span style="color:#16a34a;font-size:12px;flex:1;">Rondering klar att utföra</span>
           <button class="btn bsm" style="background:#16a34a;color:#fff;border-color:#16a34a;font-weight:700;"
             onclick="RonderingWizardPage._saveAndStart()">${ic('play',13)} Starta utförande</button>
         </div>` : ''}
@@ -128,6 +134,7 @@ const RonderingWizardPage = {
 
   _renderStep1() {
     const customers = state.customers || [];
+    const prios = [{v:'låg',l:'Låg'},{v:'normal',l:'Normal'},{v:'hög',l:'Hög'},{v:'akut',l:'Akut'}];
     return `
       <div class="fg"><label>Namn på rondering *</label>
         <input type="text" id="wiz-name" value="${this._esc(this._d.name)}" placeholder="T.ex. Månadsrondering BRF Solgläntan">
@@ -144,6 +151,11 @@ const RonderingWizardPage = {
           ${(state.properties||[]).filter(p=>!this._d.customerId||p.customerId===this._d.customerId).map(p =>
             `<option value="${p.id}"${p.id===this._d.propertyId?' selected':''}>${this._esc(p.name+(p.address?' – '+p.address:''))}</option>`
           ).join('')}
+        </select>
+      </div>
+      <div class="fg"><label>Prioritet</label>
+        <select id="wiz-priority">
+          ${prios.map(p=>`<option value="${p.v}"${this._d.priority===p.v?' selected':''}>${p.l}</option>`).join('')}
         </select>
       </div>
       <div class="fg"><label>Beskrivning / syfte</label>
@@ -169,15 +181,14 @@ const RonderingWizardPage = {
 
   _renderStep2() {
     const mallar = (state.ronderingsmallar || []).filter(m => m.active);
-    const cats = this._d.categories;
-    const totalPts = cats.reduce((s, c) => s + (c.points || []).length, 0);
-    const totalMin = cats.reduce((s, c) => (c.points || []).reduce((ss, p) => ss + (p.estimatedTime || 0), s), 0);
+    const cats   = this._d.categories;
+    const total  = cats.reduce((s, c) => s + (c.points || []).length, 0);
 
     return `
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
         <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;">${ic('list-checks',15)} Kontrollpunkter</div>
-          ${cats.length > 0 ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${cats.length} grupp${cats.length!==1?'er':''} · ${totalPts} punkt${totalPts!==1?'er':''}${totalMin>0?' · ca '+totalMin+' min':''}</div>` : ''}
+          <div style="font-weight:700;font-size:14px;">Grupper och kontrollpunkter</div>
+          ${cats.length > 0 ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${cats.length} grupp${cats.length!==1?'er':''} · ${total} punkt${total!==1?'er':''}</div>` : ''}
         </div>
         ${mallar.length > 0 ? `
           <select id="wiz-mall-select" style="padding:6px 8px;border:1px solid var(--br);border-radius:7px;font-size:12px;background:var(--wh);"
@@ -189,7 +200,6 @@ const RonderingWizardPage = {
 
       ${cats.length === 0 ? `
         <div style="padding:24px;text-align:center;border:2px dashed var(--br);border-radius:12px;margin-bottom:12px;background:#fafbfc;">
-          <div style="color:var(--mt);font-size:13px;margin-bottom:6px;">${ic('layers',28)}</div>
           <div style="color:var(--mt);font-size:13px;font-weight:600;margin-bottom:4px;">Inga grupper tillagda</div>
           <div style="font-size:12px;color:var(--mt);">Välj en mall ovan eller skapa grupper manuellt nedan</div>
         </div>` : ''}
@@ -206,7 +216,6 @@ const RonderingWizardPage = {
 
   _catHtml(cat, ci) {
     const pts = cat.points || [];
-    const catMin = pts.reduce((s, p) => s + (p.estimatedTime || 0), 0);
     return `
       <div class="card" style="margin-bottom:10px;" id="cat-block-${ci}">
         <div style="padding:10px 12px;border-bottom:1px solid var(--br);display:flex;gap:6px;align-items:center;background:#fafbfc;border-radius:10px 10px 0 0;">
@@ -216,8 +225,8 @@ const RonderingWizardPage = {
           </div>
           <input type="text" placeholder="Grupprubrik *" value="${this._esc(cat.name)}"
             id="cat-name-${ci}" style="flex:1;padding:7px 9px;border:1px solid var(--br);border-radius:7px;font-size:13px;font-weight:700;background:var(--wh);">
-          <div style="font-size:11px;color:var(--mt);white-space:nowrap;flex-shrink:0;">${pts.length} pt${catMin>0?' · '+catMin+'m':''}</div>
-          <button class="btn bd bsm" onclick="RonderingWizardPage._removeCat(${ci})" title="Ta bort grupp">${ic('trash-2',13)}</button>
+          <div style="font-size:11px;color:var(--mt);white-space:nowrap;flex-shrink:0;">${pts.length} pt</div>
+          <button class="btn bd bsm" onclick="RonderingWizardPage._removeCat(${ci})">${ic('trash-2',13)}</button>
         </div>
         <div style="padding:10px 12px;">
           <div id="cat-pts-${ci}">
@@ -231,10 +240,6 @@ const RonderingWizardPage = {
   },
 
   _ptHtml(ci, pi, pt) {
-    const prios = [
-      {v:'',l:'Standardprioritet'},{v:'låg',l:'Låg'},{v:'normal',l:'Normal'},
-      {v:'hög',l:'Hög'},{v:'akut',l:'Akut'}
-    ];
     return `
       <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:8px 10px;margin-bottom:6px;" id="pt-block-${ci}-${pi}">
         <div style="display:flex;gap:6px;align-items:flex-start;">
@@ -246,22 +251,14 @@ const RonderingWizardPage = {
             <input type="text" placeholder="Kontrollpunktens namn *" value="${this._esc(pt.title)}"
               id="pt-title-${ci}-${pi}" style="width:100%;padding:5px 8px;border:1px solid var(--br);border-radius:6px;font-size:12px;font-weight:600;margin-bottom:4px;box-sizing:border-box;">
             <input type="text" placeholder="Instruktion / beskrivning (valfri)" value="${this._esc(pt.description||'')}"
-              id="pt-desc-${ci}-${pi}" style="width:100%;padding:4px 8px;border:1px solid var(--br);border-radius:6px;font-size:11px;color:var(--mt);margin-bottom:5px;box-sizing:border-box;">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--mt);">
-                ${ic('clock',11)}
-                <input type="number" id="pt-time-${ci}-${pi}" value="${pt.estimatedTime||0}" min="0" step="5"
-                  style="width:52px;padding:3px 5px;border:1px solid var(--br);border-radius:5px;font-size:11px;text-align:right;">
-                <span>min</span>
-              </div>
-              <select id="pt-prio-${ci}-${pi}" style="padding:3px 6px;border:1px solid var(--br);border-radius:5px;font-size:10px;color:var(--mt);background:var(--wh);">
-                ${prios.map(p=>`<option value="${p.v}"${(pt.priority||'')=== p.v?' selected':''}>${p.l}</option>`).join('')}
-              </select>
-              <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;">
-                <input type="checkbox" id="pt-photo-${ci}-${pi}" ${pt.requiresPhoto?'checked':''}> Foto
+              id="pt-desc-${ci}-${pi}" style="width:100%;padding:4px 8px;border:1px solid var(--br);border-radius:6px;font-size:11px;color:var(--mt);margin-bottom:6px;box-sizing:border-box;">
+            <div style="font-size:10px;color:var(--mt);margin-bottom:5px;">Gäller vid avvikelse under utförande:</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;font-weight:600;">
+                <input type="checkbox" id="pt-photo-${ci}-${pi}" ${pt.requiresPhoto?'checked':''}> Kräver foto
               </label>
-              <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;">
-                <input type="checkbox" id="pt-ao-${ci}-${pi}" ${pt.canCreateAO!==false?'checked':''}> AO
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;font-weight:600;">
+                <input type="checkbox" id="pt-ao-${ci}-${pi}" ${pt.canCreateAO!==false?'checked':''}> Kan skapa arbetsorder
               </label>
             </div>
           </div>
@@ -278,19 +275,17 @@ const RonderingWizardPage = {
   _syncStep2() {
     const cats = [];
     this._d.categories.forEach((origCat, ci) => {
-      const nameEl = document.getElementById('cat-name-' + ci);
+      const nameEl  = document.getElementById('cat-name-' + ci);
       const catName = nameEl ? nameEl.value : origCat.name;
-      const points = [];
+      const points  = [];
       (origCat.points || []).forEach((origPt, pi) => {
         const titleEl = document.getElementById('pt-title-' + ci + '-' + pi);
         if (!titleEl) { points.push(origPt); return; }
-        const title = titleEl.value;
-        const desc = (document.getElementById('pt-desc-' + ci + '-' + pi)||{}).value || '';
-        const estimatedTime = parseInt((document.getElementById('pt-time-' + ci + '-' + pi)||{}).value || '0', 10) || 0;
-        const priority = (document.getElementById('pt-prio-' + ci + '-' + pi)||{}).value || '';
-        const requiresPhoto = !!(document.getElementById('pt-photo-' + ci + '-' + pi)||{}).checked;
-        const canCreateAO = (document.getElementById('pt-ao-' + ci + '-' + pi)||{}).checked !== false;
-        points.push({ id: origPt.id, title, description: desc, estimatedTime, priority, requiresPhoto, canCreateAO, sortOrder: pi });
+        const title        = titleEl.value;
+        const desc         = (document.getElementById('pt-desc-'  + ci + '-' + pi)||{}).value || '';
+        const requiresPhoto= !!(document.getElementById('pt-photo-'+ ci + '-' + pi)||{}).checked;
+        const canCreateAO  = (document.getElementById('pt-ao-'    + ci + '-' + pi)||{}).checked !== false;
+        points.push({ id: origPt.id, title, description: desc, requiresPhoto, canCreateAO, sortOrder: pi });
       });
       cats.push({ id: origCat.id, name: catName, sortOrder: ci, points });
     });
@@ -320,7 +315,7 @@ const RonderingWizardPage = {
   _moveCat(ci, dir) {
     this._syncStep2();
     const cats = this._d.categories;
-    const ni = ci + dir;
+    const ni   = ci + dir;
     if (ni < 0 || ni >= cats.length) return;
     [cats[ci], cats[ni]] = [cats[ni], cats[ci]];
     this._rerender2();
@@ -332,8 +327,7 @@ const RonderingWizardPage = {
     if (!cat) return;
     cat.points.push({
       id: 'pt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      title: '', description: '', estimatedTime: 0, priority: '',
-      requiresPhoto: false, canCreateAO: true, sortOrder: cat.points.length
+      title: '', description: '', requiresPhoto: false, canCreateAO: true, sortOrder: cat.points.length
     });
     this._rerender2();
   },
@@ -351,7 +345,7 @@ const RonderingWizardPage = {
     const cat = this._d.categories[ci];
     if (!cat) return;
     const pts = cat.points;
-    const ni = pi + dir;
+    const ni  = pi + dir;
     if (ni < 0 || ni >= pts.length) return;
     [pts[pi], pts[ni]] = [pts[ni], pts[pi]];
     this._rerender2();
@@ -365,7 +359,6 @@ const RonderingWizardPage = {
     const doLoad = (replace) => {
       const newCats = JSON.parse(JSON.stringify(mall.categories || []));
       if (!replace) {
-        // Append — give new IDs to avoid conflicts
         const ts = Date.now();
         newCats.forEach(c => {
           c.id = c.id + '-' + ts;
@@ -376,7 +369,7 @@ const RonderingWizardPage = {
         this._d.categories = newCats;
         if (!this._d.name) this._d.name = mall.name;
       }
-      this._d.templateId = mall.id;
+      this._d.templateId   = mall.id;
       this._d.templateName = mall.name;
       this._rerender2();
     };
@@ -387,9 +380,9 @@ const RonderingWizardPage = {
         body: `<p style="font-size:13px;margin:0 0 8px;">Mall: <strong>${this._esc(mall.name)}</strong></p>
           <p style="font-size:12px;color:var(--mt);margin:0;">Du har redan ${this._d.categories.length} grupp(er). Vad ska hända med befintliga?</p>`,
         buttons: [
-          { label: 'Ersätt befintliga', cls: 'btn bd bfull', onClick: () => { Modal.close(); doLoad(true); } },
+          { label: 'Ersätt befintliga',        cls: 'btn bd bfull', onClick: () => { Modal.close(); doLoad(true);  } },
           { label: 'Lägg till efter befintliga', cls: 'btn bs bfull', onClick: () => { Modal.close(); doLoad(false); } },
-          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+          { label: 'Avbryt',                    cls: 'btn bs',       onClick: () => Modal.close() }
         ]
       });
     } else {
@@ -409,12 +402,9 @@ const RonderingWizardPage = {
           const name = (document.getElementById('save-mall-name') || {}).value || '';
           if (!name.trim()) { showToast('Ange mallnamn'); return; }
           RonderingService.createMall({
-            name: name.trim(),
-            description: this._d.description || '',
+            name: name.trim(), description: this._d.description || '',
             categories: JSON.parse(JSON.stringify(this._d.categories)),
-            customerId: this._d.customerId || '',
-            interval: 'månadsvis',
-            active: true
+            customerId: this._d.customerId || '', interval: 'månadsvis', active: true
           });
           Modal.close();
           showToast('Mall sparad');
@@ -436,23 +426,30 @@ const RonderingWizardPage = {
       {v:'kvartalsvis',l:'Kvartalsvis'},{v:'årsvis',l:'Årsvis'},{v:'eget',l:'Eget antal dagar'}
     ];
 
+    const fmtDur = (min) => min >= 60
+      ? (Math.floor(min/60)+'h'+(min%60?''+min%60+'min':''))
+      : (min+'min');
+
     return `
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">${ic('calendar',15)} Enstaka tillfällen</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;border-bottom:1px solid var(--br);padding-bottom:6px;">Enstaka tillfällen</div>
       ${occs.length === 0 ? `<div style="font-size:12px;color:var(--mt);margin-bottom:8px;padding:10px;background:#f9fafb;border-radius:8px;">Inga enstaka tillfällen tillagda.</div>` : ''}
       ${occs.map((occ, oi) => `
         <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
           <div style="flex:1;">
             <div style="font-size:13px;font-weight:700;">${fmtDate(occ.date)}${occ.time?' kl '+occ.time:''}</div>
-            <div style="font-size:11px;color:var(--mt);">${occ.staffName||'Ej tilldelad'}${occ.comment?' · '+occ.comment:''}</div>
+            <div style="font-size:11px;color:var(--mt);">${occ.staffName||'Ej tilldelad'}${occ.estimatedDuration?' · '+fmtDur(occ.estimatedDuration):''}${occ.comment?' · '+occ.comment:''}</div>
           </div>
           <button class="btn bd bsm" onclick="RonderingWizardPage._removeOcc(${oi})">${ic('x',12)}</button>
         </div>`).join('')}
       <div class="card" style="margin-bottom:16px;">
         <div class="card-body" style="padding:12px 14px;">
-          <div style="font-size:12px;font-weight:700;margin-bottom:8px;">${ic('plus',12)} Lägg till tillfälle</div>
+          <div style="font-size:12px;font-weight:700;margin-bottom:10px;">Lägg till enstaka tillfälle</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div class="fg"><label>Datum</label><input type="date" id="occ-date" value="${tdy()}"></div>
-            <div class="fg"><label>Tid</label><input type="time" id="occ-time" value="09:00"></div>
+            <div class="fg"><label>Starttid</label><input type="time" id="occ-time" value="09:00"></div>
+          </div>
+          <div class="fg"><label>Planerad tidsåtgång (minuter)</label>
+            <input type="number" id="occ-duration" value="60" min="0" step="15" placeholder="60">
           </div>
           <div class="fg"><label>Tilldelad personal</label>
             <select id="occ-staff">
@@ -461,26 +458,26 @@ const RonderingWizardPage = {
             </select>
           </div>
           <div class="fg"><label>Kommentar</label><input type="text" id="occ-comment" placeholder="Valfri kommentar"></div>
-          <button class="btn bp bsm" style="margin-top:6px;" onclick="RonderingWizardPage._addOcc()">Lägg till</button>
+          <button class="btn bp bsm" style="margin-top:6px;" onclick="RonderingWizardPage._addOcc()">Lägg till tillfälle</button>
         </div>
       </div>
 
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">${ic('refresh-cw',14)} Återkommande</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;border-bottom:1px solid var(--br);padding-bottom:6px;">Återkommande</div>
       ${recs.length === 0 ? `<div style="font-size:12px;color:var(--mt);margin-bottom:8px;padding:10px;background:#f9fafb;border-radius:8px;">Inget återkommande upplägg tillagt.</div>` : ''}
       ${recs.map((rec, ri) => {
         const lbl = {dagligen:'Dagligen',veckovis:'Veckovis',varannan_vecka:'Varannan vecka',månadsvis:'Månadsvis',kvartalsvis:'Kvartalsvis',årsvis:'Årsvis',eget:'Var '+rec.intervalDays+' dag(ar)'}[rec.interval]||rec.interval;
         return `
           <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
             <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;">${lbl}</div>
-              <div style="font-size:11px;color:var(--mt);">Fr.o.m. ${fmtDate(rec.startDate)} · ${rec.tillsvidare?'Tills vidare':'T.o.m. '+fmtDate(rec.endDate)} · ${rec.staffName||'Ej tilldelad'}</div>
+              <div style="font-size:13px;font-weight:700;">${lbl}${rec.time?' kl '+rec.time:''}</div>
+              <div style="font-size:11px;color:var(--mt);">Fr.o.m. ${fmtDate(rec.startDate)} · ${rec.tillsvidare?'Tills vidare':'T.o.m. '+fmtDate(rec.endDate)}${rec.estimatedDuration?' · '+fmtDur(rec.estimatedDuration):''} · ${rec.staffName||'Ej tilldelad'}</div>
             </div>
             <button class="btn bd bsm" onclick="RonderingWizardPage._removeRec(${ri})">${ic('x',12)}</button>
           </div>`;
       }).join('')}
       <div class="card">
         <div class="card-body" style="padding:12px 14px;">
-          <div style="font-size:12px;font-weight:700;margin-bottom:8px;">${ic('plus',12)} Lägg till återkommande</div>
+          <div style="font-size:12px;font-weight:700;margin-bottom:10px;">Lägg till återkommande</div>
           <div class="fg"><label>Intervall</label>
             <select id="rec-interval" onchange="RonderingWizardPage._onRecIntervalChange(this.value)">
               ${intervals.map(i=>`<option value="${i.v}">${i.l}</option>`).join('')}
@@ -489,18 +486,24 @@ const RonderingWizardPage = {
           <div id="rec-interval-extra"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div class="fg"><label>Startdatum</label><input type="date" id="rec-start" value="${tdy()}"></div>
-            <div class="fg" id="rec-end-fg" style="opacity:0.4;"><label>Slutdatum</label><input type="date" id="rec-end" disabled></div>
+            <div class="fg"><label>Starttid</label><input type="time" id="rec-time" value="09:00"></div>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:4px;cursor:pointer;">
-            <input type="checkbox" id="rec-tillsvidare" checked
-              onchange="document.getElementById('rec-end').disabled=this.checked;document.getElementById('rec-end-fg').style.opacity=this.checked?'0.4':'1';">
-            Tills vidare
-          </label>
-          <div class="fg" style="margin-top:8px;"><label>Tilldelad personal</label>
+          <div class="fg"><label>Planerad tidsåtgång per tillfälle (minuter)</label>
+            <input type="number" id="rec-duration" value="60" min="0" step="15" placeholder="60">
+          </div>
+          <div class="fg"><label>Tilldelad personal</label>
             <select id="rec-staff">
               <option value="">Ej tilldelad</option>
               ${staff.map(s=>`<option value="${s.id}">${s.firstName} ${s.lastName}</option>`).join('')}
             </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="rec-tillsvidare" checked
+              onchange="document.getElementById('rec-end-row').style.display=this.checked?'none':'block';">
+            Tills vidare
+          </label>
+          <div id="rec-end-row" style="display:none;">
+            <div class="fg"><label>Slutdatum</label><input type="date" id="rec-end"></div>
           </div>
           <button class="btn bp bsm" style="margin-top:6px;" onclick="RonderingWizardPage._addRec()">Lägg till</button>
         </div>
@@ -527,14 +530,15 @@ const RonderingWizardPage = {
   },
 
   _addOcc() {
-    const date    = (document.getElementById('occ-date')   || {}).value || '';
-    const time    = (document.getElementById('occ-time')   || {}).value || '';
-    const staffId = (document.getElementById('occ-staff')  || {}).value || '';
-    const comment = (document.getElementById('occ-comment')|| {}).value || '';
+    const date              = (document.getElementById('occ-date')    || {}).value || '';
+    const time              = (document.getElementById('occ-time')    || {}).value || '';
+    const estimatedDuration = parseInt((document.getElementById('occ-duration') || {}).value || '0', 10) || 0;
+    const staffId           = (document.getElementById('occ-staff')   || {}).value || '';
+    const comment           = (document.getElementById('occ-comment') || {}).value || '';
     if (!date) { showToast('Välj datum'); return; }
     const s = staffId ? getStaff(staffId) : null;
     this._d.occasions.push({
-      id: 'occ-' + Date.now(), date, time, staffId,
+      id: 'occ-' + Date.now(), date, time, estimatedDuration, staffId,
       staffName: s ? (s.firstName + ' ' + s.lastName).trim() : '',
       comment
     });
@@ -549,18 +553,20 @@ const RonderingWizardPage = {
   },
 
   _addRec() {
-    const interval    = (document.getElementById('rec-interval')   || {}).value || 'månadsvis';
-    const startDate   = (document.getElementById('rec-start')      || {}).value || tdy();
-    const tillsvidare = !!(document.getElementById('rec-tillsvidare') || {}).checked;
-    const endDate     = tillsvidare ? '' : ((document.getElementById('rec-end') || {}).value || '');
-    const staffId     = (document.getElementById('rec-staff')      || {}).value || '';
-    const weekday     = (document.getElementById('rec-weekday')    || {}).value || '';
-    const dayOfMonth  = (document.getElementById('rec-dom')        || {}).value || '';
-    const intervalDays= parseInt((document.getElementById('rec-days') || {}).value || '14', 10) || 14;
+    const interval          = (document.getElementById('rec-interval')    || {}).value || 'månadsvis';
+    const startDate         = (document.getElementById('rec-start')       || {}).value || tdy();
+    const time              = (document.getElementById('rec-time')        || {}).value || '';
+    const estimatedDuration = parseInt((document.getElementById('rec-duration') || {}).value || '0', 10) || 0;
+    const tillsvidare       = !!(document.getElementById('rec-tillsvidare') || {}).checked;
+    const endDate           = tillsvidare ? '' : ((document.getElementById('rec-end') || {}).value || '');
+    const staffId           = (document.getElementById('rec-staff')       || {}).value || '';
+    const weekday           = (document.getElementById('rec-weekday')     || {}).value || '';
+    const dayOfMonth        = (document.getElementById('rec-dom')         || {}).value || '';
+    const intervalDays      = parseInt((document.getElementById('rec-days') || {}).value || '14', 10) || 14;
     const s = staffId ? getStaff(staffId) : null;
     this._d.recurringSetups.push({
       id: 'rec-' + Date.now(), interval, intervalDays, startDate, endDate, tillsvidare,
-      weekday, dayOfMonth, staffId,
+      time, estimatedDuration, weekday, dayOfMonth, staffId,
       staffName: s ? (s.firstName + ' ' + s.lastName).trim() : ''
     });
     const el = document.getElementById('wizard-step-content');
@@ -580,7 +586,7 @@ const RonderingWizardPage = {
     const pt = this._d.pricingType;
 
     return `
-      <div style="font-weight:700;font-size:14px;margin-bottom:12px;">${ic('dollar-sign',15)} Prissättning</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Prissättning</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
         ${[
           {v:'tim',  l:'Timpris',                 desc:'Faktureras per nedlagd tid med vald prisgrupp'},
@@ -611,18 +617,27 @@ const RonderingWizardPage = {
         </label>` : ''}
       ${pt === 'fast' ? `
         <div class="fg"><label>Fast pris ex moms (kr)</label>
-          <input type="number" id="wiz-fixedprice" value="${this._d.fixedPrice||0}" placeholder="0">
+          <input type="number" id="wiz-fixedprice" value="${this._d.fixedPrice||0}" placeholder="0"
+            oninput="RonderingWizardPage._liveVAT(this.value)">
         </div>
-        <div style="margin-top:8px;padding:10px 12px;background:#f9fafb;border-radius:8px;font-size:12px;">
-          ${(() => {
-            const ex = this._d.fixedPrice || 0;
-            const vat = Math.round(ex * 0.25);
-            return `Ex moms: <strong>${fmt(ex)} kr</strong> · Moms 25%: <strong>${fmt(vat)} kr</strong> · Inkl moms: <strong>${fmt(ex+vat)} kr</strong>`;
-          })()}
+        <div id="wiz-vat-calc" style="margin-top:8px;padding:10px 12px;background:#f9fafb;border-radius:8px;font-size:12px;">
+          ${this._vatHtml(this._d.fixedPrice || 0)}
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-top:8px;cursor:pointer;">
           <input type="checkbox" id="wiz-debiterbar" ${this._d.debiterbar!==false?'checked':''}> Debiterbar
         </label>` : ''}`;
+  },
+
+  _vatHtml(ex) {
+    ex = parseFloat(ex) || 0;
+    const vat  = Math.round(ex * 0.25);
+    const inkl = ex + vat;
+    return `Ex moms: <strong>${fmt(ex)} kr</strong> &nbsp;·&nbsp; Moms 25%: <strong>${fmt(vat)} kr</strong> &nbsp;·&nbsp; Inkl moms: <strong>${fmt(inkl)} kr</strong>`;
+  },
+
+  _liveVAT(val) {
+    const el = document.getElementById('wiz-vat-calc');
+    if (el) el.innerHTML = this._vatHtml(val);
   },
 
   _setPricingType(val) {
@@ -635,9 +650,9 @@ const RonderingWizardPage = {
   _onPGChange(pgId) {
     const pg = (state.priceGroups || []).find(p => p.id === pgId);
     if (pg) {
-      this._d.priceGroupId = pg.id;
+      this._d.priceGroupId   = pg.id;
       this._d.priceGroupName = pg.name;
-      this._d.hourRate = pg.hourRate;
+      this._d.hourRate       = pg.hourRate;
       const el = document.getElementById('wizard-step-content');
       if (el) el.innerHTML = this._renderStep4();
     }
@@ -646,12 +661,13 @@ const RonderingWizardPage = {
   // ── Read / sync DOM → state ───────────────────────────────────────────────
 
   _readStep1() {
-    this._d.name        = (document.getElementById('wiz-name') || {}).value || '';
-    this._d.customerId  = (document.getElementById('wiz-cu')   || {}).value || '';
-    this._d.propertyId  = (document.getElementById('wiz-prop') || {}).value || '';
-    this._d.description = (document.getElementById('wiz-desc') || {}).value || '';
-    this._d.internalNote= (document.getElementById('wiz-note') || {}).value || '';
-    this._d.isDraft     = !!(document.getElementById('wiz-draft') || {}).checked;
+    this._d.name         = (document.getElementById('wiz-name')    || {}).value || '';
+    this._d.customerId   = (document.getElementById('wiz-cu')      || {}).value || '';
+    this._d.propertyId   = (document.getElementById('wiz-prop')    || {}).value || '';
+    this._d.priority     = (document.getElementById('wiz-priority')|| {}).value || 'normal';
+    this._d.description  = (document.getElementById('wiz-desc')    || {}).value || '';
+    this._d.internalNote = (document.getElementById('wiz-note')    || {}).value || '';
+    this._d.isDraft      = !!(document.getElementById('wiz-draft') || {}).checked;
   },
 
   _readStep4() {
@@ -662,10 +678,10 @@ const RonderingWizardPage = {
         const pg = (state.priceGroups || []).find(p => p.id === pgEl.value);
         if (pg) { this._d.priceGroupId = pg.id; this._d.priceGroupName = pg.name; }
       }
-      this._d.hourRate   = parseFloat((document.getElementById('wiz-hourrate')  || {}).value || 0) || 0;
+      this._d.hourRate   = parseFloat((document.getElementById('wiz-hourrate')   || {}).value || 0) || 0;
       this._d.debiterbar = !!(document.getElementById('wiz-debiterbar') || {}).checked;
     } else if (pt === 'fast') {
-      this._d.fixedPrice = parseFloat((document.getElementById('wiz-fixedprice')|| {}).value || 0) || 0;
+      this._d.fixedPrice = parseFloat((document.getElementById('wiz-fixedprice') || {}).value || 0) || 0;
       this._d.debiterbar = !!(document.getElementById('wiz-debiterbar') || {}).checked;
     }
   },
@@ -674,7 +690,7 @@ const RonderingWizardPage = {
     if (this._step === 1) this._readStep1();
     else if (this._step === 2) this._syncStep2();
     else if (this._step === 4) this._readStep4();
-    // Step 3: data pushed directly to _d.occasions / _d.recurringSetups
+    // Step 3: pushed directly to _d.occasions / _d.recurringSetups on add
   },
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -686,7 +702,7 @@ const RonderingWizardPage = {
     }
     if (this._step === 2) {
       const cats = this._d.categories.filter(c => c.name.trim());
-      if (cats.length === 0) { showToast('Lägg till minst en grupp och ange ett namn på gruppen'); return false; }
+      if (cats.length === 0) { showToast('Lägg till minst en grupp med namn'); return false; }
       if (!cats.some(c => (c.points || []).some(p => p.title.trim()))) {
         showToast('Lägg till minst en kontrollpunkt med namn'); return false;
       }
@@ -767,9 +783,9 @@ const RonderingWizardPage = {
 
   _save() {
     this._readCurrentStep();
-    const d = this._d;
+    const d    = this._d;
+    const cats = this._cleanCats();
 
-    // Full validation — navigate to the failing step
     if (!d.name.trim()) {
       showToast('Ange namn på rondering (steg 1)');
       this._step = 1; this._reRenderWizard(); return;
@@ -778,13 +794,8 @@ const RonderingWizardPage = {
       showToast('Välj kund (steg 1)');
       this._step = 1; this._reRenderWizard(); return;
     }
-    const cats = this._cleanCats();
-    if (cats.length === 0) {
+    if (cats.length === 0 || !cats.some(c => (c.points || []).length > 0)) {
       showToast('Lägg till minst en grupp med kontrollpunkter (steg 2)');
-      this._step = 2; this._reRenderWizard(); return;
-    }
-    if (!cats.some(c => (c.points || []).length > 0)) {
-      showToast('Lägg till minst en kontrollpunkt (steg 2)');
       this._step = 2; this._reRenderWizard(); return;
     }
     if (d.occasions.length === 0 && d.recurringSetups.length === 0) {
