@@ -112,65 +112,64 @@ const RonderingUtforandePage = {
   },
 
   _renderPt(ron, cat, pt, pi, total) {
-    const hasBorder = pi > 0 ? 'border-top:1px solid var(--br);' : '';
-    const avv = pt.deviationId ? getAvv(pt.deviationId) : null;
+    const hasBorder = pi > 0;
+    const avv       = pt.deviationId ? getAvv(pt.deviationId) : null;
 
     if (pt.status === '') {
       return `
-        <div class="ron-pt-row${hasBorder?' ron-pt-border':''}" id="pt-row-${pt.pointId}">
-          <div class="ron-pt-body">
-            <div class="ron-pt-title">${pt.pointTitle}</div>
-            ${pt.pointDesc ? `<div class="ron-pt-desc">${pt.pointDesc}</div>` : ''}
+        <div class="ronpt${hasBorder ? ' ronpt-br' : ''}" id="pt-row-${pt.pointId}">
+          <div class="ronpt-info">
+            <div class="ronpt-name">${pt.pointTitle}</div>
+            ${pt.pointDesc ? `<div class="ronpt-desc">${pt.pointDesc}</div>` : ''}
           </div>
-          <div class="ron-pt-actions">
-            <button class="ron-pt-ok"
-              onclick="RonderingUtforandePage.markOk('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-              ${ic('check-circle',14)} Godkänd
+          <div class="ronpt-acts">
+            <button class="rona-ok" title="Godkänd"
+                onclick="RonderingUtforandePage.markOk('${ron.id}','${cat.categoryId}','${pt.pointId}')">
+              ${ic('check',14)}<span class="rona-lbl">Godkänd</span>
             </button>
-            <button class="ron-pt-avv"
-              onclick="RonderingUtforandePage.openAvvModal('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-              ${ic('alert-triangle',14)} Avvikelse
+            <button class="rona-avv" title="Avvikelse"
+                onclick="RonderingUtforandePage.openAvvModal('${ron.id}','${cat.categoryId}','${pt.pointId}')">
+              ${ic('alert-triangle',14)}<span class="rona-lbl">Avvikelse</span>
             </button>
-            <button class="ron-pt-ej"
-              onclick="RonderingUtforandePage.openEjAktuell('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-              Ej aktuell
+            <button class="rona-ej" title="Ej aktuell"
+                onclick="RonderingUtforandePage.openEjAktuell('${ron.id}','${cat.categoryId}','${pt.pointId}')">
+              ${ic('minus',13)}<span class="rona-lbl">Ej aktuell</span>
             </button>
           </div>
         </div>`;
     }
 
-    // Checked point — compact row
-    const stIcon  = {ok:'check-circle',avvikelse:'alert-triangle',ej_aktuell:'minus-circle'}[pt.status]||'circle';
-    const stColor = {ok:'#16a34a',avvikelse:'#dc2626',ej_aktuell:'#9ca3af'}[pt.status]||'#9ca3af';
-    const stLabel = {ok:'Godkänd',avvikelse:'Avvikelse',ej_aktuell:'Ej aktuell'}[pt.status]||pt.status;
+    const stIcon  = {ok:'check-circle',avvikelse:'alert-triangle',ej_aktuell:'minus-circle'}[pt.status] || 'circle';
+    const stColor = {ok:'#16a34a',avvikelse:'#dc2626',ej_aktuell:'#9ca3af'}[pt.status] || '#9ca3af';
+    const stLabel = {ok:'Godkänd',avvikelse:'Avvikelse',ej_aktuell:'Ej aktuell'}[pt.status] || pt.status;
 
     return `
-      <div style="padding:10px 14px;${hasBorder}display:flex;align-items:flex-start;gap:10px;" id="pt-row-${pt.pointId}">
-        <span style="color:${stColor};flex-shrink:0;margin-top:1px;">${ic(stIcon,16)}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;">${pt.pointTitle}</div>
-          <div style="font-size:11px;color:${stColor};font-weight:600;">${stLabel}${pt.comment?' — '+pt.comment:''}</div>
+      <div class="ronpt${hasBorder ? ' ronpt-br' : ''}" id="pt-row-${pt.pointId}">
+        <span style="color:${stColor};flex-shrink:0;">${ic(stIcon,16)}</span>
+        <div class="ronpt-info">
+          <div class="ronpt-name">${pt.pointTitle}</div>
+          <div style="font-size:11px;font-weight:600;color:${stColor};">${stLabel}${pt.comment?' — '+pt.comment:''}</div>
           ${avv ? `
-            <div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:11px;">
-              <div style="font-weight:700;margin-bottom:2px;">${avv.title}</div>
-              ${avv.comment ? `<div style="color:var(--mt);margin-bottom:4px;">${avv.comment}</div>` : ''}
-              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:6px;padding:5px 8px;margin-top:4px;font-size:11px;">
+              <div style="font-weight:700;">${avv.title}</div>
+              ${avv.comment ? `<div style="color:var(--mt);margin-top:1px;">${avv.comment}</div>` : ''}
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">
                 ${pbdg(avv.priority)}
                 ${avv.workOrderId
-                  ? `<span class="bdg bdg-green" style="font-size:9px;">AO: ${avv.workOrderId}</span>`
+                  ? `<span class="bdg bdg-green" style="font-size:9px;">AO</span>`
                   : (pt.canCreateAO !== false
                     ? `<button class="btn bp bsm" style="font-size:10px;" onclick="RonderingUtforandePage.createAO('${avv.id}')">Skapa AO</button>`
                     : '')}
               </div>
               ${avv.images && avv.images.length > 0 ? `
-                <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
-                  ${avv.images.map(img=>`<img src="${img.dataUrl}" alt="Bild" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #fca5a5;">`).join('')}
+                <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
+                  ${avv.images.map(img=>`<img src="${img.dataUrl}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid #fca5a5;">`).join('')}
                 </div>` : ''}
             </div>` : ''}
         </div>
-        <button class="btn bs bsm" style="flex-shrink:0;font-size:10px;" title="Ångra"
-          onclick="RonderingUtforandePage.undoPt('${ron.id}','${cat.categoryId}','${pt.pointId}')">
-          ${ic('rotate-ccw',11)}
+        <button class="rona-undo" title="Ångra"
+            onclick="RonderingUtforandePage.undoPt('${ron.id}','${cat.categoryId}','${pt.pointId}')">
+          ${ic('rotate-ccw',12)}
         </button>
       </div>`;
   },
@@ -199,12 +198,10 @@ const RonderingUtforandePage = {
           <textarea id="avv-comment" rows="3" placeholder="Ytterligare detaljer..."></textarea>
         </div>
         <div class="fg"><label>Prioritet</label>
-          <select id="avv-priority">
-            <option value="akut">Akut</option>
-            <option value="hög">Hög</option>
-            <option value="normal" selected>Normal</option>
-            <option value="låg">Låg</option>
-          </select>
+          ${CustomSelect.render('avv-priority', {
+            options: [{v:'akut',l:'Akut'},{v:'hög',l:'Hög'},{v:'normal',l:'Normal'},{v:'låg',l:'Låg'}],
+            value: 'normal'
+          })}
         </div>
         <div class="fg"><label>Foto (valfritt)</label>
           <input type="file" id="avv-photo" accept="image/*" capture="environment">

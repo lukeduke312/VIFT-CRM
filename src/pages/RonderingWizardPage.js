@@ -147,29 +147,30 @@ const RonderingWizardPage = {
 
   _renderStep1() {
     const customers = state.customers || [];
-    const prios = [{v:'låg',l:'Låg'},{v:'normal',l:'Normal'},{v:'hög',l:'Hög'},{v:'akut',l:'Akut'}];
+    const cuName    = c => c.name || ((c.firstName||'')+' '+(c.lastName||'')).trim() || c.id;
+    const prios     = [{v:'låg',l:'Låg'},{v:'normal',l:'Normal'},{v:'hög',l:'Hög'},{v:'akut',l:'Akut'}];
+    const props     = (state.properties||[]).filter(p => !this._d.customerId || p.customerId === this._d.customerId);
     return `
       <div class="fg"><label>Namn på rondering *</label>
         <input type="text" id="wiz-name" value="${this._esc(this._d.name)}" placeholder="T.ex. Månadsrondering BRF Solgläntan">
       </div>
       <div class="fg"><label>Kund *</label>
-        <select id="wiz-cu" onchange="RonderingWizardPage._onCustomerChange(this.value)">
-          <option value="">Välj kund...</option>
-          ${customers.map(c => `<option value="${c.id}"${c.id===this._d.customerId?' selected':''}>${this._esc(c.name||((c.firstName||'')+' '+(c.lastName||'')).trim())}</option>`).join('')}
-        </select>
+        ${CustomSelect.render('wiz-cu', {
+          options: customers.map(c => ({v:c.id, l:cuName(c)})),
+          value: this._d.customerId,
+          placeholder: 'Välj kund...',
+          onchange: 'RonderingWizardPage._onCustomerChange(this.value)',
+          searchable: true
+        })}
       </div>
       <div class="fg"><label>Fastighet / objekt</label>
-        <select id="wiz-prop">
-          <option value="">Ingen fastighet vald</option>
-          ${(state.properties||[]).filter(p=>!this._d.customerId||p.customerId===this._d.customerId).map(p =>
-            `<option value="${p.id}"${p.id===this._d.propertyId?' selected':''}>${this._esc(p.name+(p.address?' – '+p.address:''))}</option>`
-          ).join('')}
-        </select>
+        ${CustomSelect.render('wiz-prop', {
+          options: [{v:'',l:'Ingen fastighet'}].concat(props.map(p => ({v:p.id, l:p.name+(p.address?' – '+p.address:'')}))),
+          value: this._d.propertyId || ''
+        })}
       </div>
       <div class="fg"><label>Prioritet</label>
-        <select id="wiz-priority">
-          ${prios.map(p=>`<option value="${p.v}"${this._d.priority===p.v?' selected':''}>${p.l}</option>`).join('')}
-        </select>
+        ${CustomSelect.render('wiz-priority', {options: prios, value: this._d.priority || 'normal'})}
       </div>
       <div class="fg"><label>Beskrivning / syfte</label>
         <textarea id="wiz-desc" rows="3" placeholder="Beskriv vad ronderingen ska täcka...">${this._esc(this._d.description)}</textarea>
@@ -204,11 +205,13 @@ const RonderingWizardPage = {
           ${cats.length > 0 ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${cats.length} grupp${cats.length!==1?'er':''} · ${total} punkt${total!==1?'er':''}</div>` : ''}
         </div>
         ${mallar.length > 0 ? `
-          <div class="fg" style="margin:0;min-width:160px;max-width:200px;">
-            <select id="wiz-mall-select" onchange="RonderingWizardPage._loadMall(this.value)">
-              <option value="">Ladda mall...</option>
-              ${mallar.map(m => `<option value="${m.id}">${this._esc(m.name)}</option>`).join('')}
-            </select>
+          <div class="fg" style="margin:0;min-width:160px;max-width:220px;">
+            ${CustomSelect.render('wiz-mall-select', {
+              options: mallar.map(m => ({v:m.id, l:m.name})),
+              value: '',
+              placeholder: 'Ladda mall...',
+              onchange: 'RonderingWizardPage._loadMall(this.value)'
+            })}
           </div>` : ''}
       </div>
 
@@ -459,10 +462,10 @@ const RonderingWizardPage = {
             <input type="number" id="occ-duration" value="60" min="0" step="15" placeholder="60">
           </div>
           <div class="fg"><label>Tilldelad personal</label>
-            <select id="occ-staff">
-              <option value="">Ej tilldelad</option>
-              ${staff.map(s=>`<option value="${s.id}">${s.firstName} ${s.lastName}</option>`).join('')}
-            </select>
+            ${CustomSelect.render('occ-staff', {
+              options: [{v:'',l:'Ej tilldelad'}].concat(staff.map(s => ({v:s.id, l:s.firstName+' '+s.lastName}))),
+              value: '', searchable: staff.length > 4
+            })}
           </div>
           <div class="fg"><label>Kommentar</label><input type="text" id="occ-comment" placeholder="Valfri kommentar"></div>
           <button class="btn bp bsm" style="margin-top:6px;" onclick="RonderingWizardPage._addOcc()">Lägg till tillfälle</button>
@@ -486,9 +489,11 @@ const RonderingWizardPage = {
         <div class="card-body" style="padding:12px 14px;">
           <div style="font-size:12px;font-weight:700;margin-bottom:10px;">Lägg till återkommande</div>
           <div class="fg"><label>Intervall</label>
-            <select id="rec-interval" onchange="RonderingWizardPage._onRecIntervalChange(this.value)">
-              ${intervals.map(i=>`<option value="${i.v}">${i.l}</option>`).join('')}
-            </select>
+            ${CustomSelect.render('rec-interval', {
+              options: intervals.map(i => ({v:i.v, l:i.l})),
+              value: 'månadsvis',
+              onchange: 'RonderingWizardPage._onRecIntervalChange(this.value)'
+            })}
           </div>
           <div id="rec-interval-extra"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -499,10 +504,10 @@ const RonderingWizardPage = {
             <input type="number" id="rec-duration" value="60" min="0" step="15" placeholder="60">
           </div>
           <div class="fg"><label>Tilldelad personal</label>
-            <select id="rec-staff">
-              <option value="">Ej tilldelad</option>
-              ${staff.map(s=>`<option value="${s.id}">${s.firstName} ${s.lastName}</option>`).join('')}
-            </select>
+            ${CustomSelect.render('rec-staff', {
+              options: [{v:'',l:'Ej tilldelad'}].concat(staff.map(s => ({v:s.id, l:s.firstName+' '+s.lastName}))),
+              value: '', searchable: staff.length > 4
+            })}
           </div>
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="rec-tillsvidare" checked
@@ -522,13 +527,17 @@ const RonderingWizardPage = {
     if (!el) return;
     if (val === 'veckovis') {
       el.innerHTML = `<div class="fg"><label>Veckodag</label>
-        <select id="rec-weekday">
-          <option value="1">Måndag</option><option value="2">Tisdag</option><option value="3">Onsdag</option>
-          <option value="4">Torsdag</option><option value="5">Fredag</option><option value="6">Lördag</option><option value="0">Söndag</option>
-        </select></div>`;
+        ${CustomSelect.render('rec-weekday', {
+          options: [{v:'1',l:'Måndag'},{v:'2',l:'Tisdag'},{v:'3',l:'Onsdag'},
+                    {v:'4',l:'Torsdag'},{v:'5',l:'Fredag'},{v:'6',l:'Lördag'},{v:'0',l:'Söndag'}],
+          value: '1'
+        })}</div>`;
     } else if (val === 'månadsvis') {
       el.innerHTML = `<div class="fg"><label>Dag i månaden</label>
-        <select id="rec-dom">${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select></div>`;
+        ${CustomSelect.render('rec-dom', {
+          options: Array.from({length:31},(_,i)=>({v:String(i+1),l:String(i+1)})),
+          value: '1'
+        })}</div>`;
     } else if (val === 'eget') {
       el.innerHTML = `<div class="fg"><label>Antal dagar mellan tillfällen</label><input type="number" id="rec-days" value="14" min="1"></div>`;
     } else {
@@ -611,10 +620,11 @@ const RonderingWizardPage = {
       </div>
       ${pt === 'tim' ? `
         <div class="fg"><label>Prisgrupp</label>
-          <select id="wiz-pg" onchange="RonderingWizardPage._onPGChange(this.value)">
-            <option value="">Välj prisgrupp...</option>
-            ${priceGroups.map(pg=>`<option value="${pg.id}"${pg.id===this._d.priceGroupId?' selected':''}>${this._esc(pg.name)} – ${fmt(pg.hourRate)} kr/tim</option>`).join('')}
-          </select>
+          ${CustomSelect.render('wiz-pg', {
+            options: [{v:'',l:'Välj prisgrupp...'}].concat(priceGroups.map(pg => ({v:pg.id, l:pg.name+' – '+fmt(pg.hourRate)+' kr/tim'}))),
+            value: this._d.priceGroupId || '',
+            onchange: 'RonderingWizardPage._onPGChange(this.value)'
+          })}
         </div>
         <div class="fg"><label>Timpris ex moms (kr)</label>
           <input type="number" id="wiz-hourrate" value="${this._d.hourRate||0}" placeholder="695" style="background:#f9fafb;">
