@@ -64,29 +64,48 @@ const RonderingWizardPage = {
   },
 
   _renderWizard(el) {
-    const steps = ['Ronderingsinfo', 'Kontrollpunkter', 'Tillfällen', 'Prissättning'];
+    const stepLabels = ['Ronderingsinfo', 'Kontrollpunkter', 'Tillfällen', 'Prissättning'];
 
     const stepInd = (() => {
-      const items = steps.map((lbl, i) => {
+      const pct = (this._step - 1) / (stepLabels.length - 1); // 0..1
+
+      const circles = stepLabels.map((lbl, i) => {
         const n      = i + 1;
         const active = n === this._step;
         const done   = n < this._step;
-        const circBg  = active ? 'var(--navy)' : done ? '#16a34a' : '#e5e7eb';
-        const circClr = (active || done) ? '#fff' : '#94a3b8';
-        const lblClr  = active ? 'var(--navy)' : done ? '#16a34a' : '#9ca3af';
-        const lineClr = done ? '#16a34a' : '#e5e7eb';
-        const circ = `<div style="width:26px;height:26px;border-radius:50%;background:${circBg};color:${circClr};
-            display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;
-            flex-shrink:0;${done ? 'cursor:pointer;' : ''}"
-            ${done ? `onclick="RonderingWizardPage._goToStep(${n})"` : ''}>${n}</div>`;
-        const label = `<div style="font-size:9px;font-weight:${active ? '700' : '600'};color:${lblClr};
-            margin-top:3px;text-align:center;line-height:1.2;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;">${lbl}</div>`;
-        const line = i < steps.length - 1
-          ? `<div style="flex:1;height:2px;background:${lineClr};margin-top:11px;min-width:6px;"></div>`
-          : '';
-        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;">${circ}${label}</div>${line}`;
-      });
-      return `<div style="display:flex;align-items:flex-start;margin-bottom:20px;">${items.join('')}</div>`;
+
+        const bg     = active ? 'var(--navy)' : done ? '#16a34a' : '#e2e8f0';
+        const clr    = (active || done) ? '#fff' : '#94a3b8';
+        const cnt    = done ? '✓' : n;
+        const lblClr = active ? 'var(--navy)' : done ? '#15803d' : '#94a3b8';
+        const lblW   = active ? '700' : done ? '600' : '400';
+        const ring   = active ? 'box-shadow:0 0 0 3px rgba(13,43,78,.12);' : '';
+        const cursor = done ? 'cursor:pointer;' : '';
+        const click  = done ? `onclick="RonderingWizardPage._goToStep(${n})"` : '';
+
+        return `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;z-index:1;flex:1;min-width:0;${cursor}"
+              ${click}>
+            <div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${clr};
+              display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;
+              ${ring}flex-shrink:0;">
+              ${cnt}
+            </div>
+            <div style="font-size:9px;font-weight:${lblW};color:${lblClr};text-align:center;line-height:1.2;
+              max-width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px;">
+              ${lbl}
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div style="position:relative;padding-bottom:4px;margin-bottom:20px;">
+          <div style="position:absolute;top:14px;left:14px;right:14px;height:2px;background:#e2e8f0;z-index:0;"></div>
+          ${pct > 0 ? `<div style="position:absolute;top:14px;left:14px;width:calc((100% - 28px) * ${pct.toFixed(3)});height:2px;background:#16a34a;z-index:0;"></div>` : ''}
+          <div style="display:flex;justify-content:space-between;position:relative;">
+            ${circles}
+          </div>
+        </div>`;
     })();
 
     let content = '';
@@ -117,7 +136,7 @@ const RonderingWizardPage = {
       <div style="display:flex;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--br);">
         ${!isFirst
           ? `<button class="btn bs" style="flex:1;" onclick="RonderingWizardPage._prevStep()">${ic('arrow-left',13)} Tillbaka</button>`
-          : `<button class="btn bs" style="flex:1;" onclick="Router.showPage('pg-rondering')">Avbryt</button>`}
+          : `<button class="btn bs" style="flex:1;" onclick="RonderingWizardPage._backOrPrev()">Avbryt</button>`}
         ${isLast
           ? `<button class="btn bp" style="flex:2;" onclick="RonderingWizardPage._save()">${ic('save',14)} Spara rondering</button>`
           : `<button class="btn bp" style="flex:2;" onclick="RonderingWizardPage._nextStep()">Nästa ${ic('arrow-right',13)}</button>`}
@@ -215,8 +234,8 @@ const RonderingWizardPage = {
       <div class="card" style="margin-bottom:10px;" id="cat-block-${ci}">
         <div style="padding:10px 12px;border-bottom:1px solid var(--br);display:flex;gap:6px;align-items:center;background:#fafbfc;border-radius:10px 10px 0 0;">
           <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;">
-            <button class="btn bs" style="padding:0 5px;line-height:1.6;font-size:10px;" onclick="RonderingWizardPage._moveCat(${ci},-1)">▲</button>
-            <button class="btn bs" style="padding:0 5px;line-height:1.6;font-size:10px;" onclick="RonderingWizardPage._moveCat(${ci},1)">▼</button>
+            <button class="btn bs" style="padding:1px 4px;" title="Flytta upp" onclick="RonderingWizardPage._moveCat(${ci},-1)">${ic('chevron-up',12)}</button>
+            <button class="btn bs" style="padding:1px 4px;" title="Flytta ned" onclick="RonderingWizardPage._moveCat(${ci},1)">${ic('chevron-down',12)}</button>
           </div>
           <input type="text" placeholder="Grupprubrik *" value="${this._esc(cat.name)}"
             id="cat-name-${ci}" style="flex:1;padding:7px 9px;border:1px solid var(--br);border-radius:7px;font-size:13px;font-weight:700;background:var(--wh);">
@@ -238,9 +257,9 @@ const RonderingWizardPage = {
     return `
       <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:8px 10px;margin-bottom:6px;" id="pt-block-${ci}-${pi}">
         <div style="display:flex;gap:6px;align-items:flex-start;">
-          <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;padding-top:4px;">
-            <button class="btn bs" style="padding:0 4px;line-height:1.6;font-size:9px;" onclick="RonderingWizardPage._movePt(${ci},${pi},-1)">▲</button>
-            <button class="btn bs" style="padding:0 4px;line-height:1.6;font-size:9px;" onclick="RonderingWizardPage._movePt(${ci},${pi},1)">▼</button>
+          <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;padding-top:2px;">
+            <button class="btn bs" style="padding:1px 3px;" title="Flytta upp" onclick="RonderingWizardPage._movePt(${ci},${pi},-1)">${ic('chevron-up',11)}</button>
+            <button class="btn bs" style="padding:1px 3px;" title="Flytta ned" onclick="RonderingWizardPage._movePt(${ci},${pi},1)">${ic('chevron-down',11)}</button>
           </div>
           <div style="flex:1;min-width:0;">
             <input type="text" placeholder="Kontrollpunktens namn *" value="${this._esc(pt.title)}"
@@ -720,7 +739,21 @@ const RonderingWizardPage = {
     if (this._step > 1) {
       this._prevStep();
     } else {
-      Router.showPage('pg-rondering');
+      const nameEl = document.getElementById('wiz-name');
+      const cuEl   = document.getElementById('wiz-cu');
+      const hasData = (nameEl && nameEl.value.trim()) || (cuEl && cuEl.value);
+      if (hasData) {
+        Modal.open({
+          title: 'Avbryt rondering?',
+          body: `<p style="font-size:14px;margin:0;color:var(--tx);">Du har osparade uppgifter. Vill du lämna wizarden?</p>`,
+          buttons: [
+            { label: 'Lämna utan att spara', cls: 'btn bd bfull', onClick: () => { Modal.close(); Router.showPage('pg-rondering'); } },
+            { label: 'Stanna kvar',           cls: 'btn bp bfull', onClick: () => Modal.close() }
+          ]
+        });
+      } else {
+        Router.showPage('pg-rondering');
+      }
     }
   },
 

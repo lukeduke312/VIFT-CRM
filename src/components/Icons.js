@@ -32,6 +32,7 @@ function ic(name, size = 18) {
     menu:            '<line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     'chevron-down':  '<path d="m6 9 6 6 6-6"/>',
+    'chevron-up':    '<path d="m6 15 6-6 6 6"/>',
     'alert-triangle':'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
     target:          '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     activity:        '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
