@@ -92,7 +92,7 @@ const Dashboard = {
       <div class="card-body" style="padding:8px 12px;">
         <div class="quick-row">
           ${this._qbtn('clipboard-list','Ny order',     "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)")}
-          ${this._qbtn('file-text',     'Ny offert',    "Router.showPage('pg-offer')")}
+          ${this._qbtn('file-text',     'Ny offert',    "Router.showPage('pg-offer');setTimeout(()=>OffersPage.openCreate(),80)")}
           ${this._qbtn('users',         'Ny kund',      "Router.showPage('pg-crm');setTimeout(()=>CustomersPage.openCreate(),80)")}
           ${this._qbtn('refresh-cw',    'Återkommande', "Router.showPage('pg-recurring')")}
           ${this._qbtn('clock',         'Stämpla tid',  "Router.showPage('pg-tid')")}

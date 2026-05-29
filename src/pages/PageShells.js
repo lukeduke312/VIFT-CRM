@@ -5,27 +5,224 @@
 
 /* ── Offerter ─────────────────────────── */
 const OffersPage = {
+  _editLines: [],
+
   render() {
     const el = document.getElementById('pg-offer-content');
     if (!el) return;
-    const offers = state.offers || [];
-    el.innerHTML = offers.length === 0
-      ? `<div class="empty">${ic('file-text',36)}<h3>Inga offerter</h3></div>`
-      : offers.map(o => {
-          const cu = getCu(o.customerId);
-          const cuName = cu ? (cu.name || `${cu.firstName} ${cu.lastName}`.trim()) : '—';
-          const total = (o.lines || []).reduce((s, l) => s + (l.total || 0), 0);
-          return `
-            <div class="list-item" onclick="Router.showPage('pg-offer-detail', {offerId: '${o.id}'})">
-              <div class="item-row">
-                <div>
-                  <div class="item-title">${o.id} – ${cuName}</div>
-                  <div class="item-sub">${fmt(total)} kr · ${fmtDate(o.createdAt)}</div>
+    const offers = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    el.innerHTML =
+      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+         <div style="flex:1;"></div>
+         <button class="btn bp bsm" onclick="OffersPage.openCreate()">${ic('plus',14)} Ny offert</button>
+       </div>` +
+      (offers.length === 0
+        ? `<div class="empty">${ic('file-text',36)}<h3>Inga offerter</h3></div>`
+        : offers.map(o => {
+            const cu = getCu(o.customerId);
+            const cuName = cu ? CustomerService.displayName(cu) : '—';
+            const exVat = (o.lines || []).reduce((s, l) => s + (l.total || 0), 0);
+            const displayTitle = o.title ? `${o.id} – ${o.title}` : o.id;
+            return `
+              <div class="list-item" onclick="Router.showPage('pg-offer-detail', {offerId: '${o.id}'})">
+                <div class="item-row">
+                  <div style="flex:1;min-width:0;">
+                    <div class="item-title">${displayTitle}</div>
+                    <div class="item-sub">${cuName} · ${fmt(exVat)} kr ex. moms · ${fmtDate(o.createdAt)}</div>
+                  </div>
+                  ${sbdg(o.status)}
                 </div>
-                ${sbdg(o.status)}
-              </div>
-            </div>`;
-        }).join('');
+              </div>`;
+          }).join(''));
+  },
+
+  openCreate(preCustomerId) {
+    this._editLines = [this._newLine()];
+    Modal.open({
+      title: 'Ny offert',
+      wide: true,
+      body: this._formHtml(null, preCustomerId || ''),
+      buttons: [
+        { label: ic('save',13) + ' Spara offert', cls: 'btn bp', onClick: () => OffersPage._save(null) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('off-title')?.focus(), 80);
+  },
+
+  openEdit(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    this._editLines = (off.lines || []).map(l => ({ ...l }));
+    if (!this._editLines.length) this._editLines = [this._newLine()];
+    Modal.open({
+      title: `Redigera ${off.id}`,
+      wide: true,
+      body: this._formHtml(off, null),
+      buttons: [
+        { label: ic('save',13) + ' Spara', cls: 'btn bp', onClick: () => OffersPage._save(off.id) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('off-title')?.focus(), 80);
+  },
+
+  _newLine() {
+    return { id: 'L' + Date.now() + Math.random().toString(36).slice(2, 5), description: '', qty: 1, unit: 'st', unitPrice: 0, total: 0 };
+  },
+
+  _formHtml(off, preCustomerId) {
+    const cuId = off ? (off.customerId || '') : (preCustomerId || '');
+    const today = new Date().toISOString().split('T')[0];
+    const validDefault = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const cuOpts = [
+      { v: '', l: '— Välj kund —' },
+      ...(state.customers || []).map(c => ({ v: c.id, l: CustomerService.displayName(c) }))
+    ];
+    return `
+      <div class="g2">
+        <div class="fg"><label>Kund <span style="color:var(--rd)">*</span></label>
+          ${CustomSelect.render('off-cu', { options: cuOpts, value: cuId, placeholder: '— Välj kund —', searchable: true })}
+        </div>
+        <div class="fg"><label>Rubrik / titel</label>
+          <input id="off-title" value="${off ? (off.title || '').replace(/"/g, '&quot;') : ''}" placeholder="T.ex. Serviceavtal fastighetsskötsel"></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Datum</label>
+          <input type="date" id="off-date" value="${off ? (off.createdAt || '').split('T')[0] || today : today}"></div>
+        <div class="fg"><label>Giltig till</label>
+          <input type="date" id="off-valid" value="${off ? off.validUntil || validDefault : validDefault}"></div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">Offertrader</label>
+          <button type="button" class="btn bp bxs" onclick="OffersPage._addLine()">${ic('plus',12)} Lägg till rad</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 60px 68px 90px 68px 28px;gap:4px;padding:0 2px 4px;border-bottom:1px solid var(--br);">
+          <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;">Benämning</div>
+          <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;text-align:right;">Ant.</div>
+          <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;">Enhet</div>
+          <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;text-align:right;">À-pris ex moms</div>
+          <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;text-align:right;">Summa</div>
+          <div></div>
+        </div>
+        <div id="off-lines">${this._linesHtml()}</div>
+      </div>
+
+      <div id="off-totals" style="margin-top:6px;padding:10px 12px;background:var(--bg);border-radius:var(--rs);">
+        ${this._totalsHtml()}
+      </div>
+
+      <div class="fg" style="margin-top:8px;">
+        <label>Intern anteckning</label>
+        <textarea id="off-note" rows="2" placeholder="Synlig endast internt…">${off ? off.internalNote || '' : ''}</textarea>
+      </div>`;
+  },
+
+  _linesHtml() {
+    if (!this._editLines.length) {
+      return `<p style="font-size:12px;color:var(--mt);padding:10px 0;text-align:center;">Inga rader – klicka "Lägg till rad"</p>`;
+    }
+    const units = ['st', 'tim', 'm', 'm²', 'm³', 'kg', 'l', 'paket', 'mån'];
+    return this._editLines.map((l, i) => `
+      <div style="display:grid;grid-template-columns:1fr 60px 68px 90px 68px 28px;gap:4px;align-items:center;padding:4px 2px;border-bottom:1px solid var(--bg);">
+        <input style="width:100%;font-size:12px;" value="${(l.description || '').replace(/"/g, '&quot;')}" placeholder="Benämning"
+          oninput="OffersPage._editLines[${i}].description=this.value">
+        <input type="number" style="width:100%;text-align:right;font-size:12px;" value="${l.qty != null ? l.qty : 1}" min="0" step="0.5"
+          oninput="OffersPage._editLines[${i}].qty=parseFloat(this.value)||0;OffersPage._calcTotals()">
+        <select style="width:100%;font-size:12px;" onchange="OffersPage._editLines[${i}].unit=this.value">
+          ${units.map(u => `<option value="${u}" ${(l.unit || 'st') === u ? 'selected' : ''}>${u}</option>`).join('')}
+        </select>
+        <input type="number" style="width:100%;text-align:right;font-size:12px;" value="${l.unitPrice || 0}" min="0" step="0.01"
+          oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._calcTotals()">
+        <div style="font-size:12px;font-weight:700;color:var(--navy);text-align:right;padding:0 4px;"
+          id="off-lt-${i}">${fmt(Math.round((l.qty != null ? l.qty : 1) * (l.unitPrice || 0)))} kr</div>
+        <button type="button" class="btn bd bxs" style="padding:3px 5px;" onclick="OffersPage._removeLine(${i})">${ic('x',11)}</button>
+      </div>`).join('');
+  },
+
+  _totalsHtml() {
+    const exVat = Math.round(this._editLines.reduce((s, l) => s + (l.qty != null ? l.qty : 1) * (l.unitPrice || 0), 0));
+    const vat   = Math.round(exVat * 0.25);
+    return `
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+        <div style="font-size:12px;color:var(--mt);">Summa ex. moms: <strong>${fmt(exVat)} kr</strong></div>
+        <div style="font-size:12px;color:var(--mt);">Moms 25 %: <strong>${fmt(vat)} kr</strong></div>
+        <div style="font-size:15px;font-weight:800;color:var(--navy);margin-top:2px;">Totalt inkl. moms: ${fmt(exVat + vat)} kr</div>
+      </div>`;
+  },
+
+  _addLine() {
+    this._editLines.push(this._newLine());
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._calcTotals();
+  },
+
+  _removeLine(idx) {
+    this._editLines.splice(idx, 1);
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._calcTotals();
+  },
+
+  _calcTotals() {
+    this._editLines.forEach((l, i) => {
+      const el = document.getElementById('off-lt-' + i);
+      if (el) el.textContent = fmt(Math.round((l.qty != null ? l.qty : 1) * (l.unitPrice || 0))) + ' kr';
+    });
+    const totEl = document.getElementById('off-totals');
+    if (totEl) totEl.innerHTML = this._totalsHtml();
+  },
+
+  _save(offerId) {
+    const cuId = document.getElementById('off-cu')?.value || '';
+    if (!cuId) { showToast('Välj en kund'); return; }
+    const title      = document.getElementById('off-title')?.value.trim() || '';
+    const dateVal    = document.getElementById('off-date')?.value || '';
+    const validUntil = document.getElementById('off-valid')?.value || '';
+    const note       = document.getElementById('off-note')?.value.trim() || '';
+    const now        = new Date().toISOString();
+
+    const lines = this._editLines.map(l => ({
+      ...l,
+      total: Math.round((l.qty != null ? l.qty : 1) * (l.unitPrice || 0))
+    }));
+
+    if (!offerId) {
+      const newOff = Object.assign(Schema.offer(), {
+        id: newId(state.offers, 'OFF'),
+        customerId: cuId,
+        title,
+        lines,
+        validUntil,
+        internalNote: note,
+        status: 'utkast',
+        createdAt: dateVal ? dateVal + 'T00:00:00.000Z' : now,
+        updatedAt: now
+      });
+      state.offers.push(newOff);
+      persist();
+      Modal.close();
+      Router.showPage('pg-offer');
+      showToast(`Offert ${newOff.id} skapad`);
+    } else {
+      const idx = (state.offers || []).findIndex(o => o.id === offerId);
+      if (idx < 0) return;
+      state.offers[idx] = Object.assign({}, state.offers[idx], {
+        customerId: cuId,
+        title,
+        lines,
+        validUntil,
+        internalNote: note,
+        updatedAt: now
+      });
+      persist();
+      Modal.close();
+      OfferDetailPage.render({ offerId });
+      showToast('Offert uppdaterad');
+    }
   }
 };
 
@@ -54,12 +251,15 @@ const OfferDetailPage = {
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
         <button class="btn bs bsm" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)}</button>
         <div style="flex:1;">
-          <div style="font-size:16px;font-weight:800;">${off.id}</div>
+          <div style="font-size:16px;font-weight:800;">${off.id}${off.title ? ' – ' + off.title : ''}</div>
           <div>${sbdg(off.status)}</div>
         </div>
-        <select class="btn bs bsm" style="font-weight:600;" onchange="OfferDetailPage.setStatus(this.value)">
-          ${statusOpts.map(s=>`<option value="${s}" ${off.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
-        </select>
+        <button class="btn bs bsm" onclick="OffersPage.openEdit('${off.id}')" title="Redigera">${ic('pencil',14)} Redigera</button>
+        ${CustomSelect.render('offd-status', {
+          options: statusOpts.map(s => ({ v: s, l: statusLabel(s) })),
+          value: off.status,
+          onchange: 'OfferDetailPage.setStatus(this.value)'
+        })}
       </div>
 
       <div class="card">
