@@ -95,14 +95,19 @@ function _offTierLabel(area, tiers) {
   return '';
 }
 
-/* ── PART 3 + OffersPage ─── */
+
+/* ── PART 3: OffersPage (v4 – steg-wizard + tjänstoverlay) ─── */
 const OffersPage = {
   _editLines:   [],
   _editExtras:  [],
+  _editOfferId: null,
+  _wizardStep:  1,
+  _wizardData:  {},
   _activeSvcId: null,
   _svcFields:   {},
+  _svcEditIdx:  null,
 
-  /* ── Tjänstemallar med kalkylatorer ─── */
+  /* ── Tjänstemallar ─── */
   _T: [
     {
       id:'altan', name:'Altantvätt', icon:'refresh-cw', vatRate:25,
@@ -312,7 +317,7 @@ const OffersPage = {
     general:  'Priser anges exklusive moms om inget annat anges. Eventuella tillkommande arbeten debiteras enligt löpande räkning efter godkännande. VIFT reserverar sig för dolda fel och förutsättningar som ej kunnat bedömas vid offerttillfället.'
   },
 
-  /* ── Offertlista ─────────────────────── */
+  /* ── Offertlista ─── */
   render() {
     const el = document.getElementById('pg-offer-content');
     if (!el) return;
@@ -346,575 +351,438 @@ const OffersPage = {
       .reduce((s, l) => s + (l.exVat || l.total || 0), 0));
   },
 
-  /* ── Skapa / Redigera ────────────────── */
+  /* ── Wizard open ─── */
   openCreate(preCustomerId) {
-    this._editLines  = [];
-    this._editExtras = [];
+    const T = this._TERMS;
+    const today    = new Date().toISOString().split('T')[0];
+    const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    this._editLines   = [];
+    this._editExtras  = [];
+    this._editOfferId = null;
+    this._wizardStep  = 1;
     this._activeSvcId = null;
     this._svcFields   = {};
-    Modal.open({
-      title: 'Ny offert', wide: true,
-      body:  this._formHtml(null, preCustomerId || ''),
-      buttons: [
-        { label: ic('save',13) + ' Spara offert', cls: 'btn bp', onClick: () => OffersPage._save(null) },
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
-    });
-    setTimeout(() => document.getElementById('off-title')?.focus(), 80);
+    this._svcEditIdx  = null;
+    this._wizardData  = {
+      customerId: preCustomerId || '', title: '', date: today, validUntil: validDef,
+      summary: '', scope: '', includes: '', excludes: '',
+      paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: ''
+    };
+    this._showWizard();
   },
 
   openEdit(offerId) {
     const off = getOff(offerId);
     if (!off) return;
-    this._activeSvcId = null;
-    this._svcFields   = {};
-    this._editLines  = (off.lines  || []).map(l => ({...l}));
-    this._editExtras = (off.extras || []).map(e => ({...e}));
-    Modal.open({
-      title: 'Redigera ' + off.id, wide: true,
-      body:  this._formHtml(off, null),
-      buttons: [
-        { label: ic('save',13) + ' Spara', cls: 'btn bp', onClick: () => OffersPage._save(off.id) },
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
-    });
-    setTimeout(() => document.getElementById('off-title')?.focus(), 80);
-  },
-
-  /* ── Formulär HTML ───────────────────── */
-  _formHtml(off, preCustomerId) {
-    const cuId     = off ? (off.customerId || '') : (preCustomerId || '');
+    const T = this._TERMS;
     const today    = new Date().toISOString().split('T')[0];
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
-    const T        = this._TERMS;
-    const esc      = s => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const cuOpts   = [{v:'',l:'— Välj kund —'}, ...(state.customers||[]).map(c=>({v:c.id,l:CustomerService.displayName(c)}))];
+    this._editLines   = (off.lines  || []).map(l => ({...l}));
+    this._editExtras  = (off.extras || []).map(e => ({...e}));
+    this._editOfferId = off.id;
+    this._wizardStep  = 1;
+    this._activeSvcId = null;
+    this._svcFields   = {};
+    this._svcEditIdx  = null;
+    this._wizardData  = {
+      customerId:   off.customerId   || '',
+      title:        off.title        || '',
+      date:         (off.createdAt||'').split('T')[0] || today,
+      validUntil:   off.validUntil   || validDef,
+      summary:      off.summary      || '',
+      scope:        off.scope        || '',
+      includes:     off.includes     || '',
+      excludes:     off.excludes     || '',
+      paymentTerms: off.paymentTerms || T.payment,
+      validityText: off.validityText || T.validity,
+      generalTerms: off.generalTerms || T.general,
+      internalNote: off.internalNote || ''
+    };
+    this._showWizard();
+  },
+
+  /* ── Wizard core ─── */
+  _showWizard() {
+    let wiz = document.getElementById('off-wizard');
+    if (!wiz) {
+      wiz = document.createElement('div');
+      wiz.id = 'off-wizard';
+      wiz.style.cssText = 'position:fixed;inset:0;z-index:500;background:#f5f6f8;overflow-y:auto;display:flex;flex-direction:column;';
+      document.body.appendChild(wiz);
+    }
+    wiz.innerHTML = this._wizardHtml();
+  },
+
+  _wizardClose() {
+    document.getElementById('off-wizard')?.remove();
+    document.getElementById('off-svc-overlay')?.remove();
+  },
+
+  _rerender() {
+    const wiz = document.getElementById('off-wizard');
+    if (wiz) wiz.innerHTML = this._wizardHtml();
+  },
+
+  _wizardHtml() {
+    const step = this._wizardStep;
+    const isEdit = !!this._editOfferId;
+    const labels = ['Kund & info', 'Tjänster & rader', 'Villkor & spara'];
+
+    const stepInd = labels.map((lbl, i) => {
+      const n = i + 1;
+      const done   = n < step;
+      const active = n === step;
+      const circ = `<div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;
+        background:${done?'#22c55e':active?'var(--navy)':'#d1d5db'};color:${done||active?'#fff':'#9ca3af'};">
+        ${done ? ic('check',11) : n}</div>`;
+      const bar = i < labels.length - 1 ? `<div style="width:20px;height:2px;background:${done?'#22c55e':'#d1d5db'};margin:0 4px;margin-bottom:14px;flex-shrink:0;"></div>` : '';
+      return `<div style="display:flex;align-items:center;">${
+        `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+          ${circ}
+          <div style="font-size:9px;font-weight:${active?'700':'500'};color:${active?'var(--navy)':'#9ca3af'};white-space:nowrap;">${lbl}</div>
+        </div>`
+      }${bar}</div>`;
+    }).join('');
+
+    const hdr = `<div style="background:#fff;border-bottom:1px solid var(--br);padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;min-height:56px;">
+      <div style="flex:1;font-size:13px;font-weight:800;color:var(--navy);">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
+      <div style="display:flex;align-items:flex-end;">${stepInd}</div>
+      <button type="button" onclick="OffersPage._wizardClose()" style="width:30px;height:30px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('x',15)}</button>
+    </div>`;
+
+    let ftr;
+    if (step === 1) {
+      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;">
+        <button type="button" class="btn bs" onclick="OffersPage._wizardClose()">Avbryt</button>
+        <button type="button" class="btn bp" onclick="OffersPage._nextStep()">${ic('arrow-right',13)} Nästa: Tjänster</button>
+      </div>`;
+    } else if (step === 2) {
+      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:space-between;position:sticky;bottom:0;">
+        <button type="button" class="btn bs" onclick="OffersPage._prevStep()">${ic('arrow-left',13)} Tillbaka</button>
+        <button type="button" class="btn bp" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',13)}</button>
+      </div>`;
+    } else {
+      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:space-between;position:sticky;bottom:0;">
+        <button type="button" class="btn bs" onclick="OffersPage._prevStep()">${ic('arrow-left',13)} Tillbaka</button>
+        <button type="button" class="btn bp" onclick="OffersPage._save()" style="min-width:130px;">${ic('save',13)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
+      </div>`;
+    }
+
+    return hdr + `<div style="flex:1;padding:14px;max-width:700px;width:100%;margin:0 auto;box-sizing:border-box;">${this._stepHtml()}</div>` + ftr;
+  },
+
+  _stepHtml() {
+    if (this._wizardStep === 1) return this._step1Html();
+    if (this._wizardStep === 2) return this._step2Html();
+    return this._step3Html();
+  },
+
+  /* ── Step 1: Kund & info ─── */
+  _step1Html() {
+    const d   = this._wizardData;
+    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const cuOpts = [{v:'',l:'— Välj kund —'}, ...(state.customers||[]).map(c=>({v:c.id,l:CustomerService.displayName(c)}))];
     return `
-      <div class="g2">
-        <div class="fg"><label>Kund <span style="color:var(--rd)">*</span></label>
-          ${CustomSelect.render('off-cu',{options:cuOpts,value:cuId,placeholder:'— Välj kund —',searchable:true})}
-        </div>
-        <div class="fg"><label>Rubrik / titel</label>
-          <input id="off-title" value="${esc(off?off.title:'')}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"></div>
+      <div class="fg">
+        <label>Kund <span style="color:var(--rd)">*</span></label>
+        ${CustomSelect.render('off-cu',{options:cuOpts,value:d.customerId,placeholder:'— Välj kund —',searchable:true,onchange:"OffersPage._wizardData.customerId=this.value"})}
+      </div>
+      <div class="fg">
+        <label>Rubrik / titel</label>
+        <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"
+          oninput="OffersPage._wizardData.title=this.value">
       </div>
       <div class="g2">
         <div class="fg"><label>Datum</label>
-          <input type="date" id="off-date" value="${off?(off.createdAt||'').split('T')[0]||today:today}"></div>
+          <input type="date" id="off-date" value="${esc(d.date)}"
+            oninput="OffersPage._wizardData.date=this.value"></div>
         <div class="fg"><label>Giltig till</label>
-          <input type="date" id="off-valid" value="${off?off.validUntil||validDef:validDef}"></div>
+          <input type="date" id="off-valid" value="${esc(d.validUntil)}"
+            oninput="OffersPage._wizardData.validUntil=this.value"></div>
       </div>
-
-      <details style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
-        <summary style="padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);color:var(--navy);display:flex;align-items:center;gap:6px;">${ic('align-left',12)} Sammanfattning &amp; uppdragsbeskrivning</summary>
-        <div style="padding:8px 12px 12px;">
-          <div class="fg"><label>Kort sammanfattning</label>
-            <textarea id="off-summary" rows="2" placeholder="En mening om vad uppdraget innebär…">${esc(off?off.summary:'')}</textarea></div>
+      <div class="fg">
+        <label>Kort sammanfattning</label>
+        <textarea id="off-summary" rows="2" placeholder="En mening om vad uppdraget innebär…"
+          oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
+      </div>
+      <details style="border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;margin-top:4px;">
+        <summary style="padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);display:flex;align-items:center;gap:6px;">${ic('align-left',12)} Uppdragsbeskrivning (valfritt)</summary>
+        <div style="padding:10px 12px 12px;">
           <div class="fg"><label>Uppdragets omfattning</label>
-            <textarea id="off-scope" rows="3" placeholder="Detaljerad beskrivning…">${esc(off?off.scope:'')}</textarea></div>
+            <textarea id="off-scope" rows="3" placeholder="Detaljerad beskrivning…"
+              oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea></div>
           <div class="g2">
             <div class="fg"><label>Vad ingår</label>
-              <textarea id="off-includes" rows="2" placeholder="T.ex. material, frakt, bortforsling…">${esc(off?off.includes:'')}</textarea></div>
+              <textarea id="off-includes" rows="2" placeholder="T.ex. material, bortforsling…"
+                oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
             <div class="fg"><label>Vad ingår ej</label>
-              <textarea id="off-excludes" rows="2" placeholder="T.ex. elektriker, målning…">${esc(off?off.excludes:'')}</textarea></div>
+              <textarea id="off-excludes" rows="2" placeholder="T.ex. elektriker, målning…"
+                oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
           </div>
         </div>
-      </details>
+      </details>`;
+  },
 
-      <div style="margin-top:10px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
-          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">Offertrader</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" class="btn bs bxs" onclick="OffersPage._addManualLine()">${ic('plus',12)} Manuell rad</button>
-            <button type="button" class="btn bp bxs" onclick="OffersPage._toggleSvcPanel()">${ic('zap',12)} Tjänst / kalkylator</button>
-            <button type="button" class="btn bs bxs" onclick="OffersPage._addTextBlock()">${ic('align-left',12)} Fritextblock</button>
-          </div>
-        </div>
-        <div id="off-lines">${this._linesHtml()}</div>
+  /* ── Step 2: Tjänster & rader ─── */
+  _step2Html() {
+    const exVat  = this._calcExVat(this._editLines, this._editExtras);
+    const vat    = Math.round(exVat * 0.25);
+    const incVat = exVat + vat;
+    const rutAmt = this._calcRutAmt(this._editLines);
+    const cust   = incVat - rutAmt;
+    return `
+      <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap;">
+        <button type="button" class="btn bp bsm" onclick="OffersPage._openSvcCalc(null)" style="flex:1;min-width:130px;">
+          ${ic('zap',13)} Lägg till tjänst
+        </button>
+        <button type="button" class="btn bs bsm" onclick="OffersPage._addManualLine()" style="flex:1;min-width:90px;">
+          ${ic('plus',13)} Manuell rad
+        </button>
+        <button type="button" class="btn bs bsm" onclick="OffersPage._addTextBlock()" style="flex:1;min-width:90px;">
+          ${ic('align-left',13)} Fritext
+        </button>
       </div>
-
-      <div id="off-svc-panel" style="display:none;margin-top:6px;border:1.5px solid var(--sky,#0ea5e9);border-radius:var(--rs);overflow:hidden;">
-        <div style="padding:8px 12px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <span style="font-size:12px;font-weight:700;">${ic('zap',13)} Lägg till tjänst / kalkylator</span>
-            <div style="font-size:11px;color:var(--mt);margin-top:2px;">Alla priser anges exklusive moms</div>
-          </div>
-          <button type="button" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;" onclick="OffersPage._hideSvcPanel()">${ic('x',11)} Stäng</button>
-        </div>
-        <div style="display:flex;overflow-x:auto;gap:8px;padding:10px 12px;border-bottom:1px solid var(--br);-webkit-overflow-scrolling:touch;">
-          ${this._T.map(t=>`<button type="button"
-            id="off-svc-type-${t.id}"
-            style="white-space:nowrap;padding:8px 14px;border-radius:20px;border:1.5px solid var(--br);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--tx);flex-shrink:0;display:flex;align-items:center;gap:4px;"
-            onclick="OffersPage._selectSvc('${t.id}')">${ic(t.icon,12)} ${t.name}</button>`).join('')}
-        </div>
-        <div id="off-svc-calc" style="display:none;"></div>
-      </div>
-
+      <div id="off-lines">${this._linesHtml()}</div>
       <details style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
-        <summary style="padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);color:var(--navy);display:flex;align-items:center;gap:6px;">${ic('plus',12)} Tillval (valfria extratjänster)</summary>
+        <summary style="padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;background:#fff;display:flex;align-items:center;gap:6px;">${ic('plus',12)} Tillval (valfria extratjänster)</summary>
         <div style="padding:8px 12px 12px;">
-          <div id="off-extras">${this._extrasHtml()}</div>
+          <div id="off-extras">${this._extrasInnerHtml()}</div>
           <button type="button" class="btn bs bxs" style="margin-top:6px;" onclick="OffersPage._addExtra()">${ic('plus',11)} Lägg till tillval</button>
         </div>
       </details>
-
-      <div id="off-totals" style="margin-top:8px;padding:12px;background:var(--bg);border-radius:var(--rs);">${this._totalsHtml()}</div>
-
-      <details style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;" open>
-        <summary style="padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);color:var(--navy);display:flex;align-items:center;gap:6px;">${ic('file-text',12)} Betalning &amp; villkor</summary>
-        <div style="padding:8px 12px 12px;">
-          <div class="g2">
-            <div class="fg"><label>Betalningsvillkor</label>
-              <input id="off-payment" value="${esc(off?off.paymentTerms:T.payment)}" placeholder="T.ex. 30 dagar netto"></div>
-            <div class="fg"><label>Offertens giltighetstid</label>
-              <input id="off-validity" value="${esc(off?off.validityText:T.validity)}" placeholder="T.ex. 30 dagar"></div>
-          </div>
-          <div class="fg"><label>Allmänna villkor</label>
-            <textarea id="off-terms" rows="3" placeholder="Allmänna villkor och förbehåll…">${esc(off?off.generalTerms:T.general)}</textarea></div>
-        </div>
-      </details>
-
-      <div class="fg" style="margin-top:8px;">
-        <label>Intern anteckning <span style="font-size:10px;font-weight:400;color:var(--mt);">(visas ej för kund)</span></label>
-        <textarea id="off-note" rows="2" placeholder="Intern anteckning om kunden, uppdraget eller förutsättningar…">${esc(off?off.internalNote:'')}</textarea>
+      <div id="off-totals-bar" style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;margin-top:10px;">
+        ${this._totalsBarHtml(exVat, vat, incVat, rutAmt, cust)}
       </div>`;
   },
 
-  /* ── Rader ───────────────────────────── */
+  /* ── Step 3: Villkor & spara ─── */
+  _step3Html() {
+    const d   = this._wizardData;
+    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const exVat  = this._calcExVat(this._editLines, this._editExtras);
+    const vat    = Math.round(exVat * 0.25);
+    const incVat = exVat + vat;
+    const rutAmt = this._calcRutAmt(this._editLines);
+    const cust   = incVat - rutAmt;
+    const prLines = this._editLines.filter(l => l.type !== 'text').length;
+    const txtLines = this._editLines.filter(l => l.type === 'text').length;
+    return `
+      <div style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);margin-bottom:8px;">Sammanfattning</div>
+        ${this._totalsBarHtml(exVat, vat, incVat, rutAmt, cust)}
+        <div style="margin-top:6px;font-size:11px;color:var(--mt);">${prLines} pristrader · ${txtLines} textblock</div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Betalningsvillkor</label>
+          <input id="off-payment" value="${esc(d.paymentTerms)}" placeholder="T.ex. 30 dagar netto"
+            oninput="OffersPage._wizardData.paymentTerms=this.value"></div>
+        <div class="fg"><label>Offertens giltighetstid</label>
+          <input id="off-validity" value="${esc(d.validityText)}" placeholder="T.ex. 30 dagar"
+            oninput="OffersPage._wizardData.validityText=this.value"></div>
+      </div>
+      <div class="fg">
+        <label>Allmänna villkor</label>
+        <textarea id="off-terms" rows="4" placeholder="Allmänna villkor…"
+          oninput="OffersPage._wizardData.generalTerms=this.value">${esc(d.generalTerms)}</textarea>
+      </div>
+      <div class="fg" style="margin-top:4px;">
+        <label>Intern anteckning <span style="font-size:10px;font-weight:400;color:var(--mt);">(visas ej för kund)</span></label>
+        <textarea id="off-note" rows="2" placeholder="Intern anteckning…"
+          oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
+      </div>`;
+  },
+
+  _totalsBarHtml(exVat, vat, incVat, rutAmt, cust) {
+    return `<div style="display:flex;flex-direction:column;gap:4px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);">
+        <span>Summa ex. moms</span><strong>${fmt(exVat)} kr</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);">
+        <span>Moms 25 %</span><strong>${fmt(vat)} kr</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid var(--br);padding-top:5px;margin-top:2px;">
+        <span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
+      ${rutAmt ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#16a34a;">
+        <span>RUT/ROT-reduktion</span><strong>-${fmt(rutAmt)} kr</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;color:var(--navy);border-top:2px solid var(--br);padding-top:5px;margin-top:2px;">
+        <span>Kundpris inkl. moms</span><span>${fmt(cust)} kr</span></div>` : ''}
+    </div>`;
+  },
+
+  /* ── Step navigation ─── */
+  _nextStep() {
+    if (this._wizardStep === 1) {
+      const cuId = document.getElementById('off-cu')?.value || this._wizardData.customerId;
+      if (!cuId) { showToast('Välj en kund'); return; }
+      this._wizardData.customerId = cuId;
+    }
+    if (this._wizardStep === 2) {
+      if (!this._editLines.some(l => l.type !== 'text')) {
+        showToast('Lägg till minst en rad eller tjänst'); return;
+      }
+    }
+    if (this._wizardStep < 3) { this._wizardStep++; this._rerender(); }
+  },
+
+  _prevStep() {
+    if (this._wizardStep === 3) {
+      const map = {'off-payment':'paymentTerms','off-validity':'validityText','off-terms':'generalTerms','off-note':'internalNote'};
+      Object.entries(map).forEach(([id,key]) => {
+        const el = document.getElementById(id);
+        if (el) this._wizardData[key] = el.value;
+      });
+    }
+    if (this._wizardStep > 1) { this._wizardStep--; this._rerender(); }
+  },
+
+  /* ── Line card HTML ─── */
   _linesHtml() {
     if (!this._editLines.length) return `
-      <div style="padding:12px;text-align:center;border:1.5px dashed var(--br);border-radius:var(--rs);color:var(--mt);font-size:12px;">
-        Inga rader – lägg till manuell rad, välj tjänst/kalkylator eller lägg till fritextblock.</div>`;
+      <div style="padding:28px 16px;text-align:center;border:2px dashed var(--br);border-radius:var(--rs);color:var(--mt);">
+        ${ic('file-text',28)}<br><span style="font-size:13px;">Inga rader ännu</span><br>
+        <span style="font-size:12px;">Lägg till en tjänst, manuell rad eller fritext ovan.</span>
+      </div>`;
     return this._editLines.map((l, i) => {
-      if (l.type === 'text')    return this._renderTextBlock(l, i);
-      if (l.type === 'service') return this._renderServiceLine(l, i);
-      return this._renderManualLine(l, i);
+      if (l.type === 'text')    return this._renderTextCard(l, i);
+      if (l.type === 'service') return this._renderServiceCard(l, i);
+      return this._renderManualCard(l, i);
     }).join('');
   },
 
-  _renderManualLine(l, i) {
-    const units = ['st','tim','m','m²','m³','lm','kg','l','paket','mån'];
-    return `<div style="display:grid;grid-template-columns:1fr 58px 66px 86px 66px 26px;gap:4px;align-items:center;padding:4px 2px;border-bottom:1px solid var(--bg);">
-      <input style="width:100%;font-size:12px;" value="${(l.description||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" placeholder="Benämning"
-        oninput="OffersPage._editLines[${i}].description=this.value">
-      <input type="number" style="width:100%;text-align:right;font-size:12px;" value="${l.qty!=null?l.qty:1}" min="0" step="0.5"
-        oninput="OffersPage._editLines[${i}].qty=parseFloat(this.value)||0;OffersPage._calcTotals()">
-      <select style="width:100%;font-size:12px;" onchange="OffersPage._editLines[${i}].unit=this.value">
-        ${units.map(u=>'<option'+(( l.unit||'st')===u?' selected':'')+'>'+u+'</option>').join('')}
-      </select>
-      <input type="number" style="width:100%;text-align:right;font-size:12px;" value="${l.unitPrice||0}" min="0" step="0.01"
-        oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._calcTotals()">
-      <div style="font-size:12px;font-weight:700;color:var(--navy);text-align:right;padding:0 4px;" id="off-lt-${i}">
-        ${fmt(Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0)))} kr</div>
-      <button type="button" class="btn bd bxs" style="padding:3px 4px;" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
-    </div>`;
-  },
-
-  _renderServiceLine(l, i) {
-    const vat = Math.round((l.exVat||0) * (l.vatRate||25) / 100);
-    const incVat = (l.exVat||0) + vat;
-    const custPrice = incVat - (l.rutAmount||0);
-    return `<div style="background:var(--bg);border-radius:var(--rs);padding:8px 10px;margin:4px 0;border-left:3px solid var(--navy);">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+  _renderServiceCard(l, i) {
+    const exVat  = l.exVat || 0;
+    const vat    = Math.round(exVat * (l.vatRate||25) / 100);
+    const incVat = exVat + vat;
+    const rutAmt = l.rutAmount || 0;
+    const cust   = incVat - rutAmt;
+    return `<div style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;margin-bottom:8px;border-left:3px solid var(--navy);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">
-            ${ic('zap',11)} ${l.templateName||'Tjänst'}</div>
-          ${l.calculationNote?`<div style="font-size:10px;color:var(--mt);margin-bottom:3px;font-style:italic;">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>`:''}
-          ${(l.subLines||[]).map(sl=>`<div style="font-size:11px;color:var(--tx);margin-bottom:1px;">${sl.desc} – ${sl.qty} ${sl.unit} × ${fmt(sl.price)} kr = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
+          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy);margin-bottom:4px;">${ic('zap',10)} ${l.templateName||'Tjänst'}</div>
+          ${l.calculationNote ? `<div style="font-size:11px;color:var(--mt);margin-bottom:3px;">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>` : ''}
+          ${(l.subLines||[]).map(sl=>`<div style="font-size:11px;color:var(--tx);line-height:1.4;">${sl.desc} – ${sl.qty} ${sl.unit} × ${fmt(sl.price)} = ${fmt(Math.round(sl.qty*sl.price))} kr</div>`).join('')}
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:13px;font-weight:800;color:var(--navy);">${fmt(l.exVat||0)} kr</div>
-          ${l.rutAmount?`<div style="font-size:10px;color:var(--grn);">RUT/ROT -${fmt(l.rutAmount)} kr</div>`:''}
-          ${l.rutAmount?`<div style="font-size:11px;font-weight:700;color:var(--grn);">Kund: ${fmt(custPrice)} kr inkl.</div>`:''}
+          <div style="font-size:14px;font-weight:800;color:var(--navy);">${fmt(exVat)} kr</div>
           <div style="font-size:10px;color:var(--mt);">ex. moms</div>
+          ${rutAmt ? `<div style="font-size:11px;font-weight:700;color:#16a34a;margin-top:2px;">Kund: ${fmt(cust)} kr inkl.</div>` : ''}
         </div>
       </div>
-      <div style="display:flex;gap:6px;margin-top:6px;">
-        <input style="flex:1;font-size:11px;" value="${(l.description||'').replace(/"/g,'&quot;')}"
-          placeholder="Beskrivning på offerten (redigerbar)…"
+      <div class="fg" style="margin-bottom:8px;">
+        <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Beskrivning på offerten…" style="font-size:12px;"
           oninput="OffersPage._editLines[${i}].description=this.value">
-        <button type="button" class="btn bd bxs" style="padding:3px 5px;" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)}</button>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="btn bs bxs" onclick="OffersPage._openSvcCalc(${i})">${ic('pencil',11)} Redigera</button>
+        <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)} Ta bort</button>
       </div>
     </div>`;
   },
 
-  _renderTextBlock(l, i) {
-    return `<div style="border:1px solid var(--br);border-radius:var(--rs);padding:8px 10px;margin:4px 0;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-        <span style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;flex-shrink:0;">${ic('align-left',11)} Fritext</span>
-        <input style="flex:1;font-size:12px;font-weight:600;" value="${(l.blockTitle||'').replace(/"/g,'&quot;')}"
-          placeholder="Rubrik (t.ex. Förutsättningar, Kundens ansvar…)"
-          oninput="OffersPage._editLines[${i}].blockTitle=this.value">
-        <button type="button" class="btn bd bxs" style="padding:3px 4px;" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
+  _renderManualCard(l, i) {
+    const units = ['st','tim','m','m²','m³','lm','kg','l','paket','mån'];
+    const total  = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
+    return `<div style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">${ic('minus',10)} Manuell rad</span>
+        <div style="flex:1;"></div>
+        <strong style="font-size:13px;color:var(--navy);" id="off-lt-${i}">${fmt(total)} kr</strong>
+        <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',11)}</button>
       </div>
-      <textarea style="width:100%;font-size:12px;" rows="3" placeholder="Fritext som visas på offerten…"
+      <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning" style="margin-bottom:7px;"
+        oninput="OffersPage._editLines[${i}].description=this.value">
+      <div style="display:grid;grid-template-columns:80px 80px 1fr;gap:6px;">
+        <div><label style="font-size:10px;color:var(--mt);font-weight:600;display:block;margin-bottom:3px;">Antal</label>
+          <input type="number" value="${l.qty!=null?l.qty:1}" min="0" step="0.5"
+            oninput="OffersPage._editLines[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+        <div><label style="font-size:10px;color:var(--mt);font-weight:600;display:block;margin-bottom:3px;">Enhet</label>
+          <select onchange="OffersPage._editLines[${i}].unit=this.value">
+            ${units.map(u=>`<option${(l.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
+          </select></div>
+        <div><label style="font-size:10px;color:var(--mt);font-weight:600;display:block;margin-bottom:3px;">À-pris ex. moms (kr)</label>
+          <input type="number" value="${l.unitPrice||0}" min="0" step="1"
+            oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+      </div>
+    </div>`;
+  },
+
+  _renderTextCard(l, i) {
+    return `<div style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;margin-bottom:8px;border-left:3px solid #cbd5e1;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">${ic('align-left',10)} Fritextblock</span>
+        <div style="flex:1;"></div>
+        <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',11)}</button>
+      </div>
+      <input value="${(l.blockTitle||'').replace(/"/g,'&quot;')}" placeholder="Rubrik (t.ex. Förutsättningar)" style="margin-bottom:7px;font-weight:600;"
+        oninput="OffersPage._editLines[${i}].blockTitle=this.value">
+      <textarea rows="3" placeholder="Fritext som visas på offerten…"
         oninput="OffersPage._editLines[${i}].text=this.value">${l.text||''}</textarea>
     </div>`;
   },
 
-  /* ── Tillval ─────────────────────────── */
-  _extrasHtml() {
-    if (!this._editExtras.length) return `<p style="font-size:12px;color:var(--mt);margin:0;">Inga tillval ännu.</p>`;
+  /* ── Extras ─── */
+  _extrasInnerHtml() {
     const units = ['st','tim','m','m²','kg','paket'];
+    if (!this._editExtras.length) return `<p style="font-size:12px;color:var(--mt);margin:0 0 4px;">Inga tillval ännu.</p>`;
     return this._editExtras.map((e, i) => `
-      <div style="display:grid;grid-template-columns:1fr 58px 66px 86px 26px;gap:4px;align-items:center;padding:4px 2px;border-bottom:1px solid var(--bg);">
-        <input style="width:100%;font-size:12px;" value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="Beskrivning av tillval"
+      <div style="display:grid;grid-template-columns:1fr 65px 75px 90px 28px;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid var(--bg);">
+        <input value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="Tillval"
           oninput="OffersPage._editExtras[${i}].description=this.value">
-        <input type="number" style="width:100%;text-align:right;font-size:12px;" value="${e.qty||1}" min="0" step="0.5"
-          oninput="OffersPage._editExtras[${i}].qty=parseFloat(this.value)||0;OffersPage._calcTotals()">
-        <select style="width:100%;font-size:12px;" onchange="OffersPage._editExtras[${i}].unit=this.value">
-          ${units.map(u=>'<option'+((e.unit||'st')===u?' selected':'')+'>'+u+'</option>').join('')}
+        <input type="number" value="${e.qty||1}" min="0" step="0.5"
+          oninput="OffersPage._editExtras[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()">
+        <select onchange="OffersPage._editExtras[${i}].unit=this.value">
+          ${units.map(u=>`<option${(e.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
         </select>
-        <input type="number" style="width:100%;text-align:right;font-size:12px;" value="${e.unitPrice||0}" min="0" step="0.01"
-          oninput="OffersPage._editExtras[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._calcTotals()">
-        <button type="button" class="btn bd bxs" style="padding:3px 4px;" onclick="OffersPage._removeExtra(${i})">${ic('x',10)}</button>
+        <input type="number" value="${e.unitPrice||0}" min="0" step="1" placeholder="À-pris"
+          oninput="OffersPage._editExtras[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()">
+        <button type="button" class="btn bd bxs" onclick="OffersPage._removeExtra(${i})">${ic('x',10)}</button>
       </div>`).join('');
   },
 
-  /* ── Totaler ─────────────────────────── */
-  _totalsHtml() {
-    const lExVat = this._editLines.filter(l => l.type !== 'text')
-      .reduce((s, l) => s + (l.type === 'service' ? (l.exVat||0) : Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))), 0);
-    const eExVat = this._editExtras.reduce((s, e) => s + Math.round((e.qty||1)*(e.unitPrice||0)), 0);
-    const exVat  = Math.round(lExVat + eExVat);
+  _addExtra() {
+    this._editExtras.push({id:'E'+Date.now(), description:'', qty:1, unit:'st', unitPrice:0, vatRate:25});
+    const el = document.getElementById('off-extras');
+    if (el) el.innerHTML = this._extrasInnerHtml();
+  },
+
+  _removeExtra(idx) {
+    this._editExtras.splice(idx, 1);
+    const el = document.getElementById('off-extras');
+    if (el) el.innerHTML = this._extrasInnerHtml();
+    this._refreshTotals();
+  },
+
+  /* ── Totals ─── */
+  _calcExVat(lines, extras) {
+    const lSum = (lines||[]).filter(l=>l.type!=='text')
+      .reduce((s,l)=>s+(l.type==='service'?(l.exVat||0):Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))),0);
+    const eSum = (extras||[]).reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0);
+    return Math.round(lSum + eSum);
+  },
+
+  _calcRutAmt(lines) {
+    return Math.round((lines||[]).filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+  },
+
+  _refreshTotals() {
+    this._editLines.forEach((l, i) => {
+      if (l.type === 'manual') {
+        const el = document.getElementById('off-lt-' + i);
+        if (el) el.textContent = fmt(Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))) + ' kr';
+      }
+    });
+    const exVat  = this._calcExVat(this._editLines, this._editExtras);
     const vat    = Math.round(exVat * 0.25);
     const incVat = exVat + vat;
-    const rutAmt = Math.round(this._editLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-    const cust   = incVat - rutAmt;
-    return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
-      <div style="font-size:12px;color:var(--mt);">Summa ex. moms: <strong>${fmt(exVat)} kr</strong></div>
-      <div style="font-size:12px;color:var(--mt);">Moms 25 %: <strong>${fmt(vat)} kr</strong></div>
-      <div style="font-size:12px;color:var(--mt);">Totalt inkl. moms: <strong>${fmt(incVat)} kr</strong></div>
-      ${rutAmt?`<div style="font-size:12px;color:var(--grn);">RUT/ROT-reduktion: <strong>-${fmt(rutAmt)} kr</strong></div>`:''}
-      <div style="font-size:16px;font-weight:800;color:var(--navy);margin-top:4px;border-top:2px solid var(--br);padding-top:6px;">
-        ${rutAmt?'Kundpris inkl. moms:':'Totalt inkl. moms:'} ${fmt(cust)} kr</div>
-    </div>`;
+    const rutAmt = this._calcRutAmt(this._editLines);
+    const bar = document.getElementById('off-totals-bar');
+    if (bar) bar.innerHTML = this._totalsBarHtml(exVat, vat, incVat, rutAmt, incVat - rutAmt);
   },
 
-  /* ── Tjänstekalkylator panel ─────────── */
-  _toggleSvcPanel() {
-    const p = document.getElementById('off-svc-panel');
-    if (!p) return;
-    const opening = p.style.display === 'none';
-    p.style.display = opening ? 'block' : 'none';
-    if (opening) setTimeout(() => p.scrollIntoView({behavior:'smooth',block:'nearest'}), 50);
-  },
-
-  _hideSvcPanel() {
-    const p = document.getElementById('off-svc-panel');
-    if (p) p.style.display = 'none';
-    this._activeSvcId = null;
-    this._svcFields   = {};
-    this._T.forEach(t => {
-      const btn = document.getElementById('off-svc-type-' + t.id);
-      if (btn) {
-        btn.style.background = '#fff';
-        btn.style.color      = 'var(--tx)';
-        btn.style.borderColor = 'var(--br)';
-        btn.style.fontWeight  = '600';
-      }
-    });
-    const calc = document.getElementById('off-svc-calc');
-    if (calc) { calc.style.display = 'none'; calc.innerHTML = ''; }
-  },
-
-  _selectSvc(tId) {
-    this._activeSvcId = tId;
-
-    // Update type selector chip styles
-    this._T.forEach(t => {
-      const btn = document.getElementById('off-svc-type-' + t.id);
-      if (!btn) return;
-      const active = t.id === tId;
-      btn.style.background  = active ? 'var(--navy)' : '#fff';
-      btn.style.color       = active ? '#fff'        : 'var(--tx)';
-      btn.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
-      btn.style.fontWeight  = active ? '700'         : '600';
-    });
-
-    const tmpl = this._T.find(t => t.id === tId);
-    const calc = document.getElementById('off-svc-calc');
-    if (!tmpl || !calc) return;
-
-    // Initialize field defaults before rendering
-    this._svcFields = {};
-    tmpl.fields.forEach(f => {
-      if (f.def !== undefined) this._svcFields[f.id] = f.def;
-      else if (f.type === 'chips' && f.opts && f.opts[0]) this._svcFields[f.id] = f.opts[0];
-      else if (f.type === 'bool') this._svcFields[f.id] = false;
-      else if (f.type === 'number') this._svcFields[f.id] = 0;
-      else if (f.type === 'text') this._svcFields[f.id] = '';
-    });
-
-    calc.style.display = 'block';
-    calc.innerHTML = this._svcCalcHtml(tmpl);
-    setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
-  },
-
-  /* ── PART 7: _setChip ─── */
-  _setChip(fieldId, value, btn) {
-    this._svcFields[fieldId] = value;
-    const group = btn.closest('[data-chips]');
-    if (group) {
-      group.querySelectorAll('button').forEach(b => {
-        const active = b === btn;
-        b.style.background  = active ? 'var(--navy)' : '#fff';
-        b.style.color       = active ? '#fff'        : 'var(--tx)';
-        b.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
-        b.style.fontWeight  = active ? '700'         : '600';
-      });
-    }
-    this._updateSvcPreview();
-  },
-
-  /* ── PART 8: _initChips ─── */
-  _initChips() {
-    const tmpl = this._T.find(t => t.id === this._activeSvcId);
-    if (!tmpl) return;
-    tmpl.fields.filter(f => f.type === 'chips').forEach(f => {
-      const val   = this._svcFields[f.id] || f.def || (f.opts && f.opts[0]);
-      const group = document.querySelector('[data-chips="' + f.id + '"]');
-      if (!group) return;
-      group.querySelectorAll('button').forEach(btn => {
-        const active = btn.dataset.val === val || btn.textContent.trim() === val;
-        btn.style.background  = active ? 'var(--navy)' : '#fff';
-        btn.style.color       = active ? '#fff'        : 'var(--tx)';
-        btn.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
-        btn.style.fontWeight  = active ? '700'         : '600';
-      });
-    });
-  },
-
-  /* ── PART 4: _svcCalcHtml — mobile-first ─── */
-  _svcCalcHtml(tmpl) {
-    const numberFields = tmpl.fields.filter(f => f.type === 'number');
-    const chipsFields  = tmpl.fields.filter(f => f.type === 'chips');
-    const textFields   = tmpl.fields.filter(f => f.type === 'text');
-    const boolFields   = tmpl.fields.filter(f => f.type === 'bool' && !f.isRut && !f.isRot);
-    const rutField     = tmpl.fields.find(f => f.isRut);
-    const rotField     = tmpl.fields.find(f => f.isRot);
-
-    let html = `<div style="padding:10px 12px;">`;
-
-    // Number fields — large prominent
-    numberFields.forEach(f => {
-      const unitLabel = f.id === 'area' ? 'm²' : f.id === 'length' ? 'lm' : f.id === 'hours' ? 'tim' : f.id === 'qty' ? 'tim' : f.id === 'months' ? 'mån' : '';
-      const currVal   = this._svcFields[f.id] != null && this._svcFields[f.id] !== 0 ? this._svcFields[f.id] : (f.def || '');
-      html += `<div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:700;color:var(--navy);">${f.label}${f.req?` <span style="color:var(--rd)">*</span>`:''}</label>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-          <input type="number" id="svc-f-${f.id}" value="${currVal}" min="0" step="${f.id==='rate'||f.id==='monthly'||f.id==='material'?'1':'0.5'}" placeholder="0"
-            style="font-size:22px;font-weight:700;width:110px;text-align:center;padding:8px 10px;border:2px solid var(--navy);border-radius:var(--rs);"
-            oninput="OffersPage._svcFields['${f.id}']=parseFloat(this.value)||0;OffersPage._updateSvcPreview()">
-          ${unitLabel?`<span style="font-size:16px;color:var(--mt);font-weight:600;">${unitLabel}</span>`:''}
-        </div>
-      </div>`;
-    });
-
-    // Text fields
-    textFields.forEach(f => {
-      html += `<div style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:700;color:var(--navy);">${f.label}${f.req?` <span style="color:var(--rd)">*</span>`:''}</label>
-        <input type="text" id="svc-f-${f.id}" value="${this._svcFields[f.id]||''}" placeholder="${f.label}"
-          style="width:100%;margin-top:6px;font-size:14px;"
-          oninput="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()">
-      </div>`;
-    });
-
-    // Chips fields
-    chipsFields.forEach(f => {
-      html += `<div style="margin-bottom:12px;">
-        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">${f.label}</label>
-        <div data-chips="${f.id}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-          ${(f.opts||[]).map(opt => `<button type="button" data-val="${opt}"
-            style="padding:7px 14px;border-radius:20px;border:1.5px solid var(--br);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--tx);"
-            onclick="OffersPage._setChip('${f.id}','${opt.replace(/'/g,"\\'")}',this)">${opt}</button>`).join('')}
-        </div>
-      </div>`;
-    });
-
-    // Bool addons (non-RUT/ROT)
-    if (boolFields.length) {
-      html += `<div style="margin-bottom:12px;">
-        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">TILLVAL</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">`;
-      boolFields.forEach(f => {
-        html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);cursor:pointer;font-size:12px;font-weight:600;">
-          <input type="checkbox" id="svc-f-${f.id}" style="width:18px;height:18px;" ${this._svcFields[f.id]?'checked':''}
-            onchange="OffersPage._svcFields['${f.id}']=this.checked;OffersPage._updateSvcPreview()">
-          ${f.addLabel||f.label}
-        </label>`;
-      });
-      html += `</div></div>`;
-    }
-
-    // RUT toggle
-    if (rutField) {
-      html += `<div style="margin-bottom:12px;">
-        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--grn);border-radius:var(--rs);cursor:pointer;background:rgba(34,197,94,.05);">
-          <input type="checkbox" id="svc-f-${rutField.id}" style="width:20px;height:20px;" ${this._svcFields[rutField.id]?'checked':''}
-            onchange="OffersPage._svcFields['${rutField.id}']=this.checked;OffersPage._updateSvcPreview()">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--grn);">RUT-avdrag (50 %)</div>
-            <div style="font-size:11px;color:var(--mt);">Förutsätter att kunden har rätt till avdraget</div>
-          </div>
-        </label>
-      </div>`;
-    }
-
-    // ROT toggle
-    if (rotField) {
-      html += `<div style="margin-bottom:12px;">
-        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--sky,#0ea5e9);border-radius:var(--rs);cursor:pointer;background:rgba(14,165,233,.05);">
-          <input type="checkbox" id="svc-f-${rotField.id}" style="width:20px;height:20px;" ${this._svcFields[rotField.id]?'checked':''}
-            onchange="OffersPage._svcFields['${rotField.id}']=this.checked;OffersPage._updateSvcPreview()">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--sky,#0ea5e9);">ROT-avdrag (30 %)</div>
-            <div style="font-size:11px;color:var(--mt);">Förutsätter att kunden har rätt till avdraget</div>
-          </div>
-        </label>
-      </div>`;
-    }
-
-    // Price preview box
-    html += `<div id="svc-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:14px;margin-top:10px;min-height:60px;">
-      <div style="font-size:12px;opacity:.7;">Fyll i fälten ovan för att se kalkylen…</div>
-    </div>`;
-
-    // Description field
-    html += `<div style="margin-top:8px;">
-      <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">BESKRIVNING PÅ OFFERTEN</label>
-      <input id="svc-custom-desc" style="width:100%;margin-top:4px;" value="${(tmpl.defaultDesc||'').replace(/"/g,'&quot;')}" placeholder="Kundvänlig beskrivning…">
-    </div>`;
-
-    // Add button
-    html += `<button type="button" class="btn bp bfull" style="margin-top:10px;padding:13px;font-size:14px;font-weight:800;letter-spacing:.3px;"
-      onclick="OffersPage._addSvcLine()">
-      ${ic('plus',16)} Lägg till i offert
-    </button>`;
-
-    html += `</div>`; // close padding div
-    return html;
-  },
-
-  /* ── PART 5: _updateSvcPreview ─── */
-  _updateSvcPreview() {
-    const tmpl = this._T.find(t => t.id === this._activeSvcId);
-    const prev = document.getElementById('svc-preview');
-    if (!tmpl || !prev) return;
-
-    // Sync DOM values into _svcFields for non-chip fields
-    tmpl.fields.forEach(f => {
-      if (f.type === 'chips') return; // chips already updated via _setChip
-      const el = document.getElementById('svc-f-' + f.id);
-      if (!el) return;
-      if (f.type === 'bool')        this._svcFields[f.id] = el.checked;
-      else if (f.type === 'number') this._svcFields[f.id] = parseFloat(el.value) || 0;
-      else                          this._svcFields[f.id] = el.value;
-    });
-
-    try {
-      const result = tmpl.calc(this._svcFields);
-      const {ls, exVat, rutAmt} = result;
-      const tierLbl = result.tierLbl || '';
-
-      if (!exVat && exVat !== 0) {
-        prev.innerHTML = `<div style="font-size:12px;opacity:.7;">Fyll i obligatoriska fält för att se kalkylen.</div>`;
-        return;
-      }
-
-      const vat     = Math.round(exVat * (tmpl.vatRate||25) / 100);
-      const incVat  = exVat + vat;
-      const custPr  = incVat - (rutAmt||0);
-
-      let html = '';
-      if (tierLbl) {
-        html += `<div style="font-size:11px;opacity:.7;margin-bottom:8px;">PRISNIVÅ: ${tierLbl}</div>`;
-      }
-
-      // Line breakdown
-      html += `<div style="font-size:12px;margin-bottom:6px;">`;
-      ls.forEach(l => {
-        const tot = Math.round(l.qty * l.price);
-        html += `<div style="margin-bottom:3px;">${l.desc}: ${l.qty} ${l.unit} × ${fmt(l.price)} kr = <strong>${fmt(tot)} kr</strong></div>`;
-      });
-      html += `</div>`;
-
-      // Summary box
-      html += `<div style="border-top:1px solid rgba(255,255,255,.2);margin:8px 0;padding-top:8px;">
-        <div style="font-size:12px;margin-bottom:2px;">Summa ex. moms: <strong>${fmt(exVat)} kr</strong></div>
-        <div style="font-size:12px;margin-bottom:2px;">Moms ${tmpl.vatRate||25}%: <strong>${fmt(vat)} kr</strong></div>
-        <div style="font-size:14px;font-weight:800;margin-top:4px;">Totalt inkl. moms: ${fmt(incVat)} kr</div>
-      </div>`;
-
-      // RUT/ROT section
-      if (rutAmt) {
-        const isRot = tmpl.fields.some(f => f.isRot && this._svcFields[f.id]);
-        const label = isRot ? 'ROT-avdrag (30%)' : 'RUT-avdrag (50%)';
-        html += `<div style="border-top:1px solid rgba(255,255,255,.2);margin:8px 0;padding-top:8px;color:#86efac;">
-          <div style="font-size:12px;margin-bottom:2px;">Prelim. ${label}: -${fmt(rutAmt)} kr</div>
-          <div style="font-size:14px;font-weight:800;">Kundpris efter avdrag: ${fmt(custPr)} kr</div>
-          <div style="font-size:10px;opacity:.7;margin-top:4px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>
-        </div>`;
-      }
-
-      prev.innerHTML = html;
-    } catch(e) {
-      prev.innerHTML = `<div style="font-size:12px;opacity:.7;">Fyll i obligatoriska fält (markerade med *) för att se kalkyl.</div>`;
-    }
-  },
-
-  /* ── PART 6: _addSvcLine ─── */
-  _addSvcLine() {
-    const tmpl = this._T.find(t => t.id === this._activeSvcId);
-    if (!tmpl) { showToast('Välj en tjänstetyp'); return; }
-
-    // Sync all DOM values
-    tmpl.fields.forEach(f => {
-      if (f.type === 'chips') return;
-      const el = document.getElementById('svc-f-' + f.id);
-      if (!el) return;
-      if (f.type === 'bool')        this._svcFields[f.id] = el.checked;
-      else if (f.type === 'number') this._svcFields[f.id] = parseFloat(el.value) || 0;
-      else                          this._svcFields[f.id] = el.value;
-    });
-
-    const missing = tmpl.fields.filter(f => f.req && !this._svcFields[f.id] && this._svcFields[f.id] !== 0);
-    if (missing.length) { showToast('Fyll i: ' + missing.map(f => f.label).join(', ')); return; }
-
-    const result  = tmpl.calc(this._svcFields);
-    const {ls, exVat, rutAmt} = result;
-    const desc = (document.getElementById('svc-custom-desc')?.value || '').trim() || tmpl.defaultDesc;
-
-    this._editLines.push({
-      id:            'SVC' + Date.now(),
-      type:          'service',
-      templateId:    tmpl.id,
-      templateName:  tmpl.name,
-      description:   desc,
-      subLines:      ls.map(l => ({...l})),
-      exVat:         Math.round(exVat),
-      vatRate:       tmpl.vatRate,
-      rutAmount:     Math.round(rutAmt || 0),
-      total:         Math.round(exVat),
-      inputValues:   {...this._svcFields},
-      priceRuleRef:  tmpl.id,
-      tierLbl:       result.tierLbl || '',
-      calculationNote: result.tierLbl ? 'Prisnivå: ' + result.tierLbl : ''
-    });
-
-    const el = document.getElementById('off-lines');
-    if (el) el.innerHTML = this._linesHtml();
-    this._calcTotals();
-    this._hideSvcPanel();
-    showToast(tmpl.name + ' tillagd');
-  },
-
-  /* ── Hantera rader ───────────────────── */
+  /* ── Line management ─── */
   _addManualLine() {
-    this._editLines.push({id:'M'+Date.now(), type:'manual', description:'', qty:1, unit:'st', unitPrice:0, vatRate:25, total:0});
+    this._editLines.push({id:'M'+Date.now(),type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0});
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
-    this._calcTotals();
+    this._refreshTotals();
     setTimeout(() => {
       const inputs = document.querySelectorAll('#off-lines input[placeholder="Benämning"]');
       if (inputs.length) inputs[inputs.length-1].focus();
@@ -922,7 +790,7 @@ const OffersPage = {
   },
 
   _addTextBlock() {
-    this._editLines.push({id:'T'+Date.now(), type:'text', blockTitle:'', text:''});
+    this._editLines.push({id:'T'+Date.now(),type:'text',blockTitle:'',text:''});
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
   },
@@ -931,86 +799,381 @@ const OffersPage = {
     this._editLines.splice(idx, 1);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
-    this._calcTotals();
+    this._refreshTotals();
   },
 
-  _addExtra() {
-    this._editExtras.push({id:'E'+Date.now(), description:'', qty:1, unit:'st', unitPrice:0, vatRate:25});
-    const el = document.getElementById('off-extras');
-    if (el) el.innerHTML = this._extrasHtml();
-  },
-
-  _removeExtra(idx) {
-    this._editExtras.splice(idx, 1);
-    const el = document.getElementById('off-extras');
-    if (el) el.innerHTML = this._extrasHtml();
-    this._calcTotals();
-  },
-
-  _calcTotals() {
-    this._editLines.forEach((l, i) => {
-      if (l.type === 'manual') {
-        const el = document.getElementById('off-lt-' + i);
-        if (el) el.textContent = fmt(Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))) + ' kr';
+  /* ── Service calc overlay ─── */
+  _openSvcCalc(editIdx) {
+    this._svcEditIdx = editIdx;
+    if (editIdx !== null && editIdx !== undefined) {
+      const l = this._editLines[editIdx];
+      if (l && l.type === 'service') {
+        this._activeSvcId = l.templateId || l.priceRuleRef;
+        this._svcFields   = {...(l.inputValues || {})};
       }
-    });
-    const totEl = document.getElementById('off-totals');
-    if (totEl) totEl.innerHTML = this._totalsHtml();
+    } else {
+      this._activeSvcId = null;
+      this._svcFields   = {};
+    }
+    let ov = document.getElementById('off-svc-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'off-svc-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;';
+      ov.onclick = e => { if (e.target === ov) OffersPage._closeSvcCalc(); };
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = this._svcOverlayHtml();
+    if (this._activeSvcId) setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
   },
 
-  /* ── Spara ───────────────────────────── */
-  _save(offerId) {
-    const cuId = document.getElementById('off-cu')?.value || '';
-    if (!cuId) { showToast('Välj en kund'); return; }
+  _closeSvcCalc() {
+    document.getElementById('off-svc-overlay')?.remove();
+    this._svcEditIdx = null;
+  },
 
-    const cleanLines = this._editLines.filter(l => {
-      if (l.type === 'text')    return (l.blockTitle || '').trim() || (l.text || '').trim();
-      if (l.type === 'service') return true;
-      return (l.description || '').trim() || (l.unitPrice || 0) > 0;
+  _svcOverlayHtml() {
+    const isEdit = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
+    const chips = this._T.map(t => {
+      const active = t.id === this._activeSvcId;
+      return `<button type="button" id="off-svc-chip-${t.id}"
+        onclick="OffersPage._activateSvc('${t.id}',false)"
+        style="white-space:nowrap;padding:6px 13px;border-radius:20px;border:1.5px solid ${active?'var(--navy)':'var(--br)'};
+          font-size:12px;font-weight:${active?'700':'600'};cursor:pointer;background:${active?'var(--navy)':'#fff'};
+          color:${active?'#fff':'var(--tx)'};flex-shrink:0;display:flex;align-items:center;gap:4px;">
+        ${ic(t.icon,11)} ${t.name}
+      </button>`;
+    }).join('');
+    const body = this._activeSvcId
+      ? this._svcCalcHtml(this._T.find(t=>t.id===this._activeSvcId))
+      : `<div style="padding:36px 0;text-align:center;color:var(--mt);">${ic('zap',28)}<br><span style="font-size:13px;margin-top:6px;display:block;">Välj en tjänsttyp ovan</span></div>`;
+    return `<div style="background:#fff;width:100%;max-width:640px;max-height:92vh;border-radius:14px 14px 0 0;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--br);flex-shrink:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+          <div style="font-size:14px;font-weight:800;color:var(--navy);">${ic('zap',13)} ${isEdit?'Redigera tjänst':'Lägg till tjänst'}</div>
+          <button type="button" onclick="OffersPage._closeSvcCalc()"
+            style="width:28px;height:28px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;">${ic('x',14)}</button>
+        </div>
+        <div style="font-size:11px;color:var(--mt);">Alla priser exklusive moms</div>
+      </div>
+      <div style="display:flex;overflow-x:auto;gap:6px;padding:10px 14px;border-bottom:1px solid var(--br);flex-shrink:0;scrollbar-width:none;">
+        ${chips}
+      </div>
+      <div id="off-svc-body" style="flex:1;overflow-y:auto;padding:14px 16px;">${body}</div>
+    </div>`;
+  },
+
+  _activateSvc(tId, keepFields) {
+    this._activeSvcId = tId;
+    this._T.forEach(t => {
+      const btn = document.getElementById('off-svc-chip-' + t.id);
+      if (!btn) return;
+      const a = t.id === tId;
+      btn.style.background  = a ? 'var(--navy)' : '#fff';
+      btn.style.color       = a ? '#fff'        : 'var(--tx)';
+      btn.style.borderColor = a ? 'var(--navy)' : 'var(--br)';
+      btn.style.fontWeight  = a ? '700'         : '600';
     });
-    if (!cleanLines.some(l => l.type !== 'text')) {
-      showToast('Lägg till minst en offertrad eller tjänst'); return;
+    const tmpl = this._T.find(t => t.id === tId);
+    if (!tmpl) return;
+    if (!keepFields) {
+      this._svcFields = {};
+      tmpl.fields.forEach(f => {
+        if (f.def !== undefined)          this._svcFields[f.id] = f.def;
+        else if (f.type==='chips'&&f.opts) this._svcFields[f.id] = f.opts[0];
+        else if (f.type==='bool')          this._svcFields[f.id] = false;
+        else if (f.type==='number')        this._svcFields[f.id] = 0;
+        else                               this._svcFields[f.id] = '';
+      });
     }
-    const cleanExtras = this._editExtras.filter(e => (e.description||'').trim() || (e.unitPrice||0) > 0);
-    const now     = new Date().toISOString();
-    const dateVal = document.getElementById('off-date')?.value || '';
+    const body = document.getElementById('off-svc-body');
+    if (body) {
+      body.innerHTML = this._svcCalcHtml(tmpl);
+      setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
+    }
+  },
 
+  _svcCalcHtml(tmpl) {
+    if (!tmpl) return '';
+    const numF  = tmpl.fields.filter(f=>f.type==='number');
+    const chipF = tmpl.fields.filter(f=>f.type==='chips');
+    const txtF  = tmpl.fields.filter(f=>f.type==='text');
+    const boolF = tmpl.fields.filter(f=>f.type==='bool'&&!f.isRut&&!f.isRot);
+    const rutF  = tmpl.fields.find(f=>f.isRut);
+    const rotF  = tmpl.fields.find(f=>f.isRot);
+    let html = '';
+
+    numF.forEach(f => {
+      const unit = {area:'m²',length:'lm',hours:'tim',qty:'tim',months:'mån'}[f.id]||'';
+      const val  = this._svcFields[f.id]!=null&&this._svcFields[f.id]!==0 ? this._svcFields[f.id] : (f.def||'');
+      html += `<div style="margin-bottom:16px;">
+        <label style="font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="svc-f-${f.id}" value="${val}" min="0"
+            step="${['rate','monthly','material'].includes(f.id)?'1':'0.5'}" placeholder="0"
+            style="font-size:24px;font-weight:700;width:120px;text-align:center;padding:10px;border:2px solid var(--navy);border-radius:var(--rs);"
+            oninput="OffersPage._svcFields['${f.id}']=parseFloat(this.value)||0;OffersPage._updateSvcPreview()">
+          ${unit?`<span style="font-size:16px;color:var(--mt);font-weight:600;">${unit}</span>`:''}
+        </div>
+      </div>`;
+    });
+
+    txtF.forEach(f => {
+      html += `<div style="margin-bottom:16px;">
+        <label style="font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
+        <input type="text" id="svc-f-${f.id}" value="${this._svcFields[f.id]||''}" placeholder="${f.label}" style="width:100%;"
+          oninput="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()">
+      </div>`;
+    });
+
+    chipF.forEach(f => {
+      html += `<div style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">${f.label}</label>
+        <div data-chips="${f.id}" style="display:flex;flex-wrap:wrap;gap:5px;">
+          ${(f.opts||[]).map(o=>`<button type="button" data-val="${o}"
+            style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--br);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--tx);"
+            onclick="OffersPage._setChip('${f.id}','${o.replace(/'/g,"\\'")}',this)">${o}</button>`).join('')}
+        </div>
+      </div>`;
+    });
+
+    if (boolF.length) {
+      html += `<div style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">Tillval</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">`;
+      boolF.forEach(f => {
+        html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);cursor:pointer;font-size:12px;font-weight:600;">
+          <input type="checkbox" id="svc-f-${f.id}" style="width:18px;height:18px;" ${this._svcFields[f.id]?'checked':''}
+            onchange="OffersPage._svcFields['${f.id}']=this.checked;OffersPage._updateSvcPreview()">
+          ${f.addLabel||f.label}</label>`;
+      });
+      html += `</div></div>`;
+    }
+
+    if (rutF) {
+      html += `<div style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--grn);border-radius:var(--rs);cursor:pointer;background:rgba(34,197,94,.05);">
+          <input type="checkbox" id="svc-f-${rutF.id}" style="width:20px;height:20px;" ${this._svcFields[rutF.id]?'checked':''}
+            onchange="OffersPage._svcFields['${rutF.id}']=this.checked;OffersPage._updateSvcPreview()">
+          <div><div style="font-size:13px;font-weight:700;color:var(--grn);">RUT-avdrag (50 %)</div>
+          <div style="font-size:11px;color:var(--mt);">Förutsätter att kunden har rätt till avdraget</div></div>
+        </label></div>`;
+    }
+
+    if (rotF) {
+      html += `<div style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--sky,#0ea5e9);border-radius:var(--rs);cursor:pointer;background:rgba(14,165,233,.05);">
+          <input type="checkbox" id="svc-f-${rotF.id}" style="width:20px;height:20px;" ${this._svcFields[rotF.id]?'checked':''}
+            onchange="OffersPage._svcFields['${rotF.id}']=this.checked;OffersPage._updateSvcPreview()">
+          <div><div style="font-size:13px;font-weight:700;color:var(--sky,#0ea5e9);">ROT-avdrag (30 %)</div>
+          <div style="font-size:11px;color:var(--mt);">Förutsätter att kunden har rätt till avdraget</div></div>
+        </label></div>`;
+    }
+
+    const isEditing = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
+    html += `<div id="svc-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:14px;margin-top:8px;min-height:60px;">
+      <div style="font-size:12px;opacity:.7;">Fyll i fälten ovan för att se kalkylen…</div>
+    </div>
+    <div style="margin-top:12px;">
+      <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px;">Beskrivning på offerten</label>
+      <input id="svc-custom-desc" style="width:100%;" value="${(tmpl.defaultDesc||'').replace(/"/g,'&quot;')}" placeholder="Kundvänlig beskrivning…">
+    </div>
+    <button type="button" class="btn bp bfull" style="margin-top:12px;padding:14px;font-size:14px;font-weight:800;"
+      onclick="OffersPage._addSvcLine()">
+      ${ic('plus',16)} ${isEditing?'Uppdatera tjänst':'Lägg till i offert'}
+    </button>`;
+    return html;
+  },
+
+  /* ── Chips ─── */
+  _setChip(fieldId, value, btn) {
+    this._svcFields[fieldId] = value;
+    const group = btn.closest('[data-chips]');
+    if (group) {
+      group.querySelectorAll('button').forEach(b => {
+        const a = b === btn;
+        b.style.background  = a ? 'var(--navy)' : '#fff';
+        b.style.color       = a ? '#fff'        : 'var(--tx)';
+        b.style.borderColor = a ? 'var(--navy)' : 'var(--br)';
+        b.style.fontWeight  = a ? '700'         : '600';
+      });
+    }
+    this._updateSvcPreview();
+  },
+
+  _initChips() {
+    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    if (!tmpl) return;
+    tmpl.fields.filter(f=>f.type==='chips').forEach(f => {
+      const val   = this._svcFields[f.id] || f.def || (f.opts&&f.opts[0]);
+      const group = document.querySelector('[data-chips="' + f.id + '"]');
+      if (!group) return;
+      group.querySelectorAll('button').forEach(btn => {
+        const a = btn.dataset.val === val || btn.textContent.trim() === val;
+        btn.style.background  = a ? 'var(--navy)' : '#fff';
+        btn.style.color       = a ? '#fff'        : 'var(--tx)';
+        btn.style.borderColor = a ? 'var(--navy)' : 'var(--br)';
+        btn.style.fontWeight  = a ? '700'         : '600';
+      });
+    });
+  },
+
+  /* ── Svc preview ─── */
+  _updateSvcPreview() {
+    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    const prev = document.getElementById('svc-preview');
+    if (!tmpl || !prev) return;
+    tmpl.fields.forEach(f => {
+      if (f.type === 'chips') return;
+      const el = document.getElementById('svc-f-' + f.id);
+      if (!el) return;
+      if (f.type==='bool')        this._svcFields[f.id] = el.checked;
+      else if (f.type==='number') this._svcFields[f.id] = parseFloat(el.value)||0;
+      else                        this._svcFields[f.id] = el.value;
+    });
+    try {
+      const result = tmpl.calc(this._svcFields);
+      const {ls, exVat, rutAmt} = result;
+      if (!exVat && exVat !== 0) {
+        prev.innerHTML = `<div style="font-size:12px;opacity:.7;">Fyll i obligatoriska fält för att se kalkylen.</div>`;
+        return;
+      }
+      const vat    = Math.round(exVat * (tmpl.vatRate||25) / 100);
+      const incVat = exVat + vat;
+      const custPr = incVat - (rutAmt||0);
+      let html = '';
+      if (result.tierLbl) {
+        html += `<div style="font-size:10px;opacity:.6;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px;">Prisnivå: ${result.tierLbl}</div>`;
+      }
+      html += `<div style="font-size:12px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.15);padding-bottom:8px;">`;
+      ls.forEach(l => {
+        html += `<div style="margin-bottom:3px;">${l.desc}: ${l.qty} ${l.unit} × ${fmt(l.price)} kr = <strong>${fmt(Math.round(l.qty*l.price))} kr</strong></div>`;
+      });
+      html += `</div>
+        <div style="font-size:12px;margin-bottom:2px;">Summa ex. moms: <strong>${fmt(exVat)} kr</strong></div>
+        <div style="font-size:12px;margin-bottom:4px;">Moms ${tmpl.vatRate||25}%: <strong>${fmt(vat)} kr</strong></div>
+        <div style="font-size:15px;font-weight:800;">Totalt inkl. moms: ${fmt(incVat)} kr</div>`;
+      if (rutAmt) {
+        const isRot = tmpl.fields.some(f=>f.isRot&&this._svcFields[f.id]);
+        html += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);color:#86efac;">
+          <div style="font-size:12px;">Prelim. ${isRot?'ROT':'RUT'}-avdrag: -${fmt(rutAmt)} kr</div>
+          <div style="font-size:14px;font-weight:800;">Kundpris: ${fmt(custPr)} kr</div>
+          <div style="font-size:10px;opacity:.7;margin-top:2px;">* Preliminärt, förutsätter rätt till avdraget</div>
+        </div>`;
+      }
+      prev.innerHTML = html;
+    } catch(e) {
+      prev.innerHTML = `<div style="font-size:12px;opacity:.7;">Fyll i obligatoriska fält (markerade *) för att se kalkyl.</div>`;
+    }
+  },
+
+  /* ── Add/update service line ─── */
+  _addSvcLine() {
+    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    if (!tmpl) { showToast('Välj en tjänstetyp'); return; }
+    tmpl.fields.forEach(f => {
+      if (f.type==='chips') return;
+      const el = document.getElementById('svc-f-' + f.id);
+      if (!el) return;
+      if (f.type==='bool')        this._svcFields[f.id] = el.checked;
+      else if (f.type==='number') this._svcFields[f.id] = parseFloat(el.value)||0;
+      else                        this._svcFields[f.id] = el.value;
+    });
+    const missing = tmpl.fields.filter(f=>f.req&&!this._svcFields[f.id]&&this._svcFields[f.id]!==0);
+    if (missing.length) { showToast('Fyll i: ' + missing.map(f=>f.label).join(', ')); return; }
+    const result  = tmpl.calc(this._svcFields);
+    const {ls, exVat, rutAmt} = result;
+    const desc = (document.getElementById('svc-custom-desc')?.value||'').trim() || tmpl.defaultDesc;
+    const lineData = {
+      id:              'SVC' + Date.now(),
+      type:            'service',
+      templateId:      tmpl.id,
+      templateName:    tmpl.name,
+      description:     desc,
+      subLines:        ls.map(l=>({...l})),
+      exVat:           Math.round(exVat),
+      vatRate:         tmpl.vatRate,
+      rutAmount:       Math.round(rutAmt||0),
+      total:           Math.round(exVat),
+      inputValues:     {...this._svcFields},
+      priceRuleRef:    tmpl.id,
+      tierLbl:         result.tierLbl||'',
+      calculationNote: result.tierLbl||''
+    };
+    const editIdx = this._svcEditIdx;
+    if (editIdx !== null && editIdx !== undefined && this._editLines[editIdx]) {
+      const prev = this._editLines[editIdx];
+      lineData.id = prev.id;
+      if (prev.description && desc === (tmpl.defaultDesc||'')) lineData.description = prev.description;
+      this._editLines[editIdx] = lineData;
+    } else {
+      this._editLines.push(lineData);
+    }
+    this._closeSvcCalc();
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._refreshTotals();
+    showToast(editIdx !== null && editIdx !== undefined ? tmpl.name + ' uppdaterad' : tmpl.name + ' tillagd');
+  },
+
+  /* ── Save ─── */
+  _save() {
+    if (this._wizardStep === 3) {
+      const map = {'off-payment':'paymentTerms','off-validity':'validityText','off-terms':'generalTerms','off-note':'internalNote'};
+      Object.entries(map).forEach(([id,key]) => {
+        const el = document.getElementById(id);
+        if (el) this._wizardData[key] = el.value;
+      });
+    }
+    const d = this._wizardData;
+    if (!d.customerId) { showToast('Välj en kund'); return; }
+    const cleanLines = this._editLines.filter(l => {
+      if (l.type==='text')    return (l.blockTitle||'').trim()||(l.text||'').trim();
+      if (l.type==='service') return true;
+      return (l.description||'').trim()||(l.unitPrice||0)>0;
+    });
+    if (!cleanLines.some(l=>l.type!=='text')) { showToast('Lägg till minst en offertrad eller tjänst'); return; }
+    const cleanExtras = this._editExtras.filter(e=>(e.description||'').trim()||(e.unitPrice||0)>0);
+    const now  = new Date().toISOString();
     const data = {
-      customerId:   cuId,
-      title:        document.getElementById('off-title')?.value.trim() || '',
-      summary:      document.getElementById('off-summary')?.value.trim() || '',
-      scope:        document.getElementById('off-scope')?.value.trim() || '',
-      includes:     document.getElementById('off-includes')?.value.trim() || '',
-      excludes:     document.getElementById('off-excludes')?.value.trim() || '',
-      lines:        cleanLines.map(l => l.type==='manual'?{...l,total:Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))}:{...l}),
+      customerId:   d.customerId,
+      title:        d.title        || '',
+      summary:      d.summary      || '',
+      scope:        d.scope        || '',
+      includes:     d.includes     || '',
+      excludes:     d.excludes     || '',
+      lines:        cleanLines.map(l=>l.type==='manual'?{...l,total:Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))}:{...l}),
       extras:       cleanExtras,
-      validUntil:   document.getElementById('off-valid')?.value || '',
-      paymentTerms: document.getElementById('off-payment')?.value.trim() || '',
-      validityText: document.getElementById('off-validity')?.value.trim() || '',
-      generalTerms: document.getElementById('off-terms')?.value.trim() || '',
-      internalNote: document.getElementById('off-note')?.value.trim() || '',
+      validUntil:   d.validUntil   || '',
+      paymentTerms: d.paymentTerms || '',
+      validityText: d.validityText || '',
+      generalTerms: d.generalTerms || '',
+      internalNote: d.internalNote || '',
       updatedAt:    now
     };
-
+    const offerId = this._editOfferId;
     if (!offerId) {
       const newOff = Object.assign(Schema.offer(), data, {
-        id: newId(state.offers, 'OFF'), status: 'utkast',
-        createdAt: dateVal ? dateVal + 'T00:00:00.000Z' : now
+        id: newId(state.offers,'OFF'), status:'utkast',
+        createdAt: d.date ? d.date + 'T00:00:00.000Z' : now
       });
       state.offers.push(newOff);
-      persist(); Modal.close();
+      persist();
+      this._wizardClose();
       Router.showPage('pg-offer');
       showToast('Offert ' + newOff.id + ' skapad');
     } else {
-      const idx = (state.offers||[]).findIndex(o => o.id === offerId);
+      const idx = (state.offers||[]).findIndex(o=>o.id===offerId);
       if (idx < 0) return;
       state.offers[idx] = Object.assign({}, state.offers[idx], data);
-      persist(); Modal.close();
+      persist();
+      this._wizardClose();
       OfferDetailPage.render({offerId});
       showToast('Offert uppdaterad');
     }
   }
 };
+
 
 /* ── PART 10: OfferDetailPage ─────────── */
 const OfferDetailPage = {
