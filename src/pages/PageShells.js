@@ -403,24 +403,34 @@ const OffersPage = {
 
   /* ── Wizard core ─── */
   _showWizard() {
-    let wiz = document.getElementById('off-wizard');
-    if (!wiz) {
-      wiz = document.createElement('div');
-      wiz.id = 'off-wizard';
-      wiz.style.cssText = 'position:fixed;inset:0;z-index:500;background:#f5f6f8;overflow-y:auto;display:flex;flex-direction:column;';
-      document.body.appendChild(wiz);
-    }
-    wiz.innerHTML = this._wizardHtml();
+    // Render wizard inside the content area so sidebar stays visible
+    const pgOffer = document.getElementById('pg-offer');
+    if (pgOffer && !pgOffer.classList.contains('active')) Router.showPage('pg-offer');
+    const con = document.getElementById('pg-offer-content');
+    if (!con) return;
+    con.dataset.wiz = '1';
+    // Override .con padding/gap so wizard fills the area cleanly
+    con.style.cssText = 'padding:0;gap:0;display:block;box-sizing:border-box;';
+    con.innerHTML = '<div id="off-wizard"></div>';
+    document.getElementById('off-wizard').innerHTML = this._wizardHtml();
+    const scroll = document.getElementById('content-scroll');
+    if (scroll) scroll.scrollTop = 0;
   },
 
   _wizardClose() {
-    document.getElementById('off-wizard')?.remove();
+    const con = document.getElementById('pg-offer-content');
+    if (con) { delete con.dataset.wiz; con.style.cssText = ''; }
     document.getElementById('off-svc-overlay')?.remove();
+    this.render();
   },
 
   _rerender() {
+    const con = document.getElementById('pg-offer-content');
+    if (!con || !con.dataset.wiz) return;
     const wiz = document.getElementById('off-wizard');
     if (wiz) wiz.innerHTML = this._wizardHtml();
+    const scroll = document.getElementById('content-scroll');
+    if (scroll) scroll.scrollTop = 0;
   },
 
   _wizardHtml() {
@@ -444,31 +454,32 @@ const OffersPage = {
       }${bar}</div>`;
     }).join('');
 
-    const hdr = `<div style="background:#fff;border-bottom:1px solid var(--br);padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;min-height:56px;">
+    // Header sticks to top of #content-scroll (no fixed overlay — wizard lives inside the page)
+    const hdr = `<div style="background:#fff;border-bottom:1px solid var(--br);padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;box-shadow:0 1px 6px rgba(0,0,0,.07);">
       <div style="flex:1;font-size:13px;font-weight:800;color:var(--navy);">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
       <div style="display:flex;align-items:flex-end;">${stepInd}</div>
-      <button type="button" onclick="OffersPage._wizardClose()" style="width:30px;height:30px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('x',15)}</button>
+      <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" style="width:30px;height:30px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('x',15)}</button>
     </div>`;
 
     let ftr;
     if (step === 1) {
-      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;">
+      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn bs" onclick="OffersPage._wizardClose()">Avbryt</button>
         <button type="button" class="btn bp" onclick="OffersPage._nextStep()">${ic('arrow-right',13)} Nästa: Tjänster</button>
       </div>`;
     } else if (step === 2) {
-      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:space-between;position:sticky;bottom:0;">
+      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:space-between;">
         <button type="button" class="btn bs" onclick="OffersPage._prevStep()">${ic('arrow-left',13)} Tillbaka</button>
         <button type="button" class="btn bp" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',13)}</button>
       </div>`;
     } else {
-      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:space-between;position:sticky;bottom:0;">
+      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:10px 14px;display:flex;gap:8px;justify-content:space-between;">
         <button type="button" class="btn bs" onclick="OffersPage._prevStep()">${ic('arrow-left',13)} Tillbaka</button>
         <button type="button" class="btn bp" onclick="OffersPage._save()" style="min-width:130px;">${ic('save',13)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
       </div>`;
     }
 
-    return hdr + `<div style="flex:1;padding:14px;max-width:700px;width:100%;margin:0 auto;box-sizing:border-box;">${this._stepHtml()}</div>` + ftr;
+    return hdr + `<div style="padding:14px 16px;max-width:700px;width:100%;margin:0 auto;box-sizing:border-box;">${this._stepHtml()}</div>` + ftr;
   },
 
   _stepHtml() {
@@ -815,15 +826,22 @@ const OffersPage = {
       this._activeSvcId = null;
       this._svcFields   = {};
     }
+    // Respect sidebar on desktop: overlay starts at page-area left edge
+    const isDesktop = window.innerWidth >= 1024;
+    const sidebarW  = isDesktop ? (document.getElementById('bottom-nav')?.offsetWidth || 240) : 0;
+    const alignItems = isDesktop ? 'center' : 'flex-end';
+    const ovPad      = isDesktop ? '20px' : '0';
+
     let ov = document.getElementById('off-svc-overlay');
     if (!ov) {
       ov = document.createElement('div');
       ov.id = 'off-svc-overlay';
-      ov.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;';
       ov.onclick = e => { if (e.target === ov) OffersPage._closeSvcCalc(); };
       document.body.appendChild(ov);
     }
-    ov.innerHTML = this._svcOverlayHtml();
+    ov.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:${sidebarW}px;z-index:600;
+      background:rgba(0,0,0,.42);display:flex;align-items:${alignItems};justify-content:center;padding:${ovPad};box-sizing:border-box;`;
+    ov.innerHTML = this._svcOverlayHtml(isDesktop);
     if (this._activeSvcId) setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
   },
 
@@ -832,34 +850,64 @@ const OffersPage = {
     this._svcEditIdx = null;
   },
 
-  _svcOverlayHtml() {
-    const isEdit = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
-    const chips = this._T.map(t => {
+  _svcOverlayHtml(isDesktop) {
+    const isEdit     = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
+    const activeTmpl = this._T.find(t => t.id === this._activeSvcId);
+    const radius     = isDesktop ? '10px' : '14px 14px 0 0';
+    const maxH       = isDesktop ? '82vh' : '92vh';
+
+    // Left panel: vertical service type buttons
+    const svcList = this._T.map(t => {
       const active = t.id === this._activeSvcId;
       return `<button type="button" id="off-svc-chip-${t.id}"
         onclick="OffersPage._activateSvc('${t.id}',false)"
-        style="white-space:nowrap;padding:6px 13px;border-radius:20px;border:1.5px solid ${active?'var(--navy)':'var(--br)'};
-          font-size:12px;font-weight:${active?'700':'600'};cursor:pointer;background:${active?'var(--navy)':'#fff'};
-          color:${active?'#fff':'var(--tx)'};flex-shrink:0;display:flex;align-items:center;gap:4px;">
-        ${ic(t.icon,11)} ${t.name}
+        style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;
+          border-radius:6px;border:none;cursor:pointer;text-align:left;font-size:12px;font-weight:${active?'700':'500'};
+          background:${active?'var(--navy)':'transparent'};color:${active?'#fff':'var(--tx)'};margin-bottom:2px;">
+        <span style="flex-shrink:0;opacity:${active?'1':'.7'}">${ic(t.icon,14)}</span>
+        <span style="flex:1;line-height:1.2;">${t.name}</span>
+        ${active?`<span style="flex-shrink:0;">${ic('chevron-right',12)}</span>`:''}
       </button>`;
     }).join('');
-    const body = this._activeSvcId
-      ? this._svcCalcHtml(this._T.find(t=>t.id===this._activeSvcId))
-      : `<div style="padding:36px 0;text-align:center;color:var(--mt);">${ic('zap',28)}<br><span style="font-size:13px;margin-top:6px;display:block;">Välj en tjänsttyp ovan</span></div>`;
-    return `<div style="background:#fff;width:100%;max-width:640px;max-height:92vh;border-radius:14px 14px 0 0;display:flex;flex-direction:column;overflow:hidden;">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--br);flex-shrink:0;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
-          <div style="font-size:14px;font-weight:800;color:var(--navy);">${ic('zap',13)} ${isEdit?'Redigera tjänst':'Lägg till tjänst'}</div>
-          <button type="button" onclick="OffersPage._closeSvcCalc()"
-            style="width:28px;height:28px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;">${ic('x',14)}</button>
+
+    // Right panel: calc body
+    const calcBody = activeTmpl
+      ? this._svcCalcHtml(activeTmpl)
+      : `<div style="padding:40px 16px;text-align:center;color:var(--mt);">
+          <div style="margin-bottom:12px;">${ic('zap',32)}</div>
+          <div style="font-size:13px;font-weight:600;">Välj en tjänst till vänster</div>
+          <div style="font-size:12px;margin-top:4px;">Alla priser exklusive moms</div>
+        </div>`;
+
+    // Footer: description field + add button (always visible)
+    const descVal = activeTmpl ? (activeTmpl.defaultDesc||'').replace(/"/g,'&quot;') : '';
+    const addLabel = isEdit ? 'Uppdatera tjänst' : 'Lägg till i offert';
+    const footer = `<div id="off-svc-footer" style="border-top:1px solid var(--br);padding:10px 14px;flex-shrink:0;background:#fff;">
+      <label style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px;">Beskrivning på offerten</label>
+      <input id="svc-custom-desc" style="width:100%;margin-bottom:8px;font-size:12px;box-sizing:border-box;"
+        value="${descVal}" placeholder="Kundvänlig beskrivning som visas på offerten…">
+      <button type="button" class="btn bp bfull" onclick="OffersPage._addSvcLine()"
+        style="font-size:13px;font-weight:700;padding:11px 16px;">
+        ${ic('plus',14)} ${addLabel}
+      </button>
+    </div>`;
+
+    return `<div style="background:#fff;width:100%;max-width:640px;max-height:${maxH};border-radius:${radius};display:flex;flex-direction:column;overflow:hidden;">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--br);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:800;color:var(--navy);">${ic('zap',13)} ${isEdit?'Redigera tjänst':'Lägg till tjänst'}</div>
+          <div style="font-size:10px;color:var(--mt);">Alla priser exklusive moms</div>
         </div>
-        <div style="font-size:11px;color:var(--mt);">Alla priser exklusive moms</div>
+        <button type="button" onclick="OffersPage._closeSvcCalc()" title="Stäng"
+          style="width:28px;height:28px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('x',14)}</button>
       </div>
-      <div style="display:flex;overflow-x:auto;gap:6px;padding:10px 14px;border-bottom:1px solid var(--br);flex-shrink:0;scrollbar-width:none;">
-        ${chips}
+      <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+        <div style="width:148px;flex-shrink:0;border-right:1px solid var(--br);overflow-y:auto;padding:8px 6px;background:#fafbfc;">
+          ${svcList}
+        </div>
+        <div id="off-svc-body" style="flex:1;overflow-y:auto;padding:12px 14px;min-width:0;">${calcBody}</div>
       </div>
-      <div id="off-svc-body" style="flex:1;overflow-y:auto;padding:14px 16px;">${body}</div>
+      ${footer}
     </div>`;
   },
 
@@ -891,6 +939,9 @@ const OffersPage = {
       body.innerHTML = this._svcCalcHtml(tmpl);
       setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
     }
+    // Update footer description to match the new service's default
+    const descEl = document.getElementById('svc-custom-desc');
+    if (descEl && !keepFields) descEl.value = tmpl.defaultDesc || '';
   },
 
   _svcCalcHtml(tmpl) {
@@ -970,18 +1021,9 @@ const OffersPage = {
         </label></div>`;
     }
 
-    const isEditing = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
-    html += `<div id="svc-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:14px;margin-top:8px;min-height:60px;">
+    html += `<div id="svc-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:14px;margin-top:8px;min-height:60px;margin-bottom:8px;">
       <div style="font-size:12px;opacity:.7;">Fyll i fälten ovan för att se kalkylen…</div>
-    </div>
-    <div style="margin-top:12px;">
-      <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px;">Beskrivning på offerten</label>
-      <input id="svc-custom-desc" style="width:100%;" value="${(tmpl.defaultDesc||'').replace(/"/g,'&quot;')}" placeholder="Kundvänlig beskrivning…">
-    </div>
-    <button type="button" class="btn bp bfull" style="margin-top:12px;padding:14px;font-size:14px;font-weight:800;"
-      onclick="OffersPage._addSvcLine()">
-      ${ic('plus',16)} ${isEditing?'Uppdatera tjänst':'Lägg till i offert'}
-    </button>`;
+    </div>`;
     return html;
   },
 
