@@ -4,6 +4,98 @@
  */
 
 /* ── Offerter (v2 – tjänstemallar + kalkylator) ─────── */
+
+/* ── PART 1: OfferPriceRules — alla priser EXKLUSIVE MOMS ─── */
+const OfferPriceRules = {
+  altan: {
+    tiers: [
+      {max:30,  pricePerM2:95},
+      {max:60,  pricePerM2:85},
+      {max:100, pricePerM2:75},
+      {max:150, pricePerM2:70},
+      {max:Infinity, pricePerM2:65}
+    ],
+    minCharge: 1500,
+    addons: {
+      algae:     {label:'Algbehandling',        price:15,  unit:'m²'},
+      stairs:    {label:'Trappsteg tillägg',    price:450, unit:'st'},
+      treatment: {label:'Impregnering/efterbehandling', price:18, unit:'m²'},
+      disposal:  {label:'Bortforsling',         price:750, unit:'st'}
+    },
+    vatRate: 25,
+    rutApplicable: true,
+    rutRate: 0.5
+  },
+  sten: {
+    tiers: [
+      {max:30,  pricePerM2:85},
+      {max:60,  pricePerM2:72},
+      {max:100, pricePerM2:62},
+      {max:150, pricePerM2:55},
+      {max:Infinity, pricePerM2:48}
+    ],
+    minCharge: 1500,
+    addons: {
+      weeds:        {label:'Ogräs- och algbehandling', price:12, unit:'m²'},
+      jointing:     {label:'Fogsandning',              price:25, unit:'m²'},
+      impregnation: {label:'Impregnering',             price:22, unit:'m²'},
+      disposal:     {label:'Bortforsling',             price:600, unit:'st'}
+    },
+    vatRate: 25,
+    rotApplicable: true,
+    rotRate: 0.3
+  },
+  hack: {
+    basePricePerLm: 55,
+    heightFactors: {'≤ 1 m':1.0,'1–2 m':1.35,'2–3 m':1.75,'> 3 m':2.2},
+    sideFactors:   {'1 sida':1.0,'2 sidor':1.8,'3 sidor':2.5},
+    diffFactors:   {'Normal':1.0,'Svår (tät/gammal)':1.3},
+    minCharge: 1200,
+    addons: {
+      disposal: {label:'Bortforsling klippt material', price:650, unit:'st'}
+    },
+    vatRate: 25,
+    rutApplicable: true,
+    rutRate: 0.5
+  },
+  fasad: {
+    basePricePerM2: 60,
+    floorFactors: {'1 vån':1.0,'2 vån':1.25,'3 vån':1.55,'4+ vån':1.85},
+    minCharge: 2000,
+    addons: {
+      algae:    {label:'Algbehandling',       price:15,   unit:'m²'},
+      softwash: {label:'Softwash-behandling', price:18,   unit:'m²'},
+      lift:     {label:'Lift / ställning',    price:4500, unit:'st'},
+      disposal: {label:'Bortforsling',        price:600,  unit:'st'}
+    },
+    vatRate: 25,
+    rotApplicable: true,
+    rotRate: 0.3
+  }
+};
+
+/* ── PART 2: Helper functions ─── */
+function _offTierPrice(area, tiers) {
+  for (let i = 0; i < tiers.length; i++) {
+    if (area <= tiers[i].max) return tiers[i].pricePerM2;
+  }
+  return tiers[tiers.length - 1].pricePerM2;
+}
+
+function _offTierLabel(area, tiers) {
+  for (let i = 0; i < tiers.length; i++) {
+    const t = tiers[i];
+    const prev = i === 0 ? 0 : tiers[i-1].max;
+    if (area <= t.max) {
+      const fromLbl = prev === 0 ? '0' : (prev + 1);
+      const toLbl   = t.max === Infinity ? '∞' : t.max;
+      return fromLbl + '–' + toLbl + ' m²: ' + t.pricePerM2 + ' kr/m²';
+    }
+  }
+  return '';
+}
+
+/* ── PART 3 + OffersPage ─── */
 const OffersPage = {
   _editLines:   [],
   _editExtras:  [],
@@ -14,164 +106,202 @@ const OffersPage = {
   _T: [
     {
       id:'altan', name:'Altantvätt', icon:'refresh-cw', vatRate:25,
-      defaultDesc:'Altantvätt inkl. rengöring, avfettning och algbehandling.',
+      defaultDesc:'Altantvätt inkl. rengöring, avfettning och behandling.',
       fields:[
-        {id:'area',      label:'Yta (m²)',                type:'number', req:true},
-        {id:'material',  label:'Material/typ',            type:'select', opts:['Trä / Komposit','Betong','Natursten','Tegel','Annat']},
-        {id:'dirt',      label:'Smutsnivå',               type:'select', opts:['Lätt','Måttlig','Kraftig']},
-        {id:'algae',     label:'Algpåväxt',               type:'bool',   addLabel:'Algbehandling'},
-        {id:'stairs',    label:'Trappsteg',               type:'bool',   addLabel:'Trappsteg (tillägg)'},
-        {id:'treatment', label:'Efterbehandling/impregn.',type:'bool',   addLabel:'Impregnering'},
-        {id:'disposal',  label:'Bortforsling',            type:'bool',   addLabel:'Bortforsling'},
-        {id:'rut',       label:'RUT-avdrag 50 %',         type:'bool'},
+        {id:'area',      label:'Yta (m²)',       type:'number', req:true},
+        {id:'material',  label:'Material/typ',   type:'chips',  opts:['Trä / Komposit','Betong','Natursten','Tegel','Annat'], def:'Trä / Komposit'},
+        {id:'dirt',      label:'Smutsnivå',      type:'chips',  opts:['Lätt','Måttlig','Kraftig'], def:'Måttlig'},
+        {id:'algae',     label:'Algbehandling',  type:'bool',   addLabel:'Algbehandling (+15 kr/m²)'},
+        {id:'stairs',    label:'Trappsteg',      type:'bool',   addLabel:'Trappsteg (+450 kr/st)'},
+        {id:'treatment', label:'Efterbehandling',type:'bool',   addLabel:'Impregnering (+18 kr/m²)'},
+        {id:'disposal',  label:'Bortforsling',   type:'bool',   addLabel:'Bortforsling (+750 kr)'},
+        {id:'rut',       label:'RUT-avdrag 50 %',type:'bool',   isRut:true},
       ],
       calc(f){
-        const base=({Lätt:45,Måttlig:58,Kraftig:72})[f.dirt||'Måttlig']||58;
-        const a=parseFloat(f.area)||0;
-        const ls=[{desc:'Altantvätt '+a+' m² ('+( f.dirt||'Måttlig')+')',qty:a,unit:'m²',price:base}];
-        if(f.algae)     ls.push({desc:'Algbehandling',qty:a,unit:'m²',price:12});
-        if(f.stairs)    ls.push({desc:'Trappsteg tillägg',qty:1,unit:'st',price:450});
-        if(f.treatment) ls.push({desc:'Impregnering/efterbehandling',qty:a,unit:'m²',price:18});
-        if(f.disposal)  ls.push({desc:'Bortforsling',qty:1,unit:'st',price:750});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:f.rut?Math.round(exVat*0.5):0};
+        const rules = OfferPriceRules.altan;
+        const a = parseFloat(f.area) || 0;
+        const pricePerM2 = _offTierPrice(a, rules.tiers);
+        const tierLbl    = _offTierLabel(a, rules.tiers);
+        let base = a * pricePerM2;
+        if (a > 0 && base < rules.minCharge) base = rules.minCharge;
+        const ls = [{desc:'Altantvätt ' + a + ' m² (' + (f.dirt||'Måttlig') + ')', qty:a, unit:'m²', price:pricePerM2}];
+        if (a > 0 && a * pricePerM2 < rules.minCharge) {
+          ls[0] = {desc:'Altantvätt ' + a + ' m² (minimidebitering)', qty:1, unit:'st', price:rules.minCharge};
+        }
+        if (f.algae)     ls.push({desc:rules.addons.algae.label,     qty:a, unit:'m²', price:rules.addons.algae.price});
+        if (f.stairs)    ls.push({desc:rules.addons.stairs.label,    qty:1, unit:'st', price:rules.addons.stairs.price});
+        if (f.treatment) ls.push({desc:rules.addons.treatment.label, qty:a, unit:'m²', price:rules.addons.treatment.price});
+        if (f.disposal)  ls.push({desc:rules.addons.disposal.label,  qty:1, unit:'st', price:rules.addons.disposal.price});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        const totalIncVat = exVat + Math.round(exVat * rules.vatRate / 100);
+        const rutAmt = f.rut ? Math.round(totalIncVat * rules.rutRate) : 0;
+        return {ls, exVat, rutAmt, tierLbl, pricePerM2, inputValues:{...f}, priceRuleRef:'altan'};
       }
     },
     {
       id:'sten', name:'Stentvätt', icon:'layers', vatRate:25,
       defaultDesc:'Högtryckstvätt av stenläggning, plattor och markytor.',
       fields:[
-        {id:'area',         label:'Yta (m²)',            type:'number', req:true},
-        {id:'material',     label:'Stentyp',             type:'select', opts:['Betongplattor','Natursten','Klinker','Asfalt','Annat']},
-        {id:'dirt',         label:'Smutsnivå',           type:'select', opts:['Lätt','Måttlig','Kraftig']},
-        {id:'weeds',        label:'Ogräs / alger',       type:'bool',   addLabel:'Ogräs- och algbehandling'},
-        {id:'jointing',     label:'Fogsandning',         type:'bool',   addLabel:'Fogsandning'},
-        {id:'impregnation', label:'Impregnering',        type:'bool',   addLabel:'Impregnering'},
-        {id:'disposal',     label:'Bortforsling',        type:'bool',   addLabel:'Bortforsling'},
-        {id:'rot',          label:'ROT-avdrag 30 %',     type:'bool'},
+        {id:'area',         label:'Yta (m²)',    type:'number', req:true},
+        {id:'material',     label:'Stentyp',     type:'chips',  opts:['Betongplattor','Natursten','Klinker','Asfalt','Annat'], def:'Betongplattor'},
+        {id:'dirt',         label:'Smutsnivå',   type:'chips',  opts:['Lätt','Måttlig','Kraftig'], def:'Måttlig'},
+        {id:'weeds',        label:'Ogräs/alger', type:'bool',   addLabel:'Ogräs- och algbehandling (+12 kr/m²)'},
+        {id:'jointing',     label:'Fogsandning', type:'bool',   addLabel:'Fogsandning (+25 kr/m²)'},
+        {id:'impregnation', label:'Impregnering',type:'bool',   addLabel:'Impregnering (+22 kr/m²)'},
+        {id:'disposal',     label:'Bortforsling',type:'bool',   addLabel:'Bortforsling (+600 kr)'},
+        {id:'rot',          label:'ROT-avdrag 30 %', type:'bool', isRot:true},
       ],
       calc(f){
-        const base=({Lätt:40,Måttlig:52,Kraftig:68})[f.dirt||'Måttlig']||52;
-        const a=parseFloat(f.area)||0;
-        const ls=[{desc:'Stentvätt '+a+' m² ('+(f.dirt||'Måttlig')+')',qty:a,unit:'m²',price:base}];
-        if(f.weeds)        ls.push({desc:'Ogräs- och algbehandling',qty:a,unit:'m²',price:10});
-        if(f.jointing)     ls.push({desc:'Fogsandning',qty:a,unit:'m²',price:25});
-        if(f.impregnation) ls.push({desc:'Impregnering',qty:a,unit:'m²',price:22});
-        if(f.disposal)     ls.push({desc:'Bortforsling',qty:1,unit:'st',price:600});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:f.rot?Math.round(exVat*0.3):0};
+        const rules = OfferPriceRules.sten;
+        const a = parseFloat(f.area) || 0;
+        const pricePerM2 = _offTierPrice(a, rules.tiers);
+        const tierLbl    = _offTierLabel(a, rules.tiers);
+        let base = a * pricePerM2;
+        const ls = [{desc:'Stentvätt ' + a + ' m² (' + (f.dirt||'Måttlig') + ')', qty:a, unit:'m²', price:pricePerM2}];
+        if (a > 0 && base < rules.minCharge) {
+          ls[0] = {desc:'Stentvätt ' + a + ' m² (minimidebitering)', qty:1, unit:'st', price:rules.minCharge};
+        }
+        if (f.weeds)        ls.push({desc:rules.addons.weeds.label,       qty:a, unit:'m²', price:rules.addons.weeds.price});
+        if (f.jointing)     ls.push({desc:rules.addons.jointing.label,    qty:a, unit:'m²', price:rules.addons.jointing.price});
+        if (f.impregnation) ls.push({desc:rules.addons.impregnation.label,qty:a, unit:'m²', price:rules.addons.impregnation.price});
+        if (f.disposal)     ls.push({desc:rules.addons.disposal.label,    qty:1, unit:'st', price:rules.addons.disposal.price});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        const totalIncVat = exVat + Math.round(exVat * rules.vatRate / 100);
+        const rutAmt = f.rot ? Math.round(totalIncVat * rules.rotRate) : 0;
+        return {ls, exVat, rutAmt, tierLbl, pricePerM2, inputValues:{...f}, priceRuleRef:'sten'};
       }
     },
     {
       id:'hack', name:'Häckklippning', icon:'scissors', vatRate:25,
-      defaultDesc:'Klippning av häck inkl. bortforsling av klippt material.',
+      defaultDesc:'Klippning av häck inkl. uppsamling av klippt material.',
       fields:[
-        {id:'length',    label:'Löpmeter häck',           type:'number', req:true},
-        {id:'height',    label:'Höjd',                    type:'select', opts:['≤ 1 m','1–2 m','2–3 m','> 3 m']},
-        {id:'sides',     label:'Antal sidor att klippa',  type:'select', opts:['1 sida','2 sidor','3 sidor']},
-        {id:'difficulty',label:'Svårighet',               type:'select', opts:['Normal','Svår (tät/gammal)']},
-        {id:'disposal',  label:'Bortforsling',            type:'bool',   addLabel:'Bortforsling klippt material'},
-        {id:'rut',       label:'RUT-avdrag 50 %',         type:'bool'},
+        {id:'length',     label:'Löpmeter häck',   type:'number', req:true},
+        {id:'height',     label:'Höjd',            type:'chips',  opts:['≤ 1 m','1–2 m','2–3 m','> 3 m'], def:'1–2 m'},
+        {id:'sides',      label:'Antal sidor',     type:'chips',  opts:['1 sida','2 sidor','3 sidor'], def:'2 sidor'},
+        {id:'difficulty', label:'Svårighet',       type:'chips',  opts:['Normal','Svår (tät/gammal)'], def:'Normal'},
+        {id:'disposal',   label:'Bortforsling',    type:'bool',   addLabel:'Bortforsling (+650 kr)'},
+        {id:'rut',        label:'RUT-avdrag 50 %', type:'bool',   isRut:true},
       ],
       calc(f){
-        const lm=parseFloat(f.length)||0;
-        const hf=({'≤ 1 m':1.0,'1–2 m':1.3,'2–3 m':1.6,'> 3 m':2.0})[f.height||'1–2 m']||1.3;
-        const sf=({'1 sida':1.0,'2 sidor':1.7,'3 sidor':2.3})[f.sides||'2 sidor']||1.7;
-        const df=f.difficulty==='Svår (tät/gammal)'?1.25:1.0;
-        const prLm=Math.round(80*hf*sf*df);
-        const ls=[{desc:'Häckklippning '+lm+' lm ('+(f.height||'1–2 m')+', '+(f.sides||'2 sidor')+')',qty:lm,unit:'lm',price:prLm}];
-        if(f.disposal) ls.push({desc:'Bortforsling klippt material',qty:1,unit:'st',price:650});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:f.rut?Math.round(exVat*0.5):0};
+        const rules = OfferPriceRules.hack;
+        const lm  = parseFloat(f.length) || 0;
+        const hf  = rules.heightFactors[f.height||'1–2 m'] || 1.35;
+        const sf  = rules.sideFactors[f.sides||'2 sidor']  || 1.8;
+        const df  = rules.diffFactors[f.difficulty||'Normal'] || 1.0;
+        const prLm = Math.round(rules.basePricePerLm * hf * sf * df);
+        let base = lm * prLm;
+        const ls = [{desc:'Häckklippning ' + lm + ' lm (' + (f.height||'1–2 m') + ', ' + (f.sides||'2 sidor') + (f.difficulty&&f.difficulty!=='Normal'?', Svår':'') + ')', qty:lm, unit:'lm', price:prLm}];
+        if (lm > 0 && base < rules.minCharge) {
+          ls[0] = {desc:'Häckklippning ' + lm + ' lm (minimidebitering)', qty:1, unit:'st', price:rules.minCharge};
+        }
+        if (f.disposal) ls.push({desc:rules.addons.disposal.label, qty:1, unit:'st', price:rules.addons.disposal.price});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        const totalIncVat = exVat + Math.round(exVat * rules.vatRate / 100);
+        const rutAmt = f.rut ? Math.round(totalIncVat * rules.rutRate) : 0;
+        const tierLbl = lm + ' lm × ' + prLm + ' kr/lm';
+        return {ls, exVat, rutAmt, tierLbl, pricePerM2:prLm, inputValues:{...f}, priceRuleRef:'hack'};
       }
     },
     {
       id:'fasad', name:'Fasadtvätt', icon:'building-2', vatRate:25,
       defaultDesc:'Fasadtvätt inkl. förberedelse, tvätt och skyddsåtgärder.',
       fields:[
-        {id:'area',     label:'Fasadyta (m²)',            type:'number', req:true},
-        {id:'floors',   label:'Antal våningar',           type:'select', opts:['1 vån','2 vån','3 vån','4+ vån']},
-        {id:'material', label:'Fasadmaterial',            type:'select', opts:['Puts / Betong','Tegel','Träpanel','Plåt','Annat']},
-        {id:'algae',    label:'Algpåväxt / missfärgning', type:'bool',   addLabel:'Algbehandling'},
-        {id:'softwash', label:'Softwash (kemisk tvätt)',  type:'bool',   addLabel:'Softwash-behandling'},
-        {id:'lift',     label:'Lift / ställning behövs',  type:'bool',   addLabel:'Lift / ställning'},
-        {id:'disposal', label:'Bortforsling',             type:'bool',   addLabel:'Bortforsling'},
-        {id:'rot',      label:'ROT-avdrag 30 %',          type:'bool'},
+        {id:'area',     label:'Fasadyta (m²)',  type:'number', req:true},
+        {id:'floors',   label:'Antal våningar', type:'chips',  opts:['1 vån','2 vån','3 vån','4+ vån'], def:'2 vån'},
+        {id:'material', label:'Fasadmaterial',  type:'chips',  opts:['Puts / Betong','Tegel','Träpanel','Plåt','Annat'], def:'Puts / Betong'},
+        {id:'algae',    label:'Algbehandling',  type:'bool',   addLabel:'Algbehandling (+15 kr/m²)'},
+        {id:'softwash', label:'Softwash',       type:'bool',   addLabel:'Softwash-behandling (+18 kr/m²)'},
+        {id:'lift',     label:'Lift/ställning', type:'bool',   addLabel:'Lift / ställning (+4 500 kr)'},
+        {id:'disposal', label:'Bortforsling',   type:'bool',   addLabel:'Bortforsling (+600 kr)'},
+        {id:'rot',      label:'ROT-avdrag 30 %',type:'bool',   isRot:true},
       ],
       calc(f){
-        const a=parseFloat(f.area)||0;
-        const ff=({'1 vån':1.0,'2 vån':1.2,'3 vån':1.45,'4+ vån':1.7})[f.floors||'2 vån']||1.2;
-        const base=Math.round(55*ff);
-        const ls=[{desc:'Fasadtvätt '+a+' m² ('+(f.floors||'2 vån')+')',qty:a,unit:'m²',price:base}];
-        if(f.algae)    ls.push({desc:'Algbehandling',qty:a,unit:'m²',price:12});
-        if(f.softwash) ls.push({desc:'Softwash-behandling',qty:a,unit:'m²',price:18});
-        if(f.lift)     ls.push({desc:'Lift / ställning',qty:1,unit:'st',price:4500});
-        if(f.disposal) ls.push({desc:'Bortforsling',qty:1,unit:'st',price:600});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:f.rot?Math.round(exVat*0.3):0};
+        const rules = OfferPriceRules.fasad;
+        const a  = parseFloat(f.area) || 0;
+        const ff = rules.floorFactors[f.floors||'2 vån'] || 1.25;
+        const pricePerM2 = Math.round(rules.basePricePerM2 * ff);
+        let base = a * pricePerM2;
+        const ls = [{desc:'Fasadtvätt ' + a + ' m² (' + (f.floors||'2 vån') + ')', qty:a, unit:'m²', price:pricePerM2}];
+        if (a > 0 && base < rules.minCharge) {
+          ls[0] = {desc:'Fasadtvätt ' + a + ' m² (minimidebitering)', qty:1, unit:'st', price:rules.minCharge};
+        }
+        if (f.algae)    ls.push({desc:rules.addons.algae.label,    qty:a, unit:'m²', price:rules.addons.algae.price});
+        if (f.softwash) ls.push({desc:rules.addons.softwash.label, qty:a, unit:'m²', price:rules.addons.softwash.price});
+        if (f.lift)     ls.push({desc:rules.addons.lift.label,     qty:1, unit:'st', price:rules.addons.lift.price});
+        if (f.disposal) ls.push({desc:rules.addons.disposal.label, qty:1, unit:'st', price:rules.addons.disposal.price});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        const totalIncVat = exVat + Math.round(exVat * rules.vatRate / 100);
+        const rutAmt = f.rot ? Math.round(totalIncVat * rules.rotRate) : 0;
+        const tierLbl = (f.floors||'2 vån') + ': ' + pricePerM2 + ' kr/m²';
+        return {ls, exVat, rutAmt, tierLbl, pricePerM2, inputValues:{...f}, priceRuleRef:'fasad'};
       }
     },
     {
       id:'fs', name:'Fastighetsservice', icon:'wrench', vatRate:25,
       defaultDesc:'Fastighetsservice och skötsel enligt överenskommelse.',
       fields:[
-        {id:'type',     label:'Avtalstyp',                type:'select', opts:['Månadsavtal','Kvartal','Engångsuppdrag']},
-        {id:'hours',    label:'Timmar per period',        type:'number', req:true},
-        {id:'periods',  label:'Antal perioder',           type:'number'},
-        {id:'rate',     label:'Timpris ex moms (kr/tim)', type:'number', def:695},
-        {id:'material', label:'Materialkostnad (kr)',     type:'number'},
-        {id:'rot',      label:'ROT-avdrag 30 %',          type:'bool'},
+        {id:'type',     label:'Avtalstyp',              type:'chips',  opts:['Månadsavtal','Kvartal','Engångsuppdrag'], def:'Engångsuppdrag'},
+        {id:'hours',    label:'Timmar per period',      type:'number', req:true},
+        {id:'periods',  label:'Antal perioder',         type:'number', def:1},
+        {id:'rate',     label:'Timpris ex moms (kr/h)', type:'number', def:695},
+        {id:'material', label:'Material (kr)',          type:'number'},
+        {id:'rot',      label:'ROT-avdrag 30 %',        type:'bool',   isRot:true},
       ],
       calc(f){
-        const hrs=parseFloat(f.hours)||0;
-        const per=parseInt(f.periods)||1;
-        const rate=parseFloat(f.rate)||695;
-        const type=f.type||'Engångsuppdrag';
-        const mat=parseFloat(f.material)||0;
-        const ls=[{desc:'Fastighetsservice – '+type+(per>1?' × '+per+' ggr':'')+' ('+hrs+' tim/period)',qty:hrs*per,unit:'tim',price:rate}];
-        if(mat) ls.push({desc:'Material och förbrukningsmaterial',qty:1,unit:'st',price:mat});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:f.rot?Math.round(exVat*0.3):0};
+        const hrs  = parseFloat(f.hours)    || 0;
+        const per  = parseInt(f.periods)    || 1;
+        const rate = parseFloat(f.rate)     || 695;
+        const type = f.type                 || 'Engångsuppdrag';
+        const mat  = parseFloat(f.material) || 0;
+        const ls = [{desc:'Fastighetsservice – ' + type + (per>1?' × '+per+' ggr':'') + ' (' + hrs + ' tim/period)', qty:hrs*per, unit:'tim', price:rate}];
+        if (mat) ls.push({desc:'Material och förbrukningsmaterial', qty:1, unit:'st', price:mat});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        const totalIncVat = exVat + Math.round(exVat * 0.25);
+        const rutAmt = f.rot ? Math.round(totalIncVat * 0.3) : 0;
+        return {ls, exVat, rutAmt, tierLbl:'', pricePerM2:rate, inputValues:{...f}, priceRuleRef:'fs'};
       }
     },
     {
       id:'tf', name:'Teknisk förvaltning', icon:'settings', vatRate:25,
       defaultDesc:'Teknisk förvaltning av fastighet enligt förvaltningsavtal.',
       fields:[
-        {id:'months',  label:'Antal månader',              type:'number', req:true, def:12},
-        {id:'monthly', label:'Månadsavgift ex moms (kr)',  type:'number', req:true},
-        {id:'setup',   label:'Uppstartskostnad (kr)',       type:'number'},
-        {id:'ovk',     label:'OVK-besiktning ingår',       type:'bool',   addLabel:'OVK inkl. protokoll'},
+        {id:'months',  label:'Antal månader',         type:'number', req:true, def:12},
+        {id:'monthly', label:'Månadsavgift ex moms',  type:'number', req:true},
+        {id:'setup',   label:'Uppstartskostnad (kr)',  type:'number'},
+        {id:'ovk',     label:'OVK-besiktning ingår',  type:'bool',   addLabel:'OVK inkl. protokoll (+3 500 kr)'},
       ],
       calc(f){
-        const months=parseInt(f.months)||12;
-        const monthly=parseFloat(f.monthly)||0;
-        const ls=[{desc:'Teknisk förvaltning ('+months+' månader)',qty:months,unit:'mån',price:monthly}];
-        if(parseFloat(f.setup)) ls.push({desc:'Uppstart och fastighetsgenomgång',qty:1,unit:'st',price:parseFloat(f.setup)});
-        if(f.ovk) ls.push({desc:'OVK-besiktning inkl. protokoll',qty:1,unit:'st',price:3500});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:0};
+        const months  = parseInt(f.months)         || 12;
+        const monthly = parseFloat(f.monthly)      || 0;
+        const setup   = parseFloat(f.setup)        || 0;
+        const ls = [{desc:'Teknisk förvaltning (' + months + ' månader)', qty:months, unit:'mån', price:monthly}];
+        if (setup) ls.push({desc:'Uppstart och fastighetsgenomgång', qty:1, unit:'st', price:setup});
+        if (f.ovk)  ls.push({desc:'OVK-besiktning inkl. protokoll',  qty:1, unit:'st', price:3500});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        return {ls, exVat, rutAmt:0, tierLbl:'', pricePerM2:monthly, inputValues:{...f}, priceRuleRef:'tf'};
       }
     },
     {
       id:'ovr', name:'Övrigt arbete', icon:'activity', vatRate:25,
       defaultDesc:'Arbete på löpande räkning.',
       fields:[
-        {id:'desc_svc', label:'Benämning',                 type:'text',   req:true},
-        {id:'qty',      label:'Antal timmar',              type:'number', req:true},
-        {id:'rate',     label:'Timpris ex moms (kr/tim)',  type:'number', def:695},
-        {id:'material', label:'Material (kr)',             type:'number'},
-        {id:'rut',      label:'RUT-avdrag 50 %',           type:'bool'},
-        {id:'rot',      label:'ROT-avdrag 30 %',           type:'bool'},
+        {id:'desc_svc', label:'Benämning',                type:'text',   req:true},
+        {id:'qty',      label:'Antal timmar',             type:'number', req:true},
+        {id:'rate',     label:'Timpris ex moms (kr/h)',   type:'number', def:695},
+        {id:'material', label:'Material (kr)',            type:'number'},
+        {id:'rut',      label:'RUT-avdrag 50 %',          type:'bool',   isRut:true},
+        {id:'rot',      label:'ROT-avdrag 30 %',          type:'bool',   isRot:true},
       ],
       calc(f){
-        const rate=parseFloat(f.rate)||695;
-        const qty=parseFloat(f.qty)||0;
-        const mat=parseFloat(f.material)||0;
-        const ls=[{desc:f.desc_svc||'Arbete',qty,unit:'tim',price:rate}];
-        if(mat) ls.push({desc:'Material',qty:1,unit:'st',price:mat});
-        const exVat=ls.reduce((s,l)=>s+l.qty*l.price,0);
-        return {ls,exVat,rutAmt:f.rut?Math.round(exVat*0.5):f.rot?Math.round(exVat*0.3):0};
+        const rate = parseFloat(f.rate)     || 695;
+        const qty  = parseFloat(f.qty)      || 0;
+        const mat  = parseFloat(f.material) || 0;
+        const ls   = [{desc:f.desc_svc||'Arbete', qty, unit:'tim', price:rate}];
+        if (mat) ls.push({desc:'Material', qty:1, unit:'st', price:mat});
+        const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
+        const totalIncVat = exVat + Math.round(exVat * 0.25);
+        const rutAmt = f.rut ? Math.round(totalIncVat * 0.5) : f.rot ? Math.round(totalIncVat * 0.3) : 0;
+        return {ls, exVat, rutAmt, tierLbl:'', pricePerM2:rate, inputValues:{...f}, priceRuleRef:'ovr'};
       }
     },
   ],
@@ -304,13 +434,19 @@ const OffersPage = {
 
       <div id="off-svc-panel" style="display:none;margin-top:6px;border:1.5px solid var(--sky,#0ea5e9);border-radius:var(--rs);overflow:hidden;">
         <div style="padding:8px 12px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:12px;font-weight:700;">${ic('zap',13)} Lägg till tjänst / kalkylator</span>
+          <div>
+            <span style="font-size:12px;font-weight:700;">${ic('zap',13)} Lägg till tjänst / kalkylator</span>
+            <div style="font-size:11px;color:var(--mt);margin-top:2px;">Alla priser anges exklusive moms</div>
+          </div>
           <button type="button" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;" onclick="OffersPage._hideSvcPanel()">${ic('x',11)} Stäng</button>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--br);">
-          ${this._T.map(t=>`<button type="button" class="btn bs bsm" id="off-svc-type-${t.id}" onclick="OffersPage._selectSvc('${t.id}')" style="font-size:11px;">${ic(t.icon,12)} ${t.name}</button>`).join('')}
+        <div style="display:flex;overflow-x:auto;gap:8px;padding:10px 12px;border-bottom:1px solid var(--br);-webkit-overflow-scrolling:touch;">
+          ${this._T.map(t=>`<button type="button"
+            id="off-svc-type-${t.id}"
+            style="white-space:nowrap;padding:8px 14px;border-radius:20px;border:1.5px solid var(--br);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--tx);flex-shrink:0;display:flex;align-items:center;gap:4px;"
+            onclick="OffersPage._selectSvc('${t.id}')">${ic(t.icon,12)} ${t.name}</button>`).join('')}
         </div>
-        <div id="off-svc-calc" style="padding:10px 12px;display:none;"></div>
+        <div id="off-svc-calc" style="display:none;"></div>
       </div>
 
       <details style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
@@ -374,16 +510,21 @@ const OffersPage = {
   },
 
   _renderServiceLine(l, i) {
+    const vat = Math.round((l.exVat||0) * (l.vatRate||25) / 100);
+    const incVat = (l.exVat||0) + vat;
+    const custPrice = incVat - (l.rutAmount||0);
     return `<div style="background:var(--bg);border-radius:var(--rs);padding:8px 10px;margin:4px 0;border-left:3px solid var(--navy);">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:10px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">
             ${ic('zap',11)} ${l.templateName||'Tjänst'}</div>
+          ${l.calculationNote?`<div style="font-size:10px;color:var(--mt);margin-bottom:3px;font-style:italic;">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>`:''}
           ${(l.subLines||[]).map(sl=>`<div style="font-size:11px;color:var(--tx);margin-bottom:1px;">${sl.desc} – ${sl.qty} ${sl.unit} × ${fmt(sl.price)} kr = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
         </div>
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:13px;font-weight:800;color:var(--navy);">${fmt(l.exVat||0)} kr</div>
           ${l.rutAmount?`<div style="font-size:10px;color:var(--grn);">RUT/ROT -${fmt(l.rutAmount)} kr</div>`:''}
+          ${l.rutAmount?`<div style="font-size:11px;font-weight:700;color:var(--grn);">Kund: ${fmt(custPrice)} kr inkl.</div>`:''}
           <div style="font-size:10px;color:var(--mt);">ex. moms</div>
         </div>
       </div>
@@ -435,19 +576,21 @@ const OffersPage = {
       .reduce((s, l) => s + (l.type === 'service' ? (l.exVat||0) : Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))), 0);
     const eExVat = this._editExtras.reduce((s, e) => s + Math.round((e.qty||1)*(e.unitPrice||0)), 0);
     const exVat  = Math.round(lExVat + eExVat);
-    const rutAmt = Math.round(this._editLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
     const vat    = Math.round(exVat * 0.25);
-    const cust   = exVat - rutAmt + vat;
+    const incVat = exVat + vat;
+    const rutAmt = Math.round(this._editLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    const cust   = incVat - rutAmt;
     return `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
       <div style="font-size:12px;color:var(--mt);">Summa ex. moms: <strong>${fmt(exVat)} kr</strong></div>
       <div style="font-size:12px;color:var(--mt);">Moms 25 %: <strong>${fmt(vat)} kr</strong></div>
+      <div style="font-size:12px;color:var(--mt);">Totalt inkl. moms: <strong>${fmt(incVat)} kr</strong></div>
       ${rutAmt?`<div style="font-size:12px;color:var(--grn);">RUT/ROT-reduktion: <strong>-${fmt(rutAmt)} kr</strong></div>`:''}
       <div style="font-size:16px;font-weight:800;color:var(--navy);margin-top:4px;border-top:2px solid var(--br);padding-top:6px;">
         ${rutAmt?'Kundpris inkl. moms:':'Totalt inkl. moms:'} ${fmt(cust)} kr</div>
     </div>`;
   },
 
-  /* ── Tjänstekalkylator ───────────────── */
+  /* ── Tjänstekalkylator panel ─────────── */
   _toggleSvcPanel() {
     const p = document.getElementById('off-svc-panel');
     if (!p) return;
@@ -463,104 +606,302 @@ const OffersPage = {
     this._svcFields   = {};
     this._T.forEach(t => {
       const btn = document.getElementById('off-svc-type-' + t.id);
-      if (btn) { btn.style.background = ''; btn.style.color = ''; }
+      if (btn) {
+        btn.style.background = '#fff';
+        btn.style.color      = 'var(--tx)';
+        btn.style.borderColor = 'var(--br)';
+        btn.style.fontWeight  = '600';
+      }
     });
+    const calc = document.getElementById('off-svc-calc');
+    if (calc) { calc.style.display = 'none'; calc.innerHTML = ''; }
   },
 
   _selectSvc(tId) {
     this._activeSvcId = tId;
-    this._svcFields   = {};
+
+    // Update type selector chip styles
     this._T.forEach(t => {
       const btn = document.getElementById('off-svc-type-' + t.id);
-      if (btn) { btn.style.background = t.id===tId?'var(--navy)':''; btn.style.color = t.id===tId?'#fff':''; }
+      if (!btn) return;
+      const active = t.id === tId;
+      btn.style.background  = active ? 'var(--navy)' : '#fff';
+      btn.style.color       = active ? '#fff'        : 'var(--tx)';
+      btn.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
+      btn.style.fontWeight  = active ? '700'         : '600';
     });
+
     const tmpl = this._T.find(t => t.id === tId);
     const calc = document.getElementById('off-svc-calc');
     if (!tmpl || !calc) return;
+
+    // Initialize field defaults before rendering
+    this._svcFields = {};
+    tmpl.fields.forEach(f => {
+      if (f.def !== undefined) this._svcFields[f.id] = f.def;
+      else if (f.type === 'chips' && f.opts && f.opts[0]) this._svcFields[f.id] = f.opts[0];
+      else if (f.type === 'bool') this._svcFields[f.id] = false;
+      else if (f.type === 'number') this._svcFields[f.id] = 0;
+      else if (f.type === 'text') this._svcFields[f.id] = '';
+    });
+
     calc.style.display = 'block';
     calc.innerHTML = this._svcCalcHtml(tmpl);
-    setTimeout(() => this._updateSvcPreview(), 20);
+    setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
   },
 
+  /* ── PART 7: _setChip ─── */
+  _setChip(fieldId, value, btn) {
+    this._svcFields[fieldId] = value;
+    const group = btn.closest('[data-chips]');
+    if (group) {
+      group.querySelectorAll('button').forEach(b => {
+        const active = b === btn;
+        b.style.background  = active ? 'var(--navy)' : '#fff';
+        b.style.color       = active ? '#fff'        : 'var(--tx)';
+        b.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
+        b.style.fontWeight  = active ? '700'         : '600';
+      });
+    }
+    this._updateSvcPreview();
+  },
+
+  /* ── PART 8: _initChips ─── */
+  _initChips() {
+    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    if (!tmpl) return;
+    tmpl.fields.filter(f => f.type === 'chips').forEach(f => {
+      const val   = this._svcFields[f.id] || f.def || (f.opts && f.opts[0]);
+      const group = document.querySelector('[data-chips="' + f.id + '"]');
+      if (!group) return;
+      group.querySelectorAll('button').forEach(btn => {
+        const active = btn.dataset.val === val || btn.textContent.trim() === val;
+        btn.style.background  = active ? 'var(--navy)' : '#fff';
+        btn.style.color       = active ? '#fff'        : 'var(--tx)';
+        btn.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
+        btn.style.fontWeight  = active ? '700'         : '600';
+      });
+    });
+  },
+
+  /* ── PART 4: _svcCalcHtml — mobile-first ─── */
   _svcCalcHtml(tmpl) {
-    const rows = tmpl.fields.map(f => {
-      const lbl = `<label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">${f.label}${f.req?'<span style="color:var(--rd)"> *</span>':''}</label>`;
-      if (f.type === 'number') return `<div class="fg" style="margin:0;">${lbl}
-        <input type="number" id="svc-f-${f.id}" value="${f.def||''}" min="0" step="0.5" placeholder="0"
-          oninput="OffersPage._svcFields['${f.id}']=parseFloat(this.value)||0;OffersPage._updateSvcPreview()"></div>`;
-      if (f.type === 'text') return `<div class="fg" style="margin:0;">${lbl}
-        <input type="text" id="svc-f-${f.id}" value="${f.def||''}" placeholder="${f.label}"
-          oninput="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()"></div>`;
-      if (f.type === 'select') return `<div class="fg" style="margin:0;">${lbl}
-        <select id="svc-f-${f.id}" onchange="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()">
-          ${(f.opts||[]).map((o,i) => '<option value="'+o+'"'+(i===0?' selected':'')+'>'+o+'</option>').join('')}
-        </select></div>`;
-      if (f.type === 'bool') return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px;font-weight:600;">
-        <input type="checkbox" id="svc-f-${f.id}" style="width:15px;height:15px;"
-          onchange="OffersPage._svcFields['${f.id}']=this.checked;OffersPage._updateSvcPreview()">
-        ${f.addLabel||f.label}</label>`;
-      return '';
-    }).join('');
-    return `<div style="margin-bottom:8px;">
-        <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:8px;">${ic(tmpl.icon,14)} ${tmpl.name}</div>
-        <div class="g2" style="gap:6px;">${rows}</div>
-      </div>
-      <div id="svc-preview" style="padding:8px;background:var(--bg);border-radius:var(--rs);font-size:12px;color:var(--mt);margin-bottom:8px;">
-        Fyll i fälten ovan för att se kalkylen…</div>
-      <div class="fg" style="margin:0 0 8px;">
-        <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">Beskrivning på offerten</label>
-        <input id="svc-custom-desc" value="${tmpl.defaultDesc.replace(/"/g,'&quot;')}" placeholder="Visas som beskrivning på offerten">
-      </div>
-      <button type="button" class="btn bp bsm" onclick="OffersPage._addSvcLine()">${ic('plus',13)} Lägg till tjänst</button>`;
+    const numberFields = tmpl.fields.filter(f => f.type === 'number');
+    const chipsFields  = tmpl.fields.filter(f => f.type === 'chips');
+    const textFields   = tmpl.fields.filter(f => f.type === 'text');
+    const boolFields   = tmpl.fields.filter(f => f.type === 'bool' && !f.isRut && !f.isRot);
+    const rutField     = tmpl.fields.find(f => f.isRut);
+    const rotField     = tmpl.fields.find(f => f.isRot);
+
+    let html = `<div style="padding:10px 12px;">`;
+
+    // Number fields — large prominent
+    numberFields.forEach(f => {
+      const unitLabel = f.id === 'area' ? 'm²' : f.id === 'length' ? 'lm' : f.id === 'hours' ? 'tim' : f.id === 'qty' ? 'tim' : f.id === 'months' ? 'mån' : '';
+      const currVal   = this._svcFields[f.id] != null && this._svcFields[f.id] !== 0 ? this._svcFields[f.id] : (f.def || '');
+      html += `<div style="margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:700;color:var(--navy);">${f.label}${f.req?` <span style="color:var(--rd)">*</span>`:''}</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <input type="number" id="svc-f-${f.id}" value="${currVal}" min="0" step="${f.id==='rate'||f.id==='monthly'||f.id==='material'?'1':'0.5'}" placeholder="0"
+            style="font-size:22px;font-weight:700;width:110px;text-align:center;padding:8px 10px;border:2px solid var(--navy);border-radius:var(--rs);"
+            oninput="OffersPage._svcFields['${f.id}']=parseFloat(this.value)||0;OffersPage._updateSvcPreview()">
+          ${unitLabel?`<span style="font-size:16px;color:var(--mt);font-weight:600;">${unitLabel}</span>`:''}
+        </div>
+      </div>`;
+    });
+
+    // Text fields
+    textFields.forEach(f => {
+      html += `<div style="margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:700;color:var(--navy);">${f.label}${f.req?` <span style="color:var(--rd)">*</span>`:''}</label>
+        <input type="text" id="svc-f-${f.id}" value="${this._svcFields[f.id]||''}" placeholder="${f.label}"
+          style="width:100%;margin-top:6px;font-size:14px;"
+          oninput="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()">
+      </div>`;
+    });
+
+    // Chips fields
+    chipsFields.forEach(f => {
+      html += `<div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">${f.label}</label>
+        <div data-chips="${f.id}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+          ${(f.opts||[]).map(opt => `<button type="button" data-val="${opt}"
+            style="padding:7px 14px;border-radius:20px;border:1.5px solid var(--br);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--tx);"
+            onclick="OffersPage._setChip('${f.id}','${opt.replace(/'/g,"\\'")}',this)">${opt}</button>`).join('')}
+        </div>
+      </div>`;
+    });
+
+    // Bool addons (non-RUT/ROT)
+    if (boolFields.length) {
+      html += `<div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">TILLVAL</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">`;
+      boolFields.forEach(f => {
+        html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);cursor:pointer;font-size:12px;font-weight:600;">
+          <input type="checkbox" id="svc-f-${f.id}" style="width:18px;height:18px;" ${this._svcFields[f.id]?'checked':''}
+            onchange="OffersPage._svcFields['${f.id}']=this.checked;OffersPage._updateSvcPreview()">
+          ${f.addLabel||f.label}
+        </label>`;
+      });
+      html += `</div></div>`;
+    }
+
+    // RUT toggle
+    if (rutField) {
+      html += `<div style="margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--grn);border-radius:var(--rs);cursor:pointer;background:rgba(34,197,94,.05);">
+          <input type="checkbox" id="svc-f-${rutField.id}" style="width:20px;height:20px;" ${this._svcFields[rutField.id]?'checked':''}
+            onchange="OffersPage._svcFields['${rutField.id}']=this.checked;OffersPage._updateSvcPreview()">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--grn);">RUT-avdrag (50 %)</div>
+            <div style="font-size:11px;color:var(--mt);">Förutsätter att kunden har rätt till avdraget</div>
+          </div>
+        </label>
+      </div>`;
+    }
+
+    // ROT toggle
+    if (rotField) {
+      html += `<div style="margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--sky,#0ea5e9);border-radius:var(--rs);cursor:pointer;background:rgba(14,165,233,.05);">
+          <input type="checkbox" id="svc-f-${rotField.id}" style="width:20px;height:20px;" ${this._svcFields[rotField.id]?'checked':''}
+            onchange="OffersPage._svcFields['${rotField.id}']=this.checked;OffersPage._updateSvcPreview()">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--sky,#0ea5e9);">ROT-avdrag (30 %)</div>
+            <div style="font-size:11px;color:var(--mt);">Förutsätter att kunden har rätt till avdraget</div>
+          </div>
+        </label>
+      </div>`;
+    }
+
+    // Price preview box
+    html += `<div id="svc-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:14px;margin-top:10px;min-height:60px;">
+      <div style="font-size:12px;opacity:.7;">Fyll i fälten ovan för att se kalkylen…</div>
+    </div>`;
+
+    // Description field
+    html += `<div style="margin-top:8px;">
+      <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;">BESKRIVNING PÅ OFFERTEN</label>
+      <input id="svc-custom-desc" style="width:100%;margin-top:4px;" value="${(tmpl.defaultDesc||'').replace(/"/g,'&quot;')}" placeholder="Kundvänlig beskrivning…">
+    </div>`;
+
+    // Add button
+    html += `<button type="button" class="btn bp bfull" style="margin-top:10px;padding:13px;font-size:14px;font-weight:800;letter-spacing:.3px;"
+      onclick="OffersPage._addSvcLine()">
+      ${ic('plus',16)} Lägg till i offert
+    </button>`;
+
+    html += `</div>`; // close padding div
+    return html;
   },
 
+  /* ── PART 5: _updateSvcPreview ─── */
   _updateSvcPreview() {
     const tmpl = this._T.find(t => t.id === this._activeSvcId);
     const prev = document.getElementById('svc-preview');
     if (!tmpl || !prev) return;
+
+    // Sync DOM values into _svcFields for non-chip fields
     tmpl.fields.forEach(f => {
+      if (f.type === 'chips') return; // chips already updated via _setChip
       const el = document.getElementById('svc-f-' + f.id);
       if (!el) return;
-      if (f.type === 'bool')   this._svcFields[f.id] = el.checked;
+      if (f.type === 'bool')        this._svcFields[f.id] = el.checked;
       else if (f.type === 'number') this._svcFields[f.id] = parseFloat(el.value) || 0;
-      else this._svcFields[f.id] = el.value;
+      else                          this._svcFields[f.id] = el.value;
     });
+
     try {
-      const {ls, exVat, rutAmt} = tmpl.calc(this._svcFields);
-      const vat = Math.round(exVat * 0.25);
-      const lines = ls.map(l => '<div>' + l.desc + ': ' + l.qty + ' ' + l.unit + ' × ' + fmt(l.price) + ' kr = <strong>' + fmt(Math.round(l.qty * l.price)) + ' kr</strong></div>').join('');
-      prev.innerHTML = '<div style="margin-bottom:6px;">' + lines + '</div>'
-        + '<div style="font-size:13px;font-weight:800;color:var(--navy);">Ex. moms: ' + fmt(Math.round(exVat)) + ' kr · Moms: ' + fmt(vat) + ' kr · Inkl.: ' + fmt(Math.round(exVat) + vat) + ' kr'
-        + (rutAmt ? ' · RUT/ROT: -' + fmt(rutAmt) + ' kr' : '') + '</div>';
+      const result = tmpl.calc(this._svcFields);
+      const {ls, exVat, rutAmt} = result;
+      const tierLbl = result.tierLbl || '';
+
+      if (!exVat && exVat !== 0) {
+        prev.innerHTML = `<div style="font-size:12px;opacity:.7;">Fyll i obligatoriska fält för att se kalkylen.</div>`;
+        return;
+      }
+
+      const vat     = Math.round(exVat * (tmpl.vatRate||25) / 100);
+      const incVat  = exVat + vat;
+      const custPr  = incVat - (rutAmt||0);
+
+      let html = '';
+      if (tierLbl) {
+        html += `<div style="font-size:11px;opacity:.7;margin-bottom:8px;">PRISNIVÅ: ${tierLbl}</div>`;
+      }
+
+      // Line breakdown
+      html += `<div style="font-size:12px;margin-bottom:6px;">`;
+      ls.forEach(l => {
+        const tot = Math.round(l.qty * l.price);
+        html += `<div style="margin-bottom:3px;">${l.desc}: ${l.qty} ${l.unit} × ${fmt(l.price)} kr = <strong>${fmt(tot)} kr</strong></div>`;
+      });
+      html += `</div>`;
+
+      // Summary box
+      html += `<div style="border-top:1px solid rgba(255,255,255,.2);margin:8px 0;padding-top:8px;">
+        <div style="font-size:12px;margin-bottom:2px;">Summa ex. moms: <strong>${fmt(exVat)} kr</strong></div>
+        <div style="font-size:12px;margin-bottom:2px;">Moms ${tmpl.vatRate||25}%: <strong>${fmt(vat)} kr</strong></div>
+        <div style="font-size:14px;font-weight:800;margin-top:4px;">Totalt inkl. moms: ${fmt(incVat)} kr</div>
+      </div>`;
+
+      // RUT/ROT section
+      if (rutAmt) {
+        const isRot = tmpl.fields.some(f => f.isRot && this._svcFields[f.id]);
+        const label = isRot ? 'ROT-avdrag (30%)' : 'RUT-avdrag (50%)';
+        html += `<div style="border-top:1px solid rgba(255,255,255,.2);margin:8px 0;padding-top:8px;color:#86efac;">
+          <div style="font-size:12px;margin-bottom:2px;">Prelim. ${label}: -${fmt(rutAmt)} kr</div>
+          <div style="font-size:14px;font-weight:800;">Kundpris efter avdrag: ${fmt(custPr)} kr</div>
+          <div style="font-size:10px;opacity:.7;margin-top:4px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>
+        </div>`;
+      }
+
+      prev.innerHTML = html;
     } catch(e) {
-      prev.innerHTML = '<span style="color:var(--mt);">Fyll i obligatoriska fält (markerade med *) för att se kalkyl.</span>';
+      prev.innerHTML = `<div style="font-size:12px;opacity:.7;">Fyll i obligatoriska fält (markerade med *) för att se kalkyl.</div>`;
     }
   },
 
+  /* ── PART 6: _addSvcLine ─── */
   _addSvcLine() {
     const tmpl = this._T.find(t => t.id === this._activeSvcId);
     if (!tmpl) { showToast('Välj en tjänstetyp'); return; }
+
+    // Sync all DOM values
     tmpl.fields.forEach(f => {
+      if (f.type === 'chips') return;
       const el = document.getElementById('svc-f-' + f.id);
       if (!el) return;
-      if (f.type === 'bool')   this._svcFields[f.id] = el.checked;
+      if (f.type === 'bool')        this._svcFields[f.id] = el.checked;
       else if (f.type === 'number') this._svcFields[f.id] = parseFloat(el.value) || 0;
-      else this._svcFields[f.id] = el.value;
+      else                          this._svcFields[f.id] = el.value;
     });
-    const missing = tmpl.fields.filter(f => f.req && !this._svcFields[f.id]);
+
+    const missing = tmpl.fields.filter(f => f.req && !this._svcFields[f.id] && this._svcFields[f.id] !== 0);
     if (missing.length) { showToast('Fyll i: ' + missing.map(f => f.label).join(', ')); return; }
-    const {ls, exVat, rutAmt} = tmpl.calc(this._svcFields);
+
+    const result  = tmpl.calc(this._svcFields);
+    const {ls, exVat, rutAmt} = result;
     const desc = (document.getElementById('svc-custom-desc')?.value || '').trim() || tmpl.defaultDesc;
+
     this._editLines.push({
-      id: 'SVC' + Date.now(), type: 'service',
-      templateId: tmpl.id, templateName: tmpl.name,
-      description: desc,
-      subLines: ls.map(l => ({...l})),
-      exVat:      Math.round(exVat),
-      vatRate:    tmpl.vatRate,
-      rutAmount:  Math.round(rutAmt || 0),
-      total:      Math.round(exVat)
+      id:            'SVC' + Date.now(),
+      type:          'service',
+      templateId:    tmpl.id,
+      templateName:  tmpl.name,
+      description:   desc,
+      subLines:      ls.map(l => ({...l})),
+      exVat:         Math.round(exVat),
+      vatRate:       tmpl.vatRate,
+      rutAmount:     Math.round(rutAmt || 0),
+      total:         Math.round(exVat),
+      inputValues:   {...this._svcFields},
+      priceRuleRef:  tmpl.id,
+      tierLbl:       result.tierLbl || '',
+      calculationNote: result.tierLbl ? 'Prisnivå: ' + result.tierLbl : ''
     });
+
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._calcTotals();
@@ -579,28 +920,33 @@ const OffersPage = {
       if (inputs.length) inputs[inputs.length-1].focus();
     }, 50);
   },
+
   _addTextBlock() {
     this._editLines.push({id:'T'+Date.now(), type:'text', blockTitle:'', text:''});
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
   },
+
   _removeLine(idx) {
     this._editLines.splice(idx, 1);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._calcTotals();
   },
+
   _addExtra() {
     this._editExtras.push({id:'E'+Date.now(), description:'', qty:1, unit:'st', unitPrice:0, vatRate:25});
     const el = document.getElementById('off-extras');
     if (el) el.innerHTML = this._extrasHtml();
   },
+
   _removeExtra(idx) {
     this._editExtras.splice(idx, 1);
     const el = document.getElementById('off-extras');
     if (el) el.innerHTML = this._extrasHtml();
     this._calcTotals();
   },
+
   _calcTotals() {
     this._editLines.forEach((l, i) => {
       if (l.type === 'manual') {
@@ -666,7 +1012,7 @@ const OffersPage = {
   }
 };
 
-/* ── Offert-detalj ────────────────────── */
+/* ── PART 10: OfferDetailPage ─────────── */
 const OfferDetailPage = {
   offerId: null,
 
@@ -684,11 +1030,14 @@ const OfferDetailPage = {
     const txtBlks  = allLines.filter(l => l.type === 'text');
     const extras   = off.extras || [];
 
-    const exVat  = Math.round(prLines.reduce((s,l) => s+(l.exVat||l.total||0),0)
-                             + extras.reduce((s,e) => s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
-    const rutAmt = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    const exVat  = Math.round(
+      prLines.reduce((s,l) => s + (l.exVat||l.total||0), 0) +
+      extras.reduce((s,e) => s + Math.round((e.qty||1)*(e.unitPrice||0)), 0)
+    );
     const vat    = Math.round(exVat * 0.25);
-    const cust   = exVat - rutAmt + vat;
+    const incVat = exVat + vat;
+    const rutAmt = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    const cust   = incVat - rutAmt;
 
     el.innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -735,32 +1084,50 @@ const OfferDetailPage = {
 
       <div class="card">
         <div class="card-header"><h3>${ic('file-text',13)} Offertrader</h3></div>
-        ${prLines.length===0?'<p style="padding:12px 14px;font-size:12px;color:var(--mt);">Inga rader</p>':prLines.map(l=>{
-          if(l.type==='service') return `
-            <div style="padding:10px 14px;border-bottom:1px solid var(--bg);border-left:3px solid var(--navy);">
-              <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--navy);letter-spacing:.5px;margin-bottom:4px;">${ic('zap',11)} ${l.templateName||'Tjänst'}</div>
-              ${l.description?`<div style="font-size:12px;color:var(--mt);margin-bottom:4px;font-style:italic;">${l.description}</div>`:''}
-              ${(l.subLines||[]).map(sl=>`<div style="font-size:11px;color:var(--tx);margin-bottom:1px;">${sl.desc} – ${sl.qty} ${sl.unit} × ${fmt(sl.price)} kr = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
-              <div style="font-size:13px;font-weight:800;color:var(--navy);margin-top:5px;">${fmt(l.exVat||0)} kr ex. moms</div>
-              ${l.rutAmount?`<div style="font-size:11px;color:var(--grn);">RUT/ROT-reduktion: -${fmt(l.rutAmount)} kr</div>`:''}
-            </div>`;
-          return `
-            <div style="padding:8px 14px;border-bottom:1px solid var(--bg);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-              <div style="flex:1;">
-                <div style="font-size:13px;font-weight:700;">${l.description||'—'}</div>
-                <div style="font-size:11px;color:var(--mt);">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||0)} kr ex. moms</div>
-              </div>
-              <div style="font-size:13px;font-weight:700;color:var(--navy);">${fmt(l.total||Math.round((l.qty||1)*(l.unitPrice||0)))} kr</div>
-            </div>`;
-        }).join('')}
+        ${prLines.length===0
+          ? '<p style="padding:12px 14px;font-size:12px;color:var(--mt);">Inga rader</p>'
+          : prLines.map(l => {
+              if (l.type === 'service') {
+                const lExVat   = l.exVat || 0;
+                const lVat     = Math.round(lExVat * (l.vatRate||25) / 100);
+                const lIncVat  = lExVat + lVat;
+                const lRut     = l.rutAmount || 0;
+                const lCust    = lIncVat - lRut;
+                return `<div style="padding:10px 14px;border-bottom:1px solid var(--bg);border-left:3px solid var(--navy);">
+                  <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--navy);letter-spacing:.5px;margin-bottom:4px;">${ic('zap',11)} ${l.templateName||'Tjänst'}</div>
+                  ${l.description?`<div style="font-size:12px;color:var(--mt);margin-bottom:6px;font-style:italic;">${l.description}</div>`:''}
+                  ${l.calculationNote?`<div style="font-size:11px;color:var(--mt);margin-bottom:4px;">${l.calculationNote}</div>`:''}
+                  ${(l.subLines||[]).map(sl=>`<div style="font-size:11px;color:var(--tx);margin-bottom:2px;">${sl.desc} – ${sl.qty} ${sl.unit} × ${fmt(sl.price)} kr = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
+                  <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);">
+                    <div style="font-size:12px;color:var(--mt);">Summa ex. moms: <strong>${fmt(lExVat)} kr</strong></div>
+                    <div style="font-size:12px;color:var(--mt);">Moms ${l.vatRate||25}%: <strong>${fmt(lVat)} kr</strong></div>
+                    <div style="font-size:13px;font-weight:800;color:var(--navy);margin-top:4px;">Totalt inkl. moms: ${fmt(lIncVat)} kr</div>
+                    ${lRut?`<div style="margin-top:6px;padding:8px 10px;background:rgba(34,197,94,.08);border-radius:var(--rs);border:1px solid rgba(34,197,94,.3);">
+                      <div style="font-size:12px;color:var(--grn);font-weight:700;">RUT/ROT-reduktion: -${fmt(lRut)} kr</div>
+                      <div style="font-size:13px;font-weight:800;color:var(--grn);">Kundpris efter avdrag: ${fmt(lCust)} kr</div>
+                      <div style="font-size:10px;color:var(--mt);margin-top:3px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>
+                    </div>`:''}
+                  </div>
+                </div>`;
+              }
+              return `<div style="padding:8px 14px;border-bottom:1px solid var(--bg);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                <div style="flex:1;">
+                  <div style="font-size:13px;font-weight:700;">${l.description||'—'}</div>
+                  <div style="font-size:11px;color:var(--mt);">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||0)} kr ex. moms</div>
+                </div>
+                <div style="font-size:13px;font-weight:700;color:var(--navy);">${fmt(l.total||Math.round((l.qty||1)*(l.unitPrice||0)))} kr</div>
+              </div>`;
+            }).join('')}
         <div style="padding:12px 14px;border-top:2px solid var(--br);">
           <div class="dr"><span class="dk">Summa ex. moms</span><span class="dv">${fmt(exVat)} kr</span></div>
           <div class="dr"><span class="dk">Moms 25 %</span><span class="dv">${fmt(vat)} kr</span></div>
+          <div class="dr"><span class="dk">Totalt inkl. moms</span><span class="dv">${fmt(incVat)} kr</span></div>
           ${rutAmt?`<div class="dr" style="color:var(--grn);"><span class="dk">RUT/ROT-reduktion</span><span class="dv">-${fmt(rutAmt)} kr</span></div>`:''}
           <div class="dr" style="font-size:16px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
             <span class="dk" style="color:var(--navy);">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</span>
             <span class="dv" style="color:var(--navy);">${fmt(cust)} kr</span>
           </div>
+          ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:4px;text-align:right;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}
         </div>
       </div>
 
@@ -801,7 +1168,7 @@ const OfferDetailPage = {
     if (!off) return;
     off.status    = status;
     off.updatedAt = new Date().toISOString();
-    if (status === 'skickad') off.sentAt   = new Date().toISOString();
+    if (status === 'skickad') off.sentAt     = new Date().toISOString();
     if (status === 'godkänd' || status === 'nekad') off.answeredAt = new Date().toISOString();
     persist();
     this.render({offerId: this.offerId});
@@ -828,10 +1195,17 @@ const OfferDetailPage = {
     const off = getOff(this.offerId);
     if (!off) return;
     const prLines = (off.lines||[]).filter(l => l.type !== 'text');
+    // Build title from offer title or service template names
+    const svcNames = prLines
+      .filter(l => l.type === 'service')
+      .map(l => l.templateName)
+      .filter(Boolean);
+    const aoTitle = off.title
+      || (svcNames.length ? svcNames.join(', ') : 'Arbete enligt offert ' + off.id);
     const desc = [off.scope, off.summary].filter(Boolean).join('\n\n')
       || prLines.map(l => l.type==='service' ? l.templateName : l.description).filter(Boolean).join(', ');
     const ao = WorkOrderService.create({
-      title:       off.title || 'Arbete enligt offert ' + off.id,
+      title:       aoTitle,
       description: desc,
       customerId:  off.customerId,
       propertyId:  off.propertyId || '',
