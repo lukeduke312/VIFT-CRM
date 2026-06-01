@@ -803,6 +803,121 @@ const OffersPage = {
     this._refreshTotals();
   },
 
+  /* ── New offer helpers ─── */
+
+  _calcDiscount(rawExVat) {
+    const d = this._discount;
+    if (!d || !d.value) return 0;
+    if (d.type === 'percent') return Math.round(rawExVat * Math.min(d.value, 100) / 100);
+    return Math.min(Math.round(d.value), rawExVat);
+  },
+
+  _addFixedLine() {
+    this._editLines.push({id:'F'+Date.now(), type:'fixed', description:'', unitPrice:0, vatRate:25});
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._refreshTotals();
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('#off-lines .off-fixed-name');
+      if (inputs.length) inputs[inputs.length-1].focus();
+    }, 50);
+  },
+
+  _renderFixedCard(l, i) {
+    const tot    = Math.round(l.unitPrice || 0);
+    const incVat = tot + Math.round(tot * 0.25);
+    return `<div class="off-svc-card" style="border-left-color:#0ea5e9;">
+      <div class="off-svc-card-hd">
+        <div style="flex:1;min-width:0;">
+          <div class="off-svc-card-meta">${ic('tag',9)} Fastpris</div>
+          <input class="off-fixed-name" value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning…"
+            oninput="OffersPage._editLines[${i}].description=this.value">
+        </div>
+        <div style="flex-shrink:0;text-align:right;">
+          <div class="off-svc-card-price" id="off-lt-${i}">${fmt(tot)} kr</div>
+          <div class="off-svc-card-price-sub">ex. moms · ${fmt(incVat)} kr inkl.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:130px 1fr;gap:6px;margin-top:6px;">
+        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Pris ex moms (kr)</label>
+          <input type="number" value="${l.unitPrice||0}" min="0" step="1"
+            oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Intern anteckning</label>
+          <input value="${(l.note||'').replace(/"/g,'&quot;')}" placeholder="Syns ej för kund"
+            oninput="OffersPage._editLines[${i}].note=this.value" style="font-size:11px;"></div>
+      </div>
+      <div style="margin-top:6px;">
+        <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('trash-2',10)} Ta bort</button>
+      </div>
+    </div>`;
+  },
+
+  _toolbarHtml(fieldId, key) {
+    const ins = (p,s,ph) => `OffersPage._insertFormat('${fieldId}','${key}','${p}','${s}','${ph}')`;
+    return `<div class="off-toolbar">
+      <button type="button" class="btn bs bxs" onclick="${ins('- ','','punkt')}" title="Punktlista">• Lista</button>
+      <button type="button" class="btn bs bxs" onclick="${ins('**','**','text')}" title="Fet text"><b>B</b></button>
+      <button type="button" class="btn bs bxs" onclick="${ins('\\n','','\\n')}" title="Radbrytning">↵</button>
+    </div>`;
+  },
+
+  _insertFormat(fieldId, key, prefix, suffix, placeholder) {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    const s = el.selectionStart, e = el.selectionEnd;
+    const sel = el.value.substring(s, e) || placeholder || 'text';
+    const ins = prefix + sel + (suffix || '');
+    el.value = el.value.substring(0, s) + ins + el.value.substring(e);
+    el.focus();
+    el.setSelectionRange(s + prefix.length, s + prefix.length + sel.length);
+    const keyMap = {scope:'scope', includes:'includes', excludes:'excludes', summary:'summary'};
+    if (keyMap[key]) this._wizardData[keyMap[key]] = el.value;
+  },
+
+  _genTextSuggestion() {
+    const sum = (document.getElementById('off-summary')?.value || this._wizardData.summary || '').toLowerCase();
+    this._wizardData.summary = document.getElementById('off-summary')?.value || this._wizardData.summary;
+    const templates = [
+      { keys:['stentvätt','marksten','plattor','stenläggning'],
+        scope:'Professionell högtrycksrengöring av marksten och belagda ytor. Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel anpassade för aktuell yttyp.',
+        includes:'- Högtrycksrengöring av angiven yta\n- Biologisk algbehandling\n- Rengöring av kanter och kantstöd\n- Städning av kringliggande yta',
+        excludes:'- Ny fogsand efter tvätt (tillval)\n- Reparation av skadade plattor\n- Bortforsling utöver normal städning' },
+      { keys:['fasad','fasadtvätt','puts','tegelfasad'],
+        scope:'Professionell fasadtvätt med metod anpassad efter materialtyp och föroreningsgrad. Utförs av certifierad personal med godkänd utrustning.',
+        includes:'- Inventering och bedömning av fasadtyp\n- Högtrycks- eller softwashtvätt\n- Biologisk algbehandling\n- Rengöring kring fönster och dörrar',
+        excludes:'- Puts- eller murningsarbeten\n- Målning av fasad\n- Fönsterputsning' },
+      { keys:['altan','altantvätt','trädäck','träaltan'],
+        scope:'Professionell rengöring av altan och träyta, utförd varsamt med metod anpassad för aktuellt träslag och ytskikt.',
+        includes:'- Högtrycksrengöring anpassad för träyta\n- Biologisk algbehandling\n- Rengöring av räcken och trädetaljer',
+        excludes:'- Oljning eller impregnering (tillval)\n- Slipning eller utbyte av plankor' },
+      { keys:['häck','häckklippning','buskar','klippning'],
+        scope:'Professionell häckklippning och formklippning av buskage, utförd med professionell utrustning av erfaren personal.',
+        includes:'- Klippning och formning av häck och buskage\n- Uppsamling och borttransport av klippmaterial\n- Städning av angränsande yta',
+        excludes:'- Trädfällning eller stubbrytning\n- Plantering eller komplettering' },
+      { keys:['fastighetsservice','förvaltning','skötsel','tillsyn'],
+        scope:'Löpande fastighetsservice och skötsel enligt överenskommen specifikation, för att säkerställa fastighetens funktion och värde.',
+        includes:'- Regelbundna tillsynsrundor\n- Felanmälan och åtgärd vid avvikelser\n- Rapportering till uppdragsgivare',
+        excludes:'- Större renoveringsarbeten\n- Specialisttjänster (el, VVS, hiss)' },
+    ];
+    let scope = '', includes = '', excludes = '';
+    for (const t of templates) {
+      if (t.keys.some(k => sum.includes(k))) {
+        scope = t.scope; includes = t.includes; excludes = t.excludes; break;
+      }
+    }
+    if (!scope) {
+      const txt = this._wizardData.summary || 'uppdraget';
+      scope    = 'Uppdraget avser ' + txt + '. Arbetet utförs av VIFT:s personal enligt branschstandard och överenskommelse.';
+      includes = '- Arbete och personal enligt offert\n- Nödvändig utrustning';
+      excludes = '- Material ej specificerat i offert\n- Tillkommande arbeten';
+    }
+    this._wizardData.scope    = scope;
+    this._wizardData.includes = includes;
+    this._wizardData.excludes = excludes;
+    this._rerender();
+    showToast('Textförslag genererat');
+  },
+
   /* ── Totals ─── */
   _calcExVat(lines, extras) {
     const lSum = (lines||[]).filter(l=>l.type!=='text')
