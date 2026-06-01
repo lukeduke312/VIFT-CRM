@@ -370,13 +370,13 @@ const OffersPage = {
          </div>
          <div class="off-kpi-card off-kpi-card--navy">
            <div class="off-kpi-val">${fmt(totalGodkändVal)}</div>
-           <div class="off-kpi-lbl">Värde kr ex.</div>
+           <div class="off-kpi-lbl" style="font-size:9px;">Godkänt värde ex. moms</div>
          </div>
        </div>
        <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;">
          <div class="swrap" style="flex:1;">
            <span class="sico">${ic('search',16)}</span>
-           <input type="search" placeholder="Sök offert, kund, ID…" value="${this._search}"
+           <input type="search" placeholder="Sök offert, kund, titel eller ID…" value="${this._search}"
              oninput="OffersPage._search=this.value;OffersPage.render()">
          </div>
          <button class="btn bp bsm" onclick="OffersPage.openCreate()">${ic('plus',14)} Ny offert</button>
@@ -405,21 +405,28 @@ const OffersPage = {
             const borderColor = statusColors[o.status] || 'var(--br)';
             return `<div class="list-item off-offer-card" style="border-left-color:${borderColor};" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
   <div class="off-offer-card-top">
-    <span class="off-offer-card-id">${o.id}</span>
-    ${sbdg(o.status)}
+    <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
+      <span class="off-offer-card-id">${o.id}</span>
+      ${sbdg(o.status)}
+    </div>
+    <div style="display:flex;align-items:baseline;gap:5px;flex-shrink:0;margin-left:8px;">
+      <span style="font-size:11px;color:var(--mt);">Ex.</span>
+      <strong style="font-size:13px;color:var(--navy);">${fmt(exVatD)} kr</strong>
+      ${rutAmt ? `<span style="font-size:11px;color:var(--gr);font-weight:700;">&nbsp;→&nbsp;${fmt(cust)} kr kund</span>` : `<span style="font-size:11px;color:var(--mt);">&nbsp;(${fmt(incVat)} inkl.)</span>`}
+    </div>
   </div>
   <div class="off-offer-card-title">${disp}</div>
-  <div class="off-offer-card-cu">${ic('user',11)} ${cuName}</div>
-  <div class="off-offer-card-amounts">
-    <span>Ex. moms: <strong>${fmt(exVatD)} kr</strong></span>
-    ${rutAmt ? `<span style="color:var(--gr);">Kundpris: <strong>${fmt(cust)} kr</strong> (RUT/ROT)</span>` : `<span>Inkl. moms: <strong>${fmt(incVat)} kr</strong></span>`}
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:6px;flex-wrap:wrap;">
+    <div>
+      <div class="off-offer-card-cu">${ic('user',11)} ${cuName}</div>
+      <div class="off-offer-card-meta">
+        ${ic('calendar',9)} ${fmtDate(o.createdAt)}
+        ${o.sentAt ? `&nbsp;·&nbsp;${ic('send',9)} Skickad ${fmtDate(o.sentAt)}` : ''}
+        ${o.validUntil ? `&nbsp;·&nbsp;${ic('clock',9)} Giltig t.o.m. ${fmtDate(o.validUntil)}` : ''}
+      </div>
+    </div>
+    ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
   </div>
-  <div class="off-offer-card-meta">
-    <span>${fmtDate(o.createdAt)}</span>
-    ${o.validUntil ? '<span>Giltig t.o.m. ' + fmtDate(o.validUntil) + '</span>' : ''}
-    ${o.sentAt ? '<span>Skickad ' + fmtDate(o.sentAt) + '</span>' : ''}
-  </div>
-  ${insight ? '<span class="off-offer-insight ' + insight.cls + '">' + insight.txt + '</span>' : ''}
 </div>`;
           }).join(''));
   },
@@ -601,8 +608,8 @@ const OffersPage = {
           <div class="fg">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
               <label style="margin-bottom:0;">Kund <span style="color:var(--rd)">*</span></label>
-              <button type="button" onclick="OffersPage._quickNewCustomer()" style="font-size:11px;font-weight:700;color:var(--sky);background:none;border:none;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:3px;">
-                ${ic('user-plus',12)} Skapa ny kund
+              <button type="button" class="off-new-cu-btn" onclick="OffersPage._quickNewCustomer()">
+                ${ic('user-plus',11)} Ny kund
               </button>
             </div>
             ${CustomSelect.render('off-cu',{options:cuOpts,value:d.customerId,placeholder:'— Välj kund —',searchable:true,onchange:"OffersPage._wizardData.customerId=this.value"})}
@@ -627,6 +634,7 @@ const OffersPage = {
             <button type="button" class="off-gen-btn" onclick="OffersPage._genTextSuggestion()">
               ${ic('zap',11)} Generera textförslag
             </button>
+            ${d._lastGenFrom ? `<div style="font-size:10px;color:var(--mt);margin-top:4px;display:flex;align-items:center;gap:4px;">${ic('check',9)}<span>Senast: <em>${d._lastGenFrom}</em></span></div>` : ''}
           </div>
         </div>
         <div class="off-s1-col">
@@ -1246,9 +1254,10 @@ const OffersPage = {
       label    = 'Generell';
     }
 
-    this._wizardData.scope    = scope;
-    this._wizardData.includes = includes;
-    this._wizardData.excludes = excludes;
+    this._wizardData.scope       = scope;
+    this._wizardData.includes    = includes;
+    this._wizardData.excludes    = excludes;
+    this._wizardData._lastGenFrom = label + ' (' + new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) + ')';
     this._rerender();
     showToast('Textförslag baserat på: ' + label);
   },
@@ -1875,7 +1884,6 @@ const OfferDetailPage = {
                   <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--navy);letter-spacing:.5px;margin-bottom:4px;">${ic('zap',11)} ${l.templateName||'Tjänst'}</div>
                   ${l.description?`<div style="font-size:12px;color:var(--mt);margin-bottom:6px;font-style:italic;">${l.description}</div>`:''}
                   ${l.calculationNote?`<div style="font-size:11px;color:var(--mt);margin-bottom:4px;">${l.calculationNote}</div>`:''}
-                  ${(l.subLines||[]).map(sl=>`<div style="font-size:11px;color:var(--tx);margin-bottom:2px;">${sl.desc} – ${sl.qty} ${sl.unit} × ${fmt(sl.price)} kr = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
                   <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);">
                     <div style="font-size:12px;color:var(--mt);">Summa ex. moms: <strong>${fmt(lExVat)} kr</strong></div>
                     <div style="font-size:12px;color:var(--mt);">Moms ${l.vatRate||25}%: <strong>${fmt(lVat)} kr</strong></div>
