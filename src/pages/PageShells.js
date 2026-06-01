@@ -408,6 +408,25 @@ const OffersPage = {
       .reduce((s, l) => s + (l.exVat || l.total || 0), 0));
   },
 
+  _offerInsight(o) {
+    const now = Date.now();
+    const validDate  = o.validUntil ? new Date(o.validUntil).getTime() : null;
+    const daysLeft   = validDate ? Math.round((validDate - now) / 86400000) : null;
+    const sentDate   = o.sentAt ? new Date(o.sentAt).getTime() : null;
+    const daysSent   = sentDate ? Math.round((now - sentDate) / 86400000) : null;
+
+    if (o.status === 'godkänd' && o.workOrderId)  return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Arbetsorder ' + o.workOrderId + ' skapad'};
+    if (o.status === 'godkänd' && !o.workOrderId) return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Godkänd — skapa arbetsorder nu'};
+    if (o.status === 'nekad')    return {cls:'ins-nekad',   txt: ic('x-circle',10) + ' Nekad — följ upp orsak'};
+    if (o.status === 'utgången') return {cls:'ins-nekad',   txt: ic('clock',10) + ' Utgången — förnya offerten'};
+    if (daysLeft !== null && daysLeft >= 0 && daysLeft <= 7) return {cls:'ins-expiry', txt: '⚠️ Giltighet går ut om ' + daysLeft + ' dag' + (daysLeft === 1 ? '' : 'ar')};
+    if ((o.status === 'skickad' || o.status === 'väntar') && daysSent !== null && daysSent > 5) return {cls:'ins-followup', txt: ic('bell',10) + ' Skickad för ' + daysSent + ' dagar sedan — dags att följa upp'};
+    if (o.status === 'skickad')  return {cls:'ins-skickad', txt: ic('send',10) + ' Skickad — inväntar svar'};
+    if (o.status === 'väntar')   return {cls:'ins-followup',txt: ic('clock',10) + ' Väntar på svar'};
+    if (o.status === 'utkast')   return {cls:'ins-utkast',  txt: ic('edit-3',10) + ' Utkast — färdigställ och skicka'};
+    return null;
+  },
+
   /* ── Wizard open ─── */
   openCreate(preCustomerId) {
     const T = this._TERMS;

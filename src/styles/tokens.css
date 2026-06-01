@@ -7,6 +7,7 @@
 
   /* Status colors */
   --gr:    #15803d;
+  --grn:   #15803d;  /* used in JS, alias for --gr */
   --lgr:   #dcfce7;
   --rd:    #b91c1c;
   --lrd:   #fee2e2;
