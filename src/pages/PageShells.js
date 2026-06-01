@@ -1018,27 +1018,37 @@ const OffersPage = {
   _genTextSuggestion() {
     const sum = (document.getElementById('off-summary')?.value || this._wizardData.summary || '').toLowerCase();
     this._wizardData.summary = document.getElementById('off-summary')?.value || this._wizardData.summary;
+    // Parse quantity from summary (e.g. "120 m²", "45 lm")
+    const qtyMatch = sum.match(/(\d+(?:[.,]\d+)?)\s*(m²|m2|kvm|lm|löpmeter)/i);
+    const qty = qtyMatch ? parseFloat((qtyMatch[1]||'').replace(',','.')) : null;
+    const qtyUnit = qtyMatch ? (/(lm|löpmeter)/i.test(qtyMatch[2]) ? 'lm' : 'm²') : 'm²';
+    const qtyStr = qty ? `ca ${qty} ${qtyUnit}` : '';
+    const svcLines = this._editLines.filter(l => l.type === 'service');
     const templates = [
-      { keys:['stentvätt','marksten','plattor','stenläggning'],
-        scope:'Professionell högtrycksrengöring av marksten och belagda ytor. Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel anpassade för aktuell yttyp.',
-        includes:'- Högtrycksrengöring av angiven yta\n- Biologisk algbehandling\n- Rengöring av kanter och kantstöd\n- Städning av kringliggande yta',
-        excludes:'- Ny fogsand efter tvätt (tillval)\n- Reparation av skadade plattor\n- Bortforsling utöver normal städning' },
+      { keys:['stentvätt','marksten','plattor','stenläggning','sten'],
+        scope:`Professionell högtrycksrengöring av marksten och belagda ytor${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel anpassade för aktuell yttyp.`,
+        includes:'- Högtrycksrengöring av angiven yta\n- Biologisk algbehandling\n- Rengöring av kanter och kantstöd\n- Städning av kringliggande yta efter utfört arbete',
+        excludes:'- Ny fogsand efter tvätt (tillval)\n- Reparation av skadade plattor\n- Bortforsling av annat material' },
       { keys:['fasad','fasadtvätt','puts','tegelfasad'],
-        scope:'Professionell fasadtvätt med metod anpassad efter materialtyp och föroreningsgrad. Utförs av certifierad personal med godkänd utrustning.',
-        includes:'- Inventering och bedömning av fasadtyp\n- Högtrycks- eller softwashtvätt\n- Biologisk algbehandling\n- Rengöring kring fönster och dörrar',
-        excludes:'- Puts- eller murningsarbeten\n- Målning av fasad\n- Fönsterputsning' },
+        scope:`Professionell fasadtvätt${qtyStr?' ('+qtyStr+')':''} med metod anpassad efter materialtyp och föroreningsgrad. Utförs av certifierad personal med godkänd utrustning.`,
+        includes:'- Inventering och bedömning av fasadtyp\n- Högtrycks- eller softwashtvätt\n- Biologisk algbehandling vid behov\n- Rengöring kring fönster och dörrar',
+        excludes:'- Puts- eller murningsarbeten\n- Målning av fasad\n- Fönsterputsning (tillval)' },
       { keys:['altan','altantvätt','trädäck','träaltan'],
-        scope:'Professionell rengöring av altan och träyta, utförd varsamt med metod anpassad för aktuellt träslag och ytskikt.',
-        includes:'- Högtrycksrengöring anpassad för träyta\n- Biologisk algbehandling\n- Rengöring av räcken och trädetaljer',
-        excludes:'- Oljning eller impregnering (tillval)\n- Slipning eller utbyte av plankor' },
+        scope:`Professionell rengöring av altan och träyta${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs varsamt med metod anpassad för aktuellt träslag och ytskikt.`,
+        includes:'- Högtrycksrengöring anpassad för träyta\n- Biologisk algbehandling\n- Rengöring av räcken och trädetaljer\n- Städning efter utfört arbete',
+        excludes:'- Oljning eller impregnering (tillval)\n- Slipning eller utbyte av plankor\n- Målning' },
       { keys:['häck','häckklippning','buskar','klippning'],
-        scope:'Professionell häckklippning och formklippning av buskage, utförd med professionell utrustning av erfaren personal.',
+        scope:`Professionell häckklippning och formklippning av buskage${qtyStr?' ('+qtyStr+')':''}, utförd med professionell utrustning av erfaren personal.`,
         includes:'- Klippning och formning av häck och buskage\n- Uppsamling och borttransport av klippmaterial\n- Städning av angränsande yta',
-        excludes:'- Trädfällning eller stubbrytning\n- Plantering eller komplettering' },
+        excludes:'- Trädfällning eller stubbrytning\n- Plantering eller komplettering av häck' },
       { keys:['fastighetsservice','förvaltning','skötsel','tillsyn'],
         scope:'Löpande fastighetsservice och skötsel enligt överenskommen specifikation, för att säkerställa fastighetens funktion och värde.',
-        includes:'- Regelbundna tillsynsrundor\n- Felanmälan och åtgärd vid avvikelser\n- Rapportering till uppdragsgivare',
+        includes:'- Regelbundna tillsynsrundor med protokollföring\n- Felanmälan och åtgärd vid avvikelser\n- Rapportering till uppdragsgivare',
         excludes:'- Större renoveringsarbeten\n- Specialisttjänster (el, VVS, hiss)' },
+      { keys:['fönster','fönsterputsning','glasrengöring'],
+        scope:`Professionell fönsterputsning${qtyStr?' ('+qtyStr+')':''}. Utförs med professionell utrustning och rengöringsmedel anpassade för glas.`,
+        includes:'- Putsning av angivna fönster in- och/eller utvändigt\n- Rengöring av fönsterkarmar och bräden\n- Städning efter utfört arbete',
+        excludes:'- Reparation av trasigt glas\n- Svåråtkomliga fönster utan ställning (pristillägg)' },
     ];
     let scope = '', includes = '', excludes = '';
     for (const t of templates) {
@@ -1046,11 +1056,19 @@ const OffersPage = {
         scope = t.scope; includes = t.includes; excludes = t.excludes; break;
       }
     }
+    if (!scope && svcLines.length) {
+      const tmplIds = svcLines.map(l => l.templateId || l.priceRuleRef).filter(Boolean);
+      for (const t of templates) {
+        if (tmplIds.some(id => t.keys.includes(id))) {
+          scope = t.scope; includes = t.includes; excludes = t.excludes; break;
+        }
+      }
+    }
     if (!scope) {
       const txt = this._wizardData.summary || 'uppdraget';
       scope    = 'Uppdraget avser ' + txt + '. Arbetet utförs av VIFT:s personal enligt branschstandard och överenskommelse.';
-      includes = '- Arbete och personal enligt offert\n- Nödvändig utrustning';
-      excludes = '- Material ej specificerat i offert\n- Tillkommande arbeten';
+      includes = '- Arbete och personal enligt offert\n- Nödvändig utrustning och skyddsmaterial\n- Städning och bortforsling av eget avfall';
+      excludes = '- Material ej specificerat i offert\n- Tillkommande arbeten utöver offertens omfattning';
     }
     this._wizardData.scope    = scope;
     this._wizardData.includes = includes;
@@ -1737,6 +1755,8 @@ const OfferDetailPage = {
 
       ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${off.internalNote}</div>`:''}
 
+      ${OfferDetailPage._salesAssistantHtml(off)}
+
       ${OfferDetailPage._timelineHtml(off)}`;
   },
 
@@ -1814,9 +1834,10 @@ const OfferDetailPage = {
 
   _timelineHtml(off) {
     const tl = (off.timeline || []).slice().reverse();
-    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list'};
-    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)'};
+    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'handshake', reason:'help-circle'};
+    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)'};
     const id = off.id;
+    const isSent = off.status === 'skickad' || off.status === 'väntar';
     return `<div class="card" style="margin-top:8px;">
       <div class="card-header">
         <h3 style="display:flex;align-items:center;gap:6px;">${ic('activity',13)} Säljarbete & tidslinje</h3>
@@ -1826,6 +1847,10 @@ const OfferDetailPage = {
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','ring')">📞 Ring kund</button>
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','email')">✉️ Mailade kund</button>
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','followup')">🔔 Uppföljning</button>
+        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reminder')">⏰ Påminnelse</button>
+        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','price')">💰 Prisförhandling</button>`:''}
+        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','change')">✏️ Kund vill ändra</button>`:''}
+        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','verbal')" style="background:rgba(21,128,61,.08);color:var(--gr);">🤝 Muntligt godkänd</button>`:''}
         ${off.status==='nekad'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reason')">❓ Orsak nekad</button>`:''}
         ${off.status==='utkast'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','tip')">💡 Intern notering</button>`:''}
       </div>
@@ -1850,16 +1875,23 @@ const OfferDetailPage = {
   _quickAction(offerId, type) {
     const off = getOff(offerId);
     if (!off) return;
-    const labels = {ring:'Ringde kund', email:'Mailade kund', followup:'Uppföljning inbokad', reason:'Orsak till nekad offert', tip:'Intern notering'};
+    const labels = {ring:'Ringde kund', email:'Mailade kund', followup:'Uppföljning inbokad', reminder:'Påminnelse satt', price:'Prisförhandling', change:'Kund vill ändra', verbal:'Muntligt godkänd', reason:'Orsak till nekad offert', tip:'Intern notering'};
     const label = labels[type] || type;
+    // Verbal approval: auto-log as verbal and suggest status change
+    const isVerbal = type === 'verbal';
     Modal.open({
       title: label,
       body: `<div class="fg"><label>${label}</label><textarea id="qa-text" rows="3" placeholder="Anteckning…"></textarea></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const txt = (document.getElementById('qa-text')?.value || '').trim();
-          this._logEvt(off, 'comment', label + (txt ? ': ' + txt : ''));
+          this._logEvt(off, type, label + (txt ? ': ' + txt : ''));
           off.updatedAt = new Date().toISOString();
+          if (type === 'verbal') {
+            off.status = 'godkänd';
+            off.answeredAt = new Date().toISOString();
+            this._logEvt(off, 'status', 'Status: Skickad → Godkänd (muntligt)');
+          }
           persist();
           Modal.close();
           this.render({offerId});
