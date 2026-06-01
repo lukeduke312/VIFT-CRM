@@ -969,8 +969,6 @@ const OffersPage = {
     const chipF = tmpl.fields.filter(f=>f.type==='chips');
     const txtF  = tmpl.fields.filter(f=>f.type==='text');
     const boolF = tmpl.fields.filter(f=>f.type==='bool'&&!f.isRut&&!f.isRot);
-    const hasRut = tmpl.fields.some(f=>f.isRut);
-    const hasRot = tmpl.fields.some(f=>f.isRot);
     const curRed = this._svcReduction;
     let html = '';
 
@@ -1025,11 +1023,11 @@ const OffersPage = {
       html += `</div></div>`;
     }
 
-    // ── Unified tax reduction selector ──
+    // ── Unified tax reduction selector — always show all three options ──
     const redOpts = [
       {v:'ingen', l:'Ingen reduktion'},
-      ...(hasRut ? [{v:'rut', l:'RUT – 50 %'}] : []),
-      ...(hasRot ? [{v:'rot', l:'ROT – 30 %'}] : []),
+      {v:'rut',   l:'RUT – 50 %'},
+      {v:'rot',   l:'ROT – 30 %'},
     ];
     html += `<div style="margin-bottom:8px;padding-top:6px;border-top:1px solid var(--br);">
       <label style="font-size:9px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Skattereduktion</label>
@@ -1041,7 +1039,7 @@ const OffersPage = {
             background:${curRed===o.v?'var(--navy)':'#fff'};
             color:${curRed===o.v?'#fff':'var(--mt)'};">${o.l}</button>`).join('')}
       </div>
-      ${redOpts.length > 1 ? `<div style="font-size:9px;color:var(--mt);margin-top:3px;">Förutsätter att kunden har rätt till avdraget</div>` : ''}
+      <div style="font-size:9px;color:var(--mt);margin-top:3px;">Förutsätter att kunden har rätt till avdraget</div>
     </div>`;
 
     // ── Live preview ──
