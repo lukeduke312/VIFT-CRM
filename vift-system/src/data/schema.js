@@ -320,5 +320,81 @@ const Schema = {
     active: true,
     note: '',
     createdAt: ''
+  }),
+
+  ronderingsmall: () => ({
+    id: '',
+    name: '',
+    customerId: '',        // optional — lock to customer
+    propertyId: '',        // optional — lock to property
+    description: '',
+    interval: 'månadsvis', // dagligen|veckovis|varannan_vecka|månadsvis|kvartalsvis|årsvis|eget
+    intervalDays: 30,      // used when interval='eget'
+    active: true,
+    categories: [],        // [{id, name, sortOrder, points:[{id,title,description,requiresPhoto,canCreateAO,sortOrder}]}]
+    createdAt: '',
+    updatedAt: '',
+    createdBy: ''
+  }),
+
+  rondering: () => ({
+    id: '',
+    name: '',                  // explicit name for this rondering (required)
+    templateId: '',            // optional — which template was used
+    templateName: '',
+    customerId: '',
+    propertyId: '',
+    description: '',
+    internalNote: '',
+    isDraft: false,
+    images: [],                // [{dataUrl, name}]
+
+    // Categories (self-contained copy, NOT a reference to template)
+    categories: [],            // [{id, name, sortOrder, points:[{id,title,description,requiresPhoto,canCreateAO,sortOrder}]}]
+
+    // Occasions (wizard step 3)
+    occasions: [],             // [{id, date, time, staffId, staffName, comment}]
+    recurringSetups: [],       // [{id, interval, intervalDays, startDate, endDate, tillsvidare, weekday, dayOfMonth, staffId, staffName}]
+
+    // Pricing (wizard step 4)
+    pricingType: '',           // 'tim' | 'fast' | ''
+    priceGroupId: '',
+    priceGroupName: '',
+    hourRate: 0,
+    fixedPrice: 0,
+    debiterbar: true,
+
+    // Execution
+    status: 'utkast',          // utkast|planerad|pågående|slutförd|har_avvikelser
+    performedBy: '',
+    performedByName: '',
+    startedAt: '',
+    completedAt: '',
+    results: [],               // [{categoryId, categoryName, points:[{pointId,pointTitle,status:'ok'|'avvikelse'|'ej_aktuell'|'',comment,deviationId,checkedAt}]}]
+    deviationIds: [],
+
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  avvikelse: () => ({
+    id: '',
+    ronderingId: '',
+    categoryId: '',
+    pointId: '',
+    categoryName: '',
+    pointTitle: '',
+    customerId: '',
+    propertyId: '',
+    title: '',
+    comment: '',
+    images: [],            // [{dataUrl, name}]
+    priority: 'normal',    // akut|hög|normal|låg
+    status: 'öppen',       // öppen|åtgärdad|avskriven
+    workOrderId: '',
+    createdBy: '',
+    createdByName: '',
+    createdAt: '',
+    updatedAt: ''
   })
 };

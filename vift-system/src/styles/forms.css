@@ -25,18 +25,22 @@ textarea {
   border-radius: var(--rs);
   padding: 9px 11px;
   font-size: max(14px, 1em);
+  font-family: inherit;
   background: #fff;
   color: var(--tx);
   width: 100%;
+  min-height: 42px;
   appearance: none;
+  -webkit-appearance: none;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
 }
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
 select:focus,
 textarea:focus {
-  border-color: var(--sky);
-  box-shadow: 0 0 0 3px rgba(43,127,212,.1);
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(10,25,63,.08);
 }
 input::placeholder { color: var(--mt); opacity: .7; }
 
@@ -69,10 +73,13 @@ textarea {
 }
 
 select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230D2B4E' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 30px;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+  background-color: #fff;
+  padding-right: 38px;
+  cursor: pointer;
 }
 
 /* ── Grids ────────────────────────────── */
@@ -112,6 +119,25 @@ select {
 .pin-input:focus {
   border-color: var(--sky);
   box-shadow: 0 0 0 3px rgba(43,127,212,.1);
+}
+
+/* ── Date and time inputs ─────────────── */
+input[type="date"],
+input[type="time"] {
+  padding-right: 10px;
+  font-variant-numeric: tabular-nums;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: .6;
+  cursor: pointer;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: .5;
 }
 
 /* Search wrapper — icon must not overlap text */

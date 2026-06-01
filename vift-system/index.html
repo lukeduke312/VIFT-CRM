@@ -11,11 +11,11 @@
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
-<link rel="stylesheet" href="src/styles/layout.css?v=10">
-<link rel="stylesheet" href="src/styles/components.css?v=11">
-<link rel="stylesheet" href="src/styles/forms.css?v=6">
+<link rel="stylesheet" href="src/styles/layout.css?v=12">
+<link rel="stylesheet" href="src/styles/components.css?v=13">
+<link rel="stylesheet" href="src/styles/forms.css?v=9">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=14">
-<link rel="stylesheet" href="src/styles/responsive.css?v=6">
+<link rel="stylesheet" href="src/styles/responsive.css?v=7">
 </head>
 <body>
 
@@ -173,9 +173,22 @@
 
       <!-- Rondering -->
       <div class="page" id="pg-rondering">
-        <div class="con" id="pg-rondering-content">
-          <div class="ibox">Ronderingssystem byggs i Fas 5.</div>
-        </div>
+        <div class="con" id="pg-rondering-content"></div>
+      </div>
+
+      <!-- Rondering utförande -->
+      <div class="page" id="pg-rondering-utfor">
+        <div class="con" id="pg-rondering-utfor-content"></div>
+      </div>
+
+      <!-- Ronderingsrapport -->
+      <div class="page" id="pg-rondering-rapport">
+        <div class="con" id="pg-rondering-rapport-content"></div>
+      </div>
+
+      <!-- Rondering wizard -->
+      <div class="page" id="pg-rondering-wizard">
+        <div class="con" id="pg-rondering-wizard-content"></div>
       </div>
 
       <!-- Artiklar -->
@@ -226,13 +239,13 @@
 
 <!-- 1. Data-lager -->
 <script src="src/data/storage.js?v=2"></script>
-<script src="src/data/schema.js?v=6"></script>
-<script src="src/data/seedData.js?v=10"></script>
-<script src="src/data/state.js?v=9"></script>
+<script src="src/data/schema.js?v=8"></script>
+<script src="src/data/seedData.js?v=12"></script>
+<script src="src/data/state.js?v=10"></script>
 <script src="src/data/DashboardConfig.js?v=1"></script>
 
 <!-- 2. Services -->
-<script src="src/services/ActivityService.js?v=2"></script>
+<script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
 <script src="src/services/AuthService.js?v=3"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
@@ -240,15 +253,17 @@
 <script src="src/services/TimeService.js?v=4"></script>
 <script src="src/services/InvoiceService.js?v=2"></script>
 <script src="src/services/RecurringOrderService.js?v=3"></script>
+<script src="src/services/RonderingService.js?v=3"></script>
 
 <!-- 3. Components -->
-<script src="src/components/Icons.js?v=2"></script>
+<script src="src/components/Icons.js?v=5"></script>
+<script src="src/components/CustomSelect.js?v=1"></script>
 <script src="src/components/Modal.js?v=5"></script>
-<script src="src/components/Sidebar.js?v=7"></script>
+<script src="src/components/Sidebar.js?v=8"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=8"></script>
-<script src="src/pages/Dashboard.js?v=13"></script>
+<script src="src/pages/Router.js?v=10"></script>
+<script src="src/pages/Dashboard.js?v=14"></script>
 <script src="src/pages/CustomersPage.js?v=4"></script>
 <script src="src/pages/WorkOrdersPage.js?v=12"></script>
 <script src="src/pages/WorkOrderDetailPage.js?v=13"></script>
@@ -257,7 +272,10 @@
 <script src="src/pages/RecurringPage.js?v=7"></script>
 <script src="src/pages/SalesPage.js?v=2"></script>
 <script src="src/pages/PropertyDetailPage.js?v=2"></script>
-<script src="src/pages/PageShells.js?v=15"></script>
+<script src="src/pages/PageShells.js?v=23"></script>
+<script src="src/pages/RonderingPage.js?v=3"></script>
+<script src="src/pages/RonderingUtforandePage.js?v=6"></script>
+<script src="src/pages/RonderingWizardPage.js?v=7"></script>
 
 <!-- 5. App bootstrap -->
 <script>

@@ -48,7 +48,8 @@ const Sidebar = {
           <span style="font-size:20px;font-weight:900;color:var(--navy);letter-spacing:-0.5px;">VIFT</span>
         </div>
         <div class="nav-brand-name">Fastighetsservice & Förvaltning</div>
-      </div>`;
+      </div>
+      <div class="nav-scroll">`;
 
     let inSection = false;
     let sectionHasItems = false;
@@ -87,7 +88,7 @@ const Sidebar = {
     if (inSection && sectionHasItems) html += '</div>';
 
     html += `
-      <div class="nav-spacer"></div>
+      </div><!-- /nav-scroll -->
       <div class="nav-user">
         <div class="nav-user-row" onclick="Sidebar.userMenu()">
           <div class="nav-user-avatar">${initials}</div>
