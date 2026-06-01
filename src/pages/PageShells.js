@@ -107,6 +107,8 @@ const OffersPage = {
   _svcFields:    {},
   _svcEditIdx:   null,
   _svcReduction: 'ingen',   // 'ingen' | 'rut' | 'rot' — unified state, injected into calc
+  _filter:       'alla',
+  _search:       '',
 
   /* ── Tjänstemallar ─── */
   _T: [
@@ -322,14 +324,68 @@ const OffersPage = {
   render() {
     const el = document.getElementById('pg-offer-content');
     if (!el) return;
-    const offers = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const all = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // KPI counts
+    const kpi = {utkast:0, skickad:0, godkänd:0, nekad:0, total:0};
+    let totalGodkändVal = 0;
+    all.forEach(o => {
+      if (kpi[o.status] !== undefined) kpi[o.status]++;
+      kpi.total++;
+      if (o.status === 'godkänd') totalGodkändVal += OffersPage._offerExVat(o);
+    });
+
+    // Filter + search
+    const filterTab = this._filter || 'alla';
+    const q = (this._search || '').toLowerCase();
+    let offers = all;
+    if (filterTab !== 'alla') offers = offers.filter(o => o.status === filterTab);
+    if (q) offers = offers.filter(o => {
+      const cu = getCu(o.customerId);
+      const cuName = cu ? CustomerService.displayName(cu).toLowerCase() : '';
+      return o.id.toLowerCase().includes(q) || (o.title||'').toLowerCase().includes(q) || cuName.includes(q);
+    });
+
+    const tabs = [
+      {v:'alla',   l:'Alla',       n: kpi.total},
+      {v:'utkast', l:'Utkast',     n: kpi.utkast},
+      {v:'skickad',l:'Skickade',   n: kpi.skickad},
+      {v:'godkänd',l:'Godkända',   n: kpi.godkänd},
+      {v:'nekad',  l:'Nekade',     n: kpi.nekad},
+    ];
+
     el.innerHTML =
-      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-         <div style="flex:1;"></div>
+      `<div class="off-kpi-row">
+         <div class="off-kpi-card">
+           <div class="off-kpi-val">${kpi.utkast}</div>
+           <div class="off-kpi-lbl">Utkast</div>
+         </div>
+         <div class="off-kpi-card">
+           <div class="off-kpi-val">${kpi.skickad}</div>
+           <div class="off-kpi-lbl">Skickade</div>
+         </div>
+         <div class="off-kpi-card off-kpi-card--green">
+           <div class="off-kpi-val">${kpi.godkänd}</div>
+           <div class="off-kpi-lbl">Godkända</div>
+         </div>
+         <div class="off-kpi-card off-kpi-card--navy">
+           <div class="off-kpi-val">${fmt(totalGodkändVal)}</div>
+           <div class="off-kpi-lbl">Värde kr ex.</div>
+         </div>
+       </div>
+       <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;">
+         <div class="swrap" style="flex:1;">
+           <span class="sico">${ic('search',16)}</span>
+           <input type="search" placeholder="Sök offert, kund, ID…" value="${this._search}"
+             oninput="OffersPage._search=this.value;OffersPage.render()">
+         </div>
          <button class="btn bp bsm" onclick="OffersPage.openCreate()">${ic('plus',14)} Ny offert</button>
+       </div>
+       <div class="ftabs" style="margin-bottom:6px;">
+         ${tabs.map(t=>`<button class="ft ${filterTab===t.v?'on':''}" onclick="OffersPage._filter='${t.v}';OffersPage.render()">${t.l}${t.n?' <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">'+t.n+'</span>':''}</button>`).join('')}
        </div>` +
       (offers.length === 0
-        ? `<div class="empty">${ic('file-text',36)}<h3>Inga offerter</h3><p>Klicka "Ny offert" för att komma igång</p></div>`
+        ? `<div class="empty">${ic('file-text',36)}<h3>Inga offerter</h3><p>${filterTab==='alla'&&!q?'Klicka "Ny offert" för att komma igång':'Inga träffar för nuvarande filter'}</p></div>`
         : offers.map(o => {
             const cu     = getCu(o.customerId);
             const cuName = cu ? CustomerService.displayName(cu) : '—';
@@ -503,7 +559,10 @@ const OffersPage = {
       <div class="off-s1-grid">
         <div class="off-s1-col">
           <div class="fg">
-            <label>Kund <span style="color:var(--rd)">*</span></label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+              <label style="margin-bottom:0;">Kund <span style="color:var(--rd)">*</span></label>
+              <button type="button" class="off-new-cu-btn" onclick="OffersPage._quickNewCustomer()">${ic('user-plus',10)} Ny kund</button>
+            </div>
             ${CustomSelect.render('off-cu',{options:cuOpts,value:d.customerId,placeholder:'— Välj kund —',searchable:true,onchange:"OffersPage._wizardData.customerId=this.value"})}
           </div>
           <div class="fg">
@@ -545,6 +604,46 @@ const OffersPage = {
           </div>
         </div>
       </div>`;
+  },
+
+  /* ── Snabbskapa ny kund ─── */
+  _quickNewCustomer() {
+    const body = `
+      <div class="fg"><label>Namn / Företag <span style="color:var(--rd)">*</span></label>
+        <input id="qcu-name" placeholder="Förnamn Efternamn eller Företagsnamn AB"></div>
+      <div class="g2">
+        <div class="fg"><label>Telefon</label><input id="qcu-phone" placeholder="070-xxx xx xx"></div>
+        <div class="fg"><label>E-post</label><input id="qcu-email" type="email" placeholder="namn@exempel.se"></div>
+      </div>
+      <div class="fg"><label>Gatuadress</label><input id="qcu-addr" placeholder="Storgatan 1"></div>
+      <div class="g2">
+        <div class="fg"><label>Postnummer</label><input id="qcu-zip" placeholder="123 45"></div>
+        <div class="fg"><label>Stad</label><input id="qcu-city" placeholder="Stockholm"></div>
+      </div>`;
+    Modal.open({
+      title: ic('user-plus',13) + ' Ny kund',
+      body,
+      buttons: [
+        { label: 'Skapa & välj', cls: 'btn bp', onClick: () => {
+          const name = document.getElementById('qcu-name')?.value.trim();
+          if (!name) { showToast('Namn krävs'); return; }
+          const cu = CustomerService.create({
+            name, phone: document.getElementById('qcu-phone')?.value.trim()||'',
+            email: document.getElementById('qcu-email')?.value.trim()||'',
+            address: document.getElementById('qcu-addr')?.value.trim()||'',
+            zip: document.getElementById('qcu-zip')?.value.trim()||'',
+            city: document.getElementById('qcu-city')?.value.trim()||'',
+            type: 'privat', status: 'aktiv'
+          });
+          this._wizardData.customerId = cu.id;
+          Modal.close();
+          this._rerender();
+          showToast(name + ' skapad och vald');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('qcu-name')?.focus(), 80);
   },
 
   /* ── Step 2: Tjänster & rader ─── */
@@ -1404,9 +1503,10 @@ const OffersPage = {
     const offerId = this._editOfferId;
     if (!offerId) {
       const newOff = Object.assign(Schema.offer(), data, {
-        id: newId(state.offers,'OFF'), status:'utkast',
+        id: newId(state.offers,'OFF'), status:'utkast', timeline: [],
         createdAt: d.date ? d.date + 'T00:00:00.000Z' : now
       });
+      OfferDetailPage._logEvt(newOff, 'create', 'Offert skapad');
       state.offers.push(newOff);
       persist();
       this._wizardClose();
@@ -1415,7 +1515,9 @@ const OffersPage = {
     } else {
       const idx = (state.offers||[]).findIndex(o=>o.id===offerId);
       if (idx < 0) return;
-      state.offers[idx] = Object.assign({}, state.offers[idx], data);
+      const updated = Object.assign({}, state.offers[idx], data);
+      OfferDetailPage._logEvt(updated, 'edit', 'Offert redigerad');
+      state.offers[idx] = updated;
       persist();
       this._wizardClose();
       OfferDetailPage.render({offerId});
@@ -1443,10 +1545,15 @@ const OfferDetailPage = {
     const txtBlks  = allLines.filter(l => l.type === 'text');
     const extras   = off.extras || [];
 
-    const exVat  = Math.round(
+    const rawExVat = Math.round(
       prLines.reduce((s,l) => s + (l.exVat||l.total||0), 0) +
       extras.reduce((s,e) => s + Math.round((e.qty||1)*(e.unitPrice||0)), 0)
     );
+    const _disc   = off.discount || {type:'percent', value:0};
+    const discAmt = _disc.value
+      ? (_disc.type==='percent' ? Math.round(rawExVat * Math.min(_disc.value,100) / 100) : Math.min(Math.round(_disc.value), rawExVat))
+      : 0;
+    const exVat  = rawExVat - discAmt;
     const vat    = Math.round(exVat * 0.25);
     const incVat = exVat + vat;
     const rutAmt = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
@@ -1488,10 +1595,10 @@ const OfferDetailPage = {
       <div class="card">
         <div class="card-header"><h3>${ic('align-left',13)} Uppdragsbeskrivning</h3></div>
         <div class="card-body">
-          ${off.summary?`<div class="dr"><span class="dk">Sammanfattning</span><span class="dv" style="white-space:pre-wrap;">${off.summary}</span></div>`:''}
-          ${off.scope?`<div class="dr"><span class="dk">Omfattning</span><span class="dv" style="white-space:pre-wrap;">${off.scope}</span></div>`:''}
-          ${off.includes?`<div class="dr"><span class="dk">Ingår</span><span class="dv" style="white-space:pre-wrap;">${off.includes}</span></div>`:''}
-          ${off.excludes?`<div class="dr"><span class="dk">Ingår ej</span><span class="dv" style="white-space:pre-wrap;">${off.excludes}</span></div>`:''}
+          ${off.summary?`<div class="dr"><span class="dk">Sammanfattning</span><div class="dv off-rt">${OfferDetailPage._renderText(off.summary)}</div></div>`:''}
+          ${off.scope?`<div class="dr"><span class="dk">Omfattning</span><div class="dv off-rt">${OfferDetailPage._renderText(off.scope)}</div></div>`:''}
+          ${off.includes?`<div class="dr"><span class="dk">Ingår</span><div class="dv off-rt">${OfferDetailPage._renderText(off.includes)}</div></div>`:''}
+          ${off.excludes?`<div class="dr"><span class="dk">Ingår ej</span><div class="dv off-rt">${OfferDetailPage._renderText(off.excludes)}</div></div>`:''}
         </div>
       </div>`:''}
 
@@ -1532,7 +1639,8 @@ const OfferDetailPage = {
               </div>`;
             }).join('')}
         <div style="padding:12px 14px;border-top:2px solid var(--br);">
-          <div class="dr"><span class="dk">Summa ex. moms</span><span class="dv">${fmt(exVat)} kr</span></div>
+          <div class="dr"><span class="dk">Summa ex. moms</span><span class="dv">${fmt(rawExVat)} kr</span></div>
+          ${discAmt?`<div class="dr" style="color:#b45309;"><span class="dk">Rabatt (${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span class="dv">−${fmt(discAmt)} kr</span></div>`:''}
           <div class="dr"><span class="dk">Moms 25 %</span><span class="dv">${fmt(vat)} kr</span></div>
           <div class="dr"><span class="dk">Totalt inkl. moms</span><span class="dv">${fmt(incVat)} kr</span></div>
           ${rutAmt?`<div class="dr" style="color:var(--grn);"><span class="dk">RUT/ROT-reduktion</span><span class="dv">-${fmt(rutAmt)} kr</span></div>`:''}
@@ -1567,22 +1675,28 @@ const OfferDetailPage = {
       ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${off.internalNote}</div>`:''}
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-        ${off.status==='utkast'?`<button class="btn bp bsm" onclick="OfferDetailPage.setStatus('skickad')">${ic('send',13)} Markera skickad</button>`:''}
+        ${off.status==='utkast'?`<button class="btn bp bsm" onclick="OfferDetailPage.showSendModal('${off.id}')">${ic('send',13)} Skicka offert</button>`:''}
+        ${off.status==='utkast'?`<button class="btn bs bsm" onclick="OfferDetailPage.setStatus('skickad')">${ic('check',12)} Markera skickad</button>`:''}
         ${(off.status==='skickad'||off.status==='väntar')?`
           <button class="btn bsu bsm" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',13)} Godkänd / Accepterad</button>
           <button class="btn bd bsm" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',13)} Nekad</button>`:''}
         ${off.status==='godkänd'&&!off.workOrderId?`<button class="btn bp bsm" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',13)} Skapa arbetsorder</button>`:''}
         ${off.workOrderId?`<button class="btn bs bsm" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',13)} Se AO: ${off.workOrderId}</button>`:''}
-      </div>`;
+        <button class="btn bs bsm" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',13)} PDF / Skriv ut</button>
+      </div>
+
+      ${OfferDetailPage._timelineHtml(off)}`;
   },
 
   setStatus(status) {
     const off = getOff(this.offerId);
     if (!off) return;
+    const prev = off.status;
     off.status    = status;
     off.updatedAt = new Date().toISOString();
     if (status === 'skickad') off.sentAt     = new Date().toISOString();
     if (status === 'godkänd' || status === 'nekad') off.answeredAt = new Date().toISOString();
+    this._logEvt(off, 'status', 'Status: ' + statusLabel(prev) + ' → ' + statusLabel(status));
     persist();
     this.render({offerId: this.offerId});
     showToast('Status: ' + statusLabel(status));
@@ -1608,7 +1722,6 @@ const OfferDetailPage = {
     const off = getOff(this.offerId);
     if (!off) return;
     const prLines = (off.lines||[]).filter(l => l.type !== 'text');
-    // Build title from offer title or service template names
     const svcNames = prLines
       .filter(l => l.type === 'service')
       .map(l => l.templateName)
@@ -1632,10 +1745,209 @@ const OfferDetailPage = {
     });
     off.workOrderId = ao.id;
     off.updatedAt   = new Date().toISOString();
+    this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert');
     persist();
     this.render({offerId: this.offerId});
     showToast('AO ' + ao.id + ' skapad');
     setTimeout(() => Router.showPage('pg-ao-detail', {aoId: ao.id}), 800);
+  },
+
+  /* ── Händelselogg ─── */
+  _logEvt(off, type, text) {
+    if (!off) return;
+    if (!Array.isArray(off.timeline)) off.timeline = [];
+    const user = (typeof state !== 'undefined' && state.currentUser) ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+    off.timeline.push({ ts: new Date().toISOString(), type, text, user });
+  },
+
+  _timelineHtml(off) {
+    const tl = (off.timeline || []).slice().reverse();
+    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list'};
+    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)'};
+    return `<div class="card" style="margin-top:8px;">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:6px;">${ic('activity',13)} Tidslinje</h3>
+      </div>
+      <div class="card-body" style="padding:0;">
+        ${tl.length===0
+          ? `<p style="padding:12px 14px;font-size:12px;color:var(--mt);">Inga händelser ännu.</p>`
+          : tl.map(e => `<div class="off-tl-item">
+              <span class="off-tl-dot" style="color:${typeColor[e.type]||'var(--mt)'};">${ic(typeIcon[e.type]||'circle',10)}</span>
+              <div class="off-tl-body">
+                <div class="off-tl-text">${e.text||''}</div>
+                <div class="off-tl-meta">${fmtDate(e.ts)} · ${e.user||''}</div>
+              </div>
+            </div>`).join('')}
+        <div class="off-tl-comment">
+          <input id="off-tl-inp" placeholder="Lägg till intern kommentar…" style="flex:1;">
+          <button class="btn bs bxs" onclick="OfferDetailPage._addComment('${off.id}')">${ic('send',11)} Spara</button>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  _addComment(offerId) {
+    const inp = document.getElementById('off-tl-inp');
+    const txt = (inp?.value || '').trim();
+    if (!txt) return;
+    const off = getOff(offerId);
+    if (!off) return;
+    this._logEvt(off, 'comment', txt);
+    off.updatedAt = new Date().toISOString();
+    persist();
+    this.render({offerId});
+    showToast('Kommentar sparad');
+  },
+
+  /* ── Text rendering ─── */
+  _renderText(raw) {
+    if (!raw) return '';
+    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const lines = raw.split('\n');
+    let html = '', inList = false;
+    for (let line of lines) {
+      // Bold: **text**
+      line = esc(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      if (line.startsWith('## ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<div style="font-size:12px;font-weight:800;color:var(--navy);margin:6px 0 2px;">${line.slice(3)}</div>`;
+      } else if (line.startsWith('- ')) {
+        if (!inList) { html += '<ul class="off-rt-list">'; inList = true; }
+        html += `<li>${line.slice(2)}</li>`;
+      } else {
+        if (inList) { html += '</ul>'; inList = false; }
+        if (line.trim()) html += `<div>${line}</div>`;
+      }
+    }
+    if (inList) html += '</ul>';
+    return html;
+  },
+
+  /* ── PDF/Print ─── */
+  printPdf(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    const cu = getCu(off.customerId);
+    const cuName = cu ? CustomerService.displayName(cu) : '—';
+    const cuAddr = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
+    const prLines = (off.lines||[]).filter(l=>l.type!=='text');
+    const extras  = off.extras||[];
+    const rawExVat = Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+    const _disc   = off.discount||{type:'percent',value:0};
+    const discAmt = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
+    const exVat   = rawExVat - discAmt;
+    const vat     = Math.round(exVat*0.25);
+    const incVat  = exVat+vat;
+    const rutAmt  = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    const cust    = incVat - rutAmt;
+    const fmt2 = n => (n||0).toLocaleString('sv-SE');
+
+    const lineRows = prLines.map(l => {
+      if (l.type==='service') {
+        const lExVat=l.exVat||0, lVat=Math.round(lExVat*(l.vatRate||25)/100);
+        return `<tr><td>${l.templateName||'Tjänst'}${l.description?'<br><small style="color:#666;">'+l.description+'</small>':''}</td>
+          <td style="text-align:right;">${fmt2(lExVat)} kr</td><td style="text-align:right;">${l.vatRate||25}%</td>
+          <td style="text-align:right;">${fmt2(lExVat+lVat)} kr</td></tr>`;
+      }
+      const tot=Math.round((l.qty||1)*(l.unitPrice||0));
+      return `<tr><td>${l.description||'—'}<br><small style="color:#666;">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr</small></td>
+        <td style="text-align:right;">${fmt2(tot)} kr</td><td style="text-align:right;">25%</td>
+        <td style="text-align:right;">${fmt2(tot+Math.round(tot*0.25))} kr</td></tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html lang="sv"><head><meta charset="UTF-8"><title>Offert ${off.id}</title>
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box;} body{font-family:Arial,sans-serif;font-size:13px;color:#222;padding:32px;}
+      .hdr{display:flex;justify-content:space-between;margin-bottom:28px;border-bottom:2px solid #0d2b4e;padding-bottom:16px;}
+      .logo{background:#0d2b4e;color:#fff;font-weight:900;font-size:18px;padding:8px 18px;border-radius:8px;}
+      .title{font-size:22px;font-weight:900;color:#0d2b4e;} .sub{color:#666;font-size:11px;margin-top:2px;}
+      .row{display:flex;gap:32px;margin-bottom:20px;}
+      .col{flex:1;} .col h4{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+      th{background:#0d2b4e;color:#fff;padding:7px 10px;text-align:left;font-size:11px;}
+      td{padding:7px 10px;border-bottom:1px solid #eee;font-size:12px;vertical-align:top;}
+      .tot-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;}
+      .tot-final{font-size:16px;font-weight:900;color:#0d2b4e;border-top:2px solid #0d2b4e;padding-top:8px;margin-top:4px;}
+      .rut-box{background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px;margin-top:8px;}
+      .terms{margin-top:20px;border-top:1px solid #ddd;padding-top:12px;font-size:11px;color:#555;}
+      @media print{body{padding:16px;}}
+    </style></head><body>
+    <div class="hdr">
+      <div><div class="logo">VIFT</div><div style="margin-top:6px;font-size:10px;color:#666;">Fastighetsservice & Förvaltning</div></div>
+      <div style="text-align:right;"><div class="title">Offert ${off.id}</div>
+        ${off.title?`<div class="sub">${off.title}</div>`:''}
+        <div class="sub">Datum: ${(off.createdAt||'').split('T')[0]||'—'}</div>
+        ${off.validUntil?`<div class="sub">Giltig till: ${off.validUntil}</div>`:''}
+      </div>
+    </div>
+    <div class="row">
+      <div class="col"><h4>Offereras till</h4><strong>${cuName}</strong>${cuAddr?'<br>'+cuAddr:''}</div>
+      ${off.paymentTerms?`<div class="col"><h4>Betalningsvillkor</h4>${off.paymentTerms}</div>`:''}
+    </div>
+    ${off.summary?`<div style="margin-bottom:16px;"><h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;">Sammanfattning</h4><p>${off.summary}</p></div>`:''}
+    <table><thead><tr><th>Tjänst / Rad</th><th style="text-align:right;">Ex. moms</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Inkl. moms</th></tr></thead><tbody>${lineRows}</tbody></table>
+    <div style="display:flex;justify-content:flex-end;"><div style="min-width:260px;">
+      <div class="tot-row"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
+      ${discAmt?`<div class="tot-row" style="color:#b45309;"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
+      <div class="tot-row"><span>Moms 25%</span><span>${fmt2(vat)} kr</span></div>
+      <div class="tot-row tot-final"><span>${rutAmt?'Totalt inkl. moms':'Totalt'}</span><span>${fmt2(incVat)} kr</span></div>
+      ${rutAmt?`<div class="rut-box"><div style="font-weight:700;color:#16a34a;">RUT/ROT-reduktion: −${fmt2(rutAmt)} kr</div>
+        <div style="font-size:14px;font-weight:900;color:#15803d;margin-top:4px;">Kundpris: ${fmt2(cust)} kr</div>
+        <div style="font-size:10px;color:#666;margin-top:3px;">* Preliminärt, förutsätter rätt till skattereduktion</div></div>`:''}
+    </div></div>
+    ${off.generalTerms?`<div class="terms"><strong>Allmänna villkor</strong><br>${off.generalTerms}</div>`:''}
+    <script>window.onload=()=>window.print();<\/script></body></html>`;
+
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+    this._logEvt(off, 'pdf', 'PDF genererad');
+    off.pdfGeneratedAt = new Date().toISOString();
+    off.updatedAt = new Date().toISOString();
+    persist();
+  },
+
+  /* ── Skicka offert (simulerat) ─── */
+  showSendModal(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    const cu = getCu(off.customerId);
+    const cuEmail = cu ? (cu.email||'') : '';
+    const subject = `Offert ${off.id}${off.title?' – '+off.title:''}`;
+    const body2 = `Hej,\n\nBifogat hittar du offert ${off.id}${off.title?' – '+off.title:''}.\n\nOfferten är giltig till ${off.validUntil||'—'}.\n${off.paymentTerms?'Betalningsvillkor: '+off.paymentTerms+'.\n':''}\nHör av dig om du har frågor!\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice`;
+    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    Modal.open({
+      title: ic('send',14) + ' Skicka offert',
+      wide: true,
+      body: `
+        <div class="fg"><label>Till (e-post)</label>
+          <input id="send-to" value="${esc(cuEmail)}" placeholder="kund@exempel.se" type="email"></div>
+        <div class="fg"><label>Ämne</label>
+          <input id="send-subject" value="${esc(subject)}"></div>
+        <div class="fg"><label>Meddelande</label>
+          <textarea id="send-body" rows="8">${esc(body2)}</textarea></div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
+          ${ic('info',10)} Detta är en simulerad sändning — inget mejl skickas på riktigt. Status ändras till "Skickad".
+        </div>`,
+      buttons: [
+        { label: ic('send',13) + ' Skicka', cls: 'btn bp', onClick: () => {
+          const to = document.getElementById('send-to')?.value.trim();
+          if (!to) { showToast('Fyll i e-postadress'); return; }
+          this._logEvt(off, 'send', 'Offert skickad till ' + to);
+          off.status  = 'skickad';
+          off.sentAt  = new Date().toISOString();
+          off.updatedAt = new Date().toISOString();
+          persist();
+          Modal.close();
+          this.render({offerId});
+          showToast('Offert markerad som skickad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('send-to')?.focus(), 80);
   }
 };
 

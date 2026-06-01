@@ -1091,3 +1091,85 @@ body.modal-open { overflow: hidden; touch-action: none; }
   padding: 0; margin: 0;
 }
 .off-fixed-name:focus { outline: 1px solid var(--br); border-radius: 2px; padding: 0 2px; }
+
+/* ── OFFER KPI CARDS ── */
+.off-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media (max-width: 600px) {
+  .off-kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+.off-kpi-card {
+  background: #fff;
+  border: 1px solid var(--br);
+  border-radius: var(--rs);
+  padding: 10px 12px;
+  text-align: center;
+}
+.off-kpi-card--green { border-color: #86efac; background: #f0fdf4; }
+.off-kpi-card--navy  { border-color: var(--navy); background: var(--acc); }
+.off-kpi-val {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--navy);
+  line-height: 1;
+  margin-bottom: 3px;
+}
+.off-kpi-lbl {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--mt);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+/* ── OFFER TIMELINE ── */
+.off-tl-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--bg);
+}
+.off-tl-dot {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.off-tl-body { flex: 1; min-width: 0; }
+.off-tl-text { font-size: 12px; color: var(--tx); line-height: 1.4; }
+.off-tl-meta { font-size: 10px; color: var(--mt); margin-top: 2px; }
+.off-tl-comment {
+  display: flex;
+  gap: 7px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--br);
+}
+
+/* ── RICH TEXT RENDER ── */
+.off-rt { font-size: 13px; line-height: 1.6; }
+.off-rt-list {
+  margin: 4px 0 4px 16px;
+  padding: 0;
+}
+.off-rt-list li { margin-bottom: 2px; }
+
+/* ── NEW CUSTOMER QUICK BUTTON ── */
+.off-new-cu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1.5px solid var(--br);
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--navy);
+  transition: border-color .15s;
+  white-space: nowrap;
+}
+.off-new-cu-btn:hover { border-color: var(--navy); background: var(--bg); }
