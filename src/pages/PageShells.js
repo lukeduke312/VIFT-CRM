@@ -265,7 +265,7 @@ const OffersPage = {
         if (mat) ls.push({desc:'Material och förbrukningsmaterial', qty:1, unit:'st', price:mat});
         const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
         const totalIncVat = exVat + Math.round(exVat * 0.25);
-        const rutAmt = f.rot ? Math.round(totalIncVat * 0.3) : 0;
+        const rutAmt = f.rut ? Math.round(totalIncVat * 0.5) : f.rot ? Math.round(totalIncVat * 0.3) : 0;
         return {ls, exVat, rutAmt, tierLbl:'', pricePerM2:rate, inputValues:{...f}, priceRuleRef:'fs'};
       }
     },
