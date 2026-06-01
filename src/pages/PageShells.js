@@ -365,6 +365,7 @@ const OffersPage = {
     this._svcFields    = {};
     this._svcEditIdx   = null;
     this._svcReduction = 'ingen';
+    this._discount     = {type:'percent', value:0};
     this._wizardData   = {
       customerId: preCustomerId || '', title: '', date: today, validUntil: validDef,
       summary: '', scope: '', includes: '', excludes: '',
@@ -387,6 +388,7 @@ const OffersPage = {
     this._svcFields    = {};
     this._svcEditIdx   = null;
     this._svcReduction = 'ingen';
+    this._discount     = off.discount ? {...off.discount} : {type:'percent', value:0};
     this._wizardData  = {
       customerId:   off.customerId   || '',
       title:        off.title        || '',
@@ -517,52 +519,57 @@ const OffersPage = {
               <input type="date" id="off-valid" value="${esc(d.validUntil)}"
                 oninput="OffersPage._wizardData.validUntil=this.value"></div>
           </div>
+          <div class="fg">
+            <label>Kort sammanfattning</label>
+            <textarea id="off-summary" rows="3" placeholder="T.ex. Stentvätt av marksten, ca 120 m², med algbehandling…"
+              oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
+            <button type="button" class="off-gen-btn" onclick="OffersPage._genTextSuggestion()">
+              ${ic('zap',11)} Generera textförslag
+            </button>
+          </div>
         </div>
         <div class="off-s1-col">
           <div class="fg">
-            <label>Kort sammanfattning</label>
-            <textarea id="off-summary" rows="4" placeholder="En mening om vad uppdraget innebär…"
-              oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
+            <label>Uppdragets omfattning</label>
+            ${this._toolbarHtml('off-scope','scope')}
+            <textarea id="off-scope" rows="4" placeholder="Beskriv vad uppdraget innebär…"
+              oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea>
           </div>
-          <details style="border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
-            <summary style="padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);display:flex;align-items:center;gap:6px;">${ic('align-left',12)} Uppdragsbeskrivning (valfritt)</summary>
-            <div style="padding:10px 12px 12px;">
-              <div class="fg"><label>Uppdragets omfattning</label>
-                <textarea id="off-scope" rows="3" placeholder="Detaljerad beskrivning…"
-                  oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea></div>
-              <div class="g2">
-                <div class="fg"><label>Vad ingår</label>
-                  <textarea id="off-includes" rows="2" placeholder="T.ex. material, bortforsling…"
-                    oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
-                <div class="fg"><label>Vad ingår ej</label>
-                  <textarea id="off-excludes" rows="2" placeholder="T.ex. elektriker, målning…"
-                    oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
-              </div>
-            </div>
-          </details>
+          <div class="g2">
+            <div class="fg"><label>Vad ingår</label>
+              <textarea id="off-includes" rows="3" placeholder="- Rengöring&#10;- Material…"
+                oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
+            <div class="fg"><label>Vad ingår ej</label>
+              <textarea id="off-excludes" rows="3" placeholder="- Målning&#10;- Elektriker…"
+                oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
+          </div>
         </div>
       </div>`;
   },
 
   /* ── Step 2: Tjänster & rader ─── */
   _step2Html() {
-    const exVat  = this._calcExVat(this._editLines, this._editExtras);
-    const vat    = Math.round(exVat * 0.25);
-    const incVat = exVat + vat;
-    const rutAmt = this._calcRutAmt(this._editLines);
-    const cust   = incVat - rutAmt;
+    const discType = this._discount?.type || 'percent';
+    const discVal  = this._discount?.value || 0;
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
-          <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
-            <button type="button" class="btn bp bsm" onclick="OffersPage._openSvcCalc(null)" style="flex:1;min-width:120px;">
-              ${ic('zap',12)} Lägg till tjänst
+          <div class="off-action-cards">
+            <button type="button" class="off-action-card" onclick="OffersPage._openSvcCalc(null)">
+              <span class="off-action-card-icon">${ic('zap',15)}</span>
+              <div><div class="off-action-card-title">Tjänst / kalkyl</div><div class="off-action-card-sub">VIFT:s prismodell</div></div>
             </button>
-            <button type="button" class="btn bs bsm" onclick="OffersPage._addManualLine()" style="flex:1;min-width:80px;">
-              ${ic('plus',12)} Manuell rad
+            <button type="button" class="off-action-card" onclick="OffersPage._addFixedLine()">
+              <span class="off-action-card-icon">${ic('tag',15)}</span>
+              <div><div class="off-action-card-title">Fastpris</div><div class="off-action-card-sub">Eget fast pris</div></div>
             </button>
-            <button type="button" class="btn bs bsm" onclick="OffersPage._addTextBlock()" style="flex:1;min-width:80px;">
-              ${ic('align-left',12)} Fritext
+            <button type="button" class="off-action-card" onclick="OffersPage._addManualLine()">
+              <span class="off-action-card-icon">${ic('plus',15)}</span>
+              <div><div class="off-action-card-title">Löpande rad</div><div class="off-action-card-sub">Antal × à-pris</div></div>
+            </button>
+            <button type="button" class="off-action-card" onclick="OffersPage._addTextBlock()">
+              <span class="off-action-card-icon">${ic('align-left',15)}</span>
+              <div><div class="off-action-card-title">Fritext</div><div class="off-action-card-sub">Info utan pris</div></div>
             </button>
           </div>
           <div id="off-lines">${this._linesHtml()}</div>
@@ -575,8 +582,19 @@ const OffersPage = {
           </details>
         </div>
         <div class="off-wiz-s2-summ">
-          <div id="off-totals-bar">
-            ${this._totalsBarHtml(exVat, vat, incVat, rutAmt, cust)}
+          <div id="off-totals-bar">${this._totalsBarHtml()}</div>
+          <div class="off-discount-ctrl">
+            <label>Rabatt</label>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <select id="off-disc-type" style="width:auto;"
+                onchange="OffersPage._discount.type=this.value;OffersPage._refreshTotals()">
+                <option value="percent"${discType==='percent'?' selected':''}>%</option>
+                <option value="fixed"${discType==='fixed'?' selected':''}>kr</option>
+              </select>
+              <input type="number" id="off-disc-val" value="${discVal}" min="0" step="1" placeholder="0"
+                style="width:64px;"
+                oninput="OffersPage._discount.value=parseFloat(this.value)||0;OffersPage._refreshTotals()">
+            </div>
           </div>
         </div>
       </div>`;
@@ -586,16 +604,11 @@ const OffersPage = {
   _step3Html() {
     const d   = this._wizardData;
     const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const exVat  = this._calcExVat(this._editLines, this._editExtras);
-    const vat    = Math.round(exVat * 0.25);
-    const incVat = exVat + vat;
-    const rutAmt = this._calcRutAmt(this._editLines);
-    const cust   = incVat - rutAmt;
     const prLines = this._editLines.filter(l => l.type !== 'text').length;
     const txtLines = this._editLines.filter(l => l.type === 'text').length;
     return `
       <div style="margin-bottom:14px;">
-        ${this._totalsBarHtml(exVat, vat, incVat, rutAmt, rutAmt ? cust : incVat)}
+        ${this._totalsBarHtml()}
         <div style="margin-top:5px;font-size:10px;color:var(--mt);text-align:right;">${prLines} pristrader · ${txtLines} textblock</div>
       </div>
       <div class="g2">
@@ -618,25 +631,29 @@ const OffersPage = {
       </div>`;
   },
 
-  _totalsBarHtml(exVat, vat, incVat, rutAmt, cust) {
+  _totalsBarHtml() {
+    const rawExVat = this._calcExVat(this._editLines, this._editExtras);
+    const discAmt  = this._calcDiscount(rawExVat);
+    const exVat    = rawExVat - discAmt;
+    const vat      = Math.round(exVat * 0.25);
+    const incVat   = exVat + vat;
+    const rutAmt   = this._calcRutAmt(this._editLines);
+    const cust     = incVat - rutAmt;
     return `<div class="off-totals-card">
       <div class="off-totals-card-hd">Sammanfattning</div>
       <div class="off-totals-card-body">
-        <div class="off-totals-row"><span>Summa ex. moms</span><strong>${fmt(exVat)} kr</strong></div>
+        <div class="off-totals-row"><span>Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
+        ${discAmt ? `<div class="off-totals-rut" style="color:#b45309;"><span>Rabatt</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
         <div class="off-totals-row"><span>Moms 25 %</span><strong>${fmt(vat)} kr</strong></div>
         <div class="off-totals-divider"></div>
         <div class="off-totals-total"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
         ${rutAmt ? `
         <div class="off-totals-divider"></div>
-        <div class="off-totals-rut"><span>RUT/ROT-reduktion</span><span>-${fmt(rutAmt)} kr</span></div>
+        <div class="off-totals-rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>` : ''}
         <div class="off-totals-cust">
           <span class="off-totals-cust-lbl">Kundpris inkl. moms</span>
           <span class="off-totals-cust-val">${fmt(cust)} kr</span>
-        </div>` : `
-        <div class="off-totals-cust">
-          <span class="off-totals-cust-lbl">Kundpris inkl. moms</span>
-          <span class="off-totals-cust-val">${fmt(incVat)} kr</span>
-        </div>`}
+        </div>
       </div>
     </div>`;
   },
@@ -678,6 +695,7 @@ const OffersPage = {
     return this._editLines.map((l, i) => {
       if (l.type === 'text')    return this._renderTextCard(l, i);
       if (l.type === 'service') return this._renderServiceCard(l, i);
+      if (l.type === 'fixed')   return this._renderFixedCard(l, i);
       return this._renderManualCard(l, i);
     }).join('');
   },
@@ -799,17 +817,13 @@ const OffersPage = {
 
   _refreshTotals() {
     this._editLines.forEach((l, i) => {
-      if (l.type === 'manual') {
+      if (l.type === 'manual' || l.type === 'fixed') {
         const el = document.getElementById('off-lt-' + i);
         if (el) el.textContent = fmt(Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))) + ' kr';
       }
     });
-    const exVat  = this._calcExVat(this._editLines, this._editExtras);
-    const vat    = Math.round(exVat * 0.25);
-    const incVat = exVat + vat;
-    const rutAmt = this._calcRutAmt(this._editLines);
     const bar = document.getElementById('off-totals-bar');
-    if (bar) bar.innerHTML = this._totalsBarHtml(exVat, vat, incVat, rutAmt, rutAmt ? incVat - rutAmt : incVat);
+    if (bar) bar.innerHTML = this._totalsBarHtml();
   },
 
   /* ── Line management ─── */
@@ -1269,6 +1283,7 @@ const OffersPage = {
       validityText: d.validityText || '',
       generalTerms: d.generalTerms || '',
       internalNote: d.internalNote || '',
+      discount:     this._discount || {type:'percent', value:0},
       updatedAt:    now
     };
     const offerId = this._editOfferId;

@@ -1013,3 +1013,81 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-lines-empty-icon { margin-bottom: 6px; }
 .off-lines-empty-txt  { font-size: 12px; font-weight: 600; }
 .off-lines-empty-sub  { font-size: 11px; margin-top: 2px; }
+
+/* ── OFFER ACTION CARDS ── */
+.off-action-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+@media (min-width: 860px) {
+  .off-action-cards { grid-template-columns: repeat(4, 1fr); }
+}
+.off-action-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--br);
+  border-radius: var(--rs);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, box-shadow .15s;
+  min-width: 0;
+}
+.off-action-card:hover { border-color: var(--navy); box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+.off-action-card-icon { flex-shrink: 0; color: var(--navy); }
+.off-action-card-title { font-size: 11px; font-weight: 700; color: var(--navy); }
+.off-action-card-sub { font-size: 9px; color: var(--mt); margin-top: 1px; }
+
+/* ── DISCOUNT CONTROL ── */
+.off-discount-ctrl {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--br);
+  border-radius: var(--rs);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.off-discount-ctrl > label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--mt);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin: 0;
+}
+
+/* ── TEXT TOOLBAR ── */
+.off-toolbar { display: flex; gap: 3px; margin-bottom: 3px; flex-wrap: wrap; }
+
+/* ── GENERATE BUTTON ── */
+.off-gen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 5px 10px;
+  border: 1.5px solid var(--br);
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--navy);
+  transition: border-color .15s;
+}
+.off-gen-btn:hover { border-color: var(--navy); background: var(--bg); }
+
+/* ── FIXED CARD INLINE INPUT ── */
+.off-fixed-name {
+  font-size: 12px; font-weight: 700; color: var(--navy);
+  width: 100%; border: none; background: transparent;
+  padding: 0; margin: 0;
+}
+.off-fixed-name:focus { outline: 1px solid var(--br); border-radius: 2px; padding: 0 2px; }
