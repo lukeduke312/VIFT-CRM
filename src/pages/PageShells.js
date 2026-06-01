@@ -1939,86 +1939,249 @@ const OfferDetailPage = {
     return html;
   },
 
+  /* ── AI Säljassistent ─── */
+  _salesAssistantHtml(off) {
+    const now = Date.now();
+    const sentDate  = off.sentAt ? new Date(off.sentAt).getTime() : null;
+    const daysSent  = sentDate  ? Math.round((now - sentDate)  / 86400000) : null;
+    const validDate = off.validUntil ? new Date(off.validUntil).getTime() : null;
+    const daysLeft  = validDate ? Math.round((validDate - now) / 86400000) : null;
+    const prLines   = (off.lines||[]).filter(l => l.type !== 'text');
+    const extras    = off.extras||[];
+    const rawExVat  = Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+    const _disc     = off.discount||{type:'percent',value:0};
+    const discAmt   = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
+    const exVat     = rawExVat - discAmt;
+    const incVat    = exVat + Math.round(exVat*0.25);
+    const rutAmt    = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    const cust      = incVat - rutAmt;
+    const tips = [];
+
+    if (off.status === 'utkast') {
+      if (!prLines.length) {
+        tips.push({icon:'alert-circle', color:'var(--rd)', title:'Offerten är tom', body:'Lägg till minst en tjänst eller rad i steg 2 innan du skickar.', cta:'Redigera', ctaFn:`OffersPage.openEdit('${off.id}')`});
+      } else if (!off.scope && !off.summary) {
+        tips.push({icon:'edit-3', color:'var(--or)', title:'Lägg till uppdragsbeskrivning', body:'En tydlig uppdragsbeskrivning ökar vinstchansen avsevärt. Klicka Redigera och använd textgeneratorn.', cta:'Redigera & generera text', ctaFn:`OffersPage.openEdit('${off.id}')`});
+      } else {
+        tips.push({icon:'send', color:'var(--blue)', title:'Klar att skicka?', body:'Offerten ser komplett ut. Skicka den till kunden för att komma vidare i affären.', cta:'Skicka offert', ctaFn:`OfferDetailPage.showSendModal('${off.id}')`});
+      }
+    }
+
+    if (off.status === 'skickad' || off.status === 'väntar') {
+      if (daysSent !== null && daysSent > 7) {
+        tips.push({icon:'alert-circle', color:'var(--rd)', title:`Skickad för ${daysSent} dagar sedan — risk för förlust`, body:'Äldre offerter konverterar sämre. Ring kunden direkt och håll liv i dialogen.', cta:'Logga samtal', ctaFn:`OfferDetailPage._quickAction('${off.id}','ring')`});
+      } else if (daysSent !== null && daysSent >= 3) {
+        tips.push({icon:'bell', color:'var(--or)', title:`Dags att följa upp (${daysSent} dagar sedan)`, body:'Skicka ett vänligt uppföljningsmejl och fråga om kunden har frågor kring offerten.', cta:'Logga uppföljning', ctaFn:`OfferDetailPage._quickAction('${off.id}','followup')`});
+      }
+      if (daysLeft !== null && daysLeft >= 0 && daysLeft <= 5) {
+        tips.push({icon:'clock', color:'var(--or)', title:`Giltighet utgår om ${daysLeft} dag${daysLeft===1?'':'ar'}`, body:'Kontakta kunden nu och förläng giltigheten om nödvändigt för att inte tappa affären.'});
+      }
+      if (rutAmt > 0) {
+        tips.push({icon:'dollar-sign', color:'var(--gr)', title:'Lyft RUT/ROT-avdraget i uppföljningen', body:`Kunden betalar bara ${(cust).toLocaleString('sv-SE')} kr efter avdraget — en konkret och övertygande säljpunkt.`});
+      }
+      if (cust > 20000) {
+        tips.push({icon:'phone', color:'var(--navy)', title:'Stor affär — personlig kontakt rekommenderas', body:'För offerter över 20 000 kr ökar chansen med ett personligt samtal snarare än enbart e-post.'});
+      }
+    }
+
+    if (off.status === 'nekad') {
+      tips.push({icon:'help-circle', color:'var(--mt)', title:'Analysera varför affären föll', body:'Var det pris, timing, konkurrent eller omfattning? Logga orsaken för framtida lärdomar.', cta:'Logga orsak', ctaFn:`OfferDetailPage._quickAction('${off.id}','reason')`});
+      tips.push({icon:'refresh-cw', color:'var(--blue)', title:'Föreslå nytt erbjudande', body:'Duplicera och justera — antingen priset, villkoren eller tjänsternas omfattning. Många affärer återvinns med rätt anpassning.', cta:'Duplicera offert', ctaFn:`OfferDetailPage.duplicate('${off.id}')`});
+    }
+
+    if (off.status === 'godkänd' && !off.workOrderId) {
+      tips.push({icon:'clipboard-list', color:'var(--gr)', title:'Skapa arbetsorder nu', body:'Offerten är godkänd — starta jobbet genom att skapa en arbetsorder direkt från offerten.', cta:'Skapa AO', ctaFn:`OfferDetailPage.createAO()`});
+    }
+
+    if (!tips.length) return '';
+
+    return `<div class="card" style="border-left:3px solid var(--sky);margin-top:0;">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:6px;">${ic('zap',13)} Säljassistent</h3>
+      </div>
+      <div class="card-body" style="padding:6px 14px 10px;display:flex;flex-direction:column;gap:8px;">
+        ${tips.map(t=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--bg);border-radius:var(--rs);">
+          <span style="color:${t.color};flex-shrink:0;margin-top:1px;">${ic(t.icon,14)}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px;">${t.title}</div>
+            <div style="font-size:11px;color:var(--mt);line-height:1.4;">${t.body}</div>
+            ${t.cta?`<button type="button" class="btn bs bxs" style="margin-top:6px;font-size:10px;" onclick="${t.ctaFn}">${t.cta}</button>`:''}
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  },
+
   /* ── PDF/Print ─── */
   printPdf(offerId) {
     const off = getOff(offerId);
     if (!off) return;
-    const cu = getCu(off.customerId);
-    const cuName = cu ? CustomerService.displayName(cu) : '—';
-    const cuAddr = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
-    const prLines = (off.lines||[]).filter(l=>l.type!=='text');
-    const extras  = off.extras||[];
-    const rawExVat = Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
-    const _disc   = off.discount||{type:'percent',value:0};
-    const discAmt = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
-    const exVat   = rawExVat - discAmt;
-    const vat     = Math.round(exVat*0.25);
-    const incVat  = exVat+vat;
-    const rutAmt  = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-    const cust    = incVat - rutAmt;
-    const fmt2 = n => (n||0).toLocaleString('sv-SE');
+    const cu    = getCu(off.customerId);
+    const cuName= cu ? CustomerService.displayName(cu) : '—';
+    const cuAddr= cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
+    const s     = state.settings || {};
+    const co    = s.companyName    || 'VIFT Fastighetsservice & Förvaltning';
+    const coPhone = s.companyPhone || '';
+    const coEmail = s.companyEmail || '';
+    const coAddr  = s.companyAddress || '';
+    const orgNr   = s.orgNr || '';
 
+    const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
+    const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
+    const extras   = off.extras||[];
+    const rawExVat = Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+    const _disc    = off.discount||{type:'percent',value:0};
+    const discAmt  = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
+    const exVat    = rawExVat - discAmt;
+    const vat      = Math.round(exVat*0.25);
+    const incVat   = exVat+vat;
+    const rutAmt   = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    const cust     = incVat - rutAmt;
+    const fmt2     = n => (n||0).toLocaleString('sv-SE');
+    const esc2     = s => (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&/g,'&amp;');
+
+    // Service line rows — customer-friendly (no internal kalkyl)
     const lineRows = prLines.map(l => {
       if (l.type==='service') {
         const lExVat=l.exVat||0, lVat=Math.round(lExVat*(l.vatRate||25)/100);
-        return `<tr><td>${l.templateName||'Tjänst'}${l.description?'<br><small style="color:#666;">'+l.description+'</small>':''}</td>
-          <td style="text-align:right;">${fmt2(lExVat)} kr</td><td style="text-align:right;">${l.vatRate||25}%</td>
-          <td style="text-align:right;">${fmt2(lExVat+lVat)} kr</td></tr>`;
+        const desc = l.description || l.templateName || 'Tjänst';
+        return `<tr>
+          <td><strong>${esc2(l.templateName||'Tjänst')}</strong>${l.description&&l.description!==l.templateName?'<br><span style="color:#555;font-size:11px;">'+esc2(l.description)+'</span>':''}
+          ${(l.subLines||[]).map(sl=>`<br><span style="font-size:10px;color:#777;">→ ${esc2(sl.desc)} – ${sl.qty} ${sl.unit} × ${fmt2(sl.price)} kr</span>`).join('')}</td>
+          <td style="text-align:right;white-space:nowrap;">${fmt2(lExVat)} kr</td>
+          <td style="text-align:right;white-space:nowrap;">${l.vatRate||25}%</td>
+          <td style="text-align:right;white-space:nowrap;font-weight:600;">${fmt2(lExVat+lVat)} kr</td>
+        </tr>`;
       }
       const tot=Math.round((l.qty||1)*(l.unitPrice||0));
-      return `<tr><td>${l.description||'—'}<br><small style="color:#666;">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr</small></td>
-        <td style="text-align:right;">${fmt2(tot)} kr</td><td style="text-align:right;">25%</td>
-        <td style="text-align:right;">${fmt2(tot+Math.round(tot*0.25))} kr</td></tr>`;
+      return `<tr>
+        <td>${esc2(l.description||'—')}<br><span style="color:#666;font-size:11px;">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr ex. moms</span></td>
+        <td style="text-align:right;white-space:nowrap;">${fmt2(tot)} kr</td>
+        <td style="text-align:right;white-space:nowrap;">25%</td>
+        <td style="text-align:right;white-space:nowrap;font-weight:600;">${fmt2(tot+Math.round(tot*0.25))} kr</td>
+      </tr>`;
     }).join('');
 
-    const html = `<!DOCTYPE html><html lang="sv"><head><meta charset="UTF-8"><title>Offert ${off.id}</title>
+    const extrasRows = extras.length ? extras.map(e => {
+      const tot=Math.round((e.qty||1)*(e.unitPrice||0));
+      return `<tr style="color:#555;font-style:italic;">
+        <td>${esc2(e.description||'Tillval')}<br><span style="font-size:11px;">${e.qty||1} ${e.unit||'st'} × ${fmt2(e.unitPrice||0)} kr</span></td>
+        <td style="text-align:right;">${fmt2(tot)} kr</td><td style="text-align:right;">25%</td>
+        <td style="text-align:right;">${fmt2(tot+Math.round(tot*0.25))} kr</td></tr>`;
+    }).join('') : '';
+
+    const scopeHtml = off.scope ? `<div class="section"><h4>Uppdragets omfattning</h4><p>${esc2(off.scope).replace(/\n/g,'<br>')}</p></div>` : '';
+    const inclExclHtml = (off.includes||off.excludes) ? `
+      <div style="display:flex;gap:24px;margin-bottom:16px;">
+        ${off.includes?`<div style="flex:1;"><h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;">Ingår i uppdraget</h4><p style="font-size:12px;white-space:pre-wrap;">${esc2(off.includes)}</p></div>`:''}
+        ${off.excludes?`<div style="flex:1;"><h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;">Ingår ej</h4><p style="font-size:12px;color:#666;white-space:pre-wrap;">${esc2(off.excludes)}</p></div>`:''}
+      </div>` : '';
+    const txtBlksHtml = txtBlks.map(tb=>`<div class="section">${tb.blockTitle?`<h4>${esc2(tb.blockTitle)}</h4>`:''}${tb.text?`<p>${esc2(tb.text).replace(/\n/g,'<br>')}</p>`:''}</div>`).join('');
+    const extrasHtml  = extras.length ? `<h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin:16px 0 6px;">Tillval (ej inkluderat i totalpris)</h4><table><thead><tr><th>Tillval</th><th style="text-align:right;">Ex. moms</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Inkl. moms</th></tr></thead><tbody>${extrasRows}</tbody></table>` : '';
+
+    const footerContact = [coPhone?'Tel: '+coPhone:'', coEmail?'E-post: '+coEmail:'', orgNr?'Org.nr: '+orgNr:''].filter(Boolean).join('  ·  ');
+
+    const html = `<!DOCTYPE html><html lang="sv"><head><meta charset="UTF-8"><title>Offert ${off.id} – ${cuName}</title>
     <style>
-      *{margin:0;padding:0;box-sizing:border-box;} body{font-family:Arial,sans-serif;font-size:13px;color:#222;padding:32px;}
-      .hdr{display:flex;justify-content:space-between;margin-bottom:28px;border-bottom:2px solid #0d2b4e;padding-bottom:16px;}
-      .logo{background:#0d2b4e;color:#fff;font-weight:900;font-size:18px;padding:8px 18px;border-radius:8px;}
-      .title{font-size:22px;font-weight:900;color:#0d2b4e;} .sub{color:#666;font-size:11px;margin-top:2px;}
-      .row{display:flex;gap:32px;margin-bottom:20px;}
-      .col{flex:1;} .col h4{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:20px;}
-      th{background:#0d2b4e;color:#fff;padding:7px 10px;text-align:left;font-size:11px;}
-      td{padding:7px 10px;border-bottom:1px solid #eee;font-size:12px;vertical-align:top;}
-      .tot-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;}
-      .tot-final{font-size:16px;font-weight:900;color:#0d2b4e;border-top:2px solid #0d2b4e;padding-top:8px;margin-top:4px;}
-      .rut-box{background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px;margin-top:8px;}
-      .terms{margin-top:20px;border-top:1px solid #ddd;padding-top:12px;font-size:11px;color:#555;}
-      @media print{body{padding:16px;}}
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;padding:32px 36px;max-width:800px;margin:0 auto;}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #0d2b4e;}
+      .logo-box{background:#0d2b4e;color:#fff;font-weight:900;font-size:20px;padding:8px 18px;border-radius:8px;letter-spacing:-0.5px;}
+      .logo-sub{font-size:10px;color:#666;margin-top:4px;}
+      .offer-id{font-size:24px;font-weight:900;color:#0d2b4e;}
+      .offer-sub{color:#666;font-size:11px;margin-top:3px;}
+      .parties{display:flex;gap:32px;margin-bottom:20px;}
+      .party{flex:1;}
+      .party h4{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;border-bottom:1px solid #eee;padding-bottom:4px;}
+      .party p{font-size:12px;line-height:1.7;}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px;}
+      th{background:#0d2b4e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;font-weight:600;}
+      td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;}
+      tr:nth-child(even) td{background:#fafafa;}
+      .section{margin-bottom:16px;}
+      .section h4{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;}
+      .section p{font-size:12px;line-height:1.7;color:#333;}
+      .totals{display:flex;justify-content:flex-end;margin-bottom:20px;}
+      .totals-inner{min-width:280px;}
+      .tot-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f0f0f0;}
+      .tot-row:last-child{border-bottom:none;}
+      .tot-final{font-size:16px;font-weight:900;color:#0d2b4e;padding:10px 0 6px;border-top:2px solid #0d2b4e;margin-top:4px;display:flex;justify-content:space-between;}
+      .rut-box{background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px 14px;margin-top:10px;}
+      .rut-box-title{font-weight:700;color:#15803d;margin-bottom:4px;font-size:13px;}
+      .rut-price{font-size:20px;font-weight:900;color:#15803d;margin-top:4px;}
+      .rut-note{font-size:10px;color:#666;margin-top:4px;}
+      .terms{margin-top:20px;border-top:1px solid #e0e0e0;padding-top:14px;font-size:11px;color:#555;line-height:1.6;}
+      .footer{margin-top:28px;padding-top:12px;border-top:2px solid #0d2b4e;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#888;}
+      .validity-badge{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;color:#856404;}
+      @media print{body{padding:16px 20px;}@page{margin:12mm 16mm;}}
     </style></head><body>
+
     <div class="hdr">
-      <div><div class="logo">VIFT</div><div style="margin-top:6px;font-size:10px;color:#666;">Fastighetsservice & Förvaltning</div></div>
-      <div style="text-align:right;"><div class="title">Offert ${off.id}</div>
-        ${off.title?`<div class="sub">${off.title}</div>`:''}
-        <div class="sub">Datum: ${(off.createdAt||'').split('T')[0]||'—'}</div>
-        ${off.validUntil?`<div class="sub">Giltig till: ${off.validUntil}</div>`:''}
+      <div>
+        <div class="logo-box">VIFT</div>
+        <div class="logo-sub">${esc2(co)}</div>
+        ${coAddr?`<div style="font-size:10px;color:#666;margin-top:2px;">${esc2(coAddr)}</div>`:''}
+      </div>
+      <div style="text-align:right;">
+        <div class="offer-id">Offert ${off.id}</div>
+        ${off.title?`<div class="offer-sub" style="font-size:13px;font-weight:600;color:#333;">${esc2(off.title)}</div>`:''}
+        <div class="offer-sub">Datum: ${(off.createdAt||'').split('T')[0]||'—'}</div>
+        ${off.validUntil?`<div class="offer-sub"><span class="validity-badge">Giltig till ${off.validUntil}</span></div>`:''}
       </div>
     </div>
-    <div class="row">
-      <div class="col"><h4>Offereras till</h4><strong>${cuName}</strong>${cuAddr?'<br>'+cuAddr:''}</div>
-      ${off.paymentTerms?`<div class="col"><h4>Betalningsvillkor</h4>${off.paymentTerms}</div>`:''}
+
+    <div class="parties">
+      <div class="party">
+        <h4>Offereras till</h4>
+        <p><strong>${esc2(cuName)}</strong>
+        ${cuAddr?'<br>'+esc2(cuAddr):''}
+        ${cu&&cu.phone?'<br>Tel: '+esc2(cu.phone):''}
+        ${cu&&cu.email?'<br>'+esc2(cu.email):''}</p>
+      </div>
+      <div class="party">
+        <h4>Offertvillkor</h4>
+        <p>${off.paymentTerms?'Betalning: '+esc2(off.paymentTerms)+'<br>':''}${off.validityText?'Giltighetstid: '+esc2(off.validityText):'30 dagar'}</p>
+      </div>
     </div>
-    ${off.summary?`<div style="margin-bottom:16px;"><h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;">Sammanfattning</h4><p>${off.summary}</p></div>`:''}
-    <table><thead><tr><th>Tjänst / Rad</th><th style="text-align:right;">Ex. moms</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Inkl. moms</th></tr></thead><tbody>${lineRows}</tbody></table>
-    <div style="display:flex;justify-content:flex-end;"><div style="min-width:260px;">
-      <div class="tot-row"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
-      ${discAmt?`<div class="tot-row" style="color:#b45309;"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
-      <div class="tot-row"><span>Moms 25%</span><span>${fmt2(vat)} kr</span></div>
-      <div class="tot-row tot-final"><span>${rutAmt?'Totalt inkl. moms':'Totalt'}</span><span>${fmt2(incVat)} kr</span></div>
-      ${rutAmt?`<div class="rut-box"><div style="font-weight:700;color:#16a34a;">RUT/ROT-reduktion: −${fmt2(rutAmt)} kr</div>
-        <div style="font-size:14px;font-weight:900;color:#15803d;margin-top:4px;">Kundpris: ${fmt2(cust)} kr</div>
-        <div style="font-size:10px;color:#666;margin-top:3px;">* Preliminärt, förutsätter rätt till skattereduktion</div></div>`:''}
-    </div></div>
-    ${off.generalTerms?`<div class="terms"><strong>Allmänna villkor</strong><br>${off.generalTerms}</div>`:''}
-    <script>window.onload=()=>window.print();<\/script></body></html>`;
+
+    ${off.summary?`<div class="section"><h4>Sammanfattning</h4><p>${esc2(off.summary).replace(/\n/g,'<br>')}</p></div>`:''}
+    ${scopeHtml}
+    ${inclExclHtml}
+
+    <table>
+      <thead><tr><th>Tjänst / Rad</th><th style="text-align:right;">Ex. moms</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Inkl. moms</th></tr></thead>
+      <tbody>${lineRows}</tbody>
+    </table>
+
+    ${extrasHtml}
+    ${txtBlksHtml}
+
+    <div class="totals">
+      <div class="totals-inner">
+        <div class="tot-row"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
+        ${discAmt?`<div class="tot-row" style="color:#b45309;"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
+        <div class="tot-row"><span>Moms 25 %</span><span>${fmt2(vat)} kr</span></div>
+        <div class="tot-final"><span>${rutAmt?'Totalt inkl. moms':'Totalt att betala'}</span><span>${fmt2(incVat)} kr</span></div>
+        ${rutAmt?`<div class="rut-box">
+          <div class="rut-box-title">RUT/ROT-avdrag</div>
+          <div style="font-size:12px;color:#16a34a;margin-bottom:4px;">Preliminärt avdrag: −${fmt2(rutAmt)} kr</div>
+          <div class="rut-price">Kundpris: ${fmt2(cust)} kr</div>
+          <div class="rut-note">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion. VIFT administrerar ansökan.</div>
+        </div>`:''}
+      </div>
+    </div>
+
+    ${off.generalTerms?`<div class="terms"><strong>Allmänna villkor</strong><br>${esc2(off.generalTerms).replace(/\n/g,'<br>')}</div>`:''}
+
+    <div class="footer">
+      <span>${esc2(co)}</span>
+      <span>${footerContact}</span>
+    </div>
+
+    <script>window.onload=()=>{ window.print(); };<\/script></body></html>`;
 
     const w = window.open('', '_blank');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    }
+    if (w) { w.document.write(html); w.document.close(); }
     this._logEvt(off, 'pdf', 'PDF genererad');
     off.pdfGeneratedAt = new Date().toISOString();
     off.updatedAt = new Date().toISOString();
@@ -2805,6 +2968,24 @@ const AdminPage = {
                 </div>`;
               }).join('')
           }
+        </div>
+      </div>
+
+      <!-- Tjänstemallar -->
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('zap',13)} Offert-tjänstemallar</h3>
+        </div>
+        <div class="card-body" style="padding:4px 14px 8px;">
+          <p style="font-size:11px;color:var(--mt);margin-bottom:8px;">VIFT:s inbyggda kalkylatormallar för offertmodulen. Mallarna definierar prismodell, RUT/ROT-typ och ingående fält.</p>
+          ${OffersPage._T.map(t=>`<div style="padding:7px 0;border-bottom:1px solid var(--bg);display:flex;align-items:center;gap:8px;">
+            <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--blue);flex-shrink:0;">${ic(t.icon,13)}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;">${t.name}</div>
+              <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${t.vatRate||25} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
+            </div>
+            <span class="bdg bdg-green" style="font-size:9px;">Aktiv</span>
+          </div>`).join('')}
         </div>
       </div>
 
