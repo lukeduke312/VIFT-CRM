@@ -1016,65 +1016,229 @@ const OffersPage = {
   },
 
   _genTextSuggestion() {
-    const sum = (document.getElementById('off-summary')?.value || this._wizardData.summary || '').toLowerCase();
+    const raw = document.getElementById('off-summary')?.value || this._wizardData.summary || '';
     this._wizardData.summary = document.getElementById('off-summary')?.value || this._wizardData.summary;
-    // Parse quantity from summary (e.g. "120 m²", "45 lm")
+    const sum = raw.toLowerCase();
+
     const qtyMatch = sum.match(/(\d+(?:[.,]\d+)?)\s*(m²|m2|kvm|lm|löpmeter)/i);
     const qty = qtyMatch ? parseFloat((qtyMatch[1]||'').replace(',','.')) : null;
     const qtyUnit = qtyMatch ? (/(lm|löpmeter)/i.test(qtyMatch[2]) ? 'lm' : 'm²') : 'm²';
     const qtyStr = qty ? `ca ${qty} ${qtyUnit}` : '';
-    const svcLines = this._editLines.filter(l => l.type === 'service');
-    const templates = [
-      { keys:['stentvätt','marksten','plattor','stenläggning','sten'],
-        scope:`Professionell högtrycksrengöring av marksten och belagda ytor${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel anpassade för aktuell yttyp.`,
-        includes:'- Högtrycksrengöring av angiven yta\n- Biologisk algbehandling\n- Rengöring av kanter och kantstöd\n- Städning av kringliggande yta efter utfört arbete',
-        excludes:'- Ny fogsand efter tvätt (tillval)\n- Reparation av skadade plattor\n- Bortforsling av annat material' },
-      { keys:['fasad','fasadtvätt','puts','tegelfasad'],
-        scope:`Professionell fasadtvätt${qtyStr?' ('+qtyStr+')':''} med metod anpassad efter materialtyp och föroreningsgrad. Utförs av certifierad personal med godkänd utrustning.`,
-        includes:'- Inventering och bedömning av fasadtyp\n- Högtrycks- eller softwashtvätt\n- Biologisk algbehandling vid behov\n- Rengöring kring fönster och dörrar',
-        excludes:'- Puts- eller murningsarbeten\n- Målning av fasad\n- Fönsterputsning (tillval)' },
-      { keys:['altan','altantvätt','trädäck','träaltan'],
-        scope:`Professionell rengöring av altan och träyta${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs varsamt med metod anpassad för aktuellt träslag och ytskikt.`,
-        includes:'- Högtrycksrengöring anpassad för träyta\n- Biologisk algbehandling\n- Rengöring av räcken och trädetaljer\n- Städning efter utfört arbete',
-        excludes:'- Oljning eller impregnering (tillval)\n- Slipning eller utbyte av plankor\n- Målning' },
-      { keys:['häck','häckklippning','buskar','klippning'],
-        scope:`Professionell häckklippning och formklippning av buskage${qtyStr?' ('+qtyStr+')':''}, utförd med professionell utrustning av erfaren personal.`,
-        includes:'- Klippning och formning av häck och buskage\n- Uppsamling och borttransport av klippmaterial\n- Städning av angränsande yta',
-        excludes:'- Trädfällning eller stubbrytning\n- Plantering eller komplettering av häck' },
-      { keys:['fastighetsservice','förvaltning','skötsel','tillsyn'],
-        scope:'Löpande fastighetsservice och skötsel enligt överenskommen specifikation, för att säkerställa fastighetens funktion och värde.',
-        includes:'- Regelbundna tillsynsrundor med protokollföring\n- Felanmälan och åtgärd vid avvikelser\n- Rapportering till uppdragsgivare',
-        excludes:'- Större renoveringsarbeten\n- Specialisttjänster (el, VVS, hiss)' },
-      { keys:['fönster','fönsterputsning','glasrengöring'],
-        scope:`Professionell fönsterputsning${qtyStr?' ('+qtyStr+')':''}. Utförs med professionell utrustning och rengöringsmedel anpassade för glas.`,
-        includes:'- Putsning av angivna fönster in- och/eller utvändigt\n- Rengöring av fönsterkarmar och bräden\n- Städning efter utfört arbete',
-        excludes:'- Reparation av trasigt glas\n- Svåråtkomliga fönster utan ställning (pristillägg)' },
+
+    // Anti-wash signals: if any match, suppress wash/clean category object matches
+    const ANTI_WASH = /\b(riva|river|rivit|rivning|demontera|demontering|stomme|stommar)\b|montera ned|öppna upp|fuktskada|rötskada|mögel|källarintrång|myror|råttor|möss|gnagare|skadedjur|getingar|insektsangrepp/;
+    const hasAntiWash = ANTI_WASH.test(sum);
+
+    const scores = {};
+    const add = (cat, n) => { scores[cat] = (scores[cat] || 0) + n; };
+
+    // Verb-first rules — run before object rules, highest weight
+    const VERB_RULES = [
+      { re: /\b(riva|river|rivit|rivning)\b/,                              cat: 'rivning',         score: 100 },
+      { re: /\b(demontera|demonterar|demonterat|demontering)\b/,           cat: 'rivning',         score: 100 },
+      { re: /montera ned|ta ned konstruktion|riva ut/,                     cat: 'rivning',         score:  80 },
+      { re: /öppna upp|öppnar upp|öppnat upp/,                             cat: 'rivning',         score:  80 },
+      { re: /\b(felsök|felsöker|felsökt|felsökning|diagnostiser)\b/,      cat: 'felsökning',      score: 100 },
+      { re: /\b(lokalisera|lokaliserar|lokaliserat)\b/,                    cat: 'felsökning',      score:  90 },
+      { re: /hitta (felet|läckan|orsaken|skadan)|leta (efter|upp) fel/,   cat: 'felsökning',      score:  90 },
+      { re: /\b(tvätta|tvättar|tvättat|tvättning|rengöra|rengör|högtryckstvätt|softwash)\b/, cat: '_tvätt', score: 60 },
+      { re: /\b(plogga|ploggar|ploggat|plogning|snöröjning)\b/,           cat: 'snöröjning',      score: 100 },
+      { re: /\b(sanda|sandning|salta|saltning|halkbekämpning)\b/,         cat: 'snöröjning',      score: 100 },
+      { re: /\b(klippa|klipper|klippt|klippning|trimma|trimmar|trimmat)\b/, cat: '_klippning',    score:  60 },
+      { re: /\b(schakta|schaktning|gräva|grävning|dränera|dränering)\b/,  cat: 'markarbete',      score: 100 },
+      { re: /\b(måla|målar|målat|målning)\b/,                             cat: 'målning',         score: 100 },
+      { re: /\b(bygga|bygger|byggt|renovera|renoverar|renovering)\b/,     cat: 'bygg',            score:  80 },
+      { re: /\b(bekämpa|bekämpning|sanera|sanering|utrota|utrott)\b/,     cat: 'skadedjur',       score:  90 },
     ];
-    let scope = '', includes = '', excludes = '';
-    for (const t of templates) {
-      if (t.keys.some(k => sum.includes(k))) {
-        scope = t.scope; includes = t.includes; excludes = t.excludes; break;
+
+    const WASH_CATS = new Set(['altantvätt','fasadtvätt','stentvätt','fönsterputsning','taktvätt','_tvätt']);
+
+    // Object keyword rules
+    const OBJ_RULES = [
+      { re: /\b(altan|altantvätt|trädäck|träaltan)\b/,                    cat: 'altantvätt',      score:  80 },
+      { re: /\b(fasadtvätt|tegelfasad)\b|(?<!\w)fasad(?!\w)/,             cat: 'fasadtvätt',      score:  80 },
+      { re: /\b(stentvätt|marksten|betongplattor|stenläggning)\b|(?<!\w)plattor(?!\w)/, cat: 'stentvätt', score: 80 },
+      { re: /\b(fönsterputsning|glasrengöring)\b|(?<!\w)fönster(?!\w)/,   cat: 'fönsterputsning', score:  80 },
+      { re: /\b(taktvätt|takpannor|mossborttagning|mossrening|takytor)\b|(?<!\w)tak(?!\w)/, cat: 'taktvätt', score: 80 },
+      { re: /\b(häck|häckklippning)\b/,                                   cat: 'häckklippning',   score:  80 },
+      { re: /\b(buskage|formklippning)\b|(?<!\w)buskar?(?!\w)/,           cat: 'häckklippning',   score:  60 },
+      { re: /\b(gräsmatta|grästrimning|gräsklippning)\b|(?<!\w)gräs(?!\w)/, cat: 'gräsklippning', score: 80 },
+      { re: /\b(trädfällning|stubbrytning|arborist)\b|(?<!\w)träd(?!\w)/, cat: 'trädvård',        score:  80 },
+      { re: /\b(fastighetsservice|förvaltning|rondering)\b|(?<!\w)(skötsel|tillsyn)(?!\w)/, cat: 'fastighetsservice', score: 80 },
+      { re: /\b(myror|myrproblem|myrinvasion)\b/,                         cat: 'skadedjur',       score: 100 },
+      { re: /\b(råttor|möss|gnagare)\b/,                                  cat: 'skadedjur',       score: 100 },
+      { re: /\b(getingar|vespa|vespor|skalbaggar|insektsangrepp)\b/,      cat: 'skadedjur',       score: 100 },
+      { re: /\b(vattenläcka|vattenskada|fuktskada|läckage)\b/,            cat: 'felsökning',      score:  80 },
+      { re: /\b(stomme|stommar|konstruktion|bärande)\b/,                  cat: 'rivning',         score:  60 },
+      { re: /\b(dränering|dagvatten|schaktning|avloppsgrävning)\b/,       cat: 'markarbete',      score:  80 },
+      { re: /\b(snö|is|halka|isbeläggning)\b/,                            cat: 'snöröjning',      score:  80 },
+    ];
+
+    for (const r of VERB_RULES) {
+      if (r.re.test(sum)) add(r.cat, r.score);
+    }
+    for (const r of OBJ_RULES) {
+      if (r.re.test(sum)) {
+        if (hasAntiWash && WASH_CATS.has(r.cat)) continue;
+        add(r.cat, r.score);
       }
     }
-    if (!scope && svcLines.length) {
-      const tmplIds = svcLines.map(l => l.templateId || l.priceRuleRef).filter(Boolean);
-      for (const t of templates) {
-        if (tmplIds.some(id => t.keys.includes(id))) {
-          scope = t.scope; includes = t.includes; excludes = t.excludes; break;
-        }
+
+    // Merge generic '_klippning' verb into the leading clipping category
+    if (scores._klippning) {
+      const tgt = scores.gräsklippning ? 'gräsklippning' : 'häckklippning';
+      add(tgt, scores._klippning);
+      delete scores._klippning;
+    }
+    // Merge generic '_tvätt' verb into the leading wash category (if found)
+    if (scores._tvätt) {
+      const washFound = ['altantvätt','fasadtvätt','stentvätt','fönsterputsning','taktvätt'].find(c => scores[c]);
+      add(washFound || 'generell_tvätt', scores._tvätt);
+      delete scores._tvätt;
+    }
+
+    let bestCat = null, bestScore = 0;
+    for (const [cat, sc] of Object.entries(scores)) {
+      if (sc > bestScore) { bestScore = sc; bestCat = cat; }
+    }
+
+    // Fallback: infer from added service lines when summary is empty/short
+    if (!bestCat) {
+      const svcLines = this._editLines.filter(l => l.type === 'service');
+      if (svcLines.length) {
+        const ids = svcLines.map(l => (l.templateId || l.priceRuleRef || '').toLowerCase()).join(' ');
+        if (/altan/.test(ids))       bestCat = 'altantvätt';
+        else if (/fasad/.test(ids))  bestCat = 'fasadtvätt';
+        else if (/sten/.test(ids))   bestCat = 'stentvätt';
+        else if (/häck/.test(ids))   bestCat = 'häckklippning';
+        else if (/fs|fastighet/.test(ids)) bestCat = 'fastighetsservice';
+        else if (/fönster/.test(ids)) bestCat = 'fönsterputsning';
       }
     }
-    if (!scope) {
+
+    const rawSnip = raw.length > 60 ? raw.substring(0, 60) + '…' : raw;
+    const CATS = {
+      altantvätt: {
+        label: 'Altantvätt',
+        scope: `Professionell rengöring av altan och träyta${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs varsamt med metod anpassad för aktuellt träslag och ytskikt.`,
+        includes: '- Högtrycksrengöring anpassad för träyta\n- Biologisk algbehandling\n- Rengöring av räcken och trädetaljer\n- Städning efter utfört arbete',
+        excludes: '- Oljning eller impregnering (tillval)\n- Slipning eller utbyte av plankor\n- Målning',
+      },
+      fasadtvätt: {
+        label: 'Fasadtvätt',
+        scope: `Professionell fasadtvätt${qtyStr?' ('+qtyStr+')':''} med metod anpassad efter materialtyp och föroreningsgrad. Utförs av certifierad personal med godkänd utrustning.`,
+        includes: '- Inventering och bedömning av fasadtyp\n- Högtrycks- eller softwashtvätt\n- Biologisk algbehandling vid behov\n- Rengöring kring fönster och dörrar',
+        excludes: '- Puts- eller murningsarbeten\n- Målning av fasad\n- Fönsterputsning (tillval)',
+      },
+      stentvätt: {
+        label: 'Stentvätt / Marksten',
+        scope: `Professionell högtrycksrengöring av marksten och belagda ytor${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel anpassade för aktuell yttyp.`,
+        includes: '- Högtrycksrengöring av angiven yta\n- Biologisk algbehandling\n- Rengöring av kanter och kantstöd\n- Städning av kringliggande yta efter utfört arbete',
+        excludes: '- Ny fogsand efter tvätt (tillval)\n- Reparation av skadade plattor\n- Bortforsling av annat material',
+      },
+      fönsterputsning: {
+        label: 'Fönsterputsning',
+        scope: `Professionell fönsterputsning${qtyStr?' ('+qtyStr+')':''}. Utförs med professionell utrustning och rengöringsmedel anpassade för glas och karmar.`,
+        includes: '- Putsning av angivna fönster in- och/eller utvändigt\n- Rengöring av fönsterkarmar och fönsterbräden\n- Städning efter utfört arbete',
+        excludes: '- Reparation av trasigt glas\n- Svåråtkomliga fönster utan ställning (pristillägg)\n- Inglasade balkonger (separat offert)',
+      },
+      taktvätt: {
+        label: 'Taktvätt / Mossrening',
+        scope: `Professionell taktvätt och mossrening${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs varsamt för att inte skada takbeläggning eller tätskikt.`,
+        includes: '- Manuell eller mekanisk mossborttagning\n- Högtryckssköljning av takyta\n- Biologisk mossdödare (förebyggande)\n- Kontroll av takrännor och stuprör',
+        excludes: '- Reparation av skadade takpannor\n- Tätning av genomföringar\n- Byte av takbeläggning',
+      },
+      generell_tvätt: {
+        label: 'Rengöring / Tvätt',
+        scope: `Professionell rengöring${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs med lämplig metod och utrustning anpassad efter aktuell yta och föroreningsgrad.`,
+        includes: '- Rengöring av angivna ytor\n- Biologisk algbehandling vid behov\n- Städning av kringliggande yta efter utfört arbete',
+        excludes: '- Reparation av skadade ytor\n- Kemiska behandlingar utöver standard\n- Material ej inkluderat i offert',
+      },
+      häckklippning: {
+        label: 'Häckklippning',
+        scope: `Professionell häckklippning och formklippning av buskage${qtyStr?' ('+qtyStr+')':''}, utförd med professionell utrustning av erfaren personal.`,
+        includes: '- Klippning och formning av häck och buskage\n- Uppsamling och borttransport av klippmaterial\n- Städning av angränsande yta',
+        excludes: '- Trädfällning eller stubbrytning\n- Plantering eller komplettering av häck\n- Kemisk bekämpning av ogräs',
+      },
+      gräsklippning: {
+        label: 'Gräsklippning',
+        scope: `Professionell gräsklippning och skötsel av gräsmatta${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs med professionell utrustning anpassad efter ytans storlek och beskaffenhet.`,
+        includes: '- Klippning av gräsmatta till önskad höjd\n- Kantklippning längs gångbanor och rabatter\n- Uppsamling och borttransport av gräsklipp',
+        excludes: '- Gödning eller behandling av gräsmatta (tillval)\n- Nysådd eller lagning av fläckar\n- Borttagning av mossa',
+      },
+      trädvård: {
+        label: 'Trädvård',
+        scope: `Professionell trädvård${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs av behörig arborist med rätt utrustning och med hänsyn till träds hälsa och omgivning.`,
+        includes: '- Bedömning och planering av åtgärd\n- Beskärning eller fällning enligt plan\n- Uppsamling och borttransport av ris och stamvirke\n- Städning av arbetsplats',
+        excludes: '- Stubbrytning (tillval)\n- Plantering av ersättningsträd\n- Markarbeten i trädets rot- och droppzon',
+      },
+      fastighetsservice: {
+        label: 'Fastighetsservice',
+        scope: 'Löpande fastighetsservice och skötsel enligt överenskommen specifikation, för att säkerställa fastighetens funktion och värde.',
+        includes: '- Regelbundna tillsynsrundor med protokollföring\n- Felanmälan och åtgärd vid avvikelser\n- Rapportering till uppdragsgivare\n- Enklare reparations- och underhållsarbeten',
+        excludes: '- Större renoveringsarbeten\n- Specialisttjänster (el, VVS, hiss)\n- Material ej inkluderat i offert',
+      },
+      rivning: {
+        label: 'Rivning / Demontering',
+        scope: `Rivning och demontering enligt specificerat uppdrag. Arbetet utförs metodiskt och säkert med rätt skyddsutrustning och hantering av material.`,
+        includes: '- Demontering och rivning av angivna konstruktioner\n- Sortering och borttransport av rivmaterial\n- Städning av arbetsplats efter utfört arbete\n- Dokumentation inför efterföljande arbeten',
+        excludes: '- Hantering av farligt avfall (asbest, PCB) utan separat avtal\n- Nya konstruktioner eller igensättning\n- Återuppbyggnad efter rivning',
+      },
+      skadedjur: {
+        label: 'Skadedjursbekämpning / Skadeutredning',
+        scope: `Utredning och åtgärd vid skadedjursangrepp. Arbetet innefattar inspektion, identifiering av angreppsvägar samt rekommendation och genomförande av åtgärder.`,
+        includes: '- Inspektion och kartläggning av angreppsvägar\n- Identifiering av skadedjursart och omfattning\n- Åtgärdsplan med metod- och materialval\n- Bekämpning och uppföljning\n- Skriftlig rapport efter utfört arbete',
+        excludes: '- Rivning eller byggarbeten för åtkomst (separat offert)\n- Garanterad utrotning vid kraftiga angrepp utan fortsatt avtal\n- Löpande förebyggande avtal (separat prissättning)',
+      },
+      felsökning: {
+        label: 'Felsökning / Felavhjälpning',
+        scope: `Felsökning och lokalisering av fel eller skada${rawSnip?' avseende "'+rawSnip+'"':''}. Arbetet utförs systematiskt av erfaren tekniker med rätt utrustning.`,
+        includes: '- Systematisk felsökning och diagnostik\n- Dokumentation av fynd och skadeläge\n- Skriftlig åtgärdsrapport med prioritering\n- Löpande kommunikation med uppdragsgivare',
+        excludes: '- Avhjälpande åtgärder utöver felsökning (offerteras separat)\n- Ingrepp i konstruktion utan separat avtal\n- Garanterat resultat vid dolda eller komplexa fel',
+      },
+      markarbete: {
+        label: 'Markarbete / Schaktning',
+        scope: `Markarbete och schaktning${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs med rätt maskinell utrustning och med hänsyn till befintliga ledningar och konstruktioner.`,
+        includes: '- Schaktning och bortforsling av massor\n- Dränering eller dagvattenåtgärder enligt plan\n- Återfyllning och komprimering\n- Städning av arbetsplats',
+        excludes: '- Ledningskartering (uppdragsgivarens ansvar)\n- Asfalts- eller plattläggning (tillval)\n- Specialmaskiner utöver offert',
+      },
+      snöröjning: {
+        label: 'Snöröjning / Halkbekämpning',
+        scope: `Snöröjning och halkbekämpning av angivna ytor. Arbetet utförs snabbt och effektivt för att säkerställa framkomlighet och säkerhet.`,
+        includes: '- Plogning och skottning av ytor och gångar\n- Sandning och/eller saltning vid halka\n- Bortforsling av snö vid behov\n- Rapportering av utförda åtgärder',
+        excludes: '- Skador orsakade av plogutrustning på ej markerade hinder\n- Återställning av vegetation efter vintersäsong\n- Snöröjning inomhus eller på privata tak',
+      },
+      målning: {
+        label: 'Målning / Ytbehandling',
+        scope: `Målnings- och ytbehandlingsarbete${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs av erfaren målare med rätt material och metod för aktuell yta och miljö.`,
+        includes: '- Förarbete: slipning, spackling och grundning\n- Målning med överenskommet material och antal lager\n- Skydd av angränsande ytor\n- Städning och bortforsling av material',
+        excludes: '- Borttagning av gammal färg utöver normalt förarbete\n- Specialbehandlingar (brandskyddsfärg, klotterskydd)\n- Material ej inkluderat i offert',
+      },
+      bygg: {
+        label: 'Bygg / Renovering',
+        scope: `Bygg- och renoveringsarbete enligt specificerat uppdrag. Arbetet utförs av behörig personal med rätt kompetens och material.`,
+        includes: '- Arbete och personal enligt offert\n- Nödvändig utrustning och skyddsmaterial\n- Dokumentation och besiktning vid behov\n- Städning av arbetsplats',
+        excludes: '- Bygglov och myndighetskontakter (uppdragsgivarens ansvar)\n- Specialisttjänster (el, VVS) utöver offert\n- Material ej specificerat i offert',
+      },
+    };
+
+    const cat = bestCat ? CATS[bestCat] : null;
+    let scope, includes, excludes, label;
+    if (cat) {
+      scope = cat.scope; includes = cat.includes; excludes = cat.excludes; label = cat.label;
+    } else {
       const txt = this._wizardData.summary || 'uppdraget';
       scope    = 'Uppdraget avser ' + txt + '. Arbetet utförs av VIFT:s personal enligt branschstandard och överenskommelse.';
       includes = '- Arbete och personal enligt offert\n- Nödvändig utrustning och skyddsmaterial\n- Städning och bortforsling av eget avfall';
       excludes = '- Material ej specificerat i offert\n- Tillkommande arbeten utöver offertens omfattning';
+      label    = 'Generell';
     }
+
     this._wizardData.scope    = scope;
     this._wizardData.includes = includes;
     this._wizardData.excludes = excludes;
     this._rerender();
-    showToast('Textförslag genererat');
+    showToast('Textförslag baserat på: ' + label);
   },
 
   /* ── Totals ─── */
