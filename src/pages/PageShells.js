@@ -482,7 +482,7 @@ const OffersPage = {
       </div>`;
     }
 
-    const innerCls = this._wizardStep === 2 ? 'off-wiz-inner-wide' : 'off-wiz-inner';
+    const innerCls = this._wizardStep === 3 ? 'off-wiz-inner' : 'off-wiz-inner-wide';
     return hdr + `<div class="${innerCls}">${this._stepHtml()}</div>` + ftr;
   },
 
@@ -498,44 +498,50 @@ const OffersPage = {
     const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const cuOpts = [{v:'',l:'— Välj kund —'}, ...(state.customers||[]).map(c=>({v:c.id,l:CustomerService.displayName(c)}))];
     return `
-      <div class="fg">
-        <label>Kund <span style="color:var(--rd)">*</span></label>
-        ${CustomSelect.render('off-cu',{options:cuOpts,value:d.customerId,placeholder:'— Välj kund —',searchable:true,onchange:"OffersPage._wizardData.customerId=this.value"})}
-      </div>
-      <div class="fg">
-        <label>Rubrik / titel</label>
-        <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"
-          oninput="OffersPage._wizardData.title=this.value">
-      </div>
-      <div class="g2">
-        <div class="fg"><label>Datum</label>
-          <input type="date" id="off-date" value="${esc(d.date)}"
-            oninput="OffersPage._wizardData.date=this.value"></div>
-        <div class="fg"><label>Giltig till</label>
-          <input type="date" id="off-valid" value="${esc(d.validUntil)}"
-            oninput="OffersPage._wizardData.validUntil=this.value"></div>
-      </div>
-      <div class="fg">
-        <label>Kort sammanfattning</label>
-        <textarea id="off-summary" rows="2" placeholder="En mening om vad uppdraget innebär…"
-          oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
-      </div>
-      <details style="border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;margin-top:4px;">
-        <summary style="padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);display:flex;align-items:center;gap:6px;">${ic('align-left',12)} Uppdragsbeskrivning (valfritt)</summary>
-        <div style="padding:10px 12px 12px;">
-          <div class="fg"><label>Uppdragets omfattning</label>
-            <textarea id="off-scope" rows="3" placeholder="Detaljerad beskrivning…"
-              oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea></div>
+      <div class="off-s1-grid">
+        <div class="off-s1-col">
+          <div class="fg">
+            <label>Kund <span style="color:var(--rd)">*</span></label>
+            ${CustomSelect.render('off-cu',{options:cuOpts,value:d.customerId,placeholder:'— Välj kund —',searchable:true,onchange:"OffersPage._wizardData.customerId=this.value"})}
+          </div>
+          <div class="fg">
+            <label>Rubrik / titel</label>
+            <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"
+              oninput="OffersPage._wizardData.title=this.value">
+          </div>
           <div class="g2">
-            <div class="fg"><label>Vad ingår</label>
-              <textarea id="off-includes" rows="2" placeholder="T.ex. material, bortforsling…"
-                oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
-            <div class="fg"><label>Vad ingår ej</label>
-              <textarea id="off-excludes" rows="2" placeholder="T.ex. elektriker, målning…"
-                oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
+            <div class="fg"><label>Datum</label>
+              <input type="date" id="off-date" value="${esc(d.date)}"
+                oninput="OffersPage._wizardData.date=this.value"></div>
+            <div class="fg"><label>Giltig till</label>
+              <input type="date" id="off-valid" value="${esc(d.validUntil)}"
+                oninput="OffersPage._wizardData.validUntil=this.value"></div>
           </div>
         </div>
-      </details>`;
+        <div class="off-s1-col">
+          <div class="fg">
+            <label>Kort sammanfattning</label>
+            <textarea id="off-summary" rows="4" placeholder="En mening om vad uppdraget innebär…"
+              oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
+          </div>
+          <details style="border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
+            <summary style="padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg);display:flex;align-items:center;gap:6px;">${ic('align-left',12)} Uppdragsbeskrivning (valfritt)</summary>
+            <div style="padding:10px 12px 12px;">
+              <div class="fg"><label>Uppdragets omfattning</label>
+                <textarea id="off-scope" rows="3" placeholder="Detaljerad beskrivning…"
+                  oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea></div>
+              <div class="g2">
+                <div class="fg"><label>Vad ingår</label>
+                  <textarea id="off-includes" rows="2" placeholder="T.ex. material, bortforsling…"
+                    oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
+                <div class="fg"><label>Vad ingår ej</label>
+                  <textarea id="off-excludes" rows="2" placeholder="T.ex. elektriker, målning…"
+                    oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>`;
   },
 
   /* ── Step 2: Tjänster & rader ─── */
@@ -664,9 +670,10 @@ const OffersPage = {
   /* ── Line card HTML ─── */
   _linesHtml() {
     if (!this._editLines.length) return `
-      <div style="padding:28px 16px;text-align:center;border:2px dashed var(--br);border-radius:var(--rs);color:var(--mt);">
-        ${ic('file-text',28)}<br><span style="font-size:13px;">Inga rader ännu</span><br>
-        <span style="font-size:12px;">Lägg till en tjänst, manuell rad eller fritext ovan.</span>
+      <div class="off-lines-empty">
+        <div class="off-lines-empty-icon">${ic('file-text',22)}</div>
+        <div class="off-lines-empty-txt">Inga rader ännu</div>
+        <div class="off-lines-empty-sub">Lägg till en tjänst ovan</div>
       </div>`;
     return this._editLines.map((l, i) => {
       if (l.type === 'text')    return this._renderTextCard(l, i);
@@ -684,7 +691,8 @@ const OffersPage = {
     return `<div class="off-svc-card">
       <div class="off-svc-card-hd">
         <div style="flex:1;min-width:0;">
-          <div class="off-svc-card-meta">${ic('zap',9)} ${l.templateName||'Tjänst'}</div>
+          <div class="off-svc-card-title">${l.templateName||'Tjänst'}</div>
+          <div class="off-svc-card-meta">${ic('zap',9)} Tjänst</div>
           ${l.calculationNote ? `<div class="off-svc-card-sub" style="margin-bottom:2px;">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>` : ''}
           ${(l.subLines||[]).map(sl=>`<div class="off-svc-card-sub">${sl.desc} · ${sl.qty} ${sl.unit} × ${fmt(sl.price)} = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
         </div>
@@ -871,58 +879,69 @@ const OffersPage = {
   _svcOverlayHtml(isDesktop) {
     const isEdit     = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
     const activeTmpl = this._T.find(t => t.id === this._activeSvcId);
+    const maxH       = isDesktop ? '84vh' : '92vh';
     const radius     = isDesktop ? '10px' : '14px 14px 0 0';
-    const maxH       = isDesktop ? '82vh' : '92vh';
 
-    // Left panel: vertical service type buttons
+    const calcBody = activeTmpl
+      ? this._svcCalcHtml(activeTmpl)
+      : `<div style="padding:36px 16px;text-align:center;color:var(--mt);">
+          <div style="margin-bottom:10px;">${ic('zap',28)}</div>
+          <div style="font-size:13px;font-weight:600;">Välj en tjänst ${isDesktop ? 'till vänster' : 'ovan'}</div>
+          <div style="font-size:11px;margin-top:4px;">Alla priser exklusive moms</div>
+        </div>`;
+
+    const descVal  = activeTmpl ? (activeTmpl.defaultDesc||'').replace(/"/g,'&quot;') : '';
+    const addLabel = isEdit ? 'Uppdatera tjänst' : 'Lägg till i offert';
+
+    const hdr = `<div class="off-svc-hdr">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:800;color:var(--navy);">${ic('zap',13)} ${isEdit ? 'Redigera tjänst' : 'Lägg till tjänst'}</div>
+        <div style="font-size:10px;color:var(--mt);">Alla priser exklusive moms</div>
+      </div>
+      <button type="button" onclick="OffersPage._closeSvcCalc()" class="off-close-btn">${ic('x',14)}</button>
+    </div>`;
+
+    const footer = `<div id="off-svc-footer" class="off-svc-footer">
+      <div class="off-svc-footer-inner">
+        <div class="fg">
+          <label>Beskrivning på offerten</label>
+          <input id="svc-custom-desc" value="${descVal}" placeholder="Kundvänlig beskrivning…" style="font-size:11px;">
+        </div>
+        <button type="button" class="btn bp bsm off-svc-add-btn" onclick="OffersPage._addSvcLine()">
+          ${ic('plus',12)} ${addLabel}
+        </button>
+      </div>
+    </div>`;
+
+    if (!isDesktop) {
+      const chips = this._T.map(t => {
+        const active = t.id === this._activeSvcId;
+        return `<button type="button" id="off-svc-chip-${t.id}"
+          onclick="OffersPage._activateSvc('${t.id}',false)"
+          class="off-svc-chip${active ? ' off-svc-chip--active' : ''}">${t.name}</button>`;
+      }).join('');
+      return `<div class="off-svc-modal" style="max-height:${maxH};border-radius:${radius};">
+        ${hdr}
+        <div class="off-svc-chips-bar">${chips}</div>
+        <div id="off-svc-body" class="off-svc-body">${calcBody}</div>
+        ${footer}
+      </div>`;
+    }
+
     const svcList = this._T.map(t => {
       const active = t.id === this._activeSvcId;
       return `<button type="button" id="off-svc-chip-${t.id}"
         onclick="OffersPage._activateSvc('${t.id}',false)"
-        style="display:flex;align-items:center;gap:6px;width:100%;padding:6px 8px;
-          border-radius:5px;border:none;cursor:pointer;text-align:left;font-size:11px;font-weight:${active?'700':'500'};
-          background:${active?'var(--navy)':'transparent'};color:${active?'#fff':'var(--tx)'};margin-bottom:1px;">
-        <span style="flex-shrink:0;opacity:${active?'1':'.65'}">${ic(t.icon,12)}</span>
-        <span style="flex:1;line-height:1.2;">${t.name}</span>
-        ${active?`<span style="flex-shrink:0;">${ic('chevron-right',10)}</span>`:''}
+        class="off-svc-menu-item${active ? ' off-svc-menu-item--active' : ''}">
+        ${ic(t.icon,12)}<span>${t.name}</span>
       </button>`;
     }).join('');
 
-    // Right panel: calc body
-    const calcBody = activeTmpl
-      ? this._svcCalcHtml(activeTmpl)
-      : `<div style="padding:40px 16px;text-align:center;color:var(--mt);">
-          <div style="margin-bottom:12px;">${ic('zap',32)}</div>
-          <div style="font-size:13px;font-weight:600;">Välj en tjänst till vänster</div>
-          <div style="font-size:12px;margin-top:4px;">Alla priser exklusive moms</div>
-        </div>`;
-
-    // Footer: description field + add button (always visible)
-    const descVal = activeTmpl ? (activeTmpl.defaultDesc||'').replace(/"/g,'&quot;') : '';
-    const addLabel = isEdit ? 'Uppdatera tjänst' : 'Lägg till i offert';
-    const footer = `<div id="off-svc-footer" style="border-top:1px solid var(--br);padding:8px 12px;flex-shrink:0;background:#fff;">
-      <label style="font-size:9px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px;">Beskrivning på offerten</label>
-      <input id="svc-custom-desc" style="width:100%;margin-bottom:7px;font-size:11px;box-sizing:border-box;"
-        value="${descVal}" placeholder="Kundvänlig beskrivning…">
-      <button type="button" class="btn bp bfull bsm" onclick="OffersPage._addSvcLine()">
-        ${ic('plus',12)} ${addLabel}
-      </button>
-    </div>`;
-
-    return `<div style="background:#fff;width:100%;max-width:760px;max-height:${maxH};border-radius:${radius};display:flex;flex-direction:column;overflow:hidden;">
-      <div style="padding:8px 12px;border-bottom:1px solid var(--br);display:flex;align-items:center;gap:10px;flex-shrink:0;">
-        <div style="flex:1;">
-          <div style="font-size:12px;font-weight:800;color:var(--navy);">${ic('zap',12)} ${isEdit?'Redigera tjänst':'Lägg till tjänst'}</div>
-          <div style="font-size:9px;color:var(--mt);">Alla priser exklusive moms</div>
-        </div>
-        <button type="button" onclick="OffersPage._closeSvcCalc()" title="Stäng"
-          style="width:26px;height:26px;border:none;background:rgba(0,0,0,.07);border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('x',13)}</button>
-      </div>
-      <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
-        <div style="width:116px;flex-shrink:0;border-right:1px solid var(--br);overflow-y:auto;padding:6px 5px;background:#fafbfc;">
-          ${svcList}
-        </div>
-        <div id="off-svc-body" style="flex:1;overflow-y:auto;padding:10px 12px;min-width:0;">${calcBody}</div>
+    return `<div class="off-svc-modal" style="max-height:${maxH};border-radius:${radius};">
+      ${hdr}
+      <div class="off-svc-layout">
+        <div class="off-svc-menu">${svcList}</div>
+        <div id="off-svc-body" class="off-svc-body">${calcBody}</div>
       </div>
       ${footer}
     </div>`;
@@ -934,10 +953,8 @@ const OffersPage = {
       const btn = document.getElementById('off-svc-chip-' + t.id);
       if (!btn) return;
       const a = t.id === tId;
-      btn.style.background  = a ? 'var(--navy)' : '#fff';
-      btn.style.color       = a ? '#fff'        : 'var(--tx)';
-      btn.style.borderColor = a ? 'var(--navy)' : 'var(--br)';
-      btn.style.fontWeight  = a ? '700'         : '600';
+      btn.classList.toggle('off-svc-menu-item--active', a);
+      btn.classList.toggle('off-svc-chip--active', a);
     });
     const tmpl = this._T.find(t => t.id === tId);
     if (!tmpl) return;
