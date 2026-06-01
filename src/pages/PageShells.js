@@ -326,7 +326,7 @@ const OffersPage = {
     if (!el) return;
     const all = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // KPI counts
+    // KPI — always over all offers, unaffected by filter/search
     const kpi = {utkast:0, skickad:0, godkänd:0, nekad:0, total:0};
     let totalGodkändVal = 0;
     all.forEach(o => {
@@ -335,75 +335,138 @@ const OffersPage = {
       if (o.status === 'godkänd') totalGodkändVal += OffersPage._offerExVat(o);
     });
 
-    // Filter + search
+    // Render static shell (KPI + toolbar + tabs container + results container).
+    // The search input is part of the shell and is NOT re-rendered on keystroke.
+    el.innerHTML =
+      `<div class="off-kpi-row">
+         <div class="off-kpi-card"><div class="off-kpi-val">${kpi.utkast}</div><div class="off-kpi-lbl">Utkast</div></div>
+         <div class="off-kpi-card"><div class="off-kpi-val">${kpi.skickad}</div><div class="off-kpi-lbl">Skickade</div></div>
+         <div class="off-kpi-card off-kpi-card--green"><div class="off-kpi-val">${kpi.godkänd}</div><div class="off-kpi-lbl">Godkända</div></div>
+         <div class="off-kpi-card off-kpi-card--navy"><div class="off-kpi-val">${fmt(totalGodkändVal)}</div><div class="off-kpi-lbl" style="font-size:9px;">Godkänt värde ex. moms</div></div>
+       </div>
+       <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;">
+         <div class="swrap" style="flex:1;">
+           <span class="sico">${ic('search',16)}</span>
+           <input id="off-search-input" type="search" placeholder="Sök offert, kund, titel eller ID…"
+             value="${(this._search||'').replace(/"/g,'&quot;')}"
+             oninput="OffersPage._onSearchInput(this)">
+           ${this._search ? `<button class="off-clr-btn" onclick="OffersPage._clearSearch()" title="Rensa sökning">${ic('x',13)}</button>` : ''}
+         </div>
+         <button class="btn bp bsm" onclick="OffersPage.openCreate()">${ic('plus',14)} Ny offert</button>
+       </div>
+       <div id="off-tabs-row" class="ftabs" style="margin-bottom:6px;"></div>
+       <div id="off-results"></div>`;
+
+    this._renderTabRow(kpi);
+    this._renderResults();
+  },
+
+  _getKpi() {
+    const kpi = {utkast:0, skickad:0, godkänd:0, nekad:0, total:0};
+    (state.offers||[]).forEach(o => {
+      if (kpi[o.status] !== undefined) kpi[o.status]++;
+      kpi.total++;
+    });
+    return kpi;
+  },
+
+  _renderTabRow(kpi) {
+    const el = document.getElementById('off-tabs-row');
+    if (!el) return;
+    const c = kpi || this._getKpi();
+    const f = this._filter || 'alla';
+    const tabs = [
+      {v:'alla',    l:'Alla',    n:c.total},
+      {v:'utkast',  l:'Utkast',  n:c.utkast},
+      {v:'skickad', l:'Skickade',n:c.skickad},
+      {v:'godkänd', l:'Godkända',n:c.godkänd},
+      {v:'nekad',   l:'Nekade',  n:c.nekad},
+    ];
+    el.innerHTML = tabs.map(t =>
+      `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')">${t.l}${t.n?` <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
+    ).join('');
+  },
+
+  _setFilter(v) {
+    this._filter = v;
+    this._renderTabRow();
+    this._renderResults();
+  },
+
+  _onSearchInput(inputEl) {
+    this._search = inputEl.value;
+    // Toggle clear button without touching the input element
+    const wrap = inputEl.parentElement;
+    let btn = wrap.querySelector('.off-clr-btn');
+    if (this._search && !btn) {
+      btn = document.createElement('button');
+      btn.className = 'off-clr-btn';
+      btn.title = 'Rensa sökning';
+      btn.setAttribute('onclick', 'OffersPage._clearSearch()');
+      btn.innerHTML = ic('x', 13);
+      wrap.appendChild(btn);
+    } else if (!this._search && btn) {
+      btn.remove();
+    }
+    this._renderResults();
+  },
+
+  _clearSearch() {
+    this._search = '';
+    const inp = document.getElementById('off-search-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    const btn = document.querySelector('.off-clr-btn');
+    if (btn) btn.remove();
+    this._renderResults();
+  },
+
+  _renderResults() {
+    const el = document.getElementById('off-results');
+    if (!el) return;
+    const all = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     const filterTab = this._filter || 'alla';
-    const q = (this._search || '').toLowerCase();
+    const q = (this._search || '').toLowerCase().trim();
+
     let offers = all;
     if (filterTab !== 'alla') offers = offers.filter(o => o.status === filterTab);
     if (q) offers = offers.filter(o => {
       const cu = getCu(o.customerId);
       const cuName = cu ? CustomerService.displayName(cu).toLowerCase() : '';
-      return o.id.toLowerCase().includes(q) || (o.title||'').toLowerCase().includes(q) || cuName.includes(q);
+      return o.id.toLowerCase().includes(q)
+        || (o.title||'').toLowerCase().includes(q)
+        || cuName.includes(q)
+        || (o.summary||'').toLowerCase().includes(q)
+        || (o.status||'').toLowerCase().includes(q);
     });
 
-    const tabs = [
-      {v:'alla',   l:'Alla',       n: kpi.total},
-      {v:'utkast', l:'Utkast',     n: kpi.utkast},
-      {v:'skickad',l:'Skickade',   n: kpi.skickad},
-      {v:'godkänd',l:'Godkända',   n: kpi.godkänd},
-      {v:'nekad',  l:'Nekade',     n: kpi.nekad},
-    ];
+    if (offers.length === 0) {
+      const noBase = filterTab==='alla' && !q;
+      const clearBtn = q ? `<button class="btn bs bsm" style="margin-top:10px;" onclick="OffersPage._clearSearch()">Rensa sökning</button>` : '';
+      el.innerHTML = `<div class="empty">${ic('file-text',36)}
+        <h3>${noBase?'Inga offerter':'Inga träffar'}</h3>
+        <p>${noBase?'Klicka "Ny offert" för att komma igång':q?'Inga offerter matchar din sökning.':'Inga offerter i detta filter.'}</p>
+        ${noBase?`<button class="btn bp bsm" onclick="OffersPage.openCreate()" style="margin-top:8px;">${ic('plus',12)} Ny offert</button>`:clearBtn}
+      </div>`;
+      return;
+    }
 
-    el.innerHTML =
-      `<div class="off-kpi-row">
-         <div class="off-kpi-card">
-           <div class="off-kpi-val">${kpi.utkast}</div>
-           <div class="off-kpi-lbl">Utkast</div>
-         </div>
-         <div class="off-kpi-card">
-           <div class="off-kpi-val">${kpi.skickad}</div>
-           <div class="off-kpi-lbl">Skickade</div>
-         </div>
-         <div class="off-kpi-card off-kpi-card--green">
-           <div class="off-kpi-val">${kpi.godkänd}</div>
-           <div class="off-kpi-lbl">Godkända</div>
-         </div>
-         <div class="off-kpi-card off-kpi-card--navy">
-           <div class="off-kpi-val">${fmt(totalGodkändVal)}</div>
-           <div class="off-kpi-lbl" style="font-size:9px;">Godkänt värde ex. moms</div>
-         </div>
-       </div>
-       <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;">
-         <div class="swrap" style="flex:1;">
-           <span class="sico">${ic('search',16)}</span>
-           <input type="search" placeholder="Sök offert, kund, titel eller ID…" value="${this._search}"
-             oninput="OffersPage._search=this.value;OffersPage.render()">
-         </div>
-         <button class="btn bp bsm" onclick="OffersPage.openCreate()">${ic('plus',14)} Ny offert</button>
-       </div>
-       <div class="ftabs" style="margin-bottom:6px;">
-         ${tabs.map(t=>`<button class="ft ${filterTab===t.v?'on':''}" onclick="OffersPage._filter='${t.v}';OffersPage.render()">${t.l}${t.n?' <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">'+t.n+'</span>':''}</button>`).join('')}
-       </div>` +
-      (offers.length === 0
-        ? `<div class="empty">${ic('file-text',36)}<h3>Inga offerter</h3><p>${filterTab==='alla'&&!q?'Klicka "Ny offert" för att komma igång':'Inga träffar för nuvarande filter'}</p></div>`
-        : offers.map(o => {
-            const cu      = getCu(o.customerId);
-            const cuName  = cu ? CustomerService.displayName(cu) : '—';
-            const exVat   = OffersPage._offerExVat(o);
-            const disp    = o.title || o.id;
-            const prLines = (o.lines||[]).filter(l=>l.type!=='text');
-            const extras  = o.extras||[];
-            const rawExVat= Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
-            const _disc   = o.discount||{type:'percent',value:0};
-            const discAmt = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
-            const exVatD  = rawExVat - discAmt;
-            const incVat  = exVatD + Math.round(exVatD*0.25);
-            const rutAmt  = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-            const cust    = incVat - rutAmt;
-            const insight = OffersPage._offerInsight(o);
-            const statusColors = {utkast:'#94a3b8',skickad:'var(--blue)',väntar:'var(--or)',godkänd:'var(--gr)',nekad:'var(--rd)',utgången:'var(--mt)'};
-            const borderColor = statusColors[o.status] || 'var(--br)';
-            return `<div class="list-item off-offer-card" style="border-left-color:${borderColor};" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
+    el.innerHTML = offers.map(o => {
+      const cu      = getCu(o.customerId);
+      const cuName  = cu ? CustomerService.displayName(cu) : '—';
+      const disp    = o.title || o.id;
+      const prLines = (o.lines||[]).filter(l=>l.type!=='text');
+      const extras  = o.extras||[];
+      const rawExVat= Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+      const _disc   = o.discount||{type:'percent',value:0};
+      const discAmt = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
+      const exVatD  = rawExVat - discAmt;
+      const incVat  = exVatD + Math.round(exVatD*0.25);
+      const rutAmt  = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+      const cust    = incVat - rutAmt;
+      const insight = OffersPage._offerInsight(o);
+      const statusColors = {utkast:'#94a3b8',skickad:'var(--blue)',väntar:'var(--or)',godkänd:'var(--gr)',nekad:'var(--rd)',utgången:'var(--mt)'};
+      const borderColor = statusColors[o.status] || 'var(--br)';
+      return `<div class="list-item off-offer-card" style="border-left-color:${borderColor};" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
   <div class="off-offer-card-top">
     <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
       <span class="off-offer-card-id">${o.id}</span>
@@ -428,7 +491,7 @@ const OffersPage = {
     ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
   </div>
 </div>`;
-          }).join(''));
+    }).join('');
   },
 
   _offerExVat(o) {

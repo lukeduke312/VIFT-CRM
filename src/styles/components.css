@@ -343,6 +343,23 @@
   transition: border-color .15s;
 }
 .swrap input:focus { border-color: var(--sky); }
+.swrap input[type="search"] { padding-right: 34px; }
+.off-clr-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--mt);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.off-clr-btn:hover { color: var(--tx); background: var(--bg); }
 .sico {
   position: absolute;
   left: 11px;
