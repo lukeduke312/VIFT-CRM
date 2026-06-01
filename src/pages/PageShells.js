@@ -1049,6 +1049,12 @@ const OffersPage = {
       { re: /\b(måla|målar|målat|målning)\b/,                             cat: 'målning',         score: 100 },
       { re: /\b(bygga|bygger|byggt|renovera|renoverar|renovering)\b/,     cat: 'bygg',            score:  80 },
       { re: /\b(bekämpa|bekämpning|sanera|sanering|utrota|utrott)\b/,     cat: 'skadedjur',       score:  90 },
+      { re: /\b(laga|lagar|lagat|reparera|reparerar|reparerat|reparation)\b/, cat: 'reparation',  score:  90 },
+      { re: /\b(justera|justerar|justerat|justering)\b/,                  cat: 'reparation',      score:  90 },
+      { re: /\b(byta|byter|bytt|byte)\b/,                                 cat: 'reparation',      score:  85 },
+      { re: /\b(kontrollera|kontrollerar|kontrollerat)\b/,                cat: 'felsökning',      score:  80 },
+      { re: /\b(undersöka|undersöker|undersökt)\b/,                       cat: 'felsökning',      score:  80 },
+      { re: /\b(återställa|återställer|återställt)\b/,                    cat: 'reparation',      score:  80 },
     ];
 
     const WASH_CATS = new Set(['altantvätt','fasadtvätt','stentvätt','fönsterputsning','taktvätt','_tvätt']);
@@ -1219,6 +1225,12 @@ const OffersPage = {
         scope: `Bygg- och renoveringsarbete enligt specificerat uppdrag. Arbetet utförs av behörig personal med rätt kompetens och material.`,
         includes: '- Arbete och personal enligt offert\n- Nödvändig utrustning och skyddsmaterial\n- Dokumentation och besiktning vid behov\n- Städning av arbetsplats',
         excludes: '- Bygglov och myndighetskontakter (uppdragsgivarens ansvar)\n- Specialisttjänster (el, VVS) utöver offert\n- Material ej specificerat i offert',
+      },
+      reparation: {
+        label: 'Reparation / Justering',
+        scope: `Reparations- och justeringsarbete${qtyStr?' ('+qtyStr+')':''}. Arbetet utförs av erfaren personal med rätt kompetens och verktyg för aktuellt arbetsmoment.`,
+        includes: '- Bedömning och planering av åtgärd\n- Reparation eller justering enligt beskrivning\n- Test och kontroll efter åtgärd\n- Städning av arbetsplats',
+        excludes: '- Större utbyten utöver specificerad åtgärd\n- Material ej inkluderat i offert\n- Tillkommande arbeten som framkommer under utförandet',
       },
     };
 
@@ -1793,6 +1805,7 @@ const OfferDetailPage = {
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
           <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
+          <div style="font-weight:900;font-size:13px;color:var(--navy);background:var(--navy);color:#fff;padding:3px 9px;border-radius:5px;letter-spacing:-0.3px;user-select:none;">VIFT</div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
             ${sbdg(off.status)}
             ${CustomSelect.render('offd-status',{
@@ -2208,10 +2221,8 @@ const OfferDetailPage = {
     const lineRows = prLines.map(l => {
       if (l.type==='service') {
         const lExVat=l.exVat||0, lVat=Math.round(lExVat*(l.vatRate||25)/100);
-        const desc = l.description || l.templateName || 'Tjänst';
         return `<tr>
-          <td><strong>${esc2(l.templateName||'Tjänst')}</strong>${l.description&&l.description!==l.templateName?'<br><span style="color:#555;font-size:11px;">'+esc2(l.description)+'</span>':''}
-          ${(l.subLines||[]).map(sl=>`<br><span style="font-size:10px;color:#777;">→ ${esc2(sl.desc)} – ${sl.qty} ${sl.unit} × ${fmt2(sl.price)} kr</span>`).join('')}</td>
+          <td><strong>${esc2(l.templateName||'Tjänst')}</strong>${l.description&&l.description!==l.templateName?'<br><span style="color:#555;font-size:11px;">'+esc2(l.description)+'</span>':''}</td>
           <td style="text-align:right;white-space:nowrap;">${fmt2(lExVat)} kr</td>
           <td style="text-align:right;white-space:nowrap;">${l.vatRate||25}%</td>
           <td style="text-align:right;white-space:nowrap;font-weight:600;">${fmt2(lExVat+lVat)} kr</td>
@@ -2250,7 +2261,10 @@ const OfferDetailPage = {
       *{margin:0;padding:0;box-sizing:border-box;}
       body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;padding:32px 36px;max-width:800px;margin:0 auto;}
       .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #0d2b4e;}
-      .logo-box{background:#0d2b4e;color:#fff;font-weight:900;font-size:20px;padding:8px 18px;border-radius:8px;letter-spacing:-0.5px;}
+      /* VIFT logo — ersätt src i <img> med er logotypfil för skarpt bruk */
+      .logo-img{height:44px;width:auto;display:block;}
+      .logo-wordmark{background:#0d2b4e;color:#fff;font-weight:900;font-size:22px;padding:7px 16px;border-radius:6px;letter-spacing:-0.5px;display:inline-block;}
+      .logo-tagline{font-size:10px;color:#555;margin-top:3px;letter-spacing:.3px;}
       .logo-sub{font-size:10px;color:#666;margin-top:4px;}
       .offer-id{font-size:24px;font-weight:900;color:#0d2b4e;}
       .offer-sub{color:#666;font-size:11px;margin-top:3px;}
@@ -2282,9 +2296,10 @@ const OfferDetailPage = {
 
     <div class="hdr">
       <div>
-        <div class="logo-box">VIFT</div>
-        <div class="logo-sub">${esc2(co)}</div>
-        ${coAddr?`<div style="font-size:10px;color:#666;margin-top:2px;">${esc2(coAddr)}</div>`:''}
+        <!-- Logotyp: byt ut wordmark-div mot <img class="logo-img" src="/assets/logo.png" alt="VIFT"> om ni har en logofil -->
+        <div class="logo-wordmark">VIFT</div>
+        <div class="logo-tagline">${esc2(co)}</div>
+        ${coAddr?`<div style="font-size:10px;color:#888;margin-top:2px;">${esc2(coAddr)}</div>`:''}
       </div>
       <div style="text-align:right;">
         <div class="offer-id">Offert ${off.id}</div>
@@ -2335,7 +2350,10 @@ const OfferDetailPage = {
       </div>
     </div>
 
-    ${off.generalTerms?`<div class="terms"><strong>Allmänna villkor</strong><br>${esc2(off.generalTerms).replace(/\n/g,'<br>')}</div>`:''}
+    <div class="terms">
+      <strong>Villkor</strong><br>
+      ${off.generalTerms ? esc2(off.generalTerms).replace(/\n/g,'<br>') : 'Offerten är giltig i 30 dagar från offererat datum om inget annat anges. Betalning sker enligt faktura med 30 dagars netto. Dröjsmålsränta 8 % per år. Vid godkänd offert upprättas skriftlig orderbekräftelse. VIFT förbehåller sig rätten att justera priset vid väsentliga förändringar av uppdragets omfattning. Priser angivna exklusive moms om inget annat framgår.'}
+    </div>
 
     <div class="footer">
       <span>${esc2(co)}</span>

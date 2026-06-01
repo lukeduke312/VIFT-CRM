@@ -22,7 +22,7 @@ const Modal = {
     if (opts.title) {
       const title = document.createElement('div');
       title.className = 'modal-title';
-      title.textContent = opts.title;
+      title.innerHTML = opts.title;
       sheet.appendChild(title);
     }
 
