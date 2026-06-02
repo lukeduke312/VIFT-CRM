@@ -1365,3 +1365,108 @@ body.modal-open { overflow: hidden; touch-action: none; }
   transition: all .12s;
 }
 .off-tl-action-btn:hover { border-color: var(--sky); background: var(--acc); }
+
+/* ── OFFER DETAIL — FACTS STRIP ── */
+.off-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: var(--rs);
+  border: 1.5px solid var(--br);
+}
+.off-detail-fact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.off-detail-fact-icon { flex-shrink: 0; display: flex; align-items: center; }
+.off-detail-fact .off-detail-fact-lbl {
+  display: block;
+  font-size: 9px; font-weight: 700; color: var(--mt);
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 1px;
+}
+.off-detail-fact .off-detail-fact-val {
+  display: block;
+  font-size: 12px; font-weight: 600; color: var(--tx);
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.off-detail-fact--warn .off-detail-fact-icon { color: var(--or) !important; }
+.off-detail-fact--warn .off-detail-fact-val { color: var(--or); }
+
+/* ── OFFER DETAIL — HERO PRIMARY CTA ── */
+.off-hero-cta {
+  margin: 8px 0 4px;
+  border-top: 1px solid rgba(255,255,255,.12);
+  padding-top: 10px;
+}
+.off-hero-cta-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 11px 18px;
+  border-radius: var(--rs); font-size: 13px; font-weight: 800;
+  cursor: pointer; background: #fff; color: var(--navy);
+  border: none; letter-spacing: -.1px; transition: background .12s;
+}
+.off-hero-cta-btn:hover { background: #dbeafe; }
+.off-hero-cta-btn--or { background: #ea580c; color: #fff; }
+.off-hero-cta-btn--or:hover { background: #c2410c; color: #fff; }
+.off-hero-cta-btn--gr { background: #16a34a; color: #fff; }
+.off-hero-cta-btn--gr:hover { background: #15803d; color: #fff; }
+
+/* ── OFFER LINE ROWS (redesigned) ── */
+.off-line-row {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--bg);
+}
+.off-line-row--svc { border-left: 3px solid var(--navy); }
+.off-line-row-header {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+}
+.off-line-row-name {
+  font-size: 13px; font-weight: 700; color: var(--navy);
+  display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0;
+}
+.off-line-row-price { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.off-line-kundpris { font-size: 14px; font-weight: 800; color: var(--navy); }
+.off-line-rut-badge {
+  font-size: 9px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase;
+  background: rgba(34,197,94,.10); color: var(--gr);
+  border: 1px solid rgba(34,197,94,.3); border-radius: 4px; padding: 1px 5px;
+}
+.off-line-desc { font-size: 12px; color: var(--mt); line-height: 1.45; margin-top: 3px; }
+.off-line-rut-row {
+  font-size: 11px; color: var(--gr); margin-top: 4px;
+  display: flex; align-items: center; gap: 4px;
+}
+.off-line-kalk-btn {
+  display: inline-flex; align-items: center; gap: 3px; margin-top: 6px;
+  font-size: 10px; font-weight: 700; color: var(--mt);
+  background: none; border: 1px solid var(--br); border-radius: 4px; padding: 2px 8px;
+  cursor: pointer; transition: color .12s, border-color .12s;
+}
+.off-line-kalk-btn:hover { color: var(--navy); border-color: var(--sky); }
+.off-line-kalk {
+  margin-top: 6px; padding: 7px 10px;
+  background: var(--bg); border-radius: var(--rs); border-left: 2px solid var(--br);
+}
+
+/* ── INCL / EXCL (uppdragsbeskrivning) ── */
+.off-incl-excl {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; margin-top: 6px;
+}
+.off-incl-col, .off-excl-col { padding: 8px 0; }
+.off-incl-hd {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--gr); margin-bottom: 5px; display: flex; align-items: center; gap: 4px;
+}
+.off-excl-hd {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--rd); margin-bottom: 5px; display: flex; align-items: center; gap: 4px;
+}
