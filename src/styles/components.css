@@ -1266,6 +1266,48 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-top: 5px;
 }
 .off-detail-hero-validity.expiring { background: rgba(251,146,60,.3); }
+
+/* VIFT brand badge in hero */
+.off-hero-vift-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #fff;
+  border-radius: 7px;
+  padding: 4px 10px;
+  line-height: 1;
+  user-select: none;
+}
+.off-hero-vift-badge { font-size: 14px; font-weight: 900; color: var(--navy); letter-spacing: -.4px; }
+.off-hero-vift-badge span { font-size: 7px; font-weight: 600; color: var(--mt); letter-spacing: .2px; text-transform: uppercase; margin-top: 1px; }
+
+/* Hero price grid — shows ex.moms + kundpris side by side */
+.off-hero-price-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+  padding: 10px 0;
+  margin: 8px 0 10px;
+  border-top: 1px solid rgba(255,255,255,.15);
+  border-bottom: 1px solid rgba(255,255,255,.15);
+}
+.off-hero-pg-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: .6;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.off-hero-pg-val {
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+.off-hero-pg-val--big { font-size: 28px; }
+.off-hero-pg-sub { font-size: 10px; opacity: .65; }
+
 .off-detail-hero-actions {
   display: flex;
   flex-wrap: wrap;

@@ -722,6 +722,7 @@ const OffersPage = {
   /* ── Snabbskapa ny kund ─── */
   _quickNewCustomer() {
     const body = `
+      <p style="font-size:12px;color:var(--mt);margin:0 0 14px;">Kunden skapas direkt och väljs automatiskt på offerten.</p>
       <div class="fg"><label>Namn / Företag <span style="color:var(--rd)">*</span></label>
         <input id="qcu-name" placeholder="Förnamn Efternamn eller Företagsnamn AB"></div>
       <div class="g2">
@@ -734,7 +735,7 @@ const OffersPage = {
         <div class="fg"><label>Stad</label><input id="qcu-city" placeholder="Stockholm"></div>
       </div>`;
     Modal.open({
-      title: ic('user-plus',13) + ' Ny kund',
+      title: ic('user-plus',14) + ' Skapa ny kund',
       body,
       buttons: [
         { label: 'Skapa & välj', cls: 'btn bp', onClick: () => {
@@ -1895,7 +1896,7 @@ const OfferDetailPage = {
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
           <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
-          <div style="font-weight:900;font-size:13px;color:var(--navy);background:var(--navy);color:#fff;padding:3px 9px;border-radius:5px;letter-spacing:-0.3px;user-select:none;">VIFT</div>
+          <div class="off-hero-vift-badge">VIFT<span>Fastighetsservice</span></div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
             ${sbdg(off.status)}
             ${CustomSelect.render('offd-status',{
@@ -1907,11 +1908,21 @@ const OfferDetailPage = {
         <div class="off-detail-hero-id">${off.id}</div>
         <div class="off-detail-hero-title">${off.title||'Offert'}</div>
         <div class="off-detail-hero-cu">${ic('user',13)} ${cuName}</div>
-        <div class="off-detail-hero-price">
-          <span class="off-detail-hero-cust-val">${fmt(cust)} kr</span>
-          <div class="off-detail-hero-cust-sub">kundpris inkl. moms${rutAmt?' · RUT/ROT −'+fmt(rutAmt)+' kr':''}</div>
-          ${off.validUntil?`<div class="off-detail-hero-validity${expiring?' expiring':''}">${ic('calendar',10)} Giltig till ${fmtDate(off.validUntil)}${expiring?' · ⚠️ '+daysLeft+' dagar kvar':''}</div>`:''}
+
+        <div class="off-hero-price-grid">
+          <div>
+            <div class="off-hero-pg-lbl">Ex. moms</div>
+            <div class="off-hero-pg-val">${fmt(exVat)} kr</div>
+            ${discAmt?`<div class="off-hero-pg-sub">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
+          </div>
+          <div>
+            <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</div>
+            <div class="off-hero-pg-val off-hero-pg-val--big">${fmt(cust)} kr</div>
+            ${rutAmt?`<div class="off-hero-pg-sub">RUT/ROT avdrag −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. 25% moms</div>`}
+          </div>
         </div>
+
+        ${off.validUntil?`<div class="off-detail-hero-validity${expiring?' expiring':''}">${ic('calendar',10)} Giltig till ${fmtDate(off.validUntil)}${expiring?` · ${daysLeft} dag${daysLeft===1?'':'ar'} kvar`:''}</div>`:''}
         <div class="off-detail-hero-actions">
           <button type="button" class="off-hero-btn" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>
           <button type="button" class="off-hero-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>
@@ -2100,8 +2111,8 @@ const OfferDetailPage = {
 
   _timelineHtml(off) {
     const tl = (off.timeline || []).slice().reverse();
-    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'handshake', reason:'help-circle'};
-    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)'};
+    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'thumbs-up', reason:'help-circle', tip:'message-square'};
+    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)', tip:'var(--mt)'};
     const id = off.id;
     const isSent = off.status === 'skickad' || off.status === 'väntar';
     return `<div class="card" style="margin-top:8px;">
@@ -2110,15 +2121,15 @@ const OfferDetailPage = {
       </div>
       <div class="off-tl-action-bar">
         <span style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;align-self:center;white-space:nowrap;">Åtgärd:</span>
-        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','ring')">📞 Ring kund</button>
-        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','email')">✉️ Mailade kund</button>
-        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','followup')">🔔 Uppföljning</button>
-        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reminder')">⏰ Påminnelse</button>
-        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','price')">💰 Prisförhandling</button>`:''}
-        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','change')">✏️ Kund vill ändra</button>`:''}
-        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','verbal')" style="background:rgba(21,128,61,.08);color:var(--gr);">🤝 Muntligt godkänd</button>`:''}
-        ${off.status==='nekad'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reason')">❓ Orsak nekad</button>`:''}
-        ${off.status==='utkast'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','tip')">💡 Intern notering</button>`:''}
+        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','ring')">${ic('phone',11)} Ring kund</button>
+        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','email')">${ic('mail',11)} Mailade kund</button>
+        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','followup')">${ic('bell',11)} Uppföljning</button>
+        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reminder')">${ic('clock',11)} Påminnelse</button>
+        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','price')">${ic('dollar-sign',11)} Prisförhandling</button>`:''}
+        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','change')">${ic('edit-3',11)} Kund vill ändra</button>`:''}
+        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','verbal')" style="background:rgba(21,128,61,.08);color:var(--gr);">${ic('thumbs-up',11)} Muntligt godkänd</button>`:''}
+        ${off.status==='nekad'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reason')">${ic('help-circle',11)} Orsak nekad</button>`:''}
+        <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','tip')">${ic('message-square',11)} Intern notering</button>
       </div>
       <div style="padding:0;">
         ${tl.length===0
@@ -2230,6 +2241,9 @@ const OfferDetailPage = {
         tips.push({icon:'edit-3', color:'var(--or)', title:'Lägg till uppdragsbeskrivning', body:'En tydlig uppdragsbeskrivning ökar vinstchansen avsevärt. Klicka Redigera och använd textgeneratorn.', cta:'Redigera & generera text', ctaFn:`OffersPage.openEdit('${off.id}')`});
       } else {
         tips.push({icon:'send', color:'var(--blue)', title:'Klar att skicka?', body:'Offerten ser komplett ut. Skicka den till kunden för att komma vidare i affären.', cta:'Skicka offert', ctaFn:`OfferDetailPage.showSendModal('${off.id}')`});
+      }
+      if (rutAmt > 0 && prLines.length > 0) {
+        tips.push({icon:'info', color:'var(--gr)', title:`Lyft RUT/ROT i kommunikationen`, body:`Kunden betalar bara ${fmt(cust).toLocaleString('sv-SE')} kr efter avdraget. Nämn det redan i e-postmeddelandet — det är en tydlig och konkret säljpunkt.`});
       }
     }
 
