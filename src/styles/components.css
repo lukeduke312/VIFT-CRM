@@ -1210,10 +1210,10 @@ body.modal-open { overflow: hidden; touch-action: none; }
 
 /* ── OFFER DETAIL HERO ── */
 .off-detail-hero {
-  background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+  background: linear-gradient(160deg, #0f2d52 0%, #1a5fad 100%);
   color: #fff;
-  border-radius: 12px;
-  padding: 16px 18px;
+  border-radius: 10px;
+  padding: 14px 16px;
   margin-bottom: 10px;
 }
 .off-detail-hero-nav {
@@ -1319,12 +1319,12 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-bottom: 4px;
 }
 .off-hero-pg-val {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   line-height: 1;
   margin-bottom: 3px;
 }
-.off-hero-pg-val--big { font-size: 28px; }
+.off-hero-pg-val--big { font-size: 24px; }
 .off-hero-pg-sub { font-size: 10px; opacity: .65; }
 
 .off-detail-hero-actions {
@@ -1359,7 +1359,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-field-content { font-size: 13px; line-height: 1.6; color: var(--tx); }
 
 /* ── OFFER DETAIL SUMMARY CARD ── */
-.off-detail-sum { background: var(--acc); border: 1.5px solid var(--sky); border-radius: var(--rs); padding: 14px 16px; margin-top: 8px; }
+.off-detail-sum { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--rs); padding: 14px 16px; margin-top: 8px; }
 .off-detail-sum-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
 .off-detail-sum-row .dk { color: var(--mt); }
 .off-detail-sum-row.disc { color: #b45309; }
