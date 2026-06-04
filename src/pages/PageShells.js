@@ -2268,8 +2268,22 @@ const OfferDetailPage = {
   },
 
   /* ── Text rendering ─── */
+  _sanitizeText(raw) {
+    if (!raw) return '';
+    // Filter list lines that are garbage: too short, or known bad fragments
+    const BAD = /^(göra|görs|gör|på|allting|allt|etc|osv|mm|m\.m\.|bl\.a\.|t\.ex\.)$/i;
+    return raw.split('\n').filter(line => {
+      if (!line.startsWith('- ')) return true; // keep non-list lines as-is
+      const content = line.slice(2).trim();
+      if (content.length < 5) return false;
+      if (BAD.test(content)) return false;
+      return true;
+    }).join('\n');
+  },
+
   _renderText(raw) {
     if (!raw) return '';
+    raw = this._sanitizeText(raw);
     const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const lines = raw.split('\n');
     let html = '', inList = false;
@@ -2402,6 +2416,7 @@ const OfferDetailPage = {
     const hasRut   = rutAmt > 0;
     const fmt2     = n => (n||0).toLocaleString('sv-SE');
     const esc2     = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const san2     = s => OfferDetailPage._sanitizeText(s||'');
 
     // RUT or ROT label
     const rutLabel = (() => {
@@ -2571,8 +2586,8 @@ ${off.summary?`<div class="sec"><div class="sec-h">Sammanfattning</div><div clas
 ${off.scope?`<div class="sec"><div class="sec-h">Uppdragets omfattning</div><div class="sec-t">${esc2(off.scope).replace(/\n/g,'<br>')}</div></div>`:''}
 
 ${off.includes||off.excludes?`<div class="ie">
-  ${off.includes?`<div class="ie-in"><div class="ie-lbl-in">✓ Ingår i uppdraget</div><div class="ie-t">${esc2(off.includes)}</div></div>`:''}
-  ${off.excludes?`<div class="ie-out"><div class="ie-lbl-out">✗ Ingår ej</div><div class="ie-t muted">${esc2(off.excludes)}</div></div>`:''}
+  ${off.includes?`<div class="ie-in"><div class="ie-lbl-in">✓ Ingår i uppdraget</div><div class="ie-t">${esc2(san2(off.includes))}</div></div>`:''}
+  ${off.excludes?`<div class="ie-out"><div class="ie-lbl-out">✗ Ingår ej</div><div class="ie-t muted">${esc2(san2(off.excludes))}</div></div>`:''}
 </div>`:''}
 
 <div class="sec-h">Offertrader</div>
