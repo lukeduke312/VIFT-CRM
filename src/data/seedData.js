@@ -10,11 +10,18 @@ const SeedData = {
 
   settings: {
     companyName: 'VIFT Fastighetsservice & Förvaltning',
+    slogan: 'Fastighetsservice & Förvaltning',
     companyPhone: '070-123 45 67',
     companyEmail: 'info@vift.se',
     companyAddress: 'Storgatan 12, 123 45 Stockholm',
+    website: '',
     orgNr: '556XXX-XXXX',
     vatNr: 'SE556XXXXXX01',
+    primaryColor: '#0f3763',
+    secondaryColor: '#1d75d8',
+    logoLight: '',
+    logoDark: '',
+    logoIcon: '',
     defaultVatRate: 25,
     defaultPaymentTerms: 30,
     invoicePrefix: 'F-',

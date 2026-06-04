@@ -1998,7 +1998,7 @@ const OfferDetailPage = {
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
           <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
-          <img src="/assets/vift-logo-white.svg" class="off-hero-logo" alt="VIFT"
+          <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
           <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
@@ -2400,7 +2400,7 @@ const OfferDetailPage = {
     const coEmail   = s.companyEmail   || '';
     const coAddr    = s.companyAddress || '';
     const orgNr     = s.orgNr          || '';
-    const logoUrl   = window.location.origin + '/assets/vift-logo.svg';
+    const logoUrl   = BrandingService.logoLightAbsolute();
 
     const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
     const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
@@ -3344,11 +3344,102 @@ const AdminPage = {
         </div>
         <div class="card-body">
           <div class="dr"><span class="dk">Företag</span><span class="dv">${s.companyName || '—'}</span></div>
+          <div class="dr"><span class="dk">Slogan</span><span class="dv">${s.slogan || '—'}</span></div>
           <div class="dr"><span class="dk">Telefon</span><span class="dv">${s.companyPhone || '—'}</span></div>
           <div class="dr"><span class="dk">E-post</span><span class="dv">${s.companyEmail || '—'}</span></div>
           <div class="dr"><span class="dk">Adress</span><span class="dv">${s.companyAddress || '—'}</span></div>
+          <div class="dr"><span class="dk">Webbsida</span><span class="dv">${s.website || '—'}</span></div>
           <div class="dr"><span class="dk">Org.nr</span><span class="dv">${s.orgNr || '—'}</span></div>
           <div class="dr"><span class="dk">Moms-nr</span><span class="dv">${s.vatNr || '—'}</span></div>
+        </div>
+      </div>
+
+      <!-- Branding & Logga -->
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('image',14)} Branding & Logga</h3>
+        </div>
+        <div class="card-body" style="padding:0;">
+
+          <!-- Logo ljus bakgrund -->
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--br);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;margin-bottom:2px;">Logga — ljus bakgrund</div>
+              <div style="font-size:11px;color:var(--mt);margin-bottom:8px;">PDF, utskrift, e-post</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <label class="btn bs bxs" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:11px;">
+                  ${ic('upload',11)} Ladda upp SVG/PNG/JPG
+                  <input type="file" style="display:none;" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
+                    onchange="AdminPage._uploadLogo(this,'logoLight')">
+                </label>
+                ${s.logoLight ? `<button class="btn bd bxs" style="font-size:11px;" onclick="AdminPage._clearLogo('logoLight')">${ic('x',10)} Rensa</button>` : ''}
+                ${s.logoLight ? `<span style="font-size:10px;color:var(--gn);align-self:center;">${ic('check',10)} Uppladdad</span>` : `<span style="font-size:10px;color:var(--mt);align-self:center;">Använder standardlogga</span>`}
+              </div>
+            </div>
+            <div style="width:130px;height:52px;border:1px solid var(--br);border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px;flex-shrink:0;">
+              <img id="admin-preview-light" src="${BrandingService.logoLight()}" alt="Logo"
+                style="max-width:100%;max-height:100%;object-fit:contain;"
+                onerror="this.style.opacity='.2'">
+            </div>
+          </div>
+
+          <!-- Logo mörk bakgrund -->
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--br);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;margin-bottom:2px;">Logga — mörk bakgrund</div>
+              <div style="font-size:11px;color:var(--mt);margin-bottom:8px;">Sidebar, offertdetalj, hero</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <label class="btn bs bxs" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:11px;">
+                  ${ic('upload',11)} Ladda upp SVG/PNG/JPG
+                  <input type="file" style="display:none;" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
+                    onchange="AdminPage._uploadLogo(this,'logoDark')">
+                </label>
+                ${s.logoDark ? `<button class="btn bd bxs" style="font-size:11px;" onclick="AdminPage._clearLogo('logoDark')">${ic('x',10)} Rensa</button>` : ''}
+                ${s.logoDark ? `<span style="font-size:10px;color:var(--gn);align-self:center;">${ic('check',10)} Uppladdad</span>` : `<span style="font-size:10px;color:var(--mt);align-self:center;">Använder ljus logga eller standard</span>`}
+              </div>
+            </div>
+            <div style="width:130px;height:52px;border:1px solid var(--navy);border-radius:8px;background:var(--navy);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px;flex-shrink:0;">
+              <img id="admin-preview-dark" src="${BrandingService.logoDark()}" alt="Logo"
+                style="max-width:100%;max-height:100%;object-fit:contain;"
+                onerror="this.style.opacity='.2'">
+            </div>
+          </div>
+
+          <!-- Förhandsvisning sidebar -->
+          <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
+            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Förhandsvisning sidebar</div>
+            <div style="background:var(--navy);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:10px;max-width:260px;">
+              <img src="${BrandingService.logoDark()}" style="height:30px;width:auto;max-width:120px;object-fit:contain;border-radius:5px;"
+                onerror="this.style.display='none'">
+              <span style="font-size:10px;color:rgba(255,255,255,.4);">VIFT System</span>
+            </div>
+          </div>
+
+          <!-- Färger -->
+          <div style="padding:14px 16px;">
+            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Varumärkesfärger</div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Primär</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="color" value="${s.primaryColor||'#0f3763'}"
+                    style="width:36px;height:28px;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px;"
+                    oninput="AdminPage._saveColor(this.value,'primaryColor');this.nextElementSibling.textContent=this.value">
+                  <span style="font-size:11px;color:var(--mt);font-family:monospace;">${s.primaryColor||'#0f3763'}</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Sekundär</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="color" value="${s.secondaryColor||'#1d75d8'}"
+                    style="width:36px;height:28px;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px;"
+                    oninput="AdminPage._saveColor(this.value,'secondaryColor');this.nextElementSibling.textContent=this.value">
+                  <span style="font-size:11px;color:var(--mt);font-family:monospace;">${s.secondaryColor||'#1d75d8'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -3501,11 +3592,13 @@ const AdminPage = {
       title: 'Företagsinformation',
       body: `
         <div class="fg"><label>Företagsnamn</label><input id="co-name" value="${s.companyName||''}"></div>
+        <div class="fg"><label>Slogan / verksamhetsbeskrivning</label><input id="co-slogan" value="${s.slogan||''}" placeholder="Fastighetsservice & Förvaltning"></div>
         <div class="g2">
           <div class="fg"><label>Telefon</label><input id="co-phone" value="${s.companyPhone||''}" type="tel"></div>
           <div class="fg"><label>E-post</label><input id="co-email" value="${s.companyEmail||''}" type="email"></div>
         </div>
         <div class="fg"><label>Adress</label><input id="co-addr" value="${s.companyAddress||''}"></div>
+        <div class="fg"><label>Webbsida</label><input id="co-web" value="${s.website||''}" type="url" placeholder="https://"></div>
         <div class="g2">
           <div class="fg"><label>Org.nr</label><input id="co-orgnr" value="${s.orgNr||''}"></div>
           <div class="fg"><label>Moms-nr</label><input id="co-vatnr" value="${s.vatNr||''}"></div>
@@ -3514,18 +3607,44 @@ const AdminPage = {
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           state.settings = {
             ...state.settings,
-            companyName:    document.getElementById('co-name')?.value.trim()  || s.companyName,
-            companyPhone:   document.getElementById('co-phone')?.value.trim() || '',
-            companyEmail:   document.getElementById('co-email')?.value.trim() || '',
-            companyAddress: document.getElementById('co-addr')?.value.trim()  || '',
-            orgNr:          document.getElementById('co-orgnr')?.value.trim() || '',
-            vatNr:          document.getElementById('co-vatnr')?.value.trim() || ''
+            companyName:    document.getElementById('co-name')?.value.trim()   || s.companyName,
+            slogan:         document.getElementById('co-slogan')?.value.trim() || '',
+            companyPhone:   document.getElementById('co-phone')?.value.trim()  || '',
+            companyEmail:   document.getElementById('co-email')?.value.trim()  || '',
+            companyAddress: document.getElementById('co-addr')?.value.trim()   || '',
+            website:        document.getElementById('co-web')?.value.trim()    || '',
+            orgNr:          document.getElementById('co-orgnr')?.value.trim()  || '',
+            vatNr:          document.getElementById('co-vatnr')?.value.trim()  || ''
           };
           persist(); Modal.close(); AdminPage.render(); showToast('Sparat');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+  },
+
+  _uploadLogo(input, field) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { showToast('Filen är för stor (max 3 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      BrandingService.update({ [field]: e.target.result });
+      AdminPage.render();
+      showToast('Logga uppladdad');
+    };
+    reader.onerror = () => showToast('Kunde inte läsa filen');
+    reader.readAsDataURL(file);
+  },
+
+  _clearLogo(field) {
+    BrandingService.clearLogo(field);
+    AdminPage.render();
+    showToast('Logga återställd till standard');
+  },
+
+  _saveColor(value, field) {
+    BrandingService.update({ [field]: value });
   },
 
   showRoleStaff(roleId) {

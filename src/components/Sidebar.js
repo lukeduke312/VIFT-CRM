@@ -42,9 +42,10 @@ const Sidebar = {
     const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'VIFT';
     const userRole = user ? cap(user.role) : '';
 
+    const brandLogo = BrandingService.logoDark();
     let html = `
       <div class="nav-brand">
-        <img src="/assets/vift-logo-white.svg" class="nav-brand-img" alt="VIFT"
+        <img src="${brandLogo}" class="nav-brand-img" alt="VIFT"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <div class="nav-brand-fb" style="display:none;">
           <div class="nav-brand-fb-vift">VIFT</div>
@@ -176,3 +177,6 @@ const Sidebar = {
     return null;
   }
 };
+
+// Re-render sidebar whenever branding changes (logo upload etc.)
+document.addEventListener('brandingUpdated', () => Sidebar.render());
