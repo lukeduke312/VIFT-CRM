@@ -1,8 +1,9 @@
-<!-- VIFT logotyp — ersätt detta med riktig SVG-logga -->
-<!-- Använd i: sidebar, offertdetalj hero, PDF-utskrift -->
-<!-- Rekommenderat: vit version för mörka ytor, marinblå för ljusa -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="none">
-  <rect width="120" height="40" rx="6" fill="#0D2B4E"/>
-  <text x="12" y="27" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="900" fill="#ffffff" letter-spacing="-0.5">VIFT</text>
-  <text x="12" y="36" font-family="Arial,Helvetica,sans-serif" font-size="7" font-weight="600" fill="rgba(255,255,255,0.6)" letter-spacing="0.5">FASTIGHETSSERVICE</text>
+<!-- VIFT logotyp — marinblå badge för ljusa ytor (PDF, inloggning, kundvy) -->
+<!-- Ersätt innehållet med riktig logga — behåll viewBox="0 0 148 46" för bäst passform -->
+<!-- Vit version för mörka ytor: /assets/vift-logo-white.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 46" fill="none">
+  <rect width="148" height="46" rx="8" fill="#0D2B4E"/>
+  <rect x="10" y="10" width="3" height="26" rx="1.5" fill="#2B7FD4"/>
+  <text x="21" y="30" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="900" fill="#ffffff" letter-spacing="-0.5">VIFT</text>
+  <text x="21" y="39" font-family="Arial,Helvetica,sans-serif" font-size="7" font-weight="600" fill="rgba(255,255,255,0.5)" letter-spacing="0.8">FASTIGHETSSERVICE</text>
 </svg>

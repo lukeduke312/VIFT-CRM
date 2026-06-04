@@ -44,10 +44,12 @@ const Sidebar = {
 
     let html = `
       <div class="nav-brand">
-        <div class="nav-brand-logo">
-          <span style="font-size:20px;font-weight:900;color:var(--navy);letter-spacing:-0.5px;">VIFT</span>
+        <img src="/assets/vift-logo-white.svg" class="nav-brand-img" alt="VIFT"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="nav-brand-fb" style="display:none;">
+          <div class="nav-brand-fb-vift">VIFT</div>
+          <div class="nav-brand-fb-sub">Fastighetsservice</div>
         </div>
-        <div class="nav-brand-name">Fastighetsservice & Förvaltning</div>
       </div>
       <div class="nav-scroll">`;
 

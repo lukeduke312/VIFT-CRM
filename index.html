@@ -11,8 +11,8 @@
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
-<link rel="stylesheet" href="src/styles/layout.css?v=12">
-<link rel="stylesheet" href="src/styles/components.css?v=21">
+<link rel="stylesheet" href="src/styles/layout.css?v=13">
+<link rel="stylesheet" href="src/styles/components.css?v=22">
 <link rel="stylesheet" href="src/styles/forms.css?v=9">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=14">
 <link rel="stylesheet" href="src/styles/responsive.css?v=7">
@@ -28,7 +28,10 @@
   padding:24px;padding-bottom:env(safe-area-inset-bottom);">
 
   <div style="text-align:center;margin-bottom:28px;">
-    <div style="background:#fff;border-radius:14px;padding:12px 24px;display:inline-block;margin-bottom:16px;">
+    <img src="/assets/vift-logo.svg" alt="VIFT"
+      style="height:54px;width:auto;border-radius:9px;margin-bottom:12px;display:inline-block;"
+      onerror="this.style.display='none';document.getElementById('login-logo-fb').style.display='inline-block'">
+    <div id="login-logo-fb" style="display:none;background:#fff;border-radius:14px;padding:12px 24px;margin-bottom:12px;">
       <span style="font-size:22px;font-weight:900;color:var(--navy);letter-spacing:-0.5px;">VIFT</span>
     </div>
     <div style="color:rgba(255,255,255,.8);font-size:13px;font-weight:600;">Fastighetsservice & Förvaltning</div>
@@ -259,7 +262,7 @@
 <script src="src/components/Icons.js?v=6"></script>
 <script src="src/components/CustomSelect.js?v=1"></script>
 <script src="src/components/Modal.js?v=6"></script>
-<script src="src/components/Sidebar.js?v=8"></script>
+<script src="src/components/Sidebar.js?v=9"></script>
 
 <!-- 4. Pages -->
 <script src="src/pages/Router.js?v=10"></script>
@@ -272,7 +275,7 @@
 <script src="src/pages/RecurringPage.js?v=7"></script>
 <script src="src/pages/SalesPage.js?v=2"></script>
 <script src="src/pages/PropertyDetailPage.js?v=2"></script>
-<script src="src/pages/PageShells.js?v=36"></script>
+<script src="src/pages/PageShells.js?v=37"></script>
 <script src="src/pages/RonderingPage.js?v=3"></script>
 <script src="src/pages/RonderingUtforandePage.js?v=6"></script>
 <script src="src/pages/RonderingWizardPage.js?v=7"></script>

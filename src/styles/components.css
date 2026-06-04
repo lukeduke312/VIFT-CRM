@@ -1267,7 +1267,16 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-detail-hero-validity.expiring { background: rgba(251,146,60,.3); }
 
-/* VIFT brand badge in hero */
+/* VIFT logo img in hero (dark surface) */
+.off-hero-logo {
+  height: 34px;
+  width: auto;
+  display: block;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* VIFT brand badge in hero — fallback when img fails */
 .off-hero-vift-badge {
   display: flex;
   flex-direction: column;

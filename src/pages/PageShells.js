@@ -1967,7 +1967,9 @@ const OfferDetailPage = {
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
           <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
-          <div class="off-hero-vift-badge">VIFT<span>Fastighetsservice</span></div>
+          <img src="/assets/vift-logo-white.svg" class="off-hero-logo" alt="VIFT"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
             ${sbdg(off.status)}
             ${CustomSelect.render('offd-status',{
@@ -2341,15 +2343,19 @@ const OfferDetailPage = {
   printPdf(offerId) {
     const off = getOff(offerId);
     if (!off) return;
-    const cu    = getCu(off.customerId);
-    const cuName= cu ? CustomerService.displayName(cu) : '—';
-    const cuAddr= cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
-    const s     = state.settings || {};
-    const co    = s.companyName    || 'VIFT Fastighetsservice & Förvaltning';
-    const coPhone = s.companyPhone || '';
-    const coEmail = s.companyEmail || '';
-    const coAddr  = s.companyAddress || '';
-    const orgNr   = s.orgNr || '';
+    const cu        = getCu(off.customerId);
+    const cuName    = cu ? CustomerService.displayName(cu) : '—';
+    const cuContact = cu ? cu.contactPerson || '' : '';
+    const cuAddr    = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
+    const cuPhone   = cu ? cu.phone || '' : '';
+    const cuEmail   = cu ? cu.email || '' : '';
+    const s         = state.settings || {};
+    const co        = s.companyName    || 'VIFT Fastighetsservice & Förvaltning AB';
+    const coPhone   = s.companyPhone   || '';
+    const coEmail   = s.companyEmail   || '';
+    const coAddr    = s.companyAddress || '';
+    const orgNr     = s.orgNr          || '';
+    const logoUrl   = window.location.origin + '/assets/vift-logo.svg';
 
     const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
     const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
@@ -2362,153 +2368,233 @@ const OfferDetailPage = {
     const incVat   = exVat+vat;
     const rutAmt   = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
     const cust     = incVat - rutAmt;
+    const hasRut   = rutAmt > 0;
     const fmt2     = n => (n||0).toLocaleString('sv-SE');
-    const esc2     = s => (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&/g,'&amp;');
+    const esc2     = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-    // Service line rows — customer-friendly (no internal kalkyl)
+    // RUT or ROT label
+    const rutLabel = (() => {
+      const svcs = prLines.filter(l=>l.type==='service'&&(l.rutAmount||0)>0);
+      if (svcs.length === 0) return 'RUT/ROT-avdrag';
+      return svcs.every(l=>l.reductionType==='rot') ? 'ROT-avdrag' : 'RUT-avdrag';
+    })();
+
+    // Line rows — customer-facing, no internal kalkyl
     const lineRows = prLines.map(l => {
       if (l.type==='service') {
         const lExVat=l.exVat||0, lVat=Math.round(lExVat*(l.vatRate||25)/100);
         return `<tr>
-          <td><strong>${esc2(l.templateName||'Tjänst')}</strong>${l.description&&l.description!==l.templateName?'<br><span style="color:#555;font-size:11px;">'+esc2(l.description)+'</span>':''}</td>
-          <td style="text-align:right;white-space:nowrap;">${fmt2(lExVat)} kr</td>
-          <td style="text-align:right;white-space:nowrap;">${l.vatRate||25}%</td>
-          <td style="text-align:right;white-space:nowrap;font-weight:600;">${fmt2(lExVat+lVat)} kr</td>
+          <td><strong>${esc2(l.templateName||'Tjänst')}</strong>${l.description&&l.description!==l.templateName?'<br><span class="ld">'+esc2(l.description)+'</span>':''}</td>
+          <td class="r">${fmt2(lExVat)} kr</td>
+          <td class="r">${l.vatRate||25}%</td>
+          <td class="r fw">${fmt2(lExVat+lVat)} kr</td>
         </tr>`;
       }
       const tot=Math.round((l.qty||1)*(l.unitPrice||0));
       return `<tr>
-        <td>${esc2(l.description||'—')}<br><span style="color:#666;font-size:11px;">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr ex. moms</span></td>
-        <td style="text-align:right;white-space:nowrap;">${fmt2(tot)} kr</td>
-        <td style="text-align:right;white-space:nowrap;">25%</td>
-        <td style="text-align:right;white-space:nowrap;font-weight:600;">${fmt2(tot+Math.round(tot*0.25))} kr</td>
+        <td>${esc2(l.description||'—')}<br><span class="ld">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr ex. moms</span></td>
+        <td class="r">${fmt2(tot)} kr</td>
+        <td class="r">25%</td>
+        <td class="r fw">${fmt2(tot+Math.round(tot*0.25))} kr</td>
       </tr>`;
     }).join('');
 
     const extrasRows = extras.length ? extras.map(e => {
       const tot=Math.round((e.qty||1)*(e.unitPrice||0));
-      return `<tr style="color:#555;font-style:italic;">
-        <td>${esc2(e.description||'Tillval')}<br><span style="font-size:11px;">${e.qty||1} ${e.unit||'st'} × ${fmt2(e.unitPrice||0)} kr</span></td>
-        <td style="text-align:right;">${fmt2(tot)} kr</td><td style="text-align:right;">25%</td>
-        <td style="text-align:right;">${fmt2(tot+Math.round(tot*0.25))} kr</td></tr>`;
+      return `<tr class="xtra">
+        <td>${esc2(e.description||'Tillval')}<br><span class="ld">${e.qty||1} ${e.unit||'st'} × ${fmt2(e.unitPrice||0)} kr</span></td>
+        <td class="r">${fmt2(tot)} kr</td>
+        <td class="r">25%</td>
+        <td class="r">${fmt2(tot+Math.round(tot*0.25))} kr</td>
+      </tr>`;
     }).join('') : '';
 
-    const scopeHtml = off.scope ? `<div class="section"><h4>Uppdragets omfattning</h4><p>${esc2(off.scope).replace(/\n/g,'<br>')}</p></div>` : '';
-    const inclExclHtml = (off.includes||off.excludes) ? `
-      <div style="display:flex;gap:24px;margin-bottom:16px;">
-        ${off.includes?`<div style="flex:1;"><h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;">Ingår i uppdraget</h4><p style="font-size:12px;white-space:pre-wrap;">${esc2(off.includes)}</p></div>`:''}
-        ${off.excludes?`<div style="flex:1;"><h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;">Ingår ej</h4><p style="font-size:12px;color:#666;white-space:pre-wrap;">${esc2(off.excludes)}</p></div>`:''}
-      </div>` : '';
-    const txtBlksHtml = txtBlks.map(tb=>`<div class="section">${tb.blockTitle?`<h4>${esc2(tb.blockTitle)}</h4>`:''}${tb.text?`<p>${esc2(tb.text).replace(/\n/g,'<br>')}</p>`:''}</div>`).join('');
-    const extrasHtml  = extras.length ? `<h4 style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin:16px 0 6px;">Tillval (ej inkluderat i totalpris)</h4><table><thead><tr><th>Tillval</th><th style="text-align:right;">Ex. moms</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Inkl. moms</th></tr></thead><tbody>${extrasRows}</tbody></table>` : '';
+    const defaultTerms = 'Offerten är giltig enligt angiven giltighetstid från offererat datum. Betalning 30 dagar netto. Dröjsmålsränta 8 % per år. Vid godkänd offert upprättas skriftlig orderbekräftelse. VIFT förbehåller sig rätten att justera priset vid väsentliga förändringar av uppdragets omfattning. Priser angivna exklusive moms om inget annat framgår.';
+    const footerLine = [coPhone?'Tel: '+coPhone:'', coEmail||'', orgNr?'Org.nr: '+orgNr:''].filter(Boolean).join('  ·  ');
 
-    const footerContact = [coPhone?'Tel: '+coPhone:'', coEmail?'E-post: '+coEmail:'', orgNr?'Org.nr: '+orgNr:''].filter(Boolean).join('  ·  ');
+    const html = `<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Offert ${esc2(off.id)} – ${esc2(cuName)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Helvetica Neue',Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;background:#fff;}
+.pg{max-width:800px;margin:0 auto;padding:40px 44px;}
 
-    const html = `<!DOCTYPE html><html lang="sv"><head><meta charset="UTF-8"><title>Offert ${off.id} – ${cuName}</title>
-    <style>
-      *{margin:0;padding:0;box-sizing:border-box;}
-      body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;padding:32px 36px;max-width:800px;margin:0 auto;}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #0d2b4e;}
-      /* VIFT logo — ersätt src i <img> med er logotypfil för skarpt bruk */
-      .logo-img{height:44px;width:auto;display:block;}
-      .logo-wordmark{background:#0d2b4e;color:#fff;font-weight:900;font-size:22px;padding:7px 16px;border-radius:6px;letter-spacing:-0.5px;display:inline-block;}
-      .logo-tagline{font-size:10px;color:#555;margin-top:3px;letter-spacing:.3px;}
-      .logo-sub{font-size:10px;color:#666;margin-top:4px;}
-      .offer-id{font-size:24px;font-weight:900;color:#0d2b4e;}
-      .offer-sub{color:#666;font-size:11px;margin-top:3px;}
-      .parties{display:flex;gap:32px;margin-bottom:20px;}
-      .party{flex:1;}
-      .party h4{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;border-bottom:1px solid #eee;padding-bottom:4px;}
-      .party p{font-size:12px;line-height:1.7;}
-      table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px;}
-      th{background:#0d2b4e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;font-weight:600;}
-      td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;}
-      tr:nth-child(even) td{background:#fafafa;}
-      .section{margin-bottom:16px;}
-      .section h4{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.5px;margin-bottom:6px;}
-      .section p{font-size:12px;line-height:1.7;color:#333;}
-      .totals{display:flex;justify-content:flex-end;margin-bottom:20px;}
-      .totals-inner{min-width:280px;}
-      .tot-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f0f0f0;}
-      .tot-row:last-child{border-bottom:none;}
-      .tot-final{font-size:16px;font-weight:900;color:#0d2b4e;padding:10px 0 6px;border-top:2px solid #0d2b4e;margin-top:4px;display:flex;justify-content:space-between;}
-      .rut-box{background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px 14px;margin-top:10px;}
-      .rut-box-title{font-weight:700;color:#15803d;margin-bottom:4px;font-size:13px;}
-      .rut-price{font-size:20px;font-weight:900;color:#15803d;margin-top:4px;}
-      .rut-note{font-size:10px;color:#666;margin-top:4px;}
-      .terms{margin-top:20px;border-top:1px solid #e0e0e0;padding-top:14px;font-size:11px;color:#555;line-height:1.6;}
-      .footer{margin-top:28px;padding-top:12px;border-top:2px solid #0d2b4e;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#888;}
-      .validity-badge{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;color:#856404;}
-      @media print{body{padding:16px 20px;}@page{margin:12mm 16mm;}}
-    </style></head><body>
+/* Header */
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #0d2b4e;gap:24px;}
+.logo-wrap{display:flex;align-items:flex-start;gap:12px;}
+.logo-img{height:46px;width:auto;border-radius:7px;display:block;}
+.logo-fb{display:none;background:#0d2b4e;color:#fff;font-weight:900;font-size:22px;padding:10px 16px 9px;border-radius:7px;letter-spacing:-0.5px;line-height:1;}
+.logo-info{padding-top:3px;}
+.logo-co{font-size:13px;font-weight:700;color:#0d2b4e;line-height:1.35;}
+.logo-detail{font-size:10px;color:#64748b;margin-top:3px;line-height:1.6;}
 
-    <div class="hdr">
-      <div>
-        <!-- Logotyp: byt ut wordmark-div mot <img class="logo-img" src="/assets/logo.png" alt="VIFT"> om ni har en logofil -->
-        <div class="logo-wordmark">VIFT</div>
-        <div class="logo-tagline">${esc2(co)}</div>
-        ${coAddr?`<div style="font-size:10px;color:#888;margin-top:2px;">${esc2(coAddr)}</div>`:''}
-      </div>
-      <div style="text-align:right;">
-        <div class="offer-id">Offert ${off.id}</div>
-        ${off.title?`<div class="offer-sub" style="font-size:13px;font-weight:600;color:#333;">${esc2(off.title)}</div>`:''}
-        <div class="offer-sub">Datum: ${(off.createdAt||'').split('T')[0]||'—'}</div>
-        ${off.validUntil?`<div class="offer-sub"><span class="validity-badge">Giltig till ${off.validUntil}</span></div>`:''}
-      </div>
+.off-meta{text-align:right;flex-shrink:0;}
+.off-num{font-size:23px;font-weight:900;color:#0d2b4e;letter-spacing:-0.5px;line-height:1;}
+.off-title{font-size:13px;font-weight:600;color:#334155;margin-top:5px;}
+.off-date{font-size:11px;color:#64748b;margin-top:4px;line-height:1.6;}
+.validity{display:inline-block;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;margin-top:5px;}
+
+/* Parties */
+.parties{display:grid;grid-template-columns:1fr 1fr;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:22px;}
+.party{padding:14px 16px;}
+.party:first-child{background:#f8fafc;border-right:1px solid #e2e8f0;}
+.p-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#94a3b8;margin-bottom:6px;}
+.p-name{font-size:14px;font-weight:700;color:#0d2b4e;margin-bottom:4px;line-height:1.3;}
+.p-det{font-size:11px;color:#475569;line-height:1.75;}
+
+/* Sections */
+.sec{margin-bottom:18px;}
+.sec-h{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#0d2b4e;border-bottom:2px solid #0d2b4e;padding-bottom:5px;margin-bottom:10px;}
+.sec-t{font-size:12px;line-height:1.8;color:#334155;}
+
+/* Ingår/ingår ej */
+.ie{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
+.ie-in{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:11px 13px;}
+.ie-out{background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:11px 13px;}
+.ie-lbl-in{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#15803d;margin-bottom:5px;}
+.ie-lbl-out{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c2410c;margin-bottom:5px;}
+.ie-t{font-size:11px;line-height:1.75;white-space:pre-wrap;color:#374151;}
+.ie-t.muted{color:#64748b;}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;}
+thead th{background:#0d2b4e;color:#fff;padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:.3px;text-align:left;}
+thead th.r{text-align:right;}
+tbody td{padding:9px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:nth-child(even) td{background:#fafafa;}
+td.r{text-align:right;white-space:nowrap;}
+td.fw{font-weight:600;}
+.ld{font-size:10px;color:#64748b;}
+.xtra td{color:#64748b;font-style:italic;}
+
+/* Totals */
+.tot-wrap{display:flex;justify-content:flex-end;margin:10px 0 18px;}
+.tot-box{min-width:300px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:13px 16px;}
+.tot-r{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px;color:#475569;}
+.tot-r+.tot-r{border-top:1px solid #eee;}
+.tot-r.disc{color:#b45309;}
+.tot-div{height:2px;background:#0d2b4e;margin:8px 0;border:none;}
+.tot-fin{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:16px;font-weight:900;color:#0d2b4e;}
+.tot-r.rut-deduct{color:#15803d;font-weight:700;}
+
+/* RUT/ROT box */
+.rut{display:flex;align-items:flex-start;gap:14px;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:16px 18px;margin-bottom:20px;}
+.rut-icon{width:44px;height:44px;background:#15803d;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-weight:900;font-size:11px;line-height:1.2;text-align:center;}
+.rut-body{flex:1;}
+.rut-lbl{font-size:12px;font-weight:700;color:#15803d;margin-bottom:4px;}
+.rut-amt{font-size:26px;font-weight:900;color:#15803d;line-height:1;}
+.rut-sub{font-size:11px;color:#374151;margin-top:5px;line-height:1.6;}
+.rut-note{font-size:10px;color:#64748b;margin-top:5px;font-style:italic;line-height:1.5;}
+
+/* Terms */
+.terms{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-top:20px;}
+.terms-h{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#0d2b4e;margin-bottom:8px;}
+.terms-t{font-size:11px;color:#475569;line-height:1.75;}
+
+/* Footer */
+.ftr{margin-top:28px;padding-top:12px;border-top:2px solid #0d2b4e;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8;}
+.ftr-brand{font-weight:700;color:#0d2b4e;font-size:11px;}
+
+@media print{body{padding:0;}.pg{padding:18px 22px;}@page{margin:10mm 14mm;size:A4;}}
+</style>
+</head>
+<body>
+<div class="pg">
+
+<div class="hdr">
+  <div class="logo-wrap">
+    <img class="logo-img" src="${logoUrl}" alt="VIFT"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'">
+    <div class="logo-fb">VIFT</div>
+    <div class="logo-info">
+      <div class="logo-co">${esc2(co)}</div>
+      ${coAddr?`<div class="logo-detail">${esc2(coAddr)}</div>`:''}
+      ${coPhone||coEmail?`<div class="logo-detail">${[coPhone?'Tel: '+esc2(coPhone):'',coEmail?esc2(coEmail):''].filter(Boolean).join('  ·  ')}</div>`:''}
     </div>
+  </div>
+  <div class="off-meta">
+    <div class="off-num">Offert ${esc2(off.id)}</div>
+    ${off.title?`<div class="off-title">${esc2(off.title)}</div>`:''}
+    <div class="off-date">Datum: ${(off.createdAt||'').split('T')[0]||'—'}</div>
+    ${off.validUntil?`<div><span class="validity">Giltig till ${esc2(off.validUntil)}</span></div>`:''}
+  </div>
+</div>
 
-    <div class="parties">
-      <div class="party">
-        <h4>Offereras till</h4>
-        <p><strong>${esc2(cuName)}</strong>
-        ${cuAddr?'<br>'+esc2(cuAddr):''}
-        ${cu&&cu.phone?'<br>Tel: '+esc2(cu.phone):''}
-        ${cu&&cu.email?'<br>'+esc2(cu.email):''}</p>
-      </div>
-      <div class="party">
-        <h4>Offertvillkor</h4>
-        <p>${off.paymentTerms?'Betalning: '+esc2(off.paymentTerms)+'<br>':''}${off.validityText?'Giltighetstid: '+esc2(off.validityText):'30 dagar'}</p>
-      </div>
-    </div>
+<div class="parties">
+  <div class="party">
+    <div class="p-lbl">Offereras till</div>
+    <div class="p-name">${esc2(cuName)}</div>
+    <div class="p-det">${[cuContact?esc2(cuContact):'', cuPhone?'Tel: '+esc2(cuPhone):'', cuEmail?esc2(cuEmail):'', cuAddr?esc2(cuAddr):''].filter(Boolean).join('<br>')}</div>
+  </div>
+  <div class="party">
+    <div class="p-lbl">Offertvillkor</div>
+    <div class="p-det">${[off.paymentTerms?'Betalning: '+esc2(off.paymentTerms):'', off.validityText?'Giltighetstid: '+esc2(off.validityText):'Giltighetstid: 30 dagar', orgNr?'Org.nr: '+esc2(orgNr):''].filter(Boolean).join('<br>')}</div>
+  </div>
+</div>
 
-    ${off.summary?`<div class="section"><h4>Sammanfattning</h4><p>${esc2(off.summary).replace(/\n/g,'<br>')}</p></div>`:''}
-    ${scopeHtml}
-    ${inclExclHtml}
+${off.summary?`<div class="sec"><div class="sec-h">Sammanfattning</div><div class="sec-t">${esc2(off.summary).replace(/\n/g,'<br>')}</div></div>`:''}
+${off.scope?`<div class="sec"><div class="sec-h">Uppdragets omfattning</div><div class="sec-t">${esc2(off.scope).replace(/\n/g,'<br>')}</div></div>`:''}
 
-    <table>
-      <thead><tr><th>Tjänst / Rad</th><th style="text-align:right;">Ex. moms</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Inkl. moms</th></tr></thead>
-      <tbody>${lineRows}</tbody>
-    </table>
+${off.includes||off.excludes?`<div class="ie">
+  ${off.includes?`<div class="ie-in"><div class="ie-lbl-in">✓ Ingår i uppdraget</div><div class="ie-t">${esc2(off.includes)}</div></div>`:''}
+  ${off.excludes?`<div class="ie-out"><div class="ie-lbl-out">✗ Ingår ej</div><div class="ie-t muted">${esc2(off.excludes)}</div></div>`:''}
+</div>`:''}
 
-    ${extrasHtml}
-    ${txtBlksHtml}
+<div class="sec-h">Offertrader</div>
+<table>
+  <thead><tr>
+    <th>Tjänst / Beskrivning</th>
+    <th class="r">Ex. moms</th>
+    <th class="r">Moms</th>
+    <th class="r">Inkl. moms</th>
+  </tr></thead>
+  <tbody>${lineRows}</tbody>
+</table>
 
-    <div class="totals">
-      <div class="totals-inner">
-        <div class="tot-row"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
-        ${discAmt?`<div class="tot-row" style="color:#b45309;"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
-        <div class="tot-row"><span>Moms 25 %</span><span>${fmt2(vat)} kr</span></div>
-        <div class="tot-final"><span>${rutAmt?'Totalt inkl. moms':'Totalt att betala'}</span><span>${fmt2(incVat)} kr</span></div>
-        ${rutAmt?`<div class="rut-box">
-          <div class="rut-box-title">RUT/ROT-avdrag</div>
-          <div style="font-size:12px;color:#16a34a;margin-bottom:4px;">Preliminärt avdrag: −${fmt2(rutAmt)} kr</div>
-          <div class="rut-price">Kundpris: ${fmt2(cust)} kr</div>
-          <div class="rut-note">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion. VIFT administrerar ansökan.</div>
-        </div>`:''}
-      </div>
-    </div>
+${extras.length?`<table style="margin-top:8px;"><thead><tr><th colspan="4" style="background:#475569;font-size:10px;">Tillval (ej inkluderat i totalpriset)</th></tr></thead><tbody>${extrasRows}</tbody></table>`:''}
+${txtBlks.map(tb=>`<div class="sec" style="margin-top:14px;">${tb.blockTitle?`<div class="sec-h">${esc2(tb.blockTitle)}</div>`:''}${tb.text?`<div class="sec-t">${esc2(tb.text).replace(/\n/g,'<br>')}</div>`:''}</div>`).join('')}
 
-    <div class="terms">
-      <strong>Villkor</strong><br>
-      ${off.generalTerms ? esc2(off.generalTerms).replace(/\n/g,'<br>') : 'Offerten är giltig i 30 dagar från offererat datum om inget annat anges. Betalning sker enligt faktura med 30 dagars netto. Dröjsmålsränta 8 % per år. Vid godkänd offert upprättas skriftlig orderbekräftelse. VIFT förbehåller sig rätten att justera priset vid väsentliga förändringar av uppdragets omfattning. Priser angivna exklusive moms om inget annat framgår.'}
-    </div>
+<div class="tot-wrap">
+  <div class="tot-box">
+    <div class="tot-r"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
+    ${discAmt?`<div class="tot-r disc"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
+    <div class="tot-r"><span>Moms 25 %</span><span>${fmt2(vat)} kr</span></div>
+    <hr class="tot-div">
+    <div class="tot-fin"><span>${hasRut?'Totalt inkl. moms':'Totalt att betala'}</span><span>${fmt2(incVat)} kr</span></div>
+    ${hasRut?`<div class="tot-r rut-deduct" style="margin-top:4px;"><span>${rutLabel}</span><span>−${fmt2(rutAmt)} kr</span></div>`:''}
+  </div>
+</div>
 
-    <div class="footer">
-      <span>${esc2(co)}</span>
-      <span>${footerContact}</span>
-    </div>
+${hasRut?`<div class="rut">
+  <div class="rut-icon">${rutLabel.startsWith('ROT')?'ROT':'RUT'}</div>
+  <div class="rut-body">
+    <div class="rut-lbl">${rutLabel} — skattereduktion</div>
+    <div class="rut-amt">${fmt2(cust)} kr</div>
+    <div class="rut-sub">Kundpris inkl. moms &nbsp;·&nbsp; Preliminärt avdrag: −${fmt2(rutAmt)} kr &nbsp;·&nbsp; Totalt inkl. moms: ${fmt2(incVat)} kr</div>
+    <div class="rut-note">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion. VIFT administrerar ansökan direkt till Skatteverket.</div>
+  </div>
+</div>`:''}
 
-    <script>window.onload=()=>{ window.print(); };<\/script></body></html>`;
+<div class="terms">
+  <div class="terms-h">Allmänna villkor</div>
+  <div class="terms-t">${off.generalTerms ? esc2(off.generalTerms).replace(/\n/g,'<br>') : esc2(defaultTerms)}</div>
+</div>
+
+<div class="ftr">
+  <div>
+    <span class="ftr-brand">${esc2(co)}</span>
+    ${coAddr?' · '+esc2(coAddr):''}
+  </div>
+  <div>${footerLine}</div>
+</div>
+
+</div>
+<script>window.onload=()=>{ window.print(); };<\/script>
+</body></html>`;
 
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
