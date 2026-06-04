@@ -3,8 +3,10 @@
  */
 const WorkOrderDetailPage = {
   aoId: null,
+  _stampInterval: null,
 
   render(params) {
+    this._stopStampTimer();
     const el = document.getElementById('pg-ao-detail-content');
     if (!el) return;
     const id = params && params.aoId;
@@ -15,6 +17,7 @@ const WorkOrderDetailPage = {
       return;
     }
     this._renderFull(el, ao);
+    if (state.stampActive && state.stampAoId === ao.id) this._startStampTimer();
   },
 
   _renderFull(el, ao) {
@@ -72,11 +75,11 @@ const WorkOrderDetailPage = {
       <!-- Checklista -->
       <div class="card">
         <div class="card-header">
-          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-            <h3 style="margin:0;">${ic('clipboard-check',14)} Checklista</h3>
+          <h3>${ic('clipboard-check',14)} Checklista</h3>
+          <div style="display:flex;align-items:center;gap:6px;">
             <span id="ao-chk-counter">${chkBadge}</span>
+            ${Auth.can('ao_checklist') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>` : ''}
           </div>
-          ${Auth.can('ao_checklist') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>` : ''}
         </div>
         <div class="card-body" style="padding:6px 14px;" id="ao-checklist">
           ${this._renderChecklist(ao)}
@@ -113,7 +116,10 @@ const WorkOrderDetailPage = {
       <div class="card">
         <div class="card-header">
           <h3>${ic('activity',14)} Tidslinje & logg</h3>
-          <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>
+          <div style="display:flex;gap:5px;">
+            <button class="btn bxs bsu" style="font-size:11px;padding:4px 10px;" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
+            <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>
+          </div>
         </div>
         <div id="ao-timeline" style="overflow:hidden;">
           ${this._renderTimeline(ao)}
@@ -170,6 +176,9 @@ const WorkOrderDetailPage = {
     if (ao.status === 'klar' && ao.invoiceId) {
       btns.push(`<button class="btn bs bsm" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('file-text',13)} Visa fakturaunderlag</button>`);
     }
+    if (canEdit && ao.status === 'avbruten') {
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('rotate-ccw',13)} Återaktivera</button>`);
+    }
     if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status)) {
       btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()" title="Fler statusval">${ic('more-horizontal',13)}</button>`);
     }
@@ -222,7 +231,7 @@ const WorkOrderDetailPage = {
     return `
       <div class="card">
         <div class="card-header"><h3>Stämpling</h3>
-          ${isActive ? `<span class="bdg bdg-green">Inklockat ${TimeService.elapsedStr(state.stampTimestamp)}</span>` : ''}
+          ${isActive ? `<span class="bdg bdg-green" id="ao-stamp-elapsed">Inklockat ${TimeService.elapsedStr(state.stampTimestamp)}</span>` : ''}
         </div>
         <div class="card-body" style="text-align:center;padding:16px;">
           <button class="btn ${isActive?'bd':'bsu'} bfull" style="padding:14px;font-size:15px;"
@@ -251,6 +260,11 @@ const WorkOrderDetailPage = {
             <div style="flex:1;min-width:0;">
               <div style="font-size:13px;font-weight:700;${isOk?'text-decoration:line-through;color:var(--mt);':''}">${c.text}</div>
               ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
+              ${isAvv && c.avvikelseComment ? `<div style="margin-top:6px;background:#fff1f2;border-left:3px solid var(--rd);padding:6px 10px;border-radius:0 6px 6px 0;">
+                <div style="font-size:10px;font-weight:700;color:var(--rd);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Avvikelse</div>
+                <div style="font-size:12px;color:#374151;line-height:1.5;">${c.avvikelseComment}</div>
+                ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:3px;">${c.avvikelseBy||''}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
+              </div>` : ''}
             </div>
           </div>
           <div style="display:flex;gap:5px;margin-top:7px;margin-left:26px;">
@@ -260,7 +274,7 @@ const WorkOrderDetailPage = {
             </button>
             <button class="btn bxs ${isAvv?'bd':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')"
               style="font-size:10px;padding:3px 8px;display:flex;align-items:center;gap:3px;">
-              ${ic('alert-triangle',10)} ${isAvv ? 'Avvikelse !' : 'Markera avvikelse'}
+              ${ic('alert-triangle',10)} ${isAvv ? 'Avvikelse ✓' : 'Markera avvikelse'}
             </button>
             <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})"
               style="font-size:10px;padding:3px 8px;" title="Ta bort punkt">
@@ -313,12 +327,19 @@ const WorkOrderDetailPage = {
           <div style="display:flex;align-items:flex-start;gap:8px;">
             <div style="flex:1;min-width:0;">
               <div style="font-size:13px;font-weight:700;margin-bottom:3px;">${m.name}</div>
-              <div style="font-size:11px;color:var(--mt);">${qty} ${m.unit} × ${fmt(sell)} kr/st ex moms · ink-pris ${fmt(buy)} kr</div>
+              <div style="font-size:11px;color:var(--mt);">${qty} ${m.unit} × ${fmt(sell)} kr ex moms</div>
               <div style="display:flex;gap:10px;margin-top:4px;font-size:11px;">
                 <span style="color:var(--mt);">Ex: <strong style="color:var(--tx)">${fmt(exMoms)} kr</strong></span>
                 <span style="color:var(--mt);">Moms: ${fmt(momsAmt)} kr</span>
                 <span style="color:var(--navy);font-weight:700;">Inkl: ${fmt(inklMoms)} kr</span>
               </div>
+              ${buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;margin-top:5px;font-size:10px;color:var(--mt);font-style:italic;padding:4px 8px;background:var(--bg);border-radius:6px;">
+                Ink-pris: ${fmt(buy)} kr/st · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st
+              </div>
+              <button type="button" onclick="(function(){var e=document.getElementById('mat-int-${m.id}');e.style.display=e.style.display==='none'?'':'none';})()"
+                style="font-size:10px;color:var(--mt);background:none;border:none;padding:2px 0;margin-top:2px;cursor:pointer;display:flex;align-items:center;gap:3px;">
+                ${ic('eye',9)} Intern kalkyl
+              </button>` : ''}
             </div>
             <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
               <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',12)}</button>
@@ -359,7 +380,7 @@ const WorkOrderDetailPage = {
 
     // Log entries (manual log)
     (ao.log||[]).forEach(l => {
-      events.push({ type: l.type||'log', ts: l.timestamp||'', who: l.userName||'', text: l.text||'', imageData: l.imageData||'', id: l.id });
+      events.push({ type: l.type||'log', ts: l.timestamp||'', who: l.userName||'', text: l.text||'', imageData: l.imageData||'', followUpDate: l.followUpDate||'', id: l.id });
     });
 
     // Time entries
@@ -388,8 +409,8 @@ const WorkOrderDetailPage = {
     // Sort descending (newest first)
     events.sort((a,b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
 
-    const typeIcon = { note:'file-text', log:'activity', time:'clock', material:'package', status_change:'refresh-cw', created:'plus' };
-    const typeColor = { note:'var(--navy)', log:'var(--sky)', time:'var(--grn)', material:'var(--orn)', status_change:'var(--mt)', created:'var(--sky)' };
+    const typeIcon  = { note:'file-text', log:'activity', time:'clock', material:'package', status_change:'refresh-cw', created:'plus', uppföljning:'bell' };
+    const typeColor = { note:'var(--navy)', log:'var(--sky)', time:'var(--grn)', material:'var(--orn)', status_change:'var(--mt)', created:'var(--sky)', uppföljning:'#7c3aed' };
 
     return `<div style="padding:8px 14px 4px;">` + events.map(ev => {
       const col  = typeColor[ev.type] || 'var(--mt)';
@@ -400,9 +421,10 @@ const WorkOrderDetailPage = {
           <div style="flex:1;min-width:0;padding-top:4px;">
             ${ev.who ? `<div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:2px;">${ev.who}${ev.ts?' · '+relDate(ev.ts):''}</div>` : (ev.ts ? `<div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${relDate(ev.ts)}</div>` : '')}
             <div style="font-size:13px;line-height:1.5;word-break:break-word;">${ev.text}</div>
+            ${ev.followUpDate ? `<div style="margin-top:4px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;">${ic('calendar',9)} Uppföljning: ${ev.followUpDate}</div>` : ''}
             ${ev.imageData ? `<img src="${ev.imageData}" style="max-width:100%;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;" loading="lazy">` : ''}
           </div>
-          ${ev.id && ev.type==='log' ? `<button class="btn bxs bd" style="flex-shrink:0;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>` : ''}
+          ${ev.id && (ev.type==='log'||ev.type==='uppföljning') ? `<button class="btn bxs bd" style="flex-shrink:0;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>` : ''}
         </div>`;
     }).join('') + '</div>';
   },
@@ -499,6 +521,75 @@ const WorkOrderDetailPage = {
       if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
       showToast('Borttagen');
     });
+  },
+
+  /* ── Uppföljning ───────────────────────────── */
+  openFollowUp() {
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 2);
+    const defaultDateStr = defaultDate.toISOString().split('T')[0];
+    Modal.open({
+      title: `${ic('bell',14)} Skapa uppföljning`,
+      body: `
+        <div class="fg"><label>Typ</label>
+          <select id="fu-type">
+            <option value="Följ upp kund">Följ upp kund</option>
+            <option value="Ring kund">Ring kund</option>
+            <option value="Skicka påminnelse">Skicka påminnelse</option>
+            <option value="Återbesök">Återbesök</option>
+            <option value="Kontrollera arbete">Kontrollera arbete</option>
+          </select>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Datum <span style="color:var(--rd)">*</span></label>
+            <input type="date" id="fu-date" value="${defaultDateStr}"></div>
+          <div class="fg"><label>Tid (valfritt)</label>
+            <input type="time" id="fu-time"></div>
+        </div>
+        <div class="fg"><label>Kommentar <span style="color:var(--rd)">*</span></label>
+          <textarea id="fu-comment" rows="3" placeholder="Vad ska följas upp? Vad är syftet?"></textarea>
+        </div>`,
+      buttons: [
+        { label: 'Skapa uppföljning', cls: 'btn bsu', onClick: () => this._saveFollowUp() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('fu-comment')?.focus(), 80);
+  },
+
+  _saveFollowUp() {
+    const date    = document.getElementById('fu-date')?.value;
+    const time    = document.getElementById('fu-time')?.value || '';
+    const type    = document.getElementById('fu-type')?.value || 'Följ upp kund';
+    const comment = document.getElementById('fu-comment')?.value.trim();
+    if (!date)    { showToast('Välj datum'); return; }
+    if (!comment) { showToast('Kommentar krävs'); return; }
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    if (!ao.log) ao.log = [];
+    const who = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
+    const entry = {
+      id: 'LOG-' + Date.now(),
+      type: 'uppföljning',
+      text: `${type}: ${comment}`,
+      followUpDate: date,
+      followUpTime: time,
+      followUpType: type,
+      imageData: '',
+      visibility: 'intern',
+      userName: who,
+      timestamp: new Date().toISOString()
+    };
+    ao.log.push(entry);
+    WorkOrderService.update(this.aoId, { log: ao.log });
+    ActivityService.log('uppföljning', `${type}: ${comment} (${date}${time?' '+time:''})`, {
+      workOrderId: this.aoId,
+      customerId: ao.customerId
+    });
+    Modal.close();
+    const aoUp = getAO(this.aoId);
+    if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+    showToast(`Uppföljning skapad: ${date}`);
   },
 
   /* ── Material-modal ───────────────────────── */
@@ -721,13 +812,36 @@ const WorkOrderDetailPage = {
     });
   },
 
+  /* ── Stämpling timer ──────────────────── */
+  _startStampTimer() {
+    this._stopStampTimer();
+    this._stampInterval = setInterval(() => {
+      const el = document.getElementById('ao-stamp-elapsed');
+      if (!el || !state.stampActive || state.stampAoId !== this.aoId) { this._stopStampTimer(); return; }
+      el.textContent = 'Inklockat ' + TimeService.elapsedStr(state.stampTimestamp);
+    }, 30000);
+  },
+
+  _stopStampTimer() {
+    if (this._stampInterval) { clearInterval(this._stampInterval); this._stampInterval = null; }
+  },
+
   /* ── Åtgärder ──────────────────────────── */
   setStatus(status) {
     if (!Auth.require('ao_edit')) return;
-    WorkOrderService.setStatus(this.aoId, status);
-    this.render({ aoId: this.aoId });
-    Sidebar.updateBadges();
-    showToast(`Status: ${statusLabel(status)}`);
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const doSet = () => {
+      WorkOrderService.setStatus(this.aoId, status);
+      this.render({ aoId: this.aoId });
+      Sidebar.updateBadges();
+      showToast(`Status: ${statusLabel(status)}`);
+    };
+    if (ao.status === 'avbruten') {
+      Modal.confirm(`Återaktivera ordern och sätta status till "${statusLabel(status)}"?`, doSet);
+    } else {
+      doSet();
+    }
   },
 
   markComplete() {
@@ -881,16 +995,60 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     if (!ao || !ao.checklist || !ao.checklist[idx]) return;
     const c = ao.checklist[idx];
+    if (status === 'avvikelse' && c.avvikelse !== 'avvikelse') {
+      this._openAvvikelseModal(idx);
+      return;
+    }
     // Toggle: clicking same status clears it
     const newStatus = c.avvikelse === status ? null : status;
     c.avvikelse = newStatus;
     c.done = (newStatus === 'ok');
+    if (newStatus !== 'avvikelse') { c.avvikelseComment = ''; c.avvikelseAt = ''; c.avvikelseBy = ''; }
     WorkOrderService.update(this.aoId, { checklist: ao.checklist });
     const aoUp = getAO(this.aoId);
     if (aoUp) {
       document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
       this._updateChecklistCounter(aoUp);
     }
+  },
+
+  _openAvvikelseModal(idx) {
+    const ao = getAO(this.aoId);
+    if (!ao || !ao.checklist || !ao.checklist[idx]) return;
+    const c = ao.checklist[idx];
+    Modal.open({
+      title: `${ic('alert-triangle',14)} Markera avvikelse`,
+      body: `
+        <div class="nbox" style="margin-bottom:12px;">${ic('clipboard-check',13)} ${c.text}</div>
+        <div class="fg">
+          <label>Kommentar <span style="color:var(--rd)">*</span></label>
+          <textarea id="avv-comment" rows="3" placeholder="Beskriv avvikelsen – vad som är skadat, var och hur…">${c.avvikelseComment||''}</textarea>
+        </div>`,
+      buttons: [
+        { label: 'Spara avvikelse', cls: 'btn bd', onClick: () => {
+          const comment = document.getElementById('avv-comment')?.value.trim();
+          if (!comment) { showToast('Kommentar krävs vid avvikelse'); return; }
+          const aoF = getAO(this.aoId);
+          if (!aoF || !aoF.checklist || !aoF.checklist[idx]) return;
+          aoF.checklist[idx].avvikelse        = 'avvikelse';
+          aoF.checklist[idx].done             = false;
+          aoF.checklist[idx].avvikelseComment = comment;
+          aoF.checklist[idx].avvikelseAt      = new Date().toISOString();
+          aoF.checklist[idx].avvikelseBy      = state.currentUser
+            ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
+          WorkOrderService.update(this.aoId, { checklist: aoF.checklist });
+          Modal.close();
+          const aoUp = getAO(this.aoId);
+          if (aoUp) {
+            document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+            this._updateChecklistCounter(aoUp);
+          }
+          showToast('Avvikelse sparad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('avv-comment')?.focus(), 80);
   },
 
   toggleCheck(idx) {

@@ -221,10 +221,20 @@ function priorityClass(p) {
 }
 
 function sbdg(status) {
-  return `<span class="bdg ${statusClass(status)}">${statusLabel(status)}</span>`;
+  const icons = {
+    nytt:'circle',pool:'inbox',planerad:'calendar',pågående:'play-circle',
+    klar:'check-circle',fakturerad:'receipt',avbruten:'x-circle',
+    utkast:'file',skickad:'send',väntar:'clock',godkänd:'check-circle',
+    nekad:'x-circle',utgången:'alert-circle',betald:'check-circle',
+    förfallen:'alert-triangle',makulerad:'x'
+  };
+  const ico = icons[status];
+  return `<span class="bdg ${statusClass(status)}" style="display:inline-flex;align-items:center;gap:3px;">${ico?ic(ico,9):''}${statusLabel(status)}</span>`;
 }
 
 function pbdg(priority) {
-  const cls = { akut: 'bdg-red', hög: 'bdg-orange', normal: 'bdg-sky', låg: 'bdg-grey' }[priority] || 'bdg-grey';
-  return `<span class="bdg ${cls}">${priorityLabel(priority)}</span>`;
+  const cls   = { akut:'bdg-red', hög:'bdg-orange', normal:'bdg-sky', låg:'bdg-grey' }[priority] || 'bdg-grey';
+  const icons = { akut:'alert-circle', hög:'arrow-up', normal:'minus', låg:'arrow-down' };
+  const ico = icons[priority];
+  return `<span class="bdg ${cls}" style="display:inline-flex;align-items:center;gap:3px;">${ico?ic(ico,9):''}${priorityLabel(priority)}</span>`;
 }
