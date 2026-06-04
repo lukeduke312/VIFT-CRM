@@ -1269,11 +1269,21 @@ body.modal-open { overflow: hidden; touch-action: none; }
 
 /* VIFT logo img in hero (dark surface) */
 .off-hero-logo {
-  height: 34px;
+  max-height: 36px;
+  max-width: 128px;
   width: auto;
+  height: auto;
+  object-fit: contain;
   display: block;
-  border-radius: 6px;
   flex-shrink: 0;
+  opacity: .92;
+}
+/* Right-side container: logo + status dropdown */
+.off-hero-brand-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* VIFT brand badge in hero — fallback when img fails */

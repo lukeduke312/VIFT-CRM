@@ -1998,15 +1998,17 @@ const OfferDetailPage = {
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
           <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
-          <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
-            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-          <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
-          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-            ${sbdg(off.status)}
-            ${CustomSelect.render('offd-status',{
-              options:[{v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},{v:'utgången',l:'Utgången'}],
-              value:off.status, onchange:'OfferDetailPage.setStatus(this.value)'
-            })}
+          <div class="off-hero-brand-status">
+            <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
+            <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
+              ${sbdg(off.status)}
+              ${CustomSelect.render('offd-status',{
+                options:[{v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},{v:'utgången',l:'Utgången'}],
+                value:off.status, onchange:'OfferDetailPage.setStatus(this.value)'
+              })}
+            </div>
           </div>
         </div>
 
@@ -2469,19 +2471,22 @@ body{font-family:'Helvetica Neue',Arial,Helvetica,sans-serif;font-size:13px;colo
 .pg{max-width:800px;margin:0 auto;padding:40px 44px;}
 
 /* Header */
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #0d2b4e;gap:24px;}
-.logo-wrap{display:flex;align-items:flex-start;gap:12px;}
-.logo-img{height:46px;width:auto;border-radius:7px;display:block;}
-.logo-fb{display:none;background:#0d2b4e;color:#fff;font-weight:900;font-size:22px;padding:10px 16px 9px;border-radius:7px;letter-spacing:-0.5px;line-height:1;}
-.logo-info{padding-top:3px;}
-.logo-co{font-size:13px;font-weight:700;color:#0d2b4e;line-height:1.35;}
-.logo-detail{font-size:10px;color:#64748b;margin-top:3px;line-height:1.6;}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;padding-bottom:22px;border-bottom:1px solid #e2e8f0;gap:28px;}
+.hdr-accent{height:3px;background:linear-gradient(90deg,#0d2b4e 0%,#1d75d8 100%);border-radius:2px;margin-bottom:30px;margin-top:-30px;}
+.logo-wrap{display:flex;align-items:center;gap:0;}
+.logo-img{max-height:50px;max-width:180px;width:auto;height:auto;object-fit:contain;display:block;}
+.logo-fb{display:none;background:#0d2b4e;color:#fff;font-weight:900;font-size:20px;padding:11px 16px 10px;border-radius:7px;letter-spacing:-0.5px;line-height:1;}
+.logo-sep{width:1px;background:#e2e8f0;height:40px;margin:0 16px;flex-shrink:0;}
+.logo-info{}
+.logo-co{font-size:12px;font-weight:700;color:#0d2b4e;line-height:1.4;}
+.logo-detail{font-size:10px;color:#64748b;margin-top:4px;line-height:1.7;}
 
-.off-meta{text-align:right;flex-shrink:0;}
-.off-num{font-size:23px;font-weight:900;color:#0d2b4e;letter-spacing:-0.5px;line-height:1;}
-.off-title{font-size:13px;font-weight:600;color:#334155;margin-top:5px;}
-.off-date{font-size:11px;color:#64748b;margin-top:4px;line-height:1.6;}
-.validity{display:inline-block;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;margin-top:5px;}
+.off-meta{text-align:right;flex-shrink:0;padding-top:2px;}
+.off-num-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#94a3b8;margin-bottom:3px;}
+.off-num{font-size:26px;font-weight:900;color:#0d2b4e;letter-spacing:-0.8px;line-height:1;margin-bottom:5px;}
+.off-title{font-size:12px;font-weight:600;color:#475569;margin-bottom:3px;}
+.off-date{font-size:10px;color:#94a3b8;line-height:1.6;}
+.validity{display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:10px;font-weight:700;padding:2px 10px;border-radius:20px;margin-top:6px;}
 
 /* Parties */
 .parties{display:grid;grid-template-columns:1fr 1fr;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:22px;}
@@ -2556,6 +2561,7 @@ td.fw{font-weight:600;}
     <img class="logo-img" src="${logoUrl}" alt="VIFT"
       onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'">
     <div class="logo-fb">VIFT</div>
+    <div class="logo-sep"></div>
     <div class="logo-info">
       <div class="logo-co">${esc2(co)}</div>
       ${coAddr?`<div class="logo-detail">${esc2(coAddr)}</div>`:''}
@@ -2563,12 +2569,14 @@ td.fw{font-weight:600;}
     </div>
   </div>
   <div class="off-meta">
-    <div class="off-num">Offert ${esc2(off.id)}</div>
+    <div class="off-num-lbl">Offert</div>
+    <div class="off-num">${esc2(off.id)}</div>
     ${off.title?`<div class="off-title">${esc2(off.title)}</div>`:''}
     <div class="off-date">Datum: ${(off.createdAt||'').split('T')[0]||'—'}</div>
     ${off.validUntil?`<div><span class="validity">Giltig till ${esc2(off.validUntil)}</span></div>`:''}
   </div>
 </div>
+<div class="hdr-accent"></div>
 
 <div class="parties">
   <div class="party">
