@@ -53,6 +53,7 @@ const BrandingService = {
       state.settings = Object.assign({}, state.settings || {}, nonLogo);
       persist();
     }
+    this.applyColors();
     document.dispatchEvent(new CustomEvent('brandingUpdated'));
   },
 
@@ -62,6 +63,17 @@ const BrandingService = {
       if (field === 'logoDark')  localStorage.removeItem(this._LS_DARK);
     } catch(e) {}
     document.dispatchEvent(new CustomEvent('brandingUpdated'));
+  },
+
+  applyColors() {
+    const s = state && state.settings ? state.settings : {};
+    const hexRe = /^#[0-9a-fA-F]{3,6}$/;
+    const primary   = hexRe.test(s.primaryColor   || '') ? s.primaryColor   : '#0f3763';
+    const secondary = hexRe.test(s.secondaryColor || '') ? s.secondaryColor : '#1d75d8';
+    try {
+      document.documentElement.style.setProperty('--brand-primary',   primary);
+      document.documentElement.style.setProperty('--brand-secondary', secondary);
+    } catch(e) {}
   },
 
   applyToLogin() {

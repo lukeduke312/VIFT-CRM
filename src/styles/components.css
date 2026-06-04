@@ -22,8 +22,8 @@
 .btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
-.bp  { background: linear-gradient(135deg, var(--navy), var(--blue)); color: #fff; box-shadow: 0 3px 12px rgba(13,43,78,.2); }
-.bp:hover { box-shadow: 0 5px 16px rgba(13,43,78,.28); }
+.bp  { background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); color: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.2); }
+.bp:hover { box-shadow: 0 5px 16px rgba(0,0,0,.28); }
 .bs  { background: var(--acc); color: var(--navy); border: 1.5px solid var(--br); }
 .bs:hover { border-color: var(--sky); }
 .bsu { background: linear-gradient(135deg, #15803d, #16a34a); color: #fff; }

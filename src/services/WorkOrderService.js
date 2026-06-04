@@ -145,5 +145,70 @@ const WorkOrderService = {
     return (state.workOrders || []).filter(a =>
       a.status === 'klar' && !a.invoiceId
     );
+  },
+
+  /* ── Arkiv & Papperskorg ────────────── */
+
+  archive(id) {
+    const ao = getAO(id);
+    if (!ao) return;
+    const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
+    ao.archived   = true;
+    ao.archivedAt = new Date().toISOString();
+    ao.archivedBy = by;
+    ao.updatedAt  = new Date().toISOString();
+    ActivityService.log('work_order_archived', `Arbetsorder ${ao.id} arkiverad`, { workOrderId: id, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+  },
+
+  restoreFromArchive(id) {
+    const ao = getAO(id);
+    if (!ao) return;
+    ao.archived   = false;
+    ao.archivedAt = '';
+    ao.archivedBy = '';
+    ao.updatedAt  = new Date().toISOString();
+    ActivityService.log('work_order_restored', `Arbetsorder ${ao.id} återställd från arkiv`, { workOrderId: id, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+  },
+
+  softDelete(id) {
+    const ao = getAO(id);
+    if (!ao) return;
+    const by  = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
+    const now = new Date();
+    ao.deleted     = true;
+    ao.deletedAt   = now.toISOString();
+    ao.deletedBy   = by;
+    ao.deleteAfter = new Date(now.getTime() + 14 * 86400000).toISOString();
+    ao.updatedAt   = now.toISOString();
+    ActivityService.log('work_order_deleted', `Arbetsorder ${ao.id} borttagen (papperskorg)`, { workOrderId: id, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+  },
+
+  restoreFromTrash(id) {
+    const ao = getAO(id);
+    if (!ao) return;
+    ao.deleted     = false;
+    ao.deletedAt   = '';
+    ao.deletedBy   = '';
+    ao.deleteAfter = '';
+    ao.updatedAt   = new Date().toISOString();
+    ActivityService.log('work_order_restored', `Arbetsorder ${ao.id} återställd från papperskorg`, { workOrderId: id, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+  },
+
+  permanentDelete(id) {
+    const idx = state.workOrders.findIndex(a => a.id === id);
+    if (idx === -1) return;
+    const ao = state.workOrders[idx];
+    ActivityService.log('work_order_permanent_delete', `Arbetsorder ${id} raderad permanent`, { workOrderId: id, customerId: ao ? ao.customerId : '' });
+    state.workOrders.splice(idx, 1);
+    persist();
+    Sidebar.updateBadges();
   }
 };

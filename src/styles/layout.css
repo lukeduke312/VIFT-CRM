@@ -30,7 +30,7 @@
   top: 0;
   bottom: 0;
   width: var(--sidebar-w);
-  background: var(--navy);
+  background: var(--brand-primary);
   display: flex;
   flex-direction: column;
   z-index: 300;
@@ -67,7 +67,7 @@
 
 /* ── Topbar ─────────────────────────────────────── */
 .topbar {
-  background: linear-gradient(135deg, var(--navy), var(--blue));
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
   padding: 12px 14px;
   padding-top: calc(12px + env(safe-area-inset-top));
   display: flex;

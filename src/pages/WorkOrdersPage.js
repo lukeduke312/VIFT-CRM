@@ -69,9 +69,9 @@ const WorkOrdersPage = {
         ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()" style="flex-shrink:0;">${ic('plus',14)} Ny order</button>` : ''}
       </div>
       <div class="ftabs" style="margin-bottom:8px;">
-        ${['alla','nytt','pool','planerad','pågående','klar','fakturerad'].map(f =>
+        ${['alla','nytt','pool','planerad','pågående','klar','fakturerad','arkiverade','papperskorg'].map(f =>
           `<button class="ft ${this.filter===f?'on':''}" onclick="WorkOrdersPage.setFilter('${f}')">${
-            {alla:'Alla',nytt:'Nytt',pool:'Pool',planerad:'Planerad',pågående:'Pågående',klar:'Klar',fakturerad:'Fakturerad'}[f]
+            {alla:'Alla',nytt:'Nytt',pool:'Pool',planerad:'Planerad',pågående:'Pågående',klar:'Klar',fakturerad:'Fakturerad',arkiverade:'Arkiverade',papperskorg:'Papperskorg'}[f]
           }</button>`
         ).join('')}
       </div>
@@ -104,17 +104,26 @@ const WorkOrdersPage = {
     const el = document.getElementById('ao-list');
     if (!el) return;
     let list = state.workOrders || [];
-    if (this.filter !== 'alla') list = list.filter(a => a.status === this.filter);
-    // Apply quick-filter refinements
-    const _active = a => !['klar','fakturerad','avbruten'].includes(a.status);
-    if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId);
-    if (this._dashFilter === 'akut')    list = list.filter(a => a.priority==='akut' && _active(a));
-    if (this._dashFilter === 'active')  list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
-    if (this._dashFilter === 'idag')    list = list.filter(a => a.scheduledDate===tdy() && _active(a));
-    if (this._dashFilter === 'forsenad')list = list.filter(a => a.scheduledDate && a.scheduledDate<tdy() && _active(a));
-    if (this._dashFilter === 'mine') {
-      const myId = state.currentUser ? state.currentUser.id : null;
-      if (myId) list = list.filter(a => (a.staff||[]).includes(myId) && _active(a));
+
+    if (this.filter === 'arkiverade') {
+      list = list.filter(a => a.archived && !a.deleted);
+    } else if (this.filter === 'papperskorg') {
+      list = list.filter(a => a.deleted);
+    } else {
+      // Exclude archived and deleted from all normal views
+      list = list.filter(a => !a.archived && !a.deleted);
+      if (this.filter !== 'alla') list = list.filter(a => a.status === this.filter);
+      // Apply quick-filter refinements
+      const _active = a => !['klar','fakturerad','avbruten'].includes(a.status);
+      if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId);
+      if (this._dashFilter === 'akut')    list = list.filter(a => a.priority==='akut' && _active(a));
+      if (this._dashFilter === 'active')  list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
+      if (this._dashFilter === 'idag')    list = list.filter(a => a.scheduledDate===tdy() && _active(a));
+      if (this._dashFilter === 'forsenad')list = list.filter(a => a.scheduledDate && a.scheduledDate<tdy() && _active(a));
+      if (this._dashFilter === 'mine') {
+        const myId = state.currentUser ? state.currentUser.id : null;
+        if (myId) list = list.filter(a => (a.staff||[]).includes(myId) && _active(a));
+      }
     }
     if (this.q) {
       const ql = this.q.toLowerCase();
@@ -175,6 +184,17 @@ const WorkOrdersPage = {
         const chkHtml = total > 0
           ? `<span class="ao-item-progress ${chkOk===total&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${total} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
           : '';
+        const archiveActions = ao.archived ? `
+          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;" onclick="event.stopPropagation()">
+            <span class="bdg bdg-grey">${ic('archive',9)} Arkiverad${ao.archivedAt?' · '+fmtDate(ao.archivedAt):''}</span>
+            <button class="btn bxs bghost" onclick="WorkOrderDetailPage._restoreFromArchive('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',10)} Återställ</button>
+          </div>` : '';
+        const trashActions = ao.deleted ? `
+          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;" onclick="event.stopPropagation()">
+            <span class="bdg bdg-red">${ic('trash',9)} Papperskorg${ao.deletedAt?' · '+fmtDate(ao.deletedAt):''}</span>
+            <button class="btn bxs bghost" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',10)} Återställ</button>
+            <button class="btn bxs bd" onclick="WorkOrderDetailPage._confirmPermanentDelete('${ao.id}');">${ic('trash-2',10)} Radera</button>
+          </div>` : '';
         return `
           <button class="ao-list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
             <div class="ao-item-top">
@@ -190,6 +210,7 @@ const WorkOrdersPage = {
               ${readyForInvoice?`<span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span>`:''}
               ${chkHtml}
             </div>` : ''}
+            ${archiveActions}${trashActions}
           </button>`;
       }).join('');
     }

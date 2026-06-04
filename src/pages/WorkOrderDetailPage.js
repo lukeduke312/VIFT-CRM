@@ -36,6 +36,9 @@ const WorkOrderDetailPage = {
     const isStampedOnThis = state.stampActive && state.stampAoId === ao.id;
 
     el.innerHTML = `
+      ${ao.deleted ? `<div class="nbox" style="background:#fee2e2;border-left-color:var(--rd);margin-bottom:8px;">${ic('trash',13)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
+      ${ao.archived && !ao.deleted ? `<div class="nbox" style="background:#f1f5f9;border-left-color:var(--mt);margin-bottom:8px;">${ic('archive',13)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
+
       <!-- Status/Action panel -->
       <div class="ao-action-panel">
         <div class="ao-action-panel-left">
@@ -176,11 +179,23 @@ const WorkOrderDetailPage = {
     if (ao.status === 'klar' && ao.invoiceId) {
       btns.push(`<button class="btn bs bsm" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('file-text',13)} Visa fakturaunderlag</button>`);
     }
-    if (canEdit && ao.status === 'avbruten') {
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('rotate-ccw',13)} Återaktivera</button>`);
+    if (canEdit && ao.status === 'avbruten' && !ao.archived && !ao.deleted) {
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.openReactivateModal()">${ic('rotate-ccw',13)} Återaktivera</button>`);
     }
-    if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status)) {
+    if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.archived && !ao.deleted) {
       btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()" title="Fler statusval">${ic('more-horizontal',13)}</button>`);
+    }
+    // Archive / trash actions
+    if (canEdit && !ao.archived && !ao.deleted) {
+      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openArchiveModal()" title="Arkivera">${ic('archive',13)}</button>`);
+      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openDeleteModal()" title="Ta bort">${ic('trash',13)}</button>`);
+    }
+    if (ao.archived && !ao.deleted) {
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage._restoreFromArchive('${ao.id}')">${ic('rotate-ccw',13)} Återställ från arkiv</button>`);
+    }
+    if (ao.deleted) {
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}')">${ic('rotate-ccw',13)} Återställ</button>`);
+      btns.push(`<button class="btn bd bsm" onclick="WorkOrderDetailPage._confirmPermanentDelete('${ao.id}')">${ic('trash-2',13)} Radera permanent</button>`);
     }
     return btns.join('');
   },
@@ -397,7 +412,7 @@ const WorkOrderDetailPage = {
 
     // Status changes from activity log
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
-      if (a.type === 'status_change' || a.type === 'created') {
+      if (a.type === 'status_change' || a.type === 'work_order_status' || a.type === 'created') {
         events.push({ type: a.type, ts: a.timestamp||'', who: '', text: a.description||'' });
       }
     });
@@ -409,8 +424,8 @@ const WorkOrderDetailPage = {
     // Sort descending (newest first)
     events.sort((a,b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
 
-    const typeIcon  = { note:'file-text', log:'activity', time:'clock', material:'package', status_change:'refresh-cw', created:'plus', uppföljning:'bell' };
-    const typeColor = { note:'var(--navy)', log:'var(--sky)', time:'var(--grn)', material:'var(--orn)', status_change:'var(--mt)', created:'var(--sky)', uppföljning:'#7c3aed' };
+    const typeIcon  = { note:'file-text', log:'activity', time:'clock', material:'package', status_change:'refresh-cw', work_order_status:'refresh-cw', created:'plus', uppföljning:'bell' };
+    const typeColor = { note:'var(--navy)', log:'var(--sky)', time:'var(--grn)', material:'var(--orn)', status_change:'var(--mt)', work_order_status:'var(--mt)', created:'var(--sky)', uppföljning:'#7c3aed' };
 
     return `<div style="padding:8px 14px 4px;">` + events.map(ev => {
       const col  = typeColor[ev.type] || 'var(--mt)';
@@ -831,17 +846,10 @@ const WorkOrderDetailPage = {
     if (!Auth.require('ao_edit')) return;
     const ao = getAO(this.aoId);
     if (!ao) return;
-    const doSet = () => {
-      WorkOrderService.setStatus(this.aoId, status);
-      this.render({ aoId: this.aoId });
-      Sidebar.updateBadges();
-      showToast(`Status: ${statusLabel(status)}`);
-    };
-    if (ao.status === 'avbruten') {
-      Modal.confirm(`Återaktivera ordern och sätta status till "${statusLabel(status)}"?`, doSet);
-    } else {
-      doSet();
-    }
+    WorkOrderService.setStatus(this.aoId, status);
+    this.render({ aoId: this.aoId });
+    Sidebar.updateBadges();
+    showToast(`Status: ${statusLabel(status)}`);
   },
 
   markComplete() {
@@ -886,10 +894,104 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: 'Ändra status',
       body: statuses.map(s => `
-        <div class="crow" onclick="WorkOrderDetailPage.setStatus('${s}');Modal.close();">
+        <div class="crow" onclick="Modal.close();setTimeout(()=>WorkOrderDetailPage.setStatus('${s}'),50);">
           ${sbdg(s)}
           <span style="font-size:13px;">${ao.status===s?ic('check',14):''}</span>
         </div>`).join('')
+    });
+  },
+
+  openReactivateModal() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    Modal.open({
+      title: `${ic('rotate-ccw',14)} Återaktivera arbetsorder`,
+      body: `
+        <p style="font-size:13px;color:var(--mt);margin-bottom:14px;">Ordern är avbruten. Välj ny status att återaktivera till:</p>
+        <div class="fg">
+          <label>Ny status</label>
+          <select id="reactivate-status" style="font-size:14px;">
+            <option value="nytt">Nytt</option>
+            <option value="planerad">Planerad</option>
+            <option value="pågående">Pågående</option>
+          </select>
+        </div>`,
+      buttons: [
+        { label: `${ic('rotate-ccw',12)} Återaktivera`, cls: 'btn bsu', onClick: () => this._doReactivate() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _doReactivate() {
+    const newStatus = document.getElementById('reactivate-status')?.value || 'nytt';
+    WorkOrderService.setStatus(this.aoId, newStatus);
+    Modal.close();
+    this.render({ aoId: this.aoId });
+    Sidebar.updateBadges();
+    showToast(`Arbetsorder återaktiverad – ${statusLabel(newStatus)}`);
+  },
+
+  openArchiveModal() {
+    Modal.open({
+      title: `${ic('archive',14)} Arkivera arbetsorder`,
+      body: `<p style="font-size:13px;color:var(--mt);">Ordern arkiveras och syns inte i ordinarie lista. Du kan återställa den när som helst från Arkiverade-vyn.</p>`,
+      buttons: [
+        { label: `${ic('archive',12)} Arkivera`, cls: 'btn bp', onClick: () => {
+          WorkOrderService.archive(this.aoId);
+          Modal.close();
+          showToast('Arbetsorder arkiverad');
+          Router.showPage('pg-ao');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  openDeleteModal() {
+    Modal.open({
+      title: `${ic('trash',14)} Ta bort arbetsorder`,
+      body: `<p style="font-size:13px;color:var(--mt);">Ordern hamnar i papperskorgen och raderas automatiskt efter 14 dagar. Du kan återställa den dessförinnan.</p>`,
+      buttons: [
+        { label: `${ic('trash',12)} Ta bort`, cls: 'btn bd', onClick: () => {
+          WorkOrderService.softDelete(this.aoId);
+          Modal.close();
+          showToast('Arbetsorder borttagen (papperskorg)');
+          Router.showPage('pg-ao');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _restoreFromArchive(id) {
+    WorkOrderService.restoreFromArchive(id || this.aoId);
+    showToast('Återställd från arkiv');
+    if (id && id !== this.aoId) return;
+    this.render({ aoId: this.aoId });
+  },
+
+  _restoreFromTrash(id) {
+    WorkOrderService.restoreFromTrash(id || this.aoId);
+    showToast('Återställd från papperskorg');
+    if (id && id !== this.aoId) return;
+    this.render({ aoId: this.aoId });
+  },
+
+  _confirmPermanentDelete(id) {
+    const targetId = id || this.aoId;
+    Modal.open({
+      title: `${ic('trash-2',14)} Radera permanent`,
+      body: `<p style="font-size:13px;color:var(--mt);">Arbetsorder <strong>${targetId}</strong> raderas permanent och kan inte återställas.</p>`,
+      buttons: [
+        { label: `${ic('trash-2',12)} Radera permanent`, cls: 'btn bd', onClick: () => {
+          WorkOrderService.permanentDelete(targetId);
+          Modal.close();
+          showToast('Arbetsorder raderad permanent');
+          Router.showPage('pg-ao');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
     });
   },
 

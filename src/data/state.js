@@ -73,6 +73,13 @@ function initState() {
   state.ronderingar        = s.get('ronderingar')      || SeedData.ronderingar      || [];
   state.avvikelser         = s.get('avvikelser')       || SeedData.avvikelser       || [];
 
+  // Purge AOs past their 14-day trash window
+  const _trashNow = new Date();
+  state.workOrders = state.workOrders.filter(function(ao) {
+    if (!ao.deleted || !ao.deleteAfter) return true;
+    return new Date(ao.deleteAfter) > _trashNow;
+  });
+
   // Migrate plain-string titles → rich objects
   state.titles = state.titles.map(function(t, i) {
     if (typeof t === 'string') {
