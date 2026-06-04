@@ -1097,14 +1097,15 @@ const OffersPage = {
     const qtyUnit = qtyMatch ? (/(lm|löpmeter)/i.test(qtyMatch[2]) ? 'lm' : 'm²') : 'm²';
     const qtyStr = qty ? `ca ${qty} ${qtyUnit}` : '';
 
-    // Multi-moment detection — each DEFS entry fires independently
-    const WASH_V = /\b(tvätta|tvättar|tvättat|rengöra|rengör|högtryckstvätta|högtrycksvätta|softwash)\b/;
+    // Multi-moment detection — verb takes priority over object; each DEFS entry fires independently
+    const WASH_V = /\b(tvätta|tvättar|tvättat|rengöra|rengör|rengöring|högtryckstvätta|högtrycksvätta|softwash|spola|spolning|avlägsna smuts|algtvätt|algbehandla|få bort alger)\b/;
     const CLIP_V = /\b(klippa|klipper|klippt|trimma|trimmar|trimmat)\b/;
+    const RIV_V  = /\b(riva|river|rivit|rivning|demontera|demonterar|demontering)\b/;
 
     const DEFS = [
       {
         id: 'rivning', label: 'Rivning / Demontering',
-        trigger: s => /\b(riva|river|rivit|rivning|demontera|demonterar|demontering)\b|montera ned|ta ned konstruktion|riva ut/.test(s),
+        trigger: s => RIV_V.test(s) || /montera ned|ta ned konstruktion|riva ut/.test(s),
         action: 'rivning och demontering av befintliga konstruktioner',
         scopeCtx: 'Arbetet utförs metodiskt och säkert med rätt skyddsutrustning och hantering av rivmaterial.',
         includes: ['Demontering och rivning av angivna konstruktioner','Sortering och borttransport av rivmaterial','Dokumentation inför efterföljande arbeten'],
@@ -1112,7 +1113,9 @@ const OffersPage = {
       },
       {
         id: 'fasadpanel', label: 'Fasadpanel / Panelarbete',
-        trigger: s => /\b(fasadpanel|panelarbete|liggande panel|stående panel)\b|\bpanel\b/.test(s) && !/fasadtvätt/.test(s),
+        // Suppress if rivning is the primary verb — then that moment owns the panel work
+        trigger: s => (/\b(fasadpanel|panelarbete|liggande panel|stående panel)\b|\bpanel\b/.test(s)) &&
+                      !RIV_V.test(s) && !/fasadtvätt/.test(s),
         action: 'montering och byte av fasadpanel',
         scopeCtx: 'Arbetet innefattar mätning, tillpassning och montering av ny panel med korrekt infästning och tätning.',
         includes: ['Demontering av befintlig panel','Montering av ny fasadpanel enligt specifikation','Tätning och fogning'],
@@ -1135,8 +1138,8 @@ const OffersPage = {
         excludes: ['Borttagning av gammal färg utöver normalt förarbete','Specialbehandlingar (brandskyddsfärg, klotterskydd)','Material ej inkluderat i offert'],
       },
       {
-        id: 'felsökning', label: 'Felsökning / Felavhjälpning',
-        trigger: s => /\b(felsök|felsöker|felsökt|felsökning|felsöka|diagnostiser|lokalisera|lokaliserar|lokaliserat|kontrollera|kontrollerar|kontrollerat|undersöka|undersöker|undersökt)\b|hitta felet|hitta läckan|leta efter fel/.test(s),
+        id: 'felsökning', label: 'Felsökning / Kontroll',
+        trigger: s => /\b(felsök|felsöker|felsökt|felsökning|felsöka|diagnostiser|lokalisera|lokaliserar|lokaliserat|kontrollera|kontrollerar|kontrollerat|undersöka|undersöker|undersökt|besiktiga|besiktigar|besiktning|inventera|inventering|utreda|utreder|utredning|bedöma|bedömer)\b|hitta felet|hitta läckan|leta efter fel|hitta orsak/.test(s),
         action: 'felsökning och lokalisering av fel eller skada',
         scopeCtx: 'Arbetet utförs systematiskt av erfaren tekniker med rätt utrustning och dokumenteras skriftligt.',
         includes: ['Systematisk felsökning och diagnostik','Dokumentation av fynd och skadeläge','Skriftlig åtgärdsrapport med prioritering','Löpande kommunikation med uppdragsgivare'],
@@ -1159,35 +1162,46 @@ const OffersPage = {
         excludes: ['Förebyggande åtgärder utöver specificerat arbete','Orsaksutredning utan separat avtal','Material ej specificerat i offert'],
       },
       {
-        id: 'reparation', label: 'Reparation / Justering',
-        trigger: s => /\b(laga|lagar|lagat|reparera|reparerar|reparerat|reparation|justera|justerar|justerat|byta|byter|bytt|byte|täta|tätar|tätat|tätning)\b/.test(s),
-        action: 'reparation och justering av angivna delar',
-        scopeCtx: 'Arbetet utförs av erfaren personal med rätt kompetens och verktyg.',
-        includes: ['Bedömning och planering av åtgärd','Reparation eller justering enligt beskrivning','Test och kontroll efter åtgärd'],
+        id: 'stenreparation', label: 'Plattreparation / Markstenjustering',
+        trigger: s => /\b(laga|lagning|reparera|justera|rikta|sättning|sättningar|komplettera|komplettering)\b/.test(s) &&
+                      /\b(marksten|plattor|sten|uppfart|stenläggning|markytan?|gångbanor?)\b/.test(s),
+        action: 'reparation och justering av marksten och belagda ytor',
+        scopeCtx: 'Arbetet utförs med precision för att återställa jämna och stabila markytor.',
+        includes: ['Uppbrytning och återläggning av skadade eller sjunkna plattor','Justering av underlag och sättningar','Återläggning och fogning','Kontroll och jämning av angränsande ytor'],
+        excludes: ['Ny fogsand utöver fogning vid reparation (tillval)','Impregnering (tillval)','Helrenovering av yta utan separat offert'],
+      },
+      {
+        id: 'reparation', label: 'Reparation / Åtgärd',
+        trigger: s => /\b(fixa|fixar|fixat|laga|lagar|lagat|reparera|reparerar|reparerat|reparation|åtgärda|åtgärdar|åtgärdat|åtgärd|justera|justerar|justerat|byta|byter|bytt|byte|täta|tätar|tätat|tätning|komplettera|komplettering)\b/.test(s),
+        action: 'reparation och åtgärd av angivna delar',
+        scopeCtx: 'Arbetet utförs av erfaren personal med rätt kompetens och verktyg för respektive moment.',
+        includes: ['Bedömning och planering av åtgärd','Reparation eller justering enligt beskrivning','Test och kontroll efter åtgärd','Städning och bortforsling av eget avfall'],
         excludes: ['Större utbyten utöver specificerad åtgärd','Material ej inkluderat i offert','Tillkommande arbeten som framkommer under utförandet'],
       },
       {
         id: 'altantvätt', label: 'Altantvätt',
-        trigger: s => /\b(altantvätt)\b/.test(s) || (WASH_V.test(s) && /altan/.test(s)),
-        action: 'professionell rengöring av altan och träyta',
-        scopeCtx: 'Arbetet utförs varsamt med metod anpassad för aktuellt träslag och ytskikt.',
-        includes: ['Högtrycksrengöring anpassad för träyta','Biologisk algbehandling','Rengöring av räcken och trädetaljer'],
+        trigger: s => /\b(altantvätt)\b/.test(s) || (WASH_V.test(s) && /\b(altan|terrass|uteplats)\b/.test(s)),
+        action: 'professionell rengöring av altan, räcken och träytor',
+        scopeCtx: 'Arbetet utförs varsamt med metod anpassad för aktuellt träslag och ytskikt för att uppnå ett rent resultat utan att skada underlaget.',
+        includes: ['Högtrycksrengöring anpassad för träyta','Biologisk algbehandling','Rengöring av räcken, trappor och trädetaljer','Eftersköljning och kontroll av utfört arbete'],
         excludes: ['Oljning eller impregnering (tillval)','Slipning eller utbyte av plankor','Målning'],
       },
       {
-        id: 'fasadtvätt', label: 'Fasadtvätt',
-        trigger: s => /\b(fasadtvätt)\b/.test(s) || (WASH_V.test(s) && /fasad/.test(s)),
-        action: 'professionell fasadtvätt med anpassad metod',
-        scopeCtx: 'Utförs av certifierad personal med metod anpassad efter materialtyp och föroreningsgrad.',
-        includes: ['Inventering och bedömning av fasadtyp','Högtrycks- eller softwashtvätt','Biologisk algbehandling vid behov','Rengöring kring fönster och dörrar'],
+        id: 'fasadtvätt', label: 'Fasadtvätt / Utvändig tvätt',
+        trigger: s => /\b(fasadtvätt)\b/.test(s) ||
+                      (WASH_V.test(s) && /\b(fasad|hus|byggnad|fasadyta|fasaddel|sockel|vägg|puts|tegel)\b/.test(s)),
+        action: 'professionell tvätt av fasad och utvändiga ytor',
+        scopeCtx: 'Utförs av certifierad personal med metod och tryck anpassat efter materialtyp och föroreningsgrad för att uppnå ett rent och vårdat resultat utan att skada underlaget.',
+        includes: ['Inventering och bedömning av fasadtyp och ytskikt','Högtrycks- eller softwashtvätt med anpassad metod','Biologisk algbehandling vid behov','Rengöring kring fönster, dörrar och detaljer'],
         excludes: ['Puts- eller murningsarbeten','Målning av fasad','Fönsterputsning (tillval)'],
       },
       {
-        id: 'stentvätt', label: 'Stentvätt / Marksten',
-        trigger: s => /\b(stentvätt|stenhögtryck)\b/.test(s) || (WASH_V.test(s) && (/\b(marksten|betongplattor|stenläggning|plattor)\b/.test(s) || /stenterrass/.test(s))),
+        id: 'stentvätt', label: 'Stentvätt / Markytor',
+        trigger: s => /\b(stentvätt|stenhögtryck)\b/.test(s) ||
+                      (WASH_V.test(s) && /\b(sten|marksten|betongplattor|stenläggning|plattor|stenterrass|uppfart|entréyta|hårdgjord|markytor?|gångbana|gångväg)\b/.test(s)),
         action: 'högtrycksrengöring av marksten och belagda ytor',
-        scopeCtx: 'Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel.',
-        includes: ['Högtrycksrengöring av angiven yta','Biologisk algbehandling','Rengöring av kanter och kantstöd'],
+        scopeCtx: 'Arbetet utförs med professionell utrustning och miljögodkända rengöringsmedel anpassade för aktuell yta och smutsnivå.',
+        includes: ['Högtrycksrengöring av angiven yta','Biologisk algbehandling','Rengöring av kanter, kantstöd och detaljer','Efterspolning och kontroll av utfört arbete'],
         excludes: ['Ny fogsand efter tvätt (tillval)','Reparation av skadade plattor','Bortforsling av annat material'],
       },
       {
@@ -1200,7 +1214,7 @@ const OffersPage = {
       },
       {
         id: 'fönsterputsning', label: 'Fönsterputsning',
-        trigger: s => /\b(fönsterputsning|fönsterputsa|glasrengöring|putsa fönster)\b/.test(s) || (WASH_V.test(s) && /fönster/.test(s)),
+        trigger: s => /\bfönsterputs|\b(glasrengöring)\b|putsa fönster/.test(s) || (WASH_V.test(s) && /fönster/.test(s)),
         action: 'professionell fönsterputsning',
         scopeCtx: 'Utförs med professionell utrustning och rengöringsmedel anpassade för glas och karmar.',
         includes: ['Putsning av angivna fönster in- och/eller utvändigt','Rengöring av fönsterkarmar och fönsterbräden'],
@@ -1208,7 +1222,7 @@ const OffersPage = {
       },
       {
         id: 'häckklippning', label: 'Häckklippning',
-        trigger: s => /häck/.test(s) || (CLIP_V.test(s) && /buska/.test(s)),
+        trigger: s => /häck/.test(s) || (CLIP_V.test(s) && /\b(buska|buskar|buskage)\b/.test(s)),
         action: 'häckklippning och formklippning av buskage',
         scopeCtx: 'Arbetet utförs med professionell utrustning av erfaren personal.',
         includes: ['Klippning och formning av häck och buskage','Uppsamling och borttransport av klippmaterial'],
@@ -1223,6 +1237,14 @@ const OffersPage = {
         excludes: ['Gödning eller behandling av gräsmatta (tillval)','Nysådd eller lagning av fläckar','Borttagning av mossa'],
       },
       {
+        id: 'ogräs', label: 'Ogräsrensning',
+        trigger: s => /\b(ogräs|ogräsrensning|rensa ogräs|fogrensning|rensa fogar|ogräsfri)\b/.test(s),
+        action: 'ogräsrensning och rensning av belagda ytor',
+        scopeCtx: 'Arbetet utförs manuellt och med lämpliga verktyg för aktuell yta och fogbredd.',
+        includes: ['Rensning av ogräs i fogar och längs kanter','Uppsamling och borttransport av ogräs','Eftersopning av rengjord yta'],
+        excludes: ['Kemisk bekämpning utan separat avtal','Ny fogsand (tillval)','Markstensreparationer'],
+      },
+      {
         id: 'fogsand', label: 'Fogsand / Fogning',
         trigger: s => /\b(fogsand|fogning|foga|fogar|fogat)\b|lägga fogsand|fylla fogsand|fylla i fogsand/.test(s),
         action: 'läggning av fogsand och fogning av stenyta',
@@ -1231,11 +1253,11 @@ const OffersPage = {
         excludes: ['Högtryckstvätt (tillval inför fogsand)','Justering av ojämna plattor','Material utöver specificerad mängd'],
       },
       {
-        id: 'impregnering', label: 'Impregnering / Träskydd',
-        trigger: s => /impregner|träskydd|träolja|olja trä/.test(s),
-        action: 'impregnering och ytbehandling av träkonstruktion',
-        scopeCtx: 'Arbetet utförs med godkänt träskyddsmedel för aktuell träsort och exponering.',
-        includes: ['Rengöring av träyta inför behandling','Applicering av träskyddsmedel / impregnering'],
+        id: 'impregnering', label: 'Impregnering / Ytskydd',
+        trigger: s => /impregner|träskydd|träolja|olja trä|stenimpregnering|markimpregnering/.test(s),
+        action: 'impregnering och ytskyddsbehandling',
+        scopeCtx: 'Arbetet utförs med godkänt skyddsmedel för aktuellt material och exponering.',
+        includes: ['Rengöring av yta inför behandling','Applicering av impregnering / ytskyddsmedel','Kontroll av täckning och inträngning'],
         excludes: ['Slipning eller utbyte av plankor (tillval)','Målning (separat offert)','Material ej specificerat i offert'],
       },
       {
@@ -1256,7 +1278,7 @@ const OffersPage = {
       },
       {
         id: 'fastighetsservice', label: 'Fastighetsservice',
-        trigger: s => /\b(fastighetsservice|förvaltning|rondering|tillsyn|skötsel)\b/.test(s),
+        trigger: s => /\b(fastighetsservice|förvaltning|rondering|tillsyn|skötsel|trapphus|tvättstuga|entré|källare|garage|förråd)\b/.test(s),
         action: 'fastighetsservice och löpande skötsel',
         scopeCtx: 'Arbetet utförs enligt överenskommen specifikation för att säkerställa fastighetens funktion och värde.',
         includes: ['Regelbundna tillsynsrundor med protokollföring','Felanmälan och åtgärd vid avvikelser','Rapportering till uppdragsgivare'],
@@ -1274,9 +1296,14 @@ const OffersPage = {
 
     let matched = DEFS.filter(d => d.trigger(sum));
 
-    // Suppress generic reparation if a specific repair-type moment matched
-    const specificRepair = matched.some(m => ['trall','fasadpanel','återställning'].includes(m.id));
+    // Suppress generic reparation when a more specific repair moment matched
+    const specificRepair = matched.some(m => ['trall','fasadpanel','återställning','stenreparation'].includes(m.id));
     if (specificRepair) matched = matched.filter(m => m.id !== 'reparation');
+    // Suppress generic reparation when rivning owns the action
+    if (matched.some(m => m.id === 'rivning')) matched = matched.filter(m => m.id !== 'reparation');
+    // Suppress fastighetsservice when more specific moments cover the work
+    const hasSpecificWork = matched.some(m => !['fastighetsservice','reparation'].includes(m.id));
+    if (hasSpecificWork) matched = matched.filter(m => m.id !== 'fastighetsservice');
 
     // Fallback: infer from added service lines when summary is empty/short
     if (matched.length === 0) {
@@ -1293,19 +1320,23 @@ const OffersPage = {
     let scope, includes, excludes, label;
 
     if (matched.length === 0) {
-      const txt = this._wizardData.summary || 'uppdraget';
-      scope    = 'Uppdraget avser ' + txt + '. Arbetet utförs av VIFT:s personal enligt branschstandard och överenskommelse.';
-      includes = '- Arbete och personal enligt offert\n- Nödvändig utrustning och skyddsmaterial\n- Städning och bortforsling av eget avfall';
-      excludes = '- Material ej specificerat i offert\n- Tillkommande arbeten utöver offertens omfattning';
+      scope    = `Arbetet omfattar åtgärder enligt kundens beskrivning och avser de ytor och moment som anges i offerten. Utförandet anpassas efter platsens förutsättningar och eventuella avvikelser kommuniceras med kund innan tillkommande arbete påbörjas.`;
+      includes = '- Arbete och personal enligt offert\n- Nödvändig utrustning och skyddsmaterial\n- Städning och bortforsling av eget avfall\n- Löpande kommunikation med kund';
+      excludes = '- Material ej specificerat i offert\n- Tillkommande arbeten utöver offertens omfattning\n- Specialisttjänster utan separat avtal';
       label    = 'Generell';
     } else {
       label = matched.map(m => m.label).join(' + ');
 
-      // Build scope
+      // Build scope — single moment vs multi-moment
       const actions = matched.map(m => m.action);
-      const last = actions.length > 1 ? actions.pop() : null;
-      const actionStr = last ? actions.join(', ') + ' samt ' + last : actions[0];
-      scope = `Arbetet omfattar ${actionStr}${qtyStr ? ' (' + qtyStr + ')' : ''}. ${matched[0].scopeCtx}`;
+      if (matched.length === 1) {
+        scope = `Arbetet omfattar ${actions[0]}${qtyStr ? ' (' + qtyStr + ')' : ''}. ${matched[0].scopeCtx}`;
+      } else {
+        const last = actions[actions.length - 1];
+        const rest = actions.slice(0, -1);
+        const actionStr = rest.join(', ') + ' samt ' + last;
+        scope = `Uppdraget omfattar ${actionStr}${qtyStr ? ' (' + qtyStr + ')' : ''}. Samtliga moment utförs av VIFT:s personal med anpassad metod och utrustning för respektive yta och materialtyp. Eventuella avvikelser kommuniceras med kund innan tillkommande arbete påbörjas.`;
+      }
 
       // Merge includes (deduplicated by first 22 chars)
       const inclSeen = new Set();
