@@ -2197,6 +2197,35 @@ const OfferDetailPage = {
         ${off.status==='nekad'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reason')">${ic('help-circle',11)} Orsak nekad</button>`:''}
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','tip')">${ic('message-square',11)} Intern notering</button>
       </div>
+      ${(() => {
+        const openActs = ActivitiesService.getByRelated('offer', off.id).filter(a => a.status === 'open');
+        if (!openActs.length) return '';
+        const _fmtD = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'}) : '—';
+        return `<div style="padding:8px 14px 4px;border-top:1px solid var(--br);border-bottom:1px solid var(--br);background:rgba(255,181,39,.04);">
+          <div style="font-size:10px;font-weight:700;color:var(--or);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:5px;">
+            ${ic('bell',10)} Inbokade uppföljningar (${openActs.length})
+          </div>
+          ${openActs.map(a => {
+            const isOverdue = a.dueDate && a.dueDate < tdy();
+            const staff     = getStaff(a.assignedTo);
+            const staffName = staff ? `${staff.firstName} ${staff.lastName}` : '—';
+            const dateStr   = a.dueDate ? _fmtD(a.dueDate) + (a.dueTime ? ' kl ' + a.dueTime : '') : '—';
+            const priColor  = a.priority === 'hög' ? 'var(--rd)' : a.priority === 'låg' ? 'var(--mt)' : 'var(--or)';
+            return `<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.05);">
+              <span style="color:${isOverdue?'var(--rd)':priColor};flex-shrink:0;margin-top:1px;">${ic(ActivitiesService.typeIcon(a.type),13)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;color:${isOverdue?'var(--rd)':'var(--navy)'};">${dateStr}${isOverdue?' <span class="bdg bdg-red" style="font-size:9px;margin-left:4px;">Försenad</span>':''}</div>
+                ${a.note?`<div style="font-size:11px;color:var(--tx);margin-top:1px;">${a.note}</div>`:''}
+                <div style="font-size:10px;color:var(--mt);margin-top:1px;">${ic('user',9)} ${staffName}${a.priority&&a.priority!=='normal'?' · '+a.priority:''}</div>
+              </div>
+              <div style="display:flex;gap:4px;flex-shrink:0;">
+                <button class="btn bxs bsu" style="font-size:11px;padding:3px 7px;" onclick="OfferDetailPage._completeActivity('${a.id}','${off.id}')" title="Markera klar">${ic('check',12)} Klar</button>
+                <button class="btn bxs bs" style="font-size:11px;padding:3px 7px;" onclick="OfferDetailPage._rescheduleActivity('${a.id}','${off.id}')" title="Flytta">${ic('calendar',12)}</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      })()}
       <div style="padding:0;">
         ${tl.length===0
           ? `<p style="padding:12px 14px;font-size:12px;color:var(--mt);">Inga händelser ännu.</p>`
@@ -2244,6 +2273,13 @@ const OfferDetailPage = {
           </div>
           <div class="fg"><label>Ansvarig</label><select id="act-assignee">${staffOpts}</select></div>
           <div class="fg"><label>Notering</label><textarea id="act-note" rows="2" placeholder="Vad ska göras?"></textarea></div>
+          <div class="fg"><label>Prioritet</label>
+            <select id="act-priority">
+              <option value="normal">Normal</option>
+              <option value="hög">Hög</option>
+              <option value="låg">Låg</option>
+            </select>
+          </div>
         </div>`,
         buttons: [
           { label: 'Spara aktivitet', cls: 'btn bp', onClick: () => {
@@ -2252,7 +2288,12 @@ const OfferDetailPage = {
             const time    = document.getElementById('act-time')?.value || '';
             const assignee= document.getElementById('act-assignee')?.value || null;
             const note    = (document.getElementById('act-note')?.value || '').trim();
+            const priority= document.getElementById('act-priority')?.value || 'normal';
+            const cu      = getCu(off.customerId);
+            const cuName  = cu ? cu.name : (off.customerId || off.id);
+            const actTitle= `${ActivitiesService.typeLabel(actT)} — ${cuName}`;
             const act = ActivitiesService.create({
+              title:       actTitle,
               type:        actT,
               relatedType: 'offer',
               relatedId:   off.id,
@@ -2260,7 +2301,8 @@ const OfferDetailPage = {
               assignedTo:  assignee,
               dueDate:     date,
               dueTime:     time,
-              note:        note
+              note:        note,
+              priority:    priority
             });
             const dateStr = new Date(date).toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
             this._logEvt(off, 'followup', `Uppföljning bokad ${dateStr}${time?' kl '+time:''}${note?': '+note:''}`);
@@ -2770,6 +2812,58 @@ ${hasRut?`<div class="rut">
       ]
     });
     setTimeout(() => document.getElementById('send-to')?.focus(), 80);
+  },
+
+  _completeActivity(actId, offerId) {
+    const act = ActivitiesService._get(actId);
+    if (!act) return;
+    ActivitiesService.complete(actId);
+    const off = getOff(offerId);
+    if (off) {
+      const user = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+      const note = act.note ? `: ${act.note}` : '';
+      this._logEvt(off, 'followup', `Uppföljning utförd${note}`);
+      off.updatedAt = new Date().toISOString();
+      persist();
+    }
+    Sidebar.updateBadges();
+    this.render({offerId});
+    showToast('Uppföljning markerad klar');
+  },
+
+  _rescheduleActivity(actId, offerId) {
+    const act = ActivitiesService._get(actId);
+    if (!act) return;
+    const oldDate = act.dueDate;
+    Modal.open({
+      title: `${ic('calendar',14)} Flytta uppföljning`,
+      body: `<div style="display:flex;gap:8px;">
+        <div class="fg" style="flex:1;"><label>Nytt datum</label><input type="date" id="rs2-date" value="${act.dueDate||tdy()}"></div>
+        <div class="fg" style="width:90px;"><label>Tid</label><input type="time" id="rs2-time" value="${act.dueTime||'09:00'}"></div>
+      </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const d = document.getElementById('rs2-date')?.value;
+          const t = document.getElementById('rs2-time')?.value;
+          if (!d) { showToast('Välj ett datum'); return; }
+          ActivitiesService.reschedule(actId, d, t);
+          const off = getOff(offerId);
+          if (off) {
+            const user    = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+            const fromStr = oldDate ? new Date(oldDate + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'}) : '—';
+            const toStr   = new Date(d + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
+            this._logEvt(off, 'reminder', `Uppföljning flyttad från ${fromStr} till ${toStr}`);
+            off.updatedAt = new Date().toISOString();
+            persist();
+          }
+          Modal.close();
+          Sidebar.updateBadges();
+          this.render({offerId});
+          showToast('Uppföljning flyttad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   }
 };
 
@@ -4089,11 +4183,13 @@ const ActivitiesPage = {
 
     const filter = this._filter;
     let filtered = acts;
-    if (filter === 'mina')     filtered = acts.filter(a => a.status === 'open' && user && a.assignedTo === user.id);
-    else if (filter === 'idag') filtered = acts.filter(a => a.status === 'open' && a.dueDate === today);
+    if (filter === 'mina')           filtered = acts.filter(a => a.status === 'open' && user && a.assignedTo === user.id);
+    else if (filter === 'idag')      filtered = acts.filter(a => a.status === 'open' && a.dueDate === today);
     else if (filter === 'försenade') filtered = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate < today);
     else if (filter === 'kommande')  filtered = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate > today);
-    else if (filter === 'klara') filtered = acts.filter(a => a.status === 'done');
+    else if (filter === 'klara')     filtered = acts.filter(a => a.status === 'done');
+    else if (filter === 'offerter')  filtered = acts.filter(a => a.relatedType === 'offer');
+    else if (filter === 'ao')        filtered = acts.filter(a => a.relatedType === 'workOrder');
     else filtered = acts.filter(a => a.status === 'open'); // 'alla' = all open
 
     // Sort: overdue first, then by date
@@ -4130,10 +4226,11 @@ const ActivitiesPage = {
           <span style="color:${dateColor};flex-shrink:0;margin-top:2px;">${ic(ActivitiesService.typeIcon(act.type),16)}</span>
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span style="font-size:13px;font-weight:700;color:var(--navy);">${ActivitiesService.typeLabel(act.type)}</span>
+              <span style="font-size:13px;font-weight:700;color:var(--navy);">${act.title || ActivitiesService.typeLabel(act.type)}</span>
               <span style="font-size:11px;color:${dateColor};font-weight:600;">${dateLabel}</span>
               ${isOverdue?`<span class="bdg bdg-red" style="font-size:9px;">Försenad</span>`:''}
               ${isToday?`<span class="bdg bdg-orange" style="font-size:9px;">Idag</span>`:''}
+              ${act.priority==='hög'?`<span class="bdg bdg-red" style="font-size:9px;">Hög prio</span>`:''}
             </div>
             ${act.note?`<div style="font-size:12px;color:var(--tx);margin-top:2px;">${act.note}</div>`:''}
             <div style="font-size:11px;color:var(--mt);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -4160,6 +4257,8 @@ const ActivitiesPage = {
         ${_tab('försenade','Försenade',overdueCnt)}
         ${_tab('kommande','Kommande',upcomingCnt)}
         ${_tab('klara','Klara',acts.filter(a=>a.status==='done').length)}
+        ${_tab('offerter','Offertuppföljningar',acts.filter(a=>a.relatedType==='offer').length)}
+        ${_tab('ao','AO-uppföljningar',acts.filter(a=>a.relatedType==='workOrder').length)}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">
         ${filtered.length === 0
@@ -4169,15 +4268,41 @@ const ActivitiesPage = {
   },
 
   complete(id) {
+    const act = ActivitiesService._get(id);
     ActivitiesService.complete(id);
+
+    if (act) {
+      const ts   = new Date().toISOString();
+      const user = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+      const note = act.note ? `: ${act.note}` : '';
+      if (act.relatedType === 'offer') {
+        const off = getOff(act.relatedId);
+        if (off) {
+          if (!Array.isArray(off.timeline)) off.timeline = [];
+          off.timeline.push({ ts, type: 'followup', text: `Uppföljning utförd${note}`, user });
+          off.updatedAt = ts;
+          persist();
+        }
+      } else if (act.relatedType === 'workOrder') {
+        const ao = getAO(act.relatedId);
+        if (ao) {
+          if (!Array.isArray(ao.notes)) ao.notes = [];
+          ao.notes.push({ ts, type: 'log', text: `Uppföljning utförd${note}`, user, createdBy: user });
+          ao.updatedAt = ts;
+          persist();
+        }
+      }
+    }
+
     Sidebar.updateBadges();
     this.render();
     showToast('Aktivitet markerad klar');
   },
 
   openReschedule(id) {
-    const act = (state.activities || []).find(a => a.id === id);
+    const act = ActivitiesService._get(id);
     if (!act) return;
+    const oldDate = act.dueDate;
     Modal.open({
       title: `${ic('calendar',14)} Flytta aktivitet`,
       body: `<div style="display:flex;gap:8px;">
@@ -4188,7 +4313,31 @@ const ActivitiesPage = {
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const d = document.getElementById('rs-date')?.value;
           const t = document.getElementById('rs-time')?.value;
+          if (!d) { showToast('Välj ett datum'); return; }
           ActivitiesService.reschedule(id, d, t);
+
+          const ts      = new Date().toISOString();
+          const user    = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+          const fromStr = oldDate ? new Date(oldDate + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'}) : '—';
+          const toStr   = new Date(d + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
+          if (act.relatedType === 'offer') {
+            const off = getOff(act.relatedId);
+            if (off) {
+              if (!Array.isArray(off.timeline)) off.timeline = [];
+              off.timeline.push({ ts, type: 'reminder', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user });
+              off.updatedAt = ts;
+              persist();
+            }
+          } else if (act.relatedType === 'workOrder') {
+            const ao = getAO(act.relatedId);
+            if (ao) {
+              if (!Array.isArray(ao.notes)) ao.notes = [];
+              ao.notes.push({ ts, type: 'log', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user, createdBy: user });
+              ao.updatedAt = ts;
+              persist();
+            }
+          }
+
           Modal.close();
           Sidebar.updateBadges();
           this.render();

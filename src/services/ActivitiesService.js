@@ -16,6 +16,7 @@ const ActivitiesService = {
     const user = state.currentUser;
     const act = Object.assign({
       id,
+      title:       '',
       type:        'followup',
       relatedType: null,
       relatedId:   null,
@@ -24,6 +25,7 @@ const ActivitiesService = {
       dueDate:     tdy(),
       dueTime:     '',
       note:        '',
+      priority:    'normal',
       status:      'open',
       createdAt:   new Date().toISOString(),
       createdBy:   user ? user.id : null,
