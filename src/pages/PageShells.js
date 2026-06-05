@@ -314,6 +314,13 @@ const OffersPage = {
     },
   ],
 
+  _getT() {
+    if ((state.serviceTemplates||[]).length > 0) {
+      return ServiceTemplateService.buildAllWizardTemplates();
+    }
+    return this._T;
+  },
+
   _TERMS: {
     payment:  '30 dagar netto',
     validity: '30 dagar',
@@ -1464,7 +1471,7 @@ const OffersPage = {
 
   _svcOverlayHtml(isDesktop) {
     const isEdit     = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
-    const activeTmpl = this._T.find(t => t.id === this._activeSvcId);
+    const activeTmpl = this._getT().find(t => t.id === this._activeSvcId);
     const maxH       = isDesktop ? '84vh' : '92vh';
     const radius     = isDesktop ? '10px' : '14px 14px 0 0';
 
@@ -1500,7 +1507,7 @@ const OffersPage = {
     </div>`;
 
     if (!isDesktop) {
-      const chips = this._T.map(t => {
+      const chips = this._getT().map(t => {
         const active = t.id === this._activeSvcId;
         return `<button type="button" id="off-svc-chip-${t.id}"
           onclick="OffersPage._activateSvc('${t.id}',false)"
@@ -1514,7 +1521,7 @@ const OffersPage = {
       </div>`;
     }
 
-    const svcList = this._T.map(t => {
+    const svcList = this._getT().map(t => {
       const active = t.id === this._activeSvcId;
       return `<button type="button" id="off-svc-chip-${t.id}"
         onclick="OffersPage._activateSvc('${t.id}',false)"
@@ -1535,14 +1542,14 @@ const OffersPage = {
 
   _activateSvc(tId, keepFields) {
     this._activeSvcId = tId;
-    this._T.forEach(t => {
+    this._getT().forEach(t => {
       const btn = document.getElementById('off-svc-chip-' + t.id);
       if (!btn) return;
       const a = t.id === tId;
       btn.classList.toggle('off-svc-menu-item--active', a);
       btn.classList.toggle('off-svc-chip--active', a);
     });
-    const tmpl = this._T.find(t => t.id === tId);
+    const tmpl = this._getT().find(t => t.id === tId);
     if (!tmpl) return;
     if (!keepFields) {
       this._svcFields    = {};
@@ -1682,7 +1689,7 @@ const OffersPage = {
   },
 
   _initChips() {
-    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    const tmpl = this._getT().find(t => t.id === this._activeSvcId);
     if (!tmpl) return;
     tmpl.fields.filter(f=>f.type==='chips').forEach(f => {
       const val   = this._svcFields[f.id] || f.def || (f.opts&&f.opts[0]);
@@ -1700,7 +1707,7 @@ const OffersPage = {
 
   /* ── Svc preview ─── */
   _updateSvcPreview() {
-    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    const tmpl = this._getT().find(t => t.id === this._activeSvcId);
     const prev = document.getElementById('svc-preview');
     if (!tmpl || !prev) return;
     // Collect non-reduction fields from DOM
@@ -1770,7 +1777,7 @@ const OffersPage = {
 
   /* ── Add/update service line ─── */
   _addSvcLine() {
-    const tmpl = this._T.find(t => t.id === this._activeSvcId);
+    const tmpl = this._getT().find(t => t.id === this._activeSvcId);
     if (!tmpl) { showToast('Välj en tjänstetyp'); return; }
     // Collect non-reduction fields from DOM
     tmpl.fields.forEach(f => {
@@ -3506,6 +3513,444 @@ const StaffPage = {
   }
 };
 
+/* ── Offerttjänster & Prismodeller ─── */
+const ServiceTemplatesPage = {
+  _q: '',
+  _filter: 'alla',
+  _editSvcId: null,
+  _editTiers: [],
+  _editOptions: [],
+  _testFields: {},
+  _testReduction: 'ingen',
+
+  render() {
+    const el = document.getElementById('pg-service-templates-content');
+    if (!el) return;
+    const all = ServiceTemplateService.getAll().slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+    const filtered = all.filter(s => {
+      if (this._filter === 'aktiva'   && s.active === false) return false;
+      if (this._filter === 'inaktiva' && s.active !== false) return false;
+      const q = (this._q||'').toLowerCase();
+      if (q && !s.name.toLowerCase().includes(q) && !(s.category||'').toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const nAktiva   = all.filter(s=>s.active!==false).length;
+    const nInaktiva = all.filter(s=>s.active===false).length;
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('zap',15)} Offerttjänster & Prismodeller</h3>
+          <button class="btn bp bsm" onclick="ServiceTemplatesPage.openCreate()">${ic('plus',13)} Ny tjänst</button>
+        </div>
+        <div style="display:flex;gap:7px;align-items:center;padding:10px 16px 6px;">
+          <div class="swrap" style="flex:1;">
+            <span class="sico">${ic('search',14)}</span>
+            <input type="search" placeholder="Sök tjänst eller kategori…" value="${(this._q||'').replace(/"/g,'&quot;')}"
+              oninput="ServiceTemplatesPage._q=this.value;ServiceTemplatesPage.render()">
+          </div>
+        </div>
+        <div class="ftabs" style="padding:0 16px 8px;">
+          ${[['alla','Alla',all.length],['aktiva','Aktiva',nAktiva],['inaktiva','Inaktiva',nInaktiva]].map(([v,l,n])=>
+            `<button class="ft ${this._filter===v?'on':''}" onclick="ServiceTemplatesPage._filter='${v}';ServiceTemplatesPage.render()">${l} <span style="background:rgba(0,0,0,.1);border-radius:9px;padding:0 5px;font-size:9px;">${n}</span></button>`
+          ).join('')}
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${filtered.length === 0
+            ? `<div style="padding:24px;text-align:center;color:var(--mt);font-size:13px;">Inga tjänster hittades</div>`
+            : filtered.map((s,i) => `
+              <div class="crow" style="padding:10px 16px;border-bottom:1px solid var(--br);${s.active===false?'opacity:.6':''}">
+                <div style="width:36px;height:36px;border-radius:8px;background:${s.active===false?'var(--br)':'var(--navy)'};display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;margin-right:10px;">
+                  ${ic(s.icon||'zap',16)}
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:13px;font-weight:700;color:var(--navy);">${s.name}${s.active===false?' <span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>':''}</div>
+                  <div style="font-size:11px;color:var(--mt);">${s.category||'—'} · ${ServiceTemplateService.modelLabel(s.pricingModel)} · Min ${fmt(s.minChargeExVat||0)} kr</div>
+                </div>
+                <div style="display:flex;gap:4px;flex-shrink:0;">
+                  <button class="btn bs bxs" title="Testkalkyl" onclick="ServiceTemplatesPage.openTest('${s.id}')">${ic('calculator',13)}</button>
+                  <button class="btn bs bxs" title="Duplicera" onclick="ServiceTemplatesPage.duplicate('${s.id}')">${ic('copy',13)}</button>
+                  <button class="btn ${s.active===false?'bsu':'bw'} bxs" title="${s.active===false?'Aktivera':'Inaktivera'}" onclick="ServiceTemplatesPage.toggleActive('${s.id}')">${ic(s.active===false?'eye':'eye-off',13)}</button>
+                  <button class="btn bs bxs" onclick="ServiceTemplatesPage.openEdit('${s.id}')">${ic('pencil',13)}</button>
+                </div>
+              </div>`).join('')
+          }
+        </div>
+      </div>`;
+  },
+
+  openCreate() {
+    const newSvc = ServiceTemplateService.create({
+      name:'Ny tjänst', icon:'zap', category:'Övrigt',
+      pricingModel:'fixed', qtyField:'qty', basePricePerUnit:0,
+      defaultDescription:'', includes:[], excludes:[]
+    });
+    this.openEdit(newSvc.id);
+  },
+
+  openEdit(id) {
+    const svc = ServiceTemplateService.get(id);
+    if (!svc) return;
+    this._editSvcId = id;
+    this._editTiers   = JSON.parse(JSON.stringify(svc.tiers || []));
+    this._editOptions = JSON.parse(JSON.stringify(svc.options || []));
+    this._testFields  = {};
+    this._testReduction = svc.defaultReduction || 'ingen';
+    Modal.open({
+      title: `${ic('settings',14)} Redigera: ${svc.name}`,
+      body: this._editBody(svc),
+      wide: true,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => this._save() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => { Modal.close(); this.render(); } }
+      ]
+    });
+    setTimeout(() => this._initEditChips(), 30);
+  },
+
+  _editBody(svc) {
+    const modelOpts = ['tiered_unit','factor_unit','factor_lm','hourly','monthly','hourly_custom','fixed'];
+    const icons = ['zap','refresh-cw','layers','scissors','building-2','wrench','settings','activity','sparkles','leaf','droplets','truck','home','tool','star'];
+    const reducts = [{v:'ingen',l:'Ingen'},{v:'rut',l:'RUT 50%'},{v:'rot',l:'ROT 30%'}];
+    return `
+      <!-- Grundinfo -->
+      <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Grundinfo</div>
+      <div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Namn <span style="color:var(--rd)">*</span></label>
+          <input id="svc-ed-name" value="${esc(svc.name)}"></div>
+        <div class="fg"><label>Kategori</label>
+          <input id="svc-ed-cat" value="${esc(svc.category||'')}" placeholder="T.ex. Tvätt & rengöring"></div>
+      </div>
+      <div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Ikon</label>
+          <select id="svc-ed-icon">
+            ${icons.map(i=>`<option value="${i}" ${svc.icon===i?'selected':''}>${i}</option>`).join('')}
+          </select></div>
+        <div class="fg"><label>Enhet (t.ex. m², lm, tim)</label>
+          <input id="svc-ed-unit" value="${esc(svc.unit||'st')}"></div>
+      </div>
+      <div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Moms %</label>
+          <input id="svc-ed-vat" type="number" value="${svc.vatRate||25}" min="0" max="100"></div>
+        <div class="fg"><label>Minimidebitering ex moms</label>
+          <input id="svc-ed-mincharge" type="number" value="${svc.minChargeExVat||0}" min="0"></div>
+      </div>
+      <div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Standard skattereduktion</label>
+          <select id="svc-ed-red">
+            ${reducts.map(r=>`<option value="${r.v}" ${svc.defaultReduction===r.v?'selected':''}>${r.l}</option>`).join('')}
+          </select></div>
+        <div class="fg"><label>Sorteringsordning</label>
+          <input id="svc-ed-sort" type="number" value="${svc.sortOrder||0}" min="0" step="5"></div>
+      </div>
+      <div class="fg" style="margin-bottom:12px;">
+        <label><input type="checkbox" id="svc-ed-active" ${svc.active!==false?'checked':''}> Aktiv (visas i offertwizard)</label>
+      </div>
+
+      <!-- Prismodell -->
+      <div style="border-top:1px solid var(--br);padding-top:12px;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Prismodell</div>
+        <div class="fg" style="margin-bottom:8px;"><label>Modelltyp</label>
+          <select id="svc-ed-model" onchange="ServiceTemplatesPage._onModelChange()">
+            ${modelOpts.map(m=>`<option value="${m}" ${svc.pricingModel===m?'selected':''}>${ServiceTemplateService.modelLabel(m)}</option>`).join('')}
+          </select></div>
+        <div id="svc-ed-model-fields">${this._modelFields(svc)}</div>
+      </div>
+
+      <!-- Tillval -->
+      <div style="border-top:1px solid var(--br);padding-top:12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Tillval / Tillägg</div>
+          <button type="button" class="btn bsu bxs" onclick="ServiceTemplatesPage._addOption()">${ic('plus',11)} Lägg till</button>
+        </div>
+        <div id="svc-ed-options">${this._optionsHtml()}</div>
+      </div>
+
+      <!-- Texter -->
+      <div style="border-top:1px solid var(--br);padding-top:12px;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Offerttexter</div>
+        <div class="fg" style="margin-bottom:8px;"><label>Standardbeskrivning</label>
+          <textarea id="svc-ed-desc" rows="2" style="resize:vertical;">${esc(svc.defaultDescription||'')}</textarea></div>
+        <div class="fg" style="margin-bottom:8px;"><label>Vad ingår (en per rad)</label>
+          <textarea id="svc-ed-includes" rows="3" style="resize:vertical;">${(svc.includes||[]).join('\n')}</textarea></div>
+        <div class="fg" style="margin-bottom:8px;"><label>Vad ingår ej (en per rad)</label>
+          <textarea id="svc-ed-excludes" rows="3" style="resize:vertical;">${(svc.excludes||[]).join('\n')}</textarea></div>
+        <div class="fg"><label>Intern kalkylnotis</label>
+          <input id="svc-ed-note" value="${esc(svc.internalNote||'')}"></div>
+      </div>
+
+      <!-- Testkalkyl -->
+      <div style="border-top:1px solid var(--br);padding-top:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">${ic('calculator',11)} Testkalkyl</div>
+        <div id="svc-test-area" style="background:var(--bg);border:1px solid var(--br);border-radius:var(--rs);padding:12px;font-size:12px;color:var(--mt);">
+          Spara tjänsten och använd testkalkyl via listan.
+        </div>
+      </div>`;
+  },
+
+  _modelFields(svc) {
+    const model = svc.pricingModel || 'fixed';
+    if (model === 'tiered_unit') {
+      return `<div style="margin-bottom:6px;"><label style="font-size:10px;font-weight:700;color:var(--mt);">Prisstegar (ex moms per enhet)</label>
+        <div id="svc-ed-tiers">${this._tiersHtml()}</div>
+        <button type="button" class="btn bsu bxs" style="margin-top:4px;" onclick="ServiceTemplatesPage._addTier()">${ic('plus',11)} Lägg till steg</button>
+      </div>`;
+    }
+    if (model === 'factor_unit' || model === 'factor_lm') {
+      const unitLabel = model === 'factor_lm' ? 'lm' : svc.unit || 'enhet';
+      return `<div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Baspris ex moms (kr/${unitLabel})</label>
+          <input id="svc-ed-base" type="number" value="${svc.basePricePerUnit||0}" min="0"></div>
+        <div class="fg"><label>Primärt mängdfält (t.ex. area, length)</label>
+          <input id="svc-ed-qtyfield" value="${esc(svc.qtyField||'area')}"></div>
+      </div>
+      <div style="font-size:11px;color:var(--mt);">Faktorer redigeras i nästa version. Nuvarande faktorer behålls.</div>`;
+    }
+    if (model === 'hourly') {
+      return `<div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Standardtimpris ex moms (kr)</label>
+          <input id="svc-ed-base" type="number" value="${svc.basePricePerUnit||695}" min="0"></div>
+        <div class="fg"><label>Mängdfält</label>
+          <input id="svc-ed-qtyfield" value="${esc(svc.qtyField||'hours')}"></div>
+      </div>`;
+    }
+    if (model === 'monthly') {
+      return `<div class="fg" style="margin-bottom:8px;"><label>Mängdfält (antal månader)</label>
+        <input id="svc-ed-qtyfield" value="${esc(svc.qtyField||'months')}"></div>`;
+    }
+    if (model === 'hourly_custom') {
+      return `<div class="g2" style="margin-bottom:8px;">
+        <div class="fg"><label>Standardtimpris ex moms (kr)</label>
+          <input id="svc-ed-base" type="number" value="${svc.basePricePerUnit||695}" min="0"></div>
+        <div class="fg"><label>Mängdfält</label>
+          <input id="svc-ed-qtyfield" value="${esc(svc.qtyField||'qty')}"></div>
+      </div>`;
+    }
+    return `<div class="fg" style="margin-bottom:8px;"><label>Fastpris ex moms (kr)</label>
+      <input id="svc-ed-base" type="number" value="${svc.basePricePerUnit||0}" min="0"></div>`;
+  },
+
+  _tiersHtml() {
+    if (!this._editTiers.length) return '<div style="font-size:11px;color:var(--mt);padding:6px 0;">Inga steg tillagda.</div>';
+    return this._editTiers.map((t,i) => `
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px;">
+        <div class="fg" style="flex:1;margin:0;"><input type="number" placeholder="Från (m²)" value="${t.from}" min="0"
+          oninput="ServiceTemplatesPage._editTiers[${i}].from=parseFloat(this.value)||0"></div>
+        <div class="fg" style="flex:1;margin:0;"><input type="number" placeholder="Till (tom=∞)" value="${t.to===null?'':t.to}" min="0"
+          oninput="ServiceTemplatesPage._editTiers[${i}].to=this.value===''?null:(parseFloat(this.value)||0)"></div>
+        <div class="fg" style="flex:1;margin:0;"><input type="number" placeholder="kr/enhet" value="${t.priceExVat}" min="0"
+          oninput="ServiceTemplatesPage._editTiers[${i}].priceExVat=parseFloat(this.value)||0"></div>
+        <button type="button" class="btn bd bxs" onclick="ServiceTemplatesPage._removeTier(${i})">${ic('x',11)}</button>
+      </div>`).join('');
+  },
+
+  _addTier() {
+    const last = this._editTiers[this._editTiers.length-1];
+    const from = last ? (last.to !== null ? last.to + 1 : 0) : 0;
+    this._editTiers.push({from, to:null, priceExVat:0});
+    const el = document.getElementById('svc-ed-tiers');
+    if (el) el.innerHTML = this._tiersHtml();
+  },
+
+  _removeTier(i) {
+    this._editTiers.splice(i,1);
+    const el = document.getElementById('svc-ed-tiers');
+    if (el) el.innerHTML = this._tiersHtml();
+  },
+
+  _optionsHtml() {
+    if (!this._editOptions.length) return '<div style="font-size:11px;color:var(--mt);padding:6px 0;">Inga tillval tillagda.</div>';
+    return this._editOptions.map((o,i) => `
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px;">
+        <div class="fg" style="flex:2;margin:0;"><input placeholder="Namn" value="${esc(o.name||'')}"
+          oninput="ServiceTemplatesPage._editOptions[${i}].name=this.value"></div>
+        <div style="flex:1;min-width:0;">
+          <select oninput="ServiceTemplatesPage._editOptions[${i}].type=this.value" style="width:100%;padding:6px 8px;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;">
+            <option value="fixed" ${o.type==='fixed'?'selected':''}>Fastpris</option>
+            <option value="per_unit" ${o.type==='per_unit'?'selected':''}>Per enhet</option>
+          </select>
+        </div>
+        <div class="fg" style="flex:1;margin:0;"><input type="number" placeholder="Pris ex moms" value="${o.priceExVat||0}" min="0"
+          oninput="ServiceTemplatesPage._editOptions[${i}].priceExVat=parseFloat(this.value)||0"></div>
+        <button type="button" class="btn bd bxs" onclick="ServiceTemplatesPage._removeOption(${i})">${ic('x',11)}</button>
+      </div>`).join('');
+  },
+
+  _addOption() {
+    this._editOptions.push({id:'opt_'+Date.now(), name:'', type:'fixed', priceExVat:0});
+    const el = document.getElementById('svc-ed-options');
+    if (el) el.innerHTML = this._optionsHtml();
+  },
+
+  _removeOption(i) {
+    this._editOptions.splice(i,1);
+    const el = document.getElementById('svc-ed-options');
+    if (el) el.innerHTML = this._optionsHtml();
+  },
+
+  _onModelChange() {
+    const model = document.getElementById('svc-ed-model')?.value || 'fixed';
+    const svcId = this._editSvcId;
+    const svc = ServiceTemplateService.get(svcId) || {};
+    const mockSvc = {...svc, pricingModel: model};
+    const el = document.getElementById('svc-ed-model-fields');
+    if (el) el.innerHTML = this._modelFields(mockSvc);
+    if (model === 'tiered_unit') {
+      const tel = document.getElementById('svc-ed-tiers');
+      if (tel) tel.innerHTML = this._tiersHtml();
+    }
+  },
+
+  _initEditChips() {
+    // Nothing complex needed — chips are rendered by _modelFields inline
+  },
+
+  _save() {
+    const id   = this._editSvcId;
+    const name = document.getElementById('svc-ed-name')?.value?.trim();
+    if (!name) { showToast('Ange ett namn'); return; }
+    const model  = document.getElementById('svc-ed-model')?.value || 'fixed';
+    const base   = parseFloat(document.getElementById('svc-ed-base')?.value || 0) || 0;
+    const qtyFld = document.getElementById('svc-ed-qtyfield')?.value?.trim() || 'qty';
+    const changes = {
+      name,
+      category:           (document.getElementById('svc-ed-cat')?.value  || '').trim(),
+      icon:               document.getElementById('svc-ed-icon')?.value  || 'zap',
+      unit:               (document.getElementById('svc-ed-unit')?.value || 'st').trim(),
+      vatRate:            parseFloat(document.getElementById('svc-ed-vat')?.value) || 25,
+      minChargeExVat:     parseFloat(document.getElementById('svc-ed-mincharge')?.value) || 0,
+      defaultReduction:   document.getElementById('svc-ed-red')?.value  || 'ingen',
+      sortOrder:          parseInt(document.getElementById('svc-ed-sort')?.value) || 0,
+      active:             document.getElementById('svc-ed-active')?.checked !== false,
+      pricingModel:       model,
+      basePricePerUnit:   base,
+      qtyField:           qtyFld,
+      tiers:              model === 'tiered_unit' ? this._editTiers.slice() : (ServiceTemplateService.get(id)?.tiers || []),
+      options:            this._editOptions.slice(),
+      defaultDescription: (document.getElementById('svc-ed-desc')?.value || '').trim(),
+      includes:           (document.getElementById('svc-ed-includes')?.value || '').split('\n').map(s=>s.trim()).filter(Boolean),
+      excludes:           (document.getElementById('svc-ed-excludes')?.value || '').split('\n').map(s=>s.trim()).filter(Boolean),
+      internalNote:       (document.getElementById('svc-ed-note')?.value  || '').trim()
+    };
+    ServiceTemplateService.update(id, changes);
+    Modal.close();
+    this.render();
+    showToast(`"${name}" sparad`);
+  },
+
+  toggleActive(id) {
+    const svc = ServiceTemplateService.toggleActive(id);
+    this.render();
+    showToast(svc && svc.active !== false ? 'Aktiverad' : 'Inaktiverad');
+  },
+
+  duplicate(id) {
+    const copy = ServiceTemplateService.duplicate(id);
+    if (copy) { this.render(); showToast('Duplicerad — redigera kopian för att aktivera'); }
+  },
+
+  openTest(id) {
+    const svc = ServiceTemplateService.get(id);
+    if (!svc) return;
+    const tmpl = ServiceTemplateService.buildWizardTemplate(svc);
+    this._testFields = {};
+    this._testReduction = svc.defaultReduction || 'ingen';
+    // Pre-fill defaults
+    (svc.fields||[]).forEach(f => {
+      if (f.def !== undefined)         this._testFields[f.id] = f.def;
+      else if (f.type==='chips'&&f.opts) this._testFields[f.id] = f.opts[0];
+      else if (f.type==='bool')          this._testFields[f.id] = false;
+      else if (f.type==='number')        this._testFields[f.id] = 0;
+      else                               this._testFields[f.id] = '';
+    });
+    const redOpts = [{v:'ingen',l:'Ingen'},{v:'rut',l:'RUT 50%'},{v:'rot',l:'ROT 30%'}];
+    const fieldHtml = (svc.fields||[]).filter(f=>!f.isRut&&!f.isRot).map(f => {
+      if (f.type === 'number') return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
+        <input type="number" value="${f.def||0}" min="0" style="width:100%;"
+          oninput="ServiceTemplatesPage._testFields['${f.id}']=parseFloat(this.value)||0;ServiceTemplatesPage._updateTestPreview('${id}')"></div>`;
+      if (f.type === 'chips') return `<div style="margin-bottom:6px;"><div style="font-size:10px;font-weight:700;color:var(--mt);margin-bottom:3px;">${f.label}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;">
+          ${(f.opts||[]).map(o=>`<button type="button"
+            style="padding:3px 8px;border-radius:12px;border:1.5px solid var(--br);font-size:10px;cursor:pointer;background:${o===(f.def||f.opts[0])?'var(--navy)':'#fff'};color:${o===(f.def||f.opts[0])?'#fff':'var(--tx)'};"
+            onclick="ServiceTemplatesPage._testFields['${f.id}']='${o.replace(/'/g,"\\'")}';this.closest('div').querySelectorAll('button').forEach(b=>{b.style.background='#fff';b.style.color='var(--tx)';});this.style.background='var(--navy)';this.style.color='#fff';ServiceTemplatesPage._updateTestPreview('${id}')">${o}</button>`).join('')}
+        </div></div>`;
+      if (f.type === 'bool') return `<div style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+        <input type="checkbox" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.checked;ServiceTemplatesPage._updateTestPreview('${id}')">
+        <span>${f.addLabel||f.label}</span></label></div>`;
+      return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
+        <input type="text" value="" style="width:100%;"
+          oninput="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._updateTestPreview('${id}')"></div>`;
+    }).join('');
+
+    Modal.open({
+      title: `${ic('calculator',14)} Testkalkyl: ${svc.name}`,
+      body: `
+        <div class="g2" style="gap:12px;">
+          <div>${fieldHtml}
+            <div style="padding-top:8px;border-top:1px solid var(--br);">
+              <div style="font-size:10px;font-weight:700;color:var(--mt);margin-bottom:4px;">Skattereduktion</div>
+              <div style="display:flex;gap:4px;">
+                ${redOpts.map(o=>`<button type="button" id="test-red-${o.v}"
+                  style="flex:1;padding:5px;border-radius:6px;border:1.5px solid ${this._testReduction===o.v?'var(--navy)':'var(--br)'};font-size:10px;font-weight:700;cursor:pointer;background:${this._testReduction===o.v?'var(--navy)':'#fff'};color:${this._testReduction===o.v?'#fff':'var(--mt)'};"
+                  onclick="ServiceTemplatesPage._setTestReduction('${o.v}','${id}')">${o.l}</button>`).join('')}
+              </div>
+            </div>
+          </div>
+          <div id="svc-test-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:12px;min-height:120px;">
+            <div style="font-size:11px;opacity:.6;">Fyll i fälten för att se kalkyl…</div>
+          </div>
+        </div>`,
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
+    });
+    setTimeout(() => this._updateTestPreview(id), 50);
+  },
+
+  _setTestReduction(val, svcId) {
+    this._testReduction = val;
+    ['ingen','rut','rot'].forEach(v => {
+      const btn = document.getElementById('test-red-' + v);
+      if (!btn) return;
+      btn.style.background  = v===val ? 'var(--navy)' : '#fff';
+      btn.style.color       = v===val ? '#fff'        : 'var(--mt)';
+      btn.style.borderColor = v===val ? 'var(--navy)' : 'var(--br)';
+    });
+    this._updateTestPreview(svcId);
+  },
+
+  _updateTestPreview(svcId) {
+    const prev = document.getElementById('svc-test-preview');
+    if (!prev) return;
+    const svc  = ServiceTemplateService.get(svcId);
+    if (!svc) return;
+    const tmpl = ServiceTemplateService.buildWizardTemplate(svc);
+    const fields = {...this._testFields, rut:this._testReduction==='rut', rot:this._testReduction==='rot'};
+    try {
+      const r = tmpl.calc(fields);
+      const {ls, exVat, rutAmt} = r;
+      const vat    = Math.round(exVat * (svc.vatRate||25) / 100);
+      const incVat = exVat + vat;
+      const custPr = incVat - (rutAmt||0);
+      let html = '';
+      if (r.tierLbl) html += `<div style="font-size:8px;opacity:.5;margin-bottom:4px;">${r.tierLbl}</div>`;
+      html += `<div style="font-size:9px;opacity:.65;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.12);">`;
+      ls.forEach(l => { html += `<div>${l.desc} · ${l.qty} ${l.unit} × ${fmt(l.price)} kr = ${fmt(Math.round(l.qty*l.price))} kr</div>`; });
+      html += `</div>`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:2px;"><span>Ex. moms</span><span>${fmt(exVat)} kr</span></div>`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:5px;"><span>Moms ${svc.vatRate||25}%</span><span>${fmt(vat)} kr</span></div>`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;padding-top:5px;border-top:1px solid rgba(255,255,255,.15);margin-bottom:${rutAmt?'4px':'8px'};"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>`;
+      if (rutAmt) {
+        const redLbl = this._testReduction==='rut'?'RUT':'ROT';
+        html += `<div style="display:flex;justify-content:space-between;font-size:10px;color:#86efac;margin-bottom:4px;"><span>Prelim. ${redLbl}-avdrag</span><span>-${fmt(rutAmt)} kr</span></div>`;
+      }
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.13);border-radius:6px;padding:6px 9px;">
+        <span style="font-size:10px;opacity:.8;">Kundpris inkl. moms</span>
+        <span style="font-size:17px;font-weight:800;">${fmt(rutAmt?custPr:incVat)} kr</span></div>`;
+      prev.innerHTML = html;
+    } catch(e) {
+      prev.innerHTML = `<div style="font-size:10px;opacity:.65;">Fyll i obligatoriska fält för att se kalkyl.</div>`;
+    }
+  }
+};
+
 /* ── Admin ────────────────────────────── */
 const AdminPage = {
   _titleQ: '',
@@ -3733,6 +4178,10 @@ const AdminPage = {
           <div class="dr">
             <span class="dk">${ic('users',13)} Personal</span>
             <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-staff')">${(state.staff||[]).filter(s=>s.active).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
+          </div>
+          <div class="dr">
+            <span class="dk">${ic('zap',13)} Offerttjänster</span>
+            <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-service-templates')">${(state.serviceTemplates||[]).filter(s=>s.active!==false).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
           </div>
           <div class="dr">
             <span class="dk">${ic('package',13)} Artiklar</span>

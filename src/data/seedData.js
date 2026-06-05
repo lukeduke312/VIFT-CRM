@@ -1242,5 +1242,175 @@ const SeedData = {
     { id: 'ART-009', articleNumber: '3001', name: 'Resekostnad km',             category: 'kostnad', unit: 'km',    buyPrice: 0,   sellPrice: 5,    vatRate: 25, active: true },
     { id: 'ART-025', articleNumber: '3002', name: 'Parkeringskostnad',          category: 'kostnad', unit: 'st',    buyPrice: 0,   sellPrice: 0,    vatRate: 25, active: true },
     { id: 'ART-026', articleNumber: '3003', name: 'Utrustning/verktyg hyra',    category: 'kostnad', unit: 'dag',   buyPrice: 0,   sellPrice: 0,    vatRate: 25, active: true },
+  ],
+
+  serviceTemplates: [
+    {
+      id:'svc_altan', name:'Altantvätt', icon:'refresh-cw', category:'Tvätt & rengöring',
+      active:true, sortOrder:10, unit:'m²', vatRate:25, defaultReduction:'rut',
+      minChargeExVat:1500, pricingModel:'tiered_unit', qtyField:'area', basePricePerUnit:null,
+      tiers:[
+        {from:0,  to:30,   priceExVat:95},
+        {from:31, to:60,   priceExVat:85},
+        {from:61, to:100,  priceExVat:75},
+        {from:101,to:150,  priceExVat:70},
+        {from:151,to:null, priceExVat:65}
+      ],
+      factors:{},
+      options:[
+        {id:'algae',     name:'Algbehandling',               type:'per_unit', priceExVat:15},
+        {id:'stairs',    name:'Trappsteg tillägg',           type:'fixed',    priceExVat:450},
+        {id:'treatment', name:'Impregnering/efterbehandling', type:'per_unit', priceExVat:18},
+        {id:'disposal',  name:'Bortforsling',                type:'fixed',    priceExVat:750}
+      ],
+      fields:[
+        {id:'area',      label:'Yta (m²)',       type:'number', req:true},
+        {id:'material',  label:'Material/typ',   type:'chips',  opts:['Trä / Komposit','Betong','Natursten','Tegel','Annat'], def:'Trä / Komposit'},
+        {id:'dirt',      label:'Smutsnivå',      type:'chips',  opts:['Lätt','Måttlig','Kraftig'], def:'Måttlig'},
+        {id:'algae',     label:'Algbehandling',  type:'bool',   addLabel:'Algbehandling (+15 kr/m²)'},
+        {id:'stairs',    label:'Trappsteg',      type:'bool',   addLabel:'Trappsteg (+450 kr/st)'},
+        {id:'treatment', label:'Efterbehandling',type:'bool',   addLabel:'Impregnering (+18 kr/m²)'},
+        {id:'disposal',  label:'Bortforsling',   type:'bool',   addLabel:'Bortforsling (+750 kr)'}
+      ],
+      defaultDescription:'Altantvätt inkl. rengöring, avfettning och behandling.',
+      includes:['Rengöringsmedel och förberedelse','Grundtvätt och avfettning','Uppsamling av grovsmuts'],
+      excludes:['Reparationer och utbyte av material','Målning och ytbehandling'],
+      internalNote:''
+    },
+    {
+      id:'svc_sten', name:'Stentvätt', icon:'layers', category:'Tvätt & rengöring',
+      active:true, sortOrder:20, unit:'m²', vatRate:25, defaultReduction:'rot',
+      minChargeExVat:1500, pricingModel:'tiered_unit', qtyField:'area', basePricePerUnit:null,
+      tiers:[
+        {from:0,  to:30,   priceExVat:85},
+        {from:31, to:60,   priceExVat:72},
+        {from:61, to:100,  priceExVat:62},
+        {from:101,to:150,  priceExVat:55},
+        {from:151,to:null, priceExVat:48}
+      ],
+      factors:{},
+      options:[
+        {id:'weeds',        name:'Ogräs- och algbehandling', type:'per_unit', priceExVat:12},
+        {id:'jointing',     name:'Fogsandning',              type:'per_unit', priceExVat:25},
+        {id:'impregnation', name:'Impregnering',             type:'per_unit', priceExVat:22},
+        {id:'disposal',     name:'Bortforsling',             type:'fixed',    priceExVat:600}
+      ],
+      fields:[
+        {id:'area',         label:'Yta (m²)',    type:'number', req:true},
+        {id:'material',     label:'Stentyp',     type:'chips',  opts:['Betongplattor','Natursten','Klinker','Asfalt','Annat'], def:'Betongplattor'},
+        {id:'dirt',         label:'Smutsnivå',   type:'chips',  opts:['Lätt','Måttlig','Kraftig'], def:'Måttlig'},
+        {id:'weeds',        label:'Ogräs/alger', type:'bool',   addLabel:'Ogräs- och algbehandling (+12 kr/m²)'},
+        {id:'jointing',     label:'Fogsandning', type:'bool',   addLabel:'Fogsandning (+25 kr/m²)'},
+        {id:'impregnation', label:'Impregnering',type:'bool',   addLabel:'Impregnering (+22 kr/m²)'},
+        {id:'disposal',     label:'Bortforsling',type:'bool',   addLabel:'Bortforsling (+600 kr)'}
+      ],
+      defaultDescription:'Högtryckstvätt av stenläggning, plattor och markytor.',
+      includes:['Högtryckstvätt','Rengöringsmedel','Uppsamling av smuts'],
+      excludes:['Fogsandning (tillval)','Impregnering (tillval)'],
+      internalNote:''
+    },
+    {
+      id:'svc_hack', name:'Häckklippning', icon:'scissors', category:'Utemiljö',
+      active:true, sortOrder:30, unit:'lm', vatRate:25, defaultReduction:'rut',
+      minChargeExVat:1200, pricingModel:'factor_lm', qtyField:'length', basePricePerUnit:55,
+      tiers:[],
+      factors:{
+        height:{'≤ 1 m':1.0,'1–2 m':1.35,'2–3 m':1.75,'> 3 m':2.2},
+        sides:{'1 sida':1.0,'2 sidor':1.8,'3 sidor':2.5},
+        difficulty:{'Normal':1.0,'Svår (tät/gammal)':1.3}
+      },
+      options:[
+        {id:'disposal', name:'Bortforsling klippt material', type:'fixed', priceExVat:650}
+      ],
+      fields:[
+        {id:'length',     label:'Löpmeter häck',   type:'number', req:true},
+        {id:'height',     label:'Höjd',            type:'chips',  opts:['≤ 1 m','1–2 m','2–3 m','> 3 m'], def:'1–2 m'},
+        {id:'sides',      label:'Antal sidor',     type:'chips',  opts:['1 sida','2 sidor','3 sidor'], def:'2 sidor'},
+        {id:'difficulty', label:'Svårighet',       type:'chips',  opts:['Normal','Svår (tät/gammal)'], def:'Normal'},
+        {id:'disposal',   label:'Bortforsling',    type:'bool',   addLabel:'Bortforsling (+650 kr)'}
+      ],
+      defaultDescription:'Klippning av häck inkl. uppsamling av klippt material.',
+      includes:['Klippning av häck','Uppsamling av klippt material','Städning av arbetsområde'],
+      excludes:['Bortforsling (tillval)','Plantering'],
+      internalNote:''
+    },
+    {
+      id:'svc_fasad', name:'Fasadtvätt', icon:'building-2', category:'Tvätt & rengöring',
+      active:true, sortOrder:40, unit:'m²', vatRate:25, defaultReduction:'rot',
+      minChargeExVat:2000, pricingModel:'factor_unit', qtyField:'area', basePricePerUnit:60,
+      tiers:[],
+      factors:{
+        floors:{'1 vån':1.0,'2 vån':1.25,'3 vån':1.55,'4+ vån':1.85}
+      },
+      options:[
+        {id:'algae',    name:'Algbehandling',       type:'per_unit', priceExVat:15},
+        {id:'softwash', name:'Softwash-behandling', type:'per_unit', priceExVat:18},
+        {id:'lift',     name:'Lift / ställning',    type:'fixed',    priceExVat:4500},
+        {id:'disposal', name:'Bortforsling',        type:'fixed',    priceExVat:600}
+      ],
+      fields:[
+        {id:'area',     label:'Fasadyta (m²)',  type:'number', req:true},
+        {id:'floors',   label:'Antal våningar', type:'chips',  opts:['1 vån','2 vån','3 vån','4+ vån'], def:'2 vån'},
+        {id:'material', label:'Fasadmaterial',  type:'chips',  opts:['Puts / Betong','Tegel','Träpanel','Plåt','Annat'], def:'Puts / Betong'},
+        {id:'algae',    label:'Algbehandling',  type:'bool',   addLabel:'Algbehandling (+15 kr/m²)'},
+        {id:'softwash', label:'Softwash',       type:'bool',   addLabel:'Softwash-behandling (+18 kr/m²)'},
+        {id:'lift',     label:'Lift/ställning', type:'bool',   addLabel:'Lift / ställning (+4 500 kr)'},
+        {id:'disposal', label:'Bortforsling',   type:'bool',   addLabel:'Bortforsling (+600 kr)'}
+      ],
+      defaultDescription:'Fasadtvätt inkl. förberedelse, tvätt och skyddsåtgärder.',
+      includes:['Högtryckstvätt och rengöring','Skyddsövertäckning av fönster och mark','Rengöringsmedel'],
+      excludes:['Ställning (tillval)','Målning','Reparationer'],
+      internalNote:''
+    },
+    {
+      id:'svc_fs', name:'Fastighetsservice', icon:'wrench', category:'Service & förvaltning',
+      active:true, sortOrder:50, unit:'tim', vatRate:25, defaultReduction:'ingen',
+      minChargeExVat:0, pricingModel:'hourly', qtyField:'hours', basePricePerUnit:695,
+      tiers:[], factors:{}, options:[],
+      fields:[
+        {id:'type',     label:'Avtalstyp',              type:'chips',  opts:['Månadsavtal','Kvartal','Engångsuppdrag'], def:'Engångsuppdrag'},
+        {id:'hours',    label:'Timmar per period',      type:'number', req:true},
+        {id:'periods',  label:'Antal perioder',         type:'number', def:1},
+        {id:'rate',     label:'Timpris ex moms (kr/h)', type:'number', def:695},
+        {id:'material', label:'Material (kr)',          type:'number'}
+      ],
+      defaultDescription:'Fastighetsservice och skötsel enligt överenskommelse.',
+      includes:['Löpande service och underhåll','Dokumentation av utfört arbete'],
+      excludes:['Specialisttjänster (el, VVS, hiss)','Material utöver angiven summa'],
+      internalNote:''
+    },
+    {
+      id:'svc_tf', name:'Teknisk förvaltning', icon:'settings', category:'Service & förvaltning',
+      active:true, sortOrder:60, unit:'mån', vatRate:25, defaultReduction:'ingen',
+      minChargeExVat:0, pricingModel:'monthly', qtyField:'months', basePricePerUnit:0,
+      tiers:[], factors:{},
+      options:[
+        {id:'ovk', name:'OVK-besiktning inkl. protokoll', type:'fixed', priceExVat:3500}
+      ],
+      fields:[
+        {id:'months',  label:'Antal månader',         type:'number', req:true, def:12},
+        {id:'monthly', label:'Månadsavgift ex moms',  type:'number', req:true},
+        {id:'setup',   label:'Uppstartskostnad (kr)',  type:'number'},
+        {id:'ovk',     label:'OVK ingår',             type:'bool',   addLabel:'OVK-besiktning inkl. protokoll (+3 500 kr)'}
+      ],
+      defaultDescription:'Teknisk förvaltning av fastighet enligt förvaltningsavtal.',
+      includes:['Teknisk rådgivning','Tillsyn och rondering','Koordinering av underhåll'],
+      excludes:['Akutarbeten utöver avtal','Specialisttjänster'],
+      internalNote:''
+    },
+    {
+      id:'svc_ovr', name:'Övrigt arbete', icon:'activity', category:'Övrigt',
+      active:true, sortOrder:70, unit:'tim', vatRate:25, defaultReduction:'ingen',
+      minChargeExVat:0, pricingModel:'hourly_custom', qtyField:'qty', basePricePerUnit:695,
+      tiers:[], factors:{}, options:[],
+      fields:[
+        {id:'desc_svc', label:'Benämning',              type:'text',   req:true},
+        {id:'qty',      label:'Antal timmar',           type:'number', req:true},
+        {id:'rate',     label:'Timpris ex moms (kr/h)', type:'number', def:695},
+        {id:'material', label:'Material (kr)',          type:'number'}
+      ],
+      defaultDescription:'Arbete på löpande räkning.',
+      includes:[], excludes:[], internalNote:''
+    }
   ]
 };

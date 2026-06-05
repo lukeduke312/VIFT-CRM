@@ -29,6 +29,7 @@ let state = {
   ronderingar: [],
   avvikelser: [],
   activities: [],
+  serviceTemplates: [],
 
   // UI-state
   currentPage: 'dash',
@@ -74,6 +75,7 @@ function initState() {
   state.ronderingar        = s.get('ronderingar')      || SeedData.ronderingar      || [];
   state.avvikelser         = s.get('avvikelser')       || SeedData.avvikelser       || [];
   state.activities         = s.get('activities')        || [];
+  state.serviceTemplates   = s.get('serviceTemplates')  || SeedData.serviceTemplates || [];
 
   // Purge AOs past their 14-day trash window
   const _trashNow = new Date();
@@ -126,6 +128,7 @@ function persist() {
   s.set('ronderingar',      state.ronderingar);
   s.set('avvikelser',       state.avvikelser);
   s.set('activities',       state.activities);
+  s.set('serviceTemplates', state.serviceTemplates);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */
@@ -185,6 +188,10 @@ function relDate(isoStr) {
   if (diffD === 1)  return 'Igår';
   if (diffD < 7)    return `${diffD} dagar sedan`;
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+}
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function fmtDate(isoStr) {
