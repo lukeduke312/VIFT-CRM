@@ -1997,7 +1997,13 @@ const OfferDetailPage = {
     el.innerHTML = `
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
-          <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)}</button>
+            <div>
+              <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}</div>
+              <div style="font-size:16px;font-weight:800;line-height:1.2;color:#fff;">${off.title||'Offert'}</div>
+            </div>
+          </div>
           <div class="off-hero-brand-status">
             <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
@@ -2012,27 +2018,27 @@ const OfferDetailPage = {
           </div>
         </div>
 
-        <div class="off-detail-hero-id">${off.id}</div>
-        <div class="off-detail-hero-title">${off.title||'Offert'}</div>
-        <div class="off-detail-hero-cu">${ic('user',13)} ${cuName}</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:12px;opacity:.8;margin-bottom:8px;">
+          ${ic('user',12)} ${cuName}
+          ${off.validUntil?`<span style="margin-left:8px;opacity:.7;">· ${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
+        </div>
 
         <div class="off-hero-price-grid">
           <div>
             <div class="off-hero-pg-lbl">Ex. moms</div>
             <div class="off-hero-pg-val">${fmt(exVat)} kr</div>
-            ${discAmt?`<div class="off-hero-pg-sub">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
+            ${discAmt?`<div class="off-hero-pg-sub" style="color:#fbbf24;">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
           </div>
           <div>
             <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</div>
             <div class="off-hero-pg-val off-hero-pg-val--big">${fmt(cust)} kr</div>
-            ${rutAmt?`<div class="off-hero-pg-sub">RUT/ROT avdrag −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. 25% moms</div>`}
+            ${rutAmt?`<div class="off-hero-pg-sub" style="color:#86efac;">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. 25% moms</div>`}
           </div>
         </div>
 
         ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
 
         <div class="off-detail-hero-actions">
-          ${off.validUntil?`<span class="off-detail-hero-validity${expiring?' expiring':''}">${ic('calendar',10)} ${fmtDate(off.validUntil)}${expiring?` · ${daysLeft}d kvar`:''}</span>`:''}
           <button type="button" class="off-hero-btn" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>
           <button type="button" class="off-hero-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>
           ${(off.status==='skickad'||off.status==='väntar')?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button><button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>`:''}
@@ -2058,7 +2064,10 @@ const OfferDetailPage = {
       </div>`:''}
 
       <div class="card">
-        <div class="card-header"><h3>${ic('file-text',13)} Offertrader</h3></div>
+        <div class="card-header">
+          <h3>${ic('file-text',13)} Offertrader</h3>
+          ${prLines.length>0?`<span class="bdg bdg-grey">${prLines.length} rad${prLines.length===1?'':'er'}</span>`:''}
+        </div>
         ${linesHtml}
         <div class="off-detail-sum" style="margin:0;border-radius:0 0 var(--rs) var(--rs);border-left:none;border-right:none;border-bottom:none;">
           <div class="off-detail-sum-row"><span class="dk">Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>

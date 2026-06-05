@@ -11,53 +11,72 @@ const Dashboard = {
     const todos     = this._calcTodos();
     const recurring = this._recurringDue();
     const actHtml   = this._widgetActivities();
+    const overdue   = this._calcOverdueActivities();
 
     el.innerHTML =
       '<div class="dash-layout">' +
 
-      // 1. KPI row — nyckeltal
+      // 1. Röd alert om det finns försenade aktiviteter
+      (overdue > 0 ? '<div class="dw-full">' + this._widgetOverdueAlert(overdue) + '</div>' : '') +
+
+      // 2. KPI row — nyckeltal
       '<div class="dw-full">' + this._widgetKpi() + '</div>' +
 
-      // 2. Kräver åtgärd — röd alert om finns
+      // 3. Kräver åtgärd
       (todos.length > 0 ? '<div class="dw-full">' + this._widgetTodos(todos) + '</div>' : '') +
-
-      // 3. Aktiviteter & uppföljningar — hög prioritet, direkt synligt
-      (actHtml ? '<div class="dw-full">' + actHtml + '</div>' : '') +
 
       // 4. Drift: Idag | Pool | Återkommande/Planerade
       '<div class="dw-third">' + this._widgetToday() + '</div>' +
       '<div class="dw-third">' + this._widgetPool() + '</div>' +
       '<div class="dw-third">' + (recurring.length > 0 ? this._widgetRecurring(recurring) : this._widgetPlanned()) + '</div>' +
 
-      // 5. Affär: Säljchanser | Offerter | Senaste händelser
+      // 5. Aktiviteter & uppföljningar
+      (actHtml ? '<div class="dw-full">' + actHtml + '</div>' : '') +
+
+      // 6. Affär: Säljchanser | Offerter | Senaste händelser
       '<div class="dw-third">' + this._widgetSales() + '</div>' +
       '<div class="dw-third">' + this._widgetOffers() + '</div>' +
       '<div class="dw-third">' + this._widgetActivity() + '</div>' +
 
-      // 6. Snabbknappar
+      // 7. Snabbknappar
       '<div class="dw-full">' + this._widgetQuickbtns() + '</div>' +
 
-      // 7. Rondering
+      // 8. Rondering
       '<div class="dw-full">' + this._widgetRondering() + '</div>' +
 
       '</div>';
+  },
+
+  /* ── Röd alert — försenade aktiviteter ──── */
+  _widgetOverdueAlert(count) {
+    return `<div style="background:linear-gradient(135deg,#7f1d1d,#b91c1c);color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="Router.showPage('pg-activities',{filter:'försenade'})">
+      <div style="flex-shrink:0;width:36px;height:36px;background:rgba(255,255,255,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">${ic('alert-triangle',18)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:800;margin-bottom:2px;">${count} försenad${count===1?'':'e'} aktivitet${count===1?'':'er'} — kräver omedelbar åtgärd</div>
+        <div style="font-size:11px;opacity:.8;">Klicka för att se och åtgärda försenade uppföljningar</div>
+      </div>
+      <div style="flex-shrink:0;opacity:.7;">${ic('chevron-right',16)}</div>
+    </div>`;
   },
 
   /* ── KPI ─────────────────────────────────── */
   _widgetKpi() {
     const kpis = this._calcKPIs();
     return `<div class="kpi-row">
-      ${this._kpi(kpis.activeOrders, 'Aktiva ordrar',       'blue',   "Router.showPage('pg-ao',{filter:'active'})")}
-      ${this._kpi(kpis.doneThisMonth,'Klara denna månad',   'green',  "Router.showPage('pg-ao',{filter:'klar'})")}
-      ${this._kpi(kpis.readyBill,    'Redo fakturering',    'orange', "Router.showPage('pg-ao',{filter:'readyForInvoice'})")}
-      ${this._kpi(kpis.openOffers,   'Offerter ute',        '',       "Router.showPage('pg-offer')")}
-      ${this._kpi(kpis.salesActive,  'Säljchanser',         'purple', "Router.showPage('pg-sales')")}
+      ${this._kpi(kpis.activeOrders, 'Aktiva ordrar',       'blue',   "Router.showPage('pg-ao',{filter:'active'})",   'clipboard-list')}
+      ${this._kpi(kpis.doneThisMonth,'Klara denna månad',   'green',  "Router.showPage('pg-ao',{filter:'klar'})",     'check-circle')}
+      ${this._kpi(kpis.readyBill,    'Redo fakturering',    'orange', "Router.showPage('pg-ao',{filter:'readyForInvoice'})", 'receipt')}
+      ${this._kpi(kpis.openOffers,   'Offerter ute',        '',       "Router.showPage('pg-offer')",                  'file-text')}
+      ${this._kpi(kpis.salesActive,  'Säljchanser',         'purple', "Router.showPage('pg-sales')",                  'target')}
     </div>`;
   },
 
-  _kpi(value, label, color, onclick) {
+  _kpi(value, label, color, onclick, icon) {
     return `<div class="kpi-card ${color}" onclick="${onclick}">
-      <div class="kpi-number">${value}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">
+        <div class="kpi-number">${value}</div>
+        ${icon ? `<div style="opacity:.25;margin-top:2px;">${ic(icon,18)}</div>` : ''}
+      </div>
       <div class="kpi-label">${label}</div>
     </div>`;
   },
@@ -65,12 +84,12 @@ const Dashboard = {
   /* ── Kräver åtgärd ───────────────────────── */
   _widgetTodos(todos) {
     const hasUrgent = todos.some(t => t.cls === 'urgent');
-    return `<div class="card" style="border-left:3px solid var(--rd);${hasUrgent?'background:linear-gradient(to right,rgba(185,28,28,.03),transparent);':''}">
-      <div class="card-header" style="background:${hasUrgent?'rgba(185,28,28,.04)':''};">
-        <h3 class="ch3r" style="color:var(--rd);">${ic('alert-triangle',14)} Kräver åtgärd</h3>
-        <span class="bdg bdg-red">${todos.length} post${todos.length===1?'':'er'}</span>
+    return `<div class="card" style="border-left:4px solid ${hasUrgent?'var(--rd)':'var(--or)'};${hasUrgent?'background:linear-gradient(to right,rgba(185,28,28,.02),transparent);':''}">
+      <div class="card-header" style="${hasUrgent?'background:rgba(185,28,28,.03);':''}">
+        <h3 class="ch3" style="color:${hasUrgent?'var(--rd)':'var(--or)'};">${ic('alert-circle',14)} Kräver åtgärd</h3>
+        <span class="bdg ${hasUrgent?'bdg-red':'bdg-orange'}">${todos.length} post${todos.length===1?'':'er'}</span>
       </div>
-      <div class="card-body" style="padding:8px 10px;">
+      <div class="card-body" style="padding:6px 10px;">
         <div class="dash-action-list">
           ${todos.map(t => this._actionItem(t)).join('')}
         </div>
@@ -93,8 +112,8 @@ const Dashboard = {
   /* ── Snabbknappar ─────────────────────────── */
   _widgetQuickbtns() {
     return `<div class="card">
-      <div class="card-header"><h3 class="ch3">${ic('zap',14)} Snabbåtgärder</h3></div>
-      <div class="card-body" style="padding:8px 12px;">
+      <div class="card-header"><h3 class="ch3">${ic('zap',14)} Snabbåtgärder</h3><span style="font-size:10px;color:var(--mt);">Skapa nytt med ett klick</span></div>
+      <div class="card-body" style="padding:10px 14px;">
         <div class="quick-row">
           ${this._qbtn('clipboard-list','Ny order',     "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)")}
           ${this._qbtn('file-text',     'Ny offert',    "Router.showPage('pg-offer');setTimeout(()=>OffersPage.openCreate(),80)")}
@@ -123,7 +142,7 @@ const Dashboard = {
     const dateStr = new Date().toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'short'});
     return `<div class="card">
       <div class="card-header">
-        <h3 class="ch3">${ic('calendar',14)} Idag</h3>
+        <h3 class="ch3">${ic('calendar',14)} Ordrar idag</h3>
         <span style="font-size:10px;color:var(--mt);font-weight:600;text-transform:capitalize;">${dateStr}</span>
       </div>
       <div class="card-body">
@@ -151,10 +170,13 @@ const Dashboard = {
   /* ── Arbetspool ───────────────────────────── */
   _widgetPool() {
     const pool = (state.workOrders||[]).filter(a => a.status === 'pool');
-    return `<div class="card">
+    return `<div class="card" style="${pool.length>0?'border-left:4px solid var(--pu);':''}">
       <div class="card-header">
         <h3 class="ch3">${ic('inbox',14)} Arbetspool</h3>
-        ${pool.length > 0 ? `<span class="bdg bdg-purple">${pool.length}</span>` : ''}
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${pool.length > 0 ? `<span class="bdg bdg-purple">${pool.length} väntar</span>` : ''}
+          <button class="btn bghost bxs" style="font-size:10px;padding:3px 7px;" onclick="Router.showPage('pg-ao',{filter:'pool'})">Visa ${ic('arrow-right',10)}</button>
+        </div>
       </div>
       <div class="card-body">
         ${pool.length === 0
@@ -330,21 +352,21 @@ const Dashboard = {
     if (stats.overdue === 0 && stats.today === 0 && stats.upcoming === 0) return '';
 
     const _cnt = (n, label, color, filter) =>
-      `<div onclick="Router.showPage('pg-activities',{filter:'${filter}'})" style="flex:1;text-align:center;padding:8px 4px;cursor:pointer;border-radius:var(--rs);background:var(--bg);">
-        <div style="font-size:20px;font-weight:900;color:${color};">${n}</div>
-        <div style="font-size:10px;color:var(--mt);font-weight:600;">${label}</div>
+      `<div onclick="Router.showPage('pg-activities',{filter:'${filter}'})" style="flex:1;text-align:center;padding:10px 6px;cursor:pointer;border-radius:var(--rs);background:var(--bg);transition:box-shadow .12s;" onmouseover="this.style.boxShadow='var(--sh)'" onmouseout="this.style.boxShadow=''">
+        <div style="font-size:22px;font-weight:900;color:${color};line-height:1;margin-bottom:3px;">${n}</div>
+        <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;letter-spacing:.4px;">${label}</div>
       </div>`;
 
-    const urgent = [...overdue, ...todayActs].slice(0, 3);
+    const urgent = [...overdue, ...todayActs].slice(0, 4);
 
-    return `<div class="card" style="border-left:3px solid ${stats.overdue>0?'var(--rd)':'var(--or)'};">
+    return `<div class="card" style="border-left:4px solid ${stats.overdue>0?'var(--rd)':'var(--or)'};">
       <div class="card-header">
         <h3 class="ch3">${ic('bell',14)} Aktiviteter & uppföljningar</h3>
-        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;"
-          onclick="Router.showPage('pg-activities')">Visa alla</button>
+        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;"
+          onclick="Router.showPage('pg-activities')">Visa alla ${ic('arrow-right',10)}</button>
       </div>
-      <div class="card-body" style="padding:8px 10px;">
-        <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <div class="card-body" style="padding:10px 12px;">
+        <div style="display:flex;gap:8px;margin-bottom:${urgent.length>0?'10px':'0'};">
           ${_cnt(stats.overdue, 'Försenade', 'var(--rd)', 'försenade')}
           ${_cnt(stats.today,   'Idag',      'var(--or)', 'idag')}
           ${_cnt(stats.upcoming,'Kommande',  'var(--blue)','kommande')}
@@ -352,13 +374,13 @@ const Dashboard = {
         ${urgent.length > 0 ? `<div style="display:flex;flex-direction:column;gap:4px;">
           ${urgent.map(a => {
             const isOverdue = a.dueDate < today;
-            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border-radius:var(--rx);cursor:pointer;" onclick="Router.showPage('pg-activities')">
-              <span style="color:${isOverdue?'var(--rd)':'var(--or)'};">${ic(ActivitiesService.typeIcon(a.type),12)}</span>
+            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg);border-radius:var(--rx);cursor:pointer;border-left:3px solid ${isOverdue?'var(--rd)':'var(--or)'};" onclick="Router.showPage('pg-activities')">
+              <span style="color:${isOverdue?'var(--rd)':'var(--or)'};">${ic(ActivitiesService.typeIcon(a.type),13)}</span>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.note || ActivitiesService.typeLabel(a.type)}</div>
-                <div style="font-size:10px;color:${isOverdue?'var(--rd)':'var(--mt)'};">${isOverdue?'Försenad: ':''} ${fmtDate(a.dueDate)}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.note || ActivitiesService.typeLabel(a.type)}</div>
+                <div style="font-size:10px;color:${isOverdue?'var(--rd)':'var(--mt)'};">${isOverdue?'Försenad — ':''} ${fmtDate(a.dueDate)}</div>
               </div>
-              <button class="btn bxs bsu" style="font-size:9px;padding:3px 7px;" onclick="event.stopPropagation();ActivitiesService.complete('${a.id}');Dashboard.render();">Klar</button>
+              <button class="btn bxs bsu" style="font-size:9px;padding:3px 8px;" onclick="event.stopPropagation();ActivitiesService.complete('${a.id}');Dashboard.render();">${ic('check',10)} Klar</button>
             </div>`;
           }).join('')}
         </div>` : ''}
@@ -495,6 +517,10 @@ const Dashboard = {
     });
 
     return todos;
+  },
+
+  _calcOverdueActivities() {
+    try { return ActivitiesService.getStats().overdue || 0; } catch(e) { return 0; }
   },
 
   _recurringDue() {

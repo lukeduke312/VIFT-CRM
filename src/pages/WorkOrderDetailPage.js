@@ -39,36 +39,37 @@ const WorkOrderDetailPage = {
       ${ao.deleted ? `<div class="nbox" style="background:#fee2e2;border-left-color:var(--rd);margin-bottom:8px;">${ic('trash',13)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
       ${ao.archived && !ao.deleted ? `<div class="nbox" style="background:#f1f5f9;border-left-color:var(--mt);margin-bottom:8px;">${ic('archive',13)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
 
-      <!-- Status/Action panel -->
-      <div class="ao-action-panel">
-        <div class="ao-action-panel-left">
-          <button class="btn bs bsm" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)}</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${ao.id}</span>
+      <!-- Hero/Info panel -->
+      <div class="card" style="margin-bottom:2px;">
+        <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);padding:12px 14px 10px;color:#fff;border-radius:11px 11px 0 0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)}</button>
+            <span style="font-size:10px;font-weight:700;opacity:.65;letter-spacing:.5px;text-transform:uppercase;">${ao.id}</span>
+            <div style="display:flex;gap:5px;align-items:center;margin-left:auto;">
+              ${sbdg(ao.status)} ${pbdg(ao.priority)}
+            </div>
+          </div>
+          <div style="font-size:17px;font-weight:800;line-height:1.25;margin-bottom:6px;">${ao.title}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;opacity:.85;">
+            <span style="display:flex;align-items:center;gap:4px;">${ic('user',11)} <span style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu&&cu.id}'})">${cuName}</span></span>
+            ${ao.scheduledDate?`<span style="display:flex;align-items:center;gap:4px;">${ic('calendar',11)} ${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span>`:''}
+            ${ao.address?`<span style="display:flex;align-items:center;gap:4px;">${ic('map-pin',11)} ${ao.address}</span>`:''}
+          </div>
         </div>
-        <div class="ao-action-panel-badges">
-          ${sbdg(ao.status)} ${pbdg(ao.priority)}
-        </div>
-        <div class="ao-action-panel-btns">
+        <div style="padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;border-bottom:1px solid var(--bg);">
           ${this._actionBtns(ao)}
           ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>` : ''}
         </div>
-      </div>
-
-      <!-- Rubrik -->
-      <div class="card">
-        <div class="card-header">
-          <h3 style="font-size:14px;font-weight:800;color:var(--navy);line-height:1.3;">${ao.title}</h3>
-        </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:10px 14px;">
           ${ao.description ? `<p style="font-size:13px;color:var(--mt);line-height:1.5;margin-bottom:10px;">${ao.description}</p>` : ''}
-          <div class="dr"><span class="dk">Kund</span><span class="dv" style="cursor:pointer;color:var(--sky);" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu&&cu.id}'})">${cuName}</span></div>
-          <div class="dr"><span class="dk">Adress</span><span class="dv">${ao.address||'—'}</span></div>
-          <div class="dr"><span class="dk">Kontakt</span><span class="dv">${ao.contactPerson||'—'}${ao.phone?' · '+ao.phone:''}</span></div>
-          ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${ao.accessCode}</span></div>` : ''}
-          <div class="dr"><span class="dk">Datum</span><span class="dv">${ao.scheduledDate||'Ej planerad'}${ao.scheduledStart?' '+ao.scheduledStart+' – '+ao.scheduledEnd:''}</span></div>
-          <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'Ej tilldelad'}</span></div>
-          <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
-          ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye',13)} ${ao.internalNote}</div>` : ''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;">
+            <div class="dr"><span class="dk">Kontakt</span><span class="dv">${ao.contactPerson||'—'}${ao.phone?'<br><span style="font-size:11px;color:var(--sky);">'+ao.phone+'</span>':''}</span></div>
+            ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-weight:800;letter-spacing:.5px;">${ao.accessCode}</span></div>` : '<div></div>'}
+            <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'Ej tilldelad'}</span></div>
+            <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
+          </div>
+          ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
+          ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye-off',13)} <strong>Internt:</strong> ${ao.internalNote}</div>` : ''}
         </div>
       </div>
 
@@ -264,38 +265,40 @@ const WorkOrderDetailPage = {
     return `${items.map((c, i) => {
         const isOk  = c.avvikelse === 'ok' || (c.done && !c.avvikelse);
         const isAvv = c.avvikelse === 'avvikelse';
+        const statusBg = isOk ? 'var(--lgr)' : isAvv ? 'var(--lrd)' : 'var(--bg)';
+        const statusBd = isOk ? 'var(--gr)' : isAvv ? 'var(--rd)' : 'var(--br)';
         return `
-        <div style="border-bottom:1px solid var(--bg);padding:10px 0;">
+        <div style="border-bottom:1px solid var(--bg);padding:9px 0;background:${isAvv?'rgba(185,28,28,.02)':'#fff'};">
           <div style="display:flex;align-items:flex-start;gap:8px;">
-            <div style="flex-shrink:0;margin-top:2px;width:18px;height:18px;border-radius:50%;
-              background:${isOk?'var(--grn)':isAvv?'var(--rd)':'var(--br)'};
-              display:flex;align-items:center;justify-content:center;color:#fff;">
-              ${isOk?ic('check',11):isAvv?ic('alert-triangle',10):''}
+            <div style="flex-shrink:0;margin-top:1px;width:20px;height:20px;border-radius:50%;
+              border:2px solid ${statusBd};background:${isOk?'var(--gr)':isAvv?'var(--rd)':'#fff'};
+              display:flex;align-items:center;justify-content:center;color:#fff;transition:all .15s;">
+              ${isOk?ic('check',10):isAvv?ic('alert-triangle',9):''}
             </div>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:700;${isOk?'text-decoration:line-through;color:var(--mt);':''}">${c.text}</div>
+              <div style="font-size:13px;font-weight:${isOk?'500':'700'};color:${isOk?'var(--mt)':'var(--tx)'};${isOk?'text-decoration:line-through;':''}">${c.text}</div>
               ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
-              ${isAvv && (c.avvikelseComment || c.avvikelseImage) ? `<div style="margin-top:6px;background:#fff1f2;border-left:3px solid var(--rd);padding:6px 10px;border-radius:0 6px 6px 0;">
-                <div style="font-size:10px;font-weight:700;color:var(--rd);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Avvikelse</div>
-                ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.5;">${c.avvikelseComment}</div>`:''}
-                ${c.avvikelseImage?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:100px;object-fit:cover;">`:''}
-                ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:3px;">${c.avvikelseBy||''}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
+              ${isAvv && (c.avvikelseComment || c.avvikelseImage) ? `<div style="margin-top:5px;background:#fff1f2;border-left:3px solid var(--rd);padding:5px 10px;border-radius:0 6px 6px 0;">
+                <div style="font-size:9px;font-weight:800;color:var(--rd);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${ic('alert-triangle',9)} Avvikelse</div>
+                ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.45;">${c.avvikelseComment}</div>`:''}
+                ${c.avvikelseImage?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:90px;object-fit:cover;">`:''}
+                ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:2px;">${c.avvikelseBy||''}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
               </div>` : ''}
             </div>
-          </div>
-          <div style="display:flex;gap:5px;margin-top:7px;margin-left:26px;">
-            <button class="btn bxs ${isOk?'bsu':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'ok')"
-              style="font-size:10px;padding:3px 8px;display:flex;align-items:center;gap:3px;">
-              ${ic('check',10)} ${isOk ? 'OK ✓' : 'Markera OK'}
-            </button>
-            <button class="btn bxs ${isAvv?'bd':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')"
-              style="font-size:10px;padding:3px 8px;display:flex;align-items:center;gap:3px;">
-              ${ic('alert-triangle',10)} ${isAvv ? 'Avvikelse ✓' : 'Markera avvikelse'}
-            </button>
-            <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})"
-              style="font-size:10px;padding:3px 8px;" title="Ta bort punkt">
-              ${ic('trash',10)}
-            </button>
+            <div style="display:flex;gap:4px;flex-shrink:0;align-self:center;">
+              <button class="btn bxs ${isOk?'bsu':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'ok')"
+                style="font-size:9px;padding:3px 7px;" title="${isOk?'OK markerat':'Markera OK'}">
+                ${ic('check',9)} ${isOk ? 'OK' : 'OK'}
+              </button>
+              <button class="btn bxs ${isAvv?'bd':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')"
+                style="font-size:9px;padding:3px 7px;" title="${isAvv?'Avvikelse markerad':'Markera avvikelse'}">
+                ${ic('alert-triangle',9)}
+              </button>
+              <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})"
+                style="font-size:9px;padding:3px 6px;" title="Ta bort">
+                ${ic('trash',9)}
+              </button>
+            </div>
           </div>
         </div>`;
       }).join('')}`;
@@ -329,41 +332,47 @@ const WorkOrderDetailPage = {
 
   _renderMaterials(ao) {
     const mats = ao.materials || [];
-    if (!mats.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Inget material registrerat</p>`;
-    return mats.map(m => {
-      const qty  = m.qty || 0;
-      const sell = m.sellPrice || 0;
-      const buy  = m.buyPrice || 0;
-      const vat  = m.vatRate != null ? m.vatRate : 25;
-      const exMoms  = qty * sell;
-      const momsAmt = exMoms * vat / 100;
-      const inklMoms = exMoms + momsAmt;
-      return `
-        <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
-          <div style="display:flex;align-items:flex-start;gap:8px;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:700;margin-bottom:3px;">${m.name}</div>
-              <div style="font-size:11px;color:var(--mt);">${qty} ${m.unit} × ${fmt(sell)} kr ex moms</div>
-              <div style="display:flex;gap:10px;margin-top:4px;font-size:11px;">
-                <span style="color:var(--mt);">Ex: <strong style="color:var(--tx)">${fmt(exMoms)} kr</strong></span>
-                <span style="color:var(--mt);">Moms: ${fmt(momsAmt)} kr</span>
-                <span style="color:var(--navy);font-weight:700;">Inkl: ${fmt(inklMoms)} kr</span>
-              </div>
-              ${buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;margin-top:5px;font-size:10px;color:var(--mt);font-style:italic;padding:4px 8px;background:var(--bg);border-radius:6px;">
-                Ink-pris: ${fmt(buy)} kr/st · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st
-              </div>
-              <button type="button" onclick="(function(){var e=document.getElementById('mat-int-${m.id}');e.style.display=e.style.display==='none'?'':'none';})()"
-                style="font-size:10px;color:var(--mt);background:none;border:none;padding:2px 0;margin-top:2px;cursor:pointer;display:flex;align-items:center;gap:3px;">
-                ${ic('eye',9)} Intern kalkyl
-              </button>` : ''}
-            </div>
-            <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
-              <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',12)}</button>
-              <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteMaterial('${m.id}')">${ic('trash',12)}</button>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
+    if (!mats.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;font-style:italic;">Inget material registrerat ännu.</p>`;
+    return `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="background:var(--bg);border-bottom:2px solid var(--br);">
+            <th style="padding:7px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">Material</th>
+            <th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Antal</th>
+            <th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">À-pris</th>
+            <th style="padding:7px 14px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Inkl. moms</th>
+            <th style="padding:7px 10px;text-align:right;width:1px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${mats.map(m => {
+            const qty = m.qty || 0;
+            const sell = m.sellPrice || 0;
+            const buy  = m.buyPrice || 0;
+            const vat  = m.vatRate != null ? m.vatRate : 25;
+            const exMoms  = qty * sell;
+            const momsAmt = exMoms * vat / 100;
+            const inklMoms = exMoms + momsAmt;
+            return `<tr style="border-bottom:1px solid var(--bg);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+              <td style="padding:9px 14px;">
+                <div style="font-weight:700;color:var(--tx);">${m.name}</div>
+                ${buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;">Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>
+                <button type="button" onclick="(function(){var e=document.getElementById('mat-int-${m.id}');e.style.display=e.style.display==='none'?'':'none';})()" style="font-size:9px;color:var(--mt);background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;gap:2px;margin-top:2px;">${ic('eye',9)} Intern</button>` : ''}
+              </td>
+              <td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${qty} ${m.unit}</td>
+              <td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${fmt(sell)} kr</td>
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:var(--navy);white-space:nowrap;">${fmt(inklMoms)} kr</td>
+              <td style="padding:9px 10px;text-align:right;white-space:nowrap;">
+                <div style="display:flex;gap:4px;justify-content:flex-end;">
+                  <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',11)}</button>
+                  <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteMaterial('${m.id}')">${ic('trash',11)}</button>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
   },
 
   _renderTimeEntries(ao) {
