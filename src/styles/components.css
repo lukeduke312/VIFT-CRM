@@ -22,8 +22,8 @@
 .btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
-.bp  { background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); color: var(--brand-primary-text); box-shadow: 0 3px 12px rgba(0,0,0,.2); }
-.bp:hover { box-shadow: 0 5px 16px rgba(0,0,0,.28); }
+.bp  { background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); color: var(--brand-primary-text); box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.bp:hover { box-shadow: 0 4px 14px rgba(0,0,0,.22); }
 .bs  { background: var(--acc); color: var(--navy); border: 1.5px solid var(--br); }
 .bs:hover { border-color: var(--sky); }
 .bsu { background: linear-gradient(135deg, #15803d, #16a34a); color: #fff; }
@@ -64,7 +64,7 @@
   overflow: hidden;
 }
 .card-header {
-  padding: 11px 14px 9px;
+  padding: 12px 14px 10px;
   border-bottom: 1px solid var(--br);
   display: flex;
   align-items: center;
@@ -78,13 +78,13 @@
   text-transform: uppercase;
   letter-spacing: .7px;
 }
-.card-body { padding: 12px 14px; }
+.card-body { padding: 14px; }
 
 /* ── Listrader ────────────────────────── */
 .list-item {
   background: #fff;
   border-radius: var(--rs);
-  padding: 11px 14px;
+  padding: 12px 14px;
   margin-bottom: 7px;
   border: 1px solid var(--br);
   border-left: 4px solid var(--br);
@@ -311,7 +311,7 @@
 }
 .ft {
   flex-shrink: 0;
-  padding: 7px 12px;
+  padding: 8px 14px;
   border-radius: var(--rx);
   font-size: 12px;
   font-weight: 600;
@@ -372,12 +372,12 @@
 /* ── Empty state ──────────────────────── */
 .empty {
   text-align: center;
-  padding: 40px 16px;
+  padding: 44px 16px;
   color: var(--mt);
 }
-.empty-ico { font-size: 36px; display: block; margin-bottom: 10px; opacity: .45; }
-.empty h3 { font-size: 15px; font-weight: 700; color: var(--tx); margin-bottom: 6px; }
-.empty p  { font-size: 13px; line-height: 1.5; }
+.empty-ico { font-size: 36px; display: block; margin-bottom: 12px; opacity: .45; }
+.empty h3 { font-size: 15px; font-weight: 700; color: var(--tx); margin-bottom: 8px; }
+.empty p  { font-size: 13px; line-height: 1.6; }
 
 /* ── Section title ────────────────────── */
 .stitle {

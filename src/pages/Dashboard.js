@@ -10,33 +10,34 @@ const Dashboard = {
 
     const todos     = this._calcTodos();
     const recurring = this._recurringDue();
+    const actHtml   = this._widgetActivities();
 
     el.innerHTML =
       '<div class="dash-layout">' +
 
-      // 1. KPI row
+      // 1. KPI row — nyckeltal
       '<div class="dw-full">' + this._widgetKpi() + '</div>' +
 
-      // 2. Kräver åtgärd (only when items exist)
+      // 2. Kräver åtgärd — röd alert om finns
       (todos.length > 0 ? '<div class="dw-full">' + this._widgetTodos(todos) + '</div>' : '') +
 
-      // 3. Snabbknappar — compact strip above the work sections
-      '<div class="dw-full">' + this._widgetQuickbtns() + '</div>' +
+      // 3. Aktiviteter & uppföljningar — hög prioritet, direkt synligt
+      (actHtml ? '<div class="dw-full">' + actHtml + '</div>' : '') +
 
-      // 4. Drift: Idag | Pool | Återkommande snart
+      // 4. Drift: Idag | Pool | Återkommande/Planerade
       '<div class="dw-third">' + this._widgetToday() + '</div>' +
       '<div class="dw-third">' + this._widgetPool() + '</div>' +
       '<div class="dw-third">' + (recurring.length > 0 ? this._widgetRecurring(recurring) : this._widgetPlanned()) + '</div>' +
 
-      // 5. Affär: Säljchanser | Offerter | Senaste aktivitet
+      // 5. Affär: Säljchanser | Offerter | Senaste händelser
       '<div class="dw-third">' + this._widgetSales() + '</div>' +
       '<div class="dw-third">' + this._widgetOffers() + '</div>' +
       '<div class="dw-third">' + this._widgetActivity() + '</div>' +
 
-      // 5b. Aktiviteter
-      '<div class="dw-full">' + this._widgetActivities() + '</div>' +
+      // 6. Snabbknappar
+      '<div class="dw-full">' + this._widgetQuickbtns() + '</div>' +
 
-      // 6. Rondering
+      // 7. Rondering
       '<div class="dw-full">' + this._widgetRondering() + '</div>' +
 
       '</div>';
@@ -63,10 +64,11 @@ const Dashboard = {
 
   /* ── Kräver åtgärd ───────────────────────── */
   _widgetTodos(todos) {
-    return `<div class="card" style="border-left:3px solid var(--rd);">
-      <div class="card-header">
-        <h3 class="ch3r">${ic('alert-triangle',14)} Kräver åtgärd</h3>
-        <span class="bdg bdg-red">${todos.length}</span>
+    const hasUrgent = todos.some(t => t.cls === 'urgent');
+    return `<div class="card" style="border-left:3px solid var(--rd);${hasUrgent?'background:linear-gradient(to right,rgba(185,28,28,.03),transparent);':''}">
+      <div class="card-header" style="background:${hasUrgent?'rgba(185,28,28,.04)':''};">
+        <h3 class="ch3r" style="color:var(--rd);">${ic('alert-triangle',14)} Kräver åtgärd</h3>
+        <span class="bdg bdg-red">${todos.length} post${todos.length===1?'':'er'}</span>
       </div>
       <div class="card-body" style="padding:8px 10px;">
         <div class="dash-action-list">
