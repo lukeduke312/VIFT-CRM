@@ -1,53 +1,271 @@
 /**
- * Dashboard — Operativ startsida
+ * Dashboard v48 — Rollbaserad behörighet, anpassningsbar layout,
+ * personliga inställningar per användare.
  */
 
 const Dashboard = {
 
+  /* ── Huvud-render ──────────────────────────────────────────────────── */
   render() {
     const el = document.getElementById('dash-content');
     if (!el) return;
 
-    const todos     = this._calcTodos();
-    const recurring = this._recurringDue();
-    const actHtml   = this._widgetActivities();
-    const overdue   = this._calcOverdueActivities();
+    const user   = Auth.getUser();
+    const userId = user ? user.id   : null;
+    const roleId = user ? user.role : 'personal';
+
+    // Applicera personliga preferenser (accentfärg, täthet)
+    if (userId) UserPrefsService.apply(userId);
+
+    // Hämta layout för användaren (sparad eller rollstandard)
+    const layout = DashboardConfig.getUserLayout(userId, roleId);
+
+    // Bygg widgets i rätt ordning, filtrerat på behörighet
+    const parts  = [];
+    const sorted = layout
+      .filter(m => m.visible !== false)
+      .filter(m => this._canSee(m.id))
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    for (const m of sorted) {
+      const html = this._renderWidget(m.id);
+      if (html) {
+        const cls = this._sizeClass(m.size || (DashboardConfig.getModule(m.id) || {}).defaultSize || 'full');
+        parts.push(`<div class="${cls}">${html}</div>`);
+      }
+    }
+
+    const userName = user ? (user.firstName || user.username || '') : '';
 
     el.innerHTML =
-      '<div class="dash-layout">' +
-
-      // 1. Röd alert om det finns försenade aktiviteter
-      (overdue > 0 ? '<div class="dw-full">' + this._widgetOverdueAlert(overdue) + '</div>' : '') +
-
-      // 2. KPI row — nyckeltal
-      '<div class="dw-full">' + this._widgetKpi() + '</div>' +
-
-      // 3. Kräver åtgärd
-      (todos.length > 0 ? '<div class="dw-full">' + this._widgetTodos(todos) + '</div>' : '') +
-
-      // 4. Drift: Idag | Pool | Återkommande/Planerade
-      '<div class="dw-third">' + this._widgetToday() + '</div>' +
-      '<div class="dw-third">' + this._widgetPool() + '</div>' +
-      '<div class="dw-third">' + (recurring.length > 0 ? this._widgetRecurring(recurring) : this._widgetPlanned()) + '</div>' +
-
-      // 5. Aktiviteter & uppföljningar
-      (actHtml ? '<div class="dw-full">' + actHtml + '</div>' : '') +
-
-      // 6. Affär: Säljchanser | Offerter | Senaste händelser
-      '<div class="dw-third">' + this._widgetSales() + '</div>' +
-      '<div class="dw-third">' + this._widgetOffers() + '</div>' +
-      '<div class="dw-third">' + this._widgetActivity() + '</div>' +
-
-      // 7. Snabbknappar
-      '<div class="dw-full">' + this._widgetQuickbtns() + '</div>' +
-
-      // 8. Rondering
-      '<div class="dw-full">' + this._widgetRondering() + '</div>' +
-
-      '</div>';
+      `<div class="dash-topbar">` +
+        (userName ? `<span class="dash-greeting">Hej, ${esc(userName)}!</span>` : '<span></span>') +
+        `<div style="display:flex;gap:6px;">` +
+          `<button class="btn bs bsm" onclick="Dashboard.openUserPrefs()" title="Mina inställningar">${ic('user',12)} Mina inställningar</button>` +
+          `<button class="btn bs bsm" onclick="Dashboard.openCustomize()" title="Anpassa dashboard">${ic('settings',12)} Anpassa</button>` +
+        `</div>` +
+      `</div>` +
+      `<div class="dash-layout">${parts.join('')}</div>`;
   },
 
-  /* ── Röd alert — försenade aktiviteter ──── */
+  /* ── Behörighet ────────────────────────────────────────────────────── */
+  _canSee(moduleId) {
+    const mod = DashboardConfig.getModule(moduleId);
+    if (!mod) return false;
+    return Auth.canAny(mod.requiredPermissions || []);
+  },
+
+  _sizeClass(size) {
+    const map = { full:'dw-full', half:'dw-half', third:'dw-third', twothird:'dw-twothird' };
+    return map[size] || 'dw-full';
+  },
+
+  /* ── Widget-dispatcher ─────────────────────────────────────────────── */
+  _renderWidget(id) {
+    try {
+      switch (id) {
+        case 'overdue_alert': {
+          const n = this._calcOverdueActivities();
+          return n > 0 ? this._widgetOverdueAlert(n) : null;
+        }
+        case 'kpi':          return this._widgetKpi();
+        case 'todos': {
+          const t = this._calcTodos();
+          return t.length > 0 ? this._widgetTodos(t) : null;
+        }
+        case 'today':        return this._widgetToday();
+        case 'pool':         return this._widgetPool();
+        case 'stamp':        return this._widgetStamp();
+        case 'activities':   return this._widgetActivities() || null;
+        case 'recurring': {
+          const r = this._recurringDue();
+          return r.length > 0 ? this._widgetRecurring(r) : this._widgetPlanned();
+        }
+        case 'sales':        return this._widgetSales();
+        case 'offers':       return this._widgetOffers();
+        case 'activity_log': return this._widgetActivity();
+        case 'rondering':    return this._widgetRondering();
+        case 'quickbtns':    return this._widgetQuickbtns();
+        default: return null;
+      }
+    } catch(e) {
+      console.error('[Dashboard] widget error:', id, e);
+      return null;
+    }
+  },
+
+  /* ── Anpassa dashboard ─────────────────────────────────────────────── */
+  _custRows: [],
+
+  openCustomize() {
+    const user = Auth.getUser();
+    if (!user) return;
+
+    const layout    = DashboardConfig.getUserLayout(user.id, user.role);
+    const permitted = DashboardConfig.getAllModules().filter(m => this._canSee(m.id));
+
+    // Bygg rader: permitted modules sorterade på order
+    const rows = permitted.map(m => {
+      const entry = layout.find(e => e.id === m.id) || { id:m.id, visible:false, size:m.defaultSize||'full', order:999 };
+      return { id:m.id, visible:!!entry.visible, size:entry.size||m.defaultSize||'full', order:entry.order, title:m.title, icon:m.icon||'square' };
+    }).sort((a, b) => a.order - b.order);
+
+    this._custRows = rows;
+
+    Modal.open({
+      title: `${ic('settings',15)} Anpassa dashboard`,
+      body:
+        `<p style="font-size:11px;color:var(--mt);margin-bottom:12px;">Välj vilka moduler som visas, flytta om ordningen och välj storlek. Layouten sparas per användare.</p>` +
+        `<div id="dash-cust-list" style="display:flex;flex-direction:column;gap:3px;">${this._custListHtml()}</div>`,
+      buttons: [
+        { label: `${ic('check',13)} Spara layout`,     cls: 'btn bp',    onClick: () => Dashboard.saveCustomize() },
+        { label: 'Återställ standard', cls: 'btn bs',    onClick: () => Dashboard._confirmResetLayout() },
+        { label: 'Avbryt',             cls: 'btn bghost', onClick: () => Modal.close() }
+      ],
+      wide: true
+    });
+  },
+
+  _custListHtml() {
+    const sizeOpts = [
+      { v:'full',  l:'Fullbredd'      },
+      { v:'half',  l:'Halvbredd'      },
+      { v:'third', l:'En tredjedel'   },
+    ];
+    return this._custRows.map((r, i) => `
+      <div class="dash-cust-row${r.visible ? ' on' : ''}" data-idx="${i}">
+        <label class="dash-cust-check">
+          <input type="checkbox" ${r.visible ? 'checked' : ''} onchange="Dashboard._custToggle(${i})">
+          <span class="dash-cust-name">${ic(r.icon, 12)} ${esc(r.title)}</span>
+        </label>
+        <select class="dash-cust-size" onchange="Dashboard._custSize(${i},this.value)">
+          ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
+        </select>
+        <div class="dash-cust-arrows">
+          <button type="button" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',12)}</button>
+          <button type="button" title="Flytta ner" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',12)}</button>
+        </div>
+      </div>`).join('');
+  },
+
+  _custToggle(i) {
+    const cb  = document.querySelector(`[data-idx="${i}"] input[type="checkbox"]`);
+    const row = document.querySelector(`[data-idx="${i}"].dash-cust-row`);
+    if (this._custRows[i] && cb) {
+      this._custRows[i].visible = cb.checked;
+      if (row) row.classList.toggle('on', cb.checked);
+    }
+  },
+
+  _custSize(i, val) {
+    if (this._custRows[i]) this._custRows[i].size = val;
+  },
+
+  _custMove(i, dir) {
+    const rows = this._custRows;
+    const j    = i + dir;
+    if (j < 0 || j >= rows.length) return;
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+    const list = document.getElementById('dash-cust-list');
+    if (list) list.innerHTML = this._custListHtml();
+  },
+
+  saveCustomize() {
+    const user = Auth.getUser();
+    if (!user) return;
+
+    // Spara permitted-modulers ordning/synlighet
+    const layout = this._custRows.map((r, i) => ({ id:r.id, visible:r.visible, size:r.size, order:i }));
+
+    // Behåll icke-permitted modulers befintliga inställningar
+    const existing = DashboardConfig.getUserLayout(user.id, user.role);
+    existing.forEach(e => {
+      if (!layout.find(l => l.id === e.id)) layout.push(e);
+    });
+
+    DashboardConfig.saveUserLayout(user.id, layout);
+    Modal.close();
+    this.render();
+    showToast('Dashboard-layout sparad');
+  },
+
+  _confirmResetLayout() {
+    Modal.close();
+    Modal.confirm('Återställa till standardlayout för din roll?', () => {
+      const user = Auth.getUser();
+      if (!user) return;
+      DashboardConfig.resetUserLayout(user.id);
+      Dashboard.render();
+      showToast('Dashboard återställd till standard');
+    });
+  },
+
+  /* ── Personliga inställningar ──────────────────────────────────────── */
+  openUserPrefs() {
+    const user = Auth.getUser();
+    if (!user) return;
+    const prefs   = UserPrefsService.get(user.id);
+    const accent  = prefs.accentColor || '';
+    const density = prefs.density || 'normal';
+    const name    = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
+
+    Modal.open({
+      title: `${ic('user',15)} Mina inställningar`,
+      body: `
+        <p style="font-size:11px;color:var(--mt);margin-bottom:14px;">Inställningarna gäller bara din egen vy och lagras lokalt. De påverkar inte PDF, fakturor eller andra användares vy.</p>
+        <div style="margin-bottom:10px;padding:10px 12px;background:var(--bg);border-radius:var(--rs);">
+          <div style="font-size:12px;font-weight:700;color:var(--navy);">${esc(name)}</div>
+          <div style="font-size:11px;color:var(--mt);">${esc(user.username)} · Roll: ${esc(user.role || '—')}</div>
+        </div>
+        <div class="fg">
+          <label>Personlig accentfärg <span style="font-size:10px;font-weight:400;color:var(--mt);">(påverkar knappar och ikoner)</span></label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+            <input type="color" id="pref-accent" value="${accent || '#2b7fd4'}" style="width:44px;height:32px;border:1px solid var(--br);border-radius:6px;cursor:pointer;padding:2px;">
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              ${['#2b7fd4','#0f3763','#166534','#9333ea','#dc2626','#d97706','#0891b2','#1e293b'].map(c =>
+                `<button type="button" style="width:22px;height:22px;background:${c};border-radius:4px;border:2px solid ${accent===c?'var(--navy)':'transparent'};cursor:pointer;" onclick="document.getElementById('pref-accent').value='${c}'" title="${c}"></button>`
+              ).join('')}
+            </div>
+            <button class="btn bs bxs" style="font-size:11px;" onclick="Dashboard._clearAccentPreview()">Återställ</button>
+          </div>
+        </div>
+        <div class="fg" style="margin-top:12px;">
+          <label>Layout-täthet</label>
+          <select id="pref-density" style="margin-top:4px;">
+            <option value="normal"   ${density==='normal'   ?'selected':''}>Normal</option>
+            <option value="compact"  ${density==='compact'  ?'selected':''}>Kompakt — mer information per skärm</option>
+            <option value="spacious" ${density==='spacious' ?'selected':''}>Luftig — mer luft mellan element</option>
+          </select>
+        </div>`,
+      buttons: [
+        { label: `${ic('check',13)} Spara`,  cls:'btn bp',    onClick: () => Dashboard.saveUserPrefs() },
+        { label: 'Avbryt', cls:'btn bghost', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _clearAccentPreview() {
+    const input = document.getElementById('pref-accent');
+    if (input) input.value = '#2b7fd4';
+  },
+
+  saveUserPrefs() {
+    const user = Auth.getUser();
+    if (!user) return;
+    const accentInput = document.getElementById('pref-accent');
+    const accent      = accentInput ? accentInput.value : null;
+    const density     = document.getElementById('pref-density')?.value || 'normal';
+
+    // Null om accentfärg är standard-blå
+    const accentColor = (accent && accent !== '#2b7fd4') ? accent : null;
+
+    UserPrefsService.save(user.id, { accentColor, density });
+    UserPrefsService.apply(user.id);
+    Modal.close();
+    showToast('Inställningar sparade');
+  },
+
+  /* ── Widget: Försenade aktiviteter ──────────────────────────────────── */
   _widgetOverdueAlert(count) {
     return `<div style="background:linear-gradient(135deg,#7f1d1d,#b91c1c);color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="Router.showPage('pg-activities',{filter:'försenade'})">
       <div style="flex-shrink:0;width:36px;height:36px;background:rgba(255,255,255,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">${ic('alert-triangle',18)}</div>
@@ -59,16 +277,27 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── KPI ─────────────────────────────────── */
+  /* ── Widget: KPI (behörighetsfiltrad) ─────────────────────────────── */
   _widgetKpi() {
-    const kpis = this._calcKPIs();
-    return `<div class="kpi-row">
-      ${this._kpi(kpis.activeOrders, 'Aktiva ordrar',       'blue',   "Router.showPage('pg-ao',{filter:'active'})",   'clipboard-list')}
-      ${this._kpi(kpis.doneThisMonth,'Klara denna månad',   'green',  "Router.showPage('pg-ao',{filter:'klar'})",     'check-circle')}
-      ${this._kpi(kpis.readyBill,    'Redo fakturering',    'orange', "Router.showPage('pg-ao',{filter:'readyForInvoice'})", 'receipt')}
-      ${this._kpi(kpis.openOffers,   'Offerter ute',        '',       "Router.showPage('pg-offer')",                  'file-text')}
-      ${this._kpi(kpis.salesActive,  'Säljchanser',         'purple', "Router.showPage('pg-sales')",                  'target')}
-    </div>`;
+    const kpis  = this._calcKPIs();
+    const items = [];
+
+    if (Auth.canAny(['ao_view_all','ao_view_own'])) {
+      items.push(this._kpi(kpis.activeOrders,  'Aktiva ordrar',     'blue',   "Router.showPage('pg-ao',{filter:'active'})",          'clipboard-list'));
+      items.push(this._kpi(kpis.doneThisMonth, 'Klara denna månad', 'green',  "Router.showPage('pg-ao',{filter:'klar'})",             'check-circle'));
+    }
+    if (Auth.canAny(['invoice_view','invoice_create'])) {
+      items.push(this._kpi(kpis.readyBill, 'Redo fakturering', 'orange', "Router.showPage('pg-ao',{filter:'readyForInvoice'})", 'receipt'));
+    }
+    if (Auth.can('offer_manage')) {
+      items.push(this._kpi(kpis.openOffers,  'Offerter ute',  '',       "Router.showPage('pg-offer')",  'file-text'));
+    }
+    if (Auth.can('sales_manage')) {
+      items.push(this._kpi(kpis.salesActive, 'Säljchanser',   'purple', "Router.showPage('pg-sales')",  'target'));
+    }
+
+    if (items.length === 0) return '';
+    return `<div class="kpi-row">${items.join('')}</div>`;
   },
 
   _kpi(value, label, color, onclick, icon) {
@@ -81,7 +310,7 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Kräver åtgärd ───────────────────────── */
+  /* ── Widget: Kräver åtgärd (behörighetsfiltrad) ───────────────────── */
   _widgetTodos(todos) {
     const hasUrgent = todos.some(t => t.cls === 'urgent');
     return `<div class="card" style="border-left:4px solid ${hasUrgent?'var(--rd)':'var(--or)'};${hasUrgent?'background:linear-gradient(to right,rgba(185,28,28,.02),transparent);':''}">
@@ -109,19 +338,33 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Snabbknappar ─────────────────────────── */
+  /* ── Widget: Snabbknappar (behörighetsfiltrad) ────────────────────── */
   _widgetQuickbtns() {
+    const btns = [];
+    if (Auth.canAny(['ao_view_all','ao_view_own','ao_create'])) {
+      btns.push(this._qbtn('clipboard-list', 'Ny order',      "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)"));
+    }
+    if (Auth.can('offer_manage')) {
+      btns.push(this._qbtn('file-text',      'Ny offert',     "Router.showPage('pg-offer');setTimeout(()=>OffersPage.openCreate(),80)"));
+    }
+    if (Auth.can('customer_manage')) {
+      btns.push(this._qbtn('users',          'Ny kund',       "Router.showPage('pg-crm');setTimeout(()=>CustomersPage.openCreate(),80)"));
+    }
+    if (Auth.can('recurring_manage')) {
+      btns.push(this._qbtn('refresh-cw',     'Återkommande',  "Router.showPage('pg-recurring')"));
+    }
+    if (Auth.can('ao_time')) {
+      btns.push(this._qbtn('clock',          'Stämpla tid',   "Router.showPage('pg-tid')"));
+    }
+    if (Auth.canAny(['invoice_view','invoice_create'])) {
+      btns.push(this._qbtn('receipt',        'Fakturering',   "Router.showPage('pg-invoices')"));
+    }
+
+    if (btns.length === 0) return '';
     return `<div class="card">
       <div class="card-header"><h3 class="ch3">${ic('zap',14)} Snabbåtgärder</h3><span style="font-size:10px;color:var(--mt);">Skapa nytt med ett klick</span></div>
       <div class="card-body" style="padding:10px 14px;">
-        <div class="quick-row">
-          ${this._qbtn('clipboard-list','Ny order',     "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)")}
-          ${this._qbtn('file-text',     'Ny offert',    "Router.showPage('pg-offer');setTimeout(()=>OffersPage.openCreate(),80)")}
-          ${this._qbtn('users',         'Ny kund',      "Router.showPage('pg-crm');setTimeout(()=>CustomersPage.openCreate(),80)")}
-          ${this._qbtn('refresh-cw',    'Återkommande', "Router.showPage('pg-recurring')")}
-          ${this._qbtn('clock',         'Stämpla tid',  "Router.showPage('pg-tid')")}
-          ${this._qbtn('receipt',       'Fakturering',  "Router.showPage('pg-invoices')")}
-        </div>
+        <div class="quick-row">${btns.join('')}</div>
       </div>
     </div>`;
   },
@@ -133,16 +376,26 @@ const Dashboard = {
     </button>`;
   },
 
-  /* ── Idag ─────────────────────────────────── */
+  /* ── Widget: Idag ──────────────────────────────────────────────────── */
   _widgetToday() {
-    const today   = tdy();
-    const todayAOs = (state.workOrders||[]).filter(a =>
+    const today    = tdy();
+    const user     = Auth.getUser();
+    const userId   = user ? user.id : null;
+    const isAdmin  = Auth.can('all') || Auth.canAny(['ao_view_all']);
+    const hasAll   = Auth.can('ao_view_all');
+
+    // Tekniker utan ao_view_all: visa bara sina ordrar
+    let todayAOs = (state.workOrders || []).filter(a =>
       a.scheduledDate === today && !['klar','fakturerad','avbruten'].includes(a.status)
     );
+    if (!hasAll && userId) {
+      todayAOs = todayAOs.filter(a => a.assignedTo === userId || (a.assignedStaff||[]).includes(userId));
+    }
+
     const dateStr = new Date().toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'short'});
     return `<div class="card">
       <div class="card-header">
-        <h3 class="ch3">${ic('calendar',14)} Ordrar idag</h3>
+        <h3 class="ch3">${ic('calendar',14)} ${hasAll ? 'Ordrar idag' : 'Mina ordrar idag'}</h3>
         <span style="font-size:10px;color:var(--mt);font-weight:600;text-transform:capitalize;">${dateStr}</span>
       </div>
       <div class="card-body">
@@ -167,9 +420,9 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Arbetspool ───────────────────────────── */
+  /* ── Widget: Arbetspool ────────────────────────────────────────────── */
   _widgetPool() {
-    const pool = (state.workOrders||[]).filter(a => a.status === 'pool');
+    const pool = (state.workOrders || []).filter(a => a.status === 'pool');
     return `<div class="card" style="${pool.length>0?'border-left:4px solid var(--pu);':''}">
       <div class="card-header">
         <h3 class="ch3">${ic('inbox',14)} Arbetspool</h3>
@@ -197,7 +450,39 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Återkommande snart ───────────────────── */
+  /* ── Widget: Stämpla tid (ny i v48) ───────────────────────────────── */
+  _widgetStamp() {
+    const active = !!state.stampActive;
+    const ts     = state.stampTimestamp;
+    let elapsed  = '';
+    if (active && ts) {
+      const ms = Math.max(0, Date.now() - new Date(ts).getTime());
+      const h  = Math.floor(ms / 3600000);
+      const m  = Math.floor((ms % 3600000) / 60000);
+      elapsed  = `${h}h ${m}min`;
+    }
+    const timeStr = (active && ts) ? new Date(ts).toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'}) : '';
+    return `<div class="card" style="border-left:4px solid ${active?'var(--gr)':'var(--br)'};">
+      <div class="card-header">
+        <h3 class="ch3">${ic('clock',14)} Stämpla tid</h3>
+        ${active
+          ? `<span class="bdg bdg-green">${ic('check-circle',10)} Incheckad</span>`
+          : `<span class="bdg" style="background:var(--bg);color:var(--mt);">Utcheckad</span>`
+        }
+      </div>
+      <div class="card-body" style="text-align:center;padding:16px 12px;">
+        ${active
+          ? `<div style="font-size:26px;font-weight:900;color:var(--gr);line-height:1;margin-bottom:4px;">${elapsed}</div>
+             <div style="font-size:11px;color:var(--mt);margin-bottom:14px;">Incheckad sedan ${timeStr}</div>
+             <button class="btn bs bfull bsm" onclick="Router.showPage('pg-tid')">${ic('clock',13)} Hantera stämpling</button>`
+          : `<div style="font-size:13px;font-weight:600;color:var(--mt);margin-bottom:14px;">Inte incheckad</div>
+             <button class="btn bp bfull bsm" onclick="Router.showPage('pg-tid')">${ic('log-in',13)} Stämpla in</button>`
+        }
+      </div>
+    </div>`;
+  },
+
+  /* ── Widget: Återkommande ──────────────────────────────────────────── */
   _widgetRecurring(recurring) {
     return `<div class="card" style="border-left:3px solid var(--sky);">
       <div class="card-header">
@@ -225,10 +510,10 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Planerade denna vecka ───────────────── */
+  /* ── Widget: Planerade ─────────────────────────────────────────────── */
   _widgetPlanned() {
-    const today = tdy();
-    const week  = _ds(7);
+    const today   = tdy();
+    const week    = _ds(7);
     const planned = (state.workOrders||[]).filter(a =>
       a.status === 'planerad' && a.scheduledDate > today && a.scheduledDate <= week
     );
@@ -255,21 +540,17 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Säljchanser ──────────────────────────── */
+  /* ── Widget: Säljchanser ───────────────────────────────────────────── */
   _widgetSales() {
-    const active = SalesService.getActive();
-    // Sales opportunities use English priority keys; translate here
-    const prioSv  = { high:'Hög', medium:'Normal', low:'Låg', akut:'Akut', hög:'Hög', normal:'Normal', låg:'Låg' };
-    const prioCls = { high:'bdg-orange', medium:'bdg-sky', low:'bdg-grey', akut:'bdg-red', hög:'bdg-orange', normal:'bdg-sky', låg:'bdg-grey' };
+    const active   = SalesService.getActive();
+    const prioSv   = { high:'Hög', medium:'Normal', low:'Låg', akut:'Akut', hög:'Hög', normal:'Normal', låg:'Låg' };
+    const prioCls  = { high:'bdg-orange', medium:'bdg-sky', low:'bdg-grey', akut:'bdg-red', hög:'bdg-orange', normal:'bdg-sky', låg:'bdg-grey' };
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('target',14)} Säljchanser</h3>
         <div style="display:flex;gap:5px;align-items:center;">
           ${active.length > 0 ? `<span class="bdg bdg-purple">${active.length}</span>` : ''}
-          <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;"
-            onclick="Router.showPage('pg-sales')" title="Visa alla säljchanser">
-            Visa alla ${ic('arrow-right',10)}
-          </button>
+          <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;" onclick="Router.showPage('pg-sales')">Visa alla ${ic('arrow-right',10)}</button>
         </div>
       </div>
       <div class="card-body">
@@ -301,7 +582,7 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Offerter väntar ──────────────────────── */
+  /* ── Widget: Offerter väntar ───────────────────────────────────────── */
   _widgetOffers() {
     const pending = (state.offers||[]).filter(o => ['skickad','väntar'].includes(o.status));
     return `<div class="card">
@@ -313,7 +594,7 @@ const Dashboard = {
         ${pending.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('file-text',22)}<p style="font-size:11px;text-align:center;">Inga offerter väntar svar</p></div>`
           : pending.slice(0,4).map(o => {
-              var cu    = getCu(o.customerId);
+              var cu     = getCu(o.customerId);
               var cuName = cu ? (cu.name||(cu.firstName+' '+cu.lastName).trim()) : '—';
               var total  = (o.lines||[]).reduce((s,l) => s+(l.total||0),0);
               var age    = o.sentAt ? Math.floor((Date.now()-new Date(o.sentAt))/86400000) : null;
@@ -331,7 +612,7 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Senaste aktivitet ────────────────────── */
+  /* ── Widget: Senaste händelser ─────────────────────────────────────── */
   _widgetActivity() {
     const acts = ActivityService.getRecent(8);
     return `<div class="card">
@@ -342,14 +623,27 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Aktiviteter-widget ──────────────────── */
+  /* ── Widget: Aktiviteter & uppföljningar ───────────────────────────── */
   _widgetActivities() {
-    const stats    = ActivitiesService.getStats();
-    const today    = tdy();
-    const overdue  = ActivitiesService.getOverdue();
-    const todayActs= ActivitiesService.getToday();
+    const stats     = ActivitiesService.getStats();
+    const today     = tdy();
+    const overdue   = ActivitiesService.getOverdue();
+    const todayActs = ActivitiesService.getToday();
+    const user      = Auth.getUser();
+    const userId    = user ? user.id : null;
 
-    if (stats.overdue === 0 && stats.today === 0 && stats.upcoming === 0) return '';
+    // Filtera till inloggad användares aktiviteter om de inte är admin/chef
+    const canSeeAll = Auth.can('all') || Auth.can('staff_view');
+    const myOverdue = canSeeAll ? overdue : overdue.filter(a => !a.assignedTo || a.assignedTo === userId || a.createdBy === userId);
+    const myToday   = canSeeAll ? todayActs : todayActs.filter(a => !a.assignedTo || a.assignedTo === userId || a.createdBy === userId);
+
+    const myStats = canSeeAll ? stats : {
+      overdue:  myOverdue.length,
+      today:    myToday.length,
+      upcoming: stats.upcoming
+    };
+
+    if (myStats.overdue === 0 && myStats.today === 0 && myStats.upcoming === 0) return '';
 
     const _cnt = (n, label, color, filter) =>
       `<div onclick="Router.showPage('pg-activities',{filter:'${filter}'})" style="flex:1;text-align:center;padding:10px 6px;cursor:pointer;border-radius:var(--rs);background:var(--bg);transition:box-shadow .12s;" onmouseover="this.style.boxShadow='var(--sh)'" onmouseout="this.style.boxShadow=''">
@@ -357,19 +651,18 @@ const Dashboard = {
         <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;letter-spacing:.4px;">${label}</div>
       </div>`;
 
-    const urgent = [...overdue, ...todayActs].slice(0, 4);
+    const urgent = [...myOverdue, ...myToday].slice(0, 4);
 
-    return `<div class="card" style="border-left:4px solid ${stats.overdue>0?'var(--rd)':'var(--or)'};">
+    return `<div class="card" style="border-left:4px solid ${myStats.overdue>0?'var(--rd)':'var(--or)'};">
       <div class="card-header">
         <h3 class="ch3">${ic('bell',14)} Aktiviteter & uppföljningar</h3>
-        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;"
-          onclick="Router.showPage('pg-activities')">Visa alla ${ic('arrow-right',10)}</button>
+        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;" onclick="Router.showPage('pg-activities')">Visa alla ${ic('arrow-right',10)}</button>
       </div>
       <div class="card-body" style="padding:10px 12px;">
         <div style="display:flex;gap:8px;margin-bottom:${urgent.length>0?'10px':'0'};">
-          ${_cnt(stats.overdue, 'Försenade', 'var(--rd)', 'försenade')}
-          ${_cnt(stats.today,   'Idag',      'var(--or)', 'idag')}
-          ${_cnt(stats.upcoming,'Kommande',  'var(--blue)','kommande')}
+          ${_cnt(myStats.overdue, 'Försenade', 'var(--rd)', 'försenade')}
+          ${_cnt(myStats.today,   'Idag',      'var(--or)', 'idag')}
+          ${_cnt(myStats.upcoming,'Kommande',  'var(--blue)','kommande')}
         </div>
         ${urgent.length > 0 ? `<div style="display:flex;flex-direction:column;gap:4px;">
           ${urgent.map(a => {
@@ -388,21 +681,18 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Rondering ────────────────────────────── */
+  /* ── Widget: Rondering ─────────────────────────────────────────────── */
   _widgetRondering() {
-    const today = tdy();
-    const ronderingarIdag = (state.ronderingar||[]).filter(r => r.scheduledDate === today && r.status === 'planerad');
-    const forsenade = (state.ronderingar||[]).filter(r => r.scheduledDate && r.scheduledDate < today && r.status === 'planerad');
-    const medAvvikelser = (state.ronderingar||[]).filter(r => r.status === 'har_avvikelser');
+    const today           = tdy();
+    const forsenade       = (state.ronderingar||[]).filter(r => r.scheduledDate && r.scheduledDate < today && r.status === 'planerad');
     const oppnaAvvikelser = (state.avvikelser||[]).filter(a => a.status === 'öppen');
     const akutaAvvikelser = oppnaAvvikelser.filter(a => a.priority === 'akut' || a.priority === 'hög');
-    const avvUanAO = oppnaAvvikelser.filter(a => !a.workOrderId);
+    const avvUanAO        = oppnaAvvikelser.filter(a => !a.workOrderId);
 
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('clipboard-check',14)} Rondering</h3>
-        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;"
-          onclick="Router.showPage('pg-rondering')">
+        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;" onclick="Router.showPage('pg-rondering')">
           Visa alla ${ic('arrow-right',10)}
         </button>
       </div>
@@ -423,16 +713,15 @@ const Dashboard = {
         </div>
         ${forsenade.length > 0 ? `
           <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px;">
-            ${ic('alert-triangle',14)} <strong>${forsenade.length} försenad${forsenade.length===1?'':'e'} rondering${forsenade.length===1?'':'ar'}</strong> — planerade datum passerade
+            ${ic('alert-triangle',14)} <strong>${forsenade.length} försenad${forsenade.length===1?'':'e'} rondering${forsenade.length===1?'':'ar'}</strong>
             <button class="btn bp bsm" style="margin-left:auto;font-size:10px;" onclick="Router.showPage('pg-rondering')">Visa</button>
           </div>` : ''}
         ${akutaAvvikelser.length > 0 ? `
           <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px;">
-            ${ic('alert-triangle',14)} <strong>${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}</strong> — kräver åtgärd
+            ${ic('alert-triangle',14)} <strong>${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}</strong>
             <button class="btn bp bsm" style="margin-left:auto;font-size:10px;" onclick="Router.showPage('pg-rondering')">Visa</button>
           </div>` : ''}
-        ${avvUanAO.length > 0 ? `
-          <div style="font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
+        ${avvUanAO.length > 0 ? `<div style="font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">${ic('plus',13)} Ny rondering</button>
           <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">${ic('layout-template',13)} Mallar</button>
@@ -441,7 +730,7 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Beräkningar ──────────────────────────── */
+  /* ── Beräkningar ───────────────────────────────────────────────────── */
   _calcKPIs() {
     const today    = tdy();
     const monthStr = today.substring(0, 7);
@@ -462,59 +751,62 @@ const Dashboard = {
     const week  = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
     const aos   = state.workOrders || [];
 
-    // Akuta ordrar
-    const akut = aos.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));
-    if (akut.length > 0) todos.push({
-      icon:'alert-triangle', iconCls:'red', cls:'urgent',
-      title:'Akuta ordrar kräver omedelbar åtgärd',
-      sub: akut.map(a=>a.title).slice(0,2).join(', ')+(akut.length>2?` +${akut.length-2} till`:''),
-      badge:akut.length, badgeCls:'',
-      onClick:"Router.showPage('pg-ao',{filter:'akut'})"
-    });
+    if (Auth.canAny(['ao_view_all','ao_view_own'])) {
+      const akut = aos.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));
+      if (akut.length > 0) todos.push({
+        icon:'alert-triangle', iconCls:'red', cls:'urgent',
+        title:'Akuta ordrar kräver omedelbar åtgärd',
+        sub: akut.map(a=>a.title).slice(0,2).join(', ')+(akut.length>2?` +${akut.length-2} till`:''),
+        badge:akut.length, badgeCls:'',
+        onClick:"Router.showPage('pg-ao',{filter:'akut'})"
+      });
 
-    // Ej fakturerade klara ordrar
-    const readyBill = aos.filter(a => a.status==='klar' && !a.invoiceId);
-    if (readyBill.length > 0) todos.push({
-      icon:'receipt', iconCls:'orange',
-      title:'Klara ordrar utan fakturaunderlag',
-      sub:readyBill.length+' order'+(readyBill.length===1?'':'ar')+' redo för fakturering',
-      badge:readyBill.length, badgeCls:'orange',
-      onClick:"Router.showPage('pg-ao',{filter:'readyForInvoice'})"
-    });
+      const late = aos.filter(a =>
+        ['planerad','pågående'].includes(a.status) && a.scheduledDate && a.scheduledDate < today
+      );
+      if (late.length > 0) todos.push({
+        icon:'clock', iconCls:'orange',
+        title:'Försenade arbetsorder',
+        sub:late.map(a=>a.title).slice(0,2).join(', ')+(late.length>2?` +${late.length-2} till`:''),
+        badge:late.length, badgeCls:'orange',
+        onClick:"Router.showPage('pg-ao',{filter:'forsenad'})"
+      });
+    }
 
-    // Försenade (planerade som passerat datum)
-    const late = aos.filter(a =>
-      ['planerad','pågående'].includes(a.status) && a.scheduledDate && a.scheduledDate < today
-    );
-    if (late.length > 0) todos.push({
-      icon:'clock', iconCls:'orange',
-      title:'Försenade arbetsorder',
-      sub:late.map(a=>a.title).slice(0,2).join(', ')+(late.length>2?` +${late.length-2} till`:''),
-      badge:late.length, badgeCls:'orange',
-      onClick:"Router.showPage('pg-ao',{filter:'forsenad'})"
-    });
+    if (Auth.canAny(['invoice_view','invoice_create'])) {
+      const readyBill = aos.filter(a => a.status==='klar' && !a.invoiceId);
+      if (readyBill.length > 0) todos.push({
+        icon:'receipt', iconCls:'orange',
+        title:'Klara ordrar utan fakturaunderlag',
+        sub:readyBill.length+' order'+(readyBill.length===1?'':'ar')+' redo för fakturering',
+        badge:readyBill.length, badgeCls:'orange',
+        onClick:"Router.showPage('pg-ao',{filter:'readyForInvoice'})"
+      });
+    }
 
-    // Offerter utan svar 7+ dagar
-    const staleOff = (state.offers||[]).filter(o =>
-      o.status==='skickad' && o.sentAt && o.sentAt.split('T')[0] <= week
-    );
-    if (staleOff.length > 0) todos.push({
-      icon:'file-text', iconCls:'blue',
-      title:'Offerter utan svar i 7+ dagar',
-      sub:staleOff.map(o=>{var cu=getCu(o.customerId);return cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):o.id;}).slice(0,2).join(', ')+(staleOff.length>2?` +${staleOff.length-2} till`:''),
-      badge:staleOff.length, badgeCls:'blue',
-      onClick:"Router.showPage('pg-offer')"
-    });
+    if (Auth.can('offer_manage')) {
+      const staleOff = (state.offers||[]).filter(o =>
+        o.status==='skickad' && o.sentAt && o.sentAt.split('T')[0] <= week
+      );
+      if (staleOff.length > 0) todos.push({
+        icon:'file-text', iconCls:'blue',
+        title:'Offerter utan svar i 7+ dagar',
+        sub:staleOff.map(o=>{var cu=getCu(o.customerId);return cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):o.id;}).slice(0,2).join(', ')+(staleOff.length>2?` +${staleOff.length-2} till`:''),
+        badge:staleOff.length, badgeCls:'blue',
+        onClick:"Router.showPage('pg-offer')"
+      });
+    }
 
-    // Säljchanser
-    const salesCount = SalesService.getActive().length;
-    if (salesCount > 0) todos.push({
-      icon:'target', iconCls:'purple',
-      title:'Säljchanser att agera på',
-      sub:salesCount+' aktiv'+(salesCount===1?'':'a')+' säljchans'+(salesCount===1?'':'er'),
-      badge:salesCount, badgeCls:'purple',
-      onClick:"Router.showPage('pg-sales')"
-    });
+    if (Auth.can('sales_manage')) {
+      const salesCount = SalesService.getActive().length;
+      if (salesCount > 0) todos.push({
+        icon:'target', iconCls:'purple',
+        title:'Säljchanser att agera på',
+        sub:salesCount+' aktiv'+(salesCount===1?'':'a')+' säljchans'+(salesCount===1?'':'er'),
+        badge:salesCount, badgeCls:'purple',
+        onClick:"Router.showPage('pg-sales')"
+      });
+    }
 
     return todos;
   },
@@ -531,7 +823,7 @@ const Dashboard = {
     });
   },
 
-  /* ── Compat ───────────────────────────────── */
+  /* ── Bakåtkompatibilitet ───────────────────────────────────────────── */
   showAllSales() { Router.showPage('pg-sales'); },
   newWorkOrder() { Router.showPage('pg-ao'); setTimeout(() => WorkOrdersPage.openCreate(), 80); },
   newCustomer()  { Router.showPage('pg-crm'); setTimeout(() => CustomersPage.openCreate(), 80); }

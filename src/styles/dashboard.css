@@ -193,13 +193,141 @@
 /* ── Legacy ───────────────────────────────── */
 .dw-full  { width: 100%; }
 .dw-row   { display: flex; gap: 14px; align-items: flex-start; }
-.dw-half  { flex: 1; min-width: 0; }
 @media (max-width: 699px) { .dw-row { flex-direction: column; } }
 .dash-grid { display: flex; flex-direction: column; gap: 12px; }
 @media (min-width: 1024px) {
   .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   .dash-grid .dash-full { grid-column: 1 / -1; }
 }
+
+/* ── Grid size variants (v48) ─────────────── */
+/* dw-half and dw-twothird span 1 col by default (mobile) */
+.dw-half     { grid-column: span 1; }
+.dw-twothird { grid-column: span 1; }
+@media (min-width: 700px) {
+  .dash-layout .dw-half     { grid-column: span 1; }  /* 1 of 2 */
+  .dash-layout .dw-twothird { grid-column: 1 / -1; }  /* full on 2-col */
+}
+@media (min-width: 1024px) {
+  .dash-layout .dw-half     { grid-column: span 1; }  /* 1 of 3 cols */
+  .dash-layout .dw-twothird { grid-column: span 2; }  /* 2 of 3 cols */
+}
+
+/* 4 columns on very wide screens */
+@media (min-width: 1600px) {
+  .dash-layout {
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
+    gap: 16px;
+  }
+  .dash-layout .dw-full     { grid-column: 1 / -1; }
+  .dash-layout .dw-twothird { grid-column: span 3; }
+  .dash-layout .dw-half     { grid-column: span 2; }
+  .dash-layout .dw-third    { grid-column: span 1; }
+}
+
+/* ── Dashboard topbar (greeting + action buttons) */
+.dash-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 10px;
+  flex-wrap: wrap;
+}
+.dash-greeting {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+/* ── Customize modal rows ─────────────────── */
+.dash-cust-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--br);
+  background: #fff;
+  transition: background .1s, border-color .1s;
+}
+.dash-cust-row.on {
+  border-color: var(--sky);
+  background: #f0f7ff;
+}
+.dash-cust-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+.dash-cust-check input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--sky);
+}
+.dash-cust-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tx);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.dash-cust-size {
+  font-size: 11px;
+  padding: 4px 6px;
+  border: 1px solid var(--br);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--tx);
+  flex-shrink: 0;
+}
+.dash-cust-arrows {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.dash-cust-arrows button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--br);
+  border-radius: 5px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .1s;
+}
+.dash-cust-arrows button:hover { background: var(--bg); }
+
+/* ── Layout density ───────────────────────── */
+body[data-density="compact"] .card-body   { padding: 7px 10px !important; }
+body[data-density="compact"] .card-header { padding: 7px 10px 6px !important; }
+body[data-density="compact"] .dash-layout { gap: 8px; }
+body[data-density="compact"] .kpi-card    { padding: 9px 10px 8px; }
+body[data-density="compact"] .kpi-number  { font-size: 24px; }
+body[data-density="compact"] .crow        { padding: 5px 0; }
+body[data-density="compact"] .dash-action-item { padding: 5px 8px; }
+body[data-density="compact"] .quick-btn   { padding: 8px 4px; }
+body[data-density="compact"] .quick-icon  { width: 28px; height: 28px; }
+
+body[data-density="spacious"] .card-body   { padding: 16px 18px !important; }
+body[data-density="spacious"] .card-header { padding: 14px 18px 13px !important; }
+body[data-density="spacious"] .dash-layout { gap: 20px; }
+body[data-density="spacious"] .kpi-card    { padding: 18px 18px 15px; }
+body[data-density="spacious"] .kpi-number  { font-size: 36px; }
+body[data-density="spacious"] .crow        { padding: 10px 0; }
+body[data-density="spacious"] .dash-action-item { padding: 10px 14px; }
+body[data-density="spacious"] .quick-btn   { padding: 16px 8px; }
+body[data-density="spacious"] .quick-icon  { width: 40px; height: 40px; }
 
 /* ── Card-header icon+title alignment ──────── */
 .ch3 {

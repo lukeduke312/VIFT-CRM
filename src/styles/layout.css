@@ -371,6 +371,13 @@
     max-width: 1400px;
   }
 
+  /* Dashboard uses full available width */
+  #pg-dash .con {
+    max-width: none;
+    padding: 16px 20px;
+    padding-bottom: 40px;
+  }
+
   .bbar {
     position: sticky;
     bottom: 0;

@@ -255,7 +255,7 @@
 <script src="src/data/schema.js?v=8"></script>
 <script src="src/data/seedData.js?v=14"></script>
 <script src="src/data/state.js?v=14"></script>
-<script src="src/data/DashboardConfig.js?v=1"></script>
+<script src="src/data/DashboardConfig.js?v=2"></script>
 
 <!-- 2. Services -->
 <script src="src/services/BrandingService.js?v=4"></script>
@@ -270,6 +270,7 @@
 <script src="src/services/RonderingService.js?v=3"></script>
 <script src="src/services/ActivitiesService.js?v=2"></script>
 <script src="src/services/ServiceTemplateService.js?v=1"></script>
+<script src="src/services/UserPrefsService.js?v=1"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=7"></script>
@@ -279,7 +280,7 @@
 
 <!-- 4. Pages -->
 <script src="src/pages/Router.js?v=11"></script>
-<script src="src/pages/Dashboard.js?v=16"></script>
+<script src="src/pages/Dashboard.js?v=17"></script>
 <script src="src/pages/CustomersPage.js?v=4"></script>
 <script src="src/pages/WorkOrdersPage.js?v=13"></script>
 <script src="src/pages/WorkOrderDetailPage.js?v=17"></script>
@@ -327,6 +328,10 @@ const App = {
 
     // Apply brand colors immediately (from saved settings)
     BrandingService.applyColors();
+
+    // Apply personal user preferences (accent color, density)
+    const _u = Auth.getUser();
+    if (_u) UserPrefsService.apply(_u.id);
 
     // Rendera sidebar
     Sidebar.render();

@@ -1,37 +1,78 @@
 /**
- * DashboardConfig — Widget-konfiguration för dashboard
- * Förberedd för framtida drag-and-drop och användaranpassning
+ * DashboardConfig v48 — Widget-moduler, behörigheter, rollbaserade standardlayouter
+ * och per-användarlayouter.
+ *
+ * requiredPermissions: ANY av dessa räcker (tom array = alla inloggade)
+ * defaultSize: 'full' | 'half' | 'third'
  */
 const DashboardConfig = {
-  // Widgetar definieras med id, title, type, size, order, visible
-  // size: 'small' (1/3 bredd), 'medium' (1/2 bredd), 'large' (2/3 bredd), 'full' (hel bredd)
-  DEFAULT_WIDGETS: [
-    { id: 'kpi',       title: 'KPI',               type: 'kpi',       size: 'full',   order: 1,  visible: true  },
-    { id: 'todos',     title: 'Kräver åtgärd',     type: 'todos',     size: 'full',   order: 2,  visible: true  },
-    { id: 'quickbtns', title: 'Snabbåtgärder',     type: 'quickbtns', size: 'full',   order: 3,  visible: true  },
-    { id: 'today',     title: 'Idag',              type: 'today',     size: 'medium', order: 4,  visible: true  },
-    { id: 'pool',      title: 'Arbetspool',        type: 'pool',      size: 'medium', order: 5,  visible: true  },
-    { id: 'offers',    title: 'Offerter',          type: 'offers',    size: 'medium', order: 6,  visible: true  },
-    { id: 'recurring', title: 'Återkommande',      type: 'recurring', size: 'medium', order: 7,  visible: true  },
-    { id: 'sales',     title: 'Säljchanser',       type: 'sales',     size: 'full',   order: 8,  visible: true  },
-    { id: 'activity',  title: 'Senaste aktivitet', type: 'activity',  size: 'full',   order: 9,  visible: true  },
-  ],
 
-  // Hämta aktuell konfiguration (sparad eller default)
-  get: function() {
+  /* ── Modul-registry ───────────────────────────────────────────────────── */
+  MODULES: {
+    overdue_alert: { id:'overdue_alert', title:'Försenade aktiviteter',  icon:'alert-triangle',  requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    kpi:           { id:'kpi',           title:'Nyckeltal',              icon:'bar-chart-2',     requiredPermissions:['ao_view_all','ao_view_own','ao_time'],    defaultSize:'full'  },
+    todos:         { id:'todos',         title:'Kräver åtgärd',          icon:'alert-circle',    requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    today:         { id:'today',         title:'Ordrar idag',            icon:'calendar',        requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
+    pool:          { id:'pool',          title:'Arbetspool',             icon:'inbox',           requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
+    stamp:         { id:'stamp',         title:'Stämpla tid',            icon:'clock',           requiredPermissions:['ao_time'],                              defaultSize:'third' },
+    activities:    { id:'activities',    title:'Aktiviteter',            icon:'bell',            requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    rondering:     { id:'rondering',     title:'Rondering',              icon:'clipboard-check', requiredPermissions:['ao_view_all'],                          defaultSize:'full'  },
+    recurring:     { id:'recurring',     title:'Återkommande',           icon:'refresh-cw',      requiredPermissions:['recurring_manage'],                      defaultSize:'third' },
+    sales:         { id:'sales',         title:'Säljchanser',            icon:'target',          requiredPermissions:['sales_manage'],                          defaultSize:'third' },
+    offers:        { id:'offers',        title:'Offerter väntar',        icon:'file-text',       requiredPermissions:['offer_manage'],                          defaultSize:'third' },
+    activity_log:  { id:'activity_log',  title:'Senaste händelser',      icon:'activity',        requiredPermissions:['reports_view','staff_view'],             defaultSize:'third' },
+    quickbtns:     { id:'quickbtns',     title:'Snabbåtgärder',          icon:'zap',             requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+  },
+
+  /* ── Rollbaserade standardlayouter ──────────────────────────────────────
+     Listar module-ids i önskad visningsordning.
+     Moduler som inte listas visas med visible:false (kan aktiveras manuellt).
+  ─────────────────────────────────────────────────────────────────────── */
+  ROLE_DEFAULTS: {
+    admin:    ['overdue_alert','kpi','todos','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
+    chef:     ['overdue_alert','kpi','todos','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
+    personal: ['overdue_alert','kpi','today','pool','stamp','activities','rondering','quickbtns'],
+    ekonomi:  ['overdue_alert','kpi','todos','offers','activity_log','quickbtns'],
+  },
+
+  getModule(id) { return this.MODULES[id] || null; },
+  getAllModules() { return Object.values(this.MODULES); },
+
+  /* Bygg standardlayout för en roll (inkl. alla moduler, icke-default = hidden) */
+  getDefaultLayout(roleId) {
+    const ids    = this.ROLE_DEFAULTS[roleId] || this.ROLE_DEFAULTS.personal;
+    const allIds = Object.keys(this.MODULES);
+    const result = [];
+    ids.forEach((id, i) => {
+      const m = this.MODULES[id];
+      if (m) result.push({ id, visible:true, size:m.defaultSize||'full', order:i });
+    });
+    let next = ids.length;
+    allIds.forEach(id => {
+      if (!ids.includes(id)) {
+        const m = this.MODULES[id];
+        if (m) result.push({ id, visible:false, size:m.defaultSize||'full', order:next++ });
+      }
+    });
+    return result;
+  },
+
+  /* Hämta användarens sparade layout, fallback till rollstandard */
+  getUserLayout(userId, roleId) {
     try {
-      var saved = JSON.parse(localStorage.getItem('dash-widgets') || 'null');
-      if (saved && Array.isArray(saved)) return saved;
+      const saved = JSON.parse(localStorage.getItem('dashLayout_' + userId) || 'null');
+      if (saved && Array.isArray(saved) && saved.length > 0) return saved;
     } catch(e) {}
-    return this.DEFAULT_WIDGETS;
+    return this.getDefaultLayout(roleId || 'personal');
   },
 
-  save: function(widgets) {
-    try { localStorage.setItem('dash-widgets', JSON.stringify(widgets)); } catch(e) {}
+  saveUserLayout(userId, layout) {
+    if (!userId) return;
+    try { localStorage.setItem('dashLayout_' + userId, JSON.stringify(layout)); } catch(e) {}
   },
 
-  reset: function() {
-    localStorage.removeItem('dash-widgets');
-    return this.DEFAULT_WIDGETS;
+  resetUserLayout(userId) {
+    if (!userId) return;
+    try { localStorage.removeItem('dashLayout_' + userId); } catch(e) {}
   }
 };
