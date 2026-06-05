@@ -275,9 +275,10 @@ const WorkOrderDetailPage = {
             <div style="flex:1;min-width:0;">
               <div style="font-size:13px;font-weight:700;${isOk?'text-decoration:line-through;color:var(--mt);':''}">${c.text}</div>
               ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
-              ${isAvv && c.avvikelseComment ? `<div style="margin-top:6px;background:#fff1f2;border-left:3px solid var(--rd);padding:6px 10px;border-radius:0 6px 6px 0;">
+              ${isAvv && (c.avvikelseComment || c.avvikelseImage) ? `<div style="margin-top:6px;background:#fff1f2;border-left:3px solid var(--rd);padding:6px 10px;border-radius:0 6px 6px 0;">
                 <div style="font-size:10px;font-weight:700;color:var(--rd);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Avvikelse</div>
-                <div style="font-size:12px;color:#374151;line-height:1.5;">${c.avvikelseComment}</div>
+                ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.5;">${c.avvikelseComment}</div>`:''}
+                ${c.avvikelseImage?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:100px;object-fit:cover;">`:''}
                 ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:3px;">${c.avvikelseBy||''}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
               </div>` : ''}
             </div>
@@ -448,17 +449,10 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: 'Lägg till loggpost',
       body: `
-        <div class="fg">
-          <label>Typ</label>
-          <select id="log-type">
-            <option value="log">Anteckning</option>
-            <option value="photo">Foto/bild</option>
-          </select>
-        </div>
         <div class="fg"><label>Text / beskrivning</label>
           <textarea id="log-text" rows="3" placeholder="Beskriv vad som hände eller vad bilden visar…"></textarea></div>
-        <div class="fg" id="log-img-wrap" style="display:none;">
-          <label>Bild (välj fil)</label>
+        <div class="fg">
+          <label>Bild (valfri — kan kombineras med text)</label>
           <input type="file" id="log-img" accept="image/*" onchange="WorkOrderDetailPage._previewLogImg(this)">
           <div id="log-img-preview" style="margin-top:6px;"></div>
         </div>`,
@@ -467,14 +461,7 @@ const WorkOrderDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
-    setTimeout(() => {
-      const sel = document.getElementById('log-type');
-      if (sel) sel.addEventListener('change', () => {
-        const wrap = document.getElementById('log-img-wrap');
-        if (wrap) wrap.style.display = sel.value === 'photo' ? '' : 'none';
-      });
-      document.getElementById('log-text')?.focus();
-    }, 80);
+    setTimeout(() => document.getElementById('log-text')?.focus(), 80);
   },
 
   _previewLogImg(input) {
@@ -490,11 +477,9 @@ const WorkOrderDetailPage = {
 
   _saveLog() {
     const text = document.getElementById('log-text')?.value.trim();
-    const type = document.getElementById('log-type')?.value || 'log';
-    if (!text) { showToast('Skriv en text'); return; }
-
     const imgInput = document.getElementById('log-img');
     const file = imgInput && imgInput.files && imgInput.files[0];
+    if (!text && !file) { showToast('Lägg till text eller bild'); return; }
 
     const finalize = (imageData) => {
       const ao = getAO(this.aoId);
@@ -502,8 +487,8 @@ const WorkOrderDetailPage = {
       if (!ao.log) ao.log = [];
       const entry = {
         id: 'LOG-' + Date.now(),
-        type: type,
-        text: text,
+        type: (file && imageData) ? (text ? 'photo' : 'photo') : 'log',
+        text: text || '',
         imageData: imageData || '',
         visibility: 'intern',
         userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
@@ -517,7 +502,7 @@ const WorkOrderDetailPage = {
       showToast('Loggpost tillagd');
     };
 
-    if (file && type === 'photo') {
+    if (file) {
       const reader = new FileReader();
       reader.onload = (e) => finalize(e.target.result);
       reader.readAsDataURL(file);
@@ -601,6 +586,16 @@ const WorkOrderDetailPage = {
       workOrderId: this.aoId,
       customerId: ao.customerId
     });
+    ActivitiesService.create({
+      type:        'followup',
+      relatedType: 'workOrder',
+      relatedId:   this.aoId,
+      customerId:  ao.customerId || null,
+      dueDate:     date,
+      dueTime:     time,
+      note:        `${type}: ${comment}`
+    });
+    Sidebar.updateBadges();
     Modal.close();
     const aoUp = getAO(this.aoId);
     if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
@@ -1125,32 +1120,62 @@ const WorkOrderDetailPage = {
         <div class="fg">
           <label>Kommentar <span style="color:var(--rd)">*</span></label>
           <textarea id="avv-comment" rows="3" placeholder="Beskriv avvikelsen – vad som är skadat, var och hur…">${c.avvikelseComment||''}</textarea>
+        </div>
+        <div class="fg">
+          <label>Bild (valfri)</label>
+          <input type="file" id="avv-img" accept="image/*" onchange="WorkOrderDetailPage._previewAvvImg(this)">
+          <div id="avv-img-preview" style="margin-top:6px;">
+            ${c.avvikelseImage ? `<img src="${c.avvikelseImage}" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:cover;">` : ''}
+          </div>
         </div>`,
       buttons: [
         { label: 'Spara avvikelse', cls: 'btn bd', onClick: () => {
           const comment = document.getElementById('avv-comment')?.value.trim();
           if (!comment) { showToast('Kommentar krävs vid avvikelse'); return; }
-          const aoF = getAO(this.aoId);
-          if (!aoF || !aoF.checklist || !aoF.checklist[idx]) return;
-          aoF.checklist[idx].avvikelse        = 'avvikelse';
-          aoF.checklist[idx].done             = false;
-          aoF.checklist[idx].avvikelseComment = comment;
-          aoF.checklist[idx].avvikelseAt      = new Date().toISOString();
-          aoF.checklist[idx].avvikelseBy      = state.currentUser
-            ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
-          WorkOrderService.update(this.aoId, { checklist: aoF.checklist });
-          Modal.close();
-          const aoUp = getAO(this.aoId);
-          if (aoUp) {
-            document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
-            this._updateChecklistCounter(aoUp);
+          const imgInput = document.getElementById('avv-img');
+          const file = imgInput && imgInput.files && imgInput.files[0];
+          const saveAvv = (imageData) => {
+            const aoF = getAO(this.aoId);
+            if (!aoF || !aoF.checklist || !aoF.checklist[idx]) return;
+            aoF.checklist[idx].avvikelse        = 'avvikelse';
+            aoF.checklist[idx].done             = false;
+            aoF.checklist[idx].avvikelseComment = comment;
+            aoF.checklist[idx].avvikelseAt      = new Date().toISOString();
+            aoF.checklist[idx].avvikelseBy      = state.currentUser
+              ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
+            if (imageData) aoF.checklist[idx].avvikelseImage = imageData;
+            WorkOrderService.update(this.aoId, { checklist: aoF.checklist });
+            Modal.close();
+            const aoUp = getAO(this.aoId);
+            if (aoUp) {
+              document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+              this._updateChecklistCounter(aoUp);
+            }
+            showToast('Avvikelse sparad');
+          };
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => saveAvv(e.target.result);
+            reader.readAsDataURL(file);
+          } else {
+            saveAvv(null);
           }
-          showToast('Avvikelse sparad');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
     setTimeout(() => document.getElementById('avv-comment')?.focus(), 80);
+  },
+
+  _previewAvvImg(input) {
+    const file = input.files && input.files[0];
+    const prev = document.getElementById('avv-img-preview');
+    if (!file || !prev) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
   },
 
   toggleCheck(idx) {

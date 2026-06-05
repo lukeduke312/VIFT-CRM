@@ -12,6 +12,7 @@ const Sidebar = {
     { id: 'pg-crm',        icon: 'users',            label: 'Kunder' },
     { id: 'pg-offer',      icon: 'file-text',        label: 'Offerter' },
     { id: 'pg-sales',      icon: 'target',           label: 'Säljchanser',  badgeKey: 'salesNew' },
+    { id: 'pg-activities', icon: 'bell',             label: 'Aktiviteter',  badgeKey: 'activitiesOverdue' },
     { id: 'pg-invoices',   icon: 'receipt',          label: 'Fakturering' },
     { section: 'Fastigheter' },
     { id: 'pg-objects',    icon: 'building-2',       label: 'Fastigheter' },
@@ -141,8 +142,9 @@ const Sidebar = {
 
   updateBadges() {
     [
-      { key: 'aoNew',    navId: 'nav-pg-ao' },
-      { key: 'salesNew', navId: 'nav-pg-sales' }
+      { key: 'aoNew',              navId: 'nav-pg-ao' },
+      { key: 'salesNew',           navId: 'nav-pg-sales' },
+      { key: 'activitiesOverdue',  navId: 'nav-pg-activities' }
     ].forEach(({ key, navId }) => {
       const badge  = this._getBadge(key);
       const navBtn = document.getElementById(navId);
@@ -172,6 +174,11 @@ const Sidebar = {
       const n = (state.salesOpportunities || []).filter(function(s) {
         return ['new', 'contacted', 'contact_needed'].includes(s.status);
       }).length;
+      return n > 0 ? n : null;
+    }
+    if (key === 'activitiesOverdue') {
+      const today = tdy();
+      const n = (state.activities || []).filter(a => a.status === 'open' && a.dueDate && a.dueDate < today).length;
       return n > 0 ? n : null;
     }
     return null;

@@ -28,6 +28,7 @@ let state = {
   ronderingsmallar: [],
   ronderingar: [],
   avvikelser: [],
+  activities: [],
 
   // UI-state
   currentPage: 'dash',
@@ -72,6 +73,7 @@ function initState() {
   state.ronderingsmallar   = s.get('ronderingsmallar') || SeedData.ronderingsmallar || [];
   state.ronderingar        = s.get('ronderingar')      || SeedData.ronderingar      || [];
   state.avvikelser         = s.get('avvikelser')       || SeedData.avvikelser       || [];
+  state.activities         = s.get('activities')        || [];
 
   // Purge AOs past their 14-day trash window
   const _trashNow = new Date();
@@ -123,6 +125,7 @@ function persist() {
   s.set('ronderingsmallar', state.ronderingsmallar);
   s.set('ronderingar',      state.ronderingar);
   s.set('avvikelser',       state.avvikelser);
+  s.set('activities',       state.activities);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */

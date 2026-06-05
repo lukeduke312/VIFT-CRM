@@ -1,7 +1,9 @@
 :root {
   /* Brand (overrideable by BrandingService.applyColors) */
-  --brand-primary:   #0f3763;
-  --brand-secondary: #1d75d8;
+  --brand-primary:        #0f3763;
+  --brand-secondary:      #1d75d8;
+  --brand-primary-text:   #ffffff;
+  --brand-secondary-text: #ffffff;
 
   /* Brand colors */
   --navy:  #0D2B4E;

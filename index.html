@@ -11,8 +11,8 @@
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
-<link rel="stylesheet" href="src/styles/layout.css?v=15">
-<link rel="stylesheet" href="src/styles/components.css?v=25">
+<link rel="stylesheet" href="src/styles/layout.css?v=16">
+<link rel="stylesheet" href="src/styles/components.css?v=26">
 <link rel="stylesheet" href="src/styles/forms.css?v=9">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=14">
 <link rel="stylesheet" href="src/styles/responsive.css?v=7">
@@ -155,6 +155,11 @@
         <div class="con" id="pg-sales-content"></div>
       </div>
 
+      <!-- Aktiviteter -->
+      <div class="page" id="pg-activities">
+        <div class="con" id="pg-activities-content"></div>
+      </div>
+
       <!-- Tid & stämpla -->
       <div class="page" id="pg-tid">
         <div class="con" id="pg-tid-content"></div>
@@ -244,11 +249,11 @@
 <script src="src/data/storage.js?v=2"></script>
 <script src="src/data/schema.js?v=8"></script>
 <script src="src/data/seedData.js?v=13"></script>
-<script src="src/data/state.js?v=12"></script>
+<script src="src/data/state.js?v=13"></script>
 <script src="src/data/DashboardConfig.js?v=1"></script>
 
 <!-- 2. Services -->
-<script src="src/services/BrandingService.js?v=3"></script>
+<script src="src/services/BrandingService.js?v=4"></script>
 <script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
 <script src="src/services/AuthService.js?v=3"></script>
@@ -258,25 +263,26 @@
 <script src="src/services/InvoiceService.js?v=2"></script>
 <script src="src/services/RecurringOrderService.js?v=3"></script>
 <script src="src/services/RonderingService.js?v=3"></script>
+<script src="src/services/ActivitiesService.js?v=1"></script>
 
 <!-- 3. Components -->
-<script src="src/components/Icons.js?v=6"></script>
+<script src="src/components/Icons.js?v=7"></script>
 <script src="src/components/CustomSelect.js?v=1"></script>
 <script src="src/components/Modal.js?v=6"></script>
-<script src="src/components/Sidebar.js?v=10"></script>
+<script src="src/components/Sidebar.js?v=11"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=10"></script>
-<script src="src/pages/Dashboard.js?v=14"></script>
+<script src="src/pages/Router.js?v=11"></script>
+<script src="src/pages/Dashboard.js?v=15"></script>
 <script src="src/pages/CustomersPage.js?v=4"></script>
 <script src="src/pages/WorkOrdersPage.js?v=13"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=15"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=16"></script>
 <script src="src/pages/TimePage.js?v=4"></script>
 <script src="src/pages/InvoicesPage.js?v=8"></script>
 <script src="src/pages/RecurringPage.js?v=7"></script>
 <script src="src/pages/SalesPage.js?v=2"></script>
 <script src="src/pages/PropertyDetailPage.js?v=2"></script>
-<script src="src/pages/PageShells.js?v=42"></script>
+<script src="src/pages/PageShells.js?v=43"></script>
 <script src="src/pages/RonderingPage.js?v=3"></script>
 <script src="src/pages/RonderingUtforandePage.js?v=6"></script>
 <script src="src/pages/RonderingWizardPage.js?v=7"></script>

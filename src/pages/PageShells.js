@@ -2218,10 +2218,67 @@ const OfferDetailPage = {
   _quickAction(offerId, type) {
     const off = getOff(offerId);
     if (!off) return;
-    const labels = {ring:'Ringde kund', email:'Mailade kund', followup:'Uppföljning inbokad', reminder:'Påminnelse satt', price:'Prisförhandling', change:'Kund vill ändra', verbal:'Muntligt godkänd', reason:'Orsak till nekad offert', tip:'Intern notering'};
+    const labels = {ring:'Ringde kund', email:'Mailade kund', followup:'Boka uppföljning', reminder:'Påminnelse satt', price:'Prisförhandling', change:'Kund vill ändra', verbal:'Muntligt godkänd', reason:'Orsak till nekad offert', tip:'Intern notering'};
     const label = labels[type] || type;
-    // Verbal approval: auto-log as verbal and suggest status change
-    const isVerbal = type === 'verbal';
+
+    // followup / reminder → rich activity-creation modal
+    if (type === 'followup' || type === 'reminder') {
+      const tomorrow = _ds(1);
+      const staffOpts = (state.staff || []).filter(s => s.active !== false)
+        .map(s => `<option value="${s.id}"${state.currentUser && s.id === state.currentUser.id ? ' selected' : ''}>${s.firstName} ${s.lastName}</option>`).join('');
+      const actType = type === 'followup' ? 'followup' : 'call';
+      Modal.open({
+        title: `${ic('bell',14)} ${label}`,
+        body: `<div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="fg"><label>Typ</label>
+            <select id="act-type">
+              <option value="followup"${actType==='followup'?' selected':''}>Uppföljning</option>
+              <option value="call"${actType==='call'?' selected':''}>Ring kund</option>
+              <option value="email">Mejl</option>
+              <option value="meeting">Möte</option>
+              <option value="task">Uppgift</option>
+            </select></div>
+          <div style="display:flex;gap:8px;">
+            <div class="fg" style="flex:1;"><label>Datum</label><input type="date" id="act-date" value="${tomorrow}"></div>
+            <div class="fg" style="width:90px;"><label>Tid</label><input type="time" id="act-time" value="09:00"></div>
+          </div>
+          <div class="fg"><label>Ansvarig</label><select id="act-assignee">${staffOpts}</select></div>
+          <div class="fg"><label>Notering</label><textarea id="act-note" rows="2" placeholder="Vad ska göras?"></textarea></div>
+        </div>`,
+        buttons: [
+          { label: 'Spara aktivitet', cls: 'btn bp', onClick: () => {
+            const actT    = document.getElementById('act-type')?.value || 'followup';
+            const date    = document.getElementById('act-date')?.value || tomorrow;
+            const time    = document.getElementById('act-time')?.value || '';
+            const assignee= document.getElementById('act-assignee')?.value || null;
+            const note    = (document.getElementById('act-note')?.value || '').trim();
+            const act = ActivitiesService.create({
+              type:        actT,
+              relatedType: 'offer',
+              relatedId:   off.id,
+              customerId:  off.customerId || null,
+              assignedTo:  assignee,
+              dueDate:     date,
+              dueTime:     time,
+              note:        note
+            });
+            const dateStr = new Date(date).toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
+            this._logEvt(off, 'followup', `Uppföljning bokad ${dateStr}${time?' kl '+time:''}${note?': '+note:''}`);
+            off.updatedAt = new Date().toISOString();
+            persist();
+            Sidebar.updateBadges();
+            Modal.close();
+            this.render({offerId});
+            showToast(`Aktivitet skapad — ${dateStr}`);
+          }},
+          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        ]
+      });
+      setTimeout(() => document.getElementById('act-note')?.focus(), 80);
+      return;
+    }
+
+    // All other types: simple text modal
     Modal.open({
       title: label,
       body: `<div class="fg"><label>${label}</label><textarea id="qa-text" rows="3" placeholder="Anteckning…"></textarea></div>`,
@@ -2324,6 +2381,24 @@ const OfferDetailPage = {
     const rutAmt    = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
     const cust      = incVat - rutAmt;
     const tips = [];
+
+    // Check open activities for this offer
+    const offerActs   = (state.activities || []).filter(a => a.relatedType === 'offer' && a.relatedId === off.id && a.status === 'open');
+    const overdueActs = offerActs.filter(a => a.dueDate && a.dueDate < tdy());
+    const todayActs   = offerActs.filter(a => a.dueDate === tdy());
+    const nextAct     = offerActs.sort((a,b) => (a.dueDate||'').localeCompare(b.dueDate||''))[0];
+
+    if (overdueActs.length > 0) {
+      const a = overdueActs[0];
+      const daysAgo = Math.round((Date.now() - new Date(a.dueDate).getTime()) / 86400000);
+      tips.push({icon:'alert-circle', color:'var(--rd)', title:`Försenad uppföljning (${daysAgo} dag${daysAgo===1?'':'ar'} sen)`, body:(a.note || 'Uppföljning krävs') + ` — planerat ${fmtDate(a.dueDate)}`, cta:'Markera klar', ctaFn:`ActivitiesService.complete('${a.id}');OfferDetailPage.render({offerId:'${off.id}'})`});
+    } else if (todayActs.length > 0) {
+      const a = todayActs[0];
+      tips.push({icon:'bell', color:'var(--or)', title:'Uppföljning idag!', body:a.note || 'Planerad uppföljning att utföra idag.', cta:'Markera klar', ctaFn:`ActivitiesService.complete('${a.id}');OfferDetailPage.render({offerId:'${off.id}'})`});
+    } else if (nextAct) {
+      const dateStr = fmtDate(nextAct.dueDate);
+      tips.push({icon:'calendar-check', color:'var(--gr)', title:`Nästa uppföljning: ${dateStr}`, body:nextAct.note || 'Uppföljning inbokad.', cta:'Boka ny', ctaFn:`OfferDetailPage._quickAction('${off.id}','followup')`});
+    }
 
     if (off.status === 'utkast') {
       if (!prLines.length) {
@@ -3992,3 +4067,135 @@ function _renderShell(elId, title, msg) {
   if (!el) return;
   el.innerHTML = _shellFull(title, msg);
 }
+
+/* ── Aktiviteter ──────────────────────── */
+const ActivitiesPage = {
+  _filter: 'alla',
+
+  render(params = {}) {
+    const el = document.getElementById('pg-activities-content');
+    if (!el) return;
+    if (params.filter) this._filter = params.filter;
+
+    const today     = tdy();
+    const acts      = state.activities || [];
+    const user      = state.currentUser;
+
+    // Counts for filter tabs
+    const overdueCnt  = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate < today).length;
+    const todayCnt    = acts.filter(a => a.status === 'open' && a.dueDate === today).length;
+    const upcomingCnt = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate > today).length;
+    const minaCnt     = acts.filter(a => a.status === 'open' && user && a.assignedTo === user.id).length;
+
+    const filter = this._filter;
+    let filtered = acts;
+    if (filter === 'mina')     filtered = acts.filter(a => a.status === 'open' && user && a.assignedTo === user.id);
+    else if (filter === 'idag') filtered = acts.filter(a => a.status === 'open' && a.dueDate === today);
+    else if (filter === 'försenade') filtered = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate < today);
+    else if (filter === 'kommande')  filtered = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate > today);
+    else if (filter === 'klara') filtered = acts.filter(a => a.status === 'done');
+    else filtered = acts.filter(a => a.status === 'open'); // 'alla' = all open
+
+    // Sort: overdue first, then by date
+    filtered = filtered.slice().sort((a,b) => {
+      const ad = a.dueDate || '9999', bd = b.dueDate || '9999';
+      return ad.localeCompare(bd);
+    });
+
+    const _tab = (key, label, cnt) =>
+      `<button class="ft ${filter===key?'on':''}" onclick="ActivitiesPage._filter='${key}';ActivitiesPage.render()">${label}${cnt>0?` (${cnt})`:''}</button>`;
+
+    const _item = (act) => {
+      const isOverdue = act.status === 'open' && act.dueDate && act.dueDate < today;
+      const isToday   = act.status === 'open' && act.dueDate === today;
+      const isDone    = act.status === 'done';
+      const staff     = getStaff(act.assignedTo);
+      const staffName = staff ? `${staff.firstName} ${staff.lastName}` : '—';
+
+      let relLink = '';
+      if (act.relatedType === 'offer') {
+        const off = getOff(act.relatedId);
+        relLink = off ? `<a style="color:var(--blue);cursor:pointer;text-decoration:none;" onclick="Router.showPage('pg-offer-detail',{offerId:'${act.relatedId}'})">${ic('file-text',11)} Offert ${act.relatedId}</a>` : '';
+      } else if (act.relatedType === 'workOrder') {
+        relLink = `<a style="color:var(--blue);cursor:pointer;text-decoration:none;" onclick="Router.showPage('pg-ao-detail',{aoId:'${act.relatedId}'})">${ic('clipboard-list',11)} AO ${act.relatedId}</a>`;
+      }
+
+      const dateColor = isDone ? 'var(--mt)' : isOverdue ? 'var(--rd)' : isToday ? 'var(--or)' : 'var(--mt)';
+      const dateLabel = isDone
+        ? `Klar ${act.completedAt ? fmtDate(act.completedAt) : ''}`
+        : (act.dueDate ? (isOverdue ? `Försenad (${fmtDate(act.dueDate)})` : `${fmtDate(act.dueDate)}${act.dueTime?' kl '+act.dueTime:''}`) : '—');
+
+      return `<div class="card" style="margin-bottom:0;${isDone?'opacity:.65;':''}">
+        <div style="padding:10px 14px;display:flex;gap:10px;align-items:flex-start;">
+          <span style="color:${dateColor};flex-shrink:0;margin-top:2px;">${ic(ActivitiesService.typeIcon(act.type),16)}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:13px;font-weight:700;color:var(--navy);">${ActivitiesService.typeLabel(act.type)}</span>
+              <span style="font-size:11px;color:${dateColor};font-weight:600;">${dateLabel}</span>
+              ${isOverdue?`<span class="bdg bdg-red" style="font-size:9px;">Försenad</span>`:''}
+              ${isToday?`<span class="bdg bdg-orange" style="font-size:9px;">Idag</span>`:''}
+            </div>
+            ${act.note?`<div style="font-size:12px;color:var(--tx);margin-top:2px;">${act.note}</div>`:''}
+            <div style="font-size:11px;color:var(--mt);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
+              ${relLink}
+              <span>${ic('user',9)} ${staffName}</span>
+            </div>
+          </div>
+          ${!isDone?`<div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn bsm bsu bxs" onclick="ActivitiesPage.complete('${act.id}')" title="Markera klar">${ic('check',13)}</button>
+            <button class="btn bsm bs bxs" onclick="ActivitiesPage.openReschedule('${act.id}')" title="Flytta">${ic('calendar',13)}</button>
+          </div>`:`<span class="bdg bdg-grey" style="font-size:9px;flex-shrink:0;">Klar</span>`}
+        </div>
+      </div>`;
+    };
+
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+        <h2 style="font-size:16px;font-weight:800;color:var(--navy);margin:0;">Aktiviteter</h2>
+      </div>
+      <div class="ft-bar" style="overflow-x:auto;white-space:nowrap;padding-bottom:2px;">
+        ${_tab('alla','Alla öppna', acts.filter(a=>a.status==='open').length)}
+        ${_tab('mina','Mina',minaCnt)}
+        ${_tab('idag','Idag',todayCnt)}
+        ${_tab('försenade','Försenade',overdueCnt)}
+        ${_tab('kommande','Kommande',upcomingCnt)}
+        ${_tab('klara','Klara',acts.filter(a=>a.status==='done').length)}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${filtered.length === 0
+          ? `<div class="empty">${ic('bell',32)}<h3>Inga aktiviteter</h3><p>Boka en uppföljning på en offert eller arbetsorder.</p></div>`
+          : filtered.map(_item).join('')}
+      </div>`;
+  },
+
+  complete(id) {
+    ActivitiesService.complete(id);
+    Sidebar.updateBadges();
+    this.render();
+    showToast('Aktivitet markerad klar');
+  },
+
+  openReschedule(id) {
+    const act = (state.activities || []).find(a => a.id === id);
+    if (!act) return;
+    Modal.open({
+      title: `${ic('calendar',14)} Flytta aktivitet`,
+      body: `<div style="display:flex;gap:8px;">
+        <div class="fg" style="flex:1;"><label>Nytt datum</label><input type="date" id="rs-date" value="${act.dueDate||tdy()}"></div>
+        <div class="fg" style="width:90px;"><label>Tid</label><input type="time" id="rs-time" value="${act.dueTime||'09:00'}"></div>
+      </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const d = document.getElementById('rs-date')?.value;
+          const t = document.getElementById('rs-time')?.value;
+          ActivitiesService.reschedule(id, d, t);
+          Modal.close();
+          Sidebar.updateBadges();
+          this.render();
+          showToast('Aktivitet flyttad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  }
+};

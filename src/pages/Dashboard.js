@@ -33,6 +33,9 @@ const Dashboard = {
       '<div class="dw-third">' + this._widgetOffers() + '</div>' +
       '<div class="dw-third">' + this._widgetActivity() + '</div>' +
 
+      // 5b. Aktiviteter
+      '<div class="dw-full">' + this._widgetActivities() + '</div>' +
+
       // 6. Rondering
       '<div class="dw-full">' + this._widgetRondering() + '</div>' +
 
@@ -311,6 +314,52 @@ const Dashboard = {
       <div class="card-header"><h3 class="ch3">${ic('activity',14)} Senaste händelser</h3></div>
       <div class="card-body">
         ${ActivityService.renderList(acts)}
+      </div>
+    </div>`;
+  },
+
+  /* ── Aktiviteter-widget ──────────────────── */
+  _widgetActivities() {
+    const stats    = ActivitiesService.getStats();
+    const today    = tdy();
+    const overdue  = ActivitiesService.getOverdue();
+    const todayActs= ActivitiesService.getToday();
+
+    if (stats.overdue === 0 && stats.today === 0 && stats.upcoming === 0) return '';
+
+    const _cnt = (n, label, color, filter) =>
+      `<div onclick="Router.showPage('pg-activities',{filter:'${filter}'})" style="flex:1;text-align:center;padding:8px 4px;cursor:pointer;border-radius:var(--rs);background:var(--bg);">
+        <div style="font-size:20px;font-weight:900;color:${color};">${n}</div>
+        <div style="font-size:10px;color:var(--mt);font-weight:600;">${label}</div>
+      </div>`;
+
+    const urgent = [...overdue, ...todayActs].slice(0, 3);
+
+    return `<div class="card" style="border-left:3px solid ${stats.overdue>0?'var(--rd)':'var(--or)'};">
+      <div class="card-header">
+        <h3 class="ch3">${ic('bell',14)} Aktiviteter & uppföljningar</h3>
+        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;"
+          onclick="Router.showPage('pg-activities')">Visa alla</button>
+      </div>
+      <div class="card-body" style="padding:8px 10px;">
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          ${_cnt(stats.overdue, 'Försenade', 'var(--rd)', 'försenade')}
+          ${_cnt(stats.today,   'Idag',      'var(--or)', 'idag')}
+          ${_cnt(stats.upcoming,'Kommande',  'var(--blue)','kommande')}
+        </div>
+        ${urgent.length > 0 ? `<div style="display:flex;flex-direction:column;gap:4px;">
+          ${urgent.map(a => {
+            const isOverdue = a.dueDate < today;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border-radius:var(--rx);cursor:pointer;" onclick="Router.showPage('pg-activities')">
+              <span style="color:${isOverdue?'var(--rd)':'var(--or)'};">${ic(ActivitiesService.typeIcon(a.type),12)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.note || ActivitiesService.typeLabel(a.type)}</div>
+                <div style="font-size:10px;color:${isOverdue?'var(--rd)':'var(--mt)'};">${isOverdue?'Försenad: ':''} ${fmtDate(a.dueDate)}</div>
+              </div>
+              <button class="btn bxs bsu" style="font-size:9px;padding:3px 7px;" onclick="event.stopPropagation();ActivitiesService.complete('${a.id}');Dashboard.render();">Klar</button>
+            </div>`;
+          }).join('')}
+        </div>` : ''}
       </div>
     </div>`;
   },

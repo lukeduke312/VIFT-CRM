@@ -65,14 +65,26 @@ const BrandingService = {
     document.dispatchEvent(new CustomEvent('brandingUpdated'));
   },
 
+  _yiqText(hex) {
+    // Returns '#fff' or '#111' for legible contrast on the given background
+    try {
+      const h = hex.replace('#','');
+      const full = h.length === 3 ? h.split('').map(c=>c+c).join('') : h;
+      const r = parseInt(full.slice(0,2),16), g = parseInt(full.slice(2,4),16), b = parseInt(full.slice(4,6),16);
+      return (r*299 + g*587 + b*114) / 1000 >= 128 ? '#111827' : '#ffffff';
+    } catch(e) { return '#ffffff'; }
+  },
+
   applyColors() {
     const s = state && state.settings ? state.settings : {};
     const hexRe = /^#[0-9a-fA-F]{3,6}$/;
     const primary   = hexRe.test(s.primaryColor   || '') ? s.primaryColor   : '#0f3763';
     const secondary = hexRe.test(s.secondaryColor || '') ? s.secondaryColor : '#1d75d8';
     try {
-      document.documentElement.style.setProperty('--brand-primary',   primary);
-      document.documentElement.style.setProperty('--brand-secondary', secondary);
+      document.documentElement.style.setProperty('--brand-primary',        primary);
+      document.documentElement.style.setProperty('--brand-secondary',      secondary);
+      document.documentElement.style.setProperty('--brand-primary-text',   this._yiqText(primary));
+      document.documentElement.style.setProperty('--brand-secondary-text', this._yiqText(secondary));
     } catch(e) {}
   },
 
