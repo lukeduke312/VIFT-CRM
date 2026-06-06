@@ -240,73 +240,116 @@
   color: var(--navy);
 }
 
-/* ── Customize modal rows ─────────────────── */
-.dash-cust-row {
-  display: flex;
+/* ── Anpassa dashboard — modal rows (v49) ─── */
+/*
+ * Grid-layout: modulnamn tar minmax(0,1fr), actions-kolumn tar auto.
+ * Detta förhindrar att select-elementet klämmer bort modulnamnet.
+ */
+.dash-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--br);
+  border-radius: 10px;
   background: #fff;
-  transition: background .1s, border-color .1s;
+  transition: border-color .12s, background .12s;
 }
-.dash-cust-row.on {
+.dash-config-row.on {
   border-color: var(--sky);
   background: #f0f7ff;
 }
-.dash-cust-check {
+
+.dash-config-main {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex: 1;
+  gap: 8px;
   cursor: pointer;
   min-width: 0;
 }
-.dash-cust-check input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
+.dash-config-main input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
   accent-color: var(--sky);
+  cursor: pointer;
+  margin: 0;
 }
-.dash-cust-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--tx);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.dash-config-info {
+  min-width: 0;
+  flex: 1;
+}
+.dash-config-info strong {
   display: flex;
   align-items: center;
   gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
 }
-.dash-cust-size {
+.dash-config-info small {
+  display: block;
   font-size: 11px;
-  padding: 4px 6px;
+  color: var(--mt);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.dash-config-actions select {
+  font-size: 11px;
+  padding: 5px 7px;
   border: 1px solid var(--br);
-  border-radius: 5px;
+  border-radius: 6px;
   background: #fff;
   color: var(--tx);
-  flex-shrink: 0;
+  width: 130px;
+  cursor: pointer;
 }
-.dash-cust-arrows {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.dash-cust-arrows button {
-  width: 24px;
-  height: 24px;
+.dash-config-actions button {
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--br);
-  border-radius: 5px;
+  border-radius: 6px;
   background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background .1s;
+  flex-shrink: 0;
+  transition: background .1s, border-color .1s;
 }
-.dash-cust-arrows button:hover { background: var(--bg); }
+.dash-config-actions button:hover {
+  background: var(--bg);
+  border-color: var(--sky);
+}
+
+/* Smal vy: stapla om vertikalt */
+@media (max-width: 600px) {
+  .dash-config-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .dash-config-actions {
+    flex-wrap: wrap;
+  }
+  .dash-config-actions select {
+    width: 100%;
+    flex: 1;
+  }
+}
 
 /* ── Layout density ───────────────────────── */
 body[data-density="compact"] .card-body   { padding: 7px 10px !important; }

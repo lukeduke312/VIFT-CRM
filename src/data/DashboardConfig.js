@@ -1,27 +1,28 @@
 /**
- * DashboardConfig v48 — Widget-moduler, behörigheter, rollbaserade standardlayouter
+ * DashboardConfig v49 — Widget-moduler, behörigheter, rollbaserade standardlayouter
  * och per-användarlayouter.
  *
  * requiredPermissions: ANY av dessa räcker (tom array = alla inloggade)
  * defaultSize: 'full' | 'half' | 'third'
+ * description: visas i "Anpassa dashboard"-modalen
  */
 const DashboardConfig = {
 
   /* ── Modul-registry ───────────────────────────────────────────────────── */
   MODULES: {
-    overdue_alert: { id:'overdue_alert', title:'Försenade aktiviteter',  icon:'alert-triangle',  requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
-    kpi:           { id:'kpi',           title:'Nyckeltal',              icon:'bar-chart-2',     requiredPermissions:['ao_view_all','ao_view_own','ao_time'],    defaultSize:'full'  },
-    todos:         { id:'todos',         title:'Kräver åtgärd',          icon:'alert-circle',    requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
-    today:         { id:'today',         title:'Ordrar idag',            icon:'calendar',        requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
-    pool:          { id:'pool',          title:'Arbetspool',             icon:'inbox',           requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
-    stamp:         { id:'stamp',         title:'Stämpla tid',            icon:'clock',           requiredPermissions:['ao_time'],                              defaultSize:'third' },
-    activities:    { id:'activities',    title:'Aktiviteter',            icon:'bell',            requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
-    rondering:     { id:'rondering',     title:'Rondering',              icon:'clipboard-check', requiredPermissions:['ao_view_all'],                          defaultSize:'full'  },
-    recurring:     { id:'recurring',     title:'Återkommande',           icon:'refresh-cw',      requiredPermissions:['recurring_manage'],                      defaultSize:'third' },
-    sales:         { id:'sales',         title:'Säljchanser',            icon:'target',          requiredPermissions:['sales_manage'],                          defaultSize:'third' },
-    offers:        { id:'offers',        title:'Offerter väntar',        icon:'file-text',       requiredPermissions:['offer_manage'],                          defaultSize:'third' },
-    activity_log:  { id:'activity_log',  title:'Senaste händelser',      icon:'activity',        requiredPermissions:['reports_view','staff_view'],             defaultSize:'third' },
-    quickbtns:     { id:'quickbtns',     title:'Snabbåtgärder',          icon:'zap',             requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    overdue_alert: { id:'overdue_alert', title:'Försenade aktiviteter',  icon:'alert-triangle',  description:'Varnar om försenade uppföljningar och aktiviteter',           requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    kpi:           { id:'kpi',           title:'Nyckeltal',              icon:'bar-chart-2',     description:'Nyckeltal för arbetsorder, offerter och fakturering',          requiredPermissions:['ao_view_all','ao_view_own','ao_time'],    defaultSize:'full'  },
+    todos:         { id:'todos',         title:'Kräver åtgärd',          icon:'alert-circle',    description:'Åtgärder som kräver omedelbar uppmärksamhet',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    today:         { id:'today',         title:'Ordrar idag',            icon:'calendar',        description:'Schemalagda arbetsorder för dagens datum',                    requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
+    pool:          { id:'pool',          title:'Arbetspool',             icon:'inbox',           description:'Arbetsorder i poolen utan tilldelad resurs',                  requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
+    stamp:         { id:'stamp',         title:'Stämpla tid',            icon:'clock',           description:'Klocka in och ut, se aktiv stämplingstid',                   requiredPermissions:['ao_time'],                              defaultSize:'third' },
+    activities:    { id:'activities',    title:'Aktiviteter',            icon:'bell',            description:'Uppföljningar, bokade möten och påminnelser',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    rondering:     { id:'rondering',     title:'Rondering',              icon:'clipboard-check', description:'Ronderingsschema, ronderingsmallar och öppna avvikelser',      requiredPermissions:['ao_view_all'],                          defaultSize:'full'  },
+    recurring:     { id:'recurring',     title:'Återkommande',           icon:'refresh-cw',      description:'Återkommande uppdrag som snart ska skapas',                   requiredPermissions:['recurring_manage'],                      defaultSize:'third' },
+    sales:         { id:'sales',         title:'Säljchanser',            icon:'target',          description:'Aktiva säljchanser att kontakta och följa upp',               requiredPermissions:['sales_manage'],                          defaultSize:'third' },
+    offers:        { id:'offers',        title:'Offerter väntar',        icon:'file-text',       description:'Skickade offerter som väntar på kundens svar',                requiredPermissions:['offer_manage'],                          defaultSize:'third' },
+    activity_log:  { id:'activity_log',  title:'Senaste händelser',      icon:'activity',        description:'Bolagets senaste händelser, ändringar och loggar',            requiredPermissions:['reports_view','staff_view'],             defaultSize:'third' },
+    quickbtns:     { id:'quickbtns',     title:'Snabbåtgärder',          icon:'zap',             description:'Skapa ny order, offert eller kund med ett klick',             requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
   },
 
   /* ── Rollbaserade standardlayouter ──────────────────────────────────────

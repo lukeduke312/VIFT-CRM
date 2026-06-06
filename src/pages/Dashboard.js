@@ -1,6 +1,7 @@
 /**
- * Dashboard v48 — Rollbaserad behörighet, anpassningsbar layout,
+ * Dashboard v49 — Rollbaserad behörighet, anpassningsbar layout,
  * personliga inställningar per användare.
+ * v49: Fix Anpassa-modal (grid-layout, tydliga modulnamn, ingen horisontell scroll).
  */
 
 const Dashboard = {
@@ -107,7 +108,7 @@ const Dashboard = {
     // Bygg rader: permitted modules sorterade på order
     const rows = permitted.map(m => {
       const entry = layout.find(e => e.id === m.id) || { id:m.id, visible:false, size:m.defaultSize||'full', order:999 };
-      return { id:m.id, visible:!!entry.visible, size:entry.size||m.defaultSize||'full', order:entry.order, title:m.title, icon:m.icon||'square' };
+      return { id:m.id, visible:!!entry.visible, size:entry.size||m.defaultSize||'full', order:entry.order, title:m.title, icon:m.icon||'square', description:m.description||'' };
     }).sort((a, b) => a.order - b.order);
 
     this._custRows = rows;
@@ -115,8 +116,8 @@ const Dashboard = {
     Modal.open({
       title: `${ic('settings',15)} Anpassa dashboard`,
       body:
-        `<p style="font-size:11px;color:var(--mt);margin-bottom:12px;">Välj vilka moduler som visas, flytta om ordningen och välj storlek. Layouten sparas per användare.</p>` +
-        `<div id="dash-cust-list" style="display:flex;flex-direction:column;gap:3px;">${this._custListHtml()}</div>`,
+        `<p style="font-size:11px;color:var(--mt);margin-bottom:10px;">Välj vilka moduler som visas, flytta om ordningen och välj storlek. Layouten sparas per användare.</p>` +
+        `<div id="dash-cust-list" style="display:flex;flex-direction:column;gap:5px;">${this._custListHtml()}</div>`,
       buttons: [
         { label: `${ic('check',13)} Spara layout`,     cls: 'btn bp',    onClick: () => Dashboard.saveCustomize() },
         { label: 'Återställ standard', cls: 'btn bs',    onClick: () => Dashboard._confirmResetLayout() },
@@ -128,29 +129,32 @@ const Dashboard = {
 
   _custListHtml() {
     const sizeOpts = [
-      { v:'full',  l:'Fullbredd'      },
-      { v:'half',  l:'Halvbredd'      },
-      { v:'third', l:'En tredjedel'   },
+      { v:'full',    l:'Fullbredd'    },
+      { v:'half',    l:'Halvbredd'    },
+      { v:'third',   l:'En tredjedel' },
     ];
     return this._custRows.map((r, i) => `
-      <div class="dash-cust-row${r.visible ? ' on' : ''}" data-idx="${i}">
-        <label class="dash-cust-check">
+      <div class="dash-config-row${r.visible ? ' on' : ''}" data-idx="${i}">
+        <label class="dash-config-main">
           <input type="checkbox" ${r.visible ? 'checked' : ''} onchange="Dashboard._custToggle(${i})">
-          <span class="dash-cust-name">${ic(r.icon, 12)} ${esc(r.title)}</span>
+          <div class="dash-config-info">
+            <strong>${ic(r.icon||'square', 12)} ${esc(r.title)}</strong>
+            ${r.description ? `<small>${esc(r.description)}</small>` : ''}
+          </div>
         </label>
-        <select class="dash-cust-size" onchange="Dashboard._custSize(${i},this.value)">
-          ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
-        </select>
-        <div class="dash-cust-arrows">
-          <button type="button" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',12)}</button>
-          <button type="button" title="Flytta ner" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',12)}</button>
+        <div class="dash-config-actions">
+          <select onchange="Dashboard._custSize(${i},this.value)">
+            ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
+          </select>
+          <button type="button" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',13)}</button>
+          <button type="button" title="Flytta ner" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',13)}</button>
         </div>
       </div>`).join('');
   },
 
   _custToggle(i) {
     const cb  = document.querySelector(`[data-idx="${i}"] input[type="checkbox"]`);
-    const row = document.querySelector(`[data-idx="${i}"].dash-cust-row`);
+    const row = document.querySelector(`[data-idx="${i}"].dash-config-row`);
     if (this._custRows[i] && cb) {
       this._custRows[i].visible = cb.checked;
       if (row) row.classList.toggle('on', cb.checked);
