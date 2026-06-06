@@ -240,27 +240,43 @@
   color: var(--navy);
 }
 
-/* ── Anpassa dashboard — modal rows (v49) ─── */
-/*
- * Grid-layout: modulnamn tar minmax(0,1fr), actions-kolumn tar auto.
- * Detta förhindrar att select-elementet klämmer bort modulnamnet.
- */
+/* ── Anpassa dashboard — modal rows (v49-polish) ────────────────
+ * Grid-layout: minmax(0,1fr) | auto — modulnamn kan aldrig pressas bort.
+ * Kompakt, neutral design. Kategorier som lätta avdelare.
+ * ─────────────────────────────────────────────────────────────── */
+
+/* Kategorirubrik */
+.dash-config-category {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .9px;
+  color: var(--mt);
+  padding: 12px 2px 5px;
+  border-bottom: 1px solid var(--br);
+  margin-bottom: 1px;
+}
+.dash-config-category:first-child { padding-top: 0; }
+
+/* Modulrad */
 .dash-config-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border: 1px solid var(--br);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
-  transition: border-color .12s, background .12s;
+  transition: border-color .1s, background .1s;
 }
 .dash-config-row.on {
-  border-color: var(--sky);
-  background: #f0f7ff;
+  border-color: #c7dcf0;
+  background: #f6faff;
 }
+.dash-config-row:hover { border-color: #a5c4e4; }
 
+/* Vänster: checkbox + info */
 .dash-config-main {
   display: flex;
   align-items: center;
@@ -269,8 +285,8 @@
   min-width: 0;
 }
 .dash-config-main input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   accent-color: var(--sky);
   cursor: pointer;
@@ -280,47 +296,60 @@
   min-width: 0;
   flex: 1;
 }
-.dash-config-info strong {
+
+/* Modulnamn — aldrig uppercase, lagom tungt */
+.dash-config-name {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--navy);
+  text-transform: none !important;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.35;
+}
+.dash-config-row:not(.on) .dash-config-name { color: var(--tx); }
+
+/* Beskrivning — diskret, truncated med tooltip */
+.dash-config-desc {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--mt);
+  text-transform: none !important;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
   line-height: 1.3;
 }
-.dash-config-info small {
-  display: block;
-  font-size: 11px;
-  color: var(--mt);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
+/* Höger: select + pilknappar */
 .dash-config-actions {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .dash-config-actions select {
   font-size: 11px;
-  padding: 5px 7px;
+  padding: 4px 5px;
   border: 1px solid var(--br);
   border-radius: 6px;
   background: #fff;
   color: var(--tx);
-  width: 130px;
+  width: 118px;
+  height: 28px;
   cursor: pointer;
 }
 .dash-config-actions button {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: 1px solid var(--br);
   border-radius: 6px;
   background: #fff;
@@ -329,26 +358,20 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background .1s, border-color .1s;
+  color: var(--mt);
+  transition: background .1s, border-color .1s, color .1s;
 }
 .dash-config-actions button:hover {
   background: var(--bg);
   border-color: var(--sky);
+  color: var(--navy);
 }
 
-/* Smal vy: stapla om vertikalt */
-@media (max-width: 600px) {
-  .dash-config-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .dash-config-actions {
-    flex-wrap: wrap;
-  }
-  .dash-config-actions select {
-    width: 100%;
-    flex: 1;
-  }
+/* Smal vy (<540px): actions under modulnamn */
+@media (max-width: 540px) {
+  .dash-config-row { grid-template-columns: 1fr; gap: 6px; }
+  .dash-config-actions { flex-wrap: wrap; }
+  .dash-config-actions select { width: auto; flex: 1; }
 }
 
 /* ── Layout density ───────────────────────── */

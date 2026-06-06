@@ -129,27 +129,37 @@ const Dashboard = {
 
   _custListHtml() {
     const sizeOpts = [
-      { v:'full',    l:'Fullbredd'    },
-      { v:'half',    l:'Halvbredd'    },
-      { v:'third',   l:'En tredjedel' },
+      { v:'full',  l:'Fullbredd'    },
+      { v:'half',  l:'Halvbredd'    },
+      { v:'third', l:'En tredjedel' },
     ];
-    return this._custRows.map((r, i) => `
-      <div class="dash-config-row${r.visible ? ' on' : ''}" data-idx="${i}">
-        <label class="dash-config-main">
-          <input type="checkbox" ${r.visible ? 'checked' : ''} onchange="Dashboard._custToggle(${i})">
-          <div class="dash-config-info">
-            <strong>${ic(r.icon||'square', 12)} ${esc(r.title)}</strong>
-            ${r.description ? `<small>${esc(r.description)}</small>` : ''}
+    let lastCat = null;
+    return this._custRows.map((r, i) => {
+      const mod = DashboardConfig.getModule(r.id);
+      const cat = mod ? (mod.category || '') : '';
+      let header = '';
+      if (cat && cat !== lastCat) {
+        header = `<div class="dash-config-category">${esc(cat)}</div>`;
+        lastCat = cat;
+      }
+      return header + `
+        <div class="dash-config-row${r.visible ? ' on' : ''}" data-idx="${i}">
+          <label class="dash-config-main">
+            <input type="checkbox" ${r.visible ? 'checked' : ''} onchange="Dashboard._custToggle(${i})">
+            <div class="dash-config-info">
+              <span class="dash-config-name">${ic(r.icon||'square', 11)} ${esc(r.title)}</span>
+              ${r.description ? `<span class="dash-config-desc" title="${esc(r.description)}">${esc(r.description)}</span>` : ''}
+            </div>
+          </label>
+          <div class="dash-config-actions">
+            <select onchange="Dashboard._custSize(${i},this.value)">
+              ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
+            </select>
+            <button type="button" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',12)}</button>
+            <button type="button" title="Flytta ner" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',12)}</button>
           </div>
-        </label>
-        <div class="dash-config-actions">
-          <select onchange="Dashboard._custSize(${i},this.value)">
-            ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
-          </select>
-          <button type="button" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',13)}</button>
-          <button type="button" title="Flytta ner" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',13)}</button>
-        </div>
-      </div>`).join('');
+        </div>`;
+    }).join('');
   },
 
   _custToggle(i) {
