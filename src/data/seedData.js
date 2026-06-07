@@ -203,10 +203,19 @@ const SeedData = {
   ],
 
   priceGroups: [
-    { id: 'PG-001', name: 'Standard',    hourRate: 695,  description: 'Normalt timpris',                active: true, createdAt: '2024-01-01' },
-    { id: 'PG-002', name: 'Akut / Jour', hourRate: 1250, description: 'Akut utryckning och jourtjänst', active: true, createdAt: '2024-01-01' },
-    { id: 'PG-003', name: 'BRF-avtal',   hourRate: 645,  description: 'Avtalspris BRF-kunder',          active: true, createdAt: '2024-01-01' },
-    { id: 'PG-004', name: 'Intern tid',  hourRate: 0,    description: 'Intern tid utan debitering',     active: true, createdAt: '2024-01-01' }
+    { id:'PG-001', name:'Fastighetsservice avtal',    hourRate:392,  description:'Äldre/låg prisnivå, återkommande kund',     active:true, createdAt:'2024-01-01' },
+    { id:'PG-002', name:'Fastighetsservice standard', hourRate:430,  description:'Normal BRF och fastighetsägare',             active:true, createdAt:'2024-01-01' },
+    { id:'PG-003', name:'Engångsjobb / privat',       hourRate:595,  description:'Privatkund eller uppdrag utan avtal',         active:true, createdAt:'2024-01-01' },
+    { id:'PG-004', name:'Akut / kväll / helg',        hourRate:695,  description:'Jour, kort varsel, obekväm arbetstid',       active:true, createdAt:'2024-01-01' },
+    { id:'PG-005', name:'Teknisk förvaltning',        hourRate:0,    description:'Månadsavtal, pris sätts manuellt per avtal', active:true, createdAt:'2024-01-01' },
+  ],
+
+  priceProfiles: [
+    { id:'PP-001', name:'Privatkund',       defaultPriceGroupId:'PG-003', notes:'Privatpersoner utan avtal',             sortOrder:10, active:true, createdAt:'2024-01-01' },
+    { id:'PP-002', name:'BRF',             defaultPriceGroupId:'PG-002', notes:'Bostadsrättsföreningar',                 sortOrder:20, active:true, createdAt:'2024-01-01' },
+    { id:'PP-003', name:'Fastighetsägare', defaultPriceGroupId:'PG-002', notes:'Fastighetsägare med eller utan avtal',  sortOrder:30, active:true, createdAt:'2024-01-01' },
+    { id:'PP-004', name:'Företag',         defaultPriceGroupId:'PG-002', notes:'Företag och kommersiella kunder',       sortOrder:40, active:true, createdAt:'2024-01-01' },
+    { id:'PP-005', name:'Avtalskund',      defaultPriceGroupId:'PG-001', notes:'Kund med löpande avtal, lägre pris',   sortOrder:50, active:true, createdAt:'2024-01-01' },
   ],
 
   workOrders: [
