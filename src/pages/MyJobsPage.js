@@ -31,6 +31,9 @@ const MyJobsPage = {
       .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate))
       .slice(0, 8);
 
+    const unscheduled = all.filter(ao => mine(ao) && !ao.scheduledDate && alive(ao) && ao.status !== 'pågående')
+      .sort((a,b) => ({akut:0,hög:1,normal:2,låg:3}[a.priority]||2) - ({akut:0,hög:1,normal:2,låg:3}[b.priority]||2));
+
     const isStamped = !!state.stampActive;
     const stampAoId = state.stampAoId || null;
     const stampAo   = isStamped && stampAoId ? getAO(stampAoId) : null;
@@ -66,6 +69,15 @@ const MyJobsPage = {
       ao => this._jobCard(ao, myId, isStamped, stampAoId),
       `<button class="btn bghost bfull bsm" style="margin-top:8px;" onclick="Router.showPage('pg-ao',{filter:'idag'})">${ic('list',11)} Se alla ordrar idag</button>`
     );
+
+    // ── Tilldelade utan datum ─────────────────────────────────────────────────
+    if (unscheduled.length) {
+      html += this._sectionHtml(
+        `${ic('clipboard',14)} Tilldelade — ej schemalagda`,
+        unscheduled, null, 'var(--mt)', false,
+        ao => this._jobCard(ao, myId, isStamped, stampAoId)
+      );
+    }
 
     // ── Pågående ─────────────────────────────────────────────────────────────
     if (ongoing.length) {

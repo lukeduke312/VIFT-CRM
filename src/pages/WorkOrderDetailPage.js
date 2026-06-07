@@ -24,6 +24,8 @@ const WorkOrderDetailPage = {
     const cu     = getCu(ao.customerId);
     const cuName = cu ? CustomerService.displayName(cu) : '—';
     const staff  = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; });
+    const respS  = ao.responsibleStaffId ? getStaff(ao.responsibleStaffId) : null;
+    const respName = respS ? `${respS.firstName} ${respS.lastName}` : '';
     const chkOk   = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
     const chkAvv  = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
     const chkTotal = (ao.checklist||[]).length;
@@ -59,13 +61,14 @@ const WorkOrderDetailPage = {
         <div style="padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;border-bottom:1px solid var(--bg);">
           ${this._actionBtns(ao)}
           ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>` : ''}
+          ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">${ic('users',13)} Personal</button>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
           ${ao.description ? `<p style="font-size:13px;color:var(--mt);line-height:1.5;margin-bottom:10px;">${ao.description}</p>` : ''}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;">
             <div class="dr"><span class="dk">Kontakt</span><span class="dv">${ao.contactPerson||'—'}${ao.phone?'<br><span style="font-size:11px;color:var(--sky);">'+ao.phone+'</span>':''}</span></div>
             ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-weight:800;letter-spacing:.5px;">${ao.accessCode}</span></div>` : '<div></div>'}
-            <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'Ej tilldelad'}</span></div>
+            <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'<span style="color:var(--rd);">Ej tilldelad</span>'}${respName?`<br><span style="font-size:10px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:''}</span></div>
             <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
           </div>
           ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
@@ -1309,6 +1312,85 @@ const WorkOrderDetailPage = {
       if (ao) document.getElementById('ao-timeentries').innerHTML = this._renderTimeEntries(ao);
       showToast('Tidspost borttagen');
     });
+  },
+
+  /* ── Hantera personal ──────────────────── */
+  manageStaff(aoId) {
+    if (!Auth.require('ao_edit')) return;
+    const ao = getAO(aoId);
+    if (!ao) return;
+
+    const activeStaff = (state.staff || []).filter(s => s.active);
+    const current = ao.staff || [];
+    const currentResp = ao.responsibleStaffId || '';
+    const isPool = ao.status === 'pool';
+
+    const staffRows = activeStaff.map(s => {
+      const role = (state.roles||[]).find(r => r.id === s.role);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;border-bottom:1px solid var(--br);">
+        <input type="checkbox" id="smcb-${esc(s.id)}" ${current.includes(s.id)?'checked':''}>
+        <div style="flex:1;">
+          <span style="font-size:13px;font-weight:600;">${esc(s.firstName)} ${esc(s.lastName)}</span>
+          <span style="font-size:11px;color:var(--mt);margin-left:4px;">${role?esc(role.label):esc(s.role||'')}</span>
+        </div>
+      </label>`;
+    }).join('');
+
+    const respOpts = `<option value="">Ingen ansvarig</option>` +
+      activeStaff.map(s =>
+        `<option value="${esc(s.id)}" ${s.id===currentResp?'selected':''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`
+      ).join('');
+
+    const body = `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Tilldelad personal</div>
+        ${staffRows}
+      </div>
+      <div class="fg" style="margin-bottom:14px;">
+        <label>Ansvarig</label>
+        <select id="sm-resp">${respOpts}</select>
+      </div>
+      <div style="border-top:1px solid var(--br);padding-top:10px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="sm-pool" ${isPool?'checked':''}>
+          <div>
+            <div style="font-size:13px;font-weight:600;">Flytta till arbetspool</div>
+            <div style="font-size:11px;color:var(--mt);">Rensar personal och sätter status till Pool</div>
+          </div>
+        </label>
+      </div>`;
+
+    Modal.open({
+      title: `${ic('users',15)} Hantera personal — ${esc(ao.id)}`,
+      body,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => WorkOrderDetailPage._saveStaff(aoId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _saveStaff(aoId) {
+    const ao = getAO(aoId);
+    if (!ao) return;
+
+    const activeStaff = (state.staff || []).filter(s => s.active);
+    const selectedIds = activeStaff
+      .filter(s => { const cb = document.getElementById(`smcb-${s.id}`); return cb && cb.checked; })
+      .map(s => s.id);
+    const responsibleId = (document.getElementById('sm-resp') || {}).value || '';
+    const moveToPool = !!(document.getElementById('sm-pool') || {}).checked;
+
+    // If responsible not in selected staff, add them
+    if (responsibleId && !selectedIds.includes(responsibleId)) {
+      selectedIds.push(responsibleId);
+    }
+
+    WorkOrderService.updateStaff(aoId, { staffIds: selectedIds, responsibleStaffId: responsibleId, moveToPool });
+    Modal.close();
+    WorkOrderDetailPage.render({ aoId });
+    showToast('Personal uppdaterad');
+    Sidebar.updateBadges();
   },
 
   /* ── Redigera AO ───────────────────────── */

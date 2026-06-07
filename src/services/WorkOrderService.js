@@ -212,6 +212,43 @@ const WorkOrderService = {
     Sidebar.updateBadges();
   },
 
+  updateStaff(aoId, opts = {}) {
+    const ao = getAO(aoId);
+    if (!ao) return;
+    const user = state.currentUser;
+    const by = user ? `${user.firstName} ${user.lastName}`.trim() : 'Okänd';
+    const { staffIds = [], responsibleStaffId = '', moveToPool = false } = opts;
+    const oldStaff = [...(ao.staff || [])];
+    const oldResp  = ao.responsibleStaffId || '';
+    ao.log = ao.log || [];
+
+    if (moveToPool) {
+      ao.staff = [];
+      ao.status = 'pool';
+      ao.responsibleStaffId = '';
+      ao.log.push({ id: 'L'+Date.now(), type: 'staff_changed', text: `${by} flyttade ordern till arbetspoolen`, userName: by, timestamp: new Date().toISOString() });
+    } else {
+      const staffName = id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; };
+      const added   = staffIds.filter(id => !oldStaff.includes(id));
+      const removed = oldStaff.filter(id => !staffIds.includes(id));
+      ao.staff = staffIds;
+      ao.responsibleStaffId = responsibleStaffId;
+      if (ao.status === 'pool' && staffIds.length > 0) ao.status = 'planerad';
+      const t = Date.now();
+      if (added.length > 0)
+        ao.log.push({ id: 'L'+t,   type: 'staff_added',       text: `${by} lade till: ${added.map(staffName).join(', ')}`,   userName: by, timestamp: new Date().toISOString() });
+      if (removed.length > 0)
+        ao.log.push({ id: 'L'+(t+1), type: 'staff_removed',   text: `${by} tog bort: ${removed.map(staffName).join(', ')}`, userName: by, timestamp: new Date().toISOString() });
+      if (responsibleStaffId !== oldResp)
+        ao.log.push({ id: 'L'+(t+2), type: 'staff_responsible', text: `${by} satte ansvarig: ${responsibleStaffId ? staffName(responsibleStaffId) : 'Ingen'}`, userName: by, timestamp: new Date().toISOString() });
+    }
+
+    ao.updatedAt = new Date().toISOString();
+    ActivityService.log('work_order_updated', `Personal ändrad på ${ao.id}`, { workOrderId: aoId, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+  },
+
   takeFromPool(aoId) {
     const ao   = getAO(aoId);
     const user = state.currentUser;
