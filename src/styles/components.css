@@ -137,6 +137,8 @@
 .dr:last-child { border-bottom: none; }
 .dk { color: var(--mt); font-weight: 500; flex-shrink: 0; margin-right: 10px; }
 .dv { font-weight: 600; color: var(--tx); text-align: right; }
+.dv.link { color: var(--sky); cursor: pointer; }
+.dv.link:hover { text-decoration: underline; }
 
 /* ── Modaler ──────────────────────────── */
 .modal-overlay {

@@ -11,10 +11,14 @@ const InvoiceService = {
     const ao = getAO(aoId);
     if (!ao) return null;
 
+    if (ao.invoiceId) {
+      return { ok: false, error: `${aoId} har redan faktura ${ao.invoiceId}` };
+    }
+
     const lines = [];
 
-    /* Fastpris */
-    if (ao.priceType === 'fastpris' && ao.fixedPrice > 0) {
+    /* Fastpris (both 'fastpris' from manual AO and 'fast' from offer-created AO) */
+    if ((ao.priceType === 'fastpris' || ao.priceType === 'fast') && ao.fixedPrice > 0) {
       lines.push({
         id:          'L' + Date.now() + '_fp',
         description: `Fastpris – ${ao.title}`,
@@ -64,6 +68,8 @@ const InvoiceService = {
     }
 
     const inv = this._buildInvoice(lines, ao.customerId, ao.propertyId, ao.id);
+    inv.offerId = ao.offerId || '';
+    inv.title   = ao.title   || '';
     state.invoices = state.invoices || [];
     state.invoices.unshift(inv);
 

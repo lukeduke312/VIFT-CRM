@@ -147,6 +147,9 @@
   padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(255,255,255,.08);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .nav-brand-img {
   max-height: 40px;
@@ -387,5 +390,82 @@
 @media (min-width: 1400px) {
   #bottom-nav {
     width: var(--sidebar-w-xl);
+  }
+  body.sidebar-collapsed #bottom-nav {
+    width: 56px !important;
+  }
+}
+
+/* ── Collapse toggle button ─────────────────────── */
+.nav-collapse-btn {
+  display: none; /* hidden on mobile */
+  background: none;
+  color: color-mix(in srgb, var(--brand-primary-text) 35%, transparent);
+  padding: 4px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.nav-collapse-btn:hover {
+  color: color-mix(in srgb, var(--brand-primary-text) 80%, transparent);
+  background: color-mix(in srgb, var(--brand-primary-text) 10%, transparent);
+}
+
+/* ── Collapsed sidebar (desktop only) ──────────── */
+@media (min-width: 1024px) {
+  /* Animate sidebar width changes */
+  #bottom-nav {
+    transition: width .2s ease;
+  }
+
+  /* Show collapse button on desktop */
+  .nav-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Collapsed state */
+  body.sidebar-collapsed #bottom-nav {
+    width: 56px;
+  }
+
+  /* Hide text labels and logos when collapsed */
+  body.sidebar-collapsed .nav-brand-img,
+  body.sidebar-collapsed .nav-brand-fb {
+    display: none !important;
+  }
+  body.sidebar-collapsed .nav-brand {
+    padding: 10px 6px;
+    justify-content: center;
+  }
+  body.sidebar-collapsed .nav-section-label {
+    display: none;
+  }
+  body.sidebar-collapsed .nav-section {
+    padding: 6px 4px 2px;
+  }
+  body.sidebar-collapsed .ni .lbl,
+  body.sidebar-collapsed .ni .nbdg {
+    display: none;
+  }
+  body.sidebar-collapsed .ni {
+    justify-content: center;
+    padding: 9px 0;
+    gap: 0;
+  }
+  body.sidebar-collapsed .nav-user-name,
+  body.sidebar-collapsed .nav-user-role {
+    display: none;
+  }
+  body.sidebar-collapsed .nav-user-row {
+    justify-content: center;
+    gap: 0;
+    padding: 6px 4px;
+  }
+  body.sidebar-collapsed .nav-user-row > span:last-child {
+    display: none;
   }
 }

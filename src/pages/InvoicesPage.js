@@ -2,60 +2,135 @@
  * InvoicesPage — Fakturaunderlag lista + detalj
  */
 const InvoicesPage = {
+  _tab: 'alla',
+
   render() {
     const el = document.getElementById('pg-invoices-content');
     if (!el) return;
     const invoices = state.invoices || [];
     const ready    = WorkOrderService.readyForInvoice();
 
+    const TAB_LABELS = { alla:'Alla', utkast:'Utkast', skickad:'Skickade', betald:'Betalda', förfallen:'Förfallna', makulerad:'Makulerade' };
+    const tabs = Object.keys(TAB_LABELS);
+
+    const counts = {};
+    tabs.forEach(t => { counts[t] = t === 'alla' ? invoices.length : invoices.filter(i => i.status === t).length; });
+
+    // KPI summary
+    const kpiItems = [
+      { label:'Utkast',   key:'utkast',   color:'var(--mt)',  icon:'file-text'    },
+      { label:'Skickade', key:'skickad',  color:'var(--sky)', icon:'send'         },
+      { label:'Betalda',  key:'betald',   color:'var(--gr)',  icon:'check-circle' },
+      { label:'Förfallna',key:'förfallen',color:'var(--rd)',  icon:'alert-circle' }
+    ];
+    const kpiHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;">
+      ${kpiItems.map(k => {
+        const subset = invoices.filter(i => i.status === k.key);
+        const total  = subset.reduce((s,i) => s + InvoiceService.calcTotals(i).total, 0);
+        const active = this._tab === k.key;
+        return `<div class="card" onclick="InvoicesPage._setTab('${k.key}')" style="cursor:pointer;padding:12px 14px;${active?'border-color:'+k.color+';box-shadow:0 0 0 2px '+k.color+'22;':''}">
+          <div style="color:${k.color};margin-bottom:4px;">${ic(k.icon,18)}</div>
+          <div style="font-size:22px;font-weight:800;color:var(--navy);">${counts[k.key]}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--mt);">${k.label}</div>
+          ${total > 0 ? `<div style="font-size:10px;color:var(--mt);margin-top:2px;">${fkr(total)}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+    // Ready-for-invoice banner
+    const readyHtml = ready.length > 0 ? `
+      <div class="card" style="border-color:var(--gr);border-left:4px solid var(--gr);">
+        <div class="card-header">
+          <h3 style="color:var(--gr);">${ic('alert-triangle',14)} Klara ordrar – väntar fakturering</h3>
+          <span class="bdg bdg-green">${ready.length}</span>
+        </div>
+        <div class="card-body" style="padding:6px 14px;">
+          ${ready.slice(0,5).map(ao => {
+            const cu = getCu(ao.customerId);
+            const alreadyInvoiced = !!ao.invoiceId;
+            return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+              <div>
+                <div style="font-size:13px;font-weight:700;">${ao.id} – ${esc(ao.title)}</div>
+                <div style="font-size:11px;color:var(--mt);">${cu?CustomerService.displayName(cu):'—'}${alreadyInvoiced?' · '+ic('check',10)+' Faktura '+ao.invoiceId:''}</div>
+              </div>
+              ${alreadyInvoiced
+                ? `<button class="btn bsm bs" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('receipt',13)} Visa</button>`
+                : `<button class="btn bsm bsu" onclick="event.stopPropagation();InvoicesPage.createFromAO('${ao.id}')">${ic('file-plus',13)} Skapa</button>`}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : '';
+
+    // Tab bar
+    const tabHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;">
+      ${tabs.map(t => `<button class="btn bsm ${this._tab===t?'bp':'bs'}" onclick="InvoicesPage._setTab('${t}')">
+        ${TAB_LABELS[t]}${counts[t]>0?` <span style="background:rgba(255,255,255,.25);border-radius:100px;padding:1px 6px;font-size:10px;">${counts[t]}</span>`:''}
+      </button>`).join('')}
+    </div>`;
+
+    // Filtered invoice list
+    const filtered = this._tab === 'alla' ? invoices : invoices.filter(i => i.status === this._tab);
+    const listHtml = filtered.length === 0
+      ? `<div class="empty">${ic('receipt',32)}<h3>${this._tab==='alla'?'Inga fakturaunderlag':'Inga '+TAB_LABELS[this._tab].toLowerCase()}</h3><p>Skapa från en klar arbetsorder</p></div>`
+      : filtered.map(inv => {
+          const cu = getCu(inv.customerId);
+          const t  = InvoiceService.calcTotals(inv);
+          const ao = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
+          const subtitle = [
+            inv.title || (ao ? ao.title : ''),
+            cu ? CustomerService.displayName(cu) : null,
+            fkr(t.total) + ' inkl. moms',
+            fmtDate(inv.createdAt)
+          ].filter(Boolean).join(' · ');
+          return `<div class="list-item" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">
+            <div class="item-row">
+              <div style="min-width:0;flex:1;">
+                <div class="item-title">${inv.id}${inv.workOrderId?' – '+inv.workOrderId:''}</div>
+                <div class="item-sub">${esc(subtitle)}</div>
+              </div>
+              ${sbdg(inv.status)}
+            </div>
+          </div>`;
+        }).join('');
+
     el.innerHTML = `
-      ${ready.length > 0 ? `
-        <div class="card" style="border-color:var(--gr);border-left:4px solid var(--gr);">
-          <div class="card-header">
-            <h3 style="color:var(--gr);">${ic('alert-triangle',14)} Klara ordrar – väntar fakturering</h3>
-            <span class="bdg bdg-green">${ready.length}</span>
-          </div>
-          <div class="card-body" style="padding:6px 14px;">
-            ${ready.slice(0,5).map(ao => {
-              const cu = getCu(ao.customerId);
-              return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-                <div><div style="font-size:13px;font-weight:700;">${ao.id} – ${ao.title}</div>
-                  <div style="font-size:11px;color:var(--mt);">${cu?CustomerService.displayName(cu):'—'}</div></div>
-                <button class="btn bsm bsu" onclick="event.stopPropagation();InvoicesPage.createFromAO('${ao.id}')">
-                  ${ic('file-plus',13)} Skapa
-                </button>
-              </div>`;
-            }).join('')}
-          </div>
-        </div>` : ''}
-
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <h3 style="flex:1;font-size:14px;font-weight:700;">Fakturaunderlag</h3>
-        <button class="btn bp bsm" onclick="InvoicesPage.createBlank()">
-          ${ic('plus',14)} Ny faktura
-        </button>
+      ${kpiHtml}
+      ${readyHtml}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;">${tabHtml}</div>
+        <button class="btn bp bsm" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>
       </div>
+      ${listHtml}`;
+  },
 
-      ${invoices.length === 0
-        ? `<div class="empty">${ic('receipt',32)}<h3>Inga fakturaunderlag</h3><p>Skapa från en klar arbetsorder</p></div>`
-        : invoices.map(inv => {
-            const cu = getCu(inv.customerId);
-            const t  = InvoiceService.calcTotals(inv);
-            return `
-              <div class="list-item" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">
-                <div class="item-row">
-                  <div>
-                    <div class="item-title">${inv.id} – ${cu?CustomerService.displayName(cu):'—'}</div>
-                    <div class="item-sub">${fkr(t.total)} inkl. moms · ${fmtDate(inv.createdAt)}</div>
-                  </div>
-                  ${sbdg(inv.status)}
-                </div>
-              </div>`;
-          }).join('')}`;
+  _setTab(tab) {
+    this._tab = tab;
+    this.render();
   },
 
   createFromAO(aoId) {
     if (!Auth.require('invoice_create')) return;
+    const ao = getAO(aoId);
+    if (ao && ao.invoiceId) {
+      Modal.open({
+        title: 'Faktura finns redan',
+        body: `<p>Arbetsorder ${aoId} har redan faktura <strong>${ao.invoiceId}</strong>.</p><p style="margin-top:8px;color:var(--mt);font-size:13px;">Vill du skapa ytterligare en faktura? (t.ex. tilläggsfaktura)</p>`,
+        buttons: [
+          { label: 'Skapa ny faktura ändå', cls: 'btn bsu', onClick: () => {
+            Modal.close();
+            ao.invoiceId = '';
+            const result = InvoiceService.createFromAO(aoId);
+            ao.invoiceId = result.ok ? result.invoice.id : '';
+            if (!result.ok) { showToast(result.error); return; }
+            showToast(`${result.invoice.id} skapat`);
+            Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });
+          }},
+          { label: 'Visa befintlig', cls: 'btn bp', onClick: () => { Modal.close(); Router.showPage('pg-inv-detail', { invoiceId: ao.invoiceId }); }},
+          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        ]
+      });
+      return;
+    }
     const result = InvoiceService.createFromAO(aoId);
     if (!result.ok) { showToast(result.error); return; }
     showToast(`${result.invoice.id} skapat`);
@@ -116,13 +191,15 @@ const InvoiceDetailPage = {
     const cu   = getCu(inv.customerId);
     const t    = InvoiceService.calcTotals(inv);
     const statusOpts = ['utkast','skickad','betald','förfallen','makulerad'];
+    const ao   = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
+    const off  = inv.offerId ? (state.offers||[]).find(o=>o.id===inv.offerId) : null;
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
         <button class="btn bs bsm" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)}</button>
-        <div style="flex:1;">
+        <div style="flex:1;min-width:0;">
           <div style="font-size:16px;font-weight:800;">${inv.id}</div>
-          ${inv.title ? `<div style="font-size:13px;color:var(--mt);">${inv.title}</div>` : ''}
+          ${inv.title ? `<div style="font-size:13px;color:var(--mt);font-weight:600;">${esc(inv.title)}</div>` : ''}
           <div>${sbdg(inv.status)}</div>
         </div>
         <select class="btn bs bsm" style="font-weight:600;" onchange="InvoiceDetailPage.setStatus(this.value)">
@@ -130,16 +207,21 @@ const InvoiceDetailPage = {
         </select>
       </div>
 
-      <!-- Kundinfo -->
+      <!-- Metadata -->
       <div class="card">
         <div class="card-header"><h3>Faktureras till</h3></div>
         <div class="card-body">
           <div class="dr"><span class="dk">Kund</span><span class="dv">${cu?CustomerService.displayName(cu):'—'}</span></div>
-          ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${cu.address||'—'}${cu.city?', '+cu.city:''}</span></div>` : ''}
-          ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${cu.orgNr}</span></div>` : ''}
+          ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${esc(cu.address||'—')}${cu.city?', '+esc(cu.city):''}</span></div>` : ''}
+          ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(cu.orgNr)}</span></div>` : ''}
           <div class="dr"><span class="dk">Förfallodatum</span><span class="dv">${fmtDate(inv.dueDate)}</span></div>
           ${inv.workOrderId ? `<div class="dr"><span class="dk">Från AO</span>
-            <span class="dv" style="cursor:pointer;color:var(--sky);" onclick="Router.showPage('pg-ao-detail',{aoId:'${inv.workOrderId}'})">${inv.workOrderId}</span></div>` : ''}
+            <span class="dv link" onclick="Router.showPage('pg-ao-detail',{aoId:'${inv.workOrderId}'})">${inv.workOrderId}${ao?' – '+esc(ao.title):''}</span></div>` : ''}
+          ${inv.offerId ? `<div class="dr"><span class="dk">Från offert</span>
+            <span class="dv link" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${inv.offerId}${off?' (v'+off.versionNumber+')':''}</span></div>` : ''}
+          ${inv.sentAt ? `<div class="dr"><span class="dk">Skickad</span><span class="dv">${fmtDate(inv.sentAt)}</span></div>` : ''}
+          ${inv.paidAt ? `<div class="dr"><span class="dk" style="color:var(--gr);">Betald</span><span class="dv" style="color:var(--gr);font-weight:700;">${fmtDate(inv.paidAt)}</span></div>` : ''}
+          <div class="dr"><span class="dk">Skapad</span><span class="dv">${fmtDate(inv.createdAt)}</span></div>
         </div>
       </div>
 
@@ -164,12 +246,12 @@ const InvoiceDetailPage = {
         </div>
       </div>
 
-      ${inv.note ? `<div class="nbox">${inv.note}</div>` : ''}
+      ${inv.note ? `<div class="nbox">${esc(inv.note)}</div>` : ''}
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${inv.status === 'utkast'  ? `<button class="btn bp bsm" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
         ${inv.status === 'skickad' ? `<button class="btn bsu bsm" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
-        <button class="btn bs bsm" onclick="showToast('PDF-export byggs i Fas 4')">${ic('printer',14)} PDF</button>
+        <button class="btn bs bsm" onclick="showToast('PDF-export byggs i Fas 5B')">${ic('printer',14)} PDF</button>
       </div>`;
   },
 
@@ -179,13 +261,13 @@ const InvoiceDetailPage = {
     return lines.map(l => {
       const exVat  = (l.qty||0) * (l.unitPrice||0);
       const vatAmt = exVat * ((l.vatRate||25) / 100);
-      const typeIcon = { Tid: 'clock', Material: 'package', Fastpris: 'file-check', Manuell: 'pencil', Manuell_rad: 'pencil' }[l.source] || 'file-text';
-      const typeCls  = { Tid: 'bdg-sky', Material: 'bdg-orange', Fastpris: 'bdg-green', Manuell: 'bdg-grey' }[l.source] || 'bdg-grey';
+      const typeIcon = { Tid:'clock', Material:'package', Fastpris:'file-check', Manuell:'pencil', Övrigt:'more-horizontal', Fritext:'align-left' }[l.source] || 'file-text';
+      const typeCls  = { Tid:'bdg-sky', Material:'bdg-orange', Fastpris:'bdg-green', Manuell:'bdg-grey', Övrigt:'bdg-grey', Fritext:'bdg-grey' }[l.source] || 'bdg-grey';
       return `
         <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
           <div style="display:flex;align-items:flex-start;gap:8px;">
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${l.description}</div>
+              <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${esc(l.description)}</div>
               <div style="font-size:11px;color:var(--mt);">${l.qty} ${l.unit} × ${fmt(l.unitPrice)} kr
                 <span class="bdg ${typeCls}" style="font-size:9px;margin-left:4px;">${ic(typeIcon,9)} ${InvoiceService.sourceLabel(l)}</span>
               </div>
@@ -208,7 +290,6 @@ const InvoiceDetailPage = {
     const vatRates = [0, 6, 12, 25];
     const vatOpts  = (sel) => vatRates.map(r => `<option value="${r}" ${r===sel?'selected':''}>${r}%</option>`).join('');
 
-    // Determine current type: map legacy source names to our type keys
     const srcToType = { 'Tid':'tid', 'Material':'mat', 'Övrigt':'ovr', 'Fastpris':'fast', 'Fritext':'fri', 'Manuell':'ovr' };
     const curSrc  = line ? (line.source || 'Manuell') : 'Manuell';
     const curType = srcToType[curSrc] || 'ovr';
@@ -220,7 +301,6 @@ const InvoiceDetailPage = {
     const curDesc  = line ? (line.description || '') : '';
     const curFree  = line ? (line.freetext || '') : '';
 
-    const typeMap = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
     const types = ['tid','mat','ovr','fast','fri'];
     const typeLabels = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
 
@@ -229,12 +309,10 @@ const InvoiceDetailPage = {
         onclick="InvoiceDetailPage._setType('${t}')">${typeLabels[t]}</button>`
     ).join('');
 
-    // Article picker options
     const artOpts = (state.articles||[]).filter(a=>a.active).map(a =>
-      `<option value="${a.id}" data-name="${a.name||''}" data-unit="${a.unit||'st'}" data-price="${a.sellPrice||0}" data-vat="${a.vatRate||25}">${a.articleNumber?a.articleNumber+' – ':''}${a.name} (${fmt(a.sellPrice||0)} kr/${a.unit||'st'})</option>`
+      `<option value="${a.id}" data-name="${esc(a.name||'')}" data-unit="${a.unit||'st'}" data-price="${a.sellPrice||0}" data-vat="${a.vatRate||25}">${a.articleNumber?a.articleNumber+' – ':''}${esc(a.name)} (${fmt(a.sellPrice||0)} kr/${a.unit||'st'})</option>`
     ).join('');
 
-    // Helper: show/hide based on curType
     const vis = (t) => t === curType ? '' : 'display:none';
 
     return `
@@ -248,11 +326,11 @@ const InvoiceDetailPage = {
           <select id="il-pg-tid" onchange="InvoiceDetailPage._pgChanged()">
             <option value="">— Välj prisgrupp —</option>
             ${(state.priceGroups||[]).filter(p=>p.active).map(p =>
-              `<option value="${p.id}" data-rate="${p.hourRate||0}">${p.name} – ${fmt(p.hourRate||0)} kr/tim</option>`
+              `<option value="${p.id}" data-rate="${p.hourRate||0}">${esc(p.name)} – ${fmt(p.hourRate||0)} kr/tim</option>`
             ).join('')}
           </select></div>` : ''}
         <div class="fg"><label>Beskrivning</label>
-          <input id="il-desc-tid" value="${curType==='tid'?curDesc:''}" placeholder="Arbetstid – installation"></div>
+          <input id="il-desc-tid" value="${curType==='tid'?esc(curDesc):''}" placeholder="Arbetstid – installation"></div>
         <div class="g2">
           <div class="fg"><label>Antal timmar</label>
             <input type="number" id="il-qty-tid" value="${curType==='tid'?curQty:1}" min="0" step="0.25"
@@ -273,7 +351,7 @@ const InvoiceDetailPage = {
             ${artOpts}
           </select></div>` : ''}
         <div class="fg"><label>Beskrivning</label>
-          <input id="il-desc-mat" value="${curType==='mat'?curDesc:''}" placeholder="T.ex. Fogmassa, Kopparrör…"></div>
+          <input id="il-desc-mat" value="${curType==='mat'?esc(curDesc):''}" placeholder="T.ex. Fogmassa, Kopparrör…"></div>
         <div class="g3">
           <div class="fg"><label>Antal</label>
             <input type="number" id="il-qty-mat" value="${curType==='mat'?curQty:1}" min="0" step="${curType==='mat'?unitStep(curUnit):1}"
@@ -291,7 +369,7 @@ const InvoiceDetailPage = {
       <!-- Övrigt -->
       <div id="il-ovr" style="${vis('ovr')}">
         <div class="fg"><label>Beskrivning</label>
-          <input id="il-desc-ovr" value="${curType==='ovr'?curDesc:''}" placeholder="T.ex. Restid, Utrustning…"></div>
+          <input id="il-desc-ovr" value="${curType==='ovr'?esc(curDesc):''}" placeholder="T.ex. Restid, Utrustning…"></div>
         <div class="g3">
           <div class="fg"><label>Antal</label>
             <input type="number" id="il-qty-ovr" value="${curType==='ovr'?curQty:1}" min="0" step="${curType==='ovr'?unitStep(curUnit):1}"
@@ -309,7 +387,7 @@ const InvoiceDetailPage = {
       <!-- Fastpris -->
       <div id="il-fast" style="${vis('fast')}">
         <div class="fg"><label>Beskrivning</label>
-          <input id="il-desc-fast" value="${curType==='fast'?curDesc:''}" placeholder="T.ex. Avtalat pris, Årsservice…"></div>
+          <input id="il-desc-fast" value="${curType==='fast'?esc(curDesc):''}" placeholder="T.ex. Avtalat pris, Årsservice…"></div>
         <div class="fg"><label>Fast pris ex moms (kr)</label>
           <input type="number" id="il-price-fast" value="${curType==='fast'?curPrice:0}" min="0"
             oninput="InvoiceDetailPage._calcLineTotals()"></div>
@@ -320,11 +398,11 @@ const InvoiceDetailPage = {
       <!-- Fritext -->
       <div id="il-fri" style="${vis('fri')}">
         <div class="fg"><label>Fritextrad</label>
-          <textarea id="il-freetext" rows="3" placeholder="Visas som informationsrad på fakturan – ingen beräkning">${curFree}</textarea></div>
+          <textarea id="il-freetext" rows="3" placeholder="Visas som informationsrad på fakturan – ingen beräkning">${esc(curFree)}</textarea></div>
       </div>
 
-      <!-- Live-kalkyl (döljs för Fritext) -->
-      <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;margin-top:6px;${curType==='fri'?'display:none':'display:none'}">
+      <!-- Live-kalkyl -->
+      <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;margin-top:6px;display:none;">
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><strong id="il-ex">0 kr</strong></div>
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><strong id="il-moms">0 kr</strong></div>
         <div style="display:flex;justify-content:space-between;font-weight:800;color:var(--navy);"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
@@ -339,7 +417,6 @@ const InvoiceDetailPage = {
       const el = document.getElementById('il-' + p);
       if (el) el.style.display = p === type ? '' : 'none';
     });
-    // Update type buttons
     const typeLabels = { tid:'Tid', mat:'Material', ovr:'Övrigt', fast:'Fastpris', fri:'Fritext' };
     const btnContainer = document.querySelector('#il-type + div');
     if (btnContainer) {
@@ -514,7 +591,6 @@ const InvoiceDetailPage = {
     });
     setTimeout(() => {
       InvoiceDetailPage._calcLineTotals();
-      // Auto-select price group from linked work order
       const inv = getInv(this.invoiceId);
       if (inv && inv.workOrderId) {
         const ao = (state.workOrders||[]).find(a => a.id === inv.workOrderId);
@@ -571,9 +647,6 @@ const InvoiceDetailPage = {
   _refresh() {
     const inv = getInv(this.invoiceId);
     if (!inv) return;
-    document.getElementById('inv-lines').innerHTML = this._renderLines(inv);
-    const t = InvoiceService.calcTotals(inv);
-    // Re-render totals
     this.render({ invoiceId: this.invoiceId });
   }
 };

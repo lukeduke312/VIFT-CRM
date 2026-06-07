@@ -45,7 +45,8 @@ const Sidebar = {
     const userName = user ? `${user.firstName} ${user.lastName}`.trim() : 'VIFT';
     const userRole = user ? cap(user.role) : '';
 
-    const brandLogo = BrandingService.logoDark();
+    const brandLogo  = BrandingService.logoDark();
+    const collapsed  = document.body.classList.contains('sidebar-collapsed');
     let html = `
       <div class="nav-brand">
         <img src="${brandLogo}" class="nav-brand-img" alt="VIFT"
@@ -54,6 +55,9 @@ const Sidebar = {
           <div class="nav-brand-fb-vift">VIFT</div>
           <div class="nav-brand-fb-sub">Fastighetsservice</div>
         </div>
+        <button class="nav-collapse-btn" onclick="Sidebar.toggleCollapse()" title="${collapsed?'Expandera meny':'Fäll ihop meny'}">
+          ${ic(collapsed?'chevrons-right':'chevrons-left', 14)}
+        </button>
       </div>
       <div class="nav-scroll">`;
 
@@ -128,6 +132,14 @@ const Sidebar = {
   toggle() {
     document.getElementById('bottom-nav').classList.contains('open')
       ? this.close() : this.open();
+  },
+
+  toggleCollapse() {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    const user = Auth.getUser ? Auth.getUser() : state.currentUser;
+    if (user) UserPrefsService.save(user.id, { sidebarCollapsed: collapsed });
+    // Re-render just the brand area to flip the chevron icon
+    this.render();
   },
 
   userMenu() {

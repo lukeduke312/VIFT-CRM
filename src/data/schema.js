@@ -133,6 +133,7 @@ const Schema = {
 
   invoice: () => ({
     id: '',
+    title: '',
     customerId: '',
     propertyId: '',
     workOrderId: '',

@@ -44,5 +44,12 @@ const UserPrefsService = {
 
     // Layout-täthet (kompakt/normal/luftig)
     document.body.dataset.density = p.density || 'normal';
+
+    // Fällbar sidopanel (desktop only — CSS hanterar mobilundantag)
+    if (p.sidebarCollapsed) {
+      document.body.classList.add('sidebar-collapsed');
+    } else {
+      document.body.classList.remove('sidebar-collapsed');
+    }
   }
 };
