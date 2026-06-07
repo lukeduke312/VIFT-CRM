@@ -87,6 +87,7 @@ const Schema = {
     log: [],                  // [{id, type, text, imageData, visibility, userName, timestamp}]
     timeEntries: [],          // [timeEntryId, ...]  (refs till timeEntries)
     invoiceId: '',
+    offerId: '',
     salesOpportunityId: '',
     recurringOrderId: '',
     createdAt: '',

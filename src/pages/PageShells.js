@@ -2209,31 +2209,92 @@ const OfferDetailPage = {
   createAO() {
     const off = getOff(this.offerId);
     if (!off) return;
-    const prLines = (off.lines||[]).filter(l => l.type !== 'text');
-    const svcNames = prLines
-      .filter(l => l.type === 'service')
-      .map(l => l.templateName)
-      .filter(Boolean);
+
+    const prLines  = (off.lines||[]).filter(l => l.type !== 'text');
+    const svcLines = prLines.filter(l => l.type === 'service');
+    const svcNames = svcLines.map(l => l.templateName).filter(Boolean);
+
+    // Title
     const aoTitle = off.title
       || (svcNames.length ? svcNames.join(', ') : 'Arbete enligt offert ' + off.id);
-    const desc = [off.scope, off.summary].filter(Boolean).join('\n\n')
-      || prLines.map(l => l.type==='service' ? l.templateName : l.description).filter(Boolean).join(', ');
-    const ao = WorkOrderService.create({
-      title:       aoTitle,
-      description: desc,
-      customerId:  off.customerId,
-      propertyId:  off.propertyId || '',
-      address:     '',
-      status:      'nytt',
-      priority:    'normal',
-      priceType:   'fast',
-      fixedPrice:  OffersPage._offerExVat(off),
-      offerId:     off.id,
-      staff: [], checklist: [], materials: [], notes: [], timeEntries: []
+
+    // Rich description
+    const descParts = [];
+    if (off.scope)                           descParts.push(off.scope);
+    if (off.summary && off.summary !== off.scope) descParts.push(off.summary);
+    if (off.includes)                        descParts.push('Ingår: ' + off.includes);
+    if (off.excludes)                        descParts.push('Ingår ej: ' + off.excludes);
+    if (!descParts.length && prLines.length) descParts.push(prLines.map(l => l.templateName||l.description).filter(Boolean).join(', '));
+    const desc = descParts.join('\n\n');
+
+    // Checklist from service lines
+    const CHKLST = {
+      'svc_altan': ['Kontrollera altanens skick före start', 'Flytta lösa föremål vid behov', 'Tvätta ytan enligt metod', 'Kontrollera resultat efter tvätt'],
+      'svc_sten':  ['Kontrollera stenyta före start', 'Rensa smuts och ogräs', 'Tvätta stenläggning', 'Kontrollera fogar och efterbehandling'],
+      'svc_hack':  ['Kontrollera höjd och sidor enligt offert', 'Klipp enligt specifikation', 'Samla upp och bortforsla avklipp', 'Slutkontrollera ytan'],
+      'svc_fasad': ['Skydda fönster och detaljer', 'Tvätta fasad uppifrån och ner', 'Kontrollera att smuts är borta', 'Ta bort skydd och städa av'],
+      'svc_fs':    ['Kontrollera objektets skick vid ankomst', 'Utför service enligt uppdrag', 'Dokumentera utfört arbete', 'Meddela kund vid avvikelse'],
+      'svc_tf':    ['Kontrollera tekniska installationer', 'Utför förvaltningsuppgifter', 'Dokumentera status', 'Rapportera till kund'],
+      'svc_ovr':   ['Kontrollera arbetsplats vid ankomst', 'Utför beskrivet arbete', 'Städa upp efter arbete', 'Rapportera utfört arbete']
+    };
+    const checklist = [];
+    let cIdx = 0;
+    svcLines.forEach(l => {
+      const tmplChecklist = CHKLST[l.templateId || l.priceRuleRef];
+      const items = tmplChecklist || (l.templateName || l.description ? [l.templateName || l.description] : []);
+      items.forEach(text => {
+        checklist.push({ id: 'c' + (Date.now() + cIdx++), text, done: false });
+      });
     });
+    // Non-service, non-text lines add a single checklist entry
+    prLines.filter(l => l.type !== 'service').forEach(l => {
+      if (l.description) checklist.push({ id: 'c' + (Date.now() + cIdx++), text: l.description, done: false });
+    });
+
+    // estimatedHours from lines with unit='tim'
+    let estimatedHours = 0;
+    prLines.forEach(l => {
+      if ((l.unit === 'tim' || l.unit === 'h') && l.qty) estimatedHours += parseFloat(l.qty) || 0;
+      (l.subLines||[]).forEach(sl => {
+        if ((sl.unit === 'tim' || sl.unit === 'h') && sl.qty) estimatedHours += parseFloat(sl.qty) || 0;
+      });
+    });
+
+    // Initial AO log entry
+    const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Admin';
+    const aoLog = [{
+      id: 'L' + Date.now(), type: 'created_from_offer',
+      text: `${by} skapade AO från offert ${off.id}`,
+      userName: by, timestamp: new Date().toISOString()
+    }];
+
+    const ao = WorkOrderService.create({
+      title:          aoTitle,
+      description:    desc,
+      customerId:     off.customerId,
+      propertyId:     off.propertyId || '',
+      address:        off.address    || '',
+      internalNote:   off.internalNote || '',
+      status:         'nytt',
+      priority:       'normal',
+      priceType:      'fast',
+      fixedPrice:     OffersPage._offerExVat(off),
+      offerId:        off.id,
+      estimatedHours: estimatedHours || 0,
+      checklist,
+      log:            aoLog,
+      staff: [], materials: [], notes: [], timeEntries: []
+    });
+
     off.workOrderId = ao.id;
     off.updatedAt   = new Date().toISOString();
     this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert');
+
+    // Mark any open follow-up activity for this offer as done
+    (state.activities || [])
+      .filter(a => a.relatedType === 'offer' && a.relatedId === off.id && !a.done)
+      .forEach(a => { a.done = true; a.doneAt = new Date().toISOString(); });
+
     persist();
     this.render({offerId: this.offerId});
     showToast('AO ' + ao.id + ' skapad');

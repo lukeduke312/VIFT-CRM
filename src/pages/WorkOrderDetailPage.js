@@ -146,6 +146,15 @@ const WorkOrderDetailPage = {
           ${ic('receipt',14)} Fakturaunderlag: ${ao.invoiceId} – klicka för att öppna
         </div>` : ''}
 
+      <!-- Arbetsunderlag från offert -->
+      ${ao.offerId ? this._offerUnderlag(ao) : ''}
+
+      <!-- Länk till offert -->
+      ${ao.offerId ? `
+        <div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">
+          ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
+        </div>` : ''}
+
       <!-- Återkommande -->
       ${ao.recurringOrderId
         ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
@@ -236,6 +245,37 @@ const WorkOrderDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+  },
+
+  _offerUnderlag(ao) {
+    const off = (state.offers||[]).find(o => o.id === ao.offerId);
+    if (!off) return '';
+    const prLines = (off.lines||[]).filter(l => l.type !== 'text');
+    if (!prLines.length) return '';
+    const rows = prLines.map(l => {
+      const name  = l.templateName || l.description || '—';
+      const price = l.exVat || l.total || Math.round((l.qty||1)*(l.unitPrice||0));
+      const qty   = (l.type !== 'service' && l.qty) ? `${l.qty} ${l.unit||'st'} · ` : '';
+      return `<div class="dr">
+        <span class="dk" style="display:flex;align-items:center;gap:4px;">${l.type==='service'?ic('zap',9):ic('minus',9)} ${esc(name)}</span>
+        <span class="dv">${qty}${fmt(price)} kr ex moms</span>
+      </div>`;
+    }).join('');
+    return `
+      <div class="card" style="margin-bottom:2px;">
+        <div class="card-header">
+          <h3>${ic('file-text',14)} Arbetsunderlag (offert ${esc(ao.offerId)})</h3>
+          <button class="btn bghost bxs" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">${ic('external-link',12)} Öppna offert</button>
+        </div>
+        <div class="card-body" style="padding:8px 14px;">
+          ${off.scope ? `<p style="font-size:12px;color:var(--mt);line-height:1.5;margin-bottom:8px;border-left:3px solid var(--blue);padding-left:8px;">${esc(off.scope)}</p>` : ''}
+          ${rows}
+          ${off.includes||off.excludes ? `<div style="margin-top:8px;font-size:11px;color:var(--mt);">
+            ${off.includes?`${ic('check-circle',10)} Ingår: ${esc(off.includes)}<br>`:''}
+            ${off.excludes?`${ic('x-circle',10)} Ingår ej: ${esc(off.excludes)}`:''}
+          </div>` : ''}
+        </div>
+      </div>`;
   },
 
   _timePlanBlock(ao) {
