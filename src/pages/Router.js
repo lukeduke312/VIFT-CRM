@@ -37,7 +37,8 @@ const Router = {
     'pg-sales':       { title: 'Säljchanser',           sub: 'CRM pipeline' },
     'pg-activities':        { title: 'Aktiviteter',           sub: 'Uppföljningar & uppgifter' },
     'pg-service-templates': { title: 'Offerttjänster',         sub: 'Tjänster & prismodeller' },
-    'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' }
+    'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' },
+    'pg-operations':        { title: 'Dagens drift',           sub: 'Chefsöversikt & driftläge' }
   },
 
   currentPage: null,
@@ -155,7 +156,8 @@ const Router = {
       'pg-sales':       () => SalesPage.render(),
       'pg-activities':        () => ActivitiesPage.render(params),
       'pg-service-templates': () => ServiceTemplatesPage.render(),
-      'pg-myjobs':            () => MyJobsPage.render()
+      'pg-myjobs':            () => MyJobsPage.render(),
+      'pg-operations':        () => OperationsPage.render()
     };
 
     const renderer = renderers[pageId];

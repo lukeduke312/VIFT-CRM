@@ -87,6 +87,7 @@ const Dashboard = {
         case 'activity_log': return this._widgetActivity();
         case 'rondering':    return this._widgetRondering();
         case 'quickbtns':    return this._widgetQuickbtns();
+        case 'operations':   return this._widgetOperations();
         default: return null;
       }
     } catch(e) {
@@ -349,6 +350,44 @@ const Dashboard = {
       </div>
       <span class="dai-badge ${t.badgeCls||''}">${t.badge}</span>
       <span style="color:var(--mt);font-size:11px;flex-shrink:0;">${ic('chevron-right',12)}</span>
+    </div>`;
+  },
+
+  /* ── Widget: Dagens drift (chef/admin) ────────────────────────────── */
+  _widgetOperations() {
+    if (!Auth.canAny(['staff_view','reports_view'])) return null;
+    const today = tdy();
+    const all   = (state.workOrders || []).filter(ao => !ao.archived && !ao.deleted);
+    const alive = ao => !['klar','fakturerad','avbruten'].includes(ao.status);
+    const overdue  = all.filter(ao => ao.scheduledDate && ao.scheduledDate < today && alive(ao) && ao.status !== 'pool').length;
+    const urgent   = all.filter(ao => ao.priority === 'akut' && alive(ao)).length;
+    const noStaff  = all.filter(ao => (ao.staff||[]).length === 0 && alive(ao) && !['pool','avbruten'].includes(ao.status)).length;
+    const readyBill= all.filter(ao => ao.status === 'klar' && !ao.invoiceId).length;
+    const todayCnt = all.filter(ao => ao.scheduledDate === today && alive(ao)).length;
+    const ongoing  = all.filter(ao => ao.status === 'pågående').length;
+    const alert    = overdue > 0 || urgent > 0 || noStaff > 0;
+
+    const chip = (val, label, color) =>
+      `<div style="text-align:center;flex:1;min-width:60px;">
+        <div style="font-size:18px;font-weight:900;color:var(--${color});">${val}</div>
+        <div style="font-size:10px;color:var(--mt);margin-top:1px;">${label}</div>
+      </div>`;
+
+    return `<div class="card"${alert ? ' style="border-left:3px solid var(--rd);"' : ''}>
+      <div class="card-header">
+        <h3 class="ch3">${ic('layout-dashboard',14)} Dagens drift</h3>
+        <button class="btn bghost bxs" style="font-size:11px;" onclick="Router.showPage('pg-operations')">Öppna ${ic('arrow-right',11)}</button>
+      </div>
+      <div class="card-body" style="padding:12px 14px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${chip(todayCnt,  'Planerade',      'blue')}
+          ${chip(ongoing,   'Pågående',       'green')}
+          ${chip(overdue,   'Försenade',      overdue>0?'rd':'mt')}
+          ${chip(urgent,    'Akuta',          urgent>0?'rd':'mt')}
+          ${chip(noStaff,   'Sakn. personal', noStaff>0?'orange':'mt')}
+          ${chip(readyBill, 'Ej fakt.',       readyBill>0?'orange':'mt')}
+        </div>
+      </div>
     </div>`;
   },
 

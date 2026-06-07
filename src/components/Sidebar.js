@@ -20,7 +20,8 @@ const Sidebar = {
     { id: 'pg-contracts',  icon: 'file-check',       label: 'Kontrakt' },
     { id: 'pg-rondering',  icon: 'clipboard-check',  label: 'Rondering' },
     { section: 'Tid & Admin' },
-    { id: 'pg-recurring',  icon: 'refresh-cw',       label: 'Återkommande' },
+    { id: 'pg-operations', icon: 'layout-dashboard',  label: 'Dagens drift',  badgeKey: 'operationsAlert' },
+    { id: 'pg-recurring',  icon: 'refresh-cw',        label: 'Återkommande' },
     { id: 'pg-tid',        icon: 'clock',            label: 'Tid & stämpla' },
     { id: 'pg-calendar',   icon: 'calendar',         label: 'Kalender' },
     { id: 'pg-reports',    icon: 'bar-chart-2',      label: 'Rapporter' },
@@ -145,7 +146,8 @@ const Sidebar = {
     [
       { key: 'aoNew',              navId: 'nav-pg-ao' },
       { key: 'salesNew',           navId: 'nav-pg-sales' },
-      { key: 'activitiesOverdue',  navId: 'nav-pg-activities' }
+      { key: 'activitiesOverdue',  navId: 'nav-pg-activities' },
+      { key: 'operationsAlert',    navId: 'nav-pg-operations' }
     ].forEach(({ key, navId }) => {
       const badge  = this._getBadge(key);
       const navBtn = document.getElementById(navId);
@@ -192,6 +194,17 @@ const Sidebar = {
     if (key === 'activitiesOverdue') {
       const today = tdy();
       const n = (state.activities || []).filter(a => a.status === 'open' && a.dueDate && a.dueDate < today).length;
+      return n > 0 ? n : null;
+    }
+    if (key === 'operationsAlert') {
+      const today = tdy();
+      const all   = (state.workOrders || []).filter(ao => !ao.archived && !ao.deleted);
+      const alive = ao => !['klar','fakturerad','avbruten'].includes(ao.status);
+      const n = all.filter(ao =>
+        (ao.scheduledDate && ao.scheduledDate < today && alive(ao) && ao.status !== 'pool') ||
+        (ao.priority === 'akut' && alive(ao)) ||
+        ((ao.staff||[]).length === 0 && alive(ao) && !['pool','avbruten'].includes(ao.status))
+      ).length;
       return n > 0 ? n : null;
     }
     return null;

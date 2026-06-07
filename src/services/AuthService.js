@@ -45,6 +45,7 @@ const Auth = {
     'pg-inv-detail':   ['invoice_view','invoice_create'],
     'pg-sales':        ['sales_manage'],
     'pg-myjobs':       ['ao_view_all','ao_view_own','ao_time'],
+    'pg-operations':   ['staff_view','reports_view'],
     'pg-tid':          ['ao_time'],
     'pg-calendar':     ['ao_view_all','ao_view_own'],
     'pg-contracts':    ['customer_manage'],
