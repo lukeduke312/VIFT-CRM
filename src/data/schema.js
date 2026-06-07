@@ -108,14 +108,26 @@ const Schema = {
     includes: '',
     excludes: '',
     validUntil: '',
-    status: 'utkast',         // utkast | skickad | väntar | godkänd | nekad | utgången
+    status: 'utkast',         // utkast | skickad | påmind | väntar | godkänd | nekad | utgången | ersatt
     declineReason: '',
     salesOpportunityId: '',
     workOrderId: '',
     sentAt: '',
     answeredAt: '',
     createdAt: '',
-    updatedAt: ''
+    updatedAt: '',
+    versionNumber: 1,
+    parentOfferId: '',
+    emailSentTo: '',
+    reminderSentAt: '',
+    customerApproval: {
+      token: '',
+      approvedAt: null,
+      approvedByName: '',
+      approvedByEmail: '',
+      ip: '',
+      comment: ''
+    }
   }),
 
   invoice: () => ({

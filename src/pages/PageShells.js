@@ -382,12 +382,15 @@ const OffersPage = {
     if (!el) return;
     const c = kpi || this._getKpi();
     const f = this._filter || 'alla';
+    const kpiPamind = (state.offers||[]).filter(o=>o.status==='påmind').length;
+    const kpiErsatt = (state.offers||[]).filter(o=>o.status==='ersatt').length;
     const tabs = [
-      {v:'alla',    l:'Alla',    n:c.total},
-      {v:'utkast',  l:'Utkast',  n:c.utkast},
-      {v:'skickad', l:'Skickade',n:c.skickad},
-      {v:'godkänd', l:'Godkända',n:c.godkänd},
-      {v:'nekad',   l:'Nekade',  n:c.nekad},
+      {v:'alla',    l:'Alla',     n:c.total},
+      {v:'utkast',  l:'Utkast',   n:c.utkast},
+      {v:'skickad', l:'Skickade', n:c.skickad},
+      {v:'påmind',  l:'Påminda',  n:kpiPamind},
+      {v:'godkänd', l:'Godkända', n:c.godkänd},
+      {v:'nekad',   l:'Nekade',   n:c.nekad},
     ];
     el.innerHTML = tabs.map(t =>
       `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')">${t.l}${t.n?` <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
@@ -471,8 +474,25 @@ const OffersPage = {
       const rutAmt  = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
       const cust    = incVat - rutAmt;
       const insight = OffersPage._offerInsight(o);
-      const statusColors = {utkast:'#94a3b8',skickad:'var(--blue)',väntar:'var(--or)',godkänd:'var(--gr)',nekad:'var(--rd)',utgången:'var(--mt)'};
+      const statusColors = {utkast:'#94a3b8',skickad:'var(--blue)',påmind:'var(--pu)',väntar:'var(--or)',godkänd:'var(--gr)',nekad:'var(--rd)',utgången:'var(--mt)',ersatt:'#94a3b8'};
       const borderColor = statusColors[o.status] || 'var(--br)';
+      // Nästa aktivitet
+      const nextActLine = (() => {
+        const acts = (state.activities||[]).filter(a => a.relatedType==='offer' && a.relatedId===o.id && a.status==='open');
+        if (!acts.length) {
+          if (o.status==='skickad'||o.status==='påmind') {
+            return `<span style="font-size:10px;color:var(--or);">${ic('bell',9)} Ingen uppföljning bokad</span>`;
+          }
+          return '';
+        }
+        const sorted = acts.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+        const next = sorted[0];
+        const isOverdue = next.dueDate && next.dueDate < tdy();
+        const dateStr = next.dueDate ? new Date(next.dueDate+'T12:00:00').toLocaleDateString('sv-SE',{day:'numeric',month:'short'}) : '—';
+        return isOverdue
+          ? `<span style="font-size:10px;color:var(--rd);font-weight:700;">${ic('alert-circle',9)} Uppföljning försenad: ${dateStr}</span>`
+          : `<span style="font-size:10px;color:var(--gr);">${ic('calendar-check',9)} Uppföljning: ${dateStr}</span>`;
+      })();
       return `<div class="list-item off-offer-card" style="border-left-color:${borderColor};" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
   <div class="off-offer-card-top">
     <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
@@ -480,9 +500,8 @@ const OffersPage = {
       ${sbdg(o.status)}
     </div>
     <div style="display:flex;align-items:baseline;gap:5px;flex-shrink:0;margin-left:8px;">
-      <span style="font-size:11px;color:var(--mt);">Ex.</span>
-      <strong style="font-size:13px;color:var(--navy);">${fmt(exVatD)} kr</strong>
-      ${rutAmt ? `<span style="font-size:11px;color:var(--gr);font-weight:700;">&nbsp;→&nbsp;${fmt(cust)} kr kund</span>` : `<span style="font-size:11px;color:var(--mt);">&nbsp;(${fmt(incVat)} inkl.)</span>`}
+      <strong style="font-size:13px;color:var(--navy);">${fmt(rutAmt ? cust : incVat)} kr</strong>
+      <span style="font-size:11px;color:var(--mt);">${rutAmt?'kund inkl. moms':'inkl. moms'}</span>
     </div>
   </div>
   <div class="off-offer-card-title">${disp}</div>
@@ -494,6 +513,7 @@ const OffersPage = {
         ${o.sentAt ? `&nbsp;·&nbsp;${ic('send',9)} Skickad ${fmtDate(o.sentAt)}` : ''}
         ${o.validUntil ? `&nbsp;·&nbsp;${ic('clock',9)} Giltig t.o.m. ${fmtDate(o.validUntil)}` : ''}
       </div>
+      ${nextActLine ? `<div style="margin-top:3px;">${nextActLine}</div>` : ''}
     </div>
     ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
   </div>
@@ -1963,12 +1983,12 @@ const OfferDetailPage = {
       const st = off.status;
       if (st === 'utkast')
         return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.showSendModal('${off.id}')">${ic('send',14)} Skicka offert till kund</button>`;
-      if (st === 'skickad' || st === 'väntar')
+      if (st === 'skickad' || st === 'påmind' || st === 'väntar')
         return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--or" onclick="OfferDetailPage._quickAction('${off.id}','followup')">${ic('bell',14)} Logga uppföljning</button>`;
       if (st === 'godkänd' && !off.workOrderId)
         return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--gr" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',14)} Skapa arbetsorder</button>`;
       if (st === 'nekad')
-        return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',14)} Skapa ny version</button>`;
+        return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',14)} Ny version</button>`;
       if (st === 'utgången')
         return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--or" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('refresh-cw',14)} Förnya offert</button>`;
       return '';
@@ -2035,7 +2055,7 @@ const OfferDetailPage = {
           <div style="display:flex;align-items:center;gap:8px;">
             <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)}</button>
             <div>
-              <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}</div>
+              <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}${(off.versionNumber||1) > 1 ? ` <span class="bdg bdg-purple" style="font-size:10px;">v${off.versionNumber}</span>` : ''}${off.parentOfferId ? ` <span style="font-size:10px;opacity:.7;"> ← ${off.parentOfferId}</span>` : ''}</div>
               <div style="font-size:16px;font-weight:800;line-height:1.2;color:#fff;">${off.title||'Offert'}</div>
             </div>
           </div>
@@ -2046,7 +2066,7 @@ const OfferDetailPage = {
             <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
               ${sbdg(off.status)}
               ${CustomSelect.render('offd-status',{
-                options:[{v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},{v:'utgången',l:'Utgången'}],
+                options:[{v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'påmind',l:'Påmind'},{v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},{v:'utgången',l:'Utgången'},{v:'ersatt',l:'Ersatt'}],
                 value:off.status, onchange:'OfferDetailPage.setStatus(this.value)'
               })}
             </div>
@@ -2075,8 +2095,14 @@ const OfferDetailPage = {
 
         <div class="off-detail-hero-actions">
           <button type="button" class="off-hero-btn" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>
+          <button type="button" class="off-hero-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',12)} Ny version</button>
           <button type="button" class="off-hero-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>
-          ${(off.status==='skickad'||off.status==='väntar')?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button><button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>`:''}
+          ${(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`
+            <button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button>
+            <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>
+            <button type="button" class="off-hero-btn" onclick="OfferDetailPage._quickAction('${off.id}','verbal')">${ic('thumbs-up',12)} Muntligt godkänd</button>
+            <button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>
+          `:''}
           <button type="button" class="off-hero-btn" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',12)} PDF</button>
           ${off.status==='godkänd'&&!off.workOrderId?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
@@ -2153,7 +2179,8 @@ const OfferDetailPage = {
     const prev = off.status;
     off.status    = status;
     off.updatedAt = new Date().toISOString();
-    if (status === 'skickad') off.sentAt     = new Date().toISOString();
+    if (status === 'skickad') off.sentAt          = new Date().toISOString();
+    if (status === 'påmind')  off.reminderSentAt  = new Date().toISOString();
     if (status === 'godkänd' || status === 'nekad') off.answeredAt = new Date().toISOString();
     this._logEvt(off, 'status', 'Status: ' + statusLabel(prev) + ' → ' + statusLabel(status));
     persist();
@@ -2165,16 +2192,18 @@ const OfferDetailPage = {
     const off = getOff(offerId);
     if (!off) return;
     const now = new Date().toISOString();
-    const newOff = Object.assign({}, off, {
+    const newOff = Object.assign({}, JSON.parse(JSON.stringify(off)), {
       id: newId(state.offers, 'OFF'), status: 'utkast',
       title: (off.title || 'Offert') + ' (kopia)',
-      sentAt: '', answeredAt: '', workOrderId: '',
-      createdAt: now, updatedAt: now
+      versionNumber: 1, parentOfferId: '',
+      sentAt: '', answeredAt: '', reminderSentAt: '', emailSentTo: '', workOrderId: '',
+      createdAt: now, updatedAt: now, timeline: []
     });
+    this._logEvt(newOff, 'create', 'Duplicerad från ' + offerId);
     state.offers.push(newOff);
     persist();
     Router.showPage('pg-offer-detail', {offerId: newOff.id});
-    showToast('Offert ' + newOff.id + ' skapad som kopia');
+    showToast('Kopia ' + newOff.id + ' skapad');
   },
 
   createAO() {
@@ -2224,7 +2253,7 @@ const OfferDetailPage = {
     const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'thumbs-up', reason:'help-circle', tip:'message-square'};
     const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)', tip:'var(--mt)'};
     const id = off.id;
-    const isSent = off.status === 'skickad' || off.status === 'väntar';
+    const isSent = off.status === 'skickad' || off.status === 'påmind' || off.status === 'väntar';
     return `<div class="card" style="margin-top:8px;">
       <div class="card-header">
         <h3 style="display:flex;align-items:center;gap:6px;">${ic('activity',13)} Säljarbete & tidslinje</h3>
@@ -2497,9 +2526,12 @@ const OfferDetailPage = {
       if (rutAmt > 0 && prLines.length > 0) {
         tips.push({icon:'info', color:'var(--gr)', title:`Lyft RUT/ROT i kommunikationen`, body:`Kunden betalar bara ${fmt(cust).toLocaleString('sv-SE')} kr efter avdraget. Nämn det redan i e-postmeddelandet — det är en tydlig och konkret säljpunkt.`});
       }
+      if (prLines.length > 0 && cust > 20000) {
+        tips.push({icon:'phone', color:'var(--navy)', title:'Ring kunden innan du skickar', body:`Stor affär (${fmt(cust)} kr kund) — ett samtal innan utskick ökar konverteringen avsevärt.`, cta:'Logga samtal', ctaFn:`OfferDetailPage._quickAction('${off.id}','ring')`});
+      }
     }
 
-    if (off.status === 'skickad' || off.status === 'väntar') {
+    if (off.status === 'skickad' || off.status === 'påmind' || off.status === 'väntar') {
       if (daysSent !== null && daysSent > 7) {
         tips.push({icon:'alert-circle', color:'var(--rd)', title:`Skickad för ${daysSent} dagar sedan — risk för förlust`, body:'Äldre offerter konverterar sämre. Ring kunden direkt och håll liv i dialogen.', cta:'Logga samtal', ctaFn:`OfferDetailPage._quickAction('${off.id}','ring')`});
       } else if (daysSent !== null && daysSent >= 3) {
@@ -2514,11 +2546,20 @@ const OfferDetailPage = {
       if (cust > 20000) {
         tips.push({icon:'phone', color:'var(--navy)', title:'Stor affär — personlig kontakt rekommenderas', body:'För offerter över 20 000 kr ökar chansen med ett personligt samtal snarare än enbart e-post.'});
       }
+      if (!offerActs.length) {
+        tips.push({icon:'bell', color:'var(--or)', title:'Ingen uppföljning bokad', body:'Boka en uppföljning inom 3 dagar för bästa konvertering.', cta:'Boka uppföljning', ctaFn:`OfferDetailPage._quickAction('${off.id}','followup')`});
+      }
+    }
+
+    if (off.status === 'påmind') {
+      if (daysSent !== null && daysSent > 14) {
+        tips.push({icon:'alert-circle', color:'var(--rd)', title:`Skickad påminnelse för ${daysSent} dagar sedan`, body:'Ring kunden direkt — ärendet riskerar att falla bort.', cta:'Logga samtal', ctaFn:`OfferDetailPage._quickAction('${off.id}','ring')`});
+      }
     }
 
     if (off.status === 'nekad') {
       tips.push({icon:'help-circle', color:'var(--mt)', title:'Analysera varför affären föll', body:'Var det pris, timing, konkurrent eller omfattning? Logga orsaken för framtida lärdomar.', cta:'Logga orsak', ctaFn:`OfferDetailPage._quickAction('${off.id}','reason')`});
-      tips.push({icon:'refresh-cw', color:'var(--blue)', title:'Föreslå nytt erbjudande', body:'Duplicera och justera — antingen priset, villkoren eller tjänsternas omfattning. Många affärer återvinns med rätt anpassning.', cta:'Duplicera offert', ctaFn:`OfferDetailPage.duplicate('${off.id}')`});
+      tips.push({icon:'git-branch', color:'var(--blue)', title:'Föreslå nytt erbjudande', body:'Skapa en ny version och justera — antingen priset, villkoren eller tjänsternas omfattning. Många affärer återvinns med rätt anpassning.', cta:'Ny version', ctaFn:`OfferDetailPage.createNewVersion('${off.id}')`});
     }
 
     if (off.status === 'godkänd' && !off.workOrderId) {
@@ -2823,30 +2864,80 @@ ${hasRut?`<div class="rut">
     if (!off) return;
     const cu = getCu(off.customerId);
     const cuEmail = cu ? (cu.email||'') : '';
-    const subject = `Offert ${off.id}${off.title?' – '+off.title:''}`;
-    const body2 = `Hej,\n\nBifogat hittar du offert ${off.id}${off.title?' – '+off.title:''}.\n\nOfferten är giltig till ${off.validUntil||'—'}.\n${off.paymentTerms?'Betalningsvillkor: '+off.paymentTerms+'.\n':''}\nHör av dig om du har frågor!\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice`;
-    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const firstName = cu ? (cu.firstName||cu.name||'') : '';
+
+    const _interpolate = (tmplStr, extra) => {
+      const sentDate = off.sentAt ? new Date(off.sentAt).toLocaleDateString('sv-SE',{day:'numeric',month:'short',year:'numeric'}) : '—';
+      const data = {
+        offerId: off.id,
+        titleSuffix: off.title ? ' – ' + off.title : '',
+        firstName: firstName || 'kund',
+        customerName: cu ? CustomerService.displayName(cu) : '',
+        validUntil: off.validUntil || '—',
+        paymentLine: off.paymentTerms ? 'Betalningsvillkor: ' + off.paymentTerms + '.' : '',
+        sentDate,
+        viftPhone: '',
+        ...(extra||{})
+      };
+      return (tmplStr||'').replace(/\{\{(\w+)\}\}/g, (_, k) => data[k] !== undefined ? data[k] : '');
+    };
+
+    const defaultTmpl = (state.emailTemplates||[]).find(t=>t.type==='send_offer') || {
+      subject: 'Offert ' + off.id + (off.title?' – '+off.title:''),
+      body: 'Hej,\n\nBifogat hittar du offert ' + off.id + (off.title?' – '+off.title:'') + '.\n\nOfferten är giltig till ' + (off.validUntil||'—') + '.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice'
+    };
+
+    const tmplOpts = (state.emailTemplates||[]).filter(t=>t.active!==false)
+      .map(t => '<option value="' + t.id + '"' + (t.type==='send_offer'?' selected':'') + '>' + esc(t.name) + '</option>').join('');
+
+    const subject = _interpolate(defaultTmpl.subject);
+    const body2   = _interpolate(defaultTmpl.body);
+
     Modal.open({
       title: ic('send',14) + ' Skicka offert',
       wide: true,
       body: `
+        ${tmplOpts ? `<div class="fg"><label>Mejlmall</label>
+          <select id="send-tmpl" onchange="OfferDetailPage._applySendTemplate('${offerId}',this.value)">${tmplOpts}</select></div>` : ''}
         <div class="fg"><label>Till (e-post)</label>
           <input id="send-to" value="${esc(cuEmail)}" placeholder="kund@exempel.se" type="email"></div>
         <div class="fg"><label>Ämne</label>
           <input id="send-subject" value="${esc(subject)}"></div>
         <div class="fg"><label>Meddelande</label>
           <textarea id="send-body" rows="8">${esc(body2)}</textarea></div>
+        <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;font-size:12px;">
+          <input type="checkbox" id="send-followup" checked style="width:16px;height:16px;">
+          <span>Skapa uppföljning automatiskt om <strong>3 dagar</strong></span>
+        </label>
         <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
-          ${ic('info',10)} Detta är en simulerad sändning — inget mejl skickas på riktigt. Status ändras till "Skickad".
+          ${ic('info',10)} Simulerad sändning — inget mejl skickas på riktigt. Status ändras till "Skickad".
         </div>`,
       buttons: [
         { label: ic('send',13) + ' Skicka', cls: 'btn bp', onClick: () => {
           const to = document.getElementById('send-to')?.value.trim();
           if (!to) { showToast('Fyll i e-postadress'); return; }
           this._logEvt(off, 'send', 'Offert skickad till ' + to);
-          off.status  = 'skickad';
-          off.sentAt  = new Date().toISOString();
-          off.updatedAt = new Date().toISOString();
+          off.status      = 'skickad';
+          off.sentAt      = new Date().toISOString();
+          off.emailSentTo = to;
+          off.updatedAt   = new Date().toISOString();
+          // Auto followup
+          if (document.getElementById('send-followup')?.checked) {
+            ActivitiesService.create({
+              title: 'Följ upp offert ' + off.id + (off.title?' – '+off.title:''),
+              type: 'followup',
+              relatedType: 'offer',
+              relatedId: off.id,
+              customerId: off.customerId || null,
+              assignedTo: state.currentUser ? state.currentUser.id : null,
+              dueDate: _ds(3),
+              dueTime: '09:00',
+              note: 'Offert skickad till ' + to + ' — följ upp om 3 dagar',
+              priority: 'normal'
+            });
+            this._logEvt(off, 'followup', 'Uppföljning bokad om 3 dagar (automatisk vid utskick)');
+            Sidebar.updateBadges();
+          }
           persist();
           Modal.close();
           this.render({offerId});
@@ -2856,6 +2947,113 @@ ${hasRut?`<div class="rut">
       ]
     });
     setTimeout(() => document.getElementById('send-to')?.focus(), 80);
+  },
+
+  _applySendTemplate(offerId, tmplId) {
+    const off  = getOff(offerId);
+    const cu   = getCu(off?.customerId);
+    const tmpl = (state.emailTemplates||[]).find(t=>t.id===tmplId);
+    if (!tmpl || !off) return;
+    const firstName = cu ? (cu.firstName||cu.name||'') : '';
+    const sentDate  = off.sentAt ? new Date(off.sentAt).toLocaleDateString('sv-SE',{day:'numeric',month:'short',year:'numeric'}) : '—';
+    const data = {
+      offerId: off.id, titleSuffix: off.title?' – '+off.title:'', firstName: firstName||'kund',
+      validUntil: off.validUntil||'—', paymentLine: off.paymentTerms?'Betalningsvillkor: '+off.paymentTerms+'.':'',
+      sentDate, viftPhone: ''
+    };
+    const interp = s => (s||'').replace(/\{\{(\w+)\}\}/g, (_,k) => data[k]!==undefined?data[k]:'');
+    const subj = document.getElementById('send-subject');
+    const body = document.getElementById('send-body');
+    if (subj) subj.value = interp(tmpl.subject);
+    if (body) body.value = interp(tmpl.body);
+  },
+
+  showReminderModal(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    const cu = getCu(off.customerId);
+    const cuEmail = cu ? (cu.email||'') : '';
+    const firstName = cu ? (cu.firstName||cu.name||'') : '';
+    const tmpl = (state.emailTemplates||[]).find(t=>t.type==='reminder');
+    const sentDate = off.sentAt ? new Date(off.sentAt).toLocaleDateString('sv-SE',{day:'numeric',month:'short',year:'numeric'}) : '—';
+    const data = {
+      offerId: off.id, titleSuffix: off.title?' – '+off.title:'', firstName: firstName||'kund',
+      validUntil: off.validUntil||'—', sentDate, paymentLine:'', viftPhone:''
+    };
+    const interp = s => (s||'').replace(/\{\{(\w+)\}\}/g, (_,k) => data[k]!==undefined?data[k]:'');
+    const subject = interp(tmpl?.subject || ('Påminnelse: Offert ' + off.id + (off.title?' – '+off.title:'')));
+    const body2   = interp(tmpl?.body || ('Hej,\n\nPåminnelse om offert ' + off.id + '.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice'));
+
+    Modal.open({
+      title: ic('bell',14) + ' Skicka påminnelse',
+      wide: true,
+      body: `
+        <div class="fg"><label>Till (e-post)</label>
+          <input id="remind-to" value="${esc(cuEmail)}" placeholder="kund@exempel.se" type="email"></div>
+        <div class="fg"><label>Ämne</label><input id="remind-subject" value="${esc(subject)}"></div>
+        <div class="fg"><label>Meddelande</label>
+          <textarea id="remind-body" rows="7">${esc(body2)}</textarea></div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
+          ${ic('info',10)} Simulerad sändning. Status ändras till "Påmind".
+        </div>`,
+      buttons: [
+        { label: ic('bell',13) + ' Skicka påminnelse', cls: 'btn bp', onClick: () => {
+          const to = document.getElementById('remind-to')?.value.trim();
+          if (!to) { showToast('Fyll i e-postadress'); return; }
+          off.status = 'påmind';
+          off.reminderSentAt = new Date().toISOString();
+          off.updatedAt = new Date().toISOString();
+          this._logEvt(off, 'reminder', 'Påminnelse skickad till ' + to);
+          persist();
+          Modal.close();
+          this.render({offerId});
+          showToast('Påminnelse skickad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('remind-to')?.focus(), 80);
+  },
+
+  createNewVersion(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    const newVer = (off.versionNumber || 1) + 1;
+    Modal.open({
+      title: ic('git-branch',14) + ' Skapa ny version',
+      body: `<p style="font-size:13px;margin-bottom:12px;">Skapa version <strong>${newVer}</strong> av ${off.id}?</p>
+        <p style="font-size:12px;color:var(--mt);">Gamla versionen markeras som <em>Ersatt</em>. Den nya versionen kopierar alla rader, kund, text och villkor och sätts till <em>Utkast</em>.</p>`,
+      buttons: [
+        { label: ic('git-branch',12) + ' Skapa version ' + newVer, cls: 'btn bp', onClick: () => {
+          const now = new Date().toISOString();
+          off.status    = 'ersatt';
+          off.updatedAt = now;
+          this._logEvt(off, 'status', 'Version ' + (off.versionNumber||1) + ' ersatt av ny version');
+          // Create new version
+          const newOff = JSON.parse(JSON.stringify(off));
+          newOff.id             = newId(state.offers, 'OFF');
+          newOff.status         = 'utkast';
+          newOff.versionNumber  = newVer;
+          newOff.parentOfferId  = offerId;
+          newOff.sentAt         = '';
+          newOff.answeredAt     = '';
+          newOff.reminderSentAt = '';
+          newOff.emailSentTo    = '';
+          newOff.workOrderId    = '';
+          newOff.createdAt      = now;
+          newOff.updatedAt      = now;
+          newOff.timeline       = [];
+          newOff.customerApproval = { token:'', approvedAt:null, approvedByName:'', approvedByEmail:'', ip:'', comment:'' };
+          this._logEvt(newOff, 'create', 'Version ' + newVer + ' skapad från ' + offerId + ' v' + (off.versionNumber||1));
+          state.offers.push(newOff);
+          persist();
+          Modal.close();
+          Router.showPage('pg-offer-detail', {offerId: newOff.id});
+          showToast('Version ' + newVer + ' skapad: ' + newOff.id);
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   },
 
   _completeActivity(actId, offerId) {

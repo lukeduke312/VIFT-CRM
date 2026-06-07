@@ -31,6 +31,7 @@ let state = {
   avvikelser: [],
   activities: [],
   serviceTemplates: [],
+  emailTemplates: [],
 
   // UI-state
   currentPage: 'dash',
@@ -78,6 +79,7 @@ function initState() {
   state.avvikelser         = s.get('avvikelser')       || SeedData.avvikelser       || [];
   state.activities         = s.get('activities')        || [];
   state.serviceTemplates   = s.get('serviceTemplates')  || SeedData.serviceTemplates || [];
+  state.emailTemplates     = s.get('emailTemplates')    || SeedData.emailTemplates   || [];
 
   // Purge AOs past their 14-day trash window
   const _trashNow = new Date();
@@ -132,6 +134,7 @@ function persist() {
   s.set('avvikelser',       state.avvikelser);
   s.set('activities',       state.activities);
   s.set('serviceTemplates', state.serviceTemplates);
+  s.set('emailTemplates',   state.emailTemplates);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */
@@ -207,8 +210,8 @@ function statusLabel(s) {
   const m = {
     nytt: 'Nytt', pool: 'Arbetspool', planerad: 'Planerad',
     pågående: 'Pågående', klar: 'Klar', fakturerad: 'Fakturerad', avbruten: 'Avbruten',
-    utkast: 'Utkast', skickad: 'Skickad', väntar: 'Väntar svar',
-    godkänd: 'Godkänd', nekad: 'Nekad', utgången: 'Utgången',
+    utkast: 'Utkast', skickad: 'Skickad', påmind: 'Påmind', väntar: 'Väntar svar',
+    godkänd: 'Godkänd', nekad: 'Nekad', utgången: 'Utgången', ersatt: 'Ersatt',
     betald: 'Betald', förfallen: 'Förfallen', makulerad: 'Makulerad',
     aktiv: 'Aktiv', pausad: 'Pausad', avslutad: 'Avslutad',
     new: 'Ny', contacted: 'Kontaktad', snoozed: 'Uppskjuten',
@@ -222,8 +225,8 @@ function statusClass(s) {
     nytt: 'bdg-blue', pool: 'bdg-purple', planerad: 'bdg-sky',
     pågående: 'bdg-orange', klar: 'bdg-green', fakturerad: 'bdg-grey',
     avbruten: 'bdg-grey', utkast: 'bdg-grey', skickad: 'bdg-blue',
-    väntar: 'bdg-orange', godkänd: 'bdg-green', nekad: 'bdg-red',
-    utgången: 'bdg-grey', betald: 'bdg-green', förfallen: 'bdg-red',
+    påmind: 'bdg-purple', väntar: 'bdg-orange', godkänd: 'bdg-green', nekad: 'bdg-red',
+    utgången: 'bdg-grey', ersatt: 'bdg-grey', betald: 'bdg-green', förfallen: 'bdg-red',
     makulerad: 'bdg-grey', aktiv: 'bdg-green', pausad: 'bdg-yellow',
     avslutad: 'bdg-grey', new: 'bdg-blue', contacted: 'bdg-sky',
     snoozed: 'bdg-yellow', won: 'bdg-green', lost: 'bdg-red',
@@ -244,8 +247,8 @@ function sbdg(status) {
   const icons = {
     nytt:'circle',pool:'inbox',planerad:'calendar',pågående:'play-circle',
     klar:'check-circle',fakturerad:'receipt',avbruten:'x-circle',
-    utkast:'file',skickad:'send',väntar:'clock',godkänd:'check-circle',
-    nekad:'x-circle',utgången:'alert-circle',betald:'check-circle',
+    utkast:'file',skickad:'send',påmind:'bell',väntar:'clock',godkänd:'check-circle',
+    nekad:'x-circle',utgången:'alert-circle',ersatt:'copy',betald:'check-circle',
     förfallen:'alert-triangle',makulerad:'x'
   };
   const ico = icons[status];

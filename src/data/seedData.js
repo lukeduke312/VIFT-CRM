@@ -218,6 +218,34 @@ const SeedData = {
     { id:'PP-005', name:'Avtalskund',      defaultPriceGroupId:'PG-001', notes:'Kund med löpande avtal, lägre pris',   sortOrder:50, active:true, createdAt:'2024-01-01' },
   ],
 
+  emailTemplates: [
+    {
+      id: 'ET-001', type: 'send_offer', name: 'Skicka offert', sortOrder: 10, active: true,
+      subject: 'Offert {{offerId}}{{titleSuffix}} – VIFT Fastighetsservice',
+      body: 'Hej {{firstName}},\n\nTack för att du vände dig till oss!\n\nBifogat hittar du offert {{offerId}}{{titleSuffix}}.\n\nOfferten är giltig till {{validUntil}}.\n{{paymentLine}}\nHör gärna av dig om du har frågor eller vill diskutera offerten.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice\n{{viftPhone}}'
+    },
+    {
+      id: 'ET-002', type: 'reminder', name: 'Påminnelse offert', sortOrder: 20, active: true,
+      subject: 'Påminnelse: Offert {{offerId}}{{titleSuffix}} – VIFT Fastighetsservice',
+      body: 'Hej {{firstName}},\n\nJag ville bara påminna om offert {{offerId}}{{titleSuffix}} som vi skickade {{sentDate}}.\n\nOfferten är fortfarande giltig till {{validUntil}} och vi hoppas att du hunnit titta igenom den.\n\nHör gärna av dig om du har frågor – vi är glada att hjälpa!\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice\n{{viftPhone}}'
+    },
+    {
+      id: 'ET-003', type: 'approved', name: 'Tack för godkännande', sortOrder: 30, active: true,
+      subject: 'Bekräftelse – Offert {{offerId}} godkänd',
+      body: 'Hej {{firstName}},\n\nTack för att du valde VIFT Fastighetsservice!\n\nVi bekräftar härmed att offert {{offerId}}{{titleSuffix}} är godkänd.\n\nVi återkommer inom kort med planering och uppstart.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice\n{{viftPhone}}'
+    },
+    {
+      id: 'ET-004', type: 'followup', name: 'Uppföljning efter skickad offert', sortOrder: 40, active: true,
+      subject: 'Uppföljning: Offert {{offerId}}{{titleSuffix}}',
+      body: 'Hej {{firstName}},\n\nJag hör av mig angående offert {{offerId}}{{titleSuffix}} som vi skickade för ett tag sedan.\n\nHar du haft möjlighet att titta igenom den? Vi finns tillgängliga för frågor och kan naturligtvis justera om det behövs.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice\n{{viftPhone}}'
+    },
+    {
+      id: 'ET-005', type: 'declined', name: 'Tack för återkoppling (nekad)', sortOrder: 50, active: true,
+      subject: 'Tack för din återkoppling – Offert {{offerId}}',
+      body: 'Hej {{firstName}},\n\nTack för att du tog dig tid att återkoppla angående offert {{offerId}}{{titleSuffix}}.\n\nVi respekterar ditt beslut och hoppas att vi får möjlighet att hjälpa dig i framtiden.\n\nHör gärna av dig om du har frågor eller om situationen förändras.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice\n{{viftPhone}}'
+    },
+  ],
+
   workOrders: [
     // ── Pågående ────────────────────────────────────────────────────────────
     {
