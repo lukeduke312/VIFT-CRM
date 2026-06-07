@@ -36,7 +36,8 @@ const Router = {
     'pg-recurring':   { title: 'Återkommande ärenden',  sub: 'Schemalagda serviceärenden' },
     'pg-sales':       { title: 'Säljchanser',           sub: 'CRM pipeline' },
     'pg-activities':        { title: 'Aktiviteter',           sub: 'Uppföljningar & uppgifter' },
-    'pg-service-templates': { title: 'Offerttjänster',         sub: 'Tjänster & prismodeller' }
+    'pg-service-templates': { title: 'Offerttjänster',         sub: 'Tjänster & prismodeller' },
+    'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' }
   },
 
   currentPage: null,
@@ -153,7 +154,8 @@ const Router = {
       'pg-recurring':   () => RecurringPage.render(),
       'pg-sales':       () => SalesPage.render(),
       'pg-activities':        () => ActivitiesPage.render(params),
-      'pg-service-templates': () => ServiceTemplatesPage.render()
+      'pg-service-templates': () => ServiceTemplatesPage.render(),
+      'pg-myjobs':            () => MyJobsPage.render()
     };
 
     const renderer = renderers[pageId];

@@ -355,6 +355,9 @@ const Dashboard = {
   /* ── Widget: Snabbknappar (behörighetsfiltrad) ────────────────────── */
   _widgetQuickbtns() {
     const btns = [];
+    if (Auth.canAny(['ao_view_all','ao_view_own'])) {
+      btns.push(this._qbtn('briefcase', 'Mina jobb', "Router.showPage('pg-myjobs')"));
+    }
     if (Auth.canAny(['ao_view_all','ao_view_own','ao_create'])) {
       btns.push(this._qbtn('clipboard-list', 'Ny order',      "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)"));
     }
@@ -403,7 +406,7 @@ const Dashboard = {
       a.scheduledDate === today && !['klar','fakturerad','avbruten'].includes(a.status)
     );
     if (!hasAll && userId) {
-      todayAOs = todayAOs.filter(a => a.assignedTo === userId || (a.assignedStaff||[]).includes(userId));
+      todayAOs = todayAOs.filter(a => (a.staff||[]).includes(userId));
     }
 
     const dateStr = new Date().toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'short'});

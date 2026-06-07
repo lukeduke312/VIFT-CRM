@@ -210,5 +210,29 @@ const WorkOrderService = {
     state.workOrders.splice(idx, 1);
     persist();
     Sidebar.updateBadges();
+  },
+
+  takeFromPool(aoId) {
+    const ao   = getAO(aoId);
+    const user = state.currentUser;
+    if (!ao || ao.status !== 'pool' || !user) return null;
+    if (!(ao.staff || []).includes(user.id)) {
+      ao.staff = [...(ao.staff || []), user.id];
+    }
+    ao.status    = 'planerad';
+    ao.updatedAt = new Date().toISOString();
+    const staffName = `${user.firstName} ${user.lastName}`.trim();
+    ao.log = ao.log || [];
+    ao.log.push({
+      id: 'L' + Date.now(), type: 'taken_from_pool',
+      text: `${staffName} tog jobbet från arbetspoolen`,
+      userName: staffName, timestamp: new Date().toISOString()
+    });
+    ActivityService.log('work_order_assigned',
+      `${staffName} tog ${ao.id} från arbetspoolen`,
+      { workOrderId: aoId, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+    return ao;
   }
 };

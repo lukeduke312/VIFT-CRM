@@ -8,6 +8,7 @@ const Sidebar = {
   NAV_ITEMS: [
     { section: 'Huvudmeny' },
     { id: 'pg-dash',       icon: 'dashboard',        label: 'Dashboard' },
+    { id: 'pg-myjobs',     icon: 'briefcase',        label: 'Mina jobb',    badgeKey: 'myJobsToday' },
     { id: 'pg-ao',         icon: 'clipboard-list',   label: 'Arbetsorder',  badgeKey: 'aoNew' },
     { id: 'pg-crm',        icon: 'users',            label: 'Kunder' },
     { id: 'pg-offer',      icon: 'file-text',        label: 'Offerter' },
@@ -166,6 +167,18 @@ const Sidebar = {
 
   _getBadge(key) {
     if (!key) return null;
+    if (key === 'myJobsToday') {
+      const myId = state.currentUser ? state.currentUser.id : null;
+      if (!myId) return null;
+      const today = tdy();
+      const n = (state.workOrders || []).filter(ao =>
+        !ao.archived && !ao.deleted &&
+        (ao.staff || []).includes(myId) &&
+        ao.scheduledDate === today &&
+        !['klar','fakturerad','avbruten'].includes(ao.status)
+      ).length;
+      return n > 0 ? n : null;
+    }
     if (key === 'aoNew') {
       const n = (state.workOrders || []).filter(o => o.status === 'nytt').length;
       return n > 0 ? n : null;
