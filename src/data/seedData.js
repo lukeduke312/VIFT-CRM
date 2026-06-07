@@ -253,7 +253,7 @@ const SeedData = {
       description: 'Vatten tränger in vid balkongraden på vån 3. Behöver inspekteras och tätas.',
       customerId: 'K-001', propertyId: 'OBJ-001', address: 'Solvägen 1A, vån 3',
       contactPerson: 'Lars Eriksson', phone: '070-111 11 11', accessCode: '1234#', internalNote: '',
-      status: 'pågående', priority: 'hög', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'pågående', priority: 'hög', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001', estimatedHours: 3,
       staff: ['ST-002'],
       scheduledDate: _ds(0), scheduledStart: '08:00', scheduledEnd: '12:00',
       checklist: [

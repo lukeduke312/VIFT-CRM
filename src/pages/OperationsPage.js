@@ -25,6 +25,7 @@ const OperationsPage = {
       this._kpiRow(todayAOs.length, ongoing.length, overdue.length, urgent.length,
                    noStaff.length, clocked, readyBill.length, withNotes.length) +
       this._sectionToday(todayAOs, today) +
+      this._sectionTime(todayAOs) +
       this._sectionAttention(overdue, urgent, noStaff, withNotes) +
       this._sectionStaff(all, today) +
       this._sectionReadyBill(readyBill) +
@@ -253,6 +254,37 @@ const OperationsPage = {
 
   // ── AO-rad (återanvänd i alla sektioner) ─────────────────────────────────
 
+  _sectionTime(todayAOs) {
+    if (todayAOs.length === 0) return '';
+    let totalEstMins = 0, totalActMins = 0, overPlanCnt = 0, noEstimateCnt = 0;
+    todayAOs.forEach(ao => {
+      const entries    = TimeService.getByAO(ao.id);
+      const actualMins = TimeService.totalMinutes(entries);
+      const estMins    = Math.round((ao.estimatedHours || 0) * 60);
+      totalActMins += actualMins;
+      if (estMins > 0) {
+        totalEstMins += estMins;
+        if (actualMins > estMins * 1.15) overPlanCnt++;
+      } else {
+        noEstimateCnt++;
+      }
+    });
+    const fmtM = m => TimeService.fmtDuration(m);
+    const overColor = overPlanCnt > 0 ? 'var(--rd)' : 'var(--gr)';
+    return `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-header"><h3>${ic('bar-chart-2',14)} Tid idag</h3></div>
+        <div class="card-body" style="padding:10px 14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-bottom:10px;">
+            <div class="dr"><span class="dk">Totalt planerat</span><span class="dv">${totalEstMins > 0 ? fmtM(totalEstMins) : '<span style="color:var(--mt);">—</span>'}</span></div>
+            <div class="dr"><span class="dk">Totalt utfört</span><span class="dv">${totalActMins > 0 ? fmtM(totalActMins) : '<span style="color:var(--mt);">—</span>'}</span></div>
+            <div class="dr"><span class="dk" style="color:${overColor};">Över plan (&gt;115%)</span><span class="dv" style="color:${overColor};font-weight:700;">${overPlanCnt}</span></div>
+            <div class="dr"><span class="dk">Utan tidsestimat</span><span class="dv" style="color:${noEstimateCnt>0?'var(--orange)':'var(--gr)'};font-weight:700;">${noEstimateCnt}</span></div>
+          </div>
+        </div>
+      </div>`;
+  },
+
   _aoRow(ao, compact = false) {
     const cu      = getCu(ao.customerId);
     const staffHtml = (ao.staff || []).map(id => {
@@ -268,6 +300,17 @@ const OperationsPage = {
       ? `${ao.scheduledStart}–${ao.scheduledEnd}`
       : ao.scheduledStart ? ao.scheduledStart : '';
 
+    const timeEntries = TimeService.getByAO(ao.id);
+    const actualMins  = TimeService.totalMinutes(timeEntries);
+    const estMins     = Math.round((ao.estimatedHours || 0) * 60);
+    const timePct     = estMins > 0 ? Math.round(actualMins / estMins * 100) : null;
+    const timeColor   = timePct === null ? 'var(--mt)' : timePct <= 100 ? 'var(--gr)' : timePct <= 115 ? 'var(--orange)' : 'var(--rd)';
+    const overPlan    = timePct !== null && timePct > 115;
+    const fmtM        = m => TimeService.fmtDuration(m);
+    const timeChip    = estMins > 0
+      ? `<span style="font-size:9px;color:${timeColor};font-weight:700;">${ic('clock',8)} ${fmtM(estMins)}${actualMins > 0 ? ' / ' + fmtM(actualMins) : ''}${overPlan ? ' ⚠' : ''}</span>`
+      : (actualMins > 0 ? `<span style="font-size:9px;color:var(--mt);">${ic('clock',8)} ${fmtM(actualMins)}</span>` : '');
+
     return `<div style="display:flex;align-items:flex-start;gap:8px;padding:${compact?'6':'8'}px 14px;border-bottom:1px solid var(--br);cursor:pointer;"
         onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
       <div style="flex:1;min-width:0;">
@@ -275,6 +318,7 @@ const OperationsPage = {
           <span style="font-size:10px;font-weight:700;color:var(--mt);">${esc(ao.id)}</span>
           <span style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${esc(ao.title)}</span>
           ${sbdg(ao.status)} ${pbdg(ao.priority)}
+          ${timeChip}
         </div>
         <div style="font-size:11px;color:var(--mt);">
           ${cu ? esc(cu.name) + ' · ' : ''}${esc(ao.address||'')}

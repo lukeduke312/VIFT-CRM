@@ -79,6 +79,9 @@ const WorkOrderDetailPage = {
       <!-- Stämpling -->
       ${this._stampSection(ao, isStampedOnThis)}
 
+      <!-- Tid vs plan -->
+      ${this._timePlanBlock(ao)}
+
       <!-- Checklista -->
       <div class="card">
         <div class="card-header">
@@ -229,6 +232,110 @@ const WorkOrderDetailPage = {
           Modal.close();
           this.render({ aoId: this.aoId });
           showToast('Omplanerad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _timePlanBlock(ao) {
+    const entries    = TimeService.getByAO(ao.id);
+    const actualMins = TimeService.totalMinutes(entries);
+    const estMins    = Math.round((ao.estimatedHours || 0) * 60);
+    if (estMins === 0 && actualMins === 0) return '';
+    const fmt = m => TimeService.fmtDuration(m);
+    const canEdit = Auth.can('ao_edit');
+
+    if (estMins > 0) {
+      const pct   = Math.round((actualMins / estMins) * 100);
+      const diff  = actualMins - estMins;
+      const color = pct <= 100 ? 'var(--gr)' : pct <= 115 ? 'var(--orange)' : 'var(--rd)';
+      const cls   = pct <= 100 ? 'bdg-green' : pct <= 115 ? 'bdg-orange' : 'bdg-red';
+      const lbl   = pct <= 100 ? 'Under/inom plan' : pct <= 115 ? 'Nära gräns' : 'Över plan';
+      const diffStr = diff === 0 ? '±0' : diff > 0 ? `+${fmt(diff)}` : `−${fmt(-diff)}`;
+      const barW  = Math.min(pct, 100);
+      const overW = pct > 100 ? Math.min(pct - 100, 100) : 0;
+
+      return `
+        <div class="card" style="margin-bottom:2px;">
+          <div class="card-header">
+            <h3>${ic('bar-chart-2',14)} Tid vs plan</h3>
+            ${canEdit ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.editEstimatedTime('${ao.id}')">${ic('pencil',13)} Ändra</button>` : ''}
+          </div>
+          <div class="card-body" style="padding:10px 14px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-bottom:10px;">
+              <div class="dr"><span class="dk">Planerat</span><span class="dv">${fmt(estMins)}</span></div>
+              <div class="dr"><span class="dk">Utfört</span><span class="dv">${actualMins > 0 ? fmt(actualMins) : '<span style="color:var(--mt);">—</span>'}</span></div>
+              <div class="dr"><span class="dk">Differens</span><span class="dv" style="color:${color};font-weight:700;">${diffStr}</span></div>
+              <div class="dr"><span class="dk">Andel av plan</span><span class="dv"><strong>${pct} %</strong></span></div>
+            </div>
+            <div style="height:6px;background:var(--br);border-radius:3px;overflow:hidden;margin-bottom:4px;">
+              <div style="height:100%;width:${barW}%;background:${color};border-radius:3px;"></div>
+            </div>
+            ${overW > 0 ? `<div style="height:4px;background:var(--br);border-radius:3px;overflow:hidden;margin-bottom:6px;">
+              <div style="height:100%;width:${overW}%;background:${color};border-radius:3px;"></div>
+            </div>` : '<div style="margin-bottom:6px;"></div>'}
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
+              <span class="bdg ${cls}">${lbl}</span>
+              ${pct > 100 && ao.status === 'klar' ? `<span style="font-size:11px;color:var(--rd);">${ic('alert-triangle',10)} Faktisk tid överstiger plan med ${fmt(diff)}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="card" style="margin-bottom:2px;">
+        <div class="card-header">
+          <h3>${ic('bar-chart-2',14)} Tid vs plan</h3>
+          ${canEdit ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.editEstimatedTime('${ao.id}')">${ic('pencil',13)} Ändra</button>` : ''}
+        </div>
+        <div class="card-body" style="padding:10px 14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div>
+              <div style="font-size:12px;color:var(--mt);margin-bottom:2px;">${ic('clock',12)} Ingen uppskattad tid satt</div>
+              ${actualMins > 0 ? `<div style="font-size:13px;font-weight:700;">Utfört: ${fmt(actualMins)}</div>` : ''}
+            </div>
+            ${canEdit ? `<button class="btn bp bsm" onclick="WorkOrderDetailPage.editEstimatedTime('${ao.id}')">${ic('plus',12)} Sätt tid</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+  },
+
+  editEstimatedTime(aoId) {
+    if (!Auth.require('ao_edit')) return;
+    const ao = getAO(aoId);
+    if (!ao) return;
+    const estMins = Math.round((ao.estimatedHours || 0) * 60);
+    const curH = Math.floor(estMins / 60);
+    const curM = estMins % 60;
+    Modal.open({
+      title: `${ic('clock',15)} Uppskattad tid — ${esc(aoId)}`,
+      body: `
+        <div class="g2" style="margin-bottom:12px;">
+          <div class="fg"><label>Timmar</label><input type="number" id="et-hours" min="0" max="999" value="${curH}" style="text-align:center;font-size:18px;font-weight:700;"></div>
+          <div class="fg"><label>Minuter</label><input type="number" id="et-mins" min="0" max="59" value="${curM}" style="text-align:center;font-size:18px;font-weight:700;"></div>
+        </div>
+        <div class="fg"><label>Kommentar (valfritt)</label><input type="text" id="et-comment" placeholder="T.ex. Ändrad efter besiktning"></div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const h = parseInt(document.getElementById('et-hours')?.value || '0', 10) || 0;
+          const m = parseInt(document.getElementById('et-mins')?.value  || '0', 10) || 0;
+          const comment = (document.getElementById('et-comment')?.value || '').trim();
+          const newHours = h + m / 60;
+          const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Okänd';
+          ao.estimatedHours = newHours;
+          ao.updatedAt = new Date().toISOString();
+          ao.log = ao.log || [];
+          ao.log.push({
+            id: 'L' + Date.now(), type: 'estimated_time_changed',
+            text: `${by} satte uppskattad tid: ${TimeService.fmtDuration(h * 60 + m)}${comment ? ' — ' + comment : ''}`,
+            userName: by, timestamp: new Date().toISOString()
+          });
+          persist();
+          Modal.close();
+          WorkOrderDetailPage.render({ aoId });
+          showToast('Uppskattad tid uppdaterad');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]

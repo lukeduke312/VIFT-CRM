@@ -146,6 +146,12 @@ const MyJobsPage = {
     const active   = isStamped && stampAoId === ao.id;
     const isLate   = ao.scheduledDate && ao.scheduledDate < tdy() && !['klar','fakturerad','avbruten'].includes(ao.status);
 
+    const timeEntries = TimeService.getByAO(ao.id);
+    const actualMins  = TimeService.totalMinutes(timeEntries);
+    const estMins     = Math.round((ao.estimatedHours || 0) * 60);
+    const timePct     = estMins > 0 ? Math.round(actualMins / estMins * 100) : null;
+    const timeColor   = timePct === null ? 'var(--mt)' : timePct <= 100 ? 'var(--gr)' : timePct <= 115 ? 'var(--orange)' : 'var(--rd)';
+
     const meta = [];
     if (cuName !== '—') meta.push(esc(cuName));
     if (ao.address)     meta.push(esc(ao.address));
@@ -187,7 +193,10 @@ const MyJobsPage = {
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
         </div>
-        ${meta.length ? `<div style="font-size:11px;color:var(--mt);line-height:1.5;margin-bottom:4px;">${meta.join(' · ')}</div>` : ''}
+        ${meta.length ? `<div style="font-size:11px;color:var(--mt);line-height:1.5;margin-bottom:2px;">${meta.join(' · ')}</div>` : ''}
+        <div style="font-size:10px;color:${timeColor};margin-bottom:4px;">
+          ${ic('clock',9)} ${estMins > 0 ? 'Plan: ' + TimeService.fmtDuration(estMins) + ' · ' : ''}Utfört: ${actualMins > 0 ? TimeService.fmtDuration(actualMins) : '—'}${timePct !== null ? ' (' + timePct + '%)' : estMins === 0 ? ' · Ingen tidsplan' : ''}
+        </div>
         ${chkHtml ? `<div style="margin-bottom:4px;">${chkHtml}</div>` : ''}
         ${compact
           ? `<button class="btn bghost bsm" style="font-size:11px;margin-top:4px;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',10)} Öppna</button>`
