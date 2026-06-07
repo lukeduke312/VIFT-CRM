@@ -1557,7 +1557,7 @@ const OffersPage = {
       tmpl.fields.forEach(f => {
         if (f.isRut || f.isRot) return;  // handled by _svcReduction
         if (f.type === 'pricegroup') {
-          const pgs = state.priceGroups || [];
+          const pgs = (state.priceGroups || []).filter(p => p.billingType !== 'monthly');
           const defId = f.def || (pgs[0] && pgs[0].id) || '';
           this._svcFields[f.id] = defId;
           const pg = pgs.find(p => p.id === defId);
@@ -1607,7 +1607,7 @@ const OffersPage = {
 
     // ── Price group selector ──
     pgF.forEach(f => {
-      const pgs = (state.priceGroups || []).filter(p => p.active !== false);
+      const pgs = (state.priceGroups || []).filter(p => p.active !== false && p.billingType !== 'monthly');
       const curVal = this._svcFields[f.id] || f.def || (pgs[0] && pgs[0].id) || '';
       html += `<div style="margin-bottom:10px;">
         <label style="font-size:10px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
@@ -3993,7 +3993,7 @@ const ServiceTemplatesPage = {
       else if (f.type==='bool')          this._testFields[f.id] = false;
       else if (f.type==='number')        this._testFields[f.id] = 0;
       else if (f.type==='pricegroup') {
-        const pgs = state.priceGroups || [];
+        const pgs = (state.priceGroups || []).filter(p => p.billingType !== 'monthly');
         const defId = f.def || (pgs[0]&&pgs[0].id) || '';
         this._testFields[f.id] = defId;
         const pg = pgs.find(p=>p.id===defId);
@@ -4015,10 +4015,10 @@ const ServiceTemplatesPage = {
         <input type="checkbox" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.checked;ServiceTemplatesPage._updateTestPreview('${id}')">
         <span>${f.addLabel||f.label}</span></label></div>`;
       if (f.type === 'pricegroup') {
-        const pgs = state.priceGroups || [];
+        const pgs = (state.priceGroups || []).filter(p => p.billingType !== 'monthly');
         const defVal = f.def || (pgs[0]&&pgs[0].id) || '';
         return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
-          <select style="width:100%;" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._testFields['rate']=(state.priceGroups||[]).find(p=>p.id===this.value)?.hourRate||0;ServiceTemplatesPage._updateTestPreview('${id}')">
+          <select style="width:100%;" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._testFields['rate']=(state.priceGroups||[]).filter(p=>p.billingType!=='monthly').find(p=>p.id===this.value)?.hourRate||0;ServiceTemplatesPage._updateTestPreview('${id}')">
             ${pgs.map(pg=>`<option value="${pg.id}" ${(f.def||defVal)===pg.id?'selected':''}>${esc(pg.name)} (${fmt(pg.hourRate)} kr/tim)</option>`).join('')}
           </select></div>`;
       }

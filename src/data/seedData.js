@@ -203,11 +203,11 @@ const SeedData = {
   ],
 
   priceGroups: [
-    { id:'PG-001', name:'Fastighetsservice avtal',    hourRate:392,  description:'Äldre/låg prisnivå, återkommande kund',     active:true, createdAt:'2024-01-01' },
-    { id:'PG-002', name:'Fastighetsservice standard', hourRate:430,  description:'Normal BRF och fastighetsägare',             active:true, createdAt:'2024-01-01' },
-    { id:'PG-003', name:'Engångsjobb / privat',       hourRate:595,  description:'Privatkund eller uppdrag utan avtal',         active:true, createdAt:'2024-01-01' },
-    { id:'PG-004', name:'Akut / kväll / helg',        hourRate:695,  description:'Jour, kort varsel, obekväm arbetstid',       active:true, createdAt:'2024-01-01' },
-    { id:'PG-005', name:'Teknisk förvaltning',        hourRate:0,    description:'Månadsavtal, pris sätts manuellt per avtal', active:true, createdAt:'2024-01-01' },
+    { id:'PG-001', name:'Fastighetsservice avtal',    hourRate:392, billingType:'hourly',  description:'Äldre/låg prisnivå, återkommande kund',     active:true, createdAt:'2024-01-01' },
+    { id:'PG-002', name:'Fastighetsservice standard', hourRate:430, billingType:'hourly',  description:'Normal BRF och fastighetsägare',             active:true, createdAt:'2024-01-01' },
+    { id:'PG-003', name:'Engångsjobb / privat',       hourRate:595, billingType:'hourly',  description:'Privatkund eller uppdrag utan avtal',         active:true, createdAt:'2024-01-01' },
+    { id:'PG-004', name:'Akut / kväll / helg',        hourRate:695, billingType:'hourly',  description:'Jour, kort varsel, obekväm arbetstid',       active:true, createdAt:'2024-01-01' },
+    { id:'PG-005', name:'Teknisk förvaltning',        hourRate:0,   billingType:'monthly', description:'Månadsavtal, pris sätts manuellt per avtal', active:true, createdAt:'2024-01-01' },
   ],
 
   priceProfiles: [
