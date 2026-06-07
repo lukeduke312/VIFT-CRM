@@ -124,7 +124,9 @@ const ServiceTemplateService = {
       } else if (svc.pricingModel === 'hourly') {
         const hrs  = parseFloat(f.hours || f.qty || 0);
         const per  = parseInt(f.periods || 1) || 1;
-        const rate = parseFloat(f.rate || svc.basePricePerUnit || 695);
+        const pgId = f.priceGroupId || svc.defaultPriceGroupId;
+        const pg   = pgId ? (state.priceGroups||[]).find(p=>p.id===pgId) : null;
+        const rate = parseFloat(f.rate) || (pg && pg.hourRate) || svc.basePricePerUnit || 430;
         const mat  = parseFloat(f.material || 0);
         const type = f.type || '';
         const typeStr = type ? ` – ${type}` : '';
@@ -142,7 +144,9 @@ const ServiceTemplateService = {
         pricePerUnit = monthly;
 
       } else if (svc.pricingModel === 'hourly_custom') {
-        const rate = parseFloat(f.rate || svc.basePricePerUnit || 695);
+        const pgId = f.priceGroupId || svc.defaultPriceGroupId;
+        const pg   = pgId ? (state.priceGroups||[]).find(p=>p.id===pgId) : null;
+        const rate = parseFloat(f.rate) || (pg && pg.hourRate) || svc.basePricePerUnit || 430;
         const hrs  = parseFloat(f[qtyField] || f.qty || 0);
         const mat  = parseFloat(f.material || 0);
         ls.push({desc: f.desc_svc || svc.name, qty:hrs, unit:'tim', price:rate});
@@ -174,6 +178,9 @@ const ServiceTemplateService = {
       return {ls, exVat, rutAmt, tierLbl, pricePerM2:pricePerUnit, inputValues:{...f}, priceRuleRef:svc.id};
     };
   },
+
+  getPriceGroups() { return state.priceGroups || []; },
+  getPriceProfiles() { return state.priceProfiles || []; },
 
   modelLabel(m) {
     return {

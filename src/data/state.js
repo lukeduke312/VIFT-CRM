@@ -20,6 +20,7 @@ let state = {
   timeEntries: [],
   articles: [],
   priceGroups: [],
+  priceProfiles: [],
   titles: [],
   recurringOrders: [],
   salesOpportunities: [],
@@ -62,6 +63,7 @@ function initState() {
   state.staff              = s.get('staff')         || SeedData.staff;
   state.properties         = s.get('properties')   || SeedData.properties;
   state.priceGroups        = s.get('priceGroups')  || SeedData.priceGroups;
+  state.priceProfiles      = s.get('priceProfiles') || SeedData.priceProfiles || [];
   state.salesOpportunities = s.get('salesOpps')    || SeedData.salesOpportunities;
   state.activityLog        = s.get('activityLog')  || SeedData.activityLog;
   state.settings           = s.get('settings')     || SeedData.settings;
@@ -114,7 +116,8 @@ function persist() {
   s.set('invoices',     state.invoices);
   s.set('staff',        state.staff);
   s.set('properties',   state.properties);
-  s.set('priceGroups',  state.priceGroups);
+  s.set('priceGroups',   state.priceGroups);
+  s.set('priceProfiles', state.priceProfiles);
   s.set('salesOpps',    state.salesOpportunities);
   s.set('activityLog',  state.activityLog);
   s.set('settings',     state.settings);

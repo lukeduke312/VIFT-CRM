@@ -1556,7 +1556,13 @@ const OffersPage = {
       this._svcReduction = tmpl.defaultReduction || 'ingen';
       tmpl.fields.forEach(f => {
         if (f.isRut || f.isRot) return;  // handled by _svcReduction
-        if (f.def !== undefined)           this._svcFields[f.id] = f.def;
+        if (f.type === 'pricegroup') {
+          const pgs = state.priceGroups || [];
+          const defId = f.def || (pgs[0] && pgs[0].id) || '';
+          this._svcFields[f.id] = defId;
+          const pg = pgs.find(p => p.id === defId);
+          if (pg && !this._svcFields['rate']) this._svcFields['rate'] = pg.hourRate;
+        } else if (f.def !== undefined)           this._svcFields[f.id] = f.def;
         else if (f.type==='chips'&&f.opts) this._svcFields[f.id] = f.opts[0];
         else if (f.type==='bool')          this._svcFields[f.id] = false;
         else if (f.type==='number')        this._svcFields[f.id] = 0;
@@ -1578,6 +1584,7 @@ const OffersPage = {
     const numF  = tmpl.fields.filter(f=>f.type==='number');
     const chipF = tmpl.fields.filter(f=>f.type==='chips');
     const txtF  = tmpl.fields.filter(f=>f.type==='text');
+    const pgF   = tmpl.fields.filter(f=>f.type==='pricegroup');
     const boolF = tmpl.fields.filter(f=>f.type==='bool'&&!f.isRut&&!f.isRot);
     const curRed = this._svcReduction;
     let html = '';
@@ -1595,6 +1602,19 @@ const OffersPage = {
             oninput="OffersPage._svcFields['${f.id}']=parseFloat(this.value)||0;OffersPage._updateSvcPreview()">
           ${unit?`<span style="font-size:14px;color:var(--mt);font-weight:700;">${unit}</span>`:''}
         </div>
+      </div>`;
+    });
+
+    // ── Price group selector ──
+    pgF.forEach(f => {
+      const pgs = (state.priceGroups || []).filter(p => p.active !== false);
+      const curVal = this._svcFields[f.id] || f.def || (pgs[0] && pgs[0].id) || '';
+      html += `<div style="margin-bottom:10px;">
+        <label style="font-size:10px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
+        <select id="svc-f-${f.id}" style="width:100%;font-size:13px;font-weight:600;padding:6px 8px;border:1.5px solid var(--br);border-radius:var(--rs);"
+          onchange="OffersPage._svcFields['${f.id}']=this.value;var _pg=(state.priceGroups||[]).find(p=>p.id===this.value);if(_pg){OffersPage._svcFields['rate']=_pg.hourRate;var rEl=document.getElementById('svc-f-rate');if(rEl)rEl.value=_pg.hourRate;}OffersPage._updateSvcPreview()">
+          ${pgs.map(pg => `<option value="${pg.id}" ${curVal===pg.id?'selected':''}>${esc(pg.name)} (${fmt(pg.hourRate)} kr/tim)</option>`).join('')}
+        </select>
       </div>`;
     });
 
@@ -1715,9 +1735,13 @@ const OffersPage = {
       if (f.type === 'chips' || f.isRut || f.isRot) return;
       const el = document.getElementById('svc-f-' + f.id);
       if (!el) return;
-      if (f.type==='bool')        this._svcFields[f.id] = el.checked;
-      else if (f.type==='number') this._svcFields[f.id] = parseFloat(el.value)||0;
-      else                        this._svcFields[f.id] = el.value;
+      if (f.type==='bool')            this._svcFields[f.id] = el.checked;
+      else if (f.type==='number')     this._svcFields[f.id] = parseFloat(el.value)||0;
+      else if (f.type==='pricegroup') {
+        this._svcFields[f.id] = el.value;
+        const _pg = (state.priceGroups||[]).find(p=>p.id===el.value);
+        if (_pg) this._svcFields['rate'] = _pg.hourRate;
+      } else                          this._svcFields[f.id] = el.value;
     });
     // Inject unified reduction choice into calc fields
     const fields = {
@@ -1784,9 +1808,13 @@ const OffersPage = {
       if (f.type==='chips' || f.isRut || f.isRot) return;
       const el = document.getElementById('svc-f-' + f.id);
       if (!el) return;
-      if (f.type==='bool')        this._svcFields[f.id] = el.checked;
-      else if (f.type==='number') this._svcFields[f.id] = parseFloat(el.value)||0;
-      else                        this._svcFields[f.id] = el.value;
+      if (f.type==='bool')            this._svcFields[f.id] = el.checked;
+      else if (f.type==='number')     this._svcFields[f.id] = parseFloat(el.value)||0;
+      else if (f.type==='pricegroup') {
+        this._svcFields[f.id] = el.value;
+        const _pg = (state.priceGroups||[]).find(p=>p.id===el.value);
+        if (_pg) this._svcFields['rate'] = _pg.hourRate;
+      } else                          this._svcFields[f.id] = el.value;
     });
     // Inject unified reduction
     this._svcFields.rut = this._svcReduction === 'rut';
@@ -3161,8 +3189,24 @@ const ArticlesPage = {
 
 /* ── Prisgrupper ──────────────────────── */
 const PriceGroupsPage = {
+  _tab: 'grupper',
+
   render() {
     const el = document.getElementById('pg-pricegroups-content');
+    if (!el) return;
+    const tab = this._tab || 'grupper';
+    el.innerHTML = `
+      <div class="ftabs" style="margin-bottom:8px;">
+        <button class="ft ${tab==='grupper'?'on':''}" onclick="PriceGroupsPage._tab='grupper';PriceGroupsPage.render()">Prisgrupper</button>
+        <button class="ft ${tab==='profiler'?'on':''}" onclick="PriceGroupsPage._tab='profiler';PriceGroupsPage.render()">Prisprofiler</button>
+      </div>
+      <div id="pg-pricegroups-tab-body"></div>`;
+    if (tab === 'grupper') this._renderGrupper();
+    else this._renderProfiler();
+  },
+
+  _renderGrupper() {
+    const el = document.getElementById('pg-pricegroups-tab-body');
     if (!el) return;
     const pgs = state.priceGroups || [];
     el.innerHTML =
@@ -3184,6 +3228,31 @@ const PriceGroupsPage = {
           </div>`).join(''));
   },
 
+  _renderProfiler() {
+    const el = document.getElementById('pg-pricegroups-tab-body');
+    if (!el) return;
+    const pps = (state.priceProfiles || []).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+    const pgs = state.priceGroups || [];
+    const pgName = id => { const g = pgs.find(x=>x.id===id); return g ? g.name : (id||'—'); };
+    el.innerHTML =
+      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+         <h3 style="flex:1;font-size:14px;font-weight:700;">Prisprofiler</h3>
+         <button class="btn bp bsm" onclick="PriceGroupsPage.openCreateProfile()">${ic('plus',14)} Ny profil</button>
+       </div>` +
+      (pps.length === 0
+        ? `<div class="empty">${ic('users',36)}<h3>Inga prisprofiler</h3></div>`
+        : pps.map(pp => `
+          <div class="list-item">
+            <div class="item-row">
+              <div style="flex:1;min-width:0;">
+                <div class="item-title" style="font-weight:700;">${esc(pp.name)}</div>
+                <div class="item-sub">${pgName(pp.defaultPriceGroupId)}${pp.notes ? ' · ' + esc(pp.notes) : ''}</div>
+              </div>
+              <button class="btn bs bxs" onclick="PriceGroupsPage.openEditProfile('${pp.id}')">${ic('pencil',13)}</button>
+            </div>
+          </div>`).join(''));
+  },
+
   _formHtml(pg) {
     return `
       <div class="fg"><label>Namn <span style="color:var(--rd)">*</span></label>
@@ -3192,6 +3261,20 @@ const PriceGroupsPage = {
         <input type="number" id="pg-rate" value="${pg?pg.hourRate||0:0}" min="0"></div>
       <div class="fg"><label>Beskrivning</label>
         <input id="pg-desc" value="${pg?pg.description||'':''}" placeholder="Valfri beskrivning"></div>`;
+  },
+
+  _profileFormHtml(pp) {
+    const pgs = state.priceGroups || [];
+    return `
+      <div class="fg"><label>Namn <span style="color:var(--rd)">*</span></label>
+        <input id="pp-name" value="${pp?esc(pp.name||''):''}" placeholder="T.ex. BRF, Privatkund"></div>
+      <div class="fg"><label>Standard prisgrupp</label>
+        <select id="pp-pg">
+          <option value="">— Ingen —</option>
+          ${pgs.map(g=>`<option value="${g.id}" ${pp&&pp.defaultPriceGroupId===g.id?'selected':''}>${esc(g.name)} (${fmt(g.hourRate)} kr/tim)</option>`).join('')}
+        </select></div>
+      <div class="fg"><label>Anteckningar</label>
+        <textarea id="pp-notes" rows="2">${pp?esc(pp.notes||''):''}</textarea></div>`;
   },
 
   openCreate() {
@@ -3222,6 +3305,32 @@ const PriceGroupsPage = {
     });
   },
 
+  openCreateProfile() {
+    if (!Auth.require('article_manage')) return;
+    Modal.open({
+      title: 'Ny prisprofil',
+      body: this._profileFormHtml(null),
+      buttons: [
+        { label: 'Skapa', cls: 'btn bp', onClick: () => PriceGroupsPage._saveProfile(null) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('pp-name')?.focus(), 80);
+  },
+
+  openEditProfile(ppId) {
+    const pp = (state.priceProfiles||[]).find(x=>x.id===ppId);
+    if (!pp) return;
+    Modal.open({
+      title: pp.name,
+      body: this._profileFormHtml(pp),
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => PriceGroupsPage._saveProfile(ppId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
   _save(pgId) {
     const name = document.getElementById('pg-name')?.value.trim();
     if (!name) { showToast('Namn krävs'); return; }
@@ -3240,6 +3349,29 @@ const PriceGroupsPage = {
       if (idx < 0) return;
       state.priceGroups[idx] = { ...state.priceGroups[idx], ...data };
       showToast('Prisgrupp uppdaterad');
+    }
+    persist(); Modal.close(); this.render();
+  },
+
+  _saveProfile(ppId) {
+    const name = document.getElementById('pp-name')?.value.trim();
+    if (!name) { showToast('Namn krävs'); return; }
+    const data = {
+      name,
+      defaultPriceGroupId: document.getElementById('pp-pg')?.value || '',
+      notes: document.getElementById('pp-notes')?.value.trim() || '',
+      updatedAt: new Date().toISOString()
+    };
+    state.priceProfiles = state.priceProfiles || [];
+    if (!ppId) {
+      const maxSort = state.priceProfiles.reduce((m,p)=>Math.max(m,p.sortOrder||0),0);
+      state.priceProfiles.push({ ...data, id: 'PP-' + String(state.priceProfiles.length+1).padStart(3,'0'), active: true, sortOrder: maxSort+10, createdAt: new Date().toISOString() });
+      showToast(`${name} skapad`);
+    } else {
+      const idx = state.priceProfiles.findIndex(x=>x.id===ppId);
+      if (idx < 0) return;
+      state.priceProfiles[idx] = { ...state.priceProfiles[idx], ...data };
+      showToast('Prisprofil uppdaterad');
     }
     persist(); Modal.close(); this.render();
   }
@@ -3856,11 +3988,17 @@ const ServiceTemplatesPage = {
     this._testReduction = svc.defaultReduction || 'ingen';
     // Pre-fill defaults
     (svc.fields||[]).forEach(f => {
-      if (f.def !== undefined)         this._testFields[f.id] = f.def;
+      if (f.def !== undefined)           this._testFields[f.id] = f.def;
       else if (f.type==='chips'&&f.opts) this._testFields[f.id] = f.opts[0];
       else if (f.type==='bool')          this._testFields[f.id] = false;
       else if (f.type==='number')        this._testFields[f.id] = 0;
-      else                               this._testFields[f.id] = '';
+      else if (f.type==='pricegroup') {
+        const pgs = state.priceGroups || [];
+        const defId = f.def || (pgs[0]&&pgs[0].id) || '';
+        this._testFields[f.id] = defId;
+        const pg = pgs.find(p=>p.id===defId);
+        if (pg && !this._testFields['rate']) this._testFields['rate'] = pg.hourRate;
+      } else                               this._testFields[f.id] = '';
     });
     const redOpts = [{v:'ingen',l:'Ingen'},{v:'rut',l:'RUT 50%'},{v:'rot',l:'ROT 30%'}];
     const fieldHtml = (svc.fields||[]).filter(f=>!f.isRut&&!f.isRot).map(f => {
@@ -3876,6 +4014,14 @@ const ServiceTemplatesPage = {
       if (f.type === 'bool') return `<div style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
         <input type="checkbox" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.checked;ServiceTemplatesPage._updateTestPreview('${id}')">
         <span>${f.addLabel||f.label}</span></label></div>`;
+      if (f.type === 'pricegroup') {
+        const pgs = state.priceGroups || [];
+        const defVal = f.def || (pgs[0]&&pgs[0].id) || '';
+        return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
+          <select style="width:100%;" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._testFields['rate']=(state.priceGroups||[]).find(p=>p.id===this.value)?.hourRate||0;ServiceTemplatesPage._updateTestPreview('${id}')">
+            ${pgs.map(pg=>`<option value="${pg.id}" ${(f.def||defVal)===pg.id?'selected':''}>${esc(pg.name)} (${fmt(pg.hourRate)} kr/tim)</option>`).join('')}
+          </select></div>`;
+      }
       return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
         <input type="text" value="" style="width:100%;"
           oninput="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._updateTestPreview('${id}')"></div>`;
