@@ -35,7 +35,7 @@ const Router = {
     'pg-admin':       { title: 'Admin',                 sub: 'Systeminställningar' },
     'pg-recurring':   { title: 'Återkommande ärenden',  sub: 'Schemalagda serviceärenden' },
     'pg-sales':       { title: 'Säljchanser',           sub: 'CRM pipeline' },
-    'pg-activities':        { title: 'Aktiviteter',           sub: 'Uppföljningar & uppgifter' },
+    'pg-activities':        { title: 'Att göra',              sub: 'Uppföljningar & åtgärder' },
     'pg-service-templates': { title: 'Offerttjänster',         sub: 'Tjänster & prismodeller' },
     'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' },
     'pg-operations':        { title: 'Dagens drift',           sub: 'Chefsöversikt & driftläge' }

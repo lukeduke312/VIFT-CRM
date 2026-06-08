@@ -247,6 +247,16 @@
   text-align: center;
   line-height: 14px;
 }
+.ni .nbdg-soon {
+  background: rgba(255,255,255,.12);
+  color: rgba(255,255,255,.45);
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  white-space: nowrap;
+  line-height: 14px;
+}
 
 .nav-spacer { flex: 1; }
 
@@ -468,4 +478,32 @@
   body.sidebar-collapsed .nav-user-row > span:last-child {
     display: none;
   }
+}
+
+/* ── Right-positioned sidebar ─────────────────────── */
+@media (min-width: 1024px) {
+  body.sidebar-right #app {
+    flex-direction: row-reverse;
+  }
+  body.sidebar-right .ni.on::before {
+    left: auto;
+    right: 0;
+    border-radius: 3px 0 0 3px;
+  }
+}
+@media (max-width: 1023px) {
+  body.sidebar-right #bottom-nav {
+    left: auto;
+    right: 0;
+    transform: translateX(100%);
+  }
+  body.sidebar-right #bottom-nav.open {
+    transform: translateX(0);
+  }
+}
+
+/* ── Touch-targets (mobil) ─────────────────────────── */
+@media (max-width: 1023px) {
+  .btn { min-height: 44px; }
+  .bsm { min-height: 40px; }
 }

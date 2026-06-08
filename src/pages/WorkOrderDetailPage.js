@@ -133,7 +133,7 @@ const WorkOrderDetailPage = {
       <!-- Tidslinje/logg -->
       <div class="card">
         <div class="card-header">
-          <h3>${ic('activity',14)} Tidslinje & logg</h3>
+          <h3>${ic('activity',14)} Händelselogg</h3>
           <div style="display:flex;gap:5px;">
             <button class="btn bxs bsu" style="font-size:11px;padding:4px 10px;" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
             <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>

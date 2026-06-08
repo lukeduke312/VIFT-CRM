@@ -4628,7 +4628,7 @@ const AdminPage = {
           <div class="dr"><span class="dk">Fakturor</span><span class="dv">${(state.invoices||[]).length} st</span></div>
           <div class="dr"><span class="dk">Återkommande</span><span class="dv">${(state.recurringOrders||[]).length} st</span></div>
           <div class="dr"><span class="dk">Tidsposter</span><span class="dv">${(state.timeEntries||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Aktivitetslogg</span><span class="dv">${(state.activityLog||[]).length} poster</span></div>
+          <div class="dr"><span class="dk">Revisionslogg</span><span class="dv">${(state.activityLog||[]).length} poster</span></div>
         </div>
       </div>
 

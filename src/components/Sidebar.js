@@ -13,22 +13,22 @@ const Sidebar = {
     { id: 'pg-crm',        icon: 'users',            label: 'Kunder' },
     { id: 'pg-offer',      icon: 'file-text',        label: 'Offerter' },
     { id: 'pg-sales',      icon: 'target',           label: 'Säljchanser',  badgeKey: 'salesNew' },
-    { id: 'pg-activities', icon: 'bell',             label: 'Aktiviteter',  badgeKey: 'activitiesOverdue' },
+    { id: 'pg-activities', icon: 'bell',             label: 'Att göra',     badgeKey: 'activitiesOverdue' },
     { id: 'pg-invoices',   icon: 'receipt',          label: 'Fakturering' },
     { section: 'Fastigheter' },
     { id: 'pg-objects',    icon: 'building-2',       label: 'Fastigheter' },
-    { id: 'pg-contracts',  icon: 'file-check',       label: 'Kontrakt' },
+    { id: 'pg-contracts',  icon: 'file-check',       label: 'Kontrakt',     comingSoon: true },
     { id: 'pg-rondering',  icon: 'clipboard-check',  label: 'Rondering' },
     { section: 'Tid & Admin' },
     { id: 'pg-operations', icon: 'layout-dashboard',  label: 'Dagens drift',  badgeKey: 'operationsAlert' },
     { id: 'pg-recurring',  icon: 'refresh-cw',        label: 'Återkommande' },
     { id: 'pg-tid',        icon: 'clock',            label: 'Tid & stämpla' },
-    { id: 'pg-calendar',   icon: 'calendar',         label: 'Kalender' },
-    { id: 'pg-reports',    icon: 'bar-chart-2',      label: 'Rapporter' },
+    { id: 'pg-calendar',   icon: 'calendar',         label: 'Kalender',     comingSoon: true },
+    { id: 'pg-reports',    icon: 'bar-chart-2',      label: 'Rapporter',    comingSoon: true },
     { section: 'Register' },
     { id: 'pg-articles',   icon: 'package',          label: 'Artiklar' },
     { id: 'pg-pricegroups',icon: 'dollar-sign',      label: 'Prisgrupper' },
-    { id: 'pg-payroll',    icon: 'wallet',           label: 'Löneunderlag' },
+    { id: 'pg-payroll',    icon: 'wallet',           label: 'Löneunderlag', comingSoon: true },
     { section: 'System' },
     { id: 'pg-staff',      icon: 'user-cog',         label: 'Personal' },
     { id: 'pg-admin',      icon: 'settings',         label: 'Admin' }
@@ -90,7 +90,7 @@ const Sidebar = {
         <button class="ni" id="nav-${item.id}" onclick="Router.showPage('${item.id}')">
           <span class="ico">${ic(item.icon)}</span>
           <span class="lbl">${item.label}</span>
-          ${badge ? `<span class="nbdg">${badge}</span>` : ''}
+          ${item.comingSoon ? '<span class="nbdg-soon">Snart</span>' : (badge ? `<span class="nbdg">${badge}</span>` : '')}
         </button>`;
     });
 
@@ -148,10 +148,81 @@ const Sidebar = {
       body: `<p style="font-size:13px;color:var(--mt);margin-bottom:4px;">Roll: ${state.currentUser ? cap(state.currentUser.role) : '—'}</p>
              <p style="font-size:13px;color:var(--mt);">Inloggad: ${state.currentUser ? state.currentUser.username : '—'}</p>`,
       buttons: [
+        { label: `${ic('settings',14)} Mina inställningar`, cls: 'btn bs bfull', onClick: () => { Modal.close(); Sidebar.showSettings(); } },
         { label: 'Logga ut', cls: 'btn bd bfull', onClick: () => { Modal.close(); Auth.logout(); } },
         { label: 'Avbryt',   cls: 'btn bs',        onClick: () => Modal.close() }
       ]
     });
+  },
+
+  showSettings() {
+    const uid = state.currentUser ? state.currentUser.id : null;
+    if (!uid) return;
+    const p   = UserPrefsService.get(uid);
+    const pos = p.sidebarPosition || 'left';
+    const den = p.density || 'normal';
+    const acc = p.accentColor || '';
+
+    Modal.open({
+      title: 'Mina inställningar',
+      body: `
+        <div class="fg">
+          <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Sidopanelens position</label>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button id="pref-pos-left"  class="btn bsm ${pos==='left' ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('sidebarPosition','left','pos')">${ic('panel-left',14)} Vänster</button>
+            <button id="pref-pos-right" class="btn bsm ${pos==='right'?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('sidebarPosition','right','pos')">${ic('panel-left-open',14)} Höger</button>
+          </div>
+        </div>
+        <div class="fg" style="margin-top:14px;">
+          <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Täthet</label>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button id="pref-den-compact" class="btn bsm ${den==='compact'?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','compact','den')">Kompakt</button>
+            <button id="pref-den-normal"  class="btn bsm ${den==='normal' ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','normal', 'den')">Normal</button>
+            <button id="pref-den-airy"    class="btn bsm ${den==='airy'   ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','airy',   'den')">Luftig</button>
+          </div>
+        </div>
+        <div class="fg" style="margin-top:14px;">
+          <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Accentfärg</label>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+            <input type="color" id="pref-accent-input" value="${acc || '#3b82f6'}"
+              style="width:44px;height:36px;border-radius:6px;border:1.5px solid var(--br);cursor:pointer;padding:2px;"
+              oninput="Sidebar._setPref('accentColor',this.value)">
+            <span style="font-size:13px;color:var(--mt);">Välj accentfärg</span>
+            ${acc ? `<button class="btn bxs bs" onclick="Sidebar._setPref('accentColor','');document.getElementById('pref-accent-input').value='#3b82f6'">Återställ</button>` : ''}
+          </div>
+        </div>
+        <div class="fg" style="margin-top:14px;">
+          <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Sidopanel vid start</label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:13px;color:var(--tx);">
+            <input type="checkbox" ${p.sidebarCollapsed?'checked':''} onchange="Sidebar._setPref('sidebarCollapsed',this.checked)">
+            Fäll ihop vid inloggning
+          </label>
+        </div>
+      `,
+      buttons: [
+        { label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _setPref(key, value, group) {
+    const uid = state.currentUser ? state.currentUser.id : null;
+    if (!uid) return;
+    UserPrefsService.save(uid, { [key]: value });
+    UserPrefsService.apply(uid);
+    Sidebar.render();
+    if (group === 'pos') {
+      ['left','right'].forEach(v => {
+        const btn = document.getElementById('pref-pos-' + v);
+        if (btn) { btn.classList.toggle('bp', v === value); btn.classList.toggle('bs', v !== value); }
+      });
+    }
+    if (group === 'den') {
+      ['compact','normal','airy'].forEach(v => {
+        const btn = document.getElementById('pref-den-' + v);
+        if (btn) { btn.classList.toggle('bp', v === value); btn.classList.toggle('bs', v !== value); }
+      });
+    }
   },
 
   updateBadges() {

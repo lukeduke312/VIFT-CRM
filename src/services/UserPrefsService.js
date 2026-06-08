@@ -51,5 +51,12 @@ const UserPrefsService = {
     } else {
       document.body.classList.remove('sidebar-collapsed');
     }
+
+    // Sidopanelens position (vänster/höger)
+    if (p.sidebarPosition === 'right') {
+      document.body.classList.add('sidebar-right');
+    } else {
+      document.body.classList.remove('sidebar-right');
+    }
   }
 };
