@@ -143,6 +143,10 @@ const Schema = {
     dueDate: '',
     paymentTerms: 30,
     note: '',
+    customerReference: '',
+    ocr: '',
+    discount: { type: 'none', value: 0 },         // type: none | percent | fixed; value: number
+    taxReduction: { type: 'none', amount: 0, basis: 0, note: '' }, // type: none | rot | rut
     sentAt: '',
     paidAt: '',
     createdAt: '',

@@ -25,6 +25,7 @@ const SeedData = {
     defaultVatRate: 25,
     defaultPaymentTerms: 30,
     invoicePrefix: 'F-',
+    bankgiro: '5555-1234',
     internalHourlyCost: 250,
     currentUser: null
   },
@@ -832,6 +833,25 @@ const SeedData = {
       note: 'Påminnelse skickad 2 ggr. Kunden svarar ej.',
       sentAt: _d(-42), paidAt: '',
       createdAt: _d(-44), updatedAt: _d(-10)
+    },
+    {
+      id: 'INV-005', customerId: 'K-005', propertyId: '',
+      workOrderId: '', offerId: '',
+      title: 'Badrumsrenovering',
+      lines: [
+        { id: 'l1', description: 'Rivning och bortforsling', qty: 1, unit: 'fast pris', unitPrice: 4500, vatRate: 25, source: 'Fastpris' },
+        { id: 'l2', description: 'Kakelläggning 14m²', qty: 14, unit: 'm²', unitPrice: 650, vatRate: 25, source: 'Övrigt' },
+        { id: 'l3', description: 'VVS-arbete (ROT-berättigat)', qty: 8, unit: 'tim', unitPrice: 695, vatRate: 25, source: 'Tid' },
+        { id: 'l4', description: 'Material – kakelfix och fog', qty: 1, unit: 'st', unitPrice: 1280, vatRate: 25, source: 'Material' }
+      ],
+      status: 'utkast', dueDate: _ds(30), paymentTerms: 30,
+      note: 'ROT-avdrag tillämpas för arbetstid (8 tim × 695 kr).',
+      customerReference: 'Johan Lindström, Ekvägen 12',
+      ocr: '',
+      discount: { type: 'none', value: 0 },
+      taxReduction: { type: 'rot', amount: 1668, basis: 5560, note: 'ROT 30% av arbete 5 560 kr' },
+      sentAt: '', paidAt: '',
+      createdAt: _d(-2), updatedAt: _d(-2)
     }
   ],
 

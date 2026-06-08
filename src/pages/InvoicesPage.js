@@ -98,6 +98,7 @@ const InvoicesPage = {
       ${readyHtml}
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div style="flex:1;">${tabHtml}</div>
+        <button class="btn bs bsm" onclick="InvoicesPage.exportCSV()">${ic('download',14)} CSV</button>
         <button class="btn bp bsm" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>
       </div>
       ${listHtml}`;
@@ -167,6 +168,11 @@ const InvoicesPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+  },
+
+  exportCSV() {
+    InvoiceService.exportCSV();
+    showToast('CSV exporterad');
   }
 };
 
@@ -189,7 +195,6 @@ const InvoiceDetailPage = {
 
   _renderFull(el, inv) {
     const cu   = getCu(inv.customerId);
-    const t    = InvoiceService.calcTotals(inv);
     const statusOpts = ['utkast','skickad','betald','förfallen','makulerad'];
     const ao   = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
     const off  = inv.offerId ? (state.offers||[]).find(o=>o.id===inv.offerId) : null;
@@ -219,9 +224,14 @@ const InvoiceDetailPage = {
             <span class="dv link" onclick="Router.showPage('pg-ao-detail',{aoId:'${inv.workOrderId}'})">${inv.workOrderId}${ao?' – '+esc(ao.title):''}</span></div>` : ''}
           ${inv.offerId ? `<div class="dr"><span class="dk">Från offert</span>
             <span class="dv link" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${inv.offerId}${off?' (v'+off.versionNumber+')':''}</span></div>` : ''}
+          ${inv.customerReference ? `<div class="dr"><span class="dk">Er referens</span><span class="dv">${esc(inv.customerReference)}</span></div>` : ''}
+          ${inv.ocr ? `<div class="dr"><span class="dk">OCR</span><span class="dv" style="font-family:monospace;font-weight:700;">${esc(inv.ocr)}</span></div>` : ''}
           ${inv.sentAt ? `<div class="dr"><span class="dk">Skickad</span><span class="dv">${fmtDate(inv.sentAt)}</span></div>` : ''}
           ${inv.paidAt ? `<div class="dr"><span class="dk" style="color:var(--gr);">Betald</span><span class="dv" style="color:var(--gr);font-weight:700;">${fmtDate(inv.paidAt)}</span></div>` : ''}
           <div class="dr"><span class="dk">Skapad</span><span class="dv">${fmtDate(inv.createdAt)}</span></div>
+        </div>
+        <div style="padding:4px 14px 10px;">
+          <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera referens/OCR</button>
         </div>
       </div>
 
@@ -236,14 +246,7 @@ const InvoiceDetailPage = {
         </div>
 
         <!-- Summering -->
-        <div style="padding:12px 14px;border-top:2px solid var(--br);">
-          <div class="dr"><span class="dk">Summa ex. moms</span><span class="dv">${fkr(t.exVat)}</span></div>
-          <div class="dr"><span class="dk">Moms 25%</span><span class="dv">${fkr(t.vat)}</span></div>
-          <div class="dr" style="font-size:16px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
-            <span class="dk" style="color:var(--navy);">Att betala</span>
-            <span class="dv" style="color:var(--navy);">${fkr(t.total)}</span>
-          </div>
-        </div>
+        ${this._renderTotals(inv)}
       </div>
 
       ${inv.note ? `<div class="nbox">${esc(inv.note)}</div>` : ''}
@@ -254,7 +257,7 @@ const InvoiceDetailPage = {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${inv.status === 'utkast'  ? `<button class="btn bp bsm" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
         ${inv.status === 'skickad' ? `<button class="btn bsu bsm" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
-        <button class="btn bs bsm" onclick="showToast('PDF-export byggs i Fas 5C')">${ic('printer',14)} PDF</button>
+        <button class="btn bs bsm" onclick="InvoiceDetailPage.showPrintView()">${ic('printer',14)} PDF / Skriv ut</button>
       </div>`;
   },
 
@@ -683,5 +686,331 @@ const InvoiceDetailPage = {
     const inv = getInv(this.invoiceId);
     if (!inv) return;
     this.render({ invoiceId: this.invoiceId });
+  },
+
+  _renderTotals(inv) {
+    const s    = InvoiceService.calcSummary(inv);
+    const disc = inv.discount    || { type: 'none', value: 0 };
+    const tr   = inv.taxReduction|| { type: 'none', amount: 0, note: '' };
+    const hasDiscount = s.discAmt > 0;
+    const hasRot      = s.trAmount > 0;
+    return `
+      <div style="padding:12px 14px;border-top:2px solid var(--br);">
+        ${hasDiscount ? `
+        <div class="dr"><span class="dk" style="color:var(--mt);">Radernas summa</span><span class="dv">${fkr(s.linesEx)}</span></div>
+        <div class="dr" style="color:var(--gr);">
+          <span class="dk">${ic('tag',10)} Rabatt${disc.type==='percent'?' '+disc.value+'%':''}</span>
+          <span class="dv">− ${fkr(s.discAmt)}</span>
+        </div>` : ''}
+        <div class="dr"><span class="dk">Summa ex. moms</span><span class="dv">${fkr(s.exVat)}</span></div>
+        <div class="dr"><span class="dk">Moms</span><span class="dv">${fkr(s.vat)}</span></div>
+        <div class="dr" style="font-size:${hasRot?'14':'16'}px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
+          <span class="dk" style="color:var(--navy);">Totalt inkl. moms</span>
+          <span class="dv" style="color:var(--navy);">${fkr(s.totalInclVat)}</span>
+        </div>
+        ${hasRot ? `
+        <div class="dr" style="color:var(--gr);margin-top:4px;">
+          <span class="dk">${ic('percent',10)} ${tr.type.toUpperCase()}-avdrag${tr.note?' ('+esc(tr.note)+')':''}</span>
+          <span class="dv">− ${fkr(s.trAmount)}</span>
+        </div>
+        <div class="dr" style="font-size:16px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
+          <span class="dk" style="color:var(--navy);">Kunden betalar</span>
+          <span class="dv" style="color:var(--navy);">${fkr(s.customerPays)}</span>
+        </div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--bg);">
+          <button class="btn bxs bs" onclick="InvoiceDetailPage.openDiscount()" title="Sätt rabatt">${ic('tag',11)} Rabatt</button>
+          <button class="btn bxs bs" onclick="InvoiceDetailPage.openTaxReduction()" title="RUT/ROT-avdrag">${ic('percent',11)} RUT/ROT</button>
+        </div>
+      </div>`;
+  },
+
+  openEditMeta() {
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    Modal.open({
+      title: `${ic('edit',15)} Referens & OCR`,
+      body: `
+        <div class="fg"><label>Er referens (visas på faktura)</label>
+          <input id="em-ref" value="${esc(inv.customerReference||'')}" placeholder="T.ex. namn, projektnummer…"></div>
+        <div class="fg"><label>OCR-nummer</label>
+          <input id="em-ocr" value="${esc(inv.ocr||'')}" placeholder="Auto: ${inv.id.replace(/\D/g,'').padStart(6,'0')}">
+          <p style="font-size:11px;color:var(--mt);margin-top:4px;">Lämna tomt för auto-genererat. Syns vid betalning.</p></div>
+        <div class="fg"><label>Intern kommentar (visas ej på faktura)</label>
+          <textarea id="em-note" rows="2">${esc(inv.note||'')}</textarea></div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          inv.customerReference = document.getElementById('em-ref')?.value.trim() || '';
+          inv.ocr               = document.getElementById('em-ocr')?.value.trim() || '';
+          inv.note              = document.getElementById('em-note')?.value.trim() || '';
+          inv.updatedAt = new Date().toISOString();
+          persist(); Modal.close(); this._refresh();
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  openDiscount() {
+    const inv  = getInv(this.invoiceId);
+    if (!inv) return;
+    const disc = inv.discount || { type: 'none', value: 0 };
+    Modal.open({
+      title: `${ic('tag',15)} Rabatt`,
+      body: `
+        <div class="fg"><label>Rabattyp</label>
+          <select id="disc-type" onchange="InvoiceDetailPage._discTypeChanged()">
+            <option value="none"  ${disc.type==='none'   ?'selected':''}>Ingen rabatt</option>
+            <option value="percent" ${disc.type==='percent'?'selected':''}>Procent (%)</option>
+            <option value="fixed"   ${disc.type==='fixed'  ?'selected':''}>Fast belopp (kr)</option>
+          </select></div>
+        <div id="disc-val-wrap" style="${disc.type==='none'?'display:none':''}">
+          <div class="fg"><label id="disc-val-label">${disc.type==='percent'?'Rabatt %':'Rabatt kr'}</label>
+            <input type="number" id="disc-value" value="${disc.type==='none'?0:disc.value}" min="0" step="${disc.type==='percent'?'1':'100'}"></div>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const type  = document.getElementById('disc-type')?.value  || 'none';
+          const value = parseFloat(document.getElementById('disc-value')?.value) || 0;
+          InvoiceService.setDiscount(this.invoiceId, type, value);
+          Modal.close(); this._refresh();
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _discTypeChanged() {
+    const type = document.getElementById('disc-type')?.value;
+    const wrap = document.getElementById('disc-val-wrap');
+    const lbl  = document.getElementById('disc-val-label');
+    if (wrap) wrap.style.display = type === 'none' ? 'none' : '';
+    if (lbl)  lbl.textContent = type === 'percent' ? 'Rabatt %' : 'Rabatt kr';
+  },
+
+  openTaxReduction() {
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    const tr = inv.taxReduction || { type: 'none', amount: 0, basis: 0, note: '' };
+    Modal.open({
+      title: `${ic('percent',15)} RUT/ROT-avdrag`,
+      body: `
+        <div class="fg"><label>Typ av skattereduktion</label>
+          <select id="tr-type" onchange="InvoiceDetailPage._trTypeChanged()">
+            <option value="none" ${tr.type==='none'?'selected':''}>Ingen</option>
+            <option value="rot"  ${tr.type==='rot' ?'selected':''}>ROT-avdrag (30 %)</option>
+            <option value="rut"  ${tr.type==='rut' ?'selected':''}>RUT-avdrag (50 %)</option>
+          </select></div>
+        <div id="tr-fields" style="${tr.type==='none'?'display:none':''}">
+          <div class="fg"><label>Underlag – berättigat arbete ex moms (kr)</label>
+            <input type="number" id="tr-basis" value="${tr.basis||0}" min="0" step="100"
+              oninput="InvoiceDetailPage._trCalc()"></div>
+          <div class="fg"><label>Avdragsbelopp (kr) <span style="color:var(--mt);font-size:11px;">— auto-beräknat, kan justeras</span></label>
+            <input type="number" id="tr-amount" value="${tr.amount||0}" min="0" step="100"></div>
+          <div class="fg"><label>Notering (visas på faktura)</label>
+            <input id="tr-note" value="${esc(tr.note||'')}" placeholder="T.ex. ROT 30% av arbete 5 560 kr"></div>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const type   = document.getElementById('tr-type')?.value || 'none';
+          const basis  = parseFloat(document.getElementById('tr-basis')?.value)  || 0;
+          const amount = parseFloat(document.getElementById('tr-amount')?.value) || 0;
+          const note   = document.getElementById('tr-note')?.value.trim() || '';
+          InvoiceService.setTaxReduction(this.invoiceId, type, amount, basis, note);
+          Modal.close(); this._refresh();
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _trTypeChanged() {
+    const type   = document.getElementById('tr-type')?.value;
+    const fields = document.getElementById('tr-fields');
+    if (fields) fields.style.display = type === 'none' ? 'none' : '';
+    this._trCalc();
+  },
+
+  _trCalc() {
+    const type   = document.getElementById('tr-type')?.value;
+    const basis  = parseFloat(document.getElementById('tr-basis')?.value) || 0;
+    const amtEl  = document.getElementById('tr-amount');
+    if (!amtEl || type === 'none') return;
+    const rate   = type === 'rut' ? 0.50 : 0.30;
+    amtEl.value  = Math.round(basis * rate);
+  },
+
+  showPrintView() {
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    const html = this._buildPrintHTML(inv);
+    const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes');
+    if (!w) { showToast('Tillåt popup för att öppna utskriftsvy'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => { try { w.print(); } catch(e) {} }, 800);
+  },
+
+  _buildPrintHTML(inv) {
+    const s        = InvoiceService.calcSummary(inv);
+    const cu       = getCu(inv.customerId);
+    const settings = state.settings || {};
+    const ao       = inv.workOrderId ? getAO(inv.workOrderId) : null;
+    const off      = inv.offerId ? (state.offers||[]).find(o=>o.id===inv.offerId) : null;
+    const disc     = inv.discount    || { type: 'none', value: 0 };
+    const tr       = inv.taxReduction|| { type: 'none', amount: 0, note: '' };
+
+    const logoSrc    = BrandingService.logoLightAbsolute();
+    const coName     = esc(settings.companyName  || 'VIFT');
+    const coOrgNr    = esc(settings.orgNr         || '');
+    const coVatNr    = esc(settings.vatNr         || '');
+    const coAddr     = esc(settings.companyAddress|| '');
+    const coPhone    = esc(settings.companyPhone  || '');
+    const coEmail    = esc(settings.companyEmail  || '');
+    const bankgiro   = esc(settings.bankgiro      || '');
+
+    const cuName     = cu ? esc(CustomerService.displayName(cu)) : '';
+    const cuAddr     = cu ? [cu.invoiceAddress||cu.address, cu.invoiceZip||cu.zip, cu.invoiceCity||cu.city].filter(Boolean).map(esc).join(', ') : '';
+    const cuOrgNr    = cu && cu.orgNr    ? esc(cu.orgNr)    : '';
+    const cuPersonnr = cu && cu.personnr ? esc(cu.personnr) : '';
+
+    const invDate = (inv.createdAt||'').split('T')[0] || tdy();
+    const ocr     = inv.ocr || inv.id.replace(/\D/g,'').padStart(6,'0');
+
+    const linesHtml = (inv.lines||[]).map(l => {
+      const ex = Math.round((l.qty||0)*(l.unitPrice||0));
+      return `<tr><td>${esc(l.description)}</td><td class="r">${l.qty}</td><td>${esc(l.unit||'')}</td><td class="r">${fmt(l.unitPrice||0)}</td><td class="r">${l.vatRate||25}%</td><td class="r">${fmt(ex)}</td></tr>`;
+    }).join('');
+
+    const refs = [];
+    if (ao)  refs.push('AO: ' + esc(ao.id) + (ao.title?' – '+esc(ao.title):''));
+    if (off) refs.push('Offert: ' + esc(off.id) + ' (v' + (off.versionNumber||1) + ')');
+    if (inv.customerReference) refs.push('Er ref: ' + esc(inv.customerReference));
+
+    const hasDiscount = s.discAmt > 0;
+    const hasRot      = s.trAmount > 0;
+    const trLabel     = tr.type === 'rut' ? 'RUT-avdrag' : 'ROT-avdrag';
+
+    return `<!DOCTYPE html><html lang="sv"><head><meta charset="UTF-8">
+<title>Faktura ${esc(inv.id)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff;padding:12mm 14mm;}
+h1{font-size:22px;font-weight:900;color:#0f3763;letter-spacing:-0.5px;}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #0f3763;}
+.logo{max-height:44px;max-width:150px;}
+.co{font-size:10px;color:#555;line-height:1.5;margin-top:5px;}
+.inv-r{text-align:right;}
+.inv-num{font-size:12px;font-weight:700;color:#0f3763;margin-top:3px;}
+.inv-sub{font-size:10px;color:#777;}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:10px 0;padding:10px 0;border-bottom:1px solid #e5e7eb;}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#999;margin-bottom:3px;}
+.pname{font-size:12px;font-weight:700;}
+.paddr{font-size:10px;color:#444;line-height:1.5;margin-top:2px;}
+.dbar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0;background:#f8f9fb;padding:7px 10px;border-radius:5px;}
+.dl{font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px;}
+.dv{font-size:11px;font-weight:700;color:#0f3763;margin-top:1px;}
+.refs{font-size:10px;color:#666;margin:6px 0 8px;}
+table{width:100%;border-collapse:collapse;margin:6px 0;}
+thead th{background:#0f3763;color:#fff;padding:6px 8px;text-align:left;font-size:10px;font-weight:700;}
+th.r,td.r{text-align:right;}
+tbody td{padding:5px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;}
+tbody tr:last-child td{border-bottom:none;}
+.totals{margin-left:auto;width:260px;margin-top:4px;}
+.trow{display:flex;justify-content:space-between;padding:2px 0;font-size:11px;}
+.tbold{font-weight:700;}
+.tdiv{border-top:1px solid #e5e7eb;margin:3px 0;}
+.tfinal{font-size:13px;font-weight:800;color:#0f3763;border-top:2px solid #0f3763;padding-top:5px;margin-top:3px;display:flex;justify-content:space-between;}
+.tgreen{color:#15803d;}
+.pay{margin-top:12px;padding:8px 10px;background:#f8f9fb;border-radius:5px;font-size:10px;}
+.pay strong{font-size:11px;color:#0f3763;display:block;margin-bottom:3px;}
+.pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;}
+.ocr{font-size:14px;font-weight:800;font-family:monospace;letter-spacing:2px;color:#0f3763;}
+.note{margin-top:8px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;font-size:10px;color:#555;line-height:1.4;}
+.foot{margin-top:14px;padding-top:7px;border-top:1px solid #e5e7eb;font-size:9px;color:#aaa;text-align:center;}
+@media print{@page{margin:10mm;size:A4;}body{padding:0;}}
+</style></head><body>
+
+<div class="hdr">
+  <div>
+    <img src="${logoSrc}" class="logo" alt="${coName}" onerror="this.style.display='none'">
+    <div class="co">
+      ${coAddr ? coAddr + '<br>' : ''}
+      ${coPhone}${coPhone && coEmail ? ' &nbsp;·&nbsp; ' : ''}${coEmail}<br>
+      ${coOrgNr ? 'Org.nr: ' + coOrgNr : ''}${coOrgNr && coVatNr ? ' &nbsp;·&nbsp; ' : ''}${coVatNr ? 'Momsreg.nr: ' + coVatNr : ''}
+    </div>
+  </div>
+  <div class="inv-r">
+    <h1>FAKTURA</h1>
+    <div class="inv-num">${esc(inv.id)}</div>
+    ${inv.title ? '<div class="inv-sub">' + esc(inv.title) + '</div>' : ''}
+  </div>
+</div>
+
+<div class="parties">
+  <div>
+    <div class="lbl">Faktureras till</div>
+    <div class="pname">${cuName||'—'}</div>
+    <div class="paddr">${cuAddr ? cuAddr + '<br>' : ''}${cuOrgNr ? 'Org.nr: ' + cuOrgNr + '<br>' : ''}${cuPersonnr ? 'Personnr: ' + cuPersonnr : ''}</div>
+  </div>
+  <div>
+    <div class="lbl">Leverantör</div>
+    <div class="pname">${coName}</div>
+    <div class="paddr">${coAddr ? coAddr + '<br>' : ''}${coOrgNr ? 'Org.nr: ' + coOrgNr : ''}</div>
+  </div>
+</div>
+
+<div class="dbar">
+  <div><div class="dl">Fakturanr</div><div class="dv">${esc(inv.id)}</div></div>
+  <div><div class="dl">Fakturadatum</div><div class="dv">${invDate}</div></div>
+  <div><div class="dl">Förfallodatum</div><div class="dv">${inv.dueDate||'—'}</div></div>
+  <div><div class="dl">Betalningsvillkor</div><div class="dv">${inv.paymentTerms||30} dagar</div></div>
+</div>
+
+${refs.length ? '<div class="refs">' + refs.join(' &nbsp;·&nbsp; ') + '</div>' : ''}
+
+<table>
+  <thead><tr>
+    <th>Beskrivning</th>
+    <th class="r" style="width:48px">Antal</th>
+    <th style="width:38px">Enhet</th>
+    <th class="r" style="width:68px">Á-pris</th>
+    <th class="r" style="width:38px">Moms</th>
+    <th class="r" style="width:72px">Belopp</th>
+  </tr></thead>
+  <tbody>${linesHtml}</tbody>
+</table>
+
+<div class="totals">
+  ${hasDiscount ? `<div class="trow"><span>Radernas summa</span><span>${fmt(s.linesEx)} kr</span></div>
+  <div class="trow tgreen"><span>Rabatt (${disc.type==='percent'?disc.value+'%':'fast belopp'})</span><span>− ${fmt(s.discAmt)} kr</span></div>
+  <div class="tdiv"></div>` : ''}
+  <div class="trow"><span>Summa ex. moms</span><span>${fmt(s.exVat)} kr</span></div>
+  <div class="trow"><span>Moms 25%</span><span>${fmt(s.vat)} kr</span></div>
+  <div class="tdiv"></div>
+  <div class="tfinal"><span>Totalt inkl. moms</span><span>${fmt(s.totalInclVat)} kr</span></div>
+  ${hasRot ? `<div class="tdiv" style="margin-top:6px;"></div>
+  <div class="trow tgreen" style="margin-top:3px;"><span>${trLabel}${tr.note?' ('+esc(tr.note)+')':''}</span><span>− ${fmt(s.trAmount)} kr</span></div>
+  <div class="tdiv"></div>
+  <div class="tfinal"><span>Kunden betalar</span><span>${fmt(s.customerPays)} kr</span></div>` : ''}
+</div>
+
+<div class="pay">
+  <strong>Betalningsinformation</strong>
+  <div class="pay-grid">
+    <div>
+      ${bankgiro ? '<div>Bankgiro: <strong>' + bankgiro + '</strong></div>' : ''}
+      <div>Betalningsvillkor: ${inv.paymentTerms||30} dagar netto</div>
+    </div>
+    <div>
+      <div style="color:#888;font-size:9px;margin-bottom:2px;">OCR-nummer – ange vid betalning</div>
+      <div class="ocr">${esc(ocr)}</div>
+    </div>
+  </div>
+</div>
+
+${inv.note ? '<div class="note">' + esc(inv.note) + '</div>' : ''}
+
+<div class="foot">${coName}${coOrgNr?' &nbsp;·&nbsp; Org.nr: '+coOrgNr:''}${coVatNr?' &nbsp;·&nbsp; Momsreg.nr: '+coVatNr:''}</div>
+</body></html>`;
   }
 };

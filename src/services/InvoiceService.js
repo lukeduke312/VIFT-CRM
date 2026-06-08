@@ -151,11 +151,79 @@ const InvoiceService = {
     persist();
   },
 
+  calcSummary(inv) {
+    const lines    = inv.lines || [];
+    const linesEx  = lines.reduce((s, l) => s + (l.qty||0)*(l.unitPrice||0), 0);
+    const linesVat = lines.reduce((s, l) => s + (l.qty||0)*(l.unitPrice||0)*((l.vatRate||25)/100), 0);
+
+    const disc    = inv.discount || { type: 'none', value: 0 };
+    let discAmt   = 0;
+    if (disc.type === 'percent' && (disc.value||0) > 0)
+      discAmt = Math.round(linesEx * (disc.value||0) / 100 * 100) / 100;
+    else if (disc.type === 'fixed' && (disc.value||0) > 0)
+      discAmt = Math.min(disc.value||0, linesEx);
+
+    const ratio      = linesEx > 0 ? (1 - discAmt / linesEx) : 1;
+    const exVat      = Math.round((linesEx - discAmt) * 100) / 100;
+    const vat        = Math.round(linesVat * ratio * 100) / 100;
+    const totalInclVat = exVat + vat;
+
+    const tr       = inv.taxReduction || { type: 'none', amount: 0 };
+    const trAmount = (tr.type === 'rot' || tr.type === 'rut') ? (tr.amount||0) : 0;
+    const customerPays = totalInclVat - trAmount;
+
+    return { linesEx, linesVat, discAmt, exVat, vat, totalInclVat, trAmount, customerPays };
+  },
+
   calcTotals(inv) {
-    const lines  = inv.lines || [];
-    const exVat  = lines.reduce((s, l) => s + (l.qty || 0) * (l.unitPrice || 0), 0);
-    const vat    = lines.reduce((s, l) => s + (l.qty || 0) * (l.unitPrice || 0) * ((l.vatRate || 25) / 100), 0);
-    return { exVat, vat, total: exVat + vat };
+    const s = this.calcSummary(inv);
+    return { exVat: s.exVat, vat: s.vat, total: s.totalInclVat };
+  },
+
+  setDiscount(invId, type, value) {
+    const inv = getInv(invId);
+    if (!inv) return;
+    inv.discount = { type: type || 'none', value: parseFloat(value) || 0 };
+    inv.updatedAt = new Date().toISOString();
+    persist();
+  },
+
+  setTaxReduction(invId, type, amount, basis, note) {
+    const inv = getInv(invId);
+    if (!inv) return;
+    inv.taxReduction = { type: type || 'none', amount: parseFloat(amount)||0, basis: parseFloat(basis)||0, note: note||'' };
+    inv.updatedAt = new Date().toISOString();
+    persist();
+  },
+
+  exportCSV() {
+    const invs = state.invoices || [];
+    const rows = [['Fakturanummer','Kund','Datum','Förfallodatum','Status','Ex moms','Moms','Inkl moms','ROT/RUT','Kundpris','AO-id','Offert-id']];
+    invs.forEach(inv => {
+      const cu = getCu(inv.customerId);
+      const s  = this.calcSummary(inv);
+      rows.push([
+        inv.id,
+        cu ? CustomerService.displayName(cu) : '',
+        inv.createdAt ? inv.createdAt.split('T')[0] : '',
+        inv.dueDate || '',
+        inv.status,
+        s.exVat,
+        s.vat,
+        s.totalInclVat,
+        s.trAmount,
+        s.customerPays,
+        inv.workOrderId || '',
+        inv.offerId || ''
+      ]);
+    });
+    const csv  = '﻿' + rows.map(r => r.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'fakturor_' + new Date().toISOString().split('T')[0] + '.csv';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
   },
 
   sourceLabel(line) {
