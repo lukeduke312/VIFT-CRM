@@ -25,6 +25,7 @@ const SeedData = {
     defaultVatRate: 25,
     defaultPaymentTerms: 30,
     invoicePrefix: 'F-',
+    internalHourlyCost: 250,
     currentUser: null
   },
 

@@ -155,6 +155,9 @@ const WorkOrderDetailPage = {
           ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
         </div>` : ''}
 
+      <!-- Intern lönsamhet -->
+      ${this._tbBlock(ao)}
+
       <!-- Återkommande -->
       ${ao.recurringOrderId
         ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
@@ -274,6 +277,89 @@ const WorkOrderDetailPage = {
             ${off.includes?`${ic('check-circle',10)} Ingår: ${esc(off.includes)}<br>`:''}
             ${off.excludes?`${ic('x-circle',10)} Ingår ej: ${esc(off.excludes)}`:''}
           </div>` : ''}
+        </div>
+      </div>`;
+  },
+
+  _tbBlock(ao) {
+    const hasMat   = (ao.materials || []).length > 0;
+    const hasTime  = TimeService.getByAO(ao.id).length > 0;
+    const hasPrice = ao.invoiceId || ao.fixedPrice > 0 ||
+                     ['timpris','prisgrupp','fast','fastpris'].includes(ao.priceType);
+    if (!hasMat && !hasTime && !hasPrice) return '';
+
+    const tb   = ProfitabilityService.calcTB(ao);
+    const vs   = ProfitabilityService.calcVsOffer(ao);
+    const fmtM = m => TimeService.fmtDuration(m);
+    const borderColor = tb.tbPct !== null ? tb.color : 'var(--br)';
+
+    const vsHtml = vs ? `
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg);">
+        <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic('git-compare',10)} Offert vs faktiskt utfall</div>
+        <div class="dr"><span class="dk">Offererat ex moms</span><span class="dv">${fkr(vs.offerExVat)}</span></div>
+        <div class="dr"><span class="dk">${tb.revenue.label}</span>
+          <span class="dv" style="color:${vs.revDiff >= 0 ? 'var(--gr)' : 'var(--rd)'};">
+            ${fkr(vs.actualRev)}
+            ${vs.revDiff !== 0 ? `<span style="font-size:10px;font-weight:600;margin-left:4px;">(${vs.revDiff >= 0 ? '+' : ''}${fmt(Math.round(vs.revDiff))} kr)</span>` : ''}
+          </span>
+        </div>
+        ${vs.estMins > 0 ? `
+          <div class="dr"><span class="dk">Planerad tid</span><span class="dv">${fmtM(vs.estMins)}</span></div>
+          <div class="dr"><span class="dk">Faktisk tid</span>
+            <span class="dv" style="color:${vs.timeDiff > vs.estMins * 0.15 ? 'var(--rd)' : vs.timeDiff > 0 ? 'var(--yl)' : 'var(--gr)'};">
+              ${fmtM(vs.actualMins)}
+              ${vs.timeDiff !== 0 && vs.actualMins > 0 ? `<span style="font-size:10px;margin-left:4px;">(${vs.timeDiff > 0 ? '+' : '−'}${fmtM(Math.abs(vs.timeDiff))})</span>` : ''}
+            </span>
+          </div>` : ''}
+      </div>` : '';
+
+    return `
+      <div class="card" style="border-left:3px solid ${borderColor};">
+        <div class="card-header">
+          <h3>${ic('trending-up',14)} Lönsamhet <span style="font-size:10px;font-weight:600;color:var(--mt);margin-left:4px;">${ic('eye-off',9)} Intern</span></h3>
+          ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
+        </div>
+        <div class="card-body" style="padding:10px 14px;">
+          <div class="dr">
+            <span class="dk">Intäkt ex moms</span>
+            <span class="dv">${fkr(tb.revenue.value)} <span style="font-size:10px;color:var(--mt);">${tb.revenue.label}</span></span>
+          </div>
+
+          ${hasMat ? `
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
+            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('package',10)} Material</div>
+            <div class="dr"><span class="dk">Försäljning ex moms</span><span class="dv">${fkr(tb.material.sellEx)}</span></div>
+            <div class="dr"><span class="dk">Inköp ex moms</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>
+            <div class="dr"><span class="dk">Materialmarginal</span>
+              <span class="dv" style="color:var(--gr);">${fkr(tb.material.margin)}
+                ${tb.material.sellEx > 0 ? `<span style="font-size:10px;font-weight:600;margin-left:4px;">(${Math.round(tb.material.marginPct)} %)</span>` : ''}
+              </span>
+            </div>
+          </div>` : ''}
+
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
+            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('clock',10)} Arbetstid</div>
+            <div class="dr"><span class="dk">Registrerad tid</span><span class="dv">${tb.labor.minutes > 0 ? fmtM(tb.labor.minutes) : '<span style="color:var(--mt);">Ingen tid registrerad</span>'}</span></div>
+            <div class="dr"><span class="dk">Intern timkostnad</span><span class="dv" style="color:var(--mt);">${fmt(tb.labor.rate)} kr/h</span></div>
+            ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)}</span></div>` : ''}
+          </div>
+
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);">
+            <div class="dr"><span class="dk">Total kostnad</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
+            <div class="dr" style="font-size:15px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
+              <span class="dk" style="color:${tb.color};">Täckningsbidrag</span>
+              <span class="dv" style="color:${tb.color};">${fkr(tb.tb)}</span>
+            </div>
+            ${tb.tbPct !== null ? `<div class="dr">
+              <span class="dk">TB %</span>
+              <span class="dv" style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+                <strong style="font-size:15px;color:${tb.color};">${Math.round(tb.tbPct)} %</strong>
+                <span class="bdg ${tb.badge}">${tb.label}</span>
+              </span>
+            </div>` : ''}
+          </div>
+
+          ${vsHtml}
         </div>
       </div>`;
   },

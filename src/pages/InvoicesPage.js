@@ -248,10 +248,13 @@ const InvoiceDetailPage = {
 
       ${inv.note ? `<div class="nbox">${esc(inv.note)}</div>` : ''}
 
+      <!-- Intern ekonomi -->
+      ${inv.workOrderId ? this._internEkonomi(inv) : ''}
+
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${inv.status === 'utkast'  ? `<button class="btn bp bsm" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
         ${inv.status === 'skickad' ? `<button class="btn bsu bsm" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
-        <button class="btn bs bsm" onclick="showToast('PDF-export byggs i Fas 5B')">${ic('printer',14)} PDF</button>
+        <button class="btn bs bsm" onclick="showToast('PDF-export byggs i Fas 5C')">${ic('printer',14)} PDF</button>
       </div>`;
   },
 
@@ -284,6 +287,38 @@ const InvoiceDetailPage = {
           </div>
         </div>`;
     }).join('');
+  },
+
+  _internEkonomi(inv) {
+    const ao = (state.workOrders || []).find(a => a.id === inv.workOrderId);
+    if (!ao) return '';
+    const tb = ProfitabilityService.calcTB(ao);
+    if (tb.revenue.value === 0 && tb.totalCost === 0) return '';
+    const borderColor = tb.tbPct !== null ? tb.color : 'var(--br)';
+    return `
+      <div class="card" style="border-left:3px solid ${borderColor};">
+        <div class="card-header">
+          <h3>${ic('trending-up',14)} Intern ekonomi <span style="font-size:10px;color:var(--mt);margin-left:4px;">${ic('eye-off',9)} Syns ej för kund</span></h3>
+          ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
+        </div>
+        <div class="card-body" style="padding:10px 14px;">
+          <div class="dr"><span class="dk">Fakturerat ex moms</span><span class="dv">${fkr(tb.revenue.value)}</span></div>
+          ${tb.material.buyEx > 0 ? `<div class="dr"><span class="dk">Material inköp</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>` : ''}
+          ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)} <span style="font-size:10px;color:var(--mt);">(${TimeService.fmtDuration(tb.labor.minutes)} × ${fmt(tb.labor.rate)} kr/h)</span></span></div>` : ''}
+          <div class="dr"><span class="dk">Total kostnad</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
+          <div class="dr" style="font-size:15px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
+            <span class="dk" style="color:${tb.color};">Täckningsbidrag</span>
+            <span class="dv" style="color:${tb.color};">${fkr(tb.tb)}${tb.tbPct !== null ? ` <span style="font-size:12px;">(${Math.round(tb.tbPct)} %)</span>` : ''}</span>
+          </div>
+          ${tb.tbPct !== null ? `<div class="dr">
+            <span class="dk">TB %</span>
+            <span class="dv" style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+              <strong style="font-size:14px;color:${tb.color};">${Math.round(tb.tbPct)} %</strong>
+              <span class="bdg ${tb.badge}">${tb.label}</span>
+            </span>
+          </div>` : ''}
+        </div>
+      </div>`;
   },
 
   _lineFormHtml(line) {

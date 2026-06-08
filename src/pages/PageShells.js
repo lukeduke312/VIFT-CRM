@@ -4477,6 +4477,21 @@ const AdminPage = {
         </div>
       </div>
 
+      <!-- Ekonomi & Lönsamhet -->
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('trending-up',14)} Ekonomi & Lönsamhet</h3>
+          <button class="btn bs bxs" onclick="AdminPage.openEditEkonomi()">${ic('pencil',13)} Redigera</button>
+        </div>
+        <div class="card-body">
+          <div class="dr">
+            <span class="dk">Intern timkostnad</span>
+            <span class="dv">${fmt((s.internalHourlyCost || 250))} kr/h ex moms</span>
+          </div>
+          <p style="font-size:11px;color:var(--mt);margin-top:6px;line-height:1.5;">Används för att beräkna täckningsbidrag och intern arbetskostnad. Visas aldrig för kund.</p>
+        </div>
+      </div>
+
       <!-- Titlar / yrkesroller -->
       <div class="card">
         <div class="card-header">
@@ -4655,6 +4670,29 @@ const AdminPage = {
             vatNr:          document.getElementById('co-vatnr')?.value.trim()  || ''
           };
           persist(); Modal.close(); AdminPage.render(); showToast('Sparat');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  openEditEkonomi() {
+    if (!Auth.require('admin_manage')) return;
+    const s = state.settings || {};
+    Modal.open({
+      title: `${ic('trending-up',15)} Ekonomi & Lönsamhet`,
+      body: `
+        <div class="fg">
+          <label>Intern timkostnad (kr/h ex moms)</label>
+          <input type="number" id="ek-rate" value="${s.internalHourlyCost || 250}" min="0" step="10" style="font-size:16px;font-weight:700;text-align:center;">
+          <p style="font-size:11px;color:var(--mt);margin-top:6px;line-height:1.5;">Standardkostnad per timme för personalen. Används i lönsamhetsberäkningar internt — visas aldrig för kund i PDF eller e-post.</p>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const rate = parseFloat(document.getElementById('ek-rate')?.value) || 250;
+          state.settings = Object.assign({}, state.settings, { internalHourlyCost: rate });
+          persist(); Modal.close(); AdminPage.render();
+          showToast(`Intern timkostnad: ${fmt(rate)} kr/h`);
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
