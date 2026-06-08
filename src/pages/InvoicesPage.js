@@ -18,21 +18,19 @@ const InvoicesPage = {
 
     // KPI summary
     const kpiItems = [
-      { label:'Utkast',   key:'utkast',   color:'var(--mt)',  icon:'file-text'    },
-      { label:'Skickade', key:'skickad',  color:'var(--sky)', icon:'send'         },
-      { label:'Betalda',  key:'betald',   color:'var(--gr)',  icon:'check-circle' },
-      { label:'Förfallna',key:'förfallen',color:'var(--rd)',  icon:'alert-circle' }
+      { label:'Utkast',   key:'utkast',   cls:'',       icon:'file-text'    },
+      { label:'Skickade', key:'skickad',  cls:'blue',   icon:'send'         },
+      { label:'Betalda',  key:'betald',   cls:'green',  icon:'check-circle' },
+      { label:'Förfallna',key:'förfallen',cls:'red',    icon:'alert-circle' }
     ];
-    const kpiHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;">
+    const kpiHtml = `<div class="kpi-row">
       ${kpiItems.map(k => {
         const subset = invoices.filter(i => i.status === k.key);
         const total  = subset.reduce((s,i) => s + InvoiceService.calcTotals(i).total, 0);
         const active = this._tab === k.key;
-        return `<div class="card" onclick="InvoicesPage._setTab('${k.key}')" style="cursor:pointer;padding:12px 14px;${active?'border-color:'+k.color+';box-shadow:0 0 0 2px '+k.color+'22;':''}">
-          <div style="color:${k.color};margin-bottom:4px;">${ic(k.icon,18)}</div>
-          <div style="font-size:22px;font-weight:800;color:var(--navy);">${counts[k.key]}</div>
-          <div style="font-size:11px;font-weight:700;color:var(--mt);">${k.label}</div>
-          ${total > 0 ? `<div style="font-size:10px;color:var(--mt);margin-top:2px;">${fkr(total)}</div>` : ''}
+        return `<div class="kpi-card ${k.cls}${active?' kpi-active':''}" onclick="InvoicesPage._setTab('${k.key}')" style="${active?'box-shadow:0 0 0 2px var(--sky)22;':''}" title="${k.label}">
+          <div class="kpi-number">${counts[k.key]}</div>
+          <div class="kpi-label">${k.label}${total > 0 ? `<br><span style="font-size:10px;font-weight:500;">${fkr(total)}</span>` : ''}</div>
         </div>`;
       }).join('')}
     </div>`;
@@ -76,19 +74,22 @@ const InvoicesPage = {
           const cu = getCu(inv.customerId);
           const t  = InvoiceService.calcTotals(inv);
           const ao = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
-          const subtitle = [
-            inv.title || (ao ? ao.title : ''),
-            cu ? CustomerService.displayName(cu) : null,
-            fkr(t.total) + ' inkl. moms',
-            fmtDate(inv.createdAt)
-          ].filter(Boolean).join(' · ');
-          return `<div class="list-item" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">
-            <div class="item-row">
-              <div style="min-width:0;flex:1;">
-                <div class="item-title">${inv.id}${inv.workOrderId?' – '+inv.workOrderId:''}</div>
-                <div class="item-sub">${esc(subtitle)}</div>
+          const cuName = cu ? CustomerService.displayName(cu) : null;
+          const title  = inv.title || (ao ? ao.title : null);
+          return `<div class="list-item-v2" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">
+            <div class="list-item-v2-row">
+              <div class="list-item-v2-main">
+                <div class="list-item-v2-title">${inv.id}${title?' — '+esc(title):''}</div>
+                <div class="list-item-v2-meta">
+                  ${cuName ? `<span>${ic('user',10)} ${esc(cuName)}</span>` : ''}
+                  ${inv.workOrderId ? `<span style="color:var(--sky);">${ic('clipboard',10)} ${inv.workOrderId}</span>` : ''}
+                  <span>${fmtDate(inv.createdAt)}</span>
+                </div>
               </div>
-              ${sbdg(inv.status)}
+              <div class="list-item-v2-aside">
+                ${sbdg(inv.status)}
+                <span style="font-size:13px;font-weight:800;color:var(--navy);white-space:nowrap;">${fkr(t.total)}</span>
+              </div>
             </div>
           </div>`;
         }).join('');

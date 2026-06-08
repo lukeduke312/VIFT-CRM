@@ -121,15 +121,19 @@ const MyJobsPage = {
   /* ── Sektions-wrapper ─────────────────────────────────────────────────── */
   _sectionHtml(title, items, emptyMsg, borderColor, warn, cardFn, extra='') {
     const hasItems = items.length > 0;
+    const accentColor = warn ? 'var(--rd)' : borderColor;
     return `
-      <div class="card" style="border-left:4px solid ${borderColor};margin-bottom:12px;${warn?'background:linear-gradient(to right,rgba(220,38,38,.02),transparent);':''}">
-        <div class="card-header">
-          <h3 class="ch3" style="${warn?'color:var(--rd);':''}">${title}</h3>
-          ${hasItems ? `<span class="bdg ${warn?'bdg-red':''}">${items.length}</span>` : ''}
+      <div class="surface-section">
+        <div class="surface-section-header">
+          <div class="surface-section-header-title" style="color:${accentColor};font-size:12px;font-weight:700;">
+            <span style="width:3px;height:14px;background:${accentColor};border-radius:2px;display:inline-block;flex-shrink:0;"></span>
+            ${title}
+            ${hasItems ? `<span class="bdg ${warn?'bdg-red':'bdg-grey'}" style="margin-left:2px;">${items.length}</span>` : ''}
+          </div>
         </div>
-        <div class="card-body" style="padding:${hasItems?'8':'12'}px 10px;">
+        <div style="display:flex;flex-direction:column;">
           ${!hasItems && emptyMsg
-            ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;text-align:center;">${emptyMsg}</p></div>`
+            ? `<div class="empty" style="padding:16px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;text-align:center;">${emptyMsg}</p></div>`
             : items.map(cardFn).join('')}
           ${extra}
         </div>

@@ -28,10 +28,17 @@ const Dashboard = {
       .filter(m => this._canSee(m.id))
       .sort((a, b) => (a.order || 0) - (b.order || 0));
 
+    let lastCat = null;
     for (const m of sorted) {
       const html = this._renderWidget(m.id);
       if (html) {
-        const cls = this._sizeClass(m.size || (DashboardConfig.getModule(m.id) || {}).defaultSize || 'full');
+        const mod = DashboardConfig.getModule(m.id);
+        const cat = mod ? (mod.category || null) : null;
+        if (cat && cat !== lastCat) {
+          parts.push(`<div class="dw-full"><div class="section-sep">${esc(cat)}</div></div>`);
+          lastCat = cat;
+        }
+        const cls = this._sizeClass(m.size || (mod || {}).defaultSize || 'full');
         parts.push(`<div class="${cls}">${html}</div>`);
       }
     }
@@ -47,9 +54,9 @@ const Dashboard = {
     const overdueC = allWos.filter(a => a.scheduledDate && a.scheduledDate < tdy() && alive(a) && a.status !== 'pool').length;
     const todayC   = allWos.filter(a => a.scheduledDate === tdy() && alive(a)).length;
     const heroSub  = [
-      urgCount   > 0 ? `<span style="background:rgba(239,68,68,.25);border-radius:4px;padding:1px 6px;">${urgCount} akut${urgCount>1?'a':''}</span>` : '',
-      overdueC   > 0 ? `<span style="background:rgba(234,88,12,.25);border-radius:4px;padding:1px 6px;">${overdueC} försen${overdueC>1?'ade':'ad'}</span>` : '',
-      todayC     > 0 ? `<span style="background:rgba(255,255,255,.18);border-radius:4px;padding:1px 6px;">${todayC} idag</span>` : '',
+      urgCount   > 0 ? `<span style="background:var(--lrd);color:var(--rd);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('zap',10)} ${urgCount} akut${urgCount>1?'a':''}</span>` : '',
+      overdueC   > 0 ? `<span style="background:var(--lor);color:var(--or);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('clock',10)} ${overdueC} försen${overdueC>1?'ade':'ad'}</span>` : '',
+      todayC     > 0 ? `<span style="background:#e0f2fe;color:#0369a1;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('calendar',10)} ${todayC} idag</span>` : '',
     ].filter(Boolean).join(' ');
 
     el.innerHTML =

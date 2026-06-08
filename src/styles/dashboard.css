@@ -49,14 +49,14 @@
 .kpi-card {
   background: #fff;
   border-radius: 12px;
-  padding: 16px 14px 13px;
+  padding: 18px 16px 14px;
   border: 1px solid var(--br);
   border-top: 3px solid var(--sky);
   border-left: none;
   cursor: pointer;
   transition: all .15s;
   position: relative;
-  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
 .kpi-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.10); transform: translateY(-2px); }
 .kpi-card:active { transform: scale(.98); }
@@ -67,7 +67,7 @@
 .kpi-card.purple { border-top-color: var(--pu); }
 
 .kpi-number {
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 900;
   color: var(--navy);
   line-height: 1;
