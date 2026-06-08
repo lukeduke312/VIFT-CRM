@@ -371,6 +371,7 @@ const OffersPage = {
   _getKpi() {
     const kpi = {utkast:0, skickad:0, godkänd:0, nekad:0, total:0};
     (state.offers||[]).forEach(o => {
+      if (o.deleted || o.archived) return;
       if (kpi[o.status] !== undefined) kpi[o.status]++;
       kpi.total++;
     });
@@ -382,15 +383,18 @@ const OffersPage = {
     if (!el) return;
     const c = kpi || this._getKpi();
     const f = this._filter || 'alla';
-    const kpiPamind = (state.offers||[]).filter(o=>o.status==='påmind').length;
-    const kpiErsatt = (state.offers||[]).filter(o=>o.status==='ersatt').length;
+    const kpiPamind   = (state.offers||[]).filter(o=>!o.deleted&&!o.archived&&o.status==='påmind').length;
+    const kpiArkiv    = (state.offers||[]).filter(o=>o.archived&&!o.deleted).length;
+    const kpiPapperskorg = (state.offers||[]).filter(o=>o.deleted).length;
     const tabs = [
-      {v:'alla',    l:'Alla',     n:c.total},
-      {v:'utkast',  l:'Utkast',   n:c.utkast},
-      {v:'skickad', l:'Skickade', n:c.skickad},
-      {v:'påmind',  l:'Påminda',  n:kpiPamind},
-      {v:'godkänd', l:'Godkända', n:c.godkänd},
-      {v:'nekad',   l:'Nekade',   n:c.nekad},
+      {v:'alla',         l:'Alla',         n:c.total},
+      {v:'utkast',       l:'Utkast',       n:c.utkast},
+      {v:'skickad',      l:'Skickade',     n:c.skickad},
+      {v:'påmind',       l:'Påminda',      n:kpiPamind},
+      {v:'godkänd',      l:'Godkända',     n:c.godkänd},
+      {v:'nekad',        l:'Nekade',       n:c.nekad},
+      {v:'arkiverade',   l:'Arkiverade',   n:kpiArkiv},
+      {v:'papperskorg',  l:'Papperskorg',  n:kpiPapperskorg},
     ];
     el.innerHTML = tabs.map(t =>
       `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')">${t.l}${t.n?` <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
@@ -438,7 +442,15 @@ const OffersPage = {
     const q = (this._search || '').toLowerCase().trim();
 
     let offers = all;
-    if (filterTab !== 'alla') offers = offers.filter(o => o.status === filterTab);
+    if (filterTab === 'papperskorg') {
+      offers = offers.filter(o => o.deleted);
+    } else if (filterTab === 'arkiverade') {
+      offers = offers.filter(o => o.archived && !o.deleted);
+    } else if (filterTab === 'alla') {
+      offers = offers.filter(o => !o.archived && !o.deleted);
+    } else {
+      offers = offers.filter(o => !o.archived && !o.deleted && o.status === filterTab);
+    }
     if (q) offers = offers.filter(o => {
       const cu = getCu(o.customerId);
       const cuName = cu ? CustomerService.displayName(cu).toLowerCase() : '';
@@ -2094,18 +2106,23 @@ const OfferDetailPage = {
         ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
 
         <div class="off-detail-hero-actions">
-          <button type="button" class="off-hero-btn" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>
-          <button type="button" class="off-hero-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',12)} Ny version</button>
-          <button type="button" class="off-hero-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>
-          ${(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`
+          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>`:''}
+          ${!off.deleted?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',12)} Ny version</button>`:''}
+          ${!off.deleted?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>`:''}
+          ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`
             <button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button>
             <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>
             <button type="button" class="off-hero-btn" onclick="OfferDetailPage._quickAction('${off.id}','verbal')">${ic('thumbs-up',12)} Muntligt godkänd</button>
             <button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>
           `:''}
           <button type="button" class="off-hero-btn" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',12)} PDF</button>
-          ${off.status==='godkänd'&&!off.workOrderId?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
+          ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
+          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.archiveOffer('${off.id}')" title="Arkivera">${ic('archive',12)} Arkivera</button>`:''}
+          ${off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
+          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}')" title="Flytta till papperskorg">${ic('trash',12)} Ta bort</button>`:''}
+          ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>
+            <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}')">${ic('trash-2',12)} Radera permanent</button>`:''}
         </div>
       </div>
 
@@ -2141,6 +2158,7 @@ const OfferDetailPage = {
             <span class="off-detail-sum-final-val">${fmt(cust)} kr</span>
           </div>
           ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:6px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}
+          ${prLines.some(l=>(l.description||'').includes('minimidebitering'))?`<div style="font-size:10px;color:var(--mt);margin-top:6px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;border-radius:0 4px 4px 0;">${ic('info',10)} <strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
         </div>
       </div>
 
@@ -2197,6 +2215,7 @@ const OfferDetailPage = {
       title: (off.title || 'Offert') + ' (kopia)',
       versionNumber: 1, parentOfferId: '',
       sentAt: '', answeredAt: '', reminderSentAt: '', emailSentTo: '', workOrderId: '',
+      archived: false, deleted: false,
       createdAt: now, updatedAt: now, timeline: []
     });
     this._logEvt(newOff, 'create', 'Duplicerad från ' + offerId);
@@ -2204,6 +2223,56 @@ const OfferDetailPage = {
     persist();
     Router.showPage('pg-offer-detail', {offerId: newOff.id});
     showToast('Kopia ' + newOff.id + ' skapad');
+  },
+
+  archiveOffer(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    Modal.confirm('Arkivera offert ' + offerId + '? Den försvinner från standardlistorna men kan återställas.', () => {
+      off.archived = true;
+      off.updatedAt = new Date().toISOString();
+      this._logEvt(off, 'arkiverad', 'Offert arkiverad');
+      persist();
+      OffersPage._setFilter('arkiverade');
+      Router.showPage('pg-offer');
+      showToast('Offert arkiverad');
+    });
+  },
+
+  deleteOffer(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    Modal.confirm('Flytta offert ' + offerId + ' till papperskorgen?', () => {
+      off.deleted = true;
+      off.archived = false;
+      off.updatedAt = new Date().toISOString();
+      this._logEvt(off, 'borttagen', 'Offert flyttad till papperskorg');
+      persist();
+      Router.showPage('pg-offer');
+      showToast('Offert i papperskorgen');
+    });
+  },
+
+  restoreOffer(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    off.archived = false;
+    off.deleted  = false;
+    off.updatedAt = new Date().toISOString();
+    this._logEvt(off, 'återställd', 'Offert återställd');
+    persist();
+    this.render({offerId});
+    showToast('Offert återställd');
+  },
+
+  permanentDeleteOffer(offerId) {
+    Modal.confirm('Radera offert ' + offerId + ' permanent? Detta går inte att ångra.', () => {
+      const idx = (state.offers||[]).findIndex(o => o.id === offerId);
+      if (idx >= 0) state.offers.splice(idx, 1);
+      persist();
+      Router.showPage('pg-offer');
+      showToast('Offert raderad');
+    });
   },
 
   createAO() {
@@ -2884,6 +2953,8 @@ ${txtBlks.map(tb=>`<div class="sec" style="margin-top:14px;">${tb.blockTitle?`<d
   </div>
 </div>
 
+${(off.lines||[]).some(l=>(l.description||'').includes('minimidebitering'))?`<div style="margin-bottom:12px;padding:7px 10px;background:#fffbeb;border-left:3px solid #d97706;font-size:10px;color:#555;line-height:1.5;border-radius:0 4px 4px 0;"><strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
+
 ${hasRut?`<div class="rut">
   <div class="rut-icon">${rutLabel.startsWith('ROT')?'ROT':'RUT'}</div>
   <div class="rut-body">
@@ -2893,6 +2964,24 @@ ${hasRut?`<div class="rut">
     <div class="rut-note">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion. VIFT administrerar ansökan direkt till Skatteverket.</div>
   </div>
 </div>`:''}
+
+<div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:18px;">
+  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#94a3b8;margin-bottom:14px;">Godkännande</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+    <div>
+      <div style="height:36px;border-bottom:1px solid #94a3b8;margin-bottom:5px;"></div>
+      <div style="font-size:10px;color:#64748b;">Godkänd av</div>
+    </div>
+    <div>
+      <div style="height:36px;border-bottom:1px solid #94a3b8;margin-bottom:5px;"></div>
+      <div style="font-size:10px;color:#64748b;">Datum</div>
+    </div>
+    <div>
+      <div style="height:36px;border-bottom:1px solid #94a3b8;margin-bottom:5px;"></div>
+      <div style="font-size:10px;color:#64748b;">Namnförtydligande</div>
+    </div>
+  </div>
+</div>
 
 <div class="terms">
   <div class="terms-h">Allmänna villkor</div>

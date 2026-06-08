@@ -72,6 +72,7 @@ const Schema = {
     accessCode: '',
     internalNote: '',
     status: 'nytt',           // nytt | pool | planerad | pågående | klar | fakturerad | avbruten
+    substatus: '',            // inväntar_material | inväntar_kund | pausad | behöver_återbesök | blockerad
     priority: 'normal',       // akut | hög | normal | låg
     priceType: 'ej_satt',     // ej_satt | fastpris | timpris | prisgrupp
     fixedPrice: 0,
@@ -110,6 +111,8 @@ const Schema = {
     excludes: '',
     validUntil: '',
     status: 'utkast',         // utkast | skickad | påmind | väntar | godkänd | nekad | utgången | ersatt
+    archived: false,
+    deleted: false,
     declineReason: '',
     salesOpportunityId: '',
     workOrderId: '',

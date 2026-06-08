@@ -57,6 +57,7 @@ const WorkOrderDetailPage = {
             <span style="font-size:10px;font-weight:700;opacity:.65;letter-spacing:.5px;text-transform:uppercase;">${ao.id}</span>
             <div style="display:flex;gap:5px;align-items:center;margin-left:auto;">
               ${sbdg(ao.status)} ${pbdg(ao.priority)}
+              ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="background:rgba(255,255,255,.18);color:#fff;font-size:9px;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
             </div>
           </div>
           <div style="font-size:17px;font-weight:800;line-height:1.25;margin-bottom:6px;">${ao.title}</div>
@@ -199,6 +200,19 @@ const WorkOrderDetailPage = {
     if (ao.status === 'pågående') {
       if (canComplete) btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',13)} Klarmarkera</button>`);
       if (canEdit) btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',13)} Pausa</button>`);
+      if (canEdit) {
+        const subOpts = [
+          {v:'',label:'Inget substatus'},
+          {v:'inväntar_material',label:'Inväntar material'},
+          {v:'inväntar_kund',label:'Inväntar kund'},
+          {v:'pausad',label:'Pausad'},
+          {v:'behöver_återbesök',label:'Behöver återbesök'},
+          {v:'blockerad',label:'Blockerad'},
+        ];
+        btns.push(`<select class="btn bs bsm" style="padding:5px 8px;font-size:11px;" onchange="WorkOrderDetailPage.setSubstatus(this.value);this.blur();" title="Substatus">
+          ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${o.label}</option>`).join('')}
+        </select>`);
+      }
     }
     if (ao.status === 'klar' && !ao.invoiceId && canInvoice) {
       btns.push(`<button class="btn bsu bsm" onclick="InvoicesPage.createFromAO('${ao.id}')">${ic('receipt',13)} Skapa fakturaunderlag</button>`);
@@ -793,14 +807,14 @@ const WorkOrderDetailPage = {
             <option value="Kontrollera arbete">Kontrollera arbete</option>
           </select>
         </div>
+        <div class="fg"><label>Kommentar <span style="color:var(--rd)">*</span></label>
+          <textarea id="fu-comment" rows="3" placeholder="Vad ska följas upp? Vad är syftet?"></textarea>
+        </div>
         <div class="g2">
-          <div class="fg"><label>Datum <span style="color:var(--rd)">*</span></label>
+          <div class="fg"><label>Datum för uppföljning <span style="color:var(--rd)">*</span></label>
             <input type="date" id="fu-date" value="${defaultDateStr}"></div>
           <div class="fg"><label>Tid (valfritt)</label>
             <input type="time" id="fu-time"></div>
-        </div>
-        <div class="fg"><label>Kommentar <span style="color:var(--rd)">*</span></label>
-          <textarea id="fu-comment" rows="3" placeholder="Vad ska följas upp? Vad är syftet?"></textarea>
         </div>`,
       buttons: [
         { label: 'Skapa uppföljning', cls: 'btn bsu', onClick: () => this._saveFollowUp() },
@@ -1095,9 +1109,20 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     if (!ao) return;
     WorkOrderService.setStatus(this.aoId, status);
+    if (status !== 'pågående') WorkOrderService.update(this.aoId, {substatus: ''});
     this.render({ aoId: this.aoId });
     Sidebar.updateBadges();
     showToast(`Status: ${statusLabel(status)}`);
+  },
+
+  setSubstatus(val) {
+    if (!Auth.require('ao_edit')) return;
+    WorkOrderService.update(this.aoId, {substatus: val});
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    this.render({ aoId: this.aoId });
+    const labels = {inväntar_material:'Inväntar material',inväntar_kund:'Inväntar kund',pausad:'Pausad',behöver_återbesök:'Behöver återbesök',blockerad:'Blockerad'};
+    showToast(val ? 'Substatus: ' + (labels[val]||val) : 'Substatus borttaget');
   },
 
   markComplete() {

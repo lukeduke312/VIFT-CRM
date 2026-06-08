@@ -198,7 +198,7 @@ const InvoiceService = {
 
   exportCSV() {
     const invs = state.invoices || [];
-    const rows = [['Fakturanummer','Kund','Datum','Förfallodatum','Status','Ex moms','Moms','Inkl moms','ROT/RUT','Kundpris','AO-id','Offert-id']];
+    const rows = [['Fakturanummer','Kund','Datum','Förfallodatum','Skickad','Betald','Status','Ex moms','Moms','Inkl moms','ROT/RUT','Kundpris','AO-id','Offert-id']];
     invs.forEach(inv => {
       const cu = getCu(inv.customerId);
       const s  = this.calcSummary(inv);
@@ -207,6 +207,8 @@ const InvoiceService = {
         cu ? CustomerService.displayName(cu) : '',
         inv.createdAt ? inv.createdAt.split('T')[0] : '',
         inv.dueDate || '',
+        inv.sentAt ? inv.sentAt.split('T')[0] : '',
+        inv.paidAt ? inv.paidAt.split('T')[0] : '',
         inv.status,
         s.exVat,
         s.vat,

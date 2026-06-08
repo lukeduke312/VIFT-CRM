@@ -194,6 +194,7 @@ const MyJobsPage = {
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
         </div>
         ${meta.length ? `<div style="font-size:11px;color:var(--mt);line-height:1.5;margin-bottom:2px;">${meta.join(' · ')}</div>` : ''}
+        ${ao.substatus?`<div style="margin-bottom:3px;"><span style="font-size:9px;padding:1px 6px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
         <div style="font-size:10px;color:${timeColor};margin-bottom:4px;">
           ${ic('clock',9)} ${estMins > 0 ? 'Plan: ' + TimeService.fmtDuration(estMins) + ' · ' : ''}Utfört: ${actualMins > 0 ? TimeService.fmtDuration(actualMins) : '—'}${timePct !== null ? ' (' + timePct + '%)' : estMins === 0 ? ' · Ingen tidsplan' : ''}
         </div>

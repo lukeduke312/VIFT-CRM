@@ -968,7 +968,7 @@ tbody tr:last-child td{border-bottom:none;}
 .ocr{font-size:14px;font-weight:800;font-family:monospace;letter-spacing:2px;color:#0f3763;}
 .note{margin-top:8px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;font-size:10px;color:#555;line-height:1.4;}
 .foot{margin-top:14px;padding-top:7px;border-top:1px solid #e5e7eb;font-size:9px;color:#aaa;text-align:center;}
-@media print{@page{margin:10mm;size:A4;}body{padding:0;}}
+@media print{@page{margin:10mm;size:A4;}body{padding:0;font-family:'Helvetica Neue',Arial,Helvetica,sans-serif;}}
 </style></head><body>
 
 <div class="hdr">

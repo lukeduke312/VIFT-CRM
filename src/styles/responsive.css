@@ -114,3 +114,57 @@
     font-size: 11px;
   }
 }
+
+/* ── Mobil overflow-fix (~390px) ─────── */
+@media (max-width: 430px) {
+  /* Fakturadetalj — tabell */
+  .inv-lines-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 11px;
+  }
+  .inv-lines-table th,
+  .inv-lines-table td {
+    white-space: nowrap;
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  /* Offertkalkylator — inputs */
+  .off-calc-fields {
+    display: block;
+  }
+  .off-calc-fields .g2,
+  .off-calc-fields .g3 {
+    grid-template-columns: 1fr;
+  }
+  .off-calc-chip-row {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  /* AO material-tabell */
+  .ao-mat-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ao-mat-table th,
+  .ao-mat-table td {
+    white-space: nowrap;
+    font-size: 11px;
+    padding: 5px 6px;
+  }
+
+  /* Offertrader — radbryt på liten skärm */
+  .off-line-row-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .off-detail-hero-actions {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+}

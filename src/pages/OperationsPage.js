@@ -12,14 +12,15 @@ const OperationsPage = {
     const all   = (state.workOrders || []).filter(ao => !ao.archived && !ao.deleted);
     const alive = ao => !['klar','fakturerad','avbruten'].includes(ao.status);
 
-    const todayAOs  = all.filter(ao => ao.scheduledDate === today && alive(ao));
-    const ongoing   = all.filter(ao => ao.status === 'pågående');
-    const overdue   = all.filter(ao => ao.scheduledDate && ao.scheduledDate < today && alive(ao) && ao.status !== 'pool');
-    const urgent    = all.filter(ao => ao.priority === 'akut' && alive(ao));
-    const noStaff   = all.filter(ao => (ao.staff||[]).length === 0 && alive(ao) && !['pool','avbruten'].includes(ao.status));
-    const readyBill = all.filter(ao => ao.status === 'klar' && !ao.invoiceId);
-    const withNotes = all.filter(ao => alive(ao) && (ao.notes||[]).length > 0);
-    const clocked   = state.stampActive ? 1 : 0;
+    const todayAOs       = all.filter(ao => ao.scheduledDate === today && alive(ao));
+    const ongoing        = all.filter(ao => ao.status === 'pågående');
+    const ongoingNoDate  = ongoing.filter(ao => !ao.scheduledDate);
+    const overdue        = all.filter(ao => ao.scheduledDate && ao.scheduledDate < today && alive(ao) && ao.status !== 'pool');
+    const urgent         = all.filter(ao => ao.priority === 'akut' && alive(ao));
+    const noStaff        = all.filter(ao => (ao.staff||[]).length === 0 && alive(ao) && !['pool','avbruten'].includes(ao.status));
+    const readyBill      = all.filter(ao => ao.status === 'klar' && !ao.invoiceId);
+    const withNotes      = all.filter(ao => alive(ao) && (ao.notes||[]).length > 0);
+    const clocked        = state.stampActive ? 1 : 0;
 
     el.innerHTML =
       this._kpiRow(todayAOs.length, ongoing.length, overdue.length, urgent.length,
@@ -27,6 +28,7 @@ const OperationsPage = {
       this._sectionToday(todayAOs, today) +
       this._sectionTime(todayAOs) +
       this._sectionAttention(overdue, urgent, noStaff, withNotes) +
+      this._sectionOngoingNoDate(ongoingNoDate) +
       this._sectionStaff(all, today) +
       this._sectionReadyBill(readyBill) +
       this._sectionUpcoming(all, today);
@@ -110,6 +112,24 @@ const OperationsPage = {
     return `<div style="padding:8px 14px 4px;border-bottom:1px solid var(--br);">
       <div style="font-size:11px;font-weight:800;color:var(--${color});text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic(icon,11)} ${label} (${aos.length})</div>
       ${aos.map(ao => this._aoRow(ao, true)).join('')}
+    </div>`;
+  },
+
+  // ── Pågående utan datum ───────────────────────────────────────────────────
+
+  _sectionOngoingNoDate(aos) {
+    if (!aos.length) return '';
+    const rows = aos.map(ao => {
+      const subLabels = {inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'};
+      const subBadge = ao.substatus ? `<span style="font-size:9px;padding:1px 6px;background:rgba(251,191,36,.12);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${subLabels[ao.substatus]||ao.substatus}</span>` : '';
+      return this._aoRow(ao, true) + (ao.substatus ? '' : '');
+    }).join('');
+    return `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--orange);">
+      <div class="card-header">
+        <h3 class="ch3" style="color:var(--orange);">${ic('play-circle',14)} Pågående utan planerat datum</h3>
+        <span class="bdg bdg-orange">${aos.length}</span>
+      </div>
+      <div class="card-body" style="padding:0;">${aos.map(ao => this._aoRow(ao)).join('')}</div>
     </div>`;
   },
 
@@ -325,6 +345,7 @@ const OperationsPage = {
           ${timeStr ? ` · ${timeStr}` : ''}
           ${clStr ? ` · ${clStr}` : ''}
         </div>
+        ${ao.substatus?`<div style="margin-top:2px;"><span style="font-size:9px;padding:1px 6px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
         ${staffHtml ? `<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap;">${staffHtml}</div>` : `<div style="margin-top:3px;font-size:10px;color:var(--rd);font-weight:700;">${ic('user-x',10)} Ingen personal tilldelad</div>`}
       </div>
       <span style="color:var(--mt);flex-shrink:0;">${ic('chevron-right',14)}</span>
