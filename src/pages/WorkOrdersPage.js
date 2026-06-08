@@ -33,7 +33,7 @@ const WorkOrdersPage = {
     const active = a => !['klar','fakturerad','avbruten'].includes(a.status);
     const qfCounts = {
       akut:           wos.filter(a => a.priority==='akut' && active(a)).length,
-      readyForInvoice:wos.filter(a => a.status==='klar' && !a.invoiceId).length,
+      readyForInvoice:WorkOrderService.readyForInvoice().length,
       idag:           wos.filter(a => a.scheduledDate===today && active(a)).length,
       forsenad:       wos.filter(a => a.scheduledDate && a.scheduledDate<today && active(a)).length,
       mine:           myId ? wos.filter(a => (a.staff||[]).includes(myId) && active(a)).length : 0
@@ -105,6 +105,13 @@ const WorkOrdersPage = {
     if (!el) return;
     let list = state.workOrders || [];
 
+    // ao_view_own: begränsa till egna AO och pool om användaren inte har full åtkomst
+    const canViewAll = Auth.can('ao_view_all') || Auth.can('all');
+    if (!canViewAll && Auth.can('ao_view_own') && state.currentUser) {
+      const myId = state.currentUser.id;
+      list = list.filter(a => (a.staff || []).includes(myId) || a.status === 'pool');
+    }
+
     if (this.filter === 'arkiverade') {
       list = list.filter(a => a.archived && !a.deleted);
     } else if (this.filter === 'papperskorg') {
@@ -115,7 +122,7 @@ const WorkOrdersPage = {
       if (this.filter !== 'alla') list = list.filter(a => a.status === this.filter);
       // Apply quick-filter refinements
       const _active = a => !['klar','fakturerad','avbruten'].includes(a.status);
-      if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId);
+      if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a));
       if (this._dashFilter === 'akut')    list = list.filter(a => a.priority==='akut' && _active(a));
       if (this._dashFilter === 'active')  list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
       if (this._dashFilter === 'idag')    list = list.filter(a => a.scheduledDate===tdy() && _active(a));
@@ -155,7 +162,9 @@ const WorkOrdersPage = {
         const chkText = total > 0
           ? `<span class="ao-item-progress ${chkOk===total&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${total} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
           : '';
-        const readyForInvoice = ao.status==='klar' && !ao.invoiceId;
+        const needsInvoice = ao.status==='klar' && !ao.invoiceId;
+        const isBillable   = needsInvoice && WorkOrderService._hasBillableContent(ao);
+        const noPricing    = needsInvoice && !isBillable;
         return `
           <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
@@ -165,7 +174,8 @@ const WorkOrdersPage = {
             <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
             <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
             ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);">${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart:''}</div>`:''}
-            ${readyForInvoice?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span></div>`:''}
+            ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span></div>`:''}
+            ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:9px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',9)} Saknar prissättning</span></div>`:''}
             ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
           </div>`;
       }).join('')}</div>`;
@@ -176,7 +186,9 @@ const WorkOrdersPage = {
         const chkOk  = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
         const chkAvv = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
         const total  = (ao.checklist||[]).length;
-        const readyForInvoice = ao.status==='klar' && !ao.invoiceId;
+        const needsInvoice = ao.status==='klar' && !ao.invoiceId;
+        const isBillable   = needsInvoice && WorkOrderService._hasBillableContent(ao);
+        const noPricing    = needsInvoice && !isBillable;
         const metaParts = [];
         if (cuName !== '—') metaParts.push(cuName);
         if (ao.scheduledDate) metaParts.push(ao.scheduledDate+(ao.scheduledStart?' '+ao.scheduledStart:''));
@@ -206,8 +218,9 @@ const WorkOrdersPage = {
                 ${sbdg(ao.status)}${pbdg(ao.priority)}
               </div>
             </div>
-            ${readyForInvoice || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
-              ${readyForInvoice?`<span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span>`:''}
+            ${isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+              ${isBillable?`<span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span>`:''}
+              ${noPricing?`<span class="qf-chip" style="font-size:9px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',9)} Saknar prissättning</span>`:''}
               ${chkHtml}
             </div>` : ''}
             ${archiveActions}${trashActions}

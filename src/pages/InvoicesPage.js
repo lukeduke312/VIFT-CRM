@@ -119,10 +119,14 @@ const InvoicesPage = {
         buttons: [
           { label: 'Skapa ny faktura ändå', cls: 'btn bsu', onClick: () => {
             Modal.close();
+            const originalInvoiceId = ao.invoiceId;
             ao.invoiceId = '';
             const result = InvoiceService.createFromAO(aoId);
-            ao.invoiceId = result.ok ? result.invoice.id : '';
-            if (!result.ok) { showToast(result.error); return; }
+            if (!result.ok) {
+              ao.invoiceId = originalInvoiceId;
+              persist();
+              showToast(result.error); return;
+            }
             showToast(`${result.invoice.id} skapat`);
             Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });
           }},
@@ -670,16 +674,53 @@ const InvoiceDetailPage = {
   },
 
   deleteLine(lineId) {
-    Modal.confirm('Ta bort rad?', () => {
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    const locked = ['skickad', 'betald', 'makulerad'];
+    if (locked.includes(inv.status)) {
+      showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras`);
+      return;
+    }
+    const line = (inv.lines || []).find(l => l.id === lineId);
+    const desc = line ? `"${line.description}"` : 'raden';
+    Modal.confirm(`Ta bort ${desc}?`, () => {
       InvoiceService.deleteLine(this.invoiceId, lineId);
       this._refresh();
     });
   },
 
-  setStatus(status) {
-    InvoiceService.setStatus(this.invoiceId, status);
-    this.render({ invoiceId: this.invoiceId });
-    showToast(`Status: ${statusLabel(status)}`);
+  setStatus(newStatus) {
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    const prev = inv.status;
+    if (newStatus === prev) return;
+
+    const confirmStatuses = {
+      skickad:   { label: 'Markera som skickad?', detail: 'Skickat datum sätts till idag.' },
+      betald:    { label: 'Markera som betald?',  detail: 'Betaldatum sätts till idag.' },
+      makulerad: { label: 'Makulera fakturan?',   detail: 'Fakturan markeras som ogiltig. Ångra genom att sätta annan status.' }
+    };
+
+    if (confirmStatuses[newStatus]) {
+      const c = confirmStatuses[newStatus];
+      Modal.open({
+        title: c.label,
+        body: `<p style="color:var(--mt);font-size:13px;">${c.detail}</p>`,
+        buttons: [
+          { label: 'Bekräfta', cls: 'btn bp', onClick: () => {
+            Modal.close();
+            InvoiceService.setStatus(this.invoiceId, newStatus);
+            showToast(`Status: ${statusLabel(newStatus)}`);
+            this._refresh();
+          }},
+          { label: 'Avbryt', cls: 'btn bs', onClick: () => { Modal.close(); this._refresh(); } }
+        ]
+      });
+    } else {
+      InvoiceService.setStatus(this.invoiceId, newStatus);
+      showToast(`Status: ${statusLabel(newStatus)}`);
+      this._refresh();
+    }
   },
 
   _refresh() {

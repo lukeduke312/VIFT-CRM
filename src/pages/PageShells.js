@@ -4363,6 +4363,10 @@ const AdminPage = {
   render() {
     const el = document.getElementById('pg-admin-content');
     if (!el) return;
+    if (!Auth.require('admin_manage')) {
+      el.innerHTML = `<div class="empty">${ic('lock',32)}<h3>Behörighet saknas</h3><p>Du har inte tillgång till systeminställningar.</p></div>`;
+      return;
+    }
     const s = state.settings || {};
     const allTitles = state.titles || [];
     const titles = this._titleQ

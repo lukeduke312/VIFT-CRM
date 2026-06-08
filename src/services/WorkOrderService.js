@@ -140,11 +140,22 @@ const WorkOrderService = {
     ).length;
   },
 
-  /* Ordrar redo för fakturering */
+  /* Ordrar redo för fakturering — kräver faktiskt fakturerbart innehåll */
   readyForInvoice() {
     return (state.workOrders || []).filter(a =>
-      a.status === 'klar' && !a.invoiceId
+      a.status === 'klar' && !a.invoiceId && this._hasBillableContent(a)
     );
+  },
+
+  /* Returnerar true om AO har minst en fakturerbar rad */
+  _hasBillableContent(ao) {
+    if ((ao.priceType === 'fastpris' || ao.priceType === 'fast') && (ao.fixedPrice || 0) > 0) return true;
+    if (['timpris', 'prisgrupp'].includes(ao.priceType)) {
+      const entries = TimeService.getByAO(ao.id);
+      if (entries.some(t => t.billable)) return true;
+    }
+    if ((ao.materials || []).some(m => (m.sellPrice || 0) > 0)) return true;
+    return false;
   },
 
   /* ── Arkiv & Papperskorg ────────────── */

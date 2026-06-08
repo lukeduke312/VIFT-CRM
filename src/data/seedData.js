@@ -1254,8 +1254,8 @@ const SeedData = {
     },
     {
       id: 'personal', label: 'Tekniker / Personal', isBuiltin: true, active: true,
-      description: 'Kan se och arbeta med tilldelade arbetsorder. Kan registrera tid och material.',
-      permissions: ['dashboard_view','ao_view_all','ao_view_own','ao_time','ao_material','ao_checklist']
+      description: 'Kan se egna tilldelade arbetsorder och pool. Kan registrera tid och material.',
+      permissions: ['dashboard_view','ao_view_own','ao_time','ao_material','ao_checklist']
     },
     {
       id: 'ekonomi', label: 'Ekonomi', isBuiltin: true, active: true,

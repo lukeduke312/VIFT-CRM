@@ -16,6 +16,14 @@ const WorkOrderDetailPage = {
       el.innerHTML = `<div class="empty">${ic('clipboard-list',32)}<h3>Välj en order</h3></div>`;
       return;
     }
+    // ao_view_own: technicians may only see their own AOs (pool is always visible)
+    if (!Auth.can('ao_view_all') && !Auth.can('all') && Auth.can('ao_view_own') && state.currentUser) {
+      const myId = state.currentUser.id;
+      if (!(ao.staff || []).includes(myId) && ao.status !== 'pool') {
+        el.innerHTML = `<div class="empty">${ic('lock',32)}<h3>Ingen behörighet</h3><p>Du har inte tillgång till denna arbetsorder.</p></div>`;
+        return;
+      }
+    }
     this._renderFull(el, ao);
     if (state.stampActive && state.stampAoId === ao.id) this._startStampTimer();
   },
