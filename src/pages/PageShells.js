@@ -2085,9 +2085,9 @@ const OfferDetailPage = {
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:5px;font-size:12px;opacity:.8;margin-bottom:8px;">
-          ${ic('user',12)} ${cuName}
-          ${off.validUntil?`<span style="margin-left:8px;opacity:.7;">· ${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;">
+          <span style="font-size:15px;font-weight:800;color:#fff;">${cuName}</span>
+          ${off.validUntil?`<span style="font-size:11px;opacity:.7;">· ${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
         </div>
 
         <div class="off-hero-price-grid">
@@ -2118,11 +2118,12 @@ const OfferDetailPage = {
           <button type="button" class="off-hero-btn" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',12)} PDF</button>
           ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
-          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.archiveOffer('${off.id}')" title="Arkivera">${ic('archive',12)} Arkivera</button>`:''}
           ${off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
+          ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
+          ${(!off.archived&&!off.deleted)||off.deleted?`<span style="display:inline-block;width:1px;height:20px;background:rgba(255,255,255,.2);margin:0 4px;vertical-align:middle;"></span>`:''}
+          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.archiveOffer('${off.id}')" title="Arkivera">${ic('archive',12)} Arkivera</button>`:''}
           ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}')" title="Flytta till papperskorg">${ic('trash',12)} Ta bort</button>`:''}
-          ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>
-            <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}')">${ic('trash-2',12)} Radera permanent</button>`:''}
+          ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}')">${ic('trash-2',12)} Radera permanent</button>`:''}
         </div>
       </div>
 

@@ -186,8 +186,8 @@
   font-size: 10px;
   font-weight: 700;
   color: color-mix(in srgb, var(--brand-primary-text) 45%, transparent);
-  text-transform: uppercase;
-  letter-spacing: .8px;
+  text-transform: none;
+  letter-spacing: .2px;
   padding: 0 4px 4px;
 }
 

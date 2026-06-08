@@ -88,9 +88,6 @@ const WorkOrderDetailPage = {
       <!-- Stämpling -->
       ${this._stampSection(ao, isStampedOnThis)}
 
-      <!-- Tid vs plan -->
-      ${this._timePlanBlock(ao)}
-
       <!-- Checklista -->
       <div class="card">
         <div class="card-header">
@@ -131,6 +128,9 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
+      <!-- Tid vs plan -->
+      ${this._timePlanBlock(ao)}
+
       <!-- Tidslinje/logg -->
       <div class="card">
         <div class="card-header">
@@ -164,8 +164,14 @@ const WorkOrderDetailPage = {
           ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
         </div>` : ''}
 
-      <!-- Intern lönsamhet -->
-      ${this._tbBlock(ao)}
+      <!-- Intern lönsamhet (admin) -->
+      ${Auth.canAny(['reports_view','staff_view']) ? `
+        <details style="margin-top:8px;">
+          <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
+            ${ic('bar-chart-2',13)} Intern lönsamhet
+          </summary>
+          ${this._tbBlock(ao)}
+        </details>` : ''}
 
       <!-- Återkommande -->
       ${ao.recurringOrderId

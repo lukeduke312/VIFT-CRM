@@ -31,8 +31,8 @@ const DashboardConfig = {
      Moduler som inte listas visas med visible:false (kan aktiveras manuellt).
   ─────────────────────────────────────────────────────────────────────── */
   ROLE_DEFAULTS: {
-    admin:    ['overdue_alert','kpi','todos','operations','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
-    chef:     ['overdue_alert','kpi','todos','operations','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
+    admin:    ['overdue_alert','todos','kpi','operations','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
+    chef:     ['overdue_alert','todos','kpi','operations','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
     personal: ['overdue_alert','kpi','today','pool','stamp','activities','rondering','quickbtns'],
     ekonomi:  ['overdue_alert','kpi','todos','offers','activity_log','quickbtns'],
   },

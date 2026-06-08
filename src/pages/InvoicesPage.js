@@ -203,25 +203,43 @@ const InvoiceDetailPage = {
     const statusOpts = ['utkast','skickad','betald','förfallen','makulerad'];
     const ao   = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
     const off  = inv.offerId ? (state.offers||[]).find(o=>o.id===inv.offerId) : null;
+    const tots = InvoiceService.calcTotals(inv);
+    const cuName = cu ? CustomerService.displayName(cu) : '—';
 
     el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-        <button class="btn bs bsm" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)}</button>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:16px;font-weight:800;">${inv.id}</div>
-          ${inv.title ? `<div style="font-size:13px;color:var(--mt);font-weight:600;">${esc(inv.title)}</div>` : ''}
-          <div>${sbdg(inv.status)}</div>
+      <!-- Hero -->
+      <div class="card" style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);color:#fff;border-radius:12px;margin-bottom:8px;">
+        <div style="padding:12px 14px 10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)}</button>
+            <span style="font-size:11px;font-weight:700;opacity:.6;letter-spacing:.3px;">${inv.id}</span>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+              ${sbdg(inv.status)}
+              <select class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);font-weight:600;font-size:11px;" onchange="InvoiceDetailPage.setStatus(this.value)">
+                ${statusOpts.map(s=>`<option value="${s}" ${inv.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:3px;">${cuName}</div>
+          ${inv.title ? `<div style="font-size:12px;opacity:.75;margin-bottom:8px;">${esc(inv.title)}</div>` : '<div style="margin-bottom:8px;"></div>'}
+          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:11px;opacity:.65;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Totalt inkl. moms</div>
+              <div style="font-size:26px;font-weight:900;line-height:1.1;">${fkr(tots.total)}</div>
+            </div>
+            ${inv.dueDate ? `<div>
+              <div style="font-size:11px;opacity:.65;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Förfallodatum</div>
+              <div style="font-size:13px;font-weight:700;">${fmtDate(inv.dueDate)}</div>
+            </div>` : ''}
+          </div>
         </div>
-        <select class="btn bs bsm" style="font-weight:600;" onchange="InvoiceDetailPage.setStatus(this.value)">
-          ${statusOpts.map(s=>`<option value="${s}" ${inv.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
-        </select>
       </div>
 
       <!-- Metadata -->
       <div class="card">
         <div class="card-header"><h3>Faktureras till</h3></div>
         <div class="card-body">
-          <div class="dr"><span class="dk">Kund</span><span class="dv">${cu?CustomerService.displayName(cu):'—'}</span></div>
+          <div class="dr"><span class="dk">Kund</span><span class="dv">${cuName}</span></div>
           ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${esc(cu.address||'—')}${cu.city?', '+esc(cu.city):''}</span></div>` : ''}
           ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(cu.orgNr)}</span></div>` : ''}
           <div class="dr"><span class="dk">Förfallodatum</span><span class="dv">${fmtDate(inv.dueDate)}</span></div>

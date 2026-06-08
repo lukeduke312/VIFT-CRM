@@ -218,11 +218,12 @@ const WorkOrdersPage = {
           <button class="ao-list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
             <div class="ao-item-top">
               <div style="flex:1;min-width:0;">
-                <div class="ao-item-title"><span class="ao-item-id">${ao.id}</span>${ao.title}</div>
+                <div class="ao-item-id">${ao.id}</div>
+                <div class="ao-item-title">${ao.title}</div>
                 ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
               </div>
               <div class="ao-item-badges">
-                ${sbdg(ao.status)}${pbdg(ao.priority)}
+                ${sbdg(ao.status)}${ao.priority !== 'normal' ? pbdg(ao.priority) : ''}
               </div>
             </div>
             ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}

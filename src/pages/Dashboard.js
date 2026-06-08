@@ -66,8 +66,8 @@ const Dashboard = {
           `<span style="font-size:12px;font-weight:500;color:var(--mt);">${todayStr2}</span>` +
         `</div>` +
         `<div style="display:flex;gap:6px;">` +
-          `<button class="btn bs bsm" onclick="Dashboard.openUserPrefs()" title="Mina inställningar">${ic('user',12)} Mina inställningar</button>` +
-          `<button class="btn bs bsm" onclick="Dashboard.openCustomize()" title="Anpassa dashboard">${ic('settings',12)} Anpassa</button>` +
+          `<button class="btn bs bxs" onclick="Dashboard.openUserPrefs()" title="Mina inställningar">${ic('user',12)} Mina inställningar</button>` +
+          `<button class="btn bs bxs" onclick="Dashboard.openCustomize()" title="Anpassa dashboard">${ic('settings',12)} Anpassa</button>` +
         `</div>` +
       `</div>` +
       (heroSub ? `<div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">${heroSub}</div>` : '') +
