@@ -37,23 +37,26 @@ const OperationsPage = {
   // ── KPI row ──────────────────────────────────────────────────────────────
 
   _kpiRow(todayCnt, ongoingCnt, overdueCnt, urgentCnt, noStaffCnt, clockedCnt, billCnt, notesCnt) {
-    const kpi = (val, label, color, icon, page, filter) => {
-      const onclick = page ? `Router.showPage('${page}'${filter ? `,{filter:'${filter}'}` : ''})` : '';
-      return `<div class="kpi-card" style="border-top:3px solid var(--${color});cursor:${onclick?'pointer':'default'};" ${onclick?`onclick="${onclick}"`:''}">
-        <div class="kpi-val" style="color:var(--${color});">${val}</div>
-        <div class="kpi-lbl">${ic(icon,11)} ${label}</div>
+    const attentionCnt = overdueCnt + urgentCnt;
+    const stat = (val, label, cls, icon, onclick) =>
+      `<div class="ops-stat-card${cls?' '+cls:''}" ${onclick?`onclick="${onclick}"`:''}>
+        <div class="ops-stat-num">${val}</div>
+        <div class="ops-stat-lbl">${ic(icon,11)} ${label}</div>
       </div>`;
-    };
-    return `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
-      ${kpi(todayCnt,  'Planerade idag',      'blue',   'calendar',       'pg-operations', 'today')}
-      ${kpi(ongoingCnt,'Pågående',            'green',  'play-circle',    'pg-operations', 'ongoing')}
-      ${kpi(overdueCnt,'Försenade',           'rd',     'alert-triangle', 'pg-operations', 'overdue')}
-      ${kpi(urgentCnt, 'Akuta',               'rd',     'alert-circle',   'pg-operations', 'urgent')}
-      ${kpi(noStaffCnt,'Saknar personal',     'orange', 'user-x',         'pg-operations', 'nostaff')}
-      ${kpi(clockedCnt,'Inklockade',          'blue',   'clock',          null, null)}
-      ${kpi(billCnt,   'Klara ej fakt.',      'orange', 'receipt',        'pg-operations', 'bill')}
-      ${kpi(notesCnt,  'Med anteckningar',    'mt',     'file-text',      'pg-operations', 'notes')}
-    </div>`;
+
+    const pills = [
+      noStaffCnt > 0 ? `<span style="background:rgba(234,88,12,.1);color:var(--or);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;">${ic('user-x',10)} ${noStaffCnt} saknar personal</span>` : '',
+      clockedCnt > 0 ? `<span style="background:rgba(43,127,212,.1);color:var(--sky);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;">${ic('clock',10)} ${clockedCnt} inklockad${clockedCnt>1?'e':''}</span>` : '',
+      notesCnt > 0   ? `<span style="background:var(--bg);color:var(--mt);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;">${ic('file-text',10)} ${notesCnt} med anteckningar</span>` : '',
+    ].filter(Boolean).join('');
+
+    return `<div class="ops-stats-bar">
+      ${stat(todayCnt,     'Planerade idag', 'blue',                              'calendar',       `Router.showPage('pg-operations',{filter:'today'})`)}
+      ${stat(ongoingCnt,   'Pågående',       'green',                             'play-circle',    `Router.showPage('pg-operations',{filter:'ongoing'})`)}
+      ${stat(attentionCnt, 'Kräver åtgärd',  attentionCnt>0?'red':'',            'alert-triangle', `Router.showPage('pg-operations',{filter:'overdue'})`)}
+      ${stat(billCnt,      'Ej fakturerade', billCnt>0?'orange':'',               'receipt',        `Router.showPage('pg-operations',{filter:'bill'})`)}
+    </div>
+    ${pills ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${pills}</div>` : ''}`;
   },
 
   // ── Dagens AO ────────────────────────────────────────────────────────────
@@ -81,10 +84,11 @@ const OperationsPage = {
 
   _sectionAttention(overdue, urgent, noStaff, withNotes) {
     const total = overdue.length + urgent.length + noStaff.length + withNotes.length;
-    if (total === 0) return `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--green);">
-      <div class="card-body" style="padding:12px 14px;display:flex;align-items:center;gap:10px;">
-        <span style="font-size:22px;">${ic('check-circle',22)}</span>
-        <span style="font-size:13px;font-weight:700;color:var(--green);">Inget kräver omedelbar uppmärksamhet</span>
+    if (total === 0) return `<div class="attention-banner warn" style="border-left-color:var(--gr);background:#f0fdf4;border-color:#86efac;margin-bottom:12px;">
+      <div class="attention-banner-icon" style="color:var(--gr);">${ic('check-circle',18)}</div>
+      <div class="attention-banner-body">
+        <div class="attention-banner-title" style="color:#166534;">Inget kräver omedelbar uppmärksamhet</div>
+        <div class="attention-banner-sub">Alla aktiva ordrar är under kontroll</div>
       </div>
     </div>`;
 
@@ -152,26 +156,26 @@ const OperationsPage = {
       const initials = (s.firstName||'').charAt(0) + (s.lastName||'').charAt(0);
       const nextJob  = todayAOs.find(ao => !['pågående'].includes(ao.status));
 
-      return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--br);">
-        <div style="width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;">${initials}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;color:var(--navy);">${esc(s.firstName)} ${esc(s.lastName)}</div>
-          <div style="font-size:11px;color:var(--mt);">${role ? esc(role.label) : esc(s.role||'')}</div>
-          ${stamped ? `<div style="font-size:11px;font-weight:700;color:var(--green);margin-top:2px;">${ic('clock',10)} Inklockad${stampAo ? ` — ${esc(stampAo.id)}: ${esc(stampAo.title)}` : ''}</div>` : ''}
-          ${nextJob && !stamped ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${ic('arrow-right',10)} Nästa: ${esc(nextJob.title)}</div>` : ''}
+      return `<div class="ops-staff-row">
+        <div class="ops-staff-avatar">${initials}</div>
+        <div class="ops-staff-info">
+          <div class="ops-staff-name">${esc(s.firstName)} ${esc(s.lastName)}</div>
+          <div class="ops-staff-role">${role ? esc(role.label) : esc(s.role||'')}</div>
+          ${stamped ? `<div class="ops-staff-status stamped">${ic('clock',10)} Inklockad${stampAo ? ` — ${esc(stampAo.id)}: ${esc(stampAo.title)}` : ''}</div>` : ''}
+          ${nextJob && !stamped ? `<div class="ops-staff-status">${ic('arrow-right',10)} Nästa: ${esc(nextJob.title)}</div>` : ''}
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;">
-          <div style="text-align:center;">
-            <div style="font-size:14px;font-weight:800;color:var(--blue);">${todayAOs.length}</div>
-            <div style="font-size:10px;color:var(--mt);">Idag</div>
+        <div class="ops-staff-stats">
+          <div class="ops-staff-stat">
+            <div class="ops-staff-stat-num" style="color:var(--sky);">${todayAOs.length}</div>
+            <div class="ops-staff-stat-lbl">Idag</div>
           </div>
-          <div style="text-align:center;">
-            <div style="font-size:14px;font-weight:800;color:${running.length>0?'var(--green)':'var(--mt)'};">${running.length}</div>
-            <div style="font-size:10px;color:var(--mt);">Pågående</div>
+          <div class="ops-staff-stat">
+            <div class="ops-staff-stat-num" style="color:${running.length>0?'var(--gr)':'var(--mt)'};">${running.length}</div>
+            <div class="ops-staff-stat-lbl">Pågående</div>
           </div>
-          <div style="text-align:center;">
-            <div style="font-size:14px;font-weight:800;color:${overdueN.length>0?'var(--rd)':'var(--mt)'};">${overdueN.length}</div>
-            <div style="font-size:10px;color:var(--mt);">Försenade</div>
+          <div class="ops-staff-stat">
+            <div class="ops-staff-stat-num" style="color:${overdueN.length>0?'var(--rd)':'var(--mt)'};">${overdueN.length}</div>
+            <div class="ops-staff-stat-lbl">Försenade</div>
           </div>
         </div>
       </div>`;

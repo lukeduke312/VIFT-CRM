@@ -59,13 +59,14 @@
 /* ── Kort ─────────────────────────────── */
 .card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--br);
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  box-shadow: 0 1px 4px rgba(0,0,0,.05), 0 0 0 0 transparent;
   overflow: hidden;
+  transition: box-shadow .15s;
 }
 .card-header {
-  padding: 12px 14px 11px;
+  padding: 13px 16px 12px;
   border-bottom: 1px solid var(--br);
   display: flex;
   align-items: center;
@@ -84,7 +85,7 @@
   line-height: 1;
   margin: 0;
 }
-.card-body { padding: 14px; }
+.card-body { padding: 14px 16px; }
 
 /* ── Listrader ────────────────────────── */
 .list-item {
@@ -1502,3 +1503,184 @@ body.modal-open { overflow: hidden; touch-action: none; }
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
   color: var(--rd); margin-bottom: 5px; display: flex; align-items: center; gap: 4px;
 }
+
+/* ── Fas 7B — Nya layoutkomponenter ──────────── */
+
+/* Sidhero (dashboard-greeting + stats) */
+.page-hero {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+  border-radius: 14px;
+  padding: 20px 22px;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.page-hero-greeting { font-size: 13px; font-weight: 600; opacity: .75; margin-bottom: 2px; }
+.page-hero-title    { font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -.3px; }
+.page-hero-sub      { font-size: 12px; opacity: .7; margin-top: 6px; line-height: 1.4; }
+.page-hero-stats {
+  display: flex; gap: 16px; margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,.12); flex-wrap: wrap;
+}
+.page-hero-stat       { text-align: center; }
+.page-hero-stat-num   { font-size: 24px; font-weight: 900; line-height: 1; }
+.page-hero-stat-lbl   { font-size: 10px; opacity: .7; margin-top: 3px; font-weight: 600; }
+.page-hero-stat.urgent .page-hero-stat-num { color: #fca5a5; }
+.page-hero-stat.warn   .page-hero-stat-num { color: #fcd34d; }
+.page-hero-stat.good   .page-hero-stat-num { color: #86efac; }
+
+/* Urgent/attention banner */
+.attention-banner {
+  background: #fef2f2; border: 1.5px solid #fca5a5;
+  border-left: 4px solid var(--rd);
+  border-radius: 10px; padding: 12px 14px;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.attention-banner.warn {
+  background: #fff7ed; border-color: #fde68a; border-left-color: var(--or);
+}
+.attention-banner-icon { flex-shrink: 0; color: var(--rd); margin-top: 1px; }
+.attention-banner.warn .attention-banner-icon { color: var(--or); }
+.attention-banner-body { flex: 1; min-width: 0; }
+.attention-banner-title { font-size: 13px; font-weight: 800; color: var(--tx); }
+.attention-banner-sub   { font-size: 11px; color: var(--mt); margin-top: 2px; }
+
+/* KPI inline row (bar of stats in a card header or hero) */
+.kpi-inline-row {
+  display: flex; gap: 0; border-radius: 10px;
+  border: 1px solid var(--br); overflow: hidden;
+  background: #fff;
+}
+.kpi-inline-cell {
+  flex: 1; padding: 12px 10px; text-align: center;
+  border-right: 1px solid var(--br); cursor: pointer;
+  transition: background .1s;
+}
+.kpi-inline-cell:last-child { border-right: none; }
+.kpi-inline-cell:hover { background: var(--bg); }
+.kpi-inline-num { font-size: 22px; font-weight: 900; color: var(--navy); line-height: 1; }
+.kpi-inline-lbl { font-size: 10px; font-weight: 600; color: var(--mt); margin-top: 4px; letter-spacing: .1px; }
+.kpi-inline-cell.urgent .kpi-inline-num { color: var(--rd); }
+.kpi-inline-cell.warn   .kpi-inline-num { color: var(--or); }
+.kpi-inline-cell.good   .kpi-inline-num { color: var(--gr); }
+.kpi-inline-cell.info   .kpi-inline-num { color: var(--sky); }
+
+/* Job card v2 — techn. mina jobb */
+.job-card-v2 {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--br);
+  border-left: 4px solid var(--br);
+  padding: 14px 14px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: box-shadow .12s, transform .12s;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.job-card-v2:hover { box-shadow: 0 4px 14px rgba(13,43,78,.1); }
+.job-card-v2:active { transform: scale(.99); }
+.job-card-v2.p-akut { border-left-color: var(--rd); }
+.job-card-v2.p-hog  { border-left-color: var(--or); }
+.job-card-v2.p-normal{ border-left-color: var(--sky); }
+.job-card-v2.late   { border-left-color: var(--rd); background: #fef2f2; }
+.job-card-v2.active { border-left-color: var(--gr); background: #f0fdf4; }
+.job-card-v2-top    { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.job-card-v2-title  { font-size: 15px; font-weight: 800; color: var(--tx); line-height: 1.25; flex: 1; }
+.job-card-v2-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+.job-card-v2-meta   { font-size: 12px; color: var(--mt); display: flex; flex-direction: column; gap: 3px; }
+.job-card-v2-meta-row { display: flex; align-items: center; gap: 5px; }
+.job-card-v2-actions { display: flex; gap: 7px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--bg); }
+.job-card-v2-id     { font-size: 11px; font-weight: 700; color: var(--mt); }
+
+/* Ops stats bar */
+.ops-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+@media (max-width: 600px) { .ops-stats-bar { grid-template-columns: repeat(2, 1fr); } }
+.ops-stat-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--br);
+  padding: 14px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .12s;
+  border-top: 3px solid var(--br);
+}
+.ops-stat-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+.ops-stat-card.red   { border-top-color: var(--rd); }
+.ops-stat-card.orange{ border-top-color: var(--or); }
+.ops-stat-card.green { border-top-color: var(--gr); }
+.ops-stat-card.blue  { border-top-color: var(--sky); }
+.ops-stat-num  { font-size: 26px; font-weight: 900; line-height: 1; color: var(--navy); }
+.ops-stat-lbl  { font-size: 11px; font-weight: 600; color: var(--mt); margin-top: 4px; }
+.ops-stat-card.red   .ops-stat-num { color: var(--rd); }
+.ops-stat-card.orange .ops-stat-num { color: var(--or); }
+.ops-stat-card.green  .ops-stat-num { color: var(--gr); }
+.ops-stat-card.blue   .ops-stat-num { color: var(--sky); }
+
+/* Staff row (compact horizontal for operations) */
+.ops-staff-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--bg);
+}
+.ops-staff-row:last-child { border-bottom: none; }
+.ops-staff-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800;
+}
+.ops-staff-info { flex: 1; min-width: 0; }
+.ops-staff-name { font-size: 13px; font-weight: 700; color: var(--navy); }
+.ops-staff-role { font-size: 11px; color: var(--mt); }
+.ops-staff-status { font-size: 11px; font-weight: 700; margin-top: 1px; }
+.ops-staff-status.stamped { color: var(--gr); }
+.ops-staff-stats { display: flex; gap: 10px; flex-shrink: 0; }
+.ops-staff-stat  { text-align: center; }
+.ops-staff-stat-num { font-size: 16px; font-weight: 900; color: var(--navy); line-height: 1; }
+.ops-staff-stat-lbl { font-size: 10px; color: var(--mt); }
+
+/* Section separator (no card) */
+.section-sep {
+  font-size: 11px; font-weight: 700; color: var(--mt);
+  letter-spacing: .1px;
+  padding: 6px 0 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-sep::after {
+  content: ''; flex: 1; height: 1px; background: var(--br);
+}
+
+/* Admin section group */
+.admin-section-group {
+  border: 1px solid var(--br); border-radius: 14px;
+  overflow: hidden; margin-bottom: 0;
+}
+.admin-section-header {
+  background: var(--bg);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--br);
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.admin-section-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 18px;
+}
+.admin-section-title { font-size: 14px; font-weight: 800; color: var(--navy); }
+.admin-section-desc  { font-size: 12px; color: var(--mt); margin-top: 2px; }
+
+/* Offer card insight pill (Fas 7B improved) */
+.off-next-step {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg); border-radius: 8px;
+  padding: 7px 10px; margin-top: 8px;
+  font-size: 12px; font-weight: 600; color: var(--tx);
+  border-left: 3px solid var(--sky);
+}
+.off-next-step.urgent { background: #fef2f2; border-left-color: var(--rd); color: var(--rd); }
+.off-next-step.warn   { background: #fff7ed; border-left-color: var(--or); color: #92400e; }
+.off-next-step.good   { background: #f0fdf4; border-left-color: var(--gr); color: var(--gr); }

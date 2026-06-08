@@ -4463,30 +4463,33 @@ const AdminPage = {
       : allTitles;
 
     el.innerHTML = `
-      <!-- Företagsinformation -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Företagsinformation</h3>
-          <button class="btn bs bxs" onclick="AdminPage.openEditCompany()">${ic('pencil',13)} Redigera</button>
+      <!-- ─── GRUPP 1: Företagsinformation & Branding ─── -->
+      <div class="admin-section-group" style="margin-bottom:14px;">
+        <div class="admin-section-header">
+          <div class="admin-section-icon" style="background:#eff6ff;color:var(--blue);">${ic('building-2',18)}</div>
+          <div>
+            <div class="admin-section-title">Företagsinformation & Branding</div>
+            <div class="admin-section-desc">Företagsuppgifter, logotype och varumärkesfärger</div>
+          </div>
         </div>
-        <div class="card-body">
+
+        <!-- Uppgifter -->
+        <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="font-size:12px;font-weight:800;color:var(--navy);">Uppgifter</div>
+            <button class="btn bs bxs" onclick="AdminPage.openEditCompany()">${ic('pencil',13)} Redigera</button>
+          </div>
           <div class="dr"><span class="dk">Företag</span><span class="dv">${s.companyName || '—'}</span></div>
           <div class="dr"><span class="dk">Slogan</span><span class="dv">${s.slogan || '—'}</span></div>
           <div class="dr"><span class="dk">Telefon</span><span class="dv">${s.companyPhone || '—'}</span></div>
           <div class="dr"><span class="dk">E-post</span><span class="dv">${s.companyEmail || '—'}</span></div>
           <div class="dr"><span class="dk">Adress</span><span class="dv">${s.companyAddress || '—'}</span></div>
-          <div class="dr"><span class="dk">Webbsida</span><span class="dv">${s.website || '—'}</span></div>
           <div class="dr"><span class="dk">Org.nr</span><span class="dv">${s.orgNr || '—'}</span></div>
           <div class="dr"><span class="dk">Moms-nr</span><span class="dv">${s.vatNr || '—'}</span></div>
         </div>
-      </div>
 
-      <!-- Branding & Logga -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('image',14)} Branding & Logga</h3>
-        </div>
-        <div class="card-body" style="padding:0;">
+        <!-- Branding & Logga — inside group -->
+        <div>
 
           <!-- Logo ljus bakgrund -->
           <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--br);">
@@ -4570,128 +4573,149 @@ const AdminPage = {
         </div>
       </div>
 
-      <!-- Ekonomi & Lönsamhet -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('trending-up',14)} Ekonomi & Lönsamhet</h3>
-          <button class="btn bs bxs" onclick="AdminPage.openEditEkonomi()">${ic('pencil',13)} Redigera</button>
+      <!-- ─── GRUPP 2: Ekonomi ─── -->
+      <div class="admin-section-group" style="margin-bottom:14px;">
+        <div class="admin-section-header">
+          <div class="admin-section-icon" style="background:#f0fdf4;color:var(--gr);">${ic('trending-up',18)}</div>
+          <div>
+            <div class="admin-section-title">Ekonomi</div>
+            <div class="admin-section-desc">Intern timkostnad och lönsamhetsparametrar</div>
+          </div>
+          <button class="btn bs bxs" style="margin-left:auto;flex-shrink:0;" onclick="AdminPage.openEditEkonomi()">${ic('pencil',13)} Redigera</button>
         </div>
-        <div class="card-body">
+        <div style="padding:14px 16px;">
           <div class="dr">
             <span class="dk">Intern timkostnad</span>
             <span class="dv">${fmt((s.internalHourlyCost || 250))} kr/h ex moms</span>
           </div>
-          <p style="font-size:11px;color:var(--mt);margin-top:6px;line-height:1.5;">Används för att beräkna täckningsbidrag och intern arbetskostnad. Visas aldrig för kund.</p>
+          <p style="font-size:11px;color:var(--mt);margin-top:6px;line-height:1.5;">Används för att beräkna täckningsbidrag. Visas aldrig för kund.</p>
         </div>
       </div>
 
-      <!-- Titlar / yrkesroller -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Titlar / yrkesroller</h3>
-          <button class="btn bp bxs" onclick="AdminPage.openAddTitle()">${ic('plus',13)} Lägg till</button>
+      <!-- ─── GRUPP 3: Personal & Roller ─── -->
+      <div class="admin-section-group" style="margin-bottom:14px;">
+        <div class="admin-section-header">
+          <div class="admin-section-icon" style="background:#faf5ff;color:var(--pu);">${ic('users',18)}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="admin-section-title">Personal & Roller</div>
+            <div class="admin-section-desc">Titlar/yrkesroller, behörighetsroller och personalregister</div>
+          </div>
+          <button class="btn bs bxs" style="flex-shrink:0;" onclick="Router.showPage('pg-staff')">${ic('arrow-right',13)} Personal</button>
         </div>
-        <div style="padding:8px 14px 4px;border-bottom:1px solid var(--br);">
-          <div class="swrap">
-            <span class="sico">${ic('search',14)}</span>
-            <input type="search" placeholder="Sök titel…" value="${this._titleQ}"
-              oninput="AdminPage._titleQ=this.value;AdminPage.render()" style="font-size:12px;">
+
+        <!-- Titlar -->
+        <div style="border-bottom:1px solid var(--br);">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--bg);">
+            <div style="font-size:12px;font-weight:800;color:var(--navy);">Titlar / yrkesroller</div>
+            <button class="btn bp bxs" onclick="AdminPage.openAddTitle()">${ic('plus',13)} Lägg till</button>
+          </div>
+          <div style="padding:6px 16px 4px;">
+            <div class="swrap">
+              <span class="sico">${ic('search',14)}</span>
+              <input type="search" placeholder="Sök titel…" value="${this._titleQ}"
+                oninput="AdminPage._titleQ=this.value;AdminPage.render()" style="font-size:12px;">
+            </div>
+          </div>
+          <div style="padding:4px 16px 4px;">
+            ${allTitles.length === 0
+              ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga titlar registrerade</p>'
+              : titles.length === 0
+                ? `<p style="font-size:12px;color:var(--mt);padding:6px 0;">Ingen titel matchar "${this._titleQ}"</p>`
+                : titles.map(t => {
+                    const origIdx = allTitles.findIndex(x => x.id === t.id);
+                    const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
+                      <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                          <span style="font-size:13px;font-weight:600;">${t.name}</span>
+                          <span class="bdg ${t.active?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active?'Aktiv':'Inaktiv'}</span>
+                        </div>
+                        ${t.description ? `<div style="font-size:11px;color:var(--mt);">${t.description}</div>` : ''}
+                        ${usageCount > 0
+                          ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
+                              ${usageCount} person${usageCount===1?'':'er'} – Visa ${ic('arrow-right',9)}
+                            </div>`
+                          : '<div style="font-size:10px;color:var(--mt);">Ej använd</div>'}
+                      </div>
+                      <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${origIdx})">${ic('pencil',11)}</button>
+                      <button class="btn bxs ${t.active?'bw':'bsu'}" onclick="AdminPage.toggleTitleActive(${origIdx})"
+                        style="font-size:10px;">${t.active?ic('eye-off',11):ic('eye',11)}</button>
+                      <button class="btn bxs bd" onclick="AdminPage.removeTitle(${origIdx})"
+                        ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
+                    </div>`;
+                  }).join('')
+            }
           </div>
         </div>
-        <div class="card-body" style="padding:4px 14px;">
-          ${allTitles.length === 0
-            ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga titlar registrerade</p>'
-            : titles.length === 0
-              ? `<p style="font-size:12px;color:var(--mt);padding:6px 0;">Ingen titel matchar "${this._titleQ}"</p>`
-              : titles.map(t => {
-                  const origIdx = allTitles.findIndex(x => x.id === t.id);
-                  const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
-                  return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
+
+        <!-- Roller -->
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--bg);">
+            <div style="font-size:12px;font-weight:800;color:var(--navy);">Roller & behörigheter</div>
+            <button class="btn bp bxs" onclick="AdminPage.openAddRole()">${ic('plus',13)} Ny roll</button>
+          </div>
+          <div style="padding:4px 16px 4px;">
+            ${(state.roles||[]).length === 0
+              ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga roller definierade</p>'
+              : (state.roles||[]).map(r => {
+                  const permCount  = (r.permissions||[]).length;
+                  const staffCount = (state.staff||[]).filter(s=>s.role===r.id).length;
+                  const isActive   = r.active !== false;
+                  return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;${isActive?'':'opacity:.65'}">
                     <div style="flex:1;min-width:0;">
-                      <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="font-size:13px;font-weight:600;">${t.name}</span>
-                        <span class="bdg ${t.active?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active?'Aktiv':'Inaktiv'}</span>
+                      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
+                        <span style="font-size:13px;font-weight:700;">${r.label}</span>
+                        <span class="bdg ${isActive?'bdg-green':'bdg-grey'}" style="font-size:9px;">${isActive?'Aktiv':'Inaktiv'}</span>
+                        ${r.isBuiltin?`<span class="bdg bdg-grey" style="font-size:9px;">Inbyggd</span>`:''}
+                        ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;cursor:pointer;" onclick="AdminPage.showRoleStaff('${r.id}')">${staffCount} pers.</span>`:''}
                       </div>
-                      ${t.description ? `<div style="font-size:11px;color:var(--mt);">${t.description}</div>` : ''}
-                      ${usageCount > 0
-                        ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
-                            ${usageCount} person${usageCount===1?'':'er'} – Visa ${ic('arrow-right',9)}
-                          </div>`
-                        : '<div style="font-size:10px;color:var(--mt);">Ej använd</div>'}
+                      ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
+                      <div style="font-size:10px;color:var(--sky);margin-top:2px;">${permCount===0?'Inga behörigheter':permCount+' behörighet'+(permCount===1?'':'er')+(r.permissions&&r.permissions.includes('all')?' (superadmin)':'')}</div>
                     </div>
-                    <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${origIdx})">${ic('pencil',11)}</button>
-                    <button class="btn bxs ${t.active?'bw':'bsu'}" onclick="AdminPage.toggleTitleActive(${origIdx})"
-                      style="font-size:10px;">${t.active?ic('eye-off',11):ic('eye',11)}</button>
-                    <button class="btn bxs bd" onclick="AdminPage.removeTitle(${origIdx})"
-                      ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
+                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                      <button class="btn bxs bs" onclick="AdminPage.openEditRole('${r.id}')">${ic('pencil',11)}</button>
+                      <button class="btn bxs ${isActive?'bw':'bsu'}" onclick="AdminPage.toggleRoleActive('${r.id}')"
+                        title="${isActive?'Inaktivera':'Aktivera'}" style="font-size:10px;">${isActive?ic('eye-off',11):ic('eye',11)}</button>
+                      ${!r.isBuiltin?`<button class="btn bxs bd" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`:''}
+                    </div>
                   </div>`;
                 }).join('')
-          }
-        </div>
-      </div>
-
-      <!-- Roller & behörigheter -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Roller & behörigheter</h3>
-          <button class="btn bp bxs" onclick="AdminPage.openAddRole()">${ic('plus',13)} Ny roll</button>
-        </div>
-        <div class="card-body" style="padding:4px 14px;">
-          ${(state.roles||[]).length === 0
-            ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga roller definierade</p>'
-            : (state.roles||[]).map(r => {
-                const permCount  = (r.permissions||[]).length;
-                const staffCount = (state.staff||[]).filter(s=>s.role===r.id).length;
-                const isActive   = r.active !== false;
-                return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;${isActive?'':'opacity:.65'}">
-                  <div style="flex:1;min-width:0;">
-                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
-                      <span style="font-size:13px;font-weight:700;">${r.label}</span>
-                      <span class="bdg ${isActive?'bdg-green':'bdg-grey'}" style="font-size:9px;">${isActive?'Aktiv':'Inaktiv'}</span>
-                      ${r.isBuiltin?`<span class="bdg bdg-grey" style="font-size:9px;">Inbyggd</span>`:''}
-                      ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;cursor:pointer;" onclick="AdminPage.showRoleStaff('${r.id}')">${staffCount} pers.</span>`:''}
-                    </div>
-                    ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
-                    <div style="font-size:10px;color:var(--sky);margin-top:2px;">${permCount===0?'Inga behörigheter':permCount+' behörighet'+(permCount===1?'':'er')+(r.permissions&&r.permissions.includes('all')?' (superadmin)':'')}</div>
-                  </div>
-                  <div style="display:flex;gap:4px;flex-shrink:0;">
-                    <button class="btn bxs bs" onclick="AdminPage.openEditRole('${r.id}')">${ic('pencil',11)}</button>
-                    <button class="btn bxs ${isActive?'bw':'bsu'}" onclick="AdminPage.toggleRoleActive('${r.id}')"
-                      title="${isActive?'Inaktivera':'Aktivera'}" style="font-size:10px;">${isActive?ic('eye-off',11):ic('eye',11)}</button>
-                    ${!r.isBuiltin?`<button class="btn bxs bd" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`:''}
-                  </div>
-                </div>`;
-              }).join('')
-          }
-        </div>
-      </div>
-
-      <!-- Tjänstemallar -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('zap',13)} Offert-tjänstemallar</h3>
-        </div>
-        <div class="card-body" style="padding:4px 14px 8px;">
-          <p style="font-size:11px;color:var(--mt);margin-bottom:8px;">VIFT:s inbyggda kalkylatormallar för offertmodulen. Mallarna definierar prismodell, RUT/ROT-typ och ingående fält.</p>
-          ${OffersPage._T.map(t=>`<div style="padding:7px 0;border-bottom:1px solid var(--bg);display:flex;align-items:center;gap:8px;">
-            <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--blue);flex-shrink:0;">${ic(t.icon,13)}</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;">${t.name}</div>
-              <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${t.vatRate||25} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
-            </div>
-            <span class="bdg bdg-green" style="font-size:9px;">Aktiv</span>
-          </div>`).join('')}
-        </div>
-      </div>
-
-      <!-- Register-shortcuts -->
-      <div class="card">
-        <div class="card-header"><h3>Register</h3></div>
-        <div class="card-body">
-          <div class="dr">
-            <span class="dk">${ic('users',13)} Personal</span>
-            <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-staff')">${(state.staff||[]).filter(s=>s.active).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
+            }
           </div>
+        </div>
+      </div>
+
+      <!-- ─── GRUPP 4: Priser & Tjänster ─── -->
+      <div class="admin-section-group" style="margin-bottom:14px;">
+        <div class="admin-section-header">
+          <div class="admin-section-icon" style="background:#fff7ed;color:var(--or);">${ic('package',18)}</div>
+          <div>
+            <div class="admin-section-title">Priser & Tjänster</div>
+            <div class="admin-section-desc">Offerttjänstemallar, artiklar och prisgrupper</div>
+          </div>
+        </div>
+
+        <!-- Tjänstemallar -->
+        <div style="border-bottom:1px solid var(--br);">
+          <div style="padding:10px 16px;border-bottom:1px solid var(--bg);">
+            <div style="font-size:12px;font-weight:800;color:var(--navy);">Offert-tjänstemallar</div>
+            <div style="font-size:11px;color:var(--mt);margin-top:2px;">Inbyggda kalkylatormallar. Definierar prismodell, RUT/ROT-typ och fält.</div>
+          </div>
+          <div style="padding:4px 16px 4px;">
+            ${OffersPage._T.map(t=>`<div style="padding:7px 0;border-bottom:1px solid var(--bg);display:flex;align-items:center;gap:8px;">
+              <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--blue);flex-shrink:0;">${ic(t.icon,13)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;">${t.name}</div>
+                <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${t.vatRate||25} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
+              </div>
+              <span class="bdg bdg-green" style="font-size:9px;">Aktiv</span>
+            </div>`).join('')}
+          </div>
+        </div>
+
+        <!-- Register shortcuts -->
+        <div style="padding:14px 16px;">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:10px;">Register</div>
           <div class="dr">
             <span class="dk">${ic('zap',13)} Offerttjänster</span>
             <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-service-templates')">${(state.serviceTemplates||[]).filter(s=>s.active!==false).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
@@ -4707,25 +4731,33 @@ const AdminPage = {
         </div>
       </div>
 
-      <!-- Systemdata -->
-      <div class="card">
-        <div class="card-header"><h3>Systemöversikt</h3></div>
-        <div class="card-body">
-          <div class="dr"><span class="dk">Kunder</span><span class="dv">${(state.customers||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Arbetsorder</span><span class="dv">${(state.workOrders||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Offerter</span><span class="dv">${(state.offers||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Fakturor</span><span class="dv">${(state.invoices||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Återkommande</span><span class="dv">${(state.recurringOrders||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Tidsposter</span><span class="dv">${(state.timeEntries||[]).length} st</span></div>
-          <div class="dr"><span class="dk">Revisionslogg</span><span class="dv">${(state.activityLog||[]).length} poster</span></div>
+      <!-- ─── GRUPP 5: System ─── -->
+      <div class="admin-section-group" style="margin-bottom:14px;">
+        <div class="admin-section-header">
+          <div class="admin-section-icon" style="background:#f1f5f9;color:var(--mt);">${ic('settings',18)}</div>
+          <div>
+            <div class="admin-section-title">System</div>
+            <div class="admin-section-desc">Dataöversikt och systemåterställning</div>
+          </div>
         </div>
-      </div>
 
-      <!-- Rensa testdata -->
-      <div class="card">
-        <div class="card-header"><h3>Demodata & återställning</h3></div>
-        <div class="card-body">
-          <p style="font-size:12px;color:var(--mt);margin-bottom:8px;">Rensa localStorage och ladda om demodata. Återställer allt till startläget.</p>
+        <!-- Systemöversikt -->
+        <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:10px;">Dataöversikt</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+            <div class="dr"><span class="dk">Kunder</span><span class="dv">${(state.customers||[]).length} st</span></div>
+            <div class="dr"><span class="dk">Arbetsorder</span><span class="dv">${(state.workOrders||[]).length} st</span></div>
+            <div class="dr"><span class="dk">Offerter</span><span class="dv">${(state.offers||[]).length} st</span></div>
+            <div class="dr"><span class="dk">Fakturor</span><span class="dv">${(state.invoices||[]).length} st</span></div>
+            <div class="dr"><span class="dk">Återkommande</span><span class="dv">${(state.recurringOrders||[]).length} st</span></div>
+            <div class="dr"><span class="dk">Tidsposter</span><span class="dv">${(state.timeEntries||[]).length} st</span></div>
+          </div>
+        </div>
+
+        <!-- Återställning -->
+        <div style="padding:14px 16px;">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px;">Demodata & återställning</div>
+          <p style="font-size:12px;color:var(--mt);margin-bottom:10px;line-height:1.5;">Rensa localStorage och ladda om demodata. Återställer allt till startläget.</p>
           <button class="btn bd bsm" onclick="if(confirm('Rensa all data och återgå till demodata?')){localStorage.clear();location.reload();}">${ic('trash',13)} Återställ demodata</button>
         </div>
       </div>`;

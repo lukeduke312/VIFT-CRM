@@ -37,15 +37,33 @@ const Dashboard = {
     }
 
     const userName = user ? (user.firstName || user.username || '') : '';
+    const todayStr = new Date().toLocaleDateString('sv-SE', { weekday:'long', day:'numeric', month:'long' });
+    const todayStr2 = todayStr.charAt(0).toUpperCase() + todayStr.slice(1);
+
+    // Quick urgent summary for hero
+    const allWos   = (state.workOrders||[]).filter(a => !a.archived && !a.deleted);
+    const alive    = a => !['klar','fakturerad','avbruten'].includes(a.status);
+    const urgCount = allWos.filter(a => a.priority==='akut' && alive(a)).length;
+    const overdueC = allWos.filter(a => a.scheduledDate && a.scheduledDate < tdy() && alive(a) && a.status !== 'pool').length;
+    const todayC   = allWos.filter(a => a.scheduledDate === tdy() && alive(a)).length;
+    const heroSub  = [
+      urgCount   > 0 ? `<span style="background:rgba(239,68,68,.25);border-radius:4px;padding:1px 6px;">${urgCount} akut${urgCount>1?'a':''}</span>` : '',
+      overdueC   > 0 ? `<span style="background:rgba(234,88,12,.25);border-radius:4px;padding:1px 6px;">${overdueC} försen${overdueC>1?'ade':'ad'}</span>` : '',
+      todayC     > 0 ? `<span style="background:rgba(255,255,255,.18);border-radius:4px;padding:1px 6px;">${todayC} idag</span>` : '',
+    ].filter(Boolean).join(' ');
 
     el.innerHTML =
       `<div class="dash-topbar">` +
-        (userName ? `<span class="dash-greeting">Hej, ${esc(userName)}!</span>` : '<span></span>') +
+        `<div style="display:flex;flex-direction:column;gap:1px;">` +
+          (userName ? `<span class="dash-greeting">Hej, ${esc(userName)}! 👋</span>` : '<span></span>') +
+          `<span style="font-size:12px;font-weight:500;color:var(--mt);">${todayStr2}</span>` +
+        `</div>` +
         `<div style="display:flex;gap:6px;">` +
           `<button class="btn bs bsm" onclick="Dashboard.openUserPrefs()" title="Mina inställningar">${ic('user',12)} Mina inställningar</button>` +
           `<button class="btn bs bsm" onclick="Dashboard.openCustomize()" title="Anpassa dashboard">${ic('settings',12)} Anpassa</button>` +
         `</div>` +
       `</div>` +
+      (heroSub ? `<div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">${heroSub}</div>` : '') +
       `<div class="dash-layout">${parts.join('')}</div>`;
   },
 
@@ -282,13 +300,13 @@ const Dashboard = {
 
   /* ── Widget: Försenade aktiviteter ──────────────────────────────────── */
   _widgetOverdueAlert(count) {
-    return `<div style="background:linear-gradient(135deg,#7f1d1d,#b91c1c);color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="Router.showPage('pg-activities',{filter:'försenade'})">
-      <div style="flex-shrink:0;width:36px;height:36px;background:rgba(255,255,255,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">${ic('alert-triangle',18)}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:800;margin-bottom:2px;">${count} försenad${count===1?'':'e'} aktivitet${count===1?'':'er'} — kräver omedelbar åtgärd</div>
-        <div style="font-size:11px;opacity:.8;">Klicka för att se och åtgärda försenade uppföljningar</div>
+    return `<div class="attention-banner" onclick="Router.showPage('pg-activities',{filter:'försenade'})" style="cursor:pointer;">
+      <div class="attention-banner-icon">${ic('alert-circle',18)}</div>
+      <div class="attention-banner-body">
+        <div class="attention-banner-title">${count} försenad${count===1?'':'e'} uppföljning${count===1?'':'ar'} — kräver åtgärd nu</div>
+        <div class="attention-banner-sub">Klicka för att se och åtgärda</div>
       </div>
-      <div style="flex-shrink:0;opacity:.7;">${ic('chevron-right',16)}</div>
+      <div style="color:var(--rd);flex-shrink:0;">${ic('chevron-right',14)}</div>
     </div>`;
   },
 
@@ -316,10 +334,12 @@ const Dashboard = {
   },
 
   _kpi(value, label, color, onclick, icon) {
-    return `<div class="kpi-card ${color}" onclick="${onclick}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">
-        <div class="kpi-number">${value}</div>
-        ${icon ? `<div style="opacity:.25;margin-top:2px;">${ic(icon,18)}</div>` : ''}
+    const colorMap = {blue:'var(--sky)', red:'var(--rd)', green:'var(--gr)', orange:'var(--or)', purple:'var(--pu)'};
+    const c = colorMap[color] || 'var(--navy)';
+    return `<div class="kpi-card ${color}" onclick="${onclick}" style="cursor:pointer;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;margin-bottom:6px;">
+        <div class="kpi-number" style="${color?'color:'+c:''}">${value}</div>
+        ${icon ? `<div style="width:30px;height:30px;border-radius:8px;background:${c}18;color:${c};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic(icon,15)}</div>` : ''}
       </div>
       <div class="kpi-label">${label}</div>
     </div>`;
@@ -328,27 +348,25 @@ const Dashboard = {
   /* ── Widget: Kräver åtgärd (behörighetsfiltrad) ───────────────────── */
   _widgetTodos(todos) {
     const hasUrgent = todos.some(t => t.cls === 'urgent');
-    return `<div class="card" style="border-left:4px solid ${hasUrgent?'var(--rd)':'var(--or)'};${hasUrgent?'background:linear-gradient(to right,rgba(185,28,28,.02),transparent);':''}">
-      <div class="card-header" style="${hasUrgent?'background:rgba(185,28,28,.03);':''}">
-        <h3 class="ch3" style="color:${hasUrgent?'var(--rd)':'var(--or)'};">${ic('alert-circle',14)} Kräver åtgärd</h3>
-        <span class="bdg ${hasUrgent?'bdg-red':'bdg-orange'}">${todos.length} post${todos.length===1?'':'er'}</span>
+    return `<div class="card" style="border-top:3px solid ${hasUrgent?'var(--rd)':'var(--or)'};">
+      <div class="card-header">
+        <h3 class="ch3" style="color:${hasUrgent?'var(--rd)':'var(--or)'};">${ic('zap',14)} Kräver åtgärd</h3>
+        <span class="bdg ${hasUrgent?'bdg-red':'bdg-orange'}" style="font-size:11px;font-weight:800;">${todos.length}</span>
       </div>
-      <div class="card-body" style="padding:6px 10px;">
-        <div class="dash-action-list">
-          ${todos.map(t => this._actionItem(t)).join('')}
-        </div>
+      <div style="padding:4px 0;">
+        ${todos.map(t => this._actionItem(t)).join('')}
       </div>
     </div>`;
   },
 
   _actionItem(t) {
-    return `<div class="dash-action-item ${t.cls||''}" onclick="${t.onClick}">
-      <div class="dai-icon ${t.iconCls}">${ic(t.icon, 15)}</div>
+    return `<div class="dash-action-item ${t.cls||''}" onclick="${t.onClick}" style="margin:3px 8px;border-radius:8px;">
+      <div class="dai-icon ${t.iconCls}">${ic(t.icon, 16)}</div>
       <div class="dai-text">
-        <div class="dai-title">${t.title}</div>
+        <div class="dai-title" style="font-size:13px;">${t.title}</div>
         ${t.sub ? `<div class="dai-sub">${t.sub}</div>` : ''}
       </div>
-      <span class="dai-badge ${t.badgeCls||''}">${t.badge}</span>
+      <span class="dai-badge ${t.badgeCls||''}" style="font-size:12px;">${t.badge}</span>
       <span style="color:var(--mt);font-size:11px;flex-shrink:0;">${ic('chevron-right',12)}</span>
     </div>`;
   },

@@ -136,7 +136,7 @@ const MyJobsPage = {
       </div>`;
   },
 
-  /* ── AO-kort ──────────────────────────────────────────────────────────── */
+  /* ── AO-kort v2 ──────────────────────────────────────────────────────── */
   _jobCard(ao, myId, isStamped, stampAoId, compact=false) {
     const cu       = getCu(ao.customerId);
     const cuName   = cu ? CustomerService.displayName(cu) : '—';
@@ -145,90 +145,83 @@ const MyJobsPage = {
     const chkTotal = (ao.checklist||[]).length;
     const active   = isStamped && stampAoId === ao.id;
     const isLate   = ao.scheduledDate && ao.scheduledDate < tdy() && !['klar','fakturerad','avbruten'].includes(ao.status);
+    const prioClass = ({akut:'p-akut',hög:'p-hog',normal:'p-normal',låg:'p-lag'}[ao.priority]||'p-lag');
 
     const timeEntries = TimeService.getByAO(ao.id);
     const actualMins  = TimeService.totalMinutes(timeEntries);
     const estMins     = Math.round((ao.estimatedHours || 0) * 60);
     const timePct     = estMins > 0 ? Math.round(actualMins / estMins * 100) : null;
-    const timeColor   = timePct === null ? 'var(--mt)' : timePct <= 100 ? 'var(--gr)' : timePct <= 115 ? 'var(--orange)' : 'var(--rd)';
-
-    const meta = [];
-    if (cuName !== '—') meta.push(esc(cuName));
-    if (ao.address)     meta.push(esc(ao.address));
-    if (ao.scheduledDate) meta.push(ao.scheduledDate + (ao.scheduledStart ? ' ' + ao.scheduledStart : ''));
+    const timeOver    = timePct !== null && timePct > 115;
 
     const chkHtml = chkTotal > 0
-      ? `<span class="ao-item-progress ${chkOk===chkTotal&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${chkTotal} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
+      ? `<span class="ao-item-progress ${chkOk===chkTotal&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${chkTotal} ${ic('check',10)}</span>`
       : '';
 
-    let actions = '';
+    const subLbls = {inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'};
+
+    let primaryBtn = '';
+    let secondaryBtns = '';
     if (!compact) {
-      const openBtn  = `<button class="btn bghost bsm" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',12)} Öppna</button>`;
-      const startBtn = ['nytt','pool','planerad'].includes(ao.status)
-        ? `<button class="btn bs bsm" onclick="event.stopPropagation();MyJobsPage.startJob('${ao.id}')">${ic('play',12)} Starta</button>`
-        : '';
-      let clockBtn = '';
-      if (Auth.can('ao_time')) {
-        if (active) {
-          clockBtn = `<button class="btn bsm" style="background:rgba(22,101,52,.08);color:var(--gr);border:1.5px solid var(--gr);"
-            onclick="event.stopPropagation();MyJobsPage.clockOut()">${ic('log-out',12)} Stämpla ut</button>`;
-        } else if (!isStamped) {
-          clockBtn = `<button class="btn bp bsm" onclick="event.stopPropagation();MyJobsPage.clockIn('${ao.id}')">${ic('log-in',12)} Stämpla in</button>`;
-        }
+      if (active) {
+        primaryBtn = `<button class="btn bfull" style="background:#f0fdf4;color:var(--gr);border:1.5px solid var(--gr);font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockOut()">${ic('log-out',14)} Stämpla ut</button>`;
+      } else if (!isStamped && Auth.can('ao_time')) {
+        primaryBtn = `<button class="btn bp bfull" style="font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockIn('${ao.id}')">${ic('log-in',14)} Stämpla in</button>`;
       }
-      actions = `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;" onclick="event.stopPropagation()">${openBtn}${startBtn}${clockBtn}</div>`;
+      secondaryBtns = `<div style="display:flex;gap:6px;">` +
+        (['nytt','pool','planerad'].includes(ao.status)
+          ? `<button class="btn bs bsm" onclick="event.stopPropagation();MyJobsPage.startJob('${ao.id}')">${ic('play',12)} Starta</button>`
+          : '') +
+        `<button class="btn bghost bsm" style="flex:1;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',12)} Öppna</button>` +
+        `</div>`;
     }
 
     return `
-      <div style="padding:11px;border-radius:9px;border:1.5px solid ${active?'var(--gr)':isLate?'rgba(220,38,38,.3)':'var(--br)'};margin-bottom:8px;cursor:pointer;
-        ${active?'background:rgba(22,101,52,.03);':isLate?'background:rgba(220,38,38,.02);':''}"
-        onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:4px;">
+      <div class="job-card-v2 ${prioClass}${active?' active':''}${isLate&&!active?' late':''}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+        <div class="job-card-v2-top">
           <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-              <span style="font-size:11px;font-weight:700;color:var(--mt);">${ao.id}</span>
-              ${active ? `<span class="bdg bdg-green" style="font-size:10px;">${ic('clock',9)} Aktiv stämpling</span>` : ''}
-            </div>
-            <div style="font-size:13px;font-weight:700;line-height:1.3;color:var(--tx);">${esc(ao.title)}</div>
+            <div class="job-card-v2-id">${ao.id}${active?' · '+ic('clock',11)+' Aktiv stämpling':''}</div>
+            <div class="job-card-v2-title">${esc(ao.title)}</div>
           </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
+          <div class="job-card-v2-badges">${sbdg(ao.status)}${ao.priority!=='normal'?pbdg(ao.priority):''}</div>
         </div>
-        ${meta.length ? `<div style="font-size:11px;color:var(--mt);line-height:1.5;margin-bottom:2px;">${meta.join(' · ')}</div>` : ''}
-        ${ao.substatus?`<div style="margin-bottom:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-        <div style="font-size:11px;color:${timeColor};margin-bottom:4px;">
-          ${ic('clock',9)} ${estMins > 0 ? 'Plan: ' + TimeService.fmtDuration(estMins) + ' · ' : ''}Utfört: ${actualMins > 0 ? TimeService.fmtDuration(actualMins) : '—'}${timePct !== null ? ' (' + timePct + '%)' : estMins === 0 ? ' · Ingen tidsplan' : ''}
+        <div class="job-card-v2-meta">
+          ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} <span>${esc(cuName)}</span></div>` : ''}
+          ${ao.address     ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} <span>${esc(ao.address)}</span></div>` : ''}
+          ${ao.scheduledDate ? `<div class="job-card-v2-meta-row" style="color:${isLate?'var(--rd)':'var(--mt)'};">${ic('calendar',11)} <span>${isLate?'⚠ Försenad — ':''} ${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart:''}</span></div>` : ''}
+          ${ao.substatus ? `<div class="job-card-v2-meta-row" style="color:var(--or);">${subLbls[ao.substatus]||ao.substatus}</div>` : ''}
+          ${chkTotal>0 ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkHtml}</div>` : ''}
+          ${estMins>0 ? `<div class="job-card-v2-meta-row" style="color:${timeOver?'var(--rd)':'var(--mt)'};">${ic('clock',11)} Plan: ${TimeService.fmtDuration(estMins)}${actualMins>0?' · Utfört: '+TimeService.fmtDuration(actualMins)+(timePct!==null?' ('+timePct+'%)':''):''}</div>` : ''}
         </div>
-        ${chkHtml ? `<div style="margin-bottom:4px;">${chkHtml}</div>` : ''}
-        ${compact
-          ? `<button class="btn bghost bsm" style="font-size:11px;margin-top:4px;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',10)} Öppna</button>`
-          : actions}
+        ${!compact ? `<div class="job-card-v2-actions" onclick="event.stopPropagation()">
+          ${primaryBtn}
+          ${secondaryBtns}
+        </div>` : `<div onclick="event.stopPropagation()"><button class="btn bghost bsm bfull" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',11)} Öppna</button></div>`}
       </div>`;
   },
 
-  /* ── Pool-kort ────────────────────────────────────────────────────────── */
+  /* ── Pool-kort v2 ──────────────────────────────────────────────────────── */
   _poolCard(ao) {
     const cu       = getCu(ao.customerId);
     const cuName   = cu ? CustomerService.displayName(cu) : '—';
     const chkTotal = (ao.checklist||[]).length;
 
     return `
-      <div style="padding:11px;border-radius:9px;border:1.5px solid rgba(109,40,217,.2);margin-bottom:8px;background:rgba(109,40,217,.015);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:4px;">
+      <div class="job-card-v2" style="border-left-color:var(--pu);" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+        <div class="job-card-v2-top">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:2px;">${ao.id}</div>
-            <div style="font-size:13px;font-weight:700;line-height:1.3;color:var(--tx);">${esc(ao.title)}</div>
+            <div class="job-card-v2-id">${ao.id}</div>
+            <div class="job-card-v2-title">${esc(ao.title)}</div>
           </div>
-          <div style="flex-shrink:0;">${pbdg(ao.priority)}</div>
+          <div class="job-card-v2-badges">${pbdg(ao.priority)}</div>
         </div>
-        ${cuName !== '—' || ao.address
-          ? `<div style="font-size:11px;color:var(--mt);margin-bottom:5px;">${esc(cuName)}${ao.address ? ' · ' + esc(ao.address) : ''}</div>`
-          : ''}
-        ${ao.description
-          ? `<div style="font-size:11px;color:var(--mt);margin-bottom:5px;line-height:1.4;">${esc(ao.description.slice(0,120))}${ao.description.length>120?'…':''}</div>`
-          : ''}
-        ${chkTotal ? `<div style="font-size:11px;color:var(--mt);margin-bottom:6px;">${ic('check-square',10)} ${chkTotal} checkpunkt${chkTotal!==1?'er':''}</div>` : ''}
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn bp bsm" onclick="MyJobsPage.takeFromPool('${ao.id}')">${ic('user-plus',12)} Ta jobbet</button>
+        <div class="job-card-v2-meta">
+          ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} ${esc(cuName)}</div>` : ''}
+          ${ao.address     ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} ${esc(ao.address)}</div>` : ''}
+          ${ao.description ? `<div class="job-card-v2-meta-row" style="color:var(--mt);">${esc(ao.description.slice(0,80))}${ao.description.length>80?'…':''}</div>` : ''}
+          ${chkTotal       ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkTotal} checkpunkt${chkTotal!==1?'er':''}</div>` : ''}
+        </div>
+        <div class="job-card-v2-actions" onclick="event.stopPropagation()">
+          <button class="btn bp" style="flex:1;font-size:13px;padding:9px;" onclick="MyJobsPage.takeFromPool('${ao.id}')">${ic('user-plus',13)} Ta jobbet</button>
           <button class="btn bghost bsm" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('external-link',12)} Öppna</button>
         </div>
       </div>`;
