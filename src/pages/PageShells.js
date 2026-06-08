@@ -349,7 +349,7 @@ const OffersPage = {
          <div class="off-kpi-card"><div class="off-kpi-val">${kpi.utkast}</div><div class="off-kpi-lbl">Utkast</div></div>
          <div class="off-kpi-card"><div class="off-kpi-val">${kpi.skickad}</div><div class="off-kpi-lbl">Skickade</div></div>
          <div class="off-kpi-card off-kpi-card--green"><div class="off-kpi-val">${kpi.godkänd}</div><div class="off-kpi-lbl">Godkända</div></div>
-         <div class="off-kpi-card off-kpi-card--navy"><div class="off-kpi-val">${fmt(totalGodkändVal)}</div><div class="off-kpi-lbl" style="font-size:9px;">Godkänt värde ex. moms</div></div>
+         <div class="off-kpi-card off-kpi-card--navy"><div class="off-kpi-val">${fmt(totalGodkändVal)}</div><div class="off-kpi-lbl">Godkänt värde ex. moms</div></div>
        </div>
        <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;">
          <div class="swrap" style="flex:1;">

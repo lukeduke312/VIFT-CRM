@@ -149,7 +149,13 @@ const WorkOrdersPage = {
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
     if (!list.length) {
-      el.innerHTML = `<div class="empty"><p>Inga ordrar matchar</p></div>`;
+      const isSearch = !!this.q;
+      const isFilter = this.filter !== 'alla';
+      el.innerHTML = `<div class="empty">${ic('clipboard-list',36)}
+        <h3>${isSearch ? 'Inga träffar' : isFilter ? 'Inga ordrar' : 'Inga arbetsorder'}</h3>
+        <p>${isSearch ? 'Inga ordrar matchar sökningen.' : isFilter ? 'Inga ordrar i detta filter.' : 'Skapa din första arbetsorder med knappen ovan.'}</p>
+        ${isSearch ? `<button class="btn bs bsm" style="margin-top:8px;" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()">Rensa sökning</button>` : ''}
+      </div>`;
       return;
     }
     if (this.viewMode === 'grid') {
@@ -174,9 +180,9 @@ const WorkOrdersPage = {
             <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
             <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
             ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);">${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart:''}</div>`:''}
-            ${ao.substatus?`<div style="margin-top:4px;"><span style="font-size:9px;padding:2px 7px;background:rgba(251,191,36,.12);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.3);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-            ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span></div>`:''}
-            ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:9px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',9)} Saknar prissättning</span></div>`:''}
+            ${ao.substatus?`<div style="margin-top:4px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.12);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.3);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
+            ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span></div>`:''}
+            ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span></div>`:''}
             ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
           </div>`;
       }).join('')}</div>`;
@@ -219,10 +225,10 @@ const WorkOrdersPage = {
                 ${sbdg(ao.status)}${pbdg(ao.priority)}
               </div>
             </div>
-            ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:9px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
+            ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
             ${isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
-              ${isBillable?`<span class="qf-chip on" style="font-size:9px;padding:2px 7px;">${ic('receipt',9)} Redo fakturering</span>`:''}
-              ${noPricing?`<span class="qf-chip" style="font-size:9px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',9)} Saknar prissättning</span>`:''}
+              ${isBillable?`<span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span>`:''}
+              ${noPricing?`<span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span>`:''}
               ${chkHtml}
             </div>` : ''}
             ${archiveActions}${trashActions}

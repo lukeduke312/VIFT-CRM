@@ -186,16 +186,16 @@ const MyJobsPage = {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:4px;">
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-              <span style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</span>
-              ${active ? `<span class="bdg bdg-green" style="font-size:9px;">${ic('clock',8)} Aktiv stämpling</span>` : ''}
+              <span style="font-size:11px;font-weight:700;color:var(--mt);">${ao.id}</span>
+              ${active ? `<span class="bdg bdg-green" style="font-size:10px;">${ic('clock',9)} Aktiv stämpling</span>` : ''}
             </div>
             <div style="font-size:13px;font-weight:700;line-height:1.3;color:var(--tx);">${esc(ao.title)}</div>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
         </div>
         ${meta.length ? `<div style="font-size:11px;color:var(--mt);line-height:1.5;margin-bottom:2px;">${meta.join(' · ')}</div>` : ''}
-        ${ao.substatus?`<div style="margin-bottom:3px;"><span style="font-size:9px;padding:1px 6px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-        <div style="font-size:10px;color:${timeColor};margin-bottom:4px;">
+        ${ao.substatus?`<div style="margin-bottom:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
+        <div style="font-size:11px;color:${timeColor};margin-bottom:4px;">
           ${ic('clock',9)} ${estMins > 0 ? 'Plan: ' + TimeService.fmtDuration(estMins) + ' · ' : ''}Utfört: ${actualMins > 0 ? TimeService.fmtDuration(actualMins) : '—'}${timePct !== null ? ' (' + timePct + '%)' : estMins === 0 ? ' · Ingen tidsplan' : ''}
         </div>
         ${chkHtml ? `<div style="margin-bottom:4px;">${chkHtml}</div>` : ''}
@@ -215,7 +215,7 @@ const MyJobsPage = {
       <div style="padding:11px;border-radius:9px;border:1.5px solid rgba(109,40,217,.2);margin-bottom:8px;background:rgba(109,40,217,.015);">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:4px;">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:10px;font-weight:800;color:var(--mt);margin-bottom:2px;">${ao.id}</div>
+            <div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:2px;">${ao.id}</div>
             <div style="font-size:13px;font-weight:700;line-height:1.3;color:var(--tx);">${esc(ao.title)}</div>
           </div>
           <div style="flex-shrink:0;">${pbdg(ao.priority)}</div>

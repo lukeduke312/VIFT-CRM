@@ -54,10 +54,10 @@ const WorkOrderDetailPage = {
         <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);padding:12px 14px 10px;color:#fff;border-radius:11px 11px 0 0;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)}</button>
-            <span style="font-size:10px;font-weight:700;opacity:.65;letter-spacing:.5px;text-transform:uppercase;">${ao.id}</span>
+            <span style="font-size:11px;font-weight:700;opacity:.65;letter-spacing:.3px;">${ao.id}</span>
             <div style="display:flex;gap:5px;align-items:center;margin-left:auto;">
               ${sbdg(ao.status)} ${pbdg(ao.priority)}
-              ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="background:rgba(255,255,255,.18);color:#fff;font-size:9px;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
+              ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="background:rgba(255,255,255,.18);color:#fff;font-size:10px;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
             </div>
           </div>
           <div style="font-size:17px;font-weight:800;line-height:1.25;margin-bottom:6px;">${ao.title}</div>

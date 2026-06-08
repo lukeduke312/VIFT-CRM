@@ -74,11 +74,15 @@
   background: #fdfdfe;
 }
 .card-header h3 {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--navy);
-  text-transform: uppercase;
-  letter-spacing: .7px;
+  letter-spacing: .1px;
+  line-height: 1;
+  margin: 0;
 }
 .card-body { padding: 14px; }
 
@@ -392,11 +396,10 @@
 
 /* ── Section title ────────────────────── */
 .stitle {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--mt);
-  text-transform: uppercase;
-  letter-spacing: .7px;
+  letter-spacing: .2px;
   margin-bottom: 8px;
   padding-bottom: 5px;
   border-bottom: 2px solid var(--br);
@@ -1147,11 +1150,10 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-bottom: 3px;
 }
 .off-kpi-lbl {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--mt);
-  text-transform: uppercase;
-  letter-spacing: .4px;
+  letter-spacing: .1px;
 }
 
 /* ── OFFER TIMELINE ── */
@@ -1168,7 +1170,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-tl-body { flex: 1; min-width: 0; }
 .off-tl-text { font-size: 12px; color: var(--tx); line-height: 1.4; }
-.off-tl-meta { font-size: 10px; color: var(--mt); margin-top: 2px; }
+.off-tl-meta { font-size: 11px; color: var(--mt); margin-top: 2px; }
 .off-tl-comment {
   display: flex;
   gap: 7px;
@@ -1205,7 +1207,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 /* ── OFFER LIST CARDS ── */
 .off-offer-card { border-left-width: 4px !important; padding: 12px 14px; }
 .off-offer-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-.off-offer-card-id { font-size: 10px; font-weight: 700; color: var(--mt); letter-spacing: .4px; text-transform: uppercase; }
+.off-offer-card-id { font-size: 11px; font-weight: 700; color: var(--mt); letter-spacing: .2px; }
 .off-offer-card-title { font-size: 14px; font-weight: 800; color: var(--tx); margin-bottom: 3px; line-height: 1.25; }
 .off-offer-card-cu { font-size: 12px; color: var(--mt); margin-bottom: 5px; display: flex; align-items: center; gap: 4px; }
 .off-offer-card-amounts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--mt); margin-bottom: 5px; }
@@ -1237,11 +1239,10 @@ body.modal-open { overflow: hidden; touch-action: none; }
   gap: 6px;
 }
 .off-detail-hero-id {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  opacity: .55;
-  letter-spacing: .8px;
-  text-transform: uppercase;
+  opacity: .6;
+  letter-spacing: .3px;
   margin-bottom: 1px;
 }
 .off-detail-hero-title {
@@ -1337,7 +1338,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-bottom: 3px;
 }
 .off-hero-pg-val--big { font-size: 24px; }
-.off-hero-pg-sub { font-size: 10px; opacity: .65; }
+.off-hero-pg-sub { font-size: 11px; opacity: .65; }
 
 .off-detail-hero-actions {
   display: flex;
@@ -1365,8 +1366,8 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-field-stack { padding: 10px 0; border-bottom: 1px solid var(--bg); }
 .off-field-stack:last-child { border-bottom: none; }
 .off-field-label {
-  font-size: 10px; font-weight: 700; color: var(--mt);
-  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
+  font-size: 11px; font-weight: 600; color: var(--mt);
+  letter-spacing: .1px; margin-bottom: 5px;
 }
 .off-field-content { font-size: 13px; line-height: 1.6; color: var(--tx); }
 

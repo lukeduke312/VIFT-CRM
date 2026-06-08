@@ -183,9 +183,9 @@
   padding: 10px 10px 4px;
 }
 .nav-section-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--brand-primary-text) 35%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 45%, transparent);
   text-transform: uppercase;
   letter-spacing: .8px;
   padding: 0 4px 4px;

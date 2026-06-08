@@ -121,7 +121,7 @@ const OperationsPage = {
     if (!aos.length) return '';
     const rows = aos.map(ao => {
       const subLabels = {inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'};
-      const subBadge = ao.substatus ? `<span style="font-size:9px;padding:1px 6px;background:rgba(251,191,36,.12);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${subLabels[ao.substatus]||ao.substatus}</span>` : '';
+      const subBadge = ao.substatus ? `<span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.12);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${subLabels[ao.substatus]||ao.substatus}</span>` : '';
       return this._aoRow(ao, true) + (ao.substatus ? '' : '');
     }).join('');
     return `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--orange);">
@@ -163,15 +163,15 @@ const OperationsPage = {
         <div style="display:flex;gap:6px;flex-shrink:0;">
           <div style="text-align:center;">
             <div style="font-size:14px;font-weight:800;color:var(--blue);">${todayAOs.length}</div>
-            <div style="font-size:9px;color:var(--mt);">Idag</div>
+            <div style="font-size:10px;color:var(--mt);">Idag</div>
           </div>
           <div style="text-align:center;">
             <div style="font-size:14px;font-weight:800;color:${running.length>0?'var(--green)':'var(--mt)'};">${running.length}</div>
-            <div style="font-size:9px;color:var(--mt);">Pågående</div>
+            <div style="font-size:10px;color:var(--mt);">Pågående</div>
           </div>
           <div style="text-align:center;">
             <div style="font-size:14px;font-weight:800;color:${overdueN.length>0?'var(--rd)':'var(--mt)'};">${overdueN.length}</div>
-            <div style="font-size:9px;color:var(--mt);">Försenade</div>
+            <div style="font-size:10px;color:var(--mt);">Försenade</div>
           </div>
         </div>
       </div>`;
@@ -328,14 +328,14 @@ const OperationsPage = {
     const overPlan    = timePct !== null && timePct > 115;
     const fmtM        = m => TimeService.fmtDuration(m);
     const timeChip    = estMins > 0
-      ? `<span style="font-size:9px;color:${timeColor};font-weight:700;">${ic('clock',8)} ${fmtM(estMins)}${actualMins > 0 ? ' / ' + fmtM(actualMins) : ''}${overPlan ? ' ⚠' : ''}</span>`
-      : (actualMins > 0 ? `<span style="font-size:9px;color:var(--mt);">${ic('clock',8)} ${fmtM(actualMins)}</span>` : '');
+      ? `<span style="font-size:10px;color:${timeColor};font-weight:700;">${ic('clock',9)} ${fmtM(estMins)}${actualMins > 0 ? ' / ' + fmtM(actualMins) : ''}${overPlan ? ' ⚠' : ''}</span>`
+      : (actualMins > 0 ? `<span style="font-size:10px;color:var(--mt);">${ic('clock',9)} ${fmtM(actualMins)}</span>` : '');
 
     return `<div style="display:flex;align-items:flex-start;gap:8px;padding:${compact?'6':'8'}px 14px;border-bottom:1px solid var(--br);cursor:pointer;"
         onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
-          <span style="font-size:10px;font-weight:700;color:var(--mt);">${esc(ao.id)}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(ao.id)}</span>
           <span style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${esc(ao.title)}</span>
           ${sbdg(ao.status)} ${pbdg(ao.priority)}
           ${timeChip}
@@ -345,8 +345,8 @@ const OperationsPage = {
           ${timeStr ? ` · ${timeStr}` : ''}
           ${clStr ? ` · ${clStr}` : ''}
         </div>
-        ${ao.substatus?`<div style="margin-top:2px;"><span style="font-size:9px;padding:1px 6px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-        ${staffHtml ? `<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap;">${staffHtml}</div>` : `<div style="margin-top:3px;font-size:10px;color:var(--rd);font-weight:700;">${ic('user-x',10)} Ingen personal tilldelad</div>`}
+        ${ao.substatus?`<div style="margin-top:2px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
+        ${staffHtml ? `<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap;">${staffHtml}</div>` : `<div style="margin-top:3px;font-size:11px;color:var(--rd);font-weight:700;">${ic('user-x',10)} Ingen personal tilldelad</div>`}
       </div>
       <span style="color:var(--mt);flex-shrink:0;">${ic('chevron-right',14)}</span>
     </div>`;
