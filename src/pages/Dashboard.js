@@ -56,7 +56,7 @@ const Dashboard = {
     const heroSub  = [
       urgCount   > 0 ? `<span style="background:var(--lrd);color:var(--rd);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('zap',10)} ${urgCount} akut${urgCount>1?'a':''}</span>` : '',
       overdueC   > 0 ? `<span style="background:var(--lor);color:var(--or);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('clock',10)} ${overdueC} försen${overdueC>1?'ade':'ad'}</span>` : '',
-      todayC     > 0 ? `<span style="background:#e0f2fe;color:#0369a1;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('calendar',10)} ${todayC} idag</span>` : '',
+      todayC     > 0 ? `<span style="background:var(--bg);color:var(--mt);border:1px solid var(--br);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${ic('calendar',10)} ${todayC} idag</span>` : '',
     ].filter(Boolean).join(' ');
 
     el.innerHTML =
@@ -323,31 +323,29 @@ const Dashboard = {
     const items = [];
 
     if (Auth.canAny(['ao_view_all','ao_view_own'])) {
-      items.push(this._kpi(kpis.activeOrders,  'Aktiva ordrar',     'blue',   "Router.showPage('pg-ao',{filter:'active'})",          'clipboard-list'));
-      items.push(this._kpi(kpis.doneThisMonth, 'Klara denna månad', 'green',  "Router.showPage('pg-ao',{filter:'klar'})",             'check-circle'));
+      items.push(this._kpi(kpis.activeOrders,  'Aktiva ordrar',     '',       "Router.showPage('pg-ao',{filter:'active'})"));
+      items.push(this._kpi(kpis.doneThisMonth, 'Klara denna månad', '',       "Router.showPage('pg-ao',{filter:'klar'})"));
     }
     if (Auth.canAny(['invoice_view','invoice_create'])) {
-      items.push(this._kpi(kpis.readyBill, 'Redo fakturering', 'orange', "Router.showPage('pg-ao',{filter:'readyForInvoice'})", 'receipt'));
+      items.push(this._kpi(kpis.readyBill, 'Redo fakturering', 'orange', "Router.showPage('pg-ao',{filter:'readyForInvoice'})"));
     }
     if (Auth.can('offer_manage')) {
-      items.push(this._kpi(kpis.openOffers,  'Offerter ute',  '',       "Router.showPage('pg-offer')",  'file-text'));
+      items.push(this._kpi(kpis.openOffers,  'Offerter ute',  '',       "Router.showPage('pg-offer')"));
     }
     if (Auth.can('sales_manage')) {
-      items.push(this._kpi(kpis.salesActive, 'Säljchanser',   'purple', "Router.showPage('pg-sales')",  'target'));
+      items.push(this._kpi(kpis.salesActive, 'Säljchanser',   '',       "Router.showPage('pg-sales')"));
     }
 
     if (items.length === 0) return '';
     return `<div class="kpi-row">${items.join('')}</div>`;
   },
 
-  _kpi(value, label, color, onclick, icon) {
-    const colorMap = {blue:'var(--sky)', red:'var(--rd)', green:'var(--gr)', orange:'var(--or)', purple:'var(--pu)'};
-    const c = colorMap[color] || 'var(--navy)';
-    return `<div class="kpi-card ${color}" onclick="${onclick}" style="cursor:pointer;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;margin-bottom:6px;">
-        <div class="kpi-number" style="${color?'color:'+c:''}">${value}</div>
-        ${icon ? `<div style="width:30px;height:30px;border-radius:8px;background:${c}18;color:${c};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic(icon,15)}</div>` : ''}
-      </div>
+  _kpi(value, label, color, onclick) {
+    const actionable = (color === 'orange' || color === 'red') && value > 0;
+    const numColor = actionable ? (color === 'orange' ? 'color:var(--or)' : 'color:var(--rd)') : 'color:var(--navy)';
+    const cardStyle = actionable ? 'border-left:3px solid '+(color==='orange'?'var(--or)':'var(--rd)')+';padding-left:11px;' : '';
+    return `<div class="kpi-card" onclick="${onclick}" style="cursor:pointer;${cardStyle}">
+      <div class="kpi-number" style="${numColor}">${value}</div>
       <div class="kpi-label">${label}</div>
     </div>`;
   },
@@ -355,26 +353,29 @@ const Dashboard = {
   /* ── Widget: Kräver åtgärd (behörighetsfiltrad) ───────────────────── */
   _widgetTodos(todos) {
     const hasUrgent = todos.some(t => t.cls === 'urgent');
-    return `<div class="card" style="border-top:3px solid ${hasUrgent?'var(--rd)':'var(--or)'};">
+    return `<div class="card" style="border-top:2px solid ${hasUrgent?'var(--rd)':'var(--or)'};">
       <div class="card-header">
-        <h3 class="ch3" style="color:${hasUrgent?'var(--rd)':'var(--or)'};">${ic('zap',14)} Kräver åtgärd</h3>
-        <span class="bdg ${hasUrgent?'bdg-red':'bdg-orange'}" style="font-size:11px;font-weight:800;">${todos.length}</span>
+        <h3 class="ch3">${ic('alert-circle',14)} Kräver åtgärd</h3>
+        <span class="bdg ${hasUrgent?'bdg-red':'bdg-orange'}">${todos.length}</span>
       </div>
-      <div style="padding:4px 0;">
+      <div style="padding:2px 6px 6px;">
         ${todos.map(t => this._actionItem(t)).join('')}
       </div>
     </div>`;
   },
 
   _actionItem(t) {
-    return `<div class="dash-action-item ${t.cls||''}" onclick="${t.onClick}" style="margin:3px 8px;border-radius:8px;">
-      <div class="dai-icon ${t.iconCls}">${ic(t.icon, 16)}</div>
+    const isUrgent = t.cls === 'urgent';
+    const iconColor = isUrgent ? 'var(--rd)' : t.iconCls === 'orange' ? 'var(--or)' : t.iconCls === 'blue' ? 'var(--sky)' : 'var(--mt)';
+    const countCls = isUrgent ? 'urgent' : (t.badgeCls === 'orange' ? 'orange' : '');
+    return `<div class="dash-action-item ${t.cls||''}" onclick="${t.onClick}">
+      <span style="color:${iconColor};flex-shrink:0;">${ic(t.icon, 14)}</span>
       <div class="dai-text">
-        <div class="dai-title" style="font-size:13px;">${t.title}</div>
+        <div class="dai-title">${t.title}</div>
         ${t.sub ? `<div class="dai-sub">${t.sub}</div>` : ''}
       </div>
-      <span class="dai-badge ${t.badgeCls||''}" style="font-size:12px;">${t.badge}</span>
-      <span style="color:var(--mt);font-size:11px;flex-shrink:0;">${ic('chevron-right',12)}</span>
+      <span class="dai-count ${countCls}">${t.badge}</span>
+      <span style="color:#cbd5e1;flex-shrink:0;">${ic('chevron-right',12)}</span>
     </div>`;
   },
 
@@ -398,7 +399,7 @@ const Dashboard = {
         <div style="font-size:10px;color:var(--mt);margin-top:1px;">${label}</div>
       </div>`;
 
-    return `<div class="card"${alert ? ' style="border-left:3px solid var(--rd);"' : ''}>
+    return `<div class="card"${alert ? ' style="border-left:2px solid var(--or);"' : ''}>
       <div class="card-header">
         <h3 class="ch3">${ic('layout-dashboard',14)} Dagens drift</h3>
         <button class="btn bghost bxs" style="font-size:11px;" onclick="Router.showPage('pg-operations')">Öppna ${ic('arrow-right',11)}</button>
@@ -420,40 +421,44 @@ const Dashboard = {
   _widgetQuickbtns() {
     const btns = [];
     if (Auth.canAny(['ao_view_all','ao_view_own'])) {
-      btns.push(this._qbtn('briefcase', 'Mina jobb', "Router.showPage('pg-myjobs')"));
+      btns.push(this._qbtn('briefcase',     'Mina jobb',    "Router.showPage('pg-myjobs')",                                                               'Dina tilldelade arbetsorder'));
     }
     if (Auth.canAny(['ao_view_all','ao_view_own','ao_create'])) {
-      btns.push(this._qbtn('clipboard-list', 'Ny order',      "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)"));
+      btns.push(this._qbtn('clipboard-list','Ny order',     "Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),80)",                    'Skapa ett nytt jobb för kund eller fastighet'));
     }
     if (Auth.can('offer_manage')) {
-      btns.push(this._qbtn('file-text',      'Ny offert',     "Router.showPage('pg-offer');setTimeout(()=>OffersPage.openCreate(),80)"));
+      btns.push(this._qbtn('file-text',     'Ny offert',    "Router.showPage('pg-offer');setTimeout(()=>OffersPage.openCreate(),80)",                     'Skapa och skicka offert till kund'));
     }
     if (Auth.can('customer_manage')) {
-      btns.push(this._qbtn('users',          'Ny kund',       "Router.showPage('pg-crm');setTimeout(()=>CustomersPage.openCreate(),80)"));
+      btns.push(this._qbtn('users',         'Ny kund',      "Router.showPage('pg-crm');setTimeout(()=>CustomersPage.openCreate(),80)",                    'Lägg upp ny kund i registret'));
     }
     if (Auth.can('recurring_manage')) {
-      btns.push(this._qbtn('refresh-cw',     'Återkommande',  "Router.showPage('pg-recurring')"));
+      btns.push(this._qbtn('refresh-cw',    'Återkommande', "Router.showPage('pg-recurring')",                                                            'Hantera återkommande uppdrag'));
     }
     if (Auth.can('ao_time')) {
-      btns.push(this._qbtn('clock',          'Stämpla tid',   "Router.showPage('pg-tid')"));
+      btns.push(this._qbtn('clock',         'Stämpla tid',  "Router.showPage('pg-tid')",                                                                  'Klocka in och hantera din tid'));
     }
     if (Auth.canAny(['invoice_view','invoice_create'])) {
-      btns.push(this._qbtn('receipt',        'Fakturering',   "Router.showPage('pg-invoices')"));
+      btns.push(this._qbtn('receipt',       'Fakturering',  "Router.showPage('pg-invoices')",                                                             'Fakturaunderlag och betalningsstatus'));
     }
 
     if (btns.length === 0) return '';
     return `<div class="card">
-      <div class="card-header"><h3 class="ch3">${ic('zap',14)} Snabbåtgärder</h3><span style="font-size:10px;color:var(--mt);">Skapa nytt med ett klick</span></div>
-      <div class="card-body" style="padding:10px 14px;">
-        <div class="quick-row">${btns.join('')}</div>
+      <div class="card-header"><h3 class="ch3">${ic('zap',14)} Snabbåtgärder</h3></div>
+      <div class="card-body" style="padding:4px 14px 10px;">
+        <div class="quick-list">${btns.join('')}</div>
       </div>
     </div>`;
   },
 
-  _qbtn(icon, label, onclick) {
-    return `<button class="quick-btn" onclick="${onclick}">
-      <div class="quick-icon">${ic(icon, 18)}</div>
-      <span class="quick-label">${label}</span>
+  _qbtn(icon, label, onclick, desc) {
+    return `<button class="quick-action-row" onclick="${onclick}">
+      <div class="qar-icon">${ic(icon, 14)}</div>
+      <div class="qar-body">
+        <div class="qar-title">${label}</div>
+        ${desc ? `<div class="qar-sub">${desc}</div>` : ''}
+      </div>
+      <span class="qar-arrow">${ic('chevron-right',13)}</span>
     </button>`;
   },
 
@@ -504,11 +509,11 @@ const Dashboard = {
   /* ── Widget: Arbetspool ────────────────────────────────────────────── */
   _widgetPool() {
     const pool = (state.workOrders || []).filter(a => a.status === 'pool');
-    return `<div class="card" style="${pool.length>0?'border-left:4px solid var(--pu);':''}">
+    return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('inbox',14)} Arbetspool</h3>
         <div style="display:flex;align-items:center;gap:6px;">
-          ${pool.length > 0 ? `<span class="bdg bdg-purple">${pool.length} väntar</span>` : ''}
+          ${pool.length > 0 ? `<span class="bdg">${pool.length} väntar</span>` : ''}
           <button class="btn bghost bxs" style="font-size:10px;padding:3px 7px;" onclick="Router.showPage('pg-ao',{filter:'pool'})">Visa ${ic('arrow-right',10)}</button>
         </div>
       </div>
@@ -543,12 +548,12 @@ const Dashboard = {
       elapsed  = `${h}h ${m}min`;
     }
     const timeStr = (active && ts) ? new Date(ts).toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'}) : '';
-    return `<div class="card" style="border-left:4px solid ${active?'var(--gr)':'var(--br)'};">
+    return `<div class="card"${active?' style="border-left:2px solid var(--gr);"':''}>
       <div class="card-header">
         <h3 class="ch3">${ic('clock',14)} Stämpla tid</h3>
         ${active
           ? `<span class="bdg bdg-green">${ic('check-circle',10)} Incheckad</span>`
-          : `<span class="bdg" style="background:var(--bg);color:var(--mt);">Utcheckad</span>`
+          : `<span style="font-size:11px;color:var(--mt);">Utcheckad</span>`
         }
       </div>
       <div class="card-body" style="text-align:center;padding:16px 12px;">
@@ -565,10 +570,10 @@ const Dashboard = {
 
   /* ── Widget: Återkommande ──────────────────────────────────────────── */
   _widgetRecurring(recurring) {
-    return `<div class="card" style="border-left:3px solid var(--sky);">
+    return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('refresh-cw',14)} Återkommande snart</h3>
-        <span class="bdg bdg-sky">${recurring.length}</span>
+        <span class="bdg">${recurring.length}</span>
       </div>
       <div class="card-body">
         ${recurring.slice(0,5).map(r => {
@@ -630,7 +635,7 @@ const Dashboard = {
       <div class="card-header">
         <h3 class="ch3">${ic('target',14)} Säljchanser</h3>
         <div style="display:flex;gap:5px;align-items:center;">
-          ${active.length > 0 ? `<span class="bdg bdg-purple">${active.length}</span>` : ''}
+          ${active.length > 0 ? `<span class="bdg">${active.length}</span>` : ''}
           <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;" onclick="Router.showPage('pg-sales')">Visa alla ${ic('arrow-right',10)}</button>
         </div>
       </div>
@@ -727,14 +732,14 @@ const Dashboard = {
     if (myStats.overdue === 0 && myStats.today === 0 && myStats.upcoming === 0) return '';
 
     const _cnt = (n, label, color, filter) =>
-      `<div onclick="Router.showPage('pg-activities',{filter:'${filter}'})" style="flex:1;text-align:center;padding:10px 6px;cursor:pointer;border-radius:var(--rs);background:var(--bg);transition:box-shadow .12s;" onmouseover="this.style.boxShadow='var(--sh)'" onmouseout="this.style.boxShadow=''">
-        <div style="font-size:22px;font-weight:900;color:${color};line-height:1;margin-bottom:3px;">${n}</div>
-        <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;letter-spacing:.4px;">${label}</div>
+      `<div onclick="Router.showPage('pg-activities',{filter:'${filter}'})" style="flex:1;display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;border-radius:var(--rx);border:1px solid var(--br);background:#fff;">
+        <span style="font-size:18px;font-weight:900;color:${color};min-width:20px;line-height:1;">${n}</span>
+        <span style="font-size:11px;color:var(--mt);font-weight:500;">${label}</span>
       </div>`;
 
     const urgent = [...myOverdue, ...myToday].slice(0, 4);
 
-    return `<div class="card" style="border-left:4px solid ${myStats.overdue>0?'var(--rd)':'var(--or)'};">
+    return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('bell',14)} Aktiviteter & uppföljningar</h3>
         <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;" onclick="Router.showPage('pg-activities')">Visa alla ${ic('arrow-right',10)}</button>
@@ -779,28 +784,28 @@ const Dashboard = {
       </div>
       <div class="card-body" style="padding:10px 14px;">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
-          <div style="background:#eff6ff;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;" onclick="Router.showPage('pg-rondering')">
-            <div style="font-size:22px;font-weight:900;color:#1d4ed8;">${(state.ronderingar||[]).filter(r=>r.status==='planerad').length}</div>
-            <div style="font-size:10px;color:#1d4ed8;font-weight:600;">Planerade</div>
+          <div style="border:1px solid var(--br);border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;background:#fff;" onclick="Router.showPage('pg-rondering')">
+            <div style="font-size:20px;font-weight:900;color:var(--navy);">${(state.ronderingar||[]).filter(r=>r.status==='planerad').length}</div>
+            <div style="font-size:10px;color:var(--mt);font-weight:500;">Planerade</div>
           </div>
-          <div style="background:#fef2f2;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;" onclick="Router.showPage('pg-rondering')">
-            <div style="font-size:22px;font-weight:900;color:#991b1b;">${oppnaAvvikelser.length}</div>
-            <div style="font-size:10px;color:#991b1b;font-weight:600;">Öppna avvikelser</div>
+          <div style="border:1px solid var(--br);border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;background:#fff;" onclick="Router.showPage('pg-rondering')">
+            <div style="font-size:20px;font-weight:900;color:${oppnaAvvikelser.length>0?'var(--rd)':'var(--navy)'};">${oppnaAvvikelser.length}</div>
+            <div style="font-size:10px;color:var(--mt);font-weight:500;">Öppna avvikelser</div>
           </div>
-          <div style="background:#f0fdf4;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">
-            <div style="font-size:22px;font-weight:900;color:#166534;">${(state.ronderingsmallar||[]).filter(m=>m.active).length}</div>
-            <div style="font-size:10px;color:#166534;font-weight:600;">Aktiva mallar</div>
+          <div style="border:1px solid var(--br);border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;background:#fff;" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">
+            <div style="font-size:20px;font-weight:900;color:var(--navy);">${(state.ronderingsmallar||[]).filter(m=>m.active).length}</div>
+            <div style="font-size:10px;color:var(--mt);font-weight:500;">Aktiva mallar</div>
           </div>
         </div>
         ${forsenade.length > 0 ? `
-          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px;">
-            ${ic('alert-triangle',14)} <strong>${forsenade.length} försenad${forsenade.length===1?'':'e'} rondering${forsenade.length===1?'':'ar'}</strong>
-            <button class="btn bp bsm" style="margin-left:auto;font-size:10px;" onclick="Router.showPage('pg-rondering')">Visa</button>
+          <div style="font-size:12px;color:var(--rd);display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 2px;">
+            ${ic('clock',12)} ${forsenade.length} försenad${forsenade.length===1?'':'e'} rondering${forsenade.length===1?'':'ar'}
+            <button class="btn bghost bxs" style="margin-left:auto;font-size:10px;padding:2px 8px;" onclick="Router.showPage('pg-rondering')">Visa</button>
           </div>` : ''}
         ${akutaAvvikelser.length > 0 ? `
-          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px;">
-            ${ic('alert-triangle',14)} <strong>${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}</strong>
-            <button class="btn bp bsm" style="margin-left:auto;font-size:10px;" onclick="Router.showPage('pg-rondering')">Visa</button>
+          <div style="font-size:12px;color:var(--or);display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 2px;">
+            ${ic('alert-triangle',12)} ${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}
+            <button class="btn bghost bxs" style="margin-left:auto;font-size:10px;padding:2px 8px;" onclick="Router.showPage('pg-rondering')">Visa</button>
           </div>` : ''}
         ${avvUanAO.length > 0 ? `<div style="font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
