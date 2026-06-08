@@ -264,8 +264,19 @@ const SeedData = {
         { id: 'c3', text: 'Täta med fogmassa', done: false },
         { id: 'c4', text: 'Kontrollera att läckaget är åtgärdat', done: false }
       ],
-      materials: [{ id: 'm1', articleId: 'ART-001', name: 'Fogmassa Sikaflex 291i', qty: 2, unit: 'st', buyPrice: 75, sellPrice: 145 }],
-      notes: [], timeEntries: ['TE-001'], invoiceId: '',
+      materials: [
+        { id: 'm1', articleId: 'ART-001', name: 'Fogmassa Sikaflex 291i', qty: 2, unit: 'st', buyPrice: 75, sellPrice: 145, addedAt: _d(-1) },
+        { id: 'm2', articleId: 'ART-004', name: 'Primer 290 DC', qty: 1, unit: 'fl', buyPrice: 110, sellPrice: 210, addedAt: _d(0) }
+      ],
+      notes: [
+        { id: 'N-001', text: 'Läckan verkar komma inifrån balkongplattan, inte från fogar. Behöver troligen rivning av golvbeläggning för att nå tätskiktet.', staffName: 'Erik Andersson', timestamp: _d(-1) }
+      ],
+      log: [
+        { id: 'LOG-001', type: 'log', text: 'Ankomst 08:05. Inspekterade balkong och konstaterade att vattnet tränger in via skadan i tätskiktet vid vägganslutningen.', userName: 'Erik Andersson', visibility: 'intern', timestamp: _d(-1) },
+        { id: 'LOG-002', type: 'uppföljning', text: 'Kontakta kund när arbetet är klart för slutbesiktning.', userName: 'Erik Andersson', followUpDate: _ds(3), visibility: 'intern', timestamp: _d(-1) },
+        { id: 'LOG-003', type: 'log', text: 'Påbörjat rengöring av ytor inför fogning. Fogmassa beställd.', userName: 'Erik Andersson', visibility: 'intern', timestamp: _d(0) }
+      ],
+      timeEntries: ['TE-001'], invoiceId: '',
       createdAt: _d(-2), updatedAt: _d(0)
     },
     {
