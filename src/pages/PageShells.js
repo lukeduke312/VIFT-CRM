@@ -3294,12 +3294,10 @@ const PropertiesPage = {
                 <div class="item-row">
                   <div style="flex:1;min-width:0;">
                     <div class="item-title">${p.name}</div>
-                    <div class="item-sub">${[p.address, p.zip, p.city].filter(Boolean).join(', ')} · ${cuName}</div>
+                    <div class="item-sub">${[p.address, p.city].filter(Boolean).join(', ')}${cuName!=='—'?' · '+cuName:''}</div>
+                    ${p.type||p.area ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${[p.type,p.area?p.area+' m²':null].filter(Boolean).join(' · ')}</div>` : ''}
                   </div>
-                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-                    ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
-                    <span class="bdg bdg-grey" style="font-size:9px;">${p.id}</span>
-                  </div>
+                  ${aos > 0 ? `<span class="bdg bdg-sky" style="align-self:flex-start;">${aos} AO</span>` : ''}
                 </div>
               </div>`;
           }).join(''));
@@ -3428,19 +3426,29 @@ const ArticlesPage = {
       </div>
       ${arts.length === 0
         ? `<div class="empty">${ic('package',32)}<h3>Inga artiklar</h3></div>`
-        : arts.map(a => `
+        : arts.map(a => {
+            const margin = a.buyPrice > 0 && a.sellPrice > 0
+              ? Math.round((1 - a.buyPrice / a.sellPrice) * 100)
+              : null;
+            return `
           <div class="list-item" onclick="ArticlesPage.openEdit('${a.id}')">
             <div class="item-row">
               <div style="flex:1;min-width:0;">
-                <div class="item-title">${a.articleNumber ? a.articleNumber+' – ':'' }${a.name}</div>
-                <div class="item-sub">Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr/${a.unit} · Moms ${a.vatRate||25}%</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                  ${a.active===false?`<span style="width:6px;height:6px;border-radius:50%;background:var(--mt);flex-shrink:0;display:inline-block;"></span>`:''}
+                  <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${a.articleNumber} – </span>` : ''}${a.name}</span>
+                </div>
+                <div class="item-sub">
+                  ${fmt(a.sellPrice)} kr/${a.unit} inkl ${a.vatRate||25}% moms
+                  ${margin !== null ? `· <span style="color:${margin>=30?'var(--gr)':margin>=10?'var(--or)':'var(--rd)'};">${margin}% marginal</span>` : ''}
+                </div>
               </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-                <span class="bdg ${a.active!==false?'bdg-green':'bdg-grey'}">${a.active!==false?'Aktiv':'Inaktiv'}</span>
-                <span class="bdg bdg-sky" style="font-size:9px;">${catLabels[a.category]||a.category}</span>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+                <span class="bdg ${catLabels[a.category]?'bdg-sky':'bdg-grey'}" style="font-size:9px;">${catLabels[a.category]||a.category||'—'}</span>
+                ${a.active===false?`<span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>`:''}
               </div>
             </div>
-          </div>`).join('')}`;
+          </div>`;}).join('')}`;
   },
 
   _formHtml(a) {
@@ -3568,11 +3576,14 @@ const PriceGroupsPage = {
         : pgs.map(pg => `
           <div class="list-item" onclick="PriceGroupsPage.openEdit('${pg.id}')">
             <div class="item-row">
-              <div>
+              <div style="flex:1;min-width:0;">
                 <div class="item-title">${pg.name}</div>
-                <div class="item-sub">${fmt(pg.hourRate)} kr/tim${pg.description ? ' · ' + pg.description : ''}</div>
+                ${pg.description ? `<div class="item-sub">${pg.description}</div>` : ''}
               </div>
-              <span class="bdg ${pg.active ? 'bdg-green' : 'bdg-grey'}">${pg.active ? 'Aktiv' : 'Inaktiv'}</span>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+                <span style="font-size:14px;font-weight:800;color:var(--navy);">${fmt(pg.hourRate)} <span style="font-size:10px;font-weight:500;color:var(--mt);">kr/tim</span></span>
+                <span class="bdg ${pg.active ? 'bdg-green' : 'bdg-grey'}" style="font-size:9px;">${pg.active ? 'Aktiv' : 'Inaktiv'}</span>
+              </div>
             </div>
           </div>`).join(''));
   },

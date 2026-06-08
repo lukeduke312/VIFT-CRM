@@ -43,11 +43,10 @@ const SalesPage = {
   _renderCard(op) {
     const cu = getCu(op.customerId);
     const cuName = cu ? CustomerService.displayName(cu) : '—';
-    const prioColors = { high:'bdg-red', medium:'bdg-orange', low:'bdg-grey' };
-    const prioLabels = { high:'Hög', medium:'Medium', low:'Låg' };
     const typeLabels = {
       service_agreement:'Serviceavtal', seasonal_job:'Säsongsarbete',
-      upsell:'Merförsäljning', quote_followup:'Offertuppföljning', win_back:'Vinn tillbaka'
+      upsell:'Merförsäljning', quote_followup:'Offertuppföljning', win_back:'Vinn tillbaka',
+      new_customer:'Ny kund', other:'Övrigt'
     };
     const isDone = ['won','lost','done','dismissed'].includes(op.status);
     const wonLostBadge = op.status === 'won'
@@ -57,16 +56,17 @@ const SalesPage = {
       : op.status === 'dismissed'
       ? `<span class="bdg bdg-grey" style="font-size:10px;">Avfärdad</span>`
       : '';
+    const leftBorder = op.priority === 'high' ? 'border-left:3px solid var(--rd);' : '';
 
     return `
-      <div class="card" style="margin-bottom:10px;${isDone?'opacity:.75':''}">
+      <div class="card" style="margin-bottom:10px;${leftBorder}${isDone?'opacity:.7':''}">
         <div class="card-header">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:800;margin-bottom:4px;">${op.title}</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:3px;">${op.title}</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
-              <span class="bdg ${prioColors[op.priority]||'bdg-grey'}">${prioLabels[op.priority]||op.priority}</span>
-              ${op.type ? `<span class="bdg bdg-sky" style="font-size:10px;">${typeLabels[op.type]||op.type}</span>` : ''}
-              ${wonLostBadge || sbdg(op.status)}
+              ${op.priority==='high' ? `<span class="bdg bdg-red" style="font-size:10px;">${ic('alert-circle',9)} Hög prioritet</span>` : ''}
+              ${op.type && op.type !== 'other' ? `<span class="bdg bdg-grey" style="font-size:10px;">${typeLabels[op.type]||op.type}</span>` : ''}
+              ${wonLostBadge}
             </div>
           </div>
           ${!isDone ? `<button class="btn bxs bs" onclick="SalesPage.openEdit('${op.id}')">${ic('pencil',12)}</button>` : ''}
@@ -82,22 +82,22 @@ const SalesPage = {
           ${op.dueDate ? `<div class="dr"><span class="dk">Deadline</span><span class="dv">${fmtDate(op.dueDate)}</span></div>` : ''}
           ${op.status === 'snoozed' && op.snoozedUntil ? `<div class="dr"><span class="dk">Återkom</span><span class="dv">${fmtDate(op.snoozedUntil)}</span></div>` : ''}
           ${op.suggestedAction ? `
-            <div style="background:var(--acc);border-radius:8px;padding:10px 12px;margin:8px 0;">
-              <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Rekommenderad åtgärd</div>
-              <div style="font-size:13px;font-weight:600;">${op.suggestedAction}</div>
+            <div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:9px 12px;margin:8px 0;">
+              <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Rekommenderad åtgärd</div>
+              <div style="font-size:13px;font-weight:600;color:var(--tx);">${op.suggestedAction}</div>
             </div>` : ''}
           ${op.aiTip ? `
-            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-              <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('zap',10)} Tips</div>
-              <div style="font-size:12px;color:#78350f;line-height:1.5;">${op.aiTip}</div>
+            <div style="background:var(--bg);border-radius:8px;padding:9px 12px;margin-bottom:8px;border-left:2px solid var(--or);">
+              <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">${ic('zap',9)} Tips</div>
+              <div style="font-size:12px;color:var(--tx);line-height:1.5;">${op.aiTip}</div>
             </div>` : ''}
           ${!isDone ? `
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
             <button class="btn bsm bp" onclick="SalesPage.createAO('${op.id}')">${ic('clipboard-list',13)} Skapa AO</button>
-            ${op.status !== 'snoozed' ? `<button class="btn bsm bghost" onclick="SalesPage.openSnooze('${op.id}')">${ic('pause-circle',13)} Skjut upp</button>` : `<button class="btn bsm bsu" onclick="SalesPage.wakeUp('${op.id}')">${ic('play-circle',13)} Återaktivera</button>`}
-            <button class="btn bsm bsu" onclick="SalesPage.markWon('${op.id}')">${ic('check-circle',13)} Vunnen</button>
-            <button class="btn bsm bw" onclick="SalesPage.markLost('${op.id}')">${ic('x-circle',13)} Förlorad</button>
-            <button class="btn bsm bd" onclick="SalesPage.dismiss('${op.id}')">${ic('trash-2',13)} Avfärda</button>
+            ${op.status !== 'snoozed' ? `<button class="btn bsm bs" onclick="SalesPage.openSnooze('${op.id}')">${ic('pause-circle',13)} Skjut upp</button>` : `<button class="btn bsm bsu" onclick="SalesPage.wakeUp('${op.id}')">${ic('play-circle',13)} Återaktivera</button>`}
+            <button class="btn bsm bs" onclick="SalesPage.markWon('${op.id}')">${ic('check-circle',13)} Vunnen</button>
+            <button class="btn bsm bs" onclick="SalesPage.markLost('${op.id}')">${ic('x-circle',13)} Förlorad</button>
+            <button class="btn bxs bd" style="margin-left:auto;" onclick="SalesPage.dismiss('${op.id}')">${ic('trash-2',12)}</button>
           </div>` : ''}
         </div>
       </div>`;

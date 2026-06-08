@@ -661,59 +661,68 @@ const WorkOrderDetailPage = {
   /* ── Tidslinje/logg ───────────────────────── */
   _renderTimeline(ao) {
     const events = [];
-
-    // Notes
-    (ao.notes||[]).forEach(n => {
-      events.push({ type:'note', ts: n.timestamp||'', who: n.staffName||'', text: n.text||'', id: n.id });
-    });
-
-    // Log entries (manual log)
-    (ao.log||[]).forEach(l => {
-      events.push({ type: l.type||'log', ts: l.timestamp||'', who: l.userName||'', text: l.text||'', imageData: l.imageData||'', followUpDate: l.followUpDate||'', id: l.id });
-    });
-
-    // Time entries
-    TimeService.getByAO(ao.id).forEach(t => {
-      events.push({ type:'time', ts: t.createdAt||t.date||'', who: t.staffName||'', text: `${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` });
-    });
-
-    // Material additions
-    (ao.materials||[]).forEach(m => {
-      if (m.addedAt) {
-        events.push({ type:'material', ts: m.addedAt, who: '', text: `${m.qty} ${m.unit} ${m.name} tillagd` });
-      }
-    });
-
-    // Status changes from activity log
+    (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
+    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', followUpDate:l.followUpDate||'', id:l.id }));
+    TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
+    (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
-      if (a.type === 'status_change' || a.type === 'work_order_status' || a.type === 'created') {
-        events.push({ type: a.type, ts: a.timestamp||'', who: '', text: a.description||'' });
-      }
+      if (a.type==='status_change'||a.type==='work_order_status'||a.type==='created')
+        events.push({ type:a.type, ts:a.timestamp||'', who:'', text:a.description||'' });
     });
 
-    if (!events.length) {
-      return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Ingen logg ännu</p>`;
-    }
+    if (!events.length) return `<div style="padding:20px 14px;text-align:center;color:var(--mt);font-size:13px;">Ingen logg ännu</div>`;
+    events.sort((a,b) => (b.ts>a.ts?1:b.ts<a.ts?-1:0));
 
-    // Sort descending (newest first)
-    events.sort((a,b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
+    const TI = {
+      note:              {ico:'file-text',   col:'var(--navy)', lbl:'Anteckning'},
+      log:               {ico:'activity',    col:'var(--sky)',  lbl:'Logg'},
+      photo:             {ico:'camera',      col:'var(--sky)',  lbl:'Foto'},
+      time:              {ico:'clock',       col:'#16a34a',     lbl:'Tid'},
+      material:          {ico:'package',     col:'#c2410c',     lbl:'Material'},
+      status_change:     {ico:'refresh-cw',  col:'var(--mt)',   lbl:'Status'},
+      work_order_status: {ico:'refresh-cw',  col:'var(--mt)',   lbl:'Status'},
+      created:           {ico:'plus-circle', col:'var(--sky)',  lbl:'Skapad'},
+      uppföljning:       {ico:'bell',        col:'#7c3aed',     lbl:'Uppföljning'},
+    };
 
-    const typeIcon  = { note:'file-text', log:'activity', time:'clock', material:'package', status_change:'refresh-cw', work_order_status:'refresh-cw', created:'plus', uppföljning:'bell' };
-    const typeColor = { note:'var(--navy)', log:'var(--sky)', time:'var(--grn)', material:'var(--orn)', status_change:'var(--mt)', work_order_status:'var(--mt)', created:'var(--sky)', uppföljning:'#7c3aed' };
+    const fmtTs = ts => {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        if (isNaN(d)) return relDate(ts);
+        const now = new Date();
+        const pad = n => String(n).padStart(2,'0');
+        const hm = pad(d.getHours())+':'+pad(d.getMinutes());
+        if (d.toDateString()===now.toDateString()) return 'Idag '+hm;
+        const yest = new Date(now); yest.setDate(now.getDate()-1);
+        if (d.toDateString()===yest.toDateString()) return 'Igår '+hm;
+        const sameYear = d.getFullYear()===now.getFullYear();
+        return pad(d.getDate())+'/'+pad(d.getMonth()+1)+(sameYear?'':' '+d.getFullYear())+' '+hm;
+      } catch(e) { return relDate(ts); }
+    };
 
-    return `<div style="padding:8px 14px 4px;">` + events.map(ev => {
-      const col  = typeColor[ev.type] || 'var(--mt)';
-      const ico  = typeIcon[ev.type]  || 'activity';
+    return '<div style="padding:12px 14px 8px;">' + events.map((ev, i) => {
+      const ti = TI[ev.type] || {ico:'activity', col:'var(--mt)', lbl:ev.type};
+      const isLast = i === events.length - 1;
+      const ts = fmtTs(ev.ts);
+      const canDel = ev.id && (ev.type==='log'||ev.type==='photo'||ev.type==='uppföljning');
       return `
-        <div style="display:flex;gap:10px;margin-bottom:14px;align-items:flex-start;">
-          <div style="width:28px;height:28px;border-radius:50%;background:${col}20;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${col};">${ic(ico,13)}</div>
-          <div style="flex:1;min-width:0;padding-top:4px;">
-            ${ev.who ? `<div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:2px;">${ev.who}${ev.ts?' · '+relDate(ev.ts):''}</div>` : (ev.ts ? `<div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${relDate(ev.ts)}</div>` : '')}
-            <div style="font-size:13px;line-height:1.5;word-break:break-word;">${ev.text}</div>
-            ${ev.followUpDate ? `<div style="margin-top:4px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;">${ic('calendar',9)} Uppföljning: ${ev.followUpDate}</div>` : ''}
-            ${ev.imageData ? `<img src="${ev.imageData}" style="max-width:100%;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;" loading="lazy">` : ''}
+        <div style="display:flex;gap:0;">
+          <div style="display:flex;flex-direction:column;align-items:center;width:36px;flex-shrink:0;">
+            <div style="width:30px;height:30px;border-radius:50%;background:${ti.col}1a;border:1.5px solid ${ti.col}50;display:flex;align-items:center;justify-content:center;color:${ti.col};flex-shrink:0;">${ic(ti.ico,13)}</div>
+            ${!isLast?'<div style="width:2px;flex:1;min-height:8px;background:var(--br);border-radius:1px;"></div>':''}
           </div>
-          ${ev.id && (ev.type==='log'||ev.type==='uppföljning') ? `<button class="btn bxs bd" style="flex-shrink:0;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>` : ''}
+          <div style="flex:1;min-width:0;padding:2px 0 ${isLast?'4':'16'}px 10px;">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:${ev.text||ev.imageData?'3':'0'}px;">
+              <span style="font-size:10px;font-weight:800;color:${ti.col};text-transform:uppercase;letter-spacing:.4px;">${ti.lbl}</span>
+              ${ts?`<span style="font-size:10px;color:var(--mt);">${ts}</span>`:''}
+              ${ev.who?`<span style="font-size:10px;color:var(--mt);display:inline-flex;align-items:center;gap:3px;">${ic('user',9)} ${esc(ev.who)}</span>`:''}
+            </div>
+            ${ev.text?`<div style="font-size:13px;line-height:1.5;word-break:break-word;color:var(--tx);">${ev.text}</div>`:''}
+            ${ev.followUpDate?`<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid #ddd6fe;">${ic('calendar',9)} Uppföljning: ${ev.followUpDate}</div>`:''}
+            ${ev.imageData?`<img src="${ev.imageData}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);" loading="lazy">`:''}
+          </div>
+          ${canDel?`<button class="btn bxs bd" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>`:''}
         </div>`;
     }).join('') + '</div>';
   },

@@ -204,12 +204,20 @@ const InvoiceDetailPage = {
     const ao   = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
     const off  = inv.offerId ? (state.offers||[]).find(o=>o.id===inv.offerId) : null;
     const tots = InvoiceService.calcTotals(inv);
+    const summ = InvoiceService.calcSummary(inv);
+    const hasRot = summ.trAmount > 0;
     const cuName = cu ? CustomerService.displayName(cu) : '—';
+
+    const heroMeta = [];
+    if (inv.sentAt) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;">${ic('send',10)} Skickad ${fmtDate(inv.sentAt)}</span>`);
+    if (inv.paidAt) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;color:#86efac;">${ic('check-circle',10)} Betald ${fmtDate(inv.paidAt)}</span>`);
+    if (inv.workOrderId) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-ao-detail',{aoId:'${inv.workOrderId}'})">${ic('clipboard',10)} ${inv.workOrderId}${ao?' – '+esc(ao.title.substring(0,28))+(ao.title.length>28?'…':''):''}</span>`);
+    if (inv.offerId) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${ic('file-text',10)} Offert ${inv.offerId}</span>`);
 
     el.innerHTML = `
       <!-- Hero -->
       <div class="card" style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);color:#fff;border-radius:12px;margin-bottom:8px;">
-        <div style="padding:12px 14px 10px;">
+        <div style="padding:12px 14px 12px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
             <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)}</button>
             <span style="font-size:11px;font-weight:700;opacity:.6;letter-spacing:.3px;">${inv.id}</span>
@@ -220,18 +228,24 @@ const InvoiceDetailPage = {
               </select>
             </div>
           </div>
-          <div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:3px;">${cuName}</div>
-          ${inv.title ? `<div style="font-size:12px;opacity:.75;margin-bottom:8px;">${esc(inv.title)}</div>` : '<div style="margin-bottom:8px;"></div>'}
-          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:2px;">${cuName}</div>
+          ${inv.title ? `<div style="font-size:12px;opacity:.7;margin-bottom:8px;">${esc(inv.title)}</div>` : '<div style="margin-bottom:8px;"></div>'}
+          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:${heroMeta.length?'10':'0'}px;">
             <div>
-              <div style="font-size:11px;opacity:.65;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Totalt inkl. moms</div>
-              <div style="font-size:26px;font-weight:900;line-height:1.1;">${fkr(tots.total)}</div>
+              <div style="font-size:10px;opacity:.6;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Totalt inkl. moms</div>
+              <div style="font-size:26px;font-weight:900;line-height:1.1;${hasRot?'text-decoration:line-through;opacity:.7;font-size:18px;':''}">${fkr(tots.total)}</div>
             </div>
-            ${inv.dueDate ? `<div>
-              <div style="font-size:11px;opacity:.65;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Förfallodatum</div>
+            ${hasRot ? `<div>
+              <div style="font-size:10px;opacity:.6;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Kunden betalar</div>
+              <div style="font-size:26px;font-weight:900;line-height:1.1;color:#86efac;">${fkr(summ.customerPays)}</div>
+              <div style="font-size:10px;opacity:.65;">inkl. ${(inv.taxReduction||{}).type||'RUT/ROT'}-avdrag</div>
+            </div>` : ''}
+            ${inv.dueDate ? `<div style="margin-left:auto;">
+              <div style="font-size:10px;opacity:.6;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Förfallodatum</div>
               <div style="font-size:13px;font-weight:700;">${fmtDate(inv.dueDate)}</div>
             </div>` : ''}
           </div>
+          ${heroMeta.length ? `<div style="border-top:1px solid rgba(255,255,255,.15);padding-top:8px;display:flex;flex-wrap:wrap;gap:10px;font-size:11px;opacity:.8;">${heroMeta.join('')}</div>` : ''}
         </div>
       </div>
 

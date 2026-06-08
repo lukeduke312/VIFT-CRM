@@ -38,26 +38,30 @@ const RecurringPage = {
   _renderCard(ro) {
     const cu = getCu(ro.customerId);
     const days = RecurringOrderService.daysUntilNext(ro);
-    const daysStr = days === null ? '' : days < 0
-      ? `<span class="bdg bdg-red" style="font-size:10px;">Förfallen ${Math.abs(days)} d</span>`
-      : days === 0 ? `<span class="bdg bdg-orange">Idag</span>`
-      : days <= 7  ? `<span class="bdg bdg-orange">${days} dagar</span>`
-      : `<span class="bdg bdg-grey">${days} dagar</span>`;
-    const stCls = { aktiv: 'bdg-green', pausad: 'bdg-yellow', avslutad: 'bdg-grey' }[ro.status] || 'bdg-grey';
+    const isOverdue  = days !== null && days < 0;
+    const isSoon     = days !== null && days >= 0 && days <= 7;
+    const isInactive = ro.status === 'pausad' || ro.status === 'avslutad';
+    const leftBorder = isOverdue ? 'border-left:3px solid var(--rd);'
+      : isSoon      ? 'border-left:3px solid var(--or);'
+      : !isInactive ? 'border-left:3px solid var(--gr);'
+      :               'border-left:3px solid var(--br);';
+    const daysLabel = days === null ? '' : days < 0
+      ? `<span style="color:var(--rd);font-weight:700;">Förfallen ${Math.abs(days)} d sedan</span>`
+      : days === 0 ? `<span style="color:var(--or);font-weight:700;">Idag</span>`
+      : days <= 7  ? `<span style="color:var(--or);">Om ${days} dagar</span>`
+      : `<span style="color:var(--mt);">Om ${days} dagar</span>`;
+    const stCls = { aktiv: 'bdg-green', pausad: 'bdg-grey', avslutad: 'bdg-grey' }[ro.status] || 'bdg-grey';
     const stLbl = { aktiv: 'Aktiv', pausad: 'Pausad', avslutad: 'Avslutad' }[ro.status] || ro.status;
 
     return `
-      <div class="list-item p-${ro.priority || 'normal'}" onclick="RecurringPage.openDetail('${ro.id}')">
+      <div class="list-item" style="${leftBorder}" onclick="RecurringPage.openDetail('${ro.id}')">
         <div class="item-row">
           <div style="flex:1;min-width:0;">
             <div class="item-title">${ro.title}</div>
             <div class="item-sub">${cu ? CustomerService.displayName(cu) : '—'} · ${RecurringOrderService.intervalLabel(ro.interval)}</div>
-            ${ro.nextDate ? `<div style="font-size:11px;color:var(--mt);margin-top:3px;">${ic('calendar',11)} Nästa: ${fmtDate(ro.nextDate)} ${daysStr}</div>` : ''}
+            ${ro.nextDate ? `<div style="font-size:11px;margin-top:3px;display:flex;align-items:center;gap:5px;">${ic('calendar',10)} <span style="color:var(--mt);">Nästa: ${fmtDate(ro.nextDate)}</span> ${daysLabel}</div>` : ''}
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-            <span class="bdg ${stCls}">${stLbl}</span>
-            ${(ro.checklist||[]).length > 0 ? `<span class="bdg bdg-grey" style="font-size:9px;">${ic('check-square',9)} ${ro.checklist.length}</span>` : ''}
-          </div>
+          <span class="bdg ${stCls}" style="align-self:flex-start;">${stLbl}</span>
         </div>
       </div>`;
   },
