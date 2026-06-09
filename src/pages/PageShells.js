@@ -3768,7 +3768,7 @@ const StaffPage = {
           <div class="list-item" onclick="StaffPage.openEdit('${s.id}')">
             <div class="item-row">
               <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:38px;height:38px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--navy);flex-shrink:0;">${(s.firstName||'?').charAt(0)}${(s.lastName||'').charAt(0)}</div>
+                <div style="width:38px;height:38px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc-text);flex-shrink:0;">${(s.firstName||'?').charAt(0)}${(s.lastName||'').charAt(0)}</div>
                 <div>
                   <div class="item-title">${s.firstName} ${s.lastName}</div>
                   <div class="item-sub">${s.title||'—'}${s.phone?' · '+s.phone:''}</div>
@@ -4718,7 +4718,7 @@ const AdminPage = {
           </div>
           <div style="padding:4px 16px 4px;">
             ${OffersPage._T.map(t=>`<div style="padding:7px 0;border-bottom:1px solid var(--bg);display:flex;align-items:center;gap:8px;">
-              <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--blue);flex-shrink:0;">${ic(t.icon,13)}</span>
+              <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--acc-text);flex-shrink:0;">${ic(t.icon,13)}</span>
               <div style="flex:1;min-width:0;">
                 <div style="font-size:12px;font-weight:700;">${t.name}</div>
                 <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${t.vatRate||25} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
