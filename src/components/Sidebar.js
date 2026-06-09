@@ -86,11 +86,12 @@ const Sidebar = {
       }
 
       const badge = this._getBadge(item.badgeKey);
+      const badgeCls = this._isUrgentBadge(item.badgeKey) ? 'nbdg nbdg-alert' : 'nbdg';
       html += `
         <button class="ni" id="nav-${item.id}" onclick="Router.showPage('${item.id}')">
           <span class="ico">${ic(item.icon)}</span>
           <span class="lbl">${item.label}</span>
-          ${item.comingSoon ? '<span class="nbdg-soon">Snart</span>' : (badge ? `<span class="nbdg">${badge}</span>` : '')}
+          ${item.comingSoon ? '<span class="nbdg-soon">Snart</span>' : (badge ? `<span class="${badgeCls}">${badge}</span>` : '')}
         </button>`;
     });
 
@@ -239,8 +240,10 @@ const Sidebar = {
       if (badge) {
         if (!el) {
           el = document.createElement('span');
-          el.className = 'nbdg';
+          el.className = this._isUrgentBadge(key) ? 'nbdg nbdg-alert' : 'nbdg';
           navBtn.appendChild(el);
+        } else {
+          el.className = this._isUrgentBadge(key) ? 'nbdg nbdg-alert' : 'nbdg';
         }
         el.textContent = badge;
         el.style.display = '';
@@ -248,6 +251,10 @@ const Sidebar = {
         el.style.display = 'none';
       }
     });
+  },
+
+  _isUrgentBadge(key) {
+    return key === 'activitiesOverdue' || key === 'operationsAlert';
   },
 
   _getBadge(key) {

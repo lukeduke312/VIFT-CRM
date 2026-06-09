@@ -62,12 +62,12 @@ const Dashboard = {
     el.innerHTML =
       `<div class="dash-topbar">` +
         `<div style="display:flex;flex-direction:column;gap:1px;">` +
-          (userName ? `<span class="dash-greeting">Hej, ${esc(userName)}! 👋</span>` : '<span></span>') +
+          (userName ? `<span style="font-size:14px;font-weight:700;color:var(--navy);">Hej, ${esc(userName)}</span>` : '<span></span>') +
           `<span style="font-size:12px;font-weight:500;color:var(--mt);">${todayStr2}</span>` +
         `</div>` +
-        `<div style="display:flex;gap:6px;">` +
-          `<button class="btn bs bxs" onclick="Dashboard.openUserPrefs()" title="Mina inställningar">${ic('user',12)} Mina inställningar</button>` +
-          `<button class="btn bs bxs" onclick="Dashboard.openCustomize()" title="Anpassa dashboard">${ic('settings',12)} Anpassa</button>` +
+        `<div style="display:flex;gap:4px;">` +
+          `<button class="btn bghost bxs" onclick="Dashboard.openUserPrefs()" title="Mina inställningar" style="padding:6px;">${ic('user',14)}</button>` +
+          `<button class="btn bghost bxs" onclick="Dashboard.openCustomize()" title="Anpassa dashboard" style="padding:6px;">${ic('settings',14)}</button>` +
         `</div>` +
       `</div>` +
       (heroSub ? `<div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">${heroSub}</div>` : '') +
@@ -648,18 +648,16 @@ const Dashboard = {
               var val = opp.estimatedValue ? ` · ${fmt(opp.estimatedValue)} kr` : '';
               var pBadge = `<span class="bdg ${prioCls[opp.priority]||'bdg-grey'}" style="font-size:9px;flex-shrink:0;">${prioSv[opp.priority]||opp.priority}</span>`;
               var tip = opp.aiTip ? `<div style="font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💡 ${opp.aiTip}</div>` : '';
-              return `<div style="padding:6px 0;border-bottom:1px solid var(--bg);">
-                <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;">
-                  <div style="flex:1;min-width:0;">
-                    <div class="crow-title">${opp.title}</div>
-                    <div class="crow-sub">${cuName}${val}</div>
-                    ${tip}
-                  </div>
-                  ${pBadge}
+              var deadline = opp.deadline ? `<span class="bdg" style="font-size:9px;flex-shrink:0;">${ic('calendar',9)} ${opp.deadline}</span>` : '';
+              return `<div class="crow" style="cursor:pointer;" onclick="Router.showPage('pg-sales')">
+                <div style="flex:1;min-width:0;">
+                  <div class="crow-title">${opp.title}</div>
+                  <div class="crow-sub">${cuName}${val}</div>
+                  ${tip}
                 </div>
-                <div style="display:flex;gap:4px;">
-                  <button class="btn bxs bs" style="font-size:10px;padding:3px 7px;" onclick="event.stopPropagation();SalesService.openSnooze('${opp.id}')">Skjut upp</button>
-                  <button class="btn bxs bsu" style="font-size:10px;padding:3px 7px;" onclick="event.stopPropagation();SalesService.markDoneUI('${opp.id}')">Klar</button>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">
+                  ${pBadge}
+                  ${deadline}
                 </div>
               </div>`;
             }).join('')}

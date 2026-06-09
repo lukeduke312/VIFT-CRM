@@ -114,7 +114,11 @@ const OperationsPage = {
 
   _attentionGroup(label, color, icon, aos) {
     return `<div style="padding:8px 14px 4px;border-bottom:1px solid var(--br);">
-      <div style="font-size:11px;font-weight:800;color:var(--${color});text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic(icon,11)} ${label} (${aos.length})</div>
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--${color});flex-shrink:0;"></span>
+        <span style="font-size:12px;font-weight:700;color:var(--${color});">${ic(icon,11)} ${label}</span>
+        <span class="bdg" style="font-size:10px;background:var(--bg);color:var(--mt);">${aos.length}</span>
+      </div>
       ${aos.map(ao => this._aoRow(ao, true)).join('')}
     </div>`;
   },

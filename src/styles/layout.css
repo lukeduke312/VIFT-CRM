@@ -237,8 +237,8 @@
 .ni.on .ico { opacity: 1; }
 .ni .lbl { flex: 1; }
 .ni .nbdg {
-  background: var(--rd);
-  color: #fff;
+  background: rgba(255,255,255,.2);
+  color: rgba(255,255,255,.9);
   border-radius: 100px;
   font-size: 9px;
   font-weight: 800;
@@ -246,6 +246,10 @@
   min-width: 16px;
   text-align: center;
   line-height: 14px;
+}
+.ni .nbdg.nbdg-alert {
+  background: var(--rd);
+  color: #fff;
 }
 .ni .nbdg-soon {
   background: rgba(255,255,255,.1);

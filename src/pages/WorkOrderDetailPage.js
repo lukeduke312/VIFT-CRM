@@ -69,8 +69,6 @@ const WorkOrderDetailPage = {
         </div>
         <div style="padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;border-bottom:1px solid var(--bg);">
           ${this._actionBtns(ao)}
-          ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>` : ''}
-          ${Auth.can('ao_edit') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">${ic('users',13)} Personal</button>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
           ${ao.description ? `<p style="font-size:13px;color:var(--mt);line-height:1.5;margin-bottom:10px;">${ao.description}</p>` : ''}
@@ -206,7 +204,7 @@ const WorkOrderDetailPage = {
     if (ao.status === 'pågående') {
       if (canComplete) btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',13)} Klarmarkera</button>`);
       if (canEdit) btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',13)} Pausa</button>`);
-      if (canEdit) {
+      if (canEdit && ao.substatus) {
         const subOpts = [
           {v:'',label:'Inget substatus'},
           {v:'inväntar_material',label:'Inväntar material'},
@@ -232,10 +230,15 @@ const WorkOrderDetailPage = {
     if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.archived && !ao.deleted) {
       btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()" title="Fler statusval">${ic('more-horizontal',13)}</button>`);
     }
-    // Archive / trash actions
+    // Edit / staff (secondary)
+    if (canEdit) {
+      btns.push(`<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`);
+      btns.push(`<button class="btn bs bxs" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">${ic('users',13)} Personal</button>`);
+    }
+    // Archive / trash (admin — labeled, not icon-only)
     if (canEdit && !ao.archived && !ao.deleted) {
-      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openArchiveModal()" title="Arkivera">${ic('archive',13)}</button>`);
-      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openDeleteModal()" title="Ta bort">${ic('trash',13)}</button>`);
+      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openArchiveModal()">${ic('archive',13)} Arkivera</button>`);
+      btns.push(`<button class="btn bghost bsm" style="color:var(--rd);" onclick="WorkOrderDetailPage.openDeleteModal()">${ic('trash',13)} Ta bort</button>`);
     }
     if (ao.archived && !ao.deleted) {
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage._restoreFromArchive('${ao.id}')">${ic('rotate-ccw',13)} Återställ från arkiv</button>`);

@@ -224,9 +224,9 @@ const MyJobsPage = {
           ${ao.description ? `<div class="job-card-v2-meta-row" style="color:var(--mt);">${esc(ao.description.slice(0,80))}${ao.description.length>80?'…':''}</div>` : ''}
           ${chkTotal       ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkTotal} checkpunkt${chkTotal!==1?'er':''}</div>` : ''}
         </div>
-        <div class="job-card-v2-actions" onclick="event.stopPropagation()">
-          <button class="btn bp" style="flex:1;font-size:13px;padding:9px;" onclick="MyJobsPage.takeFromPool('${ao.id}')">${ic('user-plus',13)} Ta jobbet</button>
+        <div class="job-card-v2-actions" onclick="event.stopPropagation()" style="justify-content:flex-end;">
           <button class="btn bghost bsm" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('external-link',12)} Öppna</button>
+          <button class="btn bsu bsm" onclick="MyJobsPage.takeFromPool('${ao.id}')">${ic('user-plus',13)} Ta jobbet</button>
         </div>
       </div>`;
   },

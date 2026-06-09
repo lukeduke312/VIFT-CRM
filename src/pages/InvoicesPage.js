@@ -251,24 +251,18 @@ const InvoiceDetailPage = {
 
       <!-- Metadata -->
       <div class="card">
-        <div class="card-header"><h3>Faktureras till</h3></div>
+        <div class="card-header"><h3>Faktureras till</h3>
+          <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera</button>
+        </div>
         <div class="card-body">
-          <div class="dr"><span class="dk">Kund</span><span class="dv">${cuName}</span></div>
           ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${esc(cu.address||'—')}${cu.city?', '+esc(cu.city):''}</span></div>` : ''}
           ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(cu.orgNr)}</span></div>` : ''}
-          <div class="dr"><span class="dk">Förfallodatum</span><span class="dv">${fmtDate(inv.dueDate)}</span></div>
-          ${inv.workOrderId ? `<div class="dr"><span class="dk">Från AO</span>
-            <span class="dv link" onclick="Router.showPage('pg-ao-detail',{aoId:'${inv.workOrderId}'})">${inv.workOrderId}${ao?' – '+esc(ao.title):''}</span></div>` : ''}
           ${inv.offerId ? `<div class="dr"><span class="dk">Från offert</span>
             <span class="dv link" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${inv.offerId}${off?' (v'+off.versionNumber+')':''}</span></div>` : ''}
           ${inv.customerReference ? `<div class="dr"><span class="dk">Er referens</span><span class="dv">${esc(inv.customerReference)}</span></div>` : ''}
           ${inv.ocr ? `<div class="dr"><span class="dk">OCR</span><span class="dv" style="font-family:monospace;font-weight:700;">${esc(inv.ocr)}</span></div>` : ''}
-          ${inv.sentAt ? `<div class="dr"><span class="dk">Skickad</span><span class="dv">${fmtDate(inv.sentAt)}</span></div>` : ''}
           ${inv.paidAt ? `<div class="dr"><span class="dk" style="color:var(--gr);">Betald</span><span class="dv" style="color:var(--gr);font-weight:700;">${fmtDate(inv.paidAt)}</span></div>` : ''}
           <div class="dr"><span class="dk">Skapad</span><span class="dv">${fmtDate(inv.createdAt)}</span></div>
-        </div>
-        <div style="padding:4px 14px 10px;">
-          <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera referens/OCR</button>
         </div>
       </div>
 
@@ -310,14 +304,13 @@ const InvoiceDetailPage = {
         <div style="padding:10px 14px;border-bottom:1px solid var(--bg);">
           <div style="display:flex;align-items:flex-start;gap:8px;">
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${esc(l.description)}</div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px;">
+                <div style="font-size:13px;font-weight:700;">${esc(l.description)}</div>
+                <div style="font-size:14px;font-weight:800;color:var(--navy);white-space:nowrap;">${fmt(exVat+vatAmt)} kr</div>
+              </div>
               <div style="font-size:11px;color:var(--mt);">${l.qty} ${l.unit} × ${fmt(l.unitPrice)} kr
                 <span class="bdg ${typeCls}" style="font-size:9px;margin-left:4px;">${ic(typeIcon,9)} ${InvoiceService.sourceLabel(l)}</span>
-              </div>
-              <div style="display:flex;gap:10px;margin-top:3px;font-size:11px;">
-                <span style="color:var(--mt);">Ex: <strong style="color:var(--tx)">${fmt(exVat)} kr</strong></span>
-                <span style="color:var(--mt);">Moms ${l.vatRate||25}%: ${fmt(vatAmt)} kr</span>
-                <span style="color:var(--navy);font-weight:700;">Inkl: ${fmt(exVat+vatAmt)} kr</span>
+                <span style="margin-left:6px;color:var(--mt);">ex ${fmt(exVat)} kr</span>
               </div>
             </div>
             <div style="display:flex;gap:4px;flex-shrink:0;">

@@ -2106,23 +2106,26 @@ const OfferDetailPage = {
         ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
 
         <div class="off-detail-hero-actions">
-          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>`:''}
-          ${!off.deleted?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',12)} Ny version</button>`:''}
-          ${!off.deleted?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>`:''}
+          <!-- Status-based primary actions -->
           ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`
             <button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button>
             <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>
             <button type="button" class="off-hero-btn" onclick="OfferDetailPage._quickAction('${off.id}','verbal')">${ic('thumbs-up',12)} Muntligt godkänd</button>
             <button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>
           `:''}
-          <button type="button" class="off-hero-btn" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',12)} PDF</button>
           ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
           ${off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
           ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
+          <!-- Utility / secondary actions -->
+          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>`:''}
+          <button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',12)} PDF</button>
+          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',12)} Ny version</button>`:''}
+          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>`:''}
+          <!-- Admin / destructive -->
           ${(!off.archived&&!off.deleted)||off.deleted?`<span style="display:inline-block;width:1px;height:20px;background:rgba(255,255,255,.2);margin:0 4px;vertical-align:middle;"></span>`:''}
-          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.archiveOffer('${off.id}')" title="Arkivera">${ic('archive',12)} Arkivera</button>`:''}
-          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}')" title="Flytta till papperskorg">${ic('trash',12)} Ta bort</button>`:''}
+          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.archiveOffer('${off.id}')">${ic('archive',12)} Arkivera</button>`:''}
+          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}')">${ic('trash',12)} Ta bort</button>`:''}
           ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}')">${ic('trash-2',12)} Radera permanent</button>`:''}
         </div>
       </div>
@@ -2650,7 +2653,7 @@ const OfferDetailPage = {
       if (!prLines.length) {
         tips.push({icon:'alert-circle', color:'var(--rd)', title:'Offerten är tom', body:'Lägg till minst en tjänst eller rad i steg 2 innan du skickar.', cta:'Redigera', ctaFn:`OffersPage.openEdit('${off.id}')`});
       } else if (!off.scope && !off.summary) {
-        tips.push({icon:'edit-3', color:'var(--or)', title:'Lägg till uppdragsbeskrivning', body:'En tydlig uppdragsbeskrivning ökar vinstchansen avsevärt. Klicka Redigera och använd textgeneratorn.', cta:'Redigera & generera text', ctaFn:`OffersPage.openEdit('${off.id}')`});
+        tips.push({icon:'edit-3', color:'var(--mt)', title:'Lägg till uppdragsbeskrivning', body:'En tydlig uppdragsbeskrivning ökar vinstchansen avsevärt. Klicka Redigera och använd textgeneratorn.', cta:'Redigera & generera text', ctaFn:`OffersPage.openEdit('${off.id}')`});
       } else {
         tips.push({icon:'send', color:'var(--blue)', title:'Klar att skicka?', body:'Offerten ser komplett ut. Skicka den till kunden för att komma vidare i affären.', cta:'Skicka offert', ctaFn:`OfferDetailPage.showSendModal('${off.id}')`});
       }
@@ -2658,7 +2661,7 @@ const OfferDetailPage = {
         tips.push({icon:'info', color:'var(--gr)', title:`Lyft RUT/ROT i kommunikationen`, body:`Kunden betalar bara ${fmt(cust).toLocaleString('sv-SE')} kr efter avdraget. Nämn det redan i e-postmeddelandet — det är en tydlig och konkret säljpunkt.`});
       }
       if (prLines.length > 0 && cust > 20000) {
-        tips.push({icon:'phone', color:'var(--navy)', title:'Ring kunden innan du skickar', body:`Stor affär (${fmt(cust)} kr kund) — ett samtal innan utskick ökar konverteringen avsevärt.`, cta:'Logga samtal', ctaFn:`OfferDetailPage._quickAction('${off.id}','ring')`});
+        tips.push({icon:'phone', color:'var(--mt)', title:'Ring kunden innan du skickar', body:`Stor affär (${fmt(cust)} kr kund) — ett samtal innan utskick ökar konverteringen avsevärt.`, cta:'Logga samtal', ctaFn:`OfferDetailPage._quickAction('${off.id}','ring')`});
       }
     }
 
@@ -2675,10 +2678,10 @@ const OfferDetailPage = {
         tips.push({icon:'dollar-sign', color:'var(--gr)', title:'Lyft RUT/ROT-avdraget i uppföljningen', body:`Kunden betalar bara ${(cust).toLocaleString('sv-SE')} kr efter avdraget — en konkret och övertygande säljpunkt.`});
       }
       if (cust > 20000) {
-        tips.push({icon:'phone', color:'var(--navy)', title:'Stor affär — personlig kontakt rekommenderas', body:'För offerter över 20 000 kr ökar chansen med ett personligt samtal snarare än enbart e-post.'});
+        tips.push({icon:'phone', color:'var(--mt)', title:'Stor affär — personlig kontakt rekommenderas', body:'För offerter över 20 000 kr ökar chansen med ett personligt samtal snarare än enbart e-post.'});
       }
       if (!offerActs.length) {
-        tips.push({icon:'bell', color:'var(--or)', title:'Ingen uppföljning bokad', body:'Boka en uppföljning inom 3 dagar för bästa konvertering.', cta:'Boka uppföljning', ctaFn:`OfferDetailPage._quickAction('${off.id}','followup')`});
+        tips.push({icon:'bell', color:'var(--mt)', title:'Ingen uppföljning bokad', body:'Boka en uppföljning inom 3 dagar för bästa konvertering.', cta:'Boka uppföljning', ctaFn:`OfferDetailPage._quickAction('${off.id}','followup')`});
       }
     }
 
