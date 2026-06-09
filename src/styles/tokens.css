@@ -10,6 +10,7 @@
   --blue:  #1A4B8C;
   --sky:   #2B7FD4;
   --acc:   #E8F4FD;
+  --acc-text: var(--navy);  /* contrast text for --acc; updated by UserPrefsService */
 
   /* Status colors */
   --gr:    #15803d;

@@ -31,15 +31,28 @@ const UserPrefsService = {
    * Applicera sparade preferenser på DOM-roten.
    * Anropas vid inloggning och vid Dashboard.render().
    */
+  _yiqText(hex) {
+    try {
+      const h = (hex || '').replace('#', '');
+      const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+      const r = parseInt(full.slice(0, 2), 16);
+      const g = parseInt(full.slice(2, 4), 16);
+      const b = parseInt(full.slice(4, 6), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? '#111827' : '#ffffff';
+    } catch(e) { return '#111827'; }
+  },
+
   apply(userId) {
     const p    = this.get(userId);
     const root = document.documentElement;
 
-    // Personlig accentfärg (override av --acc CSS-variabel)
+    // Personlig accentfärg (override av --acc och --acc-text CSS-variabler)
     if (p.accentColor) {
       root.style.setProperty('--acc', p.accentColor);
+      root.style.setProperty('--acc-text', this._yiqText(p.accentColor));
     } else {
       root.style.removeProperty('--acc');
+      root.style.removeProperty('--acc-text');
     }
 
     // Layout-täthet (kompakt/normal/luftig)
