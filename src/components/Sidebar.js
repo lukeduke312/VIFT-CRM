@@ -184,12 +184,15 @@ const Sidebar = {
         </div>
         <div class="fg" style="margin-top:14px;">
           <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Accentfärg</label>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
-            <input type="color" id="pref-accent-input" value="${acc || '#3b82f6'}"
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;">
+            <input type="color" id="pref-accent-input" value="${acc || '#2b7fd4'}"
               style="width:44px;height:36px;border-radius:6px;border:1.5px solid var(--br);cursor:pointer;padding:2px;"
               oninput="Sidebar._setPref('accentColor',this.value)">
-            <span style="font-size:13px;color:var(--mt);">Välj accentfärg</span>
-            ${acc ? `<button class="btn bxs bs" onclick="Sidebar._setPref('accentColor','');document.getElementById('pref-accent-input').value='#3b82f6'">Återställ</button>` : ''}
+            <button class="btn bxs bs" onclick="Sidebar._setPref('accentColor','');document.getElementById('pref-accent-input').value='#2b7fd4'">Återställ</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <button class="btn bs bxs" style="pointer-events:none;min-width:110px;">Aa Förhandsgranskning</button>
+            <span style="font-size:10px;color:var(--mt);">Exempelknapp med vald accent</span>
           </div>
         </div>
         <div class="fg" style="margin-top:14px;">
@@ -209,8 +212,12 @@ const Sidebar = {
   _setPref(key, value, group) {
     const uid = state.currentUser ? state.currentUser.id : null;
     if (!uid) return;
-    UserPrefsService.save(uid, { [key]: value });
-    UserPrefsService.apply(uid);
+    if (key === 'accentColor') {
+      UserPrefsService.saveAccent(uid, value);
+    } else {
+      UserPrefsService.save(uid, { [key]: value });
+      UserPrefsService.apply(uid);
+    }
     Sidebar.render();
     if (group === 'pos') {
       ['left','right'].forEach(v => {

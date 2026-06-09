@@ -261,13 +261,17 @@ const Dashboard = {
           <label>Personlig accentfärg <span style="font-size:10px;font-weight:400;color:var(--mt);">(påverkar knappar och ikoner)</span></label>
           <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">
             <input type="color" id="pref-accent" value="${accent || '#2b7fd4'}" style="width:44px;height:32px;border:1px solid var(--br);border-radius:6px;cursor:pointer;padding:2px;"
-              oninput="Dashboard._previewAccent(this.value)">
+              oninput="UserPrefsService.previewAccent(this.value)">
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
               ${['#2b7fd4','#0f3763','#166534','#9333ea','#dc2626','#d97706','#0891b2','#1e293b'].map(c =>
-                `<button type="button" style="width:22px;height:22px;background:${c};border-radius:4px;border:2px solid ${accent===c?'var(--navy)':'transparent'};cursor:pointer;" onclick="document.getElementById('pref-accent').value='${c}';Dashboard._previewAccent('${c}')" title="${c}"></button>`
+                `<button type="button" style="width:22px;height:22px;background:${c};border-radius:4px;border:2px solid ${accent===c?'var(--navy)':'transparent'};cursor:pointer;" onclick="document.getElementById('pref-accent').value='${c}';UserPrefsService.previewAccent('${c}')" title="${c}"></button>`
               ).join('')}
             </div>
-            <button class="btn bs bxs" style="font-size:11px;" onclick="Dashboard._clearAccentPreview()">Återställ</button>
+            <button class="btn bs bxs" style="font-size:11px;" onclick="document.getElementById('pref-accent').value='';UserPrefsService.previewAccent(null)">Återställ</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+            <button class="btn bs bxs" style="pointer-events:none;min-width:110px;">Aa Förhandsgranskning</button>
+            <span style="font-size:10px;color:var(--mt);">Exempelknapp med vald accent</span>
           </div>
         </div>
         <div class="fg" style="margin-top:12px;">
@@ -280,40 +284,18 @@ const Dashboard = {
         </div>`,
       buttons: [
         { label: `${ic('check',13)} Spara`,  cls:'btn bp',    onClick: () => Dashboard.saveUserPrefs() },
-        { label: 'Avbryt', cls:'btn bghost', onClick: () => Modal.close() }
+        { label: 'Avbryt', cls:'btn bghost', onClick: () => { const u = Auth.getUser(); if (u) UserPrefsService.apply(u.id); Modal.close(); } }
       ]
     });
-  },
-
-  _clearAccentPreview() {
-    const input = document.getElementById('pref-accent');
-    if (input) input.value = '#2b7fd4';
-    this._previewAccent('#2b7fd4');
-  },
-
-  _previewAccent(hex) {
-    const root = document.documentElement;
-    const isDefault = !hex || hex === '#2b7fd4';
-    if (isDefault) {
-      root.style.removeProperty('--acc');
-      root.style.removeProperty('--acc-text');
-    } else {
-      root.style.setProperty('--acc', hex);
-      root.style.setProperty('--acc-text', UserPrefsService._yiqText(hex));
-    }
   },
 
   saveUserPrefs() {
     const user = Auth.getUser();
     if (!user) return;
-    const accentInput = document.getElementById('pref-accent');
-    const accent      = accentInput ? accentInput.value : null;
-    const density     = document.getElementById('pref-density')?.value || 'normal';
-
-    // Null om accentfärg är standard-blå
-    const accentColor = (accent && accent !== '#2b7fd4') ? accent : null;
-
-    UserPrefsService.save(user.id, { accentColor, density });
+    const accent  = document.getElementById('pref-accent')?.value || null;
+    const density = document.getElementById('pref-density')?.value || 'normal';
+    UserPrefsService.saveAccent(user.id, accent);
+    UserPrefsService.save(user.id, { density });
     UserPrefsService.apply(user.id);
     Modal.close();
     showToast('Inställningar sparade');

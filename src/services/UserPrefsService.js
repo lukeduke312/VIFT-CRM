@@ -1,7 +1,12 @@
 /**
- * UserPrefsService v48 — Personliga vyinställningar per användare.
+ * UserPrefsService v5 — Personliga vyinställningar per användare.
  * Sparas i localStorage under nyckel 'vift_prefs_{userId}'.
  * Påverkar ALDRIG PDF, företagets branding eller andra användare.
+ *
+ * Accentfärg-API:
+ *   previewAccent(hex)        — uppdaterar CSS-variabler direkt, sparar INTE
+ *   saveAccent(userId, hex)   — sparar + applicerar; null/'' = återställ till standard
+ *   apply(userId)             — applicerar sparade preferenser (anropas vid login/render)
  */
 const UserPrefsService = {
 
@@ -27,10 +32,6 @@ const UserPrefsService = {
     this.apply(userId);
   },
 
-  /**
-   * Applicera sparade preferenser på DOM-roten.
-   * Anropas vid inloggning och vid Dashboard.render().
-   */
   _yiqText(hex) {
     try {
       const h = (hex || '').replace('#', '');
@@ -42,6 +43,36 @@ const UserPrefsService = {
     } catch(e) { return '#111827'; }
   },
 
+  /**
+   * Uppdatera --acc och --acc-text direkt (ingen sparning).
+   * Anropas vid live-förhandsgranskning i inställningsmodaler.
+   * null/'' = ta bort override → CSS-filen tar över (standard #E8F4FD).
+   */
+  previewAccent(hex) {
+    const root = document.documentElement;
+    if (hex) {
+      root.style.setProperty('--acc', hex);
+      root.style.setProperty('--acc-text', this._yiqText(hex));
+    } else {
+      root.style.removeProperty('--acc');
+      root.style.removeProperty('--acc-text');
+    }
+  },
+
+  /**
+   * Spara accentfärg och applicera omedelbart.
+   * null/'' = rensa sparad accentfärg och återgå till standard.
+   */
+  saveAccent(userId, hex) {
+    const color = (hex && hex.trim()) ? hex.trim() : null;
+    this.save(userId, { accentColor: color });
+    this.apply(userId);
+  },
+
+  /**
+   * Applicera sparade preferenser på DOM-roten.
+   * Anropas vid inloggning och vid Dashboard.render().
+   */
   apply(userId) {
     const p    = this.get(userId);
     const root = document.documentElement;

@@ -1143,6 +1143,8 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-kpi-card--green { border-color: #86efac; background: #f0fdf4; }
 .off-kpi-card--navy  { border-color: var(--navy); background: var(--acc); }
+.off-kpi-card--navy .off-kpi-val { color: var(--acc-text); }
+.off-kpi-card--navy .off-kpi-lbl { color: var(--acc-text); opacity: .75; }
 .off-kpi-val {
   font-size: 22px;
   font-weight: 900;
@@ -1398,7 +1400,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   cursor: pointer; border: 1.5px solid var(--br); background: #fff; color: var(--navy);
   transition: all .12s;
 }
-.off-tl-action-btn:hover { border-color: var(--sky); background: var(--acc); }
+.off-tl-action-btn:hover { border-color: var(--sky); background: var(--acc); color: var(--acc-text); }
 
 /* ── OFFER DETAIL — FACTS STRIP ── */
 .off-detail-facts {
