@@ -1,12 +1,27 @@
 /**
- * UserPrefsService v5 — Personliga vyinställningar per användare.
- * Sparas i localStorage under nyckel 'vift_prefs_{userId}'.
- * Påverkar ALDRIG PDF, företagets branding eller andra användare.
+ * UserPrefsService v6 — Enda källan för accentfärg och personliga vyinställningar.
  *
- * Accentfärg-API:
- *   previewAccent(hex)        — uppdaterar CSS-variabler direkt, sparar INTE
- *   saveAccent(userId, hex)   — sparar + applicerar; null/'' = återställ till standard
- *   apply(userId)             — applicerar sparade preferenser (anropas vid login/render)
+ * INGEN komponent eller sida får anropa
+ *   document.documentElement.style.setProperty('--acc', ...)
+ * direkt. Alla accentsättningar sker via metoderna nedan.
+ *
+ * API — accentfärg:
+ *   getContrastText(hex)        → '#111827' | '#ffffff'  (YIQ-kontrast)
+ *   previewAccent(hex)          → uppdaterar CSS-var live, sparar INTE
+ *   saveAccent(userId, hex)     → sparar + applicerar; null/'' = återställ
+ *   resetAccent(userId)         → tar bort sparad accent, applicerar standard
+ *
+ * API — preferenser i övrigt:
+ *   save(userId, delta)         → spara godtyckliga preferenser
+ *   apply(userId)               → applicera sparade preferenser på DOM-rot
+ *   reset(userId)               → rensa ALLA preferenser
+ *
+ * CSS-variabler som hanteras:
+ *   --acc        personlig accentfärg (standard: #E8F4FD via tokens.css)
+ *   --acc-text   kontrasterande text för --acc (standard: var(--navy) via tokens.css)
+ *
+ * Sparas i localStorage under nyckel 'vift_prefs_{userId}'.
+ * Påverkar ALDRIG PDF, företagets branding eller andra användares vy.
  */
 const UserPrefsService = {
 
@@ -32,7 +47,11 @@ const UserPrefsService = {
     this.apply(userId);
   },
 
-  _yiqText(hex) {
+  /**
+   * Beräkna kontrasterande textfärg för en bakgrundsfärg via YIQ-algoritmen.
+   * Returnerar '#ffffff' för mörka bakgrunder och '#111827' för ljusa.
+   */
+  getContrastText(hex) {
     try {
       const h = (hex || '').replace('#', '');
       const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
@@ -43,16 +62,19 @@ const UserPrefsService = {
     } catch(e) { return '#111827'; }
   },
 
+  // Intern alias — behåll för bakåtkompatibilitet om ngn anropar den
+  _yiqText(hex) { return this.getContrastText(hex); },
+
   /**
-   * Uppdatera --acc och --acc-text direkt (ingen sparning).
-   * Anropas vid live-förhandsgranskning i inställningsmodaler.
-   * null/'' = ta bort override → CSS-filen tar över (standard #E8F4FD).
+   * Förhandsgranska accentfärg live — uppdaterar --acc och --acc-text direkt.
+   * Sparar INGENTING till localStorage.
+   * hex = null/'' → tar bort override, CSS-filen tar över (standard #E8F4FD).
    */
   previewAccent(hex) {
     const root = document.documentElement;
     if (hex) {
       root.style.setProperty('--acc', hex);
-      root.style.setProperty('--acc-text', this._yiqText(hex));
+      root.style.setProperty('--acc-text', this.getContrastText(hex));
     } else {
       root.style.removeProperty('--acc');
       root.style.removeProperty('--acc-text');
@@ -61,12 +83,19 @@ const UserPrefsService = {
 
   /**
    * Spara accentfärg och applicera omedelbart.
-   * null/'' = rensa sparad accentfärg och återgå till standard.
+   * hex = null/'' → rensa sparad accent, återgå till standard.
    */
   saveAccent(userId, hex) {
     const color = (hex && hex.trim()) ? hex.trim() : null;
     this.save(userId, { accentColor: color });
     this.apply(userId);
+  },
+
+  /**
+   * Återställ accent till standard och rensa localStorage-värdet.
+   */
+  resetAccent(userId) {
+    this.saveAccent(userId, null);
   },
 
   /**
@@ -77,10 +106,10 @@ const UserPrefsService = {
     const p    = this.get(userId);
     const root = document.documentElement;
 
-    // Personlig accentfärg (override av --acc och --acc-text CSS-variabler)
+    // Personlig accentfärg — enda platsen som sätter --acc och --acc-text
     if (p.accentColor) {
       root.style.setProperty('--acc', p.accentColor);
-      root.style.setProperty('--acc-text', this._yiqText(p.accentColor));
+      root.style.setProperty('--acc-text', this.getContrastText(p.accentColor));
     } else {
       root.style.removeProperty('--acc');
       root.style.removeProperty('--acc-text');
