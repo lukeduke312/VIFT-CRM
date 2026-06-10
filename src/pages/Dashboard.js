@@ -110,9 +110,10 @@ const Dashboard = {
         case 'sales':        return this._widgetSales();
         case 'offers':       return this._widgetOffers();
         case 'activity_log': return this._widgetActivity();
-        case 'rondering':    return this._widgetRondering();
-        case 'quickbtns':    return this._widgetQuickbtns();
-        case 'operations':   return this._widgetOperations();
+        case 'rondering':      return this._widgetRondering();
+        case 'quickbtns':      return this._widgetQuickbtns();
+        case 'operations':     return this._widgetOperations();
+        case 'ao_categories':  return this._widgetAoCategories();
         default: return null;
       }
     } catch(e) {
@@ -413,9 +414,70 @@ const Dashboard = {
     </div>`;
   },
 
+  /* ── Widget: Öppna AO per kategori ───────────────────────────────── */
+  _widgetAoCategories() {
+    const all    = (state.workOrders||[]).filter(a => !a.archived && !a.deleted);
+    const isOpen = a => !['klar','fakturerad','avbruten'].includes(a.status);
+    const isDone = a => ['klar','fakturerad'].includes(a.status);
+    const openAos = all.filter(isOpen);
+    const total   = all.length;
+    const doneN   = all.filter(isDone).length;
+    const pct     = total > 0 ? Math.round(doneN / total * 100) : 0;
+
+    const rows = AO_CATEGORIES
+      .map(c => {
+        const aos    = openAos.filter(ao => (ao.category || 'ovrigt') === c.slug);
+        const urgent = aos.filter(ao => ao.priority === 'akut').length;
+        return { cat: c, count: aos.length, urgent };
+      })
+      .filter(r => r.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .map(({ cat: c, count, urgent }) => {
+        const barW = Math.min(100, Math.round(count / Math.max(1, openAos.length) * 100));
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--br);" onclick="Router.showPage('pg-ao')" style="cursor:pointer;">
+          <span style="width:28px;height:28px;border-radius:8px;background:${c.color}1a;color:${c.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic(c.icon,13)}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+              <span style="font-size:12px;font-weight:700;color:var(--navy);">${esc(c.label)}</span>
+              <span style="font-size:13px;font-weight:800;color:var(--navy);">${count}${urgent > 0 ? `&nbsp;<span style="color:var(--rd);font-size:10px;font-weight:700;">${ic('zap',9)} ${urgent}</span>` : ''}</span>
+            </div>
+            <div style="height:4px;background:var(--br);border-radius:4px;overflow:hidden;">
+              <div style="width:${barW}%;height:100%;background:${c.color};border-radius:4px;"></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+    if (!rows) {
+      return `<div class="card">
+        <div class="card-header"><h3 class="ch3">${ic('layers',14)} Öppna per kategori</h3></div>
+        <div class="card-body"><div class="empty" style="padding:12px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;">Inga öppna ordrar</p></div></div>
+      </div>`;
+    }
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3 class="ch3">${ic('layers',14)} Öppna per kategori</h3>
+        <button class="btn bghost bxs" style="font-size:11px;padding:3px 8px;" onclick="Router.showPage('pg-ao')">${ic('arrow-right',11)} Se alla</button>
+      </div>
+      <div class="card-body" style="padding:8px 14px 4px;">
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-size:11px;color:var(--mt);">Totalt färdigställt</span>
+            <span style="font-size:11px;font-weight:700;color:var(--navy);">${pct}% &nbsp;(${doneN}/${total})</span>
+          </div>
+          <div style="height:6px;background:var(--br);border-radius:6px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:var(--gr);border-radius:6px;"></div>
+          </div>
+        </div>
+        ${rows}
+      </div>
+    </div>`;
+  },
+
   /* ── Widget: Snabbknappar (behörighetsfiltrad) ────────────────────── */
   _widgetQuickbtns() {
-    const btns = [];
     if (Auth.canAny(['ao_view_all','ao_view_own'])) {
       btns.push(this._qbtn('briefcase',     'Mina jobb',    "Router.showPage('pg-myjobs')",                                                               'Dina tilldelade arbetsorder'));
     }

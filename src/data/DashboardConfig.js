@@ -24,6 +24,7 @@ const DashboardConfig = {
     activity_log:  { id:'activity_log',  title:'Senaste händelser',      icon:'activity',        category:'System',         description:'Bolagets senaste händelser, ändringar och loggar',            requiredPermissions:['reports_view','staff_view'],             defaultSize:'third' },
     quickbtns:     { id:'quickbtns',     title:'Snabbåtgärder',          icon:'zap',             category:'System',         description:'Skapa ny order, offert eller kund med ett klick',             requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
     operations:    { id:'operations',    title:'Dagens drift',           icon:'layout-dashboard', category:'Översikt',       description:'Chefsoversikt: försenade, akuta, saknar personal, klara ej fakt.', requiredPermissions:['staff_view','reports_view'],             defaultSize:'full'  },
+    ao_categories: { id:'ao_categories', title:'Öppna per kategori',     icon:'layers',           category:'Översikt',       description:'Hur belastningen fördelas per arbetsorderkategori', requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'full'  },
   },
 
   /* ── Rollbaserade standardlayouter ──────────────────────────────────────
@@ -31,8 +32,8 @@ const DashboardConfig = {
      Moduler som inte listas visas med visible:false (kan aktiveras manuellt).
   ─────────────────────────────────────────────────────────────────────── */
   ROLE_DEFAULTS: {
-    admin:    ['overdue_alert','todos','kpi','operations','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
-    chef:     ['overdue_alert','todos','kpi','operations','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
+    admin:    ['overdue_alert','todos','kpi','operations','ao_categories','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
+    chef:     ['overdue_alert','todos','kpi','operations','ao_categories','today','pool','stamp','activities','sales','offers','activity_log','recurring','rondering','quickbtns'],
     personal: ['overdue_alert','kpi','today','pool','stamp','activities','rondering','quickbtns'],
     ekonomi:  ['overdue_alert','kpi','todos','offers','activity_log','quickbtns'],
   },

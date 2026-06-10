@@ -255,7 +255,7 @@ const SeedData = {
       description: 'Vatten tränger in vid balkongraden på vån 3. Behöver inspekteras och tätas.',
       customerId: 'K-001', propertyId: 'OBJ-001', address: 'Solvägen 1A, vån 3',
       contactPerson: 'Lars Eriksson', phone: '070-111 11 11', accessCode: '1234#', internalNote: '',
-      status: 'pågående', priority: 'hög', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001', estimatedHours: 3,
+      status: 'pågående', priority: 'hög', category: 'felanmalan', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001', estimatedHours: 3,
       staff: ['ST-002'],
       scheduledDate: _ds(0), scheduledStart: '08:00', scheduledEnd: '12:00',
       checklist: [
@@ -284,7 +284,7 @@ const SeedData = {
       description: 'Byta befintliga kablar i serverhall plan 2. Inkl dragning av nya nätverkskablar.',
       customerId: 'K-007', propertyId: '', address: 'Handelsgatan 22, plan 2',
       contactPerson: 'Caroline Björk', phone: '076-550 66 77', accessCode: 'PORT22', internalNote: 'Arbete pågår dagtid, störa ej hyresgäst i rum 204',
-      status: 'pågående', priority: 'hög', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'pågående', priority: 'hög', category: 'teknisk', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
       staff: ['ST-005', 'ST-002'],
       scheduledDate: _ds(0), scheduledStart: '07:00', scheduledEnd: '15:00',
       checklist: [
@@ -308,7 +308,7 @@ const SeedData = {
       customerId: 'K-002', propertyId: 'OBJ-002', address: 'Granitgatan 5',
       contactPerson: 'Peter Svensson', phone: '073-333 33 33', accessCode: '9999*',
       internalNote: 'Ring Peter direkt vid ankomst',
-      status: 'nytt', priority: 'akut', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-002',
+      status: 'nytt', priority: 'akut', category: 'akut', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-002',
       staff: [], scheduledDate: '', scheduledStart: '', scheduledEnd: '',
       checklist: [], materials: [], notes: [], timeEntries: [], invoiceId: '',
       createdAt: _d(0), updatedAt: _d(0)
@@ -319,7 +319,7 @@ const SeedData = {
       customerId: 'K-006', propertyId: 'OBJ-004', address: 'Parkgatan 8',
       contactPerson: 'Birgitta Holm', phone: '073-100 20 30', accessCode: 'PARK8',
       internalNote: '',
-      status: 'nytt', priority: 'normal', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'nytt', priority: 'normal', category: 'underhall', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
       staff: [], scheduledDate: '', scheduledStart: '', scheduledEnd: '',
       checklist: [
         { id: 'c1', text: 'Kontrollera befintliga tätningslister', done: false },
@@ -335,7 +335,7 @@ const SeedData = {
       customerId: 'K-006', propertyId: 'OBJ-004', address: 'Parkgatan 8, källare',
       contactPerson: 'Mikael Strand', phone: '070-400 50 60', accessCode: 'PARK8',
       internalNote: 'VA-bolag kontaktat men kan ej komma förrän om 3h',
-      status: 'nytt', priority: 'akut', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-002',
+      status: 'nytt', priority: 'akut', category: 'akut', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-002',
       staff: ['ST-004'], scheduledDate: _ds(0), scheduledStart: '', scheduledEnd: '',
       checklist: [
         { id: 'c1', text: 'Stäng av huvudkran', done: false },
@@ -354,7 +354,7 @@ const SeedData = {
       customerId: 'K-002', propertyId: 'OBJ-002', address: 'Granitgatan 5',
       contactPerson: 'Peter Svensson', phone: '073-333 33 33', accessCode: '9999*',
       internalNote: 'Kamerabil medhavs av Jonas',
-      status: 'planerad', priority: 'normal', priceType: 'fastpris', fixedPrice: 3800, priceGroupId: '',
+      status: 'planerad', priority: 'normal', category: 'besiktning', priceType: 'fastpris', fixedPrice: 3800, priceGroupId: '',
       staff: ['ST-004'],
       scheduledDate: _ds(1), scheduledStart: '10:00', scheduledEnd: '13:00',
       checklist: [
@@ -371,7 +371,7 @@ const SeedData = {
       customerId: 'K-004', propertyId: 'OBJ-003', address: 'Björkvägen 10B, Järfälla',
       contactPerson: 'Gunnar Lindqvist', phone: '070-888 99 00', accessCode: 'BJÖRK',
       internalNote: 'Planerat igår men kunden fick omboka. Nytt datum sätts.',
-      status: 'planerad', priority: 'normal', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'planerad', priority: 'normal', category: 'underhall', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
       staff: ['ST-002', 'ST-003'],
       scheduledDate: _ds(-1), scheduledStart: '08:00', scheduledEnd: '16:00',
       checklist: [
@@ -391,7 +391,7 @@ const SeedData = {
       customerId: 'K-001', propertyId: 'OBJ-001', address: 'Solvägen 1A',
       contactPerson: 'Lars Eriksson', phone: '070-111 11 11', accessCode: '1234#',
       internalNote: '',
-      status: 'pool', priority: 'normal', priceType: 'fastpris', fixedPrice: 8500, priceGroupId: '',
+      status: 'pool', priority: 'normal', category: 'fastighetsservice', priceType: 'fastpris', fixedPrice: 8500, priceGroupId: '',
       staff: [], scheduledDate: '', scheduledStart: '', scheduledEnd: '',
       checklist: [], materials: [], notes: [], timeEntries: [], invoiceId: '',
       createdAt: _d(-1), updatedAt: _d(-1)
@@ -402,7 +402,7 @@ const SeedData = {
       customerId: 'K-004', propertyId: 'OBJ-003', address: 'Björkvägen 10, Järfälla',
       contactPerson: 'Gunnar Lindqvist', phone: '070-888 99 00', accessCode: 'BJÖRK',
       internalNote: '',
-      status: 'pool', priority: 'låg', priceType: 'fastpris', fixedPrice: 22000, priceGroupId: '',
+      status: 'pool', priority: 'låg', category: 'utemiljo', priceType: 'fastpris', fixedPrice: 22000, priceGroupId: '',
       staff: [], scheduledDate: '', scheduledStart: '', scheduledEnd: '',
       checklist: [
         { id: 'c1', text: 'Markering av grävområde', done: false },
@@ -419,7 +419,7 @@ const SeedData = {
       customerId: 'K-001', propertyId: 'OBJ-001', address: 'Solvägen 1, parkering',
       contactPerson: 'Anna Berg', phone: '070-222 22 22', accessCode: '1234#',
       internalNote: 'Utförs vid behov, max 3 tillfällen per faktura',
-      status: 'pool', priority: 'normal', priceType: 'fastpris', fixedPrice: 1200, priceGroupId: '',
+      status: 'pool', priority: 'normal', category: 'utemiljo', priceType: 'fastpris', fixedPrice: 1200, priceGroupId: '',
       staff: [], scheduledDate: '', scheduledStart: '', scheduledEnd: '',
       checklist: [], materials: [], notes: [], timeEntries: [], invoiceId: '',
       createdAt: _d(-3), updatedAt: _d(-3)
@@ -431,7 +431,7 @@ const SeedData = {
       description: 'Obligatorisk ventilationskontroll enligt plan.',
       customerId: 'K-001', propertyId: 'OBJ-001', address: 'Solvägen 1A',
       contactPerson: 'Lars Eriksson', phone: '070-111 11 11', accessCode: '1234#', internalNote: '',
-      status: 'klar', priority: 'normal', priceType: 'fastpris', fixedPrice: 4500, priceGroupId: '',
+      status: 'klar', priority: 'normal', category: 'besiktning', priceType: 'fastpris', fixedPrice: 4500, priceGroupId: '',
       staff: ['ST-002', 'ST-003'],
       scheduledDate: _ds(-5), scheduledStart: '09:00', scheduledEnd: '16:00',
       checklist: [
@@ -448,7 +448,7 @@ const SeedData = {
       description: 'Kvartalskontroll och service av hiss.',
       customerId: 'K-001', propertyId: 'OBJ-001', address: 'Solvägen 1A',
       contactPerson: 'Anna Berg', phone: '070-222 22 22', accessCode: '1234#', internalNote: '',
-      status: 'klar', priority: 'normal', priceType: 'fastpris', fixedPrice: 2200, priceGroupId: '',
+      status: 'klar', priority: 'normal', category: 'teknisk', priceType: 'fastpris', fixedPrice: 2200, priceGroupId: '',
       staff: ['ST-002'],
       scheduledDate: _ds(-10), scheduledStart: '10:00', scheduledEnd: '12:00',
       checklist: [
@@ -464,7 +464,7 @@ const SeedData = {
       description: 'Gammal golvbrunn i badrum byttes. Tätskikt kontrollerat och dellagat.',
       customerId: 'K-005', propertyId: '', address: 'Ekvägen 12, Bromma',
       contactPerson: 'Johan Lindström', phone: '076-321 54 87', accessCode: '', internalNote: '',
-      status: 'klar', priority: 'normal', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'klar', priority: 'normal', category: 'underhall', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
       staff: ['ST-004'],
       scheduledDate: _ds(-6), scheduledStart: '09:00', scheduledEnd: '14:00',
       checklist: [
@@ -484,7 +484,7 @@ const SeedData = {
       description: 'Genomgång av VVS-systemet, kontroll av trycknivåer och tätning av småläckor.',
       customerId: 'K-002', propertyId: 'OBJ-002', address: 'Granitgatan 5',
       contactPerson: 'Peter Svensson', phone: '073-333 33 33', accessCode: '9999*', internalNote: '',
-      status: 'klar', priority: 'normal', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'klar', priority: 'normal', category: 'underhall', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
       staff: ['ST-004', 'ST-002'],
       scheduledDate: _ds(-4), scheduledStart: '08:00', scheduledEnd: '15:00',
       checklist: [
@@ -506,7 +506,7 @@ const SeedData = {
       description: 'Installation av nytt belysningssystem och uttag i konferensrummet.',
       customerId: 'K-002', propertyId: 'OBJ-002', address: 'Granitgatan 5, plan 3',
       contactPerson: 'Peter Svensson', phone: '073-333 33 33', accessCode: '9999*', internalNote: '',
-      status: 'fakturerad', priority: 'normal', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
+      status: 'fakturerad', priority: 'normal', category: 'teknisk', priceType: 'timpris', fixedPrice: 0, priceGroupId: 'PG-001',
       staff: ['ST-005'],
       scheduledDate: _ds(-25), scheduledStart: '08:00', scheduledEnd: '16:00',
       checklist: [

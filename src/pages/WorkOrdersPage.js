@@ -180,6 +180,7 @@ const WorkOrdersPage = {
             <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
             <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
             ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);">${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart:''}</div>`:''}
+            ${ao.category?`<div style="margin-top:5px;">${catBadge(ao.category)}</div>`:''}
             ${ao.substatus?`<div style="margin-top:4px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.12);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.3);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
             ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span></div>`:''}
             ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span></div>`:''}
@@ -227,7 +228,8 @@ const WorkOrdersPage = {
               </div>
             </div>
             ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-            ${isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+            ${ao.category || isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+              ${ao.category ? catBadge(ao.category) : ''}
               ${isBillable?`<span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span>`:''}
               ${noPricing?`<span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span>`:''}
               ${chkHtml}
@@ -332,6 +334,17 @@ const WorkOrdersPage = {
     return `
       <div class="fg"><label>Rubrik / Vad ska göras <span style="color:var(--rd)">*</span></label>
         <input id="wiz-title" value="${d.title||''}" placeholder="T.ex. Läckage badrum, Fasadtvätt…"></div>
+      <div class="g2">
+        <div class="fg"><label>Kategori</label>
+          <select id="wiz-category">
+            <option value="">— Välj kategori —</option>
+            ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${d.category===c.slug?'selected':''}>${c.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg" style="align-self:flex-end;"><label>&nbsp;</label>
+          ${d.category ? `<div style="margin-top:6px;">${catBadge(d.category)}</div>` : '<div></div>'}
+        </div>
+      </div>
       <div class="fg"><label>Beskrivning</label>
         <textarea id="wiz-desc" rows="2" placeholder="Mer detaljer om jobbet…">${d.description||''}</textarea></div>
       <div class="fg"><label>Kund <span style="color:var(--rd)">*</span></label>
@@ -660,6 +673,7 @@ const WorkOrdersPage = {
   _wizCollectStep1() {
     const d = this._wiz.data;
     d.title         = (document.getElementById('wiz-title')?.value || '').trim();
+    d.category      = document.getElementById('wiz-category')?.value || '';
     d.description   = (document.getElementById('wiz-desc')?.value || '').trim();
     d.customerId    = document.getElementById('wiz-customer')?.value || '';
     d.address       = document.getElementById('wiz-address')?.value.trim() || '';
@@ -727,6 +741,7 @@ const WorkOrdersPage = {
       internalNote:  d.internalNote,
       status:        d.status || 'pool',
       priority:      d.priority || 'normal',
+      category:      d.category || '',
       priceType:     d.priceType,
       fixedPrice:    d.fixedPrice,
       priceGroupId:  d.priceGroupId,

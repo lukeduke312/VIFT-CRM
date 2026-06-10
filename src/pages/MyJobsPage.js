@@ -4,6 +4,13 @@
  */
 const MyJobsPage = {
 
+  _catFilter: null,
+
+  setCatFilter(slug) {
+    this._catFilter = (slug && slug !== this._catFilter) ? slug : null;
+    this.render();
+  },
+
   render() {
     const el = document.getElementById('pg-myjobs-content');
     if (!el) return;
@@ -38,7 +45,31 @@ const MyJobsPage = {
     const stampAoId = state.stampAoId || null;
     const stampAo   = isStamped && stampAoId ? getAO(stampAoId) : null;
 
-    let html = '';
+    // Category filter chips — only show categories present in user's jobs
+    const myAllJobs = [...todayJobs, ...unscheduled, ...ongoing, ...overdue, ...upcoming];
+    const usedCats  = new Set(myAllJobs.map(ao => ao.category || 'ovrigt'));
+    const cf = this._catFilter;
+    let catChipsHtml = '';
+    if (usedCats.size > 1) {
+      const chips = [`<button class="qf-chip ${!cf?'on':''}" onclick="MyJobsPage.setCatFilter(null)">${ic('list',10)} Alla</button>`];
+      AO_CATEGORIES.forEach(c => {
+        if (!usedCats.has(c.slug)) return;
+        chips.push(`<button class="qf-chip ${cf===c.slug?'on':''}" onclick="MyJobsPage.setCatFilter('${c.slug}')" style="${cf===c.slug?`background:${c.color}20;border-color:${c.color}60;color:${c.color};`:''}">
+          ${ic(c.icon,10)} ${c.label}
+        </button>`);
+      });
+      catChipsHtml = `<div class="qf-row" style="margin-bottom:12px;">${chips.join('')}</div>`;
+    }
+
+    // Apply category filter to each section
+    const catFilter = ao => !cf || (ao.category || 'ovrigt') === cf;
+    const filteredToday       = todayJobs.filter(catFilter);
+    const filteredUnscheduled = unscheduled.filter(catFilter);
+    const filteredOngoing     = ongoing.filter(catFilter);
+    const filteredOverdue     = overdue.filter(catFilter);
+    const filteredUpcoming    = upcoming.filter(catFilter);
+
+    let html = catChipsHtml;
 
     // ── Stamp banner ─────────────────────────────────────────────────────────
     if (isStamped) {
@@ -63,36 +94,36 @@ const MyJobsPage = {
     // ── Mina jobb idag ───────────────────────────────────────────────────────
     html += this._sectionHtml(
       `${ic('calendar',14)} Mina jobb idag`,
-      todayJobs,
-      'Inga planerade jobb idag',
+      filteredToday,
+      cf ? 'Inga jobb idag i denna kategori' : 'Inga planerade jobb idag',
       'var(--sky)', false,
       ao => this._jobCard(ao, myId, isStamped, stampAoId),
       `<button class="btn bghost bfull bsm" style="margin-top:8px;" onclick="Router.showPage('pg-ao',{filter:'idag'})">${ic('list',11)} Se alla ordrar idag</button>`
     );
 
     // ── Tilldelade utan datum ─────────────────────────────────────────────────
-    if (unscheduled.length) {
+    if (filteredUnscheduled.length) {
       html += this._sectionHtml(
         `${ic('clipboard',14)} Tilldelade — ej schemalagda`,
-        unscheduled, null, 'var(--mt)', false,
+        filteredUnscheduled, null, 'var(--mt)', false,
         ao => this._jobCard(ao, myId, isStamped, stampAoId)
       );
     }
 
     // ── Pågående ─────────────────────────────────────────────────────────────
-    if (ongoing.length) {
+    if (filteredOngoing.length) {
       html += this._sectionHtml(
         `${ic('play-circle',14)} Pågående jobb`,
-        ongoing, null, 'var(--orange)', false,
+        filteredOngoing, null, 'var(--orange)', false,
         ao => this._jobCard(ao, myId, isStamped, stampAoId)
       );
     }
 
     // ── Försenade ────────────────────────────────────────────────────────────
-    if (overdue.length) {
+    if (filteredOverdue.length) {
       html += this._sectionHtml(
         `${ic('alert-triangle',14)} Försenade jobb`,
-        overdue, null, 'var(--rd)', true,
+        filteredOverdue, null, 'var(--rd)', true,
         ao => this._jobCard(ao, myId, isStamped, stampAoId)
       );
     }
@@ -107,10 +138,10 @@ const MyJobsPage = {
     );
 
     // ── Kommande jobb ────────────────────────────────────────────────────────
-    if (upcoming.length) {
+    if (filteredUpcoming.length) {
       html += this._sectionHtml(
         `${ic('calendar',14)} Kommande jobb`,
-        upcoming, null, 'var(--br)', false,
+        filteredUpcoming, null, 'var(--br)', false,
         ao => this._jobCard(ao, myId, false, null, true)
       );
     }
@@ -195,6 +226,7 @@ const MyJobsPage = {
           ${ao.substatus ? `<div class="job-card-v2-meta-row" style="color:var(--or);">${subLbls[ao.substatus]||ao.substatus}</div>` : ''}
           ${chkTotal>0 ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkHtml}</div>` : ''}
           ${estMins>0 ? `<div class="job-card-v2-meta-row" style="color:${timeOver?'var(--rd)':'var(--mt)'};">${ic('clock',11)} Plan: ${TimeService.fmtDuration(estMins)}${actualMins>0?' · Utfört: '+TimeService.fmtDuration(actualMins)+(timePct!==null?' ('+timePct+'%)':''):''}</div>` : ''}
+          ${ao.category ? `<div class="job-card-v2-meta-row">${catBadge(ao.category)}</div>` : ''}
         </div>
         ${!compact ? `<div class="job-card-v2-actions" onclick="event.stopPropagation()">
           ${primaryBtn}

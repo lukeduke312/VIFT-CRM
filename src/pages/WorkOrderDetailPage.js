@@ -77,6 +77,7 @@ const WorkOrderDetailPage = {
             ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-weight:800;letter-spacing:.5px;">${ao.accessCode}</span></div>` : '<div></div>'}
             <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'<span style="color:var(--rd);">Ej tilldelad</span>'}${respName?`<br><span style="font-size:10px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:''}</span></div>
             <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
+            ${ao.category ? `<div class="dr"><span class="dk">Kategori</span><span class="dv">${catBadge(ao.category)}</span></div>` : ''}
           </div>
           ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
           ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye-off',13)} <strong>Internt:</strong> ${ao.internalNote}</div>` : ''}
@@ -1698,7 +1699,12 @@ const WorkOrderDetailPage = {
             <select id="edit-prio">
               ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${ao.priority===p?'selected':''}>${{akut:'Akut',hög:'Hög',normal:'Normal',låg:'Låg'}[p]}</option>`).join('')}
             </select></div>
-        </div>`,
+        </div>
+        <div class="fg"><label>Kategori</label>
+          <select id="edit-category">
+            <option value="">— Ingen kategori —</option>
+            ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${ao.category===c.slug?'selected':''}>${c.label}</option>`).join('')}
+          </select></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const title = document.getElementById('edit-title')?.value.trim();
@@ -1709,7 +1715,8 @@ const WorkOrderDetailPage = {
             customerId:    document.getElementById('edit-cu')?.value || '',
             address:       document.getElementById('edit-addr')?.value.trim() || '',
             scheduledDate: document.getElementById('edit-date')?.value || '',
-            priority:      document.getElementById('edit-prio')?.value || 'normal'
+            priority:      document.getElementById('edit-prio')?.value || 'normal',
+            category:      document.getElementById('edit-category')?.value || ''
           });
           Modal.close();
           this.render({ aoId: this.aoId });

@@ -25,6 +25,7 @@ const OperationsPage = {
     el.innerHTML =
       this._kpiRow(todayAOs.length, ongoing.length, overdue.length, urgent.length,
                    noStaff.length, clocked, readyBill.length, withNotes.length) +
+      this._sectionCategories(all) +
       this._sectionToday(todayAOs, today) +
       this._sectionTime(todayAOs) +
       this._sectionAttention(overdue, urgent, noStaff, withNotes) +
@@ -32,6 +33,40 @@ const OperationsPage = {
       this._sectionStaff(all, today) +
       this._sectionReadyBill(readyBill) +
       this._sectionUpcoming(all, today);
+  },
+
+  // ── Belastning per kategori ──────────────────────────────────────────────
+
+  _sectionCategories(all) {
+    const isOpen = ao => !['klar','fakturerad','avbruten'].includes(ao.status);
+    const openAos = all.filter(isOpen);
+    if (!openAos.length) return '';
+
+    const rows = AO_CATEGORIES
+      .map(c => {
+        const aos    = openAos.filter(ao => (ao.category || 'ovrigt') === c.slug);
+        const urgent = aos.filter(ao => ao.priority === 'akut').length;
+        return { cat: c, count: aos.length, urgent };
+      })
+      .filter(r => r.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .map(({ cat: c, count, urgent }) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--br);cursor:pointer;" onclick="Router.showPage('pg-ao')">
+          <span style="width:26px;height:26px;border-radius:7px;background:${c.color}1a;color:${c.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic(c.icon,12)}</span>
+          <div style="flex:1;font-size:12px;font-weight:700;color:var(--navy);">${esc(c.label)}</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${urgent > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--rd);background:var(--lrd);padding:2px 7px;border-radius:6px;">${ic('zap',9)} ${urgent} akut${urgent>1?'a':''}</span>` : ''}
+            <span style="font-size:14px;font-weight:900;color:var(--navy);min-width:18px;text-align:right;">${count}</span>
+          </div>
+        </div>`).join('');
+
+    return `<div class="card" style="margin-bottom:12px;">
+      <div class="card-header">
+        <h3 class="ch3">${ic('layers',14)} Belastning per kategori</h3>
+        <span style="font-size:10px;color:var(--mt);">${openAos.length} öppna totalt</span>
+      </div>
+      <div class="card-body" style="padding:0;">${rows}</div>
+    </div>`;
   },
 
   // ── KPI row ──────────────────────────────────────────────────────────────

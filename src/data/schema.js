@@ -3,6 +3,31 @@
  * Används av services för att skapa tomma objekt
  */
 
+/* ── AO-kategorier ──────────────────────────── */
+const AO_CATEGORIES = [
+  { slug: 'felanmalan',        label: 'Felanmälan',            icon: 'alert-circle',    color: '#ef4444' },
+  { slug: 'underhall',         label: 'Underhåll',             icon: 'wrench',          color: '#f97316' },
+  { slug: 'besiktning',        label: 'Besiktning',            icon: 'clipboard-check', color: '#3b82f6' },
+  { slug: 'stadning',          label: 'Städning',              icon: 'sparkles',        color: '#06b6d4' },
+  { slug: 'fastighetsservice', label: 'Fastighetsservice',     icon: 'briefcase',       color: '#2b7fd4' },
+  { slug: 'utemiljo',          label: 'Utemiljö & trädgård',   icon: 'leaf',            color: '#22c55e' },
+  { slug: 'teknisk',           label: 'Teknisk förvaltning',   icon: 'settings',        color: '#1d4ed8' },
+  { slug: 'ekonomi',           label: 'Ekonomi & fakturering', icon: 'wallet',          color: '#10b981' },
+  { slug: 'kund',              label: 'Kund & uppföljning',    icon: 'users',           color: '#8b5cf6' },
+  { slug: 'admin',             label: 'Administration',        icon: 'file-text',       color: '#6b7280' },
+  { slug: 'akut',              label: 'Akut/jour',             icon: 'alert-triangle',  color: '#dc2626' },
+  { slug: 'ovrigt',            label: 'Övrigt',                icon: 'circle',          color: '#9ca3af' }
+];
+
+function getCatInfo(slug) {
+  return AO_CATEGORIES.find(c => c.slug === slug) || AO_CATEGORIES[AO_CATEGORIES.length - 1];
+}
+
+function catBadge(slug) {
+  const c = getCatInfo(slug || 'ovrigt');
+  return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:${c.color}1a;color:${c.color};border:1px solid ${c.color}40;">${ic(c.icon,9)} ${esc(c.label)}</span>`;
+}
+
 /* ── Enheter ────────────────────────────────── */
 const UNITS = [
   { value: 'st',        label: 'st',        step: 1,    type: 'count'  },
@@ -74,6 +99,7 @@ const Schema = {
     status: 'nytt',           // nytt | pool | planerad | pågående | klar | fakturerad | avbruten
     substatus: '',            // inväntar_material | inväntar_kund | pausad | behöver_återbesök | blockerad
     priority: 'normal',       // akut | hög | normal | låg
+    category: '',             // AO_CATEGORIES slug; '' = ovrigt
     priceType: 'ej_satt',     // ej_satt | fastpris | timpris | prisgrupp
     fixedPrice: 0,
     priceGroupId: '',
