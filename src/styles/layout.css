@@ -413,18 +413,22 @@
 /* ── Collapse toggle button ─────────────────────── */
 .nav-collapse-btn {
   display: none; /* hidden on mobile */
-  background: none;
-  color: color-mix(in srgb, var(--brand-primary-text) 35%, transparent);
-  padding: 4px 5px;
-  border-radius: 6px;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--brand-primary-text) 8%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 45%, transparent);
+  padding: 12px 5px;
+  border-radius: 6px 0 0 6px;
   cursor: pointer;
   transition: all .15s;
-  flex-shrink: 0;
   line-height: 1;
+  z-index: 5;
 }
 .nav-collapse-btn:hover {
-  color: color-mix(in srgb, var(--brand-primary-text) 80%, transparent);
-  background: color-mix(in srgb, var(--brand-primary-text) 10%, transparent);
+  background: color-mix(in srgb, var(--brand-primary-text) 16%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 90%, transparent);
 }
 
 /* ── Collapsed sidebar (desktop only) ──────────── */
