@@ -42,7 +42,7 @@
 
     <div class="fg">
       <label>Användarnamn</label>
-      <input type="text" id="login-user" placeholder="admin" autocomplete="username"
+      <input type="text" id="login-user" placeholder="Användarnamn" autocomplete="username"
         onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
     </div>
     <div class="fg" style="margin-top:8px;">
@@ -58,9 +58,6 @@
       Logga in
     </button>
 
-    <p style="font-size:11px;color:var(--mt);text-align:center;margin-top:12px;">
-      Demo: <strong>admin</strong> / <strong>1234</strong>
-    </p>
   </div>
 </div>
 
@@ -328,7 +325,7 @@ const App = {
   showLogin() {
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
-    // Fokusera användarnamn
+    BrandingService.applyToLogin();
     setTimeout(() => {
       const el = document.getElementById('login-user');
       if (el) el.focus();
