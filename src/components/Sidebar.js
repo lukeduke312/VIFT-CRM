@@ -55,10 +55,10 @@ const Sidebar = {
           <div class="nav-brand-fb-vift">VIFT</div>
           <div class="nav-brand-fb-sub">Fastighetsservice</div>
         </div>
+        <button class="nav-collapse-btn" onclick="Sidebar.toggleCollapse()" title="${collapsed?'Expandera meny':'Fäll ihop meny'}">
+          ${ic(collapsed?'chevrons-right':'chevrons-left', 14)}
+        </button>
       </div>
-      <button class="nav-collapse-btn" onclick="Sidebar.toggleCollapse()" title="${collapsed?'Expandera meny':'Fäll ihop meny'}">
-        ${ic(collapsed?'chevrons-right':'chevrons-left', 14)}
-      </button>
       <div class="nav-scroll">`;
 
     let inSection = false;
