@@ -3266,11 +3266,15 @@ ${hasRut?`<div class="rut">
 /* ── Fastigheter ──────────────────────── */
 const PropertiesPage = {
   _q: '',
+  _filter: 'aktiva',
 
   render() {
     const el = document.getElementById('pg-objects-content');
     if (!el) return;
-    let props = state.properties || [];
+    const allProps = state.properties || [];
+    const aktiva    = allProps.filter(p => p.status !== 'inaktiv');
+    const arkiverade = allProps.filter(p => p.status === 'inaktiv');
+    let props = this._filter === 'arkiverade' ? arkiverade : aktiva;
     if (this._q) {
       const q = this._q.toLowerCase();
       props = props.filter(p =>
@@ -3279,12 +3283,16 @@ const PropertiesPage = {
     }
     el.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-        <div class="swrap" style="flex:1;">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" placeholder="Sök fastighet…" value="${this._q}"
-            oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
+        <div class="ftabs" style="flex:1;margin-bottom:0;">
+          <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
+          <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
         </div>
         <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
+      </div>
+      <div class="swrap" style="margin-bottom:6px;">
+        <span class="sico">${ic('search',16)}</span>
+        <input type="search" placeholder="Sök fastighet…" value="${this._q}"
+          oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
       </div>` +
       (props.length === 0
         ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
@@ -3776,7 +3784,10 @@ const StaffPage = {
               </div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
                 <span class="bdg ${roleColor(s.role)}">${roleLabel(s.role)}</span>
-                <span style="font-size:10px;color:var(--mt);">${s.email||''}</span>
+                <button class="btn bxs ${s.active?'bw':'bsu'}" style="font-size:10px;padding:3px 8px;margin-top:2px;"
+                  onclick="event.stopPropagation();StaffPage._toggleActive('${s.id}')">
+                  ${s.active?ic('user-x',11)+' Inaktivera':ic('user-check',11)+' Aktivera'}
+                </button>
               </div>
             </div>
           </div>`).join('')

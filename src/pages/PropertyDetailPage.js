@@ -56,6 +56,9 @@ const PropertyDetailPage = {
           ${Auth.can('properties_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`
             : ''}
+          ${Auth.can('properties_manage')
+            ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
+            : ''}
         </div>
       </div>
 
@@ -1110,5 +1113,19 @@ const PropertyDetailPage = {
     const el = document.getElementById('prop-notes');
     if (el) el.innerHTML = this._renderNotes(prop.notes);
     showToast('Anteckning sparad');
+  },
+
+  toggleStatus() {
+    const p = getObj(this.propId);
+    if (!p) return;
+    const activate = p.status === 'inaktiv';
+    Modal.confirm(activate ? 'Aktivera fastigheten?' : 'Inaktivera fastigheten? Den döljs från aktiva listor men historisk data bevaras.', () => {
+      p.status = activate ? 'aktiv' : 'inaktiv';
+      p.updatedAt = new Date().toISOString();
+      persist();
+      const el = document.getElementById('pg-obj-detail-content');
+      if (el) this._renderFull(el, p);
+      showToast(activate ? 'Fastighet aktiverad' : 'Fastighet inaktiverad');
+    });
   }
 };

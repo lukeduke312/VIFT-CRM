@@ -27,13 +27,13 @@ const WorkOrdersPage = {
     }
 
     // Compute quick-filter counts
-    const wos   = state.workOrders || [];
+    const wos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
     const today = tdy();
     const myId  = state.currentUser ? state.currentUser.id : null;
     const active = a => !['klar','fakturerad','avbruten'].includes(a.status);
     const qfCounts = {
       akut:           wos.filter(a => a.priority==='akut' && active(a)).length,
-      readyForInvoice:WorkOrderService.readyForInvoice().length,
+      readyForInvoice: wos.filter(a => a.status === 'klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a)).length,
       idag:           wos.filter(a => a.scheduledDate===today && active(a)).length,
       forsenad:       wos.filter(a => a.scheduledDate && a.scheduledDate<today && active(a)).length,
       mine:           myId ? wos.filter(a => (a.staff||[]).includes(myId) && active(a)).length : 0
