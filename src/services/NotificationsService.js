@@ -22,13 +22,6 @@ const NotificationsService = {
     Sidebar.updateBadges();
   },
 
-  /* Push to all active staff (for pool notifications) */
-  pushToAll(type, message, meta = {}) {
-    (state.staff || []).filter(s => s.active).forEach(s => {
-      this.push(s.id, type, message, meta);
-    });
-  },
-
   /* Get unread count for current user */
   unreadCount() {
     const user = Auth.getUser();

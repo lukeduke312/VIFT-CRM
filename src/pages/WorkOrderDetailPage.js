@@ -1688,10 +1688,6 @@ const WorkOrderDetailPage = {
         });
       }
     }
-    // Notify all staff when AO goes to pool
-    if (moveToPool && typeof NotificationsService !== 'undefined') {
-      NotificationsService.pushToAll('ao_pool', `${aoId} har lagts i arbetspoolen: ${ao.title || aoId}`, { aoId });
-    }
     Modal.close();
     WorkOrderDetailPage.render({ aoId });
     showToast('Personal uppdaterad');
