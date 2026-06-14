@@ -182,8 +182,8 @@ const Dashboard = {
             <select onchange="Dashboard._custSize(${i},this.value)">
               ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
             </select>
-            <button type="button" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',12)}</button>
-            <button type="button" title="Flytta ner" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',12)}</button>
+            <button type="button" class="btn bs bxs" style="padding:6px 10px;min-height:36px;" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',14)} Upp</button>
+            <button type="button" class="btn bs bxs" style="padding:6px 10px;min-height:36px;" title="Flytta ned" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',14)} Ned</button>
           </div>
         </div>`;
     }).join('');

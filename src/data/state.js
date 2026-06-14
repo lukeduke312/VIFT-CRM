@@ -32,6 +32,7 @@ let state = {
   activities: [],
   serviceTemplates: [],
   emailTemplates: [],
+  notifications: [],
 
   // UI-state
   currentPage: 'dash',
@@ -88,6 +89,7 @@ async function initState() {
   state.activities         = g('activities')       || [];
   state.serviceTemplates   = g('serviceTemplates') || SeedData.serviceTemplates || [];
   state.emailTemplates     = g('emailTemplates')   || SeedData.emailTemplates  || [];
+  state.notifications      = g('notifications')    || [];
 
   // Rensa AO:er vars 14-dagarsfönster gått ut
   const _trashNow = new Date();
@@ -142,7 +144,8 @@ function persist() {
     ['avvikelser',       state.avvikelser],
     ['activities',       state.activities],
     ['serviceTemplates', state.serviceTemplates],
-    ['emailTemplates',   state.emailTemplates]
+    ['emailTemplates',   state.emailTemplates],
+    ['notifications',    state.notifications]
   ]);
 }
 

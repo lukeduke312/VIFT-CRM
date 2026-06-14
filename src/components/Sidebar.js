@@ -98,9 +98,15 @@ const Sidebar = {
     // Close the last section if it had items
     if (inSection && sectionHasItems) html += '</div>';
 
+    const unread = (typeof NotificationsService !== 'undefined') ? NotificationsService.unreadCount() : 0;
     html += `
       </div><!-- /nav-scroll -->
       <div class="nav-user">
+        <div class="nav-bell-row" onclick="NotificationsService.showPanel()" title="Notiser" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.1);">
+          <span>${ic('bell', 15)}</span>
+          <span style="flex:1;font-size:12px;font-weight:600;color:rgba(255,255,255,.8);">Notiser</span>
+          ${unread > 0 ? `<span class="nbdg nbdg-alert" id="notif-badge">${unread}</span>` : `<span id="notif-badge" style="display:none;"></span>`}
+        </div>
         <div class="nav-user-row" onclick="Sidebar.userMenu()">
           <div class="nav-user-avatar">${initials}</div>
           <div style="flex:1;min-width:0;">
@@ -258,6 +264,18 @@ const Sidebar = {
         el.style.display = 'none';
       }
     });
+    // Update notification bell badge
+    const notifBadgeEl = document.getElementById('notif-badge');
+    if (notifBadgeEl) {
+      const unread = (typeof NotificationsService !== 'undefined') ? NotificationsService.unreadCount() : 0;
+      if (unread > 0) {
+        notifBadgeEl.className = 'nbdg nbdg-alert';
+        notifBadgeEl.textContent = unread;
+        notifBadgeEl.style.display = '';
+      } else {
+        notifBadgeEl.style.display = 'none';
+      }
+    }
   },
 
   _isUrgentBadge(key) {
@@ -302,6 +320,10 @@ const Sidebar = {
         (ao.priority === 'akut' && alive(ao)) ||
         ((ao.staff||[]).length === 0 && alive(ao) && !['pool','avbruten'].includes(ao.status))
       ).length;
+      return n > 0 ? n : null;
+    }
+    if (key === 'notifications') {
+      const n = (typeof NotificationsService !== 'undefined') ? NotificationsService.unreadCount() : 0;
       return n > 0 ? n : null;
     }
     return null;

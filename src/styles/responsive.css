@@ -168,3 +168,32 @@
     gap: 5px;
   }
 }
+
+/* ── Mobil AO-lista: enklare kort ──────────────────── */
+@media (max-width: 639px) {
+  .ao-list-item {
+    padding: 10px 12px;
+  }
+  .ao-item-id {
+    display: none;
+  }
+  .ao-item-badges {
+    gap: 3px;
+  }
+  /* Dashboard: kompaktare KPI */
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .kpi-card {
+    padding: 12px;
+  }
+  .kpi-val {
+    font-size: 24px;
+  }
+  /* Modal: prevent overflow on narrow screens */
+  .modal-inner {
+    margin: 8px;
+    max-height: calc(100dvh - 16px);
+  }
+}

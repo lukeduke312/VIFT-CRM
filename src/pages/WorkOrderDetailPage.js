@@ -1681,6 +1681,16 @@ const WorkOrderDetailPage = {
     if (added.length > 0) {
       const names = added.map(id => { const s = getStaff(id); return s ? s.firstName + ' ' + s.lastName : id; }).join(', ');
       ActivityService.log('staff_assigned', `Personal tilldelad ${aoId}: ${names}`, { workOrderId: aoId });
+      // Send notifications to newly added staff
+      if (typeof NotificationsService !== 'undefined') {
+        added.forEach(id => {
+          NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${aoId}: ${ao.title || aoId}`, { aoId });
+        });
+      }
+    }
+    // Notify all staff when AO goes to pool
+    if (moveToPool && typeof NotificationsService !== 'undefined') {
+      NotificationsService.pushToAll('ao_pool', `${aoId} har lagts i arbetspoolen: ${ao.title || aoId}`, { aoId });
     }
     Modal.close();
     WorkOrderDetailPage.render({ aoId });
