@@ -52,43 +52,51 @@ let state = {
 };
 
 /**
- * Initiera state från localStorage, fall back på seed-data
+ * Initiera state från Supabase (ett bulk-anrop), fall back på localStorage → seed-data
  */
-function initState() {
-  const s = Storage;
+async function initState() {
+  let d = {};
+  try {
+    d = await Storage.getAll();
+  } catch(e) {
+    console.warn('[initState] Supabase ej tillgänglig, använder localStorage:', e);
+    d = Storage._localAll();
+  }
 
-  state.customers          = s.get('customers')     || SeedData.customers;
-  state.workOrders         = s.get('workOrders')    || SeedData.workOrders;
-  state.offers             = s.get('offers')        || SeedData.offers;
-  state.invoices           = s.get('invoices')      || SeedData.invoices;
-  state.staff              = s.get('staff')         || SeedData.staff;
-  state.properties         = s.get('properties')   || SeedData.properties;
-  state.priceGroups        = s.get('priceGroups')  || SeedData.priceGroups;
-  state.priceProfiles      = s.get('priceProfiles') || SeedData.priceProfiles || [];
-  state.salesOpportunities = s.get('salesOpps')    || SeedData.salesOpportunities;
-  state.activityLog        = s.get('activityLog')  || SeedData.activityLog;
-  state.settings           = s.get('settings')     || SeedData.settings;
-  state.timeEntries        = s.get('timeEntries')     || SeedData.timeEntries || [];
-  state.contracts          = s.get('contracts')       || [];
-  state.articles           = s.get('articles')        || SeedData.articles || [];
-  state.titles             = s.get('titles')          || SeedData.titles  || [];
-  state.roles              = s.get('roles')           || SeedData.roles   || [];
-  state.recurringOrders    = s.get('recurringOrders') || SeedData.recurringOrders || [];
-  state.ronderingsmallar   = s.get('ronderingsmallar') || SeedData.ronderingsmallar || [];
-  state.ronderingar        = s.get('ronderingar')      || SeedData.ronderingar      || [];
-  state.avvikelser         = s.get('avvikelser')       || SeedData.avvikelser       || [];
-  state.activities         = s.get('activities')        || [];
-  state.serviceTemplates   = s.get('serviceTemplates')  || SeedData.serviceTemplates || [];
-  state.emailTemplates     = s.get('emailTemplates')    || SeedData.emailTemplates   || [];
+  const g = key => (d[key] !== undefined && d[key] !== null) ? d[key] : null;
 
-  // Purge AOs past their 14-day trash window
+  state.customers          = g('customers')        || SeedData.customers;
+  state.workOrders         = g('workOrders')       || SeedData.workOrders;
+  state.offers             = g('offers')           || SeedData.offers;
+  state.invoices           = g('invoices')         || SeedData.invoices;
+  state.staff              = g('staff')            || SeedData.staff;
+  state.properties         = g('properties')       || SeedData.properties;
+  state.priceGroups        = g('priceGroups')      || SeedData.priceGroups;
+  state.priceProfiles      = g('priceProfiles')    || SeedData.priceProfiles || [];
+  state.salesOpportunities = g('salesOpps')        || SeedData.salesOpportunities;
+  state.activityLog        = g('activityLog')      || SeedData.activityLog;
+  state.settings           = g('settings')         || SeedData.settings;
+  state.timeEntries        = g('timeEntries')      || SeedData.timeEntries || [];
+  state.contracts          = g('contracts')        || [];
+  state.articles           = g('articles')         || SeedData.articles || [];
+  state.titles             = g('titles')           || SeedData.titles   || [];
+  state.roles              = g('roles')            || SeedData.roles    || [];
+  state.recurringOrders    = g('recurringOrders')  || SeedData.recurringOrders || [];
+  state.ronderingsmallar   = g('ronderingsmallar') || SeedData.ronderingsmallar || [];
+  state.ronderingar        = g('ronderingar')      || SeedData.ronderingar || [];
+  state.avvikelser         = g('avvikelser')       || SeedData.avvikelser  || [];
+  state.activities         = g('activities')       || [];
+  state.serviceTemplates   = g('serviceTemplates') || SeedData.serviceTemplates || [];
+  state.emailTemplates     = g('emailTemplates')   || SeedData.emailTemplates  || [];
+
+  // Rensa AO:er vars 14-dagarsfönster gått ut
   const _trashNow = new Date();
   state.workOrders = state.workOrders.filter(function(ao) {
     if (!ao.deleted || !ao.deleteAfter) return true;
     return new Date(ao.deleteAfter) > _trashNow;
   });
 
-  // Migrate plain-string titles → rich objects
+  // Migrera titlar från sträng → objekt
   state.titles = state.titles.map(function(t, i) {
     if (typeof t === 'string') {
       return { id: 'TIT-' + String(i + 1).padStart(3, '0'), name: t, description: '', active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
@@ -96,45 +104,46 @@ function initState() {
     return t;
   });
 
-  // Ensure all roles have active field
+  // Säkerställ att alla roller har active-fält
   state.roles = state.roles.map(function(r) {
     return r.active !== undefined ? r : Object.assign({ active: true }, r);
   });
 
-  // Stämpling-state
-  state.stampActive    = !!s.get('stampActive');
-  state.stampTimestamp = s.get('stampTs') || null;
-  state.stampAoId      = s.get('stampAoId') || null;
+  // Stämplingsstate (per-enhet från localStorage)
+  state.stampActive    = !!(g('stampActive'));
+  state.stampTimestamp = g('stampTs')    || null;
+  state.stampAoId      = g('stampAoId') || null;
 }
 
 /**
- * Spara hela state till localStorage
+ * Spara hela state — localStorage direkt + Supabase i bakgrunden (ett enda HTTP-anrop)
  */
 function persist() {
-  const s = Storage;
-  s.set('customers',    state.customers);
-  s.set('workOrders',   state.workOrders);
-  s.set('offers',       state.offers);
-  s.set('invoices',     state.invoices);
-  s.set('staff',        state.staff);
-  s.set('properties',   state.properties);
-  s.set('priceGroups',   state.priceGroups);
-  s.set('priceProfiles', state.priceProfiles);
-  s.set('salesOpps',    state.salesOpportunities);
-  s.set('activityLog',  state.activityLog);
-  s.set('settings',     state.settings);
-  s.set('timeEntries',  state.timeEntries);
-  s.set('contracts',        state.contracts);
-  s.set('articles',         state.articles);
-  s.set('titles',           state.titles);
-  s.set('roles',            state.roles);
-  s.set('recurringOrders',  state.recurringOrders);
-  s.set('ronderingsmallar', state.ronderingsmallar);
-  s.set('ronderingar',      state.ronderingar);
-  s.set('avvikelser',       state.avvikelser);
-  s.set('activities',       state.activities);
-  s.set('serviceTemplates', state.serviceTemplates);
-  s.set('emailTemplates',   state.emailTemplates);
+  Storage.setAll([
+    ['customers',        state.customers],
+    ['workOrders',       state.workOrders],
+    ['offers',           state.offers],
+    ['invoices',         state.invoices],
+    ['staff',            state.staff],
+    ['properties',       state.properties],
+    ['priceGroups',      state.priceGroups],
+    ['priceProfiles',    state.priceProfiles],
+    ['salesOpps',        state.salesOpportunities],
+    ['activityLog',      state.activityLog],
+    ['settings',         state.settings],
+    ['timeEntries',      state.timeEntries],
+    ['contracts',        state.contracts],
+    ['articles',         state.articles],
+    ['titles',           state.titles],
+    ['roles',            state.roles],
+    ['recurringOrders',  state.recurringOrders],
+    ['ronderingsmallar', state.ronderingsmallar],
+    ['ronderingar',      state.ronderingar],
+    ['avvikelser',       state.avvikelser],
+    ['activities',       state.activities],
+    ['serviceTemplates', state.serviceTemplates],
+    ['emailTemplates',   state.emailTemplates]
+  ]);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */

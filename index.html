@@ -257,10 +257,10 @@
 <!-- ── JavaScript — laddningsordning ──────── -->
 
 <!-- 1. Data-lager -->
-<script src="src/data/storage.js?v=2"></script>
+<script src="src/data/storage.js?v=3"></script>
 <script src="src/data/schema.js?v=14"></script>
 <script src="src/data/seedData.js?v=23"></script>
-<script src="src/data/state.js?v=16"></script>
+<script src="src/data/state.js?v=17"></script>
 <script src="src/data/DashboardConfig.js?v=7"></script>
 
 <!-- 2. Services -->
@@ -307,9 +307,16 @@
 <script>
 const App = {
 
-  init() {
-    // Ladda state från localStorage
-    initState();
+  async init() {
+    // Visa laddningsindikator på login-knappen medan data hämtas från Supabase
+    const loginBtn = document.querySelector('#login-screen button.btn.bp');
+    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = 'Laddar…'; }
+
+    // Ladda state från Supabase (ett HTTP-anrop), fallback: localStorage → seed-data
+    await initState();
+
+    // Återställ knapp
+    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = 'Logga in'; }
 
     // Försök återställa session
     const loggedIn = Auth.init();
