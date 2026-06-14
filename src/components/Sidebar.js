@@ -279,7 +279,7 @@ const Sidebar = {
       return n > 0 ? n : null;
     }
     if (key === 'aoNew') {
-      const n = (state.workOrders || []).filter(o => o.status === 'nytt').length;
+      const n = (state.workOrders || []).filter(o => o.status === 'nytt' && !o.archived && !o.deleted).length;
       return n > 0 ? n : null;
     }
     if (key === 'salesNew') {

@@ -530,6 +530,7 @@ const Dashboard = {
 
     // Tekniker utan ao_view_all: visa bara sina ordrar
     let todayAOs = (state.workOrders || []).filter(a =>
+      !a.archived && !a.deleted &&
       a.scheduledDate === today && !['klar','fakturerad','avbruten'].includes(a.status)
     );
     if (!hasAll && userId) {
@@ -566,7 +567,7 @@ const Dashboard = {
 
   /* ── Widget: Arbetspool ────────────────────────────────────────────── */
   _widgetPool() {
-    const pool = (state.workOrders || []).filter(a => a.status === 'pool');
+    const pool = (state.workOrders || []).filter(a => a.status === 'pool' && !a.archived && !a.deleted);
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('inbox',14)} Arbetspool</h3>
@@ -659,7 +660,8 @@ const Dashboard = {
     const today   = tdy();
     const week    = _ds(7);
     const planned = (state.workOrders||[]).filter(a =>
-      a.status === 'planerad' && a.scheduledDate > today && a.scheduledDate <= week
+      a.status === 'planerad' && !a.archived && !a.deleted &&
+      a.scheduledDate > today && a.scheduledDate <= week
     );
     return `<div class="card">
       <div class="card-header">
@@ -876,7 +878,7 @@ const Dashboard = {
   _calcKPIs() {
     const today    = tdy();
     const monthStr = today.substring(0, 7);
-    const aos      = state.workOrders || [];
+    const aos      = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
     const sales    = state.salesOpportunities || [];
     return {
       activeOrders:  aos.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status)).length,
@@ -891,7 +893,7 @@ const Dashboard = {
     const todos = [];
     const today = tdy();
     const week  = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const aos   = state.workOrders || [];
+    const aos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
 
     if (Auth.canAny(['ao_view_all','ao_view_own'])) {
       const akut = aos.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));

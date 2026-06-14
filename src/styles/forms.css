@@ -23,7 +23,7 @@ textarea {
   border: 1.5px solid var(--br);
   border-radius: var(--rs);
   padding: 9px 11px;
-  font-size: max(14px, 1em);
+  font-size: 16px;
   font-family: inherit;
   background: #fff;
   color: var(--tx);

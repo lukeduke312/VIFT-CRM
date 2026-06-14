@@ -3994,6 +3994,14 @@ const StaffPage = {
       }
       state.staff[idx] = { ...state.staff[idx], ...data };
       persist(); Modal.close(); showToast('Sparat');
+      // If editing the currently logged-in user, refresh their session
+      const _cu = Auth.getUser();
+      if (_cu && _cu.id === staffId) {
+        const _updated = { ..._cu, firstName: data.firstName, lastName: data.lastName, role: data.role, username: data.username, title: data.title };
+        try { sessionStorage.setItem(Auth.SESSION_KEY, JSON.stringify(_updated)); } catch(e) {}
+        state.currentUser = _updated;
+        Sidebar.render();
+      }
     }
     this.render();
   },

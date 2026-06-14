@@ -23,10 +23,10 @@ const CustomersPage = {
         </button>
       </div>
       <div class="chips" style="margin-bottom:4px;">
-        ${['alla','privat','foretag','brf','fastighetsagare'].map(t =>
+        ${['alla','privat','foretag','brf','fastighetsagare','inaktiva'].map(t =>
           `<button class="chip ${!this.q && this._typeFilter===t||(!this._typeFilter&&t==='alla')?'on':''}"
             onclick="CustomersPage._typeFilter='${t}';CustomersPage.renderList()">${
-            {alla:'Alla',privat:'Privat',foretag:'Företag',brf:'BRF',fastighetsagare:'Fastighetsägare'}[t]}</button>`
+            {alla:'Alla',privat:'Privat',foretag:'Företag',brf:'BRF',fastighetsagare:'Fastighetsägare',inaktiva:'Inaktiva'}[t]}</button>`
         ).join('')}
       </div>
       <div id="crm-list"></div>`;
@@ -37,8 +37,12 @@ const CustomersPage = {
     const el = document.getElementById('crm-list');
     if (!el) return;
     let list = CustomerService.search(this.q);
-    if (this._typeFilter && this._typeFilter !== 'alla') {
-      list = list.filter(c => c.type === this._typeFilter);
+    if (this._typeFilter === 'inaktiva') {
+      list = list.filter(c => c.inactive);
+    } else if (this._typeFilter && this._typeFilter !== 'alla') {
+      list = list.filter(c => c.type === this._typeFilter && !c.inactive);
+    } else {
+      list = list.filter(c => !c.inactive);
     }
     if (list.length === 0) {
       el.innerHTML = `<div class="empty"><span class="empty-ico">${ic('users',36)}</span><h3>Inga kunder</h3><p>${this.q ? 'Inga träffar för sökning' : 'Skapa din första kund'}</p></div>`;
@@ -250,7 +254,8 @@ const CustomerDetailPage = {
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
         <button class="btn bs bsm" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)}</button>
-        <h2 style="font-size:17px;font-weight:800;flex:1;">${name}</h2>
+        <h2 style="font-size:17px;font-weight:800;flex:1;">${name}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
+        <button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>
         <button class="btn bp bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>
       </div>
 
@@ -463,6 +468,19 @@ const CustomerDetailPage = {
       persist();
       this._renderFull(document.getElementById('pg-crm-detail-content'));
       showToast('Kontaktperson borttagen');
+    });
+  },
+
+  toggleInactive(id) {
+    const cu = getCu(id);
+    if (!cu) return;
+    const activate = !!cu.inactive;
+    Modal.confirm(activate ? 'Aktivera kunden?' : 'Markera kunden som inaktiv? Kunden döljs i standardlistan.', () => {
+      cu.inactive = !cu.inactive;
+      cu.updatedAt = new Date().toISOString();
+      persist();
+      this._renderFull(document.getElementById('pg-crm-detail-content'));
+      showToast(activate ? 'Kund aktiverad' : 'Kund inaktiverad');
     });
   }
 };

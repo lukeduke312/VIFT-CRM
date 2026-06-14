@@ -1233,6 +1233,7 @@ const WorkOrderDetailPage = {
           WorkOrderService.archive(this.aoId);
           Modal.close();
           showToast('Arbetsorder arkiverad');
+          Sidebar.updateBadges();
           Router.showPage('pg-ao');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -1249,6 +1250,7 @@ const WorkOrderDetailPage = {
           WorkOrderService.softDelete(this.aoId);
           Modal.close();
           showToast('Arbetsorder borttagen (papperskorg)');
+          Sidebar.updateBadges();
           Router.showPage('pg-ao');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -1280,6 +1282,7 @@ const WorkOrderDetailPage = {
           WorkOrderService.permanentDelete(targetId);
           Modal.close();
           showToast('Arbetsorder raderad permanent');
+          Sidebar.updateBadges();
           Router.showPage('pg-ao');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
