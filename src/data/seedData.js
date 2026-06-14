@@ -34,37 +34,37 @@ const SeedData = {
     {
       id: 'ST-001', firstName: 'Admin', lastName: 'VIFT',
       title: 'Systemadministratör', phone: '070-000 00 01', email: 'admin@vift.se',
-      username: 'admin', password: '1234', role: 'admin', permissions: ['all'],
+      username: 'admin', role: 'admin', permissions: ['all'],
       active: true, createdAt: '2024-01-01'
     },
     {
       id: 'ST-002', firstName: 'Erik', lastName: 'Andersson',
       title: 'Fastighetstekniker', phone: '070-111 22 33', email: 'erik@vift.se',
-      username: 'erik', password: '1234', role: 'personal', permissions: [],
+      username: 'erik', role: 'personal', permissions: [],
       active: true, createdAt: '2024-01-15'
     },
     {
       id: 'ST-003', firstName: 'Maria', lastName: 'Karlsson',
       title: 'Projektledare', phone: '070-444 55 66', email: 'maria@vift.se',
-      username: 'maria', password: '1234', role: 'chef', permissions: [],
+      username: 'maria', role: 'chef', permissions: [],
       active: true, createdAt: '2024-02-01'
     },
     {
       id: 'ST-004', firstName: 'Jonas', lastName: 'Pettersson',
       title: 'Rörmokare', phone: '073-666 77 88', email: 'jonas@vift.se',
-      username: 'jonas', password: '1234', role: 'personal', permissions: [],
+      username: 'jonas', role: 'personal', permissions: [],
       active: true, createdAt: '2024-03-10'
     },
     {
       id: 'ST-005', firstName: 'Sofia', lastName: 'Lindgren',
       title: 'Elektriker', phone: '072-888 99 00', email: 'sofia@vift.se',
-      username: 'sofia', password: '1234', role: 'personal', permissions: [],
+      username: 'sofia', role: 'personal', permissions: [],
       active: true, createdAt: '2024-04-05'
     },
     {
       id: 'ST-006', firstName: 'Emma', lastName: 'Ekonom',
       title: 'Ekonomiassistent', phone: '070-000 00 06', email: 'emma@vift.se',
-      username: 'emma', password: '1234', role: 'ekonomi', permissions: [],
+      username: 'emma', role: 'ekonomi', permissions: [],
       active: true, createdAt: '2024-05-01'
     }
   ],

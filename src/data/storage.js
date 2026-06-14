@@ -1,9 +1,10 @@
 /**
- * storage.js v3 — Supabase REST-backend med localStorage-cache
+ * storage.js v4 — Supabase REST-backend med localStorage-cache
  *
- * Alla skrivningar: localStorage direkt + Supabase i bakgrunden (fire-and-forget).
  * Läsning vid start: Supabase i ett enda bulk-anrop, localStorage som fallback.
- * Auth-session hanteras av AuthService via sessionStorage — rörs inte här.
+ * Skrivning: localStorage direkt + Supabase i bakgrunden (fire-and-forget).
+ * Auth: JWT från Auth.getAccessToken() injiceras i headers — RLS kräver inloggning.
+ * Auth-session hanteras av AuthService — rörs inte här.
  */
 const SUPABASE_URL  = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
 const SUPABASE_AKEY = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
@@ -11,17 +12,22 @@ const SUPABASE_AKEY = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
 const Storage = {
   prefix: 'vift_',
 
-  _h() {
-    return {
+  /* Bygg headers — anon key som apikey, JWT som Authorization när inloggad */
+  _h(contentType) {
+    const jwt = (typeof Auth !== 'undefined' && Auth.getAccessToken)
+      ? (Auth.getAccessToken() || SUPABASE_AKEY)
+      : SUPABASE_AKEY;
+    const h = {
       'apikey':        SUPABASE_AKEY,
-      'Authorization': 'Bearer ' + SUPABASE_AKEY,
-      'Content-Type':  'application/json'
+      'Authorization': 'Bearer ' + jwt
     };
+    if (contentType !== false) h['Content-Type'] = 'application/json';
+    return h;
   },
 
   /* Hämta ALL data i ett enda HTTP-anrop (används av initState) */
   async getAll() {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/store?select=key,value', { headers: this._h() });
+    const res = await fetch(SUPABASE_URL + '/rest/v1/store?select=key,value', { headers: this._h(false) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const rows = await res.json();
     const out  = {};
@@ -36,7 +42,7 @@ const Storage = {
   _localAll() {
     const out = {};
     Object.keys(localStorage)
-      .filter(k => k.startsWith(this.prefix))
+      .filter(k => k.startsWith(this.prefix) && k !== this.prefix + 'auth_v2')
       .forEach(k => {
         try { out[k.slice(this.prefix.length)] = JSON.parse(localStorage.getItem(k)); } catch(e) {}
       });
@@ -56,13 +62,13 @@ const Storage = {
     }).catch(e => console.warn('[Storage.setAll]', e));
   },
 
-  /* Enstaka get (för individuella nycklar utanför initState) */
+  /* Enstaka get */
   async get(key) {
     const k = this.prefix + key;
     try {
       const res = await fetch(
         SUPABASE_URL + '/rest/v1/store?key=eq.' + encodeURIComponent(k) + '&select=value',
-        { headers: this._h() }
+        { headers: this._h(false) }
       );
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const rows = await res.json();
@@ -72,7 +78,7 @@ const Storage = {
     }
   },
 
-  /* Enstaka set — localStorage direkt + Supabase i bakgrunden */
+  /* Enstaka set */
   set(key, value) {
     const k = this.prefix + key;
     try { localStorage.setItem(k, JSON.stringify(value)); } catch(e) {}
@@ -87,13 +93,14 @@ const Storage = {
     const k = this.prefix + key;
     try { localStorage.removeItem(k); } catch(e) {}
     fetch(SUPABASE_URL + '/rest/v1/store?key=eq.' + encodeURIComponent(k), {
-      method: 'DELETE', headers: this._h()
+      method: 'DELETE', headers: this._h(false)
     }).catch(e => console.warn('[Storage.remove]', key, e));
   },
 
-  /* clear() rensar bara localStorage — använd Supabase Dashboard för full reset */
+  /* clear() rensar bara localStorage-cache — inte Supabase */
   clear() {
-    Object.keys(localStorage).filter(k => k.startsWith(this.prefix))
+    Object.keys(localStorage)
+      .filter(k => k.startsWith(this.prefix) && k !== this.prefix + 'auth_v2')
       .forEach(k => { try { localStorage.removeItem(k); } catch(e) {} });
   }
 };

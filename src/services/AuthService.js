@@ -1,5 +1,9 @@
 /**
- * AuthService — Inloggning, session och behörighetskontroll
+ * AuthService v6 — Supabase Auth + rollbaserade behörigheter
+ *
+ * Inloggning: Supabase Auth (email + lösenord via /auth/v1/token)
+ * Session: JWT + refresh_token i localStorage ('vift_auth_v2')
+ * Koppling: auth.user.email → state.staff[].email → currentUser + roll
  *
  * Permission keys:
  *   all               – Superadmin, full access
@@ -27,10 +31,13 @@
 
 const Auth = {
 
-  SESSION_KEY: 'vift_session',
+  /* Nyckel i localStorage för JWT-session */
+  SESSION_KEY: 'vift_auth_v2',
 
-  // Sidor → vilka permissions som räcker (ANY)
-  // Tom array = alltid tillgänglig när inloggad
+  /* Intern session-state */
+  _session: null,   // { access_token, refresh_token, expires_at, user_email }
+
+  /* ── Sidors behörighetskrav ───────────────────────────── */
   PAGE_PERMISSIONS: {
     'pg-dash':         [],
     'pg-ao':           ['ao_view_all','ao_view_own','ao_create','ao_edit','ao_complete','ao_time','ao_material','ao_checklist'],
@@ -59,21 +66,143 @@ const Auth = {
     'pg-recurring':    ['recurring_manage'],
   },
 
+  /* ── JWT ──────────────────────────────────────────────── */
+
+  getAccessToken() {
+    return this._session ? this._session.access_token : null;
+  },
+
+  /* ── Session restore (sync) ───────────────────────────── */
+
+  /* Återställ session från localStorage. Returnerar true om token finns. */
+  init() {
+    try {
+      const saved = localStorage.getItem(this.SESSION_KEY);
+      if (!saved) return false;
+      const s = JSON.parse(saved);
+      if (!s || !s.access_token || !s.refresh_token) return false;
+      this._session = s;
+      return true;
+    } catch(e) { return false; }
+  },
+
+  /* ── Token refresh (async) ────────────────────────────── */
+
+  /* Förnya JWT om det löper ut inom 60s. Returnerar true om token är giltig. */
+  async refreshIfNeeded() {
+    if (!this._session) return false;
+    if (this._session.expires_at && Date.now() < this._session.expires_at - 60000) return true;
+    try {
+      const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method:  'POST',
+        headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ refresh_token: this._session.refresh_token })
+      });
+      if (!res.ok) { this._clearSession(); return false; }
+      const d = await res.json();
+      this._session.access_token  = d.access_token;
+      this._session.refresh_token = d.refresh_token;
+      this._session.expires_at    = Date.now() + (d.expires_in * 1000);
+      this._session.user_email    = d.user?.email || this._session.user_email;
+      this._saveSession();
+      return true;
+    } catch(e) {
+      /* Nätverksfel — behåll befintlig token och försök igen nästa anrop */
+      return !!this._session.access_token;
+    }
+  },
+
+  /* ── Login (async) ────────────────────────────────────── */
+
+  async login(email, password) {
+    try {
+      const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+        method:  'POST',
+        headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: email.toLowerCase().trim(), password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = (data.error_description || data.msg || data.error || '').toLowerCase();
+        if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('email')) {
+          return { ok: false, error: 'Fel e-post eller lösenord' };
+        }
+        return { ok: false, error: 'Inloggning misslyckades. Försök igen.' };
+      }
+      this._session = {
+        access_token:  data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at:    Date.now() + (data.expires_in * 1000),
+        user_email:    data.user?.email || email.toLowerCase().trim()
+      };
+      this._saveSession();
+      return { ok: true };
+    } catch(e) {
+      return { ok: false, error: 'Kunde inte ansluta till servern. Kontrollera din uppkoppling.' };
+    }
+  },
+
+  /* ── Logout ───────────────────────────────────────────── */
+
+  logout() {
+    const token = this._session ? this._session.access_token : null;
+    this._clearSession();
+    state.currentUser = null;
+    App.showLogin();
+    /* Fire-and-forget: ogiltigförklara JWT hos Supabase */
+    if (token) {
+      fetch(SUPABASE_URL + '/auth/v1/logout', {
+        method:  'POST',
+        headers: { 'apikey': SUPABASE_AKEY, 'Authorization': 'Bearer ' + token }
+      }).catch(() => {});
+    }
+  },
+
+  /* ── Koppla auth-user → staff-post ───────────────────── */
+
+  /*
+   * Kör efter initState(). Matchar auth-emailen mot state.staff[].email.
+   * Sätter state.currentUser baserat på staff-posten (roll, behörigheter, namn).
+   */
+  _resolveUser() {
+    const email = this._session ? this._session.user_email : null;
+    if (!email) { state.currentUser = null; return; }
+
+    const staff = (state.staff || []).find(s =>
+      s.active && s.email && s.email.toLowerCase() === email.toLowerCase()
+    );
+
+    if (!staff) {
+      console.warn('[Auth] Ingen aktiv staff-post hittad för e-post:', email);
+      state.currentUser = {
+        id: 'unknown', firstName: email.split('@')[0], lastName: '',
+        role: 'personal', username: email, title: ''
+      };
+      return;
+    }
+
+    state.currentUser = {
+      id:        staff.id,
+      firstName: staff.firstName,
+      lastName:  staff.lastName,
+      role:      staff.role,
+      username:  staff.username || staff.email,
+      title:     staff.title   || ''
+    };
+  },
+
+  /* ── Getters ──────────────────────────────────────────── */
+
   isLoggedIn() {
-    try { return !!sessionStorage.getItem(this.SESSION_KEY); } catch(e) { return false; }
+    return !!(this._session && this._session.access_token && state.currentUser);
   },
 
   getUser() {
-    try {
-      const s = sessionStorage.getItem(this.SESSION_KEY);
-      return s ? JSON.parse(s) : null;
-    } catch(e) { return null; }
+    return state.currentUser || null;
   },
 
-  /**
-   * Kolla om den inloggade användaren har en specifik behörighet.
-   * Söker i rollens permissions (state.roles), inte i sessionen.
-   */
+  /* ── Behörighetskontroll ──────────────────────────────── */
+
   can(permission) {
     const user = this.getUser();
     if (!user) return false;
@@ -81,78 +210,39 @@ const Auth = {
     return perms.includes('all') || perms.includes(permission);
   },
 
-  /**
-   * Kolla om användaren har NÅGON av de angivna behörigheterna.
-   * Tom lista → alltid sant (ingen begränsning).
-   */
   canAny(permissions) {
     if (!permissions || permissions.length === 0) return true;
     return permissions.some(p => this.can(p));
   },
 
-  /**
-   * Kolla om en sida är tillgänglig för inloggad användare.
-   */
   canViewPage(pageId) {
     if (!this.isLoggedIn()) return false;
     const required = this.PAGE_PERMISSIONS[pageId];
-    if (required === undefined) return true; // okänd sida — tillåt
+    if (required === undefined) return true;
     return this.canAny(required);
   },
 
-  /**
-   * Guard: returnerar true om behörighet finns, annars visar toast och returnerar false.
-   * Används inuti onclick-handlers och metoder.
-   */
   require(permission) {
     if (this.can(permission)) return true;
     showToast('Du saknar behörighet för den åtgärden');
     return false;
   },
 
-  /**
-   * Returnerar alla behörigheter för den inloggade användaren.
-   * Slår upp rollens permissions från state.roles (live, inte cachad session).
-   */
   _getPermsForUser(user) {
     if (!user) return [];
     const role = (state.roles || []).find(r => r.id === user.role);
     if (role) return role.permissions || [];
-    // fallback: staff-level permissions (bakåtkompatibilitet)
     return user.permissions || [];
   },
 
-  login(username, password) {
-    const staff = (state.staff || []).find(s =>
-      s.active &&
-      s.username.toLowerCase() === username.toLowerCase().trim() &&
-      s.password === password
-    );
-    if (!staff) return { ok: false, error: 'Fel användarnamn eller lösenord' };
+  /* ── Intern helpers ───────────────────────────────────── */
 
-    const user = {
-      id:        staff.id,
-      firstName: staff.firstName,
-      lastName:  staff.lastName,
-      role:      staff.role,
-      username:  staff.username,
-      title:     staff.title
-    };
-
-    try { sessionStorage.setItem(this.SESSION_KEY, JSON.stringify(user)); } catch(e) {}
-    state.currentUser = user;
-    return { ok: true, user };
+  _saveSession() {
+    try { localStorage.setItem(this.SESSION_KEY, JSON.stringify(this._session)); } catch(e) {}
   },
 
-  logout() {
-    try { sessionStorage.removeItem(this.SESSION_KEY); } catch(e) {}
-    state.currentUser = null;
-    App.showLogin();
-  },
-
-  init() {
-    const user = this.getUser();
-    if (user) { state.currentUser = user; return true; }
-    return false;
+  _clearSession() {
+    this._session = null;
+    try { localStorage.removeItem(this.SESSION_KEY); } catch(e) {}
   }
 };

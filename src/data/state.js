@@ -53,7 +53,8 @@ let state = {
 };
 
 /**
- * Initiera state från Supabase (ett bulk-anrop), fall back på localStorage → seed-data
+ * Initiera state från Supabase (ett bulk-anrop), fall back på localStorage → seed-data.
+ * Kräver att Auth.getAccessToken() returnerar ett giltigt JWT (RLS blockerar anon).
  */
 async function initState() {
   let d = {};
@@ -70,7 +71,6 @@ async function initState() {
   state.workOrders         = g('workOrders')       || SeedData.workOrders;
   state.offers             = g('offers')           || SeedData.offers;
   state.invoices           = g('invoices')         || SeedData.invoices;
-  state.staff              = g('staff')            || SeedData.staff;
   state.properties         = g('properties')       || SeedData.properties;
   state.priceGroups        = g('priceGroups')      || SeedData.priceGroups;
   state.priceProfiles      = g('priceProfiles')    || SeedData.priceProfiles || [];
@@ -90,6 +90,15 @@ async function initState() {
   state.serviceTemplates   = g('serviceTemplates') || SeedData.serviceTemplates || [];
   state.emailTemplates     = g('emailTemplates')   || SeedData.emailTemplates  || [];
   state.notifications      = g('notifications')    || [];
+
+  /* Ladda staff — strippa alltid lösenordsfält (ska aldrig ligga i frontend) */
+  const rawStaff = g('staff') || SeedData.staff;
+  state.staff = rawStaff.map(function(s) {
+    const clean = Object.assign({}, s);
+    delete clean.password;
+    delete clean.passwordHash;
+    return clean;
+  });
 
   // Rensa AO:er vars 14-dagarsfönster gått ut
   const _trashNow = new Date();
@@ -111,10 +120,10 @@ async function initState() {
     return r.active !== undefined ? r : Object.assign({ active: true }, r);
   });
 
-  // Stämplingsstate (per-enhet från localStorage)
-  state.stampActive    = !!(g('stampActive'));
-  state.stampTimestamp = g('stampTs')    || null;
-  state.stampAoId      = g('stampAoId') || null;
+  // Stämplingsstate (per-enhet, läs från localStorage direkt — inte via Supabase blob)
+  try { state.stampActive    = !!JSON.parse(localStorage.getItem('vift_stampActive')); } catch(e) { state.stampActive = false; }
+  try { state.stampTimestamp = JSON.parse(localStorage.getItem('vift_stampTs'))    || null; } catch(e) { state.stampTimestamp = null; }
+  try { state.stampAoId      = JSON.parse(localStorage.getItem('vift_stampAoId')) || null; } catch(e) { state.stampAoId = null; }
 }
 
 /**

@@ -40,8 +40,8 @@
     <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:20px;text-align:center;">Logga in</h2>
 
     <div class="fg">
-      <label>Användarnamn</label>
-      <input type="text" id="login-user" placeholder="Användarnamn" autocomplete="username"
+      <label>E-post</label>
+      <input type="email" id="login-user" placeholder="din@epost.se" autocomplete="email"
         onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
     </div>
     <div class="fg" style="margin-top:8px;">
@@ -257,17 +257,17 @@
 <!-- ── JavaScript — laddningsordning ──────── -->
 
 <!-- 1. Data-lager -->
-<script src="src/data/storage.js?v=3"></script>
+<script src="src/data/storage.js?v=4"></script>
 <script src="src/data/schema.js?v=14"></script>
-<script src="src/data/seedData.js?v=23"></script>
-<script src="src/data/state.js?v=18"></script>
+<script src="src/data/seedData.js?v=24"></script>
+<script src="src/data/state.js?v=19"></script>
 <script src="src/data/DashboardConfig.js?v=7"></script>
 
 <!-- 2. Services -->
 <script src="src/services/BrandingService.js?v=4"></script>
 <script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
-<script src="src/services/AuthService.js?v=5"></script>
+<script src="src/services/AuthService.js?v=6"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
 <script src="src/services/WorkOrderService.js?v=7"></script>
 <script src="src/services/TimeService.js?v=4"></script>
@@ -297,7 +297,7 @@
 <script src="src/pages/RecurringPage.js?v=8"></script>
 <script src="src/pages/SalesPage.js?v=3"></script>
 <script src="src/pages/PropertyDetailPage.js?v=3"></script>
-<script src="src/pages/PageShells.js?v=62"></script>
+<script src="src/pages/PageShells.js?v=63"></script>
 <script src="src/pages/RonderingPage.js?v=3"></script>
 <script src="src/pages/OperationsPage.js?v=7"></script>
 <script src="src/pages/MyJobsPage.js?v=9"></script>
@@ -308,25 +308,33 @@
 <script>
 const App = {
 
+  /*
+   * Startflöde (Fas 1 — Supabase Auth):
+   * 1. Försök återställa JWT-session från localStorage (sync)
+   * 2. Om session finns → förnya token vid behov → ladda data → visa app
+   * 3. Om ingen session → visa inloggning direkt (snabbt, ingen data-hämtning)
+   * Data laddas aldrig utan giltig JWT (RLS blockerar anon-access).
+   */
   async init() {
-    // Visa laddningsindikator på login-knappen medan data hämtas från Supabase
-    const loginBtn = document.querySelector('#login-screen button.btn.bp');
-    if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = 'Laddar…'; }
+    const hadSession = Auth.init();   // sync — läser bara localStorage
 
-    // Ladda state från Supabase (ett HTTP-anrop), fallback: localStorage → seed-data
-    await initState();
+    if (hadSession) {
+      const btn = document.querySelector('#login-screen button.btn.bp');
+      if (btn) { btn.disabled = true; btn.textContent = 'Återansluter…'; }
 
-    // Återställ knapp
-    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = 'Logga in'; }
-
-    // Försök återställa session
-    const loggedIn = Auth.init();
-
-    if (loggedIn) {
-      this.showApp();
-    } else {
-      this.showLogin();
+      const tokenOk = await Auth.refreshIfNeeded();
+      if (tokenOk) {
+        await initState();
+        Auth._resolveUser();
+        if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
+        this.showApp();
+        return;
+      }
+      Auth._clearSession();
+      if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
     }
+
+    this.showLogin();
   },
 
   showLogin() {
@@ -342,45 +350,52 @@ const App = {
   showApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-
-    // Apply brand colors immediately (from saved settings)
     BrandingService.applyColors();
-
-    // Apply personal user preferences (accent color, density)
     const _u = Auth.getUser();
     if (_u) UserPrefsService.apply(_u.id);
-
-    // Rendera sidebar
     Sidebar.render();
-
-    // Patch login logo to use uploaded branding (for next time login screen shows)
     BrandingService.applyToLogin();
-
-    // Visa dashboard
     Router.showPage('pg-dash');
   },
 
-  login() {
-    const username = (document.getElementById('login-user').value || '').trim();
-    const password = document.getElementById('login-pass').value || '';
+  async login() {
+    const email    = (document.getElementById('login-user').value  || '').trim();
+    const password = (document.getElementById('login-pass').value  || '');
     const errEl    = document.getElementById('login-err');
+    const btn      = document.querySelector('#login-screen button.btn.bp');
 
-    if (!username || !password) {
-      errEl.textContent = 'Fyll i användarnamn och lösenord';
+    if (!email || !password) {
+      errEl.textContent = 'Fyll i e-post och lösenord';
       errEl.style.display = 'block';
       return;
     }
 
-    const result = Auth.login(username, password);
-    if (result.ok) {
-      errEl.style.display = 'none';
-      this.showApp();
-    } else {
+    if (btn) { btn.disabled = true; btn.textContent = 'Loggar in…'; }
+
+    const result = await Auth.login(email, password);
+    if (!result.ok) {
       errEl.textContent = result.error;
       errEl.style.display = 'block';
       document.getElementById('login-pass').value = '';
       document.getElementById('login-pass').focus();
+      if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
+      return;
     }
+
+    errEl.style.display = 'none';
+    if (btn) btn.textContent = 'Laddar data…';
+
+    await initState();
+    Auth._resolveUser();
+
+    /* Skriv tillbaka lösenordsfri staff-data till Supabase (engångsmigration) */
+    if (!localStorage.getItem('vift_pw_cleaned')) {
+      persist();
+      localStorage.setItem('vift_pw_cleaned', '1');
+    }
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
+    this.showApp();
   }
 };
 

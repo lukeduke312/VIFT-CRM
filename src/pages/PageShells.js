@@ -3855,17 +3855,9 @@ const StaffPage = {
           }).join('')}
         </div>
       </div>
-      ${s ? `
-      <div class="fg"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;font-weight:600;letter-spacing:0;cursor:pointer;">
-        <input type="checkbox" id="sf-change-pw" onchange="document.getElementById('sf-pw-wrap').style.display=this.checked?'':'none'">
-        Ändra lösenord
-      </label></div>
-      <div id="sf-pw-wrap" style="display:none;">
-        <div class="fg"><label>Nytt lösenord</label>
-          <input type="password" id="sf-pw" placeholder="Minst 4 tecken" autocomplete="new-password"></div>
-      </div>` : `
-      <div class="fg"><label>Lösenord <span style="color:var(--rd)">*</span></label>
-        <input type="password" id="sf-pw" placeholder="Minst 4 tecken" autocomplete="new-password"></div>`}`;
+      <div class="nbox" style="font-size:11px;color:var(--mt);">
+        ${ic('lock',11)} Inloggning hanteras via Supabase Auth. ${s ? 'Lösenord ändras i Supabase Dashboard.' : 'Skapa inloggningskonto i Supabase Dashboard efter att personposten sparats.'}
+      </div>`;
   },
 
   _openTitlePicker() {
@@ -3988,29 +3980,19 @@ const StaffPage = {
     };
 
     if (!staffId) {
-      const pw = document.getElementById('sf-pw')?.value || '';
-      if (!pw || pw.length < 4) { showToast('Lösenord krävs (minst 4 tecken)'); return; }
       if ((state.staff||[]).find(s => s.username === uname)) { showToast('Användarnamnet används redan'); return; }
-      state.staff.push({ ...data, id: newId(state.staff||[], 'ST'), password: pw, permissions: [], active: true, createdAt: new Date().toISOString() });
-      persist(); Modal.close(); showToast(`${first} ${last} skapad`);
+      state.staff.push({ ...data, id: newId(state.staff||[], 'ST'), permissions: [], active: true, createdAt: new Date().toISOString() });
+      persist(); Modal.close(); showToast(`${first} ${last} skapad — kom ihåg att skapa inloggningskonto i Supabase Dashboard`);
     } else {
       const idx = (state.staff||[]).findIndex(s => s.id === staffId);
       if (idx < 0) return;
       if ((state.staff||[]).find(s => s.username === uname && s.id !== staffId)) { showToast('Användarnamnet används redan'); return; }
-      const changePw = document.getElementById('sf-change-pw');
-      if (changePw?.checked) {
-        const pw = document.getElementById('sf-pw')?.value || '';
-        if (!pw || pw.length < 4) { showToast('Lösenord krävs (minst 4 tecken)'); return; }
-        data.password = pw;
-      }
       state.staff[idx] = { ...state.staff[idx], ...data };
       persist(); Modal.close(); showToast('Sparat');
-      // If editing the currently logged-in user, refresh their session
+      // Om den inloggade användaren redigerar sig själv — uppdatera state.currentUser
       const _cu = Auth.getUser();
       if (_cu && _cu.id === staffId) {
-        const _updated = { ..._cu, firstName: data.firstName, lastName: data.lastName, role: data.role, username: data.username, title: data.title };
-        try { sessionStorage.setItem(Auth.SESSION_KEY, JSON.stringify(_updated)); } catch(e) {}
-        state.currentUser = _updated;
+        state.currentUser = { ..._cu, firstName: data.firstName, lastName: data.lastName, role: data.role, username: data.username, title: data.title };
         Sidebar.render();
       }
     }
