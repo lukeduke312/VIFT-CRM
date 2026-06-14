@@ -229,7 +229,7 @@ const WorkOrderDetailPage = {
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.openReactivateModal()">${ic('rotate-ccw',13)} Återaktivera</button>`);
     }
     if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.archived && !ao.deleted) {
-      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()" title="Fler statusval">${ic('more-horizontal',13)}</button>`);
+      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('refresh-cw',13)} Byt status</button>`);
     }
     // Edit / staff (secondary)
     if (canEdit) {
@@ -1674,7 +1674,14 @@ const WorkOrderDetailPage = {
       selectedIds.push(responsibleId);
     }
 
+    const prevStaff = (ao.staff || []).slice();
     WorkOrderService.updateStaff(aoId, { staffIds: selectedIds, responsibleStaffId: responsibleId, moveToPool });
+    // Log assignment changes
+    const added = selectedIds.filter(id => !prevStaff.includes(id));
+    if (added.length > 0) {
+      const names = added.map(id => { const s = getStaff(id); return s ? s.firstName + ' ' + s.lastName : id; }).join(', ');
+      ActivityService.log('staff_assigned', `Personal tilldelad ${aoId}: ${names}`, { workOrderId: aoId });
+    }
     Modal.close();
     WorkOrderDetailPage.render({ aoId });
     showToast('Personal uppdaterad');
