@@ -37,25 +37,67 @@
   </div>
 
   <div style="width:100%;max-width:340px;background:#fff;border-radius:20px;padding:24px 20px;">
-    <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:20px;text-align:center;">Logga in</h2>
 
-    <div class="fg">
-      <label>E-post</label>
-      <input type="email" id="login-user" placeholder="din@epost.se" autocomplete="email"
-        onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
+    <!-- Panel 1: Logga in -->
+    <div id="lp-login">
+      <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:20px;text-align:center;">Logga in</h2>
+      <div class="fg">
+        <label>E-post</label>
+        <input type="email" id="login-user" placeholder="din@epost.se" autocomplete="email"
+          onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
+      </div>
+      <div class="fg" style="margin-top:8px;">
+        <label>Lösenord</label>
+        <input type="password" id="login-pass" placeholder="Lösenord"
+          autocomplete="current-password"
+          onkeydown="if(event.key==='Enter') App.login()">
+      </div>
+      <div id="login-err" style="color:var(--rd);font-size:12px;font-weight:700;text-align:center;margin:6px 0;display:none;"></div>
+      <button class="btn bp bfull" style="margin-top:12px;padding:12px;" onclick="App.login()">Logga in</button>
+      <div style="text-align:center;margin-top:14px;">
+        <button type="button" onclick="App.showForgotPassword()"
+          style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;padding:0;text-decoration:underline;">
+          Glömt lösenord?
+        </button>
+      </div>
     </div>
-    <div class="fg" style="margin-top:8px;">
-      <label>Lösenord</label>
-      <input type="password" id="login-pass" placeholder="Lösenord"
-        autocomplete="current-password"
-        onkeydown="if(event.key==='Enter') App.login()">
+
+    <!-- Panel 2: Glömt lösenord -->
+    <div id="lp-forgot" style="display:none;">
+      <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;text-align:center;">Återställ lösenord</h2>
+      <p style="font-size:12px;color:var(--mt);text-align:center;margin-bottom:16px;">Ange din e-post så skickar vi en återställningslänk.</p>
+      <div class="fg">
+        <label>E-post</label>
+        <input type="email" id="reset-email" placeholder="din@epost.se" autocomplete="email"
+          onkeydown="if(event.key==='Enter') App.sendReset()">
+      </div>
+      <div id="reset-msg" style="font-size:12px;font-weight:700;text-align:center;margin:6px 0;display:none;"></div>
+      <button class="btn bp bfull" style="margin-top:12px;padding:12px;" onclick="App.sendReset()">Skicka länk</button>
+      <div style="text-align:center;margin-top:14px;">
+        <button type="button" onclick="App.showLoginPanel()"
+          style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;padding:0;text-decoration:underline;">
+          Tillbaka till inloggning
+        </button>
+      </div>
     </div>
 
-    <div id="login-err" style="color:var(--rd);font-size:12px;font-weight:700;text-align:center;margin:6px 0;display:none;"></div>
-
-    <button class="btn bp bfull" style="margin-top:12px;padding:12px;" onclick="App.login()">
-      Logga in
-    </button>
+    <!-- Panel 3: Ange nytt lösenord (visas efter klick på återställningslänk) -->
+    <div id="lp-setpass" style="display:none;">
+      <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;text-align:center;">Välj nytt lösenord</h2>
+      <p style="font-size:12px;color:var(--mt);text-align:center;margin-bottom:16px;">Ange ditt nya lösenord. Minst 8 tecken.</p>
+      <div class="fg">
+        <label>Nytt lösenord</label>
+        <input type="password" id="new-pass" placeholder="Minst 8 tecken" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter') document.getElementById('new-pass2').focus()">
+      </div>
+      <div class="fg" style="margin-top:8px;">
+        <label>Upprepa lösenord</label>
+        <input type="password" id="new-pass2" placeholder="Upprepa lösenord" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter') App.saveNewPassword()">
+      </div>
+      <div id="setpass-msg" style="font-size:12px;font-weight:700;text-align:center;margin:6px 0;display:none;"></div>
+      <button class="btn bp bfull" style="margin-top:12px;padding:12px;" onclick="App.saveNewPassword()">Spara nytt lösenord</button>
+    </div>
 
   </div>
 </div>
@@ -267,7 +309,7 @@
 <script src="src/services/BrandingService.js?v=4"></script>
 <script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
-<script src="src/services/AuthService.js?v=6"></script>
+<script src="src/services/AuthService.js?v=7"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
 <script src="src/services/WorkOrderService.js?v=7"></script>
 <script src="src/services/TimeService.js?v=4"></script>
@@ -310,16 +352,25 @@ const App = {
 
   /*
    * Startflöde (Fas 1 — Supabase Auth):
+   * 0. Kontrollera URL-hash för e-postlänk (återställning/inbjudan) — FÖRST
    * 1. Försök återställa JWT-session från localStorage (sync)
    * 2. Om session finns → förnya token vid behov → ladda data → visa app
-   * 3. Om ingen session → visa inloggning direkt (snabbt, ingen data-hämtning)
+   * 3. Om ingen session → visa inloggning
    * Data laddas aldrig utan giltig JWT (RLS blockerar anon-access).
    */
   async init() {
+    /* Steg 0: Hantera Supabase e-postlänk (lösenordsåterställning m.m.) */
+    const linkType = Auth.handleEmailLink();   // sync, rensar URL-hashen
+    if (linkType === 'recovery') {
+      this.showSetPassword();
+      return;
+    }
+
+    /* Steg 1–3: Normal session-restore */
     const hadSession = Auth.init();   // sync — läser bara localStorage
 
     if (hadSession) {
-      const btn = document.querySelector('#login-screen button.btn.bp');
+      const btn = document.querySelector('#lp-login button.btn.bp');
       if (btn) { btn.disabled = true; btn.textContent = 'Återansluter…'; }
 
       const tokenOk = await Auth.refreshIfNeeded();
@@ -337,14 +388,107 @@ const App = {
     this.showLogin();
   },
 
+  /* ── Panel-hjälpare ──────────────────────────── */
+
+  _loginPanel(id) {
+    ['lp-login','lp-forgot','lp-setpass'].forEach(p => {
+      const el = document.getElementById(p);
+      if (el) el.style.display = (p === id) ? '' : 'none';
+    });
+  },
+
+  showLoginPanel()      { this._loginPanel('lp-login');   setTimeout(() => { const e = document.getElementById('login-user'); if(e) e.focus(); }, 80); },
+  showForgotPassword()  { this._loginPanel('lp-forgot');  setTimeout(() => { const e = document.getElementById('reset-email'); if(e) e.focus(); }, 80); },
+  showSetPassword()     {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    this._loginPanel('lp-setpass');
+    setTimeout(() => { const e = document.getElementById('new-pass'); if(e) e.focus(); }, 80);
+  },
+
   showLogin() {
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
+    this._loginPanel('lp-login');
     BrandingService.applyToLogin();
     setTimeout(() => {
       const el = document.getElementById('login-user');
       if (el) el.focus();
     }, 100);
+  },
+
+  /* Skicka återställningslänk */
+  async sendReset() {
+    const email  = (document.getElementById('reset-email').value || '').trim();
+    const msgEl  = document.getElementById('reset-msg');
+    const btn    = document.querySelector('#lp-forgot button.btn.bp');
+
+    if (!email) {
+      msgEl.style.color = 'var(--rd)';
+      msgEl.textContent = 'Ange din e-postadress.';
+      msgEl.style.display = 'block';
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Skickar…'; }
+    msgEl.style.display = 'none';
+
+    const result = await Auth.sendPasswordReset(email);
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Skicka länk'; }
+
+    if (!result.ok) {
+      msgEl.style.color = 'var(--rd)';
+      msgEl.textContent = result.error;
+    } else {
+      msgEl.style.color = 'var(--gr)';
+      msgEl.textContent = 'Länk skickad! Kolla din inkorg (och skräppost).';
+      if (btn) btn.disabled = true;
+    }
+    msgEl.style.display = 'block';
+  },
+
+  /* Spara nytt lösenord via återställningstoken */
+  async saveNewPassword() {
+    const p1    = document.getElementById('new-pass').value  || '';
+    const p2    = document.getElementById('new-pass2').value || '';
+    const msgEl = document.getElementById('setpass-msg');
+    const btn   = document.querySelector('#lp-setpass button.btn.bp');
+
+    if (p1.length < 8) {
+      msgEl.style.color = 'var(--rd)';
+      msgEl.textContent = 'Lösenordet måste vara minst 8 tecken.';
+      msgEl.style.display = 'block';
+      return;
+    }
+    if (p1 !== p2) {
+      msgEl.style.color = 'var(--rd)';
+      msgEl.textContent = 'Lösenorden matchar inte.';
+      msgEl.style.display = 'block';
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Sparar…'; }
+    msgEl.style.display = 'none';
+
+    const result = await Auth.updatePassword(p1);
+
+    if (!result.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Spara nytt lösenord'; }
+      msgEl.style.color = 'var(--rd)';
+      msgEl.textContent = result.error;
+      msgEl.style.display = 'block';
+      return;
+    }
+
+    msgEl.style.color = 'var(--gr)';
+    msgEl.textContent = 'Lösenord sparat! Laddar appen…';
+    msgEl.style.display = 'block';
+
+    /* Token från länken räcker för att ladda data direkt */
+    await initState();
+    Auth._resolveUser();
+    this.showApp();
   },
 
   showApp() {

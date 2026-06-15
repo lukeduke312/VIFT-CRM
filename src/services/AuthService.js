@@ -1,5 +1,5 @@
 /**
- * AuthService v6 — Supabase Auth + rollbaserade behörigheter
+ * AuthService v7 — Supabase Auth + rollbaserade behörigheter
  *
  * Inloggning: Supabase Auth (email + lösenord via /auth/v1/token)
  * Session: JWT + refresh_token i localStorage ('vift_auth_v2')
@@ -233,6 +233,90 @@ const Auth = {
     const role = (state.roles || []).find(r => r.id === user.role);
     if (role) return role.permissions || [];
     return user.permissions || [];
+  },
+
+  /* ── Lösenordsåterställning ──────────────────────────── */
+
+  /*
+   * Anropas synkront vid sidladdning (före session-restore).
+   * Parsas URL-hash för tokens från Supabase e-postlänkar.
+   * Returnerar 'recovery', 'signup' eller null.
+   * Supabase skickar: #access_token=...&type=recovery&...
+   */
+  handleEmailLink() {
+    const hash = window.location.hash;
+    if (!hash || hash.length < 2) return null;
+
+    const params = {};
+    hash.slice(1).split('&').forEach(part => {
+      const eq = part.indexOf('=');
+      if (eq > 0) params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
+    });
+
+    if (!params.access_token || !params.type) return null;
+
+    this._session = {
+      access_token:  params.access_token,
+      refresh_token: params.refresh_token || '',
+      expires_at:    params.expires_in ? Date.now() + Number(params.expires_in) * 1000 : Date.now() + 3600000,
+      user_email:    params.email || ''
+    };
+    this._saveSession();
+
+    /* Ta bort hashen ur URL utan sidladdning */
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch(e) {}
+
+    return params.type;  // 'recovery' | 'signup' | 'magiclink' | ...
+  },
+
+  /*
+   * Skicka återställningslänk till angiven e-post.
+   * Kräver bara anon-nyckel — service role key används INTE.
+   */
+  async sendPasswordReset(email) {
+    try {
+      const redirectTo = window.location.origin + window.location.pathname;
+      const res = await fetch(SUPABASE_URL + '/auth/v1/recover', {
+        method:  'POST',
+        headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: email.toLowerCase().trim(), redirect_to: redirectTo })
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        return { ok: false, error: d.msg || d.error || 'Kunde inte skicka återställningslänk.' };
+      }
+      return { ok: true };
+    } catch(e) {
+      return { ok: false, error: 'Kunde inte ansluta till servern.' };
+    }
+  },
+
+  /*
+   * Uppdatera lösenord med JWT från återställningslänken (finns i this._session).
+   * Anropas när användaren skriver sitt nya lösenord i ange-nytt-lösenord-vyn.
+   */
+  async updatePassword(newPassword) {
+    if (!this._session || !this._session.access_token) {
+      return { ok: false, error: 'Ogiltig session — begär en ny återställningslänk.' };
+    }
+    try {
+      const res = await fetch(SUPABASE_URL + '/auth/v1/user', {
+        method:  'PUT',
+        headers: {
+          'apikey':        SUPABASE_AKEY,
+          'Authorization': 'Bearer ' + this._session.access_token,
+          'Content-Type':  'application/json'
+        },
+        body: JSON.stringify({ password: newPassword })
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        return { ok: false, error: d.msg || d.message || d.error || 'Kunde inte uppdatera lösenord.' };
+      }
+      return { ok: true };
+    } catch(e) {
+      return { ok: false, error: 'Kunde inte ansluta till servern.' };
+    }
   },
 
   /* ── Intern helpers ───────────────────────────────────── */
