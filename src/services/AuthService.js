@@ -275,7 +275,7 @@ const Auth = {
    */
   async sendPasswordReset(email) {
     try {
-      const redirectTo = window.location.origin + window.location.pathname;
+      const redirectTo = window.location.origin;
       const res = await fetch(SUPABASE_URL + '/auth/v1/recover', {
         method:  'POST',
         headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
