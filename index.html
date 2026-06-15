@@ -361,7 +361,7 @@ const App = {
   async init() {
     /* Steg 0: Hantera Supabase e-postlänk (lösenordsåterställning m.m.) */
     const linkType = Auth.handleEmailLink();   // sync, rensar URL-hashen
-    if (linkType === 'recovery') {
+    if (linkType === 'recovery' || linkType === 'signup' || linkType === 'invite') {
       this.showSetPassword();
       return;
     }
