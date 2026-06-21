@@ -165,10 +165,10 @@
   gap: 2px;
 }
 .nav-brand-fb-vift {
-  font-size: 22px;
-  font-weight: 900;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--brand-primary-text);
-  letter-spacing: -0.8px;
+  letter-spacing: -0.5px;
   line-height: 1;
 }
 .nav-brand-fb-sub {
@@ -184,8 +184,8 @@
 }
 .nav-section-label {
   font-size: 10px;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--brand-primary-text) 45%, transparent);
+  font-weight: 500;
+  color: color-mix(in srgb, var(--brand-primary-text) 40%, transparent);
   text-transform: none;
   letter-spacing: .2px;
   padding: 0 4px 4px;
@@ -195,11 +195,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
   color: color-mix(in srgb, var(--brand-primary-text) 65%, transparent);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all .15s;
   position: relative;
@@ -241,7 +241,7 @@
   color: color-mix(in srgb, var(--brand-primary-text) 90%, transparent);
   border-radius: 100px;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   padding: 1px 5px;
   min-width: 16px;
   text-align: center;
@@ -286,7 +286,7 @@
   background: var(--sky);
   color: #fff;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -326,7 +326,7 @@
 .topbar-title h1 {
   color: var(--brand-primary-text);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

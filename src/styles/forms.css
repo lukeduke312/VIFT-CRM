@@ -12,7 +12,7 @@
 
 label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--mt);
   letter-spacing: .1px;
 }
@@ -20,20 +20,30 @@ label {
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 select,
 textarea {
-  border: 1.5px solid var(--br);
+  border: 1px solid var(--br);
   border-radius: var(--rs);
-  padding: 9px 11px;
-  font-size: 16px;
+  padding: 8px 10px;
+  font-size: 16px; /* 16px krävs på mobil för att förhindra iOS auto-zoom */
   font-family: inherit;
   background: #fff;
   color: var(--tx);
   width: 100%;
-  min-height: 42px;
+  min-height: 40px;
   appearance: none;
   -webkit-appearance: none;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
   box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 14px;
+    min-height: 36px;
+    padding: 7px 10px;
+  }
 }
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
 select:focus,
@@ -105,7 +115,7 @@ select {
 /* ── PIN input ────────────────────────── */
 .pin-input {
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 600;
   text-align: center;
   letter-spacing: 9px;
   padding: 14px;

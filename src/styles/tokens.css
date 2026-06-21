@@ -33,18 +33,18 @@
   --wh:    #ffffff;
 
   /* Shadows */
-  --sh:    0 1px 3px rgba(0,0,0,.08);
-  --shm:   0 4px 16px rgba(13,43,78,.10);
+  --sh:    0 1px 2px rgba(0,0,0,.06);
+  --shm:   0 2px 8px rgba(13,43,78,.08);
 
   /* Radii */
-  --r:     16px;
-  --rs:    10px;
-  --rx:    6px;
+  --r:     12px;
+  --rs:    8px;
+  --rx:    5px;
 
   /* Sidebar */
   --sidebar-w:      240px;
   --sidebar-w-xl:   260px;
 
   /* Typography */
-  --font: 'Montserrat', system-ui, sans-serif;
+  --font: 'Inter', system-ui, sans-serif;
 }

@@ -9,9 +9,9 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 15px;
+  padding: 8px 14px;
   border-radius: var(--rs);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
   cursor: pointer;
   border: none;
@@ -22,8 +22,8 @@
 .btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
-.bp  { background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); color: var(--brand-primary-text); box-shadow: 0 2px 6px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08); }
-.bp:hover { box-shadow: 0 4px 14px rgba(0,0,0,.20), 0 2px 4px rgba(0,0,0,.08); transform: translateY(-1px); }
+.bp  { background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); color: var(--brand-primary-text); box-shadow: 0 1px 4px rgba(0,0,0,.10); }
+.bp:hover { box-shadow: 0 3px 10px rgba(0,0,0,.15); transform: translateY(-1px); }
 .bs  { background: var(--acc); color: var(--acc-text); border: 1.5px solid var(--br); }
 .bs:hover { border-color: var(--sky); }
 .bsu { background: linear-gradient(135deg, #15803d, #16a34a); color: #fff; }
@@ -32,18 +32,18 @@
 .bghost { background: transparent; color: var(--mt); border: 1.5px solid var(--br); }
 .bghost:hover { border-color: var(--sky); color: var(--navy); }
 
-.bsm  { padding: 6px 11px; font-size: 12px; border-radius: var(--rx); }
-.bxs  { padding: 4px 9px;  font-size: 11px; border-radius: var(--rx); }
+.bsm  { padding: 5px 10px; font-size: 12px; border-radius: var(--rx); }
+.bxs  { padding: 3px 8px;  font-size: 11px; border-radius: var(--rx); }
 .bfull { width: 100%; }
 
 /* ── Badges / statusar ────────────────── */
 .bdg {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 100px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 500;
   white-space: nowrap;
   gap: 4px;
 }
@@ -59,14 +59,14 @@
 /* ── Kort ─────────────────────────────── */
 .card {
   background: #fff;
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--br);
-  box-shadow: 0 2px 8px rgba(0,0,0,.06), 0 0 0 0 transparent;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
   overflow: hidden;
   transition: box-shadow .15s;
 }
 .card-header {
-  padding: 14px 18px 13px;
+  padding: 11px 14px 10px;
   border-bottom: 1px solid var(--br);
   display: flex;
   align-items: center;
@@ -78,23 +78,23 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--navy);
   letter-spacing: .1px;
   line-height: 1;
   margin: 0;
 }
-.card-body { padding: 14px 18px; }
+.card-body { padding: 11px 14px; }
 
 /* ── Listrader ────────────────────────── */
 .list-item {
   background: #fff;
   border-radius: var(--rs);
-  padding: 12px 14px;
-  margin-bottom: 6px;
+  padding: 10px 12px;
+  margin-bottom: 4px;
   border: 1px solid var(--br);
-  border-left: 4px solid var(--br);
+  border-left: 3px solid var(--br);
   cursor: pointer;
   transition: all .12s;
   display: block;
@@ -112,8 +112,8 @@
 .list-item.p-normal { border-left-color: var(--sky); }
 .list-item.p-lag    { border-left-color: var(--br); }
 
-.item-title { font-size: 14px; font-weight: 700; color: var(--tx); }
-.item-sub   { font-size: 11px; color: var(--mt); margin-top: 3px; }
+.item-title { font-size: 13px; font-weight: 600; color: var(--tx); }
+.item-sub   { font-size: 11px; color: var(--mt); margin-top: 2px; }
 .item-row   { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 
 /* ── Crow (enkel rad i kort) ──────────── */
@@ -140,8 +140,8 @@
   font-size: 13px;
 }
 .dr:last-child { border-bottom: none; }
-.dk { color: var(--mt); font-weight: 500; flex-shrink: 0; margin-right: 10px; }
-.dv { font-weight: 600; color: var(--tx); text-align: right; }
+.dk { color: var(--mt); font-weight: 400; flex-shrink: 0; margin-right: 10px; }
+.dv { font-weight: 500; color: var(--tx); text-align: right; }
 .dv.link { color: var(--sky); cursor: pointer; }
 .dv.link:hover { text-decoration: underline; }
 
@@ -161,7 +161,7 @@
 }
 .modal-sheet {
   background: #fff;
-  border-radius: 16px 16px 0 0;
+  border-radius: 14px 14px 0 0;
   width: 100%;
   max-height: calc(94dvh - env(safe-area-inset-top));
   display: flex;
@@ -181,10 +181,10 @@
   flex-shrink: 0;
 }
 .modal-title {
-  font-size: 17px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--navy);
-  padding: 12px 16px 4px;
+  padding: 10px 14px 4px;
   flex-shrink: 0;
 }
 .modal-body {
@@ -193,7 +193,7 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: 8px 16px 16px;
+  padding: 6px 14px 14px;
   scrollbar-width: thin;
   scrollbar-color: rgba(0,0,0,.15) transparent;
 }
@@ -208,8 +208,8 @@
   flex-shrink: 0;
   display: flex;
   gap: 8px;
-  padding: 12px 16px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  padding: 10px 14px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--br);
   background: #fff;
 }
@@ -217,11 +217,11 @@
 @media (min-width: 768px) {
   .modal-overlay { align-items: center; }
   .modal-sheet {
-    border-radius: 16px;
-    max-width: 580px;
+    border-radius: 12px;
+    max-width: 560px;
     max-height: 88dvh;
   }
-  .modal-wide { max-width: 720px; }
+  .modal-wide { max-width: 700px; }
 }
 
 /* ── Multi-select picker ──────────────── */
@@ -503,7 +503,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 11px; font-weight: 800;
+  font-size: 11px; font-weight: 600;
   transition: all .15s;
 }
 .chc.done { background: var(--gr); border-color: var(--gr); color: #fff; }
@@ -563,7 +563,7 @@
   right: 8px;
   color: var(--sky);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 /* ── Modal open — blockera bakgrundscroll ─ */
@@ -598,7 +598,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   color: #fff;
   border-radius: 100px;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   padding: 0 4px;
   min-width: 14px;
   text-align: center;
@@ -865,7 +865,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-svc-card-meta {
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .5px;
   color: var(--navy);
@@ -878,7 +878,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-svc-card-price {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--navy);
   text-align: right;
 }
@@ -906,7 +906,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   padding: 8px 12px;
   background: var(--navy);
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .7px;
   color: rgba(255,255,255,.7);
@@ -953,7 +953,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-top: 6px;
 }
 .off-totals-cust-lbl { font-size: 11px; font-weight: 600; opacity: .8; }
-.off-totals-cust-val { font-size: 16px; font-weight: 800; }
+.off-totals-cust-val { font-size: 16px; font-weight: 600; }
 
 /* ── OFFER STEP 1 TWO-COLUMN GRID ── */
 .off-s1-grid {
@@ -1147,7 +1147,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-kpi-card--navy .off-kpi-lbl { color: var(--acc-text); opacity: .75; }
 .off-kpi-val {
   font-size: 22px;
-  font-weight: 900;
+  font-weight: 700;
   color: var(--navy);
   line-height: 1;
   margin-bottom: 3px;
@@ -1211,7 +1211,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-offer-card { border-left-width: 4px !important; padding: 12px 14px; }
 .off-offer-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
 .off-offer-card-id { font-size: 11px; font-weight: 700; color: var(--mt); letter-spacing: .2px; }
-.off-offer-card-title { font-size: 14px; font-weight: 800; color: var(--tx); margin-bottom: 3px; line-height: 1.25; }
+.off-offer-card-title { font-size: 14px; font-weight: 600; color: var(--tx); margin-bottom: 3px; line-height: 1.25; }
 .off-offer-card-cu { font-size: 12px; color: var(--mt); margin-bottom: 5px; display: flex; align-items: center; gap: 4px; }
 .off-offer-card-amounts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--mt); margin-bottom: 5px; }
 .off-offer-card-amounts strong { color: var(--navy); }
@@ -1222,7 +1222,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ins-followup { background: #fff7ed; color: var(--or); }
 .ins-godkand { background: #f0fdf4; color: var(--gr); }
 .ins-nekad   { background: #fef2f2; color: var(--rd); }
-.ins-expiry  { background: #fff7ed; color: var(--or); font-weight: 800; }
+.ins-expiry  { background: #fff7ed; color: var(--or); font-weight: 600; }
 
 /* ── OFFER DETAIL HERO ── */
 .off-detail-hero {
@@ -1250,7 +1250,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-detail-hero-title {
   font-size: 20px;
-  font-weight: 900;
+  font-weight: 700;
   margin-bottom: 5px;
   line-height: 1.2;
 }
@@ -1265,7 +1265,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-detail-hero-price { margin-bottom: 12px; }
 .off-detail-hero-cust-val {
   font-size: 32px;
-  font-weight: 900;
+  font-weight: 700;
   display: block;
   line-height: 1;
   margin-bottom: 3px;
@@ -1313,7 +1313,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   line-height: 1;
   user-select: none;
 }
-.off-hero-vift-badge { font-size: 14px; font-weight: 900; color: var(--navy); letter-spacing: -.4px; }
+.off-hero-vift-badge { font-size: 14px; font-weight: 700; color: var(--navy); letter-spacing: -.4px; }
 .off-hero-vift-badge span { font-size: 7px; font-weight: 600; color: var(--mt); letter-spacing: .2px; text-transform: uppercase; margin-top: 1px; }
 
 /* Hero price grid — shows ex.moms + kundpris side by side */
@@ -1336,7 +1336,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-hero-pg-val {
   font-size: 18px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
   margin-bottom: 3px;
 }
@@ -1386,7 +1386,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   padding-top: 10px; margin-top: 6px; border-top: 2px solid var(--navy);
 }
 .off-detail-sum-final-lbl { font-size: 13px; font-weight: 700; color: var(--navy); }
-.off-detail-sum-final-val { font-size: 22px; font-weight: 900; color: var(--navy); }
+.off-detail-sum-final-val { font-size: 22px; font-weight: 700; color: var(--navy); }
 
 /* ── SALES TIMELINE ACTIONS ── */
 .off-tl-action-bar {
@@ -1446,7 +1446,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-hero-cta-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; padding: 11px 18px;
-  border-radius: var(--rs); font-size: 13px; font-weight: 800;
+  border-radius: var(--rs); font-size: 13px; font-weight: 600;
   cursor: pointer; background: #fff; color: var(--navy);
   border: none; letter-spacing: -.1px; transition: background .12s;
 }
@@ -1470,9 +1470,9 @@ body.modal-open { overflow: hidden; touch-action: none; }
   display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0;
 }
 .off-line-row-price { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-.off-line-kundpris { font-size: 14px; font-weight: 800; color: var(--navy); }
+.off-line-kundpris { font-size: 14px; font-weight: 600; color: var(--navy); }
 .off-line-rut-badge {
-  font-size: 9px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase;
+  font-size: 9px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase;
   background: rgba(34,197,94,.10); color: var(--gr);
   border: 1px solid rgba(34,197,94,.3); border-radius: 4px; padding: 1px 5px;
 }
@@ -1518,14 +1518,14 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-bottom: 2px;
 }
 .page-hero-greeting { font-size: 13px; font-weight: 600; opacity: .75; margin-bottom: 2px; }
-.page-hero-title    { font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -.3px; }
+.page-hero-title    { font-size: 22px; font-weight: 700; line-height: 1.15; letter-spacing: -.3px; }
 .page-hero-sub      { font-size: 12px; opacity: .7; margin-top: 6px; line-height: 1.4; }
 .page-hero-stats {
   display: flex; gap: 16px; margin-top: 16px; padding-top: 14px;
   border-top: 1px solid rgba(255,255,255,.12); flex-wrap: wrap;
 }
 .page-hero-stat       { text-align: center; }
-.page-hero-stat-num   { font-size: 24px; font-weight: 900; line-height: 1; }
+.page-hero-stat-num   { font-size: 24px; font-weight: 700; line-height: 1; }
 .page-hero-stat-lbl   { font-size: 10px; opacity: .7; margin-top: 3px; font-weight: 600; }
 .page-hero-stat.urgent .page-hero-stat-num { color: #fca5a5; }
 .page-hero-stat.warn   .page-hero-stat-num { color: #fcd34d; }
@@ -1544,7 +1544,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .attention-banner-icon { flex-shrink: 0; color: var(--rd); margin-top: 1px; }
 .attention-banner.warn .attention-banner-icon { color: var(--or); }
 .attention-banner-body { flex: 1; min-width: 0; }
-.attention-banner-title { font-size: 13px; font-weight: 800; color: var(--tx); }
+.attention-banner-title { font-size: 13px; font-weight: 600; color: var(--tx); }
 .attention-banner-sub   { font-size: 11px; color: var(--mt); margin-top: 2px; }
 
 /* KPI inline row (bar of stats in a card header or hero) */
@@ -1560,7 +1560,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .kpi-inline-cell:last-child { border-right: none; }
 .kpi-inline-cell:hover { background: var(--bg); }
-.kpi-inline-num { font-size: 22px; font-weight: 900; color: var(--navy); line-height: 1; }
+.kpi-inline-num { font-size: 22px; font-weight: 700; color: var(--navy); line-height: 1; }
 .kpi-inline-lbl { font-size: 10px; font-weight: 600; color: var(--mt); margin-top: 4px; letter-spacing: .1px; }
 .kpi-inline-cell.urgent .kpi-inline-num { color: var(--rd); }
 .kpi-inline-cell.warn   .kpi-inline-num { color: var(--or); }
@@ -1587,7 +1587,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .job-card-v2.late   { border-left-color: var(--rd); background: #fef2f2; }
 .job-card-v2.active { border-left-color: var(--gr); background: #f0fdf4; }
 .job-card-v2-top    { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.job-card-v2-title  { font-size: 15px; font-weight: 800; color: var(--tx); line-height: 1.25; flex: 1; }
+.job-card-v2-title  { font-size: 15px; font-weight: 600; color: var(--tx); line-height: 1.25; flex: 1; }
 .job-card-v2-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
 .job-card-v2-meta   { font-size: 12px; color: var(--mt); display: flex; flex-direction: column; gap: 3px; }
 .job-card-v2-meta-row { display: flex; align-items: center; gap: 5px; }
@@ -1617,7 +1617,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ops-stat-card.orange{ border-top-color: var(--or); }
 .ops-stat-card.green { border-top-color: var(--gr); }
 .ops-stat-card.blue  { border-top-color: var(--sky); }
-.ops-stat-num  { font-size: 26px; font-weight: 900; line-height: 1; color: var(--navy); }
+.ops-stat-num  { font-size: 26px; font-weight: 700; line-height: 1; color: var(--navy); }
 .ops-stat-lbl  { font-size: 11px; font-weight: 600; color: var(--mt); margin-top: 4px; }
 .ops-stat-card.red   .ops-stat-num { color: var(--rd); }
 .ops-stat-card.orange .ops-stat-num { color: var(--or); }
@@ -1634,7 +1634,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
   background: var(--navy); color: #fff;
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 800;
+  font-size: 13px; font-weight: 600;
 }
 .ops-staff-info { flex: 1; min-width: 0; }
 .ops-staff-name { font-size: 13px; font-weight: 700; color: var(--navy); }
@@ -1643,7 +1643,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ops-staff-status.stamped { color: var(--gr); }
 .ops-staff-stats { display: flex; gap: 10px; flex-shrink: 0; }
 .ops-staff-stat  { text-align: center; }
-.ops-staff-stat-num { font-size: 16px; font-weight: 900; color: var(--navy); line-height: 1; }
+.ops-staff-stat-num { font-size: 16px; font-weight: 700; color: var(--navy); line-height: 1; }
 .ops-staff-stat-lbl { font-size: 10px; color: var(--mt); }
 
 /* Section separator (no card) */
@@ -1673,7 +1673,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; font-size: 18px;
 }
-.admin-section-title { font-size: 14px; font-weight: 800; color: var(--navy); }
+.admin-section-title { font-size: 14px; font-weight: 600; color: var(--navy); }
 .admin-section-desc  { font-size: 12px; color: var(--mt); margin-top: 2px; }
 
 /* Offer card insight pill (Fas 7B improved) */
