@@ -478,6 +478,7 @@ const Dashboard = {
 
   /* ── Widget: Snabbknappar (behörighetsfiltrad) ────────────────────── */
   _widgetQuickbtns() {
+    const btns = [];
     if (Auth.canAny(['ao_view_all','ao_view_own'])) {
       btns.push(this._qbtn('briefcase',     'Mina jobb',    "Router.showPage('pg-myjobs')",                                                               'Dina tilldelade arbetsorder'));
     }
