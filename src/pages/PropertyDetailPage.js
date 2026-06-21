@@ -1310,6 +1310,7 @@ const PropertyDetailPage = {
   },
 
   _executeCopy() {
+    if (!Auth.can('properties_manage')) { showToast('Du saknar behörighet'); return; }
     const p = getObj(this.propId);
     if (!p) return;
 
