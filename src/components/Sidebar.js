@@ -308,7 +308,7 @@ const Sidebar = {
     }
     if (key === 'activitiesOverdue') {
       const today = tdy();
-      const n = (state.activities || []).filter(a => a.status === 'open' && a.dueDate && a.dueDate < today).length;
+      const n = (state.activities || []).filter(a => a.status === 'open' && a.dueDate && a.dueDate <= today).length;
       return n > 0 ? n : null;
     }
     if (key === 'operationsAlert') {

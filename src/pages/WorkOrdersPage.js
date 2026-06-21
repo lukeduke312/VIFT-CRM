@@ -55,18 +55,24 @@ const WorkOrdersPage = {
     }).join('');
     const clearHtml = anyQf ? `<button class="qf-clear" onclick="WorkOrdersPage.setQuickFilter(null)">${ic('x',10)} Rensa</button>` : '';
 
+    const activeLabel = this._dashFilter ? (qfDefs.find(d=>d.key===this._dashFilter)||{}).label || this._dashFilter : null;
     el.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <div class="swrap" style="flex:1;">
+      <div class="ao-toolbar">
+        <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="ao-search" placeholder="Sök order, kund, adress…"
             value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()">
         </div>
-        <div style="display:flex;border:1.5px solid var(--br);border-radius:var(--rx);overflow:hidden;flex-shrink:0;">
-          <button class="btn bxs ${this.viewMode==='list'?'bp':'bghost'}" style="border-radius:0;border:none;padding:7px 9px;" title="Listvy" onclick="WorkOrdersPage.setView('list')">${ic('list',14)}</button>
-          <button class="btn bxs ${this.viewMode==='grid'?'bp':'bghost'}" style="border-radius:0;border-left:1.5px solid var(--br);border-right:none;border-top:none;border-bottom:none;padding:7px 9px;" title="Kortvy" onclick="WorkOrdersPage.setView('grid')">${ic('grid',14)}</button>
+        <button class="btn bghost bsm ao-filter-btn${anyQf?' ao-filter-active':''}" onclick="WorkOrdersPage.openFilterSheet()">
+          ${ic('sliders',13)}${anyQf?` (1)`:' Filter'}
+        </button>
+        <div class="ao-toolbar-right">
+          <div class="view-toggle">
+            <button class="btn ${this.viewMode==='list'?'bp':'bghost'}" title="Listvy" onclick="WorkOrdersPage.setView('list')">${ic('list',14)}</button>
+            <button class="btn ${this.viewMode==='grid'?'bp':'bghost'}" title="Kortvy" onclick="WorkOrdersPage.setView('grid')">${ic('grid',14)}</button>
+          </div>
+          ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
         </div>
-        ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()" style="flex-shrink:0;">${ic('plus',14)} Ny order</button>` : ''}
       </div>
       <div class="ftabs" style="margin-bottom:8px;">
         ${['alla','nytt','pool','planerad','pågående','klar','fakturerad','arkiverade','papperskorg'].map(f =>
@@ -75,7 +81,8 @@ const WorkOrdersPage = {
           }</button>`
         ).join('')}
       </div>
-      <div class="qf-row" style="margin-bottom:8px;">${qfHtml}${clearHtml}</div>
+      ${activeLabel ? `<div class="ao-active-filter">${ic('filter',10)} ${activeLabel}<button class="qf-clear" onclick="WorkOrdersPage.setQuickFilter(null)">${ic('x',10)}</button></div>` : ''}
+      <div class="qf-row qf-row-desktop" style="margin-bottom:8px;">${qfHtml}${clearHtml}</div>
       <div id="ao-list"></div>`;
     this.renderList();
   },
@@ -93,6 +100,45 @@ const WorkOrdersPage = {
   setFilter(f) {
     this.filter = f;
     this.render();
+  },
+
+  openFilterSheet() {
+    const today = tdy();
+    const myId  = state.currentUser ? state.currentUser.id : null;
+    const wos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
+    const alive  = a => !['klar','fakturerad','avbruten'].includes(a.status);
+    const counts = {
+      akut:            wos.filter(a => a.priority==='akut' && alive(a)).length,
+      readyForInvoice: wos.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a)).length,
+      idag:            wos.filter(a => a.scheduledDate===today && alive(a)).length,
+      forsenad:        wos.filter(a => a.scheduledDate && a.scheduledDate<today && alive(a)).length,
+      mine:            myId ? wos.filter(a => (a.staff||[]).includes(myId) && alive(a)).length : 0
+    };
+    const defs = [
+      { key:'akut',            icon:'zap',      label:'Akuta',            cnt:counts.akut },
+      { key:'readyForInvoice', icon:'receipt',  label:'Redo fakturering', cnt:counts.readyForInvoice },
+      { key:'idag',            icon:'calendar', label:'Idag',             cnt:counts.idag },
+      { key:'forsenad',        icon:'clock',    label:'Försenade',        cnt:counts.forsenad },
+      { key:'mine',            icon:'user',     label:'Mina ärenden',     cnt:counts.mine }
+    ];
+    const rows = defs.map(b =>
+      `<button class="btn bghost bfull" style="justify-content:space-between;padding:12px 14px;font-size:13px;" onclick="WorkOrdersPage.setQuickFilter('${b.key}');Modal.close();">
+        <span style="display:flex;align-items:center;gap:10px;">${ic(b.icon,15)} ${b.label}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          ${b.cnt > 0 ? `<span class="bdg">${b.cnt}</span>` : ''}
+          ${this._dashFilter===b.key ? `<span style="color:var(--gr);">${ic('check',15)}</span>` : ''}
+        </span>
+      </button>`
+    ).join('');
+    const btns = [
+      this._dashFilter ? { label:`${ic('x',12)} Rensa filter`, cls:'btn bs', onClick:()=>{ WorkOrdersPage.setQuickFilter(null); Modal.close(); } } : null,
+      { label:'Stäng', cls:'btn bghost', onClick:()=>Modal.close() }
+    ].filter(Boolean);
+    Modal.open({
+      title: `${ic('sliders',14)} Snabbfilter`,
+      body: `<div style="display:flex;flex-direction:column;gap:2px;margin:0 -2px;">${rows}</div>`,
+      buttons: btns
+    });
   },
 
   setQuickFilter(key) {

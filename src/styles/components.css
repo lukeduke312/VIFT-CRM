@@ -569,6 +569,115 @@
 /* ── Modal open — blockera bakgrundscroll ─ */
 body.modal-open { overflow: hidden; touch-action: none; }
 
+/* ── AO-detalj hero (Runda 3) ─────────────── */
+.ao-hero { overflow: hidden; }
+
+.ao-hero-head {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+  padding: 12px 16px 14px;
+  color: #fff;
+  border-radius: 10px 10px 0 0;
+}
+
+.ao-back-btn {
+  background: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.3) !important;
+  font-weight: 500;
+}
+.ao-back-btn:hover { background: rgba(255,255,255,.28) !important; }
+
+.ao-head-id {
+  font-size: 11px; font-weight: 700; opacity: .6; letter-spacing: .3px;
+}
+
+.ao-head-badges {
+  display: flex; gap: 4px; align-items: center; margin-left: auto; flex-wrap: wrap;
+}
+
+.ao-head-title {
+  font-size: 19px; font-weight: 700; line-height: 1.25; margin: 10px 0 10px;
+}
+
+.ao-head-meta { display: flex; flex-direction: column; gap: 5px; }
+
+.ao-head-meta-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; opacity: .9;
+}
+
+.ao-addr-link {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255,255,255,.45);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ao-addr-link:hover { text-decoration-color: rgba(255,255,255,.9); }
+
+.ao-nav-btn {
+  background: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.3) !important;
+  font-size: 11px !important;
+  padding: 3px 9px !important;
+  flex-shrink: 0; white-space: nowrap; line-height: 1.4;
+}
+
+.ao-hero-body { display: flex; flex-direction: column; }
+
+.ao-hero-info { padding: 12px 16px 14px; }
+
+.ao-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
+
+.ao-desc {
+  font-size: 13px; color: var(--mt);
+  line-height: 1.5; margin-bottom: 12px;
+}
+
+.ao-hero-actions {
+  padding: 10px 14px 12px;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  border-top: 1px solid var(--br);
+}
+
+/* ── AO filter toolbar ─────────────────── */
+.ao-toolbar {
+  display: flex; gap: 8px; align-items: center;
+  margin-bottom: 8px;
+}
+.ao-toolbar .swrap { flex: 1; }
+.ao-toolbar-right { display: flex; gap: 6px; align-items: center; }
+
+.view-toggle {
+  display: flex;
+  border: 1.5px solid var(--br);
+  border-radius: var(--rx);
+  overflow: hidden;
+}
+.view-toggle .btn {
+  border-radius: 0; border: none; padding: 7px 9px;
+}
+.view-toggle .btn + .btn {
+  border-left: 1.5px solid var(--br);
+}
+
+/* Active filter chip (mobile, when filter active) */
+.ao-active-filter {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700;
+  color: var(--blue); background: var(--acc);
+  border: 1px solid rgba(43,127,212,.25);
+  border-radius: 100px;
+  padding: 4px 8px 4px 10px;
+  margin-bottom: 6px;
+}
+
+/* ftabs: horizontal scroll */
+.ftabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
+.ftabs::-webkit-scrollbar { display: none; }
+
 /* ── AO Quick-filter chips ─────────────────── */
 .qf-row {
   display: flex;

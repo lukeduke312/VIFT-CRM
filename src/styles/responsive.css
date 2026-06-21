@@ -197,3 +197,40 @@
     max-height: calc(100dvh - 16px);
   }
 }
+
+/* ── AO-hero: desktop two-column (Runda 3) ── */
+@media (min-width: 1024px) {
+  .ao-hero-body {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .ao-hero-info {
+    flex: 1; min-width: 0;
+    border-right: 1px solid var(--br);
+  }
+  .ao-hero-actions {
+    flex: 0 0 230px;
+    border-top: none;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    background: var(--bg);
+    border-radius: 0 0 10px 0;
+    padding: 12px 14px;
+  }
+  .ao-hero-actions .btn,
+  .ao-hero-actions select.btn {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+/* ── AO filter chips: desktop only ── */
+.qf-row-desktop { display: none; }
+.ao-filter-btn  { display: inline-flex; }
+
+@media (min-width: 768px) {
+  .qf-row-desktop { display: flex; }
+  .ao-filter-btn  { display: none; }
+  .ao-active-filter { display: none; }
+}
