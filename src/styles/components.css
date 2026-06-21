@@ -1928,4 +1928,121 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .action-sheet-btn:hover { background: var(--bg); }
 .action-sheet-btn--red  { color: var(--rd); }
+
+/* ── Tech accordion rows (Teknisk info) ──────────────── */
+.prop-acc-row {
+  border-bottom: 1px solid var(--br);
+}
+.prop-acc-row:last-child { border-bottom: none; }
+.prop-acc-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  user-select: none;
+  background: #fff;
+  transition: background .1s;
+}
+.prop-acc-hd:hover { background: var(--bg); }
+.prop-acc-hd-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--navy);
+}
+.prop-acc-hd-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.prop-acc-hd-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.prop-acc-chevron {
+  color: var(--mt);
+  transition: transform .18s;
+}
+.prop-acc-row.open .prop-acc-chevron { transform: rotate(180deg); }
+.prop-acc-body {
+  display: none;
+  padding: 4px 14px 14px 14px;
+  border-top: 1px solid var(--bg);
+  background: var(--bg);
+}
+.prop-acc-row.open .prop-acc-body { display: block; }
+
+/* ── Mobile quick-info banners ──────────────────────── */
+.prop-mobile-quick,
+.off-mobile-quick {
+  display: none;
+}
+@media (max-width: 767px) {
+  .prop-mobile-quick,
+  .off-mobile-quick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #fff;
+    border-bottom: 1px solid var(--br);
+    font-size: 12px;
+    flex-wrap: wrap;
+    min-height: 36px;
+  }
+  .prop-mobile-quick-name,
+  .off-mobile-quick-name {
+    font-weight: 700;
+    color: var(--navy);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .prop-mobile-quick-ao {
+    font-weight: 800;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--mt);
+  }
+  .prop-mobile-quick-ao--active {
+    background: #dbeafe;
+    color: var(--navy);
+  }
+}
+
+/* ── Property desktop two-column ─────────────────────── */
+.prop-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.prop-layout-left  { flex: 1; min-width: 0; }
+.prop-layout-right { display: none; }
+
+/* ── Image gallery badge ─────────────────────────────── */
+.img-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--mt);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
 .action-sheet-btn--warn { color: var(--or); }

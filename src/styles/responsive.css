@@ -241,3 +241,24 @@
   .inv-left  { flex: 1; min-width: 0; }
   .inv-right { flex: 0 0 280px; position: sticky; top: 62px; }
 }
+
+/* ── Property detail — desktop two-column (Runda 4) ── */
+@media (min-width: 1024px) {
+  .prop-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .prop-layout-left  { flex: 1; min-width: 0; }
+  .prop-layout-right {
+    display: block;
+    flex: 0 0 280px;
+    position: sticky;
+    top: 62px;
+  }
+  /* On desktop, hide the inline header card (shown in right column instead) */
+  .prop-inline-header { display: none; }
+  /* Mobile quick banner hides on desktop */
+  .prop-mobile-quick,
+  .off-mobile-quick { display: none !important; }
+}

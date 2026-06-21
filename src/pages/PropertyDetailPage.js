@@ -1,6 +1,7 @@
 /**
- * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v2)
+ * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v6)
  * Tabs: Översikt | Kontakt | Teknisk info | Arbetsorder | Återkommande | Bilder | Anteckningar
+ * v6: bildgalleri-kategorier, desktop 2-kol layout, tech-accordion, mobile quick banner
  */
 const PropertyDetailPage = {
   propId: null,
@@ -39,34 +40,7 @@ const PropertyDetailPage = {
     const fullAddr = [addrLine, cityLine].filter(Boolean).join(', ');
     const mapsUrl  = fullAddr ? `https://maps.google.com/?q=${encodeURIComponent(fullAddr)}` : '';
 
-    el.innerHTML = `
-      <!-- Action panel -->
-      <div class="ao-action-panel">
-        <div class="ao-action-panel-left">
-          <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${p.id}${p.objectNumber?' · '+p.objectNumber:''}</span>
-        </div>
-        <div class="ao-action-panel-badges">
-          ${p.status==='aktiv'
-            ? `<span class="bdg bdg-green">Aktiv</span>`
-            : `<span class="bdg bdg-grey">Inaktiv</span>`}
-          ${p.type ? `<span class="bdg bdg-blue" style="font-size:10px;">${p.type}</span>` : ''}
-          ${overdueInsp > 0 ? `<span class="bdg bdg-red">${overdueInsp} försenade</span>` : ''}
-        </div>
-        <div class="ao-action-panel-btns">
-          ${Auth.can('ao_create')
-            ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openCreateAO()">${ic('plus',13)} Ny AO</button>`
-            : ''}
-          ${Auth.can('properties_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`
-            : ''}
-          ${Auth.can('properties_manage')
-            ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
-            : ''}
-        </div>
-      </div>
-
-      <!-- Fastighetshuvud -->
+    const headerCardHtml = `
       <div class="card" style="margin-bottom:8px;">
         <div class="card-body" style="padding:14px;">
           <div style="display:flex;align-items:flex-start;gap:12px;">
@@ -100,8 +74,35 @@ const PropertyDetailPage = {
             ${p.floors  ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Våningar</div><div style="font-size:14px;font-weight:800;">${p.floors}</div></div>` : ''}
           </div>` : ''}
         </div>
-      </div>
+      </div>`;
 
+    const snabbHtml = `
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-body" style="padding:10px 14px;">
+          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);margin-bottom:8px;">Snabböversikt</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;">
+              <span style="color:var(--mt);">Öppna AO</span>
+              <strong style="color:${openAos>0?'var(--navy)':'var(--mt)'};">${openAos}</strong>
+            </div>
+            ${cu ? `<div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;">
+              <span style="color:var(--mt);">Kund</span>
+              <span style="color:var(--sky);cursor:pointer;font-weight:600;text-align:right;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${cuName}</span>
+            </div>` : ''}
+            ${p.type ? `<div style="display:flex;justify-content:space-between;font-size:12px;">
+              <span style="color:var(--mt);">Typ</span><span>${p.type}</span>
+            </div>` : ''}
+            <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;">
+              <span style="color:var(--mt);">Status</span>
+              ${p.status==='aktiv'?`<span class="bdg bdg-green">Aktiv</span>`:`<span class="bdg bdg-grey">Inaktiv</span>`}
+            </div>
+            ${addrLine ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${addrLine}${cityLine?', '+cityLine:''}</div>` : ''}
+          </div>
+        </div>
+      </div>`;
+
+    const tabsAndContentHtml = `
       <!-- Flikar -->
       <div class="ftabs" id="prop-tabs" style="margin-bottom:8px;">
         <button class="ft ${this.activeTab==='overview'  ?'on':''}" onclick="PropertyDetailPage.switchTab('overview')">Översikt</button>
@@ -121,7 +122,57 @@ const PropertyDetailPage = {
       <div id="prop-tab-recurring"  ${this.activeTab!=='recurring'  ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
       <div id="prop-tab-rondering"  ${this.activeTab!=='rondering'  ?'style="display:none"':''}><div id="tab-rondering">${this.activeTab==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
       <div id="prop-tab-images"     ${this.activeTab!=='images'     ?'style="display:none"':''}>${this._renderImagesTab(p, images)}</div>
-      <div id="prop-tab-notes"      ${this.activeTab!=='notes'      ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>
+      <div id="prop-tab-notes"      ${this.activeTab!=='notes'      ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>`;
+
+    el.innerHTML = `
+      <!-- Action panel -->
+      <div class="ao-action-panel">
+        <div class="ao-action-panel-left">
+          <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
+          <span style="font-size:11px;font-weight:700;color:var(--mt);">${p.id}${p.objectNumber?' · '+p.objectNumber:''}</span>
+        </div>
+        <div class="ao-action-panel-badges">
+          ${p.status==='aktiv'
+            ? `<span class="bdg bdg-green">Aktiv</span>`
+            : `<span class="bdg bdg-grey">Inaktiv</span>`}
+          ${p.type ? `<span class="bdg bdg-blue" style="font-size:10px;">${p.type}</span>` : ''}
+          ${overdueInsp > 0 ? `<span class="bdg bdg-red">${overdueInsp} försenade</span>` : ''}
+        </div>
+        <div class="ao-action-panel-btns">
+          ${Auth.can('ao_create')
+            ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openCreateAO()">${ic('plus',13)} Ny AO</button>`
+            : ''}
+          ${Auth.can('properties_manage')
+            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`
+            : ''}
+          ${Auth.can('properties_manage')
+            ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
+            : ''}
+        </div>
+      </div>
+
+      <!-- Mobile quick-info banner (hidden on desktop via CSS) -->
+      <div class="prop-mobile-quick">
+        <span class="prop-mobile-quick-name">${p.name}</span>
+        <span class="prop-mobile-quick-ao${openAos>0?' prop-mobile-quick-ao--active':''}">${openAos} AO</span>
+        ${p.status==='aktiv'?`<span class="bdg bdg-green" style="font-size:10px;">Aktiv</span>`:`<span class="bdg bdg-grey" style="font-size:10px;">Inaktiv</span>`}
+      </div>
+
+      <!-- Fastighetshuvud (inline — visas på mobil, döljs på desktop) -->
+      <div class="prop-inline-header">
+        ${headerCardHtml}
+      </div>
+
+      <!-- Desktop two-column layout -->
+      <div class="prop-layout">
+        <div class="prop-layout-left">
+          ${tabsAndContentHtml}
+        </div>
+        <div class="prop-layout-right">
+          ${headerCardHtml}
+          ${snabbHtml}
+        </div>
+      </div>
     `;
   },
 
