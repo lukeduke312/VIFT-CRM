@@ -2065,7 +2065,7 @@ const OfferDetailPage = {
       <div class="off-detail-hero">
         <div class="off-detail-hero-nav">
           <div style="display:flex;align-items:center;gap:8px;">
-            <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)}</button>
+            <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
             <div>
               <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}${(off.versionNumber||1) > 1 ? ` <span class="bdg bdg-purple" style="font-size:10px;">v${off.versionNumber}</span>` : ''}${off.parentOfferId ? ` <span style="font-size:10px;opacity:.7;"> ← ${off.parentOfferId}</span>` : ''}</div>
               <div style="font-size:16px;font-weight:800;line-height:1.2;color:#fff;">${off.title||'Offert'}</div>
@@ -3282,17 +3282,17 @@ const PropertiesPage = {
       );
     }
     el.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-        <div class="ftabs" style="flex:1;margin-bottom:0;">
-          <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
-          <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
+      <div class="ao-toolbar" style="margin-bottom:6px;">
+        <div class="swrap">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" placeholder="Sök fastighet…" value="${this._q}"
+            oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
         </div>
         <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
       </div>
-      <div class="swrap" style="margin-bottom:6px;">
-        <span class="sico">${ic('search',16)}</span>
-        <input type="search" placeholder="Sök fastighet…" value="${this._q}"
-          oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
+      <div class="ftabs" style="margin-bottom:6px;">
+        <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
+        <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
       </div>` +
       (props.length === 0
         ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
