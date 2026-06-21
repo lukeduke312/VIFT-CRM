@@ -539,7 +539,7 @@ const PropertyDetailPage = {
               <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;background:#fff;"
                 onclick="PropertyDetailPage.viewImage(${i})">
                 <div style="position:relative;">
-                  <img src="${img.publicUrl}" alt="${img.title||''}"
+                  <img src="${img.signedUrl}" alt="${img.title||''}"
                     loading="lazy"
                     style="width:100%;height:90px;object-fit:cover;display:block;">
                   ${img.category ? `<span class="img-cat-badge">${img.category}</span>` : ''}
@@ -1095,7 +1095,7 @@ const PropertyDetailPage = {
           <input type="file" id="img-file" accept="image/*,image/heic,image/heif"
             onchange="PropertyDetailPage._previewImage(this)"></div>
         <div id="img-preview" style="margin-top:8px;"></div>
-        <div style="font-size:11px;color:var(--mt);margin-top:8px;">${ic('info',10)} Bilden sparas i Supabase och syns för alla inloggade.</div>`,
+        <div style="font-size:11px;color:var(--mt);margin-top:8px;">${ic('lock',10)} Privat lagring — kräver inloggning för visning.</div>`,
       buttons: [
         { label: `${ic('upload',13)} Ladda upp`, cls: 'btn bp', onClick: () => this._saveImage() },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -1145,7 +1145,7 @@ const PropertyDetailPage = {
       title: img.title || 'Bild',
       body: `
         <div style="text-align:center;">
-          <img src="${img.publicUrl}" alt="${img.title||''}"
+          <img src="${img.signedUrl}" alt="${img.title||''}"
             style="max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain;">
           ${img.description  ? `<p style="font-size:13px;margin-top:10px;">${img.description}</p>` : ''}
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
