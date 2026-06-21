@@ -6,6 +6,29 @@
 
 const Dashboard = {
 
+  _collapsed: {},  /* { catKey: true } — persisted in sessionStorage */
+
+  _colKey: 'dash_collapsed_v1',
+
+  _loadCollapsed() {
+    try { this._collapsed = JSON.parse(sessionStorage.getItem(this._colKey) || '{}'); } catch(e) { this._collapsed = {}; }
+  },
+
+  _saveCollapsed() {
+    try { sessionStorage.setItem(this._colKey, JSON.stringify(this._collapsed)); } catch(e) {}
+  },
+
+  toggleSection(key) {
+    this._collapsed[key] = !this._collapsed[key];
+    this._saveCollapsed();
+    const isCollapsed = !!this._collapsed[key];
+    document.querySelectorAll(`.dash-layout [data-sec="${key}"]`).forEach(el => {
+      el.style.display = isCollapsed ? 'none' : '';
+    });
+    const caret = document.querySelector(`.dash-layout [data-sec-hdr="${key}"] .sec-caret`);
+    if (caret) caret.innerHTML = ic(isCollapsed ? 'chevron-right' : 'chevron-down', 11);
+  },
+
   /* ── Huvud-render ──────────────────────────────────────────────────── */
   render() {
     const el = document.getElementById('dash-content');
@@ -22,6 +45,7 @@ const Dashboard = {
     const layout = DashboardConfig.getUserLayout(userId, roleId);
 
     // Bygg widgets i rätt ordning, filtrerat på behörighet
+    this._loadCollapsed();
     const parts  = [];
     const sorted = layout
       .filter(m => m.visible !== false)
@@ -34,12 +58,21 @@ const Dashboard = {
       if (html) {
         const mod = DashboardConfig.getModule(m.id);
         const cat = mod ? (mod.category || null) : null;
+        const key = cat ? cat.toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'other';
         if (cat && cat !== lastCat) {
-          parts.push(`<div class="dw-full"><div class="section-sep">${esc(cat)}</div></div>`);
+          const collapsed = !!this._collapsed[key];
+          parts.push(`<div class="dw-full" data-sec-hdr="${key}">
+            <div class="dash-sec-toggle" onclick="Dashboard.toggleSection('${key}')">
+              <span class="dash-sec-label">${esc(cat)}</span>
+              <span class="dash-sec-line"></span>
+              <span class="sec-caret">${ic(collapsed ? 'chevron-right' : 'chevron-down', 11)}</span>
+            </div>
+          </div>`);
           lastCat = cat;
         }
         const cls = this._sizeClass(m.size || (mod || {}).defaultSize || 'full');
-        parts.push(`<div class="${cls}">${html}</div>`);
+        const collapsed = !!this._collapsed[key];
+        parts.push(`<div class="${cls}" data-sec="${key}"${collapsed ? ' style="display:none;"' : ''}>${html}</div>`);
       }
     }
 
@@ -547,18 +580,15 @@ const Dashboard = {
       <div class="card-body">
         ${todayAOs.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('calendar',22)}<p style="font-size:11px;text-align:center;">Inga planerade ordrar idag</p></div>`
-          : todayAOs.slice(0,5).map(ao => {
-              var cu = getCu(ao.customerId);
-              return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-                <div style="min-width:0;flex:1;">
-                  <div class="crow-title">${ao.title}</div>
-                  <div class="crow-sub">${ao.scheduledStart||'?'}–${ao.scheduledEnd||'?'} · ${cu?CustomerService.displayName(cu):'—'}</div>
-                </div>
-                ${sbdg(ao.status)}
-              </div>`;
-            }).join('')
+          : (() => {
+              const LIMIT = 4;
+              const uid = 'vm-today';
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${ao.title}</div><div class="crow-sub">${ao.scheduledStart||'?'}–${ao.scheduledEnd||'?'} · ${cu?CustomerService.displayName(cu):'—'}</div></div>${sbdg(ao.status)}</div>`; };
+              const visible = todayAOs.slice(0, LIMIT).map(renderRow).join('');
+              const hidden  = todayAOs.length > LIMIT ? `<div id="${uid}" style="display:none;">${todayAOs.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${todayAOs.length})</button>` : '';
+              return visible + hidden;
+            })()
         }
-        ${todayAOs.length > 5 ? `<button class="btn bghost bfull bsm" style="margin-top:4px;" onclick="Router.showPage('pg-ao',{filter:'idag'})">+${todayAOs.length-5} till idag</button>` : ''}
         <button class="btn bghost bfull bsm" style="margin-top:4px;" onclick="Router.showPage('pg-ao',{filter:'idag'})">
           ${ic('list',11)} Alla ordrar idag
         </button>
@@ -580,18 +610,15 @@ const Dashboard = {
       <div class="card-body">
         ${pool.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('inbox',22)}<p style="font-size:11px;text-align:center;">Arbetspoolen är tom</p></div>`
-          : pool.slice(0,5).map(ao => {
-              var cu = getCu(ao.customerId);
-              return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-                <div style="min-width:0;flex:1;">
-                  <div class="crow-title">${ao.title}</div>
-                  <div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div>
-                </div>
-                ${pbdg(ao.priority)}
-              </div>`;
-            }).join('')
+          : (() => {
+              const LIMIT = 4;
+              const uid = 'vm-pool';
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${ao.title}</div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div>${pbdg(ao.priority)}</div>`; };
+              const visible = pool.slice(0, LIMIT).map(renderRow).join('');
+              const hidden  = pool.length > LIMIT ? `<div id="${uid}" style="display:none;">${pool.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pool.length})</button>` : '';
+              return visible + hidden;
+            })()
         }
-        ${pool.length > 5 ? `<button class="btn bghost bfull bsm" style="margin-top:4px;" onclick="Router.showPage('pg-ao',{filter:'pool'})">+${pool.length-5} i poolen</button>` : ''}
       </div>
     </div>`;
   },
@@ -636,19 +663,14 @@ const Dashboard = {
         <span class="bdg">${recurring.length}</span>
       </div>
       <div class="card-body">
-        ${recurring.slice(0,5).map(r => {
-          var days = Math.ceil((new Date(r.nextDate) - new Date(tdy())) / 86400000);
-          var cu   = getCu(r.customerId);
-          return `<div class="crow" onclick="Router.showPage('pg-recurring')">
-            <div style="min-width:0;flex:1;">
-              <div class="crow-title">${r.title}</div>
-              <div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div>
-            </div>
-            <span class="bdg ${days<=0?'bdg-red':'bdg-orange'}" style="font-size:10px;white-space:nowrap;flex-shrink:0;">
-              ${days<=0?'Förfallen':days===0?'Idag':days+' d'}
-            </span>
-          </div>`;
-        }).join('')}
+        ${(() => {
+          const LIMIT = 4;
+          const uid = 'vm-recur';
+          const renderRow = r => { var days = Math.ceil((new Date(r.nextDate)-new Date(tdy()))/86400000); var cu = getCu(r.customerId); return `<div class="crow" onclick="Router.showPage('pg-recurring')"><div style="min-width:0;flex:1;"><div class="crow-title">${r.title}</div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div><span class="bdg ${days<=0?'bdg-red':'bdg-orange'}" style="font-size:10px;white-space:nowrap;flex-shrink:0;">${days<=0?'Förfallen':days===0?'Idag':days+' d'}</span></div>`; };
+          const visible = recurring.slice(0, LIMIT).map(renderRow).join('');
+          const hidden  = recurring.length > LIMIT ? `<div id="${uid}" style="display:none;">${recurring.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${recurring.length})</button>` : '';
+          return visible + hidden;
+        })()}
         <button class="btn bghost bfull bsm" style="margin-top:4px;" onclick="Router.showPage('pg-recurring')">
           ${ic('refresh-cw',11)} Hantera återkommande
         </button>
@@ -672,16 +694,14 @@ const Dashboard = {
       <div class="card-body">
         ${planned.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('calendar',22)}<p style="font-size:11px;text-align:center;">Inga planerade denna vecka</p></div>`
-          : planned.slice(0,5).map(ao => {
-              var cu = getCu(ao.customerId);
-              return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-                <div style="min-width:0;flex:1;">
-                  <div class="crow-title">${ao.title}</div>
-                  <div class="crow-sub">${fmtDate(ao.scheduledDate)} · ${cu?CustomerService.displayName(cu):'—'}</div>
-                </div>
-                ${sbdg(ao.status)}
-              </div>`;
-            }).join('')
+          : (() => {
+              const LIMIT = 4;
+              const uid = 'vm-planned';
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${ao.title}</div><div class="crow-sub">${fmtDate(ao.scheduledDate)} · ${cu?CustomerService.displayName(cu):'—'}</div></div>${sbdg(ao.status)}</div>`; };
+              const visible = planned.slice(0, LIMIT).map(renderRow).join('');
+              const hidden  = planned.length > LIMIT ? `<div id="${uid}" style="display:none;">${planned.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${planned.length})</button>` : '';
+              return visible + hidden;
+            })()
         }
       </div>
     </div>`;
@@ -738,21 +758,15 @@ const Dashboard = {
       <div class="card-body">
         ${pending.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('file-text',22)}<p style="font-size:11px;text-align:center;">Inga offerter väntar svar</p></div>`
-          : pending.slice(0,4).map(o => {
-              var cu     = getCu(o.customerId);
-              var cuName = cu ? (cu.name||(cu.firstName+' '+cu.lastName).trim()) : '—';
-              var total  = (o.lines||[]).reduce((s,l) => s+(l.total||0),0);
-              var age    = o.sentAt ? Math.floor((Date.now()-new Date(o.sentAt))/86400000) : null;
-              return `<div class="crow" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
-                <div style="min-width:0;flex:1;">
-                  <div class="crow-title">${cuName}</div>
-                  <div class="crow-sub">${fmt(total)} kr${age!==null?' · '+age+' dagar':''}</div>
-                </div>
-                ${sbdg(o.status)}
-              </div>`;
-            }).join('')
+          : (() => {
+              const LIMIT = 3;
+              const uid = 'vm-offers';
+              const renderRow = o => { var cu = getCu(o.customerId); var cuName = cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):'—'; var total = (o.lines||[]).reduce((s,l)=>s+(l.total||0),0); var age = o.sentAt?Math.floor((Date.now()-new Date(o.sentAt))/86400000):null; return `<div class="crow" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${cuName}</div><div class="crow-sub">${fmt(total)} kr${age!==null?' · '+age+' dagar':''}</div></div>${sbdg(o.status)}</div>`; };
+              const visible = pending.slice(0, LIMIT).map(renderRow).join('');
+              const hidden  = pending.length > LIMIT ? `<div id="${uid}" style="display:none;">${pending.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pending.length})</button>` : '';
+              return visible + hidden;
+            })()
         }
-        ${pending.length > 4 ? `<button class="btn bghost bfull bsm" style="margin-top:4px;" onclick="Router.showPage('pg-offer')">+${pending.length-4} fler</button>` : ''}
       </div>
     </div>`;
   },

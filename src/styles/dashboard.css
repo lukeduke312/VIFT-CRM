@@ -397,6 +397,35 @@ body[data-density="spacious"] .quick-icon  { width: 40px; height: 40px; }
   text-overflow: ellipsis;
 }
 
+/* ── Collapsible section header ────────────── */
+.dash-sec-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.dash-sec-toggle:hover .dash-sec-label { color: var(--navy); }
+.dash-sec-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mt);
+  letter-spacing: .1px;
+  white-space: nowrap;
+}
+.dash-sec-line {
+  flex: 1;
+  height: 1px;
+  background: var(--br);
+}
+.sec-caret {
+  flex: 0 0 auto;
+  color: var(--mt);
+  display: flex;
+  align-items: center;
+}
+
 /* ── Filter chip on list pages ────────────── */
 .filter-chip {
   display: inline-flex; align-items: center; gap: 6px;
