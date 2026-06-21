@@ -1,6 +1,7 @@
 /**
- * PageShells — Placeholder-rendering för sidor som byggs i Fas 3+
+ * PageShells — Placeholder-rendering för sidor som byggs i Fas 3+ (v67)
  * Fas 2-sidor (Kunder, AO, Tid, Faktura) har egna filer.
+ * v67: wizard-polish, mobile quick banners, off-detail-facts wrapping
  */
 
 /* ── Offerter (v2 – tjänstemallar + kalkylator) ─────── */
@@ -685,7 +686,7 @@ const OffersPage = {
     } else {
       ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:8px 14px;display:flex;gap:7px;justify-content:space-between;">
         <button type="button" class="btn bs bsm" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
-        <button type="button" class="btn bp bsm" onclick="OffersPage._save()">${ic('save',12)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
+        <button type="button" class="btn bp" style="flex:1;" onclick="OffersPage._save()">${ic('save',13)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
       </div>`;
     }
 
@@ -720,6 +721,7 @@ const OffersPage = {
             <label>Rubrik / titel</label>
             <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"
               oninput="OffersPage._wizardData.title=this.value">
+            <div style="font-size:10px;color:var(--mt);margin-top:3px;">T.ex. 'Stentvätt Solvägen 3' eller 'Serviceavtal 2025'</div>
           </div>
           <div class="g2">
             <div class="fg"><label>Datum</label>
@@ -729,31 +731,46 @@ const OffersPage = {
               <input type="date" id="off-valid" value="${esc(d.validUntil)}"
                 oninput="OffersPage._wizardData.validUntil=this.value"></div>
           </div>
-          <div class="fg">
-            <label>Kort sammanfattning</label>
-            <textarea id="off-summary" rows="3" placeholder="T.ex. Stentvätt av marksten, ca 120 m², med algbehandling…"
-              oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
-            <button type="button" class="off-gen-btn" onclick="OffersPage._genTextSuggestion()">
-              ${ic('zap',11)} Generera textförslag
-            </button>
-            ${d._lastGenFrom ? `<div style="font-size:10px;color:var(--mt);margin-top:4px;display:flex;align-items:center;gap:4px;">${ic('check',9)}<span>Senast: <em>${d._lastGenFrom}</em></span></div>` : ''}
-          </div>
+          <details style="margin-bottom:10px;">
+            <summary style="font-size:12px;font-weight:600;color:var(--navy);cursor:pointer;padding:6px 0;list-style:none;display:flex;align-items:center;gap:5px;">
+              ${ic('zap',11)} Lägg till uppdragsbeskrivning
+            </summary>
+            <summary style="display:none;"></summary>
+            <div style="padding-top:6px;">
+              <div class="fg">
+                <label>Kort sammanfattning</label>
+                <textarea id="off-summary" rows="3" placeholder="T.ex. Stentvätt av marksten, ca 120 m², med algbehandling…"
+                  oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
+                <button type="button" class="off-gen-btn" onclick="OffersPage._genTextSuggestion()">
+                  ${ic('zap',11)} Generera textförslag
+                </button>
+                ${d._lastGenFrom ? `<div style="font-size:10px;color:var(--mt);margin-top:4px;display:flex;align-items:center;gap:4px;">${ic('check',9)}<span>Senast: <em>${d._lastGenFrom}</em></span></div>` : ''}
+              </div>
+            </div>
+          </details>
         </div>
         <div class="off-s1-col">
-          <div class="fg">
-            <label>Uppdragets omfattning</label>
-            ${this._toolbarHtml('off-scope','scope')}
-            <textarea id="off-scope" rows="4" placeholder="Beskriv vad uppdraget innebär…"
-              oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea>
-          </div>
-          <div class="g2">
-            <div class="fg"><label>Vad ingår</label>
-              <textarea id="off-includes" rows="3" placeholder="- Rengöring&#10;- Material…"
-                oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
-            <div class="fg"><label>Vad ingår ej</label>
-              <textarea id="off-excludes" rows="3" placeholder="- Målning&#10;- Elektriker…"
-                oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
-          </div>
+          <details style="margin-bottom:10px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;" ${d.scope||d.includes||d.excludes?'open':''}>
+            <summary style="padding:10px 12px;font-size:12px;font-weight:600;color:var(--navy);cursor:pointer;background:var(--bg);list-style:none;display:flex;align-items:center;gap:6px;">
+              ${ic('align-left',12)} Uppdragsbeskrivning (valfritt)
+            </summary>
+            <div style="padding:10px 12px;">
+              <div class="fg">
+                <label>Uppdragets omfattning</label>
+                ${this._toolbarHtml('off-scope','scope')}
+                <textarea id="off-scope" rows="4" placeholder="Beskriv vad uppdraget innebär…"
+                  oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea>
+              </div>
+              <div class="g2">
+                <div class="fg"><label>Vad ingår</label>
+                  <textarea id="off-includes" rows="3" placeholder="- Rengöring&#10;- Material…"
+                    oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
+                <div class="fg"><label>Vad ingår ej</label>
+                  <textarea id="off-excludes" rows="3" placeholder="- Målning&#10;- Elektriker…"
+                    oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
+              </div>
+            </div>
+          </details>
         </div>
       </div>`;
   },
@@ -806,21 +823,21 @@ const OffersPage = {
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
-          <div class="off-action-cards">
-            <button type="button" class="off-action-card" onclick="OffersPage._openSvcCalc(null)">
-              <span class="off-action-card-icon">${ic('zap',15)}</span>
+          <div class="off-action-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._openSvcCalc(null)">
+              <span class="off-action-card-icon">${ic('zap',14)}</span>
               <div><div class="off-action-card-title">Tjänst / kalkyl</div><div class="off-action-card-sub">VIFT:s prismodell</div></div>
             </button>
-            <button type="button" class="off-action-card" onclick="OffersPage._addFixedLine()">
-              <span class="off-action-card-icon">${ic('tag',15)}</span>
+            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._addFixedLine()">
+              <span class="off-action-card-icon">${ic('tag',14)}</span>
               <div><div class="off-action-card-title">Fastpris</div><div class="off-action-card-sub">Eget fast pris</div></div>
             </button>
-            <button type="button" class="off-action-card" onclick="OffersPage._addManualLine()">
-              <span class="off-action-card-icon">${ic('plus',15)}</span>
+            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._addManualLine()">
+              <span class="off-action-card-icon">${ic('plus',14)}</span>
               <div><div class="off-action-card-title">Löpande rad</div><div class="off-action-card-sub">Antal × à-pris</div></div>
             </button>
-            <button type="button" class="off-action-card" onclick="OffersPage._addTextBlock()">
-              <span class="off-action-card-icon">${ic('align-left',15)}</span>
+            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._addTextBlock()">
+              <span class="off-action-card-icon">${ic('align-left',14)}</span>
               <div><div class="off-action-card-title">Fritext</div><div class="off-action-card-sub">Info utan pris</div></div>
             </button>
           </div>
@@ -859,9 +876,16 @@ const OffersPage = {
     const prLines = this._editLines.filter(l => l.type !== 'text').length;
     const txtLines = this._editLines.filter(l => l.type === 'text').length;
     return `
-      <div style="margin-bottom:14px;">
-        ${this._totalsBarHtml()}
-        <div style="margin-top:5px;font-size:10px;color:var(--mt);text-align:right;">${prLines} pristrader · ${txtLines} textblock</div>
+      <div style="margin-bottom:16px;border:2px solid var(--navy);border-radius:var(--rs);overflow:hidden;">
+        <div style="background:var(--navy);padding:8px 14px;">
+          <div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;">Offertsummering</div>
+        </div>
+        <div style="background:#fff;padding:4px 0;">
+          ${this._totalsBarHtml().replace('<div class="off-totals-card">','<div class="off-totals-card" style="border:none;border-radius:0;margin:0;">').replace('<div class="off-totals-card-hd">Sammanfattning</div>','')}
+        </div>
+        <div style="padding:4px 14px 8px;font-size:10px;color:var(--mt);background:#f8f9fa;border-top:1px solid var(--bg);">
+          ${prLines} pristrader · ${txtLines} textblock
+        </div>
       </div>
       <div class="g2">
         <div class="fg"><label>Betalningsvillkor</label>
@@ -876,11 +900,15 @@ const OffersPage = {
         <textarea id="off-terms" rows="4" placeholder="Allmänna villkor…"
           oninput="OffersPage._wizardData.generalTerms=this.value">${esc(d.generalTerms)}</textarea>
       </div>
-      <div class="fg" style="margin-top:4px;">
-        <label>Intern anteckning <span style="font-size:10px;font-weight:400;color:var(--mt);">(visas ej för kund)</span></label>
-        <textarea id="off-note" rows="2" placeholder="Intern anteckning…"
-          oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
-      </div>`;
+      <details style="margin-top:10px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;" ${d.internalNote?'open':''}>
+        <summary style="padding:10px 12px;font-size:12px;font-weight:600;color:var(--mt);cursor:pointer;background:var(--bg);list-style:none;display:flex;align-items:center;gap:6px;">
+          ${ic('lock',11)} Intern anteckning (valfritt, visas ej för kund)
+        </summary>
+        <div style="padding:10px 12px;">
+          <textarea id="off-note" rows="2" placeholder="Intern anteckning…"
+            oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
+        </div>
+      </details>`;
   },
 
   _totalsBarHtml() {
@@ -2121,7 +2149,14 @@ const OfferDetailPage = {
         </div>
       </div>
 
-      ${factItems ? `<div class="off-detail-facts">${factItems}</div>` : ''}
+      <!-- Mobile quick-info banner (hidden on desktop via CSS) -->
+      <div class="off-mobile-quick">
+        <span class="off-mobile-quick-name">${cuName}</span>
+        ${sbdg(off.status)}
+        <span style="font-size:11px;font-weight:700;color:var(--navy);margin-left:auto;">Kund: ${fmt(cust)} kr</span>
+      </div>
+
+      ${factItems ? `<div class="off-detail-facts" style="flex-wrap:wrap;">${factItems}</div>` : ''}
 
       ${off.summary||off.scope||off.includes||off.excludes?`
       <div class="card">

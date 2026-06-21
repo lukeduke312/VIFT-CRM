@@ -333,33 +333,37 @@ const PropertyDetailPage = {
     const inspTypes = { ovk:'OVK',sba:'SBA',hiss:'Hissbesiktning',el:'Elbesiktning',pbe:'PBE-kontroll' };
 
     return `
-      ${systems.map(sys => {
-        const t = tech[sys.key] || {};
-        const hasData = Object.values(t).some(Boolean);
-        return `
-        <div class="card">
-          <div class="card-header" style="cursor:pointer;"
-            onclick="var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'':'none'">
-            <h3>${ic(sys.icon,14)} ${sys.label}</h3>
-            <div style="display:flex;align-items:center;gap:6px;">
-              ${hasData
-                ? `<span class="bdg bdg-green" style="font-size:9px;">Ifylld</span>`
-                : `<span class="bdg bdg-grey" style="font-size:9px;">Tom</span>`}
-              ${ic('chevron-down',14)}
+      <div class="card" style="margin-bottom:8px;">
+        <div class="card-header">
+          <h3>${ic('settings',14)} Tekniska system</h3>
+        </div>
+        ${systems.map(sys => {
+          const t = tech[sys.key] || {};
+          const hasData = Object.values(t).some(Boolean);
+          const accId = `prop-acc-${sys.key}`;
+          return `
+          <div class="prop-acc-row" id="${accId}">
+            <div class="prop-acc-hd" onclick="PropertyDetailPage._toggleAcc('${accId}')">
+              <span class="prop-acc-hd-icon">${ic(sys.icon,14)}</span>
+              <span class="prop-acc-hd-label">${sys.label}</span>
+              <div class="prop-acc-hd-right">
+                ${hasData
+                  ? `<span class="bdg bdg-green" style="font-size:9px;">Ifylld</span>`
+                  : `<span class="bdg bdg-grey" style="font-size:9px;">Tom</span>`}
+                <span class="prop-acc-chevron">${ic('chevron-down',14)}</span>
+              </div>
             </div>
-          </div>
-          <div style="display:none;">
-            <div class="card-body">
+            <div class="prop-acc-body">
               ${this._renderTechSystem(sys.key, t)}
               ${Auth.can('properties_manage')
                 ? `<button class="btn bs bsm" style="margin-top:8px;"
-                     onclick="event.stopPropagation();PropertyDetailPage.openEditTechSystem('${sys.key}')">
+                     onclick="PropertyDetailPage.openEditTechSystem('${sys.key}')">
                      ${ic('pencil',13)} Redigera ${sys.label}</button>`
                 : ''}
             </div>
-          </div>
-        </div>`;
-      }).join('')}
+          </div>`;
+        }).join('')}
+      </div>
 
       <div class="card">
         <div class="card-header">
@@ -391,6 +395,11 @@ const PropertyDetailPage = {
     return entries.map(([k,v]) =>
       `<div class="dr"><span class="dk">${labels[k]||cap(k)}</span><span class="dv" style="white-space:pre-wrap;">${v}</span></div>`
     ).join('');
+  },
+
+  _toggleAcc(id) {
+    const row = document.getElementById(id);
+    if (row) row.classList.toggle('open');
   },
 
   _renderInspections(insp) {
@@ -482,32 +491,35 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('image',14)} Bilder</h3>
+          <h3>${ic('image',14)} Bilder${images.length ? ` (${images.length})` : ''}</h3>
           ${Auth.can('properties_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)}</button>`
+            ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till</button>`
             : ''}
         </div>
         <div class="card-body">
           ${images.length === 0 ? `
-            <div style="text-align:center;padding:24px 0;">
-              ${ic('image',28)}
-              <p style="font-size:12px;color:var(--mt);margin:8px 0 4px;">Lägg till bilder på fastigheten</p>
-              <p style="font-size:11px;color:var(--mt);margin-bottom:12px;">
-                Bilder på entré, teknikrum, undercentral, garage m.m. hjälper personalen att hitta rätt.
+            <div style="text-align:center;padding:32px 0;">
+              <div style="color:var(--mt);margin-bottom:12px;">${ic('image',36)}</div>
+              <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px;">Inga bilder ännu</div>
+              <p style="font-size:12px;color:var(--mt);margin:0 0 16px;line-height:1.5;">
+                Lägg till bilder på entré, teknikrum, undercentral, garage m.m.<br>
+                Det hjälper personalen att hitta rätt snabbt.
               </p>
               ${Auth.can('properties_manage')
-                ? `<button class="btn bs bsm" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till bild</button>`
+                ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till bild</button>`
                 : ''}
             </div>` :
             `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;">
               ${images.map((img, i) => `
-                <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;"
+                <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;background:#fff;"
                   onclick="PropertyDetailPage.viewImage(${i})">
-                  <img src="${img.dataUrl||''}" alt="${img.title||''}"
-                    style="width:100%;height:90px;object-fit:cover;display:block;">
+                  <div style="position:relative;">
+                    <img src="${img.dataUrl||''}" alt="${img.title||''}"
+                      style="width:100%;height:90px;object-fit:cover;display:block;">
+                    ${img.category ? `<span class="img-cat-badge" style="position:absolute;bottom:4px;left:4px;">${img.category}</span>` : ''}
+                  </div>
                   <div style="padding:5px 7px;font-size:10px;font-weight:700;color:var(--navy);
                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${img.title||'Bild'}</div>
-                  ${img.category ? `<div style="padding:0 7px 5px;font-size:9px;color:var(--mt);">${img.category}</div>` : ''}
                 </div>`).join('')}
             </div>`}
         </div>
@@ -1044,7 +1056,7 @@ const PropertyDetailPage = {
           <div class="fg"><label>Kategori</label>
             <select id="img-cat">
               <option value="">— Valfritt —</option>
-              ${['Fasad','Entré','Teknikrum','Garage','Gård','Övrigt'].map(c=>`<option>${c}</option>`).join('')}
+              ${['Fasad','Entré','Teknik','Garage','Tvättstuga','Utemiljö','Skada/problem','Övrigt'].map(c=>`<option>${c}</option>`).join('')}
             </select></div>
           <div class="fg"><label>Kopplat till system</label>
             <select id="img-section">
