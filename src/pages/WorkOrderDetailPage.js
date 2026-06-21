@@ -185,70 +185,120 @@ const WorkOrderDetailPage = {
   },
 
   _actionBtns(ao) {
+    const primary   = this._primaryActionBtns(ao);
+    const secondary = this._secondaryActions(ao);
+    const moreBtnHtml = secondary.length > 0
+      ? `<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openMoreActions('${ao.id}')">${ic('more-horizontal',13)} Fler åtgärder</button>`
+      : '';
+    return primary.join('') + moreBtnHtml;
+  },
+
+  _primaryActionBtns(ao) {
     const canEdit     = Auth.can('ao_edit');
     const canComplete = Auth.can('ao_complete');
     const canInvoice  = Auth.can('invoice_create');
     const btns = [];
-    if (canEdit && ao.status === 'nytt') {
+    // Start work
+    if (canEdit && ['nytt','pool','planerad'].includes(ao.status)) {
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
-      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',13)} Planera</button>`);
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.setStatus('pool')">${ic('inbox',13)} Till pool</button>`);
     }
-    if (canEdit && ao.status === 'pool') {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
-      btns.push(`<button class="btn bp bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('calendar',13)} Planera</button>`);
+    // Mark complete
+    if (ao.status === 'pågående' && canComplete) {
+      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',13)} Klarmarkera</button>`);
     }
-    if (canEdit && ao.status === 'planerad') {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',13)} Omplanera</button>`);
+    // Substatus select (shown inline when active)
+    if (ao.status === 'pågående' && canEdit && ao.substatus) {
+      const subOpts = [
+        {v:'',label:'Inget substatus'},
+        {v:'inväntar_material',label:'Inväntar material'},
+        {v:'inväntar_kund',label:'Inväntar kund'},
+        {v:'pausad',label:'Pausad'},
+        {v:'behöver_återbesök',label:'Behöver återbesök'},
+        {v:'blockerad',label:'Blockerad'},
+      ];
+      btns.push(`<select class="btn bs bsm" style="padding:5px 8px;font-size:11px;" onchange="WorkOrderDetailPage.setSubstatus(this.value);this.blur();" title="Substatus">
+        ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${o.label}</option>`).join('')}
+      </select>`);
     }
-    if (ao.status === 'pågående') {
-      if (canComplete) btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',13)} Klarmarkera</button>`);
-      if (canEdit) btns.push(`<button class="btn bw bsm" onclick="WorkOrderDetailPage.setStatus('planerad')">${ic('pause-circle',13)} Pausa</button>`);
-      if (canEdit && ao.substatus) {
-        const subOpts = [
-          {v:'',label:'Inget substatus'},
-          {v:'inväntar_material',label:'Inväntar material'},
-          {v:'inväntar_kund',label:'Inväntar kund'},
-          {v:'pausad',label:'Pausad'},
-          {v:'behöver_återbesök',label:'Behöver återbesök'},
-          {v:'blockerad',label:'Blockerad'},
-        ];
-        btns.push(`<select class="btn bs bsm" style="padding:5px 8px;font-size:11px;" onchange="WorkOrderDetailPage.setSubstatus(this.value);this.blur();" title="Substatus">
-          ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${o.label}</option>`).join('')}
-        </select>`);
-      }
-    }
+    // Invoice CTA
     if (ao.status === 'klar' && !ao.invoiceId && canInvoice) {
       btns.push(`<button class="btn bsu bsm" onclick="InvoicesPage.createFromAO('${ao.id}')">${ic('receipt',13)} Skapa fakturaunderlag</button>`);
     }
-    if (ao.status === 'klar' && ao.invoiceId) {
-      btns.push(`<button class="btn bs bsm" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('file-text',13)} Visa fakturaunderlag</button>`);
-    }
+    // Reactivate
     if (canEdit && ao.status === 'avbruten' && !ao.archived && !ao.deleted) {
       btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.openReactivateModal()">${ic('rotate-ccw',13)} Återaktivera</button>`);
     }
+    // Restore from trash
+    if (ao.deleted) {
+      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}')">${ic('rotate-ccw',13)} Återställ</button>`);
+    }
+    // Change status
     if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.archived && !ao.deleted) {
       btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('refresh-cw',13)} Byt status</button>`);
     }
-    // Edit / staff (secondary)
+    return btns;
+  },
+
+  _secondaryActions(ao) {
+    const canEdit    = Auth.can('ao_edit');
+    const canInvoice = Auth.can('invoice_create');
+    const items = [];
+    // Plan / reschedule
+    if (canEdit && ['nytt','pool'].includes(ao.status)) {
+      items.push({ label:'Planera',   icon:'calendar',    fn:`WorkOrderDetailPage.setStatus('planerad')` });
+    }
+    if (canEdit && ao.status === 'nytt') {
+      items.push({ label:'Till pool', icon:'inbox',       fn:`WorkOrderDetailPage.setStatus('pool')` });
+    }
+    if (canEdit && ao.status === 'planerad') {
+      items.push({ label:'Omplanera', icon:'calendar',    fn:`WorkOrderDetailPage.openReschedule()` });
+    }
+    // Pause
+    if (canEdit && ao.status === 'pågående') {
+      items.push({ label:'Pausa',     icon:'pause-circle',fn:`WorkOrderDetailPage.setStatus('planerad')` });
+    }
+    // View invoice
+    if (ao.status === 'klar' && ao.invoiceId) {
+      items.push({ label:'Visa fakturaunderlag', icon:'file-text', fn:`Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})` });
+    }
+    // Edit / staff (separator before)
     if (canEdit) {
-      btns.push(`<button class="btn bs bxs" onclick="WorkOrderDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`);
-      btns.push(`<button class="btn bs bxs" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">${ic('users',13)} Personal</button>`);
+      items.push({ label:'Redigera',  icon:'pencil',      fn:`WorkOrderDetailPage.openEdit()`,           divider: items.length > 0 });
+      items.push({ label:'Personal',  icon:'users',       fn:`WorkOrderDetailPage.manageStaff('${ao.id}')` });
     }
-    // Archive / trash (admin — labeled, not icon-only)
+    // Archive / delete (separator before)
     if (canEdit && !ao.archived && !ao.deleted) {
-      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openArchiveModal()">${ic('archive',13)} Arkivera</button>`);
-      btns.push(`<button class="btn bghost bsm" style="color:var(--rd);" onclick="WorkOrderDetailPage.openDeleteModal()">${ic('trash',13)} Ta bort</button>`);
+      items.push({ label:'Arkivera',  icon:'archive',     fn:`WorkOrderDetailPage.openArchiveModal()`,   divider: true });
+      items.push({ label:'Ta bort',   icon:'trash',       fn:`WorkOrderDetailPage.openDeleteModal()`,    destructive: true });
     }
+    // Restore from archive
     if (ao.archived && !ao.deleted) {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage._restoreFromArchive('${ao.id}')">${ic('rotate-ccw',13)} Återställ från arkiv</button>`);
+      items.push({ label:'Återställ från arkiv', icon:'rotate-ccw', fn:`WorkOrderDetailPage._restoreFromArchive('${ao.id}')` });
     }
+    // Permanent delete
     if (ao.deleted) {
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}')">${ic('rotate-ccw',13)} Återställ</button>`);
-      btns.push(`<button class="btn bd bsm" onclick="WorkOrderDetailPage._confirmPermanentDelete('${ao.id}')">${ic('trash-2',13)} Radera permanent</button>`);
+      items.push({ label:'Radera permanent', icon:'trash-2', fn:`WorkOrderDetailPage._confirmPermanentDelete('${ao.id}')`, destructive: true, divider: true });
     }
-    return btns.join('');
+    return items;
+  },
+
+  openMoreActions(aoId) {
+    const ao = getAO(aoId || this.aoId);
+    if (!ao) return;
+    const items = this._secondaryActions(ao);
+    if (!items.length) return;
+    const rows = items.map(it => {
+      const div = it.divider ? `<div style="height:1px;background:var(--br);margin:4px 0;"></div>` : '';
+      const col = it.destructive ? 'color:var(--rd);' : '';
+      return div + `<button class="btn bghost bfull" style="justify-content:flex-start;padding:11px 14px;gap:10px;${col}" onclick="Modal.close();${it.fn}">
+        <span style="opacity:.65;flex-shrink:0;">${ic(it.icon,15)}</span>${it.label}
+      </button>`;
+    }).join('');
+    Modal.open({
+      title: `${ic('more-horizontal',14)} Fler åtgärder`,
+      body:  `<div style="display:flex;flex-direction:column;gap:2px;margin:0 -2px;">${rows}</div>`,
+      buttons: [{ label:'Avbryt', cls:'btn bs', onClick:() => Modal.close() }]
+    });
   },
 
   openReschedule() {
