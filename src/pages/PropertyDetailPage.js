@@ -39,7 +39,7 @@ const PropertyDetailPage = {
       <!-- Action panel -->
       <div class="ao-action-panel">
         <div class="ao-action-panel-left">
-          <button class="btn bs bsm" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)}</button>
+          <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
           <span style="font-size:11px;font-weight:700;color:var(--mt);">${p.id}${p.objectNumber?' · '+p.objectNumber:''}</span>
         </div>
         <div class="ao-action-panel-badges">

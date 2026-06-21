@@ -4464,6 +4464,7 @@ const ServiceTemplatesPage = {
 /* ── Admin ────────────────────────────── */
 const AdminPage = {
   _titleQ: '',
+  _tab: 'foretag',
 
   render() {
     const el = document.getElementById('pg-admin-content');
@@ -4478,8 +4479,20 @@ const AdminPage = {
       ? allTitles.filter(t => typeof t === 'object' && t.name && t.name.toLowerCase().includes(this._titleQ.toLowerCase()))
       : allTitles;
 
-    el.innerHTML = `
-      <!-- ─── GRUPP 1: Företagsinformation & Branding ─── -->
+    const tabDefs = [
+      { key: 'foretag',  label: 'Företag'   },
+      { key: 'ekonomi',  label: 'Ekonomi'   },
+      { key: 'personal', label: 'Personal'  },
+      { key: 'priser',   label: 'Priser'    },
+      { key: 'system',   label: 'System'    }
+    ];
+    const tabBar = `<div class="admin-tabs">
+      ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.label}</button>`).join('')}
+    </div>`;
+
+    const sections = {};
+
+    sections.foretag = `
       <div class="admin-section-group" style="margin-bottom:14px;">
         <div class="admin-section-header">
           <div class="admin-section-icon" style="background:#eff6ff;color:var(--blue);">${ic('building-2',18)}</div>
@@ -4587,9 +4600,9 @@ const AdminPage = {
           </div>
 
         </div>
-      </div>
+      </div>`;
 
-      <!-- ─── GRUPP 2: Ekonomi ─── -->
+    sections.ekonomi = `
       <div class="admin-section-group" style="margin-bottom:14px;">
         <div class="admin-section-header">
           <div class="admin-section-icon" style="background:#f0fdf4;color:var(--gr);">${ic('trending-up',18)}</div>
@@ -4606,9 +4619,9 @@ const AdminPage = {
           </div>
           <p style="font-size:11px;color:var(--mt);margin-top:6px;line-height:1.5;">Används för att beräkna täckningsbidrag. Visas aldrig för kund.</p>
         </div>
-      </div>
+      </div>`;
 
-      <!-- ─── GRUPP 3: Personal & Roller ─── -->
+    sections.personal = `
       <div class="admin-section-group" style="margin-bottom:14px;">
         <div class="admin-section-header">
           <div class="admin-section-icon" style="background:#faf5ff;color:var(--pu);">${ic('users',18)}</div>
@@ -4699,9 +4712,9 @@ const AdminPage = {
             }
           </div>
         </div>
-      </div>
+      </div>`;
 
-      <!-- ─── GRUPP 4: Priser & Tjänster ─── -->
+    sections.priser = `
       <div class="admin-section-group" style="margin-bottom:14px;">
         <div class="admin-section-header">
           <div class="admin-section-icon" style="background:#fff7ed;color:var(--or);">${ic('package',18)}</div>
@@ -4745,9 +4758,9 @@ const AdminPage = {
             <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-pricegroups')">${(state.priceGroups||[]).filter(p=>p.active).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
           </div>
         </div>
-      </div>
+      </div>`;
 
-      <!-- ─── GRUPP 5: System ─── -->
+    secs.system = `
       <div class="admin-section-group" style="margin-bottom:14px;">
         <div class="admin-section-header">
           <div class="admin-section-icon" style="background:#f1f5f9;color:var(--mt);">${ic('settings',18)}</div>
@@ -4777,6 +4790,8 @@ const AdminPage = {
           <button class="btn bd bsm" onclick="if(confirm('Rensa all data och återgå till demodata?')){localStorage.clear();location.reload();}">${ic('trash',13)} Återställ demodata</button>
         </div>
       </div>`;
+
+    el.innerHTML = tabBar + secs[this._tab];
   },
 
   openEditCompany() {

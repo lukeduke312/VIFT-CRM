@@ -215,11 +215,11 @@ const InvoiceDetailPage = {
     if (inv.offerId) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${ic('file-text',10)} Offert ${inv.offerId}</span>`);
 
     el.innerHTML = `
-      <!-- Hero -->
-      <div class="card" style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);color:#fff;border-radius:12px;margin-bottom:8px;">
+      <!-- Hero — full width -->
+      <div class="card inv-hero" style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);color:#fff;border-radius:12px;margin-bottom:8px;">
         <div style="padding:12px 14px 12px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-            <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)}</button>
+            <button class="btn bxs ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)} Tillbaka</button>
             <span style="font-size:11px;font-weight:700;opacity:.6;letter-spacing:.3px;">${inv.id}</span>
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
               ${sbdg(inv.status)}
@@ -249,46 +249,52 @@ const InvoiceDetailPage = {
         </div>
       </div>
 
-      <!-- Metadata -->
-      <div class="card">
-        <div class="card-header"><h3>Faktureras till</h3>
-          <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera</button>
-        </div>
-        <div class="card-body">
-          ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${esc(cu.address||'—')}${cu.city?', '+esc(cu.city):''}</span></div>` : ''}
-          ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(cu.orgNr)}</span></div>` : ''}
-          ${inv.offerId ? `<div class="dr"><span class="dk">Från offert</span>
-            <span class="dv link" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${inv.offerId}${off?' (v'+off.versionNumber+')':''}</span></div>` : ''}
-          ${inv.customerReference ? `<div class="dr"><span class="dk">Er referens</span><span class="dv">${esc(inv.customerReference)}</span></div>` : ''}
-          ${inv.ocr ? `<div class="dr"><span class="dk">OCR</span><span class="dv" style="font-family:monospace;font-weight:700;">${esc(inv.ocr)}</span></div>` : ''}
-          ${inv.paidAt ? `<div class="dr"><span class="dk" style="color:var(--gr);">Betald</span><span class="dv" style="color:var(--gr);font-weight:700;">${fmtDate(inv.paidAt)}</span></div>` : ''}
-          <div class="dr"><span class="dk">Skapad</span><span class="dv">${fmtDate(inv.createdAt)}</span></div>
-        </div>
-      </div>
-
-      <!-- Rader -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Fakturarader</h3>
-          <button class="btn bs bxs" onclick="InvoiceDetailPage.openAddLine()">${ic('plus',13)}</button>
-        </div>
-        <div id="inv-lines">
-          ${this._renderLines(inv)}
+      <!-- Two-column layout -->
+      <div class="inv-layout">
+        <!-- Left: invoice lines -->
+        <div class="inv-left">
+          <div class="card">
+            <div class="card-header">
+              <h3>Fakturarader</h3>
+              <button class="btn bs bxs" onclick="InvoiceDetailPage.openAddLine()">${ic('plus',13)}</button>
+            </div>
+            <div id="inv-lines">
+              ${this._renderLines(inv)}
+            </div>
+            ${this._renderTotals(inv)}
+          </div>
+          ${inv.note ? `<div class="nbox">${esc(inv.note)}</div>` : ''}
         </div>
 
-        <!-- Summering -->
-        ${this._renderTotals(inv)}
-      </div>
+        <!-- Right: metadata + actions + intern ekonomi -->
+        <div class="inv-right">
+          <div class="card">
+            <div class="card-header"><h3>Faktureras till</h3>
+              <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera</button>
+            </div>
+            <div class="card-body">
+              ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${esc(cu.address||'—')}${cu.city?', '+esc(cu.city):''}</span></div>` : ''}
+              ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(cu.orgNr)}</span></div>` : ''}
+              ${inv.offerId ? `<div class="dr"><span class="dk">Från offert</span>
+                <span class="dv link" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${inv.offerId}${off?' (v'+off.versionNumber+')':''}</span></div>` : ''}
+              ${inv.customerReference ? `<div class="dr"><span class="dk">Er referens</span><span class="dv">${esc(inv.customerReference)}</span></div>` : ''}
+              ${inv.ocr ? `<div class="dr"><span class="dk">OCR</span><span class="dv" style="font-family:monospace;font-weight:700;">${esc(inv.ocr)}</span></div>` : ''}
+              ${inv.paidAt ? `<div class="dr"><span class="dk" style="color:var(--gr);">Betald</span><span class="dv" style="color:var(--gr);font-weight:700;">${fmtDate(inv.paidAt)}</span></div>` : ''}
+              <div class="dr"><span class="dk">Skapad</span><span class="dv">${fmtDate(inv.createdAt)}</span></div>
+            </div>
+          </div>
 
-      ${inv.note ? `<div class="nbox">${esc(inv.note)}</div>` : ''}
+          <div class="inv-actions-card">
+            ${inv.status === 'utkast'  ? `<button class="btn bp bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
+            ${inv.status === 'skickad' ? `<button class="btn bsu bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
+            <button class="btn bs bsm inv-action-btn" onclick="InvoiceDetailPage.showPrintView()">${ic('printer',14)} PDF / Skriv ut</button>
+          </div>
 
-      <!-- Intern ekonomi -->
-      ${inv.workOrderId ? this._internEkonomi(inv) : ''}
-
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${inv.status === 'utkast'  ? `<button class="btn bp bsm" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
-        ${inv.status === 'skickad' ? `<button class="btn bsu bsm" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
-        <button class="btn bs bsm" onclick="InvoiceDetailPage.showPrintView()">${ic('printer',14)} PDF / Skriv ut</button>
+          ${inv.workOrderId ? `<details class="inv-intern-wrap">
+            <summary class="inv-intern-summary">${ic('trending-up',12)} Intern ekonomi <span style="font-size:10px;color:var(--mt);">${ic('eye-off',9)} Ej kundsynlig</span></summary>
+            ${this._internEkonomi(inv)}
+          </details>` : ''}
+        </div>
       </div>`;
   },
 

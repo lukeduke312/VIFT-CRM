@@ -1832,3 +1832,61 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .list-item-v2-title { font-size: 14px; font-weight: 700; color: var(--tx); margin-bottom: 3px; }
 .list-item-v2-meta  { font-size: 12px; color: var(--mt); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .list-item-v2-aside { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+
+/* ── Invoice detail layout ────────────────────── */
+.inv-layout { display: flex; flex-direction: column; gap: 8px; }
+.inv-left  { display: flex; flex-direction: column; gap: 8px; }
+.inv-right { display: flex; flex-direction: column; gap: 8px; }
+
+.inv-actions-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--br);
+}
+.inv-action-btn { width: 100%; justify-content: flex-start; }
+
+.inv-intern-wrap {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--br);
+  overflow: hidden;
+}
+.inv-intern-wrap > .card {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+}
+.inv-intern-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mt);
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+  user-select: none;
+}
+.inv-intern-wrap[open] .inv-intern-summary { border-bottom-color: var(--br); }
+.inv-intern-summary::-webkit-details-marker { display: none; }
+
+/* ── Admin tabs ───────────────────────────────── */
+.admin-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  margin-bottom: 14px;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+}
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tab { white-space: nowrap; flex-shrink: 0; }
