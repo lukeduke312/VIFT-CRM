@@ -148,6 +148,9 @@ const PropertyDetailPage = {
           ${Auth.can('properties_manage')
             ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
             : ''}
+          ${Auth.can('properties_manage')
+            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openFlerAtgarder('${p.id}')">${ic('more-vertical',13)}</button>`
+            : ''}
         </div>
       </div>
 
@@ -1224,5 +1227,150 @@ const PropertyDetailPage = {
       if (el) this._renderFull(el, p);
       showToast(activate ? 'Fastighet aktiverad' : 'Fastighet inaktiverad');
     });
+  },
+
+  /* ── Fler åtgärder (action sheet) ─────────────────────── */
+
+  openFlerAtgarder(propId) {
+    Modal.open({
+      title: 'Fler åtgärder',
+      body: `
+        <ul class="action-sheet-list">
+          <li><button class="action-sheet-btn" onclick="Modal.close();PropertyDetailPage.openCopyProperty()">
+            ${ic('copy',16)} Kopiera fastighet
+          </button></li>
+        </ul>`,
+      buttons: [{ label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }]
+    });
+  },
+
+  /* ── Kopiera fastighet ─────────────────────────────────── */
+
+  openCopyProperty() {
+    const p = getObj(this.propId);
+    if (!p) return;
+    const contactCount = (p.contacts||[]).length;
+    const noteCount    = (p.notes||[]).length;
+    const techKeys     = Object.keys(p.technicalSystems||{}).filter(k => Object.values(p.technicalSystems[k]||{}).some(Boolean));
+    const techSummary  = techKeys.length ? techKeys.length + ' system ifyllda' : 'inga ifyllda';
+    const inspKeys     = Object.keys(p.inspections||{}).filter(k => Object.values(p.inspections[k]||{}).some(Boolean));
+
+    Modal.open({
+      title: `${ic('copy',14)} Kopiera fastighet`,
+      body: `
+        <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;">
+          <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:4px;">Ny fastighet skapas</div>
+          <div style="font-size:12px;color:var(--mt);">Namn: <strong style="color:var(--navy);">Kopia av ${p.name}</strong></div>
+          <div style="font-size:11px;color:var(--mt);margin-top:4px;">Grunddata (adress, typ, kund, ytor, förvaltning, åtkomst) kopieras alltid.</div>
+        </div>
+
+        <div style="font-size:11px;font-weight:800;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Välj vad som inkluderas</div>
+
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bg);cursor:pointer;">
+          <input type="checkbox" id="copy-tech" checked style="margin-top:2px;flex-shrink:0;">
+          <div>
+            <div style="font-size:13px;font-weight:600;">Tekniska system</div>
+            <div style="font-size:11px;color:var(--mt);">${techSummary} · Värme, Ventilation, El, Vatten, SBA m.m.</div>
+          </div>
+        </label>
+
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bg);cursor:pointer;">
+          <input type="checkbox" id="copy-contacts" ${contactCount > 0 ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;">
+          <div>
+            <div style="font-size:13px;font-weight:600;">Kontaktpersoner</div>
+            <div style="font-size:11px;color:var(--mt);">${contactCount > 0 ? contactCount + ' person' + (contactCount>1?'er':'') : 'Inga registrerade'}</div>
+          </div>
+        </label>
+
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--bg);cursor:pointer;">
+          <input type="checkbox" id="copy-insp" style="margin-top:2px;flex-shrink:0;">
+          <div>
+            <div style="font-size:13px;font-weight:600;">Besiktningsdata</div>
+            <div style="font-size:11px;color:var(--mt);">${inspKeys.length > 0 ? inspKeys.length + ' besiktning(ar) registrerade' : 'Inga registrerade'} · OVK, SBA, Hiss m.m.</div>
+          </div>
+        </label>
+
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;cursor:pointer;">
+          <input type="checkbox" id="copy-notes" style="margin-top:2px;flex-shrink:0;">
+          <div>
+            <div style="font-size:13px;font-weight:600;">Anteckningar</div>
+            <div style="font-size:11px;color:var(--mt);">${noteCount > 0 ? noteCount + ' anteckning(ar)' : 'Inga registrerade'}</div>
+          </div>
+        </label>
+
+        <div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:8px;">
+          <div style="font-size:11px;color:var(--mt);font-weight:700;margin-bottom:4px;">Inkluderas aldrig</div>
+          <div style="font-size:11px;color:var(--mt);">Bilder · Arbetsorder · Återkommande ärenden · Historik</div>
+        </div>`,
+      buttons: [
+        { label: `${ic('copy',13)} Skapa kopia`, cls: 'btn bp', onClick: () => this._executeCopy() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _executeCopy() {
+    const p = getObj(this.propId);
+    if (!p) return;
+
+    const opts = {
+      tech:      document.getElementById('copy-tech')?.checked     ?? true,
+      contacts:  document.getElementById('copy-contacts')?.checked ?? false,
+      insp:      document.getElementById('copy-insp')?.checked     ?? false,
+      notes:     document.getElementById('copy-notes')?.checked    ?? false,
+    };
+
+    /* Deep clone — strips by reference cleanly */
+    const src = JSON.parse(JSON.stringify(p));
+
+    const copy = {
+      /* Basic data — always copied */
+      id:                   newId(state.properties, 'OBJ'),
+      name:                 'Kopia av ' + p.name,
+      customerId:           src.customerId           || '',
+      address:              src.address              || '',
+      zip:                  src.zip                  || '',
+      city:                 src.city                 || '',
+      type:                 src.type                 || '',
+      group:                src.group                || '',
+      operationalArea:      src.operationalArea      || '',
+      propertyDesignation:  src.propertyDesignation  || '',
+      buildYear:            src.buildYear            || '',
+      renovationYear:       src.renovationYear       || '',
+      buildingCount:        src.buildingCount        || 1,
+      floors:               src.floors               || 0,
+      apartments:           src.apartments           || 0,
+      area:                 src.area                 || 0,
+      boa:                  src.boa                  || 0,
+      loa:                  src.loa                  || 0,
+      bta:                  src.bta                  || 0,
+      lotArea:              src.lotArea              || 0,
+      managementType:       src.managementType       || '',
+      propertyManager:      src.propertyManager      || '',
+      technician:           src.technician           || '',
+      accessCode:           src.accessCode           || '',
+      keyInfo:              src.keyInfo              || '',
+      note:                 src.note                 || '',
+      objectNumber:         '',        /* cleared — varje fastighet har unikt objektnummer */
+      status:               'aktiv',
+      createdAt:            new Date().toISOString(),
+      updatedAt:            new Date().toISOString(),
+
+      /* Optionals */
+      technicalSystems:     opts.tech     ? (src.technicalSystems || {}) : {},
+      contacts:             opts.contacts ? (src.contacts          || []) : [],
+      inspections:          opts.insp     ? (src.inspections        || {}) : {},
+      notes:                opts.notes    ? (src.notes              || []) : [],
+
+      /* Always empty — these are separate records indexed by propertyId */
+      images: [],
+    };
+
+    state.properties = state.properties || [];
+    state.properties.push(copy);
+    persist();
+    Modal.close();
+    showToast('Fastighet kopierad — öppnar ny fastighet');
+    setTimeout(() => Router.showPage('pg-obj-detail', { propId: copy.id }), 300);
   }
 };
