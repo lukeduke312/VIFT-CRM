@@ -121,7 +121,7 @@ const PropertyDetailPage = {
       <div id="prop-tab-ao"         ${this.activeTab!=='ao'         ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
       <div id="prop-tab-recurring"  ${this.activeTab!=='recurring'  ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
       <div id="prop-tab-rondering"  ${this.activeTab!=='rondering'  ?'style="display:none"':''}><div id="tab-rondering">${this.activeTab==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
-      <div id="prop-tab-images"     ${this.activeTab!=='images'     ?'style="display:none"':''}>${this._renderImagesTab(p, images)}</div>
+      <div id="prop-tab-images"     ${this.activeTab!=='images'     ?'style="display:none"':''}>${this._renderImagesTab(p)}</div>
       <div id="prop-tab-notes"      ${this.activeTab!=='notes'      ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>`;
 
     el.innerHTML = `
@@ -174,6 +174,8 @@ const PropertyDetailPage = {
         </div>
       </div>
     `;
+    /* Auto-load images if images tab is active */
+    if (this.activeTab === 'images') this._loadImages(p.id);
   },
 
   switchTab(tab) {
@@ -194,6 +196,10 @@ const PropertyDetailPage = {
         if (p) el.innerHTML = this._renderRonderingTabContent(p);
         el.dataset.loaded = '1';
       }
+    }
+    // Load images from Supabase when switching to images tab
+    if (tab === 'images') {
+      this._loadImages(this.propId);
     }
   },
 
@@ -485,49 +491,66 @@ const PropertyDetailPage = {
     `;
   },
 
-  /* ── Tab: Bilder ───────────────────────────────────────── */
+  /* ── Tab: Bilder (Supabase Storage) ───────────────────── */
 
-  _renderImagesTab(p, images) {
+  _renderImagesTab(p) {
     return `
-      <div class="card">
+      <div class="card" id="prop-images-card">
         <div class="card-header">
-          <h3>${ic('image',14)} Bilder${images.length ? ` (${images.length})` : ''}</h3>
+          <h3>${ic('image',14)} Bilder</h3>
           ${Auth.can('properties_manage')
             ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till</button>`
             : ''}
         </div>
-        <div class="card-body">
-          ${images.length === 0 ? `
-            <div style="text-align:center;padding:32px 0;">
-              <div style="color:var(--mt);margin-bottom:12px;">${ic('image',36)}</div>
-              <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px;">Inga bilder ännu</div>
-              <p style="font-size:12px;color:var(--mt);margin:0 0 16px;line-height:1.5;">
-                Lägg till bilder på entré, teknikrum, undercentral, garage m.m.<br>
-                Det hjälper personalen att hitta rätt snabbt.
-              </p>
-              ${Auth.can('properties_manage')
-                ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till bild</button>`
-                : ''}
-            </div>` :
-            `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;">
-              ${images.map((img, i) => `
-                <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;background:#fff;"
-                  onclick="PropertyDetailPage.viewImage(${i})">
-                  <div style="position:relative;">
-                    <img src="${img.dataUrl||''}" alt="${img.title||''}"
-                      style="width:100%;height:90px;object-fit:cover;display:block;">
-                    ${img.category ? `<span class="img-cat-badge" style="position:absolute;bottom:4px;left:4px;">${img.category}</span>` : ''}
-                  </div>
-                  <div style="padding:5px 7px;font-size:10px;font-weight:700;color:var(--navy);
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${img.title||'Bild'}</div>
-                </div>`).join('')}
-            </div>`}
+        <div class="card-body" id="prop-images-container">
+          <div style="text-align:center;padding:24px 0;color:var(--mt);">${ic('loader',18)} Laddar bilder…</div>
         </div>
-      </div>
-      <div class="ibox" style="font-size:11px;color:var(--mt);text-align:center;">
-        ${ic('info',12)} Bilder lagras lokalt. Riktig filuppladdning aktiveras i Fas 4 (backend).
-      </div>
-    `;
+      </div>`;
+  },
+
+  async _loadImages(propId) {
+    const container = document.getElementById('prop-images-container');
+    const card      = document.getElementById('prop-images-card');
+    if (!container) return;
+    try {
+      const images = await PropertyImageService.list(propId);
+      this._cachedImages = images;
+      /* Update tab counter */
+      const tabBtn = document.querySelector('#prop-tabs .ft:nth-child(7)');
+      if (tabBtn) tabBtn.textContent = images.length ? `Bilder (${images.length})` : 'Bilder';
+      /* Update card header count */
+      const h3 = card?.querySelector('h3');
+      if (h3) h3.innerHTML = `${ic('image',14)} Bilder${images.length ? ` (${images.length})` : ''}`;
+
+      container.innerHTML = images.length === 0
+        ? `<div style="text-align:center;padding:32px 0;">
+            <div style="color:var(--mt);margin-bottom:12px;">${ic('image',36)}</div>
+            <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px;">Inga bilder ännu</div>
+            <p style="font-size:12px;color:var(--mt);margin:0 0 16px;line-height:1.5;">
+              Lägg till bilder på entré, teknikrum, undercentral, garage m.m.<br>
+              Bilderna sparas i molnet och syns för alla inloggade användare.
+            </p>
+            ${Auth.can('properties_manage')
+              ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till bild</button>`
+              : ''}
+          </div>`
+        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;">
+            ${images.map((img, i) => `
+              <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;background:#fff;"
+                onclick="PropertyDetailPage.viewImage(${i})">
+                <div style="position:relative;">
+                  <img src="${img.publicUrl}" alt="${img.title||''}"
+                    loading="lazy"
+                    style="width:100%;height:90px;object-fit:cover;display:block;">
+                  ${img.category ? `<span class="img-cat-badge">${img.category}</span>` : ''}
+                </div>
+                <div style="padding:5px 7px;font-size:10px;font-weight:700;color:var(--navy);
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${img.title||'Bild'}</div>
+              </div>`).join('')}
+          </div>`;
+    } catch(e) {
+      container.innerHTML = `<div class="ibox" style="color:var(--rd);">${ic('alert-circle',13)} Kunde inte ladda bilder: ${e.message}</div>`;
+    }
   },
 
   /* ── Tab: Rondering ───────────────────────────────────── */
@@ -1044,11 +1067,13 @@ const PropertyDetailPage = {
     if (overviewTab) overviewTab.innerHTML = this._renderOverview(prop, insp);
   },
 
-  /* ── Bilder ────────────────────────────────────────────── */
+  /* ── Bilder (Supabase Storage) ────────────────────────── */
+
+  _cachedImages: [],   /* Cache för aktuell fastighets bilder */
 
   openAddImage() {
     Modal.open({
-      title: 'Lägg till bild',
+      title: `${ic('image',14)} Lägg till bild`,
       body: `
         <div class="fg"><label>Rubrik <span style="color:var(--rd)">*</span></label>
           <input id="img-title" placeholder="T.ex. Undercentral, Entré port A…"></div>
@@ -1067,11 +1092,12 @@ const PropertyDetailPage = {
         <div class="fg"><label>Beskrivning</label>
           <textarea id="img-desc" rows="2" placeholder="Kort beskrivning…"></textarea></div>
         <div class="fg"><label>Bild (välj fil) <span style="color:var(--rd)">*</span></label>
-          <input type="file" id="img-file" accept="image/*"
+          <input type="file" id="img-file" accept="image/*,image/heic,image/heif"
             onchange="PropertyDetailPage._previewImage(this)"></div>
-        <div id="img-preview" style="margin-top:8px;"></div>`,
+        <div id="img-preview" style="margin-top:8px;"></div>
+        <div style="font-size:11px;color:var(--mt);margin-top:8px;">${ic('info',10)} Bilden sparas i Supabase och syns för alla inloggade.</div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveImage() },
+        { label: `${ic('upload',13)} Ladda upp`, cls: 'btn bp', onClick: () => this._saveImage() },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
@@ -1081,73 +1107,69 @@ const PropertyDetailPage = {
   _previewImage(input) {
     const file = input.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const prev = document.getElementById('img-preview');
-      if (prev) prev.innerHTML =
-        `<img src="${e.target.result}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:contain;">`;
-    };
-    reader.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const prev = document.getElementById('img-preview');
+    if (prev) prev.innerHTML =
+      `<img src="${url}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:contain;">`;
   },
 
-  _saveImage() {
+  async _saveImage() {
     const title = document.getElementById('img-title')?.value.trim();
     if (!title) { showToast('Rubrik krävs'); return; }
     const file = document.getElementById('img-file')?.files[0];
     if (!file) { showToast('Välj en bild'); return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-      const prop = getObj(this.propId);
-      if (!prop) return;
-      if (!prop.images) prop.images = [];
-      prop.images.push({
-        id:          'IMG' + Date.now(),
+
+    const saveBtn = document.querySelector('.modal-footer .btn.bp');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = ic('loader',13) + ' Laddar upp…'; }
+
+    try {
+      await PropertyImageService.upload(this.propId, file, {
         title,
         category:    document.getElementById('img-cat')?.value    || '',
-        techSection: document.getElementById('img-section')?.value|| '',
-        description: document.getElementById('img-desc')?.value.trim() || '',
-        dataUrl:     e.target.result,
-        createdAt:   new Date().toISOString()
+        techSection: document.getElementById('img-section')?.value || '',
+        description: document.getElementById('img-desc')?.value.trim() || ''
       });
-      persist();
       Modal.close();
-      showToast('Bild sparad');
-      const tabEl = document.getElementById('prop-tab-images');
-      if (tabEl) tabEl.innerHTML = this._renderImagesTab(prop, prop.images);
-    };
-    reader.readAsDataURL(file);
+      showToast('Bild uppladdad');
+      await this._loadImages(this.propId);
+    } catch(e) {
+      showToast('Fel: ' + e.message);
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = ic('upload',13) + ' Ladda upp'; }
+    }
   },
 
   viewImage(idx) {
-    const prop = getObj(this.propId);
-    const img = (prop?.images||[])[idx];
+    const img = this._cachedImages[idx];
     if (!img) return;
     Modal.open({
       title: img.title || 'Bild',
       body: `
         <div style="text-align:center;">
-          <img src="${img.dataUrl}" alt="${img.title}"
+          <img src="${img.publicUrl}" alt="${img.title||''}"
             style="max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain;">
-          ${img.description ? `<p style="font-size:13px;margin-top:8px;">${img.description}</p>` : ''}
-          ${img.techSection ? `<div style="font-size:11px;color:var(--mt);">System: ${img.techSection}</div>` : ''}
-          ${img.category    ? `<div style="font-size:11px;color:var(--mt);">Kategori: ${img.category}</div>` : ''}
+          ${img.description  ? `<p style="font-size:13px;margin-top:10px;">${img.description}</p>` : ''}
+          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
+            ${img.category    ? `<span style="font-size:11px;color:var(--mt);">${ic('tag',10)} ${img.category}</span>` : ''}
+            ${img.tech_section? `<span style="font-size:11px;color:var(--mt);">${ic('settings',10)} ${img.tech_section}</span>` : ''}
+          </div>
         </div>`,
       buttons: [
-        { label: `${ic('trash',13)} Ta bort`, cls:'btn bd', onClick: () => this._removeImage(idx) },
-        { label: 'Stäng', cls:'btn bs', onClick: () => Modal.close() }
+        { label: `${ic('trash',13)} Ta bort`, cls: 'btn bd', onClick: () => this._removeImage(img.id, img.storage_path) },
+        { label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
   },
 
-  _removeImage(idx) {
-    const prop = getObj(this.propId);
-    if (!prop || !prop.images) return;
-    prop.images.splice(idx, 1);
-    persist();
-    Modal.close();
-    showToast('Bild borttagen');
-    const tabEl = document.getElementById('prop-tab-images');
-    if (tabEl) tabEl.innerHTML = this._renderImagesTab(prop, prop.images);
+  async _removeImage(id, storagePath) {
+    Modal.confirm('Ta bort bilden permanent från Supabase?', async () => {
+      try {
+        await PropertyImageService.remove(id, storagePath);
+        showToast('Bild borttagen');
+        await this._loadImages(this.propId);
+      } catch(e) {
+        showToast('Fel: ' + e.message);
+      }
+    });
   },
 
   /* ── Anteckningar ──────────────────────────────────────── */
