@@ -4760,7 +4760,7 @@ const AdminPage = {
         </div>
       </div>`;
 
-    secs.system = `
+    sections.system = `
       <div class="admin-section-group" style="margin-bottom:14px;">
         <div class="admin-section-header">
           <div class="admin-section-icon" style="background:#f1f5f9;color:var(--mt);">${ic('settings',18)}</div>
@@ -4791,7 +4791,7 @@ const AdminPage = {
         </div>
       </div>`;
 
-    el.innerHTML = tabBar + secs[this._tab];
+    el.innerHTML = tabBar + sections[this._tab];
   },
 
   openEditCompany() {
