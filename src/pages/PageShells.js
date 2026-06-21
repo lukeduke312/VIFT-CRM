@@ -785,7 +785,11 @@ const OffersPage = {
         <div class="fg"><label>Telefon</label><input id="qcu-phone" placeholder="070-xxx xx xx"></div>
         <div class="fg"><label>E-post</label><input id="qcu-email" type="email" placeholder="namn@exempel.se"></div>
       </div>
-      <div class="fg"><label>Gatuadress</label><input id="qcu-addr" placeholder="Storgatan 1"></div>
+      <div class="fg"><label>Gatuadress</label><input id="qcu-addr" placeholder="Storgatan 1"
+        autocomplete="off"
+        oninput="AddressService.handleInput(this)"
+        onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
+        data-addr-zip="qcu-zip" data-addr-city="qcu-city"></div>
       <div class="g2">
         <div class="fg"><label>Postnummer</label><input id="qcu-zip" placeholder="123 45"></div>
         <div class="fg"><label>Stad</label><input id="qcu-city" placeholder="Stockholm"></div>
@@ -3376,7 +3380,11 @@ const PropertiesPage = {
           ${(state.customers||[]).map(c=>`<option value="${c.id}" ${v('customerId')===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
         </select></div>
       <div class="fg"><label>Gatuadress</label>
-        <input id="prop-addr" value="${v('address')}" placeholder="Storgatan 1"></div>
+        <input id="prop-addr" value="${v('address')}" placeholder="Börja skriva adress…"
+          autocomplete="off"
+          oninput="AddressService.handleInput(this)"
+          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
+          data-addr-zip="prop-zip" data-addr-city="prop-city"></div>
       <div class="g2">
         <div class="fg"><label>Postnummer</label><input id="prop-zip" value="${v('zip')}" placeholder="123 45"></div>
         <div class="fg"><label>Stad</label><input id="prop-city" value="${v('city')}" placeholder="Stockholm"></div>

@@ -1,7 +1,7 @@
 /**
- * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v6)
+ * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v11)
  * Tabs: Översikt | Kontakt | Teknisk info | Arbetsorder | Återkommande | Bilder | Anteckningar
- * v6: bildgalleri-kategorier, desktop 2-kol layout, tech-accordion, mobile quick banner
+ * v11: data-addr-* på adressinput för AddressService v3
  */
 const PropertyDetailPage = {
   propId: null,
@@ -689,7 +689,11 @@ const PropertyDetailPage = {
 
       <div style="font-size:11px;font-weight:800;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px;">Adress</div>
       <div class="fg"><label>Gatuadress</label>
-        <input id="prop-addr" value="${v('address')}" placeholder="Storgatan 1"></div>
+        <input id="prop-addr" value="${v('address')}" placeholder="Börja skriva adress…"
+          autocomplete="off"
+          oninput="AddressService.handleInput(this)"
+          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
+          data-addr-zip="prop-zip" data-addr-city="prop-city"></div>
       <div class="g2">
         <div class="fg"><label>Postnummer</label><input id="prop-zip" value="${v('zip')}" placeholder="123 45"></div>
         <div class="fg"><label>Stad</label><input id="prop-city" value="${v('city')}" placeholder="Stockholm"></div>

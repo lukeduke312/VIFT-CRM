@@ -134,7 +134,11 @@ const CustomersPage = {
         <div class="fg"><label>Telefon</label><input id="cu-phone" type="tel" value="${v('phone')}" placeholder="070-000 00 00"></div>
         <div class="fg"><label>E-post</label><input id="cu-email" type="email" value="${v('email')}" placeholder="info@exempel.se"></div>
       </div>
-      <div class="fg"><label>Adress</label><input id="cu-address" value="${v('address')}" placeholder="Storgatan 1"></div>
+      <div class="fg"><label>Adress</label><input id="cu-address" value="${v('address')}" placeholder="Storgatan 1"
+        autocomplete="off"
+        oninput="AddressService.handleInput(this)"
+        onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
+        data-addr-zip="cu-zip" data-addr-city="cu-city"></div>
       <div class="g2">
         <div class="fg"><label>Postnummer</label><input id="cu-zip" value="${v('zip')}" placeholder="123 45"></div>
         <div class="fg"><label>Stad</label><input id="cu-city" value="${v('city')}" placeholder="Stockholm"></div>
@@ -145,7 +149,11 @@ const CustomersPage = {
           onchange="CustomersPage._toggleInvoice()">Annan fakturaadress</label>
       </div>
       <div id="cu-inv-fields" style="${diffInv?'':'display:none'}">
-        <div class="fg"><label>Fakturaadress</label><input id="cu-inv-address" value="${v('invoiceAddress')}" placeholder="Fakturavägen 2"></div>
+        <div class="fg"><label>Fakturaadress</label><input id="cu-inv-address" value="${v('invoiceAddress')}" placeholder="Fakturavägen 2"
+          autocomplete="off"
+          oninput="AddressService.handleInput(this)"
+          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
+          data-addr-zip="cu-inv-zip" data-addr-city="cu-inv-city"></div>
         <div class="g2">
           <div class="fg"><label>Postnummer</label><input id="cu-inv-zip" value="${v('invoiceZip')}" placeholder="123 45"></div>
           <div class="fg"><label>Stad</label><input id="cu-inv-city" value="${v('invoiceCity')}" placeholder="Stockholm"></div>

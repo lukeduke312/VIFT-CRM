@@ -1774,7 +1774,10 @@ const WorkOrderDetailPage = {
         <div class="fg"><label>Rubrik</label><input id="edit-title" value="${ao.title}"></div>
         <div class="fg"><label>Beskrivning</label><textarea id="edit-desc" rows="2">${ao.description||''}</textarea></div>
         <div class="fg"><label>Kund</label><select id="edit-cu">${cuOptions}</select></div>
-        <div class="fg"><label>Adress</label><input id="edit-addr" value="${ao.address||''}"></div>
+        <div class="fg"><label>Adress</label><input id="edit-addr" value="${ao.address||''}"
+          autocomplete="off"
+          oninput="AddressService.handleInput(this)"
+          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"></div>
         <div class="g2">
           <div class="fg"><label>Datum</label><input type="date" id="edit-date" value="${ao.scheduledDate||''}"></div>
           <div class="fg"><label>Prioritet</label>

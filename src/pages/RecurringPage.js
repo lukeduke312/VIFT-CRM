@@ -247,7 +247,11 @@ const RecurringPage = {
           <div id="ro-addr-custom-wrap" style="${addrMode==='custom'?'':'display:none'}">
             <div class="fg" style="margin-bottom:6px;">
               <label>Gatuadress</label>
-              <input id="ro-street" value="${parsedStreet}" placeholder="Storgatan 1"></div>
+              <input id="ro-street" value="${parsedStreet}" placeholder="Storgatan 1"
+                autocomplete="off"
+                oninput="AddressService.handleInput(this)"
+                onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
+                data-addr-zip="ro-zip" data-addr-city="ro-city"></div>
             <div class="g2" style="margin-bottom:6px;">
               <div class="fg"><label>Postnummer</label>
                 <input id="ro-zip" value="${parsedZip}" placeholder="123 45"></div>

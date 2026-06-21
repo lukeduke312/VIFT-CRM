@@ -402,7 +402,10 @@ const WorkOrdersPage = {
         </button></div>
       <div id="wiz-autofill"></div>
       <div class="fg"><label>Arbetsadress</label>
-        <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"></div>
+        <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"
+          autocomplete="off"
+          oninput="AddressService.handleInput(this)"
+          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"></div>
       <div class="g2">
         <div class="fg"><label>Kontaktperson</label>
           <input id="wiz-contact" value="${d.contactPerson||cu&&cu.contactPerson||''}" placeholder="Namn"></div>
