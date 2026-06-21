@@ -49,38 +49,52 @@ const WorkOrderDetailPage = {
       ${ao.deleted ? `<div class="nbox" style="background:#fee2e2;border-left-color:var(--rd);margin-bottom:8px;">${ic('trash',13)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
       ${ao.archived && !ao.deleted ? `<div class="nbox" style="background:#f1f5f9;border-left-color:var(--mt);margin-bottom:8px;">${ic('archive',13)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
 
-      <!-- Hero/Info panel -->
-      <div class="card" style="margin-bottom:2px;">
-        <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);padding:12px 14px 10px;color:#fff;border-radius:11px 11px 0 0;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)}</button>
-            <span style="font-size:11px;font-weight:700;opacity:.65;letter-spacing:.3px;">${ao.id}</span>
-            <div style="display:flex;gap:5px;align-items:center;margin-left:auto;">
+      <!-- Hero/Info panel (Runda 3) -->
+      <div class="card ao-hero" style="margin-bottom:2px;">
+        <div class="ao-hero-head">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <button class="btn bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)} Tillbaka</button>
+            <span class="ao-head-id">${ao.id}</span>
+            <div class="ao-head-badges">
               ${sbdg(ao.status)} ${pbdg(ao.priority)}
               ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="background:rgba(255,255,255,.18);color:#fff;font-size:10px;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
             </div>
           </div>
-          <div style="font-size:17px;font-weight:800;line-height:1.25;margin-bottom:6px;">${ao.title}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;opacity:.85;">
-            <span style="display:flex;align-items:center;gap:4px;">${ic('user',11)} <span style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu&&cu.id}'})">${cuName}</span></span>
-            ${ao.scheduledDate?`<span style="display:flex;align-items:center;gap:4px;">${ic('calendar',11)} ${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span>`:''}
-            ${ao.address?`<span style="display:flex;align-items:center;gap:4px;">${ic('map-pin',11)} ${ao.address}</span>`:''}
+          <div class="ao-head-title">${ao.title}</div>
+          <div class="ao-head-meta">
+            <div class="ao-head-meta-row">
+              ${ic('user',13)}
+              <span style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu&&cu.id}'})">${cuName}</span>
+            </div>
+            ${ao.address?`
+            <div class="ao-head-meta-row">
+              ${ic('map-pin',13)}
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener" class="ao-addr-link" onclick="event.stopPropagation()">${esc(ao.address)}</a>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener" class="btn ao-nav-btn" onclick="event.stopPropagation()">${ic('navigation',11)} Navigera</a>
+            </div>`:''}
+            ${ao.scheduledDate?`
+            <div class="ao-head-meta-row">
+              ${ic('calendar',13)}
+              <span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span>
+            </div>`:''}
           </div>
         </div>
-        <div style="padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;border-bottom:1px solid var(--bg);">
-          ${this._actionBtns(ao)}
-        </div>
-        <div class="card-body" style="padding:10px 14px;">
-          ${ao.description ? `<p style="font-size:13px;color:var(--mt);line-height:1.5;margin-bottom:10px;">${ao.description}</p>` : ''}
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;">
-            <div class="dr"><span class="dk">Kontakt</span><span class="dv">${ao.contactPerson||'—'}${ao.phone?'<br><span style="font-size:11px;color:var(--sky);">'+ao.phone+'</span>':''}</span></div>
-            ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-weight:800;letter-spacing:.5px;">${ao.accessCode}</span></div>` : '<div></div>'}
-            <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'<span style="color:var(--rd);">Ej tilldelad</span>'}${respName?`<br><span style="font-size:10px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:''}</span></div>
-            <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
-            ${ao.category ? `<div class="dr"><span class="dk">Kategori</span><span class="dv">${catBadge(ao.category)}</span></div>` : ''}
+        <div class="ao-hero-body">
+          <div class="ao-hero-info">
+            ${ao.description ? `<p class="ao-desc">${ao.description}</p>` : ''}
+            <div class="ao-info-grid">
+              <div class="dr"><span class="dk">Kontakt</span><span class="dv">${ao.contactPerson||'—'}${ao.phone?'<br><span style="font-size:11px;color:var(--sky);">'+ao.phone+'</span>':''}</span></div>
+              ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-weight:800;letter-spacing:.5px;">${ao.accessCode}</span></div>` : '<div></div>'}
+              <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'<span style="color:var(--rd);">Ej tilldelad</span>'}${respName?`<br><span style="font-size:10px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:''}</span></div>
+              <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
+              ${ao.category ? `<div class="dr"><span class="dk">Kategori</span><span class="dv">${catBadge(ao.category)}</span></div>` : ''}
+            </div>
+            ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
+            ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye-off',13)} <strong>Internt:</strong> ${ao.internalNote}</div>` : ''}
           </div>
-          ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
-          ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye-off',13)} <strong>Internt:</strong> ${ao.internalNote}</div>` : ''}
+          <div class="ao-hero-actions">
+            ${this._actionBtns(ao)}
+          </div>
         </div>
       </div>
 
