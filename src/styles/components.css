@@ -580,12 +580,24 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 
 .ao-back-btn {
+  background: rgba(0,0,0,.05) !important;
+  color: var(--navy) !important;
+  border: 1px solid var(--br) !important;
+  font-weight: 600;
+}
+.ao-back-btn:hover { background: rgba(0,0,0,.1) !important; }
+
+/* Inside dark hero areas, restore white style */
+.ao-hero-head .ao-back-btn,
+.inv-hero .ao-back-btn {
   background: rgba(255,255,255,.18) !important;
   color: #fff !important;
-  border: 1px solid rgba(255,255,255,.3) !important;
-  font-weight: 500;
+  border-color: rgba(255,255,255,.3) !important;
 }
-.ao-back-btn:hover { background: rgba(255,255,255,.28) !important; }
+.ao-hero-head .ao-back-btn:hover,
+.inv-hero .ao-back-btn:hover {
+  background: rgba(255,255,255,.28) !important;
+}
 
 .ao-head-id {
   font-size: 11px; font-weight: 700; opacity: .6; letter-spacing: .3px;
@@ -1890,3 +1902,30 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .admin-tabs::-webkit-scrollbar { display: none; }
 .admin-tab { white-space: nowrap; flex-shrink: 0; }
+
+/* ── Action Sheet (Fler åtgärder) ─────────────────── */
+.action-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -4px 0;
+}
+.action-sheet-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--navy);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s;
+}
+.action-sheet-btn:hover { background: var(--bg); }
+.action-sheet-btn--red  { color: var(--rd); }
+.action-sheet-btn--warn { color: var(--or); }

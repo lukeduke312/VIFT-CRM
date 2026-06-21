@@ -34,6 +34,10 @@ const PropertyDetailPage = {
     const insp    = p.inspections || {};
     const images  = p.images || [];
     const overdueInsp = Object.values(insp).filter(v => v.nextDate && v.nextDate < tdy()).length;
+    const addrLine = p.address || '';
+    const cityLine = [p.zip, p.city].filter(Boolean).join(' ');
+    const fullAddr = [addrLine, cityLine].filter(Boolean).join(', ');
+    const mapsUrl  = fullAddr ? `https://maps.google.com/?q=${encodeURIComponent(fullAddr)}` : '';
 
     el.innerHTML = `
       <!-- Action panel -->
@@ -68,8 +72,12 @@ const PropertyDetailPage = {
           <div style="display:flex;align-items:flex-start;gap:12px;">
             <div style="flex:1;min-width:0;">
               <div style="font-size:18px;font-weight:900;color:var(--navy);line-height:1.2;margin-bottom:4px;">${p.name}</div>
-              ${[p.address, [p.zip,p.city].filter(Boolean).join(' ')].filter(Boolean).map(s=>
-                `<div style="font-size:12px;color:var(--mt);">${s}</div>`).join('')}
+              ${addrLine ? `<div style="font-size:12px;color:var(--mt);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
+                <a href="${mapsUrl}" target="_blank" rel="noopener"
+                  style="color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-color:rgba(0,0,0,.3);">${addrLine}${cityLine ? ', ' + cityLine : ''}</a>
+                <a href="${mapsUrl}" target="_blank" rel="noopener"
+                  class="btn bs bxs" style="font-size:10px;padding:2px 8px;line-height:1.8;">${ic('navigation',11)} Navigera</a>
+              </div>` : ''}
               ${cu ? `<div style="font-size:12px;margin-top:4px;">
                 <span style="color:var(--mt);">Ägare: </span>
                 <span style="color:var(--sky);cursor:pointer;font-weight:600;"

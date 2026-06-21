@@ -2106,7 +2106,7 @@ const OfferDetailPage = {
         ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
 
         <div class="off-detail-hero-actions">
-          <!-- Status-based primary actions -->
+          <!-- Status-based primary actions (alltid synliga) -->
           ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`
             <button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button>
             <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>
@@ -2115,18 +2115,9 @@ const OfferDetailPage = {
           `:''}
           ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
-          ${off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
-          ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
-          <!-- Utility / secondary actions -->
-          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OffersPage.openEdit('${off.id}')">${ic('pencil',12)} Redigera</button>`:''}
-          <button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.printPdf('${off.id}')">${ic('printer',12)} PDF</button>
-          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',12)} Ny version</button>`:''}
-          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('copy',12)} Duplicera</button>`:''}
-          <!-- Admin / destructive -->
-          ${(!off.archived&&!off.deleted)||off.deleted?`<span style="display:inline-block;width:1px;height:20px;background:rgba(255,255,255,.2);margin:0 4px;vertical-align:middle;"></span>`:''}
-          ${!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.archiveOffer('${off.id}')">${ic('archive',12)} Arkivera</button>`:''}
-          ${!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}')">${ic('trash',12)} Ta bort</button>`:''}
-          ${off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}')">${ic('trash-2',12)} Radera permanent</button>`:''}
+          ${(off.archived||off.deleted)?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
+          <!-- Fler åtgärder (Redigera, PDF, Ny version, Duplicera, Arkivera, Ta bort) -->
+          <button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.openFlerAtgarder('${off.id}')">${ic('more-horizontal',12)} Fler åtgärder</button>
         </div>
       </div>
 
@@ -2193,6 +2184,31 @@ const OfferDetailPage = {
       ${OfferDetailPage._salesAssistantHtml(off)}
 
       ${OfferDetailPage._timelineHtml(off)}`;
+  },
+
+  openFlerAtgarder(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    const btns = [];
+    if (!off.archived && !off.deleted)
+      btns.push(`<button class="action-sheet-btn" onclick="OffersPage.openEdit('${off.id}');Modal.close()">${ic('pencil',16)} Redigera offert</button>`);
+    btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.printPdf('${off.id}');Modal.close()">${ic('printer',16)} Skriv ut / PDF</button>`);
+    if (!off.deleted)
+      btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.createNewVersion('${off.id}');Modal.close()">${ic('git-branch',16)} Skapa ny version</button>`);
+    if (!off.deleted)
+      btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.duplicate('${off.id}');Modal.close()">${ic('copy',16)} Duplicera</button>`);
+    if (!off.archived && !off.deleted) {
+      btns.push(`<hr style="border:none;border-top:1px solid var(--br);margin:6px 0;">`);
+      btns.push(`<button class="action-sheet-btn action-sheet-btn--warn" onclick="OfferDetailPage.archiveOffer('${off.id}');Modal.close()">${ic('archive',16)} Arkivera</button>`);
+      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}');Modal.close()">${ic('trash',16)} Flytta till papperskorgen</button>`);
+    }
+    if (off.deleted)
+      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}');Modal.close()">${ic('trash-2',16)} Radera permanent</button>`);
+    Modal.open({
+      title: ic('more-horizontal',14) + ' Fler åtgärder',
+      body: `<div class="action-sheet-list">${btns.join('')}</div>`,
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
+    });
   },
 
   setStatus(status) {
