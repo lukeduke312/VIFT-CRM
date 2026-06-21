@@ -11,22 +11,20 @@ const CustomersPage = {
     const customers = CustomerService.search(this.q);
 
     el.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <div class="swrap" style="flex:1;">
+      <div class="ao-toolbar" style="margin-bottom:6px;">
+        <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="crm-search" placeholder="Sök kund, telefon, e-post…"
             value="${this.q}"
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
-        <button class="btn bp bsm" onclick="CustomersPage.openCreate()">
-          ${ic('plus',14)} Ny kund
-        </button>
+        <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
       </div>
-      <div class="chips" style="margin-bottom:4px;">
+      <div class="ftabs" style="margin-bottom:6px;">
         ${['alla','privat','foretag','brf','fastighetsagare','inaktiva'].map(t =>
-          `<button class="chip ${!this.q && this._typeFilter===t||(!this._typeFilter&&t==='alla')?'on':''}"
+          `<button class="ft ${!this.q && this._typeFilter===t||(!this._typeFilter&&t==='alla')?'on':''}"
             onclick="CustomersPage._typeFilter='${t}';CustomersPage.renderList()">${
-            {alla:'Alla',privat:'Privat',foretag:'Företag',brf:'BRF',fastighetsagare:'Fastighetsägare',inaktiva:'Inaktiva'}[t]}</button>`
+            {alla:'Alla',privat:'Privat',foretag:'Företag',brf:'BRF',fastighetsagare:'Fastighetsäg.',inaktiva:'Inaktiva'}[t]}</button>`
         ).join('')}
       </div>
       <div id="crm-list"></div>`;

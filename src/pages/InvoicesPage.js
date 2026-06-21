@@ -60,9 +60,9 @@ const InvoicesPage = {
       </div>` : '';
 
     // Tab bar
-    const tabHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;">
-      ${tabs.map(t => `<button class="btn bsm ${this._tab===t?'bp':'bs'}" onclick="InvoicesPage._setTab('${t}')">
-        ${TAB_LABELS[t]}${counts[t]>0?` <span style="background:rgba(255,255,255,.25);border-radius:100px;padding:1px 6px;font-size:10px;">${counts[t]}</span>`:''}
+    const tabHtml = `<div class="ftabs" style="margin-bottom:0;">
+      ${tabs.map(t => `<button class="ft ${this._tab===t?'on':''}" onclick="InvoicesPage._setTab('${t}')">
+        ${TAB_LABELS[t]}${counts[t]>0?` <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">${counts[t]}</span>`:''}
       </button>`).join('')}
     </div>`;
 
@@ -97,10 +97,10 @@ const InvoicesPage = {
     el.innerHTML = `
       ${kpiHtml}
       ${readyHtml}
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;">${tabHtml}</div>
-        <button class="btn bs bsm" onclick="InvoicesPage.exportCSV()">${ic('download',14)} CSV</button>
-        <button class="btn bp bsm" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        ${tabHtml}
+        <button class="btn bs bsm" style="flex-shrink:0;" onclick="InvoicesPage.exportCSV()">${ic('download',14)} CSV</button>
+        <button class="btn bp bsm" style="flex-shrink:0;" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>
       </div>
       ${listHtml}`;
   },
