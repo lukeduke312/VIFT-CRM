@@ -433,24 +433,23 @@ const WorkOrdersPage = {
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
       `<option value="${p.id}" ${d.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
-    const pt = d.priceType || 'ej_satt';
+    /* Bakåtkompatibilitet: gamla AO:n med priceType='prisgrupp' visas som 'timpris' i UI */
+    const pt = (d.priceType === 'prisgrupp' ? 'timpris' : d.priceType) || 'ej_satt';
     const hints = {
       ej_satt:  'Pris sätts senare på arbetsordern eller vid fakturering.',
       fastpris: 'Ange fast pris exkl. moms. Moms 25% tillkommer.',
-      timpris:  'Tid debiteras enligt registrerade tidsnoteringar.',
-      prisgrupp:'Tid debiteras enligt vald prisgrupp.'
+      timpris:  'Tid debiteras enligt registrerade tidsnoteringar och vald prisgrupp.'
     };
     return `
       <div class="fg"><label>Prissättning</label>
         <div class="chips" style="margin-top:6px;">
           <button type="button" class="chip ${pt==='ej_satt'?'on':''}" id="pt-ej_satt" onclick="WorkOrdersPage._wizSetPriceType('ej_satt')">Ej satt</button>
           <button type="button" class="chip ${pt==='fastpris'?'on':''}" id="pt-fastpris" onclick="WorkOrdersPage._wizSetPriceType('fastpris')">Fastpris</button>
-          <button type="button" class="chip ${pt==='timpris'?'on':''}" id="pt-timpris" onclick="WorkOrdersPage._wizSetPriceType('timpris')">Timpris</button>
-          <button type="button" class="chip ${pt==='prisgrupp'?'on':''}" id="pt-prisgrupp" onclick="WorkOrdersPage._wizSetPriceType('prisgrupp')">Prisgrupp</button>
+          <button type="button" class="chip ${pt==='timpris'?'on':''}" id="pt-timpris" onclick="WorkOrdersPage._wizSetPriceType('timpris')">Löpande timpris</button>
         </div>
       </div>
 
-      <div id="wiz-pt-hint" class="ibox" style="margin:8px 0;font-size:12px;">${hints[pt]}</div>
+      <div id="wiz-pt-hint" class="ibox" style="margin:8px 0;font-size:12px;">${hints[pt]||''}</div>
 
       <div id="wiz-fastpris-row" style="${pt==='fastpris'?'':'display:none'}">
         <div class="fg"><label>Fastpris ex. moms (kr)</label>
@@ -461,7 +460,7 @@ const WorkOrdersPage = {
         </div>
       </div>
 
-      <div id="wiz-prisgrupp-row" style="${pt==='prisgrupp'?'':'display:none'}">
+      <div id="wiz-prisgrupp-row" style="${pt==='timpris'?'':'display:none'}">
         <div class="fg"><label>Prisgrupp</label>
           <select id="wiz-pg"><option value="">— Välj prisgrupp —</option>${pgOptions}</select></div>
       </div>
@@ -614,20 +613,19 @@ const WorkOrdersPage = {
 
   _wizSetPriceType(pt) {
     this._wiz.data.priceType = pt;
-    ['ej_satt','fastpris','timpris','prisgrupp'].forEach(t => {
+    ['ej_satt','fastpris','timpris'].forEach(t => {
       const b = document.getElementById('pt-'+t);
       if (b) b.classList.toggle('on', t === pt);
     });
     const fp   = document.getElementById('wiz-fastpris-row');
     const pg   = document.getElementById('wiz-prisgrupp-row');
     const hint = document.getElementById('wiz-pt-hint');
-    if (fp) fp.style.display = pt === 'fastpris'  ? '' : 'none';
-    if (pg) pg.style.display = pt === 'prisgrupp' ? '' : 'none';
+    if (fp) fp.style.display = pt === 'fastpris' ? '' : 'none';
+    if (pg) pg.style.display = pt === 'timpris'  ? '' : 'none';
     const hints = {
-      ej_satt:'Pris sätts senare på arbetsordern eller vid fakturering.',
-      fastpris:'Ange fast pris exkl. moms. Moms 25% tillkommer.',
-      timpris:'Tid debiteras enligt registrerade tidsnoteringar.',
-      prisgrupp:'Tid debiteras enligt vald prisgrupp.'
+      ej_satt: 'Pris sätts senare på arbetsordern eller vid fakturering.',
+      fastpris: 'Ange fast pris exkl. moms. Moms 25% tillkommer.',
+      timpris:  'Tid debiteras enligt registrerade tidsnoteringar och vald prisgrupp.'
     };
     if (hint) hint.textContent = hints[pt] || '';
   },
@@ -707,7 +705,6 @@ const WorkOrdersPage = {
     d.fixedPrice   = parseFloat(document.getElementById('wiz-fastpris')?.value || '0') || 0;
     d.priceGroupId = document.getElementById('wiz-pg')?.value || '';
     if (d.priceType === 'fastpris' && !d.fixedPrice) { showToast('Ange fastpris'); return false; }
-    if (d.priceType === 'prisgrupp' && !d.priceGroupId) { showToast('Välj prisgrupp'); return false; }
     return true;
   },
 

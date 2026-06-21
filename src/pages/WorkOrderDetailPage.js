@@ -501,11 +501,13 @@ const WorkOrderDetailPage = {
   },
 
   _priceLabel(ao) {
-    if (ao.priceType === 'fastpris')  return `Fastpris: ${fmt(ao.fixedPrice)} kr ex moms`;
-    if (ao.priceType === 'timpris')   return 'Timpris';
-    if (ao.priceType === 'prisgrupp') {
-      const pg = (state.priceGroups||[]).find(p => p.id === ao.priceGroupId);
-      return pg ? `${pg.name} – ${fmt(pg.hourRate)} kr/tim ex moms` : 'Prisgrupp';
+    if (ao.priceType === 'fastpris' || ao.priceType === 'fast') return `Fastpris: ${fmt(ao.fixedPrice)} kr ex moms`;
+    if (ao.priceType === 'timpris' || ao.priceType === 'prisgrupp') {
+      if (ao.priceGroupId) {
+        const pg = (state.priceGroups||[]).find(p => p.id === ao.priceGroupId);
+        return pg ? `Löpande timpris – ${pg.name} (${fmt(pg.hourRate)} kr/tim ex moms)` : 'Löpande timpris';
+      }
+      return 'Löpande timpris';
     }
     return 'Ej satt';
   },
