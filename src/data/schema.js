@@ -427,6 +427,7 @@ const Schema = {
   avvikelse: () => ({
     id: '',
     ronderingId: '',
+    passId: '',
     categoryId: '',
     pointId: '',
     categoryName: '',

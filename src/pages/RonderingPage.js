@@ -1,36 +1,67 @@
 /**
- * RonderingPage — Lista ronderingar + mallar
+ * RonderingPage — Lista ronderingar + mallar + tillfällen (PASS)
+ * v2: detail-vy per rondering med PASS-lista
  */
 const RonderingPage = {
   _tab: 'ronderingar',
   _filterStatus: 'alla',
   _search: '',
+  _view: 'list',    // 'list' | 'detail'
+  _detailId: null,
 
   render(params) {
     const el = document.getElementById('pg-rondering-content');
     if (!el) return;
     if (params && params.tab) this._tab = params.tab;
+    if (params && params.ronId) {
+      this._view = 'detail';
+      this._detailId = params.ronId;
+    } else {
+      this._view = 'list';
+      this._detailId = null;
+    }
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <div style="display:flex;gap:4px;flex:1;">
           <button class="btn ${this._tab==='ronderingar'?'bp':'bs'} bsm" onclick="RonderingPage.switchTab('ronderingar')">Ronderingar</button>
           <button class="btn ${this._tab==='mallar'?'bp':'bs'} bsm" onclick="RonderingPage.switchTab('mallar')">Mallar</button>
         </div>
-        ${this._tab==='ronderingar'
-          ? `<button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">+ Ny rondering</button>`
-          : `<button class="btn bp bsm" onclick="RonderingPage.openNewMall()">+ Ny mall</button>`}
+        <div id="ron-hdr-btn"></div>
       </div>
       <div id="ron-tab-content"></div>`;
     this._renderTab();
   },
 
-  switchTab(tab) { this._tab = tab; this.render(); },
+  switchTab(tab) {
+    this._tab = tab;
+    this._view = 'list';
+    this._detailId = null;
+    this.render();
+  },
 
   _renderTab() {
     const el = document.getElementById('ron-tab-content');
     if (!el) return;
-    this._tab === 'ronderingar' ? this._renderList(el) : this._renderMallar(el);
+    const btn = document.getElementById('ron-hdr-btn');
+    if (btn) {
+      if (this._view === 'detail') {
+        btn.innerHTML = '';
+      } else if (this._tab === 'ronderingar') {
+        btn.innerHTML = `<button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">+ Ny rondering</button>`;
+      } else {
+        btn.innerHTML = `<button class="btn bp bsm" onclick="RonderingPage.openNewMall()">+ Ny mall</button>`;
+      }
+    }
+    if (this._tab === 'mallar') {
+      this._renderMallar(el);
+    } else if (this._view === 'detail') {
+      this._renderDetail(el);
+    } else {
+      this._renderList(el);
+    }
   },
+
+  /* ── LIST ──────────────────────────────── */
 
   _renderList(el) {
     const statusOpts = [
@@ -56,7 +87,7 @@ const RonderingPage = {
     el.innerHTML = `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
         <input style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;"
-          placeholder="Sök rondering..." value="${this._search}"
+          placeholder="Sök rondering..." value="${esc(this._search)}"
           oninput="RonderingPage._search=this.value;RonderingPage._renderTab()">
         <select style="padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;"
           onchange="RonderingPage._filterStatus=this.value;RonderingPage._renderTab()">
@@ -69,37 +100,204 @@ const RonderingPage = {
             const cu = getCu(r.customerId);
             const cuName = cu ? (cu.name||(cu.firstName+' '+cu.lastName).trim()) : '—';
             const prop = r.propertyId ? getObj(r.propertyId) : null;
-            const stats = RonderingService.getStats(r.id);
-            const nextOcc = (r.occasions||[]).filter(o=>o.date>=tdy()).sort((a,b)=>a.date>b.date?1:-1)[0];
+            const passes = RonderingService.getPassesByRondering(r.id);
+            const nextPass = passes.filter(p=>p.scheduledDate>=tdy()&&p.status==='planerat').sort((a,b)=>a.scheduledDate>b.scheduledDate?1:-1)[0];
             const totalPts = (r.categories||[]).reduce((s,c)=>s+(c.points||[]).length, 0);
-            const planMins = (r.occasions||[]).reduce((s,o)=>s+(o.estimatedDuration||0),0) ||
-              (((r.recurringSetups||[])[0])||{}).estimatedDuration || 0;
-            const planTid = planMins > 0
-              ? (planMins >= 60 ? Math.floor(planMins/60)+'h'+(planMins%60?(planMins%60)+'min':'') : planMins+'min')
-              : '';
-            const priMap = {låg:'#64748b',normal:'var(--blue)',hög:'var(--orange)',akut:'var(--rd)'};
-            const priLbl = {låg:'Låg',normal:'Normal',hög:'Hög',akut:'Akut'};
             return `
               <div class="list-item" onclick="RonderingPage.openRondering('${r.id}')">
                 <div class="item-row">
                   <div style="flex:1;min-width:0;">
-                    <div class="item-title">${r.name||r.templateName||r.id}</div>
-                    <div class="item-sub">${cuName}${prop?' · '+prop.name:''}</div>
+                    <div class="item-title">${esc(r.name||r.templateName||r.id)}</div>
+                    <div class="item-sub">${esc(cuName)}${prop?' · '+esc(prop.name):''}</div>
                     <div style="font-size:11px;color:var(--mt);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;">
-                      ${nextOcc?'<span>'+ic('calendar',10)+' '+fmtDate(nextOcc.date)+'</span>':''}
-                      ${totalPts>0?'<span>'+totalPts+' punkter</span>':''}
-                      ${planTid?'<span>'+ic('clock',10)+' '+planTid+'</span>':''}
+                      ${nextPass?`<span>${ic('calendar',10)} ${fmtDate(nextPass.scheduledDate)}</span>`:''}
+                      ${totalPts>0?`<span>${totalPts} punkter</span>`:''}
+                      ${passes.length>0?`<span>${ic('list',10)} ${passes.length} tillfälle${passes.length!==1?'n':''}</span>`:''}
                     </div>
                   </div>
                   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
                     ${statusBadge(r.status)}
-                    ${r.priority&&r.priority!=='normal'?`<span style="font-size:9px;font-weight:700;color:${priMap[r.priority]||''};">${priLbl[r.priority]||''}</span>`:''}
                     ${(r.deviationIds||[]).length>0?`<span class="bdg bdg-red" style="font-size:9px;">${r.deviationIds.length} avv.</span>`:''}
                   </div>
                 </div>
               </div>`;
           }).join('')}`;
   },
+
+  /* ── DETAIL (RON + PASS-lista) ─────────── */
+
+  openRondering(id) {
+    this._view = 'detail';
+    this._detailId = id;
+    this._renderTab();
+  },
+
+  backToList() {
+    this._view = 'list';
+    this._detailId = null;
+    this._renderTab();
+  },
+
+  _passStatusBadge(s) {
+    const cls = {planerat:'bdg-blue',pågående:'bdg-orange',slutfört:'bdg-green',har_avvikelser:'bdg-red'}[s]||'bdg-grey';
+    const lbl = {planerat:'Planerat',pågående:'Pågående',slutfört:'Slutfört',har_avvikelser:'Har anmärkningar'}[s]||s;
+    return `<span class="bdg ${cls}">${lbl}</span>`;
+  },
+
+  _renderDetail(el) {
+    const ron = getRon(this._detailId);
+    if (!ron) {
+      el.innerHTML = `<div class="empty">${ic('clipboard-check',32)}<h3>Rondering hittades inte</h3></div>`;
+      return;
+    }
+    const cu = getCu(ron.customerId);
+    const cuName = cu ? (cu.name||(cu.firstName+' '+cu.lastName).trim()) : '—';
+    const prop = ron.propertyId ? getObj(ron.propertyId) : null;
+    const passes = RonderingService.getPassesByRondering(ron.id)
+      .sort((a,b) => (b.sequenceNumber||0)-(a.sequenceNumber||0));
+
+    const ronStatusBadge = s => {
+      const cls = {utkast:'bdg-grey',planerad:'bdg-blue',pågående:'bdg-orange',slutförd:'bdg-green',har_avvikelser:'bdg-red'}[s]||'bdg-grey';
+      const lbl = {utkast:'Utkast',planerad:'Planerad',pågående:'Pågående',slutförd:'Slutförd',har_avvikelser:'Har avvikelser'}[s]||s;
+      return `<span class="bdg ${cls}">${lbl}</span>`;
+    };
+
+    const totalPts = (ron.categories||[]).reduce((s,c)=>s+(c.points||[]).length,0);
+
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <button class="btn bs bsm" onclick="RonderingPage.backToList()">${ic('arrow-left',14)}</button>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:15px;font-weight:800;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ron.name||ron.templateName||ron.id)}</div>
+          <div style="font-size:11px;color:var(--mt);">${esc(cuName)}${prop?' · '+esc(prop.name):''}</div>
+        </div>
+        ${ronStatusBadge(ron.status)}
+      </div>
+
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-body" style="padding:12px 14px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;">
+            ${ron.templateName?`<div><span style="color:var(--mt);">Mall: </span>${esc(ron.templateName)}</div>`:''}
+            <div><span style="color:var(--mt);">Kontrollpunkter: </span>${totalPts}</div>
+            ${(ron.categories||[]).length?`<div><span style="color:var(--mt);">Grupper: </span>${ron.categories.length}</div>`:''}
+            ${ron.pricingType==='tim'?`<div><span style="color:var(--mt);">Timtaxa: </span>${ron.hourRate||0} kr/h</div>`:''}
+            ${ron.pricingType==='fast'?`<div><span style="color:var(--mt);">Fast pris: </span>${fkr(ron.fixedPrice||0)}</div>`:''}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn bp bsm" onclick="RonderingPage.openNewPass('${ron.id}')">${ic('plus',13)} Nytt tillfälle</button>
+            <button class="btn bs bsm" onclick="RonderingPage.openRonderingWizard('${ron.id}')">${ic('settings',12)} Redigera</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">${ic('calendar',13)} Tillfällen (${passes.length})</div>
+      ${passes.length === 0
+        ? `<div class="ibox" style="text-align:center;padding:24px;">
+            <div style="color:var(--mt);font-size:13px;margin-bottom:10px;">Inga tillfällen skapade ännu</div>
+            <button class="btn bp bsm" onclick="RonderingPage.openNewPass('${ron.id}')">+ Skapa första tillfälle</button>
+          </div>`
+        : passes.map(pass => {
+            const stats = RonderingService.getPassStats(pass.id);
+            const pct = stats && stats.total > 0 ? Math.round(stats.checked/stats.total*100) : 0;
+            const staffNames = (pass.staffIds||[]).map(sid => {
+              const s = getStaff(sid);
+              return s ? (s.firstName+' '+s.lastName).trim() : sid;
+            }).filter(Boolean).join(', ');
+            const isLegacy = pass.migratedFromLegacy;
+            const btnLabel = (pass.status==='slutfört'||pass.status==='har_avvikelser')
+              ? ic('file-text',12)+' Rapport'
+              : (pass.status==='pågående' ? ic('play',12)+' Fortsätt' : ic('play',12)+' Starta');
+            const btnCls = (pass.status==='slutfört'||pass.status==='har_avvikelser') ? 'bs' : 'bp';
+            return `
+              <div class="list-item" onclick="RonderingPage.openPass('${pass.id}')" style="margin-bottom:6px;">
+                <div class="item-row" style="gap:8px;">
+                  <div style="width:28px;height:28px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--navy);flex-shrink:0;">#${pass.sequenceNumber||1}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <span style="font-weight:700;font-size:13px;">${pass.scheduledDate?fmtDate(pass.scheduledDate):'Inget datum'}</span>
+                      ${pass.scheduledTime?`<span style="font-size:11px;color:var(--mt);">${pass.scheduledTime}</span>`:''}
+                      ${isLegacy?`<span style="font-size:9px;color:var(--mt);padding:1px 5px;background:#f3f4f6;border-radius:4px;">Historisk</span>`:''}
+                    </div>
+                    <div style="font-size:11px;color:var(--mt);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;">
+                      ${staffNames?`<span>${ic('user',10)} ${staffNames}</span>`:''}
+                      ${stats?`<span>${ic('check-circle',10)} ${stats.checked}/${stats.total}</span>`:''}
+                      ${stats&&stats.anmärkningar>0?`<span style="color:#dc2626;">${ic('alert-triangle',10)} ${stats.anmärkningar} anm.</span>`:''}
+                      ${stats&&stats.unchecked>0&&pass.status!=='planerat'?`<span style="color:var(--mt);">${stats.unchecked} kvar</span>`:''}
+                    </div>
+                    ${stats&&stats.total>0&&pass.status!=='planerat'?`
+                      <div style="background:#e5e7eb;border-radius:4px;height:4px;margin-top:5px;overflow:hidden;">
+                        <div style="background:${stats.anmärkningar>0?'#dc2626':'#16a34a'};width:${pct}%;height:4px;border-radius:4px;"></div>
+                      </div>`:''}
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                    ${this._passStatusBadge(pass.status)}
+                    <button class="btn ${btnCls} bsm" style="font-size:10px;white-space:nowrap;"
+                      onclick="event.stopPropagation();RonderingPage.openPass('${pass.id}')">
+                      ${btnLabel}
+                    </button>
+                  </div>
+                </div>
+              </div>`;
+          }).join('')
+      }`;
+  },
+
+  openPass(passId) {
+    const pass = getPass(passId);
+    if (!pass) return;
+    if (pass.status === 'slutfört' || pass.status === 'har_avvikelser') {
+      Router.showPage('pg-rondering-rapport', { passId: passId });
+    } else {
+      Router.showPage('pg-rondering-utfor', { passId: passId });
+    }
+  },
+
+  openNewPass(ronId) {
+    const ron = getRon(ronId);
+    if (!ron) return;
+    const staffOpts = (state.staff||[]).filter(s=>s.active!==false)
+      .map(s=>`<option value="${s.id}">${esc(s.firstName+' '+s.lastName)}</option>`).join('');
+    Modal.open({
+      title: 'Nytt ronderingstillfälle',
+      body: `
+        <div class="fg"><label>Datum *</label>
+          <input type="date" id="np-date" value="${tdy()}">
+        </div>
+        <div class="fg"><label>Starttid</label>
+          <input type="time" id="np-time" value="09:00">
+        </div>
+        <div class="fg"><label>Personal</label>
+          <select id="np-staff" multiple style="height:80px;width:100%;padding:6px;border:1px solid var(--br);border-radius:8px;font-size:13px;">
+            ${staffOpts}
+          </select>
+          <div style="font-size:10px;color:var(--mt);margin-top:2px;">Håll Ctrl/Cmd för att välja flera</div>
+        </div>
+        <div class="fg"><label>Beräknad tid (min)</label>
+          <input type="number" id="np-dur" value="90" min="15" step="15">
+        </div>`,
+      buttons: [
+        { label: 'Skapa tillfälle', cls: 'btn bp bfull', onClick: () => {
+          const date = (document.getElementById('np-date')||{}).value||'';
+          if (!date) { showToast('Välj datum'); return; }
+          const time = (document.getElementById('np-time')||{}).value||'';
+          const staffEl = document.getElementById('np-staff');
+          const staffIds = staffEl ? Array.from(staffEl.selectedOptions).map(o=>o.value) : [];
+          const dur = parseInt((document.getElementById('np-dur')||{}).value||'90',10)||90;
+          RonderingService.createPassFromRondering(ronId, { scheduledDate: date, scheduledTime: time, staffIds, estimatedDurationMins: dur });
+          showToast('Tillfälle skapat');
+          Modal.close();
+          this._renderDetail(document.getElementById('ron-tab-content'));
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  openRonderingWizard(ronId) {
+    Router.showPage('pg-rondering-wizard', { ronderingId: ronId, reset: true });
+  },
+
+  /* ── MALLAR ────────────────────────────── */
 
   _renderMallar(el) {
     const mallar = (state.ronderingsmallar||[]).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
@@ -112,9 +310,9 @@ const RonderingPage = {
               <div class="card-body" style="padding:12px 14px;">
                 <div style="display:flex;gap:8px;align-items:flex-start;">
                   <div style="flex:1;min-width:0;">
-                    <div style="font-weight:700;font-size:14px;">${m.name}</div>
+                    <div style="font-weight:700;font-size:14px;">${esc(m.name)}</div>
                     <div style="font-size:12px;color:var(--mt);">${(m.categories||[]).length} grupper · ${pts} kontrollpunkter</div>
-                    ${m.description?`<div style="font-size:11px;color:var(--mt);margin-top:3px;">${m.description}</div>`:''}
+                    ${m.description?`<div style="font-size:11px;color:var(--mt);margin-top:3px;">${esc(m.description)}</div>`:''}
                   </div>
                   <span class="bdg ${m.active?'bdg-green':'bdg-grey'}">${m.active?'Aktiv':'Inaktiv'}</span>
                 </div>
@@ -127,18 +325,6 @@ const RonderingPage = {
               </div>
             </div>`;
         }).join('');
-  },
-
-  openRondering(id) {
-    const ron = getRon(id);
-    if (!ron) return;
-    if (ron.status === 'utkast' || ron.status === 'planerad') {
-      Router.showPage('pg-rondering-wizard', { ronderingId: id, reset: true });
-    } else if (ron.status === 'pågående') {
-      Router.showPage('pg-rondering-utfor', { ronderingId: id });
-    } else {
-      Router.showPage('pg-rondering-rapport', { ronderingId: id });
-    }
   },
 
   openNewRondering(prefillMallId) {
@@ -179,7 +365,7 @@ const RonderingPage = {
       return `<div class="card" style="margin-bottom:6px;border:1px solid var(--br);" id="mc-${ci}">
         <div class="card-body" style="padding:8px 10px;">
           <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-            <input type="text" placeholder="Grupprubrik" value="${cat?cat.name:''}" id="mc-name-${ci}"
+            <input type="text" placeholder="Grupprubrik" value="${cat?esc(cat.name):''}" id="mc-name-${ci}"
               style="flex:1;padding:5px 8px;border:1px solid var(--br);border-radius:6px;font-size:12px;font-weight:600;">
             <button class="btn bd bsm" onclick="document.getElementById('mc-${ci}').remove()">${ic('trash-2',12)}</button>
           </div>
@@ -192,7 +378,7 @@ const RonderingPage = {
     const ptHtml = (ci, pi, pt) => `
       <div style="display:flex;gap:4px;margin-bottom:4px;" id="mc-pt-${ci}-${pi}">
         <div style="flex:1;">
-          <input type="text" placeholder="Punktrubrik" value="${pt?pt.title:''}" id="mc-ptname-${ci}-${pi}"
+          <input type="text" placeholder="Punktrubrik" value="${pt?esc(pt.title):''}" id="mc-ptname-${ci}-${pi}"
             style="width:100%;padding:4px 7px;border:1px solid var(--br);border-radius:5px;font-size:11px;margin-bottom:2px;">
           <label style="font-size:10px;color:var(--mt);display:flex;align-items:center;gap:3px;">
             <input type="checkbox" id="mc-ptao-${ci}-${pi}" ${pt&&pt.canCreateAO!==false?'checked':'checked'}> AO
@@ -220,8 +406,8 @@ const RonderingPage = {
     Modal.open({
       title: mall ? 'Redigera mall' : 'Ny ronderingsmall',
       body: `
-        <div class="fg"><label>Mallnamn *</label><input type="text" id="mc-mname" value="${mall?mall.name:''}"></div>
-        <div class="fg"><label>Beskrivning</label><textarea id="mc-mdesc" rows="2">${mall?mall.description:''}</textarea></div>
+        <div class="fg"><label>Mallnamn *</label><input type="text" id="mc-mname" value="${mall?esc(mall.name):''}"></div>
+        <div class="fg"><label>Beskrivning</label><textarea id="mc-mdesc" rows="2">${mall?esc(mall.description):''}</textarea></div>
         <div style="margin-top:10px;">
           <div style="font-weight:700;font-size:12px;margin-bottom:6px;">Grupper och kontrollpunkter</div>
           <div id="mc-cats">${cats.map((c,ci)=>catHtml(c,ci)).join('')}</div>
