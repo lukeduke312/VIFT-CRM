@@ -1,5 +1,7 @@
 /**
- * VIFT CRM — Service Worker v1
+ * VIFT CRM — Service Worker v2
+ *
+ * v2: lade till push + notificationclick för mobilnotiser
  *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only)
@@ -11,7 +13,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v1';
+const CACHE_NAME = 'vift-crm-v2';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
@@ -114,3 +116,44 @@ self.addEventListener('fetch', event => {
       .catch(() => caches.match(req))
   );
 });
+
+/* ── Push notification received ──────────────────────────── */
+self.addEventListener('push', event => {
+  if (!event.data) return;
+
+  let payload;
+  try { payload = event.data.json(); }
+  catch { payload = { title: 'VIFT CRM', body: event.data.text() }; }
+
+  const title   = payload.title || 'VIFT CRM';
+  const options = {
+    body:               payload.body || '',
+    icon:               '/assets/icon-192.png',
+    badge:              '/assets/icon-192.png',
+    data:               { url: payload.url || '/' },
+    requireInteraction: false
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+/* ── Notification clicked → öppna rätt sida ─────────────── */
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(list => {
+        const existing = list.find(c => c.url.startsWith(self.location.origin));
+        if (existing) {
+          existing.focus();
+          return existing.navigate ? existing.navigate(url) : existing.focus();
+        }
+        return clients.openWindow(url);
+      })
+  );
+});
+

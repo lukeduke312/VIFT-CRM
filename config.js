@@ -1,13 +1,17 @@
 /**
  * VIFT-CRM konfiguration
  *
- * Sätt din domänbegränsade Mapbox-token här.
- * Token ska begränsas till: https://crm.viftfast.se
- * Skapa token på: https://account.mapbox.com/access-tokens/
+ * mapboxToken:
+ *   Domänbegränsad Mapbox-token. Begränsa till: https://crm.viftfast.se
+ *   Lämnas tom → manuell adressinmatning (inget trasigt UI).
  *
- * Lämnas tom → adressfältet fungerar som vanligt manuell inmatning.
- * Ingen annan kod behöver ändras för att aktivera adressautokomplettering.
+ * vapidPublicKey:
+ *   VAPID public key för Web Push-notiser.
+ *   Generera nyckelpar: npx web-push generate-vapid-keys --json
+ *   Public key → sätt här. Private key → Supabase secrets.
+ *   Lämnas tom → notis-funktionen inaktiveras tyst.
  */
 window.VIFT_CONFIG = {
-  mapboxToken: ''   /* ← sätt din token här */
+  mapboxToken:   '',   /* ← Mapbox public token */
+  vapidPublicKey: ''   /* ← VAPID public key (börjar med "B...") */
 };

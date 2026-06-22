@@ -4543,7 +4543,8 @@ const AdminPage = {
       { key: 'ekonomi',  label: 'Ekonomi'   },
       { key: 'personal', label: 'Personal'  },
       { key: 'priser',   label: 'Priser'    },
-      { key: 'system',   label: 'System'    }
+      { key: 'system',   label: 'System'    },
+      { key: 'notiser',  label: `${ic('bell',12)} Notiser` }
     ];
     const tabBar = `<div class="admin-tabs">
       ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.label}</button>`).join('')}
@@ -4850,7 +4851,158 @@ const AdminPage = {
         </div>
       </div>`;
 
-    el.innerHTML = tabBar + sections[this._tab];
+    /* ── Notiser-fliken (tillgänglig för alla inloggade) ───── */
+    const push    = typeof PushService !== 'undefined' ? PushService : null;
+    const pSupp   = push ? push.isSupported() : false;
+    const pState  = push ? push.permissionState() : 'unsupported';
+    const pIOS    = push ? push.isIOS() : false;
+    const pSA     = push ? push.isStandalone() : false;
+    const pKey    = push ? push._vapidKey() : '';
+    const pReason = push ? push.blockReason() : 'unsupported';
+
+    const statusBadge = () => {
+      if (!pSupp)                   return '<span class="bdg bdg-grey">Ej stödd</span>';
+      if (pIOS && !pSA)             return '<span class="bdg bdg-grey">Kräver hemskärmsapp</span>';
+      if (!pKey)                    return '<span class="bdg" style="background:#fef9c3;color:#854d0e;">VAPID saknas</span>';
+      if (pState === 'denied')      return '<span class="bdg bdg-red">Blockerad</span>';
+      if (pState === 'granted')     return '<span class="bdg bdg-green">Aktiv</span>';
+      return '<span class="bdg bdg-grey">Ej aktiverad</span>';
+    };
+
+    const iosNote = pIOS && !pSA ? `
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;">
+        ${ic('smartphone',14)} <strong>iPhone kräver hemskärmsapp</strong><br>
+        Pushnotiser fungerar bara när CRM är installerat via Safari → Dela → Lägg till på hemskärmen.<br>
+        Öppna appen därifrån och kom sedan hit för att aktivera notiser.
+      </div>` : '';
+
+    const deniedNote = pState === 'denied' ? `
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;">
+        ${ic('x-circle',14)} <strong>Notiser blockerade av systemet</strong><br>
+        Du har nekat notisbehörighet. Gå till ${pIOS ? 'iPhone-inställningar → VIFT CRM → Notiser' : 'webbläsarens webbplatsinställningar'} och tillåt notiser.
+      </div>` : '';
+
+    const vapidNote = !pKey ? `
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;">
+        ${ic('key',14)} <strong>VAPID-nyckel saknas</strong><br>
+        Lägg till din VAPID public key i <code>config.js</code> → <code>vapidPublicKey</code>.<br>
+        Skapa nycklar: <code>npx web-push generate-vapid-keys --json</code>
+      </div>` : '';
+
+    const canAct = pSupp && (!pIOS || pSA) && pKey && pState !== 'denied';
+
+    sections.notiser = `
+      <div class="card">
+        <div class="card-header" style="gap:10px;">
+          <div>${ic('bell',16)} Mobilnotiser</div>
+          ${statusBadge()}
+        </div>
+        <div class="card-body" style="padding:14px 16px;">
+
+          ${iosNote}${deniedNote}${vapidNote}
+
+          <!-- Info-rutor -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Push API</div>
+              <div style="font-size:12px;font-weight:700;">${pSupp ? '✓ Stödd' : '✗ Saknas'}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Appläge</div>
+              <div style="font-size:12px;font-weight:700;">${pSA ? '✓ Hemskärmsapp' : '○ Browser'}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Behörighet</div>
+              <div style="font-size:12px;font-weight:700;">${
+                pState === 'granted' ? '✓ Tillåten'
+                : pState === 'denied' ? '✗ Blockerad'
+                : '— Ej frågad'}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">VAPID-nyckel</div>
+              <div style="font-size:12px;font-weight:700;">${pKey ? '✓ Konfigurerad' : '✗ Saknas'}</div>
+            </div>
+          </div>
+
+          <!-- Åtgärder -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+            ${canAct ? `
+              <button class="btn bp bsm" onclick="AdminPage._activatePush()">
+                ${ic('bell',13)} Aktivera notiser
+              </button>
+              <button class="btn bs bsm" onclick="AdminPage._testPush()">
+                ${ic('send',13)} Skicka testnotis
+              </button>
+              <button class="btn bd bsm" onclick="AdminPage._deactivatePush()">
+                ${ic('bell-off',13)} Stäng av
+              </button>
+            ` : ''}
+          </div>
+
+          <div id="push-status-msg" style="font-size:12px;margin-bottom:12px;"></div>
+
+          <!-- Enhetsinformation -->
+          <div style="font-size:11px;color:var(--mt);">
+            ${pIOS ? 'iOS' : navigator.platform || navigator.userAgent.split(' ').pop()} · ${
+              (() => { const ua = navigator.userAgent;
+                return /CriOS/i.test(ua) ? 'Chrome (iOS)' :
+                       /FxiOS/i.test(ua) ? 'Firefox (iOS)' :
+                       /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' :
+                       /Chrome/i.test(ua) ? 'Chrome' : 'Okänd browser'; })()
+            }
+          </div>
+
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--br);font-size:11px;color:var(--mt);line-height:1.6;">
+            ${ic('info',11)} Pushnotiser skickas när en AO tilldelas dig eller vid viktiga händelser.
+            Notisen visas även när appen är stängd. iOS 16.4+ krävs på iPhone.
+          </div>
+        </div>
+      </div>`;
+
+    el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+  },
+
+  async _activatePush() {
+    const msg = document.getElementById('push-status-msg');
+    if (msg) msg.textContent = 'Aktiverar…';
+    try {
+      await PushService.subscribe();
+      if (msg) msg.innerHTML = '<span style="color:var(--gr);">✓ Notiser aktiverade på den här enheten!</span>';
+      AdminPage.render();
+    } catch(e) {
+      const text = e.message === 'permission-denied'
+        ? 'Du nekade notisbehörighet. Tillåt i webbläsar-/systeminställningarna och försök igen.'
+        : 'Fel: ' + e.message;
+      if (msg) msg.innerHTML = '<span style="color:var(--rd);">' + text + '</span>';
+    }
+  },
+
+  async _testPush() {
+    const msg = document.getElementById('push-status-msg');
+    const ok  = await PushService.isSubscribed();
+    if (!ok) {
+      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Aktivera notiser först.</span>';
+      return;
+    }
+    if (msg) msg.textContent = 'Skickar testnotis…';
+    try {
+      await PushService.sendTest();
+      if (msg) msg.innerHTML = '<span style="color:var(--gr);">✓ Testnotis skickad — kolla din mobil!</span>';
+    } catch(e) {
+      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Fel: ' + e.message + '</span>';
+    }
+  },
+
+  async _deactivatePush() {
+    const msg = document.getElementById('push-status-msg');
+    if (msg) msg.textContent = 'Stänger av…';
+    try {
+      await PushService.unsubscribe();
+      if (msg) msg.innerHTML = '<span style="color:var(--mt);">Notiser avstängda på den här enheten.</span>';
+      AdminPage.render();
+    } catch(e) {
+      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Fel: ' + e.message + '</span>';
+    }
   },
 
   openEditCompany() {
