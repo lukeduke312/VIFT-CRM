@@ -124,7 +124,7 @@ const WorkOrderDetailPage = {
         <div id="ao-materials" style="overflow:hidden;">
           ${this._renderMaterials(ao)}
         </div>
-        ${(ao.materials||[]).length > 0 ? this._matTotals(ao) : ''}
+        <div id="ao-mat-totals">${(ao.materials||[]).length > 0 ? this._matTotals(ao) : ''}</div>
       </div>
 
       <!-- Tidsposter -->
@@ -132,7 +132,7 @@ const WorkOrderDetailPage = {
         <div class="card-header">
           <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
             <h3 style="margin:0;">${ic('clock',14)} Arbetstid</h3>
-            ${totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : ''}
+            <span id="ao-time-badge">${totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : ''}</span>
           </div>
           ${Auth.can('ao_time') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>` : ''}
         </div>
@@ -142,7 +142,7 @@ const WorkOrderDetailPage = {
       </div>
 
       <!-- Tid vs plan -->
-      ${this._timePlanBlock(ao)}
+      <div id="ao-time-plan">${this._timePlanBlock(ao)}</div>
 
       <!-- Tidslinje/logg -->
       <div class="card">
@@ -178,13 +178,13 @@ const WorkOrderDetailPage = {
         </div>` : ''}
 
       <!-- Intern lönsamhet (admin) -->
-      ${Auth.canAny(['reports_view','staff_view']) ? `
+      <div id="ao-lonsam">${Auth.canAny(['reports_view','staff_view']) ? `
         <details style="margin-top:8px;">
           <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
             ${ic('bar-chart-2',13)} Intern lönsamhet
           </summary>
           ${this._tbBlock(ao)}
-        </details>` : ''}
+        </details>` : ''}</div>
 
       <!-- Återkommande -->
       ${ao.recurringOrderId
@@ -1157,21 +1157,67 @@ const WorkOrderDetailPage = {
       showToast('Material tillagt');
     }
     Modal.close();
-    const ao = getAO(this.aoId);
-    if (ao) {
-      document.getElementById('ao-materials').innerHTML = this._renderMaterials(ao);
-      const matTotEl = document.getElementById('ao-materials').nextElementSibling;
-      if (matTotEl && matTotEl.style !== undefined) matTotEl.outerHTML = this._matTotals(ao);
-    }
+    this._refreshMaterialSection();
   },
 
   deleteMaterial(matId) {
     Modal.confirm('Ta bort material?', () => {
       WorkOrderService.deleteMaterial(this.aoId, matId);
-      const ao = getAO(this.aoId);
-      if (ao) document.getElementById('ao-materials').innerHTML = this._renderMaterials(ao);
+      this._refreshMaterialSection();
       showToast('Borttaget');
     });
+  },
+
+  /* ── Refresh-helpers (partiell DOM-uppdatering utan full re-render) ── */
+
+  _refreshTimeSection() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const timeEntries = TimeService.getByAO(ao.id);
+    const totalMins   = TimeService.totalMinutes(timeEntries);
+
+    const listEl  = document.getElementById('ao-timeentries');
+    if (listEl)  listEl.innerHTML  = this._renderTimeEntries(ao);
+
+    const badge   = document.getElementById('ao-time-badge');
+    if (badge)   badge.innerHTML   = totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : '';
+
+    const planEl  = document.getElementById('ao-time-plan');
+    if (planEl)  planEl.innerHTML  = this._timePlanBlock(ao);
+
+    const timelineEl = document.getElementById('ao-timeline');
+    if (timelineEl)  timelineEl.innerHTML = this._renderTimeline(ao);
+
+    const lonEl   = document.getElementById('ao-lonsam');
+    if (lonEl)   lonEl.innerHTML   = Auth.canAny(['reports_view','staff_view']) ? `
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
+          ${ic('bar-chart-2',13)} Intern lönsamhet
+        </summary>
+        ${this._tbBlock(ao)}
+      </details>` : '';
+
+    Sidebar.updateBadges();
+  },
+
+  _refreshMaterialSection() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+
+    const listEl  = document.getElementById('ao-materials');
+    if (listEl)  listEl.innerHTML  = this._renderMaterials(ao);
+
+    const totEl   = document.getElementById('ao-mat-totals');
+    if (totEl)   totEl.innerHTML   = (ao.materials||[]).length > 0 ? this._matTotals(ao) : '';
+
+    const lonEl   = document.getElementById('ao-lonsam');
+    if (lonEl)   lonEl.innerHTML   = Auth.canAny(['reports_view','staff_view']) ? `
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
+          ${ic('bar-chart-2',13)} Intern lönsamhet
+        </summary>
+        ${this._tbBlock(ao)}
+      </details>` : '';
   },
 
   /* ── Stämpling timer ──────────────────── */
@@ -1655,15 +1701,13 @@ const WorkOrderDetailPage = {
       showToast('Tid registrerad');
     }
     Modal.close();
-    const ao = getAO(this.aoId);
-    if (ao) document.getElementById('ao-timeentries').innerHTML = this._renderTimeEntries(ao);
+    this._refreshTimeSection();
   },
 
   deleteTime(entryId) {
     Modal.confirm('Ta bort tidspost?', () => {
       TimeService.delete(entryId);
-      const ao = getAO(this.aoId);
-      if (ao) document.getElementById('ao-timeentries').innerHTML = this._renderTimeEntries(ao);
+      this._refreshTimeSection();
       showToast('Tidspost borttagen');
     });
   },
