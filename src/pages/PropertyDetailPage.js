@@ -347,6 +347,8 @@ const PropertyDetailPage = {
       ? cats.map(c => ({ slug: c.slug, icon: c.icon, label: c.label, fields: c.fields || [] }))
       : fallbackSystems.map(s => ({ ...s, fields: [] }));
 
+    const propId = this.propId;
+
     return `
       <div class="card" style="margin-bottom:8px;">
         <div class="card-header">
@@ -357,12 +359,19 @@ const PropertyDetailPage = {
           const tObj = (t && typeof t === 'object') ? t : (t ? { _value: t } : {});
           const hasData = Object.values(tObj).some(Boolean);
           const accId = `prop-acc-${sys.slug}`;
+          const openCatAOs = (state.workOrders||[]).filter(a =>
+            a.propertyId === propId &&
+            a.technicalCategorySlug === sys.slug &&
+            !['klar','fakturerad','avbruten'].includes(a.status) &&
+            !a.deleted
+          ).length;
           return `
           <div class="prop-acc-row" id="${accId}">
             <div class="prop-acc-hd" onclick="PropertyDetailPage._toggleAcc('${accId}')">
               <span class="prop-acc-hd-icon">${ic(sys.icon,14)}</span>
               <span class="prop-acc-hd-label">${sys.label}</span>
               <div class="prop-acc-hd-right">
+                ${openCatAOs > 0 ? `<span class="bdg bdg-blue" style="font-size:9px;" title="${openCatAOs} öppna AO">${ic('clipboard-list',9)} ${openCatAOs}</span>` : ''}
                 ${hasData
                   ? `<span class="bdg bdg-green" style="font-size:9px;">Ifylld</span>`
                   : `<span class="bdg bdg-grey" style="font-size:9px;">Tom</span>`}
@@ -371,11 +380,19 @@ const PropertyDetailPage = {
             </div>
             <div class="prop-acc-body">
               ${this._renderTechSystem(sys.slug, tObj, sys.fields)}
-              ${Auth.can('properties_manage')
-                ? `<button class="btn bs bsm" style="margin-top:8px;"
-                     onclick="PropertyDetailPage.openEditTechSystem('${sys.slug}')">
-                     ${ic('pencil',13)} Redigera ${sys.label}</button>`
-                : ''}
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                ${Auth.can('properties_manage')
+                  ? `<button class="btn bs bsm"
+                       onclick="PropertyDetailPage.openEditTechSystem('${sys.slug}')">
+                       ${ic('pencil',13)} Redigera</button>`
+                  : ''}
+                ${Auth.can('ao_create')
+                  ? `<button class="btn bsu bsm"
+                       onclick="PropertyDetailPage.openCreateAOFromTech('${sys.slug}','${esc(sys.label)}')">
+                       ${ic('plus',13)} Skapa AO</button>`
+                  : ''}
+              </div>
+              ${this._techCatHistory(propId, sys.slug)}
             </div>
           </div>`;
         }).join('')}
@@ -495,6 +512,167 @@ const PropertyDetailPage = {
   _toggleAcc(id) {
     const row = document.getElementById(id);
     if (row) row.classList.toggle('open');
+  },
+
+  _techCatHistory(propId, catSlug) {
+    if (!propId || !catSlug) return '';
+    const allAOs = (state.workOrders||[]).filter(a =>
+      a.propertyId === propId &&
+      a.technicalCategorySlug === catSlug &&
+      !a.deleted
+    );
+    if (!allAOs.length) return '';
+
+    const isOpen = a => !['klar','fakturerad','avbruten'].includes(a.status);
+    const open   = allAOs.filter(isOpen) .sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+    const closed = allAOs.filter(a => !isOpen(a)).sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+    const sorted = [...open, ...closed];
+
+    const rows = sorted.map(ao => `
+      <div class="crow" style="padding:7px 0;" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;line-height:1.3;">${esc(ao.title)}</div>
+          <div style="font-size:10px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt)}</div>
+        </div>
+        <div style="flex-shrink:0;">${sbdg(ao.status)}</div>
+      </div>`).join('');
+
+    return `
+      <details style="margin-top:10px;">
+        <summary style="font-size:11px;font-weight:700;color:var(--mt);cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0;user-select:none;">
+          ${ic('clock',11)} Tidigare arbetsorder
+          <span class="bdg ${open.length?'bdg-blue':'bdg-grey'}" style="font-size:9px;">${allAOs.length}</span>
+        </summary>
+        <div style="margin-top:4px;border-top:1px solid var(--bg);">${rows}</div>
+      </details>`;
+  },
+
+  _buildTechDesc(p, catSlug, catLabel, catFields) {
+    const lines = [];
+    lines.push(`Tekniskt område: ${catLabel}`);
+    lines.push(`Fastighet: ${p.name||'—'}`);
+    const cityLine = [p.zip, p.city].filter(Boolean).join(' ');
+    const addr = [p.address, cityLine].filter(Boolean).join(', ');
+    if (addr) lines.push(`Adress: ${addr}`);
+
+    const rawT = (p.technicalSystems||{})[catSlug];
+    if (rawT) {
+      lines.push('');
+      lines.push('Teknisk information:');
+      if (typeof rawT === 'string') {
+        lines.push(`• ${rawT}`);
+      } else if (rawT && rawT._value) {
+        lines.push(`• ${rawT._value}`);
+      } else if (rawT && typeof rawT === 'object') {
+        const activeFields = catFields && catFields.length
+          ? catFields.filter(f => f.active !== false).sort((a,b) => (a.order||99)-(b.order||99))
+          : null;
+        const fallback = {
+          type:'Systemtyp',manufacturer:'Fabrikat',model:'Modell',location:'Placering',
+          serviceInterval:'Serviceintervall',lastService:'Senaste service',comment:'Kommentar',
+          mainPanel:'Elcentral',meter:'Elmätare/anl-ID',shutoffLocation:'Huvudavstängning',
+          description:'Systembeskrivning',pump:'Pump/Sump',alarmSystem:'Brandlarmsystem',
+          lastControl:'Senaste kontroll',nextControl:'Nästa kontroll',filterType:'Filtertyp',
+          lastFilterChange:'Senaste filterbyte',fractions:'Fraktioner',supplier:'Leverantör',access:'Åtkomst'
+        };
+        if (activeFields) {
+          activeFields.forEach(f => { const v = rawT[f.key]; if (v) lines.push(`• ${f.label}: ${v}`); });
+        } else {
+          Object.entries(rawT).forEach(([k,v]) => { if (v) lines.push(`• ${fallback[k]||cap(k)}: ${v}`); });
+        }
+      }
+    }
+    return lines.join('\n');
+  },
+
+  openCreateAOFromTech(catSlug, catLabel) {
+    if (!Auth.require('ao_create')) return;
+    const p = getObj(this.propId);
+    if (!p) return;
+
+    const cu      = p.customerId ? getCu(p.customerId) : null;
+    const cuName  = cu ? CustomerService.displayName(cu) : null;
+    const dynCat  = (state.propertyCategories||[]).find(c => c.slug === catSlug);
+    const catFields = dynCat ? (dynCat.fields||[]) : [];
+    const addr    = p.address || '';
+    const desc    = this._buildTechDesc(p, catSlug, catLabel, catFields);
+
+    const warnings = [];
+    if (!p.customerId || !cu) warnings.push('Fastigheten har ingen kopplad kund — lägg till kund efteråt i redigera-vyn.');
+    if (!addr)              warnings.push('Fastigheten saknar adress — fyll i manuellt nedan.');
+
+    Modal.open({
+      title: `${ic('clipboard-list',14)} Skapa AO — ${esc(catLabel)}`,
+      wide: true,
+      body: `
+        <div class="nbox" style="margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          ${ic('building-2',12)} <strong>${esc(p.name)}</strong>
+          ${cuName ? `· ${ic('user',11)} ${esc(cuName)}` : ''}
+          · ${ic('settings',11)} ${esc(catLabel)}
+        </div>
+        ${warnings.map(w=>`<div class="nbox" style="margin-bottom:8px;font-size:11px;background:#fef9c3;border-left-color:#ca8a04;">${ic('alert-triangle',11)} ${esc(w)}</div>`).join('')}
+        <div class="fg">
+          <label>Rubrik</label>
+          <input id="act-title" value="${esc(catLabel)} – service/kontroll">
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Datum</label>
+            <input type="date" id="act-date" value="">
+          </div>
+          <div class="fg"><label>Prioritet</label>
+            <select id="act-prio">
+              <option value="normal" selected>Normal</option>
+              <option value="hög">Hög</option>
+              <option value="akut">Akut</option>
+              <option value="låg">Låg</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Adress</label>
+          <input id="act-addr" value="${esc(addr)}" placeholder="Fastighetens adress">
+        </div>
+        <div class="fg">
+          <label>Beskrivning</label>
+          <textarea id="act-desc" rows="8">${esc(desc)}</textarea>
+        </div>`,
+      buttons: [
+        { label: 'Skapa AO', cls: 'btn bsu', onClick: () => {
+          const title = document.getElementById('act-title')?.value.trim();
+          if (!title) { showToast('Rubrik krävs'); return; }
+          const ao = WorkOrderService.create({
+            title,
+            description:            document.getElementById('act-desc')?.value.trim() || '',
+            customerId:             p.customerId || '',
+            propertyId:             p.id,
+            address:                document.getElementById('act-addr')?.value.trim() || addr,
+            status:                 'nytt',
+            priority:               document.getElementById('act-prio')?.value || 'normal',
+            scheduledDate:          document.getElementById('act-date')?.value || '',
+            category:               '',
+            technicalCategorySlug:  catSlug,
+            technicalCategoryLabel: catLabel,
+            materials: [], notes: [], log: [], timeEntries: [], checklist: []
+          });
+          Modal.close();
+          showToast(`${ao.id} skapad — ${esc(catLabel)}`);
+          // Live-uppdatera teknik-fliken utan omladdning
+          const freshProp = getObj(p.id);
+          if (freshProp) {
+            const tabEl = document.getElementById('prop-tab-tech');
+            if (tabEl) {
+              tabEl.innerHTML = this._renderTechTab(freshProp.technicalSystems||{}, freshProp.inspections||{});
+              setTimeout(() => {
+                const accEl = document.getElementById(`prop-acc-${catSlug}`);
+                if (accEl && !accEl.classList.contains('open')) accEl.classList.add('open');
+              }, 60);
+            }
+          }
+          Sidebar.updateBadges();
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   },
 
   _renderInspections(insp) {

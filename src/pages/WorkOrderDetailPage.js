@@ -88,6 +88,7 @@ const WorkOrderDetailPage = {
               <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'<span style="color:var(--rd);">Ej tilldelad</span>'}${respName?`<br><span style="font-size:10px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:''}</span></div>
               <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
               ${ao.category ? `<div class="dr"><span class="dk">Kategori</span><span class="dv">${catBadge(ao.category)}</span></div>` : ''}
+              ${ao.technicalCategorySlug ? `<div class="dr"><span class="dk">Tekniskt område</span><span class="dv" style="${ao.propertyId?'cursor:pointer;':''}display:flex;align-items:center;gap:4px;" ${ao.propertyId?`onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})"`:''}>${ic('settings',11)} ${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}${ao.propertyId?ic('arrow-right',10):''}</span></div>` : ''}
             </div>
             ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
             ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye-off',13)} <strong>Internt:</strong> ${ao.internalNote}</div>` : ''}
