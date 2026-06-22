@@ -221,29 +221,39 @@ const RonderingService = {
     const avv = Object.assign(Schema.avvikelse(), data, {
       id: newId(state.avvikelser, 'AVV'),
       ronderingId,
+      passId: data.passId || '',
       createdBy: state.currentUser ? state.currentUser.id : '',
       createdByName: state.currentUser ? (state.currentUser.firstName + ' ' + state.currentUser.lastName).trim() : '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
     state.avvikelser.push(avv);
-    // Link to rondering
+
+    // Link to rondering (legacy / keep in sync)
     const ron = getRon(ronderingId);
     if (ron) {
       ron.deviationIds = ron.deviationIds || [];
-      ron.deviationIds.push(avv.id);
-      // Mark point in results
-      const cat = (ron.results || []).find(r => r.categoryId === data.categoryId);
-      if (cat) {
-        const pt = (cat.points || []).find(p => p.pointId === data.pointId);
-        if (pt) {
-          pt.deviationId = avv.id;
-          pt.status = 'avvikelse';
-          pt.checkedAt = pt.checkedAt || new Date().toISOString();
-        }
-      }
+      if (!ron.deviationIds.includes(avv.id)) ron.deviationIds.push(avv.id);
       ron.updatedAt = new Date().toISOString();
     }
+
+    // Link to PASS point if passId provided
+    if (data.passId) {
+      const pass = getPass(data.passId);
+      if (pass) {
+        const cat = (pass.categories||[]).find(c => c.id === data.categoryId);
+        if (cat) {
+          const pt = (cat.points||[]).find(p => p.id === data.pointId);
+          if (pt) {
+            pt.deviationId = avv.id;
+            pt.status = pt.status || 'anmärkning';
+            pt.checkedAt = pt.checkedAt || new Date().toISOString();
+          }
+        }
+        pass.updatedAt = new Date().toISOString();
+      }
+    }
+
     persist();
     ActivityService.log('deviation_created', 'Avvikelse skapad: ' + avv.title, {
       customerId: avv.customerId, propertyId: avv.propertyId,
@@ -260,36 +270,38 @@ const RonderingService = {
     return avv;
   },
 
-  createAOFromAvvikelse(avvikelseId) {
+  createAOFromAvvikelse(avvikelseId, passId) {
     const avv = getAvv(avvikelseId);
     if (!avv) return null;
-    if (avv.workOrderId) return getAO(avv.workOrderId); // already created
-    const cu = getCu(avv.customerId);
+    if (avv.workOrderId) return getAO(avv.workOrderId);
+    const cu   = getCu(avv.customerId);
     const prop = getObj(avv.propertyId);
-    const ron = getRon(avv.ronderingId);
+    const ron  = getRon(avv.ronderingId);
+    const resolvedPassId = passId || avv.passId || '';
+    const pass = resolvedPassId ? getPass(resolvedPassId) : null;
     const address = prop ? prop.address : (cu ? cu.address : '');
-    const ronName = ron ? (ron.name || ron.templateName || avv.ronderingId) : avv.ronderingId;
-    const title = 'Avvikelse rondering – ' + avv.pointTitle;
+    const ronName = ron ? (ron.name||ron.templateName||avv.ronderingId) : avv.ronderingId;
+    const passSeq = pass ? (' (tillfälle #' + (pass.sequenceNumber||1) + ')') : '';
+    const title = 'Anmärkning rondering – ' + avv.pointTitle;
     const description = [
-      'Rondering: ' + ronName,
-      'Grupp: ' + (avv.categoryName || '—'),
-      'Kontrollpunkt: ' + (avv.pointTitle || '—'),
+      'Rondering: ' + ronName + passSeq,
+      'Grupp: ' + (avv.categoryName||'—'),
+      'Kontrollpunkt: ' + (avv.pointTitle||'—'),
       '',
-      'Avvikelse: ' + avv.title,
-      'Kommentar: ' + (avv.comment || '(ingen kommentar)')
+      'Anmärkning: ' + avv.title,
+      'Kommentar: ' + (avv.comment||'(ingen kommentar)')
     ].join('\n');
-    const notes = (avv.images || []).map(function(img) {
+    const notes = (avv.images||[]).map(function(img) {
       return {
         id: 'n' + Date.now() + Math.random(),
-        text: 'Bild från avvikelse: ' + avv.title,
-        imageData: img.dataUrl,
+        text: 'Bild från anmärkning: ' + avv.title,
+        imageData: img.dataUrl || img.url || '',
         staffName: avv.createdByName,
         timestamp: avv.createdAt
       };
     });
     const ao = WorkOrderService.create({
-      title,
-      description,
+      title, description,
       customerId: avv.customerId,
       propertyId: avv.propertyId,
       address,
@@ -297,13 +309,26 @@ const RonderingService = {
       notes,
       status: 'nytt',
       ronderingId: avv.ronderingId,
-      deviationId: avvikelseId
+      passId: resolvedPassId,
+      deviationId: avvikelseId,
+      category: 'felanmalan'
     });
     // Link AO back to avvikelse
     avv.workOrderId = ao.id;
     avv.updatedAt = new Date().toISOString();
+    // Link AO to PASS point
+    if (pass) {
+      const cat = (pass.categories||[]).find(c => c.id === avv.categoryId);
+      if (cat) {
+        const pt = (cat.points||[]).find(p => p.id === avv.pointId);
+        if (pt) {
+          pt.workOrderId = ao.id;
+        }
+      }
+      pass.updatedAt = new Date().toISOString();
+    }
     persist();
-    ActivityService.log('ao_from_deviation', 'AO skapad från avvikelse: ' + avv.title, {
+    ActivityService.log('ao_from_deviation', 'AO skapad från anmärkning: ' + avv.title, {
       customerId: avv.customerId, propertyId: avv.propertyId,
       ronderingId: avv.ronderingId, deviationId: avvikelseId, workOrderId: ao.id
     });
