@@ -325,5 +325,92 @@ const RonderingService = {
       });
     });
     return { total: total, ok: ok, avvs: avvs, ejAktuell: ejAktuell, checked: ok + avvs + ejAktuell };
+  },
+
+  /* ── Ronderingstillfällen (PASS) ─────── */
+
+  getPassesByRondering(ronderingId) {
+    return state.ronderingspass.filter(p => p.ronderingId === ronderingId);
+  },
+
+  getPassesByProperty(propertyId) {
+    return state.ronderingspass.filter(p => p.propertyId === propertyId);
+  },
+
+  // Creates a new PASS from a rondering's categories (deep copy, all points empty)
+  createPassFromRondering(ronderingId, options) {
+    const ron = getRon(ronderingId);
+    if (!ron) return null;
+    const opts = options || {};
+    const cats = JSON.parse(JSON.stringify(ron.categories || [])).map(function(cat) {
+      return {
+        id: cat.id,
+        name: cat.name,
+        points: (cat.points || []).map(function(pt) {
+          return {
+            id: pt.id,
+            title: pt.title,
+            description: pt.description || '',
+            canCreateAO: pt.canCreateAO !== false,
+            requiresPhoto: !!pt.requiresPhoto,
+            status: '',
+            comment: '',
+            images: [],
+            workOrderId: null,
+            checkedAt: null,
+            checkedBy: null
+          };
+        })
+      };
+    });
+    let total = 0;
+    cats.forEach(function(cat) { total += (cat.points || []).length; });
+    const pass = Object.assign(Schema.ronderingspass(), {
+      id: newId(state.ronderingspass, 'PASS'),
+      ronderingId: ron.id,
+      mallId: ron.templateId || '',
+      propertyId: opts.propertyId || ron.propertyId || '',
+      customerId: opts.customerId || ron.customerId || '',
+      sequenceNumber: this.getPassesByRondering(ronderingId).length + 1,
+      scheduledDate: opts.scheduledDate || '',
+      scheduledTime: opts.scheduledTime || '',
+      staffIds: opts.staffIds || (ron.performedBy ? [ron.performedBy] : []),
+      estimatedDurationMins: opts.estimatedDurationMins || 90,
+      status: 'planerat',
+      categories: cats,
+      summary: { total: total, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
+      internalNote: opts.internalNote || '',
+      migratedFromLegacy: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    state.ronderingspass.push(pass);
+    persist();
+    return pass;
+  },
+
+  getPassStats(passId) {
+    const pass = getPass(passId);
+    if (!pass) return null;
+    let total = 0, ok = 0, anmärkningar = 0, ejKontrollerad = 0, ejAktuell = 0;
+    (pass.categories || []).forEach(function(cat) {
+      (cat.points || []).forEach(function(pt) {
+        total++;
+        if (pt.status === 'ok') ok++;
+        else if (pt.status === 'anmärkning') anmärkningar++;
+        else if (pt.status === 'ej_kontrollerad') ejKontrollerad++;
+        else if (pt.status === 'ej_aktuell') ejAktuell++;
+      });
+    });
+    const checked = ok + anmärkningar + ejKontrollerad + ejAktuell;
+    return { total, ok, anmärkningar, ejKontrollerad, ejAktuell, checked, unchecked: total - checked };
+  },
+
+  updatePass(id, data) {
+    const pass = getPass(id);
+    if (!pass) return null;
+    Object.assign(pass, data, { updatedAt: new Date().toISOString() });
+    persist();
+    return pass;
   }
 };

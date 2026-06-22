@@ -443,5 +443,31 @@ const Schema = {
     createdByName: '',
     createdAt: '',
     updatedAt: ''
+  }),
+
+  ronderingspass: () => ({
+    id: '',
+    ronderingId: '',
+    mallId: '',
+    propertyId: '',
+    customerId: '',
+    sequenceNumber: 1,
+    scheduledDate: '',
+    scheduledTime: '',
+    staffIds: [],
+    estimatedDurationMins: 90,
+    status: 'planerat',         // planerat|pågående|slutfört|har_avvikelser
+    startedAt: null,
+    completedAt: null,
+    completedBy: null,
+    // categories: self-contained copy with per-point results
+    // point.status: ''|'ok'|'anmärkning'|'ej_kontrollerad'|'ej_aktuell'
+    // point.images: [{id, url, storagePath, caption, createdAt, createdBy}]
+    categories: [],
+    summary: { total: 0, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
+    internalNote: '',
+    migratedFromLegacy: false,
+    createdAt: '',
+    updatedAt: ''
   })
 };

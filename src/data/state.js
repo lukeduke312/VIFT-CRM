@@ -34,6 +34,7 @@ let state = {
   emailTemplates: [],
   notifications: [],
   propertyCategories: [],
+  ronderingspass: [],
 
   // UI-state
   currentPage: 'dash',
@@ -92,6 +93,7 @@ async function initState() {
   state.emailTemplates     = g('emailTemplates')   || SeedData.emailTemplates  || [];
   state.notifications      = g('notifications')    || [];
   state.propertyCategories = g('propertyCategories') || SeedData.propertyCategories || [];
+  state.ronderingspass     = g('ronderingspass')     || SeedData.ronderingspass     || [];
 
   /* Ladda staff — strippa alltid lösenordsfält (ska aldrig ligga i frontend) */
   const rawStaff = g('staff') || SeedData.staff;
@@ -126,6 +128,68 @@ async function initState() {
   try { state.stampActive    = !!JSON.parse(localStorage.getItem('vift_stampActive')); } catch(e) { state.stampActive = false; }
   try { state.stampTimestamp = JSON.parse(localStorage.getItem('vift_stampTs'))    || null; } catch(e) { state.stampTimestamp = null; }
   try { state.stampAoId      = JSON.parse(localStorage.getItem('vift_stampAoId')) || null; } catch(e) { state.stampAoId = null; }
+
+  // Migrera gamla RON.results[] → ronderingspass (idempotent, kör varje laddning tills persist skett)
+  state.ronderingar.forEach(function(ron) {
+    if (!ron.results || ron.results.length === 0) return;
+    if (state.ronderingspass.some(function(p) { return p.ronderingId === ron.id && p.migratedFromLegacy; })) return;
+    var passStatus = (ron.status === 'slutförd' || ron.status === 'har_avvikelser') ? ron.status
+                   : (ron.status === 'pågående' ? 'pågående' : 'planerat');
+    var passCats = (ron.results || []).map(function(res) {
+      return {
+        id: res.categoryId,
+        name: res.categoryName,
+        points: (res.points || []).map(function(pt) {
+          var newStatus = pt.status === 'avvikelse' ? 'anmärkning' : (pt.status || '');
+          return {
+            id: pt.pointId,
+            title: pt.pointTitle,
+            description: pt.pointDesc || '',
+            canCreateAO: pt.canCreateAO !== false,
+            requiresPhoto: false,
+            status: newStatus,
+            comment: pt.comment || '',
+            images: [],
+            workOrderId: pt.workOrderId || null,
+            checkedAt: pt.checkedAt || null,
+            checkedBy: ron.performedBy || null
+          };
+        })
+      };
+    });
+    var sumTotal = 0, sumOk = 0, sumAnm = 0, sumEjK = 0, sumEjA = 0;
+    passCats.forEach(function(cat) {
+      (cat.points || []).forEach(function(pt) {
+        sumTotal++;
+        if (pt.status === 'ok') sumOk++;
+        else if (pt.status === 'anmärkning') sumAnm++;
+        else if (pt.status === 'ej_aktuell') sumEjA++;
+        else if (pt.status === 'ej_kontrollerad') sumEjK++;
+      });
+    });
+    var pass = Object.assign(Schema.ronderingspass(), {
+      id: 'PASS-MIG-' + ron.id,
+      ronderingId: ron.id,
+      mallId: ron.templateId || '',
+      propertyId: ron.propertyId || '',
+      customerId: ron.customerId || '',
+      sequenceNumber: 1,
+      scheduledDate: ron.startedAt ? ron.startedAt.split('T')[0] : '',
+      scheduledTime: ron.startedAt ? ron.startedAt.split('T')[1].substring(0, 5) : '',
+      staffIds: ron.performedBy ? [ron.performedBy] : [],
+      status: passStatus,
+      startedAt: ron.startedAt || null,
+      completedAt: ron.completedAt || null,
+      completedBy: ron.performedBy || null,
+      categories: passCats,
+      summary: { total: sumTotal, ok: sumOk, anmärkningar: sumAnm, ejKontrollerad: sumEjK, ejAktuell: sumEjA },
+      internalNote: ron.internalNote || '',
+      migratedFromLegacy: true,
+      createdAt: ron.createdAt || new Date().toISOString(),
+      updatedAt: ron.updatedAt || new Date().toISOString()
+    });
+    state.ronderingspass.push(pass);
+  });
 }
 
 /**
@@ -157,7 +221,8 @@ function persist() {
     ['serviceTemplates', state.serviceTemplates],
     ['emailTemplates',   state.emailTemplates],
     ['notifications',    state.notifications],
-    ['propertyCategories', state.propertyCategories]
+    ['propertyCategories', state.propertyCategories],
+    ['ronderingspass',   state.ronderingspass]
   ]);
 }
 
@@ -182,6 +247,7 @@ function getStaff(id){ return state.staff.find(s => s.id === id) || null; }
 function getMall(id)  { return state.ronderingsmallar.find(m => m.id === id) || null; }
 function getRon(id)   { return state.ronderingar.find(r => r.id === id) || null; }
 function getAvv(id)   { return state.avvikelser.find(a => a.id === id) || null; }
+function getPass(id)  { return state.ronderingspass.find(p => p.id === id) || null; }
 
 function tdy() {
   return new Date().toISOString().split('T')[0];

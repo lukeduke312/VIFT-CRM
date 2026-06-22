@@ -1234,6 +1234,111 @@ const SeedData = {
     }
   ],
 
+  ronderingspass: [
+    {
+      id: 'PASS-001',
+      ronderingId: 'RON-001',
+      mallId: 'MALL-001',
+      propertyId: '',
+      customerId: 'K-001',
+      sequenceNumber: 1,
+      scheduledDate: _ds(-8),
+      scheduledTime: '09:00',
+      staffIds: ['ST-002'],
+      estimatedDurationMins: 90,
+      status: 'har_avvikelser',
+      startedAt: _ds(-7) + 'T09:00:00.000Z',
+      completedAt: _ds(-7) + 'T10:30:00.000Z',
+      completedBy: 'ST-002',
+      categories: [
+        {
+          id: 'cat-1', name: 'Utomhusmiljö',
+          points: [
+            { id: 'pt-1-1', title: 'Fasader', description: 'Kontrollera fasaders skick, sprickor, skador', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:10:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-1-2', title: 'Belysning utomhus', description: 'Kontrollera att all utomhusbelysning fungerar', canCreateAO: true, requiresPhoto: false, status: 'anmärkning', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:15:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-1-3', title: 'Rent och snyggt', description: 'Skräp, ogräs, allmänt intryck', canCreateAO: false, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:20:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-1-4', title: 'Hårdgjorda ytor', description: 'Asfalt, plattor, gångar — sprickor eller ojämnheter', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:25:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-1-5', title: 'Avfall/miljörum', description: 'Ordning i miljörum, kärl på plats', canCreateAO: false, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:30:00.000Z', checkedBy: 'ST-002' }
+          ]
+        },
+        {
+          id: 'cat-2', name: 'Inomhus',
+          points: [
+            { id: 'pt-2-1', title: 'Entréer', description: 'Dörrautomatik, belysning, städning', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:40:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-2-2', title: 'Trapphus', description: 'Lampor, städning, skador på väggar/golv', canCreateAO: true, requiresPhoto: false, status: 'anmärkning', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:45:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-2-3', title: 'Källare/förråd', description: 'Lås, belysning, ordning', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:50:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-2-4', title: 'Soprum/miljörum inomhus', description: 'Sortering, lukt, skick', canCreateAO: false, requiresPhoto: false, status: 'ej_aktuell', comment: 'Soprum renoveras', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T09:55:00.000Z', checkedBy: 'ST-002' }
+          ]
+        },
+        {
+          id: 'cat-3', name: 'Teknik',
+          points: [
+            { id: 'pt-3-1', title: 'Undercentral', description: 'Läckor, larm, tryck och temperatur', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T10:05:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-3-2', title: 'Ventilation', description: 'Synliga filter, drift, ljudnivå', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T10:10:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-3-3', title: 'Brand/SBA', description: 'Nödbelysning, brandvarnare, utrymningsvägar fria', canCreateAO: true, requiresPhoto: true, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T10:15:00.000Z', checkedBy: 'ST-002' },
+            { id: 'pt-3-4', title: 'Lås/passersystem', description: 'Digitala lås, nyckelsystem, kodpaneler', canCreateAO: true, requiresPhoto: false, status: 'ok', comment: '', images: [], workOrderId: null, checkedAt: _ds(-7) + 'T10:20:00.000Z', checkedBy: 'ST-002' }
+          ]
+        }
+      ],
+      summary: { total: 13, ok: 10, anmärkningar: 2, ejKontrollerad: 0, ejAktuell: 1 },
+      internalNote: 'Genomförd utan problem. Två avvikelser noterade.',
+      migratedFromLegacy: true,
+      createdAt: _ds(-8) + 'T08:00:00.000Z',
+      updatedAt: _ds(-7) + 'T10:30:00.000Z'
+    },
+    {
+      id: 'PASS-002',
+      ronderingId: 'RON-002',
+      mallId: 'MALL-001',
+      propertyId: '',
+      customerId: 'K-001',
+      sequenceNumber: 1,
+      scheduledDate: _ds(7),
+      scheduledTime: '09:00',
+      staffIds: ['ST-002'],
+      estimatedDurationMins: 90,
+      status: 'planerat',
+      startedAt: null,
+      completedAt: null,
+      completedBy: null,
+      categories: [
+        {
+          id: 'cat-1', name: 'Utomhusmiljö',
+          points: [
+            { id: 'pt-1-1', title: 'Fasader', description: 'Kontrollera fasaders skick, sprickor, skador', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-1-2', title: 'Belysning utomhus', description: 'Kontrollera att all utomhusbelysning fungerar', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-1-3', title: 'Rent och snyggt', description: 'Skräp, ogräs, allmänt intryck', canCreateAO: false, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-1-4', title: 'Hårdgjorda ytor', description: 'Asfalt, plattor, gångar — sprickor eller ojämnheter', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-1-5', title: 'Avfall/miljörum', description: 'Ordning i miljörum, kärl på plats', canCreateAO: false, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null }
+          ]
+        },
+        {
+          id: 'cat-2', name: 'Inomhus',
+          points: [
+            { id: 'pt-2-1', title: 'Entréer', description: 'Dörrautomatik, belysning, städning', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-2-2', title: 'Trapphus', description: 'Lampor, städning, skador på väggar/golv', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-2-3', title: 'Källare/förråd', description: 'Lås, belysning, ordning', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-2-4', title: 'Soprum/miljörum inomhus', description: 'Sortering, lukt, skick', canCreateAO: false, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null }
+          ]
+        },
+        {
+          id: 'cat-3', name: 'Teknik',
+          points: [
+            { id: 'pt-3-1', title: 'Undercentral', description: 'Läckor, larm, tryck och temperatur', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-3-2', title: 'Ventilation', description: 'Synliga filter, drift, ljudnivå', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-3-3', title: 'Brand/SBA', description: 'Nödbelysning, brandvarnare, utrymningsvägar fria', canCreateAO: true, requiresPhoto: true, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null },
+            { id: 'pt-3-4', title: 'Lås/passersystem', description: 'Digitala lås, nyckelsystem, kodpaneler', canCreateAO: true, requiresPhoto: false, status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null }
+          ]
+        }
+      ],
+      summary: { total: 13, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
+      internalNote: '',
+      migratedFromLegacy: false,
+      createdAt: _ds(-1) + 'T08:00:00.000Z',
+      updatedAt: _ds(-1) + 'T08:00:00.000Z'
+    }
+  ],
+
   titles: [
     { id:'TIT-001', name:'Fastighetstekniker', description:'Ansvarar för teknisk drift och underhåll av fastigheter.', active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
     { id:'TIT-002', name:'Rörmokare',          description:'Utför rörinstallationer och VVS-arbeten.',                active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' },
