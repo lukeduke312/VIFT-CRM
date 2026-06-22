@@ -4539,12 +4539,13 @@ const AdminPage = {
       : allTitles;
 
     const tabDefs = [
-      { key: 'foretag',  label: 'Företag'   },
-      { key: 'ekonomi',  label: 'Ekonomi'   },
-      { key: 'personal', label: 'Personal'  },
-      { key: 'priser',   label: 'Priser'    },
-      { key: 'system',   label: 'System'    },
-      { key: 'notiser',  label: `${ic('bell',12)} Notiser` }
+      { key: 'foretag',        label: 'Företag'                                    },
+      { key: 'ekonomi',        label: 'Ekonomi'                                    },
+      { key: 'personal',       label: 'Personal'                                   },
+      { key: 'priser',         label: 'Priser'                                     },
+      { key: 'system',         label: 'System'                                     },
+      { key: 'fastighetskort', label: `${ic('building-2',12)} Fastighetskort`      },
+      { key: 'notiser',        label: `${ic('bell',12)} Notiser`                   }
     ];
     const tabBar = `<div class="admin-tabs">
       ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.label}</button>`).join('')}
@@ -4977,7 +4978,110 @@ const AdminPage = {
         </div>
       </div>`;
 
+    const propCats = (state.propertyCategories || []).sort((a,b) => (a.order||99)-(b.order||99));
+    sections.fastighetskort = `
+      <div class="admin-section-group">
+        <div class="admin-section-header">
+          <div class="admin-section-icon" style="background:#eff6ff;color:var(--blue);">${ic('building-2',18)}</div>
+          <div>
+            <div class="admin-section-title">Fastighetskortets kategorier</div>
+            <div class="admin-section-desc">Tekniska systemkategorier som visas i fastighetskort</div>
+          </div>
+        </div>
+        <div style="padding:8px 16px 4px;display:flex;justify-content:flex-end;">
+          <button class="btn bp bxs" onclick="AdminPage.openAddCategory()">${ic('plus',13)} Ny kategori</button>
+        </div>
+        ${propCats.length === 0
+          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga kategorier. Ladda om sidan för att läsa in standardkategorier.</div>`
+          : propCats.map(cat => `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--br);">
+              <span style="color:var(--mt);flex-shrink:0;">${ic(cat.icon||'folder',16)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;color:var(--navy);">${esc(cat.label)}</div>
+                <div style="font-size:10px;color:var(--mt);">slug: ${esc(cat.slug)} · ${(cat.fields||[]).filter(f=>f.active!==false).length} fält</div>
+              </div>
+              <span class="bdg ${cat.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${cat.active!==false?'Aktiv':'Inaktiv'}</span>
+              <button class="btn bxs bs" onclick="AdminPage.openEditCategory('${cat.id}')">${ic('pencil',12)}</button>
+            </div>`).join('')}
+      </div>`;
+
     el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+  },
+
+  openAddCategory() {
+    Modal.open({
+      title: `${ic('plus',14)} Ny kategori`,
+      body: `
+        <div class="g2">
+          <div class="fg"><label>Namn</label><input id="cat-label" placeholder="T.ex. Hiss"></div>
+          <div class="fg"><label>Slug (unikt ID)</label><input id="cat-slug" placeholder="elevator"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Ikon (Lucide-namn)</label><input id="cat-icon" placeholder="folder" value="folder"></div>
+          <div class="fg"><label>Sorteringsordning</label><input type="number" id="cat-order" value="${(state.propertyCategories||[]).length+1}"></div>
+        </div>
+        <div class="fg" style="margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="cat-active" checked> Aktiv (visas i fastighetskort)
+          </label>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const label = document.getElementById('cat-label')?.value.trim();
+          const slug  = document.getElementById('cat-slug')?.value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
+          const icon  = document.getElementById('cat-icon')?.value.trim() || 'folder';
+          const order = parseInt(document.getElementById('cat-order')?.value) || 99;
+          const active= document.getElementById('cat-active')?.checked !== false;
+          if (!label || !slug) { showToast('Namn och slug krävs'); return; }
+          if ((state.propertyCategories||[]).some(c => c.slug === slug)) { showToast('Slug redan används'); return; }
+          const cats = state.propertyCategories || [];
+          cats.push({ id: 'cat-'+slug, slug, label, icon, order, active, showByDefault: active, fields: [] });
+          state.propertyCategories = cats;
+          persist();
+          Modal.close();
+          AdminPage.render();
+          showToast('Kategori skapad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  openEditCategory(catId) {
+    const cat = (state.propertyCategories||[]).find(c => c.id === catId);
+    if (!cat) return;
+    Modal.open({
+      title: `${ic('pencil',14)} Redigera kategori`,
+      body: `
+        <div class="g2">
+          <div class="fg"><label>Namn</label><input id="cat-label" value="${esc(cat.label)}"></div>
+          <div class="fg"><label>Slug (låst)</label><input id="cat-slug" value="${esc(cat.slug)}" disabled style="opacity:.5;background:var(--bg);"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Ikon (Lucide-namn)</label><input id="cat-icon" value="${esc(cat.icon||'folder')}"></div>
+          <div class="fg"><label>Sorteringsordning</label><input type="number" id="cat-order" value="${cat.order||99}"></div>
+        </div>
+        <div class="fg" style="margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="cat-active" ${cat.active!==false?'checked':''}> Aktiv (visas i fastighetskort)
+          </label>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const label = document.getElementById('cat-label')?.value.trim();
+          const icon  = document.getElementById('cat-icon')?.value.trim() || 'folder';
+          const order = parseInt(document.getElementById('cat-order')?.value) || 99;
+          const active= document.getElementById('cat-active')?.checked !== false;
+          if (!label) { showToast('Namn krävs'); return; }
+          Object.assign(cat, { label, icon, order, active });
+          persist();
+          Modal.close();
+          AdminPage.render();
+          showToast('Kategori sparad');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   },
 
   async _activatePush() {

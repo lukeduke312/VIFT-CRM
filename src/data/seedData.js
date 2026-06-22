@@ -1484,5 +1484,92 @@ const SeedData = {
       defaultDescription:'Arbete på löpande räkning.',
       includes:[], excludes:[], internalNote:''
     }
+  ],
+
+  propertyCategories: [
+    {
+      id: 'cat-heating', slug: 'heating', label: 'Värme', icon: 'thermometer',
+      order: 1, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-heat-1', key: 'type',            label: 'Systemtyp',        type: 'text',     order: 1, active: true },
+        { id: 'f-heat-2', key: 'manufacturer',    label: 'Fabrikat',         type: 'text',     order: 2, active: true },
+        { id: 'f-heat-3', key: 'model',           label: 'Modell',           type: 'text',     order: 3, active: true },
+        { id: 'f-heat-4', key: 'location',        label: 'Placering',        type: 'text',     order: 4, active: true },
+        { id: 'f-heat-5', key: 'serviceInterval', label: 'Serviceintervall', type: 'text',     order: 5, active: true },
+        { id: 'f-heat-6', key: 'lastService',     label: 'Senaste service',  type: 'date',     order: 6, active: true },
+        { id: 'f-heat-7', key: 'comment',         label: 'Kommentar',        type: 'textarea', order: 7, active: true }
+      ]
+    },
+    {
+      id: 'cat-ventilation', slug: 'ventilation', label: 'Ventilation', icon: 'wind',
+      order: 2, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-vent-1', key: 'type',            label: 'Systemtyp',        type: 'text',     order: 1, active: true },
+        { id: 'f-vent-2', key: 'manufacturer',    label: 'Fabrikat/Aggregat',type: 'text',     order: 2, active: true },
+        { id: 'f-vent-3', key: 'location',        label: 'Placering',        type: 'text',     order: 3, active: true },
+        { id: 'f-vent-4', key: 'filterType',      label: 'Filtertyp',        type: 'text',     order: 4, active: true },
+        { id: 'f-vent-5', key: 'lastFilterChange',label: 'Senaste filterbyte',type: 'date',    order: 5, active: true },
+        { id: 'f-vent-6', key: 'comment',         label: 'Kommentar',        type: 'textarea', order: 6, active: true }
+      ]
+    },
+    {
+      id: 'cat-electricity', slug: 'electricity', label: 'El', icon: 'zap',
+      order: 3, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-el-1', key: 'mainPanel', label: 'Elcentral',      type: 'text',     order: 1, active: true },
+        { id: 'f-el-2', key: 'location',  label: 'Placering',      type: 'text',     order: 2, active: true },
+        { id: 'f-el-3', key: 'meter',     label: 'Elmätare/anl-ID',type: 'text',     order: 3, active: true },
+        { id: 'f-el-4', key: 'comment',   label: 'Kommentar',      type: 'textarea', order: 4, active: true }
+      ]
+    },
+    {
+      id: 'cat-water', slug: 'water', label: 'Vatten & avlopp', icon: 'droplets',
+      order: 4, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-wat-1', key: 'shutoffLocation', label: 'Huvudavstängning',  type: 'text',     order: 1, active: true },
+        { id: 'f-wat-2', key: 'description',     label: 'Systembeskrivning', type: 'textarea', order: 2, active: true },
+        { id: 'f-wat-3', key: 'pump',            label: 'Pump/Sump',         type: 'text',     order: 3, active: true },
+        { id: 'f-wat-4', key: 'comment',         label: 'Kommentar',         type: 'textarea', order: 4, active: true }
+      ]
+    },
+    {
+      id: 'cat-sba', slug: 'sba', label: 'SBA / Brand', icon: 'shield-check',
+      order: 5, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-sba-1', key: 'alarmSystem',  label: 'Brandlarmsystem',    type: 'text',     order: 1, active: true },
+        { id: 'f-sba-2', key: 'lastControl',  label: 'Senaste SBA-kontroll',type: 'date',    order: 2, active: true },
+        { id: 'f-sba-3', key: 'nextControl',  label: 'Nästa SBA-kontroll', type: 'date',     order: 3, active: true },
+        { id: 'f-sba-4', key: 'comment',      label: 'Kommentar',          type: 'textarea', order: 4, active: true }
+      ]
+    },
+    {
+      id: 'cat-waste', slug: 'waste', label: 'Avfall & miljö', icon: 'trash-2',
+      order: 6, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-wst-1', key: 'location',  label: 'Miljörum placering', type: 'text',     order: 1, active: true },
+        { id: 'f-wst-2', key: 'fractions', label: 'Fraktioner',         type: 'text',     order: 2, active: true },
+        { id: 'f-wst-3', key: 'supplier',  label: 'Leverantör',         type: 'text',     order: 3, active: true },
+        { id: 'f-wst-4', key: 'access',    label: 'Åtkomst',            type: 'text',     order: 4, active: true },
+        { id: 'f-wst-5', key: 'comment',   label: 'Kommentar',          type: 'textarea', order: 5, active: true }
+      ]
+    },
+    {
+      id: 'cat-other', slug: 'other', label: 'Övrigt', icon: 'settings',
+      order: 7, active: true, showByDefault: true,
+      fields: [
+        { id: 'f-oth-1', key: 'description', label: 'Beskrivning', type: 'textarea', order: 1, active: true }
+      ]
+    },
+    { id: 'cat-laundry',   slug: 'laundry',   label: 'Tvättstuga',    icon: 'shirt',          order: 8,  active: false, showByDefault: false, fields: [] },
+    { id: 'cat-garage',    slug: 'garage',    label: 'Garage',        icon: 'car',            order: 9,  active: false, showByDefault: false, fields: [] },
+    { id: 'cat-outdoor',   slug: 'outdoor',   label: 'Utemiljö',      icon: 'trees',          order: 10, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-access',    slug: 'access',    label: 'Lås & passage', icon: 'key',            order: 11, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-lighting',  slug: 'lighting',  label: 'Belysning',     icon: 'lightbulb',      order: 12, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-elevator',  slug: 'elevator',  label: 'Hiss',          icon: 'arrow-up-down',  order: 13, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-roof',      slug: 'roof',      label: 'Tak',           icon: 'home',           order: 14, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-facade',    slug: 'facade',    label: 'Fasad',         icon: 'building-2',     order: 15, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-ground',    slug: 'ground',    label: 'Mark',          icon: 'mountain',       order: 16, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-playground',slug: 'playground',label: 'Lekplats',      icon: 'smile',          order: 17, active: false, showByDefault: false, fields: [] },
+    { id: 'cat-security',  slug: 'security',  label: 'Säkerhet',      icon: 'shield',         order: 18, active: false, showByDefault: false, fields: [] }
   ]
 };

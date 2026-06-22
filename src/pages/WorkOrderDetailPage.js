@@ -250,6 +250,8 @@ const WorkOrderDetailPage = {
     if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.archived && !ao.deleted) {
       btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('refresh-cw',13)} Byt status</button>`);
     }
+    // Contact
+    btns.push(`<button class="btn bxs bs" onclick="WorkOrderDetailPage.openContact()" style="display:inline-flex;align-items:center;gap:5px;">${ic('phone',13)} Kontakt</button>`);
     return btns;
   },
 
@@ -343,6 +345,93 @@ const WorkOrderDetailPage = {
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
+    });
+  },
+
+  openContact() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const cu = getCu(ao.customerId);
+    const prop = ao.propertyId ? getObj(ao.propertyId) : null;
+
+    // Build prioritized contact list
+    const contacts = [];
+
+    // 1. AO contact person
+    if (ao.contactPerson || ao.phone || ao.email) {
+      contacts.push({
+        label: 'AO-kontakt',
+        name: ao.contactPerson || '',
+        phone: ao.phone || '',
+        email: ao.email || '',
+        primary: true
+      });
+    }
+
+    // 2. Customer
+    if (cu) {
+      contacts.push({
+        label: 'Kund',
+        name: CustomerService.displayName(cu),
+        phone: cu.phone || '',
+        email: cu.email || '',
+        primary: false
+      });
+    }
+
+    // 3. Property contacts
+    if (prop && prop.contacts && prop.contacts.length) {
+      prop.contacts.forEach(c => {
+        contacts.push({
+          label: c.role || 'Fastighetskontakt',
+          name: c.name || '',
+          phone: c.phone || '',
+          email: c.email || '',
+          primary: false
+        });
+      });
+    }
+
+    // 4. Assigned staff
+    (ao.staff || []).forEach(staffId => {
+      const s = getStaff(staffId);
+      if (s && s.phone) {
+        contacts.push({
+          label: 'Personal',
+          name: `${s.firstName} ${s.lastName}`,
+          phone: s.phone || '',
+          email: s.email || '',
+          primary: false
+        });
+      }
+    });
+
+    if (!contacts.length) {
+      showToast('Inga kontaktuppgifter registrerade');
+      return;
+    }
+
+    const rows = contacts.map(c => `
+      <div style="padding:12px 0;border-bottom:1px solid var(--bg);">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">${esc(c.label)}</span>
+          ${c.primary ? `<span class="bdg bdg-sky" style="font-size:9px;">Primär</span>` : ''}
+        </div>
+        ${c.name ? `<div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px;">${esc(c.name)}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${c.phone
+            ? `<a href="tel:${esc(c.phone)}" class="btn bp bsm" style="gap:6px;font-size:13px;font-weight:700;padding:10px 16px;">${ic('phone',14)} ${esc(c.phone)}</a>`
+            : `<span class="btn bs bsm" style="opacity:.45;cursor:default;gap:5px;font-size:12px;">${ic('phone',13)} Inget tel.</span>`}
+          ${c.email
+            ? `<a href="mailto:${esc(c.email)}" class="btn bs bsm" style="gap:6px;font-size:12px;">${ic('mail',13)} ${esc(c.email)}</a>`
+            : ''}
+        </div>
+      </div>`).join('');
+
+    Modal.open({
+      title: `${ic('phone',14)} Kontakt`,
+      body: `<div style="margin:0 -2px;">${rows}</div>`,
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
     });
   },
 

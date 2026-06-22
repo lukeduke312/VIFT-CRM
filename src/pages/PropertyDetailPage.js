@@ -330,16 +330,22 @@ const PropertyDetailPage = {
   /* ── Tab: Teknisk information ──────────────────────────── */
 
   _renderTechTab(tech, insp) {
-    const systems = [
-      { key:'heating',     icon:'thermometer',   label:'Värme' },
-      { key:'ventilation', icon:'wind',          label:'Ventilation' },
-      { key:'electricity', icon:'zap',           label:'El' },
-      { key:'water',       icon:'droplets',      label:'Vatten & avlopp' },
-      { key:'sba',         icon:'shield-check',  label:'SBA / Brand' },
-      { key:'waste',       icon:'trash-2',       label:'Avfall & miljö' },
-      { key:'other',       icon:'settings',      label:'Övrigt' },
+    const cats = (state.propertyCategories || [])
+      .filter(c => c.active !== false)
+      .sort((a, b) => (a.order || 99) - (b.order || 99));
+
+    const fallbackSystems = [
+      { slug:'heating',     icon:'thermometer',   label:'Värme' },
+      { slug:'ventilation', icon:'wind',          label:'Ventilation' },
+      { slug:'electricity', icon:'zap',           label:'El' },
+      { slug:'water',       icon:'droplets',      label:'Vatten & avlopp' },
+      { slug:'sba',         icon:'shield-check',  label:'SBA / Brand' },
+      { slug:'waste',       icon:'trash-2',       label:'Avfall & miljö' },
+      { slug:'other',       icon:'settings',      label:'Övrigt' },
     ];
-    const inspTypes = { ovk:'OVK',sba:'SBA',hiss:'Hissbesiktning',el:'Elbesiktning',pbe:'PBE-kontroll' };
+    const systems = cats.length
+      ? cats.map(c => ({ slug: c.slug, icon: c.icon, label: c.label, fields: c.fields || [] }))
+      : fallbackSystems.map(s => ({ ...s, fields: [] }));
 
     return `
       <div class="card" style="margin-bottom:8px;">
@@ -347,9 +353,10 @@ const PropertyDetailPage = {
           <h3>${ic('settings',14)} Tekniska system</h3>
         </div>
         ${systems.map(sys => {
-          const t = tech[sys.key] || {};
-          const hasData = Object.values(t).some(Boolean);
-          const accId = `prop-acc-${sys.key}`;
+          const t = tech[sys.slug];
+          const tObj = (t && typeof t === 'object') ? t : (t ? { _value: t } : {});
+          const hasData = Object.values(tObj).some(Boolean);
+          const accId = `prop-acc-${sys.slug}`;
           return `
           <div class="prop-acc-row" id="${accId}">
             <div class="prop-acc-hd" onclick="PropertyDetailPage._toggleAcc('${accId}')">
@@ -363,10 +370,10 @@ const PropertyDetailPage = {
               </div>
             </div>
             <div class="prop-acc-body">
-              ${this._renderTechSystem(sys.key, t)}
+              ${this._renderTechSystem(sys.slug, tObj, sys.fields)}
               ${Auth.can('properties_manage')
                 ? `<button class="btn bs bsm" style="margin-top:8px;"
-                     onclick="PropertyDetailPage.openEditTechSystem('${sys.key}')">
+                     onclick="PropertyDetailPage.openEditTechSystem('${sys.slug}')">
                      ${ic('pencil',13)} Redigera ${sys.label}</button>`
                 : ''}
             </div>
@@ -388,21 +395,34 @@ const PropertyDetailPage = {
     `;
   },
 
-  _renderTechSystem(key, t) {
-    const fieldLabels = {
-      heating:     { type:'Systemtyp',manufacturer:'Fabrikat',model:'Modell',location:'Placering',serviceInterval:'Serviceintervall',lastService:'Senaste service',comment:'Kommentar' },
-      ventilation: { type:'Systemtyp',manufacturer:'Fabrikat/Aggregat',location:'Placering',filterType:'Filtertyp',lastFilterChange:'Senaste filterbyte',comment:'Kommentar' },
-      electricity: { mainPanel:'Elcentral',location:'Placering',meter:'Elmätare/anl-ID',comment:'Kommentar' },
-      water:       { shutoffLocation:'Huvudavstängning',description:'Systembeskrivning',pump:'Pump/Sump',comment:'Kommentar' },
-      sba:         { alarmSystem:'Brandlarmsystem',lastControl:'Senaste SBA-kontroll',nextControl:'Nästa SBA-kontroll',comment:'Kommentar' },
-      waste:       { location:'Miljörum placering',fractions:'Fraktioner',supplier:'Leverantör',access:'Åtkomst',comment:'Kommentar' },
-      other:       { description:'Beskrivning' },
-    };
-    const labels = fieldLabels[key] || {};
-    const entries = Object.entries(t).filter(([,v]) => v);
+  _renderTechSystem(key, t, fields) {
+    if (!fields || !fields.length) {
+      // Fallback: hardcoded field labels for backward compat
+      const fieldLabels = {
+        heating:     { type:'Systemtyp',manufacturer:'Fabrikat',model:'Modell',location:'Placering',serviceInterval:'Serviceintervall',lastService:'Senaste service',comment:'Kommentar' },
+        ventilation: { type:'Systemtyp',manufacturer:'Fabrikat/Aggregat',location:'Placering',filterType:'Filtertyp',lastFilterChange:'Senaste filterbyte',comment:'Kommentar' },
+        electricity: { mainPanel:'Elcentral',location:'Placering',meter:'Elmätare/anl-ID',comment:'Kommentar' },
+        water:       { shutoffLocation:'Huvudavstängning',description:'Systembeskrivning',pump:'Pump/Sump',comment:'Kommentar' },
+        sba:         { alarmSystem:'Brandlarmsystem',lastControl:'Senaste SBA-kontroll',nextControl:'Nästa SBA-kontroll',comment:'Kommentar' },
+        waste:       { location:'Miljörum placering',fractions:'Fraktioner',supplier:'Leverantör',access:'Åtkomst',comment:'Kommentar' },
+        other:       { description:'Beskrivning' },
+      };
+      const labels = fieldLabels[key] || {};
+      // Handle legacy string value
+      if (t._value) return `<div class="dr"><span class="dk">Info</span><span class="dv" style="white-space:pre-wrap;">${esc(t._value)}</span></div>`;
+      const entries = Object.entries(t).filter(([,v]) => v);
+      if (!entries.length) return `<p style="font-size:12px;color:var(--mt);">Ingen information registrerad</p>`;
+      return entries.map(([k,v]) =>
+        `<div class="dr"><span class="dk">${labels[k]||cap(k)}</span><span class="dv" style="white-space:pre-wrap;">${esc(String(v))}</span></div>`
+      ).join('');
+    }
+    // Dynamic fields from state.propertyCategories
+    if (t._value) return `<div class="dr"><span class="dk">Info</span><span class="dv" style="white-space:pre-wrap;">${esc(t._value)}</span></div>`;
+    const activeFields = fields.filter(f => f.active !== false).sort((a,b) => (a.order||99)-(b.order||99));
+    const entries = activeFields.filter(f => t[f.key]);
     if (!entries.length) return `<p style="font-size:12px;color:var(--mt);">Ingen information registrerad</p>`;
-    return entries.map(([k,v]) =>
-      `<div class="dr"><span class="dk">${labels[k]||cap(k)}</span><span class="dv" style="white-space:pre-wrap;">${v}</span></div>`
+    return entries.map(f =>
+      `<div class="dr"><span class="dk">${f.label}</span><span class="dv" style="white-space:pre-wrap;">${esc(String(t[f.key]))}</span></div>`
     ).join('');
   },
 
@@ -975,23 +995,68 @@ const PropertyDetailPage = {
     const p = getObj(this.propId);
     if (!p) return;
     const t = (p.technicalSystems||{})[key] || {};
-    const cfgs = this._techSystemConfig();
-    const cfg = cfgs[key] || cfgs.other;
-    Modal.open({
-      title: cfg.label,
-      wide: true,
-      body: cfg.fields.map(f =>
-        f.textarea
-          ? `<div class="fg"><label>${f.label}</label>
-               <textarea id="tech-${f.id}" rows="3" placeholder="${f.ph}">${t[f.id]||''}</textarea></div>`
-          : `<div class="fg"><label>${f.label}</label>
-               <input id="tech-${f.id}" value="${t[f.id]||''}" placeholder="${f.ph}"></div>`
-      ).join(''),
-      buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveTechSystem(key, cfg.fields) },
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
+
+    // Try dynamic fields from state.propertyCategories first
+    const dynCat = (state.propertyCategories||[]).find(c => c.slug === key);
+    const dynFields = dynCat && dynCat.fields && dynCat.fields.length
+      ? dynCat.fields.filter(f => f.active !== false).sort((a,b)=>(a.order||99)-(b.order||99))
+      : null;
+
+    if (dynFields) {
+      const title = dynCat.label;
+      Modal.open({
+        title,
+        wide: true,
+        body: dynFields.map(f => {
+          const val = t[f.key] || '';
+          return f.type === 'textarea'
+            ? `<div class="fg"><label>${f.label}</label>
+                 <textarea id="tech-dyn-${f.key}" rows="3">${esc(val)}</textarea></div>`
+            : `<div class="fg"><label>${f.label}</label>
+                 <input id="tech-dyn-${f.key}" type="${f.type==='date'?'date':'text'}" value="${esc(val)}"></div>`;
+        }).join(''),
+        buttons: [
+          { label: 'Spara', cls: 'btn bp', onClick: () => this._saveTechSystemDyn(key, dynFields) },
+          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        ]
+      });
+    } else {
+      // Fallback to hardcoded config
+      const cfgs = this._techSystemConfig();
+      const cfg = cfgs[key] || cfgs.other;
+      Modal.open({
+        title: cfg.label,
+        wide: true,
+        body: cfg.fields.map(f =>
+          f.textarea
+            ? `<div class="fg"><label>${f.label}</label>
+                 <textarea id="tech-${f.id}" rows="3" placeholder="${f.ph}">${t[f.id]||''}</textarea></div>`
+            : `<div class="fg"><label>${f.label}</label>
+                 <input id="tech-${f.id}" value="${t[f.id]||''}" placeholder="${f.ph}"></div>`
+        ).join(''),
+        buttons: [
+          { label: 'Spara', cls: 'btn bp', onClick: () => this._saveTechSystem(key, cfg.fields) },
+          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        ]
+      });
+    }
+  },
+
+  _saveTechSystemDyn(key, fields) {
+    const prop = getObj(this.propId);
+    if (!prop) return;
+    if (!prop.technicalSystems) prop.technicalSystems = {};
+    const t = {};
+    fields.forEach(f => {
+      const val = document.getElementById(`tech-dyn-${f.key}`)?.value.trim();
+      if (val) t[f.key] = val;
     });
+    prop.technicalSystems[key] = t;
+    persist();
+    Modal.close();
+    showToast('Teknisk info sparad');
+    const tabEl = document.getElementById('prop-tab-tech');
+    if (tabEl) tabEl.innerHTML = this._renderTechTab(prop.technicalSystems, prop.inspections||{});
   },
 
   _saveTechSystem(key, fields) {

@@ -33,6 +33,7 @@ let state = {
   serviceTemplates: [],
   emailTemplates: [],
   notifications: [],
+  propertyCategories: [],
 
   // UI-state
   currentPage: 'dash',
@@ -90,6 +91,7 @@ async function initState() {
   state.serviceTemplates   = g('serviceTemplates') || SeedData.serviceTemplates || [];
   state.emailTemplates     = g('emailTemplates')   || SeedData.emailTemplates  || [];
   state.notifications      = g('notifications')    || [];
+  state.propertyCategories = g('propertyCategories') || SeedData.propertyCategories || [];
 
   /* Ladda staff — strippa alltid lösenordsfält (ska aldrig ligga i frontend) */
   const rawStaff = g('staff') || SeedData.staff;
@@ -154,7 +156,8 @@ function persist() {
     ['activities',       state.activities],
     ['serviceTemplates', state.serviceTemplates],
     ['emailTemplates',   state.emailTemplates],
-    ['notifications',    state.notifications]
+    ['notifications',    state.notifications],
+    ['propertyCategories', state.propertyCategories]
   ]);
 }
 
