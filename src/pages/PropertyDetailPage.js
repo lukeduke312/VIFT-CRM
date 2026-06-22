@@ -823,44 +823,118 @@ const PropertyDetailPage = {
   /* ── Tab: Rondering ───────────────────────────────────── */
 
   _renderRonderingTabContent(p) {
+    // Hämta ronderingar kopplade till fastigheten (via propertyId eller customerId)
     const ronderingar = (state.ronderingar||[]).filter(function(r) {
       return r.propertyId === p.id || r.customerId === p.customerId;
-    }).sort(function(a,b) { return new Date(b.createdAt)-new Date(a.createdAt); }).slice(0,10);
-    const avvikelser = (state.avvikelser||[]).filter(function(a) { return a.propertyId === p.id; });
+    }).sort(function(a,b) { return new Date(b.createdAt)-new Date(a.createdAt); });
+
+    // Hämta PASS kopplade till fastigheten (direkt eller via rondering)
+    const ronIds = new Set(ronderingar.map(r=>r.id));
+    const passes = (state.ronderingspass||[]).filter(function(pass) {
+      return pass.propertyId === p.id || ronIds.has(pass.ronderingId);
+    }).sort(function(a,b) {
+      const da = a.scheduledDate||a.createdAt||'';
+      const db = b.scheduledDate||b.createdAt||'';
+      return db.localeCompare(da);
+    });
+
+    const avvikelser = (state.avvikelser||[]).filter(function(a) {
+      return a.propertyId === p.id || (a.ronderingId && ronIds.has(a.ronderingId));
+    });
+    const openAvv = avvikelser.filter(function(a){ return a.status==='öppen'; });
+
+    const passStatusBadge = function(s) {
+      const cls = {planerat:'bdg-blue',pågående:'bdg-orange',slutfört:'bdg-green',har_avvikelser:'bdg-red'}[s]||'bdg-grey';
+      const lbl = {planerat:'Planerat',pågående:'Pågående',slutfört:'Slutfört',har_avvikelser:'Har anmärkningar'}[s]||s;
+      return `<span class="bdg ${cls}">${lbl}</span>`;
+    };
+
+    // KPI-rad: senaste 30 dagar
+    const recent = passes.filter(function(p){ return p.completedAt && p.completedAt > new Date(Date.now()-30*86400000).toISOString(); });
+    const totalAnm = avvikelser.filter(function(a){ return a.status==='öppen'; }).length;
+    const totalAO  = avvikelser.filter(function(a){ return a.workOrderId; }).length;
 
     return `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-weight:700;font-size:14px;">Ronderingar</div>
-        <button class="btn bp bsm" onclick="RonderingPage.openNewRonderingFromProperty('${p.customerId}','${p.id}')">Ny rondering</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:14px;">Ronderingshistorik</div>
+        <button class="btn bp bsm" onclick="RonderingPage.openNewRonderingFromProperty('${p.customerId}','${p.id}')">+ Ny rondering</button>
       </div>
-      ${ronderingar.length === 0
-        ? `<div class="ibox">Inga ronderingar kopplade till denna fastighet ännu.</div>`
-        : ronderingar.map(function(r) {
-            const statusCls = {planerad:'bdg-blue',pågående:'bdg-orange',slutförd:'bdg-green',har_avvikelser:'bdg-red'}[r.status]||'bdg-grey';
-            const statusLbl = {planerad:'Planerad',pågående:'Pågående',slutförd:'Slutförd',har_avvikelser:'Har avvikelser'}[r.status]||r.status;
-            const page = (r.status==='slutförd'||r.status==='har_avvikelser') ? 'pg-rondering-rapport' : 'pg-rondering-utfor';
+
+      ${ronderingar.length > 0 ? `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;text-align:center;">
+        <div style="background:#eff6ff;border-radius:8px;padding:8px 4px;">
+          <div style="font-size:18px;font-weight:900;color:#1d4ed8;">${passes.length}</div>
+          <div style="font-size:10px;color:#1d4ed8;">Tillfällen</div>
+        </div>
+        <div style="background:#fef2f2;border-radius:8px;padding:8px 4px;">
+          <div style="font-size:18px;font-weight:900;color:#991b1b;">${totalAnm}</div>
+          <div style="font-size:10px;color:#991b1b;">Öppna anm.</div>
+        </div>
+        <div style="background:#f0fdf4;border-radius:8px;padding:8px 4px;">
+          <div style="font-size:18px;font-weight:900;color:#166534;">${totalAO}</div>
+          <div style="font-size:10px;color:#166534;">AO skapade</div>
+        </div>
+      </div>` : ''}
+
+      ${passes.length === 0
+        ? `<div class="ibox">Inga ronderingstillfällen kopplade till denna fastighet ännu.</div>`
+        : passes.slice(0, 15).map(function(pass) {
+            const ron  = getRon(pass.ronderingId);
+            const ronName = ron ? (ron.name||ron.templateName||pass.ronderingId) : pass.ronderingId;
+            const stats = RonderingService.getPassStats(pass.id);
+            const pct = stats && stats.total > 0 ? Math.round(stats.checked/stats.total*100) : 0;
+            const staffNames = (pass.staffIds||[]).map(function(sid){
+              const s = getStaff(sid);
+              return s ? (s.firstName+' '+s.lastName).trim() : sid;
+            }).filter(Boolean).join(', ');
+            const isLegacy = pass.migratedFromLegacy;
+            const openFn = (pass.status==='slutfört'||pass.status==='har_avvikelser')
+              ? `Router.showPage('pg-rondering-rapport',{passId:'${pass.id}'})`
+              : `Router.showPage('pg-rondering-utfor',{passId:'${pass.id}'})`;
             return `
-              <div class="list-item" onclick="Router.showPage('${page}',{ronderingId:'${r.id}'})">
-                <div class="item-row">
-                  <div>
-                    <div class="item-title">${r.templateName}</div>
-                    <div class="item-sub">${fmtDate(r.scheduledDate||r.createdAt)} · ${r.performedByName||'—'}</div>
+              <div class="list-item" onclick="${openFn}" style="margin-bottom:4px;">
+                <div class="item-row" style="gap:8px;">
+                  <div style="width:24px;height:24px;background:var(--bg);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--navy);flex-shrink:0;">#${pass.sequenceNumber||1}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ronName)}</div>
+                    <div style="font-size:11px;color:var(--mt);display:flex;gap:6px;flex-wrap:wrap;margin-top:1px;">
+                      ${pass.scheduledDate?`<span>${fmtDate(pass.scheduledDate)}</span>`:''}
+                      ${staffNames?`<span>${ic('user',10)} ${staffNames}</span>`:''}
+                      ${stats&&stats.total>0?`<span>${ic('check-circle',10)} ${stats.checked}/${stats.total}</span>`:''}
+                      ${stats&&stats.anmärkningar>0?`<span style="color:#dc2626;">${ic('alert-triangle',10)} ${stats.anmärkningar}</span>`:''}
+                      ${isLegacy?`<span style="color:var(--mt);">(historisk)</span>`:''}
+                    </div>
+                    ${stats&&stats.total>0&&pass.status!=='planerat'?`
+                      <div style="background:#e5e7eb;border-radius:3px;height:3px;margin-top:4px;overflow:hidden;">
+                        <div style="background:${stats.anmärkningar>0?'#dc2626':'#16a34a'};width:${pct}%;height:3px;border-radius:3px;"></div>
+                      </div>`:''}
                   </div>
-                  <span class="bdg ${statusCls}">${statusLbl}</span>
+                  ${passStatusBadge(pass.status)}
                 </div>
               </div>`;
           }).join('')
       }
-      ${avvikelser.filter(function(a){return a.status==='öppen';}).length > 0 ? `
-        <div style="margin-top:16px;font-weight:700;font-size:14px;margin-bottom:8px;">Öppna avvikelser (${avvikelser.filter(function(a){return a.status==='öppen';}).length})</div>
-        ${avvikelser.filter(function(a){return a.status==='öppen';}).map(function(avv){ return `
-          <div class="list-item">
+
+      ${ronderingar.length > 0 ? `
+        <div style="margin-top:6px;text-align:center;">
+          <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{ronId:'${ronderingar[0].id}'})">
+            Visa i ronderingsvy ${ic('arrow-right',11)}
+          </button>
+        </div>` : ''}
+
+      ${openAvv.length > 0 ? `
+        <div style="margin-top:16px;font-weight:700;font-size:13px;margin-bottom:8px;">${ic('alert-triangle',13)} Öppna anmärkningar (${openAvv.length})</div>
+        ${openAvv.slice(0,8).map(function(avv){ return `
+          <div class="list-item" style="margin-bottom:4px;">
             <div class="item-row">
-              <div>
-                <div class="item-title">${avv.title}</div>
-                <div class="item-sub">${avv.categoryName} · ${fmtDate(avv.createdAt)}</div>
+              <div style="flex:1;min-width:0;">
+                <div class="item-title">${esc(avv.title)}</div>
+                <div class="item-sub">${esc(avv.categoryName||'')} · ${fmtDate(avv.createdAt)}</div>
               </div>
-              ${pbdg(avv.priority)}
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+                ${pbdg(avv.priority)}
+                ${avv.workOrderId?`<span class="bdg bdg-green" style="font-size:9px;cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} AO</span>`:''}
+              </div>
             </div>
           </div>`;}).join('')}` : ''}`;
   },
