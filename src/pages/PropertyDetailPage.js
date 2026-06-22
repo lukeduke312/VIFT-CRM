@@ -397,7 +397,6 @@ const PropertyDetailPage = {
 
   _renderTechSystem(key, t, fields) {
     if (!fields || !fields.length) {
-      // Fallback: hardcoded field labels for backward compat
       const fieldLabels = {
         heating:     { type:'Systemtyp',manufacturer:'Fabrikat',model:'Modell',location:'Placering',serviceInterval:'Serviceintervall',lastService:'Senaste service',comment:'Kommentar' },
         ventilation: { type:'Systemtyp',manufacturer:'Fabrikat/Aggregat',location:'Placering',filterType:'Filtertyp',lastFilterChange:'Senaste filterbyte',comment:'Kommentar' },
@@ -408,7 +407,6 @@ const PropertyDetailPage = {
         other:       { description:'Beskrivning' },
       };
       const labels = fieldLabels[key] || {};
-      // Handle legacy string value
       if (t._value) return `<div class="dr"><span class="dk">Info</span><span class="dv" style="white-space:pre-wrap;">${esc(t._value)}</span></div>`;
       const entries = Object.entries(t).filter(([,v]) => v);
       if (!entries.length) return `<p style="font-size:12px;color:var(--mt);">Ingen information registrerad</p>`;
@@ -416,14 +414,82 @@ const PropertyDetailPage = {
         `<div class="dr"><span class="dk">${labels[k]||cap(k)}</span><span class="dv" style="white-space:pre-wrap;">${esc(String(v))}</span></div>`
       ).join('');
     }
-    // Dynamic fields from state.propertyCategories
     if (t._value) return `<div class="dr"><span class="dk">Info</span><span class="dv" style="white-space:pre-wrap;">${esc(t._value)}</span></div>`;
     const activeFields = fields.filter(f => f.active !== false).sort((a,b) => (a.order||99)-(b.order||99));
-    const entries = activeFields.filter(f => t[f.key]);
+    const entries = activeFields.filter(f => t[f.key] !== undefined && t[f.key] !== null && t[f.key] !== '');
     if (!entries.length) return `<p style="font-size:12px;color:var(--mt);">Ingen information registrerad</p>`;
-    return entries.map(f =>
-      `<div class="dr"><span class="dk">${f.label}</span><span class="dv" style="white-space:pre-wrap;">${esc(String(t[f.key]))}</span></div>`
-    ).join('');
+    return entries.map(f => {
+      const displayed = this._displayFieldValue(f.type, t[f.key]);
+      return `<div class="dr"><span class="dk">${f.label}</span><span class="dv">${displayed}</span></div>`;
+    }).join('');
+  },
+
+  _displayFieldValue(type, v) {
+    if (v === undefined || v === null || v === '') return '—';
+    const s = String(v);
+    switch (type) {
+      case 'date':
+        return fmtDate(s) || esc(s);
+      case 'boolean':
+        return (s === 'true' || s === '1') ? 'Ja' : 'Nej';
+      case 'link':
+        return `<a href="${esc(s)}" target="_blank" rel="noopener" style="color:var(--sky);word-break:break-all;">${esc(s)}</a>`;
+      case 'phone':
+        return `<a href="tel:${esc(s)}" style="color:var(--sky);">${esc(s)}</a>`;
+      case 'email':
+        return `<a href="mailto:${esc(s)}" style="color:var(--sky);">${esc(s)}</a>`;
+      case 'textarea':
+      case 'comment':
+        return `<span style="white-space:pre-wrap;">${esc(s)}</span>`;
+      default:
+        return esc(s);
+    }
+  },
+
+  _buildFieldInput(f, val) {
+    const id   = `tech-dyn-${f.key}`;
+    const v    = val !== undefined && val !== null ? String(val) : '';
+    const ev   = esc(v);
+    const opts = f.options || [];
+    switch (f.type) {
+      case 'textarea':
+      case 'comment':
+        return `<textarea id="${id}" rows="3" placeholder="${esc(f.placeholder||f.label||'')}">${esc(v)}</textarea>`;
+      case 'date':
+        return `<input type="date" id="${id}" value="${ev}">`;
+      case 'number':
+        return `<input type="number" id="${id}" value="${ev}" placeholder="0">`;
+      case 'boolean':
+        return `<select id="${id}">
+          <option value="">— Ej angett —</option>
+          <option value="true" ${v==='true'?'selected':''}>Ja</option>
+          <option value="false" ${v==='false'?'selected':''}>Nej</option>
+        </select>`;
+      case 'dropdown':
+      case 'status':
+        if (opts.length) {
+          return `<select id="${id}">
+            <option value="">— Välj —</option>
+            ${opts.map(o => `<option value="${esc(o)}" ${v===o?'selected':''}>${esc(o)}</option>`).join('')}
+          </select>`;
+        }
+        return `<input type="text" id="${id}" value="${ev}" placeholder="Inga val definierade ännu">`;
+      case 'interval':
+        const stdIntervals = ['Dagligen','Veckovis','Månadsvis','Kvartalsvis','Halvårsvis','Årsvis','Vartannat år','Vart 3:e år','Vart 5:e år','Vid behov'];
+        const allIntervals = [...stdIntervals, ...opts.filter(o => !stdIntervals.includes(o))];
+        return `<select id="${id}">
+          <option value="">— Välj —</option>
+          ${allIntervals.map(o => `<option value="${esc(o)}" ${v===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>`;
+      case 'link':
+        return `<input type="url" id="${id}" value="${ev}" placeholder="https://...">`;
+      case 'phone':
+        return `<input type="tel" id="${id}" value="${ev}" placeholder="070-XXX XX XX">`;
+      case 'email':
+        return `<input type="email" id="${id}" value="${ev}" placeholder="namn@exempel.se">`;
+      default:
+        return `<input type="text" id="${id}" value="${ev}" placeholder="${esc(f.placeholder||'')}">`;
+    }
   },
 
   _toggleAcc(id) {
@@ -994,34 +1060,33 @@ const PropertyDetailPage = {
   openEditTechSystem(key) {
     const p = getObj(this.propId);
     if (!p) return;
-    const t = (p.technicalSystems||{})[key] || {};
+    const rawT = (p.technicalSystems||{})[key];
+    const t = (rawT && typeof rawT === 'object' && !rawT._value) ? rawT : {};
+    const legacyVal = rawT && typeof rawT === 'string' ? rawT : (rawT && rawT._value ? rawT._value : '');
 
-    // Try dynamic fields from state.propertyCategories first
     const dynCat = (state.propertyCategories||[]).find(c => c.slug === key);
-    const dynFields = dynCat && dynCat.fields && dynCat.fields.length
+    const dynFields = dynCat && (dynCat.fields||[]).length
       ? dynCat.fields.filter(f => f.active !== false).sort((a,b)=>(a.order||99)-(b.order||99))
       : null;
 
     if (dynFields) {
-      const title = dynCat.label;
+      const legacyNote = legacyVal
+        ? `<div class="nbox" style="margin-bottom:8px;font-size:11px;">${ic('info',11)} Äldre fritext finns lagrad: <em>${esc(legacyVal)}</em> — spara för att migrera till strukturerad data.</div>`
+        : '';
       Modal.open({
-        title,
+        title: `${ic(dynCat.icon||'folder',14)} ${dynCat.label}`,
         wide: true,
-        body: dynFields.map(f => {
-          const val = t[f.key] || '';
-          return f.type === 'textarea'
-            ? `<div class="fg"><label>${f.label}</label>
-                 <textarea id="tech-dyn-${f.key}" rows="3">${esc(val)}</textarea></div>`
-            : `<div class="fg"><label>${f.label}</label>
-                 <input id="tech-dyn-${f.key}" type="${f.type==='date'?'date':'text'}" value="${esc(val)}"></div>`;
-        }).join(''),
+        body: legacyNote + dynFields.map(f => `
+          <div class="fg">
+            <label>${f.label}${f.required ? ' <span style="color:var(--rd);">*</span>' : ''}</label>
+            ${this._buildFieldInput(f, t[f.key])}
+          </div>`).join(''),
         buttons: [
           { label: 'Spara', cls: 'btn bp', onClick: () => this._saveTechSystemDyn(key, dynFields) },
           { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
         ]
       });
     } else {
-      // Fallback to hardcoded config
       const cfgs = this._techSystemConfig();
       const cfg = cfgs[key] || cfgs.other;
       Modal.open({
@@ -1030,9 +1095,9 @@ const PropertyDetailPage = {
         body: cfg.fields.map(f =>
           f.textarea
             ? `<div class="fg"><label>${f.label}</label>
-                 <textarea id="tech-${f.id}" rows="3" placeholder="${f.ph}">${t[f.id]||''}</textarea></div>`
+                 <textarea id="tech-${f.id}" rows="3" placeholder="${f.ph}">${esc(t[f.id]||legacyVal||'')}</textarea></div>`
             : `<div class="fg"><label>${f.label}</label>
-                 <input id="tech-${f.id}" value="${t[f.id]||''}" placeholder="${f.ph}"></div>`
+                 <input id="tech-${f.id}" value="${esc(t[f.id]||'')}" placeholder="${f.ph}"></div>`
         ).join(''),
         buttons: [
           { label: 'Spara', cls: 'btn bp', onClick: () => this._saveTechSystem(key, cfg.fields) },
@@ -1046,10 +1111,15 @@ const PropertyDetailPage = {
     const prop = getObj(this.propId);
     if (!prop) return;
     if (!prop.technicalSystems) prop.technicalSystems = {};
-    const t = {};
+    const existing = (prop.technicalSystems[key] && typeof prop.technicalSystems[key] === 'object' && !prop.technicalSystems[key]._value)
+      ? prop.technicalSystems[key] : {};
+    const t = Object.assign({}, existing);
     fields.forEach(f => {
-      const val = document.getElementById(`tech-dyn-${f.key}`)?.value.trim();
+      const el  = document.getElementById(`tech-dyn-${f.key}`);
+      if (!el) return;
+      const val = el.tagName === 'SELECT' ? el.value : (el.value || '').trim();
       if (val) t[f.key] = val;
+      else delete t[f.key];
     });
     prop.technicalSystems[key] = t;
     persist();

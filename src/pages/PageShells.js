@@ -4993,19 +4993,300 @@ const AdminPage = {
         </div>
         ${propCats.length === 0
           ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga kategorier. Ladda om sidan för att läsa in standardkategorier.</div>`
-          : propCats.map(cat => `
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--br);">
+          : propCats.map(cat => {
+            const activeFields = (cat.fields||[]).filter(f=>f.active!==false).length;
+            const totalFields  = (cat.fields||[]).length;
+            return `
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--br);">
               <span style="color:var(--mt);flex-shrink:0;">${ic(cat.icon||'folder',16)}</span>
               <div style="flex:1;min-width:0;">
                 <div style="font-size:13px;font-weight:700;color:var(--navy);">${esc(cat.label)}</div>
-                <div style="font-size:10px;color:var(--mt);">slug: ${esc(cat.slug)} · ${(cat.fields||[]).filter(f=>f.active!==false).length} fält</div>
+                <div style="font-size:10px;color:var(--mt);">slug: ${esc(cat.slug)} · ${activeFields}/${totalFields} fält aktiva</div>
               </div>
               <span class="bdg ${cat.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${cat.active!==false?'Aktiv':'Inaktiv'}</span>
+              <button class="btn bxs bs" style="font-size:11px;" onclick="AdminPage.openManageFields('${cat.id}')">${ic('list',12)} Fält</button>
               <button class="btn bxs bs" onclick="AdminPage.openEditCategory('${cat.id}')">${ic('pencil',12)}</button>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
       </div>`;
 
     el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+  },
+
+  /* ── Fält-CRUD per kategori ──────────────────────────────── */
+
+  _labelToKey(label) {
+    const latin = label.toLowerCase()
+      .replace(/å/g,'a').replace(/ä/g,'a').replace(/ö/g,'o')
+      .replace(/[^a-z0-9\s]/g,' ').trim().replace(/\s+/g,' ');
+    const words = latin.split(' ').filter(Boolean);
+    if (!words.length) return 'field';
+    return words[0] + words.slice(1).map(w => w[0].toUpperCase() + w.slice(1)).join('');
+  },
+
+  _fieldTypeLabel(t) {
+    return { text:'Text',textarea:'Lång text',date:'Datum',number:'Nummer',boolean:'Ja/Nej',
+             dropdown:'Lista',link:'Länk',phone:'Telefon',email:'E-post',
+             interval:'Intervall',status:'Status',comment:'Kommentar' }[t] || t;
+  },
+
+  _fieldHasData(catSlug, fieldKey) {
+    return (state.properties||[]).some(p => {
+      const t = (p.technicalSystems||{})[catSlug];
+      if (!t || typeof t !== 'object') return false;
+      return t[fieldKey] !== undefined && t[fieldKey] !== null && t[fieldKey] !== '';
+    });
+  },
+
+  openManageFields(catId) {
+    const cat = (state.propertyCategories||[]).find(c => c.id === catId);
+    if (!cat) return;
+    if (!cat.fields) cat.fields = [];
+    const fields = [...cat.fields].sort((a,b) => (a.order||99)-(b.order||99));
+    const typeColors = { date:'bdg-sky',number:'bdg-sky',boolean:'bdg-purple',
+                         dropdown:'bdg-purple',status:'bdg-purple',interval:'bdg-purple',
+                         link:'bdg-blue',phone:'bdg-green',email:'bdg-green',
+                         textarea:'bdg-grey',comment:'bdg-grey' };
+
+    const rows = fields.length === 0
+      ? `<p style="font-size:12px;color:var(--mt);padding:8px 0;">Inga fält ännu. Lägg till ett fält för att komma igång.</p>`
+      : fields.map((f, idx) => {
+          const hasData  = this._fieldHasData(cat.slug, f.key);
+          const typeCls  = typeColors[f.type] || 'bdg-grey';
+          const inactive = f.active === false;
+          return `
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--bg);${inactive?'opacity:.55;':''}">
+            <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+              <button class="btn bxs bs" style="padding:2px 5px;font-size:10px;line-height:1;" ${idx===0?'disabled':''} onclick="AdminPage._moveField('${catId}','${f.id}',-1)">${ic('chevron-up',10)}</button>
+              <button class="btn bxs bs" style="padding:2px 5px;font-size:10px;line-height:1;" ${idx===fields.length-1?'disabled':''} onclick="AdminPage._moveField('${catId}','${f.id}',1)">${ic('chevron-down',10)}</button>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;color:var(--navy);${inactive?'text-decoration:line-through;':''}">${esc(f.label)}</div>
+              <div style="display:flex;align-items:center;gap:4px;margin-top:2px;flex-wrap:wrap;">
+                <span class="bdg ${typeCls}" style="font-size:9px;">${this._fieldTypeLabel(f.type)}</span>
+                <span style="font-size:9px;color:var(--mt);">key: ${esc(f.key)}</span>
+                ${hasData ? `<span class="bdg bdg-orange" style="font-size:9px;">${ic('database',8)} Har data</span>` : ''}
+                ${f.required ? `<span class="bdg bdg-red" style="font-size:9px;">Obligatorisk</span>` : ''}
+                ${inactive ? `<span style="font-size:9px;color:var(--mt);">Inaktiv</span>` : ''}
+              </div>
+            </div>
+            <button class="btn bxs bs" title="Duplicera" onclick="AdminPage._duplicateField('${catId}','${f.id}')">${ic('copy',11)}</button>
+            <button class="btn bxs bs" title="Redigera" onclick="AdminPage.openEditField('${catId}','${f.id}')">${ic('pencil',11)}</button>
+            ${inactive
+              ? `<button class="btn bxs bs" title="Aktivera" onclick="AdminPage._toggleFieldActive('${catId}','${f.id}',true)">${ic('eye',11)}</button>`
+              : `<button class="btn bxs bs" title="Inaktivera" onclick="AdminPage._toggleFieldActive('${catId}','${f.id}',false)">${ic('eye-off',11)}</button>`}
+            <button class="btn bxs bd" title="${hasData?'Har data — inaktivera istället':'Ta bort'}" ${hasData?'disabled style="opacity:.4;"':''} onclick="AdminPage._deleteField('${catId}','${f.id}')">${ic('trash',11)}</button>
+          </div>`;
+        }).join('');
+
+    Modal.open({
+      title: `${ic('list',14)} Fält — ${esc(cat.label)}`,
+      wide: true,
+      body: `
+        <div style="margin-bottom:10px;display:flex;justify-content:flex-end;">
+          <button class="btn bp bxs" onclick="AdminPage.openAddField('${catId}')">${ic('plus',13)} Lägg till fält</button>
+        </div>
+        <div id="field-list-${catId}">${rows}</div>`,
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
+    });
+  },
+
+  openAddField(catId) {
+    const cat = (state.propertyCategories||[]).find(c => c.id === catId);
+    if (!cat) return;
+    const nextOrder = ((cat.fields||[]).reduce((m,f)=>Math.max(m,f.order||0),0)) + 1;
+    const types = ['text','textarea','date','number','boolean','dropdown','link','phone','email','interval','status','comment'];
+    Modal.open({
+      title: `${ic('plus',14)} Nytt fält — ${esc(cat.label)}`,
+      wide: true,
+      body: `
+        <div class="g2">
+          <div class="fg"><label>Fältnamn (label)</label>
+            <input id="fl-label" placeholder="T.ex. Senaste service"
+              oninput="(function(){var k=AdminPage._labelToKey(document.getElementById('fl-label').value);document.getElementById('fl-key').value=k;})()">
+          </div>
+          <div class="fg"><label>Nyckel (key, stabil)</label>
+            <input id="fl-key" placeholder="senasteService" style="font-family:monospace;font-size:12px;">
+          </div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Fälttyp</label>
+            <select id="fl-type" onchange="AdminPage._toggleOptionsField()">
+              ${types.map(t=>`<option value="${t}">${this._fieldTypeLabel(t)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="fg"><label>Sorteringsordning</label>
+            <input type="number" id="fl-order" value="${nextOrder}">
+          </div>
+        </div>
+        <div class="fg" id="fl-options-wrap" style="display:none;">
+          <label>Valalternativ (ett per rad, för Lista/Status)</label>
+          <textarea id="fl-options" rows="4" placeholder="T.ex.&#10;Godkänd&#10;Ej utförd&#10;Planerad"></textarea>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="fl-active" checked> Aktiv
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="fl-required"> Obligatorisk
+          </label>
+        </div>`,
+      buttons: [
+        { label: 'Spara fält', cls: 'btn bp', onClick: () => {
+          const label   = document.getElementById('fl-label')?.value.trim();
+          const key     = document.getElementById('fl-key')?.value.trim().replace(/[^a-zA-Z0-9_]/g,'');
+          const type    = document.getElementById('fl-type')?.value || 'text';
+          const order   = parseInt(document.getElementById('fl-order')?.value) || nextOrder;
+          const active  = document.getElementById('fl-active')?.checked !== false;
+          const required= !!document.getElementById('fl-required')?.checked;
+          const optsRaw = document.getElementById('fl-options')?.value || '';
+          const options = optsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
+          if (!label) { showToast('Fältnamn krävs'); return; }
+          if (!key)   { showToast('Nyckel krävs (autogenereras från namn)'); return; }
+          if (!cat.fields) cat.fields = [];
+          if (cat.fields.some(f => f.key === key)) { showToast('Nyckel används redan i kategorin'); return; }
+          const id = 'f-' + cat.slug + '-' + Date.now();
+          cat.fields.push({ id, key, label, type, order, active, required, options });
+          persist();
+          Modal.close();
+          AdminPage.openManageFields(catId);
+          showToast('Fält tillagt');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => AdminPage.openManageFields(catId) }
+      ]
+    });
+    this._toggleOptionsField();
+  },
+
+  _toggleOptionsField() {
+    const type = document.getElementById('fl-type')?.value;
+    const wrap = document.getElementById('fl-options-wrap');
+    if (wrap) wrap.style.display = ['dropdown','status'].includes(type) ? '' : 'none';
+  },
+
+  openEditField(catId, fieldId) {
+    const cat   = (state.propertyCategories||[]).find(c => c.id === catId);
+    const field = cat && (cat.fields||[]).find(f => f.id === fieldId);
+    if (!cat || !field) return;
+    const hasData = this._fieldHasData(cat.slug, field.key);
+    const types   = ['text','textarea','date','number','boolean','dropdown','link','phone','email','interval','status','comment'];
+    Modal.open({
+      title: `${ic('pencil',14)} Redigera fält — ${esc(field.label)}`,
+      wide: true,
+      body: `
+        <div class="g2">
+          <div class="fg"><label>Fältnamn (label)</label>
+            <input id="fl-label" value="${esc(field.label)}">
+          </div>
+          <div class="fg"><label>Nyckel (låst — ändra bryter befintlig data)</label>
+            <input id="fl-key" value="${esc(field.key)}" disabled style="opacity:.5;background:var(--bg);font-family:monospace;font-size:12px;">
+          </div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label>Fälttyp</label>
+            <select id="fl-type" onchange="AdminPage._toggleOptionsField()">
+              ${types.map(t=>`<option value="${t}" ${field.type===t?'selected':''}>${this._fieldTypeLabel(t)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="fg"><label>Sorteringsordning</label>
+            <input type="number" id="fl-order" value="${field.order||99}">
+          </div>
+        </div>
+        <div class="fg" id="fl-options-wrap" style="display:${['dropdown','status'].includes(field.type)?'':'none'};">
+          <label>Valalternativ (ett per rad)</label>
+          <textarea id="fl-options" rows="4">${esc((field.options||[]).join('\n'))}</textarea>
+        </div>
+        ${hasData ? `<div class="nbox" style="margin-top:6px;font-size:11px;">${ic('database',11)} Detta fält har data i ${(state.properties||[]).filter(p=>{const t=(p.technicalSystems||{})[cat.slug];return t&&typeof t==='object'&&t[field.key];}).length} fastighet(er). Ändring av typ kan ge oväntad rendering.</div>` : ''}
+        <div style="display:flex;gap:16px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="fl-active" ${field.active!==false?'checked':''}> Aktiv
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="fl-required" ${field.required?'checked':''}> Obligatorisk
+          </label>
+        </div>`,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => {
+          const label   = document.getElementById('fl-label')?.value.trim();
+          const type    = document.getElementById('fl-type')?.value || field.type;
+          const order   = parseInt(document.getElementById('fl-order')?.value) || field.order;
+          const active  = document.getElementById('fl-active')?.checked !== false;
+          const required= !!document.getElementById('fl-required')?.checked;
+          const optsRaw = document.getElementById('fl-options')?.value || '';
+          const options = optsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
+          if (!label) { showToast('Fältnamn krävs'); return; }
+          Object.assign(field, { label, type, order, active, required, options });
+          persist();
+          Modal.close();
+          AdminPage.openManageFields(catId);
+          showToast('Fält uppdaterat');
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => AdminPage.openManageFields(catId) }
+      ]
+    });
+    this._toggleOptionsField();
+  },
+
+  _toggleFieldActive(catId, fieldId, active) {
+    const cat   = (state.propertyCategories||[]).find(c => c.id === catId);
+    const field = cat && (cat.fields||[]).find(f => f.id === fieldId);
+    if (!field) return;
+    field.active = active;
+    persist();
+    AdminPage.openManageFields(catId);
+    showToast(active ? 'Fält aktiverat' : 'Fält inaktiverat');
+  },
+
+  _deleteField(catId, fieldId) {
+    const cat = (state.propertyCategories||[]).find(c => c.id === catId);
+    if (!cat) return;
+    const field = (cat.fields||[]).find(f => f.id === fieldId);
+    if (!field) return;
+    if (this._fieldHasData(cat.slug, field.key)) {
+      showToast('Fältet har data — inaktivera istället för att bevara data');
+      return;
+    }
+    cat.fields = (cat.fields||[]).filter(f => f.id !== fieldId);
+    persist();
+    AdminPage.openManageFields(catId);
+    showToast('Fält borttaget');
+  },
+
+  _moveField(catId, fieldId, dir) {
+    const cat = (state.propertyCategories||[]).find(c => c.id === catId);
+    if (!cat || !cat.fields) return;
+    const sorted = [...cat.fields].sort((a,b) => (a.order||99)-(b.order||99));
+    const idx = sorted.findIndex(f => f.id === fieldId);
+    if (idx < 0) return;
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const aOrd = sorted[idx].order || (idx + 1);
+    const bOrd = sorted[swapIdx].order || (swapIdx + 1);
+    sorted[idx].order    = bOrd;
+    sorted[swapIdx].order = aOrd;
+    persist();
+    AdminPage.openManageFields(catId);
+  },
+
+  _duplicateField(catId, fieldId) {
+    const cat   = (state.propertyCategories||[]).find(c => c.id === catId);
+    const field = cat && (cat.fields||[]).find(f => f.id === fieldId);
+    if (!cat || !field) return;
+    const maxOrder = (cat.fields||[]).reduce((m,f)=>Math.max(m,f.order||0),0);
+    const baseKey  = field.key + '_kopia';
+    let newKey = baseKey;
+    let n = 2;
+    while ((cat.fields||[]).some(f => f.key === newKey)) { newKey = baseKey + n; n++; }
+    const newField = Object.assign({}, field, {
+      id:    'f-' + cat.slug + '-' + Date.now(),
+      key:   newKey,
+      label: field.label + ' (kopia)',
+      order: maxOrder + 1
+    });
+    cat.fields.push(newField);
+    persist();
+    AdminPage.openManageFields(catId);
+    showToast('Fält duplicerat');
   },
 
   openAddCategory() {
