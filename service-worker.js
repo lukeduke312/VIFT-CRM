@@ -1,7 +1,7 @@
 /**
- * VIFT CRM — Service Worker v2
+ * VIFT CRM — Service Worker v3
  *
- * v2: lade till push + notificationclick för mobilnotiser
+ * v3: cache-bump för att tvinga bort gammal v2-cache
  *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only)
@@ -13,7 +13,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v2';
+const CACHE_NAME = 'vift-crm-v3';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [

@@ -4883,10 +4883,16 @@ const AdminPage = {
       </div>` : '';
 
     const vapidNote = !pKey ? `
-      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;">
-        ${ic('key',14)} <strong>VAPID-nyckel saknas</strong><br>
-        Lägg till din VAPID public key i <code>config.js</code> → <code>vapidPublicKey</code>.<br>
-        Skapa nycklar: <code>npx web-push generate-vapid-keys --json</code>
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.8;">
+        ${ic('key',14)} <strong>VAPID-nyckel saknas — notiser kan inte aktiveras</strong><br>
+        <code>window.VIFT_CONFIG.vapidPublicKey</code> är tom i <code>config.js</code> på servern.<br><br>
+        <strong>Åtgärda i 4 steg:</strong><br>
+        1. Generera nyckelpar: <code>npx web-push generate-vapid-keys --json</code><br>
+        2. Kopiera <code>publicKey</code>-värdet (börjar med B…)<br>
+        3. Redigera <code>config.js</code> på Loopia: <code>vapidPublicKey: 'B...'</code><br>
+        4. Ladda upp filen och ladda om sidan<br><br>
+        <button class="btn bs bsm" onclick="location.reload()" style="margin-right:8px;">${ic('refresh-cw',12)} Ladda om sidan</button>
+        <span style="font-size:11px;opacity:.7;">Klicka efter att config.js uppdaterats på servern</span>
       </div>` : '';
 
     const canAct = pSupp && (!pIOS || pSA) && pKey && pState !== 'denied';
@@ -4925,7 +4931,7 @@ const AdminPage = {
           </div>
 
           <!-- Åtgärder -->
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
             ${canAct ? `
               <button class="btn bp bsm" onclick="AdminPage._activatePush()">
                 ${ic('bell',13)} Aktivera notiser
@@ -4936,7 +4942,18 @@ const AdminPage = {
               <button class="btn bd bsm" onclick="AdminPage._deactivatePush()">
                 ${ic('bell-off',13)} Stäng av
               </button>
-            ` : ''}
+            ` : `
+              <button class="btn bp bsm" disabled style="opacity:.4;cursor:not-allowed;">
+                ${ic('bell',13)} Aktivera notiser
+              </button>
+              <span style="font-size:11px;color:var(--mt);">${
+                pReason === 'no-vapid-key'       ? 'VAPID-nyckel saknas i config.js — se instruktion ovan' :
+                pReason === 'ios-not-standalone' ? 'Öppna appen från hemskärmen, inte i Safari' :
+                pReason === 'permission-denied'  ? 'Behörighet blockerad — ändra i systeminställningarna' :
+                pReason === 'unsupported'        ? 'Push API stöds ej i den här browsern/OS-versionen' :
+                'Kan ej aktivera just nu'
+              }</span>
+            `}
           </div>
 
           <div id="push-status-msg" style="font-size:12px;margin-bottom:12px;"></div>
@@ -4952,9 +4969,10 @@ const AdminPage = {
             }
           </div>
 
-          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--br);font-size:11px;color:var(--mt);line-height:1.6;">
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--br);font-size:11px;color:var(--mt);line-height:1.8;">
             ${ic('info',11)} Pushnotiser skickas när en AO tilldelas dig eller vid viktiga händelser.
-            Notisen visas även när appen är stängd. iOS 16.4+ krävs på iPhone.
+            Notisen visas även när appen är stängd. iOS 16.4+ krävs på iPhone.<br>
+            ${ic('refresh-cw',10)} <strong>Gammal version?</strong> Öppna webbläsarens inställningar → Rensa webbplatsdata för crm.viftfast.se → Ladda om.
           </div>
         </div>
       </div>`;
