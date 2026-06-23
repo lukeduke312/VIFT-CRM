@@ -605,9 +605,10 @@ const RonderingWizardPage = {
       <div style="font-weight:700;font-size:14px;margin-bottom:12px;">Prissättning</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
         ${[
-          {v:'tim',  l:'Timpris',                 desc:'Faktureras per nedlagd tid med vald prisgrupp'},
-          {v:'fast', l:'Fast pris per tillfälle',  desc:'Fast pris debiteras per utförd rondering'},
-          {v:'',     l:'Utan prissättning',        desc:'Ingen fakturering / internt arbete'}
+          {v:'tim',   l:'Timpris',                 desc:'Faktureras per nedlagd tid med vald prisgrupp'},
+          {v:'fast',  l:'Fast pris per tillfälle',  desc:'Fast pris debiteras per utförd rondering'},
+          {v:'avtal', l:'Pris enligt avtal',        desc:'Faktureras enligt befintligt avtal med kunden'},
+          {v:'',      l:'Utan prissättning',        desc:'Ingen fakturering / internt arbete'}
         ].map(opt => `
           <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid ${pt===opt.v?'var(--navy)':'var(--br)'};border-radius:10px;cursor:pointer;background:${pt===opt.v?'#f0f4ff':'var(--wh)'};"
             onclick="RonderingWizardPage._setPricingType('${opt.v}')">
@@ -852,10 +853,12 @@ const RonderingWizardPage = {
           results: this._buildResults(cats, existing),
           status: saveData.isDraft ? 'utkast' : (existing && existing.status !== 'utkast' ? existing.status : 'planerad')
         }));
+        RonderingService.generatePassesFromRecurring(this._editId);
         showToast('Rondering sparad');
       } else {
-        RonderingService.createRondering(saveData);
-        showToast('Rondering skapad');
+        const ron = RonderingService.createRondering(saveData);
+        const nPasses = RonderingService.generatePassesFromRecurring(ron.id);
+        showToast('Rondering skapad' + (nPasses > 0 ? ' · ' + nPasses + ' tillfällen schemalagda' : ''));
       }
       Router.showPage('pg-rondering');
     } catch (e) {

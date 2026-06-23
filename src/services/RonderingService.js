@@ -437,5 +437,106 @@ const RonderingService = {
     Object.assign(pass, data, { updatedAt: new Date().toISOString() });
     persist();
     return pass;
+  },
+
+  // Generate PASS objects from RON's occasions and recurringSetups (idempotent)
+  generatePassesFromRecurring(ronId) {
+    const ron = getRon(ronId);
+    if (!ron) return 0;
+    const today = tdy();
+    const maxDate = new Date(new Date().getTime() + 366 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const cats = JSON.parse(JSON.stringify(ron.categories || [])).map(function(cat) {
+      return {
+        id: cat.id, name: cat.name,
+        points: (cat.points || []).map(function(pt) {
+          return { id: pt.id, title: pt.title, description: pt.description || '',
+            canCreateAO: pt.canCreateAO !== false, requiresPhoto: !!pt.requiresPhoto,
+            status: '', comment: '', images: [], workOrderId: null, checkedAt: null, checkedBy: null };
+        })
+      };
+    });
+    const total = cats.reduce(function(s, c) { return s + (c.points || []).length; }, 0);
+    let seqBase = this.getPassesByRondering(ronId).length;
+    let created = 0;
+    const self = this;
+
+    function addPass(date, time, staffIds, dur) {
+      const p = Object.assign(Schema.ronderingspass(), {
+        id: newId(state.ronderingspass, 'PASS'),
+        ronderingId: ron.id, mallId: ron.templateId || '',
+        propertyId: ron.propertyId || '', customerId: ron.customerId || '',
+        sequenceNumber: ++seqBase,
+        scheduledDate: date, scheduledTime: time || '',
+        staffIds: staffIds || [], estimatedDurationMins: dur || 90,
+        status: 'planerat',
+        categories: JSON.parse(JSON.stringify(cats)),
+        summary: { total: total, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
+        internalNote: '', migratedFromLegacy: false,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+      state.ronderingspass.push(p);
+      created++;
+    }
+
+    // Enstaka tillfällen
+    (ron.occasions || []).forEach(function(occ) {
+      if (!occ.date) return;
+      const exists = state.ronderingspass.find(function(p) {
+        return p.ronderingId === ronId && p.scheduledDate === occ.date && !p.migratedFromLegacy;
+      });
+      if (!exists) addPass(occ.date, occ.time, occ.staffId ? [occ.staffId] : [], occ.estimatedDuration);
+    });
+
+    // Återkommande
+    (ron.recurringSetups || []).forEach(function(rec) {
+      if (!rec.startDate) return;
+      const recEnd = rec.tillsvidare ? maxDate : (rec.endDate || maxDate);
+      const end = recEnd < maxDate ? recEnd : maxDate;
+      const dates = self._computeRecurringDates(rec, rec.startDate, end);
+      dates.forEach(function(dateStr) {
+        if (dateStr < today) return;
+        const exists = state.ronderingspass.find(function(p) {
+          return p.ronderingId === ronId && p.scheduledDate === dateStr && !p.migratedFromLegacy;
+        });
+        if (!exists) addPass(dateStr, rec.time, rec.staffId ? [rec.staffId] : [], rec.estimatedDuration);
+      });
+    });
+
+    if (created > 0) persist();
+    return created;
+  },
+
+  _computeRecurringDates(rec, startDate, endDate) {
+    const dates = [];
+    const start = new Date(startDate + 'T00:00:00');
+    const end   = new Date(endDate   + 'T23:59:59');
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return dates;
+    const interval = rec.interval || 'månadsvis';
+    let cur = new Date(start);
+
+    if (interval === 'veckovis' || interval === 'varannan_vecka') {
+      const target = parseInt(rec.weekday || '1', 10);
+      let tries = 0;
+      while (cur.getDay() !== target && tries++ < 7) cur.setDate(cur.getDate() + 1);
+    } else if (interval === 'månadsvis') {
+      const dom = Math.min(parseInt(rec.dayOfMonth || '1', 10), 28);
+      cur.setDate(dom);
+      if (cur < start) { cur.setMonth(cur.getMonth() + 1); cur.setDate(dom); }
+    }
+
+    const MAX = 104;
+    while (cur <= end && dates.length < MAX) {
+      dates.push(cur.toISOString().slice(0, 10));
+      const prev = cur.getTime();
+      if (interval === 'dagligen')        cur.setDate(cur.getDate() + 1);
+      else if (interval === 'veckovis')   cur.setDate(cur.getDate() + 7);
+      else if (interval === 'varannan_vecka') cur.setDate(cur.getDate() + 14);
+      else if (interval === 'månadsvis')  { const d = Math.min(parseInt(rec.dayOfMonth||'1',10),28); cur.setMonth(cur.getMonth()+1); cur.setDate(d); }
+      else if (interval === 'kvartalsvis') cur.setMonth(cur.getMonth() + 3);
+      else if (interval === 'årsvis')     cur.setFullYear(cur.getFullYear() + 1);
+      else                                cur.setDate(cur.getDate() + (rec.intervalDays || 14));
+      if (cur.getTime() === prev) break;
+    }
+    return dates;
   }
 };

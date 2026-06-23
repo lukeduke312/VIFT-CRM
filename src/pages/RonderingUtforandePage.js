@@ -7,6 +7,61 @@ const RonderingUtforandePage = {
   passId: null,
   ronderingId: null,
 
+  _avvImages: [],
+
+  _resizeImage(file) {
+    return new Promise(function(resolve) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const MAX = 900;
+          let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          if (w > MAX || h > MAX) { const s = Math.min(MAX/w, MAX/h); w = Math.round(w*s); h = Math.round(h*s); }
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(cv.toDataURL('image/jpeg', 0.75));
+        };
+        img.onerror = function() { resolve(e.target.result); };
+        img.src = e.target.result;
+      };
+      reader.onerror = function() { resolve(null); };
+      reader.readAsDataURL(file);
+    });
+  },
+
+  async _addImgToAvvModal(files) {
+    for (const file of Array.from(files || [])) {
+      if (!file.type.startsWith('image/')) continue;
+      const dataUrl = await this._resizeImage(file);
+      if (!dataUrl) continue;
+      this._avvImages.push({
+        id: 'img-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+        url: dataUrl, caption: '',
+        createdAt: new Date().toISOString(),
+        createdBy: state.currentUser ? state.currentUser.id : ''
+      });
+      this._renderAvvImgList();
+    }
+  },
+
+  _renderAvvImgList() {
+    const el = document.getElementById('avv-img-list');
+    if (!el) return;
+    el.innerHTML = this._avvImages.map(function(img, i) {
+      return '<div style="position:relative;display:inline-block;">' +
+        '<img src="' + img.url + '" class="ron-img-thumb">' +
+        '<button onclick="RonderingUtforandePage._removeAvvImg(' + i + ')" class="ron-img-rm">×</button>' +
+        '</div>';
+    }).join('');
+  },
+
+  _removeAvvImg(i) {
+    this._avvImages.splice(i, 1);
+    this._renderAvvImgList();
+  },
+
   render(params) {
     const el = document.getElementById('pg-rondering-utfor-content');
     if (!el) return;
@@ -76,7 +131,7 @@ const RonderingUtforandePage = {
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <button class="btn bs bsm" onclick="Router.back()">${ic('arrow-left',14)}</button>
+        <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{ronId:'${pass.ronderingId}'})">${ic('arrow-left',14)}</button>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ronName)}</div>
           <div style="font-size:11px;color:var(--mt);">${esc(cuName)}${prop?' · '+esc(prop.name):''}
@@ -215,6 +270,7 @@ const RonderingUtforandePage = {
   },
 
   openAvvModal(passId, catId, ptId) {
+    this._avvImages = [];
     const pass = getPass(passId);
     const cat  = pass && (pass.categories||[]).find(c=>c.id===catId);
     const pt   = cat && (cat.points||[]).find(p=>p.id===ptId);
@@ -235,6 +291,15 @@ const RonderingUtforandePage = {
             options: [{v:'akut',l:'Akut'},{v:'hög',l:'Hög'},{v:'normal',l:'Normal'},{v:'låg',l:'Låg'}],
             value: 'normal'
           })}
+        </div>
+        <div class="fg" style="margin-top:4px;">
+          <label>Bilder (valfria)</label>
+          <div id="avv-img-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;"></div>
+          <label class="ron-img-add">
+            ${ic('camera',14)} Kamera / välj bild
+            <input type="file" accept="image/*" multiple style="display:none;"
+              onchange="RonderingUtforandePage._addImgToAvvModal(this.files)">
+          </label>
         </div>
         ${canAO?`
           <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;font-weight:600;margin-top:10px;cursor:pointer;">
@@ -271,7 +336,7 @@ const RonderingUtforandePage = {
       pointTitle: pt ? pt.title : '',
       customerId: pass.customerId,
       propertyId: pass.propertyId,
-      title, comment, priority, images: []
+      title, comment, priority, images: this._avvImages.slice()
     });
 
     // Update PASS point status
@@ -283,6 +348,7 @@ const RonderingUtforandePage = {
     }
 
     Modal.close();
+    this._avvImages = [];
     this._refresh();
   },
 
@@ -469,7 +535,7 @@ const RonderingRapportPage = {
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <button class="btn bs bsm" onclick="Router.back()">${ic('arrow-left',14)}</button>
+        <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{ronId:'${pass.ronderingId}'})">${ic('arrow-left',14)}</button>
         <div style="flex:1;">
           <div style="font-size:16px;font-weight:800;">Ronderingsrapport</div>
           <div style="font-size:11px;color:var(--mt);">${esc(ronName)} · Tillfälle #${pass.sequenceNumber||1}</div>
