@@ -351,3 +351,64 @@ function pbdg(priority) {
   const ico = icons[priority];
   return `<span class="bdg ${cls}" style="display:inline-flex;align-items:center;gap:3px;">${ico?ic(ico,9):''}${priorityLabel(priority)}</span>`;
 }
+
+/* ── LiveSync — polling för cross-device synk ─── */
+const LiveSync = {
+  _timer: null,
+  _passId: null,
+  _lastSig: null,
+
+  start(passId) {
+    this._passId = passId;
+    this._lastSig = null;
+    this.stop();
+    this._timer = setInterval(function() { LiveSync._poll(); }, 4000);
+  },
+
+  stop() {
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+  },
+
+  async _poll() {
+    if (document.hidden) return;
+    const page = typeof Router !== 'undefined' ? Router.currentPage : null;
+    if (page !== 'pg-rondering-utfor' && page !== 'pg-rondering-rapport') { LiveSync.stop(); return; }
+    if (!LiveSync._passId) return;
+    try {
+      const remote = await Storage.get('ronderingspass');
+      if (!Array.isArray(remote)) return;
+      const rp = remote.find(function(p) { return p.id === LiveSync._passId; });
+      if (!rp) return;
+      const sig = rp.updatedAt;
+      if (sig === LiveSync._lastSig) return;
+      const lp = getPass(LiveSync._passId);
+      if (lp && lp.updatedAt === sig) { LiveSync._lastSig = sig; return; }
+      LiveSync._lastSig = sig;
+      state.ronderingspass = remote;
+      try { localStorage.setItem('vift_ronderingspass', JSON.stringify(remote)); } catch(e2) {}
+      if (page === 'pg-rondering-utfor' && typeof RonderingUtforandePage !== 'undefined') {
+        RonderingUtforandePage._refresh();
+      } else if (page === 'pg-rondering-rapport' && typeof RonderingRapportPage !== 'undefined') {
+        RonderingRapportPage.render(Router.currentParams);
+      }
+    } catch(e) { /* network error — ignore */ }
+  }
+};
+
+// Cross-tab sync (same browser, storage event)
+window.addEventListener('storage', function(e) {
+  if (e.key !== 'vift_ronderingspass' || !e.newValue) return;
+  try {
+    const updated = JSON.parse(e.newValue);
+    if (!Array.isArray(updated)) return;
+    state.ronderingspass = updated;
+    const page = typeof Router !== 'undefined' ? Router.currentPage : null;
+    if (page === 'pg-rondering-utfor' && typeof RonderingUtforandePage !== 'undefined') {
+      RonderingUtforandePage._refresh();
+    } else if (page === 'pg-rondering-rapport' && typeof RonderingRapportPage !== 'undefined') {
+      RonderingRapportPage.render(Router.currentParams);
+    } else if (page === 'pg-rondering' && typeof RonderingPage !== 'undefined') {
+      RonderingPage._renderTab();
+    }
+  } catch(e2) {}
+});

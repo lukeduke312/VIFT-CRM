@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
 <link rel="stylesheet" href="src/styles/layout.css?v=27">
-<link rel="stylesheet" href="src/styles/components.css?v=40">
+<link rel="stylesheet" href="src/styles/components.css?v=41">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=21">
 <link rel="stylesheet" href="src/styles/responsive.css?v=12">
@@ -309,7 +309,7 @@
 <script src="src/data/storage.js?v=4"></script>
 <script src="src/data/schema.js?v=16"></script>
 <script src="src/data/seedData.js?v=25"></script>
-<script src="src/data/state.js?v=20"></script>
+<script src="src/data/state.js?v=21"></script>
 <script src="src/data/DashboardConfig.js?v=7"></script>
 
 <!-- 2. Services -->
@@ -323,7 +323,7 @@
 <script src="src/services/InvoiceService.js?v=5"></script>
 <script src="src/services/ProfitabilityService.js?v=1"></script>
 <script src="src/services/RecurringOrderService.js?v=3"></script>
-<script src="src/services/RonderingService.js?v=5"></script>
+<script src="src/services/RonderingService.js?v=6"></script>
 <script src="src/services/ActivitiesService.js?v=2"></script>
 <script src="src/services/ServiceTemplateService.js?v=2"></script>
 <script src="src/services/UserPrefsService.js?v=6"></script>
@@ -350,15 +350,16 @@
 <script src="src/pages/SalesPage.js?v=3"></script>
 <script src="src/pages/PropertyDetailPage.js?v=15"></script>
 <script src="src/pages/PageShells.js?v=73"></script>
-<script src="src/pages/RonderingPage.js?v=5"></script>
+<script src="src/pages/RonderingPage.js?v=6"></script>
 <script src="src/pages/OperationsPage.js?v=7"></script>
 <script src="src/pages/MyJobsPage.js?v=9"></script>
-<script src="src/pages/RonderingUtforandePage.js?v=8"></script>
-<script src="src/pages/RonderingWizardPage.js?v=7"></script>
+<script src="src/pages/RonderingUtforandePage.js?v=9"></script>
+<script src="src/pages/RonderingWizardPage.js?v=8"></script>
 
 <!-- 5. App bootstrap -->
 <script>
 const App = {
+  _pendingDeeplink: null,
 
   /*
    * Startflöde (Fas 1 — Supabase Auth):
@@ -369,6 +370,8 @@ const App = {
    * Data laddas aldrig utan giltig JWT (RLS blockerar anon-access).
    */
   async init() {
+    const _rawHash = (location.hash || '').slice(1);
+    if (_rawHash.startsWith('pass=')) this._pendingDeeplink = _rawHash;
     /* Steg 0: Hantera Supabase e-postlänk (lösenordsåterställning m.m.) */
     const linkType = Auth.handleEmailLink();   // sync, rensar URL-hashen
     if (linkType === 'recovery' || linkType === 'signup' || linkType === 'invite') {
@@ -509,7 +512,9 @@ const App = {
     if (_u) UserPrefsService.apply(_u.id);
     Sidebar.render();
     BrandingService.applyToLogin();
-    Router.showPage('pg-dash');
+    const _dl = this._pendingDeeplink; this._pendingDeeplink = null;
+    if (_dl && _dl.startsWith('pass=')) { Router.showPage('pg-rondering-rapport', {passId: _dl.slice(5)}); }
+    else { Router.showPage('pg-dash'); }
   },
 
   async login() {

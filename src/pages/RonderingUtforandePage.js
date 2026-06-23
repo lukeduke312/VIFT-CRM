@@ -102,6 +102,7 @@ const RonderingUtforandePage = {
 
     this.passId = pass.id;
     this.ronderingId = pass.ronderingId;
+    if (typeof LiveSync !== 'undefined') LiveSync.start(pass.id);
 
     // Auto-start if planerat
     if (pass.status === 'planerat') {
@@ -246,6 +247,7 @@ const RonderingUtforandePage = {
             <div class="ron-anm">
               <div class="ron-anm-title">${esc(avv.title)}</div>
               ${avv.comment?`<div class="ron-anm-body">${esc(avv.comment)}</div>`:''}
+              ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
               <div class="ron-anm-actions">
                 ${pbdg(avv.priority)}
                 ${avv.workOrderId
@@ -472,6 +474,12 @@ const RonderingUtforandePage = {
  * v2: läser från PASS; fallback till RON.results för legacy
  */
 const RonderingRapportPage = {
+  copyLink(passId) {
+    const url = location.origin + location.pathname + '#pass=' + passId;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function() { showToast('Länk kopierad!'); }).catch(function() { prompt('Kopiera länk:', url); });
+    } else { prompt('Kopiera länk:', url); }
+  },
 
   render(params) {
     const el = document.getElementById('pg-rondering-rapport-content');
@@ -541,6 +549,7 @@ const RonderingRapportPage = {
           <div style="font-size:11px;color:var(--mt);">${esc(ronName)} · Tillfälle #${pass.sequenceNumber||1}</div>
         </div>
         ${passStatusBadge(pass.status)}
+        <button class="btn bs bsm" onclick="RonderingRapportPage.copyLink('${pass.id}')">${ic('share-2',14)} Dela</button>
         <button class="btn bs bsm" onclick="window.print()">${ic('printer',14)} Skriv ut</button>
       </div>
 
@@ -611,6 +620,7 @@ const RonderingRapportPage = {
                         <div class="ron-anm">
                           <div class="ron-anm-title">${esc(avv.title)}</div>
                           ${avv.comment?`<div class="ron-anm-body">${esc(avv.comment)}</div>`:''}
+                          ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
                           <div class="ron-anm-actions">
                             ${pbdg(avv.priority)}
                             ${avv.workOrderId

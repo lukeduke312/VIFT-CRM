@@ -999,6 +999,37 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ron-sect-title { font-weight: 700; font-size: 13px; flex: 1; }
 .ron-sect-meta  { font-size: 11px; color: var(--mt); }
 
+/* Rondering bildminiatyrer */
+.ron-img-thumb {
+  width: 60px; height: 60px; object-fit: cover;
+  border-radius: 6px; border: 1px solid var(--br);
+  cursor: pointer;
+}
+.ron-img-rm {
+  position: absolute; top: -5px; right: -5px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #dc2626; color: #fff; border: none;
+  cursor: pointer; font-size: 13px; line-height: 18px;
+  text-align: center; padding: 0; display: block;
+}
+.ron-img-add {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; padding: 7px 12px;
+  border: 1px dashed var(--br); border-radius: 8px;
+  font-size: 12px; color: var(--mt); background: #f9fafb;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobil: större tryckytor för kontrollpunkter */
+@media (max-width: 640px) {
+  .rona-ok, .rona-avv, .rona-ej {
+    width: 44px; height: 44px;
+  }
+  .ronpt { padding: 10px 10px; }
+  .ronpt-info { min-width: 0; }
+  .ron-pass { padding: 12px 10px; }
+}
+
 /* ═══════════════════════════════════
    OFFER WIZARD LAYOUT
    ═══════════════════════════════════ */

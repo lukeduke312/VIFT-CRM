@@ -182,6 +182,7 @@ const RonderingPage = {
             ${(ron.categories||[]).length?`<div><span style="color:var(--mt);">Grupper: </span>${ron.categories.length}</div>`:''}
             ${ron.pricingType==='tim'?`<div><span style="color:var(--mt);">Timtaxa: </span>${ron.hourRate||0} kr/h</div>`:''}
             ${ron.pricingType==='fast'?`<div><span style="color:var(--mt);">Fast pris: </span>${fkr(ron.fixedPrice||0)}</div>`:''}
+            ${ron.pricingType==='avtal'?`<div><span style="color:var(--mt);">Pris: </span>Enligt avtal</div>`:''}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn bp bsm" onclick="RonderingPage.openNewPass('${ron.id}')">${ic('plus',13)} Nytt tillfälle</button>
