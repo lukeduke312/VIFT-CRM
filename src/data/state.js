@@ -384,8 +384,16 @@ const LiveSync = {
       const lp = getPass(LiveSync._passId);
       if (lp && lp.updatedAt === sig) { LiveSync._lastSig = sig; return; }
       LiveSync._lastSig = sig;
+      // Spara osparad antecknings-text i textrutan innan vi byter ut state
+      const noteEl = document.getElementById('pass-exec-note');
+      const unsavedNote = noteEl ? noteEl.value : null;
       state.ronderingspass = remote;
       try { localStorage.setItem('vift_ronderingspass', JSON.stringify(remote)); } catch(e2) {}
+      // Återställ osparad anteckning på det nya in-memory PASS-objektet
+      if (unsavedNote !== null) {
+        const np = getPass(LiveSync._passId);
+        if (np) np.internalNote = unsavedNote;
+      }
       if (page === 'pg-rondering-utfor' && typeof RonderingUtforandePage !== 'undefined') {
         RonderingUtforandePage._refresh();
       } else if (page === 'pg-rondering-rapport' && typeof RonderingRapportPage !== 'undefined') {
