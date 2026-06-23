@@ -2140,3 +2140,40 @@ body.modal-open { overflow: hidden; touch-action: none; }
   letter-spacing: .3px;
 }
 .action-sheet-btn--warn { color: var(--or); }
+
+/* ── Adress-autocomplete dropdown ────────────────────────── */
+.addr-dropdown {
+  background: var(--wh, #fff);
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.13), 0 1px 4px rgba(0,0,0,.07);
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 13px;
+  -webkit-overflow-scrolling: touch;
+}
+.addr-item {
+  padding: 10px 13px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f2f5;
+  line-height: 1.4;
+  transition: background .1s;
+}
+.addr-item:last-child { border-bottom: none; }
+.addr-item:hover, .addr-item:active { background: #eef3ff; }
+.addr-item-street {
+  font-weight: 600;
+  color: var(--navy, #0f1e3c);
+  font-size: 13px;
+}
+.addr-item-meta {
+  font-size: 11px;
+  color: var(--mt, #6b7280);
+  margin-top: 2px;
+}
+.addr-status {
+  padding: 10px 13px;
+  color: var(--mt, #6b7280);
+  font-size: 12px;
+  font-style: italic;
+}

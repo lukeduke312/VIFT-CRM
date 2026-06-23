@@ -628,14 +628,32 @@ const WorkOrdersPage = {
     const id = sel.value;
     this._wiz.data.customerId = id;
     const cu = id ? getCu(id) : null;
+
+    const addr = document.getElementById('wiz-address');
+    const cont = document.getElementById('wiz-contact');
+    const ph   = document.getElementById('wiz-phone');
+
+    const currentSrc = addr ? (addr.dataset.addrSource || '') : '';
+    const fromCustomer = currentSrc === 'customer';
+
     if (cu) {
-      const addr = document.getElementById('wiz-address');
-      const cont = document.getElementById('wiz-contact');
-      const ph   = document.getElementById('wiz-phone');
-      if (addr && !addr.value) addr.value = cu.address || '';
+      /* Fyll adress om: tomt, ELLER adressen kom från en annan kund */
+      if (addr && (!addr.value || fromCustomer)) {
+        addr.value = cu.address || '';
+        if (addr.dataset) addr.dataset.addrSource = cu.address ? 'customer' : '';
+      }
       if (cont && !cont.value) cont.value = cu.contactPerson || '';
       if (ph   && !ph.value)   ph.value   = cu.phone || '';
+    } else {
+      /* Kund borttagen — rensa fält som kom från kund */
+      if (addr && fromCustomer) {
+        addr.value = '';
+        delete addr.dataset.addrSource;
+      }
+      if (cont) cont.value = '';
+      if (ph)   ph.value   = '';
     }
+
     document.getElementById('wiz-autofill').innerHTML = cu
       ? `<div class="ibox" style="margin-bottom:8px;">${ic('check',14)} ${CustomerService.displayName(cu)}</div>`
       : '';

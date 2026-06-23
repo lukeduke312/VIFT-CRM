@@ -13,7 +13,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v3';
+const CACHE_NAME = 'vift-crm-v4';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
@@ -93,8 +93,9 @@ self.addEventListener('fetch', event => {
         if (cached) return cached;
         return fetch(req).then(response => {
           if (response.ok) {
-            caches.open(CACHE_NAME)
-              .then(cache => cache.put(req, response.clone()));
+            /* clone() måste anropas synkront innan response returneras */
+            const toCache = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(req, toCache));
           }
           return response;
         });
@@ -108,8 +109,9 @@ self.addEventListener('fetch', event => {
     fetch(req)
       .then(response => {
         if (response.ok) {
-          caches.open(CACHE_NAME)
-            .then(cache => cache.put(req, response.clone()));
+          /* clone() måste anropas synkront innan response returneras */
+          const toCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, toCache));
         }
         return response;
       })
