@@ -526,8 +526,27 @@ const WorkOrdersPage = {
   },
 
   _bindWizStep1() {
-    const sel = document.getElementById('wiz-customer');
-    if (sel && this._wiz.data.customerId) this._wizCustomerChanged();
+    const d = this._wiz.data;
+    d._sources = d._sources || {};
+
+    /* Återställ addrSource på DOM-elementet (förloras vid omrendering av steg) */
+    const addrEl = document.getElementById('wiz-address');
+    if (addrEl && d._sources.address) {
+      addrEl.dataset.addrSource = d._sources.address;
+    }
+
+    /* Fyll kunduppgifter om kund redan vald */
+    if (document.getElementById('wiz-customer') && d.customerId) {
+      this._wizCustomerChanged();
+    }
+
+    /* Spåra manuella ändringar i kontakt/telefon */
+    const markManual = (id, key) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => { d._sources[key] = 'manual'; });
+    };
+    markManual('wiz-contact', 'contact');
+    markManual('wiz-phone',   'phone');
   },
 
   _bindWizStep2() {
@@ -622,6 +641,75 @@ const WorkOrdersPage = {
   },
 
   /* ── Wizard helpers ────────────────────── */
+
+  /*
+   * Fyll in kunduppgifter i wizard-formuläret.
+   * Skriver över fält som kom från föregående kund (source='customer'),
+   * men rör inte fält som användaren skrivit manuellt (source='manual')
+   * eller fyllt via Mapbox (addrSource='mapbox').
+   */
+  _applyCustomerToWizard(cu) {
+    const d   = this._wiz.data;
+    d._sources = d._sources || {};
+
+    const addr = document.getElementById('wiz-address');
+    const cont = document.getElementById('wiz-contact');
+    const ph   = document.getElementById('wiz-phone');
+
+    /* Adress: använd dataset.addrSource (hanteras av AddressService + oss) */
+    if (addr) {
+      const src = addr.dataset.addrSource || d._sources.address || '';
+      if (!addr.value || src === 'customer') {
+        addr.value = cu.address || '';
+        const newSrc = cu.address ? 'customer' : '';
+        addr.dataset.addrSource = newSrc;
+        d._sources.address = newSrc;
+      }
+    }
+
+    /* Kontaktperson: fyll om tomt eller kom från kund */
+    if (cont && d._sources.contact !== 'manual') {
+      cont.value = cu.contactPerson || '';
+      d._sources.contact = cu.contactPerson ? 'customer' : '';
+    }
+
+    /* Telefon: fyll om tomt eller kom från kund */
+    if (ph && d._sources.phone !== 'manual') {
+      ph.value = cu.phone || '';
+      d._sources.phone = cu.phone ? 'customer' : '';
+    }
+  },
+
+  /*
+   * Rensa alla fält som kom från kund.
+   * Lämnar fält med source='manual' eller source='mapbox' orörda.
+   */
+  _clearCustomerDependentWizardFields() {
+    const d = this._wiz.data;
+    d._sources = d._sources || {};
+
+    const addr = document.getElementById('wiz-address');
+    const cont = document.getElementById('wiz-contact');
+    const ph   = document.getElementById('wiz-phone');
+
+    if (addr) {
+      const src = addr.dataset.addrSource || d._sources.address || '';
+      if (src === 'customer') {
+        addr.value = '';
+        addr.dataset.addrSource = '';
+        d._sources.address = '';
+      }
+    }
+    if (cont && d._sources.contact === 'customer') {
+      cont.value = '';
+      d._sources.contact = '';
+    }
+    if (ph && d._sources.phone === 'customer') {
+      ph.value = '';
+      d._sources.phone = '';
+    }
+  },
+
   _wizCustomerChanged() {
     const sel = document.getElementById('wiz-customer');
     if (!sel) return;
@@ -629,29 +717,10 @@ const WorkOrdersPage = {
     this._wiz.data.customerId = id;
     const cu = id ? getCu(id) : null;
 
-    const addr = document.getElementById('wiz-address');
-    const cont = document.getElementById('wiz-contact');
-    const ph   = document.getElementById('wiz-phone');
-
-    const currentSrc = addr ? (addr.dataset.addrSource || '') : '';
-    const fromCustomer = currentSrc === 'customer';
-
     if (cu) {
-      /* Fyll adress om: tomt, ELLER adressen kom från en annan kund */
-      if (addr && (!addr.value || fromCustomer)) {
-        addr.value = cu.address || '';
-        if (addr.dataset) addr.dataset.addrSource = cu.address ? 'customer' : '';
-      }
-      if (cont && !cont.value) cont.value = cu.contactPerson || '';
-      if (ph   && !ph.value)   ph.value   = cu.phone || '';
+      this._applyCustomerToWizard(cu);
     } else {
-      /* Kund borttagen — rensa fält som kom från kund */
-      if (addr && fromCustomer) {
-        addr.value = '';
-        delete addr.dataset.addrSource;
-      }
-      if (cont) cont.value = '';
-      if (ph)   ph.value   = '';
+      this._clearCustomerDependentWizardFields();
     }
 
     document.getElementById('wiz-autofill').innerHTML = cu

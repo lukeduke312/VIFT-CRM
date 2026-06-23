@@ -1907,9 +1907,13 @@ const WorkOrderDetailPage = {
       body: `
         <div class="fg"><label>Rubrik</label><input id="edit-title" value="${ao.title}"></div>
         <div class="fg"><label>Beskrivning</label><textarea id="edit-desc" rows="2">${ao.description||''}</textarea></div>
-        <div class="fg"><label>Kund</label><select id="edit-cu">${cuOptions}</select></div>
+        <div class="fg"><label>Kund</label>
+          <select id="edit-cu" onchange="WorkOrderDetailPage._editCustomerChanged('${this.aoId}')">
+            ${cuOptions}
+          </select></div>
         <div class="fg"><label>Adress</label><input id="edit-addr" value="${ao.address||''}"
           autocomplete="off"
+          data-addr-source="${ao.address ? 'existing' : ''}"
           oninput="AddressService.handleInput(this)"
           onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"></div>
         <div class="g2">
@@ -1944,6 +1948,30 @@ const WorkOrderDetailPage = {
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+  },
+
+  /*
+   * Autofyll adress från ny kund i redigera-AO-modal.
+   * Fyller adressen om: fältet är tomt, ELLER adressen matchar gamla AO-adressen
+   * (dvs. användaren har inte skrivit något manuellt).
+   */
+  _editCustomerChanged(aoId) {
+    const ao = getAO(aoId);
+    if (!ao) return;
+    const sel    = document.getElementById('edit-cu');
+    const addrEl = document.getElementById('edit-addr');
+    if (!sel || !addrEl) return;
+
+    const newCu      = sel.value ? getCu(sel.value) : null;
+    const currentVal = addrEl.value.trim();
+    const origAddr   = ao.address || '';
+    const src        = addrEl.dataset.addrSource || '';
+
+    /* Fyll adress om: tomt, oförändrat från AO, eller tidigare kundadress */
+    if (!currentVal || currentVal === origAddr || src === 'customer') {
+      addrEl.value = newCu ? (newCu.address || '') : '';
+      addrEl.dataset.addrSource = newCu && newCu.address ? 'customer' : '';
+    }
   },
 
   /* ── Gör återkommande ─────────────────── */
