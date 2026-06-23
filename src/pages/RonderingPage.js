@@ -192,9 +192,10 @@ const RonderingPage = {
 
       <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">${ic('calendar',13)} Tillfällen (${passes.length})</div>
       ${passes.length === 0
-        ? `<div class="ibox" style="text-align:center;padding:24px;">
-            <div style="color:var(--mt);font-size:13px;margin-bottom:10px;">Inga tillfällen skapade ännu</div>
-            <button class="btn bp bsm" onclick="RonderingPage.openNewPass('${ron.id}')">+ Skapa första tillfälle</button>
+        ? `<div class="ibox" style="text-align:center;padding:28px;">
+            ${ic('calendar',32)}
+            <div style="color:var(--mt);font-size:13px;margin:8px 0;">Inga tillfällen skapade ännu</div>
+            <button class="btn bp bsm" onclick="RonderingPage.openNewPass('${ron.id}')">${ic('plus',13)} Skapa första tillfälle</button>
           </div>`
         : passes.map(pass => {
             const stats = RonderingService.getPassStats(pass.id);
@@ -204,34 +205,35 @@ const RonderingPage = {
               return s ? (s.firstName+' '+s.lastName).trim() : sid;
             }).filter(Boolean).join(', ');
             const isLegacy = pass.migratedFromLegacy;
-            const btnLabel = (pass.status==='slutfört'||pass.status==='har_avvikelser')
-              ? ic('file-text',12)+' Rapport'
+            const isDone = pass.status==='slutfört'||pass.status==='har_avvikelser';
+            const btnLabel = isDone ? ic('file-text',12)+' Rapport'
               : (pass.status==='pågående' ? ic('play',12)+' Fortsätt' : ic('play',12)+' Starta');
-            const btnCls = (pass.status==='slutfört'||pass.status==='har_avvikelser') ? 'bs' : 'bp';
+            const btnCls = isDone ? 'bs' : 'bp';
+            const progColor = stats&&stats.anmärkningar>0 ? '#dc2626' : '#16a34a';
             return `
-              <div class="list-item" onclick="RonderingPage.openPass('${pass.id}')" style="margin-bottom:6px;">
-                <div class="item-row" style="gap:8px;">
-                  <div style="width:28px;height:28px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--navy);flex-shrink:0;">#${pass.sequenceNumber||1}</div>
+              <div class="ron-pass ${pass.status||''}" onclick="RonderingPage.openPass('${pass.id}')">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                  <div style="width:32px;height:32px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:var(--navy);flex-shrink:0;">#${pass.sequenceNumber||1}</div>
                   <div style="flex:1;min-width:0;">
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <span style="font-weight:700;font-size:13px;">${pass.scheduledDate?fmtDate(pass.scheduledDate):'Inget datum'}</span>
-                      ${pass.scheduledTime?`<span style="font-size:11px;color:var(--mt);">${pass.scheduledTime}</span>`:''}
-                      ${isLegacy?`<span style="font-size:9px;color:var(--mt);padding:1px 5px;background:#f3f4f6;border-radius:4px;">Historisk</span>`:''}
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
+                      <span style="font-weight:800;font-size:14px;color:var(--navy);">${pass.scheduledDate?fmtDate(pass.scheduledDate):'Inget datum'}</span>
+                      ${pass.scheduledTime?`<span style="font-size:12px;color:var(--mt);font-weight:600;">${pass.scheduledTime}</span>`:''}
+                      ${isLegacy?`<span style="font-size:9px;color:var(--mt);padding:1px 5px;background:#f3f4f6;border-radius:4px;font-weight:600;">Historisk</span>`:''}
                     </div>
-                    <div style="font-size:11px;color:var(--mt);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <div style="font-size:11px;color:var(--mt);display:flex;gap:10px;flex-wrap:wrap;">
                       ${staffNames?`<span>${ic('user',10)} ${staffNames}</span>`:''}
-                      ${stats?`<span>${ic('check-circle',10)} ${stats.checked}/${stats.total}</span>`:''}
-                      ${stats&&stats.anmärkningar>0?`<span style="color:#dc2626;">${ic('alert-triangle',10)} ${stats.anmärkningar} anm.</span>`:''}
-                      ${stats&&stats.unchecked>0&&pass.status!=='planerat'?`<span style="color:var(--mt);">${stats.unchecked} kvar</span>`:''}
+                      ${stats&&stats.total>0?`<span>${ic('check-square',10)} ${stats.checked}/${stats.total}</span>`:''}
+                      ${stats&&stats.anmärkningar>0?`<span style="color:#dc2626;font-weight:700;">${ic('alert-triangle',10)} ${stats.anmärkningar} anm.</span>`:''}
+                      ${stats&&stats.unchecked>0&&!isDone&&pass.status!=='planerat'?`<span style="color:var(--mt);">${stats.unchecked} kvar</span>`:''}
                     </div>
                     ${stats&&stats.total>0&&pass.status!=='planerat'?`
-                      <div style="background:#e5e7eb;border-radius:4px;height:4px;margin-top:5px;overflow:hidden;">
-                        <div style="background:${stats.anmärkningar>0?'#dc2626':'#16a34a'};width:${pct}%;height:4px;border-radius:4px;"></div>
+                      <div class="ron-prog" style="margin-top:6px;">
+                        <div class="ron-prog-fill" style="width:${pct}%;background:${progColor};"></div>
                       </div>`:''}
                   </div>
-                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
                     ${this._passStatusBadge(pass.status)}
-                    <button class="btn ${btnCls} bsm" style="font-size:10px;white-space:nowrap;"
+                    <button class="btn ${btnCls} bxs" style="white-space:nowrap;"
                       onclick="event.stopPropagation();RonderingPage.openPass('${pass.id}')">
                       ${btnLabel}
                     </button>

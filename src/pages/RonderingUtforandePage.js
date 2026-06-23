@@ -133,19 +133,17 @@ const RonderingUtforandePage = {
     const pts     = cat.points || [];
     const checked = pts.filter(p => p.status !== '').length;
     const allDone = checked === pts.length && pts.length > 0;
-    const headBg  = allDone ? '#f0fdf4' : '#f8fafc';
-    const headBdr = allDone ? '#bbf7d0' : 'var(--br)';
-    const cntClr  = allDone ? '#16a34a' : 'var(--mt)';
+    const headCls = allDone ? 'done' : 'open';
+    const bdrClr  = allDone ? '#bbf7d0' : 'var(--br)';
     return `
       <div style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;
-            background:${headBg};border:1px solid ${headBdr};border-radius:10px 10px 0 0;">
-          <span style="font-weight:800;font-size:13px;color:var(--navy);flex:1;">${esc(cat.name)}</span>
-          <span style="font-size:11px;font-weight:600;color:${cntClr};">
+        <div class="roncat-head ${headCls}">
+          <span>${esc(cat.name)}</span>
+          <span class="roncat-head-cnt" style="color:${allDone?'#16a34a':'var(--mt)'};">
             ${allDone ? ic('check',11)+' Klar' : checked + '/' + pts.length}
           </span>
         </div>
-        <div style="border:1px solid ${headBdr};border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:var(--wh);">
+        <div style="border:1px solid ${bdrClr};border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:var(--wh);">
           ${pts.map((pt, pi) => this._renderPt(pass, cat, pt, pi)).join('')}
         </div>
       </div>`;
@@ -190,10 +188,10 @@ const RonderingUtforandePage = {
           <div class="ronpt-name">${esc(pt.title)}</div>
           <div style="font-size:11px;font-weight:600;color:${stColor};">${stLabel}${pt.comment?' — '+esc(pt.comment):''}</div>
           ${avv?`
-            <div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:6px;padding:5px 8px;margin-top:4px;font-size:11px;">
-              <div style="font-weight:700;">${esc(avv.title)}</div>
-              ${avv.comment?`<div style="color:var(--mt);margin-top:1px;">${esc(avv.comment)}</div>`:''}
-              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+            <div class="ron-anm">
+              <div class="ron-anm-title">${esc(avv.title)}</div>
+              ${avv.comment?`<div class="ron-anm-body">${esc(avv.comment)}</div>`:''}
+              <div class="ron-anm-actions">
                 ${pbdg(avv.priority)}
                 ${avv.workOrderId
                   ?`<span class="bdg bdg-green" style="font-size:9px;cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} ${avv.workOrderId}</span>`
@@ -494,22 +492,22 @@ const RonderingRapportPage = {
             <div><div style="font-size:10px;color:var(--mt);font-weight:600;">SLUTFÖRD</div><div style="font-size:13px;">${pass.completedAt?fmtDate(pass.completedAt):'Pågår'}</div></div>
             ${faktiskTid?`<div><div style="font-size:10px;color:var(--mt);font-weight:600;">TID</div><div style="font-size:13px;">${faktiskTid}</div></div>`:''}
           </div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
-            <div style="background:#f0fdf4;border-radius:8px;padding:10px 4px;">
-              <div style="font-size:20px;font-weight:900;color:#166534;">${stats?stats.ok:0}</div>
-              <div style="font-size:10px;color:#166534;">Godkända</div>
+          <div class="ron-kpi4">
+            <div class="ron-kpi-cell" style="background:#f0fdf4;">
+              <div class="ron-kpi-num" style="color:#166534;">${stats?stats.ok:0}</div>
+              <div class="ron-kpi-lbl" style="color:#166534;">Godkända</div>
             </div>
-            <div style="background:#fef2f2;border-radius:8px;padding:10px 4px;">
-              <div style="font-size:20px;font-weight:900;color:#991b1b;">${stats?stats.anmärkningar:0}</div>
-              <div style="font-size:10px;color:#991b1b;">Anmärkningar</div>
+            <div class="ron-kpi-cell" style="background:#fef2f2;">
+              <div class="ron-kpi-num" style="color:#991b1b;">${stats?stats.anmärkningar:0}</div>
+              <div class="ron-kpi-lbl" style="color:#991b1b;">Anmärkningar</div>
             </div>
-            <div style="background:#f9fafb;border-radius:8px;padding:10px 4px;">
-              <div style="font-size:20px;font-weight:900;color:#374151;">${stats?stats.ejAktuell:0}</div>
-              <div style="font-size:10px;color:#374151;">Ej aktuell</div>
+            <div class="ron-kpi-cell" style="background:#f9fafb;">
+              <div class="ron-kpi-num" style="color:#374151;">${stats?stats.ejAktuell:0}</div>
+              <div class="ron-kpi-lbl" style="color:#374151;">Ej aktuell</div>
             </div>
-            <div style="background:#eff6ff;border-radius:8px;padding:10px 4px;">
-              <div style="font-size:20px;font-weight:900;color:#1d4ed8;">${stats?stats.total:0}</div>
-              <div style="font-size:10px;color:#1d4ed8;">Totalt</div>
+            <div class="ron-kpi-cell" style="background:#eff6ff;">
+              <div class="ron-kpi-num" style="color:#1d4ed8;">${stats?stats.total:0}</div>
+              <div class="ron-kpi-lbl" style="color:#1d4ed8;">Totalt</div>
             </div>
           </div>
           ${pass.internalNote?`<div style="margin-top:10px;padding:8px;background:#f9fafb;border-radius:6px;font-size:12px;color:var(--mt);"><strong>Anteckning:</strong> ${esc(pass.internalNote)}</div>`:''}
@@ -524,9 +522,9 @@ const RonderingRapportPage = {
         const unchecked = pts.filter(p=>p.status==='').length;
         return `
           <div class="card" style="margin-bottom:8px;">
-            <div class="card-head" style="padding:10px 14px;display:flex;align-items:center;gap:8px;">
-              <span style="font-weight:700;font-size:14px;flex:1;">${esc(cat.name)}</span>
-              <span style="font-size:11px;color:var(--mt);">${ok} ok · ${anm} anm · ${ej} ej · ${unchecked} kvar</span>
+            <div class="ron-sect">
+              <span class="ron-sect-title">${esc(cat.name)}</span>
+              <span class="ron-sect-meta">${ok} ok · ${anm} anm · ${ej} ej${unchecked?` · ${unchecked} kvar`:''}</span>
             </div>
             <div>
               ${pts.map(pt => {
@@ -544,10 +542,10 @@ const RonderingRapportPage = {
                       ${pt.comment&&pt.status!=='anmärkning'?`<div style="font-size:11px;color:var(--mt);">${esc(pt.comment)}</div>`:''}
                       ${pt.checkedAt?`<div style="font-size:10px;color:var(--mt);">${fmtDate(pt.checkedAt)}</div>`:''}
                       ${avv?`
-                        <div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:6px;padding:8px;margin-top:6px;font-size:12px;">
-                          <div style="font-weight:700;">${esc(avv.title)}</div>
-                          ${avv.comment?`<div style="color:var(--mt);margin-top:2px;">${esc(avv.comment)}</div>`:''}
-                          <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+                        <div class="ron-anm">
+                          <div class="ron-anm-title">${esc(avv.title)}</div>
+                          ${avv.comment?`<div class="ron-anm-body">${esc(avv.comment)}</div>`:''}
+                          <div class="ron-anm-actions">
                             ${pbdg(avv.priority)}
                             ${avv.workOrderId
                               ?`<span class="bdg bdg-green" style="cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} ${avv.workOrderId}</span>`
@@ -568,15 +566,17 @@ const RonderingRapportPage = {
             <span style="font-weight:700;font-size:14px;">${ic('alert-triangle',15)} Anmärkningar (${avvikelser.length})</span>
           </div>
           ${avvikelser.map(avv=>`
-            <div style="padding:10px 14px;border-top:1px solid var(--br);">
-              <div style="font-weight:700;font-size:13px;">${esc(avv.title)}</div>
-              <div style="font-size:11px;color:var(--mt);">${esc(avv.categoryName||'')} › ${esc(avv.pointTitle||'')}</div>
-              ${avv.comment?`<div style="font-size:12px;margin-top:4px;">${esc(avv.comment)}</div>`:''}
-              <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap;">
-                ${pbdg(avv.priority)}
-                ${avv.workOrderId
-                  ?`<span class="bdg bdg-green" style="cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} ${avv.workOrderId}</span>`
-                  :`<button class="btn bp bsm" style="font-size:11px;" onclick="RonderingRapportPage.createAO('${avv.id}','${pass.id}')">Skapa AO</button>`}
+            <div style="padding:8px 14px;border-top:1px solid var(--br);">
+              <div class="ron-anm">
+                <div class="ron-anm-title">${esc(avv.title)}</div>
+                <div class="ron-anm-body">${esc(avv.categoryName||'')} › ${esc(avv.pointTitle||'')}</div>
+                ${avv.comment?`<div class="ron-anm-body" style="margin-top:2px;">${esc(avv.comment)}</div>`:''}
+                <div class="ron-anm-actions">
+                  ${pbdg(avv.priority)}
+                  ${avv.workOrderId
+                    ?`<span class="bdg bdg-green" style="cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} ${avv.workOrderId}</span>`
+                    :`<button class="btn bp bsm" style="font-size:11px;" onclick="RonderingRapportPage.createAO('${avv.id}','${pass.id}')">Skapa AO</button>`}
+                </div>
               </div>
             </div>`).join('')}
         </div>`:''}
@@ -635,18 +635,18 @@ const RonderingRapportPage = {
             <div><div style="font-size:10px;color:var(--mt);font-weight:600;">UTFÖRARE</div><div style="font-size:13px;">${esc(ron.performedByName||'—')}</div></div>
             <div><div style="font-size:10px;color:var(--mt);font-weight:600;">SLUTFÖRD</div><div style="font-size:13px;">${ron.completedAt?fmtDate(ron.completedAt):'—'}</div></div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;margin-top:10px;">
-            <div style="background:#f0fdf4;border-radius:8px;padding:8px 4px;">
-              <div style="font-size:18px;font-weight:900;color:#166534;">${stats?stats.ok:0}</div>
-              <div style="font-size:10px;color:#166534;">Godkända</div>
+          <div class="ron-kpi3" style="margin-top:10px;">
+            <div class="ron-kpi-cell" style="background:#f0fdf4;">
+              <div class="ron-kpi-num" style="color:#166534;">${stats?stats.ok:0}</div>
+              <div class="ron-kpi-lbl" style="color:#166534;">Godkända</div>
             </div>
-            <div style="background:#fef2f2;border-radius:8px;padding:8px 4px;">
-              <div style="font-size:18px;font-weight:900;color:#991b1b;">${stats?stats.avvs:0}</div>
-              <div style="font-size:10px;color:#991b1b;">Avvikelser</div>
+            <div class="ron-kpi-cell" style="background:#fef2f2;">
+              <div class="ron-kpi-num" style="color:#991b1b;">${stats?stats.avvs:0}</div>
+              <div class="ron-kpi-lbl" style="color:#991b1b;">Avvikelser</div>
             </div>
-            <div style="background:#eff6ff;border-radius:8px;padding:8px 4px;">
-              <div style="font-size:18px;font-weight:900;color:#1d4ed8;">${stats?stats.total:0}</div>
-              <div style="font-size:10px;color:#1d4ed8;">Totalt</div>
+            <div class="ron-kpi-cell" style="background:#eff6ff;">
+              <div class="ron-kpi-num" style="color:#1d4ed8;">${stats?stats.total:0}</div>
+              <div class="ron-kpi-lbl" style="color:#1d4ed8;">Totalt</div>
             </div>
           </div>
         </div>

@@ -937,6 +937,69 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 
 /* ═══════════════════════════════════
+   RONDERING — PASS-KORT (Steg 9)
+   ═══════════════════════════════════ */
+.ron-pass {
+  background: var(--wh);
+  border: 1px solid var(--br);
+  border-left: 4px solid var(--br);
+  border-radius: var(--rs);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: box-shadow .14s;
+  display: block;
+  margin-bottom: 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ron-pass:active { opacity: .9; transform: scale(.995); }
+@media (min-width: 1024px) {
+  .ron-pass:hover { box-shadow: 0 2px 10px rgba(43,127,212,.12); border-left-color: var(--sky) !important; }
+}
+.ron-pass.planerat    { border-left-color: #3b82f6; }
+.ron-pass.pågående    { border-left-color: var(--or); }
+.ron-pass.slutfört    { border-left-color: var(--gr); }
+.ron-pass.har_avvikelser { border-left-color: var(--rd); }
+
+/* Progress bar */
+.ron-prog { height: 5px; border-radius: 3px; background: #e5e7eb; overflow: hidden; margin-top: 6px; }
+.ron-prog-fill { height: 5px; border-radius: 3px; transition: width .4s ease; }
+
+/* KPI-rad (4 celler) */
+.ron-kpi4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+.ron-kpi3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+.ron-kpi-cell { border-radius: 8px; padding: 10px 4px; text-align: center; }
+.ron-kpi-num  { font-size: 20px; font-weight: 900; line-height: 1; }
+.ron-kpi-lbl  { font-size: 10px; font-weight: 600; margin-top: 2px; }
+
+/* Kategori-rubrik i utförande */
+.roncat-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 10px 10px 0 0;
+  font-size: 13px; font-weight: 800; color: var(--navy);
+}
+.roncat-head.done  { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.roncat-head.open  { background: #f8fafc; border: 1px solid var(--br); }
+.roncat-head-cnt   { margin-left: auto; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+/* Anmärkning-ruta i utförande/rapport */
+.ron-anm {
+  background: #fff5f5; border: 1px solid #fca5a5;
+  border-radius: 8px; padding: 8px 10px; margin-top: 6px;
+}
+.ron-anm-title { font-size: 12px; font-weight: 700; color: #991b1b; }
+.ron-anm-body  { font-size: 11px; color: var(--mt); margin-top: 2px; }
+.ron-anm-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+
+/* Rapport sektion-rubrik */
+.ron-sect {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--br);
+  background: #fdfdfe;
+}
+.ron-sect-title { font-weight: 700; font-size: 13px; flex: 1; }
+.ron-sect-meta  { font-size: 11px; color: var(--mt); }
+
+/* ═══════════════════════════════════
    OFFER WIZARD LAYOUT
    ═══════════════════════════════════ */
 .off-wiz-inner {
