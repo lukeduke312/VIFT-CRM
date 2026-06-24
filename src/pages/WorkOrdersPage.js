@@ -1,6 +1,12 @@
 /**
  * WorkOrdersPage — AO-lista + skapa-wizard
  */
+
+/* Akut-badge: röd chip med emoji och fetstilstext */
+function akutBadge() {
+  return `<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`;
+}
+
 const WorkOrdersPage = {
   filter: 'alla',
   q: '',
@@ -221,7 +227,7 @@ const WorkOrdersPage = {
           <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
               <div style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${sbdg(ao.status)}${ao.priority==='akut'?akutBadge():pbdg(ao.priority)}</div>
             </div>
             <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
             <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
@@ -270,7 +276,7 @@ const WorkOrdersPage = {
                 ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
               </div>
               <div class="ao-item-badges">
-                ${sbdg(ao.status)}${ao.priority !== 'normal' ? pbdg(ao.priority) : ''}
+                ${sbdg(ao.status)}${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
               </div>
             </div>
             ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}

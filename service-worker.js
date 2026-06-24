@@ -132,7 +132,7 @@ self.addEventListener('push', event => {
     body:               payload.body || '',
     icon:               '/assets/icon-192.png',
     badge:              '/assets/icon-192.png',
-    data:               { url: payload.url || '/' },
+    data:               { url: payload.url || '/', aoId: payload.aoId || null },
     requireInteraction: false
   };
 
@@ -144,7 +144,9 @@ self.addEventListener('push', event => {
 /* ── Notification clicked → öppna rätt sida ─────────────── */
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  const data  = event.notification.data || {};
+  const url   = data.url || '/';
+  const aoId  = data.aoId || null;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -152,8 +154,13 @@ self.addEventListener('notificationclick', event => {
         const existing = list.find(c => c.url.startsWith(self.location.origin));
         if (existing) {
           existing.focus();
-          return existing.navigate ? existing.navigate(url) : existing.focus();
+          /* Skicka meddelande till appen för in-app-navigering utan sidladdning */
+          if (aoId) {
+            existing.postMessage({ type: 'OPEN_AO', aoId });
+          }
+          return;
         }
+        /* Appen inte öppen — öppna ny flik med deep-link-URL */
         return clients.openWindow(url);
       })
   );

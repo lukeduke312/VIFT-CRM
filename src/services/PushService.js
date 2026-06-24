@@ -194,9 +194,12 @@ const PushService = {
       return;
     }
 
-    const cuName   = (typeof getCu === 'function' && ao.customerId) ? (() => { const c = getCu(ao.customerId); return c ? (c.name || (c.firstName + ' ' + c.lastName).trim()) : ''; })() : '';
-    const poolText = ao.status === 'pool' ? 'Ny AO i arbetspoolen' : 'Ny tilldelad arbetsorder';
-    const bodyText = [ao.title, cuName].filter(Boolean).join(' — ');
+    const cuName    = (typeof getCu === 'function' && ao.customerId) ? (() => { const c = getCu(ao.customerId); return c ? (c.name || (c.firstName + ' ' + c.lastName).trim()) : ''; })() : '';
+    const isAkut    = ao.priority === 'akut';
+    const titleText = isAkut ? '🚨 AKUT arbetsorder' : 'Ny arbetsorder';
+    const context   = (cuName || ao.address || '').trim();
+    const bodyText  = context ? ao.title + ' – ' + context : ao.title;
+    const url       = '/#ao=' + ao.id;
 
     try {
       const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
@@ -206,9 +209,10 @@ const PushService = {
           'Authorization': 'Bearer ' + token
         },
         body: JSON.stringify({
-          title:     poolText,
+          title:     titleText,
           body:      bodyText,
-          url:       '/',
+          url:       url,
+          aoId:      ao.id,
           broadcast: true
         })
       });

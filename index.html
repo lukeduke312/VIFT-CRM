@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
 <link rel="stylesheet" href="src/styles/layout.css?v=27">
-<link rel="stylesheet" href="src/styles/components.css?v=42">
+<link rel="stylesheet" href="src/styles/components.css?v=43">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=21">
 <link rel="stylesheet" href="src/styles/responsive.css?v=12">
@@ -330,7 +330,7 @@
 <script src="src/services/NotificationsService.js?v=2"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
 <script src="src/services/AddressService.js?v=4"></script>
-<script src="src/services/PushService.js?v=2"></script>
+<script src="src/services/PushService.js?v=3"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=10"></script>
@@ -342,7 +342,7 @@
 <script src="src/pages/Router.js?v=14"></script>
 <script src="src/pages/Dashboard.js?v=32"></script>
 <script src="src/pages/CustomersPage.js?v=8"></script>
-<script src="src/pages/WorkOrdersPage.js?v=23"></script>
+<script src="src/pages/WorkOrdersPage.js?v=24"></script>
 <script src="src/pages/WorkOrderDetailPage.js?v=40"></script>
 <script src="src/pages/TimePage.js?v=4"></script>
 <script src="src/pages/InvoicesPage.js?v=19"></script>
@@ -371,7 +371,7 @@ const App = {
    */
   async init() {
     const _rawHash = (location.hash || '').slice(1);
-    if (_rawHash.startsWith('pass=')) this._pendingDeeplink = _rawHash;
+    if (_rawHash.startsWith('pass=') || _rawHash.startsWith('ao=')) this._pendingDeeplink = _rawHash;
     /* Steg 0: Hantera Supabase e-postlänk (lösenordsåterställning m.m.) */
     const linkType = Auth.handleEmailLink();   // sync, rensar URL-hashen
     if (linkType === 'recovery' || linkType === 'signup' || linkType === 'invite') {
@@ -514,7 +514,8 @@ const App = {
     BrandingService.applyToLogin();
     if (typeof DataSync !== 'undefined') DataSync.start();
     const _dl = this._pendingDeeplink; this._pendingDeeplink = null;
-    if (_dl && _dl.startsWith('pass=')) { Router.showPage('pg-rondering-rapport', {passId: _dl.slice(5)}); }
+    if (_dl && _dl.startsWith('pass='))      { Router.showPage('pg-rondering-rapport', {passId: _dl.slice(5)}); }
+    else if (_dl && _dl.startsWith('ao=')) { Router.showPage('pg-ao-detail', {aoId: _dl.slice(3)}); }
     else { Router.showPage('pg-dash'); }
   },
 
@@ -561,6 +562,17 @@ const App = {
 
 // Starta appen
 document.addEventListener('DOMContentLoaded', () => App.init());
+
+/* ── SW-meddelanden: navigera till AO utan sidladdning ── */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'OPEN_AO' && e.data.aoId) {
+      if (typeof Router !== 'undefined') {
+        Router.showPage('pg-ao-detail', { aoId: e.data.aoId });
+      }
+    }
+  });
+}
 
 /* ── PWA: Service Worker ─────────────────────────────── */
 if ('serviceWorker' in navigator) {
