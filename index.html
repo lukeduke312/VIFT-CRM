@@ -309,7 +309,7 @@
 <script src="src/data/storage.js?v=4"></script>
 <script src="src/data/schema.js?v=16"></script>
 <script src="src/data/seedData.js?v=25"></script>
-<script src="src/data/state.js?v=22"></script>
+<script src="src/data/state.js?v=23"></script>
 <script src="src/data/DashboardConfig.js?v=7"></script>
 
 <!-- 2. Services -->
@@ -318,7 +318,7 @@
 <script src="src/services/SalesService.js?v=3"></script>
 <script src="src/services/AuthService.js?v=7"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
-<script src="src/services/WorkOrderService.js?v=7"></script>
+<script src="src/services/WorkOrderService.js?v=8"></script>
 <script src="src/services/TimeService.js?v=4"></script>
 <script src="src/services/InvoiceService.js?v=5"></script>
 <script src="src/services/ProfitabilityService.js?v=1"></script>
@@ -330,7 +330,7 @@
 <script src="src/services/NotificationsService.js?v=2"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
 <script src="src/services/AddressService.js?v=4"></script>
-<script src="src/services/PushService.js?v=1"></script>
+<script src="src/services/PushService.js?v=2"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=10"></script>
@@ -512,6 +512,7 @@ const App = {
     if (_u) UserPrefsService.apply(_u.id);
     Sidebar.render();
     BrandingService.applyToLogin();
+    if (typeof DataSync !== 'undefined') DataSync.start();
     const _dl = this._pendingDeeplink; this._pendingDeeplink = null;
     if (_dl && _dl.startsWith('pass=')) { Router.showPage('pg-rondering-rapport', {passId: _dl.slice(5)}); }
     else { Router.showPage('pg-dash'); }

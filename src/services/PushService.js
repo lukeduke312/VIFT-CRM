@@ -180,6 +180,51 @@ const PushService = {
     return res.json();
   },
 
+  /* ── Notis vid ny AO ────────────────────────────────────── */
+
+  /*
+   * Skickar push-notis (broadcast) till alla prenumeranter när en ny AO skapas.
+   * Kräver att send-push Edge Function stöder { broadcast: true }.
+   * Fire-and-forget — felet loggas men stoppar aldrig AO-skapandet.
+   */
+  async notifyNewAO(ao) {
+    const token = Auth.getAccessToken();
+    if (!token) {
+      console.warn('[PushService] notifyNewAO: ej inloggad, hoppar över push');
+      return;
+    }
+
+    const cuName   = (typeof getCu === 'function' && ao.customerId) ? (() => { const c = getCu(ao.customerId); return c ? (c.name || (c.firstName + ' ' + c.lastName).trim()) : ''; })() : '';
+    const poolText = ao.status === 'pool' ? 'Ny AO i arbetspoolen' : 'Ny tilldelad arbetsorder';
+    const bodyText = [ao.title, cuName].filter(Boolean).join(' — ');
+
+    try {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          title:     poolText,
+          body:      bodyText,
+          url:       '/',
+          broadcast: true
+        })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[PushService] notifyNewAO svar', res.status, ':', txt);
+      } else {
+        const result = await res.json().catch(() => ({}));
+        console.log('[PushService] notifyNewAO skickad — enheter:', result.sent || 0, '/ revokade:', result.revoked || 0);
+      }
+    } catch(e) {
+      console.warn('[PushService] notifyNewAO nätverksfel:', e);
+    }
+  },
+
   /* ── Hjälpfunktioner ─────────────────────────────────────── */
 
   _toUint8Array(base64url) {

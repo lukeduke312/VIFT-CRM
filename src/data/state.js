@@ -196,7 +196,11 @@ async function initState() {
  * Spara hela state — localStorage direkt + Supabase i bakgrunden (ett enda HTTP-anrop)
  */
 function persist() {
+  const _now = new Date().toISOString();
+  /* Sätt _lastSig lokalt så DataSync inte triggar en omedelbar re-läsning av egna skrivningar */
+  if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
   Storage.setAll([
+    ['lastChanged',      _now],
     ['customers',        state.customers],
     ['workOrders',       state.workOrders],
     ['offers',           state.offers],
@@ -400,6 +404,115 @@ const LiveSync = {
         RonderingRapportPage.render(Router.currentParams);
       }
     } catch(e) { /* network error — ignore */ }
+  }
+};
+
+/*
+ * DataSync — global cross-device synk för ALL appdata
+ *
+ * Polling var 15:e sekund mot en lättviktsnyckel (lastChanged).
+ * Om timestamp ändrats av en annan enhet: hämta all data från Supabase,
+ * uppdatera state, rendera om aktuell sida.
+ *
+ * Startas från App.showApp() i index.html när användaren är inloggad.
+ * Egna persist()-skrivningar uppdaterar _lastSig och triggar INTE re-read.
+ */
+const DataSync = {
+  _timer:   null,
+  _lastSig: null,
+  INTERVAL: 15000,
+
+  start() {
+    this.stop();
+    this._timer = setInterval(function() { DataSync._poll(); }, DataSync.INTERVAL);
+    console.log('[DataSync] Startar — pollar var', DataSync.INTERVAL / 1000, 's');
+  },
+
+  stop() {
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+  },
+
+  async _poll() {
+    if (document.hidden) return;
+    /* Avbryt om användaren skriver eller en modal är öppen */
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+    if (document.querySelector('.modal-overlay, [id^="modal-"]')) return;
+
+    try {
+      const sig = await Storage.get('lastChanged');
+      if (!sig || sig === DataSync._lastSig) return;
+
+      console.log('[DataSync] Fjärruppdatering detekterad (' + sig + ') — hämtar data…');
+      const remote = await Storage.getAll();
+      if (!remote) return;
+
+      DataSync._lastSig = sig;
+
+      /* Uppdatera state-arrayer från remote */
+      const g = function(key) { return (remote[key] !== undefined && remote[key] !== null) ? remote[key] : null; };
+      const arr = function(stateKey, remoteKey) { var v = g(remoteKey); if (Array.isArray(v)) state[stateKey] = v; };
+
+      arr('customers',          'customers');
+      arr('workOrders',         'workOrders');
+      arr('offers',             'offers');
+      arr('invoices',           'invoices');
+      arr('properties',         'properties');
+      arr('priceGroups',        'priceGroups');
+      arr('priceProfiles',      'priceProfiles');
+      arr('salesOpportunities', 'salesOpps');
+      arr('activityLog',        'activityLog');
+      arr('timeEntries',        'timeEntries');
+      arr('contracts',          'contracts');
+      arr('articles',           'articles');
+      arr('titles',             'titles');
+      arr('roles',              'roles');
+      arr('recurringOrders',    'recurringOrders');
+      arr('ronderingsmallar',   'ronderingsmallar');
+      arr('ronderingar',        'ronderingar');
+      arr('avvikelser',         'avvikelser');
+      arr('activities',         'activities');
+      arr('serviceTemplates',   'serviceTemplates');
+      arr('emailTemplates',     'emailTemplates');
+      arr('notifications',      'notifications');
+      arr('propertyCategories', 'propertyCategories');
+      arr('ronderingspass',     'ronderingspass');
+
+      /* Staff: strippa lösenordsfält */
+      var rawStaff = g('staff');
+      if (Array.isArray(rawStaff)) {
+        state.staff = rawStaff.map(function(s) {
+          var clean = Object.assign({}, s);
+          delete clean.password;
+          delete clean.passwordHash;
+          return clean;
+        });
+      }
+
+      /* Settings är ett objekt */
+      if (remote['settings'] && typeof remote['settings'] === 'object' && !Array.isArray(remote['settings'])) {
+        state.settings = remote['settings'];
+      }
+
+      /* Uppdatera localStorage-cache */
+      Object.entries(remote).forEach(function(entry) {
+        try { localStorage.setItem('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
+      });
+
+      /* Uppdatera badge-räknare */
+      if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+
+      /* Rendera om aktuell sida (om ingen modal är öppen) */
+      var page = typeof Router !== 'undefined' ? Router.currentPage : null;
+      if (page && typeof Router !== 'undefined') {
+        Router.showPage(page, Router.currentParams || {});
+      }
+
+      var aoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a){ return !a.deleted && !a.archived; }).length : 0;
+      console.log('[DataSync] Synkat ' + new Date().toLocaleTimeString('sv-SE') + ' — aktiva AO: ' + aoCount + ' — sig: ' + sig);
+    } catch(e) {
+      console.warn('[DataSync] poll-fel:', e);
+    }
   }
 };
 

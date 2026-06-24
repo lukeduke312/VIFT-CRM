@@ -74,24 +74,28 @@ serve(async (req: Request) => {
 
     /* Läs request body */
     const body = await req.json().catch(() => ({}))
-    const title  = (body.title  || 'VIFT CRM').slice(0, 100)
-    const text   = (body.body   || '').slice(0, 300)
-    const url    = (body.url    || '/').slice(0, 500)
+    const title     = (body.title  || 'VIFT CRM').slice(0, 100)
+    const text      = (body.body   || '').slice(0, 300)
+    const url       = (body.url    || '/').slice(0, 500)
+    const broadcast = body.broadcast === true
 
-    /* Target user — default = anroparen själv */
-    const targetUserId: string = body.userId || caller.id
-
-    /* Hämta aktiva subscriptions för target user */
-    const { data: subs, error: subsErr } = await supabase
+    /* Hämta subscriptions: broadcast → alla aktiva, annars target user */
+    let subsQuery = supabase
       .from('push_subscriptions')
       .select('id, endpoint, p256dh, auth_key')
-      .eq('user_id', targetUserId)
       .is('revoked_at', null)
+
+    if (!broadcast) {
+      const targetUserId: string = body.userId || caller.id
+      subsQuery = subsQuery.eq('user_id', targetUserId)
+    }
+
+    const { data: subs, error: subsErr } = await subsQuery
 
     if (subsErr) throw subsErr
 
     if (!subs || subs.length === 0) {
-      return json({ sent: 0, revoked: 0, message: 'Inga aktiva subscriptions för användaren' })
+      return json({ sent: 0, revoked: 0, message: broadcast ? 'Inga aktiva subscriptions' : 'Inga aktiva subscriptions för användaren' })
     }
 
     const payload = JSON.stringify({ title, body: text, url })

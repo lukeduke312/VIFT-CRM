@@ -10,12 +10,19 @@ const WorkOrderService = {
       updatedAt: new Date().toISOString()
     });
     state.workOrders.push(ao);
-    const cu = getCu(ao.customerId);
+    console.log('[WorkOrderService] AO skapad lokalt:', ao.id, ao.title);
     ActivityService.log('work_order_created',
       `Arbetsorder ${ao.id} skapad: ${ao.title}`,
       { customerId: ao.customerId, workOrderId: ao.id });
     persist();
+    console.log('[WorkOrderService] persist() skickad till Supabase för', ao.id);
     Sidebar.updateBadges();
+    /* Push-notis — fire-and-forget, blockerar inte AO-skapandet */
+    if (typeof PushService !== 'undefined' && typeof PushService.notifyNewAO === 'function') {
+      PushService.notifyNewAO(ao).catch(function(e) {
+        console.warn('[WorkOrderService] Push-fel för', ao.id, ':', e);
+      });
+    }
     return ao;
   },
 
