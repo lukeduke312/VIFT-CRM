@@ -124,6 +124,12 @@ async function initState() {
     return r.active !== undefined ? r : Object.assign({ active: true }, r);
   });
 
+  /* Sätt DataSync._lastSig från laddad lastChanged — undviker omedelbar re-fetch vid första poll */
+  var _loadedSig = d['lastChanged'] || null;
+  if (_loadedSig && typeof DataSync !== 'undefined') DataSync._lastSig = _loadedSig;
+  var _aoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a) { return !a.deleted && !a.archived; }).length : 0;
+  console.log('[initState] Laddat ' + _aoCount + ' aktiva AO — lastChanged: ' + (_loadedSig || 'saknas'));
+
   // Stämplingsstate (per-enhet, läs från localStorage direkt — inte via Supabase blob)
   try { state.stampActive    = !!JSON.parse(localStorage.getItem('vift_stampActive')); } catch(e) { state.stampActive = false; }
   try { state.stampTimestamp = JSON.parse(localStorage.getItem('vift_stampTs'))    || null; } catch(e) { state.stampTimestamp = null; }
@@ -199,6 +205,8 @@ function persist() {
   const _now = new Date().toISOString();
   /* Sätt _lastSig lokalt så DataSync inte triggar en omedelbar re-läsning av egna skrivningar */
   if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
+  const _persistAoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a) { return !a.deleted && !a.archived; }).length : 0;
+  console.log('[persist] Sparar state — aktiva AO: ' + _persistAoCount + ' — ts: ' + _now);
   Storage.setAll([
     ['lastChanged',      _now],
     ['customers',        state.customers],
@@ -437,7 +445,7 @@ const DataSync = {
     /* Avbryt om användaren skriver eller en modal är öppen */
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
-    if (document.querySelector('.modal-overlay, [id^="modal-"]')) return;
+    if (document.body.classList.contains('modal-open')) return;
 
     try {
       const sig = await Storage.get('lastChanged');

@@ -1,5 +1,5 @@
 /**
- * storage.js v4 — Supabase REST-backend med localStorage-cache
+ * storage.js v5 — Supabase REST-backend med localStorage-cache
  *
  * Läsning vid start: Supabase i ett enda bulk-anrop, localStorage som fallback.
  * Skrivning: localStorage direkt + Supabase i bakgrunden (fire-and-forget).
@@ -55,11 +55,24 @@ const Storage = {
       try { localStorage.setItem(this.prefix + key, JSON.stringify(value)); } catch(e) {}
     });
     const body = pairs.map(([key, value]) => ({ key: this.prefix + key, value }));
+    const aoEntry = pairs.find(function(p) { return p[0] === 'workOrders'; });
+    const aoCount = Array.isArray(aoEntry && aoEntry[1]) ? aoEntry[1].filter(function(a) { return !a.deleted && !a.archived; }).length : '?';
+    console.log('[Storage.setAll] Skriver ' + pairs.length + ' nycklar till Supabase — aktiva AO: ' + aoCount);
     fetch(SUPABASE_URL + '/rest/v1/store', {
       method:  'POST',
       headers: Object.assign({}, this._h(), { 'Prefer': 'resolution=merge-duplicates' }),
       body:    JSON.stringify(body)
-    }).catch(e => console.warn('[Storage.setAll]', e));
+    }).then(function(res) {
+      if (res.ok) {
+        console.log('[Storage.setAll] Supabase write OK — ' + pairs.length + ' nycklar (inkl. vift_workOrders)');
+      } else {
+        res.text().then(function(txt) {
+          console.error('[Storage.setAll] Supabase write MISSLYCKADES HTTP ' + res.status + ':', txt.substring(0, 300));
+        });
+      }
+    }).catch(function(e) {
+      console.error('[Storage.setAll] Nätverksfel vid write:', e.message || e);
+    });
   },
 
   /* Enstaka get */
