@@ -199,7 +199,7 @@ const PushService = {
     const titleText = isAkut ? '🚨 AKUT arbetsorder' : 'Ny arbetsorder';
     const context   = (cuName || ao.address || '').trim();
     const bodyText  = context ? ao.title + ' – ' + context : ao.title;
-    const url       = '/#ao=' + ao.id;
+    const url       = '/#/ao/' + ao.id;
 
     try {
       const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {

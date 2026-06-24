@@ -1,5 +1,5 @@
 /**
- * AuthService v7 — Supabase Auth + rollbaserade behörigheter
+ * AuthService v8 — Supabase Auth + rollbaserade behörigheter
  *
  * Inloggning: Supabase Auth (email + lösenord via /auth/v1/token)
  * Session: JWT + refresh_token i localStorage ('vift_auth_v2')
@@ -237,52 +237,130 @@ const Auth = {
 
   /* ── Lösenordsåterställning ──────────────────────────── */
 
+  /* Pending PKCE auth code (set by handleEmailLink when ?code= detected) */
+  _pendingPKCECode: null,
+
   /*
    * Anropas synkront vid sidladdning (före session-restore).
-   * Parsas URL-hash för tokens från Supabase e-postlänkar.
+   * Hanterar både implicit flow (hash-tokens) och PKCE flow (?code=).
    * Returnerar 'recovery', 'signup' eller null.
-   * Supabase skickar: #access_token=...&type=recovery&...
+   *
+   * Implicit flow: #access_token=...&type=recovery (Supabase ersätter hela hash)
+   * PKCE flow:     ?code=... i query string, eller #/reset-password?code=... i hash
    */
   handleEmailLink() {
-    const hash = window.location.hash;
-    if (!hash || hash.length < 2) return null;
+    const hash = window.location.hash; // inkl. #
 
-    const params = {};
-    hash.slice(1).split('&').forEach(part => {
-      const eq = part.indexOf('=');
-      if (eq > 0) params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
-    });
+    /* ── Case 1: Implicit flow — tokens i hash ────────────── */
+    if (hash && hash.length >= 2 && hash.includes('access_token=')) {
+      const params = {};
+      hash.slice(1).split('&').forEach(function(part) {
+        const eq = part.indexOf('=');
+        if (eq > 0) params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
+      });
+      if (params.access_token && params.type) {
+        this._session = {
+          access_token:  params.access_token,
+          refresh_token: params.refresh_token || '',
+          expires_at:    params.expires_in ? Date.now() + Number(params.expires_in) * 1000 : Date.now() + 3600000,
+          user_email:    params.email || ''
+        };
+        this._saveSession();
+        try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch(e) {}
+        return params.type;
+      }
+    }
 
-    if (!params.access_token || !params.type) return null;
+    /* ── Case 2: PKCE code i hash-fragment (t.ex. #/reset-password?code=xxx) ── */
+    if (hash && hash.includes('?code=')) {
+      const qmark = hash.indexOf('?');
+      const hashSearch = new URLSearchParams(hash.slice(qmark));
+      const hashCode = hashSearch.get('code');
+      if (hashCode) {
+        this._pendingPKCECode = hashCode;
+        const cleanHash = hash.slice(1, qmark) || '/';
+        try { history.replaceState(null, '', window.location.pathname + window.location.search + '#' + cleanHash); } catch(e) {}
+        return 'recovery';
+      }
+    }
 
-    this._session = {
-      access_token:  params.access_token,
-      refresh_token: params.refresh_token || '',
-      expires_at:    params.expires_in ? Date.now() + Number(params.expires_in) * 1000 : Date.now() + 3600000,
-      user_email:    params.email || ''
-    };
-    this._saveSession();
+    /* ── Case 3: PKCE code i query string (t.ex. ?code=xxx#/reset-password) ── */
+    const searchParams = new URLSearchParams(window.location.search);
+    const code = searchParams.get('code');
+    if (code) {
+      this._pendingPKCECode = code;
+      try { history.replaceState(null, '', window.location.pathname + (window.location.hash || '')); } catch(e) {}
+      return 'recovery';
+    }
 
-    /* Ta bort hashen ur URL utan sidladdning */
-    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch(e) {}
+    return null;
+  },
 
-    return params.type;  // 'recovery' | 'signup' | 'magiclink' | ...
+  /*
+   * Byt ut PKCE-kod mot access_token + refresh_token.
+   * Kräver code_verifier ur sessionStorage (sparad av sendPasswordReset).
+   */
+  async exchangePKCECode(code) {
+    const codeVerifier = sessionStorage.getItem('vift_pkce_verifier');
+    try {
+      const body = { auth_code: code };
+      if (codeVerifier) body.code_verifier = codeVerifier;
+      const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=pkce', {
+        method:  'POST',
+        headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(function() { return {}; });
+        return { ok: false, error: d.msg || d.error_description || d.error || 'Ogiltig återställningslänk. Begär en ny länk.' };
+      }
+      const d = await res.json();
+      this._session = {
+        access_token:  d.access_token,
+        refresh_token: d.refresh_token || '',
+        expires_at:    d.expires_in ? Date.now() + Number(d.expires_in) * 1000 : Date.now() + 3600000,
+        user_email:    (d.user && d.user.email) || ''
+      };
+      this._saveSession();
+      if (codeVerifier) sessionStorage.removeItem('vift_pkce_verifier');
+      return { ok: true };
+    } catch(e) {
+      return { ok: false, error: 'Kunde inte ansluta till servern.' };
+    }
   },
 
   /*
    * Skicka återställningslänk till angiven e-post.
-   * Kräver bara anon-nyckel — service role key används INTE.
+   * Genererar PKCE-par och sparar code_verifier i sessionStorage.
+   * Redirect: https://crm.viftfast.se/#/reset-password
    */
   async sendPasswordReset(email) {
     try {
-      const redirectTo = window.location.origin;
+      const redirectTo = 'https://crm.viftfast.se/#/reset-password';
+      /* Generera PKCE code_verifier + code_challenge (S256) */
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      const verifier = btoa(String.fromCharCode.apply(null, array))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      const encoded  = new TextEncoder().encode(verifier);
+      const digest   = await crypto.subtle.digest('SHA-256', encoded);
+      const challenge = btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      sessionStorage.setItem('vift_pkce_verifier', verifier);
+
       const res = await fetch(SUPABASE_URL + '/auth/v1/recover', {
         method:  'POST',
         headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email: email.toLowerCase().trim(), redirect_to: redirectTo })
+        body:    JSON.stringify({
+          email:                 email.toLowerCase().trim(),
+          redirect_to:           redirectTo,
+          code_challenge:        challenge,
+          code_challenge_method: 'S256'
+        })
       });
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
+        const d = await res.json().catch(function() { return {}; });
+        sessionStorage.removeItem('vift_pkce_verifier');
         return { ok: false, error: d.msg || d.error || 'Kunde inte skicka återställningslänk.' };
       }
       return { ok: true };

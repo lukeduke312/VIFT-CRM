@@ -316,7 +316,7 @@
 <script src="src/services/BrandingService.js?v=4"></script>
 <script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
-<script src="src/services/AuthService.js?v=7"></script>
+<script src="src/services/AuthService.js?v=8"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
 <script src="src/services/WorkOrderService.js?v=8"></script>
 <script src="src/services/TimeService.js?v=4"></script>
@@ -330,7 +330,7 @@
 <script src="src/services/NotificationsService.js?v=2"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
 <script src="src/services/AddressService.js?v=4"></script>
-<script src="src/services/PushService.js?v=3"></script>
+<script src="src/services/PushService.js?v=4"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=10"></script>
@@ -339,7 +339,7 @@
 <script src="src/components/Sidebar.js?v=23"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=14"></script>
+<script src="src/pages/Router.js?v=15"></script>
 <script src="src/pages/Dashboard.js?v=32"></script>
 <script src="src/pages/CustomersPage.js?v=8"></script>
 <script src="src/pages/WorkOrdersPage.js?v=24"></script>
@@ -359,25 +359,33 @@
 <!-- 5. App bootstrap -->
 <script>
 const App = {
-  _pendingDeeplink: null,
 
   /*
    * Startflöde (Fas 1 — Supabase Auth):
-   * 0. Kontrollera URL-hash för e-postlänk (återställning/inbjudan) — FÖRST
+   * 0. Hantera Supabase e-postlänk (implicit hash ELLER PKCE ?code=) — FÖRST
    * 1. Försök återställa JWT-session från localStorage (sync)
    * 2. Om session finns → förnya token vid behov → ladda data → visa app
    * 3. Om ingen session → visa inloggning
    * Data laddas aldrig utan giltig JWT (RLS blockerar anon-access).
    */
   async init() {
-    const _rawHash = (location.hash || '').slice(1);
-    if (_rawHash.startsWith('pass=') || _rawHash.startsWith('ao=')) {
-      this._pendingDeeplink = _rawHash;
-      console.log('[App] Deep-link vid start:', _rawHash);
-    }
-    /* Steg 0: Hantera Supabase e-postlänk (lösenordsåterställning m.m.) */
-    const linkType = Auth.handleEmailLink();   // sync, rensar URL-hashen
+    /* Steg 0: Detektera Supabase e-postlänk (sync — rensar tokens från URL) */
+    const linkType = Auth.handleEmailLink();
+
     if (linkType === 'recovery' || linkType === 'signup' || linkType === 'invite') {
+      /* PKCE-flöde: byt ut code mot tokens asynkront */
+      if (Auth._pendingPKCECode) {
+        const code = Auth._pendingPKCECode;
+        Auth._pendingPKCECode = null;
+        const result = await Auth.exchangePKCECode(code);
+        if (!result.ok) {
+          this.showLogin();
+          const el = document.getElementById('setpass-msg');
+          if (el) { el.style.color = 'var(--rd)'; el.textContent = result.error; el.style.display = 'block'; }
+          this._loginPanel('lp-setpass');
+          return;
+        }
+      }
       this.showSetPassword();
       return;
     }
@@ -498,13 +506,15 @@ const App = {
     }
 
     msgEl.style.color = 'var(--gr)';
-    msgEl.textContent = 'Lösenord sparat! Laddar appen…';
+    msgEl.textContent = 'Lösenordet har sparats! Du kan nu logga in med ditt nya lösenord.';
     msgEl.style.display = 'block';
+    if (btn) { btn.disabled = true; btn.textContent = 'Lösenord sparat'; }
 
-    /* Token från länken räcker för att ladda data direkt */
-    await initState();
-    Auth._resolveUser();
-    this.showApp();
+    /* Rensa recovery-sessionen och gå tillbaka till inloggning */
+    setTimeout(() => {
+      Auth._clearSession();
+      this.showLogin();
+    }, 2500);
   },
 
   showApp() {
@@ -516,14 +526,8 @@ const App = {
     Sidebar.render();
     BrandingService.applyToLogin();
     if (typeof DataSync !== 'undefined') DataSync.start();
-    const _dl = this._pendingDeeplink; this._pendingDeeplink = null;
-    if (_dl && _dl.startsWith('pass='))      { Router.showPage('pg-rondering-rapport', {passId: _dl.slice(5)}); }
-    else if (_dl && _dl.startsWith('ao=')) {
-      const _aoId = _dl.slice(3);
-      console.log('[App] Navigerar till AO via deep-link:', _aoId);
-      Router.showPage('pg-ao-detail', {aoId: _aoId});
-    }
-    else { Router.showPage('pg-dash'); }
+    /* Hash-baserad routing: läser nuvarande #hash och navigerar till rätt sida */
+    Router.initFromHash();
   },
 
   async login() {

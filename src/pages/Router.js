@@ -1,5 +1,5 @@
 /**
- * Router — sidnavigering
+ * Router v15 — sidnavigering + hash-baserad routing
  * Hanterar aktivering av sidor och topbar-titel
  */
 
@@ -7,6 +7,76 @@ const Router = {
 
   history: [],
   _goingBack: false,
+
+  /* ── Hash-routing ──────────────────────────────────────── */
+
+  /* Hash → page mapping (statiska rutter) */
+  HASH_ROUTES: {
+    '/':            { page: 'pg-dash' },
+    '/dash':        { page: 'pg-dash' },
+    '/ao':          { page: 'pg-ao' },
+    '/kunder':      { page: 'pg-crm' },
+    '/fastigheter': { page: 'pg-objects' },
+    '/rondering':   { page: 'pg-rondering' },
+    '/admin':       { page: 'pg-admin' },
+  },
+
+  /* Page → hash mapping (för URL-reflektion) */
+  PAGE_HASHES: {
+    'pg-dash':      '/',
+    'pg-ao':        '/ao',
+    'pg-crm':       '/kunder',
+    'pg-objects':   '/fastigheter',
+    'pg-rondering': '/rondering',
+    'pg-admin':     '/admin',
+  },
+
+  /*
+   * Läs aktuell hash och navigera till rätt sida.
+   * Anropas från App.showApp() efter inloggning.
+   * Hanterar både gammalt format (#ao=AO-016) och nytt (#/ao/AO-016).
+   */
+  initFromHash() {
+    const raw = (window.location.hash || '').slice(1); // utan #
+
+    /* Gammalt format (bakåtkompatibilitet) */
+    if (raw.startsWith('ao=')) {
+      this.showPage('pg-ao-detail', { aoId: raw.slice(3) });
+      return;
+    }
+    if (raw.startsWith('pass=')) {
+      this.showPage('pg-rondering-rapport', { passId: raw.slice(5) });
+      return;
+    }
+
+    /* Nytt format: /ao/AO-016 */
+    if (raw.startsWith('/ao/')) {
+      const aoId = raw.slice(4);
+      if (aoId) { this.showPage('pg-ao-detail', { aoId }); return; }
+    }
+
+    /* Statiska rutter */
+    const route = this.HASH_ROUTES[raw] || this.HASH_ROUTES[raw.replace(/\/$/, '')];
+    if (route) {
+      this.showPage(route.page, route.params || {});
+      return;
+    }
+
+    /* Fallback: dashboard */
+    this.showPage('pg-dash');
+  },
+
+  /* Uppdatera URL-hashen för aktuell sida (replaceState = ingen browserhistorik) */
+  _updateHash(pageId, params) {
+    if (pageId === 'pg-ao-detail' && params && params.aoId) {
+      try { history.replaceState(null, '', '#/ao/' + params.aoId); } catch(e) {}
+      return;
+    }
+    const hash = this.PAGE_HASHES[pageId];
+    if (hash) {
+      try { history.replaceState(null, '', '#' + hash); } catch(e) {}
+    }
+  },
 
   PAGE_TITLES: {
     'pg-dash':        { title: 'Dashboard',            sub: 'Översikt & åtgärder' },
@@ -125,6 +195,9 @@ const Router = {
     this.currentPage   = pageId;
     this.currentParams = params;
     state.currentPage  = pageId;
+
+    // Uppdatera URL-hash (silent, ingen browserhistorik)
+    this._updateHash(pageId, params);
 
     // Kör sidans render-funktion om den finns
     const renderers = {
