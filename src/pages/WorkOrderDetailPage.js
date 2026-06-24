@@ -44,108 +44,154 @@ const WorkOrderDetailPage = {
     const totalMins   = TimeService.totalMinutes(timeEntries);
     const matTotal    = WorkOrderService.materialTotal(ao);
     const isStampedOnThis = state.stampActive && state.stampAoId === ao.id;
+    const hasChk  = chkTotal > 0;
+    const hasMat  = (ao.materials||[]).length > 0;
+    const hasTime = timeEntries.length > 0;
 
     el.innerHTML = `
       ${ao.deleted ? `<div class="nbox" style="background:#fee2e2;border-left-color:var(--rd);margin-bottom:8px;">${ic('trash',13)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
       ${ao.archived && !ao.deleted ? `<div class="nbox" style="background:#f1f5f9;border-left-color:var(--mt);margin-bottom:8px;">${ic('archive',13)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
 
-      <!-- Hero/Info panel (Runda 3) -->
-      <div class="card ao-hero" style="margin-bottom:2px;">
-        <div class="ao-hero-head">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-            <button class="btn bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',14)} Tillbaka</button>
-            <span class="ao-head-id">${ao.id}</span>
-            <div class="ao-head-badges">
-              ${sbdg(ao.status)} ${pbdg(ao.priority)}
-              ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="background:rgba(255,255,255,.18);color:#fff;font-size:10px;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
-            </div>
-          </div>
-          <div class="ao-head-title">${ao.title}</div>
-          <div class="ao-head-meta">
-            <div class="ao-head-meta-row">
-              ${ic('user',13)}
-              <span style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu&&cu.id}'})">${cuName}</span>
-            </div>
-            ${ao.address?`
-            <div class="ao-head-meta-row">
-              ${ic('map-pin',13)}
-              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener" class="ao-addr-link" onclick="event.stopPropagation()">${esc(ao.address)}</a>
-              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener" class="btn ao-nav-btn" onclick="event.stopPropagation()">${ic('navigation',11)} Navigera</a>
+      <!-- Kompakt header: tillbaka + ID + badges -->
+      <div class="ao-detail-top">
+        <button class="btn bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">
+          ${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span>
+        </button>
+        <span style="font-size:11px;font-weight:700;color:var(--mt);letter-spacing:.3px;white-space:nowrap;">${ao.id}</span>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-left:auto;">
+          ${sbdg(ao.status)}
+          ${ao.priority==='akut'?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:ao.priority!=='normal'?pbdg(ao.priority):''}
+          ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="font-size:10px;background:#fef3c7;color:#d97706;border:1px solid #fde68a;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
+        </div>
+      </div>
+
+      <!-- Titelkort: rubrik + kund/adress/datum + knappar -->
+      <div class="card ao-title-card">
+        <div class="ao-title-hero">
+          <h2 class="ao-title-main">${esc(ao.title)}</h2>
+          <div class="ao-title-meta">
+            ${cu?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('user',11)}</span><a style="color:var(--sky);text-decoration:none;font-weight:600;cursor:pointer;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a></div>`:''}
+            ${ao.address?`<div class="ao-title-meta-row">
+              <span style="color:var(--mt);flex-shrink:0;">${ic('map-pin',11)}</span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ao.address)}</span>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener" class="btn bsm" style="font-size:11px;padding:3px 8px;white-space:nowrap;flex-shrink:0;" onclick="event.stopPropagation()">${ic('navigation',10)} Navigera</a>
             </div>`:''}
-            ${ao.scheduledDate?`
-            <div class="ao-head-meta-row">
-              ${ic('calendar',13)}
-              <span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span>
-            </div>`:''}
+            ${ao.scheduledDate?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('calendar',11)}</span><span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span></div>`:''}
           </div>
         </div>
-        <div class="ao-hero-body">
-          <div class="ao-hero-info">
-            ${ao.description ? `<p class="ao-desc">${ao.description}</p>` : ''}
-            <div class="ao-info-grid">
-              <div class="dr"><span class="dk">Kontakt</span><span class="dv">${ao.contactPerson||'—'}${ao.phone?'<br><span style="font-size:11px;color:var(--sky);">'+ao.phone+'</span>':''}</span></div>
-              ${ao.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-weight:800;letter-spacing:.5px;">${ao.accessCode}</span></div>` : '<div></div>'}
-              <div class="dr"><span class="dk">Personal</span><span class="dv">${staff.length?staff.join(', '):'<span style="color:var(--rd);">Ej tilldelad</span>'}${respName?`<br><span style="font-size:10px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:''}</span></div>
-              <div class="dr"><span class="dk">Pris</span><span class="dv">${this._priceLabel(ao)}</span></div>
-              ${ao.category ? `<div class="dr"><span class="dk">Kategori</span><span class="dv">${catBadge(ao.category)}</span></div>` : ''}
-              ${ao.technicalCategorySlug ? `<div class="dr"><span class="dk">Tekniskt område</span><span class="dv" style="${ao.propertyId?'cursor:pointer;':''}display:flex;align-items:center;gap:4px;" ${ao.propertyId?`onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})"`:''}>${ic('settings',11)} ${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}${ao.propertyId?ic('arrow-right',10):''}</span></div>` : ''}
-            </div>
-            ${chkTotal>0?`<div style="margin-top:8px;">${chkBadge} <span style="font-size:10px;color:var(--mt);">checklista</span></div>`:''}
-            ${ao.internalNote ? `<div style="margin-top:8px;" class="nbox">${ic('eye-off',13)} <strong>Internt:</strong> ${ao.internalNote}</div>` : ''}
+        <div class="ao-action-strip">
+          ${this._actionBtns(ao)}
+        </div>
+      </div>
+
+      <!-- Beskrivning / uppdrag (framträdande, högt upp) -->
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('align-left',14)} Beskrivning / uppdrag</h3>
+          ${ao.priority==='akut'?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:''}
+        </div>
+        <div class="card-body ao-desc-body">
+          ${ao.description
+            ? `<p style="font-size:14px;line-height:1.65;margin:0;color:var(--tx);white-space:pre-wrap;">${esc(ao.description)}</p>`
+            : `<p style="font-size:13px;color:var(--mt);font-style:italic;margin:0;">Ingen beskrivning angiven</p>`
+          }
+        </div>
+      </div>
+
+      <!-- Info: kontakt, portkod, personal, pris, kategori -->
+      <div class="card">
+        <div class="ao-info-list">
+          <div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('phone',11)} Kontakt</span>
+            <span class="ao-info-val">
+              ${ao.contactPerson ? esc(ao.contactPerson) : '<span style="color:var(--mt);">—</span>'}
+              ${ao.phone?`<br><a href="tel:${ao.phone}" style="color:var(--sky);font-size:12px;font-weight:600;">${esc(ao.phone)}</a>`:''}
+            </span>
           </div>
-          <div class="ao-hero-actions">
-            ${this._actionBtns(ao)}
+          ${ao.accessCode?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('key',11)} Portkod</span>
+            <span class="ao-info-val" style="font-weight:800;letter-spacing:.8px;font-size:16px;">${esc(ao.accessCode)}</span>
+          </div>`:''}
+          <div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('users',11)} Personal</span>
+            <span class="ao-info-val">
+              ${staff.length
+                ? esc(staff.join(', ')) + (respName?`<br><span style="font-size:11px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:'')
+                : `<span style="color:var(--rd);font-weight:600;">Ej tilldelad</span>`
+              }
+            </span>
           </div>
+          <div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('tag',11)} Pris</span>
+            <span class="ao-info-val">${this._priceLabel(ao)}</span>
+          </div>
+          ${ao.category?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('folder',11)} Kategori</span>
+            <span class="ao-info-val">${catBadge(ao.category)}</span>
+          </div>`:''}
+          ${ao.technicalCategorySlug?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('settings',11)} Tekniskt</span>
+            <span class="ao-info-val" style="${ao.propertyId?'cursor:pointer;':''}display:flex;align-items:center;gap:4px;" ${ao.propertyId?`onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})"`:''}>${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}${ao.propertyId?ic('arrow-right',10):''}</span>
+          </div>`:''}
+          ${chkTotal>0?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('clipboard-check',11)} Lista</span>
+            <span class="ao-info-val">${chkBadge}</span>
+          </div>`:''}
+          ${ao.internalNote?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('eye-off',11)} Internt</span>
+            <span class="ao-info-val">${esc(ao.internalNote)}</span>
+          </div>`:''}
         </div>
       </div>
 
       <!-- Stämpling -->
       ${this._stampSection(ao, isStampedOnThis)}
 
-      <!-- Checklista -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('clipboard-check',14)} Checklista</h3>
-          <div style="display:flex;align-items:center;gap:6px;">
+      <!-- Checklista (hopfällbar om tom) -->
+      <details class="card ao-section" ${hasChk?'open':''}>
+        <summary class="ao-section-head">
+          <span class="ao-section-title">${ic('clipboard-check',14)} Checklista</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
             <span id="ao-chk-counter">${chkBadge}</span>
-            ${Auth.can('ao_checklist') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>` : ''}
+            ${Auth.can('ao_checklist')?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>`:''}
+            <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
           </div>
-        </div>
+        </summary>
         <div class="card-body" style="padding:6px 14px;" id="ao-checklist">
           ${this._renderChecklist(ao)}
         </div>
-      </div>
+      </details>
 
-      <!-- Material & kostnader -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('package',14)} Material & kostnader</h3>
-          ${Auth.can('ao_material') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>` : ''}
-        </div>
-        <div id="ao-materials" style="overflow:hidden;">
-          ${this._renderMaterials(ao)}
-        </div>
-        <div id="ao-mat-totals">${(ao.materials||[]).length > 0 ? this._matTotals(ao) : ''}</div>
-      </div>
-
-      <!-- Tidsposter -->
-      <div class="card">
-        <div class="card-header">
-          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-            <h3 style="margin:0;">${ic('clock',14)} Arbetstid</h3>
-            <span id="ao-time-badge">${totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : ''}</span>
+      <!-- Material & kostnader (hopfällbar om tom) -->
+      <details class="card ao-section" ${hasMat?'open':''}>
+        <summary class="ao-section-head">
+          <span class="ao-section-title">${ic('package',14)} Material & kostnader</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            ${Auth.can('ao_material')?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>`:''}
+            <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
           </div>
-          ${Auth.can('ao_time') ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>` : ''}
-        </div>
-        <div id="ao-timeentries" style="overflow:hidden;">
-          ${this._renderTimeEntries(ao)}
-        </div>
-      </div>
+        </summary>
+        <div id="ao-materials" style="overflow:hidden;">${this._renderMaterials(ao)}</div>
+        <div id="ao-mat-totals">${hasMat?this._matTotals(ao):''}</div>
+      </details>
+
+      <!-- Tidsposter (hopfällbar om tom) -->
+      <details class="card ao-section" ${hasTime?'open':''}>
+        <summary class="ao-section-head">
+          <span class="ao-section-title">${ic('clock',14)} Arbetstid</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>`:''}</span>
+            ${Auth.can('ao_time')?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>`:''}
+            <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
+          </div>
+        </summary>
+        <div id="ao-timeentries" style="overflow:hidden;">${this._renderTimeEntries(ao)}</div>
+      </details>
 
       <!-- Tid vs plan -->
       <div id="ao-time-plan">${this._timePlanBlock(ao)}</div>
 
-      <!-- Tidslinje/logg -->
+      <!-- Händelselogg (visar senaste 5, "Visa alla"-knapp) -->
       <div class="card">
         <div class="card-header">
           <h3>${ic('activity',14)} Händelselogg</h3>
@@ -159,7 +205,7 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
-      <!-- Fakturaunderlag-knapp -->
+      <!-- Fakturaunderlag -->
       ${ao.status === 'klar' && !ao.invoiceId ? `
         <button class="btn bsu bfull" style="padding:14px;" onclick="WorkOrderDetailPage.createInvoice()">
           ${ic('file-plus',16)} Skapa fakturaunderlag
@@ -169,23 +215,14 @@ const WorkOrderDetailPage = {
           ${ic('receipt',14)} Fakturaunderlag: ${ao.invoiceId} – klicka för att öppna
         </div>` : ''}
 
-      <!-- Arbetsunderlag från offert -->
       ${ao.offerId ? this._offerUnderlag(ao) : ''}
-
-      <!-- Länk till offert -->
       ${ao.offerId ? `
         <div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">
           ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
         </div>` : ''}
 
-      <!-- Intern lönsamhet (admin) -->
-      <div id="ao-lonsam">${Auth.canAny(['reports_view','staff_view']) ? `
-        <details style="margin-top:8px;">
-          <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
-            ${ic('bar-chart-2',13)} Intern lönsamhet
-          </summary>
-          ${this._tbBlock(ao)}
-        </details>` : ''}</div>
+      <!-- Intern lönsamhet (hopfällbar, admin) -->
+      <div id="ao-lonsam">${this._renderLonsamhet(ao)}</div>
 
       <!-- Återkommande -->
       ${ao.recurringOrderId
@@ -197,6 +234,30 @@ const WorkOrderDetailPage = {
            </button>`
       }
     `;
+  },
+
+  _renderLonsamhet(ao) {
+    if (!Auth.canAny(['reports_view','staff_view'])) return '';
+    return `
+      <details class="card ao-section" style="margin-top:8px;">
+        <summary class="ao-section-head">
+          <span class="ao-section-title">${ic('bar-chart-2',13)} Intern lönsamhet</span>
+          <span class="ao-section-chevron" style="margin-left:auto;">${ic('chevron-down',12)}</span>
+        </summary>
+        ${this._tbBlock(ao)}
+      </details>`;
+  },
+
+  _showAllTimeline() {
+    const el = document.getElementById('ao-timeline');
+    const ao = getAO(this.aoId);
+    if (!el || !ao) return;
+    el.innerHTML = this._renderTimeline(ao, true);
+  },
+
+  _openSectionOf(elementId) {
+    const el = document.getElementById(elementId);
+    if (el) { const det = el.closest('details.ao-section'); if (det) det.open = true; }
   },
 
   _actionBtns(ao) {
@@ -819,7 +880,7 @@ const WorkOrderDetailPage = {
   },
 
   /* ── Tidslinje/logg ───────────────────────── */
-  _renderTimeline(ao) {
+  _renderTimeline(ao, showAll = false) {
     const events = [];
     (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
     (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', followUpDate:l.followUpDate||'', id:l.id }));
@@ -832,6 +893,10 @@ const WorkOrderDetailPage = {
 
     if (!events.length) return `<div style="padding:20px 14px;text-align:center;color:var(--mt);font-size:13px;">Ingen logg ännu</div>`;
     events.sort((a,b) => (b.ts>a.ts?1:b.ts<a.ts?-1:0));
+
+    const LIMIT   = 5;
+    const hasMore = !showAll && events.length > LIMIT;
+    const display = hasMore ? events.slice(0, LIMIT) : events;
 
     const TI = {
       note:              {ico:'file-text',   col:'var(--navy)', lbl:'Anteckning'},
@@ -861,9 +926,9 @@ const WorkOrderDetailPage = {
       } catch(e) { return relDate(ts); }
     };
 
-    return '<div style="padding:12px 14px 8px;">' + events.map((ev, i) => {
+    let html = '<div style="padding:12px 14px 8px;">' + display.map((ev, i) => {
       const ti = TI[ev.type] || {ico:'activity', col:'var(--mt)', lbl:ev.type};
-      const isLast = i === events.length - 1;
+      const isLast = i === display.length - 1;
       const ts = fmtTs(ev.ts);
       const canDel = ev.id && (ev.type==='log'||ev.type==='photo'||ev.type==='uppföljning');
       return `
@@ -884,7 +949,17 @@ const WorkOrderDetailPage = {
           </div>
           ${canDel?`<button class="btn bxs bd" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>`:''}
         </div>`;
-    }).join('') + '</div>';
+    }).join('');
+
+    if (hasMore) {
+      html += `<div style="padding:0 14px 12px;">
+        <button class="btn bghost bfull" style="font-size:12px;" onclick="WorkOrderDetailPage._showAllTimeline()">
+          ${ic('chevron-down',13)} Visa alla ${events.length} händelser
+        </button>
+      </div>`;
+    }
+    html += '</div>';
+    return html;
   },
 
   openAddLog() {
@@ -1279,13 +1354,10 @@ const WorkOrderDetailPage = {
     if (timelineEl)  timelineEl.innerHTML = this._renderTimeline(ao);
 
     const lonEl   = document.getElementById('ao-lonsam');
-    if (lonEl)   lonEl.innerHTML   = Auth.canAny(['reports_view','staff_view']) ? `
-      <details style="margin-top:8px;">
-        <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
-          ${ic('bar-chart-2',13)} Intern lönsamhet
-        </summary>
-        ${this._tbBlock(ao)}
-      </details>` : '';
+    if (lonEl)   lonEl.innerHTML   = this._renderLonsamhet(ao);
+
+    // Öppna tidssektionen om det finns poster
+    if (TimeService.getByAO(ao.id).length > 0) this._openSectionOf('ao-timeentries');
 
     Sidebar.updateBadges();
   },
@@ -1301,13 +1373,10 @@ const WorkOrderDetailPage = {
     if (totEl)   totEl.innerHTML   = (ao.materials||[]).length > 0 ? this._matTotals(ao) : '';
 
     const lonEl   = document.getElementById('ao-lonsam');
-    if (lonEl)   lonEl.innerHTML   = Auth.canAny(['reports_view','staff_view']) ? `
-      <details style="margin-top:8px;">
-        <summary style="cursor:pointer;padding:10px 14px;background:#fff;border:1px solid var(--br);border-radius:var(--rs);font-size:12px;font-weight:700;color:var(--mt);display:flex;align-items:center;gap:7px;list-style:none;">
-          ${ic('bar-chart-2',13)} Intern lönsamhet
-        </summary>
-        ${this._tbBlock(ao)}
-      </details>` : '';
+    if (lonEl)   lonEl.innerHTML   = this._renderLonsamhet(ao);
+
+    // Öppna materialsektionen om det finns material
+    if ((ao.materials||[]).length > 0) this._openSectionOf('ao-materials');
   },
 
   /* ── Stämpling timer ──────────────────── */
@@ -1586,6 +1655,7 @@ const WorkOrderDetailPage = {
     if (aoUp) {
       document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
       this._updateChecklistCounter(aoUp);
+      this._openSectionOf('ao-checklist');
     }
     showToast('Checkpunkt tillagd');
   },

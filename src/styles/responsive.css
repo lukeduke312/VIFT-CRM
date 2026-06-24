@@ -169,6 +169,25 @@
   }
 }
 
+/* ── Mobil AO-detalj ────────────────────────────────── */
+@media (max-width: 639px) {
+  /* Back-knapp: bara ikon på mobil */
+  .ao-back-label { display: none; }
+
+  /* Titelkort: tighter */
+  .ao-title-main { font-size: 16px; }
+  .ao-title-hero { padding: 12px 14px 8px; }
+  .ao-action-strip { padding: 8px 12px 10px; gap: 5px; }
+  .ao-desc-body { padding: 10px 14px; }
+  .ao-info-row { padding: 9px 14px; }
+  .ao-info-lbl { min-width: 60px; width: 60px; }
+
+  /* Topbar: kompaktare på mobil */
+  .topbar { padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top)); }
+  #topbar-title { font-size: 15px; }
+  #topbar-sub   { display: none; }
+}
+
 /* ── Mobil AO-lista: enklare kort ──────────────────── */
 @media (max-width: 639px) {
   .ao-list-item {

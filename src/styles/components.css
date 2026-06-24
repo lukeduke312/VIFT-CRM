@@ -2182,3 +2182,88 @@ body.modal-open { overflow: hidden; touch-action: none; }
   font-size: 11px;
   letter-spacing: .3px;
 }
+
+/* ── AO detail: mobil-first layout ────── */
+.ao-detail-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ao-back-label { /* dold på mobil, visas på desktop via responsive.css */ }
+
+.ao-title-card { padding: 0; overflow: hidden; }
+.ao-title-hero { padding: 14px 16px 10px; }
+.ao-title-main { font-size: 18px; font-weight: 700; line-height: 1.25; margin: 0 0 10px; color: var(--tx); }
+.ao-title-meta { display: flex; flex-direction: column; gap: 6px; }
+.ao-title-meta-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--mt);
+  min-width: 0;
+}
+.ao-action-strip {
+  padding: 10px 14px 12px;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  border-top: 1px solid var(--br);
+  background: var(--bg);
+}
+
+.ao-desc-body { padding: 12px 16px; }
+
+/* Info-lista: vänsterställda rader */
+.ao-info-list { padding: 0; }
+.ao-info-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--br);
+  gap: 12px;
+  min-height: 40px;
+}
+.ao-info-row:last-child { border-bottom: none; }
+.ao-info-lbl {
+  font-size: 11px;
+  color: var(--mt);
+  font-weight: 600;
+  min-width: 68px;
+  width: 68px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding-top: 2px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.ao-info-val {
+  font-size: 13px;
+  color: var(--tx);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+/* Hopfällbara sektioner */
+details.ao-section { padding: 0; overflow: hidden; }
+details.ao-section > summary.ao-section-head {
+  list-style: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 11px 14px;
+  border-bottom: 1px solid transparent;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  gap: 8px;
+}
+details.ao-section > summary.ao-section-head::-webkit-details-marker { display: none; }
+details.ao-section[open] > summary.ao-section-head { border-bottom-color: var(--br); }
+.ao-section-title { font-size: 13px; font-weight: 700; color: var(--tx); display: flex; align-items: center; gap: 6px; }
+.ao-section-chevron { color: var(--mt); transition: transform .2s; display: flex; flex-shrink: 0; }
+details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
