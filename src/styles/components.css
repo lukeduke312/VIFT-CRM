@@ -2214,6 +2214,53 @@ body.modal-open { overflow: hidden; touch-action: none; }
 
 .ao-desc-body { padding: 12px 16px; }
 
+/* ── Uppdragskort (Beskrivning / uppdrag) — mest framträdande ── */
+.ao-mission-card {
+  border-left: 4px solid var(--blue);
+  padding: 0;
+  overflow: hidden;
+}
+.ao-mission-akut {
+  border-left-color: #dc2626;
+}
+.ao-mission-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--blue);
+  border-bottom: 1px solid rgba(14,107,196,.12);
+  background: rgba(14,107,196,.04);
+}
+.ao-mission-akut .ao-mission-header {
+  color: #dc2626;
+  background: #fff1f2;
+  border-bottom-color: #fecdd3;
+}
+.ao-mission-label { flex-shrink: 0; }
+.ao-mission-body { padding: 16px 18px 18px; }
+.ao-mission-text {
+  font-size: 15px;
+  line-height: 1.75;
+  margin: 0;
+  color: var(--tx);
+  white-space: pre-wrap;
+  font-weight: 500;
+}
+.ao-mission-empty {
+  font-size: 13px;
+  color: var(--mt);
+  font-style: italic;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Info-lista: vänsterställda rader */
 .ao-info-list { padding: 0; }
 .ao-info-row {

@@ -42,11 +42,16 @@ const WorkOrderDetailPage = {
       : '';
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
-    const matTotal    = WorkOrderService.materialTotal(ao);
     const isStampedOnThis = state.stampActive && state.stampAoId === ao.id;
     const hasChk  = chkTotal > 0;
     const hasMat  = (ao.materials||[]).length > 0;
     const hasTime = timeEntries.length > 0;
+    const isAkut  = ao.priority === 'akut';
+
+    /* ── Rollstyrning: vad som visas beror på behörigheter ── */
+    /* Pris, faktura, TB: syns bara för admin/ledning         */
+    const canSeePrice         = Auth.canAny(['invoice_view','invoice_create','reports_view']);
+    const canSeeProfitability = Auth.canAny(['reports_view','staff_view']);
 
     el.innerHTML = `
       ${ao.deleted ? `<div class="nbox" style="background:#fee2e2;border-left-color:var(--rd);margin-bottom:8px;">${ic('trash',13)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
@@ -60,7 +65,7 @@ const WorkOrderDetailPage = {
         <span style="font-size:11px;font-weight:700;color:var(--mt);letter-spacing:.3px;white-space:nowrap;">${ao.id}</span>
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-left:auto;">
           ${sbdg(ao.status)}
-          ${ao.priority==='akut'?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:ao.priority!=='normal'?pbdg(ao.priority):''}
+          ${isAkut?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:ao.priority!=='normal'?pbdg(ao.priority):''}
           ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="font-size:10px;background:#fef3c7;color:#d97706;border:1px solid #fde68a;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
         </div>
       </div>
@@ -84,23 +89,25 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
-      <!-- Beskrivning / uppdrag (framträdande, högt upp) -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('align-left',14)} Beskrivning / uppdrag</h3>
-          ${ao.priority==='akut'?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:''}
+      <!-- Beskrivning / uppdrag — mest framträdande kort på sidan -->
+      <div class="card ao-mission-card${isAkut?' ao-mission-akut':''}">
+        <div class="ao-mission-header">
+          ${ic('align-left',13)}
+          <span class="ao-mission-label">Beskrivning / uppdrag</span>
+          ${isAkut?`<span class="bdg bdg-red" style="margin-left:auto;font-size:11px;">🚨 AKUT — prioritera detta ärende</span>`:''}
         </div>
-        <div class="card-body ao-desc-body">
+        <div class="ao-mission-body">
           ${ao.description
-            ? `<p style="font-size:14px;line-height:1.65;margin:0;color:var(--tx);white-space:pre-wrap;">${esc(ao.description)}</p>`
-            : `<p style="font-size:13px;color:var(--mt);font-style:italic;margin:0;">Ingen beskrivning angiven</p>`
+            ? `<p class="ao-mission-text">${esc(ao.description)}</p>`
+            : `<p class="ao-mission-empty">${ic('info',13)} Ingen beskrivning angiven</p>`
           }
         </div>
       </div>
 
-      <!-- Info: kontakt, portkod, personal, pris, kategori -->
+      <!-- Info-rader: prioriterad ordning för fältarbete -->
       <div class="card">
         <div class="ao-info-list">
+          <!-- 1. Kontakt (viktigast för fältpersonal) -->
           <div class="ao-info-row">
             <span class="ao-info-lbl">${ic('phone',11)} Kontakt</span>
             <span class="ao-info-val">
@@ -108,10 +115,12 @@ const WorkOrderDetailPage = {
               ${ao.phone?`<br><a href="tel:${ao.phone}" style="color:var(--sky);font-size:12px;font-weight:600;">${esc(ao.phone)}</a>`:''}
             </span>
           </div>
+          <!-- 2. Portkod (om finns) -->
           ${ao.accessCode?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('key',11)} Portkod</span>
             <span class="ao-info-val" style="font-weight:800;letter-spacing:.8px;font-size:16px;">${esc(ao.accessCode)}</span>
           </div>`:''}
+          <!-- 3. Personal -->
           <div class="ao-info-row">
             <span class="ao-info-lbl">${ic('users',11)} Personal</span>
             <span class="ao-info-val">
@@ -121,10 +130,7 @@ const WorkOrderDetailPage = {
               }
             </span>
           </div>
-          <div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('tag',11)} Pris</span>
-            <span class="ao-info-val">${this._priceLabel(ao)}</span>
-          </div>
+          <!-- 4. Kategori -->
           ${ao.category?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('folder',11)} Kategori</span>
             <span class="ao-info-val">${catBadge(ao.category)}</span>
@@ -141,13 +147,18 @@ const WorkOrderDetailPage = {
             <span class="ao-info-lbl">${ic('eye-off',11)} Internt</span>
             <span class="ao-info-val">${esc(ao.internalNote)}</span>
           </div>`:''}
+          <!-- 5. Pris — BARA för admin/ledning (invoice/reports-behörighet) -->
+          ${canSeePrice?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('tag',11)} Pris</span>
+            <span class="ao-info-val">${this._priceLabel(ao)}</span>
+          </div>`:''}
         </div>
       </div>
 
       <!-- Stämpling -->
       ${this._stampSection(ao, isStampedOnThis)}
 
-      <!-- Checklista (hopfällbar om tom) -->
+      <!-- Checklista (hopfällbar) -->
       <details class="card ao-section" ${hasChk?'open':''}>
         <summary class="ao-section-head">
           <span class="ao-section-title">${ic('clipboard-check',14)} Checklista</span>
@@ -162,7 +173,7 @@ const WorkOrderDetailPage = {
         </div>
       </details>
 
-      <!-- Material & kostnader (hopfällbar om tom) -->
+      <!-- Material & kostnader (hopfällbar) -->
       <details class="card ao-section" ${hasMat?'open':''}>
         <summary class="ao-section-head">
           <span class="ao-section-title">${ic('package',14)} Material & kostnader</span>
@@ -175,7 +186,7 @@ const WorkOrderDetailPage = {
         <div id="ao-mat-totals">${hasMat?this._matTotals(ao):''}</div>
       </details>
 
-      <!-- Tidsposter (hopfällbar om tom) -->
+      <!-- Tidsposter (hopfällbar) -->
       <details class="card ao-section" ${hasTime?'open':''}>
         <summary class="ao-section-head">
           <span class="ao-section-title">${ic('clock',14)} Arbetstid</span>
@@ -188,10 +199,10 @@ const WorkOrderDetailPage = {
         <div id="ao-timeentries" style="overflow:hidden;">${this._renderTimeEntries(ao)}</div>
       </details>
 
-      <!-- Tid vs plan -->
-      <div id="ao-time-plan">${this._timePlanBlock(ao)}</div>
+      <!-- Tid vs plan (admin/ledning) — tom div alltid för uppdateringar -->
+      <div id="ao-time-plan">${canSeePrice?this._timePlanBlock(ao):''}</div>
 
-      <!-- Händelselogg (visar senaste 5, "Visa alla"-knapp) -->
+      <!-- Händelselogg -->
       <div class="card">
         <div class="card-header">
           <h3>${ic('activity',14)} Händelselogg</h3>
@@ -205,34 +216,40 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
-      <!-- Fakturaunderlag -->
-      ${ao.status === 'klar' && !ao.invoiceId ? `
-        <button class="btn bsu bfull" style="padding:14px;" onclick="WorkOrderDetailPage.createInvoice()">
-          ${ic('file-plus',16)} Skapa fakturaunderlag
-        </button>` : ''}
-      ${ao.invoiceId ? `
-        <div class="ibox" style="cursor:pointer;" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">
-          ${ic('receipt',14)} Fakturaunderlag: ${ao.invoiceId} – klicka för att öppna
-        </div>` : ''}
+      <!-- Fakturaunderlag + offert (bara admin/ledning) -->
+      ${canSeePrice?`
+        ${ao.status==='klar'&&!ao.invoiceId&&Auth.can('invoice_create')?`
+          <button class="btn bsu bfull" style="padding:14px;" onclick="WorkOrderDetailPage.createInvoice()">
+            ${ic('file-plus',16)} Skapa fakturaunderlag
+          </button>`:''
+        }
+        ${ao.invoiceId?`
+          <div class="ibox" style="cursor:pointer;" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">
+            ${ic('receipt',14)} Fakturaunderlag: ${ao.invoiceId} – klicka för att öppna
+          </div>`:''
+        }
+        ${ao.offerId?this._offerUnderlag(ao):''}
+        ${ao.offerId?`
+          <div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">
+            ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
+          </div>`:''
+        }
+      `:''}
 
-      ${ao.offerId ? this._offerUnderlag(ao) : ''}
-      ${ao.offerId ? `
-        <div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">
-          ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
-        </div>` : ''}
+      <!-- Intern lönsamhet (bara admin/ledning med reports/staff-behörighet) -->
+      <div id="ao-lonsam">${canSeeProfitability?this._renderLonsamhet(ao):''}</div>
 
-      <!-- Intern lönsamhet (hopfällbar, admin) -->
-      <div id="ao-lonsam">${this._renderLonsamhet(ao)}</div>
-
-      <!-- Återkommande -->
-      ${ao.recurringOrderId
-        ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
-             ${ic('refresh-cw',13)} Skapad från återkommande mall: ${ao.recurringOrderId}
-           </div>`
-        : `<button class="btn bghost bfull" style="margin-top:8px;" onclick="WorkOrderDetailPage.makeRecurring()">
-             ${ic('refresh-cw',14)} Gör till återkommande ärende
-           </button>`
-      }
+      <!-- Återkommande (bara för användare med ao_edit) -->
+      ${Auth.can('ao_edit')?`
+        ${ao.recurringOrderId
+          ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
+               ${ic('refresh-cw',13)} Skapad från återkommande mall: ${ao.recurringOrderId}
+             </div>`
+          : `<button class="btn bghost bfull" style="margin-top:8px;" onclick="WorkOrderDetailPage.makeRecurring()">
+               ${ic('refresh-cw',14)} Gör till återkommande ärende
+             </button>`
+        }
+      `:''}
     `;
   },
 
