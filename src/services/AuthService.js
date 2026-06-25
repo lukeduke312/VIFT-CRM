@@ -1,5 +1,5 @@
 /**
- * AuthService v8 — Supabase Auth + rollbaserade behörigheter
+ * AuthService v9 — Supabase Auth + rollbaserade behörigheter
  *
  * Inloggning: Supabase Auth (email + lösenord via /auth/v1/token)
  * Session: JWT + refresh_token i localStorage ('vift_auth_v2')
@@ -331,41 +331,33 @@ const Auth = {
 
   /*
    * Skicka återställningslänk till angiven e-post.
-   * Genererar PKCE-par och sparar code_verifier i sessionStorage.
-   * Redirect: https://crm.viftfast.se/#/reset-password
+   * Enkel POST utan PKCE — redirect_to satt till CRM:ets reset-sida.
+   * OBS: PKCE skickas INTE i recover-anropet eftersom det kan göra att
+   *      Supabase avvisar anropet eller att vi inte kan verifiera koden.
    */
   async sendPasswordReset(email) {
+    const redirectTo = 'https://crm.viftfast.se/#/reset-password';
+    const body       = { email: email.toLowerCase().trim(), redirect_to: redirectTo };
+    console.log('[Auth.sendPasswordReset] Skickar till Supabase:', JSON.stringify(body));
     try {
-      const redirectTo = 'https://crm.viftfast.se/#/reset-password';
-      /* Generera PKCE code_verifier + code_challenge (S256) */
-      const array = new Uint8Array(32);
-      crypto.getRandomValues(array);
-      const verifier = btoa(String.fromCharCode.apply(null, array))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-      const encoded  = new TextEncoder().encode(verifier);
-      const digest   = await crypto.subtle.digest('SHA-256', encoded);
-      const challenge = btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-      sessionStorage.setItem('vift_pkce_verifier', verifier);
-
-      const res = await fetch(SUPABASE_URL + '/auth/v1/recover', {
+      const res  = await fetch(SUPABASE_URL + '/auth/v1/recover', {
         method:  'POST',
         headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          email:                 email.toLowerCase().trim(),
-          redirect_to:           redirectTo,
-          code_challenge:        challenge,
-          code_challenge_method: 'S256'
-        })
+        body:    JSON.stringify(body)
       });
+      const text = await res.text();
+      console.log('[Auth.sendPasswordReset] Svar', res.status, ':', text.slice(0, 400));
       if (!res.ok) {
-        const d = await res.json().catch(function() { return {}; });
-        sessionStorage.removeItem('vift_pkce_verifier');
-        return { ok: false, error: d.msg || d.error || 'Kunde inte skicka återställningslänk.' };
+        let errMsg = 'Kunde inte skicka återställningslänk.';
+        try { const d = JSON.parse(text); errMsg = d.msg || d.error_description || d.error || errMsg; } catch(e) {}
+        console.error('[Auth.sendPasswordReset] FEL:', errMsg);
+        return { ok: false, error: errMsg };
       }
+      console.log('[Auth.sendPasswordReset] E-post skickad OK.');
       return { ok: true };
     } catch(e) {
-      return { ok: false, error: 'Kunde inte ansluta till servern.' };
+      console.error('[Auth.sendPasswordReset] Nätverksfel:', e.message || e);
+      return { ok: false, error: 'Kunde inte ansluta till servern. Kontrollera din uppkoppling.' };
     }
   },
 

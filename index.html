@@ -316,7 +316,7 @@
 <script src="src/services/BrandingService.js?v=4"></script>
 <script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
-<script src="src/services/AuthService.js?v=8"></script>
+<script src="src/services/AuthService.js?v=9"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
 <script src="src/services/WorkOrderService.js?v=8"></script>
 <script src="src/services/TimeService.js?v=4"></script>
@@ -339,7 +339,7 @@
 <script src="src/components/Sidebar.js?v=23"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=15"></script>
+<script src="src/pages/Router.js?v=16"></script>
 <script src="src/pages/Dashboard.js?v=32"></script>
 <script src="src/pages/CustomersPage.js?v=8"></script>
 <script src="src/pages/WorkOrdersPage.js?v=24"></script>
@@ -605,6 +605,13 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* ── Browser back-knapp: popstate → återställ sida ──────── */
+window.addEventListener('popstate', function(e) {
+  if (e.state && e.state.pageId && typeof Router !== 'undefined') {
+    Router._restoreFromState(e.state.pageId, e.state.params || {});
+  }
+});
+
 /* ── Swipe-tillbaka (iPhone-känsla) ──────────────────── */
 (function() {
   var startX = 0, startY = 0, tracking = false;
@@ -626,8 +633,8 @@ if ('serviceWorker' in navigator) {
     var dx = t.clientX - startX;
     var dy = Math.abs(t.clientY - startY);
     if (dx > MIN_SWIPE && dy < MAX_VERT) {
-      if (typeof Router !== 'undefined' && Router.history && Router.history.length > 0) {
-        Router.back();
+      if (typeof Router !== 'undefined') {
+        Router.back(); // delegerar till history.back() → popstate
       }
     }
   }, { passive: true });

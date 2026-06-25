@@ -1,6 +1,7 @@
 /**
- * Router v15 — sidnavigering + hash-baserad routing
- * Hanterar aktivering av sidor och topbar-titel
+ * Router v16 — sidnavigering + fullständig hash-baserad routing
+ * Alla sidor reflekteras i URL-hashen (#/ao/AO-016 osv.)
+ * Browser back + swipe-back delar samma historik via pushState/popstate.
  */
 
 const Router = {
@@ -10,72 +11,115 @@ const Router = {
 
   /* ── Hash-routing ──────────────────────────────────────── */
 
-  /* Hash → page mapping (statiska rutter) */
-  HASH_ROUTES: {
-    '/':            { page: 'pg-dash' },
-    '/dash':        { page: 'pg-dash' },
-    '/ao':          { page: 'pg-ao' },
-    '/kunder':      { page: 'pg-crm' },
-    '/fastigheter': { page: 'pg-objects' },
-    '/rondering':   { page: 'pg-rondering' },
-    '/admin':       { page: 'pg-admin' },
-  },
-
-  /* Page → hash mapping (för URL-reflektion) */
-  PAGE_HASHES: {
-    'pg-dash':      '/',
-    'pg-ao':        '/ao',
-    'pg-crm':       '/kunder',
-    'pg-objects':   '/fastigheter',
-    'pg-rondering': '/rondering',
-    'pg-admin':     '/admin',
+  /*
+   * Generera hash-sträng för en sida + params.
+   * Returnerar sträng utan #-prefix, t.ex. '/ao/AO-016'.
+   */
+  _hashForPage(pageId, params) {
+    const p = params || {};
+    switch (pageId) {
+      case 'pg-dash':             return '/dashboard';
+      case 'pg-ao':               return '/ao';
+      case 'pg-ao-detail':        return p.aoId ? '/ao/' + p.aoId : '/ao';
+      case 'pg-crm':              return '/kunder';
+      case 'pg-crm-detail':       return p.customerId ? '/kunder/' + p.customerId : '/kunder';
+      case 'pg-objects':          return '/fastigheter';
+      case 'pg-obj-detail':       return p.propId ? '/fastigheter/' + p.propId : '/fastigheter';
+      case 'pg-offer':            return '/offerter';
+      case 'pg-offer-detail':     return p.offerId ? '/offerter/' + p.offerId : '/offerter';
+      case 'pg-invoices':         return '/fakturaunderlag';
+      case 'pg-inv-detail':       return p.invoiceId ? '/fakturaunderlag/' + p.invoiceId : '/fakturaunderlag';
+      case 'pg-tid':              return '/tid';
+      case 'pg-calendar':         return '/kalender';
+      case 'pg-contracts':        return '/kontrakt';
+      case 'pg-rondering':        return '/rondering';
+      case 'pg-rondering-wizard': return '/rondering/ny';
+      case 'pg-rondering-utfor':  return p.passId ? '/rondering/utfor/' + p.passId : '/rondering';
+      case 'pg-rondering-rapport':return p.passId ? '/rondering/rapport/' + p.passId : '/rondering';
+      case 'pg-payroll':          return '/loneunderlag';
+      case 'pg-reports':          return '/rapporter';
+      case 'pg-articles':         return '/artiklar';
+      case 'pg-pricegroups':      return '/prisgrupper';
+      case 'pg-staff':            return '/personal';
+      case 'pg-admin':            return '/admin';
+      case 'pg-recurring':        return '/aterkommande';
+      case 'pg-sales':            return '/saljchanser';
+      case 'pg-activities':       return '/aktiviteter';
+      case 'pg-service-templates':return '/offerttjanster';
+      case 'pg-myjobs':           return '/minajobb';
+      case 'pg-operations':       return '/drift';
+      default:                    return null;
+    }
   },
 
   /*
-   * Läs aktuell hash och navigera till rätt sida.
-   * Anropas från App.showApp() efter inloggning.
-   * Hanterar både gammalt format (#ao=AO-016) och nytt (#/ao/AO-016).
+   * Läs aktuell hash vid start och navigera till rätt sida.
+   * Anropas av App.showApp() direkt efter inloggning.
+   * Stödjer gamla #ao=AO-ID och #pass=ID för bakåtkompatibilitet.
    */
   initFromHash() {
-    const raw = (window.location.hash || '').slice(1); // utan #
+    const raw = (window.location.hash || '').slice(1); // utan #-tecknet
 
-    /* Gammalt format (bakåtkompatibilitet) */
-    if (raw.startsWith('ao=')) {
-      this.showPage('pg-ao-detail', { aoId: raw.slice(3) });
-      return;
-    }
-    if (raw.startsWith('pass=')) {
-      this.showPage('pg-rondering-rapport', { passId: raw.slice(5) });
-      return;
-    }
+    /* ── Bakåtkompatibla gamla format ─────────── */
+    if (raw.startsWith('ao='))   { this.showPage('pg-ao-detail',        { aoId:   raw.slice(3) }, { replace: true }); return; }
+    if (raw.startsWith('pass=')) { this.showPage('pg-rondering-rapport', { passId: raw.slice(5) }, { replace: true }); return; }
 
-    /* Nytt format: /ao/AO-016 */
-    if (raw.startsWith('/ao/')) {
-      const aoId = raw.slice(4);
-      if (aoId) { this.showPage('pg-ao-detail', { aoId }); return; }
-    }
+    /* ── Parsa nytt /path/segment-format ─────── */
+    const parts = raw.replace(/^\//, '').split('/');
+    const s0 = parts[0] || '';
+    const s1 = parts[1] || '';
+    const s2 = parts[2] || '';
 
-    /* Statiska rutter */
-    const route = this.HASH_ROUTES[raw] || this.HASH_ROUTES[raw.replace(/\/$/, '')];
-    if (route) {
-      this.showPage(route.page, route.params || {});
-      return;
+    switch (s0) {
+      case '':
+      case 'dashboard':
+        this.showPage('pg-dash', {}, { replace: true }); return;
+
+      case 'ao':
+        if (s1) { this.showPage('pg-ao-detail', { aoId: s1 }, { replace: true }); return; }
+        this.showPage('pg-ao', {}, { replace: true }); return;
+
+      case 'kunder':
+        if (s1) { this.showPage('pg-crm-detail', { customerId: s1 }, { replace: true }); return; }
+        this.showPage('pg-crm', {}, { replace: true }); return;
+
+      case 'fastigheter':
+        if (s1) { this.showPage('pg-obj-detail', { propId: s1 }, { replace: true }); return; }
+        this.showPage('pg-objects', {}, { replace: true }); return;
+
+      case 'offerter':
+        if (s1) { this.showPage('pg-offer-detail', { offerId: s1 }, { replace: true }); return; }
+        this.showPage('pg-offer', {}, { replace: true }); return;
+
+      case 'fakturaunderlag':
+        if (s1) { this.showPage('pg-inv-detail', { invoiceId: s1 }, { replace: true }); return; }
+        this.showPage('pg-invoices', {}, { replace: true }); return;
+
+      case 'rondering':
+        if (s1 === 'utfor'   && s2) { this.showPage('pg-rondering-utfor',   { passId: s2 }, { replace: true }); return; }
+        if (s1 === 'rapport' && s2) { this.showPage('pg-rondering-rapport',  { passId: s2 }, { replace: true }); return; }
+        if (s1 === 'ny')            { this.showPage('pg-rondering-wizard',   {},             { replace: true }); return; }
+        this.showPage('pg-rondering', {}, { replace: true }); return;
+
+      case 'admin':         this.showPage('pg-admin',            {}, { replace: true }); return;
+      case 'aterkommande':  this.showPage('pg-recurring',        {}, { replace: true }); return;
+      case 'tid':           this.showPage('pg-tid',              {}, { replace: true }); return;
+      case 'kalender':      this.showPage('pg-calendar',         {}, { replace: true }); return;
+      case 'kontrakt':      this.showPage('pg-contracts',        {}, { replace: true }); return;
+      case 'loneunderlag':  this.showPage('pg-payroll',          {}, { replace: true }); return;
+      case 'rapporter':     this.showPage('pg-reports',          {}, { replace: true }); return;
+      case 'artiklar':      this.showPage('pg-articles',         {}, { replace: true }); return;
+      case 'prisgrupper':   this.showPage('pg-pricegroups',      {}, { replace: true }); return;
+      case 'personal':      this.showPage('pg-staff',            {}, { replace: true }); return;
+      case 'saljchanser':   this.showPage('pg-sales',            {}, { replace: true }); return;
+      case 'aktiviteter':   this.showPage('pg-activities',       {}, { replace: true }); return;
+      case 'offerttjanster':this.showPage('pg-service-templates',{}, { replace: true }); return;
+      case 'minajobb':      this.showPage('pg-myjobs',           {}, { replace: true }); return;
+      case 'drift':         this.showPage('pg-operations',       {}, { replace: true }); return;
     }
 
     /* Fallback: dashboard */
-    this.showPage('pg-dash');
-  },
-
-  /* Uppdatera URL-hashen för aktuell sida (replaceState = ingen browserhistorik) */
-  _updateHash(pageId, params) {
-    if (pageId === 'pg-ao-detail' && params && params.aoId) {
-      try { history.replaceState(null, '', '#/ao/' + params.aoId); } catch(e) {}
-      return;
-    }
-    const hash = this.PAGE_HASHES[pageId];
-    if (hash) {
-      try { history.replaceState(null, '', '#' + hash); } catch(e) {}
-    }
+    this.showPage('pg-dash', {}, { replace: true });
   },
 
   PAGE_TITLES: {
@@ -114,19 +158,38 @@ const Router = {
   currentPage: null,
   currentParams: {},
 
+  /*
+   * Gå tillbaka: delegera till browser history (pushState-baserat).
+   * Swipe-gesten anropar också back() — delar exakt samma historik.
+   * Fallback till Router.history om browser history inte är tillgänglig.
+   */
   back() {
+    if (window.history && window.history.length > 1) {
+      window.history.back(); // utlöser popstate → _restoreFromState
+      return;
+    }
+    /* Fallback utan browserhistorik */
     const prev = this.history.pop();
     this._goingBack = true;
-    if (prev) {
-      this.showPage(prev.page, prev.params);
-    } else {
-      this.showPage('pg-dash');
-    }
+    this.showPage(prev ? prev.page : 'pg-dash', prev ? prev.params : {}, { replace: true });
   },
 
-  showPage(pageId, params = {}) {
+  /* Intern: återställ sida från popstate utan att lägga till ny historikpost */
+  _restoreFromState(pageId, params) {
+    this._goingBack = true;
+    this.showPage(pageId, params || {}, { replace: true });
+  },
+
+  /*
+   * Navigera till en sida.
+   * opts.replace = true → history.replaceState (vid back/restore/init)
+   * opts.replace = false (default) → history.pushState (vid framåtnavigering)
+   */
+  showPage(pageId, params = {}, opts = {}) {
+    const doReplace = opts.replace === true;
+
     // ── Lägg till i historik ─────────────────────────────────
-    if (!this._goingBack && this.currentPage && pageId !== this.currentPage) {
+    if (!this._goingBack && !doReplace && this.currentPage && pageId !== this.currentPage) {
       this.history.push({ page: this.currentPage, params: Object.assign({}, this.currentParams) });
       if (this.history.length > 30) this.history.shift();
     }
@@ -196,8 +259,18 @@ const Router = {
     this.currentParams = params;
     state.currentPage  = pageId;
 
-    // Uppdatera URL-hash (silent, ingen browserhistorik)
-    this._updateHash(pageId, params);
+    // Uppdatera URL-hash + browser-historik
+    const hash = this._hashForPage(pageId, params);
+    if (hash) {
+      const histState = { pageId, params };
+      try {
+        if (doReplace) {
+          history.replaceState(histState, '', '#' + hash);
+        } else {
+          history.pushState(histState, '', '#' + hash);
+        }
+      } catch(e) {}
+    }
 
     // Kör sidans render-funktion om den finns
     const renderers = {
