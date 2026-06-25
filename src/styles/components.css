@@ -2314,3 +2314,139 @@ details.ao-section[open] > summary.ao-section-head { border-bottom-color: var(--
 .ao-section-title { font-size: 13px; font-weight: 700; color: var(--tx); display: flex; align-items: center; gap: 6px; }
 .ao-section-chevron { color: var(--mt); transition: transform .2s; display: flex; flex-shrink: 0; }
 details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
+
+/* ═══════════════════════════════════════════════════
+   AKTIVA FILTER — chip-rad ovanför listan
+   ═══════════════════════════════════════════════════ */
+.active-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  padding: 0 0 8px;
+}
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px 4px 9px;
+  background: var(--navy);
+  color: #fff;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.active-filter-chip button {
+  background: none;
+  border: none;
+  padding: 0 1px;
+  cursor: pointer;
+  color: rgba(255,255,255,.65);
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  transition: color .1s;
+}
+.active-filter-chip button:hover { color: #fff; }
+.active-filter-clear {
+  background: none;
+  border: 1.5px solid var(--br);
+  padding: 4px 9px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mt);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: border-color .12s, color .12s;
+}
+.active-filter-clear:hover { border-color: var(--rd); color: var(--rd); }
+
+/* Filter-knapp aktiv */
+.ao-filter-active { border-color: var(--navy) !important; color: var(--navy) !important; background: #eff6ff !important; }
+
+/* ═══════════════════════════════════════════════════
+   FILTERPANEL (öppnas i modal)
+   ═══════════════════════════════════════════════════ */
+.filter-panel { display: flex; flex-direction: column; }
+
+.filter-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--br);
+}
+.filter-section:last-child { border-bottom: none; }
+.filter-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--mt);
+  margin-bottom: 8px;
+}
+.filter-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.filter-panel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--br);
+  border-radius: 100px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--tx);
+  transition: all .12s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.filter-panel-chip:hover:not(.on) { border-color: var(--sky); color: var(--navy); }
+.filter-panel-chip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.filter-panel-chip.on .qf-cnt { background: rgba(255,255,255,.3); color: #fff; }
+
+/* Personal-lista i filterpanel */
+.filter-staff-list { display: flex; flex-direction: column; gap: 1px; }
+.filter-staff-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.filter-staff-item:hover { background: var(--bg); }
+.filter-staff-check {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  border: 2px solid var(--br);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .1s;
+  color: transparent;
+}
+.filter-staff-item.on .filter-staff-check {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+/* AO status-flikar: alltid scrollbart horisontellt */
+.ao-status-tabs {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
+  flex-wrap: nowrap !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ao-status-tabs::-webkit-scrollbar { display: none; }

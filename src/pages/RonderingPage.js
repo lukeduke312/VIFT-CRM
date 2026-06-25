@@ -85,14 +85,15 @@ const RonderingPage = {
     }).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
 
     el.innerHTML = `
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-        <input style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;"
-          placeholder="Sök rondering..." value="${esc(this._search)}"
-          oninput="RonderingPage._search=this.value;RonderingPage._renderTab()">
-        <select style="padding:8px 10px;border:1px solid var(--br);border-radius:8px;font-size:13px;"
-          onchange="RonderingPage._filterStatus=this.value;RonderingPage._renderTab()">
-          ${statusOpts.map(o=>`<option value="${o.v}"${this._filterStatus===o.v?' selected':''}>${o.l}</option>`).join('')}
-        </select>
+      <div class="ao-toolbar" style="margin-bottom:6px;">
+        <div class="swrap">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" placeholder="Sök rondering, kund…" value="${esc(this._search)}"
+            oninput="RonderingPage._search=this.value;RonderingPage._renderTab()">
+        </div>
+      </div>
+      <div class="ftabs ao-status-tabs" style="margin-bottom:8px;">
+        ${statusOpts.map(o=>`<button class="ft ${this._filterStatus===o.v?'on':''}" onclick="RonderingPage._filterStatus='${o.v}';RonderingPage._renderTab()">${o.l}</button>`).join('')}
       </div>
       ${filtered.length === 0
         ? `<div class="empty">${ic('clipboard-check',36)}<h3>Inga ronderingar</h3><p>Skapa en ny rondering med knappen ovan</p></div>`

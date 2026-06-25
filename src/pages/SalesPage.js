@@ -3,6 +3,7 @@
  */
 const SalesPage = {
   _filter: 'active',
+  q: '',
 
   render() {
     const el = document.getElementById('pg-sales-content');
@@ -16,26 +17,42 @@ const SalesPage = {
     };
 
     let list = allOps;
-    if (this._filter === 'active')  list = list.filter(s => ['new','contacted','contact_needed'].includes(s.status));
+    if (this._filter === 'active')       list = list.filter(s => ['new','contacted','contact_needed'].includes(s.status));
     else if (this._filter === 'snoozed') list = list.filter(s => s.status === 'snoozed');
     else if (this._filter === 'done')    list = list.filter(s => ['won','lost','done','dismissed'].includes(s.status));
+
+    if (this.q) {
+      const ql = this.q.toLowerCase();
+      list = list.filter(s => {
+        const cu = getCu(s.customerId);
+        return (s.title||'').toLowerCase().includes(ql)
+          || (cu && CustomerService.displayName(cu).toLowerCase().includes(ql));
+      });
+    }
 
     list = list.slice().sort((a,b) => {
       const p = {high:0,medium:1,low:2};
       return (p[a.priority]||1) - (p[b.priority]||1);
     });
 
-    el.innerHTML =
-      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <div class="ftabs" style="flex:1;margin-bottom:0;">
-          <button class="ft ${this._filter==='active'?'on':''}" onclick="SalesPage._filter='active';SalesPage.render()">Aktiva${counts.active>0?' ('+counts.active+')':''}</button>
-          <button class="ft ${this._filter==='snoozed'?'on':''}" onclick="SalesPage._filter='snoozed';SalesPage.render()">Uppskjutna${counts.snoozed>0?' ('+counts.snoozed+')':''}</button>
-          <button class="ft ${this._filter==='done'?'on':''}" onclick="SalesPage._filter='done';SalesPage.render()">Avslutade${counts.done>0?' ('+counts.done+')':''}</button>
+    el.innerHTML = `
+      <div class="ao-toolbar" style="margin-bottom:6px;">
+        <div class="swrap">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" id="sales-search" placeholder="Sök kund eller titel…"
+            value="${this.q}" oninput="SalesPage.q=this.value;SalesPage.render()">
         </div>
-        <button class="btn bp bsm" onclick="SalesPage.openCreate()">${ic('plus',14)} Ny chans</button>
-       </div>` +
+        <div class="ao-toolbar-right">
+          <button class="btn bp bsm" onclick="SalesPage.openCreate()">${ic('plus',14)} Ny chans</button>
+        </div>
+      </div>
+      <div class="ftabs ao-status-tabs" style="margin-bottom:8px;">
+        <button class="ft ${this._filter==='active'?'on':''}" onclick="SalesPage._filter='active';SalesPage.render()">Aktiva${counts.active>0?' ('+counts.active+')':''}</button>
+        <button class="ft ${this._filter==='snoozed'?'on':''}" onclick="SalesPage._filter='snoozed';SalesPage.render()">Uppskjutna${counts.snoozed>0?' ('+counts.snoozed+')':''}</button>
+        <button class="ft ${this._filter==='done'?'on':''}" onclick="SalesPage._filter='done';SalesPage.render()">Avslutade${counts.done>0?' ('+counts.done+')':''}</button>
+      </div>` +
       (list.length === 0
-        ? `<div class="empty">${ic('target',32)}<h3>Inga säljchanser</h3><p>${this._filter==='active'?'Inga aktiva säljchanser just nu.':this._filter==='snoozed'?'Inga uppskjutna.':'Inga avslutade.'}</p>${this._filter==='active'?`<button class="btn bp" style="margin-top:12px;" onclick="SalesPage.openCreate()">${ic('plus',14)} Skapa säljchans</button>`:''}</div>`
+        ? `<div class="empty">${ic('target',32)}<h3>Inga säljchanser</h3><p>${this.q?'Inga träffar för sökningen.':this._filter==='active'?'Inga aktiva säljchanser just nu.':this._filter==='snoozed'?'Inga uppskjutna.':'Inga avslutade.'}</p>${this._filter==='active'&&!this.q?`<button class="btn bp" style="margin-top:12px;" onclick="SalesPage.openCreate()">${ic('plus',14)} Skapa säljchans</button>`:''}</div>`
         : list.map(op => this._renderCard(op)).join('')
       );
   },

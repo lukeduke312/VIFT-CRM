@@ -4,11 +4,21 @@
 
 const CustomersPage = {
   q: '',
+  _typeFilter: 'alla',
+  _sortBy: 'name', // 'name' | 'created' | 'aos'
 
   render() {
     const el = document.getElementById('pg-crm-content');
     if (!el) return;
-    const customers = CustomerService.search(this.q);
+
+    const TYPE_TABS = [
+      { key:'alla',            label:'Alla' },
+      { key:'foretag',         label:'Företag' },
+      { key:'brf',             label:'BRF' },
+      { key:'fastighetsagare', label:'Fastighetsäg.' },
+      { key:'privat',          label:'Privat' },
+      { key:'inaktiva',        label:'Inaktiva' }
+    ];
 
     el.innerHTML = `
       <div class="ao-toolbar" style="margin-bottom:6px;">
@@ -18,13 +28,14 @@ const CustomersPage = {
             value="${this.q}"
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
-        <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
+        <div class="ao-toolbar-right">
+          <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
+        </div>
       </div>
-      <div class="ftabs" style="margin-bottom:6px;">
-        ${['alla','privat','foretag','brf','fastighetsagare','inaktiva'].map(t =>
-          `<button class="ft ${!this.q && this._typeFilter===t||(!this._typeFilter&&t==='alla')?'on':''}"
-            onclick="CustomersPage._typeFilter='${t}';CustomersPage.renderList()">${
-            {alla:'Alla',privat:'Privat',foretag:'Företag',brf:'BRF',fastighetsagare:'Fastighetsäg.',inaktiva:'Inaktiva'}[t]}</button>`
+      <div class="ftabs ao-status-tabs" style="margin-bottom:6px;">
+        ${TYPE_TABS.map(t =>
+          `<button class="ft ${this._typeFilter===t.key?'on':''}"
+            onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${t.label}</button>`
         ).join('')}
       </div>
       <div id="crm-list"></div>`;
@@ -42,8 +53,16 @@ const CustomersPage = {
     } else {
       list = list.filter(c => !c.inactive);
     }
+    // Sortering
+    list = list.slice().sort((a, b) => {
+      const na = CustomerService.displayName(a), nb = CustomerService.displayName(b);
+      return na.localeCompare(nb, 'sv');
+    });
     if (list.length === 0) {
-      el.innerHTML = `<div class="empty"><span class="empty-ico">${ic('users',36)}</span><h3>Inga kunder</h3><p>${this.q ? 'Inga träffar för sökning' : 'Skapa din första kund'}</p></div>`;
+      el.innerHTML = `<div class="empty"><span class="empty-ico">${ic('users',36)}</span><h3>Inga kunder</h3>
+        <p>${this.q ? 'Inga träffar för sökning' : 'Skapa din första kund'}</p>
+        ${this.q ? `<button class="btn bs bsm" style="margin-top:8px;" onclick="CustomersPage.q='';document.getElementById('crm-search').value='';CustomersPage.renderList()">Rensa sökning</button>` : ''}
+      </div>`;
       return;
     }
     el.innerHTML = list.map(cu => {

@@ -15,53 +15,47 @@ const WorkOrdersPage = {
   /* ── Wizard-state ──────────────────────── */
   _wiz: { step: 1, data: {}, modalId: null },
 
-  _dashFilter: null, // extra filter from dashboard navigation
+  /* ── Avancerade filter ─────────────────── */
+  _f: {
+    quick: null,       // 'akut' | 'readyForInvoice' | 'idag' | 'forsenad'
+    mine: false,       // bara mina ärenden
+    unassigned: false, // bara otilldelade
+    staffIds: [],      // specifik personal
+    customer: null,    // kund-ID
+    category: null,    // kategori-slug
+    sort: 'default'    // 'default' | 'updated' | 'scheduled' | 'priority'
+  },
 
   render(params) {
     const el = document.getElementById('pg-ao-content');
     if (!el) return;
 
-    // Handle filter params from dashboard navigation
+    // Handle filter params from dashboard navigation — reset filters
     if (params && params.filter) {
-      const tabMap = {
-        akut:'alla', active:'alla', pool:'pool', planerad:'planerad',
-        pågående:'pågående', klar:'klar', nytt:'nytt', readyForInvoice:'klar',
-        idag:'planerad', forsenad:'alla', mine:'alla'
-      };
-      this.filter      = tabMap[params.filter] || 'alla';
-      this._dashFilter = params.filter;
+      this._f = { quick: null, mine: false, unassigned: false, staffIds: [], customer: null, category: null, sort: 'default' };
+      const tabMap = { pool:'pool', planerad:'planerad', pågående:'pågående', klar:'klar', nytt:'nytt', active:'alla' };
+      this.filter = tabMap[params.filter] || 'alla';
+      if (params.filter === 'akut')            { this._f.quick = 'akut'; this.filter = 'alla'; }
+      if (params.filter === 'readyForInvoice') { this._f.quick = 'readyForInvoice'; this.filter = 'klar'; }
+      if (params.filter === 'idag')            { this._f.quick = 'idag'; }
+      if (params.filter === 'forsenad')        { this._f.quick = 'forsenad'; }
+      if (params.filter === 'mine')            { this._f.mine = true; }
     }
 
-    // Compute quick-filter counts
-    const wos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
-    const today = tdy();
-    const myId  = state.currentUser ? state.currentUser.id : null;
-    const active = a => !['klar','fakturerad','avbruten'].includes(a.status);
-    const qfCounts = {
-      akut:           wos.filter(a => a.priority==='akut' && active(a)).length,
-      readyForInvoice: wos.filter(a => a.status === 'klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a)).length,
-      idag:           wos.filter(a => a.scheduledDate===today && active(a)).length,
-      forsenad:       wos.filter(a => a.scheduledDate && a.scheduledDate<today && active(a)).length,
-      mine:           myId ? wos.filter(a => (a.staff||[]).includes(myId) && active(a)).length : 0
-    };
+    const activeCount = this._activeFilterCount();
 
-    // Quick-filter chips: always visible, highlighted when active
-    const qfDefs = [
-      { key:'akut',            icon:'zap',       label:'Akuta',            cnt:qfCounts.akut },
-      { key:'readyForInvoice', icon:'receipt',   label:'Redo fakturering', cnt:qfCounts.readyForInvoice },
-      { key:'idag',            icon:'calendar',  label:'Idag',             cnt:qfCounts.idag },
-      { key:'forsenad',        icon:'clock',     label:'Försenade',        cnt:qfCounts.forsenad },
-      { key:'mine',            icon:'user',      label:'Mina ärenden',     cnt:qfCounts.mine }
+    const STATUS_TABS = [
+      { key:'alla',        label:'Alla' },
+      { key:'nytt',        label:'Nytt' },
+      { key:'pool',        label:'Pool' },
+      { key:'planerad',    label:'Planerad' },
+      { key:'pågående',    label:'Pågående' },
+      { key:'klar',        label:'Klar' },
+      { key:'fakturerad',  label:'Fakturerad' },
+      { key:'arkiverade',  label:'Arkiverade' },
+      { key:'papperskorg', label:'Papperskorg' }
     ];
-    const anyQf = !!this._dashFilter;
-    const qfHtml = qfDefs.map(b => {
-      const isOn = this._dashFilter === b.key;
-      const cntHtml = b.cnt > 0 ? `<span class="qf-cnt">${b.cnt}</span>` : '';
-      return `<button class="qf-chip ${isOn?'on':''}" onclick="WorkOrdersPage.setQuickFilter('${b.key}')">${ic(b.icon,10)} ${b.label}${cntHtml}</button>`;
-    }).join('');
-    const clearHtml = anyQf ? `<button class="qf-clear" onclick="WorkOrdersPage.setQuickFilter(null)">${ic('x',10)} Rensa</button>` : '';
 
-    const activeLabel = this._dashFilter ? (qfDefs.find(d=>d.key===this._dashFilter)||{}).label || this._dashFilter : null;
     el.innerHTML = `
       <div class="ao-toolbar">
         <div class="swrap">
@@ -69,8 +63,8 @@ const WorkOrdersPage = {
           <input type="search" id="ao-search" placeholder="Sök order, kund, adress…"
             value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()">
         </div>
-        <button class="btn bghost bsm ao-filter-btn${anyQf?' ao-filter-active':''}" onclick="WorkOrdersPage.openFilterSheet()">
-          ${ic('sliders',13)}${anyQf?` (1)`:' Filter'}
+        <button class="btn bghost bsm ao-filter-btn${activeCount?' ao-filter-active':''}" onclick="WorkOrdersPage.openFilterPanel()">
+          ${ic('sliders',13)}${activeCount ? ` (${activeCount})` : ' Filter'}
         </button>
         <div class="ao-toolbar-right">
           <div class="view-toggle">
@@ -80,15 +74,12 @@ const WorkOrdersPage = {
           ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
         </div>
       </div>
-      <div class="ftabs" style="margin-bottom:8px;">
-        ${['alla','nytt','pool','planerad','pågående','klar','fakturerad','arkiverade','papperskorg'].map(f =>
-          `<button class="ft ${this.filter===f?'on':''}" onclick="WorkOrdersPage.setFilter('${f}')">${
-            {alla:'Alla',nytt:'Nytt',pool:'Pool',planerad:'Planerad',pågående:'Pågående',klar:'Klar',fakturerad:'Fakturerad',arkiverade:'Arkiverade',papperskorg:'Papperskorg'}[f]
-          }</button>`
+      <div class="ftabs ao-status-tabs" style="margin-bottom:8px;">
+        ${STATUS_TABS.map(t =>
+          `<button class="ft ${this.filter===t.key?'on':''}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}</button>`
         ).join('')}
       </div>
-      ${activeLabel ? `<div class="ao-active-filter">${ic('filter',10)} ${activeLabel}<button class="qf-clear" onclick="WorkOrdersPage.setQuickFilter(null)">${ic('x',10)}</button></div>` : ''}
-      <div class="qf-row qf-row-desktop" style="margin-bottom:8px;">${qfHtml}${clearHtml}</div>
+      <div id="ao-active-filters">${this._activeChipsHtml()}</div>
       <div id="ao-list"></div>`;
     this.renderList();
   },
@@ -108,82 +99,239 @@ const WorkOrdersPage = {
     this.render();
   },
 
-  openFilterSheet() {
-    const today = tdy();
-    const myId  = state.currentUser ? state.currentUser.id : null;
-    const wos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
-    const alive  = a => !['klar','fakturerad','avbruten'].includes(a.status);
-    const counts = {
-      akut:            wos.filter(a => a.priority==='akut' && alive(a)).length,
-      readyForInvoice: wos.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a)).length,
-      idag:            wos.filter(a => a.scheduledDate===today && alive(a)).length,
-      forsenad:        wos.filter(a => a.scheduledDate && a.scheduledDate<today && alive(a)).length,
-      mine:            myId ? wos.filter(a => (a.staff||[]).includes(myId) && alive(a)).length : 0
-    };
-    const defs = [
-      { key:'akut',            icon:'zap',      label:'Akuta',            cnt:counts.akut },
-      { key:'readyForInvoice', icon:'receipt',  label:'Redo fakturering', cnt:counts.readyForInvoice },
-      { key:'idag',            icon:'calendar', label:'Idag',             cnt:counts.idag },
-      { key:'forsenad',        icon:'clock',    label:'Försenade',        cnt:counts.forsenad },
-      { key:'mine',            icon:'user',     label:'Mina ärenden',     cnt:counts.mine }
-    ];
-    const rows = defs.map(b =>
-      `<button class="btn bghost bfull" style="justify-content:space-between;padding:12px 14px;font-size:13px;" onclick="WorkOrdersPage.setQuickFilter('${b.key}');Modal.close();">
-        <span style="display:flex;align-items:center;gap:10px;">${ic(b.icon,15)} ${b.label}</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          ${b.cnt > 0 ? `<span class="bdg">${b.cnt}</span>` : ''}
-          ${this._dashFilter===b.key ? `<span style="color:var(--gr);">${ic('check',15)}</span>` : ''}
-        </span>
-      </button>`
+  /* ── Filter helpers ────────────────────── */
+
+  _activeFilterCount() {
+    const f = this._f;
+    return (f.quick?1:0) + (f.mine?1:0) + (f.unassigned?1:0) +
+      f.staffIds.length + (f.customer?1:0) + (f.category?1:0);
+  },
+
+  _activeChipsHtml() {
+    const f = this._f;
+    const chips = [];
+    const QUICK_LABELS = { akut:'Akuta', readyForInvoice:'Redo fakturering', idag:'Idag', forsenad:'Försenade' };
+    const QUICK_ICONS  = { akut:'zap', readyForInvoice:'receipt', idag:'calendar', forsenad:'clock' };
+    if (f.quick) chips.push({ label: QUICK_LABELS[f.quick]||f.quick, icon: QUICK_ICONS[f.quick]||'filter',
+      clear: `WorkOrdersPage._f.quick=null;WorkOrdersPage._refreshFilters()` });
+    if (f.mine) chips.push({ label: 'Mina ärenden', icon: 'user',
+      clear: `WorkOrdersPage._f.mine=false;WorkOrdersPage._refreshFilters()` });
+    if (f.unassigned) chips.push({ label: 'Otilldelade', icon: 'user-x',
+      clear: `WorkOrdersPage._f.unassigned=false;WorkOrdersPage._refreshFilters()` });
+    f.staffIds.forEach(id => {
+      const s = getStaff(id);
+      chips.push({ label: s ? `${s.firstName} ${s.lastName.charAt(0)}.` : id, icon: 'user',
+        clear: `WorkOrdersPage._removeStaffFilter('${id}')` });
+    });
+    if (f.customer) {
+      const cu = getCu(f.customer);
+      chips.push({ label: cu ? CustomerService.displayName(cu) : f.customer, icon: 'building-2',
+        clear: `WorkOrdersPage._f.customer=null;WorkOrdersPage._refreshFilters()` });
+    }
+    if (f.category) {
+      const cat = (typeof AO_CATEGORIES!=='undefined'?AO_CATEGORIES:[]).find(c=>c.slug===f.category);
+      chips.push({ label: cat ? cat.label : f.category, icon: 'tag',
+        clear: `WorkOrdersPage._f.category=null;WorkOrdersPage._refreshFilters()` });
+    }
+    if (!chips.length) return '';
+    const chipsHtml = chips.map(c =>
+      `<span class="active-filter-chip">${ic(c.icon,10)} ${esc(c.label)}<button onclick="${c.clear}">${ic('x',9)}</button></span>`
     ).join('');
-    const btns = [
-      this._dashFilter ? { label:`${ic('x',12)} Rensa filter`, cls:'btn bs', onClick:()=>{ WorkOrdersPage.setQuickFilter(null); Modal.close(); } } : null,
-      { label:'Stäng', cls:'btn bghost', onClick:()=>Modal.close() }
-    ].filter(Boolean);
+    return `<div class="active-filters-row">${chipsHtml}<button class="active-filter-clear" onclick="WorkOrdersPage.clearAllFilters()">${ic('x',10)} Rensa</button></div>`;
+  },
+
+  _refreshFilters() {
+    const chipsEl = document.getElementById('ao-active-filters');
+    if (chipsEl) chipsEl.innerHTML = this._activeChipsHtml();
+    const btn = document.querySelector('.ao-filter-btn');
+    if (btn) {
+      const n = this._activeFilterCount();
+      btn.className = `btn bghost bsm ao-filter-btn${n?' ao-filter-active':''}`;
+      btn.innerHTML = `${ic('sliders',13)}${n ? ` (${n})` : ' Filter'}`;
+    }
+    this.renderList();
+    // Uppdatera filterpanelen om den är öppen
+    const panelEl = document.querySelector('.modal-body .filter-panel');
+    if (panelEl) panelEl.innerHTML = this._filterPanelBody();
+  },
+
+  clearAllFilters() {
+    const sort = this._f.sort;
+    this._f = { quick:null, mine:false, unassigned:false, staffIds:[], customer:null, category:null, sort };
+    this._refreshFilters();
+  },
+
+  _removeStaffFilter(id) {
+    this._f.staffIds = this._f.staffIds.filter(s => s !== id);
+    this._refreshFilters();
+  },
+
+  /* ── Filter panel ──────────────────────── */
+
+  openFilterPanel() {
     Modal.open({
-      title: `${ic('sliders',14)} Snabbfilter`,
-      body: `<div style="display:flex;flex-direction:column;gap:2px;margin:0 -2px;">${rows}</div>`,
-      buttons: btns
+      title: `${ic('sliders',14)} Filter`,
+      body: `<div class="filter-panel">${this._filterPanelBody()}</div>`,
+      buttons: [{ label: 'Stäng', cls: 'btn bp', onClick: () => Modal.close() }]
     });
   },
 
-  setQuickFilter(key) {
-    this._dashFilter = (key !== null && key === this._dashFilter) ? null : key;
-    this.render();
+  _filterPanelBody() {
+    const f = this._f;
+    const wos = (state.workOrders||[]).filter(a => !a.archived && !a.deleted);
+    const today = tdy();
+    const myId = state.currentUser ? state.currentUser.id : null;
+
+    // Snabbfilter
+    const quickOpts = [
+      { key:'akut',            icon:'zap',      label:'Akuta',            cnt: wos.filter(a=>a.priority==='akut').length },
+      { key:'readyForInvoice', icon:'receipt',  label:'Redo fakturering', cnt: wos.filter(a=>a.status==='klar'&&!a.invoiceId&&WorkOrderService._hasBillableContent(a)).length },
+      { key:'idag',            icon:'calendar', label:'Idag',             cnt: wos.filter(a=>a.scheduledDate===today).length },
+      { key:'forsenad',        icon:'clock',    label:'Försenade',        cnt: wos.filter(a=>a.scheduledDate&&a.scheduledDate<today).length }
+    ];
+    const quickHtml = quickOpts.map(o =>
+      `<button class="filter-panel-chip ${f.quick===o.key?'on':''}" onclick="WorkOrdersPage._toggleQuick('${o.key}')">
+        ${ic(o.icon,11)} ${o.label}${o.cnt ? `<span class="qf-cnt">${o.cnt}</span>` : ''}
+      </button>`
+    ).join('');
+
+    // Personal
+    const staffList = (state.staff||[]).filter(s => s.active);
+    const mineCount = myId ? wos.filter(a=>(a.staff||[]).includes(myId)).length : 0;
+    const unassCount = wos.filter(a=>!(a.staff||[]).length).length;
+    const staffSpecial = `
+      <button class="filter-panel-chip ${f.mine?'on':''}" onclick="WorkOrdersPage._toggleMine()">
+        ${ic('user',11)} Mina ärenden${mineCount ? `<span class="qf-cnt">${mineCount}</span>` : ''}
+      </button>
+      <button class="filter-panel-chip ${f.unassigned?'on':''}" onclick="WorkOrdersPage._toggleUnassigned()">
+        ${ic('user-x',11)} Otilldelade${unassCount ? `<span class="qf-cnt">${unassCount}</span>` : ''}
+      </button>`;
+    const staffItems = staffList.map(s => {
+      const isOn = f.staffIds.includes(s.id);
+      const cnt = wos.filter(a=>(a.staff||[]).includes(s.id)).length;
+      return `<div class="filter-staff-item ${isOn?'on':''}" onclick="WorkOrdersPage._toggleStaff('${s.id}')">
+        <div class="filter-staff-check">${isOn?ic('check',11):''}</div>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:13px;font-weight:600;">${esc(s.firstName)} ${esc(s.lastName)}</span>
+          ${s.title?`<span style="font-size:11px;color:var(--mt);margin-left:6px;">${esc(s.title)}</span>`:''}
+        </div>
+        ${cnt ? `<span class="qf-cnt" style="background:var(--bg);color:var(--mt);">${cnt}</span>` : ''}
+      </div>`;
+    }).join('');
+
+    // Kategori
+    const cats = typeof AO_CATEGORIES!=='undefined' ? AO_CATEGORIES : [];
+    const catHtml = cats.map(c => {
+      const cnt = wos.filter(a=>a.category===c.slug).length;
+      return `<button class="filter-panel-chip ${f.category===c.slug?'on':''}" onclick="WorkOrdersPage._toggleCat('${c.slug}')">
+        ${c.label}${cnt ? `<span class="qf-cnt">${cnt}</span>` : ''}
+      </button>`;
+    }).join('');
+
+    // Kund
+    const cuIds = [...new Set(wos.filter(a=>a.customerId).map(a=>a.customerId))];
+    const cuOpts = cuIds.map(id => {
+      const cu = getCu(id);
+      if (!cu) return null;
+      return { id, name: CustomerService.displayName(cu), cnt: wos.filter(a=>a.customerId===id).length };
+    }).filter(Boolean).sort((a,b) => a.name.localeCompare(b.name,'sv'));
+    const cuHtml = cuOpts.length ? `<select onchange="WorkOrdersPage._setCustFilter(this.value)" style="width:100%;padding:9px 10px;border:1.5px solid var(--br);border-radius:8px;font-size:13px;background:var(--bg);font-family:inherit;">
+      <option value="">— Alla kunder —</option>
+      ${cuOpts.map(c=>`<option value="${c.id}" ${f.customer===c.id?'selected':''}>${esc(c.name)} (${c.cnt})</option>`).join('')}
+    </select>` : '';
+
+    // Sortering
+    const SORT_OPTS = [
+      { key:'default',   label:'Prioritet & datum' },
+      { key:'updated',   label:'Senast uppdaterad' },
+      { key:'scheduled', label:'Planerat datum' },
+      { key:'priority',  label:'Enbart prioritet' }
+    ];
+    const sortHtml = SORT_OPTS.map(o =>
+      `<button class="filter-panel-chip ${f.sort===o.key?'on':''}" onclick="WorkOrdersPage._setSort('${o.key}')">${o.label}</button>`
+    ).join('');
+
+    const hasAny = this._activeFilterCount() > 0;
+    const clearBtn = hasAny ? `<div style="padding-top:4px;"><button class="btn bd bsm" style="width:100%;" onclick="WorkOrdersPage.clearAllFilters()">${ic('x',12)} Rensa alla filter</button></div>` : '';
+
+    return `
+      <div class="filter-section">
+        <div class="filter-section-title">Snabbfilter</div>
+        <div class="filter-chips-row">${quickHtml}</div>
+      </div>
+      <div class="filter-section">
+        <div class="filter-section-title">Personal</div>
+        <div class="filter-chips-row" style="margin-bottom:8px;">${staffSpecial}</div>
+        ${staffItems ? `<div class="filter-staff-list">${staffItems}</div>` : ''}
+      </div>
+      ${catHtml ? `<div class="filter-section">
+        <div class="filter-section-title">Kategori</div>
+        <div class="filter-chips-row">${catHtml}</div>
+      </div>` : ''}
+      ${cuHtml ? `<div class="filter-section">
+        <div class="filter-section-title">Kund</div>
+        ${cuHtml}
+      </div>` : ''}
+      <div class="filter-section">
+        <div class="filter-section-title">Sortering</div>
+        <div class="filter-chips-row">${sortHtml}</div>
+      </div>
+      ${clearBtn}`;
   },
+
+  _toggleQuick(key)    { this._f.quick = this._f.quick===key ? null : key; this._refreshFilters(); },
+  _toggleMine()        { this._f.mine = !this._f.mine; if(this._f.mine){ this._f.unassigned=false; this._f.staffIds=[]; } this._refreshFilters(); },
+  _toggleUnassigned()  { this._f.unassigned = !this._f.unassigned; if(this._f.unassigned){ this._f.mine=false; this._f.staffIds=[]; } this._refreshFilters(); },
+  _toggleStaff(id)     { const i=this._f.staffIds.indexOf(id); if(i>-1) this._f.staffIds.splice(i,1); else { this._f.staffIds.push(id); this._f.mine=false; this._f.unassigned=false; } this._refreshFilters(); },
+  _toggleCat(slug)     { this._f.category = this._f.category===slug ? null : slug; this._refreshFilters(); },
+  _setCustFilter(id)   { this._f.customer = id||null; this._refreshFilters(); },
+  _setSort(key)        { this._f.sort = key; this._refreshFilters(); },
 
   renderList() {
     const el = document.getElementById('ao-list');
     if (!el) return;
     let list = state.workOrders || [];
 
-    // ao_view_own: begränsa till egna AO och pool om användaren inte har full åtkomst
+    // ao_view_own: begränsa till egna AO och pool
     const canViewAll = Auth.can('ao_view_all') || Auth.can('all');
     if (!canViewAll && Auth.can('ao_view_own') && state.currentUser) {
       const myId = state.currentUser.id;
-      list = list.filter(a => (a.staff || []).includes(myId) || a.status === 'pool');
+      list = list.filter(a => (a.staff||[]).includes(myId) || a.status === 'pool');
     }
+
+    const today = tdy();
 
     if (this.filter === 'arkiverade') {
       list = list.filter(a => a.archived && !a.deleted);
     } else if (this.filter === 'papperskorg') {
       list = list.filter(a => a.deleted);
     } else {
-      // Exclude archived and deleted from all normal views
       list = list.filter(a => !a.archived && !a.deleted);
-      if (this.filter !== 'alla') list = list.filter(a => a.status === this.filter);
-      // Apply quick-filter refinements
-      const _active = a => !['klar','fakturerad','avbruten'].includes(a.status);
-      if (this._dashFilter === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a));
-      if (this._dashFilter === 'akut')    list = list.filter(a => a.priority==='akut' && _active(a));
-      if (this._dashFilter === 'active')  list = list.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status));
-      if (this._dashFilter === 'idag')    list = list.filter(a => a.scheduledDate===tdy() && _active(a));
-      if (this._dashFilter === 'forsenad')list = list.filter(a => a.scheduledDate && a.scheduledDate<tdy() && _active(a));
-      if (this._dashFilter === 'mine') {
-        const myId = state.currentUser ? state.currentUser.id : null;
-        if (myId) list = list.filter(a => (a.staff||[]).includes(myId) && _active(a));
+      if (this.filter === 'alla') {
+        // "Alla" visar bara aktiva AO — exkluderar fakturerade
+        list = list.filter(a => a.status !== 'fakturerad');
+      } else {
+        list = list.filter(a => a.status === this.filter);
       }
+      // Snabbfilter
+      if (this._f.quick === 'akut')            list = list.filter(a => a.priority==='akut');
+      if (this._f.quick === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a));
+      if (this._f.quick === 'idag')            list = list.filter(a => a.scheduledDate===today);
+      if (this._f.quick === 'forsenad')        list = list.filter(a => a.scheduledDate && a.scheduledDate<today);
+      // Personal
+      if (this._f.mine) {
+        const myId = state.currentUser ? state.currentUser.id : null;
+        if (myId) list = list.filter(a => (a.staff||[]).includes(myId));
+      } else if (this._f.unassigned) {
+        list = list.filter(a => !(a.staff||[]).length);
+      } else if (this._f.staffIds.length) {
+        list = list.filter(a => this._f.staffIds.some(id => (a.staff||[]).includes(id)));
+      }
+      // Kund / Kategori
+      if (this._f.customer) list = list.filter(a => a.customerId===this._f.customer);
+      if (this._f.category) list = list.filter(a => a.category===this._f.category);
     }
+
     if (this.q) {
       const ql = this.q.toLowerCase();
       list = list.filter(a => {
@@ -194,19 +342,36 @@ const WorkOrdersPage = {
           || (cu && CustomerService.displayName(cu).toLowerCase().includes(ql));
       });
     }
+
+    // Sortering
     list = list.slice().sort((a,b) => {
+      if (this._f.sort === 'updated')   return new Date(b.updatedAt||b.createdAt) - new Date(a.updatedAt||a.createdAt);
+      if (this._f.sort === 'scheduled') {
+        if (!a.scheduledDate && !b.scheduledDate) return 0;
+        if (!a.scheduledDate) return 1;
+        if (!b.scheduledDate) return -1;
+        return a.scheduledDate < b.scheduledDate ? -1 : 1;
+      }
+      if (this._f.sort === 'priority') {
+        const p = {akut:0,hög:1,normal:2,låg:3};
+        return (p[a.priority]||2) - (p[b.priority]||2);
+      }
+      // default: prioritet + skapad
       const pOrd = {akut:0,hög:1,normal:2,låg:3};
       const d = (pOrd[a.priority]||2) - (pOrd[b.priority]||2);
-      if (d !== 0) return d;
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      return d !== 0 ? d : new Date(b.createdAt) - new Date(a.createdAt);
     });
     if (!list.length) {
       const isSearch = !!this.q;
-      const isFilter = this.filter !== 'alla';
+      const isFilter = this.filter !== 'alla' || this._activeFilterCount() > 0;
+      const hasAnyFilter = isSearch || isFilter;
       el.innerHTML = `<div class="empty">${ic('clipboard-list',36)}
         <h3>${isSearch ? 'Inga träffar' : isFilter ? 'Inga ordrar' : 'Inga arbetsorder'}</h3>
-        <p>${isSearch ? 'Inga ordrar matchar sökningen.' : isFilter ? 'Inga ordrar i detta filter.' : 'Skapa din första arbetsorder med knappen ovan.'}</p>
-        ${isSearch ? `<button class="btn bs bsm" style="margin-top:8px;" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()">Rensa sökning</button>` : ''}
+        <p>${isSearch ? 'Inga ordrar matchar sökningen.' : isFilter ? 'Inga ordrar matchar valt filter.' : 'Skapa din första arbetsorder med knappen ovan.'}</p>
+        ${hasAnyFilter ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+          ${isSearch ? `<button class="btn bs bsm" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()">Rensa sökning</button>` : ''}
+          ${isFilter ? `<button class="btn bs bsm" onclick="WorkOrdersPage.clearAllFilters()">Rensa filter</button>` : ''}
+        </div>` : ''}
       </div>`;
       return;
     }
