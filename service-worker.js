@@ -1,7 +1,7 @@
 /**
  * VIFT CRM — Service Worker v5
  *
- * v5: fix login-logo + filterpanel (WorkOrdersPage v25)
+ * v7: force WorkOrdersPage v26 cache-bust
  *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only)
@@ -13,7 +13,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v6';
+const CACHE_NAME = 'vift-crm-v7';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
