@@ -1,0 +1,42 @@
+:root {
+  /* Brand colors */
+  --navy:  #0D2B4E;
+  --blue:  #1A4B8C;
+  --sky:   #2B7FD4;
+  --acc:   #E8F4FD;
+
+  /* Status colors */
+  --gr:    #15803d;
+  --lgr:   #dcfce7;
+  --rd:    #b91c1c;
+  --lrd:   #fee2e2;
+  --or:    #c2410c;
+  --lor:   #ffedd5;
+  --pu:    #7c3aed;
+  --lpu:   #ede9fe;
+  --yl:    #a16207;
+  --lyl:   #fef9c3;
+
+  /* Neutral */
+  --tx:    #0f172a;
+  --mt:    #64748b;
+  --br:    #e2e8f0;
+  --bg:    #f8fafc;
+  --wh:    #ffffff;
+
+  /* Shadows */
+  --sh:    0 1px 3px rgba(0,0,0,.08);
+  --shm:   0 4px 16px rgba(13,43,78,.10);
+
+  /* Radii */
+  --r:     16px;
+  --rs:    10px;
+  --rx:    6px;
+
+  /* Sidebar */
+  --sidebar-w:      240px;
+  --sidebar-w-xl:   260px;
+
+  /* Typography */
+  --font: 'Montserrat', system-ui, sans-serif;
+}

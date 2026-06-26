@@ -1,0 +1,372 @@
+/* ═══════════════════════════════════════════════════
+   LAYOUT — ett system, inga konflikter
+   Sidebar = drawer på mobil, fast vänster på desktop
+   ═══════════════════════════════════════════════════ */
+
+/* ── App wrapper ────────────────────────────────── */
+#app {
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ── Sidebar overlay (mobil) ────────────────────── */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.55);
+  z-index: 299;
+  backdrop-filter: blur(2px);
+}
+#sidebar-overlay.open {
+  display: block;
+}
+
+/* ── Sidebar (#bottom-nav är det ENDA nav-systemet) ─ */
+#bottom-nav {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--navy);
+  display: flex;
+  flex-direction: column;
+  z-index: 300;
+  overflow: hidden;          /* Ingen scrollbar på yttre containern */
+  transform: translateX(-100%);
+  transition: transform .25s ease;
+  flex-shrink: 0;
+}
+#bottom-nav.open {
+  transform: translateX(0);
+}
+
+/* ── Scrollbar endast på menylistan ─────────────── */
+.nav-scroll {
+  flex: 1;
+  min-height: 0;             /* Krävs för att flex-child ska respektera höjdbegränsning */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;     /* Firefox — göm scrollbaren */
+}
+.nav-scroll::-webkit-scrollbar {
+  display: none;             /* Chrome / Safari / Edge — göm scrollbaren */
+}
+
+/* ── Page area ──────────────────────────────────── */
+#page-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Topbar ─────────────────────────────────────── */
+.topbar {
+  background: linear-gradient(135deg, var(--navy), var(--blue));
+  padding: 12px 14px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+  z-index: 100;
+  box-shadow: 0 2px 18px rgba(13,43,78,.25);
+}
+
+/* ── Scrollable content area ────────────────────── */
+#content-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  background: var(--bg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.15) transparent;
+}
+#content-scroll::-webkit-scrollbar { width: 5px; }
+#content-scroll::-webkit-scrollbar-track { background: transparent; }
+#content-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.12);
+  border-radius: 999px;
+}
+#content-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.22); }
+
+/* ── Page shells ────────────────────────────────── */
+.page {
+  display: none;
+  flex-direction: column;
+  min-height: 100%;
+}
+.page.active {
+  display: flex;
+  animation: pageIn .18s ease;
+}
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Content container ──────────────────────────── */
+.con {
+  padding: 14px 12px;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Bottom action bar ──────────────────────────── */
+.bbar {
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  background: var(--wh);
+  border-top: 1px solid var(--br);
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+}
+
+/* ── Sidebar nav items ──────────────────────────── */
+.nav-brand {
+  padding: 16px 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  flex-shrink: 0;
+}
+.nav-brand-logo {
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-brand-name {
+  color: rgba(255,255,255,.9);
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 6px;
+  letter-spacing: .3px;
+}
+
+.nav-section {
+  padding: 10px 10px 4px;
+}
+.nav-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255,255,255,.35);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  padding: 0 4px 4px;
+}
+
+.ni {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: rgba(255,255,255,.65);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+.ni:hover {
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.9);
+}
+.ni.on {
+  background: rgba(255,255,255,.13);
+  color: #fff;
+}
+.ni.on::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  background: var(--sky);
+  border-radius: 0 3px 3px 0;
+}
+.ni .ico {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: .85;
+}
+.ni.on .ico { opacity: 1; }
+.ni .lbl { flex: 1; }
+.ni .nbdg {
+  background: var(--rd);
+  color: #fff;
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 14px;
+}
+
+.nav-spacer { flex: 1; }
+
+.nav-user {
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  flex-shrink: 0;
+}
+.nav-user-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.nav-user-row:hover { background: rgba(255,255,255,.07); }
+.nav-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--sky);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.nav-user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,.85);
+  flex: 1;
+}
+.nav-user-role {
+  font-size: 10px;
+  color: rgba(255,255,255,.4);
+  margin-top: 1px;
+}
+
+/* ── Topbar elements ────────────────────────────── */
+.topbar-hamburger {
+  background: rgba(255,255,255,.15);
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.topbar-hamburger:hover { background: rgba(255,255,255,.22); }
+
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+}
+.topbar-title h1 {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-title p {
+  color: rgba(255,255,255,.55);
+  font-size: 10px;
+  margin-top: 1px;
+}
+.tbtn {
+  background: rgba(255,255,255,.15);
+  border-radius: 7px;
+  padding: 7px 11px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.tbtn:hover { background: rgba(255,255,255,.22); }
+
+/* ══════════════════════════════════════
+   DESKTOP (1024px+)
+   Sidebar är fast, inte drawer
+   ══════════════════════════════════════ */
+@media (min-width: 1024px) {
+  #app {
+    flex-direction: row;
+  }
+
+  #bottom-nav {
+    position: relative;
+    transform: translateX(0) !important; /* alltid synlig */
+    flex-shrink: 0;
+    height: 100dvh;
+    z-index: 10;
+    transition: none;
+  }
+
+  #sidebar-overlay {
+    display: none !important; /* aldrig på desktop */
+  }
+
+  .topbar-hamburger {
+    display: none; /* inget hamburger på desktop */
+  }
+
+  #page-area {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .con {
+    padding: 20px 28px;
+    padding-bottom: 40px;
+    max-width: 1400px;
+  }
+
+  .bbar {
+    position: sticky;
+    bottom: 0;
+  }
+}
+
+@media (min-width: 1400px) {
+  #bottom-nav {
+    width: var(--sidebar-w-xl);
+  }
+}

@@ -1,0 +1,400 @@
+/**
+ * schema.js — Datastrukturer (dokumentation + validering)
+ * Används av services för att skapa tomma objekt
+ */
+
+/* ── Enheter ────────────────────────────────── */
+const UNITS = [
+  { value: 'st',        label: 'st',        step: 1,    type: 'count'  },
+  { value: 'tim',       label: 'tim',       step: 0.25, type: 'time'   },
+  { value: 'm',         label: 'm',         step: 0.01, type: 'length' },
+  { value: 'm²',        label: 'm²',        step: 0.01, type: 'area'   },
+  { value: 'm³',        label: 'm³',        step: 0.01, type: 'volume' },
+  { value: 'kg',        label: 'kg',        step: 0.1,  type: 'weight' },
+  { value: 'liter',     label: 'liter',     step: 0.1,  type: 'volume' },
+  { value: 'säck',      label: 'säck',      step: 1,    type: 'count'  },
+  { value: 'rulle',     label: 'rulle',     step: 1,    type: 'count'  },
+  { value: 'paket',     label: 'paket',     step: 1,    type: 'count'  },
+  { value: 'dag',       label: 'dag',       step: 1,    type: 'time'   },
+  { value: 'månad',     label: 'månad',     step: 1,    type: 'time'   },
+  { value: 'km',        label: 'km',        step: 1,    type: 'length' },
+  { value: 'resa',      label: 'resa',      step: 1,    type: 'count'  },
+  { value: 'tillfälle', label: 'tillfälle', step: 1,    type: 'count'  },
+  { value: 'fast pris', label: 'fast pris', step: 1,    type: 'fixed'  },
+  { value: 'lm',        label: 'lm',        step: 0.01, type: 'length' },
+];
+
+function unitStep(unit) {
+  const u = UNITS.find(function(x) { return x.value === unit; });
+  return u ? u.step : 1;
+}
+
+function unitsHtml(selectedUnit) {
+  return UNITS.map(function(u) {
+    return '<option value="' + u.value + '"' + (u.value === selectedUnit ? ' selected' : '') + '>' + u.label + '</option>';
+  }).join('');
+}
+
+const Schema = {
+  customer: () => ({
+    id: '',
+    type: 'foretag',          // privat | foretag | brf | fastighetsagare
+    name: '',                 // företagsnamn
+    orgNr: '',
+    personnr: '',
+    firstName: '',            // för privatperson
+    lastName: '',
+    contactPerson: '',
+    phone: '',
+    email: '',
+    address: '',
+    zip: '',
+    city: '',
+    invoiceAddress: '',
+    invoiceZip: '',
+    invoiceCity: '',
+    note: '',
+    contacts: [],             // [{name, phone, email, role}]
+    active: true,
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  workOrder: () => ({
+    id: '',
+    title: '',
+    description: '',
+    customerId: '',
+    propertyId: '',
+    address: '',
+    contactPerson: '',
+    phone: '',
+    accessCode: '',
+    internalNote: '',
+    status: 'nytt',           // nytt | pool | planerad | pågående | klar | fakturerad | avbruten
+    priority: 'normal',       // akut | hög | normal | låg
+    priceType: 'ej_satt',     // ej_satt | fastpris | timpris | prisgrupp
+    fixedPrice: 0,
+    priceGroupId: '',
+    estimatedHours: 0,
+    staff: [],                // [staffId, ...]
+    scheduledDate: '',
+    scheduledStart: '',
+    scheduledEnd: '',
+    checklist: [],            // [{id, text, done}]
+    materials: [],            // [{id, articleId, name, qty, unit, buyPrice, sellPrice, addedAt}]
+    notes: [],                // [{id, text, imageData, staffName, timestamp}]
+    log: [],                  // [{id, type, text, imageData, visibility, userName, timestamp}]
+    timeEntries: [],          // [timeEntryId, ...]  (refs till timeEntries)
+    invoiceId: '',
+    salesOpportunityId: '',
+    recurringOrderId: '',
+    createdAt: '',
+    updatedAt: '',
+    completedAt: '',
+    completedBy: ''
+  }),
+
+  offer: () => ({
+    id: '',
+    customerId: '',
+    propertyId: '',
+    address: '',
+    internalNote: '',
+    lines: [],                // [{id, description, qty, unit, unitPrice, discount, total}]
+    taxType: 'moms',          // moms | rot | rut | none
+    rotRutAmount: 0,
+    terms: '',
+    includes: '',
+    excludes: '',
+    validUntil: '',
+    status: 'utkast',         // utkast | skickad | väntar | godkänd | nekad | utgången
+    declineReason: '',
+    salesOpportunityId: '',
+    workOrderId: '',
+    sentAt: '',
+    answeredAt: '',
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  invoice: () => ({
+    id: '',
+    customerId: '',
+    propertyId: '',
+    workOrderId: '',
+    offerId: '',
+    lines: [],                // [{id, description, qty, unit, unitPrice, vatRate, source, sourceId}]
+    status: 'utkast',         // utkast | skickad | betald | förfallen | makulerad
+    dueDate: '',
+    paymentTerms: 30,
+    note: '',
+    sentAt: '',
+    paidAt: '',
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  timeEntry: () => ({
+    id: '',
+    aoId: '',
+    staffId: '',
+    staffName: '',
+    date: '',
+    startStr: '',             // HH:MM
+    endStr: '',               // HH:MM
+    minutes: 0,
+    comment: '',
+    priceGroupId: '',
+    priceGroupName: '',
+    hourRate: 0,
+    billable: true,
+    internal: false,
+    createdAt: ''
+  }),
+
+  property: () => ({
+    id: '',
+    objectNumber: '',          // objektnummer / fastighets-ID
+    customerId: '',
+    group: '',                 // koncern / fastighetsgrupp
+    name: '',
+    address: '',
+    zip: '',
+    city: '',
+    propertyDesignation: '',   // fastighetsbeteckning
+    type: '',                  // fastighetstyp
+    buildYear: '',
+    renovationYear: '',        // ombyggnadsår
+    buildingCount: 1,
+    apartments: 0,
+    floors: 0,
+    area: 0,                   // total yta m²
+    boa: 0,
+    loa: 0,
+    bta: 0,
+    lotArea: 0,                // tomtarea
+    managementType: '',        // förvaltningsform
+    propertyManager: '',       // ansvarig förvaltare (staffId)
+    technician: '',            // ansvarig tekniker (staffId)
+    operationalArea: '',       // driftområde
+    status: 'aktiv',
+    accessCode: '',
+    keyInfo: '',               // nyckel-/åtkomstinfo
+    note: '',
+    contacts: [],              // [{name, phone, email, role}]
+    technicalSystems: {},      // {heating:{type,manufacturer,model,location,...}, ...}
+    inspections: {},           // {ovk: {lastDate, nextDate, status}, ...}
+    documents: [],             // [{id, name, category, url, date}]
+    images: [],                // [{id, title, category, techSection, description, dataUrl, createdAt}]
+    notes: [],                 // [{id, text, createdAt, createdBy}]
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  contract: () => ({
+    id: '',
+    customerId: '',
+    propertyId: '',
+    title: '',
+    type: '',                 // service | rondering | städ | övrigt
+    description: '',
+    startDate: '',
+    endDate: '',
+    tillsvidare: false,
+    noticePeriod: 3,          // månader
+    autoRenew: false,
+    amount: 0,
+    period: 'månad',          // månad | kvartal | år | timme
+    services: [],
+    status: 'aktiv',          // aktiv | pausad | avslutad | utkast
+    note: '',
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  salesOpportunity: () => ({
+    id: '',
+    customerId: '',
+    propertyId: '',
+    type: '',                 // service_agreement | seasonal_job | upsell | quote_followup | win_back
+    title: '',
+    reason: '',
+    aiTip: '',
+    suggestedAction: '',
+    priority: 'medium',       // high | medium | low
+    status: 'new',            // new | contact_needed | contacted | snoozed | quote_created | work_order_created | won | lost | done | dismissed
+    dueDate: '',
+    snoozedUntil: '',
+    sourceType: '',
+    sourceId: '',
+    estimatedValue: 0,
+    convertedWorkOrderId: '',
+    convertedQuoteId: '',
+    createdAt: '',
+    updatedAt: '',
+    completedAt: '',
+    completedBy: ''
+  }),
+
+  activityEntry: () => ({
+    id: '',
+    type: '',
+    description: '',
+    timestamp: '',
+    customerId: '',
+    propertyId: '',
+    workOrderId: '',
+    offerId: '',
+    invoiceId: '',
+    salesOpportunityId: '',
+    inspectionId: '',
+    userId: ''
+  }),
+
+  staff: () => ({
+    id: '',
+    firstName: '',
+    lastName: '',
+    title: '',
+    phone: '',
+    email: '',
+    username: '',
+    passwordHash: '',
+    role: 'personal',         // admin | chef | personal
+    permissions: [],
+    active: true,
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  priceGroup: () => ({
+    id: '',
+    name: '',
+    hourRate: 0,
+    description: '',
+    active: true,
+    createdAt: ''
+  }),
+
+  recurringOrder: () => ({
+    id: '',
+    title: '',
+    customerId: '',
+    propertyId: '',
+    address: '',
+    description: '',
+    contactPerson: '',
+    phone: '',
+    internalNote: '',
+    priority: 'normal',
+    priceType: 'ej_satt',
+    priceGroupId: '',
+    fixedPrice: 0,
+    staff: [],
+    // Intervall: dagligen | veckovis | varannan_vecka | månadsvis | kvartalsvis | årsvis | eget
+    interval: 'månadsvis',
+    intervalDays: 30,        // används om interval = 'eget'
+    startDate: '',
+    endDate: '',
+    tillsvidare: true,
+    checklist: [],           // [{text}] — mall, kopieras vid skapande
+    status: 'aktiv',         // aktiv | pausad | avslutad
+    nextDate: '',
+    lastCreatedDate: '',
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  article: () => ({
+    id: '',
+    articleNumber: '',
+    name: '',
+    category: '',
+    unit: 'st',               // st | tim | m² | m | lm | kg | liter | säck | rulle | dag | månad | gång | paket | par
+    buyPrice: 0,
+    sellPrice: 0,
+    markup: 0,                // %
+    vatRate: 25,              // %
+    supplier: '',
+    active: true,
+    note: '',
+    createdAt: ''
+  }),
+
+  ronderingsmall: () => ({
+    id: '',
+    name: '',
+    customerId: '',        // optional — lock to customer
+    propertyId: '',        // optional — lock to property
+    description: '',
+    interval: 'månadsvis', // dagligen|veckovis|varannan_vecka|månadsvis|kvartalsvis|årsvis|eget
+    intervalDays: 30,      // used when interval='eget'
+    active: true,
+    categories: [],        // [{id, name, sortOrder, points:[{id,title,description,requiresPhoto,canCreateAO,sortOrder}]}]
+    createdAt: '',
+    updatedAt: '',
+    createdBy: ''
+  }),
+
+  rondering: () => ({
+    id: '',
+    name: '',                  // explicit name for this rondering (required)
+    templateId: '',            // optional — which template was used
+    templateName: '',
+    customerId: '',
+    propertyId: '',
+    description: '',
+    internalNote: '',
+    isDraft: false,
+    images: [],                // [{dataUrl, name}]
+
+    // Categories (self-contained copy, NOT a reference to template)
+    categories: [],            // [{id, name, sortOrder, points:[{id,title,description,requiresPhoto,canCreateAO,sortOrder}]}]
+
+    // Occasions (wizard step 3)
+    occasions: [],             // [{id, date, time, staffId, staffName, comment}]
+    recurringSetups: [],       // [{id, interval, intervalDays, startDate, endDate, tillsvidare, weekday, dayOfMonth, staffId, staffName}]
+
+    // Pricing (wizard step 4)
+    pricingType: '',           // 'tim' | 'fast' | ''
+    priceGroupId: '',
+    priceGroupName: '',
+    hourRate: 0,
+    fixedPrice: 0,
+    debiterbar: true,
+
+    // Execution
+    status: 'utkast',          // utkast|planerad|pågående|slutförd|har_avvikelser
+    performedBy: '',
+    performedByName: '',
+    startedAt: '',
+    completedAt: '',
+    results: [],               // [{categoryId, categoryName, points:[{pointId,pointTitle,status:'ok'|'avvikelse'|'ej_aktuell'|'',comment,deviationId,checkedAt}]}]
+    deviationIds: [],
+
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  avvikelse: () => ({
+    id: '',
+    ronderingId: '',
+    categoryId: '',
+    pointId: '',
+    categoryName: '',
+    pointTitle: '',
+    customerId: '',
+    propertyId: '',
+    title: '',
+    comment: '',
+    images: [],            // [{dataUrl, name}]
+    priority: 'normal',    // akut|hög|normal|låg
+    status: 'öppen',       // öppen|åtgärdad|avskriven
+    workOrderId: '',
+    createdBy: '',
+    createdByName: '',
+    createdAt: '',
+    updatedAt: ''
+  })
+};

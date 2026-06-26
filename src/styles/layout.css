@@ -1,0 +1,514 @@
+/* ═══════════════════════════════════════════════════
+   LAYOUT — ett system, inga konflikter
+   Sidebar = drawer på mobil, fast vänster på desktop
+   ═══════════════════════════════════════════════════ */
+
+/* ── App wrapper ────────────────────────────────── */
+#app {
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ── Sidebar overlay (mobil) ────────────────────── */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.55);
+  z-index: 299;
+  backdrop-filter: blur(2px);
+}
+#sidebar-overlay.open {
+  display: block;
+}
+
+/* ── Sidebar (#bottom-nav är det ENDA nav-systemet) ─ */
+#bottom-nav {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--brand-primary);
+  display: flex;
+  flex-direction: column;
+  z-index: 300;
+  overflow: hidden;          /* Ingen scrollbar på yttre containern */
+  transform: translateX(-100%);
+  transition: transform .25s ease;
+  flex-shrink: 0;
+}
+#bottom-nav.open {
+  transform: translateX(0);
+}
+
+/* ── Scrollbar endast på menylistan ─────────────── */
+.nav-scroll {
+  flex: 1;
+  min-height: 0;             /* Krävs för att flex-child ska respektera höjdbegränsning */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;     /* Firefox — göm scrollbaren */
+}
+.nav-scroll::-webkit-scrollbar {
+  display: none;             /* Chrome / Safari / Edge — göm scrollbaren */
+}
+
+/* ── Page area ──────────────────────────────────── */
+#page-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Topbar ─────────────────────────────────────── */
+.topbar {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  padding: 9px 14px;
+  padding-top: calc(9px + env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+  z-index: 100;
+  box-shadow: 0 2px 18px rgba(13,43,78,.25);
+}
+
+/* ── Scrollable content area ────────────────────── */
+#content-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  background: var(--bg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.15) transparent;
+}
+#content-scroll::-webkit-scrollbar { width: 5px; }
+#content-scroll::-webkit-scrollbar-track { background: transparent; }
+#content-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.12);
+  border-radius: 999px;
+}
+#content-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.22); }
+
+/* ── Page shells ────────────────────────────────── */
+.page {
+  display: none;
+  flex-direction: column;
+  min-height: 100%;
+}
+.page.active {
+  display: flex;
+  animation: pageIn .18s ease;
+}
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Content container ──────────────────────────── */
+.con {
+  padding: 16px 14px;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Bottom action bar ──────────────────────────── */
+.bbar {
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  background: var(--wh);
+  border-top: 1px solid var(--br);
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+}
+
+/* ── Sidebar nav items ──────────────────────────── */
+.nav-brand {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand-primary-text) 8%, transparent);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-brand-img {
+  max-height: 40px;
+  max-width: 158px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+/* Fallback text when SVG fails to load */
+.nav-brand-fb {
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-brand-fb-vift {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--brand-primary-text);
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+.nav-brand-fb-sub {
+  font-size: 9px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--brand-primary-text) 50%, transparent);
+  text-transform: uppercase;
+  letter-spacing: .7px;
+}
+
+.nav-section {
+  padding: 14px 10px 4px;
+}
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--brand-primary-text) 40%, transparent);
+  text-transform: none;
+  letter-spacing: .2px;
+  padding: 0 4px 4px;
+}
+
+.ni {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--brand-primary-text) 65%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+.ni:hover {
+  background: color-mix(in srgb, var(--brand-primary-text) 8%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 90%, transparent);
+}
+.ni.on {
+  background: color-mix(in srgb, var(--brand-primary-text) 13%, transparent);
+  color: var(--brand-primary-text);
+}
+.ni.on::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  background: color-mix(in srgb, var(--brand-primary-text) 60%, transparent);
+  border-radius: 0 3px 3px 0;
+}
+.ni .ico {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: .85;
+}
+.ni.on .ico { opacity: 1; }
+.ni .lbl { flex: 1; }
+.ni .nbdg {
+  background: color-mix(in srgb, var(--brand-primary-text) 18%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 90%, transparent);
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 14px;
+}
+.ni .nbdg.nbdg-alert {
+  background: var(--rd);
+  color: #fff;
+}
+.ni .nbdg-soon {
+  background: color-mix(in srgb, var(--brand-primary-text) 8%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 35%, transparent);
+  border-radius: 100px;
+  font-size: 8px;
+  font-weight: 600;
+  padding: 1px 5px;
+  white-space: nowrap;
+  line-height: 13px;
+}
+
+.nav-spacer { flex: 1; }
+
+.nav-user {
+  padding: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--brand-primary-text) 8%, transparent);
+  flex-shrink: 0;
+}
+.nav-user-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.nav-user-row:hover { background: color-mix(in srgb, var(--brand-primary-text) 7%, transparent); }
+.nav-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--sky);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.nav-user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--brand-primary-text) 85%, transparent);
+  flex: 1;
+}
+.nav-user-role {
+  font-size: 10px;
+  color: color-mix(in srgb, var(--brand-primary-text) 40%, transparent);
+  margin-top: 1px;
+}
+
+/* ── Topbar elements ────────────────────────────── */
+.topbar-hamburger {
+  background: color-mix(in srgb, var(--brand-primary-text) 15%, transparent);
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: var(--brand-primary-text);
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.topbar-hamburger:hover { background: color-mix(in srgb, var(--brand-primary-text) 22%, transparent); }
+
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+}
+.topbar-title h1 {
+  color: var(--brand-primary-text);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-title p {
+  color: color-mix(in srgb, var(--brand-primary-text) 55%, transparent);
+  font-size: 10px;
+  margin-top: 1px;
+}
+.tbtn {
+  background: color-mix(in srgb, var(--brand-primary-text) 15%, transparent);
+  border-radius: 7px;
+  padding: 7px 11px;
+  color: var(--brand-primary-text);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.tbtn:hover { background: color-mix(in srgb, var(--brand-primary-text) 22%, transparent); }
+
+/* ══════════════════════════════════════
+   DESKTOP (1024px+)
+   Sidebar är fast, inte drawer
+   ══════════════════════════════════════ */
+@media (min-width: 1024px) {
+  #app {
+    flex-direction: row;
+  }
+
+  #bottom-nav {
+    position: relative;
+    transform: translateX(0) !important; /* alltid synlig */
+    flex-shrink: 0;
+    height: 100dvh;
+    z-index: 10;
+    transition: none;
+  }
+
+  #sidebar-overlay {
+    display: none !important; /* aldrig på desktop */
+  }
+
+  .topbar-hamburger {
+    display: none; /* inget hamburger på desktop */
+  }
+
+  #page-area {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .con {
+    padding: 24px 32px;
+    padding-bottom: 40px;
+    max-width: 1400px;
+  }
+
+  /* Dashboard uses full available width */
+  #pg-dash .con {
+    max-width: none;
+    padding: 16px 20px;
+    padding-bottom: 40px;
+  }
+
+  .bbar {
+    position: sticky;
+    bottom: 0;
+  }
+}
+
+@media (min-width: 1400px) {
+  #bottom-nav {
+    width: var(--sidebar-w-xl);
+  }
+  body.sidebar-collapsed #bottom-nav {
+    width: 56px !important;
+  }
+}
+
+/* ── Collapse toggle button ─────────────────────── */
+.nav-collapse-btn {
+  display: none; /* hidden on mobile */
+  margin-left: auto;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--brand-primary-text) 10%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 60%, transparent);
+  padding: 6px 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+  line-height: 1;
+}
+.nav-collapse-btn:hover {
+  background: color-mix(in srgb, var(--brand-primary-text) 20%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 95%, transparent);
+}
+
+/* ── Collapsed sidebar (desktop only) ──────────── */
+@media (min-width: 1024px) {
+  /* Animate sidebar width changes */
+  #bottom-nav {
+    transition: width .2s ease;
+  }
+
+  /* Show collapse button on desktop */
+  .nav-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Collapsed state */
+  body.sidebar-collapsed #bottom-nav {
+    width: 56px;
+  }
+
+  /* Hide text labels and logos when collapsed */
+  body.sidebar-collapsed .nav-brand-img,
+  body.sidebar-collapsed .nav-brand-fb {
+    display: none !important;
+  }
+  body.sidebar-collapsed .nav-brand {
+    padding: 10px 6px;
+    justify-content: center;
+  }
+  body.sidebar-collapsed .nav-section-label {
+    display: none;
+  }
+  body.sidebar-collapsed .nav-section {
+    padding: 6px 4px 2px;
+  }
+  body.sidebar-collapsed .ni .lbl,
+  body.sidebar-collapsed .ni .nbdg {
+    display: none;
+  }
+  body.sidebar-collapsed .ni {
+    justify-content: center;
+    padding: 9px 0;
+    gap: 0;
+  }
+  body.sidebar-collapsed .nav-user-name,
+  body.sidebar-collapsed .nav-user-role {
+    display: none;
+  }
+  body.sidebar-collapsed .nav-user-row {
+    justify-content: center;
+    gap: 0;
+    padding: 6px 4px;
+  }
+  body.sidebar-collapsed .nav-user-row > span:last-child {
+    display: none;
+  }
+}
+
+/* ── Right-positioned sidebar ─────────────────────── */
+@media (min-width: 1024px) {
+  body.sidebar-right #app {
+    flex-direction: row-reverse;
+  }
+  body.sidebar-right .ni.on::before {
+    left: auto;
+    right: 0;
+    border-radius: 3px 0 0 3px;
+  }
+}
+@media (max-width: 1023px) {
+  body.sidebar-right #bottom-nav {
+    left: auto;
+    right: 0;
+    transform: translateX(100%);
+  }
+  body.sidebar-right #bottom-nav.open {
+    transform: translateX(0);
+  }
+}
+
+/* ── Touch-targets (mobil) ─────────────────────────── */
+@media (max-width: 1023px) {
+  .btn { min-height: 44px; }
+  .bsm { min-height: 40px; }
+}

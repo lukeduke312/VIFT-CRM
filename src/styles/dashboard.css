@@ -1,0 +1,440 @@
+/* ═══════════════════════════════════════════
+   DASHBOARD — layout, KPI, widgets
+   ═══════════════════════════════════════════ */
+
+/* ── Dashboard grid ───────────────────────── */
+.dash-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  align-items: start;
+  min-width: 0;
+}
+/* Grid items must have min-width: 0 to prevent content blowout with 1fr */
+.dash-layout > * { min-width: 0; }
+
+/* Tablet: 2 columns */
+@media (min-width: 700px) {
+  .dash-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; }
+  .dash-layout .dw-full   { grid-column: 1 / -1; }
+  .dash-layout .dw-main   { grid-column: 1; }
+  .dash-layout .dw-side   { grid-column: 2; }
+  .dash-layout .dw-third  { grid-column: span 1; }
+}
+
+/* Desktop: 3 columns */
+@media (min-width: 1024px) {
+  .dash-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 16px; }
+  .dash-layout .dw-full   { grid-column: 1 / -1; }
+  .dash-layout .dw-main   { grid-column: span 2; }
+  .dash-layout .dw-side   { grid-column: span 1; }
+  .dash-layout .dw-third  { grid-column: span 1; }
+}
+
+/* ── Tighter card padding on dashboard ── */
+.dash-layout .card-body   { padding: 10px 12px; }
+.dash-layout .card-header { padding: 10px 12px 9px; }
+
+/* ── KPI row ──────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+}
+@media (min-width: 480px)  { .kpi-row { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (min-width: 700px)  { .kpi-row { grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; } }
+@media (min-width: 1024px) { .kpi-row { gap: 12px; } }
+
+.kpi-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--br);
+  cursor: pointer;
+  transition: all .15s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+.kpi-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.07); transform: translateY(-1px); }
+.kpi-card:active { transform: scale(.98); }
+
+.kpi-number {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--navy);
+  line-height: 1;
+  letter-spacing: -.3px;
+}
+.kpi-label {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--mt);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+/* ── Action required section ─────────────── */
+.dash-action-list { display: flex; flex-direction: column; gap: 2px; }
+
+.dash-action-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--rx);
+  cursor: pointer;
+  transition: background .1s;
+}
+.dash-action-item:hover { background: var(--bg); }
+.dash-action-item.urgent { background: #fef2f2; }
+
+.dai-text { flex: 1; min-width: 0; }
+.dai-title { font-size: 12px; font-weight: 600; color: var(--tx); }
+.dai-sub   { font-size: 11px; color: var(--mt); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.dai-count {
+  font-size: 11px; font-weight: 500; color: var(--mt);
+  background: var(--bg); border: 1px solid var(--br);
+  border-radius: 100px; padding: 1px 7px; min-width: 20px;
+  text-align: center; flex-shrink: 0;
+}
+.dai-count.urgent { background: var(--lrd); color: var(--rd); border-color: #fca5a5; }
+.dai-count.orange { background: var(--lor); color: var(--or); border-color: #fdba74; }
+
+/* ── Quick action list ────────────────────── */
+.quick-list { display: flex; flex-direction: column; }
+
+.quick-action-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 0; border: none; border-bottom: 1px solid var(--bg);
+  background: none; cursor: pointer; width: 100%; text-align: left;
+  transition: background .1s; border-radius: 0;
+}
+.quick-action-row:last-child { border-bottom: none; }
+.quick-action-row:hover { background: var(--bg); margin: 0 -14px; padding: 9px 14px; border-radius: 6px; }
+.quick-action-row:active { opacity: .75; }
+
+.qar-icon {
+  width: 30px; height: 30px; border-radius: 7px;
+  background: var(--bg); color: var(--navy);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  border: 1px solid var(--br);
+}
+.qar-body { flex: 1; min-width: 0; }
+.qar-title { font-size: 13px; font-weight: 600; color: var(--navy); }
+.qar-sub   { font-size: 11px; color: var(--mt); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qar-arrow { color: #cbd5e1; flex-shrink: 0; }
+
+/* ── Crow (compact row in widgets) ────────── */
+.crow {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 0; border-bottom: 1px solid var(--bg);
+  cursor: pointer; transition: background .1s;
+}
+.crow:last-child { border-bottom: none; }
+.crow:hover { background: var(--bg); margin: 0 -12px; padding: 8px 12px; border-radius: 6px; }
+
+/* ── Activity log ─────────────────────────── */
+.act-item { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--bg); }
+.act-item:last-child { border-bottom: none; }
+.act-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sky); flex-shrink: 0; margin-top: 4px; }
+.act-dot.green  { background: var(--gr); }
+.act-dot.red    { background: var(--rd); }
+.act-dot.orange { background: var(--or); }
+.act-dot.purple { background: var(--pu); }
+.act-text { font-size: 12px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
+.act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
+
+/* ── Pair wrapper (always 2-col) ──────────── */
+.dw-pair { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; }
+@media (min-width: 480px) { .dw-pair { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; } }
+@media (min-width: 1024px) { .dw-pair { gap: 14px; } }
+
+/* ch3r = ch3 (alias for backwards compat) */
+.ch3r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0;
+}
+
+/* ── Legacy ───────────────────────────────── */
+.dw-full  { width: 100%; }
+.dw-row   { display: flex; gap: 14px; align-items: flex-start; }
+@media (max-width: 699px) { .dw-row { flex-direction: column; } }
+.dash-grid { display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 1024px) {
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .dash-grid .dash-full { grid-column: 1 / -1; }
+}
+
+/* ── Grid size variants (v48) ─────────────── */
+/* dw-half and dw-twothird span 1 col by default (mobile) */
+.dw-half     { grid-column: span 1; }
+.dw-twothird { grid-column: span 1; }
+@media (min-width: 700px) {
+  .dash-layout .dw-half     { grid-column: span 1; }  /* 1 of 2 */
+  .dash-layout .dw-twothird { grid-column: 1 / -1; }  /* full on 2-col */
+}
+@media (min-width: 1024px) {
+  .dash-layout .dw-half     { grid-column: span 1; }  /* 1 of 3 cols */
+  .dash-layout .dw-twothird { grid-column: span 2; }  /* 2 of 3 cols */
+}
+
+/* 4 columns on very wide screens */
+@media (min-width: 1600px) {
+  .dash-layout {
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
+    gap: 16px;
+  }
+  .dash-layout .dw-full     { grid-column: 1 / -1; }
+  .dash-layout .dw-twothird { grid-column: span 3; }
+  .dash-layout .dw-half     { grid-column: span 2; }
+  .dash-layout .dw-third    { grid-column: span 1; }
+}
+
+/* ── Dashboard topbar (greeting + action buttons) */
+.dash-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 10px;
+  flex-wrap: wrap;
+}
+.dash-greeting {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+/* ── Anpassa dashboard — modal rows (v49-polish) ────────────────
+ * Grid-layout: minmax(0,1fr) | auto — modulnamn kan aldrig pressas bort.
+ * Kompakt, neutral design. Kategorier som lätta avdelare.
+ * ─────────────────────────────────────────────────────────────── */
+
+/* Kategorirubrik */
+.dash-config-category {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .9px;
+  color: var(--mt);
+  padding: 12px 2px 5px;
+  border-bottom: 1px solid var(--br);
+  margin-bottom: 1px;
+}
+.dash-config-category:first-child { padding-top: 0; }
+
+/* Modulrad */
+.dash-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid var(--br);
+  border-radius: 8px;
+  background: #fff;
+  transition: border-color .1s, background .1s;
+}
+.dash-config-row.on {
+  border-color: #c7dcf0;
+  background: #f6faff;
+}
+.dash-config-row:hover { border-color: #a5c4e4; }
+
+/* Vänster: checkbox + info */
+.dash-config-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+.dash-config-main input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--sky);
+  cursor: pointer;
+  margin: 0;
+}
+.dash-config-info {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Modulnamn — aldrig uppercase, lagom tungt */
+.dash-config-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--navy);
+  text-transform: none !important;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+.dash-config-row:not(.on) .dash-config-name { color: var(--tx); }
+
+/* Beskrivning — diskret, truncated med tooltip */
+.dash-config-desc {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--mt);
+  text-transform: none !important;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+  line-height: 1.3;
+}
+
+/* Höger: select + pilknappar */
+.dash-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.dash-config-actions select {
+  font-size: 11px;
+  padding: 4px 5px;
+  border: 1px solid var(--br);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--tx);
+  width: 118px;
+  height: 28px;
+  cursor: pointer;
+}
+.dash-config-actions button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--br);
+  border-radius: 6px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--mt);
+  transition: background .1s, border-color .1s, color .1s;
+}
+.dash-config-actions button:hover {
+  background: var(--bg);
+  border-color: var(--sky);
+  color: var(--navy);
+}
+
+/* Smal vy (<540px): actions under modulnamn */
+@media (max-width: 540px) {
+  .dash-config-row { grid-template-columns: 1fr; gap: 6px; }
+  .dash-config-actions { flex-wrap: wrap; }
+  .dash-config-actions select { width: auto; flex: 1; }
+}
+
+/* ── Layout density ───────────────────────── */
+body[data-density="compact"] .card-body   { padding: 7px 10px !important; }
+body[data-density="compact"] .card-header { padding: 7px 10px 6px !important; }
+body[data-density="compact"] .dash-layout { gap: 8px; }
+body[data-density="compact"] .kpi-card    { padding: 9px 10px 8px; }
+body[data-density="compact"] .kpi-number  { font-size: 24px; }
+body[data-density="compact"] .crow        { padding: 5px 0; }
+body[data-density="compact"] .dash-action-item { padding: 5px 8px; }
+body[data-density="compact"] .quick-btn   { padding: 8px 4px; }
+body[data-density="compact"] .quick-icon  { width: 28px; height: 28px; }
+
+body[data-density="spacious"] .card-body   { padding: 16px 18px !important; }
+body[data-density="spacious"] .card-header { padding: 14px 18px 13px !important; }
+body[data-density="spacious"] .dash-layout { gap: 20px; }
+body[data-density="spacious"] .kpi-card    { padding: 18px 18px 15px; }
+body[data-density="spacious"] .kpi-number  { font-size: 36px; }
+body[data-density="spacious"] .crow        { padding: 10px 0; }
+body[data-density="spacious"] .dash-action-item { padding: 10px 14px; }
+body[data-density="spacious"] .quick-btn   { padding: 16px 8px; }
+body[data-density="spacious"] .quick-icon  { width: 40px; height: 40px; }
+
+/* ── Card-header icon+title alignment ──────── */
+.ch3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0;
+}
+
+/* ── Compact row typography (used in widgets) */
+.crow-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--tx);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crow-sub {
+  font-size: 10px;
+  color: var(--mt);
+  margin-top: 2px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Collapsible section header ────────────── */
+.dash-sec-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.dash-sec-toggle:hover .dash-sec-label { color: var(--navy); }
+.dash-sec-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mt);
+  letter-spacing: .1px;
+  white-space: nowrap;
+}
+.dash-sec-line {
+  flex: 1;
+  height: 1px;
+  background: var(--br);
+}
+.sec-caret {
+  flex: 0 0 auto;
+  color: var(--mt);
+  display: flex;
+  align-items: center;
+}
+
+/* ── Filter chip on list pages ────────────── */
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #dbeafe; color: #1e40af; border-radius: 100px;
+  font-size: 11px; font-weight: 700; padding: 4px 10px;
+  margin-bottom: 6px;
+}
+.filter-chip button {
+  background: none; border: none; cursor: pointer;
+  color: #1e40af; font-weight: 700; font-size: 13px;
+  padding: 0 0 0 2px; line-height: 1;
+}
