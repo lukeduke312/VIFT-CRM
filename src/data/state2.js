@@ -100,8 +100,10 @@ async function initState() {
   state.propertyCategories = g('propertyCategories') || SeedData.propertyCategories || [];
   state.ronderingsmallar   = g('ronderingsmallar')   || SeedData.ronderingsmallar   || [];
 
-  /* Ladda staff — strippa alltid lösenordsfält (ska aldrig ligga i frontend) */
-  const rawStaff = g('staff') || [];
+  /* Ladda staff — strippa alltid lösenordsfält (ska aldrig ligga i frontend).
+   * BEHÅLLER SeedData.staff som fallback: _resolveUser() matchar inloggad email
+   * mot state.staff för rollresolution — tom lista → alla får roll "personal". */
+  const rawStaff = g('staff') || SeedData.staff;
   state.staff = rawStaff.map(function(s) {
     const clean = Object.assign({}, s);
     delete clean.password;
@@ -109,25 +111,6 @@ async function initState() {
     return clean;
   });
 
-  /* Rensa seed-data som eventuellt lagrats i Supabase/localStorage vid tidig init.
-   * Seed-ID:n följer mönster AO-00x, K-00x, ST-00x, SE-00x — inga riktiga poster har dessa.
-   * Om ALLA poster i en samling är seed → nollställ samlingen. */
-  function _isSeedId(id) {
-    return typeof id === 'string' && /^(AO|K|SE|ST|OBJ|INV|OF|TE|RON|ACT)-0\d\d/.test(id);
-  }
-  function _clearIfAllSeed(arr) {
-    if (!arr || !arr.length) return arr;
-    return arr.every(function(x) { return _isSeedId(x.id); }) ? [] : arr;
-  }
-  state.workOrders         = _clearIfAllSeed(state.workOrders);
-  state.customers          = _clearIfAllSeed(state.customers);
-  state.offers             = _clearIfAllSeed(state.offers);
-  state.invoices           = _clearIfAllSeed(state.invoices);
-  state.properties         = _clearIfAllSeed(state.properties);
-  state.salesOpportunities = _clearIfAllSeed(state.salesOpportunities);
-  state.timeEntries        = _clearIfAllSeed(state.timeEntries);
-  state.recurringOrders    = _clearIfAllSeed(state.recurringOrders);
-  state.staff              = _clearIfAllSeed(state.staff);
 
   // Rensa AO:er vars 14-dagarsfönster gått ut
   const _trashNow = new Date();
