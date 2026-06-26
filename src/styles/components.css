@@ -2216,9 +2216,10 @@ body.modal-open { overflow: hidden; touch-action: none; }
 
 /* ── Uppdragskort (Beskrivning / uppdrag) — mest framträdande ── */
 .ao-mission-card {
-  border-left: 4px solid var(--blue);
+  border-left: 5px solid var(--blue);
   padding: 0;
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
 .ao-mission-akut {
   border-left-color: #dc2626;
@@ -2227,7 +2228,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px 8px;
+  padding: 12px 18px 10px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -2242,10 +2243,10 @@ body.modal-open { overflow: hidden; touch-action: none; }
   border-bottom-color: #fecdd3;
 }
 .ao-mission-label { flex-shrink: 0; }
-.ao-mission-body { padding: 16px 18px 18px; }
+.ao-mission-body { padding: 18px 20px 22px; }
 .ao-mission-text {
-  font-size: 15px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 1.9;
   margin: 0;
   color: var(--tx);
   white-space: pre-wrap;

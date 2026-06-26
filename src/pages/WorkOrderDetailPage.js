@@ -808,6 +808,8 @@ const WorkOrderDetailPage = {
 
   /* ── Material ─────────────────────────────── */
   _matTotals(ao) {
+    const canSeePrice = Auth.canAny(['invoice_view','invoice_create','reports_view']);
+    if (!canSeePrice) return '';
     const mats = ao.materials || [];
     if (!mats.length) return '';
     let exMoms = 0, momsAmt = 0;
@@ -833,6 +835,7 @@ const WorkOrderDetailPage = {
   },
 
   _renderMaterials(ao) {
+    const canSeePrice = Auth.canAny(['invoice_view','invoice_create','reports_view']);
     const mats = ao.materials || [];
     if (!mats.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;font-style:italic;">Inget material registrerat ännu.</p>`;
     return `<div style="overflow-x:auto;">
@@ -841,8 +844,8 @@ const WorkOrderDetailPage = {
           <tr style="background:var(--bg);border-bottom:2px solid var(--br);">
             <th style="padding:7px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">Material</th>
             <th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Antal</th>
-            <th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">À-pris</th>
-            <th style="padding:7px 14px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Inkl. moms</th>
+            ${canSeePrice ? `<th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">À-pris</th>
+            <th style="padding:7px 14px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Inkl. moms</th>` : ''}
             <th style="padding:7px 10px;text-align:right;width:1px;"></th>
           </tr>
         </thead>
@@ -858,12 +861,12 @@ const WorkOrderDetailPage = {
             return `<tr style="border-bottom:1px solid var(--bg);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
               <td style="padding:9px 14px;">
                 <div style="font-weight:700;color:var(--tx);">${m.name}</div>
-                ${buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;">Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>
+                ${canSeePrice && buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;">Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>
                 <button type="button" onclick="(function(){var e=document.getElementById('mat-int-${m.id}');e.style.display=e.style.display==='none'?'':'none';})()" style="font-size:9px;color:var(--mt);background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;gap:2px;margin-top:2px;">${ic('eye',9)} Intern</button>` : ''}
               </td>
               <td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${qty} ${m.unit}</td>
-              <td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${fmt(sell)} kr</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:var(--navy);white-space:nowrap;">${fmt(inklMoms)} kr</td>
+              ${canSeePrice ? `<td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${fmt(sell)} kr</td>
+              <td style="padding:9px 14px;text-align:right;font-weight:700;color:var(--navy);white-space:nowrap;">${fmt(inklMoms)} kr</td>` : ''}
               <td style="padding:9px 10px;text-align:right;white-space:nowrap;">
                 <div style="display:flex;gap:4px;justify-content:flex-end;">
                   <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',11)}</button>
