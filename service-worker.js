@@ -1,7 +1,7 @@
 /**
- * VIFT CRM — Service Worker v5
+ * VIFT CRM — Service Worker v9 (rollback)
  *
- * v7: force WorkOrdersPage v26 cache-bust
+ * v9: rollback till 17d1b1d — rensar v7+v8 cacher
  *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only)
@@ -13,7 +13,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v7';
+const CACHE_NAME = 'vift-crm-v9';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
