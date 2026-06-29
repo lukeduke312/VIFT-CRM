@@ -61,8 +61,11 @@ const WorkOrdersPage = {
       <div class="ao-toolbar">
         <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="ao-search" placeholder="Sök order, kund, adress…"
-            value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()">
+          <input type="search" id="ao-search"
+            placeholder="Sök order, kund, adress, personal, beskrivning…"
+            value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()"
+            style="padding-right:${this.q?'28px':'10px'}">
+          ${this.q ? `<button class="swrap-clear" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()" title="Rensa sökning">${ic('x',12)}</button>` : ''}
         </div>
         <button class="btn bghost bsm ao-filter-btn${activeCount?' ao-filter-active':''}" onclick="WorkOrdersPage.openFilterPanel()">
           ${ic('sliders',13)}${activeCount ? ` (${activeCount})` : ' Filter'}
@@ -231,9 +234,11 @@ const WorkOrdersPage = {
   },
 
   _clearDraft() {
-    const sort = this._fDraft ? this._fDraft.sort : this._f.sort;
-    this._fDraft = { quick:null, mine:false, unassigned:false, staffIds:[], customer:null, categories:[], sort };
-    this._showFilterPanel();
+    const sort = this._f.sort;
+    this._f = { quick:null, mine:false, unassigned:false, staffIds:[], customer:null, categories:[], sort };
+    this._fDraft = null;
+    Modal.close();
+    this._refreshFilters();
   },
 
   _draftCount() {
@@ -411,13 +416,29 @@ const WorkOrdersPage = {
     }
 
     if (this.q) {
-      const ql = this.q.toLowerCase();
-      list = list.filter(a => {
-        const cu = getCu(a.customerId);
-        return a.title.toLowerCase().includes(ql)
-          || a.id.toLowerCase().includes(ql)
-          || (a.address||'').toLowerCase().includes(ql)
-          || (cu && CustomerService.displayName(cu).toLowerCase().includes(ql));
+      const words = this.q.toLowerCase().split(/\s+/).filter(Boolean);
+      const cats  = typeof AO_CATEGORIES !== 'undefined' ? AO_CATEGORIES : [];
+      const nrm   = s => (s||'').toLowerCase().replace(/å/g,'a').replace(/ä/g,'a').replace(/ö/g,'o');
+      list = list.filter(ao => {
+        const cu       = getCu(ao.customerId);
+        const prop     = (state.properties||[]).find(p => p.id === ao.propertyId);
+        const catObj   = cats.find(c => c.slug === ao.category);
+        const stfNames = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? s.firstName+' '+s.lastName : ''; }).join(' ');
+        const matText  = (ao.materials||[]).map(m => m.description||m.name||'').join(' ');
+        const haystack = nrm([
+          ao.id, ao.title, ao.description, ao.address, ao.contactPerson,
+          ao.phone, ao.email, ao.category,
+          catObj ? catObj.label : '',
+          ao.status, ao.priority,
+          cu ? CustomerService.displayName(cu) : '',
+          prop ? (prop.name||prop.address||'') : '',
+          stfNames, matText
+        ].join(' '));
+        const phoneDigits = (ao.phone||'').replace(/\D/g,'');
+        return words.every(w => {
+          const nw = nrm(w);
+          return haystack.includes(nw) || (nw.replace(/\D/g,'') && phoneDigits.includes(nw.replace(/\D/g,'')));
+        });
       });
     }
 
