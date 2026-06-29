@@ -257,6 +257,16 @@
   .qf-row-desktop { display: flex; }
 }
 
+/* ── iOS zoom-prevention: alla inputs ≥ 16px på mobil ── */
+/* iOS Safari zoomar automatiskt in på inputs med font-size < 16px */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* ── Invoice detail — desktop two-column ─── */
 @media (min-width: 900px) {
   .inv-layout { flex-direction: row; align-items: flex-start; gap: 14px; }

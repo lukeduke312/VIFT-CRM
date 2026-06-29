@@ -1,7 +1,8 @@
 /**
- * VIFT CRM — Service Worker v5
+ * VIFT CRM — Service Worker v10
  *
- * v7: force WorkOrdersPage v26 cache-bust
+ * v10: bugfixar — behörigheter, snabb status, mobil iOS-zoom
+ *      Rensar v7/v8/v9 cacher.
  *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only)
@@ -13,7 +14,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v8';
+const CACHE_NAME = 'vift-crm-v10';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [

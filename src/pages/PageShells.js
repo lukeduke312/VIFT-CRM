@@ -4047,12 +4047,17 @@ const StaffPage = {
       if (idx < 0) return;
       if ((state.staff||[]).find(s => s.username === uname && s.id !== staffId)) { showToast('Användarnamnet används redan'); return; }
       state.staff[idx] = { ...state.staff[idx], ...data };
-      persist(); Modal.close(); showToast('Sparat');
-      // Om den inloggade användaren redigerar sig själv — uppdatera state.currentUser
+      persist(); Modal.close();
       const _cu = Auth.getUser();
       if (_cu && _cu.id === staffId) {
+        // Redigerar sig själv — uppdatera currentUser och re-rendera sidebar direkt
         state.currentUser = { ..._cu, firstName: data.firstName, lastName: data.lastName, role: data.role, username: data.username, title: data.title };
+        Auth._resolveUser();
         Sidebar.render();
+        showToast('Sparat — dina behörigheter uppdaterade omedelbart');
+      } else {
+        const changedName = data.firstName + ' ' + data.lastName;
+        showToast('Sparat — ' + changedName + ' ser nya behörigheter vid nästa inloggning');
       }
     }
     this.render();
@@ -5795,7 +5800,10 @@ const AdminPage = {
       description: document.getElementById('role-edit-desc')?.value.trim() || '',
       permissions: checked
     };
-    persist(); Modal.close(); AdminPage.render(); showToast('Roll uppdaterad');
+    persist(); Modal.close(); AdminPage.render();
+    // Re-resolve logged-in user in case their role's permissions just changed
+    Auth._resolveUser(); Sidebar.render();
+    showToast('Roll uppdaterad — behörigheter träder i kraft direkt');
   },
 
   removeRole(roleId) {

@@ -99,6 +99,20 @@ const WorkOrdersPage = {
     this.render();
   },
 
+  /* Snabb statusbyte direkt från listvy/kortvy */
+  quickSetStatus(aoId, newStatus) {
+    if (!newStatus || !aoId) return;
+    if (!Auth.require('ao_edit')) return;
+    const ao = (state.workOrders||[]).find(a => a.id === aoId);
+    if (!ao || ao.status === newStatus) return;
+    ao.status = newStatus;
+    ao.updatedAt = new Date().toISOString();
+    persist();
+    Sidebar.updateBadges();
+    WorkOrdersPage.renderList();
+    showToast(ao.id + ': ' + statusLabel(newStatus));
+  },
+
   /* ── Filter helpers ────────────────────── */
 
   _activeFilterCount() {
@@ -402,6 +416,7 @@ const WorkOrdersPage = {
             ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span></div>`:''}
             ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span></div>`:''}
             ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
+            ${Auth.can('ao_edit') ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);" onclick="event.stopPropagation()"><select style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);" onchange="WorkOrdersPage.quickSetStatus('${ao.id}',this.value)" onclick="event.stopPropagation()">${['nytt','pool','planerad','pågående','klar','avbruten'].map(s=>`<option value="${s}"${ao.status===s?' selected':''}>${statusLabel(s)}</option>`).join('')}</select></div>` : ''}
           </div>`;
       }).join('')}</div>`;
     } else {
@@ -452,6 +467,7 @@ const WorkOrdersPage = {
               ${chkHtml}
             </div>` : ''}
             ${archiveActions}${trashActions}
+            ${!ao.archived && !ao.deleted && Auth.can('ao_edit') ? `<div style="display:flex;align-items:center;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid var(--br);" onclick="event.stopPropagation()"><span style="font-size:10px;color:var(--mt);font-weight:600;white-space:nowrap;">Ändra status:</span><select style="flex:1;font-size:13px;padding:4px 6px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);" onchange="WorkOrdersPage.quickSetStatus('${ao.id}',this.value)" onclick="event.stopPropagation()">${['nytt','pool','planerad','pågående','klar','avbruten'].map(s=>`<option value="${s}"${ao.status===s?' selected':''}>${statusLabel(s)}</option>`).join('')}</select></div>` : ''}
           </button>`;
       }).join('');
     }

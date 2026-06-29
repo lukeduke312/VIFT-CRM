@@ -61,9 +61,12 @@ let state = {
 async function initState() {
   let d = {};
   try {
-    d = await Storage.getAll();
+    /* 8-sekunders timeout — om Supabase är långsam/offline faller vi tillbaka
+     * på localStorage direkt utan att hänga på "Laddar data" */
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000));
+    d = await Promise.race([Storage.getAll(), timeout]);
   } catch(e) {
-    console.warn('[initState] Supabase ej tillgänglig, använder localStorage:', e);
+    console.warn('[initState] Supabase ej tillgänglig, använder localStorage:', e.message);
     d = Storage._localAll();
   }
 
