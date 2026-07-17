@@ -1,5 +1,7 @@
 /**
- * WorkOrdersPage — AO-lista + skapa-wizard
+ * WorkOrdersPage — AO-lista + skapa-wizard (v31)
+ * v31: kompakt statuskontroll (klickbar badge), datum-snabbval i wizard,
+ *      fastighetsväljare i wizard steg 1, tydligare åtgärdstext
  */
 
 /* Akut-badge: röd chip med emoji och fetstilstext */
@@ -115,6 +117,38 @@ const WorkOrdersPage = {
     Sidebar.updateBadges();
     WorkOrdersPage.renderList();
     showToast(ao.id + ': ' + statusLabel(newStatus));
+  },
+
+  /* Flytande statuspopover — öppnas vid klick på status-badge i listan */
+  openStatusPop(event, aoId) {
+    event.stopPropagation();
+    document.getElementById('ao-spop')?.remove();
+    if (!Auth.can('ao_edit')) return;
+    const STATUSES = ['nytt','pool','planerad','pågående','klar','avbruten'];
+    const pop = document.createElement('div');
+    pop.id = 'ao-spop';
+    pop.className = 'ao-spop';
+    pop.innerHTML = STATUSES.map(s =>
+      `<button class="ao-spop-item" onclick="document.getElementById('ao-spop')?.remove();WorkOrdersPage.quickSetStatus('${aoId}','${s}')">
+        ${sbdg(s)}
+      </button>`
+    ).join('');
+    document.body.appendChild(pop);
+
+    const btn  = event.currentTarget || event.target;
+    const rect = btn.getBoundingClientRect();
+    const popW = 190;
+    let left = rect.left + window.scrollX;
+    let top  = rect.bottom + window.scrollY + 4;
+    if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+    if (rect.bottom + 260 > window.innerHeight) top = rect.top + window.scrollY - pop.offsetHeight - 4;
+    pop.style.left = left + 'px';
+    pop.style.top  = top  + 'px';
+
+    const close = (e) => {
+      if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', close, true); }
+    };
+    setTimeout(() => document.addEventListener('click', close, true), 0);
   },
 
   /* ── Filter helpers ────────────────────── */
@@ -491,7 +525,12 @@ const WorkOrdersPage = {
           <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
               <div style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${sbdg(ao.status)}${ao.priority==='akut'?akutBadge():pbdg(ao.priority)}</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;" onclick="event.stopPropagation()">
+                ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
+                  ? `<button class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</button>`
+                  : sbdg(ao.status)}
+                ${ao.priority==='akut'?akutBadge():pbdg(ao.priority)}
+              </div>
             </div>
             <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
             <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
@@ -501,7 +540,6 @@ const WorkOrdersPage = {
             ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span></div>`:''}
             ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span></div>`:''}
             ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
-            ${Auth.can('ao_edit') ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);" onclick="event.stopPropagation()"><select style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);" onchange="WorkOrdersPage.quickSetStatus('${ao.id}',this.value)" onclick="event.stopPropagation()">${['nytt','pool','planerad','pågående','klar','avbruten'].map(s=>`<option value="${s}"${ao.status===s?' selected':''}>${statusLabel(s)}</option>`).join('')}</select></div>` : ''}
           </div>`;
       }).join('')}</div>`;
     } else {
@@ -540,8 +578,11 @@ const WorkOrdersPage = {
                 <div class="ao-item-title">${ao.title}</div>
                 ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
               </div>
-              <div class="ao-item-badges">
-                ${sbdg(ao.status)}${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
+              <div class="ao-item-badges" onclick="event.stopPropagation()">
+                ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
+                  ? `<button class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</button>`
+                  : sbdg(ao.status)}
+                ${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
               </div>
             </div>
             ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
@@ -552,7 +593,6 @@ const WorkOrdersPage = {
               ${chkHtml}
             </div>` : ''}
             ${archiveActions}${trashActions}
-            ${!ao.archived && !ao.deleted && Auth.can('ao_edit') ? `<div style="display:flex;align-items:center;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid var(--br);" onclick="event.stopPropagation()"><span style="font-size:10px;color:var(--mt);font-weight:600;white-space:nowrap;">Ändra status:</span><select style="flex:1;font-size:13px;padding:4px 6px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);" onchange="WorkOrdersPage.quickSetStatus('${ao.id}',this.value)" onclick="event.stopPropagation()">${['nytt','pool','planerad','pågående','klar','avbruten'].map(s=>`<option value="${s}"${ao.status===s?' selected':''}>${statusLabel(s)}</option>`).join('')}</select></div>` : ''}
           </button>`;
       }).join('');
     }
@@ -649,6 +689,17 @@ const WorkOrdersPage = {
       `<option value="${c.id}" ${d.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
     ).join('');
     const cu = d.customerId ? getCu(d.customerId) : null;
+    const cuProps = d.customerId
+      ? (state.properties||[]).filter(p => p.customerId === d.customerId)
+      : [];
+    const propSelectHtml = cuProps.length
+      ? `<div class="fg"><label>Fastighet (valfritt)</label>
+           <select id="wiz-property" onchange="WorkOrdersPage._wizPropertyChanged()">
+             <option value="">— Välj fastighet —</option>
+             ${cuProps.map(p=>`<option value="${p.id}" ${d.propertyId===p.id?'selected':''}>${esc(p.name||p.address||p.id)}</option>`).join('')}
+           </select>
+         </div>`
+      : '';
     return `
       <div class="fg"><label>Rubrik / Vad ska göras <span style="color:var(--rd)">*</span></label>
         <input id="wiz-title" value="${d.title||''}" placeholder="T.ex. Läckage badrum, Fasadtvätt…"></div>
@@ -673,6 +724,7 @@ const WorkOrdersPage = {
           + Ny kund
         </button></div>
       <div id="wiz-autofill"></div>
+      <div id="wiz-prop-wrap">${propSelectHtml}</div>
       <div class="fg"><label>Arbetsadress</label>
         <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"
           autocomplete="off"
@@ -720,12 +772,25 @@ const WorkOrdersPage = {
       </div>
 
       <div id="wiz-schedule" style="${isPlan?'':'display:none;'}">
-        <div class="g2">
-          <div class="fg"><label>Datum</label><input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}"></div>
-          <div class="g2">
-            <div class="fg"><label>Starttid</label><input type="time" id="wiz-start" value="${d.scheduledStart||'08:00'}"></div>
-            <div class="fg"><label>Sluttid</label><input type="time" id="wiz-end" value="${d.scheduledEnd||'16:00'}"></div>
+        <div class="fg">
+          <label>Datum</label>
+          <div class="date-quick-row">
+            ${(()=>{
+              const td = new Date(); const todayStr = td.toISOString().slice(0,10);
+              const tm = new Date(td); tm.setDate(tm.getDate()+1); const tmStr = tm.toISOString().slice(0,10);
+              const nw = new Date(td); nw.setDate(nw.getDate()+1); while(nw.getDay()===0||nw.getDay()===6)nw.setDate(nw.getDate()+1); const nwStr = nw.toISOString().slice(0,10);
+              const wk = new Date(td); wk.setDate(wk.getDate()+7); const wkStr = wk.toISOString().slice(0,10);
+              return [
+                {l:'Idag',d:todayStr},{l:'Imorgon',d:tmStr},
+                {l:'Nästa vardag',d:nwStr},{l:'Om en vecka',d:wkStr}
+              ].map(q=>`<button type="button" class="btn bxs bghost" style="font-size:11px;padding:3px 8px;" onclick="WorkOrdersPage._wizSetDate('${q.d}')">${q.l}</button>`).join('');
+            })()}
           </div>
+          <input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}" style="margin-top:4px;">
+        </div>
+        <div class="g2" style="margin-top:4px;">
+          <div class="fg"><label>Starttid</label><input type="time" id="wiz-start" value="${d.scheduledStart||'08:00'}"></div>
+          <div class="fg"><label>Sluttid</label><input type="time" id="wiz-end" value="${d.scheduledEnd||'16:00'}"></div>
         </div>
       </div>
 
@@ -987,6 +1052,7 @@ const WorkOrdersPage = {
     if (!sel) return;
     const id = sel.value;
     this._wiz.data.customerId = id;
+    this._wiz.data.propertyId = ''; // reset fastighet vid kundyte
     const cu = id ? getCu(id) : null;
 
     if (cu) {
@@ -998,6 +1064,43 @@ const WorkOrdersPage = {
     document.getElementById('wiz-autofill').innerHTML = cu
       ? `<div class="ibox" style="margin-bottom:8px;">${ic('check',14)} ${CustomerService.displayName(cu)}</div>`
       : '';
+
+    // Uppdatera fastighetsväljaren för ny kund
+    const propWrap = document.getElementById('wiz-prop-wrap');
+    if (propWrap) {
+      const cuProps = id ? (state.properties||[]).filter(p => p.customerId === id) : [];
+      propWrap.innerHTML = cuProps.length
+        ? `<div class="fg"><label>Fastighet (valfritt)</label>
+             <select id="wiz-property" onchange="WorkOrdersPage._wizPropertyChanged()">
+               <option value="">— Välj fastighet —</option>
+               ${cuProps.map(p=>`<option value="${p.id}">${esc(p.name||p.address||p.id)}</option>`).join('')}
+             </select>
+           </div>`
+        : '';
+    }
+  },
+
+  _wizPropertyChanged() {
+    const sel = document.getElementById('wiz-property');
+    if (!sel) return;
+    const id = sel.value;
+    this._wiz.data.propertyId = id;
+    // Om fastigheten har adress, fyll in den i adressfältet
+    if (id) {
+      const prop = (state.properties||[]).find(p => p.id === id);
+      const addrEl = document.getElementById('wiz-address');
+      if (prop && addrEl && (!addrEl.value || addrEl.dataset.addrSource === 'customer' || addrEl.dataset.addrSource === 'property')) {
+        addrEl.value = prop.address || prop.name || '';
+        addrEl.dataset.addrSource = 'property';
+        this._wiz.data._sources = this._wiz.data._sources || {};
+        this._wiz.data._sources.address = 'property';
+      }
+    }
+  },
+
+  _wizSetDate(d) {
+    const el = document.getElementById('wiz-date');
+    if (el) { el.value = d; this._wiz.data.scheduledDate = d; }
   },
 
   _wizSetPlan(mode) {

@@ -1,5 +1,6 @@
 /**
- * WorkOrderDetailPage — Fullständig AO-detaljvy
+ * WorkOrderDetailPage — Fullständig AO-detaljvy (v44)
+ * v44: Tydligare återkommande-knapp, action-sheet-klasser i Fler åtgärder
  */
 const WorkOrderDetailPage = {
   aoId: null,
@@ -245,9 +246,14 @@ const WorkOrderDetailPage = {
           ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
                ${ic('refresh-cw',13)} Skapad från återkommande mall: ${ao.recurringOrderId}
              </div>`
-          : `<button class="btn bghost bfull" style="margin-top:8px;" onclick="WorkOrderDetailPage.makeRecurring()">
-               ${ic('refresh-cw',14)} Gör till återkommande ärende
-             </button>`
+          : `<div style="margin-top:8px;">
+               <button class="btn bghost bfull" onclick="WorkOrderDetailPage.makeRecurring()">
+                 ${ic('refresh-cw',14)} Skapa återkommande arbetsorder
+               </button>
+               <p style="font-size:11px;color:var(--mt);margin:4px 0 0;text-align:center;line-height:1.4;">
+                 Systemet skapar automatiskt nya arbetsorder enligt valt intervall.
+               </p>
+             </div>`
         }
       `:''}
     `;
@@ -382,17 +388,19 @@ const WorkOrderDetailPage = {
     if (!ao) return;
     const items = this._secondaryActions(ao);
     if (!items.length) return;
-    const rows = items.map(it => {
-      const div = it.divider ? `<div style="height:1px;background:var(--br);margin:4px 0;"></div>` : '';
-      const col = it.destructive ? 'color:var(--rd);' : '';
-      return div + `<button class="btn bghost bfull" style="justify-content:flex-start;padding:11px 14px;gap:10px;${col}" onclick="Modal.close();${it.fn}">
-        <span style="opacity:.65;flex-shrink:0;">${ic(it.icon,15)}</span>${it.label}
+    let rows = '<div class="action-sheet-list">';
+    items.forEach(it => {
+      if (it.divider) rows += '<div class="action-sheet-divider"></div>';
+      const cls = it.destructive ? 'action-sheet-btn action-sheet-btn--red' : 'action-sheet-btn';
+      rows += `<button class="${cls}" onclick="Modal.close();${it.fn}">
+        <span style="opacity:.65;flex-shrink:0;">${ic(it.icon,16)}</span>${it.label}
       </button>`;
-    }).join('');
+    });
+    rows += '</div>';
     Modal.open({
       title: `${ic('more-horizontal',14)} Fler åtgärder`,
-      body:  `<div style="display:flex;flex-direction:column;gap:2px;margin:0 -2px;">${rows}</div>`,
-      buttons: [{ label:'Avbryt', cls:'btn bs', onClick:() => Modal.close() }]
+      body: rows,
+      buttons: [{ label:'Stäng', cls:'btn bs bfull', onClick:() => Modal.close() }]
     });
   },
 

@@ -2038,6 +2038,7 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .action-sheet-btn:hover { background: var(--bg); }
 .action-sheet-btn--red  { color: var(--rd); }
+.action-sheet-divider   { height: 1px; background: var(--br); margin: 4px 0; }
 
 /* ── Tech accordion rows (Teknisk info) ──────────────── */
 .prop-acc-row {
@@ -2467,3 +2468,57 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   -ms-overflow-style: none;
 }
 .ao-status-tabs::-webkit-scrollbar { display: none; }
+
+/* ── Klickbar status-badge i AO-lista (v49) ──────────── */
+.ao-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  padding: 1px 2px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: box-shadow .12s;
+  line-height: 1;
+}
+.ao-status-btn:hover {
+  box-shadow: 0 0 0 2px var(--sky);
+}
+.ao-status-btn:active {
+  opacity: .75;
+}
+
+/* ── Flytande status-popover ──────────────────────────── */
+.ao-spop {
+  position: absolute;
+  z-index: 9998;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.14);
+  padding: 4px;
+  min-width: 180px;
+}
+.ao-spop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: background .1s;
+}
+.ao-spop-item:hover { background: var(--bg); }
+
+/* ── Datum snabbval-rad i AO-wizard ──────────────────── */
+.date-quick-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
