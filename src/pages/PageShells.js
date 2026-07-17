@@ -1947,7 +1947,10 @@ const OffersPage = {
       scope:        d.scope        || '',
       includes:     d.includes     || '',
       excludes:     d.excludes     || '',
-      lines:        cleanLines.map(l=>l.type==='manual'?{...l,total:Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))}:{...l}),
+      lines:        cleanLines.map(l=>{
+        if(l.type==='service'||l.type==='text') return {...l};
+        return {...l, total: Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))};
+      }),
       extras:       cleanExtras,
       validUntil:   d.validUntil   || '',
       paymentTerms: d.paymentTerms || '',
@@ -2003,7 +2006,10 @@ const OfferDetailPage = {
     const extras   = off.extras || [];
 
     const rawExVat = Math.round(
-      prLines.reduce((s,l) => s + (l.exVat||l.total||0), 0) +
+      prLines.reduce((s,l) => {
+        if (l.type === 'service') return s + (l.exVat||0);
+        return s + Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
+      }, 0) +
       extras.reduce((s,e) => s + Math.round((e.qty||1)*(e.unitPrice||0)), 0)
     );
     const _disc   = off.discount || {type:'percent', value:0};
@@ -2798,7 +2804,7 @@ const OfferDetailPage = {
     const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
     const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
     const extras   = off.extras||[];
-    const rawExVat = Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+    const rawExVat = Math.round(prLines.reduce((s,l)=>{if(l.type==='service')return s+(l.exVat||0);return s+Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));},0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
     const _disc    = off.discount||{type:'percent',value:0};
     const discAmt  = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
     const exVat    = rawExVat - discAmt;
@@ -3056,11 +3062,49 @@ ${hasRut?`<div class="rut">
 </div>
 
 </div>
-<script>window.onload=()=>{ window.print(); };<\/script>
 </body></html>`;
 
-    const w = window.open('', '_blank');
-    if (w) { w.document.write(html); w.document.close(); }
+    /* ── Visa PDF i in-page overlay (fungerar på mobil, iPad, iPhone Safari och PWA) ── */
+    const prev = document.getElementById('pdf-preview-ov');
+    if (prev) prev.remove();
+
+    const blob    = new Blob([html], {type: 'text/html'});
+    const blobUrl = URL.createObjectURL(blob);
+
+    const ov = document.createElement('div');
+    ov.id = 'pdf-preview-ov';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#e8edf2;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);';
+
+    const offLabel = esc2(off.id) + (off.title ? ' – ' + esc2(off.title) : '');
+
+    ov.innerHTML = `
+      <div style="flex-shrink:0;background:#0d2b4e;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+        <button id="pdf-close-btn" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">← Tillbaka</button>
+        <span style="flex:1;color:#fff;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${offLabel}</span>
+        <button id="pdf-print-btn" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">Skriv ut</button>
+      </div>
+      <iframe id="pdf-frame" style="flex:1;border:none;width:100%;background:#fff;" title="Offert ${esc2(off.id)}"></iframe>
+    `;
+    document.body.appendChild(ov);
+
+    /* Stäng: ta bort overlay och frigör blob-URL */
+    document.getElementById('pdf-close-btn').onclick = () => {
+      ov.remove();
+      URL.revokeObjectURL(blobUrl);
+    };
+
+    /* Skriv ut via iframe (iframe + blob fungerar i alla moderna browsers inkl. iOS Safari) */
+    document.getElementById('pdf-print-btn').onclick = () => {
+      const fr = document.getElementById('pdf-frame');
+      if (fr && fr.contentWindow) {
+        try { fr.contentWindow.print(); }
+        catch(_) { window.open(blobUrl, '_blank'); }
+      }
+    };
+
+    /* Ladda HTML i iframe via blob-URL — säkert och utan popup-blockers */
+    document.getElementById('pdf-frame').src = blobUrl;
+
     this._logEvt(off, 'pdf', 'PDF genererad');
     off.pdfGeneratedAt = new Date().toISOString();
     off.updatedAt = new Date().toISOString();
