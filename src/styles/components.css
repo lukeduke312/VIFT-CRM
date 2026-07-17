@@ -2591,7 +2591,7 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 }
 .ao-address-link:hover span[style*="map-pin"] { color: var(--sky) !important; }
 
-/* ── Serviceintervall (v52) ────────────────────────────────── */
+/* ── Serviceintervall (v53) ────────────────────────────────── */
 .si-badge {
   display: inline-block;
   font-size: 10px;
@@ -2632,7 +2632,17 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 .si-card--overdue   { border-left: 3px solid var(--rd); }
 .si-card--due-soon  { border-left: 3px solid var(--or); }
 .si-card--approaching { border-left: 3px solid #eab308; }
+.si-card--paused    { opacity: 0.6; border-left: 3px solid var(--mt); }
 .si-card:hover      { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+
+.si-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.si-fchip {
+  font-size: 11px; padding: 3px 10px; border-radius: 20px;
+  border: 1px solid var(--br); background: var(--bg); color: var(--tx);
+  cursor: pointer; display: flex; align-items: center; gap: 4px;
+}
+.si-fchip.on { background: var(--sky); color: #fff; border-color: var(--sky); }
+.si-fchip-cnt { font-size: 10px; font-weight: 700; }
 
 .si-card-header {
   display: flex;

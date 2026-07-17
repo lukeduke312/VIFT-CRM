@@ -1,6 +1,6 @@
 /**
  * OperationsPage — Dagens drift (Fas 4B)
- * Chefsvy: KPI, personalstatus, försenade/akuta, klara ej fakturerade, kommande
+ * Chefsvy: KPI, personalstatus, försenade/akuta, klara ej fakturerade, kommande, serviceintervall
  */
 const OperationsPage = {
 
@@ -31,6 +31,7 @@ const OperationsPage = {
       this._sectionAttention(overdue, urgent, noStaff, withNotes) +
       this._sectionOngoingNoDate(ongoingNoDate) +
       this._sectionStaff(all, today) +
+      this._sectionServiceIntervals(today) +
       this._sectionReadyBill(readyBill) +
       this._sectionUpcoming(all, today);
   },
@@ -348,15 +349,70 @@ const OperationsPage = {
       </div>`;
   },
 
+  // ── Serviceintervall som kräver uppmärksamhet ───────────────────────────
+
+  _sectionServiceIntervals(today) {
+    if (typeof ServiceIntervalService === 'undefined') return '';
+    const SIS   = ServiceIntervalService;
+    const items = SIS.getAllNeedingAttention();
+    if (items.length === 0) return '';
+
+    const dueToday    = items.filter(i => i.interval.nextDue === today);
+    const overdue     = items.filter(i => i.status === 'overdue');
+    const approaching = items.filter(i => i.status === 'due_soon' || i.status === 'approaching');
+
+    const renderRow = (item) => {
+      const { interval: si } = item;
+      const propName = item.propertyName || '—';
+      const propAddr = item.address || '';
+      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 14px;border-bottom:1px solid var(--br);cursor:pointer;"
+          onclick="Router.showPage('pg-obj-detail',{propId:'${item.propertyId}',tab:'service'})">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
+            <span style="font-size:12px;font-weight:700;color:var(--navy);">${esc(si.title)}</span>
+            ${SIS.statusBadge(si)}
+          </div>
+          <div style="font-size:11px;color:var(--mt);">${esc(propName)}${propAddr ? ' · ' + esc(propAddr) : ''}</div>
+          ${si.nextDue ? `<div style="font-size:11px;color:var(--mt);">Förfaller: ${fmtDate(si.nextDue)}</div>` : ''}
+        </div>
+        <span style="color:var(--mt);flex-shrink:0;">${ic('chevron-right',14)}</span>
+      </div>`;
+    };
+
+    let html = `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--rd);">
+      <div class="card-header">
+        <h3 class="ch3" style="color:var(--rd);">${ic('tool',14)} Serviceintervall kräver åtgärd</h3>
+        <span class="bdg bdg-red">${items.length}</span>
+      </div>
+      <div class="card-body" style="padding:0;">`;
+
+    if (dueToday.length > 0) {
+      html += `<div style="padding:6px 14px 3px;font-size:11px;font-weight:700;color:var(--rd);border-bottom:1px solid var(--br);">${ic('alert-circle',11)} Förfaller idag</div>`;
+      html += dueToday.map(renderRow).join('');
+    }
+    if (overdue.length > 0) {
+      html += `<div style="padding:6px 14px 3px;font-size:11px;font-weight:700;color:var(--rd);border-bottom:1px solid var(--br);">${ic('alert-triangle',11)} Förfallna</div>`;
+      html += overdue.map(renderRow).join('');
+    }
+    if (approaching.length > 0) {
+      html += `<div style="padding:6px 14px 3px;font-size:11px;font-weight:700;color:var(--or);border-bottom:1px solid var(--br);">${ic('clock',11)} Förfaller snart</div>`;
+      html += approaching.map(renderRow).join('');
+    }
+
+    return html + '</div></div>';
+  },
+
+  // ── AO-rad ───────────────────────────────────────────────────────────────
+
   _aoRow(ao, compact = false) {
-    const cu      = getCu(ao.customerId);
+    const cu        = getCu(ao.customerId);
     const staffHtml = (ao.staff || []).map(id => {
       const s = getStaff(id);
       return s ? `<span style="font-size:10px;background:var(--lbl);color:var(--navy);border-radius:10px;padding:1px 5px;">${esc(s.firstName)}</span>` : '';
     }).join(' ');
 
-    const cl = ao.checklist || [];
-    const done = cl.filter(c => c.done).length;
+    const cl    = ao.checklist || [];
+    const done  = cl.filter(c => c.done).length;
     const clStr = cl.length > 0 ? `${done}/${cl.length} ✓` : '';
 
     const timeStr = (ao.scheduledStart && ao.scheduledEnd)
