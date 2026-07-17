@@ -2706,3 +2706,65 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   .si-badge-due-soon { background: rgba(249,115,22,.15); }
   .si-badge-overdue  { background: rgba(239,68,68,.15);  }
 }
+
+/* ── Objekt-kort (lägenheter, lokaler) — Leverans C ────────────────────── */
+.obj-card {
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: box-shadow .15s, border-color .15s;
+  background: var(--card, var(--bg));
+}
+.obj-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); border-color: var(--sky); }
+
+.obj-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.obj-card-num {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--sky);
+  background: rgba(14,165,233,.08);
+  border-radius: 6px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+  min-width: 40px;
+  text-align: center;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+.obj-card-info { flex: 1; min-width: 0; }
+.obj-card-name { font-size: 14px; font-weight: 700; color: var(--tx); margin-bottom: 2px; }
+.obj-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--mt);
+}
+.obj-card-meta span::before { content: '·'; margin-right: 6px; }
+.obj-card-meta span:first-child::before { content: none; }
+
+.obj-card-desc {
+  font-size: 12px;
+  color: var(--mt);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg);
+  white-space: pre-wrap;
+}
+.obj-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .obj-card { background: var(--card-bg, #1e293b); }
+  .obj-card-num { background: rgba(14,165,233,.15); }
+}

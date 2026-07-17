@@ -25,6 +25,7 @@ const Router = {
       case 'pg-crm-detail':       return p.customerId ? '/kunder/' + p.customerId : '/kunder';
       case 'pg-objects':          return '/fastigheter';
       case 'pg-obj-detail':       return p.propId ? '/fastigheter/' + p.propId : '/fastigheter';
+      case 'pg-propobj-detail':   return p.objId ? '/objekt/' + p.objId : '/fastigheter';
       case 'pg-offer':            return '/offerter';
       case 'pg-offer-detail':     return p.offerId ? '/offerter/' + p.offerId : '/offerter';
       case 'pg-invoices':         return '/fakturaunderlag';
@@ -87,6 +88,10 @@ const Router = {
         if (s1) { this.showPage('pg-obj-detail', { propId: s1 }, { replace: true }); return; }
         this.showPage('pg-objects', {}, { replace: true }); return;
 
+      case 'objekt':
+        if (s1) { this.showPage('pg-propobj-detail', { objId: s1 }, { replace: true }); return; }
+        this.showPage('pg-objects', {}, { replace: true }); return;
+
       case 'offerter':
         if (s1) { this.showPage('pg-offer-detail', { offerId: s1 }, { replace: true }); return; }
         this.showPage('pg-offer', {}, { replace: true }); return;
@@ -130,6 +135,7 @@ const Router = {
     'pg-crm-detail':  { title: 'Kundkort',              sub: '' },
     'pg-objects':     { title: 'Fastigheter',           sub: 'Fastighetsregister' },
     'pg-obj-detail':  { title: 'Fastighetskort',        sub: '' },
+    'pg-propobj-detail': { title: 'Objekt',             sub: 'Lägenhet / lokal' },
     'pg-offer':       { title: 'Offerter',              sub: 'Offerthantering' },
     'pg-offer-detail':{ title: 'Offert',                sub: 'Detalj' },
     'pg-invoices':    { title: 'Fakturering',           sub: 'Fakturaunderlag' },
@@ -303,7 +309,8 @@ const Router = {
       'pg-activities':        () => ActivitiesPage.render(params),
       'pg-service-templates': () => ServiceTemplatesPage.render(),
       'pg-myjobs':            () => MyJobsPage.render(),
-      'pg-operations':        () => OperationsPage.render()
+      'pg-operations':        () => OperationsPage.render(),
+      'pg-propobj-detail':    () => PropertyObjectPage.render(params)
     };
 
     const renderer = renderers[pageId];

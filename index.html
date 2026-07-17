@@ -12,14 +12,14 @@
 <title>VIFT CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- DEPLOY: SW=v10 responsive=v16 WorkOrdersPage=v33 WorkOrderDetailPage=v46 components=v53 PageShells=v75 PropertyDetailPage=v17 ServiceIntervalService=v3 OperationsPage=v9 PropertyObjectService=v1 -->
+<!-- DEPLOY: SW=v10 responsive=v16 WorkOrdersPage=v33 WorkOrderDetailPage=v46 components=v54 PageShells=v75 PropertyDetailPage=v18 ServiceIntervalService=v3 OperationsPage=v9 PropertyObjectService=v1 PropertyObjectPage=v1 -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
 <link rel="stylesheet" href="src/styles/layout.css?v=27">
-<link rel="stylesheet" href="src/styles/components.css?v=53">
+<link rel="stylesheet" href="src/styles/components.css?v=54">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=21">
 <link rel="stylesheet" href="src/styles/responsive.css?v=16">
@@ -293,6 +293,11 @@
         <div class="con" id="pg-admin-content"></div>
       </div>
 
+      <!-- Objekt (lägenhet/lokal) detalj -->
+      <div class="page" id="pg-propobj-detail">
+        <div class="con" id="pg-propobj-detail-content"></div>
+      </div>
+
     </div><!-- /content-scroll -->
   </div><!-- /page-area -->
 </div><!-- /app -->
@@ -353,7 +358,8 @@
 <script src="src/pages/InvoicesPage.js?v=19"></script>
 <script src="src/pages/RecurringPage.js?v=9"></script>
 <script src="src/pages/SalesPage.js?v=4"></script>
-<script src="src/pages/PropertyDetailPage.js?v=17"></script>
+<script src="src/pages/PropertyDetailPage.js?v=18"></script>
+<script src="src/pages/PropertyObjectPage.js?v=1"></script>
 <script src="src/pages/PageShells.js?v=75"></script>
 <script src="src/pages/RonderingPage.js?v=7"></script>
 <script src="src/pages/OperationsPage.js?v=9"></script>

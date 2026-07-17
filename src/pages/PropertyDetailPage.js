@@ -1,7 +1,8 @@
 /**
  * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v12)
- * Tabs: Översikt | Kontakt | Teknisk info | Serviceintervall | Arbetsorder | Återkommande | Bilder | Anteckningar
+ * Tabs: Översikt | Kontakt | Teknisk info | Serviceintervall | Arbetsorder | Återkommande | Objekt | Bilder | Anteckningar
  * v12: ServiceIntervalService-integration — bevakning, historik, markera utförd
+ * v18: Objekt-flik (lägenheter, lokaler) — Leverans C
  */
 const PropertyDetailPage = {
   propId: null,
@@ -35,6 +36,7 @@ const PropertyDetailPage = {
     const insp    = p.inspections || {};
     const images  = p.images || [];
     const siList  = p.serviceIntervals || [];
+    const objList = (typeof PropertyObjectService !== 'undefined') ? PropertyObjectService.getByProperty(p.id) : [];
     const overdueInsp = Object.values(insp).filter(v => v.nextDate && v.nextDate < tdy()).length;
     const overdueServices = (typeof ServiceIntervalService !== 'undefined')
       ? siList.filter(si => ServiceIntervalService.getStatus(si) === 'overdue').length : 0;
@@ -117,6 +119,7 @@ const PropertyDetailPage = {
         <button class="ft ${this.activeTab==='ao'        ?'on':''}" onclick="PropertyDetailPage.switchTab('ao')">Arbetsorder${aos.length?` (${aos.length})`:''}</button>
         <button class="ft ${this.activeTab==='recurring' ?'on':''}" onclick="PropertyDetailPage.switchTab('recurring')">Återkommande${recs.length?` (${recs.length})`:''}</button>
         <button class="ft ${this.activeTab==='rondering'  ?'on':''}" onclick="PropertyDetailPage.switchTab('rondering')">Rondering</button>
+        <button class="ft ${this.activeTab==='objects'   ?'on':''}" onclick="PropertyDetailPage.switchTab('objects')">Objekt${objList.length?` (${objList.length})`:''}</button>
         <button class="ft ${this.activeTab==='images'    ?'on':''}" onclick="PropertyDetailPage.switchTab('images')">Bilder${images.length?` (${images.length})`:''}</button>
         <button class="ft ${this.activeTab==='notes'     ?'on':''}" onclick="PropertyDetailPage.switchTab('notes')">Anteckningar${notes.length?` (${notes.length})`:''}</button>
       </div>
@@ -128,6 +131,7 @@ const PropertyDetailPage = {
       <div id="prop-tab-ao"         ${this.activeTab!=='ao'         ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
       <div id="prop-tab-recurring"  ${this.activeTab!=='recurring'  ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
       <div id="prop-tab-rondering"  ${this.activeTab!=='rondering'  ?'style="display:none"':''}><div id="tab-rondering">${this.activeTab==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
+      <div id="prop-tab-objects"    ${this.activeTab!=='objects'    ?'style="display:none"':''}>${this._renderObjectsTab(p)}</div>
       <div id="prop-tab-images"     ${this.activeTab!=='images'     ?'style="display:none"':''}>${this._renderImagesTab(p)}</div>
       <div id="prop-tab-notes"      ${this.activeTab!=='notes'      ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>`;
 
@@ -192,7 +196,7 @@ const PropertyDetailPage = {
 
   switchTab(tab) {
     this.activeTab = tab;
-    const tabs = ['overview','contact','tech','service','ao','recurring','rondering','images','notes'];
+    const tabs = ['overview','contact','tech','service','ao','recurring','rondering','objects','images','notes'];
     tabs.forEach(t => {
       const el = document.getElementById(`prop-tab-${t}`);
       if (el) el.style.display = t === tab ? '' : 'none';
@@ -298,6 +302,298 @@ const PropertyDetailPage = {
   },
 
   /* ── Tab: Serviceintervall ─────────────────────────────── */
+
+  /* ── Objekt-flik ─────────────────────────────────────────── */
+
+  _objFilter: { type: '', status: '', search: '' },
+
+  _objFApply(f) {
+    Object.assign(this._objFilter, f);
+    const p = this.propId ? getObj(this.propId) : null;
+    if (p) {
+      const el = document.getElementById('prop-tab-objects');
+      if (el) el.innerHTML = this._renderObjectsTab(p);
+    }
+  },
+
+  _renderObjectsTab(p) {
+    const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
+    if (!POS) return '<div class="empty"><h3>PropertyObjectService saknas</h3></div>';
+    const canManage = Auth.can('properties_manage');
+    const f = this._objFilter;
+
+    const objects = POS.search(p.id, { query: f.search, type: f.type, status: f.status });
+    const all     = POS.getByProperty(p.id);
+
+    const typeOptions = [{ key: '', label: 'Alla typer' }, ...(typeof PROPERTY_OBJECT_TYPES !== 'undefined' ? PROPERTY_OBJECT_TYPES : [])];
+    const statusOptions = [{ key: '', label: 'Alla statusar' }, ...(typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])];
+
+    const filterBar = `
+      <div class="si-filter-bar" style="margin-bottom:10px;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;">
+          <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="PropertyDetailPage._objFApply({type:this.value})">
+            ${typeOptions.map(t => `<option value="${t.key}" ${f.type===t.key?'selected':''}>${t.label}</option>`).join('')}
+          </select>
+          <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="PropertyDetailPage._objFApply({status:this.value})">
+            ${statusOptions.map(s => `<option value="${s.key}" ${f.status===s.key?'selected':''}>${s.label}</option>`).join('')}
+          </select>
+          <input type="text" class="fi" placeholder="Sök objekt…" value="${esc(f.search||'')}"
+            style="font-size:12px;padding:5px 10px;height:32px;min-width:120px;"
+            oninput="PropertyDetailPage._objFApply({search:this.value})">
+        </div>
+        ${canManage ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
+      </div>`;
+
+    const itemsHtml = objects.length === 0
+      ? `<div class="empty" style="padding:24px 0;">
+           ${ic('layout',28)}
+           <p style="font-size:12px;color:var(--mt);margin-top:6px;">${all.length === 0 ? 'Inga objekt tillagda ännu.' : 'Inga objekt matchar filtret.'}</p>
+           ${all.length === 0 && canManage ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
+         </div>`
+      : objects.map(obj => {
+          const typeLbl   = POS.typeLabel(obj.type);
+          const statusLbl = POS.statusLabel(obj.status);
+          const badgeCls  = POS.statusBadgeClass(obj.status);
+          const openAO    = (state.workOrders || []).filter(a => a.objectId === obj.id && !a.deleted && !a.archived && !['klar','fakturerad','avbruten'].includes(a.status)).length;
+          return `
+            <div class="obj-card" onclick="Router.showPage('pg-propobj-detail',{objId:'${obj.id}'})">
+              <div class="obj-card-header">
+                <div class="obj-card-num">${esc(obj.objectNumber || '—')}</div>
+                <div class="obj-card-info">
+                  <div class="obj-card-name">${esc(obj.name || typeLbl)}</div>
+                  <div class="obj-card-meta">
+                    <span>${typeLbl}</span>
+                    ${obj.floor ? `<span>Vån ${esc(obj.floor)}</span>` : ''}
+                    ${obj.entrance ? `<span>${esc(obj.entrance)}</span>` : ''}
+                    ${obj.area ? `<span>${fmt(obj.area)} m²</span>` : ''}
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                  <span class="bdg ${badgeCls}" style="font-size:10px;">${statusLbl}</span>
+                  ${openAO > 0 ? `<span class="bdg bdg-orange" style="font-size:10px;">${openAO} AO</span>` : ''}
+                </div>
+              </div>
+              ${(obj.description || obj.accessInformation) ? `
+              <div class="obj-card-desc">${esc(obj.description || obj.accessInformation)}</div>` : ''}
+              <div class="obj-card-actions" onclick="event.stopPropagation()">
+                <button class="btn bghost bsm" onclick="Router.showPage('pg-propobj-detail',{objId:'${obj.id}'})">${ic('eye',13)} Visa</button>
+                ${canManage ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openEditObject('${obj.id}')">${ic('pencil',13)} Redigera</button>` : ''}
+                ${canManage ? `<button class="btn bd bsm" onclick="PropertyDetailPage.deleteObject('${obj.id}')">${ic('trash-2',13)}</button>` : ''}
+              </div>
+            </div>`;
+        }).join('');
+
+    return `
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('layout',14)} Objekt (${all.length})</h3>
+          ${canManage ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
+        </div>
+        <div class="card-body" style="padding-top:8px;">
+          ${all.length > 0 ? filterBar : ''}
+          <div id="obj-list-body">${itemsHtml}</div>
+        </div>
+      </div>`;
+  },
+
+  openAddObject(propId) {
+    const p = getObj(propId);
+    if (!p) return;
+    const typeOptions = (typeof PROPERTY_OBJECT_TYPES !== 'undefined' ? PROPERTY_OBJECT_TYPES : [])
+      .map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+    const statusOptions = (typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])
+      .map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+    openModal(`
+      <h3 style="margin-bottom:16px;">${ic('plus',14)} Nytt objekt — ${esc(p.name)}</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <label class="fl">Typ *</label>
+            <select id="new-obj-type" class="fi" style="width:100%;">${typeOptions}</select>
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Objektnummer</label>
+            <input type="text" id="new-obj-num" class="fi" style="width:100%;" placeholder="t.ex. 1101">
+          </div>
+        </div>
+        <div>
+          <label class="fl">Namn / benämning</label>
+          <input type="text" id="new-obj-name" class="fi" style="width:100%;" placeholder="t.ex. Lägenhet 1101">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <label class="fl">Entré / port</label>
+            <input type="text" id="new-obj-entrance" class="fi" style="width:100%;">
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Trapphus</label>
+            <input type="text" id="new-obj-stairwell" class="fi" style="width:100%;">
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Våning</label>
+            <input type="text" id="new-obj-floor" class="fi" style="width:100%;">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <label class="fl">Yta (m²)</label>
+            <input type="number" id="new-obj-area" class="fi" style="width:100%;" min="0">
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Status</label>
+            <select id="new-obj-status" class="fi" style="width:100%;">${statusOptions}</select>
+          </div>
+        </div>
+        <div>
+          <label class="fl">Beskrivning</label>
+          <textarea id="new-obj-desc" class="fi" rows="2" style="width:100%;resize:vertical;"></textarea>
+        </div>
+        <div>
+          <label class="fl">Tillträdesinformation / portkod</label>
+          <input type="text" id="new-obj-access" class="fi" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn bs" onclick="closeModal()">Avbryt</button>
+        <button class="btn bp" onclick="PropertyDetailPage._saveAddObject('${propId}')">Spara objekt</button>
+      </div>
+    `);
+  },
+
+  _saveAddObject(propId) {
+    const type        = document.getElementById('new-obj-type')?.value || 'lagenhet';
+    const objectNumber= (document.getElementById('new-obj-num')?.value || '').trim();
+    const name        = (document.getElementById('new-obj-name')?.value || '').trim();
+    const entrance    = (document.getElementById('new-obj-entrance')?.value || '').trim();
+    const stairwell   = (document.getElementById('new-obj-stairwell')?.value || '').trim();
+    const floor       = (document.getElementById('new-obj-floor')?.value || '').trim();
+    const area        = parseFloat(document.getElementById('new-obj-area')?.value || '0') || 0;
+    const status      = document.getElementById('new-obj-status')?.value || 'aktiv';
+    const description = (document.getElementById('new-obj-desc')?.value || '').trim();
+    const accessInformation = (document.getElementById('new-obj-access')?.value || '').trim();
+    try {
+      PropertyObjectService.create({ propertyId: propId, type, objectNumber, name, entrance, stairwell, floor, area, status, description, accessInformation });
+      closeModal();
+      showToast('Objekt sparat');
+      const p = getObj(propId);
+      if (p) {
+        const el = document.getElementById('prop-tab-objects');
+        if (el) el.innerHTML = this._renderObjectsTab(p);
+      }
+    } catch(e) {
+      showToast(e.message || 'Kunde inte spara objekt', 'error');
+    }
+  },
+
+  openEditObject(objId) {
+    const obj = getPropObj(objId);
+    if (!obj) return;
+    const typeOptions = (typeof PROPERTY_OBJECT_TYPES !== 'undefined' ? PROPERTY_OBJECT_TYPES : [])
+      .map(t => `<option value="${t.key}" ${obj.type===t.key?'selected':''}>${t.label}</option>`).join('');
+    const statusOptions = (typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])
+      .map(s => `<option value="${s.key}" ${obj.status===s.key?'selected':''}>${s.label}</option>`).join('');
+    openModal(`
+      <h3 style="margin-bottom:16px;">${ic('pencil',14)} Redigera objekt — ${esc(obj.name || obj.objectNumber)}</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <label class="fl">Typ *</label>
+            <select id="edit-obj-type" class="fi" style="width:100%;">${typeOptions}</select>
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Objektnummer</label>
+            <input type="text" id="edit-obj-num" class="fi" style="width:100%;" value="${esc(obj.objectNumber||'')}">
+          </div>
+        </div>
+        <div>
+          <label class="fl">Namn / benämning</label>
+          <input type="text" id="edit-obj-name" class="fi" style="width:100%;" value="${esc(obj.name||'')}">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <label class="fl">Entré / port</label>
+            <input type="text" id="edit-obj-entrance" class="fi" style="width:100%;" value="${esc(obj.entrance||'')}">
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Trapphus</label>
+            <input type="text" id="edit-obj-stairwell" class="fi" style="width:100%;" value="${esc(obj.stairwell||'')}">
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Våning</label>
+            <input type="text" id="edit-obj-floor" class="fi" style="width:100%;" value="${esc(obj.floor||'')}">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;">
+            <label class="fl">Yta (m²)</label>
+            <input type="number" id="edit-obj-area" class="fi" style="width:100%;" value="${obj.area||0}" min="0">
+          </div>
+          <div style="flex:1;">
+            <label class="fl">Status</label>
+            <select id="edit-obj-status" class="fi" style="width:100%;">${statusOptions}</select>
+          </div>
+        </div>
+        <div>
+          <label class="fl">Beskrivning</label>
+          <textarea id="edit-obj-desc" class="fi" rows="2" style="width:100%;resize:vertical;">${esc(obj.description||'')}</textarea>
+        </div>
+        <div>
+          <label class="fl">Tillträdesinformation / portkod</label>
+          <input type="text" id="edit-obj-access" class="fi" style="width:100%;" value="${esc(obj.accessInformation||'')}">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn bs" onclick="closeModal()">Avbryt</button>
+        <button class="btn bp" onclick="PropertyDetailPage._saveEditObject('${objId}')">Spara ändringar</button>
+      </div>
+    `);
+  },
+
+  _saveEditObject(objId) {
+    const obj = getPropObj(objId);
+    if (!obj) return;
+    const fields = {
+      type:              document.getElementById('edit-obj-type')?.value || obj.type,
+      objectNumber:      (document.getElementById('edit-obj-num')?.value || '').trim(),
+      name:              (document.getElementById('edit-obj-name')?.value || '').trim(),
+      entrance:          (document.getElementById('edit-obj-entrance')?.value || '').trim(),
+      stairwell:         (document.getElementById('edit-obj-stairwell')?.value || '').trim(),
+      floor:             (document.getElementById('edit-obj-floor')?.value || '').trim(),
+      area:              parseFloat(document.getElementById('edit-obj-area')?.value || '0') || 0,
+      status:            document.getElementById('edit-obj-status')?.value || obj.status,
+      description:       (document.getElementById('edit-obj-desc')?.value || '').trim(),
+      accessInformation: (document.getElementById('edit-obj-access')?.value || '').trim()
+    };
+    try {
+      PropertyObjectService.update(objId, fields);
+      closeModal();
+      showToast('Objekt uppdaterat');
+      const p = getObj(obj.propertyId);
+      if (p) {
+        const el = document.getElementById('prop-tab-objects');
+        if (el) el.innerHTML = this._renderObjectsTab(p);
+      }
+    } catch(e) {
+      showToast(e.message || 'Kunde inte spara', 'error');
+    }
+  },
+
+  deleteObject(objId) {
+    const obj = getPropObj(objId);
+    if (!obj) return;
+    if (!confirm(`Ta bort "${obj.name || obj.objectNumber}"? Åtgärden kan inte ångras.`)) return;
+    try {
+      PropertyObjectService.remove(objId);
+      showToast('Objekt borttaget');
+      const p = getObj(obj.propertyId);
+      if (p) {
+        const el = document.getElementById('prop-tab-objects');
+        if (el) el.innerHTML = this._renderObjectsTab(p);
+      }
+    } catch(e) {
+      showToast(e.message || 'Kunde inte ta bort', 'error');
+    }
+  },
 
   /* _siFilter: { status: 'all'|'overdue'|'due_soon'|'approaching'|'ok'|'paused', search: '', sort: 'nextDue' } */
   _siFilter: { status: 'all', search: '', sort: 'nextDue' },
