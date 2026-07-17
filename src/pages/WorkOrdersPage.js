@@ -1,7 +1,6 @@
 /**
- * WorkOrdersPage — AO-lista + skapa-wizard (v31)
- * v31: kompakt statuskontroll (klickbar badge), datum-snabbval i wizard,
- *      fastighetsväljare i wizard steg 1, tydligare åtgärdstext
+ * WorkOrdersPage — AO-lista + skapa-wizard (v32)
+ * v32: sparar propertyName + objectId-plats, date-input-wrap
  */
 
 /* Akut-badge: röd chip med emoji och fetstilstext */
@@ -786,11 +785,28 @@ const WorkOrdersPage = {
               ].map(q=>`<button type="button" class="btn bxs bghost" style="font-size:11px;padding:3px 8px;" onclick="WorkOrdersPage._wizSetDate('${q.d}')">${q.l}</button>`).join('');
             })()}
           </div>
-          <input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}" style="margin-top:4px;">
+          <div class="date-input-wrap" style="margin-top:4px;">
+            <span class="date-input-icon">${ic('calendar',14)}</span>
+            <input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}">
+            <button type="button" class="date-input-clear" title="Rensa datum"
+              onclick="document.getElementById('wiz-date').value='';WorkOrdersPage._wiz.data.scheduledDate=''">${ic('x',11)}</button>
+          </div>
         </div>
-        <div class="g2" style="margin-top:4px;">
-          <div class="fg"><label>Starttid</label><input type="time" id="wiz-start" value="${d.scheduledStart||'08:00'}"></div>
-          <div class="fg"><label>Sluttid</label><input type="time" id="wiz-end" value="${d.scheduledEnd||'16:00'}"></div>
+        <div class="g2" style="margin-top:8px;">
+          <div class="fg">
+            <label>Starttid</label>
+            <div class="date-input-wrap">
+              <span class="date-input-icon">${ic('clock',13)}</span>
+              <input type="time" id="wiz-start" value="${d.scheduledStart||'08:00'}">
+            </div>
+          </div>
+          <div class="fg">
+            <label>Sluttid</label>
+            <div class="date-input-wrap">
+              <span class="date-input-icon">${ic('clock',13)}</span>
+              <input type="time" id="wiz-end" value="${d.scheduledEnd||'16:00'}">
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1237,11 +1253,14 @@ const WorkOrdersPage = {
   _wizSave() {
     if (!this._wizCollectStep3()) return;
     const d  = this._wiz.data;
+    const _prop = d.propertyId ? (state.properties||[]).find(p => p.id === d.propertyId) : null;
     const ao = WorkOrderService.create({
       title:         d.title,
       description:   d.description,
       customerId:    d.customerId,
       propertyId:    d.propertyId || '',
+      propertyName:  _prop ? (_prop.name || _prop.address || '') : '',
+      objectId:      d.objectId  || '',   // Fas C: objekt/lägenhet
       address:       d.address,
       contactPerson: d.contactPerson,
       phone:         d.phone,

@@ -79,8 +79,10 @@ const RecurringPage = {
       description:  ao.description || '',
       customerId:   ao.customerId || '',
       address:      ao.address || '',
+      category:     ao.category || '',
       priority:     ao.priority || 'normal',
       priceGroupId: ao.priceGroupId || '',
+      propertyId:   ao.propertyId || '',
       staff:        (ao.staff || []).slice(),
       checklist:    (ao.checklist || []).map(c => ({ text: c.text, description: c.description || '' }))
     };

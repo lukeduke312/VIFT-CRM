@@ -2522,3 +2522,60 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   flex-wrap: wrap;
   margin-bottom: 6px;
 }
+
+/* ── Styled date/time input wrapper (v50) ───────────── */
+.date-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid var(--br);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--bg);
+  transition: border-color .15s;
+  min-height: 40px;
+}
+.date-input-wrap:focus-within {
+  border-color: var(--sky);
+}
+.date-input-wrap input[type="date"],
+.date-input-wrap input[type="time"] {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  color: var(--tx);
+  min-width: 0;
+}
+.date-input-icon {
+  color: var(--mt);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.date-input-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--mt);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color .1s, background .1s;
+  flex-shrink: 0;
+}
+.date-input-clear:hover { color: var(--rd); background: rgba(220,38,38,.08); }
+
+/* ── Responsiva AO-åtgärdsknappar (v50) ──────────────── */
+/* Mobil: visa en row, desktop-varianten dold */
+.ao-acts-mobile  { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.ao-acts-desktop { display: none; }
+
+@media (min-width: 768px) {
+  .ao-acts-mobile  { display: none; }
+  .ao-acts-desktop { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+}

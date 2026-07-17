@@ -1,6 +1,7 @@
 /**
- * WorkOrderDetailPage — Fullständig AO-detaljvy (v44)
- * v44: Tydligare återkommande-knapp, action-sheet-klasser i Fler åtgärder
+ * WorkOrderDetailPage — Fullständig AO-detaljvy (v45)
+ * v45: Responsiva åtgärder (desktop/mobil), makeRecurring direkt,
+ *      styled date-input-wrap i Omplanera
  */
 const WorkOrderDetailPage = {
   aoId: null,
@@ -286,10 +287,34 @@ const WorkOrderDetailPage = {
   _actionBtns(ao) {
     const primary   = this._primaryActionBtns(ao);
     const secondary = this._secondaryActions(ao);
-    const moreBtnHtml = secondary.length > 0
-      ? `<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openMoreActions('${ao.id}')">${ic('more-horizontal',13)} Fler åtgärder</button>`
+
+    // Desktop: visa dessa sekundäråtgärder direkt i knappraden
+    const DESKTOP_INLINE = new Set(['Planera','Omplanera','Till pool','Pausa','Redigera','Personal','Visa fakturaunderlag']);
+    const desktopInline = secondary.filter(it => DESKTOP_INLINE.has(it.label));
+    const desktopRest   = secondary.filter(it => !DESKTOP_INLINE.has(it.label)); // Arkivera, Ta bort, etc.
+
+    const _inlineBtn = (it) => {
+      const cls = it.destructive ? 'btn bsm bd' : 'btn bsm bghost';
+      return `<button class="${cls}" onclick="${it.fn}">${ic(it.icon,13)} ${it.label}</button>`;
+    };
+
+    const desktopMoreBtn = desktopRest.length
+      ? `<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openMoreActions('${ao.id}','desktop')">${ic('more-horizontal',13)}</button>`
       : '';
-    return primary.join('') + moreBtnHtml;
+    const mobileMoreBtn = secondary.length
+      ? `<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openMoreActions('${ao.id}','mobile')">${ic('more-horizontal',13)} Fler åtgärder</button>`
+      : '';
+
+    return `
+      <div class="ao-acts-desktop">
+        ${primary.join('')}
+        ${desktopInline.map(_inlineBtn).join('')}
+        ${desktopMoreBtn}
+      </div>
+      <div class="ao-acts-mobile">
+        ${primary.join('')}
+        ${mobileMoreBtn}
+      </div>`;
   },
 
   _primaryActionBtns(ao) {
@@ -383,14 +408,22 @@ const WorkOrderDetailPage = {
     return items;
   },
 
-  openMoreActions(aoId) {
+  openMoreActions(aoId, mode) {
     const ao = getAO(aoId || this.aoId);
     if (!ao) return;
-    const items = this._secondaryActions(ao);
+    const allItems = this._secondaryActions(ao);
+    // On desktop, the inline buttons already show common actions — only show the rest
+    const DESKTOP_INLINE = new Set(['Planera','Omplanera','Till pool','Pausa','Redigera','Personal','Visa fakturaunderlag']);
+    const items = (mode === 'desktop')
+      ? allItems.filter(it => !DESKTOP_INLINE.has(it.label))
+      : allItems;
     if (!items.length) return;
     let rows = '<div class="action-sheet-list">';
+    let needDivider = false;
     items.forEach(it => {
-      if (it.divider) rows += '<div class="action-sheet-divider"></div>';
+      if (it.divider) needDivider = true;
+      if (needDivider && !it.divider) { rows += '<div class="action-sheet-divider"></div>'; needDivider = false; }
+      if (it.divider) { needDivider = true; return; }
       const cls = it.destructive ? 'action-sheet-btn action-sheet-btn--red' : 'action-sheet-btn';
       rows += `<button class="${cls}" onclick="Modal.close();${it.fn}">
         <span style="opacity:.65;flex-shrink:0;">${ic(it.icon,16)}</span>${it.label}
@@ -410,11 +443,21 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: 'Omplanera',
       body: `
-        <div class="g2">
-          <div class="fg"><label>Nytt datum</label><input type="date" id="rs-date" value="${ao.scheduledDate||tdy()}"></div>
-          <div class="g2">
-            <div class="fg"><label>Starttid</label><input type="time" id="rs-start" value="${ao.scheduledStart||'08:00'}"></div>
-            <div class="fg"><label>Sluttid</label><input type="time" id="rs-end" value="${ao.scheduledEnd||'16:00'}"></div>
+        <div class="fg">
+          <label>Nytt datum</label>
+          <div class="date-input-wrap">
+            ${ic('calendar',14)}
+            <input type="date" id="rs-date" value="${ao.scheduledDate||tdy()}" style="flex:1;">
+            <button type="button" class="date-input-clear" title="Rensa datum"
+              onclick="document.getElementById('rs-date').value=''">${ic('x',11)}</button>
+          </div>
+        </div>
+        <div class="g2" style="margin-top:8px;">
+          <div class="fg"><label>Starttid</label>
+            <div class="date-input-wrap">${ic('clock',13)}<input type="time" id="rs-start" value="${ao.scheduledStart||'08:00'}" style="flex:1;"></div>
+          </div>
+          <div class="fg"><label>Sluttid</label>
+            <div class="date-input-wrap">${ic('clock',13)}<input type="time" id="rs-end" value="${ao.scheduledEnd||'16:00'}" style="flex:1;"></div>
           </div>
         </div>`,
       buttons: [
@@ -2076,8 +2119,8 @@ const WorkOrderDetailPage = {
   makeRecurring() {
     const ao = getAO(this.aoId);
     if (!ao) return;
-    Router.showPage('pg-recurring');
-    setTimeout(() => RecurringPage.openFromAO(this.aoId), 150);
+    /* Öppna formuläret direkt som modal — navigerar inte bort från AO-sidan */
+    RecurringPage.openFromAO(this.aoId);
   },
 
   /* ── Skapa fakturaunderlag ─────────────── */
