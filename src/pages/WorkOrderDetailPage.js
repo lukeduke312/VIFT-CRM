@@ -82,6 +82,7 @@ const WorkOrderDetailPage = {
               <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ao.address)}</span>
               <span style="color:var(--sky);flex-shrink:0;">${ic('external-link',11)}</span>
             </a>`:''}
+            ${ao.objectId?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('layout',11)}</span><a style="color:var(--sky);text-decoration:none;font-size:12px;cursor:pointer;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectName || ao.objectId)}</a></div>`:''}
             ${ao.scheduledDate?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('calendar',11)}</span><span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span></div>`:''}
           </div>
         </div>
@@ -120,6 +121,11 @@ const WorkOrderDetailPage = {
           ${ao.accessCode?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('key',11)} Portkod</span>
             <span class="ao-info-val" style="font-weight:800;letter-spacing:.8px;font-size:16px;">${esc(ao.accessCode)}</span>
+          </div>`:''}
+          <!-- 2b. Objekt (lägenhet/lokal) -->
+          ${ao.objectId?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('layout',11)} Objekt</span>
+            <span class="ao-info-val" style="cursor:pointer;color:var(--sky);font-weight:600;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectName || ao.objectId)} ${ic('arrow-right',10)}</span>
           </div>`:''}
           <!-- 3. Personal -->
           <div class="ao-info-row">

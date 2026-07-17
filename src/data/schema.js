@@ -115,6 +115,9 @@ const Schema = {
     description: '',
     customerId: '',
     propertyId: '',
+    propertyName: '',
+    objectId: '',         // Leverans C: kopplat objekt (lägenhet/lokal)
+    objectName: '',
     address: '',
     contactPerson: '',
     phone: '',

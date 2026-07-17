@@ -604,6 +604,23 @@ const WorkOrdersPage = {
     this._showWizard();
   },
 
+  /* Alias för anrop från PropertyObjectPage / PropertyDetailPage */
+  openCreateAO(opts) {
+    if (!Auth.require('ao_create')) return;
+    opts = opts || {};
+    this._wiz = {
+      step: 1,
+      data: {
+        customerId: opts.customerId || '',
+        propertyId: opts.propertyId || '',
+        objectId:   opts.objectId   || '',
+        objectName: opts.objectName || ''
+      },
+      modalId: null
+    };
+    this._showWizard();
+  },
+
   _showWizard() {
     const wiz = this._wiz;
     const stepTitles = ['', 'Kund & jobb', 'Planering', 'Pris & utförande'];
@@ -699,6 +716,20 @@ const WorkOrdersPage = {
            </select>
          </div>`
       : '';
+
+    // Objekt-väljare — visas om en fastighet är vald och har objekt
+    const propObjs = d.propertyId
+      ? (typeof PropertyObjectService !== 'undefined' ? PropertyObjectService.getByProperty(d.propertyId) : [])
+      : [];
+    const objSelectHtml = propObjs.length
+      ? `<div class="fg"><label>Objekt / lägenhet (valfritt)</label>
+           <select id="wiz-object" onchange="WorkOrdersPage._wizObjectChanged()">
+             <option value="">— Välj objekt —</option>
+             ${propObjs.map(o=>`<option value="${o.id}" ${d.objectId===o.id?'selected':''}>${esc(o.objectNumber?o.objectNumber+' – ':'') + esc(o.name || PropertyObjectService.typeLabel(o.type))}</option>`).join('')}
+           </select>
+         </div>`
+      : (d.objectId ? `<input type="hidden" id="wiz-object" value="${esc(d.objectId)}">` : '');
+
     return `
       <div class="fg"><label>Rubrik / Vad ska göras <span style="color:var(--rd)">*</span></label>
         <input id="wiz-title" value="${d.title||''}" placeholder="T.ex. Läckage badrum, Fasadtvätt…"></div>
@@ -724,6 +755,7 @@ const WorkOrdersPage = {
         </button></div>
       <div id="wiz-autofill"></div>
       <div id="wiz-prop-wrap">${propSelectHtml}</div>
+      <div id="wiz-obj-wrap">${objSelectHtml}</div>
       <div class="fg"><label>Arbetsadress</label>
         <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"
           autocomplete="off"
@@ -1086,6 +1118,8 @@ const WorkOrdersPage = {
     const id = sel.value;
     this._wiz.data.customerId = id;
     this._wiz.data.propertyId = ''; // reset fastighet vid kundyte
+    this._wiz.data.objectId   = '';
+    this._wiz.data.objectName = '';
     const cu = id ? getCu(id) : null;
 
     if (cu) {
@@ -1111,6 +1145,9 @@ const WorkOrdersPage = {
            </div>`
         : '';
     }
+    // Töm objekt-väljaren när kund byts
+    const objWrap = document.getElementById('wiz-obj-wrap');
+    if (objWrap) objWrap.innerHTML = '';
   },
 
   _wizPropertyChanged() {
@@ -1118,7 +1155,9 @@ const WorkOrdersPage = {
     if (!sel) return;
     const id = sel.value;
     this._wiz.data.propertyId = id;
-    // Om fastigheten har adress, fyll in den i adressfältet
+    this._wiz.data.objectId   = '';
+    this._wiz.data.objectName = '';
+    // Om fastigheten har adress, fyll i adressfältet
     if (id) {
       const prop = (state.properties||[]).find(p => p.id === id);
       const addrEl = document.getElementById('wiz-address');
@@ -1128,6 +1167,35 @@ const WorkOrdersPage = {
         this._wiz.data._sources = this._wiz.data._sources || {};
         this._wiz.data._sources.address = 'property';
       }
+    }
+    // Uppdatera objekt-väljaren
+    const objWrap = document.getElementById('wiz-obj-wrap');
+    if (objWrap) {
+      const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
+      const propObjs = (id && POS) ? POS.getByProperty(id) : [];
+      objWrap.innerHTML = propObjs.length
+        ? `<div class="fg"><label>Objekt / lägenhet (valfritt)</label>
+             <select id="wiz-object" onchange="WorkOrdersPage._wizObjectChanged()">
+               <option value="">— Välj objekt —</option>
+               ${propObjs.map(o=>`<option value="${o.id}">${esc(o.objectNumber?o.objectNumber+' – ':'')}${esc(o.name || POS.typeLabel(o.type))}</option>`).join('')}
+             </select>
+           </div>`
+        : '';
+    }
+  },
+
+  _wizObjectChanged() {
+    const sel = document.getElementById('wiz-object');
+    if (!sel) return;
+    const id = sel.value;
+    this._wiz.data.objectId = id;
+    const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
+    const obj = (id && POS) ? POS.getById(id) : null;
+    this._wiz.data.objectName = obj ? (obj.name || obj.objectNumber || '') : '';
+    // Fyll i tillträdeskod om objektet har en
+    if (obj && obj.accessInformation) {
+      const accessEl = document.getElementById('wiz-access');
+      if (accessEl && !accessEl.value) accessEl.value = obj.accessInformation;
     }
   },
 
@@ -1244,6 +1312,14 @@ const WorkOrdersPage = {
     d.phone         = document.getElementById('wiz-phone')?.value.trim() || '';
     d.accessCode    = document.getElementById('wiz-access')?.value.trim() || '';
     d.internalNote  = document.getElementById('wiz-intnote')?.value.trim() || '';
+    // Objekt (lägenhet/lokal)
+    const objSel = document.getElementById('wiz-object');
+    if (objSel && objSel.tagName === 'SELECT') {
+      d.objectId = objSel.value || '';
+      const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
+      const obj = (d.objectId && POS) ? POS.getById(d.objectId) : null;
+      d.objectName = obj ? (obj.name || obj.objectNumber || '') : '';
+    }
     if (!d.title)      { showToast('Rubrik krävs'); return false; }
     if (!d.customerId) { showToast('Välj en kund'); return false; }
     return true;
@@ -1298,7 +1374,8 @@ const WorkOrdersPage = {
       customerId:    d.customerId,
       propertyId:    d.propertyId || '',
       propertyName:  _prop ? (_prop.name || _prop.address || '') : '',
-      objectId:      d.objectId  || '',   // Fas C: objekt/lägenhet
+      objectId:      d.objectId   || '',
+      objectName:    d.objectName || '',
       address:       d.address,
       contactPerson: d.contactPerson,
       phone:         d.phone,
