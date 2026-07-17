@@ -462,6 +462,7 @@ const Schema = {
     pointTitle: '',
     customerId: '',
     propertyId: '',
+    objectId: '',         // Leverans C: kopplat objekt (lägenhet/lokal)
     title: '',
     comment: '',
     images: [],            // [{dataUrl, name}]

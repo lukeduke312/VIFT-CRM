@@ -279,12 +279,25 @@ const RonderingUtforandePage = {
     if (!pt) return;
     const canAO = pt.canCreateAO !== false;
 
+    // Objekt-väljare för fastigheten
+    const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
+    const propObjs = (pass && pass.propertyId && POS) ? POS.getByProperty(pass.propertyId) : [];
+    const objSelectHtml = propObjs.length
+      ? `<div class="fg"><label>Objekt (valfritt)</label>
+           <select id="avv-object" class="fi">
+             <option value="">— Hela fastigheten —</option>
+             ${propObjs.map(o=>`<option value="${o.id}">${esc(o.objectNumber?o.objectNumber+' – ':'')}${esc(o.name || POS.typeLabel(o.type))}</option>`).join('')}
+           </select>
+         </div>`
+      : '';
+
     Modal.open({
       title: 'Anmärkning: ' + pt.title,
       body: `
         <div class="fg"><label>Rubrik *</label>
           <input type="text" id="avv-title" value="${esc(pt.title)}" placeholder="Beskriv anmärkningen...">
         </div>
+        ${objSelectHtml}
         <div class="fg"><label>Kommentar</label>
           <textarea id="avv-comment" rows="3" placeholder="Ytterligare detaljer..."></textarea>
         </div>
@@ -324,6 +337,7 @@ const RonderingUtforandePage = {
     const comment  = (document.getElementById('avv-comment')||{}).value||'';
     const priority = (document.getElementById('avv-priority')||{}).value||'normal';
     const createAO = canAO && !!(document.getElementById('avv-create-ao')||{}).checked;
+    const objectId = (document.getElementById('avv-object')||{}).value||'';
 
     const pass = getPass(passId);
     if (!pass) return;
@@ -338,6 +352,7 @@ const RonderingUtforandePage = {
       pointTitle: pt ? pt.title : '',
       customerId: pass.customerId,
       propertyId: pass.propertyId,
+      objectId,
       title, comment, priority, images: this._avvImages.slice()
     });
 

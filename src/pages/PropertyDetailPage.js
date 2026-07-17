@@ -738,15 +738,31 @@ const PropertyDetailPage = {
     const selCat   = si ? (si.category      || 'filterbyte')  : 'filterbyte';
     const selRem   = si ? (si.reminderDays  || 14)            : 14;
     const selStaff = si ? (si.responsibleStaffId || '')       : '';
+    const selObj   = si ? (si.objectId || '') : '';
     const isCustom = selType.startsWith('custom_');
     const isAutoAO = si ? !!si.autoCreateAO : false;
     const aoStaff  = si ? (si.aoStaff || []) : [];
     const prios    = [{v:'akut',l:'Akut'},{v:'hög',l:'Hög'},{v:'normal',l:'Normal'},{v:'låg',l:'Låg'}];
+
+    // Objekt-väljare för fastigheten
+    const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
+    const propObjs = (this.propId && POS) ? POS.getByProperty(this.propId) : [];
+    const objSelectHtml = propObjs.length
+      ? `<div class="fg">
+           <label>Kopplat objekt (valfritt)</label>
+           <select id="si-object" class="fi">
+             <option value="">— Hela fastigheten —</option>
+             ${propObjs.map(o=>`<option value="${o.id}" ${selObj===o.id?'selected':''}>${esc(o.objectNumber?o.objectNumber+' – ':'')}${esc(o.name || POS.typeLabel(o.type))}</option>`).join('')}
+           </select>
+         </div>`
+      : '';
+
     return `
       <div class="fg">
         <label>Titel *</label>
         <input id="si-title" class="fi" type="text" value="${esc(si ? si.title : '')}" placeholder="Filterbyte ventilation, OVK, …">
       </div>
+      ${objSelectHtml}
       <div class="g2">
         <div class="fg">
           <label>Kategori</label>
@@ -874,7 +890,8 @@ const PropertyDetailPage = {
       aoDescription:      document.getElementById('si-ao-description')?.value.trim() || '',
       aoPriority:         document.getElementById('si-ao-priority')?.value        || 'normal',
       aoStaff,
-      description:        document.getElementById('si-description')?.value.trim() || ''
+      description:        document.getElementById('si-description')?.value.trim() || '',
+      objectId:           document.getElementById('si-object')?.value || ''
     };
   },
 
