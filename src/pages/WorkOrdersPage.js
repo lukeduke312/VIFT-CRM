@@ -1,6 +1,6 @@
 /**
- * WorkOrdersPage — AO-lista + skapa-wizard (v32)
- * v32: sparar propertyName + objectId-plats, date-input-wrap
+ * WorkOrdersPage — AO-lista + skapa-wizard (v33)
+ * v33: status-badge som span (fix nested button), tydlig datumvy med svensk text
  */
 
 /* Akut-badge: röd chip med emoji och fetstilstext */
@@ -526,7 +526,7 @@ const WorkOrdersPage = {
               <div style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;" onclick="event.stopPropagation()">
                 ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
-                  ? `<button class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</button>`
+                  ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
                   : sbdg(ao.status)}
                 ${ao.priority==='akut'?akutBadge():pbdg(ao.priority)}
               </div>
@@ -579,7 +579,7 @@ const WorkOrdersPage = {
               </div>
               <div class="ao-item-badges" onclick="event.stopPropagation()">
                 ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
-                  ? `<button class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</button>`
+                  ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
                   : sbdg(ao.status)}
                 ${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
               </div>
@@ -743,10 +743,19 @@ const WorkOrdersPage = {
       </div>`;
   },
 
+  _fmtSwedishDate(isoStr) {
+    if (!isoStr) return '';
+    const DAYS = ['söndag','måndag','tisdag','onsdag','torsdag','fredag','lördag'];
+    const MONTHS = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december'];
+    const d = new Date(isoStr + 'T12:00:00');
+    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  },
+
   _wizStep2Html(d) {
     const isPlan = d.status === 'planerad' || !!d.scheduledDate;
     const priorities = [{v:'akut',l:'Akut'},{v:'hög',l:'Hög'},{v:'normal',l:'Normal'},{v:'låg',l:'Låg'}];
     const prio = d.priority || 'normal';
+    const activeDateKey = d.scheduledDate || '';
 
     // Staff modal picker
     const sel = d.staff || [];
@@ -755,9 +764,19 @@ const WorkOrdersPage = {
       return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
     }).join('');
 
+    const td = new Date(); const todayStr = td.toISOString().slice(0,10);
+    const tm = new Date(td); tm.setDate(tm.getDate()+1); const tmStr = tm.toISOString().slice(0,10);
+    const nw = new Date(td); nw.setDate(nw.getDate()+1); while(nw.getDay()===0||nw.getDay()===6)nw.setDate(nw.getDate()+1); const nwStr = nw.toISOString().slice(0,10);
+    const wk = new Date(td); wk.setDate(wk.getDate()+7); const wkStr = wk.toISOString().slice(0,10);
+    const quickDates = [{l:'Idag',d:todayStr},{l:'Imorgon',d:tmStr},{l:'Nästa vardag',d:nwStr},{l:'Om en vecka',d:wkStr}];
+
+    const sweDateDisplay = activeDateKey
+      ? `<div id="wiz-date-display" style="font-size:13px;font-weight:600;color:var(--sky);margin-bottom:6px;">${ic('calendar',13)} ${this._fmtSwedishDate(activeDateKey)}</div>`
+      : `<div id="wiz-date-display" style="font-size:13px;color:var(--mt);margin-bottom:6px;">${ic('calendar',13)} Inget datum valt</div>`;
+
     return `
       <div class="fg">
-        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Planering</label>
+        <label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Planeringstyp</label>
         <div class="g2" style="margin-top:6px;">
           <button type="button" class="btn ${!isPlan?'bp':'bs'} bfull" id="btn-pool"
             onclick="WorkOrdersPage._wizSetPlan('pool')" style="padding:12px;font-size:13px;">
@@ -765,31 +784,29 @@ const WorkOrdersPage = {
           </button>
           <button type="button" class="btn ${isPlan?'bp':'bs'} bfull" id="btn-direct"
             onclick="WorkOrdersPage._wizSetPlan('direct')" style="padding:12px;font-size:13px;">
-            ${ic('calendar',15)} Planera direkt
+            ${ic('calendar',15)} Planera till datum
           </button>
         </div>
       </div>
 
+      <div id="wiz-pool-info" style="${!isPlan?'':'display:none;'}margin-top:8px;">
+        <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--mt);line-height:1.5;">
+          ${ic('info',13)} Ordern läggs i <strong>arbetspoolen</strong> — ingen specifik dag är bokad. Personal kan hämta ordern därifrån när de har tid.
+        </div>
+      </div>
+
       <div id="wiz-schedule" style="${isPlan?'':'display:none;'}">
-        <div class="fg">
+        <div class="fg" style="margin-top:8px;">
           <label>Datum</label>
+          ${sweDateDisplay}
           <div class="date-quick-row">
-            ${(()=>{
-              const td = new Date(); const todayStr = td.toISOString().slice(0,10);
-              const tm = new Date(td); tm.setDate(tm.getDate()+1); const tmStr = tm.toISOString().slice(0,10);
-              const nw = new Date(td); nw.setDate(nw.getDate()+1); while(nw.getDay()===0||nw.getDay()===6)nw.setDate(nw.getDate()+1); const nwStr = nw.toISOString().slice(0,10);
-              const wk = new Date(td); wk.setDate(wk.getDate()+7); const wkStr = wk.toISOString().slice(0,10);
-              return [
-                {l:'Idag',d:todayStr},{l:'Imorgon',d:tmStr},
-                {l:'Nästa vardag',d:nwStr},{l:'Om en vecka',d:wkStr}
-              ].map(q=>`<button type="button" class="btn bxs bghost" style="font-size:11px;padding:3px 8px;" onclick="WorkOrdersPage._wizSetDate('${q.d}')">${q.l}</button>`).join('');
-            })()}
+            ${quickDates.map(q=>`<button type="button" class="wiz-qdate-btn btn bxs ${activeDateKey===q.d?'bp':'bghost'}" data-date="${q.d}" style="font-size:11px;padding:3px 8px;" onclick="WorkOrdersPage._wizSetDate('${q.d}')">${q.l}</button>`).join('')}
           </div>
-          <div class="date-input-wrap" style="margin-top:4px;">
+          <div class="date-input-wrap" style="margin-top:6px;">
             <span class="date-input-icon">${ic('calendar',14)}</span>
-            <input type="date" id="wiz-date" value="${d.scheduledDate||tdy()}">
+            <input type="date" id="wiz-date" value="${activeDateKey||todayStr}" oninput="WorkOrdersPage._wizDateInputChanged(this.value)">
             <button type="button" class="date-input-clear" title="Rensa datum"
-              onclick="document.getElementById('wiz-date').value='';WorkOrdersPage._wiz.data.scheduledDate=''">${ic('x',11)}</button>
+              onclick="WorkOrdersPage._wizSetDate('')">${ic('x',11)}</button>
           </div>
         </div>
         <div class="g2" style="margin-top:8px;">
@@ -1114,15 +1131,36 @@ const WorkOrdersPage = {
     }
   },
 
-  _wizSetDate(d) {
+  _wizSetDate(dateStr) {
+    this._wiz.data.scheduledDate = dateStr;
     const el = document.getElementById('wiz-date');
-    if (el) { el.value = d; this._wiz.data.scheduledDate = d; }
+    if (el) el.value = dateStr;
+    const disp = document.getElementById('wiz-date-display');
+    if (disp) {
+      if (dateStr) {
+        disp.style.color = 'var(--sky)';
+        disp.style.fontWeight = '600';
+        disp.innerHTML = `${ic('calendar',13)} ${this._fmtSwedishDate(dateStr)}`;
+      } else {
+        disp.style.color = 'var(--mt)';
+        disp.style.fontWeight = 'normal';
+        disp.innerHTML = `${ic('calendar',13)} Inget datum valt`;
+      }
+    }
+    document.querySelectorAll('.wiz-qdate-btn').forEach(b => {
+      b.className = `wiz-qdate-btn btn bxs ${b.dataset.date === dateStr ? 'bp' : 'bghost'}`;
+      b.style.cssText = 'font-size:11px;padding:3px 8px;';
+    });
   },
+
+  _wizDateInputChanged(v) { this._wizSetDate(v); },
 
   _wizSetPlan(mode) {
     const isPlan = mode === 'direct';
-    const sched = document.getElementById('wiz-schedule');
-    if (sched) sched.style.display = isPlan ? '' : 'none';
+    const sched    = document.getElementById('wiz-schedule');
+    const poolInfo = document.getElementById('wiz-pool-info');
+    if (sched)    sched.style.display    = isPlan ? '' : 'none';
+    if (poolInfo) poolInfo.style.display = isPlan ? 'none' : '';
     const pool   = document.getElementById('btn-pool');
     const direct = document.getElementById('btn-direct');
     if (pool)   pool.className   = `btn ${!isPlan?'bp':'bs'} bfull`;

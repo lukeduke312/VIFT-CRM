@@ -1,7 +1,6 @@
 /**
- * WorkOrderDetailPage — Fullständig AO-detaljvy (v45)
- * v45: Responsiva åtgärder (desktop/mobil), makeRecurring direkt,
- *      styled date-input-wrap i Omplanera
+ * WorkOrderDetailPage — Fullständig AO-detaljvy (v46)
+ * v46: Adressrad klickbar (öppnar karta), ta bort Navigera-knapp
  */
 const WorkOrderDetailPage = {
   aoId: null,
@@ -78,11 +77,11 @@ const WorkOrderDetailPage = {
           <h2 class="ao-title-main">${esc(ao.title)}</h2>
           <div class="ao-title-meta">
             ${cu?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('user',11)}</span><a style="color:var(--sky);text-decoration:none;font-weight:600;cursor:pointer;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a></div>`:''}
-            ${ao.address?`<div class="ao-title-meta-row">
+            ${ao.address?`<a class="ao-title-meta-row ao-address-link" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener">
               <span style="color:var(--mt);flex-shrink:0;">${ic('map-pin',11)}</span>
               <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ao.address)}</span>
-              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener" class="btn bsm" style="font-size:11px;padding:3px 8px;white-space:nowrap;flex-shrink:0;" onclick="event.stopPropagation()">${ic('navigation',10)} Navigera</a>
-            </div>`:''}
+              <span style="color:var(--sky);flex-shrink:0;">${ic('external-link',11)}</span>
+            </a>`:''}
             ${ao.scheduledDate?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('calendar',11)}</span><span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span></div>`:''}
           </div>
         </div>

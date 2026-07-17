@@ -2579,3 +2579,14 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   .ao-acts-mobile  { display: none; }
   .ao-acts-desktop { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 }
+
+/* ── Klickbar adressrad i AO-detaljvy (v51) ──────────────── */
+.ao-address-link {
+  text-decoration: none;
+  color: inherit;
+  transition: color .15s;
+}
+.ao-address-link:hover {
+  color: var(--sky);
+}
+.ao-address-link:hover span[style*="map-pin"] { color: var(--sky) !important; }
