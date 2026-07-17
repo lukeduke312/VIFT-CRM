@@ -1,10 +1,41 @@
 /**
- * PageShells — Placeholder-rendering för sidor som byggs i Fas 3+ (v67)
+ * PageShells — Placeholder-rendering för sidor som byggs i Fas 3+ (v75)
  * Fas 2-sidor (Kunder, AO, Tid, Faktura) har egna filer.
- * v67: wizard-polish, mobile quick banners, off-detail-facts wrapping
+ * v75: gemensamma beräkningsfunktioner _lineExVat/_offRawExVat, offert-totaler-fix (alla 5 platser)
  */
 
 /* ── Offerter (v2 – tjänstemallar + kalkylator) ─────── */
+
+/**
+ * _lineExVat(l) — enda gemensam beräkning för en offertrads exklusive moms-belopp.
+ *
+ * Hanterar ALLA radtyper och datastrukturer:
+ *  • service  → l.exVat (förkalkylerat av priskriget)
+ *  • manual   → qty * unitPrice
+ *  • fixed    → 1 * unitPrice  (ingen qty-fältet)
+ *  • äldre rader utan type-fält → qty * unitPrice (fallback till l.total om qty/price saknas)
+ *
+ * Används ÖVERALLT: offertlista, detaljvy, sammanfattning, PDF, utskrift, e-post, AO-skapande.
+ */
+function _lineExVat(l) {
+  if (!l || l.type === 'text') return 0;
+  if (l.type === 'service')    return (l.exVat != null ? +l.exVat : 0);
+  const qty  = (l.qty != null && l.qty !== '') ? +l.qty : 1;
+  const up   = +(l.unitPrice || l.price || 0);
+  const comp = Math.round(qty * up);
+  /* Fallback: om beräkningen ger 0 men l.total är satt, använd l.total (bakåtkompatibilitet) */
+  if (comp === 0 && l.total) return +l.total;
+  return comp;
+}
+
+/** Summa ex. moms för ett helt offert-objekt (rader + extras) */
+function _offRawExVat(off) {
+  const prLines = (off.lines  || []).filter(l => l.type !== 'text');
+  const extras  = off.extras  || [];
+  const lineSum = prLines.reduce((s, l) => s + _lineExVat(l), 0);
+  const extrSum = extras.reduce((s, e) => s + Math.round((+(e.qty||1)) * (+(e.unitPrice||0))), 0);
+  return Math.round(lineSum + extrSum);
+}
 
 /* ── PART 1: OfferPriceRules — alla priser EXKLUSIVE MOMS ─── */
 const OfferPriceRules = {
@@ -479,7 +510,7 @@ const OffersPage = {
       const disp    = o.title || o.id;
       const prLines = (o.lines||[]).filter(l=>l.type!=='text');
       const extras  = o.extras||[];
-      const rawExVat= Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+      const rawExVat= _offRawExVat(o);
       const _disc   = o.discount||{type:'percent',value:0};
       const discAmt = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
       const exVatD  = rawExVat - discAmt;
@@ -535,8 +566,7 @@ const OffersPage = {
   },
 
   _offerExVat(o) {
-    return Math.round((o.lines || []).filter(l => l.type !== 'text')
-      .reduce((s, l) => s + (l.exVat || l.total || 0), 0));
+    return _offRawExVat(o);
   },
 
   _offerInsight(o) {
@@ -1448,9 +1478,8 @@ const OffersPage = {
 
   /* ── Totals ─── */
   _calcExVat(lines, extras) {
-    const lSum = (lines||[]).filter(l=>l.type!=='text')
-      .reduce((s,l)=>s+(l.type==='service'?(l.exVat||0):Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))),0);
-    const eSum = (extras||[]).reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0);
+    const lSum = (lines||[]).filter(l=>l.type!=='text').reduce((s,l)=>s+_lineExVat(l),0);
+    const eSum = (extras||[]).reduce((s,e)=>s+Math.round((+(e.qty||1))*(+(e.unitPrice||0))),0);
     return Math.round(lSum + eSum);
   },
 
@@ -2005,13 +2034,10 @@ const OfferDetailPage = {
     const txtBlks  = allLines.filter(l => l.type === 'text');
     const extras   = off.extras || [];
 
-    const rawExVat = Math.round(
-      prLines.reduce((s,l) => {
-        if (l.type === 'service') return s + (l.exVat||0);
-        return s + Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
-      }, 0) +
-      extras.reduce((s,e) => s + Math.round((e.qty||1)*(e.unitPrice||0)), 0)
-    );
+    /* Diagnostik: logga raddata i konsolen för felsökning */
+    console.log('[OfferDetail] off.id=', off.id, 'lines=', JSON.stringify(off.lines||[]), 'rawExVat=', _offRawExVat(off));
+
+    const rawExVat = _offRawExVat(off);
     const _disc   = off.discount || {type:'percent', value:0};
     const discAmt = _disc.value
       ? (_disc.type==='percent' ? Math.round(rawExVat * Math.min(_disc.value,100) / 100) : Math.min(Math.round(_disc.value), rawExVat))
@@ -2683,7 +2709,7 @@ const OfferDetailPage = {
     const daysLeft  = validDate ? Math.round((validDate - now) / 86400000) : null;
     const prLines   = (off.lines||[]).filter(l => l.type !== 'text');
     const extras    = off.extras||[];
-    const rawExVat  = Math.round(prLines.reduce((s,l)=>s+(l.exVat||l.total||0),0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+    const rawExVat  = _offRawExVat(off);
     const _disc     = off.discount||{type:'percent',value:0};
     const discAmt   = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
     const exVat     = rawExVat - discAmt;
@@ -2804,7 +2830,7 @@ const OfferDetailPage = {
     const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
     const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
     const extras   = off.extras||[];
-    const rawExVat = Math.round(prLines.reduce((s,l)=>{if(l.type==='service')return s+(l.exVat||0);return s+Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));},0)+extras.reduce((s,e)=>s+Math.round((e.qty||1)*(e.unitPrice||0)),0));
+    const rawExVat = _offRawExVat(off);
     const _disc    = off.discount||{type:'percent',value:0};
     const discAmt  = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
     const exVat    = rawExVat - discAmt;
