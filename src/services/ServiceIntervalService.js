@@ -1,5 +1,5 @@
 /**
- * ServiceIntervalService — Generell intervallmotor för serviceåtgärder (v2)
+ * ServiceIntervalService — Generell intervallmotor för serviceåtgärder (v3)
  *
  * Fullständig datamodell med idempotensnycklar, korrekt kalenderbaserad
  * datumberäkning, pausad-status, AO-mallfält och historik med previousNextDue.
@@ -345,6 +345,9 @@ const ServiceIntervalService = {
     si.lastNotificationSentForDueDate = '';
     si.lastAOGeneratedForDueDate      = '';
 
+    /* Stäng kopplade Att göra-poster för den avslutade perioden */
+    this._completeLinkedActivities(si, previousNextDue, { staffId, comment });
+
     persist();
     if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
 
@@ -392,24 +395,26 @@ const ServiceIntervalService = {
           ? `Förfallen med ${Math.abs(this.daysUntil(si.nextDue))} dagar. Fastighet: ${p.name}${p.address ? ', ' + p.address : ''}.`
           : `Förfaller ${typeof fmtDate === 'function' ? fmtDate(si.nextDue) : si.nextDue}. Fastighet: ${p.name}${p.address ? ', ' + p.address : ''}.`;
 
-        /* Undvik dubbla uppgifter för samma period */
+        /* Undvik dubbla uppgifter för samma period (matchas på duePeriodKey) */
         const exists = (state.activities || []).some(a =>
-          a.relatedType === 'service_interval' &&
-          a.relatedId   === si.id &&
-          a.note        && a.note.includes(si.nextDue) &&
-          a.status      !== 'done'
+          a.relatedType  === 'service_interval' &&
+          a.relatedId    === si.id &&
+          a.duePeriodKey === periodKey &&
+          a.status       !== 'done'
         );
         if (!exists) {
           ActivitiesService.create({
-            title:       titleStr,
-            type:        'service',
-            relatedType: 'service_interval',
-            relatedId:   si.id,
-            customerId:  p.customerId || null,
-            assignedTo:  assignTo,
-            dueDate:     si.nextDue,
-            note:        noteStr,
-            priority:    st === 'overdue' ? 'hög' : 'normal'
+            title:        titleStr,
+            type:         'service',
+            relatedType:  'service_interval',
+            relatedId:    si.id,
+            duePeriodKey: periodKey,
+            propertyId:   p.id,
+            customerId:   p.customerId || null,
+            assignedTo:   assignTo,
+            dueDate:      si.nextDue,
+            note:         noteStr,
+            priority:     st === 'overdue' ? 'hög' : 'normal'
           });
         }
 
@@ -430,6 +435,29 @@ const ServiceIntervalService = {
     if (changed) {
       persist();
       if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+    }
+  },
+
+  /* ── Stäng Att göra-poster kopplade till en avslutad period ── */
+  /*
+   * Matchar på duePeriodKey (strukturerat fält, satt av runDailyCheck v3+)
+   * med fallback på dueDate === periodNextDue för aktiviteter skapade i v2.
+   * Sparar kommentar och slutförandestämpel. Rör inte historiska poster.
+   */
+  _completeLinkedActivities(si, periodNextDue, { staffId, comment } = {}) {
+    if (typeof ActivitiesService === 'undefined' || !periodNextDue) return;
+    const periodKey = si.id + '::' + periodNextDue;
+    const linked    = (state.activities || []).filter(a =>
+      a.relatedType === 'service_interval' &&
+      a.relatedId   === si.id &&
+      a.status      !== 'done' &&
+      (a.duePeriodKey === periodKey || a.dueDate === periodNextDue)
+    );
+    for (const a of linked) {
+      if (comment) {
+        ActivitiesService.update(a.id, { note: (a.note ? a.note + '\nUtförd: ' : 'Utförd: ') + comment });
+      }
+      ActivitiesService.complete(a.id);
     }
   },
 

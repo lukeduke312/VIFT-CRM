@@ -1,6 +1,6 @@
 /**
  * OperationsPage — Dagens drift (Fas 4B)
- * Chefsvy: KPI, personalstatus, försenade/akuta, klara ej fakturerade, kommande, serviceintervall
+ * Chefsvy: KPI, personalstatus, försenade/akuta, klara ej fakturerade, kommande, serviceintervall (v9)
  */
 const OperationsPage = {
 
@@ -363,8 +363,12 @@ const OperationsPage = {
 
     const renderRow = (item) => {
       const { interval: si } = item;
-      const propName = item.propertyName || '—';
-      const propAddr = item.address || '';
+      const propName  = item.propertyName || '—';
+      const propAddr  = item.address || '';
+      const respStaff = si.responsibleStaffId ? getStaff(si.responsibleStaffId) : null;
+      const respName  = respStaff
+        ? `${respStaff.firstName}${respStaff.lastName ? ' ' + respStaff.lastName : ''}`.trim()
+        : 'Ej tilldelad';
       return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 14px;border-bottom:1px solid var(--br);cursor:pointer;"
           onclick="Router.showPage('pg-obj-detail',{propId:'${item.propertyId}',tab:'service'})">
         <div style="flex:1;min-width:0;">
@@ -373,7 +377,10 @@ const OperationsPage = {
             ${SIS.statusBadge(si)}
           </div>
           <div style="font-size:11px;color:var(--mt);">${esc(propName)}${propAddr ? ' · ' + esc(propAddr) : ''}</div>
-          ${si.nextDue ? `<div style="font-size:11px;color:var(--mt);">Förfaller: ${fmtDate(si.nextDue)}</div>` : ''}
+          <div style="font-size:11px;color:var(--mt);display:flex;gap:8px;flex-wrap:wrap;">
+            ${si.nextDue ? `<span>${ic('calendar',10)} ${fmtDate(si.nextDue)}</span>` : ''}
+            <span>${ic('user',10)} ${esc(respName)}</span>
+          </div>
         </div>
         <span style="color:var(--mt);flex-shrink:0;">${ic('chevron-right',14)}</span>
       </div>`;
