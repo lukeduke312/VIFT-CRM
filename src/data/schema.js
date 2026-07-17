@@ -235,6 +235,7 @@ const Schema = {
     documents: [],             // [{id, name, category, url, date}]
     images: [],                // [{id, title, category, techSection, description, dataUrl, createdAt}]
     notes: [],                 // [{id, text, createdAt, createdBy}]
+    serviceIntervals: [],      // [{id, title, category, lastDone, intervalType, intervalDays, nextDue, responsibleStaffId, supplier, reminderDays, autoCreateAO, description, history[]}]
     createdAt: '',
     updatedAt: ''
   }),

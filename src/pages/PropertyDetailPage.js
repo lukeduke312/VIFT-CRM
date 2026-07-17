@@ -1,7 +1,7 @@
 /**
- * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v11)
- * Tabs: Översikt | Kontakt | Teknisk info | Arbetsorder | Återkommande | Bilder | Anteckningar
- * v11: data-addr-* på adressinput för AddressService v3
+ * PropertyDetailPage — Fullständigt fastighetskort (Fas 3, Modul 1 v12)
+ * Tabs: Översikt | Kontakt | Teknisk info | Serviceintervall | Arbetsorder | Återkommande | Bilder | Anteckningar
+ * v12: ServiceIntervalService-integration — bevakning, historik, markera utförd
  */
 const PropertyDetailPage = {
   propId: null,
@@ -34,7 +34,12 @@ const PropertyDetailPage = {
     const tech    = p.technicalSystems || {};
     const insp    = p.inspections || {};
     const images  = p.images || [];
+    const siList  = p.serviceIntervals || [];
     const overdueInsp = Object.values(insp).filter(v => v.nextDate && v.nextDate < tdy()).length;
+    const overdueServices = (typeof ServiceIntervalService !== 'undefined')
+      ? siList.filter(si => ServiceIntervalService.getStatus(si) === 'overdue').length : 0;
+    const approachingServices = (typeof ServiceIntervalService !== 'undefined')
+      ? siList.filter(si => ['due_soon','approaching'].includes(ServiceIntervalService.getStatus(si))).length : 0;
     const addrLine = p.address || '';
     const cityLine = [p.zip, p.city].filter(Boolean).join(' ');
     const fullAddr = [addrLine, cityLine].filter(Boolean).join(', ');
@@ -108,6 +113,7 @@ const PropertyDetailPage = {
         <button class="ft ${this.activeTab==='overview'  ?'on':''}" onclick="PropertyDetailPage.switchTab('overview')">Översikt</button>
         <button class="ft ${this.activeTab==='contact'   ?'on':''}" onclick="PropertyDetailPage.switchTab('contact')">Kontakt${contacts.length?` (${contacts.length})`:''}</button>
         <button class="ft ${this.activeTab==='tech'      ?'on':''}" onclick="PropertyDetailPage.switchTab('tech')">Teknisk info</button>
+        <button class="ft ${this.activeTab==='service'   ?'on':''}" onclick="PropertyDetailPage.switchTab('service')">Service${siList.length?` (${siList.length})`:''}${overdueServices>0?` <span class="si-tab-alert">!</span>`:''}</button>
         <button class="ft ${this.activeTab==='ao'        ?'on':''}" onclick="PropertyDetailPage.switchTab('ao')">Arbetsorder${aos.length?` (${aos.length})`:''}</button>
         <button class="ft ${this.activeTab==='recurring' ?'on':''}" onclick="PropertyDetailPage.switchTab('recurring')">Återkommande${recs.length?` (${recs.length})`:''}</button>
         <button class="ft ${this.activeTab==='rondering'  ?'on':''}" onclick="PropertyDetailPage.switchTab('rondering')">Rondering</button>
@@ -115,9 +121,10 @@ const PropertyDetailPage = {
         <button class="ft ${this.activeTab==='notes'     ?'on':''}" onclick="PropertyDetailPage.switchTab('notes')">Anteckningar${notes.length?` (${notes.length})`:''}</button>
       </div>
 
-      <div id="prop-tab-overview"   ${this.activeTab!=='overview'   ?'style="display:none"':''}>${this._renderOverview(p, insp)}</div>
+      <div id="prop-tab-overview"   ${this.activeTab!=='overview'   ?'style="display:none"':''}>${this._renderOverview(p, insp, siList)}</div>
       <div id="prop-tab-contact"    ${this.activeTab!=='contact'    ?'style="display:none"':''}>${this._renderContactTab(p, contacts)}</div>
       <div id="prop-tab-tech"       ${this.activeTab!=='tech'       ?'style="display:none"':''}>${this._renderTechTab(tech, insp)}</div>
+      <div id="prop-tab-service"    ${this.activeTab!=='service'    ?'style="display:none"':''}>${this._renderServiceTab(p)}</div>
       <div id="prop-tab-ao"         ${this.activeTab!=='ao'         ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
       <div id="prop-tab-recurring"  ${this.activeTab!=='recurring'  ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
       <div id="prop-tab-rondering"  ${this.activeTab!=='rondering'  ?'style="display:none"':''}><div id="tab-rondering">${this.activeTab==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
@@ -136,7 +143,9 @@ const PropertyDetailPage = {
             ? `<span class="bdg bdg-green">Aktiv</span>`
             : `<span class="bdg bdg-grey">Inaktiv</span>`}
           ${p.type ? `<span class="bdg bdg-blue" style="font-size:10px;">${p.type}</span>` : ''}
-          ${overdueInsp > 0 ? `<span class="bdg bdg-red">${overdueInsp} försenade</span>` : ''}
+          ${overdueInsp > 0 ? `<span class="bdg bdg-red">${overdueInsp} försenade besikt.</span>` : ''}
+          ${overdueServices > 0 ? `<span class="bdg bdg-red">${overdueServices} service förfallen</span>` : ''}
+          ${approachingServices > 0 && overdueServices === 0 ? `<span class="bdg bdg-orange">${approachingServices} service snart</span>` : ''}
         </div>
         <div class="ao-action-panel-btns">
           ${Auth.can('ao_create')
@@ -183,7 +192,7 @@ const PropertyDetailPage = {
 
   switchTab(tab) {
     this.activeTab = tab;
-    const tabs = ['overview','contact','tech','ao','recurring','rondering','images','notes'];
+    const tabs = ['overview','contact','tech','service','ao','recurring','rondering','images','notes'];
     tabs.forEach(t => {
       const el = document.getElementById(`prop-tab-${t}`);
       if (el) el.style.display = t === tab ? '' : 'none';
@@ -208,7 +217,8 @@ const PropertyDetailPage = {
 
   /* ── Tab: Översikt ─────────────────────────────────────── */
 
-  _renderOverview(p, insp) {
+  _renderOverview(p, insp, siList) {
+    siList = siList || p.serviceIntervals || [];
     const staff = state.staff || [];
     const mgrObj = p.propertyManager ? staff.find(s => s.id === p.propertyManager) : null;
     const techObj = p.technician     ? staff.find(s => s.id === p.technician)     : null;
@@ -233,6 +243,13 @@ const PropertyDetailPage = {
     const overdueInsp = Object.entries(insp).filter(([,v]) => v.nextDate && v.nextDate < tdy());
     const inspTypes = { ovk:'OVK', sba:'SBA', hiss:'Hissbesiktning', el:'Elbesiktning', pbe:'PBE-kontroll' };
 
+    // Service interval alerts for overview
+    const SIS = typeof ServiceIntervalService !== 'undefined' ? ServiceIntervalService : null;
+    const alertSIs = SIS ? siList.filter(si => {
+      const st = SIS.getStatus(si);
+      return st === 'overdue' || st === 'due_soon' || st === 'approaching';
+    }).sort((a,b) => (SIS.daysUntil(a.nextDue)||999) - (SIS.daysUntil(b.nextDue)||999)) : [];
+
     return `
       ${overdueInsp.length > 0 ? `
       <div class="card" style="border-left:3px solid var(--rd);">
@@ -243,6 +260,19 @@ const PropertyDetailPage = {
              <span class="dv" style="color:var(--rd);">Försenad sedan ${fmtDate(v.nextDate)}</span></div>`
           ).join('')}
           <button class="btn bs bsm" style="margin-top:8px;" onclick="PropertyDetailPage.switchTab('tech');PropertyDetailPage.openEditInsp()">Uppdatera besiktningar</button>
+        </div>
+      </div>` : ''}
+
+      ${alertSIs.length > 0 ? `
+      <div class="card" style="border-left:3px solid var(--rd);">
+        <div class="card-header"><h3>${ic('tool',14)} Serviceintervall kräver åtgärd</h3></div>
+        <div class="card-body">
+          ${alertSIs.map(si => `
+            <div class="dr" style="align-items:center;">
+              <span class="dk">${si.title}</span>
+              <span class="dv">${SIS.statusBadge(si)}</span>
+            </div>`).join('')}
+          <button class="btn bs bsm" style="margin-top:8px;" onclick="PropertyDetailPage.switchTab('service')">Visa serviceintervall</button>
         </div>
       </div>` : ''}
 
@@ -265,6 +295,321 @@ const PropertyDetailPage = {
 
       ${p.note ? `<div class="nbox">${ic('eye',12)} ${p.note}</div>` : ''}
     `;
+  },
+
+  /* ── Tab: Serviceintervall ─────────────────────────────── */
+
+  _renderServiceTab(p) {
+    const SIS = typeof ServiceIntervalService !== 'undefined' ? ServiceIntervalService : null;
+    if (!SIS) return '<div class="empty"><h3>ServiceIntervalService saknas</h3></div>';
+    const siList = p.serviceIntervals || [];
+
+    const canManage = Auth.can('properties_manage');
+
+    const itemsHtml = siList.length === 0
+      ? `<div class="empty" style="padding:32px 0;">
+           ${ic('tool',28)}
+           <h3 style="margin-top:8px;">Inga serviceintervall</h3>
+           <p>Lägg till intervall för filterbyte, OVK, brandkontroll m.m.</p>
+           ${canManage ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddInterval('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
+         </div>`
+      : siList.map(si => {
+          const status  = SIS.getStatus(si);
+          const respS   = si.responsibleStaffId ? (state.staff||[]).find(s => s.id === si.responsibleStaffId) : null;
+          const respName = respS ? `${respS.firstName} ${respS.lastName}`.trim() : '';
+          const cat     = SIS.CATEGORIES.find(c => c.key === si.category);
+          const presetLabel = si.intervalType === 'custom'
+            ? `Var ${si.intervalDays} dag${si.intervalDays===1?'':'ar'}`
+            : (SIS.PRESETS[si.intervalType] || {}).label || si.intervalType;
+          const isActionable = status === 'overdue' || status === 'due_soon' || status === 'approaching';
+          return `
+            <div class="si-card ${status === 'overdue' ? 'si-card--overdue' : status === 'due_soon' ? 'si-card--due-soon' : status === 'approaching' ? 'si-card--approaching' : ''}">
+              <div class="si-card-header">
+                <div style="flex:1;min-width:0;">
+                  <div class="si-card-title">${esc(si.title)}</div>
+                  <div class="si-card-meta">
+                    ${cat ? `<span>${cat.label}</span>` : ''}
+                    <span>${presetLabel}</span>
+                    ${respName ? `<span>${ic('user',10)} ${respName}</span>` : ''}
+                    ${si.supplier ? `<span>${ic('package',10)} ${esc(si.supplier)}</span>` : ''}
+                  </div>
+                </div>
+                <div class="si-card-status">
+                  ${SIS.statusBadge(si)}
+                </div>
+              </div>
+              <div class="si-card-body">
+                <div class="si-info-row">
+                  <span style="color:var(--mt);">Senast utfört:</span>
+                  <span>${si.lastDone ? fmtDate(si.lastDone) : '—'}</span>
+                </div>
+                <div class="si-info-row">
+                  <span style="color:var(--mt);">Nästa förfall:</span>
+                  <span style="font-weight:600;color:${status==='overdue'?'var(--rd)':status==='due_soon'?'var(--or)':status==='approaching'?'var(--or)':'inherit'};">
+                    ${si.nextDue ? fmtDate(si.nextDue) : '—'}
+                    ${si.nextDue ? ` <span style="font-size:11px;font-weight:400;color:var(--mt);">(${SIS.statusLabel(si)})</span>` : ''}
+                  </span>
+                </div>
+                ${si.description ? `<div class="si-info-row" style="color:var(--mt);font-size:11px;">${esc(si.description)}</div>` : ''}
+                ${si.reminderDays ? `<div class="si-info-row"><span style="color:var(--mt);">Påminnelse:</span><span>${si.reminderDays} dagar före</span></div>` : ''}
+                ${si.autoCreateAO ? `<div class="si-info-row"><span class="bdg bdg-blue" style="font-size:10px;">${ic('clipboard-list',10)} Skapar AO automatiskt</span></div>` : ''}
+              </div>
+              <div class="si-card-actions">
+                ${canManage ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openMarkDone('${p.id}','${si.id}')">${ic('check-circle',13)} Markera utförd</button>` : ''}
+                ${(si.history||[]).length > 0 ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openSIHistory('${p.id}','${si.id}')">${ic('clock',13)} Historik (${si.history.length})</button>` : ''}
+                ${canManage ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openEditInterval('${p.id}','${si.id}')">${ic('pencil',13)}</button>` : ''}
+                ${canManage ? `<button class="btn bd bsm" onclick="PropertyDetailPage.deleteInterval('${p.id}','${si.id}')">${ic('trash-2',13)}</button>` : ''}
+              </div>
+            </div>`;
+        }).join('');
+
+    return `
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('tool',14)} Serviceintervall</h3>
+          ${canManage ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddInterval('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
+        </div>
+        <div class="card-body" id="si-list-body">
+          ${itemsHtml}
+        </div>
+      </div>`;
+  },
+
+  _siIntervalFormHtml(si) {
+    const SIS = ServiceIntervalService;
+    const presets = Object.entries(SIS.PRESETS);
+    const cats    = SIS.CATEGORIES;
+    const selType = si ? (si.intervalType || 'annual') : 'annual';
+    const isCustom = selType === 'custom';
+    const staff   = state.staff || [];
+    const selCat  = si ? (si.category || 'filterbyte') : 'filterbyte';
+    const selReminder = si ? (si.reminderDays || 14) : 14;
+    const selStaff = si ? (si.responsibleStaffId || '') : '';
+    return `
+      <div class="fg">
+        <label>Titel *</label>
+        <input id="si-title" class="fi" type="text" value="${esc(si ? si.title : '')}" placeholder="Filterbyte ventilation, OVK, …">
+      </div>
+      <div class="g2">
+        <div class="fg">
+          <label>Kategori</label>
+          <select id="si-category" class="fi">
+            ${cats.map(c => `<option value="${c.key}" ${selCat===c.key?'selected':''}>${c.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Intervall *</label>
+          <select id="si-interval-type" class="fi" onchange="PropertyDetailPage._siToggleCustom()">
+            ${presets.map(([k,v]) => `<option value="${k}" ${selType===k?'selected':''}>${v.label}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="fg" id="si-custom-days-wrap" style="${isCustom?'':'display:none;'}">
+        <label>Antal dagar</label>
+        <input id="si-custom-days" class="fi" type="number" min="1" value="${si && si.intervalType==='custom' ? si.intervalDays : 90}" placeholder="90">
+      </div>
+      <div class="fg">
+        <label>Senast utfört</label>
+        <input id="si-last-done" class="fi" type="date" value="${si ? (si.lastDone || '') : ''}">
+      </div>
+      <div class="g2">
+        <div class="fg">
+          <label>Ansvarig person</label>
+          <select id="si-staff" class="fi">
+            <option value="">— Välj —</option>
+            ${staff.map(s => `<option value="${s.id}" ${selStaff===s.id?'selected':''}>${s.firstName} ${s.lastName}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Leverantör</label>
+          <input id="si-supplier" class="fi" type="text" value="${esc(si ? (si.supplier||'') : '')}" placeholder="Företagsnamn">
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg">
+          <label>Påminnelse (dagar före)</label>
+          <select id="si-reminder" class="fi">
+            <option value="7"  ${selReminder==7 ?'selected':''}>7 dagar</option>
+            <option value="14" ${selReminder==14?'selected':''}>14 dagar</option>
+            <option value="30" ${selReminder==30?'selected':''}>30 dagar</option>
+            <option value="60" ${selReminder==60?'selected':''}>60 dagar</option>
+          </select>
+        </div>
+        <div class="fg" style="justify-content:flex-end;padding-top:20px;">
+          <label class="check-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+            <input id="si-auto-ao" type="checkbox" ${si && si.autoCreateAO ? 'checked' : ''}>
+            Skapa AO automatiskt
+          </label>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Anteckning</label>
+        <textarea id="si-description" class="fi" rows="2" placeholder="Mer information om åtgärden…">${esc(si ? (si.description||'') : '')}</textarea>
+      </div>`;
+  },
+
+  _siToggleCustom() {
+    const sel  = document.getElementById('si-interval-type');
+    const wrap = document.getElementById('si-custom-days-wrap');
+    if (sel && wrap) wrap.style.display = sel.value === 'custom' ? '' : 'none';
+  },
+
+  _siReadForm() {
+    return {
+      title:              document.getElementById('si-title')?.value.trim()  || '',
+      category:           document.getElementById('si-category')?.value     || 'annat',
+      intervalType:       document.getElementById('si-interval-type')?.value || 'annual',
+      intervalDays:       Number(document.getElementById('si-custom-days')?.value || 0),
+      lastDone:           document.getElementById('si-last-done')?.value    || '',
+      responsibleStaffId: document.getElementById('si-staff')?.value        || '',
+      supplier:           document.getElementById('si-supplier')?.value.trim() || '',
+      reminderDays:       Number(document.getElementById('si-reminder')?.value || 14),
+      autoCreateAO:       document.getElementById('si-auto-ao')?.checked    || false,
+      description:        document.getElementById('si-description')?.value.trim() || ''
+    };
+  },
+
+  openAddInterval(propId) {
+    if (!Auth.can('properties_manage')) return;
+    Modal.open({
+      title: 'Lägg till serviceintervall',
+      wide:  true,
+      body:  this._siIntervalFormHtml(null),
+      buttons: [
+        { label: 'Avbryt', cls: 'bs', fn: 'Modal.close()' },
+        { label: 'Spara', cls: 'bp', fn: `PropertyDetailPage._saveAddInterval('${propId}')` }
+      ]
+    });
+  },
+
+  _saveAddInterval(propId) {
+    const d = this._siReadForm();
+    if (!d.title) { showToast('Ange en titel'); return; }
+    ServiceIntervalService.create(propId, d);
+    Modal.close();
+    showToast('Serviceintervall tillagt');
+    const p = getObj(propId);
+    if (p) {
+      const el = document.getElementById('prop-tab-service');
+      if (el) el.innerHTML = this._renderServiceTab(p);
+    }
+  },
+
+  openEditInterval(propId, siId) {
+    if (!Auth.can('properties_manage')) return;
+    const p  = getObj(propId);
+    const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
+    if (!si) return;
+    Modal.open({
+      title: 'Redigera serviceintervall',
+      wide:  true,
+      body:  this._siIntervalFormHtml(si),
+      buttons: [
+        { label: 'Avbryt', cls: 'bs', fn: 'Modal.close()' },
+        { label: 'Spara',  cls: 'bp', fn: `PropertyDetailPage._saveEditInterval('${propId}','${siId}')` }
+      ]
+    });
+  },
+
+  _saveEditInterval(propId, siId) {
+    const d = this._siReadForm();
+    if (!d.title) { showToast('Ange en titel'); return; }
+    ServiceIntervalService.update(propId, siId, d);
+    Modal.close();
+    showToast('Serviceintervall uppdaterat');
+    const p = getObj(propId);
+    if (p) {
+      const el = document.getElementById('prop-tab-service');
+      if (el) el.innerHTML = this._renderServiceTab(p);
+    }
+  },
+
+  deleteInterval(propId, siId) {
+    if (!Auth.can('properties_manage')) return;
+    if (!confirm('Ta bort detta serviceintervall?')) return;
+    ServiceIntervalService.delete(propId, siId);
+    showToast('Serviceintervall borttaget');
+    const p = getObj(propId);
+    if (p) {
+      const el = document.getElementById('prop-tab-service');
+      if (el) el.innerHTML = this._renderServiceTab(p);
+    }
+  },
+
+  openMarkDone(propId, siId) {
+    const p  = getObj(propId);
+    const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
+    if (!si) return;
+    const staff = state.staff || [];
+    const curStaff = si.responsibleStaffId || (state.currentUser ? state.currentUser.id : '');
+    Modal.open({
+      title: `Markera utförd — ${esc(si.title)}`,
+      wide:  false,
+      body:  `
+        <div class="fg">
+          <label>Datum för utförande</label>
+          <input id="si-done-date" class="fi" type="date" value="${tdy()}">
+        </div>
+        <div class="fg">
+          <label>Utförd av</label>
+          <select id="si-done-staff" class="fi">
+            <option value="">— Välj —</option>
+            ${staff.map(s => `<option value="${s.id}" ${curStaff===s.id?'selected':''}>${s.firstName} ${s.lastName}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Kommentar (valfritt)</label>
+          <textarea id="si-done-comment" class="fi" rows="2" placeholder="Ev. anteckning…"></textarea>
+        </div>
+        ${si.nextDue ? `<div style="background:rgba(14,165,233,.07);border:1px solid rgba(14,165,233,.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--mt);margin-top:4px;">
+          ${ic('info',12)} Nästa förfallodatum räknas om automatiskt baserat på intervallet (${(ServiceIntervalService.PRESETS[si.intervalType]||{}).label||si.intervalType}).
+        </div>` : ''}`,
+      buttons: [
+        { label: 'Avbryt',           cls: 'bs', fn: 'Modal.close()' },
+        { label: 'Markera utförd',   cls: 'bp', fn: `PropertyDetailPage._saveMarkDone('${propId}','${siId}')` }
+      ]
+    });
+  },
+
+  _saveMarkDone(propId, siId) {
+    const date    = document.getElementById('si-done-date')?.value    || tdy();
+    const staffId = document.getElementById('si-done-staff')?.value   || '';
+    const comment = document.getElementById('si-done-comment')?.value.trim() || '';
+    ServiceIntervalService.markDone(propId, siId, { date, staffId, comment });
+    Modal.close();
+    showToast('Markerat som utförd — nästa datum beräknat');
+    const p = getObj(propId);
+    if (p) {
+      const el = document.getElementById('prop-tab-service');
+      if (el) el.innerHTML = this._renderServiceTab(p);
+      const ovEl = document.getElementById('prop-tab-overview');
+      if (ovEl) ovEl.innerHTML = this._renderOverview(p, p.inspections || {}, p.serviceIntervals || []);
+    }
+  },
+
+  openSIHistory(propId, siId) {
+    const p  = getObj(propId);
+    const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
+    if (!si) return;
+    const hist = si.history || [];
+    const staff = state.staff || [];
+    const rows = hist.map(h => {
+      const s = h.staffId ? staff.find(x => x.id === h.staffId) : null;
+      const sName = s ? `${s.firstName} ${s.lastName}`.trim() : (h.staffId || '—');
+      return `<div class="si-hist-row">
+        <div class="si-hist-date">${fmtDate(h.date)}</div>
+        <div class="si-hist-by">${sName}</div>
+        ${h.comment ? `<div class="si-hist-comment">${esc(h.comment)}</div>` : ''}
+      </div>`;
+    });
+    Modal.open({
+      title: `Historik — ${esc(si.title)}`,
+      wide:  false,
+      body:  hist.length === 0
+        ? '<p style="color:var(--mt);">Ingen historik ännu.</p>'
+        : `<div class="si-hist-list">${rows.join('')}</div>`,
+      buttons: [{ label: 'Stäng', cls: 'bs', fn: 'Modal.close()' }]
+    });
   },
 
   /* ── Tab: Kontakt & åtkomst ────────────────────────────── */

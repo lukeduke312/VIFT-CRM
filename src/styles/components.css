@@ -2590,3 +2590,109 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   color: var(--sky);
 }
 .ao-address-link:hover span[style*="map-pin"] { color: var(--sky) !important; }
+
+/* ── Serviceintervall (v52) ────────────────────────────────── */
+.si-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.si-badge-ok          { background: rgba(34,197,94,.12);  color: #15803d; border: 1px solid rgba(34,197,94,.3); }
+.si-badge-approaching { background: rgba(234,179,8,.12);  color: #92400e; border: 1px solid rgba(234,179,8,.3); }
+.si-badge-due-soon    { background: rgba(249,115,22,.12); color: #c2410c; border: 1px solid rgba(249,115,22,.3); }
+.si-badge-overdue     { background: rgba(239,68,68,.12);  color: #b91c1c; border: 1px solid rgba(239,68,68,.3); }
+.si-badge-not-set     { background: var(--bg); color: var(--mt); border: 1px solid var(--br); }
+
+.si-tab-alert {
+  display: inline-block;
+  width: 14px; height: 14px;
+  background: var(--rd);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 900;
+  text-align: center;
+  line-height: 14px;
+  margin-left: 3px;
+  vertical-align: middle;
+}
+
+.si-card {
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--card-bg, #fff);
+  transition: box-shadow .15s;
+}
+.si-card:last-child { margin-bottom: 0; }
+.si-card--overdue   { border-left: 3px solid var(--rd); }
+.si-card--due-soon  { border-left: 3px solid var(--or); }
+.si-card--approaching { border-left: 3px solid #eab308; }
+.si-card:hover      { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+
+.si-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.si-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.si-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--mt);
+}
+.si-card-meta span { display: flex; align-items: center; gap: 3px; }
+.si-card-status { flex-shrink: 0; }
+
+.si-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.si-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.si-info-row > span:first-child { min-width: 110px; flex-shrink: 0; }
+
+.si-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Historik i modal */
+.si-hist-list { display: flex; flex-direction: column; gap: 8px; }
+.si-hist-row {
+  padding: 10px 12px;
+  border: 1px solid var(--br);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.si-hist-date    { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+.si-hist-by      { color: var(--mt); }
+.si-hist-comment { margin-top: 4px; color: var(--tx); }
+
+@media (prefers-color-scheme: dark) {
+  .si-card { background: var(--card-bg, #1e293b); }
+  .si-badge-ok       { background: rgba(34,197,94,.15);  }
+  .si-badge-approaching { background: rgba(234,179,8,.15); }
+  .si-badge-due-soon { background: rgba(249,115,22,.15); }
+  .si-badge-overdue  { background: rgba(239,68,68,.15);  }
+}

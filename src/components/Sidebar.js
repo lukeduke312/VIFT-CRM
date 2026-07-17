@@ -18,7 +18,7 @@ const Sidebar = {
     { id: 'pg-calendar',    icon: 'calendar',        label: 'Kalender',     comingSoon: true },
     { section: 'Kund & Sälj' },
     { id: 'pg-crm',         icon: 'users',           label: 'Kunder' },
-    { id: 'pg-objects',     icon: 'building-2',      label: 'Fastigheter' },
+    { id: 'pg-objects',     icon: 'building-2',      label: 'Fastigheter',  badgeKey: 'serviceOverdue' },
     { id: 'pg-offer',       icon: 'file-text',       label: 'Offerter' },
     { id: 'pg-sales',       icon: 'target',          label: 'Säljchanser',  badgeKey: 'salesNew' },
     { id: 'pg-contracts',   icon: 'file-check',      label: 'Kontrakt',     comingSoon: true },
@@ -244,7 +244,8 @@ const Sidebar = {
       { key: 'aoNew',              navId: 'nav-pg-ao' },
       { key: 'salesNew',           navId: 'nav-pg-sales' },
       { key: 'activitiesOverdue',  navId: 'nav-pg-activities' },
-      { key: 'operationsAlert',    navId: 'nav-pg-operations' }
+      { key: 'operationsAlert',    navId: 'nav-pg-operations' },
+      { key: 'serviceOverdue',     navId: 'nav-pg-objects' }
     ].forEach(({ key, navId }) => {
       const badge  = this._getBadge(key);
       const navBtn = document.getElementById(navId);
@@ -279,7 +280,7 @@ const Sidebar = {
   },
 
   _isUrgentBadge(key) {
-    return key === 'activitiesOverdue' || key === 'operationsAlert';
+    return key === 'activitiesOverdue' || key === 'operationsAlert' || key === 'serviceOverdue';
   },
 
   _getBadge(key) {
@@ -324,6 +325,11 @@ const Sidebar = {
     }
     if (key === 'notifications') {
       const n = (typeof NotificationsService !== 'undefined') ? NotificationsService.unreadCount() : 0;
+      return n > 0 ? n : null;
+    }
+    if (key === 'serviceOverdue') {
+      if (typeof ServiceIntervalService === 'undefined') return null;
+      const n = ServiceIntervalService.countGlobalAlert();
       return n > 0 ? n : null;
     }
     return null;
