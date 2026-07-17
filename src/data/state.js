@@ -35,6 +35,7 @@ let state = {
   notifications: [],
   propertyCategories: [],
   ronderingspass: [],
+  propertyObjects: [],
 
   // UI-state
   currentPage: 'dash',
@@ -90,6 +91,7 @@ async function initState() {
   state.activities         = g('activities')       || [];
   state.notifications      = g('notifications')    || [];
   state.ronderingspass     = g('ronderingspass')   || [];
+  state.propertyObjects    = g('propertyObjects')  || [];
 
   /* ── Konfigurations- och referensdata: SeedData ger vettiga standardvärden ── */
   state.priceGroups        = g('priceGroups')        || SeedData.priceGroups        || [];
@@ -245,7 +247,8 @@ function persist() {
     ['emailTemplates',   state.emailTemplates],
     ['notifications',    state.notifications],
     ['propertyCategories', state.propertyCategories],
-    ['ronderingspass',   state.ronderingspass]
+    ['ronderingspass',   state.ronderingspass],
+    ['propertyObjects',  state.propertyObjects]
   ]);
 }
 
@@ -270,7 +273,8 @@ function getStaff(id){ return state.staff.find(s => s.id === id) || null; }
 function getMall(id)  { return state.ronderingsmallar.find(m => m.id === id) || null; }
 function getRon(id)   { return state.ronderingar.find(r => r.id === id) || null; }
 function getAvv(id)   { return state.avvikelser.find(a => a.id === id) || null; }
-function getPass(id)  { return state.ronderingspass.find(p => p.id === id) || null; }
+function getPass(id)    { return state.ronderingspass.find(p => p.id === id) || null; }
+function getPropObj(id) { return state.propertyObjects.find(o => o.id === id) || null; }
 
 function tdy() {
   return new Date().toISOString().split('T')[0];

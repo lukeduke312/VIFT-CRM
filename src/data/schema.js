@@ -3,6 +3,30 @@
  * Används av services för att skapa tomma objekt
  */
 
+/* ── Objekttyper (lägenhet, lokal, etc.) ─────── */
+const PROPERTY_OBJECT_TYPES = [
+  { key: 'lagenhet',  label: 'Lägenhet'         },
+  { key: 'lokal',     label: 'Lokal'            },
+  { key: 'butik',     label: 'Butik'            },
+  { key: 'kontor',    label: 'Kontor'           },
+  { key: 'forrad',    label: 'Förråd'           },
+  { key: 'garage',    label: 'Garageplats'      },
+  { key: 'parkering', label: 'Parkeringsplats'  },
+  { key: 'teknik',    label: 'Teknikutrymme'    },
+  { key: 'gemensamt', label: 'Gemensamt utrymme'},
+  { key: 'byggnad',   label: 'Byggnad/huskropp' },
+  { key: 'annat',     label: 'Annat'            }
+];
+
+const PROPERTY_OBJECT_STATUSES = [
+  { key: 'aktiv',      label: 'Aktiv'            },
+  { key: 'vakant',     label: 'Vakant'           },
+  { key: 'avstaelld',  label: 'Avställd'         },
+  { key: 'uthyrd',     label: 'Uthyrd'           },
+  { key: 'renovering', label: 'Under renovering' },
+  { key: 'inaktiv',    label: 'Inaktiv'          }
+];
+
 /* ── AO-kategorier ──────────────────────────── */
 const AO_CATEGORIES = [
   { slug: 'felanmalan',        label: 'Felanmälan',            icon: 'alert-circle',    color: '#ef4444' },
@@ -469,6 +493,36 @@ const Schema = {
     summary: { total: 0, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
     internalNote: '',
     migratedFromLegacy: false,
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  propertyObject: () => ({
+    id: '',
+    customerId: '',
+    propertyId: '',
+    objectNumber: '',       // löpnummer, t.ex. "1101"
+    type: 'lagenhet',       // PROPERTY_OBJECT_TYPES[].key
+    name: '',               // fritext, t.ex. "Lägenhet 1101"
+    address: '',
+    postalCode: '',
+    city: '',
+    entrance: '',           // port/entré
+    stairwell: '',          // trapphus
+    floor: '',              // våningsplan
+    apartmentNumber: '',    // lägenhetsnummer (formellt)
+    area: 0,                // kvm
+    status: 'aktiv',        // PROPERTY_OBJECT_STATUSES[].key
+    description: '',
+    primaryContactId: '',   // kund-id
+    accessInformation: '',  // tillträdeskod, nyckelinfo
+    doorCode: '',
+    keyInformation: '',
+    documents: [],          // [{id, name, url, uploadedAt}]
+    images: [],             // [{dataUrl, name}]
+    contacts: [],           // [{contactId, role, validFrom, validTo, active}]
+    technicalSystems: {},   // friformat nyckel→värde
+    equipment: [],          // [{id, name, type, serialNumber, installedAt}]
     createdAt: '',
     updatedAt: ''
   })
