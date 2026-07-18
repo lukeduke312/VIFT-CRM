@@ -1,5 +1,5 @@
 /**
- * Router v18 — sidnavigering + fullständig hash-baserad routing
+ * Router v19 — sidnavigering + fullständig hash-baserad routing
  * Alla sidor reflekteras i URL-hashen (#/ao/AO-016 osv.)
  * Browser back + swipe-back delar samma historik via pushState/popstate.
  */
@@ -27,6 +27,7 @@ const Router = {
       case 'pg-obj-detail':       return p.propId ? '/fastigheter/' + p.propId : '/fastigheter';
       case 'pg-propobj-detail':   return p.objId ? '/objekt/' + p.objId : '/fastigheter';
       case 'pg-import-wizard':    return '/importera/' + (p.type || 'kunder');
+      case 'pg-import-log':       return '/importera/logg';
       case 'pg-offer':            return '/offerter';
       case 'pg-offer-detail':     return p.offerId ? '/offerter/' + p.offerId : '/offerter';
       case 'pg-invoices':         return '/fakturaunderlag';
@@ -122,7 +123,9 @@ const Router = {
       case 'offerttjanster':this.showPage('pg-service-templates',{}, { replace: true }); return;
       case 'minajobb':      this.showPage('pg-myjobs',           {}, { replace: true }); return;
       case 'drift':         this.showPage('pg-operations',       {}, { replace: true }); return;
-      case 'importera':     this.showPage('pg-import-wizard', { type: s1 || 'customer' }, { replace: true }); return;
+      case 'importera':
+        if (s1 === 'logg') { this.showPage('pg-import-log', {}, { replace: true }); return; }
+        this.showPage('pg-import-wizard', { type: s1 || 'customer' }, { replace: true }); return;
     }
 
     /* Fallback: dashboard */
@@ -161,7 +164,8 @@ const Router = {
     'pg-service-templates': { title: 'Offerttjänster',         sub: 'Tjänster & prismodeller' },
     'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' },
     'pg-operations':        { title: 'Dagens drift',           sub: 'Chefsöversikt & driftläge' },
-    'pg-import-wizard':     { title: 'Importera',              sub: 'CSV- och XLSX-import' }
+    'pg-import-wizard':     { title: 'Importera',              sub: 'CSV- och XLSX-import' },
+    'pg-import-log':        { title: 'Importlogg',             sub: 'Historik och ångra' }
   },
 
   currentPage: null,
@@ -314,7 +318,8 @@ const Router = {
       'pg-myjobs':            () => MyJobsPage.render(),
       'pg-operations':        () => OperationsPage.render(),
       'pg-propobj-detail':    () => PropertyObjectPage.render(params),
-      'pg-import-wizard':     () => ImportWizardPage.render(params)
+      'pg-import-wizard':     () => ImportWizardPage.render(params),
+      'pg-import-log':        () => ImportLogPage.render(params)
     };
 
     const renderer = renderers[pageId];

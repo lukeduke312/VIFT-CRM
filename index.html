@@ -12,14 +12,14 @@
 <title>VIFT CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- DEPLOY: SW=v10 responsive=v16 WorkOrdersPage=v34 WorkOrderDetailPage=v47 components=v55 PageShells=v75 PropertyDetailPage=v19 ServiceIntervalService=v3 OperationsPage=v9 PropertyObjectService=v1 PropertyObjectPage=v1 Router=v18 schema=v17 state=v27 RonderingUtforandePage=v10 ImportExportService=v1 ImportWizardPage=v1 CustomersPage=v10 -->
+<!-- DEPLOY: SW=v10 responsive=v16 WorkOrdersPage=v34 WorkOrderDetailPage=v47 components=v56 PageShells=v75 PropertyDetailPage=v19 ServiceIntervalService=v3 OperationsPage=v9 PropertyObjectService=v1 PropertyObjectPage=v1 Router=v19 schema=v17 state=v27 RonderingUtforandePage=v10 ImportExportService=v1 ImportWizardPage=v1 ImportLogPage=v1 CustomersPage=v10 -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
 <link rel="stylesheet" href="src/styles/layout.css?v=27">
-<link rel="stylesheet" href="src/styles/components.css?v=55">
+<link rel="stylesheet" href="src/styles/components.css?v=56">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=21">
 <link rel="stylesheet" href="src/styles/responsive.css?v=16">
@@ -303,6 +303,11 @@
         <div class="con" id="pg-import-wizard-content"></div>
       </div>
 
+      <!-- Importlogg (Leverans B) -->
+      <div class="page" id="pg-import-log">
+        <div class="con" id="pg-import-log-content"></div>
+      </div>
+
     </div><!-- /content-scroll -->
   </div><!-- /page-area -->
 </div><!-- /app -->
@@ -345,6 +350,7 @@
 <script src="src/services/PropertyObjectService.js?v=1"></script>
 <script src="src/services/ImportExportService.js?v=1"></script>
 <script src="src/pages/ImportWizardPage.js?v=1"></script>
+<script src="src/pages/ImportLogPage.js?v=1"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
 <script src="src/services/AddressService.js?v=4"></script>
 <script src="src/services/PushService.js?v=4"></script>
@@ -356,7 +362,7 @@
 <script src="src/components/Sidebar.js?v=23"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=18"></script>
+<script src="src/pages/Router.js?v=19"></script>
 <script src="src/pages/Dashboard.js?v=32"></script>
 <script src="src/pages/CustomersPage.js?v=10"></script>
 <script src="src/pages/WorkOrdersPage.js?v=34"></script>
