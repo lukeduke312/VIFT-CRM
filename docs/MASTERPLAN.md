@@ -81,17 +81,17 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 44 | Schema: customerNumber, externalId, externalSystem, paymentTerms på kund | EJ BYGGD | — | schema.js |
-| 45 | ImportExportService.js — CSV-parser, XLSX-reader/writer (rent JS, ingen extern lib) | EJ BYGGD | — | ImportExportService.js |
-| 46 | Importlogg-schema (importSession i state.importLogs) | EJ BYGGD | — | schema.js, state.js |
-| 47 | ImportWizard.js — 6-stegsguide (välj fil, förhandsgranskning, matchning, validering, bekräftelse, resultat) | EJ BYGGD | — | ImportWizard.js |
-| 48 | Kolumnmatchning (auto-förslag, Bokio-profil, "Importera inte") | EJ BYGGD | — | ImportWizard.js |
-| 49 | Dubblettdetektering (org-nr, ext-ID, kundnr, e-post, namn+adress) | EJ BYGGD | — | ImportExportService.js |
-| 50 | Konfliktlösning per rad (hoppa/skapa/uppdatera/granska) + diff-vy | EJ BYGGD | — | ImportWizard.js |
-| 51 | Kundexport — CSV (alla/filtrerade/markerade, valbara kolumner) | EJ BYGGD | — | CustomersPage, ImportExportService.js |
-| 52 | Kundexport — XLSX (flerblads: Kunder, Kontakter, Fastigheter, Objekt) | EJ BYGGD | — | ImportExportService.js |
-| 53 | Importlogg och angra (spara skapade/uppdaterade ID:n, pre-import snapshot) | EJ BYGGD | — | ImportWizard.js, ImportExportService.js |
-| 54 | Behörighetskontroll (bara admin får importera), känsliga fältskyddar vid export | EJ BYGGD | — | ImportWizard.js, CustomersPage |
+| 44 | Schema: customerNumber, externalId, externalSystem, paymentTerms på kund | KLAR | 9910cda | schema.js v17 |
+| 45 | ImportExportService.js — CSV-parser, XLSX-reader/writer (rent JS, ingen extern lib) | KLAR | 9910cda | ImportExportService.js v1 |
+| 46 | Importlogg-schema (Schema.importLog(), state.importLogs[]) | KLAR | 9910cda | schema.js v17, state.js v27 |
+| 47 | ImportWizardPage.js — 6-stegsguide (välj fil, förhandsgranskning, matchning, validering, bekräftelse, resultat) | KLAR | d3b5117 | ImportWizardPage.js v1 |
+| 48 | Kolumnmatchning (auto-förslag, Bokio-profil, "Importera inte") | KLAR | d3b5117 | ImportWizardPage.js, ImportExportService.js |
+| 49 | Dubblettdetektering (org-nr, ext-ID, kundnr, e-post, namn+ort) | KLAR | d3b5117 | ImportWizardPage.js._validateRows() |
+| 50 | Konfliktlösning per rad (hoppa/skapa/uppdatera) | KLAR | d3b5117 | ImportWizardPage.js steg 4–5 (diff-vy EJ BYGGD) |
+| 51 | Kundexport — CSV (alla/filtrerade) | KLAR | 33872a1 | CustomersPage v10 |
+| 52 | Kundexport — XLSX (flerblads: Kunder, Kontaktpersoner, Fastigheter) | KLAR | 33872a1 | CustomersPage v10, ImportExportService.js |
+| 53 | Importlogg med ångra (skapade ID:n + pre-import snapshot, ImportLogPage) | KLAR | fb9ff35 | ImportLogPage.js v1, ImportExportService.undoImport() |
+| 54 | Behörighetskontroll (bara admin importerar), portkod/nyckel aldrig i export | KLAR | d3b5117 33872a1 | ImportWizardPage + ImportLogPage Auth.can('admin'), buildCustomerExportRows() |
 
 ---
 
@@ -124,7 +124,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Prioritet | Beroenden |
 |---|----------|--------|-----------|-----------|
-| 73 | Generell import/export för fastigheter, objekt, artiklar, personal | EJ BYGGD | Hög | ImportExportService.js |
+| 73 | Generell import/export för fastigheter, objekt, artiklar, personal | DELVIS | Hög | ImportExportService.js (motor klar, endast kund-UI byggd) |
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
@@ -154,6 +154,19 @@ contacts[]-arrayen finns i schema och kan sparas via PropertyObjectService.updat
 
 ### Rollbaserat döljande av portkod (punkt 72)
 doorCode och keyInformation visas för alla inloggade användare. Kräver rollkontroll (t.ex. Auth.can('objects_sensitive')) innan det är säkert för mobila fältarbetare.
+
+### Importera per rad — diff-vy (punkt 50)
+Konfliktlösning har tre val (hoppa/uppdatera/skapa ny) per rad, men saknar en sida-vid-sida diff-vy som jämför importvärdena mot befintliga värden.
+
+### Kundexport — markerade kunder (punkt 51)
+Export stöder "alla" och "filtrerade" (aktiv sökning + typfiler), men inte manuellt markerade kunder (checkbox per rad).
+
+### XLSX-import — deflate-komprimerade celler
+Läsaren hanterar DEFLATE-komprimerade ZIP-poster via DecompressionStream('deflate-raw'). Om Excel-filer exporteras med metod=6 (DEFLATE64) faller läsaren. Ovanligt i Sverige-marknad, men oklart i framtiden.
+
+### Generell import för övriga register (punkt 73)
+ImportExportService.js är byggd som återanvändbar motor för alla register.
+ImportWizard och kolumnmatchning stöder bara entityType='customer' idag. Fastigheter, objekt, artiklar och personal kräver egna fältmappningar och CRUD-logik — byggs i Fas 4.
 
 ---
 
