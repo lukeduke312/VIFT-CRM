@@ -503,6 +503,8 @@ const DataSync = {
       arr('notifications',      'notifications');
       arr('propertyCategories', 'propertyCategories');
       arr('ronderingspass',     'ronderingspass');
+      arr('propertyObjects',    'propertyObjects');
+      arr('importLogs',         'importLogs');
 
       /* Staff: strippa lösenordsfält */
       var rawStaff = g('staff');

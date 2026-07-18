@@ -4919,6 +4919,18 @@ const AdminPage = {
           </div>
         </div>
 
+        <!-- Import & Export -->
+        <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
+          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px;">Import &amp; Export</div>
+          <p style="font-size:12px;color:var(--mt);margin-bottom:10px;line-height:1.5;">
+            Importera kunder från CSV eller XLSX. Exportera register. Historik och ångra via importloggen.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',13)} Importera kunder</button>
+            <button class="btn bs bsm" onclick="Router.showPage('pg-import-log',{})">${ic('clock',13)} Importlogg (${(state.importLogs||[]).length})</button>
+          </div>
+        </div>
+
         <!-- Återställning -->
         <div style="padding:14px 16px;">
           <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px;">Demodata & återställning</div>

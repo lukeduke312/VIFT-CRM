@@ -677,7 +677,8 @@ const ImportWizardPage = (function () {
         : '') +
       '<div style="display:flex;gap:8px;justify-content:center;margin-top:20px;">' +
         '<button class="btn btn-ghost" onclick="ImportWizardPage._undoLast()">' + _ic('rotate-ccw', 14) + ' Ångra import</button>' +
-        '<button class="btn btn-primary" onclick="Router.go(\'pg-crm\')">' + _ic('users', 14) + ' Till kundregister</button>' +
+        '<button class="btn btn-primary" onclick="Router.showPage(\'pg-crm\',{})">' + _ic('users', 14) + ' Till kundregister</button>' +
+        '<button class="btn btn-ghost" onclick="Router.showPage(\'pg-import-log\',{})">' + _ic('clock', 14) + ' Importlogg</button>' +
         '<button class="btn btn-ghost" onclick="ImportWizardPage._reset()">' + _ic('upload', 14) + ' Ny import</button>' +
       '</div>' +
     '</div>';
