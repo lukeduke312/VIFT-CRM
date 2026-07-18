@@ -105,8 +105,32 @@ const Schema = {
     note: '',
     contacts: [],             // [{name, phone, email, role}]
     active: true,
+    // Leverans B: import/export-fält
+    customerNumber: '',       // internt kundnummer
+    externalId: '',           // ID i externt system (t.ex. Bokio)
+    externalSystem: '',       // 'bokio' | 'fortnox' | 'visma' | ''
+    paymentTerms: 30,         // betalningsvillkor i dagar (används även av faktura)
     createdAt: '',
     updatedAt: ''
+  }),
+
+  importLog: () => ({
+    id: '',
+    type: 'customer',         // 'customer' | 'property' | 'object' | 'article' | 'staff'
+    filename: '',
+    format: 'csv',            // 'csv' | 'xlsx'
+    totalRows: 0,
+    createdCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errorCount: 0,
+    errors: [],               // [{row, field, message}]
+    createdIds: [],           // IDs för ångra
+    updatedSnapshots: [],     // [{id, before}] för ångra
+    performedBy: '',
+    undone: false,
+    createdAt: '',
+    note: ''
   }),
 
   workOrder: () => ({

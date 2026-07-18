@@ -36,6 +36,7 @@ let state = {
   propertyCategories: [],
   ronderingspass: [],
   propertyObjects: [],
+  importLogs: [],
 
   // UI-state
   currentPage: 'dash',
@@ -92,6 +93,7 @@ async function initState() {
   state.notifications      = g('notifications')    || [];
   state.ronderingspass     = g('ronderingspass')   || [];
   state.propertyObjects    = g('propertyObjects')  || [];
+  state.importLogs         = g('importLogs')       || [];
 
   /* ── Konfigurations- och referensdata: SeedData ger vettiga standardvärden ── */
   state.priceGroups        = g('priceGroups')        || SeedData.priceGroups        || [];
@@ -248,7 +250,8 @@ function persist() {
     ['notifications',    state.notifications],
     ['propertyCategories', state.propertyCategories],
     ['ronderingspass',   state.ronderingspass],
-    ['propertyObjects',  state.propertyObjects]
+    ['propertyObjects',  state.propertyObjects],
+    ['importLogs',       state.importLogs]
   ]);
 }
 
