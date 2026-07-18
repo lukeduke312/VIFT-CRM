@@ -29,6 +29,8 @@ const CustomersPage = {
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
         <div class="ao-toolbar-right">
+          ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'customer'})" title="Importera kunder">${ic('upload',14)} Importera</button>` : ''}
+          <button class="btn bs bsm" onclick="CustomersPage._showExportMenu(this)" title="Exportera">${ic('download',14)} Exportera</button>
           <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
         </div>
       </div>
@@ -248,6 +250,102 @@ const CustomersPage = {
         this.render();
       }
     }
+  },
+
+  /* ── Export ──────────────────────────── */
+
+  _showExportMenu(btn) {
+    // Enkel dropdown via popover
+    const existing = document.getElementById('cust-export-menu');
+    if (existing) { existing.remove(); return; }
+
+    const menu = document.createElement('div');
+    menu.id = 'cust-export-menu';
+    menu.className = 'dropdown-menu';
+    menu.style.cssText = 'position:absolute;z-index:900;background:var(--bg);border:1px solid var(--br);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.15);padding:6px;min-width:200px';
+
+    const items = [
+      { icon: 'file-text', label: 'Exportera CSV (alla kunder)',        fn: () => this._exportCSV('all') },
+      { icon: 'file-text', label: 'Exportera CSV (filtrerade)',         fn: () => this._exportCSV('filtered') },
+      { icon: 'table',     label: 'Exportera XLSX (fullständig)',       fn: () => this._exportXLSX() }
+    ];
+
+    items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'dropdown-item';
+      div.innerHTML = ic(item.icon, 14) + ' ' + item.label;
+      div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;';
+      div.onmouseenter = () => div.style.background = 'var(--bg2)';
+      div.onmouseleave = () => div.style.background = '';
+      div.onclick = () => { menu.remove(); item.fn(); };
+      menu.appendChild(div);
+    });
+
+    const rect = btn.getBoundingClientRect();
+    menu.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    document.body.appendChild(menu);
+
+    const closer = (e) => {
+      if (!menu.contains(e.target) && e.target !== btn) {
+        menu.remove();
+        document.removeEventListener('click', closer, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closer, true), 10);
+  },
+
+  _getFilteredList() {
+    let list = CustomerService.search(this.q);
+    if (this._typeFilter === 'inaktiva') {
+      list = list.filter(c => c.inactive);
+    } else if (this._typeFilter && this._typeFilter !== 'alla') {
+      list = list.filter(c => c.type === this._typeFilter && !c.inactive);
+    } else {
+      list = list.filter(c => !c.inactive);
+    }
+    return list;
+  },
+
+  _exportCSV(scope) {
+    const customers = scope === 'filtered' ? this._getFilteredList() : state.customers.filter(c => !c.deleted);
+    const { headers, rows } = ImportExportService.buildCustomerExportRows(customers);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+    ImportExportService.downloadCSV('kunder-' + ts + '.csv', headers, rows);
+    showToast('Exporterar ' + customers.length + ' kunder som CSV…');
+  },
+
+  _exportXLSX() {
+    const customers = state.customers.filter(c => !c.deleted);
+
+    // Blad 1: Kunder
+    const { headers: h1, rows: r1 } = ImportExportService.buildCustomerExportRows(customers);
+
+    // Blad 2: Kontaktpersoner (alla kontakter ur contacts[])
+    const h2 = ['KundID', 'Kundnamn', 'Kontaktnamn', 'Roll', 'Telefon', 'E-post'];
+    const r2 = [];
+    customers.forEach(c => {
+      (c.contacts || []).forEach(ct => {
+        r2.push([c.id, CustomerService.displayName(c), ct.name || '', ct.role || '', ct.phone || '', ct.email || '']);
+      });
+    });
+
+    // Blad 3: Fastigheter (kopplade per kund)
+    const h3 = ['KundID', 'Kundnamn', 'FastighetsID', 'Fastighetsbeteckning', 'Adress', 'Ort'];
+    const r3 = [];
+    customers.forEach(c => {
+      (state.properties || []).filter(p => p.customerId === c.id).forEach(p => {
+        r3.push([c.id, CustomerService.displayName(c), p.id, p.propertyDesignation || '', p.address || '', p.city || '']);
+      });
+    });
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+    ImportExportService.downloadXLSX('kunder-' + ts + '.xlsx', [
+      { name: 'Kunder',          headers: h1, rows: r1 },
+      { name: 'Kontaktpersoner', headers: h2, rows: r2 },
+      { name: 'Fastigheter',     headers: h3, rows: r3 }
+    ]);
+    showToast('Exporterar ' + customers.length + ' kunder som XLSX…');
   }
 };
 
