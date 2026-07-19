@@ -5223,7 +5223,8 @@ const AdminPage = {
       { key: 'fastighetskort', label: `${ic('building-2',12)} Fastighetskort`      },
       { key: 'ansvariga',      label: `${ic('user-check',12)} Ansvariga`           },
       { key: 'avvikelse',      label: `${ic('alert-triangle',12)} Avvikelser`      },
-      { key: 'notiser',        label: `${ic('bell',12)} Notiser`                   }
+      { key: 'notiser',        label: `${ic('bell',12)} Notiser`                   },
+      { key: 'epost',          label: `${ic('mail',12)} E-post-mallar`             }
     ];
     const tabBar = `<div class="admin-tabs">
       ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.label}</button>`).join('')}
@@ -5750,7 +5751,119 @@ const AdminPage = {
             </div>`).join('')}
       </div>`;
 
+    /* ── Punkt 80: E-post-mallar ───────────────────────────── */
+    const tmpls = (state.emailTemplates || []).sort((a,b)=>(a.sortOrder||99)-(b.sortOrder||99));
+    sections.epost = `
+      <div class="admin-section-group">
+        <div class="admin-section-header">
+          <div>
+            <div class="admin-section-title">${ic('mail',16)} E-post-mallar</div>
+            <div class="admin-section-desc">Mallar för offertutskick, påminnelser och bekräftelser. Variabler: {{firstName}}, {{offerId}}, {{validUntil}}, {{viftPhone}} m.fl.</div>
+          </div>
+          <button class="btn bp bxs" onclick="AdminPage.openEditEmailTemplate(null)">${ic('plus',13)} Ny mall</button>
+        </div>
+        ${tmpls.length === 0
+          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga e-post-mallar. Skapa din första mall.</div>`
+          : tmpls.map(t => `
+            <div style="display:flex;align-items:start;gap:8px;padding:12px 16px;border-top:1px solid var(--br);">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:600;">${esc(t.name||'Namnlös mall')}</div>
+                <div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc(t.subject||'')}</div>
+                <div style="font-size:11px;color:var(--mt);margin-top:4px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc((t.body||'').slice(0,120))}</div>
+              </div>
+              <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
+                <span class="bdg ${t.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active!==false?'Aktiv':'Inaktiv'}</span>
+                <button class="btn bxs bs" onclick="AdminPage.openEditEmailTemplate('${esc(t.id)}')">${ic('pencil',11)}</button>
+                <button class="btn bxs ${t.active!==false?'bw':'bsu'}" onclick="AdminPage.toggleEmailTemplate('${esc(t.id)}')">${t.active!==false?ic('eye-off',11)+' Inaktivera':ic('eye',11)+' Aktivera'}</button>
+              </div>
+            </div>`).join('')}
+      </div>`;
+
     el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+  },
+
+  /* ── E-post-mallar CRUD (Punkt 80) ──────────────────────── */
+  openEditEmailTemplate(id) {
+    const t = id ? (state.emailTemplates||[]).find(x=>x.id===id) : null;
+    const isNew = !t;
+    const typeOpts = [
+      { key:'send_offer',  label:'Skicka offert'           },
+      { key:'reminder',    label:'Påminnelse offert'       },
+      { key:'approved',    label:'Tack för godkännande'    },
+      { key:'followup',    label:'Uppföljning'             },
+      { key:'declined',    label:'Tack för återkoppling'   },
+      { key:'new_ao',      label:'Ny arbetsorder (intern)' },
+      { key:'övrigt',      label:'Övrigt'                  }
+    ].map(x=>`<option value="${x.key}"${(t?.type||'övrigt')===x.key?' selected':''}>${x.label}</option>`).join('');
+
+    Modal.open({
+      title: isNew ? ic('mail',13) + ' Ny e-post-mall' : ic('pencil',13) + ' Redigera e-post-mall',
+      body: `<div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
+          <div class="fg"><label>Mallnamn *</label><input class="form-control" id="et-name" value="${esc(t?.name||'')}" placeholder="Namn på mallen"></div>
+          <div class="fg"><label>Typ</label><select class="form-control" id="et-type">${typeOpts}</select></div>
+        </div>
+        <div class="fg"><label>Ämnesrad *</label><input class="form-control" id="et-subj" value="${esc(t?.subject||'')}" placeholder="Ämnesrad med {{variabler}}"></div>
+        <div class="fg">
+          <label>Meddelandetext *</label>
+          <textarea class="form-control" id="et-body" rows="10" style="font-family:monospace;font-size:12px;">${esc(t?.body||'')}</textarea>
+          <div style="font-size:10px;color:var(--mt);margin-top:4px;">Tillgängliga variabler: <code>{{firstName}}</code> <code>{{offerId}}</code> <code>{{titleSuffix}}</code> <code>{{validUntil}}</code> <code>{{sentDate}}</code> <code>{{paymentLine}}</code> <code>{{viftPhone}}</code></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;font-size:12px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="et-active" ${t?.active!==false?'checked':''}> Aktiv</label>
+          <div class="fg" style="margin:0;display:flex;align-items:center;gap:6px;">
+            <label style="margin:0;">Sortering</label>
+            <input type="number" class="form-control" id="et-sort" value="${t?.sortOrder||99}" min="1" max="999" style="width:70px;">
+          </div>
+        </div>
+      </div>`,
+      okLabel: isNew ? 'Skapa mall' : 'Spara',
+      ok: () => {
+        const name = document.getElementById('et-name')?.value.trim();
+        const subj = document.getElementById('et-subj')?.value.trim();
+        const body = document.getElementById('et-body')?.value;
+        if (!name || !subj || !body) { showToast('Namn, ämne och text krävs', 'error'); return; }
+        const now = new Date().toISOString();
+        if (t) {
+          t.name      = name;
+          t.type      = document.getElementById('et-type')?.value   || 'övrigt';
+          t.subject   = subj;
+          t.body      = body;
+          t.active    = document.getElementById('et-active')?.checked !== false;
+          t.sortOrder = parseInt(document.getElementById('et-sort')?.value||'99',10);
+          t.updatedAt = now;
+        } else {
+          if (!state.emailTemplates) state.emailTemplates = [];
+          state.emailTemplates.push({
+            id:        newId(state.emailTemplates, 'ET'),
+            name,
+            type:      document.getElementById('et-type')?.value || 'övrigt',
+            subject:   subj,
+            body,
+            active:    document.getElementById('et-active')?.checked !== false,
+            sortOrder: parseInt(document.getElementById('et-sort')?.value||'99',10),
+            createdAt: now,
+            updatedAt: now
+          });
+        }
+        persist();
+        Modal.close();
+        AdminPage._tab = 'epost';
+        AdminPage.render();
+        showToast(t ? 'Mall sparad' : 'Mall skapad');
+      }
+    });
+  },
+
+  toggleEmailTemplate(id) {
+    const t = (state.emailTemplates||[]).find(x=>x.id===id);
+    if (!t) return;
+    t.active    = !t.active;
+    t.updatedAt = new Date().toISOString();
+    persist();
+    AdminPage._tab = 'epost';
+    AdminPage.render();
+    showToast(t.active ? 'Mall aktiverad' : 'Mall inaktiverad');
   },
 
   /* ── Avvikelsekategorier CRUD ────────────────────────── */
@@ -6665,7 +6778,7 @@ const AdminPage = {
 
 /* ── Shell-sidor utan rendering ───────── */
 const CalendarPage    = { render() { _renderShell('pg-calendar-content',    'Kalender',    'Kalendervy med planerade ordrar byggs i Fas 4.'); } };
-const ContractsPage   = { render() { _renderShell('pg-contracts-content',   'Kontrakt',    'Kontrakthantering byggs i Fas 4.'); } };
+/* ContractsPage definieras i src/pages/ContractsPage.js (Punkt 81) */
 const InspectionsPage = { render() { RonderingPage.render(); } };
 /* PayrollPage definieras i src/pages/PayrollPage.js (Punkt 76) */
 const ReportsPage     = { render() { _renderShell('pg-reports-content',     'Rapporter',   'Statistik och rapporter byggs i Fas 4.'); } };
