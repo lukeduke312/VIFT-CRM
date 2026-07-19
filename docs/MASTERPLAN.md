@@ -126,7 +126,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 |---|----------|--------|-----------|-----------|
 | 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | 18 register konfigurerade (inkl. Rapporter exportonly); markerad export klar (5 sidor); disambiguering klar; historicalImport-guard klar; webbläsarverifiering återstår |
 | 74 | Rondering — visningsrapport (PDF, dela) | KLAR | — | RonderingRapportPage v1 (skriv ut + dela via länk) |
-| 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
+| 75 | Kalender — schemaläggning, dra-och-släpp | KLAR | — | CalendarPage v1 (dag/vecka/månad/agenda, DnD, filter, krockar, pool) |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
 | 77 | Rapporter — statistik, diagram (AO, tid, objekt) | KLAR | d8bd9bc | ReportsPage v2 + export |
 | 78 | Mina jobb — tilldelade uppdrag per inloggad personal | KLAR | (befintlig) | MyJobsPage (existerar, fel status i MASTERPLAN) |
