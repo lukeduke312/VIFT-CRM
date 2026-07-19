@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Offert — VIFT Fastighetsservice</title>
+<style>
+/* ── Reset & tokens ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:   #0A1628;
+  --blue:   #1E5FAD;
+  --sky:    #3b82f6;
+  --gr:     #16a34a;
+  --grn:    #22c55e;
+  --or:     #f59e0b;
+  --rd:     #dc2626;
+  --mt:     #6b7280;
+  --tx:     #111827;
+  --bg:     #f8f9fa;
+  --card:   #ffffff;
+  --br:     #e5e7eb;
+  --rs:     8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tx:   #f3f4f6;
+    --bg:   #111827;
+    --card: #1f2937;
+    --br:   #374151;
+    --mt:   #9ca3af;
+  }
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--tx);
+  line-height: 1.5;
+  min-height: 100vh;
+  padding: 0 0 40px;
+}
+a { color: var(--blue); text-decoration: none; }
+
+/* ── Header ────────────────────────────────────────────── */
+.po-header {
+  background: var(--navy);
+  color: #fff;
+  padding: 20px 24px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.po-logo { font-size: 22px; font-weight: 900; letter-spacing: -.5px; }
+.po-logo span { color: #60a5fa; }
+.po-header-sub { font-size: 11px; opacity: .65; margin-top: 2px; }
+.po-version-badge {
+  background: rgba(255,255,255,.15);
+  border-radius: 12px;
+  font-size: 11px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+/* ── Main layout ───────────────────────────────────────── */
+.po-wrap { max-width: 800px; margin: 0 auto; padding: 20px 16px; }
+.po-card {
+  background: var(--card);
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.po-card-head {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--br);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.po-card-head h2 { font-size: 14px; font-weight: 700; }
+.po-card-body { padding: 16px 18px; }
+
+/* ── Status banner ─────────────────────────────────────── */
+.po-status-banner {
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.po-status-banner.ok      { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.po-status-banner.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.po-status-banner.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.po-status-banner.info    { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+
+/* ── Fact strip ────────────────────────────────────────── */
+.po-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--br);
+  background: rgba(0,0,0,.015);
+}
+.po-fact { font-size: 12px; }
+.po-fact-lbl { color: var(--mt); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 1px; }
+.po-fact-val { font-weight: 600; }
+
+/* ── Line table ────────────────────────────────────────── */
+.po-line-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.po-line-table th {
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--mt);
+  border-bottom: 1px solid var(--br);
+  white-space: nowrap;
+}
+.po-line-table th:last-child { text-align: right; }
+.po-line-table td { padding: 9px 10px; border-bottom: 1px solid var(--br); vertical-align: top; }
+.po-line-table td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.po-line-table tr:last-child td { border-bottom: none; }
+.po-line-desc { font-size: 11px; color: var(--mt); margin-top: 2px; }
+.po-rut-badge {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+/* ── Totals ────────────────────────────────────────────── */
+.po-totals { padding: 12px 18px; }
+.po-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  color: var(--mt);
+}
+.po-total-row.main {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--tx);
+  border-top: 2px solid var(--br);
+  padding-top: 10px;
+  margin-top: 6px;
+}
+.po-total-row span { font-variant-numeric: tabular-nums; }
+
+/* ── Terms ────────────────────────────────────────────── */
+.po-terms-text {
+  font-size: 12px;
+  color: var(--mt);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* ── Action panel ──────────────────────────────────────── */
+.po-actions {
+  background: var(--card);
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  padding: 20px 18px;
+  margin-bottom: 14px;
+}
+.po-actions h2 { font-size: 15px; font-weight: 800; margin-bottom: 6px; }
+.po-actions p  { font-size: 12px; color: var(--mt); margin-bottom: 14px; }
+.po-action-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.po-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.po-btn:hover { opacity: .88; }
+.po-btn.approve  { background: #16a34a; color: #fff; }
+.po-btn.change   { background: #1e5fad; color: #fff; }
+.po-btn.decline  { background: #fff; color: var(--rd); border: 1px solid var(--rd); }
+.po-btn.submit   { background: var(--blue); color: #fff; }
+.po-btn.cancel   { background: var(--bg); color: var(--mt); border: 1px solid var(--br); }
+.po-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Form ─────────────────────────────────────────────── */
+.po-form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.po-fg label { display: block; font-size: 11px; font-weight: 700; color: var(--mt); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
+.po-fg input, .po-fg textarea, .po-fg select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--br);
+  border-radius: 7px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--tx);
+  font-family: inherit;
+}
+.po-fg textarea { resize: vertical; }
+.po-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 480px) { .po-row2 { grid-template-columns: 1fr; } }
+.po-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+}
+.po-checkbox-row input[type=checkbox] { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.po-checkbox-row span { font-size: 12px; color: #15803d; font-weight: 600; line-height: 1.4; }
+.po-error { color: var(--rd); font-size: 12px; font-weight: 600; display: none; margin-top: 4px; }
+.po-error.show { display: block; }
+.po-success-box {
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  padding: 18px 20px;
+  text-align: center;
+}
+.po-success-box h3 { color: #15803d; font-size: 16px; margin-bottom: 6px; }
+.po-success-box p  { color: #166534; font-size: 13px; }
+
+/* ── Print ────────────────────────────────────────────── */
+.po-print-btn {
+  background: none;
+  border: 1px solid var(--br);
+  border-radius: 6px;
+  color: var(--mt);
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+@media print {
+  .po-actions, .po-print-btn, .po-action-btns { display: none !important; }
+  .po-header { background: #0A1628 !important; }
+  body { background: #fff; }
+}
+
+/* ── Loader ───────────────────────────────────────────── */
+.po-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 14px;
+  color: var(--mt);
+  font-size: 14px;
+}
+.po-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--br);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="po-header">
+  <div>
+    <div class="po-logo">VIFT <span>Fastighetsservice</span></div>
+    <div class="po-header-sub">Digital offert — säker länk</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <span class="po-version-badge" id="po-ver-badge"></span>
+    <button class="po-print-btn" onclick="window.print()">🖨 Skriv ut</button>
+  </div>
+</div>
+
+<!-- Main content injected here -->
+<div class="po-wrap" id="po-root">
+  <div class="po-loader">
+    <div class="po-spinner"></div>
+    <span>Hämtar offert…</span>
+  </div>
+</div>
+
+<script>
+/* ── Konfig ─────────────────────────────────────────────── */
+/* SUPABASE_URL injiceras från window.VIFT_CONFIG om tillgängligt,
+   annars hårdkodas (samma som storage.js) */
+var SUPABASE_URL = (typeof window !== 'undefined' && window.VIFT_CONFIG && window.VIFT_CONFIG.supabaseUrl)
+  ? window.VIFT_CONFIG.supabaseUrl
+  : 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+
+/* ── State ──────────────────────────────────────────────── */
+var _offer      = null;
+var _token      = null;
+var _activeForm = null; /* approve | change_request | decline */
+
+/* ── Hjälpfunktioner ────────────────────────────────────── */
+function fmt(n) { return new Intl.NumberFormat('sv-SE').format(Math.round(n||0)); }
+function fmtD(d) {
+  if (!d) return '—';
+  var s = d.slice(0,10);
+  try { return new Date(s + 'T12:00:00').toLocaleDateString('sv-SE', {year:'numeric',month:'long',day:'numeric'}); } catch(e) { return s; }
+}
+function esc(s) {
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ── Token från URL ─────────────────────────────────────── */
+function getToken() {
+  var params = new URLSearchParams(window.location.search);
+  return (params.get('t') || '').trim();
+}
+
+/* ── Hämta offert via Edge Function ─────────────────────── */
+async function loadOffer(token) {
+  var root = document.getElementById('po-root');
+  try {
+    var res = await fetch(SUPABASE_URL + '/functions/v1/offer-token-validate?t=' + encodeURIComponent(token));
+    var data = await res.json();
+
+    if (!res.ok) {
+      var msg = data.error === 'expired'   ? 'Offertlänken har gått ut.'
+              : data.error === 'revoked'   ? 'Offertlänken har återkallats.'
+              : data.error === 'not_found' ? 'Offerten hittades inte. Kontrollera att länken är korrekt.'
+              : 'Kunde inte hämta offerten. Försök igen senare.';
+      root.innerHTML = '<div class="po-status-banner error">⚠ ' + esc(msg) + '</div>';
+      return;
+    }
+
+    _offer = data.offer;
+    renderOffer(_offer);
+  } catch(e) {
+    root.innerHTML = '<div class="po-status-banner error">⚠ Nätverksfel — kontrollera din internetanslutning och försök igen.</div>';
+  }
+}
+
+/* ── Render offert ──────────────────────────────────────── */
+function renderOffer(off) {
+  var root = document.getElementById('po-root');
+
+  /* Versionbadge i header */
+  var vb = document.getElementById('po-ver-badge');
+  if (vb) vb.textContent = off.title || ('Offert ' + off.id);
+
+  /* Beräkna summor */
+  var lines    = Array.isArray(off.lines)  ? off.lines  : [];
+  var extras   = Array.isArray(off.extras) ? off.extras : [];
+  var prLines  = lines.filter(function(l) { return l.type !== 'text'; });
+  var txtBlks  = lines.filter(function(l) { return l.type === 'text'; });
+
+  var rawEx = prLines.reduce(function(s,l) {
+    if (l.type === 'service') return s + (l.exVat || 0);
+    return s + (l.total || Math.round((l.qty||1)*(l.unitPrice||0)));
+  }, 0);
+  extras.forEach(function(e) { rawEx += Math.round((e.qty||1)*(e.unitPrice||0)); });
+
+  var disc  = off.discount || {type:'none', value:0};
+  var discAmt = disc.value
+    ? (disc.type==='percent' ? Math.round(rawEx * Math.min(disc.value,100)/100) : Math.min(Math.round(disc.value), rawEx))
+    : 0;
+  var exVat  = rawEx - discAmt;
+  var vat    = Math.round(exVat * 0.25);
+  var incVat = exVat + vat;
+  var rutAmt = prLines.filter(function(l){return l.type==='service';}).reduce(function(s,l){return s+(l.rutAmount||0);},0);
+  var cust   = incVat - rutAmt;
+
+  /* Statusbanner */
+  var answered = off.status === 'godkänd' || off.status === 'nekad' || off.status === 'ändring-begärd';
+  var statusBanner = '';
+  if (off.status === 'godkänd') {
+    statusBanner = '<div class="po-status-banner ok">✓ Offerten är godkänd</div>';
+  } else if (off.status === 'nekad') {
+    statusBanner = '<div class="po-status-banner error">✕ Offerten har nekats</div>';
+  } else if (off.status === 'ändring-begärd') {
+    statusBanner = '<div class="po-status-banner warning">↩ Ändring har begärts — VIFT återkommer med reviderat förslag</div>';
+  }
+
+  /* Validitetspåminnelse */
+  var expiryNote = '';
+  if (off.tokenExpiresAt) {
+    var exp    = new Date(off.tokenExpiresAt).getTime();
+    var daysL  = Math.ceil((exp - Date.now()) / 86400000);
+    if (daysL <= 7 && daysL > 0) {
+      expiryNote = '<div class="po-status-banner warning">⏰ Offerten utgår om ' + daysL + ' dag' + (daysL===1?'':'ar') + ' (' + fmtD(off.tokenExpiresAt) + ').</div>';
+    }
+  }
+
+  /* Faktarader */
+  var factsHtml = '';
+  var facts = [];
+  if (off.customerName) facts.push({l:'Kund', v: off.customerName});
+  if (off.address)      facts.push({l:'Fastighet', v: off.address});
+  if (off.date)         facts.push({l:'Datum', v: fmtD(off.date)});
+  if (off.validUntil)   facts.push({l:'Giltig till', v: fmtD(off.validUntil)});
+  if (off.paymentTerms) facts.push({l:'Betalning', v: off.paymentTerms});
+  if (off.validityText) facts.push({l:'Giltighetstid', v: off.validityText});
+  if (facts.length) {
+    factsHtml = '<div class="po-facts">' + facts.map(function(f) {
+      return '<div class="po-fact"><span class="po-fact-lbl">' + esc(f.l) + '</span><span class="po-fact-val">' + esc(f.v) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  /* Offertposter */
+  var linesHtml = '';
+  if (prLines.length) {
+    var rows = prLines.map(function(l) {
+      if (l.type === 'service') {
+        var lEx  = l.exVat || 0;
+        var lVat = Math.round(lEx*(l.vatRate||25)/100);
+        var lInc = lEx + lVat;
+        var lRut = l.rutAmount || 0;
+        var lCust2 = lInc - lRut;
+        return '<tr><td>' + esc(l.templateName||'Tjänst') +
+          (lRut ? '<span class="po-rut-badge">RUT/ROT</span>' : '') +
+          (l.description ? '<div class="po-line-desc">' + esc(l.description) + '</div>' : '') +
+          '</td><td>' + (lRut ? fmt(lCust2) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : fmt(lInc) + ' kr') + '</td></tr>';
+      }
+      var tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
+      var totInc = tot + Math.round(tot * 0.25);
+      return '<tr><td>' + esc(l.description||l.templateName||'Rad') +
+        (l.qty && l.unit ? '<div class="po-line-desc">' + l.qty + ' ' + esc(l.unit) + ' × ' + fmt(l.unitPrice||0) + ' kr</div>' : '') +
+        '</td><td>' + fmt(totInc) + ' kr</td></tr>';
+    }).join('');
+    linesHtml = '<div style="overflow-x:auto;"><table class="po-line-table"><thead><tr><th>Beskrivning</th><th>Pris inkl. moms</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  /* Textblock */
+  var txtHtml = txtBlks.map(function(b) {
+    return b.text ? '<div style="padding:10px 0;border-bottom:1px solid var(--br);font-size:13px;line-height:1.6;">' + esc(b.text) + '</div>' : '';
+  }).join('');
+
+  /* Tilläggsrader */
+  var extrasHtml = '';
+  if (extras.length) {
+    extrasHtml = '<div style="margin-top:8px;"><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Tillägg</div>' +
+      extras.map(function(e) {
+        var tot = Math.round((e.qty||1)*(e.unitPrice||0));
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--br);">' +
+          '<span>' + esc(e.description||'') + (e.qty&&e.unit ? ' (' + e.qty + ' ' + esc(e.unit) + ')' : '') + '</span>' +
+          '<span style="font-weight:600;font-variant-numeric:tabular-nums;">' + fmt(tot+Math.round(tot*.25)) + ' kr</span></div>';
+      }).join('') + '</div>';
+  }
+
+  /* Summering */
+  var totalsHtml = '<div class="po-totals">' +
+    (discAmt ? '<div class="po-total-row"><span>Delsumma</span><span>' + fmt(rawEx) + ' kr</span></div>' : '') +
+    (discAmt ? '<div class="po-total-row"><span>Rabatt</span><span>−' + fmt(discAmt) + ' kr</span></div>' : '') +
+    '<div class="po-total-row"><span>Totalt exkl. moms</span><span>' + fmt(exVat) + ' kr</span></div>' +
+    '<div class="po-total-row"><span>Moms (25 %)</span><span>' + fmt(vat) + ' kr</span></div>' +
+    (rutAmt ? '<div class="po-total-row"><span>RUT/ROT-avdrag</span><span>−' + fmt(rutAmt) + ' kr</span></div>' : '') +
+    '<div class="po-total-row main"><span>Totalt att betala</span><span>' + fmt(rutAmt ? cust : incVat) + ' kr</span></div>' +
+    (rutAmt ? '<div style="font-size:10px;color:var(--mt);margin-top:6px;">Totalt inkl. moms: ' + fmt(incVat) + ' kr — RUT/ROT-avdrag: −' + fmt(rutAmt) + ' kr = Kundpris: ' + fmt(cust) + ' kr</div>' : '') +
+    '</div>';
+
+  /* Aktionspanel */
+  var actionsHtml = '';
+  if (!answered) {
+    actionsHtml = '<div class="po-actions" id="po-actions">' +
+      '<h2>Vad vill du göra?</h2>' +
+      '<p>Du kan godkänna offerten, begära ändringar eller meddela att du inte vill gå vidare.</p>' +
+      '<div class="po-action-btns" id="po-action-btns">' +
+        '<button class="po-btn approve" onclick="showForm(\'approve\')">✓ Godkänn offert</button>' +
+        '<button class="po-btn change"  onclick="showForm(\'change_request\')">↩ Begär ändring</button>' +
+        '<button class="po-btn decline" onclick="showForm(\'decline\')">✕ Neka offert</button>' +
+      '</div>' +
+      '<div id="po-form-area"></div>' +
+    '</div>';
+  }
+
+  /* Villkor */
+  var termsHtml = '';
+  var termsFields = [];
+  if (off.scope)        termsFields.push({l:'Omfattning', v:off.scope});
+  if (off.includes)     termsFields.push({l:'Ingår', v:off.includes});
+  if (off.excludes)     termsFields.push({l:'Ingår ej', v:off.excludes});
+  if (off.terms)        termsFields.push({l:'Villkor', v:off.terms});
+  if (off.generalTerms) termsFields.push({l:'Allmänna villkor', v:off.generalTerms});
+  if (termsFields.length) {
+    termsHtml = '<div class="po-card"><div class="po-card-head"><h2>Villkor och omfattning</h2></div><div class="po-card-body" style="display:flex;flex-direction:column;gap:14px;">' +
+      termsFields.map(function(f) {
+        return '<div><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">' + esc(f.l) + '</div>' +
+          '<p class="po-terms-text">' + esc(f.v) + '</p></div>';
+      }).join('') + '</div></div>';
+  }
+
+  root.innerHTML =
+    statusBanner +
+    expiryNote +
+    '<div class="po-card">' +
+      '<div class="po-card-head">' +
+        '<h2>' + esc(off.title || ('Offert ' + off.id)) + '</h2>' +
+        '<span style="font-size:11px;color:var(--mt);">Version ' + (off.versionNumber||1) + ' · ' + esc(off.id) + '</span>' +
+      '</div>' +
+      factsHtml +
+      (linesHtml||txtHtml||extrasHtml ? '<div class="po-card-body" style="padding:0;">' + (txtHtml?'<div style="padding:12px 18px;">'+txtHtml+'</div>':'') + linesHtml + (extrasHtml?'<div style="padding:12px 18px;">'+extrasHtml+'</div>':'') + '</div>' : '') +
+      totalsHtml +
+    '</div>' +
+    termsHtml +
+    (off.summary ? '<div class="po-card"><div class="po-card-head"><h2>Sammanfattning</h2></div><div class="po-card-body"><p style="font-size:13px;line-height:1.6;white-space:pre-wrap;">' + esc(off.summary) + '</p></div></div>' : '') +
+    actionsHtml +
+    '<div style="text-align:center;padding:20px 0;font-size:11px;color:var(--mt);">VIFT Fastighetsservice · Frågor? Kontakta din förvaltare.</div>';
+}
+
+/* ── Formulär per åtgärd ─────────────────────────────────── */
+function showForm(action) {
+  _activeForm = action;
+  var area = document.getElementById('po-form-area');
+  if (!area) return;
+
+  if (action === 'approve') {
+    area.innerHTML = '<div class="po-form" id="po-form">' +
+      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" placeholder="För- och efternamn" autocomplete="name"></div>' +
+      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" placeholder="din@email.se" autocomplete="email"></div></div>' +
+      '<div class="po-row2"><div class="po-fg"><label>Telefon</label><input id="f-phone" type="tel" autocomplete="tel"></div>' +
+      '<div class="po-fg"><label>Befattning</label><input id="f-position" type="text"></div></div>' +
+      '<div class="po-fg"><label>Kommentar (valfri)</label><textarea id="f-comment" rows="2" placeholder="Eventuella kommentarer…"></textarea></div>' +
+      '<label class="po-checkbox-row"><input type="checkbox" id="f-agree"> <span>Jag bekräftar att jag tagit del av och godkänner denna offert och dess villkor.</span></label>' +
+      '<div id="f-err" class="po-error"></div>' +
+      '<div class="po-action-btns"><button class="po-btn submit" onclick="submitForm()">✓ Godkänn och skicka</button><button class="po-btn cancel" onclick="cancelForm()">Avbryt</button></div>' +
+    '</div>';
+  } else if (action === 'change_request') {
+    area.innerHTML = '<div class="po-form" id="po-form">' +
+      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" autocomplete="name"></div>' +
+      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" autocomplete="email"></div></div>' +
+      '<div class="po-fg"><label>Kategori</label><select id="f-cat">' +
+        '<option value="pris">Pris</option><option value="omfattning">Omfattning</option><option value="tidplan">Tidplan</option>' +
+        '<option value="villkor">Villkor</option><option value="offertpost">Specifik offertpost</option><option value="annat">Annat</option>' +
+      '</select></div>' +
+      '<div class="po-fg"><label>Beskriv vad som behöver ändras *</label><textarea id="f-comment" rows="4" placeholder="Ange vad du vill ska ändras…"></textarea></div>' +
+      '<div id="f-err" class="po-error"></div>' +
+      '<div class="po-action-btns"><button class="po-btn submit" onclick="submitForm()">↩ Skicka ändringsbegäran</button><button class="po-btn cancel" onclick="cancelForm()">Avbryt</button></div>' +
+    '</div>';
+  } else if (action === 'decline') {
+    area.innerHTML = '<div class="po-form" id="po-form">' +
+      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" autocomplete="name"></div>' +
+      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" autocomplete="email"></div></div>' +
+      '<div class="po-fg"><label>Anledning</label><select id="f-reason">' +
+        '<option value="för_dyrt">För dyrt</option><option value="annan_leverantör">Valt annan leverantör</option>' +
+        '<option value="genomförs_ej">Projektet genomförs inte</option><option value="tidplan">Tidplanen fungerar inte</option>' +
+        '<option value="omfattning">Omfattningen passar inte</option><option value="annat">Annat</option>' +
+      '</select></div>' +
+      '<div class="po-fg"><label>Kommentar (valfri)</label><textarea id="f-comment" rows="2"></textarea></div>' +
+      '<div id="f-err" class="po-error"></div>' +
+      '<div class="po-action-btns"><button class="po-btn decline" onclick="submitForm()">✕ Neka offert</button><button class="po-btn cancel" onclick="cancelForm()">Avbryt</button></div>' +
+    '</div>';
+  }
+  var firstInput = area.querySelector('input,textarea,select');
+  if (firstInput) setTimeout(function(){ firstInput.focus(); }, 60);
+}
+
+function cancelForm() {
+  _activeForm = null;
+  var area = document.getElementById('po-form-area');
+  if (area) area.innerHTML = '';
+}
+
+/* ── Skicka svar ─────────────────────────────────────────── */
+async function submitForm() {
+  var name    = (document.getElementById('f-name')?.value   || '').trim();
+  var email   = (document.getElementById('f-email')?.value  || '').trim();
+  var comment = (document.getElementById('f-comment')?.value|| '').trim();
+  var err     = document.getElementById('f-err');
+  if (err) { err.classList.remove('show'); err.textContent = ''; }
+
+  if (!name)  { showErr('Fyll i ditt namn.'); return; }
+  if (!email || !email.includes('@')) { showErr('Fyll i en giltig e-postadress.'); return; }
+  if (_activeForm === 'approve' && !document.getElementById('f-agree')?.checked) {
+    showErr('Du måste bekräfta att du godkänner villkoren.'); return;
+  }
+  if (_activeForm === 'change_request' && !comment) {
+    showErr('Beskriv vad du vill ändra.'); return;
+  }
+
+  var body = {
+    token:          _token,
+    action:         _activeForm,
+    offerVersion:   _offer.versionNumber || 1,
+    name:           name,
+    email:          email,
+    comment:        comment,
+    agreedToTerms:  _activeForm === 'approve' ? !!document.getElementById('f-agree')?.checked : false,
+    changeCategory: _activeForm === 'change_request' ? (document.getElementById('f-cat')?.value || '') : '',
+    declineReason:  _activeForm === 'decline'         ? (document.getElementById('f-reason')?.value || '') : '',
+    phone:          (document.getElementById('f-phone')?.value    || '').trim(),
+    position:       (document.getElementById('f-position')?.value || '').trim()
+  };
+
+  var btn = document.querySelector('#po-form .po-btn.submit, #po-form .po-btn.decline');
+  if (btn) { btn.disabled = true; btn.textContent = 'Skickar…'; }
+
+  try {
+    var res  = await fetch(SUPABASE_URL + '/functions/v1/offer-respond', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body)
+    });
+    var data = await res.json();
+
+    if (!res.ok) {
+      var msg = data.error === 'terms_required'    ? 'Du måste bekräfta villkoren.'
+              : data.error === 'name_required'     ? 'Fyll i ditt namn.'
+              : data.error === 'email_required'    ? 'Fyll i din e-postadress.'
+              : data.error === 'already_answered'  ? 'Offerten har redan besvarats.'
+              : data.error === 'expired'           ? 'Offertlänken har gått ut.'
+              : data.error === 'revoked'           ? 'Offertlänken har återkallats.'
+              : data.error === 'version_mismatch'  ? 'Offertversionen har ändrats — ladda om sidan.'
+              : 'Ett fel uppstod. Försök igen.';
+      showErr(msg);
+      if (btn) { btn.disabled = false; btn.textContent = _activeForm==='decline'?'✕ Neka offert':'Skicka'; }
+      return;
+    }
+
+    /* Visa bekräftelse */
+    var successMsg = _activeForm === 'approve'
+      ? '<h3>✓ Offert godkänd!</h3><p>Tack för ditt svar! VIFT Fastighetsservice har mottagit ditt godkännande och återkommer med bekräftelse och nästa steg.</p>'
+      : _activeForm === 'change_request'
+      ? '<h3>↩ Ändringsbegäran skickad</h3><p>Vi har tagit emot din begäran och återkommer med ett reviderat förslag.</p>'
+      : '<h3>Offert nekad</h3><p>Vi har tagit emot ditt svar och noterat att du inte vill gå vidare med denna offert. Tack för att du meddelat oss.</p>';
+
+    var actions = document.getElementById('po-actions');
+    if (actions) actions.innerHTML = '<div class="po-success-box">' + successMsg + '</div>';
+
+  } catch(e) {
+    showErr('Nätverksfel — kontrollera din anslutning och försök igen.');
+    if (btn) { btn.disabled = false; btn.textContent = _activeForm==='decline'?'✕ Neka offert':'Skicka'; }
+  }
+}
+
+function showErr(msg) {
+  var err = document.getElementById('f-err');
+  if (err) { err.textContent = msg; err.classList.add('show'); }
+}
+
+/* ── Init ────────────────────────────────────────────────── */
+_token = getToken();
+if (!_token) {
+  document.getElementById('po-root').innerHTML =
+    '<div class="po-status-banner error">⚠ Ogiltig länk — ingen offerttoken hittades.</div>';
+} else {
+  loadOffer(_token);
+}
+</script>
+</body>
+</html>

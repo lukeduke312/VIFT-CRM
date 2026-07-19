@@ -309,7 +309,7 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 ## Leverans E — Digitala offerter och kundsvar
 
-**Leveransstatus:** EJ BYGGD  
+**Leveransstatus:** DELVIS BYGGD (E1+E2+E3+E4 klara — E5 notiser, E6 konvertering, E7 påminnelser/analys återstår)  
 **Prioritet i arbetsordning:** Byggs efter kvarvarande Leverans D, serviceintervall-motor, push och auto-AO. Inget i Leverans E ersätter eller skjuter upp tidigare planerade funktioner.  
 **Säkerhetsregel (permanent):** Tokenkontroll, godkännande, ändringsbegäran och nekande valideras och sparas enbart via säker backend-funktion (Supabase Edge Function). Kunden kan aldrig manipulera offert­status eller belopp via frontendkod. Känsliga interna fält (inköpspris, marginal, TB, interna noter, personalinfo, andra kunder) exponeras aldrig i kundvyn.
 
@@ -317,11 +317,11 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 93 | Schema — Schema.offerVersion(): versionNumber, lockedAt, lockedSnapshotJSON, versionStatus, changedFields | EJ BYGGD | — | schema.js |
-| 94 | Schema — Schema.offerEvent(): händelselogg per offert/version (typ, datum, användare/kund, version, kommentar, relatedId) | EJ BYGGD | — | schema.js |
-| 95 | State — state.offerVersions[], state.offerEvents[], persist, DataSync | EJ BYGGD | — | state.js |
-| 96 | OffertUI — versionshistorik i offertkortet (lista med versionsnummer, status, datum, lås-ikon) | EJ BYGGD | — | OfferDetailPage.js |
-| 97 | Låsning vid utskick — skickad version är oföränderlig; redigering skapar ny version automatiskt | EJ BYGGD | — | OffersPage.js, OfferDetailPage.js |
+| 93 | Schema — Schema.offerEvent(), token-fält på offer (publicToken, tokenCreatedAt, tokenExpiresAt, tokenRevokedAt, openCount, openedAt, lockedSnapshotJSON) | KLAR | — | schema.js v21 |
+| 94 | Schema — Schema.offerEvent(): händelselogg per offert/version | KLAR | — | schema.js v21 |
+| 95 | State — state.offerEvents[], persist, DataSync | KLAR | — | state.js v31 |
+| 96 | OffertUI — Digital länk-panel i offertkortet (generera, kopiera, statusindikator, återkalla, förläng) | KLAR | — | PageShells.js v82 (_digitalLinkPanel, generateDigitalLink, revokeDigitalLink, extendDigitalLink) |
+| 97 | Låsning vid utskick — lockedSnapshotJSON sparas vid tokengenerering | KLAR | — | PageShells.js v82 (generateDigitalLink) |
 
 **Statusar för offerter:**
 `Utkast` · `Klar att skicka` · `Skickad` · `Öppnad` · `Ändring begärd` · `Reviderad` · `Godkänd` · `Nekad` · `Utgången` · `Återkallad` · `Ersatt av ny version`
@@ -334,11 +334,11 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 98 | Schema — publicToken (lång slumpmässig token), tokenCreatedAt, tokenExpiresAt, tokenRevokedAt, accessStatus, openedAt, openCount | EJ BYGGD | — | schema.js |
-| 99 | Edge Function — offer-token-validate: validerar token, kontrollerar giltighetstid och återkallning, returnerar offentlig offertdata (utan känsliga interna fält), rate-limit mot automatiserade anrop | EJ BYGGD | — | supabase/functions/offer-token-validate |
-| 100 | Edge Function — offer-respond: tar emot kundsvar (godkänn/ändring/neka), validerar token + version, sparar auditlogg, uppdaterar status | EJ BYGGD | — | supabase/functions/offer-respond |
-| 101 | CRM-UI — Skicka digital offert: generera token, sätt giltighetstid, visa länk att kopiera/skicka, se aktiv länkstatus | EJ BYGGD | — | OfferDetailPage.js |
-| 102 | CRM-UI — Återkalla länk / förläng giltighetstid / generera ny token (ogiltigförklarar gammal) | EJ BYGGD | — | OfferDetailPage.js |
+| 98 | Schema — publicToken, tokenCreatedAt, tokenExpiresAt, tokenRevokedAt, openedAt, openCount på offer | KLAR | — | schema.js v21 |
+| 99 | Edge Function — offer-token-validate: rate-limit 30/min, validerar token/giltighetstid/återkallning, returnerar publika fält (inga interna), uppdaterar openCount/openedAt | KLAR | — | supabase/functions/offer-token-validate/index.ts |
+| 100 | Edge Function — offer-respond: godkänn/ändring/neka, rate-limit 5/min, validerar token+version, sparar auditlogg, uppdaterar status, push-notis till VIFT | KLAR | — | supabase/functions/offer-respond/index.ts |
+| 101 | CRM-UI — Generera digital länk: token, giltighetstid, visningslänk + kopiering, statusindikator | KLAR | — | PageShells.js v82 (generateDigitalLink, _digitalLinkPanel) |
+| 102 | CRM-UI — Återkalla länk / förläng giltighetstid / generera ny token | KLAR | — | PageShells.js v82 (revokeDigitalLink, extendDigitalLink) |
 
 **Länkkrav:**
 - Token är lång, slumpmässig och ogissningsbar — aldrig internt offert-ID ensamt i URL
@@ -373,12 +373,12 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 103 | PublicOfferPage — extern kundvy med VIFT-logotyp, kontaktuppgifter, offertnummer, kund, kontaktperson, offertdatum, giltighetstid, rubrik, beskrivning | EJ BYGGD | — | src/pages/PublicOfferPage.js |
-| 104 | Kundvy — offertposter: artikel, antal, enhet, à-pris exkl. moms, moms, à-pris inkl. moms, rabatt, tillägg, delsumma | EJ BYGGD | — | PublicOfferPage.js |
-| 105 | Kundvy — summering: totalbelopp exkl. moms, moms per sats, totalbelopp inkl. moms, ev. ROT/RUT, ev. förskott | EJ BYGGD | — | PublicOfferPage.js |
-| 106 | Kundvy — villkor, betalningsvillkor, omfattning, vad som ingår, vad som inte ingår | EJ BYGGD | — | PublicOfferPage.js |
-| 107 | Kundvy — bilagor (lista med tillåtna bilagor kunden kan öppna), kontakta ansvarig (mailto-länk/telefon) | EJ BYGGD | — | PublicOfferPage.js |
-| 108 | Kundvy — skriv ut (window.print()), spara/ladda ner som PDF | EJ BYGGD | — | PublicOfferPage.js |
+| 103 | PublicOfferPage — extern kundvy med VIFT-logotyp, offertnummer, kund, datum, giltighetstid, rubrik, beskrivning | KLAR | — | public-offer.html |
+| 104 | Kundvy — offertposter: namn, à-pris inkl. moms, RUT/ROT-märkning, tillägg, rad-detaljer | KLAR | — | public-offer.html |
+| 105 | Kundvy — summering: exkl. moms, moms, RUT/ROT-avdrag, kundpris | KLAR | — | public-offer.html |
+| 106 | Kundvy — villkor, betalningsvillkor, omfattning, ingår/ingår ej, allmänna villkor | KLAR | — | public-offer.html |
+| 107 | Kundvy — statusmeddelanden (godkänd/nekad/ändring), utgångspåminnelse | KLAR | — | public-offer.html |
+| 108 | Kundvy — Skriv ut (window.print()), responsiv (mobil/desktop/iOS Safari/Chrome) | KLAR | — | public-offer.html |
 
 **Designkrav:** Ren, professionell, VIFT-profilerad. Fungerar på mobil, iPhone, iPad, desktop, Safari, Chrome. Inga interna fält, noteringar, inköpspris, marginal, TB, annan kundinformation eller personaldata visas.
 
@@ -388,13 +388,13 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 109 | Godkänn offert — bekräftelsedialog: namn, företag, e-post, telefon (valfritt), befattning (valfritt), kommentar (valfritt), checkbox "Jag bekräftar att jag tagit del av och godkänner denna offert och dess villkor." | EJ BYGGD | — | PublicOfferPage.js |
-| 110 | Godkänn offert — Edge Function: validerar token+version, låser offertversion, sparar datum/tid, namn, e-post, kommentar, sätter status → Godkänd, skapar offerEvent | EJ BYGGD | — | supabase/functions/offer-respond |
-| 111 | Begär ändring — formulär: fritext vad som behöver ändras, kategori (pris/omfattning/tidplan/villkor/offertpost/annat), ev. hänvisning till specifik rad, kontaktuppgifter | EJ BYGGD | — | PublicOfferPage.js |
-| 112 | Begär ändring — Edge Function: validerar, sparar invändning + kategori + ev. offertpostId, sätter status → Ändring begärd, skapar offerEvent | EJ BYGGD | — | supabase/functions/offer-respond |
-| 113 | Neka offert — bekräftelsedialog: välj anledning (för dyrt / valt annan leverantör / projektet genomförs inte / tidplanen fungerar inte / omfattningen passar inte / annat), kommentar valfri | EJ BYGGD | — | PublicOfferPage.js |
-| 114 | Neka offert — Edge Function: validerar, sparar anledning + kommentar, sätter status → Nekad, skapar offerEvent | EJ BYGGD | — | supabase/functions/offer-respond |
-| 115 | Kundbekräftelse — kunden ser tydligt bekräftelsemeddelande efter varje svar (godkänd/ändring begärd/nekad), möjlighet att skicka bekräftelse-e-post | EJ BYGGD | — | PublicOfferPage.js |
+| 109 | Godkänn offert — formulär: namn, e-post, telefon, befattning, kommentar, villkors-checkbox | KLAR | — | public-offer.html (showForm approve) |
+| 110 | Godkänn offert — Edge Function: validerar token+version, sparar datum/tid/namn/e-post/IP, sätter status → godkänd, offerEvent | KLAR | — | offer-respond (action=approve) |
+| 111 | Begär ändring — formulär: kategori (pris/omfattning/tidplan/villkor/offertpost/annat), fritext | KLAR | — | public-offer.html (showForm change_request) |
+| 112 | Begär ändring — Edge Function: validerar, sparar invändning + kategori, sätter status → ändring-begärd, offerEvent | KLAR | — | offer-respond (action=change_request) |
+| 113 | Neka offert — formulär: anledning (för dyrt/annan leverantör/genomförs ej/tidplan/omfattning/annat), valfri kommentar | KLAR | — | public-offer.html (showForm decline) |
+| 114 | Neka offert — Edge Function: validerar, sparar anledning + kommentar, sätter status → nekad, offerEvent | KLAR | — | offer-respond (action=decline) |
+| 115 | Kundbekräftelse — tydlig bekräftelsebox efter godkänn/ändring/neka, push-notis till VIFT-personal | KLAR | — | public-offer.html (po-success-box), offer-respond (sendPushToVift) |
 
 **Godkännandespårbarhet:** Datum, tid, IP (om tillgänglig), namn och e-post sparas. Beskrivs inte som avancerad e-signatur eller BankID eftersom ingen sådan tjänst används — godkännandet är ett spårbart digitalt samtycke.
 
@@ -404,10 +404,10 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 116 | Notiser — ansvarig på VIFT får notis vid: första öppning av länk, godkännande, ändringsbegäran, nekande. Ingen notis vid varje återöppning. | EJ BYGGD | — | PushService.js, supabase/functions/offer-respond |
-| 117 | Notiser — format: titel ("Offert godkänd"), text ("Kund AB har godkänt offert OFF-2026-0012, version 2."), deep-link till offerten i CRM | EJ BYGGD | — | PushService.js |
-| 118 | Tidslinje-UI — strukturerade händelser visas kronologiskt i offertkortet: skapad, redigerad, version skapad, skickad, öppnad, ändring begärd, svar, godkänd, nekad, utgången, återkallad, konverterad till AO | EJ BYGGD | — | OfferDetailPage.js |
-| 119 | Visningsstatistik — CRM visar: när länk skickades, när kunden öppnade första gången, senaste visning, antal visningar, vem som svarade, vilket svar, vilken version | EJ BYGGD | — | OfferDetailPage.js |
+| 116 | Notiser — push till VIFT vid godkännande, ändringsbegäran, nekande | KLAR | — | offer-respond (sendPushToVift — broadcast till alla aktiva) |
+| 117 | Notiser — format: "Offert godkänd" / "Ändring begärd" / "Offert nekad" + kundens namn + offertid | KLAR | — | offer-respond |
+| 118 | Tidslinje-UI — strukturerade händelser visas i offertkortet (befintlig _timelineHtml) | DELVIS | — | PageShells.js (loggar händelser via _logEvt, men ingen dedikerad offerEvent-tidslinje ännu) |
+| 119 | Visningsstatistik — öppningsantal, openedAt, openCount visas i digital länk-panel | KLAR | — | PageShells.js (_digitalLinkPanel) |
 
 ---
 

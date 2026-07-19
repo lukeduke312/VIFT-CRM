@@ -2252,6 +2252,8 @@ const OfferDetailPage = {
 
       ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${off.internalNote}</div>`:''}
 
+      ${OfferDetailPage._digitalLinkPanel(off)}
+
       ${OfferDetailPage._salesAssistantHtml(off)}
 
       ${OfferDetailPage._timelineHtml(off)}`;
@@ -3329,6 +3331,193 @@ ${hasRut?`<div class="rut">
           Modal.close();
           Router.showPage('pg-offer-detail', {offerId: newOff.id});
           showToast('Version ' + newVer + ' skapad: ' + newOff.id);
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  /* ── Digital offertlänk — panel ────────────────────────── */
+  _digitalLinkPanel(off) {
+    if (off.archived || off.deleted) return '';
+    const hasToken = !!off.publicToken;
+    const revoked  = !!off.tokenRevokedAt;
+    const expired  = off.tokenExpiresAt && new Date(off.tokenExpiresAt).getTime() < Date.now();
+
+    if (!hasToken) {
+      /* Visa knapp för att generera länk om offert är skickad eller klare */
+      const canSend = !off.archived && !off.deleted;
+      if (!canSend) return '';
+      return `<div class="card" style="margin-top:8px;">
+        <div class="card-header"><h3 style="display:flex;align-items:center;gap:6px;">${ic('link',13)} Digital offertlänk</h3></div>
+        <div class="card-body" style="padding:14px 16px;">
+          <p style="font-size:12px;color:var(--mt);margin:0 0 10px;">Generera en säker länk som kunden kan öppna för att godkänna, begära ändring eller neka offerten.</p>
+          <button type="button" class="btn bp" style="font-size:12px;" onclick="OfferDetailPage.generateDigitalLink('${esc(off.id)}')">${ic('link',12)} Generera digital länk</button>
+        </div>
+      </div>`;
+    }
+
+    const host    = window.location.origin;
+    const linkUrl = `${host}/public-offer.html?t=${off.publicToken}`;
+    const expiryLabel = off.tokenExpiresAt
+      ? 'Giltig till ' + (typeof fmtDate === 'function' ? fmtDate(off.tokenExpiresAt.slice(0,10)) : off.tokenExpiresAt.slice(0,10))
+      : 'Ingen utgångsdatum';
+
+    const statusDot = revoked ? `<span style="color:var(--rd);">● Återkallad</span>`
+                    : expired ? `<span style="color:var(--or);">● Utgången</span>`
+                    : `<span style="color:var(--gr);">● Aktiv</span>`;
+
+    const openInfo = off.openedAt
+      ? `Öppnad ${off.openCount || 1} gång${(off.openCount||1)===1?'':'er'}, första: ${typeof fmtDate==='function' ? fmtDate(off.openedAt.slice(0,10)) : off.openedAt.slice(0,10)}`
+      : 'Ej öppnad ännu';
+
+    return `<div class="card" style="margin-top:8px;">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:6px;">${ic('link',13)} Digital offertlänk</h3>
+        <span style="font-size:11px;">${statusDot}</span>
+      </div>
+      <div class="card-body" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input id="off-pub-link" readonly value="${esc(linkUrl)}" style="flex:1;font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);font-family:monospace;">
+          <button type="button" class="btn bs" style="font-size:11px;white-space:nowrap;" onclick="OfferDetailPage._copyLink('${esc(linkUrl)}')">${ic('copy',11)} Kopiera</button>
+        </div>
+        <div style="font-size:11px;color:var(--mt);display:flex;gap:16px;flex-wrap:wrap;">
+          <span>${ic('calendar',10)} ${esc(expiryLabel)}</span>
+          <span>${ic('eye',10)} ${esc(openInfo)}</span>
+        </div>
+        ${revoked ? `<div style="background:var(--rd-bg,#fef2f2);border:1px solid var(--rd,#dc2626);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--rd,#dc2626);">${ic('alert-circle',10)} Länken är återkallad — kunden kan inte längre öppna den.</div>` : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${!revoked ? `<button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.revokeDigitalLink('${esc(off.id)}')">${ic('x-circle',11)} Återkalla länk</button>` : ''}
+          <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.extendDigitalLink('${esc(off.id)}')">${ic('clock',11)} Förläng giltighetstid</button>
+          <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.generateDigitalLink('${esc(off.id)}')">${ic('refresh-cw',11)} Ny länk (ogiltigförklarar gammal)</button>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  _copyLink(url) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => showToast('Länk kopierad!')).catch(() => {
+        const el = document.getElementById('off-pub-link');
+        if (el) { el.select(); document.execCommand('copy'); showToast('Länk kopierad!'); }
+      });
+    } else {
+      const el = document.getElementById('off-pub-link');
+      if (el) { el.select(); document.execCommand('copy'); showToast('Länk kopierad!'); }
+    }
+  },
+
+  /* ── Digital offertlänk — generera token ───────────────── */
+  generateDigitalLink(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+
+    const hasExisting = !!off.publicToken && !off.tokenRevokedAt;
+    const confirmMsg  = hasExisting
+      ? 'En aktiv länk finns redan. Generera ny länk? Den gamla ogiltigförklaras omedelbart.'
+      : 'Generera digital offertlänk?';
+
+    const _doGenerate = (days) => {
+      const arr    = new Uint8Array(32);
+      crypto.getRandomValues(arr);
+      const token  = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+      const now    = new Date().toISOString();
+      const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
+
+      /* Lås snapshot av publika fält */
+      const snapshot = {
+        id: off.id, title: off.title, versionNumber: off.versionNumber,
+        lines: (off.lines||[]).map(function(l) {
+          const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','subLines','text'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+        }),
+        extras: (off.extras||[]).map(function(l) {
+          const p = {}; ['id','description','qty','unit','unitPrice'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+        }),
+        discount: off.discount, taxType: off.taxType, rotRutAmount: off.rotRutAmount,
+        date: off.date || off.createdAt?.slice(0,10) || now.slice(0,10),
+        validUntil: off.validUntil, paymentTerms: off.paymentTerms,
+        validityText: off.validityText, terms: off.terms, includes: off.includes,
+        excludes: off.excludes, scope: off.scope, summary: off.summary,
+        generalTerms: off.generalTerms, address: off.address,
+        customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })()
+      };
+      off.publicToken        = token;
+      off.tokenCreatedAt     = now;
+      off.tokenExpiresAt     = expiry + 'T23:59:59.000Z';
+      off.tokenRevokedAt     = '';
+      off.openCount          = 0;
+      off.openedAt           = '';
+      off.lockedSnapshotJSON = JSON.stringify(snapshot);
+      off.updatedAt          = now;
+      if (off.status === 'utkast') { off.status = 'skickad'; off.sentAt = now; }
+      this._logEvt(off, 'send', 'Digital offertlänk genererad — giltig till ' + expiry + ' (' + days + ' dagar)');
+      persist();
+      this.render({offerId});
+      showToast('Länk genererad — giltig i ' + days + ' dagar');
+    };
+
+    Modal.open({
+      title: ic('link',14) + ' Digital offertlänk',
+      body: `<p style="font-size:13px;margin:0 0 12px;">${esc(confirmMsg)}</p>
+        <div class="fg"><label>Giltighetstid</label>
+          <select id="link-days">
+            <option value="14">14 dagar</option>
+            <option value="30" selected>30 dagar</option>
+            <option value="60">60 dagar</option>
+            <option value="90">90 dagar</option>
+          </select>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);margin-top:10px;">
+          ${ic('info',10)} Länken kräver ingen inloggning för kunden. Dela den via e-post, SMS eller kundportalen.
+        </div>`,
+      buttons: [
+        { label: ic('link',12) + ' Generera länk', cls: 'btn bp', onClick: () => {
+          const days = parseInt(document.getElementById('link-days')?.value || '30', 10);
+          Modal.close();
+          _doGenerate(days);
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  revokeDigitalLink(offerId) {
+    Modal.confirm('Återkalla offertlänken? Kunden kan inte längre öppna offerten via länken.', () => {
+      const off = getOff(offerId);
+      if (!off) return;
+      off.tokenRevokedAt = new Date().toISOString();
+      off.updatedAt      = new Date().toISOString();
+      this._logEvt(off, 'send', 'Digital offertlänk återkallad');
+      persist();
+      this.render({offerId});
+      showToast('Länk återkallad');
+    });
+  },
+
+  extendDigitalLink(offerId) {
+    Modal.open({
+      title: ic('clock',14) + ' Förläng giltighetstid',
+      body: `<div class="fg"><label>Ny giltighetstid (från idag)</label>
+        <select id="extend-days">
+          <option value="7">7 dagar</option>
+          <option value="14">14 dagar</option>
+          <option value="30" selected>30 dagar</option>
+          <option value="60">60 dagar</option>
+          <option value="90">90 dagar</option>
+        </select></div>`,
+      buttons: [
+        { label: 'Förläng', cls: 'btn bp', onClick: () => {
+          const days = parseInt(document.getElementById('extend-days')?.value || '30', 10);
+          const off  = getOff(offerId);
+          if (!off) return;
+          const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
+          off.tokenExpiresAt = expiry + 'T23:59:59.000Z';
+          off.updatedAt      = new Date().toISOString();
+          this._logEvt(off, 'send', 'Giltighetstid förlängd — ny utgång: ' + expiry);
+          persist();
+          Modal.close();
+          this.render({offerId});
+          showToast('Giltighetstid förlängd till ' + expiry);
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]

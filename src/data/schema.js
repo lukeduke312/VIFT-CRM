@@ -195,7 +195,7 @@ const Schema = {
     includes: '',
     excludes: '',
     validUntil: '',
-    status: 'utkast',         // utkast | skickad | påmind | väntar | godkänd | nekad | utgången | ersatt
+    status: 'utkast',         // utkast | skickad | påmind | väntar | godkänd | nekad | utgången | ersatt | ändring-begärd
     archived: false,
     deleted: false,
     declineReason: '',
@@ -216,7 +216,31 @@ const Schema = {
       approvedByEmail: '',
       ip: '',
       comment: ''
-    }
+    },
+    /* ── Leverans E — Digital offertlänk ─────── */
+    publicToken:        '',   // 64-hex unguessable token (crypto.getRandomValues)
+    tokenCreatedAt:     '',
+    tokenExpiresAt:     '',   // ISO date (t.ex. 30 dagar från utskick)
+    tokenRevokedAt:     '',   // satt vid återkallning
+    openCount:          0,    // antal unika URL-besök validerade av backend
+    openedAt:           '',   // tidpunkt för första öppning (satt av offer-token-validate)
+    lockedSnapshotJSON: ''    // JSON-snapshot av offertens publika fält vid utskick (inga interna fält)
+  }),
+
+  /* Händelselogg per offert (Leverans E — E1) */
+  offerEvent: () => ({
+    id:                     '',
+    offerId:                '',
+    offerVersion:           1,
+    type:                   '', // created|edited|sent|opened|approved|change_requested|declined|revoked|renewed|converted_ao
+    ts:                     '',
+    byUser:                 '',  // VIFT staff ID (interna händelser)
+    byCustomer:             '',  // kundens namn (externa svar)
+    byEmail:                '',  // kundens e-post
+    ip:                     '',  // IP vid kundsvar (om tillgänglig)
+    comment:                '',
+    changeRequestCategory:  '',  // pris|omfattning|tidplan|villkor|offertpost|annat
+    declineReason:          ''   // för_dyrt|annan_leverantör|genomförs_ej|tidplan|omfattning|annat
   }),
 
   invoice: () => ({

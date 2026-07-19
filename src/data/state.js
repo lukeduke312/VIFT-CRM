@@ -100,6 +100,7 @@ async function initState() {
   state.propertyRoles         = g('propertyRoles')         || [];
   state.propertyContacts      = g('propertyContacts')      || [];
   state.deviationCategories   = g('deviationCategories')   || [];
+  state.offerEvents           = g('offerEvents')           || [];
 
   /* ── Konfigurations- och referensdata: SeedData ger vettiga standardvärden ── */
   state.priceGroups        = g('priceGroups')        || SeedData.priceGroups        || [];
@@ -260,7 +261,8 @@ function persist() {
     ['importLogs',       state.importLogs],
     ['propertyRoles',         state.propertyRoles],
     ['propertyContacts',      state.propertyContacts],
-    ['deviationCategories',   state.deviationCategories]
+    ['deviationCategories',   state.deviationCategories],
+    ['offerEvents',           state.offerEvents]
   ]);
 }
 
