@@ -763,14 +763,21 @@ const ImportExportService = (function () {
    * Sparar en import-loggpost i state.importLogs och kör persist().
    * log: delvis ifyllt Schema.importLog()-objekt (id och createdAt sätts här om det saknas)
    */
+  var MAX_IMPORT_LOGS = 50;
+
   function saveImportLog(log) {
-    if (!log.id) {
-      log.id = newId(state.importLogs, 'IMP');
-    }
-    if (!log.createdAt) {
-      log.createdAt = new Date().toISOString();
-    }
+    if (!log.id)        log.id        = newId(state.importLogs, 'IMP');
+    if (!log.createdAt) log.createdAt = new Date().toISOString();
     state.importLogs.push(log);
+
+    /* Pruning: behåll de MAX_IMPORT_LOGS senaste loggarna */
+    if (state.importLogs.length > MAX_IMPORT_LOGS) {
+      state.importLogs.sort(function (a, b) {
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+      state.importLogs.splice(MAX_IMPORT_LOGS);
+    }
+
     persist();
     return log;
   }

@@ -124,7 +124,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Prioritet | Beroenden |
 |---|----------|--------|-----------|-----------|
-| 73 | Generell import/export för fastigheter, objekt, artiklar, personal | DELVIS | Hög | ImportExportConfigs.js v1 — motor + wizard generisk (F4-1 klar) |
+| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | KLAR | Hög | F4-1..F4-8 levererade: commits 49b2810, 8398450, 22e8ed3, 328e3bf, (F4-8 stab) |
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
@@ -136,6 +136,32 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 82 | Mobil-optimerad offline-läge (SW fallback) | EJ BYGGD | Låg | sw.js, IndexedDB |
 
 ---
+
+## Leverans F4 — Generell import/export (punkt 73)
+
+**Leveransstatus:** KLAR (F4-1 t.o.m. F4-8)
+
+| Del | Funktion | Status | Commit |
+|-----|----------|--------|--------|
+| F4-1 | Kundimport, generisk motor, 6 register, wizard | KLAR | 49b2810 |
+| F4-2/3 | Fastigheter, objekt, artiklar, prisgrupper, personal — konfigurationer + toolbar-knappar | KLAR | 8398450 |
+| F4-4/5 | AO, tid, faktura (historicalImport), ronderingsmall, avvikelse | KLAR | 8398450 |
+| F4-6 | Diff/conflict-UI: per-fält before/after, ångra-dialog, konfliktdetektering | KLAR | 22e8ed3 |
+| F4-7 | Exportcenter (ExportCenterPage), kolumnval, känsliga fält av som standard | KLAR | 328e3bf |
+| F4-8 | Stabilisering: syntaxkontroll, logg-pruning (max 50), race-condition-skydd | KLAR | (F4-8) |
+
+**Säkerhetsregler (permanenta):**
+- `historicalImport:true` på AO/tid/faktura/avvikelse: supprimerar push, auto-AO, billing, notiser
+- Känsliga fält (portkod, nyckel, lösenord, PIN) aldrig i standardexport
+- Admin-roll sätts ALDRIG automatiskt via import
+- Exportcenter: känsliga fält kräver admin + explicit toggle
+- Import av lösenord/PIN/token: alltid förbjudet
+- Race-condition: om poster ändrats sedan validering (steg 4) → hoppar över med varning
+
+**Pending (nästa leverans):**
+- Markerad export (checkbox per rad på listsidor)
+- Ronderingsimport och serviceinterval
+- Leverans D full UI (punkt 86–92)
 
 ---
 

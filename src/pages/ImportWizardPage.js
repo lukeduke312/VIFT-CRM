@@ -17,15 +17,16 @@ const ImportWizardPage = (function () {
 
   /* ── Intern state ─────────────────────────────────────────────────────── */
 
-  var _step       = 1;
-  var _file       = null;
-  var _rawParsed  = null;   // { headers, rows }
-  var _mapping    = {};     // header → fieldName | null
-  var _validated  = [];     // [{ rowIndex, row, mapped, resolved, status, duplicate, errors }]
-  var _conflicts  = {};     // rowIndex → 'skip' | 'create' | 'update'
-  var _lastLogId  = null;
-  var _entityType = 'customer';
-  var _caps       = null;   // checkCapabilities() result
+  var _step            = 1;
+  var _file            = null;
+  var _rawParsed       = null;   // { headers, rows }
+  var _mapping         = {};     // header → fieldName | null
+  var _validated       = [];     // [{ rowIndex, row, mapped, resolved, status, duplicate, errors }]
+  var _conflicts       = {};     // rowIndex → 'skip' | 'create' | 'update'
+  var _lastLogId       = null;
+  var _entityType      = 'customer';
+  var _caps            = null;   // checkCapabilities() result
+  var _validationTime  = null;   // ISO timestamp när steg 4 kördes (för konfliktsdetektering)
 
   var STEPS = [
     'Välj fil', 'Förhandsgranskning', 'Kolumnmatchning',
@@ -358,6 +359,7 @@ const ImportWizardPage = (function () {
     }
 
     _step = 4;
+    _validationTime = new Date().toISOString();
     _validated = ImportExportService.validateImportRowsForType(_rawParsed, _mapping, _entityType);
     // Sätt defaultkonfliktval
     _validated.forEach(function (v) {
@@ -588,6 +590,16 @@ const ImportWizardPage = (function () {
 
       if (action === 'update') {
         var existing = v.duplicate.item;
+        /* Kontrollera om posten ändrades efter validering (race condition) */
+        if (_validationTime && existing.updatedAt && existing.updatedAt > _validationTime) {
+          errorRows.push({
+            row: v.rowIndex,
+            field: '',
+            message: 'Posten ändrades av annan användare under importen — hoppar över (id: ' + existing.id + ')'
+          });
+          skippedCount++;
+          return;
+        }
         var beforeSnap = Object.assign({}, existing);
         var beforeAt   = existing.updatedAt || '';
 
@@ -764,13 +776,14 @@ const ImportWizardPage = (function () {
   }
 
   function _reset() {
-    _step      = 1;
-    _file      = null;
-    _rawParsed = null;
-    _mapping   = {};
-    _validated = [];
-    _conflicts = {};
-    _lastLogId = null;
+    _step           = 1;
+    _file           = null;
+    _rawParsed      = null;
+    _mapping        = {};
+    _validated      = [];
+    _conflicts      = {};
+    _lastLogId      = null;
+    _validationTime = null;
     _renderStep();
   }
 
