@@ -878,6 +878,212 @@ const ReportsPage = (function () {
   }
 
   /* ══════════════════════════════════════════════════════════════════
+     OFFERTER (punkt 127)
+  ══════════════════════════════════════════════════════════════════ */
+
+  function _offerter() {
+    var range   = _periodRange();
+    var offers  = (state.offers || []).filter(function (o) {
+      var d = (o.date || o.createdAt || '').slice(0, 10);
+      return d >= range.from && d <= range.to;
+    });
+    var events  = state.offerEvents || [];
+
+    /* ── KPI-tal ── */
+    var total      = offers.length;
+    var sent       = offers.filter(function (o) { return o.publicToken; }).length;
+    var opened     = offers.filter(function (o) { return o.openedAt; }).length;
+    var approved   = offers.filter(function (o) { return o.status === 'godkänd'; }).length;
+    var declined   = offers.filter(function (o) { return o.status === 'nekad'; }).length;
+    var changeReq  = offers.filter(function (o) { return o.status === 'ändring-begärd'; }).length;
+    var pending    = offers.filter(function (o) {
+      return o.publicToken && o.status !== 'godkänd' && o.status !== 'nekad';
+    }).length;
+
+    var openRate     = sent    > 0 ? Math.round(opened   / sent    * 100) : null;
+    var approveRate  = opened  > 0 ? Math.round(approved / opened  * 100) : null;
+    var convRate     = sent    > 0 ? Math.round(approved / sent    * 100) : null;
+
+    /* Genomsnittlig svarstid (approved/declined/changeReq):
+       mäts från openedAt (första öppning) till answeredAt */
+    var responseTimes = [];
+    offers.forEach(function (o) {
+      if (o.openedAt && o.answeredAt) {
+        var ms = new Date(o.answeredAt) - new Date(o.openedAt);
+        if (ms >= 0) responseTimes.push(ms / 3600000 / 24); /* dagar */
+      }
+    });
+    var avgDays = responseTimes.length
+      ? (responseTimes.reduce(function (a, b) { return a + b; }, 0) / responseTimes.length)
+      : null;
+
+    /* ── Totalvärde ── */
+    function _offerTotal(o) {
+      var lines = (o.lines || []).concat(o.extras || []);
+      return lines.reduce(function (s, l) { return s + (Number(l.total) || 0); }, 0);
+    }
+    var totalValue    = offers.reduce(function (s, o) { return s + _offerTotal(o); }, 0);
+    var approvedValue = offers.filter(function (o) { return o.status === 'godkänd'; })
+      .reduce(function (s, o) { return s + _offerTotal(o); }, 0);
+
+    /* ── Statusfördelning (stapeldiagram) ── */
+    var statusGroups = [
+      { label: 'Utkast',          key: 'utkast',          color: 'var(--mt)'   },
+      { label: 'Skickad',         key: 'skickad',         color: 'var(--ac)'   },
+      { label: 'Öppnad av kund',  key: '_opened',         color: '#6c8ebf'     },
+      { label: 'Ändring begärd',  key: 'ändring-begärd',  color: 'var(--or)'   },
+      { label: 'Godkänd',         key: 'godkänd',         color: 'var(--gr)'   },
+      { label: 'Nekad',           key: 'nekad',           color: 'var(--rd)'   }
+    ];
+    var statusCounts = {};
+    offers.forEach(function (o) {
+      var k = (o.openedAt && o.status === 'skickad') ? '_opened' : (o.status || 'utkast');
+      statusCounts[k] = (statusCounts[k] || 0) + 1;
+    });
+    var maxStatus = Math.max.apply(null, statusGroups.map(function (g) { return statusCounts[g.key] || 0; }).concat([1]));
+
+    /* ── Händelsetyper (offerEvents) per dag — öppningar och svar ── */
+    var eventsByDay = {};
+    events.forEach(function (e) {
+      if (!offers.find(function (o) { return o.id === e.offerId; })) return;
+      var day = (e.ts || '').slice(0, 10);
+      if (!day || day < range.from || day > range.to) return;
+      if (!eventsByDay[day]) eventsByDay[day] = { opened: 0, approved: 0, declined: 0 };
+      if (e.type === 'opened')   eventsByDay[day].opened++;
+      if (e.type === 'approved') eventsByDay[day].approved++;
+      if (e.type === 'declined') eventsByDay[day].declined++;
+    });
+
+    /* ── Top 5 offertmottagare (kunder) ── */
+    var byCustomer = {};
+    offers.forEach(function (o) {
+      var k = o.customerName || 'Okänd';
+      if (!byCustomer[k]) byCustomer[k] = { total: 0, approved: 0, value: 0 };
+      byCustomer[k].total++;
+      if (o.status === 'godkänd') { byCustomer[k].approved++; byCustomer[k].value += _offerTotal(o); }
+    });
+    var topCustomers = Object.keys(byCustomer).map(function (k) {
+      return Object.assign({ name: k }, byCustomer[k]);
+    }).sort(function (a, b) { return b.total - a.total; }).slice(0, 8);
+    var maxCust = topCustomers.length ? topCustomers[0].total : 1;
+
+    /* ── Datakvalitet ── */
+    var qualIssues = [];
+    if (offers.filter(function (o) { return !o.date && !o.createdAt; }).length)
+      qualIssues.push('Vissa offerter saknar datum och kan ha missats i periodfilter');
+
+    /* ── HTML ── */
+    var pct = function (n) { return n == null ? '–' : n + '%'; };
+
+    var kpiRow = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('file-text',       'Totalt',          total + ' st',            'offerter i perioden') +
+      _kpi('send',            'Skickade',         sent + ' st',             'med publik länk') +
+      _kpi('eye',             'Öppningsgrad',     pct(openRate),            'av skickade öppnade av kund') +
+      _kpi('check-circle',    'Godkännandegrad',  pct(approveRate),         'av öppnade godkändes') +
+      _kpi('trending-up',     'Konvertering',     pct(convRate),            'skickad → godkänd') +
+      _kpi('clock',           'Svarstid',         avgDays != null ? avgDays.toFixed(1) + ' dagar' : '–', 'genomsnitt öppnad → svar') +
+    '</div>';
+
+    var valueRow = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('dollar-sign',     'Offertvärde',      fmt(totalValue),          'totalt offertvärde i perioden') +
+      _kpi('check-square',    'Godkänt värde',    fmt(approvedValue),       'godkända offerter') +
+      _kpi('clock',           'Inväntar svar',    pending + ' st',          'skickade utan slutgiltigt svar') +
+      _kpi('alert-circle',    'Ändring begärd',   changeReq + ' st',        'kund begärt ändring') +
+    '</div>';
+
+    /* Statusfördelning */
+    var statusBars = '<div class="ibox" style="margin-bottom:12px;">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('bar-chart-2', 14) + ' Statusfördelning</div>' +
+      statusGroups.map(function (g) {
+        var cnt = statusCounts[g.key] || 0;
+        if (!cnt) return '';
+        var pctW = Math.round(cnt / maxStatus * 100);
+        return '<div style="margin-bottom:6px;">' +
+          '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;">' +
+            '<span>' + g.label + '</span>' +
+            '<span style="font-weight:600;">' + cnt + ' st</span>' +
+          '</div>' +
+          '<div style="background:var(--br);border-radius:3px;height:10px;">' +
+            '<div style="background:' + g.color + ';width:' + pctW + '%;height:10px;border-radius:3px;transition:width .3s;"></div>' +
+          '</div>' +
+        '</div>';
+      }).join('') +
+    '</div>';
+
+    /* Top kunder */
+    var custTable = '<div class="ibox">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">' + _ic('users', 14) + ' Topp kunder</div>' +
+      (topCustomers.length
+        ? '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+            '<thead><tr>' +
+              '<th style="text-align:left;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Kund</th>' +
+              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Offerter</th>' +
+              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkända</th>' +
+              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkänt värde</th>' +
+            '</tr></thead><tbody>' +
+            topCustomers.map(function (c) {
+              return '<tr>' +
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);">' + esc(c.name) + '</td>' +
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;">' + c.total + '</td>' +
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;">' + c.approved + '</td>' +
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;font-variant-numeric:tabular-nums;">' + fmt(c.value) + '</td>' +
+              '</tr>';
+            }).join('') +
+          '</tbody></table>'
+        : '<div style="font-size:12px;color:var(--mt);">Inga offerter i perioden</div>') +
+    '</div>';
+
+    /* Senaste händelser från offerEvents */
+    var recentEvents = events
+      .filter(function (e) {
+        var d = (e.ts || '').slice(0, 10);
+        return d >= range.from && d <= range.to && offers.find(function (o) { return o.id === e.offerId; });
+      })
+      .sort(function (a, b) { return (b.ts || '') > (a.ts || '') ? 1 : -1; })
+      .slice(0, 10);
+
+    var _evLabel = {
+      opened:           'Kund öppnade länk',
+      approved:         'Kund godkände',
+      change_requested: 'Kund begärde ändring',
+      declined:         'Kund nekade',
+      revoked:          'Länk återkallad',
+      renewed:          'Länk förnyad'
+    };
+    var _evColor = {
+      opened: 'var(--ac)', approved: 'var(--gr)', change_requested: 'var(--or)',
+      declined: 'var(--rd)', revoked: 'var(--mt)', renewed: 'var(--ac)'
+    };
+
+    var eventsFeed = '<div class="ibox" style="margin-bottom:12px;">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">' + _ic('activity', 14) + ' Senaste kundhändelser</div>' +
+      (recentEvents.length
+        ? recentEvents.map(function (e) {
+            var off = offers.find(function (o) { return o.id === e.offerId; });
+            var title = off ? (off.title || e.offerId) : e.offerId;
+            return '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--br);">' +
+              '<span style="width:8px;height:8px;border-radius:50%;background:' + (_evColor[e.type] || 'var(--mt)') + ';flex-shrink:0;margin-top:4px;"></span>' +
+              '<div style="flex:1;min-width:0;">' +
+                '<div style="font-size:12px;font-weight:600;">' + (_evLabel[e.type] || e.type) + '</div>' +
+                '<div style="font-size:11px;color:var(--mt);">' + esc(title) + (e.byCustomer ? ' · ' + esc(e.byCustomer) : '') + ' · ' + (e.ts || '').slice(0, 16).replace('T', ' ') + '</div>' +
+              '</div>' +
+            '</div>';
+          }).join('')
+        : '<div style="font-size:12px;color:var(--mt);">Inga kundhändelser i perioden</div>') +
+    '</div>';
+
+    return _periodBar(range) +
+      _qualityBanner(qualIssues) +
+      kpiRow +
+      valueRow +
+      '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
+        statusBars +
+        eventsFeed +
+      '</div>' +
+      custTable;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
      RENDER
   ══════════════════════════════════════════════════════════════════ */
 
@@ -892,7 +1098,8 @@ const ReportsPage = (function () {
       { key: 'avvikelser',       label: _ic('alert-triangle', 12)    + ' Avvikelser'        },
       { key: 'ekonomi',          label: _ic('trending-up', 12)       + ' Ekonomi'           },
       { key: 'material',         label: _ic('package', 12)           + ' Material'          },
-      { key: 'serviceintervall', label: _ic('wrench', 12)            + ' Serviceintervall'  }
+      { key: 'serviceintervall', label: _ic('wrench', 12)            + ' Serviceintervall'  },
+      { key: 'offerter',         label: _ic('file-text', 12)         + ' Offerter'           }
     ];
 
     var tabBar = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
@@ -914,6 +1121,7 @@ const ReportsPage = (function () {
     else if (_tab === 'ekonomi')          content = _ekonomi();
     else if (_tab === 'material')         content = _material();
     else if (_tab === 'serviceintervall') content = _serviceIntervall();
+    else if (_tab === 'offerter')         content = _offerter();
 
     el.innerHTML = tabBar + content;
   }
