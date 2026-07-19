@@ -1,35 +1,36 @@
 /**
- * ImportWizardPage.js — 6-stegsguide för kundimport
+ * ImportWizardPage.js — Generisk 6-stegsguide för import
+ * F4-1: Gjord generisk — stöder alla register via IMPORT_EXPORT_CONFIGS
  *
  * Steg 1: Välj fil (drag-and-drop eller klicka, CSV / XLSX)
  * Steg 2: Förhandsgranskning (5 rader, välj profil)
- * Steg 3: Kolumnmatchning (auto-förslag, Bokio-profil, "Importera inte")
+ * Steg 3: Kolumnmatchning (auto-förslag, "Importera inte")
  * Steg 4: Validering och dubblettdetektering
  * Steg 5: Bekräftelse (sammanfattning + konfliktlösning)
  * Steg 6: Resultat (logg, ångra)
  *
- * Kräver: Auth.can('admin') — ej inloggad admin spärras direkt.
+ * Kräver: Auth.can('admin'), ImportExportService, ImportExportConfigs
  */
 
 const ImportWizardPage = (function () {
 
   /* ── Intern state ─────────────────────────────────────────────────────── */
 
-  var _step      = 1;
-  var _file      = null;
-  var _rawParsed = null;   // { headers, rows }
-  var _mapping   = {};     // header → fieldName | null
-  var _validated = [];     // [{ rowIndex, row, mapped, status, conflicts, errors }]
-  var _conflicts = {};     // rowIndex → 'skip' | 'create' | 'update' | 'review'
-  var _lastLogId = null;
+  var _step       = 1;
+  var _file       = null;
+  var _rawParsed  = null;   // { headers, rows }
+  var _mapping    = {};     // header → fieldName | null
+  var _validated  = [];     // [{ rowIndex, row, mapped, resolved, status, duplicate, errors }]
+  var _conflicts  = {};     // rowIndex → 'skip' | 'create' | 'update'
+  var _lastLogId  = null;
   var _entityType = 'customer';
+  var _caps       = null;   // checkCapabilities() result
 
   var STEPS = [
     'Välj fil', 'Förhandsgranskning', 'Kolumnmatchning',
     'Validering', 'Bekräftelse', 'Resultat'
   ];
 
-  /* ── Inbyggd ikon (återanvänder ic() från Icons.js) ───────────────────── */
   function _ic(name, size) {
     return typeof ic !== 'undefined' ? ic(name, size || 16) : '';
   }
@@ -39,11 +40,11 @@ const ImportWizardPage = (function () {
   function render(params) {
     params = params || {};
     _entityType = params.type || 'customer';
+    _caps = ImportExportService.checkCapabilities();
 
     var el = document.getElementById('pg-import-wizard-content');
     if (!el) return;
 
-    // Behörighetskontroll
     if (typeof Auth !== 'undefined' && !Auth.can('admin')) {
       el.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center;">' +
         _ic('lock', 32) + '<h3 style="margin-top:12px">Åtkomst nekad</h3>' +
@@ -51,17 +52,32 @@ const ImportWizardPage = (function () {
       return;
     }
 
-    el.innerHTML = _html();
+    var cfg = ImportExportService.getConfig(_entityType);
+    if (!cfg) {
+      el.innerHTML = '<div class="ibox">Okänd registertyp: ' + esc(_entityType) + '</div>';
+      return;
+    }
+
+    _step      = 1;
+    _file      = null;
+    _rawParsed = null;
+    _mapping   = {};
+    _validated = [];
+    _conflicts = {};
+    _lastLogId = null;
+
+    el.innerHTML = _html(cfg);
     _bindEvents();
     _renderStep();
   }
 
-  function _html() {
+  function _html(cfg) {
     return '<div class="imp-wizard">' +
       '<div class="imp-wizard-header">' +
-        '<h2 style="margin:0 0 4px">' + _ic('upload', 20) + ' Importera kunder</h2>' +
+        '<h2 style="margin:0 0 4px">' + _ic('upload', 20) + ' Importera ' + esc(cfg.label) + '</h2>' +
         '<p style="margin:0;color:var(--text-muted);font-size:13px">' +
-          'Importera kunder från CSV- eller XLSX-fil. Stöder Bokio-export.' +
+          'Importera ' + esc(cfg.label.toLowerCase()) + ' från CSV- eller XLSX-fil.' +
+          (_caps && !_caps.xlsxRead ? ' <strong style="color:var(--orange)">OBS: XLSX-import stöds inte av din webbläsare — använd CSV.</strong>' : '') +
         '</p>' +
       '</div>' +
       '<nav class="imp-steps" id="imp-steps">' + _stepsHtml() + '</nav>' +
@@ -72,9 +88,9 @@ const ImportWizardPage = (function () {
 
   function _stepsHtml() {
     return STEPS.map(function (s, i) {
-      var n = i + 1;
+      var n   = i + 1;
       var cls = 'imp-step';
-      if (n < _step) cls += ' imp-step-done';
+      if (n < _step)       cls += ' imp-step-done';
       else if (n === _step) cls += ' imp-step-active';
       return '<div class="' + cls + '">' +
         '<span class="imp-step-num">' + (n < _step ? _ic('check', 12) : n) + '</span>' +
@@ -93,13 +109,12 @@ const ImportWizardPage = (function () {
 
     var bodyFn = [null, _step1, _step2, _step3, _step4, _step5, _step6][_step];
     body.innerHTML = bodyFn ? bodyFn() : '';
-
     foot.innerHTML = _footerHtml();
     _bindStepEvents();
   }
 
   function _footerHtml() {
-    if (_step === 6) return ''; // Resultatsida har egna knappar
+    if (_step === 6) return '';
     var prev = _step > 1 && _step < 6
       ? '<button class="btn btn-ghost" onclick="ImportWizardPage._back()">' + _ic('arrow-left', 14) + ' Tillbaka</button>'
       : '';
@@ -115,13 +130,16 @@ const ImportWizardPage = (function () {
   /* ── Steg 1: Välj fil ────────────────────────────────────────────────── */
 
   function _step1() {
+    var accept = (_caps && !_caps.xlsxRead) ? '.csv' : '.csv,.xlsx';
     return '<div class="imp-drop-zone" id="imp-drop" onclick="document.getElementById(\'imp-file-input\').click()">' +
-      '<input type="file" id="imp-file-input" accept=".csv,.xlsx" style="display:none" onchange="ImportWizardPage._onFileInput(event)">' +
+      '<input type="file" id="imp-file-input" accept="' + accept + '" style="display:none" onchange="ImportWizardPage._onFileInput(event)">' +
       '<div style="text-align:center;padding:40px 20px;">' +
         '<div style="color:var(--text-muted);margin-bottom:12px">' + _ic('upload-cloud', 40) + '</div>' +
         '<p style="font-size:15px;font-weight:600;margin:0 0 4px">Dra och släpp fil här</p>' +
         '<p style="color:var(--text-muted);font-size:13px;margin:0">eller klicka för att välja fil</p>' +
-        '<p style="color:var(--text-muted);font-size:12px;margin:12px 0 0">CSV (semikolon/komma) och XLSX stöds · max 10 MB</p>' +
+        '<p style="color:var(--text-muted);font-size:12px;margin:12px 0 0">' +
+          ((_caps && !_caps.xlsxRead) ? 'CSV (semikolon/komma) · max 10 MB' : 'CSV (semikolon/komma) och XLSX stöds · max 10 MB') +
+        '</p>' +
       '</div>' +
     '</div>' +
     '<div id="imp-file-info" style="margin-top:12px;min-height:24px"></div>';
@@ -142,12 +160,14 @@ const ImportWizardPage = (function () {
       _showFileInfo('Filformatet stöds inte. Använd CSV eller XLSX.', 'error');
       return;
     }
+    if (ext === 'xlsx' && _caps && !_caps.xlsxRead) {
+      _showFileInfo('XLSX stöds inte av din webbläsare. Använd CSV.', 'error');
+      return;
+    }
     _file = f;
     _showFileInfo(_ic('file', 14) + ' ' + esc(f.name) + ' (' + _fmtSize(f.size) + ')', 'ok');
     var btn = document.getElementById('imp-btn-next');
     if (btn) btn.disabled = false;
-
-    // Uppdatera drop zone-utseende
     var dz = document.getElementById('imp-drop');
     if (dz) dz.classList.add('imp-drop-active');
   }
@@ -186,9 +206,7 @@ const ImportWizardPage = (function () {
         return;
       }
 
-      // Auto-matcha kolumner direkt
       _mapping = ImportExportService.autoMatchColumns(_rawParsed.headers, _entityType);
-
       _step = 2;
       _renderStep();
     } catch (e) {
@@ -218,21 +236,22 @@ const ImportWizardPage = (function () {
   /* ── Steg 2: Förhandsgranskning ──────────────────────────────────────── */
 
   function _step2() {
-    var h = _rawParsed.headers;
-    var rows = _rawParsed.rows.slice(0, 5);
+    var h        = _rawParsed.headers;
+    var rows     = _rawParsed.rows.slice(0, 5);
     var totalRows = _rawParsed.rows.length;
 
-    var html = '<div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">' +
+    // Bokio-knapp bara för kunder
+    var bokioBtn = _entityType === 'customer'
+      ? '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyBokioProfile()">' + _ic('zap', 14) + ' Bokio-profil</button>'
+      : '';
+
+    var html = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
       '<div><strong>' + totalRows + ' rader</strong> · ' + h.length + ' kolumner</div>' +
-      '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyBokioProfile()">' +
-        _ic('zap', 14) + ' Använd Bokio-profil' +
-      '</button>' +
+      bokioBtn +
     '</div>' +
     '<div style="overflow-x:auto">' +
     '<table class="imp-preview-table">' +
-    '<thead><tr>' + h.map(function (col) {
-      return '<th>' + esc(col) + '</th>';
-    }).join('') + '</tr></thead>' +
+    '<thead><tr>' + h.map(function (col) { return '<th>' + esc(col) + '</th>'; }).join('') + '</tr></thead>' +
     '<tbody>';
 
     rows.forEach(function (row) {
@@ -243,8 +262,7 @@ const ImportWizardPage = (function () {
     });
 
     if (totalRows > 5) {
-      html += '<tr><td colspan="' + h.length + '" style="text-align:center;color:var(--text-muted);font-size:12px">' +
-        '… och ' + (totalRows - 5) + ' rader till</td></tr>';
+      html += '<tr><td colspan="' + h.length + '" style="text-align:center;color:var(--text-muted);font-size:12px">… och ' + (totalRows - 5) + ' rader till</td></tr>';
     }
 
     html += '</tbody></table></div>';
@@ -254,9 +272,7 @@ const ImportWizardPage = (function () {
   function _applyBokioProfile() {
     var profile = ImportExportService.BOKIO_PROFILE;
     _rawParsed.headers.forEach(function (h) {
-      if (profile.mappings[h]) {
-        _mapping[h] = profile.mappings[h];
-      }
+      if (profile.mappings[h]) _mapping[h] = profile.mappings[h];
     });
     _step = 3;
     _renderStep();
@@ -269,37 +285,17 @@ const ImportWizardPage = (function () {
 
   /* ── Steg 3: Kolumnmatchning ─────────────────────────────────────────── */
 
-  var _CUSTOMER_FIELDS = [
-    { value: 'name',          label: 'Namn *' },
-    { value: 'type',          label: 'Typ (privat/foretag/brf)' },
-    { value: 'orgNr',         label: 'Organisationsnummer' },
-    { value: 'personnr',      label: 'Personnummer' },
-    { value: 'firstName',     label: 'Förnamn' },
-    { value: 'lastName',      label: 'Efternamn' },
-    { value: 'contactPerson', label: 'Kontaktperson' },
-    { value: 'phone',         label: 'Telefon' },
-    { value: 'email',         label: 'E-post' },
-    { value: 'address',       label: 'Adress' },
-    { value: 'zip',           label: 'Postnummer' },
-    { value: 'city',          label: 'Ort' },
-    { value: 'invoiceAddress',label: 'Fakturaadress' },
-    { value: 'invoiceZip',    label: 'Faktura postnummer' },
-    { value: 'invoiceCity',   label: 'Faktura ort' },
-    { value: 'customerNumber',label: 'Kundnummer' },
-    { value: 'externalId',    label: 'Externt ID' },
-    { value: 'externalSystem',label: 'Externt system' },
-    { value: 'paymentTerms',  label: 'Betalningsvillkor (dagar)' },
-    { value: 'note',          label: 'Anteckning' }
-  ];
-
   function _step3() {
-    var html = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;">' +
+    var fields = ImportExportService.getFieldsForType(_entityType);
+    var showBokio = _entityType === 'customer';
+
+    var html = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
       '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyAutoMatch()">' +
         _ic('cpu', 14) + ' Auto-matcha' +
       '</button>' +
-      '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyBokioProfile()">' +
-        _ic('zap', 14) + ' Bokio-profil' +
-      '</button>' +
+      (showBokio
+        ? '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyBokioProfile()">' + _ic('zap', 14) + ' Bokio-profil</button>'
+        : '') +
       '<span style="color:var(--text-muted);font-size:12px;margin-left:auto">* = obligatoriskt fält</span>' +
     '</div>' +
     '<div class="imp-mapping-grid">';
@@ -311,8 +307,8 @@ const ImportWizardPage = (function () {
         '<div class="imp-mapping-arrow">' + _ic('arrow-right', 12) + '</div>' +
         '<select class="imp-mapping-select" data-col="' + esc(h) + '" onchange="ImportWizardPage._onMappingChange(this)">' +
           '<option value="">— Importera inte —</option>' +
-          _CUSTOMER_FIELDS.map(function (f) {
-            return '<option value="' + f.value + '"' + (selected === f.value ? ' selected' : '') + '>' + f.label + '</option>';
+          fields.map(function (f) {
+            return '<option value="' + f.value + '"' + (selected === f.value ? ' selected' : '') + '>' + esc(f.label) + '</option>';
           }).join('') +
         '</select>' +
         _sampleValue(h) +
@@ -346,14 +342,27 @@ const ImportWizardPage = (function () {
   }
 
   function _toStep4() {
-    // Kontrollera att minst "name" är mappat
-    var haName = Object.values(_mapping).some(function (v) { return v === 'name'; });
-    if (!haName) {
-      _showError('imp-body', 'Minst fältet "Namn" måste vara mappat för att kunna importera.');
+    // Kontrollera att minst ett obligatoriskt fält är mappat
+    var cfg = ImportExportService.getConfig(_entityType);
+    var requiredFields = (cfg ? cfg.fields : []).filter(function (f) { return f.required; });
+    var mappedValues = Object.values(_mapping).filter(Boolean);
+
+    var missing = requiredFields.filter(function (f) {
+      return f.value.charAt(0) !== '_' && mappedValues.indexOf(f.value) === -1;
+    });
+
+    if (missing.length) {
+      _showError('imp-body', 'Obligatoriska fält saknas: ' + missing.map(function (f) { return f.label.replace(' *', ''); }).join(', '));
       return;
     }
+
     _step = 4;
-    _validated = _validateRows();
+    _validated = ImportExportService.validateImportRowsForType(_rawParsed, _mapping, _entityType);
+    // Sätt defaultkonfliktval
+    _validated.forEach(function (v) {
+      var ri = v.rowIndex - 2;
+      if (v.status === 'duplicate' && !_conflicts[ri]) _conflicts[ri] = 'update';
+    });
     _renderStep();
   }
 
@@ -369,70 +378,6 @@ const ImportWizardPage = (function () {
   }
 
   /* ── Steg 4: Validering och dubblettdetektering ──────────────────────── */
-
-  /**
-   * Dublettdetektering — prioritetsordning:
-   * 1. orgNr (starkast)
-   * 2. externalId
-   * 3. customerNumber
-   * 4. email
-   * 5. name + city
-   */
-  function _validateRows() {
-    var results = [];
-    var headers = _rawParsed.headers;
-    var rows    = _rawParsed.rows;
-
-    function mapRow(row) {
-      var obj = {};
-      headers.forEach(function (h, ci) {
-        var field = _mapping[h];
-        if (field) obj[field] = (row[ci] || '').trim();
-      });
-      return obj;
-    }
-
-    function findDuplicate(mapped) {
-      var customers = state.customers;
-      for (var i = 0; i < customers.length; i++) {
-        var c = customers[i];
-        if (mapped.orgNr && c.orgNr && mapped.orgNr === c.orgNr)           return { match: 'orgNr', customer: c };
-        if (mapped.externalId && c.externalId && mapped.externalId === c.externalId) return { match: 'externalId', customer: c };
-        if (mapped.customerNumber && c.customerNumber && mapped.customerNumber === c.customerNumber) return { match: 'customerNumber', customer: c };
-        if (mapped.email && c.email && mapped.email.toLowerCase() === c.email.toLowerCase())  return { match: 'email', customer: c };
-        if (mapped.name && c.name && mapped.city && c.city &&
-            mapped.name.toLowerCase() === c.name.toLowerCase() &&
-            mapped.city.toLowerCase() === c.city.toLowerCase())   return { match: 'name+ort', customer: c };
-      }
-      return null;
-    }
-
-    rows.forEach(function (row, ri) {
-      var mapped   = mapRow(row);
-      var errors   = [];
-      var warnings = [];
-
-      if (!mapped.name) errors.push('Namn saknas');
-
-      var dup = findDuplicate(mapped);
-      var status = errors.length ? 'error' : (dup ? 'duplicate' : 'new');
-
-      results.push({
-        rowIndex: ri + 2,  // 1-indexerat, rad 1 = rubriker
-        row:      row,
-        mapped:   mapped,
-        status:   status,
-        duplicate: dup,
-        errors:   errors,
-        warnings: warnings
-      });
-
-      // Defaultval för konflikter: uppdatera befintlig
-      if (dup && !_conflicts[ri]) _conflicts[ri] = 'update';
-    });
-
-    return results;
-  }
 
   function _step4() {
     var stats = { ok: 0, dup: 0, err: 0 };
@@ -454,7 +399,7 @@ const ImportWizardPage = (function () {
       _validated.filter(function (v) { return v.status === 'error'; }).forEach(function (v) {
         html += '<div class="imp-row-item imp-row-error">' +
           '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
-          '<span class="imp-row-name">' + esc(v.mapped.name || '(tomt)') + '</span>' +
+          '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '(tomt)') + '</span>' +
           '<span class="imp-row-msg">' + v.errors.join(', ') + '</span>' +
         '</div>';
       });
@@ -464,14 +409,13 @@ const ImportWizardPage = (function () {
     if (stats.dup > 0) {
       html += '<div class="imp-section-title" style="margin-top:16px">Dubbletter — välj åtgärd per rad</div>' +
         '<div class="imp-row-list">';
-      _validated.filter(function (v) { return v.status === 'duplicate'; }).forEach(function (v, i) {
-        var ri = v.rowIndex - 2;
+      _validated.filter(function (v) { return v.status === 'duplicate'; }).forEach(function (v) {
+        var ri     = v.rowIndex - 2;
         var action = _conflicts[ri] || 'update';
-        var matchLabel = { orgNr: 'Org.nr', externalId: 'Ext.ID', customerNumber: 'Kundnr', email: 'E-post', 'name+ort': 'Namn+ort' };
         html += '<div class="imp-row-item imp-row-dup">' +
           '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
-          '<span class="imp-row-name">' + esc(v.mapped.name || '') + '</span>' +
-          '<span class="imp-row-match bdg bdg-orange">' + (matchLabel[v.duplicate.match] || v.duplicate.match) + '</span>' +
+          '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '') + '</span>' +
+          '<span class="imp-row-match bdg bdg-orange">' + esc(v.duplicate.match) + '</span>' +
           '<span class="imp-row-actions">' +
             '<select class="imp-conflict-sel" data-ri="' + ri + '" onchange="ImportWizardPage._onConflict(this)">' +
               ['skip', 'update', 'create'].map(function (opt) {
@@ -494,9 +438,9 @@ const ImportWizardPage = (function () {
   }
 
   function _statChip(n, label, color) {
-    var colors = { green: 'var(--green)', orange: 'var(--orange)', red: 'var(--red)' };
-    return '<div class="imp-stat-chip" style="border-color:' + colors[color] + '">' +
-      '<span style="font-size:22px;font-weight:800;color:' + colors[color] + '">' + n + '</span>' +
+    var colors = { green: 'var(--green)', orange: 'var(--orange)', red: 'var(--red)', sky: 'var(--sky)' };
+    return '<div class="imp-stat-chip" style="border-color:' + (colors[color] || 'var(--text-muted)') + '">' +
+      '<span style="font-size:22px;font-weight:800;color:' + (colors[color] || 'var(--text-muted)') + '">' + n + '</span>' +
       '<span style="color:var(--text-muted);font-size:12px">' + label + '</span>' +
     '</div>';
   }
@@ -516,21 +460,22 @@ const ImportWizardPage = (function () {
   function _step5() {
     var toCreate = 0, toUpdate = 0, toSkip = 0;
 
-    _validated.forEach(function (v, i) {
+    _validated.forEach(function (v) {
       var ri = v.rowIndex - 2;
       if (v.status === 'error')     { toSkip++; return; }
       if (v.status === 'new')       { toCreate++; return; }
       var action = _conflicts[ri] || 'update';
-      if (action === 'skip')   toSkip++;
+      if (action === 'skip')        toSkip++;
       else if (action === 'update') toUpdate++;
       else if (action === 'create') toCreate++;
     });
 
+    var cfg = ImportExportService.getConfig(_entityType);
     var html = '<div style="margin-bottom:24px;">' +
-      '<p style="font-size:14px;margin:0 0 16px">Granskat ' + _validated.length + ' rader. Klicka <strong>Importera</strong> för att genomföra.</p>' +
+      '<p style="font-size:14px;margin:0 0 16px">Granskat <strong>' + _validated.length + '</strong> rader i ' + esc((cfg && cfg.label) || _entityType) + '. Klicka <strong>Importera</strong> för att genomföra.</p>' +
       '<div class="imp-confirm-summary">' +
-        _confirmRow(_ic('user-plus', 14), toCreate, 'Skapas', 'var(--green)') +
-        _confirmRow(_ic('edit', 14),      toUpdate, 'Uppdateras', 'var(--sky)') +
+        _confirmRow(_ic('user-plus', 14), toCreate, 'Skapas',      'var(--green)') +
+        _confirmRow(_ic('edit', 14),      toUpdate, 'Uppdateras',  'var(--sky)') +
         _confirmRow(_ic('skip-forward', 14), toSkip, 'Hoppas över', 'var(--text-muted)') +
       '</div>' +
     '</div>' +
@@ -555,6 +500,10 @@ const ImportWizardPage = (function () {
     var btn = document.querySelector('#imp-footer .btn-primary');
     if (btn) { btn.disabled = true; btn.textContent = 'Importerar…'; }
 
+    var cfg              = ImportExportService.getConfig(_entityType);
+    var arr              = (typeof state !== 'undefined') ? state[cfg.stateKey] : null;
+    if (!arr) { if (btn) { btn.disabled = false; btn.textContent = 'Importera'; } return; }
+
     var createdIds       = [];
     var updatedSnapshots = [];
     var errorRows        = [];
@@ -567,52 +516,51 @@ const ImportWizardPage = (function () {
 
       if (v.status === 'error') {
         skippedCount++;
-        errorRows.push({ row: v.rowIndex, field: v.errors.join(', '), message: 'Hoppas över pga fel' });
+        errorRows.push({ row: v.rowIndex, field: '', message: v.errors.join(', ') });
         return;
       }
 
-      if (v.status === 'new') {
-        var newCu = Object.assign(Schema.customer(), v.mapped, {
-          id:        newId(state.customers, 'KU'),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+      function _createNew(baseObj) {
+        var now  = new Date().toISOString();
+        var newObj = Object.assign(cfg.schemaFn(), baseObj || {}, {
+          id:        newId(arr, cfg.idPrefix),
+          createdAt: now,
+          updatedAt: now
         });
-        _coerceTypes(newCu);
-        state.customers.push(newCu);
-        createdIds.push(newCu.id);
+        if (cfg.coerce) cfg.coerce(newObj);
+        arr.push(newObj);
+        createdIds.push(newObj.id);
         createdCount++;
+      }
+
+      if (v.status === 'new') {
+        _createNew(v.resolved);
         return;
       }
 
       // Dubblett
       var action = _conflicts[ri] || 'update';
-      if (action === 'skip') {
-        skippedCount++;
-        return;
-      }
-      if (action === 'create') {
-        var newCu2 = Object.assign(Schema.customer(), v.mapped, {
-          id:        newId(state.customers, 'KU'),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-        _coerceTypes(newCu2);
-        state.customers.push(newCu2);
-        createdIds.push(newCu2.id);
-        createdCount++;
-        return;
-      }
+      if (action === 'skip') { skippedCount++; return; }
+      if (action === 'create') { _createNew(v.resolved); return; }
+
       if (action === 'update') {
-        var existing = v.duplicate.customer;
-        updatedSnapshots.push({ id: existing.id, before: Object.assign({}, existing) });
-        // Merge: befintliga fält behålls om det importerade värdet är tomt
-        Object.keys(v.mapped).forEach(function (k) {
-          if (v.mapped[k] !== '' && v.mapped[k] != null) {
-            existing[k] = v.mapped[k];
-          }
+        var existing = v.duplicate.item;
+        var beforeSnap = Object.assign({}, existing);
+        var beforeAt   = existing.updatedAt || '';
+
+        Object.keys(v.resolved).forEach(function (k) {
+          if (v.resolved[k] !== '' && v.resolved[k] != null) existing[k] = v.resolved[k];
         });
-        existing.updatedAt = new Date().toISOString();
-        _coerceTypes(existing);
+        var afterAt = new Date().toISOString();
+        existing.updatedAt = afterAt;
+        if (cfg.coerce) cfg.coerce(existing);
+
+        updatedSnapshots.push({
+          id:             existing.id,
+          before:         beforeSnap,
+          updatedAtBefore: beforeAt,
+          updatedAtAfter:  afterAt
+        });
         updatedCount++;
       }
     });
@@ -639,35 +587,24 @@ const ImportWizardPage = (function () {
     _renderStep();
   }
 
-  function _coerceTypes(cu) {
-    // paymentTerms ska vara ett heltal
-    if (cu.paymentTerms !== '') {
-      var n = parseInt(cu.paymentTerms, 10);
-      cu.paymentTerms = isNaN(n) ? 30 : n;
-    }
-    // active
-    if (typeof cu.active === 'string') {
-      cu.active = cu.active.toLowerCase() !== 'nej' && cu.active !== '0' && cu.active !== 'false';
-    }
-    // type: normalisera svenska värden
-    var typeMap = { privatperson: 'privat', företag: 'foretag', bostadsrättsförening: 'brf' };
-    if (cu.type && typeMap[cu.type.toLowerCase()]) cu.type = typeMap[cu.type.toLowerCase()];
-  }
-
   /* ── Steg 6: Resultat ────────────────────────────────────────────────── */
 
   function _step6() {
     var log = _lastLogId ? state.importLogs.find(function (l) { return l.id === _lastLogId; }) : null;
     if (!log) return '<p>Import slutförd.</p>';
 
+    var cfg       = ImportExportService.getConfig(_entityType) || {};
+    var targetPage = cfg.targetPage || 'pg-dash';
+    var targetLabel = cfg.label ? 'Till ' + cfg.label.toLowerCase() : 'Till registret';
+
     var html = '<div class="imp-result">' +
       '<div class="imp-result-icon">' + _ic('check-circle', 40) + '</div>' +
       '<h3 style="margin:12px 0 4px">Import slutförd!</h3>' +
       '<div class="imp-stats-row" style="justify-content:center;margin:16px 0">' +
-        _statChip(log.createdCount,  'Skapade',     'green') +
-        _statChip(log.updatedCount,  'Uppdaterade', 'sky' ) +
-        _statChip(log.skippedCount,  'Hoppade',     'orange') +
-        _statChip(log.errorCount,    'Fel',          'red') +
+        _statChip(log.createdCount, 'Skapade',     'green') +
+        _statChip(log.updatedCount, 'Uppdaterade', 'sky')   +
+        _statChip(log.skippedCount, 'Hoppade',     'orange') +
+        _statChip(log.errorCount,   'Fel',          'red')   +
       '</div>' +
       (log.errors && log.errors.length
         ? '<details style="margin:8px 0"><summary style="cursor:pointer;font-size:13px">Visa ' + log.errors.length + ' felposter</summary>' +
@@ -675,9 +612,9 @@ const ImportWizardPage = (function () {
             log.errors.map(function (e) { return '<li>Rad ' + e.row + ': ' + esc(e.message) + '</li>'; }).join('') +
           '</ul></details>'
         : '') +
-      '<div style="display:flex;gap:8px;justify-content:center;margin-top:20px;">' +
+      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:20px;">' +
         '<button class="btn btn-ghost" onclick="ImportWizardPage._undoLast()">' + _ic('rotate-ccw', 14) + ' Ångra import</button>' +
-        '<button class="btn btn-primary" onclick="Router.showPage(\'pg-crm\',{})">' + _ic('users', 14) + ' Till kundregister</button>' +
+        '<button class="btn btn-primary" onclick="Router.showPage(\'' + targetPage + '\',{})">' + _ic('list', 14) + ' ' + esc(targetLabel) + '</button>' +
         '<button class="btn btn-ghost" onclick="Router.showPage(\'pg-import-log\',{})">' + _ic('clock', 14) + ' Importlogg</button>' +
         '<button class="btn btn-ghost" onclick="ImportWizardPage._reset()">' + _ic('upload', 14) + ' Ny import</button>' +
       '</div>' +
@@ -688,12 +625,17 @@ const ImportWizardPage = (function () {
 
   function _undoLast() {
     if (!_lastLogId) return;
-    if (!confirm('Ångra importen? Skapade kunder raderas och uppdaterade återställs.')) return;
+    if (!confirm('Ångra importen? Skapade poster raderas och uppdaterade återställs.')) return;
     var result = ImportExportService.undoImport(_lastLogId);
     var msg = 'Ångrat: ' + result.removed + ' borttagna, ' + result.restored + ' återställda.';
+    if (result.conflicts && result.conflicts.length) {
+      msg += '\n\nOBS: ' + result.conflicts.length + ' poster ändrades efter importen — kontrollera dessa manuellt:\n' +
+        result.conflicts.map(function (c) { return '• ' + (c.name || c.id); }).join('\n');
+    }
     if (result.errors.length) msg += '\n\nFel:\n' + result.errors.join('\n');
     alert(msg);
-    Router.go('pg-crm');
+    var cfg = ImportExportService.getConfig(_entityType);
+    Router.showPage(cfg ? cfg.targetPage : 'pg-dash', {});
   }
 
   function _reset() {
@@ -710,7 +652,6 @@ const ImportWizardPage = (function () {
   /* ── Event-binding ───────────────────────────────────────────────────── */
 
   function _bindEvents() {
-    // Drag-and-drop på hela sidan (aktiv på steg 1)
     var page = document.getElementById('pg-import-wizard-content');
     if (!page) return;
 
@@ -737,33 +678,30 @@ const ImportWizardPage = (function () {
   }
 
   function _bindStepEvents() {
-    // ingenting extra behövs — onclick-hanterare är inline
+    // onclick-hanterare är inline
   }
 
   function _back() {
-    if (_step > 1 && _step < 6) {
-      _step--;
-      _renderStep();
-    }
+    if (_step > 1 && _step < 6) { _step--; _renderStep(); }
   }
 
   /* ── Publikt API ─────────────────────────────────────────────────────── */
 
   return {
-    render:            render,
-    _parseFile:        _parseFile,
-    _applyBokioProfile:_applyBokioProfile,
-    _applyAutoMatch:   _applyAutoMatch,
-    _onMappingChange:  _onMappingChange,
-    _toStep3:          _toStep3,
-    _toStep4:          _toStep4,
-    _toStep5:          _toStep5,
-    _onConflict:       _onConflict,
-    _runImport:        _runImport,
-    _undoLast:         _undoLast,
-    _reset:            _reset,
-    _back:             _back,
-    _onFileInput:      _onFileInput
+    render:             render,
+    _parseFile:         _parseFile,
+    _applyBokioProfile: _applyBokioProfile,
+    _applyAutoMatch:    _applyAutoMatch,
+    _onMappingChange:   _onMappingChange,
+    _toStep3:           _toStep3,
+    _toStep4:           _toStep4,
+    _toStep5:           _toStep5,
+    _onConflict:        _onConflict,
+    _runImport:         _runImport,
+    _undoLast:          _undoLast,
+    _reset:             _reset,
+    _back:              _back,
+    _onFileInput:       _onFileInput
   };
 
 })();

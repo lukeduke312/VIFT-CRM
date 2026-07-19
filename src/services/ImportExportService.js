@@ -777,21 +777,22 @@ const ImportExportService = (function () {
 
   /**
    * Ångrar en import: tar bort skapade poster och återställer uppdaterade poster.
-   * Stöder entityType: 'customer' (utökbar).
-   * Returnerar { removed: number, restored: number, errors: string[] }
+   * Returnerar { removed, restored, errors, conflicts }
+   * conflicts: poster som ändrades efter importen och inte kunde säkert återställas
    */
   function undoImport(logId) {
     var log = state.importLogs.find(function (l) { return l.id === logId; });
-    if (!log) return { removed: 0, restored: 0, errors: ['Importloggen hittades inte'] };
-    if (log.undone)  return { removed: 0, restored: 0, errors: ['Importen har redan ångrats'] };
+    if (!log) return { removed: 0, restored: 0, errors: ['Importloggen hittades inte'], conflicts: [] };
+    if (log.undone)  return { removed: 0, restored: 0, errors: ['Importen har redan ångrats'], conflicts: [] };
 
-    var errors   = [];
-    var removed  = 0;
-    var restored = 0;
+    var errors    = [];
+    var removed   = 0;
+    var restored  = 0;
+    var conflicts = [];   // [{id, field, importedValue, currentValue}]
 
     var arr = _getEntityArray(log.type);
     if (!arr) {
-      return { removed: 0, restored: 0, errors: ['Okänd entitetstyp: ' + log.type] };
+      return { removed: 0, restored: 0, errors: ['Okänd entitetstyp: ' + log.type], conflicts: [] };
     }
 
     // Ta bort skapade poster
@@ -805,30 +806,41 @@ const ImportExportService = (function () {
       }
     });
 
-    // Återställ uppdaterade poster
+    // Återställ uppdaterade poster — kontrollera om posten ändrats sedan importen
     (log.updatedSnapshots || []).forEach(function (snap) {
       var idx = arr.findIndex(function (e) { return e.id === snap.id; });
-      if (idx !== -1) {
-        arr[idx] = Object.assign({}, arr[idx], snap.before);
-        restored++;
-      } else {
+      if (idx === -1) {
         errors.push('Hittade inte ' + snap.id + ' för återställning');
+        return;
       }
+      var current = arr[idx];
+
+      // Konfliktdetektering: om updatedAtAfter finns och current.updatedAt är nyare
+      if (snap.updatedAtAfter && current.updatedAt && current.updatedAt > snap.updatedAtAfter) {
+        conflicts.push({ id: snap.id, name: current.name || snap.id, updatedAt: current.updatedAt });
+      }
+
+      // Återställ ändå (med snapshot) — konflikten rapporteras men blockerar inte
+      arr[idx] = Object.assign({}, current, snap.before);
+      restored++;
     });
 
     log.undone = true;
     persist();
 
-    return { removed: removed, restored: restored, errors: errors };
+    return { removed: removed, restored: restored, errors: errors, conflicts: conflicts };
   }
 
   function _getEntityArray(type) {
+    if (typeof state === 'undefined') return null;
     var map = {
-      customer: state.customers,
-      property: state.properties,
-      object:   state.propertyObjects,
-      article:  state.articles,
-      staff:    state.staff
+      customer:       state.customers,
+      property:       state.properties,
+      propertyObject: state.propertyObjects,
+      object:         state.propertyObjects,
+      article:        state.articles,
+      priceGroup:     state.priceGroups,
+      staff:          state.staff
     };
     return map[type] || null;
   }

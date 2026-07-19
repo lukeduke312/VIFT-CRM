@@ -124,7 +124,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Prioritet | Beroenden |
 |---|----------|--------|-----------|-----------|
-| 73 | Generell import/export för fastigheter, objekt, artiklar, personal | DELVIS | Hög | ImportExportService.js (motor klar, endast kund-UI byggd) |
+| 73 | Generell import/export för fastigheter, objekt, artiklar, personal | DELVIS | Hög | ImportExportConfigs.js v1 — motor + wizard generisk (F4-1 klar) |
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
@@ -134,6 +134,41 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
 | 81 | Kontrakthantering (avtal, betalningsplan, villkor) | EJ BYGGD | Medel | ContractsPage |
 | 82 | Mobil-optimerad offline-läge (SW fallback) | EJ BYGGD | Låg | sw.js, IndexedDB |
+
+---
+
+---
+
+## Leverans D — Ansvariga & kontakter per fastighet/objekt
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 83 | Schema — Schema.propertyRole() (titelregister: förvaltare, skötare, m.fl.) | KLAR | — | schema.js v18 |
+| 84 | Schema — Schema.propertyContact() (koppling person↔fastighet/objekt) | KLAR | — | schema.js v18 |
+| 85 | State — state.propertyRoles[], state.propertyContacts[], persist, DataSync | KLAR | — | state.js v29 |
+| 86 | Titelregister — CRUD i Admin (skapa/redigera titlar, scope, onlyOnePrimary) | EJ BYGGD | — | AdminPage |
+| 87 | Fastighetskortet — flik "Ansvariga & kontakter" (CRUD, primär, giltighet) | EJ BYGGD | — | PropertyDetailPage |
+| 88 | Objektskortet — kontakter på objektnivå (hyresgäst, lokalansvarig) | EJ BYGGD | — | PropertyObjectPage |
+| 89 | AO-wizard — föreslå kontakt baserat på fastighet + kategori + titel | EJ BYGGD | — | WorkOrdersPage |
+| 90 | Dagens drift — visa ansvariga per fastighet | EJ BYGGD | — | OperationsPage |
+| 91 | PropertyContactService — CRUD, primärkontroll, historikvy | EJ BYGGD | — | PropertyContactService.js |
+| 92 | Push/notiser — använd ansvarig titel vid utskick | EJ BYGGD | — | PushService |
+
+### Datamodell — persontyper
+- `staff` → state.staff[].id
+- `customerContact` → state.customers[].contacts[].id
+- `objectContact` → state.propertyObjects[].contacts[].id
+- `externalOther` → fritext, inget internt ID
+
+### Datamodell — scope
+- `scope: 'property'` → kopplas till fastighet (objectId='')
+- `scope: 'object'` → kopplas till objekt (objectId satt)
+- `scope: 'both'` → kan kopplas på båda nivåer
+
+### Säkerhetsprinciper (Leverans D)
+- Gamla ansvars­kopplingar raderas aldrig — avslutas med validTo eller active: false
+- Snapshot-fält (roleNameSnapshot, personNameSnapshot, m.fl.) bevarar historik oavsett framtida namnändringar
+- Historiska AO-poster behåller rätt kontaktnamn via egna snapshotfält (contactPerson, phone)
 
 ---
 

@@ -525,6 +525,50 @@ const Schema = {
     updatedAt: ''
   }),
 
+  /* ── Ansvarstitel / roll (titelregister) ─────────────────────────────────
+   * Admin kan skapa och redigera titlar (förvaltare, städansvarig m.fl.).
+   * Leverans D: Ansvariga & kontakter per fastighet/objekt               */
+  propertyRole: () => ({
+    id: '',
+    name: '',               // "Ansvarig förvaltare", "Fastighetsskötare", …
+    description: '',
+    scope: 'property',      // 'property' | 'object' | 'both'
+    isInternal: true,       // intern personal eller extern kontakt
+    active: true,
+    onlyOnePrimary: false,  // om bara en primär person tillåts per titel+objekt
+    sortOrder: 0,
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  /* ── Ansvars-/kontaktkoppling (property ↔ person) ────────────────────────
+   * Kopplar en person (från valfritt register) till en fastighet eller ett
+   * objekt med en viss titel/funktion och eventuell giltighetstid.
+   * personType bestämmer i vilket register personId söks:
+   *   'staff'           → state.staff
+   *   'customerContact' → state.customers[].contacts[]
+   *   'objectContact'   → state.propertyObjects[].contacts[]
+   *   'externalOther'   → fritext (ingen intern koppling)               */
+  propertyContact: () => ({
+    id: '',
+    propertyId: '',         // alltid satt
+    objectId: '',           // null = gäller hela fastigheten; satt = gäller objekt
+    roleId: '',             // PropertyRole.id
+    roleNameSnapshot: '',   // snapshot vid tidpunkten för kopplingen
+    personType: 'staff',    // 'staff' | 'customerContact' | 'objectContact' | 'externalOther'
+    personId: '',           // ID i resp. register (tomt om externalOther)
+    personNameSnapshot: '', // snapshot av personens namn
+    personPhoneSnapshot: '',
+    personEmailSnapshot: '',
+    isPrimary: false,
+    validFrom: '',          // ISO-datum, '' = inga begränsningar
+    validTo: '',
+    active: true,
+    notes: '',
+    createdAt: '',
+    updatedAt: ''
+  }),
+
   propertyObject: () => ({
     id: '',
     customerId: '',

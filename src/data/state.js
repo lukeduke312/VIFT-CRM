@@ -37,6 +37,8 @@ let state = {
   ronderingspass: [],
   propertyObjects: [],
   importLogs: [],
+  propertyRoles: [],       // Leverans D: titelregister (förvaltare, skötare, etc.)
+  propertyContacts: [],    // Leverans D: kopplingar person↔fastighet/objekt
 
   // UI-state
   currentPage: 'dash',
@@ -94,6 +96,8 @@ async function initState() {
   state.ronderingspass     = g('ronderingspass')   || [];
   state.propertyObjects    = g('propertyObjects')  || [];
   state.importLogs         = g('importLogs')       || [];
+  state.propertyRoles      = g('propertyRoles')    || [];
+  state.propertyContacts   = g('propertyContacts') || [];
 
   /* ── Konfigurations- och referensdata: SeedData ger vettiga standardvärden ── */
   state.priceGroups        = g('priceGroups')        || SeedData.priceGroups        || [];
@@ -251,7 +255,9 @@ function persist() {
     ['propertyCategories', state.propertyCategories],
     ['ronderingspass',   state.ronderingspass],
     ['propertyObjects',  state.propertyObjects],
-    ['importLogs',       state.importLogs]
+    ['importLogs',       state.importLogs],
+    ['propertyRoles',    state.propertyRoles],
+    ['propertyContacts', state.propertyContacts]
   ]);
 }
 
@@ -505,6 +511,8 @@ const DataSync = {
       arr('ronderingspass',     'ronderingspass');
       arr('propertyObjects',    'propertyObjects');
       arr('importLogs',         'importLogs');
+      arr('propertyRoles',      'propertyRoles');
+      arr('propertyContacts',   'propertyContacts');
 
       /* Staff: strippa lösenordsfält */
       var rawStaff = g('staff');
