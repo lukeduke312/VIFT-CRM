@@ -684,6 +684,191 @@ IMPORT_EXPORT_CONFIGS.avvikelse = {
   }
 };
 
+/* ── Kontaktpersoner (export-only, tillplattas från customer.contacts[]) ─── */
+
+IMPORT_EXPORT_CONFIGS.customerContact = {
+  label: 'Kontaktpersoner', labelSingular: 'Kontaktperson',
+  stateKey: null,          /* nästlat i customer.contacts[] */
+  importDisabled: true,
+  targetPage: 'pg-crm',
+  sensitiveFields: [],
+  fields: [
+    { value: 'customerId',   label: 'Kund-ID'     },
+    { value: 'customerName', label: 'Kundnamn'    },
+    { value: 'name',         label: 'Namn'        },
+    { value: 'phone',        label: 'Telefon'     },
+    { value: 'email',        label: 'E-post'      },
+    { value: 'role',         label: 'Roll/Titel'  }
+  ],
+  exportFn: function () {
+    var headers = ['Kund-ID', 'Kundnamn', 'Namn', 'Telefon', 'E-post', 'Roll/Titel'];
+    var rows = [];
+    (typeof state !== 'undefined' ? state.customers || [] : []).forEach(function (cu) {
+      (cu.contacts || []).forEach(function (c) {
+        rows.push([cu.id, cu.name || '', c.name || '', c.phone || '', c.email || '', c.role || '']);
+      });
+    });
+    return { headers: headers, rows: rows };
+  }
+};
+
+/* ── Materialrader (export-only, tillplattas från workOrder.materials[]) ─── */
+
+IMPORT_EXPORT_CONFIGS.materialRow = {
+  label: 'Materialrader', labelSingular: 'Materialsrad',
+  stateKey: null,
+  importDisabled: true,
+  targetPage: 'pg-ao',
+  sensitiveFields: [],
+  historicalImport: true,
+  fields: [
+    { value: 'aoId',       label: 'AO-ID'        },
+    { value: 'aoTitle',    label: 'AO-titel'     },
+    { value: 'articleId',  label: 'Artikel-ID'   },
+    { value: 'name',       label: 'Namn'         },
+    { value: 'qty',        label: 'Antal'        },
+    { value: 'unit',       label: 'Enhet'        },
+    { value: 'buyPrice',   label: 'Inpris'       },
+    { value: 'sellPrice',  label: 'Utpris'       },
+    { value: 'addedAt',    label: 'Tillagd'      }
+  ],
+  exportFn: function () {
+    var headers = ['AO-ID', 'AO-titel', 'Artikel-ID', 'Namn', 'Antal', 'Enhet', 'Inpris', 'Utpris', 'Tillagd'];
+    var rows = [];
+    (typeof state !== 'undefined' ? state.workOrders || [] : []).forEach(function (ao) {
+      (ao.materials || []).forEach(function (m) {
+        rows.push([ao.id, ao.title || '', m.articleId || '', m.name || '', m.qty != null ? m.qty : '', m.unit || '', m.buyPrice != null ? m.buyPrice : '', m.sellPrice != null ? m.sellPrice : '', m.addedAt || '']);
+      });
+    });
+    return { headers: headers, rows: rows };
+  }
+};
+
+/* ── Ronderingspass ───────────────────────────────────────────────────────── */
+
+IMPORT_EXPORT_CONFIGS.ronderingPass = {
+  label: 'Ronderingspass', labelSingular: 'Ronderingspass',
+  stateKey: 'ronderingspass', idPrefix: 'RPASS',
+  schemaFn: function () { return Schema.ronderingspass(); },
+  targetPage: 'pg-rondering',
+  sensitiveFields: [],
+  historicalImport: true,
+  fields: [
+    { value: 'scheduledDate',  label: 'Planerat datum *',           required: true },
+    { value: 'scheduledTime',  label: 'Planerad tid'                               },
+    { value: 'status',         label: 'Status'                                     },
+    { value: 'completedAt',    label: 'Slutförd'                                   },
+    { value: 'internalNote',   label: 'Intern notering'                            },
+    { value: '_mallRef',       label: 'Mall (namn / ID)'                           },
+    { value: '_propertyRef',   label: 'Fastighet (beteckning / namn)'              },
+    { value: '_customerRef',   label: 'Kund (kundnummer / org.nr)'                 }
+  ],
+  aliases: {
+    scheduledDate: ['datum', 'planerat datum', 'date'],
+    scheduledTime: ['tid', 'planerad tid', 'time'],
+    status:        ['status'],
+    completedAt:   ['slutförd', 'completed', 'klar'],
+    internalNote:  ['notering', 'anteckning', 'note'],
+    _mallRef:      ['mall', 'mallen', 'template', 'mallnamn'],
+    _propertyRef:  ['fastighet', 'fastighetsbeteckning'],
+    _customerRef:  ['kund', 'kundnummer']
+  },
+  relations: [
+    {
+      label: 'Ronderingsmall',
+      targetField: 'mallId', required: false,
+      refFields: ['_mallRef'],
+      lookupIn: 'ronderingsmallar',
+      matchSets: [['id'], ['name']]
+    },
+    {
+      label: 'Fastighet',
+      targetField: 'propertyId', required: false,
+      refFields: ['_propertyRef'],
+      lookupIn: 'properties',
+      matchSets: [['propertyDesignation'], ['name']]
+    },
+    {
+      label: 'Kund',
+      targetField: 'customerId', required: false,
+      refFields: ['_customerRef'],
+      lookupIn: 'customers',
+      matchSets: [['customerNumber'], ['orgNr'], ['name']]
+    }
+  ],
+  duplicateStrategies: [
+    { fields: ['mallId','propertyId','scheduledDate'], label: 'Mall+Fastighet+Datum', priority: 1 }
+  ],
+  validate: function (mapped) { return mapped.scheduledDate ? [] : ['Planerat datum saknas']; },
+  coerce: function (obj) {
+    var validStatus = ['planerat','pågående','slutfört','har_avvikelser'];
+    if (!obj.status || validStatus.indexOf(obj.status.toLowerCase()) === -1) obj.status = 'planerat';
+    else obj.status = obj.status.toLowerCase();
+  }
+};
+
+/* ── Återkommande ronderingar (export-only, state.ronderingar) ───────────── */
+
+IMPORT_EXPORT_CONFIGS.ronderingSchema = {
+  label: 'Återkommande ronderingar', labelSingular: 'Rondering',
+  stateKey: 'ronderingar',
+  importDisabled: true,   /* komplexa nästlade strukturer, import planeras senare */
+  targetPage: 'pg-rondering',
+  sensitiveFields: [],
+  fields: [
+    { value: 'name',          label: 'Namn'           },
+    { value: 'templateName',  label: 'Mall'           },
+    { value: 'status',        label: 'Status'         },
+    { value: 'customerId',    label: 'Kund-ID'        },
+    { value: 'propertyId',    label: 'Fastighets-ID'  },
+    { value: 'pricingType',   label: 'Pristyp'        },
+    { value: 'debiterbar',    label: 'Debiterbar'     },
+    { value: 'completedAt',   label: 'Slutförd'       },
+    { value: 'createdAt',     label: 'Skapad'         }
+  ],
+  aliases: {},
+  relations: [],
+  duplicateStrategies: [
+    { field: 'id', label: 'ID', priority: 1 }
+  ],
+  validate: function () { return []; },
+  coerce: function () {}
+};
+
+/* ── Serviceintervall (export-only, tillplattas från property.serviceIntervals[]) */
+
+IMPORT_EXPORT_CONFIGS.serviceInterval = {
+  label: 'Serviceintervall', labelSingular: 'Serviceintervall',
+  stateKey: null,
+  importDisabled: true,    /* nästlat i property.serviceIntervals[], import planeras */
+  targetPage: 'pg-objects',
+  sensitiveFields: [],
+  fields: [
+    { value: 'propertyId',          label: 'Fastighets-ID'     },
+    { value: 'propertyName',        label: 'Fastighetsnamn'    },
+    { value: 'id',                  label: 'Intervall-ID'      },
+    { value: 'title',               label: 'Titel'             },
+    { value: 'category',            label: 'Kategori'          },
+    { value: 'lastDone',            label: 'Senast utfört'     },
+    { value: 'intervalType',        label: 'Intervalltyp'      },
+    { value: 'intervalDays',        label: 'Intervall (dagar)' },
+    { value: 'nextDue',             label: 'Nästa förfall'     },
+    { value: 'responsibleStaffId',  label: 'Ansvarig personal' },
+    { value: 'supplier',            label: 'Leverantör'        },
+    { value: 'autoCreateAO',        label: 'Skapa AO auto'     }
+  ],
+  exportFn: function () {
+    var headers = ['Fastighets-ID','Fastighetsnamn','Intervall-ID','Titel','Kategori','Senast utfört','Intervalltyp','Intervall (dagar)','Nästa förfall','Ansvarig personal','Leverantör','Skapa AO auto'];
+    var rows = [];
+    (typeof state !== 'undefined' ? state.properties || [] : []).forEach(function (prop) {
+      (prop.serviceIntervals || []).forEach(function (si) {
+        rows.push([prop.id, prop.name || '', si.id || '', si.title || '', si.category || '', si.lastDone || '', si.intervalType || '', si.intervalDays != null ? si.intervalDays : '', si.nextDue || '', si.responsibleStaffId || '', si.supplier || '', si.autoCreateAO ? 'Ja' : 'Nej']);
+      });
+    });
+    return { headers: headers, rows: rows };
+  }
+};
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Utökning av ImportExportService med generiska metoder
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -945,6 +1130,11 @@ Object.assign(ImportExportService, {
     var cfg = IMPORT_EXPORT_CONFIGS[entityType];
     if (!cfg) return { headers: [], rows: [] };
 
+    /* Nästlade register med exportFn() hanteras separat */
+    if (cfg.exportFn && !records) {
+      return cfg.exportFn(opts);
+    }
+
     var sensitiveSet = {};
     (cfg.sensitiveFields || []).forEach(function (f) { sensitiveSet[f] = true; });
 
@@ -955,7 +1145,7 @@ Object.assign(ImportExportService, {
     });
 
     var headers = cols.map(function (f) { return f.label.replace(' *', ''); });
-    var rows = records.map(function (rec) {
+    var rows = (records || []).map(function (rec) {
       return cols.map(function (col) {
         var v = rec[col.value];
         if (v == null) return '';
@@ -982,7 +1172,8 @@ Object.assign(ImportExportService, {
     var ts    = new Date().toISOString().slice(0, 10);
     var base  = cfg.label.toLowerCase().replace(/[^a-zåäö0-9]+/gi, '-');
     var tag   = label ? '-' + label : '';
-    var recs  = records || (typeof state !== 'undefined' ? (state[cfg.stateKey] || []) : []);
+    /* För nästlade register (exportFn): records=null, data byggs av exportFn */
+    var recs  = cfg.exportFn && !records ? null : (records || (typeof state !== 'undefined' ? (state[cfg.stateKey] || []) : []));
 
     var items = [
       {
@@ -991,7 +1182,7 @@ Object.assign(ImportExportService, {
         fn: function () {
           var d = ImportExportService.buildExportRowsForType(entityType, recs);
           ImportExportService.downloadCSV(base + tag + '-' + ts + '.csv', d.headers, d.rows);
-          if (typeof showToast !== 'undefined') showToast('Exporterar ' + recs.length + ' poster som CSV…');
+          if (typeof showToast !== 'undefined') showToast('Exporterar ' + d.rows.length + ' poster som CSV…');
         }
       },
       {
@@ -1000,7 +1191,7 @@ Object.assign(ImportExportService, {
         fn: function () {
           var d = ImportExportService.buildExportRowsForType(entityType, recs);
           ImportExportService.downloadXLSX(base + tag + '-' + ts + '.xlsx', [{ name: cfg.label, headers: d.headers, rows: d.rows }]);
-          if (typeof showToast !== 'undefined') showToast('Exporterar ' + recs.length + ' poster som XLSX…');
+          if (typeof showToast !== 'undefined') showToast('Exporterar ' + d.rows.length + ' poster som XLSX…');
         }
       },
       {

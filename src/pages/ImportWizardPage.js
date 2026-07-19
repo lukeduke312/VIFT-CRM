@@ -567,11 +567,10 @@ const ImportWizardPage = (function () {
 
       function _createNew(baseObj) {
         var now  = new Date().toISOString();
-        var newObj = Object.assign(cfg.schemaFn(), baseObj || {}, {
-          id:        newId(arr, cfg.idPrefix),
-          createdAt: now,
-          updatedAt: now
-        });
+        var extras = { id: newId(arr, cfg.idPrefix), createdAt: now, updatedAt: now };
+        /* Märk historiska importer så att automation kan ignorera dem */
+        if (cfg.historicalImport) extras.historicalImport = true;
+        var newObj = Object.assign(cfg.schemaFn(), baseObj || {}, extras);
         if (cfg.coerce) cfg.coerce(newObj);
         arr.push(newObj);
         createdIds.push(newObj.id);
