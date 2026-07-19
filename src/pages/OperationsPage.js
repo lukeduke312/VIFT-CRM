@@ -453,6 +453,12 @@ const OperationsPage = {
         </div>
         ${ao.substatus?`<div style="margin-top:2px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:7px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
         ${staffHtml ? `<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap;">${staffHtml}</div>` : `<div style="margin-top:3px;font-size:11px;color:var(--rd);font-weight:700;">${ic('user-x',10)} Ingen personal tilldelad</div>`}
+        ${(()=>{
+          if (!ao.propertyId || typeof PropertyContactService === 'undefined') return '';
+          const primary = PropertyContactService.summaryList(ao.propertyId).find(c => c.isPrimary);
+          if (!primary) return '';
+          return `<div style="margin-top:3px;font-size:10px;color:var(--mt);">${ic('user',9)} <strong>${esc(primary.personName)}</strong>${primary.roleName?' · '+esc(primary.roleName):''}${primary.phone?' · '+esc(primary.phone):''}</div>`;
+        })()}
       </div>
       <span style="color:var(--mt);flex-shrink:0;">${ic('chevron-right',14)}</span>
     </div>`;

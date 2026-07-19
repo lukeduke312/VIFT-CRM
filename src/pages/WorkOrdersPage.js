@@ -769,6 +769,7 @@ const WorkOrdersPage = {
       <div id="wiz-autofill"></div>
       <div id="wiz-prop-wrap">${propSelectHtml}</div>
       <div id="wiz-obj-wrap">${objSelectHtml}</div>
+      <div id="wiz-contacts">${this._wizContactsHtml(d.propertyId)}</div>
       <div class="fg"><label>Arbetsadress</label>
         <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"
           autocomplete="off"
@@ -1195,6 +1196,41 @@ const WorkOrdersPage = {
            </div>`
         : '';
     }
+    // Uppdatera kontaktförslag
+    const conWrap = document.getElementById('wiz-contacts');
+    if (conWrap) conWrap.innerHTML = this._wizContactsHtml(id);
+  },
+
+  _wizContactsHtml(propertyId) {
+    if (!propertyId || typeof PropertyContactService === 'undefined') return '';
+    const contacts = PropertyContactService.summaryList(propertyId);
+    if (!contacts.length) return '';
+    return `<div style="background:rgba(14,165,233,.07);border:1px solid rgba(14,165,233,.18);border-radius:8px;padding:10px 12px;margin-top:4px;">
+      <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic('users',12)} Ansvariga för fastigheten</div>
+      ${contacts.map(c => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;">
+        <span style="flex:1;min-width:0;">
+          ${c.isPrimary ? `<span style="color:var(--sky);font-weight:700;" title="Primär kontakt">★</span> ` : ''}
+          <strong>${esc(c.personName)}</strong>
+          ${c.roleName ? `<span style="color:var(--mt);"> · ${esc(c.roleName)}</span>` : ''}
+          ${c.phone ? `<span style="color:var(--mt);"> · ${esc(c.phone)}</span>` : ''}
+        </span>
+        <button type="button" class="btn bs bxs" style="font-size:10px;padding:2px 7px;white-space:nowrap;"
+          onclick="WorkOrdersPage._wizUseContact(${JSON.stringify(c.personName)},${JSON.stringify(c.phone)});event.stopPropagation();">
+          Använd
+        </button>
+      </div>`).join('')}
+    </div>`;
+  },
+
+  _wizUseContact(name, phone) {
+    const nc = document.getElementById('wiz-contact');
+    const np = document.getElementById('wiz-phone');
+    if (nc && !nc.value) nc.value = name || '';
+    else if (nc) nc.value = name || '';
+    if (np && !np.value) np.value = phone || '';
+    else if (np) np.value = phone || '';
+    this._wiz.data.contactPerson = nc ? nc.value : name;
+    this._wiz.data.phone = np ? np.value : phone;
   },
 
   _wizObjectChanged() {

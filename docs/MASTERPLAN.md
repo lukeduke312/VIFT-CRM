@@ -195,14 +195,14 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 |---|----------|--------|--------|-------|
 | 83 | Schema — Schema.propertyRole() (titelregister: förvaltare, skötare, m.fl.) | KLAR | — | schema.js v18 |
 | 84 | Schema — Schema.propertyContact() (koppling person↔fastighet/objekt) | KLAR | — | schema.js v18 |
-| 85 | State — state.propertyRoles[], state.propertyContacts[], persist, DataSync | KLAR | — | state.js v29 |
-| 86 | Titelregister — CRUD i Admin (skapa/redigera titlar, scope, onlyOnePrimary) | EJ BYGGD | — | AdminPage |
-| 87 | Fastighetskortet — flik "Ansvariga & kontakter" (CRUD, primär, giltighet) | EJ BYGGD | — | PropertyDetailPage |
+| 85 | State — state.propertyRoles[], state.propertyContacts[], persist, DataSync | KLAR | af97e9f | state.js v30 |
+| 86 | Titelregister — CRUD i Admin (skapa/redigera titlar, scope, onlyOnePrimary) | KLAR | af97e9f | PageShells v81 |
+| 87 | Fastighetskortet — flik "Ansvariga & kontakter" (CRUD, primär, giltighet) | KLAR | af97e9f | PropertyDetailPage v20 |
 | 88 | Objektskortet — kontakter på objektnivå (hyresgäst, lokalansvarig) | EJ BYGGD | — | PropertyObjectPage |
-| 89 | AO-wizard — föreslå kontakt baserat på fastighet + kategori + titel | EJ BYGGD | — | WorkOrdersPage |
-| 90 | Dagens drift — visa ansvariga per fastighet | EJ BYGGD | — | OperationsPage |
-| 91 | PropertyContactService — CRUD, primärkontroll, historikvy | EJ BYGGD | — | PropertyContactService.js |
-| 92 | Push/notiser — använd ansvarig titel vid utskick | EJ BYGGD | — | PushService |
+| 89 | AO-wizard — föreslå kontakt baserat på fastighet + kategori + titel | KLAR | — | WorkOrdersPage v37 |
+| 90 | Dagens drift — visa ansvariga per fastighet | KLAR | — | OperationsPage v10 |
+| 91 | PropertyContactService — CRUD, primärkontroll, historikvy | KLAR | af97e9f | PropertyContactService.js v1 |
+| 92 | Push/notiser — använd ansvarig titel vid utskick | EJ BYGGD | — | PushService (kräver Edge Function) |
 
 ### Datamodell — persontyper
 - `staff` → state.staff[].id
