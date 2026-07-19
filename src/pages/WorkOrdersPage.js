@@ -470,7 +470,12 @@ const WorkOrdersPage = {
           catObj ? catObj.label : '',
           ao.status, ao.priority,
           cu ? CustomerService.displayName(cu) : '',
+          ao.customerName || '',
           prop ? (prop.name||prop.address||'') : '',
+          ao.propertyName || '',
+          ao.objectId || '', ao.objectName || '', ao.objectNumber || '',
+          ao.entrance || '', ao.stairwell || '', ao.floor || '', ao.apartmentNumber || '',
+          ao.contactEmail || '',
           stfNames, matText
         ].join(' '));
         const phoneDigits = (ao.phone||'').replace(/\D/g,'');
@@ -1240,12 +1245,64 @@ const WorkOrdersPage = {
     this._wiz.data.objectId = id;
     const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
     const obj = (id && POS) ? POS.getById(id) : null;
-    this._wiz.data.objectName = obj ? (obj.name || obj.objectNumber || '') : '';
-    // Fyll i tillträdeskod om objektet har en
-    if (obj && obj.accessInformation) {
+    this._wiz.data.objectName       = obj ? (obj.name || obj.objectNumber || '') : '';
+    this._wiz.data.objectNumber     = obj ? (obj.objectNumber || '') : '';
+    this._wiz.data.entrance         = obj ? (obj.entrance   || '') : '';
+    this._wiz.data.stairwell        = obj ? (obj.stairwell  || '') : '';
+    this._wiz.data.floor            = obj ? (obj.floor      || '') : '';
+    this._wiz.data.apartmentNumber  = obj ? (obj.apartmentNumber || '') : '';
+
+    if (!obj) return;
+
+    /* Tillträdeskod — fyll bara om fältet är tomt */
+    if (obj.accessInformation || obj.doorCode) {
       const accessEl = document.getElementById('wiz-access');
-      if (accessEl && !accessEl.value) accessEl.value = obj.accessInformation;
+      if (accessEl && !accessEl.value) {
+        accessEl.value = obj.accessInformation || obj.doorCode || '';
+        this._wiz.data.accessCode = accessEl.value;
+      }
     }
+
+    /* Kontaktperson från objekt.contacts[] eller PropertyContactService */
+    var contact = null;
+    /* 1. PropertyContactService: primärkontakt på objektnivå */
+    if (typeof PropertyContactService !== 'undefined') {
+      const pcs = PropertyContactService.getByObject(obj.id);
+      const primary = pcs.find(c => c.isPrimary) || pcs[0];
+      if (primary) {
+        contact = {
+          name:  primary.personNameSnapshot  || '',
+          phone: primary.personPhoneSnapshot || '',
+          email: primary.personEmailSnapshot || '',
+          id:    primary.personId || ''
+        };
+      }
+    }
+    /* 2. Fallback: obj.contacts[] (äldre schema) */
+    if (!contact && obj.contacts && obj.contacts.length) {
+      const first = obj.contacts.find(c => c.active !== false) || obj.contacts[0];
+      if (first && first.contactId) {
+        /* leta i state.customers[].contacts[] */
+        var cc = null;
+        (state.customers || []).forEach(function(cu) {
+          (cu.contacts || []).forEach(function(c) { if (c.id === first.contactId) cc = c; });
+        });
+        if (cc) contact = { name: cc.name||'', phone: cc.phone||'', email: cc.email||'', id: first.contactId };
+      }
+    }
+
+    if (contact) {
+      const nc = document.getElementById('wiz-contact');
+      const np = document.getElementById('wiz-phone');
+      if (nc && !nc.value) { nc.value = contact.name;  this._wiz.data.contactPerson = contact.name; }
+      if (np && !np.value) { np.value = contact.phone; this._wiz.data.phone         = contact.phone; }
+      this._wiz.data.contactEmail = contact.email || '';
+      this._wiz.data.contactId    = contact.id    || '';
+    }
+
+    /* Uppdatera kontaktförslag */
+    const conWrap = document.getElementById('wiz-contacts');
+    if (conWrap) conWrap.innerHTML = this._wizContactsHtml(this._wiz.data.propertyId);
   },
 
   _wizSetDate(dateStr) {
@@ -1361,14 +1418,25 @@ const WorkOrdersPage = {
     d.phone         = document.getElementById('wiz-phone')?.value.trim() || '';
     d.accessCode    = document.getElementById('wiz-access')?.value.trim() || '';
     d.internalNote  = document.getElementById('wiz-intnote')?.value.trim() || '';
-    // Objekt (lägenhet/lokal)
+    // Objekt (lägenhet/lokal) — inkl. snapshot-fält
     const objSel = document.getElementById('wiz-object');
     if (objSel && objSel.tagName === 'SELECT') {
       d.objectId = objSel.value || '';
       const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
       const obj = (d.objectId && POS) ? POS.getById(d.objectId) : null;
-      d.objectName = obj ? (obj.name || obj.objectNumber || '') : '';
+      if (obj) {
+        d.objectName      = obj.name || obj.objectNumber || '';
+        d.objectNumber    = obj.objectNumber    || '';
+        d.entrance        = obj.entrance        || '';
+        d.stairwell       = obj.stairwell       || '';
+        d.floor           = obj.floor           || '';
+        d.apartmentNumber = obj.apartmentNumber || '';
+      }
     }
+    // customerName snapshot
+    const cu = d.customerId ? (state.customers||[]).find(c => c.id === d.customerId) : null;
+    d.customerName = cu ? CustomerService.displayName(cu) : '';
+
     if (!d.title)      { showToast('Rubrik krävs'); return false; }
     if (!d.customerId) { showToast('Välj en kund'); return false; }
     return true;
@@ -1418,33 +1486,41 @@ const WorkOrdersPage = {
     const d  = this._wiz.data;
     const _prop = d.propertyId ? (state.properties||[]).find(p => p.id === d.propertyId) : null;
     const ao = WorkOrderService.create({
-      title:         d.title,
-      description:   d.description,
-      customerId:    d.customerId,
-      propertyId:    d.propertyId || '',
-      propertyName:  _prop ? (_prop.name || _prop.address || '') : '',
-      objectId:      d.objectId   || '',
-      objectName:    d.objectName || '',
-      address:       d.address,
-      contactPerson: d.contactPerson,
-      phone:         d.phone,
-      accessCode:    d.accessCode,
-      internalNote:  d.internalNote,
-      status:        d.status || 'pool',
-      priority:      d.priority || 'normal',
-      category:      d.category || '',
-      priceType:     d.priceType,
-      fixedPrice:    d.fixedPrice,
-      priceGroupId:  d.priceGroupId,
-      staff:         d.staff || [],
-      scheduledDate: d.scheduledDate || '',
-      scheduledStart:d.scheduledStart || '',
-      scheduledEnd:  d.scheduledEnd || '',
-      checklist:     (d.checklist || []).map(c => ({ ...c })),
-      materials:     [],
-      notes:         [],
-      log:           [],
-      timeEntries:   []
+      title:           d.title,
+      description:     d.description,
+      customerId:      d.customerId,
+      customerName:    d.customerName    || '',
+      propertyId:      d.propertyId      || '',
+      propertyName:    _prop ? (_prop.name || _prop.address || '') : '',
+      objectId:        d.objectId        || '',
+      objectName:      d.objectName      || '',
+      objectNumber:    d.objectNumber    || '',
+      address:         d.address,
+      contactPerson:   d.contactPerson,
+      contactEmail:    d.contactEmail    || '',
+      contactId:       d.contactId       || '',
+      phone:           d.phone,
+      accessCode:      d.accessCode,
+      entrance:        d.entrance        || '',
+      stairwell:       d.stairwell       || '',
+      floor:           d.floor           || '',
+      apartmentNumber: d.apartmentNumber || '',
+      internalNote:    d.internalNote,
+      status:          d.status    || 'pool',
+      priority:        d.priority  || 'normal',
+      category:        d.category  || '',
+      priceType:       d.priceType,
+      fixedPrice:      d.fixedPrice,
+      priceGroupId:    d.priceGroupId,
+      staff:           d.staff      || [],
+      scheduledDate:   d.scheduledDate  || '',
+      scheduledStart:  d.scheduledStart || '',
+      scheduledEnd:    d.scheduledEnd   || '',
+      checklist:       (d.checklist || []).map(c => ({ ...c })),
+      materials:       [],
+      notes:           [],
+      log:             [],
+      timeEntries:     []
     });
     this._wiz.modalId = null;
     Modal.close();

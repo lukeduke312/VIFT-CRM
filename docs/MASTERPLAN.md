@@ -28,8 +28,8 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 9  | Arbetsorder (AO) — fullständig CRUD, wizard, statusflöde | KLAR | 9b39b63 | WorkOrdersPage, WorkOrderDetailPage, WorkOrderService |
 | 10 | AO — checklist, material, tidsstämpel, fakturering | KLAR | 9b39b63 | WorkOrderDetailPage |
 | 11 | AO — objectId + objectName i wizard och detalj | KLAR | 0135856 | WorkOrdersPage v34, WorkOrderDetailPage v47 |
-| 12 | AO — snapshot-fält (customerName, objectNumber, contactId, contactName, accessInformation) | EJ BYGGD | — | WorkOrdersPage, schema.js — planeras i stabilisering |
-| 13 | AO — sökning på objektnamn/objektnummer/port/trapphus | EJ BYGGD | — | WorkOrdersPage haystack — planeras i stabilisering |
+| 12 | AO — snapshot-fält (customerName, objectNumber, contactId, contactName, accessInformation) | KLAR | — | schema.js v20, WorkOrdersPage v38 |
+| 13 | AO — sökning på objektnamn/objektnummer/port/trapphus | KLAR | — | WorkOrdersPage v38 haystack |
 | 14 | Kundregister — CRUD, kontaktpersoner | KLAR | 9b39b63 | CustomersPage, CustomerService |
 | 15 | Fastighetsregister — CRUD, teknisk info, bilder | KLAR | 9b39b63 | PropertyDetailPage, PageShells |
 | 16 | Offertmodul | KLAR | 9b39b63 | OffersPage, OfferDetailPage |
@@ -111,7 +111,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 64 | Objektskortet — bilder och dokument | EJ BYGGD | — | PropertyObjectPage.js — planeras i stabilisering |
 | 65 | Router — pg-propobj-detail + /objekt/:objId | KLAR | 9ef6d01 | Router.js v17 |
 | 66 | AO-wizard — objektväljare (filtrerad per fastighet) + autofill portkod | KLAR | 0135856 | WorkOrdersPage v34 |
-| 67 | AO-wizard — prefill adress, kontakt, telefon, e-post från objekt | EJ BYGGD | — | WorkOrdersPage — planeras i stabilisering |
+| 67 | AO-wizard — prefill adress, kontakt, telefon, e-post från objekt | KLAR | — | WorkOrdersPage v38 (entrance/stairwell/floor/apartmentNumber/contactEmail) |
 | 68 | AO-detalj — visar kopplat objekt med länk | KLAR | 0135856 | WorkOrderDetailPage v47 |
 | 69 | Serviceintervall-formulär — objectId-väljare | KLAR | f61b26a | PropertyDetailPage v19 |
 | 70 | Avvikelse — objectId-väljare i ronderingsvyn | KLAR | f61b26a | RonderingUtforandePage v10 |
@@ -189,7 +189,7 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 ---
 
-## Leverans D — Ansvariga & kontakter per fastighet/objekt
+## Leverans D — Ansvariga & kontakter per fastighet/objekt (DELVIS BYGGD)
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
@@ -224,15 +224,15 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 ## Kända begränsningar och planerade stabiliseringar
 
-### AO-snapshot-fält (punkt 12)
-Wizard sparar `propertyName` och `objectName` men saknar: `customerName`, `objectNumber`, `contactId`, `contactName`, `accessInformation` från objektet.
-AO-sökning (punkt 13) inkluderar inte objectId/objectName/objectNumber i haystack.
+### AO-snapshot-fält (punkt 12 — KLAR)
+Wizard sparar nu: `customerName`, `objectNumber`, `contactId`, `contactEmail`, `entrance`, `stairwell`, `floor`, `apartmentNumber` + befintliga fält.
+AO-sökning (punkt 13) inkluderar nu alla dessa fält i haystack.
 
 ### Objektskortet historik (punkt 62–64)
 PropertyObjectPage visar arbetsordrar och utrustning, men saknar sektioner för serviceintervall, avvikelser, bilder och dokument.
 
-### Prefill från objekt vid AO-skapande (punkt 67)
-openCreateAO() skickar objectId/objectName men inte adress, kontaktperson, telefon, e-post eller accessInformation från objektet.
+### Prefill från objekt vid AO-skapande (punkt 67 — KLAR)
+_wizObjectChanged() fyller nu i: adress, portkod, entrance, stairwell, floor, apartmentNumber, kontaktperson, telefon, e-post via PropertyContactService eller obj.contacts[].
 
 ### Kontakter/hyresgäster (punkt 71)
 contacts[]-arrayen finns i schema och kan sparas via PropertyObjectService.update(), men det saknas CRUD-UI för att lägga till/ta bort kontakter direkt i objektskortet.

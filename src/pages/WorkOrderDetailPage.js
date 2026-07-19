@@ -115,6 +115,7 @@ const WorkOrderDetailPage = {
             <span class="ao-info-val">
               ${ao.contactPerson ? esc(ao.contactPerson) : '<span style="color:var(--mt);">—</span>'}
               ${ao.phone?`<br><a href="tel:${ao.phone}" style="color:var(--sky);font-size:12px;font-weight:600;">${esc(ao.phone)}</a>`:''}
+              ${ao.contactEmail?`<br><a href="mailto:${ao.contactEmail}" style="color:var(--sky);font-size:11px;">${esc(ao.contactEmail)}</a>`:''}
             </span>
           </div>
           <!-- 2. Portkod (om finns) -->
@@ -125,7 +126,11 @@ const WorkOrderDetailPage = {
           <!-- 2b. Objekt (lägenhet/lokal) -->
           ${ao.objectId?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('layout',11)} Objekt</span>
-            <span class="ao-info-val" style="cursor:pointer;color:var(--sky);font-weight:600;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectName || ao.objectId)} ${ic('arrow-right',10)}</span>
+            <span class="ao-info-val" style="cursor:pointer;color:var(--sky);font-weight:600;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)} ${ic('arrow-right',10)}</span>
+          </div>`:''}
+          ${(ao.floor||ao.entrance||ao.stairwell||ao.apartmentNumber)?`<div class="ao-info-row">
+            <span class="ao-info-lbl">${ic('home',11)} Plats</span>
+            <span class="ao-info-val">${[ao.floor&&('Vån '+esc(ao.floor)), ao.entrance&&('Entré '+esc(ao.entrance)), ao.stairwell&&('Trapph. '+esc(ao.stairwell)), ao.apartmentNumber&&('Lgh '+esc(ao.apartmentNumber))].filter(Boolean).join(' · ')}</span>
           </div>`:''}
           <!-- 3. Personal -->
           <div class="ao-info-row">

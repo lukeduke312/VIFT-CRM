@@ -142,10 +142,18 @@ const Schema = {
     propertyName: '',
     objectId: '',         // Leverans C: kopplat objekt (lägenhet/lokal)
     objectName: '',
-    address: '',
+    objectNumber: '',     // snapshot: obj.objectNumber
+    customerName: '',     // snapshot: customer display name
     contactPerson: '',
+    contactEmail: '',     // snapshot: kontaktpersonens e-post
+    contactId: '',        // snapshot: källkontaktens ID (kund/objekt)
     phone: '',
     accessCode: '',
+    entrance: '',         // snapshot: port/entré från objekt
+    stairwell: '',        // snapshot: trapphus från objekt
+    floor: '',            // snapshot: våning från objekt
+    apartmentNumber: '',  // snapshot: lägenhetsnummer från objekt
+    address: '',
     internalNote: '',
     status: 'nytt',           // nytt | pool | planerad | pågående | klar | fakturerad | avbruten
     substatus: '',            // inväntar_material | inväntar_kund | pausad | behöver_återbesök | blockerad
