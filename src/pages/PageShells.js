@@ -3406,6 +3406,8 @@ const PropertiesPage = {
         p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.city||'').toLowerCase().includes(q)
       );
     }
+    SelectionModel.init('property');
+    const visibleIds = props.map(p => p.id);
     el.innerHTML = `
       <div class="ao-toolbar" style="margin-bottom:6px;">
         <div class="swrap">
@@ -3417,9 +3419,12 @@ const PropertiesPage = {
         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
         <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
       </div>
-      <div class="ftabs" style="margin-bottom:6px;">
-        <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
-        <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div class="ftabs" style="margin-bottom:0;flex:1;">
+          <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
+          <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
+        </div>
+        ${props.length > 0 ? SelectionModel.selectAllHtml(visibleIds) : ''}
       </div>` +
       (props.length === 0
         ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
@@ -3430,6 +3435,7 @@ const PropertiesPage = {
             return `
               <div class="list-item" onclick="PropertiesPage.openDetail('${p.id}')">
                 <div class="item-row">
+                  ${SelectionModel.checkboxHtml(p.id)}
                   <div style="flex:1;min-width:0;">
                     <div class="item-title">${p.name}</div>
                     <div class="item-sub">${[p.address, p.city].filter(Boolean).join(', ')}${cuName!=='—'?' · '+cuName:''}</div>
@@ -3554,6 +3560,8 @@ const ArticlesPage = {
       const q = this._q.toLowerCase();
       arts = arts.filter(a => a.name.toLowerCase().includes(q) || (a.articleNumber||'').includes(q));
     }
+    SelectionModel.init('article');
+    const artVisibleIds = arts.map(a => a.id);
     el.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
         <div class="swrap" style="flex:1;">
@@ -3565,8 +3573,11 @@ const ArticlesPage = {
         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('article',this)">${ic('download',14)} Exportera</button>
         <button class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)} Ny artikel</button>
       </div>
-      <div class="ftabs" style="margin-bottom:4px;">
-        ${cats.map(c=>`<button class="ft ${this._filter===c?'on':''}" onclick="ArticlesPage._filter='${c}';ArticlesPage.render()">${catLabels[c]}</button>`).join('')}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="ftabs" style="margin-bottom:0;flex:1;">
+          ${cats.map(c=>`<button class="ft ${this._filter===c?'on':''}" onclick="ArticlesPage._filter='${c}';ArticlesPage.render()">${catLabels[c]}</button>`).join('')}
+        </div>
+        ${arts.length > 0 ? SelectionModel.selectAllHtml(artVisibleIds) : ''}
       </div>
       ${arts.length === 0
         ? `<div class="empty">${ic('package',32)}<h3>Inga artiklar</h3></div>`
@@ -3577,6 +3588,7 @@ const ArticlesPage = {
             return `
           <div class="list-item" onclick="ArticlesPage.openEdit('${a.id}')">
             <div class="item-row">
+              ${SelectionModel.checkboxHtml(a.id)}
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                   ${a.active===false?`<span style="width:6px;height:6px;border-radius:50%;background:var(--mt);flex-shrink:0;display:inline-block;"></span>`:''}
