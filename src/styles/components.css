@@ -2877,3 +2877,16 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   border-radius: 8px;
   background: var(--card-bg, var(--bg));
 }
+
+/* ── PayrollPage (Punkt 76) ───────────────────────────────── */
+.stat-card {
+  background: var(--card-bg, var(--bg));
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 120px;
+  flex: 1;
+}
+.stat-num { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-lbl { font-size: 11px; color: var(--mt); margin-top: 2px; }
+.pr-attested td { opacity: .6; }

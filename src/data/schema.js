@@ -301,6 +301,9 @@ const Schema = {
     hourRate: 0,
     billable: true,
     internal: false,
+    attested: false,          // löneunderlag attesterat (Punkt 76)
+    attestedAt: '',
+    attestedBy: '',           // staffId för attesterande användare
     createdAt: ''
   }),
 
