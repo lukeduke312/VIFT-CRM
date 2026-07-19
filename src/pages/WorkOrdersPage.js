@@ -32,16 +32,20 @@ const WorkOrdersPage = {
     const el = document.getElementById('pg-ao-content');
     if (!el) return;
 
-    // Handle filter params from dashboard navigation — reset filters
-    if (params && params.filter) {
-      this._f = { quick: null, mine: false, unassigned: false, staffIds: [], customer: null, category: null, sort: 'default' };
-      const tabMap = { pool:'pool', planerad:'planerad', pågående:'pågående', klar:'klar', nytt:'nytt', active:'alla' };
-      this.filter = tabMap[params.filter] || 'alla';
-      if (params.filter === 'akut')            { this._f.quick = 'akut'; this.filter = 'alla'; }
-      if (params.filter === 'readyForInvoice') { this._f.quick = 'readyForInvoice'; this.filter = 'klar'; }
-      if (params.filter === 'idag')            { this._f.quick = 'idag'; }
-      if (params.filter === 'forsenad')        { this._f.quick = 'forsenad'; }
-      if (params.filter === 'mine')            { this._f.mine = true; }
+    // Handle filter params from dashboard/reports navigation — reset filters
+    if (params && (params.filter || params.propertyId || params.customerId)) {
+      this._f = { quick: null, mine: false, unassigned: false, staffIds: [], customer: null, property: null, categories: [], sort: 'default' };
+      if (params.filter) {
+        const tabMap = { pool:'pool', planerad:'planerad', pågående:'pågående', klar:'klar', nytt:'nytt', active:'alla' };
+        this.filter = tabMap[params.filter] || 'alla';
+        if (params.filter === 'akut')            { this._f.quick = 'akut'; this.filter = 'alla'; }
+        if (params.filter === 'readyForInvoice') { this._f.quick = 'readyForInvoice'; this.filter = 'klar'; }
+        if (params.filter === 'idag')            { this._f.quick = 'idag'; }
+        if (params.filter === 'forsenad')        { this._f.quick = 'forsenad'; }
+        if (params.filter === 'mine')            { this._f.mine = true; }
+      }
+      if (params.propertyId) { this._f.property = params.propertyId; this.filter = 'alla'; }
+      if (params.customerId) { this._f.customer = params.customerId; this.filter = 'alla'; }
     }
 
     SelectionModel.init('workOrder');
@@ -178,7 +182,7 @@ const WorkOrdersPage = {
   _activeFilterCount() {
     const f = this._f;
     return (f.quick?1:0) + (f.mine?1:0) + (f.unassigned?1:0) +
-      f.staffIds.length + (f.customer?1:0) + f.categories.length;
+      f.staffIds.length + (f.customer?1:0) + (f.property?1:0) + f.categories.length;
   },
 
   _activeChipsHtml() {
@@ -201,6 +205,11 @@ const WorkOrdersPage = {
       const cu = getCu(f.customer);
       chips.push({ label: cu ? CustomerService.displayName(cu) : f.customer, icon: 'building-2',
         clear: `WorkOrdersPage._f.customer=null;WorkOrdersPage._refreshFilters()` });
+    }
+    if (f.property) {
+      const prop = (state.properties||[]).find(p => p.id === f.property);
+      chips.push({ label: prop ? (prop.name || prop.address || f.property) : f.property, icon: 'home',
+        clear: `WorkOrdersPage._f.property=null;WorkOrdersPage._refreshFilters()` });
     }
     (f.categories||[]).forEach(slug => {
       const cat = (typeof AO_CATEGORIES!=='undefined'?AO_CATEGORIES:[]).find(c=>c.slug===slug);
@@ -284,7 +293,7 @@ const WorkOrdersPage = {
     const f = this._fDraft;
     if (!f) return 0;
     return (f.quick?1:0) + (f.mine?1:0) + (f.unassigned?1:0) +
-      f.staffIds.length + (f.customer?1:0) + (f.categories||[]).length;
+      f.staffIds.length + (f.customer?1:0) + (f.property?1:0) + (f.categories||[]).length;
   },
 
   /* Uppdatera bara panelens body (utan att stänga/öppna modalen) */
@@ -449,8 +458,9 @@ const WorkOrdersPage = {
       } else if (this._f.staffIds.length) {
         list = list.filter(a => this._f.staffIds.some(id => (a.staff||[]).includes(id)));
       }
-      // Kund / Kategori (categories är en array — OR-logik inom typen)
-      if (this._f.customer) list = list.filter(a => a.customerId===this._f.customer);
+      // Kund / Fastighet / Kategori (categories är en array — OR-logik inom typen)
+      if (this._f.customer)  list = list.filter(a => a.customerId===this._f.customer);
+      if (this._f.property)  list = list.filter(a => a.propertyId===this._f.property);
       if ((this._f.categories||[]).length) list = list.filter(a => this._f.categories.includes(a.category));
     }
 

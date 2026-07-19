@@ -170,7 +170,7 @@ Manuell testkörning: `POST /functions/v1/service-monitor` med `Authorization: B
 | 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
 | 81 | Kontrakthantering (avtal, betalningsplan, villkor) | EJ BYGGD | Medel | ContractsPage |
 | 82 | Mobil-optimerad offline-läge (SW fallback) | EJ BYGGD | Låg | sw.js, IndexedDB |
-| 129 | Klickbara rapportunderlag — öppna filtrerad lista med aktivt filter och period | EJ BYGGD | Medel | WorkOrdersPage (behöver propertyId/objectId-filter via Router), avvikelselista, serviceintervallista |
+| 129 | Klickbara rapportunderlag — öppna filtrerad lista med aktivt filter och period | KLAR | v38→v39 | WorkOrdersPage stöder nu propertyId/customerId via Router. AO-staplarna i ReportsPage navigerar till filtrerad AO-lista. |
 
 ---
 
@@ -428,9 +428,9 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 |---|----------|--------|--------|-------|
 | 124 | Påminnelseflaggor — CRM visar offerter som: skickade men ej öppnade, öppnade men obesvarade, snart utgångna (konfig. dagar), utgångna, kräver svar på ändringsbegäran | EJ BYGGD | — | OffersPage.js |
 | 125 | Påminnelse — ansvarig kan skicka manuell påminnelse (uppdaterar tokenExpiresAt vid behov). Inga påminnelser skickas efter godkännande, nekande eller återkallande. | EJ BYGGD | — | OfferDetailPage.js |
-| 126 | Analysdata — sparas strukturerat för framtida rapportering: antal skickade, öppningsgrad, godkännandegrad, nekandegrad, svarstid, vanligaste nekandeanledning, offertvärde, vunnet/förlorat värde per kund/ansvarig | EJ BYGGD | — | offerEvents (redan i E1/E5) |
+| 126 | Analysdata — sparas strukturerat för framtida rapportering: antal skickade, öppningsgrad, godkännandegrad, nekandegrad, svarstid, vanligaste nekandeanledning, offertvärde, vunnet/förlorat värde per kund/ansvarig | KLAR | v6 | offerEvents (E1/E5) + ReportsPage Offert-flik (punkt 127) |
 | 127 | ReportsPage — Offert-flik: öppningsgrad, godkännandegrad, vanligaste invändningar, offertvärde vunnet/förlorat, per kund och ansvarig | KLAR | v6 | ReportsPage.js |
-| 128 | Säkerhetsverifiering — fullständig kontroll: inga interna fält i kundvy, tokenkontroll fungerar, rate-limit testad, dubbelkonverteringsskydd verifierat, inga XSS-risker i offertposter | EJ BYGGD | — | — |
+| 128 | Säkerhetsverifiering — fullständig kontroll: inga interna fält i kundvy, tokenkontroll fungerar, rate-limit testad, dubbelkonverteringsskydd verifierat, inga XSS-risker i offertposter | KLAR | — | Automatisk audit (7/8 PASS). Fix: already_answered blockerar nu ALLA svar (inte bara approve) efter godkänd/nekad offert. |
 
 ### Arbetsordning Leverans E (7 commits)
 1. **E1** — Offertversioner + låsta snapshots (schema, state, versionshistorik i UI, låslogik)

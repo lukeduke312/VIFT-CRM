@@ -359,7 +359,7 @@ const ReportsPage = (function () {
       '<div class="ibox">' +
         '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' AO per fastighet (top 10)</div>' +
         (topProp.length ? topProp.map(function (r) {
-          return _bar(_propName(r.key), r.val, maxProp, 'var(--sky)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+          return _bar(_propName(r.key), r.val, maxProp, 'var(--sky)', 'Router.showPage(\'pg-ao\',{propertyId:\'' + r.key + '\'})');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
       '</div>' +
     '</div>' +
@@ -478,7 +478,7 @@ const ReportsPage = (function () {
         '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Timmar per fastighet — ' + range.label + '</div>' +
         '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summerad tid via AO-koppling</div>' +
         (topPropH.length ? topPropH.map(function (r) {
-          return _bar(_propName(r.key), r.val + ' h', maxPropH, 'var(--sky)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+          return _bar(_propName(r.key), r.val + ' h', maxPropH, 'var(--sky)', 'Router.showPage(\'pg-ao\',{propertyId:\'' + r.key + '\'})');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata i perioden</div>') +
       '</div>' +
     '</div>';
@@ -710,7 +710,7 @@ const ReportsPage = (function () {
         '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Fakturerat per fastighet — ' + range.label + '</div>' +
         '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Via AO-koppling på faktura</div>' +
         (topPropRev.length ? topPropRev.map(function (r) {
-          return _bar(_propName(r.key), _fmtKr(r.val), maxPropRev, 'var(--sky)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+          return _bar(_propName(r.key), _fmtKr(r.val), maxPropRev, 'var(--sky)', 'Router.showPage(\'pg-ao\',{propertyId:\'' + r.key + '\'})');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata (fakturor saknar AO-koppling)</div>') +
       '</div>' +
     '</div>' +

@@ -156,9 +156,9 @@ serve(async (req: Request) => {
       }, 400)
     }
 
-    /* Förhindra dubbelgodkännande / dubbelsvar */
+    /* Förhindra alla svar efter att offerten redan fått ett slutgiltigt svar */
     const alreadyAnswered = off.status === 'godkänd' || off.status === 'nekad'
-    if (alreadyAnswered && action === 'approve') {
+    if (alreadyAnswered) {
       return json({ error: 'already_answered', status: off.status }, 410)
     }
 
