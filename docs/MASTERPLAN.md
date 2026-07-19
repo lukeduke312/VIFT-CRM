@@ -406,7 +406,7 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 |---|----------|--------|--------|-------|
 | 116 | Notiser — push till VIFT vid godkännande, ändringsbegäran, nekande | KLAR | — | offer-respond (sendPushToVift — broadcast till alla aktiva) |
 | 117 | Notiser — format: "Offert godkänd" / "Ändring begärd" / "Offert nekad" + kundens namn + offertid | KLAR | — | offer-respond |
-| 118 | Tidslinje-UI — strukturerade händelser visas i offertkortet (befintlig _timelineHtml) | DELVIS | — | PageShells.js (loggar händelser via _logEvt, men ingen dedikerad offerEvent-tidslinje ännu) |
+| 118 | Tidslinje-UI — offerEvents (öppnat/godkänt/ändring/nekat) visas i _timelineHtml kombinerat med interna händelser | KLAR | — | PageShells.js v83 (_timelineHtml — slår ihop off.timeline + state.offerEvents) |
 | 119 | Visningsstatistik — öppningsantal, openedAt, openCount visas i digital länk-panel | KLAR | — | PageShells.js (_digitalLinkPanel) |
 
 ---
@@ -415,10 +415,10 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| 120 | Konvertering — "Skapa arbetsorder från godkänd offert"-knapp visas efter godkännande (standard: manuell bekräftelse av ansvarig) | EJ BYGGD | — | OfferDetailPage.js |
-| 121 | Konvertering — AO ärver: kund, kontakt, fastighet, objekt, offertnummer, offertversion, rubrik, beskrivning, offertposter, priser, material, personal, planering, bilagor, villkor | EJ BYGGD | — | WorkOrderService.js |
-| 122 | Konvertering — bi-direktionell länk: Offert.convertedWorkOrderId + convertedAt ↔ AO.sourceOfferId + sourceOfferVersionId + sourceOfferNumber | EJ BYGGD | — | schema.js, WorkOrderService.js, OfferDetailPage.js |
-| 123 | Dubbelkonverteringsskydd — offert kan inte konverteras till AO mer än en gång av misstag | EJ BYGGD | — | OfferDetailPage.js |
+| 120 | Konvertering — "Skapa arbetsorder från godkänd offert"-knapp (status=godkänd && !workOrderId) | KLAR | — | PageShells.js (OfferDetailPage.createAO CTA) |
+| 121 | Konvertering — AO ärver kund, fastighet, titel, beskrivning, offertposter, priser, checklista | KLAR | — | PageShells.js (OfferDetailPage.createAO) |
+| 122 | Konvertering — off.workOrderId + convertedAt ↔ ao.sourceOfferId + sourceOfferVersionId + sourceOfferNumber | KLAR | — | PageShells.js v83 (createAO) |
+| 123 | Dubbelkonverteringsskydd — kontroll + toast om workOrderId redan satt | KLAR | — | PageShells.js v83 (createAO — tidig return med toast) |
 
 ---
 

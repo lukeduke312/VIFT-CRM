@@ -418,18 +418,30 @@ const OffersPage = {
     const kpiPamind   = (state.offers||[]).filter(o=>!o.deleted&&!o.archived&&o.status==='påmind').length;
     const kpiArkiv    = (state.offers||[]).filter(o=>o.archived&&!o.deleted).length;
     const kpiPapperskorg = (state.offers||[]).filter(o=>o.deleted).length;
+    /* Punkt 124 — "Behöver åtgärd": ändring-begärd + digitala länkflaggor */
+    const now7d = Date.now();
+    const kpiAtgard = (state.offers||[]).filter(o => {
+      if (o.deleted || o.archived) return false;
+      if (o.status === 'ändring-begärd') return true;
+      if (o.status === 'godkänd' && !o.workOrderId) return true;
+      const tokenActive = o.publicToken && !o.tokenRevokedAt && !(o.tokenExpiresAt && new Date(o.tokenExpiresAt).getTime() < now7d);
+      if (tokenActive && !o.openCount && o.sentAt && (now7d - new Date(o.sentAt).getTime()) > 2 * 86400000) return true;
+      if (o.tokenExpiresAt && !o.tokenRevokedAt && new Date(o.tokenExpiresAt).getTime() > now7d && (new Date(o.tokenExpiresAt).getTime() - now7d) < 3 * 86400000) return true;
+      return false;
+    }).length;
     const tabs = [
-      {v:'alla',         l:'Alla',         n:c.total},
-      {v:'utkast',       l:'Utkast',       n:c.utkast},
-      {v:'skickad',      l:'Skickade',     n:c.skickad},
-      {v:'påmind',       l:'Påminda',      n:kpiPamind},
-      {v:'godkänd',      l:'Godkända',     n:c.godkänd},
-      {v:'nekad',        l:'Nekade',       n:c.nekad},
-      {v:'arkiverade',   l:'Arkiverade',   n:kpiArkiv},
-      {v:'papperskorg',  l:'Papperskorg',  n:kpiPapperskorg},
+      {v:'alla',         l:'Alla',                   n:c.total},
+      {v:'utkast',       l:'Utkast',                 n:c.utkast},
+      {v:'skickad',      l:'Skickade',               n:c.skickad},
+      {v:'atgard',       l:'Behöver åtgärd',         n:kpiAtgard, urgent: kpiAtgard > 0},
+      {v:'påmind',       l:'Påminda',                n:kpiPamind},
+      {v:'godkänd',      l:'Godkända',               n:c.godkänd},
+      {v:'nekad',        l:'Nekade',                 n:c.nekad},
+      {v:'arkiverade',   l:'Arkiverade',             n:kpiArkiv},
+      {v:'papperskorg',  l:'Papperskorg',            n:kpiPapperskorg},
     ];
     el.innerHTML = tabs.map(t =>
-      `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')">${t.l}${t.n?` <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
+      `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')" style="${t.urgent?'color:var(--or);':''}">${t.l}${t.n?` <span style="background:${t.urgent?'var(--or)':'rgba(0,0,0,.10)'};${t.urgent?'color:#fff;':''}border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
     ).join('');
   },
 
@@ -480,6 +492,17 @@ const OffersPage = {
       offers = offers.filter(o => o.archived && !o.deleted);
     } else if (filterTab === 'alla') {
       offers = offers.filter(o => !o.archived && !o.deleted);
+    } else if (filterTab === 'atgard') {
+      const nowA = Date.now();
+      offers = offers.filter(o => {
+        if (o.deleted || o.archived) return false;
+        if (o.status === 'ändring-begärd') return true;
+        if (o.status === 'godkänd' && !o.workOrderId) return true;
+        const tokActive = o.publicToken && !o.tokenRevokedAt && !(o.tokenExpiresAt && new Date(o.tokenExpiresAt).getTime() < nowA);
+        if (tokActive && !o.openCount && o.sentAt && (nowA - new Date(o.sentAt).getTime()) > 2 * 86400000) return true;
+        if (o.tokenExpiresAt && !o.tokenRevokedAt && new Date(o.tokenExpiresAt).getTime() > nowA && (new Date(o.tokenExpiresAt).getTime() - nowA) < 3 * 86400000) return true;
+        return false;
+      });
     } else {
       offers = offers.filter(o => !o.archived && !o.deleted && o.status === filterTab);
     }
@@ -576,12 +599,27 @@ const OffersPage = {
     const sentDate   = o.sentAt ? new Date(o.sentAt).getTime() : null;
     const daysSent   = sentDate ? Math.round((now - sentDate) / 86400000) : null;
 
+    /* Tokengiltighet */
+    const tokenActive  = o.publicToken && !o.tokenRevokedAt;
+    const tokenExpired = o.tokenExpiresAt && new Date(o.tokenExpiresAt).getTime() < now;
+    const tokenDaysL   = o.tokenExpiresAt ? Math.round((new Date(o.tokenExpiresAt).getTime() - now) / 86400000) : null;
+
     if (o.status === 'godkänd' && o.workOrderId)  return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Arbetsorder ' + o.workOrderId + ' skapad'};
-    if (o.status === 'godkänd' && !o.workOrderId) return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Godkänd — skapa arbetsorder nu'};
-    if (o.status === 'nekad')    return {cls:'ins-nekad',   txt: ic('x-circle',10) + ' Nekad — följ upp orsak'};
-    if (o.status === 'utgången') return {cls:'ins-nekad',   txt: ic('clock',10) + ' Utgången — förnya offerten'};
-    if (daysLeft !== null && daysLeft >= 0 && daysLeft <= 7) return {cls:'ins-expiry', txt: '⚠️ Giltighet går ut om ' + daysLeft + ' dag' + (daysLeft === 1 ? '' : 'ar')};
-    if ((o.status === 'skickad' || o.status === 'väntar') && daysSent !== null && daysSent > 5) return {cls:'ins-followup', txt: ic('bell',10) + ' Skickad för ' + daysSent + ' dagar sedan — dags att följa upp'};
+    if (o.status === 'godkänd' && !o.workOrderId) return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Godkänd — skapa arbetsorder'};
+    if (o.status === 'nekad')           return {cls:'ins-nekad',   txt: ic('x-circle',10) + ' Nekad — följ upp orsak'};
+    if (o.status === 'ändring-begärd')  return {cls:'ins-followup',txt: ic('edit-3',10) + ' Ändring begärd av kund — åtgärda'};
+    if (o.status === 'utgången')        return {cls:'ins-nekad',   txt: ic('clock',10) + ' Utgången — förnya offerten'};
+    /* Tokenaktiv men kund ej öppnat > 2 dagar — påminn */
+    if (tokenActive && !tokenExpired && o.openCount === 0 && daysSent !== null && daysSent > 2)
+      return {cls:'ins-followup', txt: ic('link',10) + ' Länk skickad men ej öppnad — påminn kunden'};
+    /* Kund har öppnat men inte svarat */
+    if (tokenActive && !tokenExpired && o.openCount > 0 && (o.status === 'skickad' || o.status === 'väntar') && daysSent > 3)
+      return {cls:'ins-followup', txt: ic('eye',10) + ' Kund har öppnat — inväntar svar (' + (o.openCount||0) + ' visn.)'};
+    /* Token snart utgången */
+    if (tokenActive && tokenDaysL !== null && tokenDaysL >= 0 && tokenDaysL <= 3)
+      return {cls:'ins-expiry', txt: '⚠️ Länk utgår om ' + tokenDaysL + ' dag' + (tokenDaysL===1?'':'ar')};
+    if (daysLeft !== null && daysLeft >= 0 && daysLeft <= 7) return {cls:'ins-expiry', txt: '⚠️ Offert utgår om ' + daysLeft + ' dag' + (daysLeft === 1 ? '' : 'ar')};
+    if ((o.status === 'skickad' || o.status === 'väntar') && daysSent !== null && daysSent > 5) return {cls:'ins-followup', txt: ic('bell',10) + ' Skickad för ' + daysSent + ' dagar — dags följa upp'};
     if (o.status === 'skickad')  return {cls:'ins-skickad', txt: ic('send',10) + ' Skickad — inväntar svar'};
     if (o.status === 'väntar')   return {cls:'ins-followup',txt: ic('clock',10) + ' Väntar på svar'};
     if (o.status === 'utkast')   return {cls:'ins-utkast',  txt: ic('edit-3',10) + ' Utkast — färdigställ och skicka'};
@@ -2430,27 +2468,38 @@ const OfferDetailPage = {
       userName: by, timestamp: new Date().toISOString()
     }];
 
+    /* Dubbelkonverteringsskydd (punkt 123) */
+    if (off.workOrderId) {
+      showToast('Offerten är redan konverterad till ' + off.workOrderId);
+      return;
+    }
+
     const ao = WorkOrderService.create({
-      title:          aoTitle,
-      description:    desc,
-      customerId:     off.customerId,
-      propertyId:     off.propertyId || '',
-      address:        off.address    || '',
-      internalNote:   off.internalNote || '',
-      status:         'nytt',
-      priority:       'normal',
-      priceType:      'fast',
-      fixedPrice:     OffersPage._offerExVat(off),
-      offerId:        off.id,
-      estimatedHours: estimatedHours || 0,
+      title:               aoTitle,
+      description:         desc,
+      customerId:          off.customerId,
+      propertyId:          off.propertyId || '',
+      address:             off.address    || '',
+      internalNote:        off.internalNote || '',
+      status:              'nytt',
+      priority:            'normal',
+      priceType:           'fast',
+      fixedPrice:          OffersPage._offerExVat(off),
+      offerId:             off.id,
+      sourceOfferId:       off.parentOfferId || off.id,
+      sourceOfferVersionId:off.id,
+      sourceOfferNumber:   off.id,
+      estimatedHours:      estimatedHours || 0,
       checklist,
-      log:            aoLog,
+      log:                 aoLog,
       staff: [], materials: [], notes: [], timeEntries: []
     });
 
-    off.workOrderId = ao.id;
-    off.updatedAt   = new Date().toISOString();
-    this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert');
+    const now3 = new Date().toISOString();
+    off.workOrderId    = ao.id;
+    off.convertedAt    = now3;
+    off.updatedAt      = now3;
+    this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert v' + (off.versionNumber||1));
 
     // Mark any open follow-up activity for this offer as done
     (state.activities || [])
@@ -2472,9 +2521,22 @@ const OfferDetailPage = {
   },
 
   _timelineHtml(off) {
-    const tl = (off.timeline || []).slice().reverse();
-    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'thumbs-up', reason:'help-circle', tip:'message-square'};
-    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)', tip:'var(--mt)'};
+    /* Kombinera interna händelser (off.timeline) med externa kundhändelser (state.offerEvents) */
+    const tl = (off.timeline || []).slice().map(function(e) { return Object.assign({}, e, {_src:'internal'}); });
+
+    const extEvents = (state.offerEvents || []).filter(function(e) { return e.offerId === off.id; });
+    const _extLabel = { opened:'Kund öppnade länk', approved:'Kund godkände offert', change_requested:'Kund begärde ändring', declined:'Kund nekade offert', revoked:'Länk återkallad', renewed:'Länk förnyad' };
+    extEvents.forEach(function(e) {
+      var desc = (_extLabel[e.type] || e.type) + (e.byCustomer ? ' — ' + e.byCustomer : '') + (e.byEmail ? ' (' + e.byEmail + ')' : '') + (e.comment ? ': ' + e.comment.slice(0,120) : '');
+      tl.push({ ts: e.ts, type: e.type, text: desc, user: e.byCustomer || 'Kund', _src:'customer' });
+    });
+
+    tl.sort(function(a, b) { return (b.ts || '').localeCompare(a.ts || ''); });
+
+    const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'thumbs-up', reason:'help-circle', tip:'message-square',
+      opened:'eye', approved:'check-circle', change_requested:'edit-3', declined:'x-circle', revoked:'x-circle', renewed:'refresh-cw' };
+    const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)', tip:'var(--mt)',
+      opened:'var(--sky)', approved:'var(--gr)', change_requested:'var(--or)', declined:'var(--rd)', revoked:'var(--rd)', renewed:'var(--blue)' };
     const id = off.id;
     const isSent = off.status === 'skickad' || off.status === 'påmind' || off.status === 'väntar';
     return `<div class="card" style="margin-top:8px;">
