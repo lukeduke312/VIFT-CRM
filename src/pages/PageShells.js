@@ -2292,6 +2292,8 @@ const OfferDetailPage = {
 
       ${OfferDetailPage._digitalLinkPanel(off)}
 
+      ${OfferDetailPage._attachmentsPanel(off)}
+
       ${OfferDetailPage._salesAssistantHtml(off)}
 
       ${OfferDetailPage._timelineHtml(off)}`;
@@ -3467,6 +3469,256 @@ ${hasRut?`<div class="rut">
     } else {
       const el = document.getElementById('off-pub-link');
       if (el) { el.select(); document.execCommand('copy'); showToast('Länk kopierad!'); }
+    }
+  },
+
+  /* ── Bilagor — panel ─────────────────────────────────────── */
+  _attachmentsPanel(off) {
+    if (off.archived || off.deleted) return '';
+    const atts = (state.offerAttachments || []).filter(a => a.offerId === off.id && a.active !== false);
+    const locked = !!off.publicToken && !off.tokenRevokedAt;
+
+    const attRows = atts.length === 0
+      ? `<p style="font-size:12px;color:var(--mt);margin:0;text-align:center;padding:12px 0;">Inga bilagor uppladdade</p>`
+      : atts.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).map(a => {
+          const lockedBadge = a.lockedInVersion ? `<span style="font-size:10px;color:var(--or);margin-left:4px;">${ic('lock',10)} låst</span>` : '';
+          const pubBadge = a.includeInPublicView ? `<span style="font-size:10px;color:var(--gr);margin-left:4px;">${ic('eye',10)} kundvy</span>` : '';
+          const pdfBadge = a.includeInCombinedPdf ? `<span style="font-size:10px;color:var(--bl);margin-left:4px;">${ic('file-text',10)} PDF</span>` : '';
+          const sizeLbl = a.sizeBytes > 1048576 ? (a.sizeBytes/1048576).toFixed(1)+' MB' : Math.round(a.sizeBytes/1024)+' KB';
+          return `<div class="att-row">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.displayName||a.originalFileName)}</div>
+              <div style="font-size:10px;color:var(--mt);">${esc(a.mimeType)} · ${sizeLbl}${lockedBadge}${pubBadge}${pdfBadge}</div>
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              <button type="button" class="btn bs" style="font-size:10px;padding:3px 7px;" onclick="OfferDetailPage._downloadAttachment('${esc(a.id)}')">${ic('download',10)}</button>
+              <button type="button" class="btn bs" style="font-size:10px;padding:3px 7px;" onclick="OfferDetailPage._editAttachment('${esc(a.id)}','${esc(off.id)}')">${ic('edit-2',10)}</button>
+              <button type="button" class="btn bs" style="font-size:10px;padding:3px 7px;color:var(--rd);" onclick="OfferDetailPage._deleteAttachment('${esc(a.id)}','${esc(off.id)}')">${ic('trash-2',10)}</button>
+            </div>
+          </div>`;
+        }).join('');
+
+    const lockedNotice = locked ? `<div style="font-size:11px;color:var(--or);display:flex;align-items:center;gap:4px;margin-bottom:8px;">${ic('lock',11)} Bilagor som laddades upp innan digital länk genererades är versionslåsta.</div>` : '';
+
+    return `<div class="card" style="margin-top:8px;">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:6px;">${ic('paperclip',13)} Bilagor (${atts.length})</h3>
+        <div style="display:flex;gap:6px;">
+          ${atts.length > 0 ? `<button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage._generateCombinedPdf('${esc(off.id)}')">${ic('file-text',11)} Samlad PDF</button>` : ''}
+          <button type="button" class="btn bp" style="font-size:11px;" onclick="OfferDetailPage._openUploadDialog('${esc(off.id)}','${esc(off.id)}')">${ic('upload',11)} Ladda upp</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:14px 16px;">
+        ${lockedNotice}
+        <div class="att-dropzone" id="att-drop-${esc(off.id)}"
+          ondragover="event.preventDefault();this.classList.add('att-dropzone-over')"
+          ondragleave="this.classList.remove('att-dropzone-over')"
+          ondrop="event.preventDefault();this.classList.remove('att-dropzone-over');OfferDetailPage._handleFileDrop(event,'${esc(off.id)}','${esc(off.id)}')"
+          onclick="OfferDetailPage._openUploadDialog('${esc(off.id)}','${esc(off.id)}')"
+        >
+          ${ic('upload-cloud',18)} Dra hit filer eller klicka för att välja
+        </div>
+        <input type="file" id="att-file-${esc(off.id)}" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.svg,.tiff,.docx,.xlsx,.pptx,.doc,.xls,.txt,.csv,.zip,.dwg" style="display:none;"
+          onchange="OfferDetailPage._handleFileSelect(event,'${esc(off.id)}','${esc(off.id)}')">
+        <div id="att-upload-progress-${esc(off.id)}" style="margin-top:6px;font-size:11px;color:var(--mt);"></div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+          ${attRows}
+        </div>
+      </div>
+    </div>`;
+  },
+
+  _handleFileDrop(ev, offerId, versionId) {
+    const files = Array.from(ev.dataTransfer.files || []);
+    if (files.length) this._uploadFiles(files, offerId, versionId);
+  },
+
+  _handleFileSelect(ev, offerId, versionId) {
+    const files = Array.from(ev.target.files || []);
+    if (files.length) this._uploadFiles(files, offerId, versionId);
+    ev.target.value = '';
+  },
+
+  _openUploadDialog(offerId, versionId) {
+    const inp = document.getElementById('att-file-' + offerId);
+    if (inp) inp.click();
+  },
+
+  async _uploadFiles(files, offerId, versionId) {
+    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    const progressEl = document.getElementById('att-upload-progress-' + offerId);
+    if (progressEl) progressEl.textContent = 'Laddar upp ' + files.length + ' fil(er)…';
+
+    let uploaded = 0, errors = 0;
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('offerId', offerId);
+      fd.append('versionId', versionId || offerId);
+      fd.append('uploadedBy', (state.currentUser && state.currentUser.id) || '');
+      try {
+        const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-upload', {
+          method: 'POST', headers: { apikey: ANON_KEY }, body: fd
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || res.status);
+        const att = Object.assign(Schema.offerAttachment(), json.attachment || {});
+        if (!state.offerAttachments) state.offerAttachments = [];
+        state.offerAttachments.push(att);
+        uploaded++;
+      } catch(e) {
+        errors++;
+        console.error('[uploadFiles]', file.name, e);
+      }
+    }
+    persist();
+    if (progressEl) progressEl.textContent = uploaded + ' fil(er) uppladdade' + (errors ? ', ' + errors + ' fel' : '') + '.';
+    setTimeout(() => { if (progressEl) progressEl.textContent = ''; }, 4000);
+    Router.refresh();
+  },
+
+  async _downloadAttachment(attachmentId) {
+    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
+    if (!att) return;
+    try {
+      showToast('Hämtar nedladdningslänk…');
+      const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY },
+        body: JSON.stringify({ attachmentId, mode: 'internal' })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || res.status);
+      const a = document.createElement('a');
+      a.href = json.url;
+      a.download = json.fileName || att.originalFileName || 'bilaga';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch(e) {
+      showToast('Fel vid nedladdning: ' + e.message, 'error');
+    }
+  },
+
+  _editAttachment(attachmentId, offerId) {
+    const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
+    if (!att) return;
+    Modal.open({
+      title: 'Redigera bilaga',
+      body: `<div style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label style="font-size:12px;font-weight:500;">Visningsnamn</label>
+          <input id="att-edit-name" class="form-control" style="margin-top:4px;" value="${esc(att.displayName||att.originalFileName)}">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:500;">Beskrivning</label>
+          <textarea id="att-edit-desc" class="form-control" rows="2" style="margin-top:4px;">${esc(att.description||'')}</textarea>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+            <input type="checkbox" id="att-edit-pub" ${att.includeInPublicView!==false?'checked':''}>
+            Synlig i kundvy
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+            <input type="checkbox" id="att-edit-pdf" ${att.includeInCombinedPdf?'checked':''}>
+            Inkludera i samlad PDF
+          </label>
+        </div>
+      </div>`,
+      okLabel: 'Spara',
+      ok: () => {
+        att.displayName          = document.getElementById('att-edit-name').value.trim() || att.originalFileName;
+        att.description          = document.getElementById('att-edit-desc').value.trim();
+        att.includeInPublicView  = document.getElementById('att-edit-pub').checked;
+        att.includeInCombinedPdf = document.getElementById('att-edit-pdf').checked;
+        persist();
+        Router.refresh();
+        showToast('Bilaga uppdaterad');
+      }
+    });
+  },
+
+  async _deleteAttachment(attachmentId, offerId) {
+    const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
+    if (!att) return;
+    const confirmed = await Modal.confirm(`Ta bort bilagan "${esc(att.displayName||att.originalFileName)}"?`);
+    if (!confirmed) return;
+
+    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    try {
+      const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-upload', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY },
+        body: JSON.stringify({ attachmentId, offerId })
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}));
+        throw new Error(j.error || res.status);
+      }
+    } catch(e) {
+      showToast('Fel vid borttagning: ' + e.message, 'error');
+      return;
+    }
+    att.active = false;
+    persist();
+    Router.refresh();
+    showToast('Bilaga borttagen');
+  },
+
+  _generateCombinedPdf(offerId) {
+    const atts = (state.offerAttachments || []).filter(a =>
+      a.offerId === offerId && a.active !== false && a.includeInPublicView !== false
+    );
+    const embeddable = atts.filter(a => a.includeInCombinedPdf &&
+      ['application/pdf','image/jpeg','image/png'].includes(a.mimeType));
+    const separate   = atts.filter(a => !a.includeInCombinedPdf ||
+      !['application/pdf','image/jpeg','image/png'].includes(a.mimeType));
+
+    const sepHtml = separate.length ? `<div style="margin-top:10px;font-size:11px;color:var(--mt);">
+      <strong>Hämtas separat:</strong> ${separate.map(a=>esc(a.displayName||a.originalFileName)).join(', ')}
+    </div>` : '';
+
+    Modal.open({
+      title: 'Samlad PDF',
+      body: `<p style="font-size:12px;margin:0 0 10px;">Genererar en PDF med offertinnehållet plus ${embeddable.length} inbäddningsbara bilagor.</p>
+        ${sepHtml}
+        <p style="font-size:11px;color:var(--mt);margin-top:10px;">DOCX, XLSX och TXT-filer kan inte bäddas in utan konvertering och listas på en sista sida.</p>`,
+      okLabel: 'Generera PDF',
+      ok: () => OfferDetailPage._requestCombinedPdf(offerId)
+    });
+  },
+
+  async _requestCombinedPdf(offerId) {
+    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    try {
+      showToast('Genererar PDF…');
+      const res = await fetch(EDGE_BASE + '/functions/v1/offer-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY },
+        body: JSON.stringify({ offerId })
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}));
+        throw new Error(j.error || res.status);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'offert-' + offerId + '.pdf';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch(e) {
+      showToast('PDF-generering misslyckades: ' + e.message, 'error');
     }
   },
 
