@@ -3449,6 +3449,7 @@ ${hasRut?`<div class="rut">
         </div>
         ${revoked ? `<div style="background:var(--rd-bg,#fef2f2);border:1px solid var(--rd,#dc2626);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--rd,#dc2626);">${ic('alert-circle',10)} Länken är återkallad — kunden kan inte längre öppna den.</div>` : ''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${!revoked && !['godkänd','nekad'].includes(off.status) ? `<button type="button" class="btn bp" style="font-size:11px;" onclick="OfferDetailPage.sendReminder('${esc(off.id)}')">${ic('send',11)} Skicka påminnelse</button>` : ''}
           ${!revoked ? `<button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.revokeDigitalLink('${esc(off.id)}')">${ic('x-circle',11)} Återkalla länk</button>` : ''}
           <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.extendDigitalLink('${esc(off.id)}')">${ic('clock',11)} Förläng giltighetstid</button>
           <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.generateDigitalLink('${esc(off.id)}')">${ic('refresh-cw',11)} Ny länk (ogiltigförklarar gammal)</button>
@@ -3580,6 +3581,73 @@ ${hasRut?`<div class="rut">
           Modal.close();
           this.render({offerId});
           showToast('Giltighetstid förlängd till ' + expiry);
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  /* ── Manuell påminnelse (punkt 125) ────────────────────────
+     Öppnar modal: valfritt förläng giltighetstid + mailto-länk.
+     Blockeras om offerten är godkänd, nekad eller återkallad.
+  ──────────────────────────────────────────────────────────── */
+  sendReminder(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+
+    /* Säkerhetsspärr — ingen påminnelse om slutgiltigt svar */
+    if (['godkänd','nekad'].includes(off.status) || off.tokenRevokedAt) {
+      showToast('Påminnelse kan inte skickas – offerten är ' + (off.tokenRevokedAt ? 'återkallad' : off.status) + '.', 'warning');
+      return;
+    }
+
+    const host    = window.location.origin;
+    const linkUrl = `${host}/public-offer.html?t=${off.publicToken}`;
+    const cuName  = off.customerName || '';
+    const email   = off.contactEmail || '';
+    const title   = off.title        || off.id;
+
+    const subject = encodeURIComponent(`Påminnelse: Offert "${title}"`);
+    const body    = encodeURIComponent(
+      `Hej${cuName ? ' ' + cuName : ''},\n\nVi vill påminna om att vi väntar på svar på offerten "${title}".\n\nDu kan öppna och svara på offerten via länken nedan:\n${linkUrl}\n\nHör gärna av dig om du har frågor.\n\nMed vänliga hälsningar`
+    );
+    const mailto = `mailto:${email}?subject=${subject}&body=${body}`;
+
+    Modal.open({
+      title: ic('send',14) + ' Skicka påminnelse',
+      body: `<div style="display:flex;flex-direction:column;gap:12px;">
+        <p style="font-size:13px;margin:0;">Kund: <strong>${esc(cuName || '–')}</strong><br>E-post: <strong>${esc(email || '–')}</strong></p>
+        <div class="fg">
+          <label>Förläng giltighetstid (valfritt)</label>
+          <select id="remind-extend">
+            <option value="">Behåll nuvarande utgångsdatum</option>
+            <option value="7">Förläng 7 dagar från idag</option>
+            <option value="14">Förläng 14 dagar från idag</option>
+            <option value="30">Förläng 30 dagar från idag</option>
+          </select>
+        </div>
+        <div style="font-size:12px;color:var(--mt);">
+          ${ic('info',11)} Klicka "Skicka påminnelse" för att öppna din e-postklient med förifylt meddelande.
+          Länken till offerten inkluderas automatiskt.
+        </div>
+        <div style="background:var(--bg2,var(--bg));border:1px solid var(--br);border-radius:6px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">${esc(linkUrl)}</div>
+      </div>`,
+      buttons: [
+        { label: ic('send',12) + ' Skicka påminnelse', cls: 'btn bp', onClick: () => {
+          const days = parseInt(document.getElementById('remind-extend')?.value || '0', 10);
+          if (days > 0) {
+            const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
+            off.tokenExpiresAt = expiry + 'T23:59:59.000Z';
+            off.updatedAt      = new Date().toISOString();
+            this._logEvt(off, 'send', 'Giltighetstid förlängd vid påminnelse — ny utgång: ' + expiry);
+          }
+          this._logEvt(off, 'send', 'Manuell påminnelse skickad till ' + (email || cuName || 'kund'));
+          off.updatedAt = new Date().toISOString();
+          persist();
+          Modal.close();
+          window.open(mailto, '_blank');
+          this.render({offerId});
+          showToast('Påminnelse öppnad i e-postklient');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
