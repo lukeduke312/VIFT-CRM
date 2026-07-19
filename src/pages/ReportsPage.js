@@ -1,5 +1,5 @@
 /**
- * ReportsPage v4 — Fas 4C: Analys och rapportering
+ * ReportsPage v5 — Fas 4C: Analys och rapportering
  * Flikar: översikt, arbetsordrar, tid, avvikelser, ekonomi, material, serviceintervall
  * Gemensamt periodfilter, datakvalitetsvarningar, klickbara KPI:er.
  *
@@ -171,12 +171,30 @@ const ReportsPage = (function () {
     '</div>';
   }
 
-  /* ── Datakvalitetsvarning ────────────────────────────────────────── */
+  /* ── Datakvalitetsvarning ────────────────────────────────────────────
+     issues: array av antingen strängar ELLER {msg: string, items: string[]}
+     items renderas som expanderbar <details>-lista (inget JS behövs).
+  ──────────────────────────────────────────────────────────────────── */
 
   function _qualityBanner(issues) {
     if (!issues || !issues.length) return '';
     var rows = issues.map(function (i) {
-      return '<li style="margin:0 0 2px 16px;">' + esc(i) + '</li>';
+      if (typeof i === 'string') {
+        return '<li style="margin:0 0 2px 14px;">' + esc(i) + '</li>';
+      }
+      /* Strukturerad: {msg, items[]} → expanderbar detalj */
+      var detail = '';
+      if (i.items && i.items.length) {
+        var listItems = i.items.slice(0, 25).map(function (x) {
+          return '<li style="margin:0 0 1px 14px;font-size:10px;color:var(--mt);">' + esc(x) + '</li>';
+        }).join('');
+        if (i.items.length > 25) listItems += '<li style="margin:0 0 1px 14px;font-size:10px;color:var(--mt);">… och ' + (i.items.length - 25) + ' till</li>';
+        detail = '<details style="display:inline;">' +
+          '<summary style="cursor:pointer;list-style:none;color:var(--blue);text-decoration:underline dotted;font-size:10px;margin-left:6px;">Visa poster</summary>' +
+          '<ul style="margin:4px 0 0 0;padding:0;">' + listItems + '</ul>' +
+          '</details>';
+      }
+      return '<li style="margin:0 0 4px 14px;">' + esc(i.msg) + detail + '</li>';
     }).join('');
     return '<div style="background:var(--or-bg,#fff8ec);border:1px solid var(--or,#f59e0b);border-radius:6px;padding:8px 12px;margin-bottom:12px;">' +
       '<div style="font-size:11px;font-weight:700;color:var(--or,#f59e0b);margin-bottom:4px;">' + _ic('alert-triangle', 11) + ' Datakvalitet — poster som inte kunnat räknas fullt ut</div>' +
@@ -264,7 +282,7 @@ const ReportsPage = (function () {
       _kpi('alert-circle',  'Försenade',            forsen.length,            'passerat planerat datum',         'Router.showPage(\'pg-ao\',{filter:\'forsenad\'})') +
       _kpi('receipt',       'Fakturerat ' + range.label, revPeriod ? _fmtKr(revPeriod) : '—', 'Källa: state.invoices.amount · ej makulerade',      'ReportsPage._setTab(\'ekonomi\')') +
       _kpi('alert-triangle','Klara ej fakturerade', klar_ej_fak.length + ' st', 'belopp beräknas ej utan prissättning', 'ReportsPage._setTab(\'ekonomi\')') +
-      _kpi('percent',       'Faktureringsgr. (AO)', fakGrad + ' %',           faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat',  'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('percent',       'Andel fakturerade AO', fakGrad + ' %',           faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat',  'ReportsPage._setTab(\'ekonomi\')') +
       _kpi('clock',         'Tim ' + range.label,   Math.round(timmar) + ' h', 'registrerad tid · ' + range.label,  'ReportsPage._setTab(\'tid\')') +
       _kpi('alert-triangle','Öppna avvikelser',     avvNoAO.length,           'utan arbetsorder',               'Router.showPage(\'pg-rondering\',{})') +
     '</div>' +
@@ -289,11 +307,11 @@ const ReportsPage = (function () {
     });
 
     /* Kvalitetsvarningar */
-    var noCustomer  = inPeriod.filter(function (a) { return !a.customerId; }).length;
-    var noProperty  = inPeriod.filter(function (a) { return !a.propertyId; }).length;
-    var qualIssues  = [];
-    if (noCustomer) qualIssues.push(noCustomer + ' AO saknar kundkoppling (kan inte visas i kund-grafer)');
-    if (noProperty) qualIssues.push(noProperty + ' AO saknar fastighetskoppling (kan inte visas i fastighets-grafer)');
+    var noCuAOs    = inPeriod.filter(function (a) { return !a.customerId; });
+    var noPropAOs  = inPeriod.filter(function (a) { return !a.propertyId; });
+    var qualIssues = [];
+    if (noCuAOs.length)   qualIssues.push({ msg: noCuAOs.length + ' AO saknar kundkoppling (visas ej i kund-grafer)', items: noCuAOs.map(function(a){ return a.id + (a.title ? ' – ' + a.title.slice(0,30) : ''); }) });
+    if (noPropAOs.length) qualIssues.push({ msg: noPropAOs.length + ' AO saknar fastighetskoppling (visas ej i fastighets-grafer)', items: noPropAOs.map(function(a){ return a.id + (a.title ? ' – ' + a.title.slice(0,30) : ''); }) });
 
     /* Per kund */
     var byCu    = _groupBy(inPeriod, function (a) { return a.customerId; });
@@ -375,9 +393,9 @@ const ReportsPage = (function () {
     var inPeriod = entries.filter(function (e) { return _inPeriod(e.date || e.startDate, range); });
 
     /* Datakvalitet */
-    var noStaff = inPeriod.filter(function (e) { return !e.staffId; }).length;
+    var noStaffE = inPeriod.filter(function (e) { return !e.staffId; });
     var qualIssues = [];
-    if (noStaff) qualIssues.push(noStaff + ' tidsregistreringar saknar personal (visas ej i personalgrafer)');
+    if (noStaffE.length) qualIssues.push({ msg: noStaffE.length + ' tidsregistreringar saknar personal (visas ej i personalgrafer)', items: noStaffE.map(function(e){ return (e.workOrderId || e.id) + (e.date ? ' · ' + e.date : ''); }) });
 
     /* Per personal */
     var byStaff   = _groupBy(inPeriod, function (e) { return e.staffId; });
@@ -478,8 +496,10 @@ const ReportsPage = (function () {
     var noType  = inPeriod.filter(function (a) { return !a.issueType; }).length;
     var noProp  = inPeriod.filter(function (a) { return !a.propertyId; }).length;
     var qualIssues = [];
-    if (noType) qualIssues.push(noType + ' avvikelser saknar feltyp');
-    if (noProp) qualIssues.push(noProp + ' avvikelser saknar fastighetskoppling');
+    var noTypeAvv = inPeriod.filter(function (a) { return !a.issueType; });
+    var noPropAvv = inPeriod.filter(function (a) { return !a.propertyId; });
+    if (noTypeAvv.length) qualIssues.push({ msg: noTypeAvv.length + ' avvikelser saknar feltyp', items: noTypeAvv.map(function(a){ return a.id + (a.description ? ' – ' + a.description.slice(0,30) : ''); }) });
+    if (noPropAvv.length) qualIssues.push({ msg: noPropAvv.length + ' avvikelser saknar fastighetskoppling', items: noPropAvv.map(function(a){ return a.id + (a.description ? ' – ' + a.description.slice(0,30) : ''); }) });
 
     /* Per fastighet (öppna, alla perioder) */
     var byProp  = _groupBy(oppna, function (a) { return a.propertyId; });
@@ -652,7 +672,7 @@ const ReportsPage = (function () {
     var noInvLink = fakInvs.filter(function (i) { return !i.workOrderId; }).length;
     var qualIssues = [];
     if (noMatPrice) qualIssues.push(noMatPrice + ' materialposter saknar pris (räknas ej i materialkostnad)');
-    if (noInvLink)  qualIssues.push(noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)');
+    if (noInvLink)  qualIssues.push({ msg: noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)', items: fakInvs.filter(function(i){return !i.workOrderId;}).map(function(i){ return (i.id||'?') + (i.invoiceDate ? ' · ' + i.invoiceDate : '') + (i.amount ? ' · ' + parseFloat(i.amount).toFixed(0) + ' kr' : ''); }) });
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
@@ -660,13 +680,13 @@ const ReportsPage = (function () {
     '<div style="background:var(--bg2,var(--br));border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--mt);">' +
       '<strong>Intäktsdefinition:</strong> Fakturerat = summa av <code>state.invoices[].amount</code> med invoiceDate i perioden, exkl. makulerade. ' +
       'Klara ej fakturerade AO och pågående ordervärde visas som <em>antal</em> — belopp kräver summering av material + tid × timpris.<br>' +
-      '<strong>Faktureringsgrad:</strong> Antal AO med status "fakturerad" / (antal AO med status "klar" + "fakturerad"). ' +
+      '<strong>Andel fakturerade AO (antal-baserat):</strong> Antal AO med status "fakturerad" / (antal AO med status "klar" + "fakturerad"). ' +
       'Inte ett värdebaserat mått — saknar prissättning per AO.' +
     '</div>' +
     '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
       _kpi('trending-up',   'Fakturerat ' + range.label,    totalFak ? _fmtKr(totalFak) : '—',         'Källa: fakturor i perioden (ej makulerade)') +
       _kpi('trending-up',   'Fakturerat totalt',            totalAllFak ? _fmtKr(totalAllFak) : '—',    'alla perioder') +
-      _kpi('percent',       'Faktureringsgr. (antal AO)',   fakGrad + ' %',                              faktureradeCnt + ' av ' + allKlara.length + ' klara · obs: antal-baserat') +
+      _kpi('percent',       'Andel fakturerade AO',   fakGrad + ' %',                              faktureradeCnt + ' av ' + allKlara.length + ' klara · obs: antal-baserat') +
       _kpi('check-circle',  'Klara ej fakturerade',         klaraEjFak.length + ' AO',                  'belopp beräknas ej utan prissättning',      'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
       _kpi('clock',         'Pågående ordrar',              pagaende.length + ' AO',                     'status pågående/planerad · inget belopp',   'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
       _kpi('shopping-cart', 'Materialkostnad (totalt)',      matCost ? _fmtKr(matCost) : '—',            'alla AO, alla perioder') +
@@ -913,9 +933,10 @@ const ReportsPage = (function () {
 
   function _exportAll(btn) {
     if (typeof ImportExportService !== 'undefined') {
-      /* Gör aktuell period tillgänglig för exportFn */
+      /* Gör aktiv period och flik tillgängliga för exportFn i ImportExportConfigs.report */
       if (typeof IMPORT_EXPORT_CONFIGS !== 'undefined' && IMPORT_EXPORT_CONFIGS.report) {
         IMPORT_EXPORT_CONFIGS.report._currentRange = _periodRange();
+        IMPORT_EXPORT_CONFIGS.report._currentTab   = _tab;
       }
       ImportExportService.showExportMenu('report', btn);
     }

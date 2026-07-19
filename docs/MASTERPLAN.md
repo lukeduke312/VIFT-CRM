@@ -134,6 +134,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
 | 81 | Kontrakthantering (avtal, betalningsplan, villkor) | EJ BYGGD | Medel | ContractsPage |
 | 82 | Mobil-optimerad offline-läge (SW fallback) | EJ BYGGD | Låg | sw.js, IndexedDB |
+| 129 | Klickbara rapportunderlag — öppna filtrerad lista med aktivt filter och period | EJ BYGGD | Medel | WorkOrdersPage (behöver propertyId/objectId-filter via Router), avvikelselista, serviceintervallista |
 
 ---
 
@@ -161,12 +162,25 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 - **Klickbara staplar → fastighetsfiltrerad AO-lista:** Klick navigerar till fastighetskort (pg-property-detail), inte till filtrerad AO-lista, eftersom WorkOrdersPage saknar propertyId-filterparameter via Router.
 - **Intäktkälla:** `state.invoices[].amount` med `invoiceDate` i period, exkl. makulerade. Inte `workOrders` eller `quotes`.
 
+### Datumfält per register (dokumenterat i kod och exportFn)
+| Register | Datumfält för period-filter | Kommentar |
+|----------|-----------------------------|-----------|
+| Arbetsordrar (AO) | `scheduledDate` → `createdAt` → `date` | Utförandedatum i första hand |
+| Tidsregistreringar | `date` → `startDate` | Utförandedatum |
+| Fakturor (intäkt) | `invoiceDate` → `date` | Fakturadatum, exkl. makulerade |
+| Avvikelser | `date` → `createdAt` | Rapportdatum |
+| Serviceintervall | `nextDate` | Förfallodatum (ej period-filtrerat — visas alltid) |
+
+### Klickbara rapportunderlag (kvarvarande uppgift, punkt 129)
+Staplarna i ReportsPage navigerar i nuläget till kundkort/fastighetskort, inte till filtrerade listor.
+Se punkt 129 nedan för fullständig spec.
+
 ### Vad som behöver testas
 - [ ] Webbläsarverifiering (Chrome, Safari, iOS, iPad, Edge)
 - [ ] Periodfilter testat med verkliga data (flera månader, kvartal, år)
-- [ ] Datakvalitetsbanners visas korrekt med saknad data
+- [ ] Datakvalitetsbanners med "Visa poster"-funktion fungerar
 - [ ] Klick på staplar navigerar till rätt sida
-- [ ] Export (XLSX) respekterar vald period och innehåller rätt data
+- [ ] Export (XLSX) respekterar vald period, korrekt filnamn (VIFT_rapport_{flik}_{from}_{to}.xlsx)
 - [ ] Beläggningsfärger fungerar korrekt vid >100%
 - [ ] Ekonomi-beräkningar verifierade mot faktiska fakturor i test-data
 
@@ -296,6 +310,26 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 - Utgången offert visar tydligt meddelande, inga offertuppgifter
 - Återkallad länk visar inget offertinnehåll
 - Kunden har nollåtkomst till övrig CRM-data
+
+---
+
+### Del E2b — Bilagor per offertversion
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| E2b-1 | Schema — offerAttachment: id, offerVersionId, name, fileType, fileSize, url/path, sortOrder, addedAt | EJ BYGGD | — | schema.js |
+| E2b-2 | CRM-UI — lägg till / ta bort / sortera bilagor på en offertversion (drag-drop ordning) | EJ BYGGD | — | OfferDetailPage.js |
+| E2b-3 | Låsning — exakt bilageuppsättning (inkl. sortOrder) låses per offertversion vid utskick; ändrad bilaga → ny version | EJ BYGGD | — | OfferDetailPage.js |
+| E2b-4 | Kundvy — bilagor listas efter offertinnehållet i vald sortordning; varje bilaga kan öppnas separat | EJ BYGGD | — | PublicOfferPage.js |
+| E2b-5 | Samlad offert-PDF — möjlighet att generera en PDF med offert + bilagor i en enda fil (via backend/Edge Function) | EJ BYGGD | — | supabase/functions/offer-pdf |
+| E2b-6 | Token-kontroll för bilagor — bilagor servas enbart via giltig offerttoken; ingen publik URL utan auth | EJ BYGGD | — | supabase/functions/offer-token-validate |
+
+**Bilage-regler:**
+- Bilagor kopplas till en specifik offerVersionId, inte till offerId
+- sortOrder-fältet styr visningsordning i kundvy och PDF
+- Ändrad bilaga (ny fil, ny ordning, borttagen) = ny offertversion innan utskick
+- Tillåtna typer: bilder (JPEG, PNG, WebP), PDF, eventuellt XLSX (konfigurbart)
+- Känsliga interna dokument (kalkyl, TB, underlag) ska aldrig ingå i kundbilagor
 
 ---
 

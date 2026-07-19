@@ -876,54 +876,105 @@ IMPORT_EXPORT_CONFIGS.report = {
   importable: false,
   fields: [],
   exportFn: function (opts) {
+    /* Läs aktiv period och flik satta av ReportsPage._exportAll() */
+    var cfg      = IMPORT_EXPORT_CONFIGS.report;
+    var range    = cfg._currentRange || { from: '', to: '', label: 'alla' };
+    var activeTab = cfg._currentTab  || 'alla';
+
     var sheets = [];
     var ao    = (typeof state !== 'undefined' ? state.workOrders  || [] : []).filter(function(a){ return !a.deleted && !a.archived; });
     var te    = (typeof state !== 'undefined' ? state.timeEntries || [] : []);
     var avv   = (typeof state !== 'undefined' ? state.avvikelser  || [] : []);
+    var invs  = (typeof state !== 'undefined' ? state.invoices    || [] : []);
     var cus   = (typeof state !== 'undefined' ? state.customers   || [] : []);
     var props = (typeof state !== 'undefined' ? state.properties  || [] : []);
     var staff = (typeof state !== 'undefined' ? state.staff       || [] : []);
 
+    function inPeriod(d) {
+      if (!range.from || !d) return true; /* om period ej satt, ta med allt */
+      var ds = d.slice(0, 10);
+      return ds >= range.from && ds <= range.to;
+    }
     function cuName(id) { var c = cus.find(function(x){return x.id===id;}); return c ? (c.name||c.id) : id||''; }
     function propName(id) { var p = props.find(function(x){return x.id===id;}); return p ? (p.name||p.address||p.id) : id||''; }
-    function staffName(id) { var s = staff.find(function(x){return x.id===id;}); return s ? (s.firstName+' '+s.lastName).trim() : id||''; }
+    function staffName(id) { var s = staff.find(function(x){return x.id===id;}); return s ? ((s.firstName||'')+' '+(s.lastName||'')).trim() : id||''; }
 
-    /* --- Sheet 1: AO per status --- */
+    /* Filtrera per register med korrekt datumfält:
+       AO       → scheduledDate (utförandedatum) eller createdAt
+       Tid      → date / startDate (utförandedatum)
+       Faktura  → invoiceDate (fakturadatum)
+       Avvikelse → date / createdAt (rapportdatum)
+       Serviceintervall → nextDate (förfallodatum) */
+    var aoInPeriod   = ao.filter(function(a){ return inPeriod(a.scheduledDate || a.createdAt || a.date); });
+    var teInPeriod   = te.filter(function(e){ return inPeriod(e.date || e.startDate); });
+    var invInPeriod  = invs.filter(function(i){ return inPeriod(i.invoiceDate || i.date) && i.status !== 'makulerad'; });
+    var avvInPeriod  = avv.filter(function(a){ return inPeriod(a.date || a.createdAt); });
+
+    /* Periodrad som första rad i alla sheets */
+    var periodInfo = 'Period: ' + range.label + ' (' + (range.from || '–') + ' – ' + (range.to || '–') + ')';
+
+    /* ── Sheet 1: AO per status (period) */
     var statusCount = {};
-    ao.forEach(function(a){ statusCount[a.status] = (statusCount[a.status]||0) + 1; });
-    var s1rows = Object.keys(statusCount).map(function(k){ return [k, statusCount[k]]; });
-    sheets.push({ name: 'AO per status', headers: ['Status','Antal'], rows: s1rows });
+    aoInPeriod.forEach(function(a){ statusCount[a.status] = (statusCount[a.status]||0) + 1; });
+    sheets.push({ name: 'AO per status', headers: ['Status','Antal','Period'], rows:
+      [[periodInfo, '', '']].concat(Object.keys(statusCount).map(function(k){ return [k, statusCount[k], range.label]; })) });
 
-    /* --- Sheet 2: AO per kund (topp 20) --- */
+    /* ── Sheet 2: AO per kund (period, topp 30) */
     var cuCount = {};
-    ao.forEach(function(a){ if(a.customerId){ cuCount[a.customerId]=(cuCount[a.customerId]||0)+1; } });
-    var cuRows = Object.keys(cuCount).sort(function(a,b){return cuCount[b]-cuCount[a];}).slice(0,20)
-      .map(function(id){ return [cuName(id), cuCount[id]]; });
-    sheets.push({ name: 'AO per kund', headers: ['Kund','Antal AO'], rows: cuRows });
+    aoInPeriod.forEach(function(a){ if(a.customerId){ cuCount[a.customerId]=(cuCount[a.customerId]||0)+1; } });
+    sheets.push({ name: 'AO per kund', headers: ['Kund','Antal AO','Period'], rows:
+      [[periodInfo,'','']].concat(Object.keys(cuCount).sort(function(a,b){return cuCount[b]-cuCount[a];}).slice(0,30)
+        .map(function(id){ return [cuName(id), cuCount[id], range.label]; })) });
 
-    /* --- Sheet 3: Tid per personal (tim) --- */
-    var staffMin = {};
-    te.forEach(function(t){ if(t.staffId){ staffMin[t.staffId]=(staffMin[t.staffId]||0)+(t.minutes||0); } });
-    var staffRows = Object.keys(staffMin).sort(function(a,b){return staffMin[b]-staffMin[a];})
-      .map(function(id){ return [staffName(id), Math.round(staffMin[id]/60*10)/10]; });
-    sheets.push({ name: 'Tid per personal', headers: ['Personal','Tim totalt'], rows: staffRows });
+    /* ── Sheet 3: AO per fastighet (period, topp 30) */
+    var propCount = {};
+    aoInPeriod.forEach(function(a){ if(a.propertyId){ propCount[a.propertyId]=(propCount[a.propertyId]||0)+1; } });
+    sheets.push({ name: 'AO per fastighet', headers: ['Fastighet','Antal AO','Period'], rows:
+      [[periodInfo,'','']].concat(Object.keys(propCount).sort(function(a,b){return propCount[b]-propCount[a];}).slice(0,30)
+        .map(function(id){ return [propName(id), propCount[id], range.label]; })) });
 
-    /* --- Sheet 4: Avvikelser per fastighet --- */
+    /* ── Sheet 4: Tid per personal (period, tim via duration-fält) */
+    var staffHours = {};
+    teInPeriod.forEach(function(t){
+      if(t.staffId){
+        var h = parseFloat(t.duration) || (t.minutes ? t.minutes/60 : 0);
+        staffHours[t.staffId] = (staffHours[t.staffId]||0) + h;
+      }
+    });
+    sheets.push({ name: 'Tid per personal', headers: ['Personal','Timmar','Period'], rows:
+      [[periodInfo,'','']].concat(Object.keys(staffHours).sort(function(a,b){return staffHours[b]-staffHours[a];})
+        .map(function(id){ return [staffName(id), Math.round(staffHours[id]*10)/10, range.label]; })) });
+
+    /* ── Sheet 5: Ekonomi — fakturerat (period) */
+    var cuRev = {};
+    invInPeriod.forEach(function(i){ if(i.customerId){ cuRev[i.customerId]=(cuRev[i.customerId]||0)+(parseFloat(i.amount)||0); } });
+    var totalFak = invInPeriod.reduce(function(s,i){ return s+(parseFloat(i.amount)||0); }, 0);
+    sheets.push({ name: 'Fakturerat per kund', headers: ['Kund','Fakturerat (kr)','Period'], rows:
+      [[periodInfo, totalFak.toFixed(2), ''], ['Kund (topp 30)','Belopp',range.label]].concat(
+        Object.keys(cuRev).sort(function(a,b){return cuRev[b]-cuRev[a];}).slice(0,30)
+          .map(function(id){ return [cuName(id), cuRev[id].toFixed(2), range.label]; })) });
+
+    /* ── Sheet 6: Avvikelser per fastighet (period) */
     var avvProp = {};
-    avv.forEach(function(a){ if(a.propertyId){ avvProp[a.propertyId]=(avvProp[a.propertyId]||0)+1; } });
-    var avvRows = Object.keys(avvProp).sort(function(a,b){return avvProp[b]-avvProp[a];})
-      .map(function(id){ return [propName(id), avvProp[id]]; });
-    sheets.push({ name: 'Avvikelser per fastighet', headers: ['Fastighet','Antal avvikelser'], rows: avvRows });
+    avvInPeriod.forEach(function(a){ if(a.propertyId){ avvProp[a.propertyId]=(avvProp[a.propertyId]||0)+1; } });
+    sheets.push({ name: 'Avvikelser per fastighet', headers: ['Fastighet','Antal avvikelser','Period'], rows:
+      [[periodInfo,'','']].concat(Object.keys(avvProp).sort(function(a,b){return avvProp[b]-avvProp[a];})
+        .map(function(id){ return [propName(id), avvProp[id], range.label]; })) });
 
-    /* --- Sheet 5: Avvikelser per feltyp --- */
+    /* ── Sheet 7: Avvikelser per feltyp (period) */
     var avvType = {};
-    avv.forEach(function(a){ var t=a.issueType||a.type||'okänd'; avvType[t]=(avvType[t]||0)+1; });
-    var avvTypeRows = Object.keys(avvType).sort(function(a,b){return avvType[b]-avvType[a];})
-      .map(function(t){ return [t, avvType[t]]; });
-    sheets.push({ name: 'Avvikelser per feltyp', headers: ['Feltyp','Antal'], rows: avvTypeRows });
+    avvInPeriod.forEach(function(a){ var t=a.issueType||a.type||'okänd'; avvType[t]=(avvType[t]||0)+1; });
+    sheets.push({ name: 'Avvikelser per feltyp', headers: ['Feltyp','Antal','Period'], rows:
+      [[periodInfo,'','']].concat(Object.keys(avvType).sort(function(a,b){return avvType[b]-avvType[a];})
+        .map(function(t){ return [t, avvType[t], range.label]; })) });
 
-    /* Returnera för XLSX-export (headers+rows används ej direkt — returneras som sheets) */
-    return { headers: ['Rapport'], rows: [['Se flikar i XLSX']], _sheets: sheets };
+    /* Filnamn: VIFT_rapport_{flik}_{from}_{to}.xlsx */
+    var tabSlug  = activeTab.replace(/[^a-zåäö0-9]+/gi, '-');
+    var fromSlug = range.from || new Date().toISOString().slice(0, 10);
+    var toSlug   = range.to   || fromSlug;
+    var filename = 'VIFT_rapport_' + tabSlug + '_' + fromSlug + '_' + toSlug + '.xlsx';
+
+    return { headers: ['Rapport'], rows: [['Se flikar i XLSX']], _sheets: sheets, _filename: filename };
   }
 };
 
@@ -1250,7 +1301,8 @@ Object.assign(ImportExportService, {
         fn: function () {
           var d = ImportExportService.buildExportRowsForType(entityType, recs);
           var sheets = d._sheets || [{ name: cfg.label, headers: d.headers, rows: d.rows }];
-          ImportExportService.downloadXLSX(base + tag + '-' + ts + '.xlsx', sheets);
+          var xlsxFilename = d._filename || (base + tag + '-' + ts + '.xlsx');
+          ImportExportService.downloadXLSX(xlsxFilename, sheets);
           var total = sheets.reduce(function(s,sh){ return s + sh.rows.length; }, 0);
           if (typeof showToast !== 'undefined') showToast('Exporterar rapport som XLSX (' + sheets.length + ' flikar)…');
         }
