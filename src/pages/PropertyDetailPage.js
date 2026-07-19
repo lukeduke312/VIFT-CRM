@@ -114,6 +114,7 @@ const PropertyDetailPage = {
       <div class="ftabs" id="prop-tabs" style="margin-bottom:8px;">
         <button class="ft ${this.activeTab==='overview'  ?'on':''}" onclick="PropertyDetailPage.switchTab('overview')">Översikt</button>
         <button class="ft ${this.activeTab==='contact'   ?'on':''}" onclick="PropertyDetailPage.switchTab('contact')">Kontakt${contacts.length?` (${contacts.length})`:''}</button>
+        <button class="ft ${this.activeTab==='ansvariga' ?'on':''}" onclick="PropertyDetailPage.switchTab('ansvariga')">${ic('user-check',11)} Ansvariga</button>
         <button class="ft ${this.activeTab==='tech'      ?'on':''}" onclick="PropertyDetailPage.switchTab('tech')">Teknisk info</button>
         <button class="ft ${this.activeTab==='service'   ?'on':''}" onclick="PropertyDetailPage.switchTab('service')">Service${siList.length?` (${siList.length})`:''}${overdueServices>0?` <span class="si-tab-alert">!</span>`:''}</button>
         <button class="ft ${this.activeTab==='ao'        ?'on':''}" onclick="PropertyDetailPage.switchTab('ao')">Arbetsorder${aos.length?` (${aos.length})`:''}</button>
@@ -126,6 +127,7 @@ const PropertyDetailPage = {
 
       <div id="prop-tab-overview"   ${this.activeTab!=='overview'   ?'style="display:none"':''}>${this._renderOverview(p, insp, siList)}</div>
       <div id="prop-tab-contact"    ${this.activeTab!=='contact'    ?'style="display:none"':''}>${this._renderContactTab(p, contacts)}</div>
+      <div id="prop-tab-ansvariga"  ${this.activeTab!=='ansvariga'  ?'style="display:none"':''}>${this._renderAnsvarigaTab(p)}</div>
       <div id="prop-tab-tech"       ${this.activeTab!=='tech'       ?'style="display:none"':''}>${this._renderTechTab(tech, insp)}</div>
       <div id="prop-tab-service"    ${this.activeTab!=='service'    ?'style="display:none"':''}>${this._renderServiceTab(p)}</div>
       <div id="prop-tab-ao"         ${this.activeTab!=='ao'         ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
@@ -196,7 +198,7 @@ const PropertyDetailPage = {
 
   switchTab(tab) {
     this.activeTab = tab;
-    const tabs = ['overview','contact','tech','service','ao','recurring','rondering','objects','images','notes'];
+    const tabs = ['overview','contact','ansvariga','tech','service','ao','recurring','rondering','objects','images','notes'];
     tabs.forEach(t => {
       const el = document.getElementById(`prop-tab-${t}`);
       if (el) el.style.display = t === tab ? '' : 'none';
@@ -1067,6 +1069,111 @@ const PropertyDetailPage = {
         : `<div class="si-hist-list">${rows.join('')}</div>`,
       buttons: [{ label: 'Stäng', cls: 'bs', fn: 'Modal.close()' }]
     });
+  },
+
+  /* ── Tab: Ansvariga & kontakter (Leverans D) ─────────── */
+
+  _renderAnsvarigaTab(p) {
+    const contacts = PropertyContactService.getForProperty(p.id);
+    const roles    = PropertyContactService.activeRoles();
+    const canEdit  = Auth.can('properties_manage');
+
+    const rows = contacts.length
+      ? contacts.map(c => `
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--br);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;">${esc(c.personNameSnapshot||'—')}</div>
+              <div style="font-size:11px;color:var(--mt);">${esc(c.roleNameSnapshot||'—')}${c.isPrimary?' · Primär':''}${c.personPhoneSnapshot?' · '+esc(c.personPhoneSnapshot):''}</div>
+              ${c.notes?`<div style="font-size:11px;color:var(--mt);">${esc(c.notes)}</div>`:''}
+            </div>
+            ${c.isPrimary?`<span class="bdg bdg-blue" style="font-size:9px;">Primär</span>`:''}
+            ${canEdit?`
+              <button class="btn bxs bs" onclick="PropertyDetailPage.openEditPropContact('${c.id}','${p.id}')">${ic('pencil',11)}</button>
+              <button class="btn bxs bd" onclick="PropertyDetailPage.removePropContact('${c.id}','${p.id}')">${ic('trash',11)}</button>
+            `:''}
+          </div>`)
+        .join('')
+      : `<p style="font-size:12px;color:var(--mt);padding:4px 0;">Inga ansvariga kopplade.</p>`;
+
+    return `
+      <div class="card">
+        <div class="card-header">
+          <h3>${ic('user-check',14)} Ansvariga & kontakter</h3>
+          ${canEdit ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddPropContact('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
+        </div>
+        <div class="card-body">
+          ${roles.length === 0 ? `<div style="font-size:12px;color:var(--or);padding:8px 0;">${ic('alert-circle',12)} Inga ansvarstiler skapade. Gå till <b>Admin → Ansvariga</b> för att lägga till titlar.</div>` : ''}
+          ${rows}
+        </div>
+      </div>`;
+  },
+
+  openAddPropContact(propertyId) {
+    this._propContactForm(null, propertyId);
+  },
+
+  openEditPropContact(id, propertyId) {
+    const c = (state.propertyContacts || []).find(x => x.id === id);
+    if (c) this._propContactForm(c, propertyId);
+  },
+
+  _propContactForm(contact, propertyId) {
+    const isEdit = !!contact;
+    const roles  = PropertyContactService.activeRoles();
+    const staffOpts = (state.staff || [])
+      .filter(s => s.active !== false)
+      .map(s => `<option value="${s.id}" ${contact&&contact.personId===s.id?'selected':''}>${esc(s.firstName+' '+s.lastName)}</option>`)
+      .join('');
+
+    Modal.open({
+      title: isEdit ? 'Redigera ansvarig' : 'Lägg till ansvarig',
+      body: `
+        <div class="fg"><label>Titel *</label>
+          <select id="pcon-role" class="fi">
+            <option value="">— Välj titel —</option>
+            ${roles.map(r => `<option value="${r.id}" ${contact&&contact.roleId===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg"><label>Personal *</label>
+          <select id="pcon-staff" class="fi">
+            <option value="">— Välj personal —</option>
+            ${staffOpts}
+          </select>
+        </div>
+        <div class="fg"><label>Anteckningar</label>
+          <input type="text" id="pcon-notes" value="${contact ? esc(contact.notes||'') : ''}" placeholder="Valfri notering...">
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:6px;">
+          <input type="checkbox" id="pcon-primary" ${contact&&contact.isPrimary?'checked':''}> Primär kontakt för denna titel
+        </label>`,
+      buttons: [
+        { label: isEdit ? 'Spara' : 'Lägg till', cls: 'btn bp', onClick: () => this._savePropContact(contact ? contact.id : null, propertyId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _savePropContact(id, propertyId) {
+    const roleId    = (document.getElementById('pcon-role')||{}).value||'';
+    const staffId   = (document.getElementById('pcon-staff')||{}).value||'';
+    const notes     = ((document.getElementById('pcon-notes')||{}).value||'').trim();
+    const isPrimary = !!(document.getElementById('pcon-primary')||{}).checked;
+    if (!roleId) { showToast('Välj titel'); return; }
+    if (!staffId) { showToast('Välj personal'); return; }
+    const data = { roleId, personType: 'staff', personId: staffId, notes, isPrimary, propertyId, active: true };
+    if (id) {
+      PropertyContactService.update(id, data);
+    } else {
+      PropertyContactService.add(data);
+    }
+    Modal.close();
+    this.render({ propertyId });
+  },
+
+  removePropContact(id, propertyId) {
+    if (!confirm('Ta bort denna koppling?')) return;
+    PropertyContactService.remove(id);
+    this.render({ propertyId });
   },
 
   /* ── Tab: Kontakt & åtkomst ────────────────────────────── */

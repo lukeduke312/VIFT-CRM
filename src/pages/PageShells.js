@@ -4644,6 +4644,7 @@ const AdminPage = {
       { key: 'priser',         label: 'Priser'                                     },
       { key: 'system',         label: 'System'                                     },
       { key: 'fastighetskort', label: `${ic('building-2',12)} Fastighetskort`      },
+      { key: 'ansvariga',      label: `${ic('user-check',12)} Ansvariga`           },
       { key: 'avvikelse',      label: `${ic('alert-triangle',12)} Avvikelser`      },
       { key: 'notiser',        label: `${ic('bell',12)} Notiser`                   }
     ];
@@ -5122,6 +5123,31 @@ const AdminPage = {
           }).join('')}
       </div>`;
 
+    /* ── Ansvariga: titelregister (Leverans D) ──────────── */
+    const propRoles = state.propertyRoles || [];
+    sections.ansvariga = `
+      <div class="admin-section-group">
+        <div class="admin-section-header">
+          <div>
+            <div class="admin-section-title">${ic('user-check',16)} Titelregister — ansvariga per fastighet</div>
+            <div class="admin-section-desc">Roller som kan kopplas till personal och kontakter per fastighet/objekt</div>
+          </div>
+          <button class="btn bp bxs" onclick="AdminPage.openAddPropRole()">${ic('plus',13)} Ny titel</button>
+        </div>
+        ${propRoles.length === 0
+          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga titlar. Lägg till t.ex. Ansvarig förvaltare, Fastighetsskötare, Felanmälningskontakt.</div>`
+          : propRoles.map(r => `
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--br);">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;">${esc(r.name)}</div>
+                <div style="font-size:10px;color:var(--mt);">${r.scope==='property'?'Fastighet':r.scope==='object'?'Objekt':'Fastighet & objekt'}${r.isInternal?'':' · Extern'}${r.onlyOnePrimary?' · Max 1 primär':''}</div>
+              </div>
+              <span class="bdg ${r.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${r.active!==false?'Aktiv':'Inaktiv'}</span>
+              <button class="btn bxs bs" onclick="AdminPage.openEditPropRole('${r.id}')">${ic('pencil',11)}</button>
+              <button class="btn bxs ${r.active!==false?'bw':'bsu'}" onclick="AdminPage.togglePropRole('${r.id}')">${r.active!==false?ic('eye-off',11)+' Inaktivera':ic('eye',11)+' Aktivera'}</button>
+            </div>`).join('')}
+      </div>`;
+
     /* ── Avvikelsekategorier (Fas 4B) ──────────────────── */
     const devCats = state.deviationCategories || [];
     sections.avvikelse = `
@@ -5206,6 +5232,60 @@ const AdminPage = {
     c.active = !c.active;
     c.updatedAt = new Date().toISOString();
     persist();
+    this.render();
+  },
+
+  /* ── Titelregister för ansvariga (Leverans D) ────────────── */
+
+  openAddPropRole() { this._propRoleForm(null); },
+  openEditPropRole(id) {
+    const r = (state.propertyRoles || []).find(x => x.id === id);
+    if (r) this._propRoleForm(r);
+  },
+  _propRoleForm(role) {
+    const isEdit = !!role;
+    Modal.open({
+      title: isEdit ? 'Redigera titel' : 'Ny ansvarstitel',
+      body: `
+        <div class="fg"><label>Namn *</label>
+          <input type="text" id="pr-name" value="${role ? esc(role.name) : ''}" placeholder="T.ex. Ansvarig förvaltare...">
+        </div>
+        <div class="fg"><label>Beskrivning</label>
+          <input type="text" id="pr-desc" value="${role ? esc(role.description||'') : ''}" placeholder="Valfri beskrivning...">
+        </div>
+        <div class="fg"><label>Tillämpning</label>
+          <select id="pr-scope" class="fi">
+            <option value="property" ${!role||role.scope==='property'?'selected':''}>Fastighet</option>
+            <option value="object" ${role&&role.scope==='object'?'selected':''}>Objekt</option>
+            <option value="both" ${role&&role.scope==='both'?'selected':''}>Fastighet & objekt</option>
+          </select>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:6px;">
+          <input type="checkbox" id="pr-primary" ${role&&role.onlyOnePrimary?'checked':''}> Max 1 primär per fastighet
+        </label>`,
+      buttons: [
+        { label: isEdit ? 'Spara' : 'Skapa', cls: 'btn bp', onClick: () => this._savePropRole(role ? role.id : null) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+  _savePropRole(id) {
+    const name = ((document.getElementById('pr-name')||{}).value||'').trim();
+    if (!name) { showToast('Ange namn'); return; }
+    const desc         = (document.getElementById('pr-desc')||{}).value||'';
+    const scope        = (document.getElementById('pr-scope')||{}).value||'property';
+    const onlyOnePrimary = !!(document.getElementById('pr-primary')||{}).checked;
+    const data = { name, description: desc, scope, onlyOnePrimary };
+    if (id) {
+      PropertyContactService.updateRole(id, data);
+    } else {
+      PropertyContactService.createRole(data);
+    }
+    Modal.close();
+    this.render();
+  },
+  togglePropRole(id) {
+    PropertyContactService.toggleRoleActive(id);
     this.render();
   },
 
