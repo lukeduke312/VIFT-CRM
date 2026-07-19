@@ -124,7 +124,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Prioritet | Beroenden |
 |---|----------|--------|-----------|-----------|
-| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | KLAR | Hög | F4-1..F4-8 levererade: commits 49b2810, 8398450, 22e8ed3, 328e3bf, (F4-8 stab) |
+| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | Motor + 11 register klara; 6 register saknas; markerad export ej byggd; inga register UI-verifierade i webbläsare |
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
@@ -139,29 +139,52 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 ## Leverans F4 — Generell import/export (punkt 73)
 
-**Leveransstatus:** KLAR (F4-1 t.o.m. F4-8)
+**Leveransstatus:** DELVIS BYGGD — motor och 11 register finns, 6 saknas, markerad export saknas, ingen webbläsarverifiering gjord
 
 | Del | Funktion | Status | Commit |
 |-----|----------|--------|--------|
-| F4-1 | Kundimport, generisk motor, 6 register, wizard | KLAR | 49b2810 |
-| F4-2/3 | Fastigheter, objekt, artiklar, prisgrupper, personal — konfigurationer + toolbar-knappar | KLAR | 8398450 |
-| F4-4/5 | AO, tid, faktura (historicalImport), ronderingsmall, avvikelse | KLAR | 8398450 |
-| F4-6 | Diff/conflict-UI: per-fält before/after, ångra-dialog, konfliktdetektering | KLAR | 22e8ed3 |
-| F4-7 | Exportcenter (ExportCenterPage), kolumnval, känsliga fält av som standard | KLAR | 328e3bf |
-| F4-8 | Stabilisering: syntaxkontroll, logg-pruning (max 50), race-condition-skydd | KLAR | (F4-8) |
+| F4-1 | Kundimport, generisk motor, 6 register, wizard | Byggd | 49b2810 |
+| F4-2/3 | Fastigheter, objekt, artiklar, prisgrupper, personal — config + toolbar | Byggd | 8398450 |
+| F4-4/5 | AO, tid, faktura (historicalImport), ronderingsmall, avvikelse — config | Byggd | 8398450 |
+| F4-6 | Diff/conflict-UI: per-fält before/after, ångra-dialog | Byggd | 22e8ed3 |
+| F4-7 | Exportcenter (ExportCenterPage), kolumnval, känsliga fält av som standard | Byggd | 328e3bf |
+| F4-8 | Stabilisering: logg-pruning, race-condition-skydd | Byggd | 0adbf27 |
+| F4-9 | 6 saknade register (kontaktpersoner, materialrader, ronderingspass, ronderingSchema, serviceintervall) | Pågår | — |
+| F4-10 | Import/export UI på AO, Tid, Faktura, Rondering | Pågår | — |
+| F4-11 | Markerad export — SelectionModel, checkbox per rad | Pågår | — |
+| F4-12 | Relationsdialog för ambiguösa träffar | Ej byggd | — |
+| F4-13 | Webbläsarverifiering med riktiga filer (Bokio, Excel, Numbers) | Ej testad | — |
+
+### Registermatris — import/export-status
+
+| Register | Config | Wizard | CSV-imp | XLSX-imp | Valid | Dubblett | Relation | Hist.imp | CSV-exp | XLSX-exp | Alla | Filtr | Markerade | UI sida | Testad |
+|----------|--------|--------|---------|----------|-------|----------|----------|----------|---------|----------|------|-------|-----------|---------|--------|
+| Kunder | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Kontaktpersoner | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → Kund | — | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Fastigheter | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Objekt | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund, Fastighet | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Artiklar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Prisgrupper | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Personal | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Arbetsordrar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund, Fastighet, Obj, Personal, PG | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Arbetad tid | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → AO, Personal | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Materialrader | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → AO, Artikel | Byggd | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Fakturaunderlag | Byggd | Ej byggd | Ej byggd | Ej byggd | — | — | → Kund, AO | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Ronderingsmallar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Åter.ronderingar | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → Mall, Fastighet | Ej byggd | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Ronderingspass | Pågår | Byggd | Byggd | Byggd | Byggd | Byggd | → Mall, Fastighet, Kund | Byggd | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Avvikelser | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Fastighet, Obj | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Serviceintervall | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → Fastighet | — | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Rapporter | Ej byggd | — | — | — | — | — | — | — | Ej byggd | Ej byggd | Ej byggd | — | — | Ej byggd | Ej testad |
 
 **Säkerhetsregler (permanenta):**
-- `historicalImport:true` på AO/tid/faktura/avvikelse: supprimerar push, auto-AO, billing, notiser
+- `historicalImport:true` på AO/tid/faktura/avvikelse/ronderingspass: supprimerar push, auto-AO, billing, notiser
 - Känsliga fält (portkod, nyckel, lösenord, PIN) aldrig i standardexport
 - Admin-roll sätts ALDRIG automatiskt via import
-- Exportcenter: känsliga fält kräver admin + explicit toggle
 - Import av lösenord/PIN/token: alltid förbjudet
-- Race-condition: om poster ändrats sedan validering (steg 4) → hoppar över med varning
 
-**Pending (nästa leverans):**
-- Markerad export (checkbox per rad på listsidor)
-- Ronderingsimport och serviceinterval
-- Leverans D full UI (punkt 86–92)
+**Verifieringskrav (XLSX-motor):**
+Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska tecken, datum, tomma celler, stora filer, Safari iOS, Chrome/Edge. Felaktig fil får inte krascha CRM.
 
 ---
 
