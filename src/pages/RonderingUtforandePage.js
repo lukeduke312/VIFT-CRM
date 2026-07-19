@@ -250,6 +250,8 @@ const RonderingUtforandePage = {
               ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
               <div class="ron-anm-actions">
                 ${pbdg(avv.priority)}
+                ${avv.severity?`<span class="bdg bdg-orange" style="font-size:9px;">${avv.severity}</span>`:''}
+                ${avv.issueType?`<span class="bdg bdg-grey" style="font-size:9px;">${avv.issueType}</span>`:''}
                 ${avv.workOrderId
                   ?`<span class="bdg bdg-green" style="font-size:9px;cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} ${avv.workOrderId}</span>`
                   :(pt.canCreateAO!==false
@@ -291,13 +293,65 @@ const RonderingUtforandePage = {
          </div>`
       : '';
 
+    // Avvikelsekategorier och återkommande-detektering
+    const devCats = (typeof state !== 'undefined' ? state.deviationCategories || [] : []).filter(c => c.active !== false);
+    const catSelectHtml = devCats.length
+      ? `<div class="fg"><label>Avvikelsekategori</label>
+           <select id="avv-dev-cat" class="fi">
+             <option value="">— Välj kategori —</option>
+             ${devCats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+           </select>
+         </div>`
+      : '';
+
+    // Returnkommande: kolla om samma pointTitle finns i nyliga avvikelser på denna fastighet
+    const propId = pass ? pass.propertyId : '';
+    const recentRecurring = propId
+      ? (typeof state !== 'undefined' ? state.avvikelser || [] : [])
+          .filter(a => a.propertyId === propId && a.status !== 'avskriven' &&
+            a.pointTitle && a.pointTitle.toLowerCase() === (pt.title||'').toLowerCase() &&
+            a.id !== (pt.deviationId || ''))
+      : [];
+    const recurringBanner = recentRecurring.length
+      ? `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--rd);margin-bottom:8px;">
+           ${ic('repeat',12)} Återkommande — ${recentRecurring.length} liknande avvikelse${recentRecurring.length>1?'r':''} finns på denna fastighet
+         </div>`
+      : '';
+
     Modal.open({
       title: 'Anmärkning: ' + pt.title,
       body: `
+        ${recurringBanner}
         <div class="fg"><label>Rubrik *</label>
           <input type="text" id="avv-title" value="${esc(pt.title)}" placeholder="Beskriv anmärkningen...">
         </div>
         ${objSelectHtml}
+        ${catSelectHtml}
+        <div class="g2">
+          <div class="fg"><label>Allvarlighetsgrad</label>
+            <select id="avv-severity" class="fi">
+              <option value="">— Välj —</option>
+              <option value="kritisk">Kritisk</option>
+              <option value="hög">Hög</option>
+              <option value="medel">Medel</option>
+              <option value="låg">Låg</option>
+            </select>
+          </div>
+          <div class="fg"><label>Feltyp</label>
+            <select id="avv-issue-type" class="fi">
+              <option value="">— Välj —</option>
+              <option value="skada">Skada</option>
+              <option value="slitage">Slitage</option>
+              <option value="säkerhet">Säkerhet</option>
+              <option value="hygien">Hygien</option>
+              <option value="drift">Driftfel</option>
+              <option value="övrigt">Övrigt</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg"><label>Plats / lokal (valfri)</label>
+          <input type="text" id="avv-location" placeholder="T.ex. Trapphus B, plan 3...">
+        </div>
         <div class="fg"><label>Kommentar</label>
           <textarea id="avv-comment" rows="3" placeholder="Ytterligare detaljer..."></textarea>
         </div>
@@ -334,8 +388,12 @@ const RonderingUtforandePage = {
   _saveAvv(passId, catId, ptId, canAO) {
     const title    = ((document.getElementById('avv-title')||{}).value||'').trim();
     if (!title) { showToast('Ange rubrik'); return; }
-    const comment  = (document.getElementById('avv-comment')||{}).value||'';
-    const priority = (document.getElementById('avv-priority')||{}).value||'normal';
+    const comment           = (document.getElementById('avv-comment')||{}).value||'';
+    const priority          = (document.getElementById('avv-priority')||{}).value||'normal';
+    const severity          = (document.getElementById('avv-severity')||{}).value||'';
+    const issueType         = (document.getElementById('avv-issue-type')||{}).value||'';
+    const location          = ((document.getElementById('avv-location')||{}).value||'').trim();
+    const deviationCategoryId = (document.getElementById('avv-dev-cat')||{}).value||'';
     const createAO = canAO && !!(document.getElementById('avv-create-ao')||{}).checked;
     const objectId = (document.getElementById('avv-object')||{}).value||'';
 
@@ -343,6 +401,11 @@ const RonderingUtforandePage = {
     if (!pass) return;
     const cat  = (pass.categories||[]).find(c=>c.id===catId);
     const pt   = cat && (cat.points||[]).find(p=>p.id===ptId);
+
+    /* Bygg recurringKey av kategori + punkttitel (används för återkommande-detektering) */
+    const ptSlug = (pt ? pt.title : title).toLowerCase().replace(/[^a-zåäö0-9]+/g, '-').replace(/^-|-$/g,'');
+    const catSlug = (cat ? cat.name : '').toLowerCase().replace(/[^a-zåäö0-9]+/g, '-').replace(/^-|-$/g,'');
+    const recurringKey = [deviationCategoryId||catSlug, ptSlug].filter(Boolean).join('::');
 
     const avv = RonderingService.createAvvikelse(pass.ronderingId, {
       passId: passId,
@@ -353,7 +416,9 @@ const RonderingUtforandePage = {
       customerId: pass.customerId,
       propertyId: pass.propertyId,
       objectId,
-      title, comment, priority, images: this._avvImages.slice()
+      title, comment, priority, images: this._avvImages.slice(),
+      /* Fas 4B — strukturerade fält */
+      deviationCategoryId, severity, issueType, location, recurringKey
     });
 
     // Update PASS point status

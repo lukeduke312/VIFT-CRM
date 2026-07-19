@@ -4644,6 +4644,7 @@ const AdminPage = {
       { key: 'priser',         label: 'Priser'                                     },
       { key: 'system',         label: 'System'                                     },
       { key: 'fastighetskort', label: `${ic('building-2',12)} Fastighetskort`      },
+      { key: 'avvikelse',      label: `${ic('alert-triangle',12)} Avvikelser`      },
       { key: 'notiser',        label: `${ic('bell',12)} Notiser`                   }
     ];
     const tabBar = `<div class="admin-tabs">
@@ -5121,7 +5122,91 @@ const AdminPage = {
           }).join('')}
       </div>`;
 
+    /* ── Avvikelsekategorier (Fas 4B) ──────────────────── */
+    const devCats = state.deviationCategories || [];
+    sections.avvikelse = `
+      <div class="admin-section-group">
+        <div class="admin-section-header">
+          <div>
+            <div class="admin-section-title">${ic('alert-triangle',16)} Avvikelsekategorier</div>
+            <div class="admin-section-desc">Kategorier för strukturerade anmärkningar från ronderingar</div>
+          </div>
+          <button class="btn bp bxs" onclick="AdminPage.openAddDevCat()">${ic('plus',13)} Ny kategori</button>
+        </div>
+        ${devCats.length === 0
+          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga avvikelsekategorier ännu. Skapa din första kategori.</div>`
+          : devCats.map((c, idx) => `
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--br);">
+              <span style="color:${c.color||'var(--acc)'};flex-shrink:0;">${ic(c.icon||'alert-triangle',16)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;">${esc(c.name)}</div>
+              </div>
+              <span class="bdg ${c.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${c.active!==false?'Aktiv':'Inaktiv'}</span>
+              <button class="btn bxs bs" onclick="AdminPage.openEditDevCat('${c.id}')">${ic('pencil',11)}</button>
+              <button class="btn bxs ${c.active!==false?'bw':'bsu'}" onclick="AdminPage.toggleDevCat('${c.id}')">${c.active!==false?ic('eye-off',11)+' Inaktivera':ic('eye',11)+' Aktivera'}</button>
+            </div>`).join('')}
+      </div>`;
+
     el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+  },
+
+  /* ── Avvikelsekategorier CRUD ────────────────────────── */
+
+  openAddDevCat() {
+    this._devCatForm(null);
+  },
+
+  openEditDevCat(id) {
+    const c = (state.deviationCategories || []).find(x => x.id === id);
+    if (c) this._devCatForm(c);
+  },
+
+  _devCatForm(cat) {
+    const isEdit = !!cat;
+    Modal.open({
+      title: isEdit ? 'Redigera avvikelsekategori' : 'Ny avvikelsekategori',
+      body: `
+        <div class="fg"><label>Namn *</label>
+          <input type="text" id="dc-name" value="${cat ? esc(cat.name) : ''}" placeholder="T.ex. Säkerhet, Skada, Slitage..."></div>
+        <div class="fg"><label>Ikon (lucide-namn)</label>
+          <input type="text" id="dc-icon" value="${cat ? esc(cat.icon||'alert-triangle') : 'alert-triangle'}" placeholder="alert-triangle"></div>
+        <div class="fg"><label>Färg</label>
+          <input type="color" id="dc-color" value="${cat ? (cat.color||'#6366f1') : '#6366f1'}" style="height:36px;width:60px;border:none;cursor:pointer;border-radius:6px;">
+        </div>`,
+      buttons: [
+        { label: isEdit ? 'Spara' : 'Skapa', cls: 'btn bp', onClick: () => this._saveDevCat(cat ? cat.id : null) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _saveDevCat(id) {
+    const name  = ((document.getElementById('dc-name')||{}).value||'').trim();
+    if (!name) { showToast('Ange namn'); return; }
+    const icon  = ((document.getElementById('dc-icon')||{}).value||'alert-triangle').trim();
+    const color = (document.getElementById('dc-color')||{}).value || '#6366f1';
+    const now   = new Date().toISOString();
+    if (id) {
+      const c = (state.deviationCategories || []).find(x => x.id === id);
+      if (c) { c.name = name; c.icon = icon; c.color = color; c.updatedAt = now; }
+    } else {
+      if (!state.deviationCategories) state.deviationCategories = [];
+      state.deviationCategories.push(Object.assign(Schema.deviationCategory(), {
+        id: newId(state.deviationCategories, 'DEVCAT'), name, icon, color, createdAt: now, updatedAt: now
+      }));
+    }
+    persist();
+    Modal.close();
+    this.render();
+  },
+
+  toggleDevCat(id) {
+    const c = (state.deviationCategories || []).find(x => x.id === id);
+    if (!c) return;
+    c.active = !c.active;
+    c.updatedAt = new Date().toISOString();
+    persist();
+    this.render();
   },
 
   /* ── Fält-CRUD per kategori ──────────────────────────────── */

@@ -37,8 +37,9 @@ let state = {
   ronderingspass: [],
   propertyObjects: [],
   importLogs: [],
-  propertyRoles: [],       // Leverans D: titelregister (förvaltare, skötare, etc.)
-  propertyContacts: [],    // Leverans D: kopplingar person↔fastighet/objekt
+  propertyRoles: [],        // Leverans D: titelregister (förvaltare, skötare, etc.)
+  propertyContacts: [],     // Leverans D: kopplingar person↔fastighet/objekt
+  deviationCategories: [],  // Fas 4B: admin-register för avvikelsekategorier
 
   // UI-state
   currentPage: 'dash',
@@ -96,8 +97,9 @@ async function initState() {
   state.ronderingspass     = g('ronderingspass')   || [];
   state.propertyObjects    = g('propertyObjects')  || [];
   state.importLogs         = g('importLogs')       || [];
-  state.propertyRoles      = g('propertyRoles')    || [];
-  state.propertyContacts   = g('propertyContacts') || [];
+  state.propertyRoles         = g('propertyRoles')         || [];
+  state.propertyContacts      = g('propertyContacts')      || [];
+  state.deviationCategories   = g('deviationCategories')   || [];
 
   /* ── Konfigurations- och referensdata: SeedData ger vettiga standardvärden ── */
   state.priceGroups        = g('priceGroups')        || SeedData.priceGroups        || [];
@@ -256,8 +258,9 @@ function persist() {
     ['ronderingspass',   state.ronderingspass],
     ['propertyObjects',  state.propertyObjects],
     ['importLogs',       state.importLogs],
-    ['propertyRoles',    state.propertyRoles],
-    ['propertyContacts', state.propertyContacts]
+    ['propertyRoles',         state.propertyRoles],
+    ['propertyContacts',      state.propertyContacts],
+    ['deviationCategories',   state.deviationCategories]
   ]);
 }
 

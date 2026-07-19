@@ -486,15 +486,32 @@ const Schema = {
     pointTitle: '',
     customerId: '',
     propertyId: '',
-    objectId: '',         // Leverans C: kopplat objekt (lägenhet/lokal)
+    objectId: '',             // kopplat objekt (lägenhet/lokal)
     title: '',
     comment: '',
-    images: [],            // [{dataUrl, name}]
-    priority: 'normal',    // akut|hög|normal|låg
-    status: 'öppen',       // öppen|åtgärdad|avskriven
+    images: [],               // [{dataUrl, name}]
+    priority: 'normal',       // akut|hög|normal|låg
+    status: 'öppen',          // öppen|åtgärdad|avskriven
     workOrderId: '',
     createdBy: '',
     createdByName: '',
+    createdAt: '',
+    updatedAt: '',
+    /* Fas 4B — strukturerade avvikelsefält */
+    deviationCategoryId: '',  // → state.deviationCategories
+    issueType: '',            // 'skada'|'slitage'|'säkerhet'|'hygien'|'drift'|'övrigt'
+    issueTags: [],            // fria taggar
+    location: '',             // t.ex. "Trapphus B, plan 3"
+    severity: '',             // 'kritisk'|'hög'|'medel'|'låg' (komplement till priority)
+    recurringKey: ''          // slug för återkommande-detektering, t.ex. "AVK-SÄKERHET-DÖRRHANDLE"
+  }),
+
+  deviationCategory: () => ({
+    id: '',
+    name: '',
+    color: '#6366f1',
+    icon: 'alert-triangle',
+    active: true,
     createdAt: '',
     updatedAt: ''
   }),
