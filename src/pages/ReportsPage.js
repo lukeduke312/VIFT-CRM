@@ -1,30 +1,91 @@
 /**
- * ReportsPage v3 — Fas 4C: Analys och rapportering
+ * ReportsPage v4 — Fas 4C: Analys och rapportering
  * Flikar: översikt, arbetsordrar, tid, avvikelser, ekonomi, material, serviceintervall
- * Alla KPI-kort och staplar är klickbara till underliggande poster.
+ * Gemensamt periodfilter, datakvalitetsvarningar, klickbara KPI:er.
+ *
+ * OBS – estimat och kända begränsningar (visas inline i rapporten):
+ *  · Beläggning baseras på 160 h/mån som standard (individuell kapacitet saknas)
+ *  · "Bidrag före lönekostnad" = fakturerat − materialkostnad (lönekostnad ej med)
+ *  · Faktureringsgrad mäts som antal AO, inte som andel av fakturerbart värde
+ *  · Intäkt = summa fakturerade fakturabelopp (state.invoices). Ej fakturerade AO
+ *    räknas separat som "Klart att fakturera" men saknar beloppsdata utan prissättning.
+ *
+ * Status: Byggd – behöver dataverifiering och webbläsartest
  */
 const ReportsPage = (function () {
 
-  var _tab = 'oversikt';
+  var _tab    = 'oversikt';
+
+  /* ── Periodfilter ───────────────────────────────────────────────────
+     preset: 'month' | 'prev-month' | 'quarter' | 'year' | '12months' | 'custom'
+     För 'custom': _periodCustomFrom och _periodCustomTo sätts separat.
+  ─────────────────────────────────────────────────────────────────── */
+  var _periodPreset      = 'month';
+  var _periodCustomFrom  = '';
+  var _periodCustomTo    = '';
+
+  function _periodRange() {
+    var today = _today();
+    var d = new Date();
+    var y = d.getFullYear();
+    var m = d.getMonth(); // 0-indexed
+    if (_periodPreset === 'month') {
+      var from = y + '-' + String(m + 1).padStart(2, '0') + '-01';
+      var lastDay = new Date(y, m + 1, 0).getDate();
+      var to = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+      return { from: from, to: to, label: _monthLabel(from.slice(0, 7)) + ' ' + y };
+    }
+    if (_periodPreset === 'prev-month') {
+      var pm = m === 0 ? 11 : m - 1;
+      var py = m === 0 ? y - 1 : y;
+      var from = py + '-' + String(pm + 1).padStart(2, '0') + '-01';
+      var lastDay = new Date(py, pm + 1, 0).getDate();
+      var to = py + '-' + String(pm + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+      return { from: from, to: to, label: _monthLabel(from.slice(0, 7)) + ' ' + py };
+    }
+    if (_periodPreset === 'quarter') {
+      var q = Math.floor(m / 3);
+      var qFrom = y + '-' + String(q * 3 + 1).padStart(2, '0') + '-01';
+      var qEndMonth = q * 3 + 3;
+      var lastDay = new Date(y, qEndMonth, 0).getDate();
+      var qTo = y + '-' + String(qEndMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+      return { from: qFrom, to: qTo, label: 'Q' + (q + 1) + ' ' + y };
+    }
+    if (_periodPreset === 'year') {
+      return { from: y + '-01-01', to: y + '-12-31', label: 'År ' + y };
+    }
+    if (_periodPreset === '12months') {
+      var d12 = new Date(); d12.setMonth(d12.getMonth() - 12);
+      return { from: d12.toISOString().slice(0, 10), to: today, label: 'Senaste 12 mån' };
+    }
+    if (_periodPreset === 'custom' && _periodCustomFrom && _periodCustomTo) {
+      return { from: _periodCustomFrom, to: _periodCustomTo, label: _periodCustomFrom + ' – ' + _periodCustomTo };
+    }
+    /* fallback = innevarande månad */
+    var from = y + '-' + String(m + 1).padStart(2, '0') + '-01';
+    var lastDay = new Date(y, m + 1, 0).getDate();
+    return { from: from, to: y + '-' + String(m + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0'), label: _monthLabel(from.slice(0, 7)) + ' ' + y };
+  }
+
+  function _inPeriod(dateStr, range) {
+    if (!dateStr || !range) return false;
+    var d = dateStr.slice(0, 10);
+    return d >= range.from && d <= range.to;
+  }
+
+  /* ── Helpers ─────────────────────────────────────────────────────── */
 
   function _ic(name, size) {
     return typeof ic !== 'undefined' ? ic(name, size || 16) : '';
   }
 
-  /* ── Dataaggregering ─────────────────────────────────────────────── */
-
   function _today() {
     return new Date().toISOString().slice(0, 10);
   }
 
-  function _thisMonth() {
-    var d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-  }
-
   function _monthLabel(ym) {
     if (!ym || ym.length < 7) return ym || '—';
-    var months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+    var months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
     var m = parseInt(ym.slice(5, 7), 10) - 1;
     return months[m] + ' ' + ym.slice(2, 4);
   }
@@ -73,7 +134,11 @@ const ReportsPage = (function () {
       .slice(0, n);
   }
 
-  /* ── KPI-kort helper ─────────────────────────────────────────────── */
+  function _fmtKr(val) {
+    return val ? Math.round(val).toLocaleString('sv-SE') + ' kr' : '0 kr';
+  }
+
+  /* ── KPI-kort ────────────────────────────────────────────────────── */
 
   function _kpi(icon, label, val, sub, nav) {
     var clickStyle = nav ? 'cursor:pointer;' : '';
@@ -88,13 +153,13 @@ const ReportsPage = (function () {
     '</div>';
   }
 
-  /* ── Bar chart helper ────────────────────────────────────────────── */
+  /* ── Stapeldiagram ───────────────────────────────────────────────── */
 
   function _bar(label, val, max, color, onClick) {
     var pct = max > 0 ? Math.round((val / max) * 100) : 0;
-    var clickAttr = onClick ? 'onclick="' + onClick + '"' : '';
+    var clickAttr  = onClick ? 'onclick="' + onClick + '"' : '';
     var labelStyle = 'font-size:12px;' + (onClick ? 'cursor:pointer;color:var(--blue);text-decoration:underline dotted;' : '');
-    var barStyle = 'height:8px;background:var(--br);border-radius:4px;overflow:hidden;' + (onClick ? 'cursor:pointer;' : '');
+    var barStyle   = 'height:8px;background:var(--br);border-radius:4px;overflow:hidden;' + (onClick ? 'cursor:pointer;' : '');
     return '<div style="margin-bottom:6px;">' +
       '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
         '<span style="' + labelStyle + '" ' + clickAttr + '>' + esc(String(label)) + '</span>' +
@@ -106,79 +171,145 @@ const ReportsPage = (function () {
     '</div>';
   }
 
-  /* ── Sektioner ───────────────────────────────────────────────────── */
+  /* ── Datakvalitetsvarning ────────────────────────────────────────── */
+
+  function _qualityBanner(issues) {
+    if (!issues || !issues.length) return '';
+    var rows = issues.map(function (i) {
+      return '<li style="margin:0 0 2px 16px;">' + esc(i) + '</li>';
+    }).join('');
+    return '<div style="background:var(--or-bg,#fff8ec);border:1px solid var(--or,#f59e0b);border-radius:6px;padding:8px 12px;margin-bottom:12px;">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--or,#f59e0b);margin-bottom:4px;">' + _ic('alert-triangle', 11) + ' Datakvalitet — poster som inte kunnat räknas fullt ut</div>' +
+      '<ul style="margin:0;padding:0;font-size:11px;color:var(--mt);">' + rows + '</ul>' +
+    '</div>';
+  }
+
+  /* ── Periodfilterrad ─────────────────────────────────────────────── */
+
+  function _periodBar(range) {
+    var presets = [
+      { key: 'month',      label: 'Denna mån'   },
+      { key: 'prev-month', label: 'Föreg. mån'  },
+      { key: 'quarter',    label: 'Kvartal'      },
+      { key: 'year',       label: 'I år'         },
+      { key: '12months',   label: 'Senaste 12 mån' },
+      { key: 'custom',     label: 'Eget intervall'  }
+    ];
+    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;padding:8px 10px;background:var(--bg2,var(--br));border-radius:6px;">' +
+      '<span style="font-size:11px;color:var(--mt);white-space:nowrap;font-weight:600;">' + _ic('calendar', 11) + ' Period:</span>' +
+      '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
+    presets.forEach(function (p) {
+      var on = _periodPreset === p.key;
+      html += '<button class="btn bs bsm" style="padding:3px 9px;font-size:11px;' +
+        (on ? 'background:var(--acc);color:#fff;border-color:var(--acc);' : '') + '" ' +
+        'onclick="ReportsPage._setPeriod(\'' + p.key + '\')">' + p.label + '</button>';
+    });
+    html += '</div>';
+    if (_periodPreset === 'custom') {
+      html += '<input type="date" value="' + esc(_periodCustomFrom) + '" ' +
+        'onchange="ReportsPage._setCustomFrom(this.value)" ' +
+        'style="font-size:11px;padding:3px 6px;border:1px solid var(--br);border-radius:4px;background:var(--bg);color:var(--tx);">';
+      html += '<span style="font-size:11px;color:var(--mt);">–</span>';
+      html += '<input type="date" value="' + esc(_periodCustomTo) + '" ' +
+        'onchange="ReportsPage._setCustomTo(this.value)" ' +
+        'style="font-size:11px;padding:3px 6px;border:1px solid var(--br);border-radius:4px;background:var(--bg);color:var(--tx);">';
+    }
+    html += '<span style="font-size:11px;color:var(--mt);white-space:nowrap;margin-left:4px;">↳ <strong>' + esc(range.label) + '</strong> (' + range.from + ' – ' + range.to + ')</span>';
+    html += '</div>';
+    return html;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     SEKTIONER
+  ══════════════════════════════════════════════════════════════════ */
 
   function _oversikt() {
-    var today   = _today();
-    var month   = _thisMonth();
-    var aos     = state.workOrders || [];
-    var active  = aos.filter(function (a) { return !a.archived && !a.deleted && a.status !== 'fakturerad'; });
-    var oppna   = active.filter(function (a) { return a.status !== 'klar'; });
-    var klara   = active.filter(function (a) { return a.status === 'klar'; });
-    var forsen  = active.filter(function (a) { return a.scheduledDate && a.scheduledDate < today; });
-    var avvs    = (state.avvikelser || []).filter(function (a) { return a.status === 'öppen'; });
+    var today  = _today();
+    var range  = _periodRange();
+    var aos    = state.workOrders || [];
+    var active = aos.filter(function (a) { return !a.archived && !a.deleted; });
+    var oppna  = active.filter(function (a) { return a.status !== 'klar' && a.status !== 'fakturerad'; });
+    var klara  = active.filter(function (a) { return a.status === 'klar'; });
+    var forsen = active.filter(function (a) { return a.scheduledDate && a.scheduledDate < today && a.status !== 'klar' && a.status !== 'fakturerad'; });
+    var avvs   = (state.avvikelser || []).filter(function (a) { return a.status === 'öppen'; });
     var avvNoAO = avvs.filter(function (a) { return !a.workOrderId; });
 
-    var invs     = (state.invoices || []).filter(function (i) { return (i.invoiceDate || '').slice(0, 7) === month; });
-    var revMonth = invs.reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+    /* Intäkter — FAKTURERAT i vald period */
+    var invs    = (state.invoices || []).filter(function (i) { return _inPeriod(i.invoiceDate || i.date, range) && i.status !== 'makulerad'; });
+    var revPeriod = invs.reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
 
-    var entries = state.timeEntries || [];
-    var hoursThisMonth = entries
-      .filter(function (e) { return (e.date || e.startDate || '').slice(0, 7) === month; })
+    /* Klara AO ej fakturerade — antal (belopp saknar standardvärde utan prissättning) */
+    var klar_ej_fak = active.filter(function (a) { return a.status === 'klar' && !a.invoiceId; });
+
+    /* Faktureringsgrad (antal AO) */
+    var allKlara     = active.filter(function (a) { return a.status === 'klar' || a.status === 'fakturerad'; });
+    var faktureradeCnt = active.filter(function (a) { return a.status === 'fakturerad'; }).length;
+    var fakGrad = allKlara.length > 0 ? Math.round((faktureradeCnt / allKlara.length) * 100) : 0;
+
+    /* Timmar i period */
+    var timmar = (state.timeEntries || [])
+      .filter(function (e) { return _inPeriod(e.date || e.startDate, range); })
       .reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
 
     /* Status-fördelning */
-    var statusGroups = _groupBy(active, function (a) { return a.status; });
+    var statusGroups = _groupBy(active.filter(function (a) { return a.status !== 'fakturerad'; }), function (a) { return a.status; });
     var statusOrder  = ['pool', 'planerad', 'pågående', 'klar'];
     var statusColors = { pool: 'var(--sky)', planerad: 'var(--blue)', pågående: 'var(--or)', klar: 'var(--gr)' };
     var maxStatus = Math.max.apply(null, statusOrder.map(function (s) { return (statusGroups[s] || []).length; }).concat([1]));
 
-    var statusBars = statusOrder.map(function (s) {
-      var cnt = (statusGroups[s] || []).length;
-      return _bar(s, cnt, maxStatus, statusColors[s],
-        'WorkOrdersPage.setFilter(\'' + s + '\');Router.showPage(\'pg-ao\',{})');
-    }).join('');
-
-    /* Faktureringsgrad */
-    var allKlaraTotal  = (state.workOrders || []).filter(function (a) { return !a.deleted && (a.status === 'klar' || a.status === 'fakturerad'); });
-    var faktureradeCnt = (state.workOrders || []).filter(function (a) { return !a.deleted && a.status === 'fakturerad'; }).length;
-    var fakGrad = allKlaraTotal.length > 0 ? Math.round((faktureradeCnt / allKlaraTotal.length) * 100) : 0;
-
-    return '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('clipboard-list', 'Öppna AO',       oppna.length,                          'aktiva, ej klara',              'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
-      _kpi('check-circle',  'Klara AO',        klara.length,                          'ej fakturerade',                'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
-      _kpi('alert-circle',  'Försenade',        forsen.length,                         'passerat planerat datum',       'Router.showPage(\'pg-ao\',{filter:\'forsenad\'})') +
-      _kpi('alert-triangle','Öppna avv.',       avvNoAO.length,                        'utan arbetsorder',              'Router.showPage(\'pg-rondering\',{})') +
-      _kpi('clock',         'Tim denna mån',    Math.round(hoursThisMonth) + ' h',     'registrerad tid') +
-      _kpi('receipt',       'Intäkter mån',     revMonth ? Math.round(revMonth).toLocaleString('sv-SE') + ' kr' : '—', 'fakturerade',                   'ReportsPage._setTab(\'ekonomi\')') +
-      _kpi('percent',       'Faktureringsgr.',  fakGrad + ' %',                        faktureradeCnt + ' av ' + allKlaraTotal.length + ' klara',         'ReportsPage._setTab(\'ekonomi\')') +
+    return _periodBar(range) +
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('clipboard-list', 'Öppna AO',           oppna.length,             'aktiva, ej klara',               'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
+      _kpi('check-circle',  'Klara AO',             klara.length,             'ej fakturerade',                 'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
+      _kpi('alert-circle',  'Försenade',            forsen.length,            'passerat planerat datum',         'Router.showPage(\'pg-ao\',{filter:\'forsenad\'})') +
+      _kpi('receipt',       'Fakturerat ' + range.label, revPeriod ? _fmtKr(revPeriod) : '—', 'Källa: state.invoices.amount · ej makulerade',      'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('alert-triangle','Klara ej fakturerade', klar_ej_fak.length + ' st', 'belopp beräknas ej utan prissättning', 'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('percent',       'Faktureringsgr. (AO)', fakGrad + ' %',           faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat',  'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('clock',         'Tim ' + range.label,   Math.round(timmar) + ' h', 'registrerad tid · ' + range.label,  'ReportsPage._setTab(\'tid\')') +
+      _kpi('alert-triangle','Öppna avvikelser',     avvNoAO.length,           'utan arbetsorder',               'Router.showPage(\'pg-rondering\',{})') +
     '</div>' +
-    '<div class="ibox" style="margin-bottom:12px;">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('bar-chart-2', 14) + ' AO per status</div>' +
-      statusBars +
+    '<div class="ibox">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('bar-chart-2', 14) + ' AO per status (alla aktiva)</div>' +
+      statusOrder.map(function (s) {
+        var cnt = (statusGroups[s] || []).length;
+        return _bar(s, cnt, maxStatus, statusColors[s], 'WorkOrdersPage.setFilter(\'' + s + '\');Router.showPage(\'pg-ao\',{})');
+      }).join('') +
     '</div>';
   }
 
   function _arbetsordrar() {
+    var range  = _periodRange();
+    var today  = _today();
     var aos    = (state.workOrders || []).filter(function (a) { return !a.deleted; });
     var active = aos.filter(function (a) { return !a.archived; });
-    var today  = _today();
+
+    /* Filtrera på period (scheduledDate, skapad eller uppdaterad) */
+    var inPeriod = active.filter(function (a) {
+      return _inPeriod(a.scheduledDate || a.createdAt || a.date, range);
+    });
+
+    /* Kvalitetsvarningar */
+    var noCustomer  = inPeriod.filter(function (a) { return !a.customerId; }).length;
+    var noProperty  = inPeriod.filter(function (a) { return !a.propertyId; }).length;
+    var qualIssues  = [];
+    if (noCustomer) qualIssues.push(noCustomer + ' AO saknar kundkoppling (kan inte visas i kund-grafer)');
+    if (noProperty) qualIssues.push(noProperty + ' AO saknar fastighetskoppling (kan inte visas i fastighets-grafer)');
 
     /* Per kund */
-    var byCu   = _groupBy(active, function (a) { return a.customerId; });
-    var topCu  = _topN(byCu, 10);
+    var byCu    = _groupBy(inPeriod, function (a) { return a.customerId; });
+    var topCu   = _topN(byCu, 10);
 
     /* Per fastighet */
-    var byProp  = _groupBy(active, function (a) { return a.propertyId; });
+    var byProp  = _groupBy(inPeriod.filter(function (a) { return a.propertyId; }), function (a) { return a.propertyId; });
     var topProp = _topN(byProp, 10);
 
     /* Per objekt */
-    var byObj  = _groupBy(active.filter(function (a) { return a.objectId; }), function (a) { return a.objectId; });
-    var topObj = _topN(byObj, 8);
+    var byObj   = _groupBy(inPeriod.filter(function (a) { return a.objectId; }), function (a) { return a.objectId; });
+    var topObj  = _topN(byObj, 8);
 
     /* Per personal */
     var byStaff = {};
-    active.forEach(function (a) {
+    inPeriod.forEach(function (a) {
       (a.staff || []).forEach(function (sid) {
         if (!byStaff[sid]) byStaff[sid] = [];
         byStaff[sid].push(a);
@@ -186,8 +317,8 @@ const ReportsPage = (function () {
     });
     var topStaff = _topN(byStaff, 10);
 
-    /* Försenade per kund */
-    var late     = active.filter(function (a) { return a.scheduledDate && a.scheduledDate < today && a.status !== 'klar'; });
+    /* Försenade per kund (alla, ej bara period) */
+    var late     = active.filter(function (a) { return a.scheduledDate && a.scheduledDate < today && a.status !== 'klar' && a.status !== 'fakturerad'; });
     var lateByCu = _groupBy(late, function (a) { return a.customerId; });
     var topLate  = _topN(lateByCu, 8);
 
@@ -197,20 +328,21 @@ const ReportsPage = (function () {
     var maxStaff = topStaff.length ? topStaff[0].val : 1;
     var maxLate  = topLate.length  ? topLate[0].val  : 1;
 
-    return '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
+    return _periodBar(range) +
+    _qualityBanner(qualIssues) +
+    '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Visar AO med scheduledDate/skapad i perioden <strong>' + esc(range.label) + '</strong>. Försenade AO visas oavsett period.</div>' +
+    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('users', 14) + ' Flest AO per kund (top 10)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('users', 14) + ' AO per kund (top 10)</div>' +
         (topCu.length ? topCu.map(function (r) {
-          return _bar(_cuName(r.key), r.val, maxCu, 'var(--blue)',
-            'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
+          return _bar(_cuName(r.key), r.val, maxCu, 'var(--blue)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' Flest AO per fastighet (top 10)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' AO per fastighet (top 10)</div>' +
         (topProp.length ? topProp.map(function (r) {
-          return _bar(_propName(r.key), r.val, maxProp, 'var(--sky)',
-            'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
+          return _bar(_propName(r.key), r.val, maxProp, 'var(--sky)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
       '</div>' +
     '</div>' +
     '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
@@ -218,39 +350,43 @@ const ReportsPage = (function () {
         '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('home', 14) + ' AO per objekt (top 8)</div>' +
         (topObj.length ? topObj.map(function (r) {
           return _bar(_objName(r.key), r.val, maxObj, 'var(--acc)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga objekt-kopplade AO</div>') +
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga objekt-kopplade AO i perioden</div>') +
       '</div>' +
       '<div class="ibox">' +
         '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('user', 14) + ' AO per personal (top 10)</div>' +
         (topStaff.length ? topStaff.map(function (r) {
           return _bar(_staffName(r.key), r.val, maxStaff, 'var(--or)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
       '</div>' +
     '</div>' +
     '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('clock', 14) + ' Försenade AO per kund</div>' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('clock', 14) + ' Försenade AO per kund (alla perioder)</div>' +
       (topLate.length ? topLate.map(function (r) {
-        return _bar(_cuName(r.key), r.val, maxLate, 'var(--rd)',
-          'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
+        return _bar(_cuName(r.key), r.val, maxLate, 'var(--rd)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
       }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga försenade AO</div>') +
     '</div>';
   }
 
   function _tid() {
+    var range   = _periodRange();
     var entries = state.timeEntries || [];
-    var month   = _thisMonth();
 
-    /* Per personal — denna månad */
-    var thisMonthEntries = entries.filter(function (e) {
-      return (e.date || e.startDate || '').slice(0, 7) === month;
-    });
-    var byStaff = _groupBy(thisMonthEntries, function (e) { return e.staffId; });
-    var topStaff = _topN(byStaff, 15, function (items) {
+    /* Filtrera på period */
+    var inPeriod = entries.filter(function (e) { return _inPeriod(e.date || e.startDate, range); });
+
+    /* Datakvalitet */
+    var noStaff = inPeriod.filter(function (e) { return !e.staffId; }).length;
+    var qualIssues = [];
+    if (noStaff) qualIssues.push(noStaff + ' tidsregistreringar saknar personal (visas ej i personalgrafer)');
+
+    /* Per personal */
+    var byStaff   = _groupBy(inPeriod, function (e) { return e.staffId; });
+    var topStaff  = _topN(byStaff, 15, function (items) {
       return items.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
     }).map(function (r) { r.val = Math.round(r.val * 10) / 10; return r; });
 
-    /* Personalbeläggning — timmar som % av 160h/månad */
-    var totalHoursMonth = thisMonthEntries.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
+    /* Beläggning per person (estimat 160 h/mån) */
+    var totalHours = inPeriod.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
     var belaggning = Object.keys(byStaff).map(function (sid) {
       var h = byStaff[sid].reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
       return { staffId: sid, hours: Math.round(h * 10) / 10 };
@@ -258,93 +394,111 @@ const ReportsPage = (function () {
     var maxBel = belaggning.length ? belaggning[0].hours : 1;
 
     /* Per AO */
-    var byAO = _groupBy(entries.filter(function (e) { return e.workOrderId; }), function (e) { return e.workOrderId; });
+    var byAO  = _groupBy(entries.filter(function (e) { return e.workOrderId; }), function (e) { return e.workOrderId; });
     var topAO = _topN(byAO, 8, function (items) {
       return items.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
     }).map(function (r) { r.val = Math.round(r.val * 10) / 10; return r; });
 
-    /* Per fastighet */
+    /* Per fastighet via AO-koppling (alla tider, inte bara period, för total bild) */
     var byPropH = {};
-    entries.forEach(function (e) {
+    inPeriod.forEach(function (e) {
       var ao = e.workOrderId ? (state.workOrders || []).find(function (a) { return a.id === e.workOrderId; }) : null;
-      if (!ao) return;
-      var pid = ao.propertyId || '—';
-      byPropH[pid] = (byPropH[pid] || 0) + (parseFloat(e.duration) || 0);
+      if (!ao || !ao.propertyId) return;
+      byPropH[ao.propertyId] = (byPropH[ao.propertyId] || 0) + (parseFloat(e.duration) || 0);
     });
-    var topPropH = Object.keys(byPropH).map(function (k) { return { key: k, val: Math.round(byPropH[k] * 10) / 10 }; })
+    var topPropH  = Object.keys(byPropH).map(function (k) { return { key: k, val: Math.round(byPropH[k] * 10) / 10 }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 8);
-    var maxPropH = topPropH.length ? topPropH[0].val : 1;
+    var maxPropH  = topPropH.length  ? topPropH[0].val  : 1;
+    var maxStaff  = topStaff.length  ? topStaff[0].val  : 1;
+    var maxAO     = topAO.length     ? topAO[0].val     : 1;
 
-    var maxStaff = topStaff.length ? topStaff[0].val : 1;
-    var maxAO    = topAO.length    ? topAO[0].val    : 1;
+    /* Beläggningsfärg: <60% grå, 60–85% grön, 85–100% orange, >100% röd */
+    function _belColor(h) {
+      var pct = (h / 160) * 100;
+      if (pct > 100) return 'var(--rd)';
+      if (pct >= 85)  return 'var(--or)';
+      if (pct >= 60)  return 'var(--gr)';
+      return 'var(--sky)';
+    }
 
-    return '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('clock', 'Tim denna mån', Math.round(totalHoursMonth) + ' h', 'registrerad tid ' + month) +
-      _kpi('users', 'Personal aktiv', belaggning.length + ' st', 'med registrerad tid') +
+    return _periodBar(range) +
+    _qualityBanner(qualIssues) +
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('clock',  'Tim ' + range.label, Math.round(totalHours) + ' h', 'registrerad tid i perioden') +
+      _kpi('users',  'Personal aktiv',     belaggning.length + ' st',     'med registrerad tid') +
       _kpi('clipboard-list', 'AO med tid', Object.keys(byAO).length + ' st', 'arbetsordrar med tidspost') +
     '</div>' +
     '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clock', 14) + ' Timmar per personal — ' + month + '</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Registrerade timmar denna månad</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clock', 14) + ' Timmar per personal — ' + range.label + '</div>' +
+        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Registrerade timmar i perioden</div>' +
         (topStaff.length ? topStaff.map(function (r) {
           return _bar(_staffName(r.key), r.val + ' h', maxStaff, 'var(--blue)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga tidsregistreringar denna månad</div>') +
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga tidsregistreringar i perioden</div>') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('activity', 14) + ' Personalbeläggning — ' + month + '</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Timmar loggade (referens: 160 h/mån)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('activity', 14) + ' Beläggningsestimat — ' + range.label + '</div>' +
+        '<div style="font-size:11px;color:var(--mt);margin-bottom:6px;">Registrerade timmar vs. 160 h/mån (standardvärde). <strong>Obs: faktisk kapacitet varierar per person</strong> (sysselsättningsgrad, frånvaro, deltid saknas).</div>' +
+        '<div style="font-size:10px;color:var(--mt);margin-bottom:8px;">Färg: <span style="color:var(--sky);">■</span> &lt;60% låg · <span style="color:var(--gr);">■</span> 60–85% normal · <span style="color:var(--or);">■</span> 85–100% hög · <span style="color:var(--rd);">■</span> &gt;100% överbelastad</div>' +
         (belaggning.length ? belaggning.map(function (r) {
           var pct160 = Math.round((r.hours / 160) * 100);
-          var col = pct160 >= 90 ? 'var(--rd)' : pct160 >= 60 ? 'var(--or)' : 'var(--gr)';
-          return _bar(_staffName(r.staffId), r.hours + ' h (' + pct160 + '%)', maxBel, col);
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga tidsregistreringar denna månad</div>') +
+          return _bar(_staffName(r.staffId), r.hours + ' h (' + pct160 + '%)', maxBel, _belColor(r.hours));
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga tidsregistreringar i perioden</div>') +
       '</div>' +
     '</div>' +
     '<div class="g2" style="gap:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clipboard-list', 14) + ' Tim per AO (top 8, totalt)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clipboard-list', 14) + ' Timmar per AO (top 8, totalt)</div>' +
         '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Mest tidskrävande arbetsordrar</div>' +
         (topAO.length ? topAO.map(function (r) {
           var ao = (state.workOrders || []).find(function (a) { return a.id === r.key; });
           var label = ao ? (r.key + ' – ' + (ao.title || '').slice(0, 22)) : r.key;
-          return _bar(label, r.val + ' h', maxAO, 'var(--acc)',
-            'Router.showPage(\'pg-ao-detail\',{aoId:\'' + r.key + '\'})');
+          return _bar(label, r.val + ' h', maxAO, 'var(--acc)', 'Router.showPage(\'pg-ao-detail\',{aoId:\'' + r.key + '\'})');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen tiddata</div>') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Tim per fastighet (top 8)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Timmar per fastighet — ' + range.label + '</div>' +
         '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summerad tid via AO-koppling</div>' +
         (topPropH.length ? topPropH.map(function (r) {
-          return _bar(_propName(r.key), r.val + ' h', maxPropH, 'var(--sky)',
-            'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata</div>') +
+          return _bar(_propName(r.key), r.val + ' h', maxPropH, 'var(--sky)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata i perioden</div>') +
       '</div>' +
     '</div>';
   }
 
   function _avvikelser() {
+    var range = _periodRange();
     var avvs  = state.avvikelser || [];
-    var oppna = avvs.filter(function (a) { return a.status === 'öppen'; });
 
-    /* Per fastighet */
+    /* Filtrera avvikelser på period (skapade i perioden) */
+    var inPeriod = avvs.filter(function (a) { return _inPeriod(a.date || a.createdAt, range); });
+    var oppna    = avvs.filter(function (a) { return a.status === 'öppen'; }); /* alla öppna, oavsett period */
+
+    /* Datakvalitet */
+    var noType  = inPeriod.filter(function (a) { return !a.issueType; }).length;
+    var noProp  = inPeriod.filter(function (a) { return !a.propertyId; }).length;
+    var qualIssues = [];
+    if (noType) qualIssues.push(noType + ' avvikelser saknar feltyp');
+    if (noProp) qualIssues.push(noProp + ' avvikelser saknar fastighetskoppling');
+
+    /* Per fastighet (öppna, alla perioder) */
     var byProp  = _groupBy(oppna, function (a) { return a.propertyId; });
     var topProp = _topN(byProp, 10);
 
-    /* Per objekt */
-    var byObj  = _groupBy(oppna.filter(function (a) { return a.objectId; }), function (a) { return a.objectId; });
-    var topObj = _topN(byObj, 8);
+    /* Per objekt (öppna) */
+    var byObj   = _groupBy(oppna.filter(function (a) { return a.objectId; }), function (a) { return a.objectId; });
+    var topObj  = _topN(byObj, 8);
 
-    /* Per feltyp (alla, ej bara öppna) */
-    var byType  = _groupBy(avvs, function (a) { return a.issueType || '—'; });
+    /* Per feltyp (period) */
+    var byType  = _groupBy(inPeriod, function (a) { return a.issueType || '—'; });
     var topType = _topN(byType, 8);
 
-    /* Återkommande via recurringKey — per fastighet + per objekt */
+    /* Återkommande via recurringKey */
     var recurring  = avvs.filter(function (a) { return a.recurringKey; });
     var byRecKey   = _groupBy(recurring, function (a) { return a.recurringKey; });
     var topRecur   = _topN(byRecKey, 8).filter(function (r) { return r.val > 1; });
 
-    /* Återkommande per fastighet: räkna unika recurringKeys per property */
+    /* Återkommande per fastighet (unika recurringKeys) */
     var recurByProp = {};
     recurring.forEach(function (a) {
       if (!a.propertyId) return;
@@ -355,23 +509,25 @@ const ReportsPage = (function () {
       .map(function (k) { return { key: k, val: recurByProp[k].size }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 8);
 
-    /* Per allvarlighetsgrad */
-    var bySev      = _groupBy(avvs, function (a) { return a.severity || 'ej angiven'; });
-    var sevColors  = { kritisk: 'var(--rd)', hög: 'var(--or)', medel: 'var(--or)', låg: 'var(--gr)', 'ej angiven': 'var(--mt)' };
-    var sevOrder   = ['kritisk', 'hög', 'medel', 'låg', 'ej angiven'];
-    var maxSev     = Math.max.apply(null, sevOrder.map(function (s) { return (bySev[s] || []).length; }).concat([1]));
-    var maxProp    = topProp.length    ? topProp[0].val    : 1;
-    var maxObj     = topObj.length     ? topObj[0].val     : 1;
-    var maxType    = topType.length    ? topType[0].val    : 1;
-    var maxRecur   = topRecur.length   ? topRecur[0].val   : 1;
-    var maxRProp   = topRecurProp.length ? topRecurProp[0].val : 1;
+    /* Per allvarlighetsgrad (period) */
+    var bySev     = _groupBy(inPeriod, function (a) { return a.severity || 'ej angiven'; });
+    var sevColors = { kritisk: 'var(--rd)', hög: 'var(--or)', medel: 'var(--or)', låg: 'var(--gr)', 'ej angiven': 'var(--mt)' };
+    var sevOrder  = ['kritisk', 'hög', 'medel', 'låg', 'ej angiven'];
+    var maxSev    = Math.max.apply(null, sevOrder.map(function (s) { return (bySev[s] || []).length; }).concat([1]));
+    var maxProp   = topProp.length    ? topProp[0].val    : 1;
+    var maxObj    = topObj.length     ? topObj[0].val     : 1;
+    var maxType   = topType.length    ? topType[0].val    : 1;
+    var maxRecur  = topRecur.length   ? topRecur[0].val   : 1;
+    var maxRProp  = topRecurProp.length ? topRecurProp[0].val : 1;
 
-    return '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
+    return _periodBar(range) +
+    _qualityBanner(qualIssues) +
+    '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Öppna avvikelser visas för alla perioder. Feltyp, allvarlighetsgrad och återkommande filtreras på <strong>' + esc(range.label) + '</strong>.</div>' +
+    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' Öppna avvikelser per fastighet</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' Öppna avvikelser per fastighet (alla)</div>' +
         (topProp.length ? topProp.map(function (r) {
-          return _bar(_propName(r.key), r.val, maxProp, 'var(--rd)',
-            'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+          return _bar(_propName(r.key), r.val, maxProp, 'var(--rd)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga öppna avvikelser</div>') +
       '</div>' +
       '<div class="ibox">' +
@@ -383,65 +539,78 @@ const ReportsPage = (function () {
     '</div>' +
     '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('alert-triangle', 14) + ' Per allvarlighetsgrad (totalt)</div>' +
-        sevOrder.map(function (s) {
-          return _bar(s, (bySev[s] || []).length, maxSev, sevColors[s]);
-        }).join('') +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('alert-triangle', 14) + ' Per allvarlighetsgrad — ' + range.label + '</div>' +
+        sevOrder.map(function (s) { return _bar(s, (bySev[s] || []).length, maxSev, sevColors[s]); }).join('') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('tag', 14) + ' Avvikelser per feltyp (top 8)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('tag', 14) + ' Avvikelser per feltyp — ' + range.label + '</div>' +
         (topType.length ? topType.map(function (r) {
           return _bar(r.key, r.val, maxType, 'var(--or)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga feltyper registrerade</div>') +
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga avvikelser i perioden</div>') +
       '</div>' +
     '</div>' +
     '<div class="g2" style="gap:12px;">' +
       '<div class="ibox">' +
         '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('repeat', 14) + ' Återkommande mönster (> 1 förekomst)</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Grupperade via recurringKey</div>' +
+        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Alla perioder · grupperade via recurringKey</div>' +
         (topRecur.length ? topRecur.map(function (r) {
           var label = r.key.split('::').pop() || r.key;
           return _bar(label, r.val, maxRecur, 'var(--rd)');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga återkommande mönster ännu</div>') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Fastigheter med flest återkommande</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Antal unika återkommande mönster per fastighet</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Fastigheter med flest återkommande mönster</div>' +
+        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Alla perioder · unika recurringKeys per fastighet</div>' +
         (topRecurProp.length ? topRecurProp.map(function (r) {
-          return _bar(_propName(r.key), r.val + ' mönster', maxRProp, 'var(--rd)',
-            'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+          return _bar(_propName(r.key), r.val + ' mönster', maxRProp, 'var(--rd)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
         }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
       '</div>' +
     '</div>';
   }
 
   function _ekonomi() {
-    var today  = _today();
-    var month  = _thisMonth();
-    var invs   = state.invoices || [];
-    var aos    = (state.workOrders || []).filter(function (a) { return !a.deleted; });
+    var range = _periodRange();
+    var invs  = state.invoices || [];
+    var aos   = (state.workOrders || []).filter(function (a) { return !a.deleted; });
 
-    /* Faktureringsgrad */
+    /* ── Intäktskällor ──────────────────────────────────────────────
+       Fakturerat    = fakturor i perioden (ej makulerade)
+       Klart att fak = AO med status klar, inget invoiceId (ej period-filtrerat, visar totalt)
+       Pågående      = AO med status pågående/planerad (antal, inget belopp)
+       OBS: Klara och pågående AO saknar ett faktisk belopps-fält utan summering av
+       material + tid × timpris. Visas som antal, inte som kr.
+    ──────────────────────────────────────────────────────────────── */
+    var fakInvs    = invs.filter(function (i) { return _inPeriod(i.invoiceDate || i.date, range) && i.status !== 'makulerad'; });
+    var totalFak   = fakInvs.reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+    var totalAllFak = invs.filter(function (i) { return i.status !== 'makulerad'; })
+      .reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+
+    var klaraEjFak = aos.filter(function (a) { return a.status === 'klar' && !a.invoiceId; });
+    var pagaende   = aos.filter(function (a) { return a.status === 'pågående' || a.status === 'planerad'; });
+
+    /* Faktureringsgrad (antal AO) */
     var allKlara     = aos.filter(function (a) { return a.status === 'klar' || a.status === 'fakturerad'; });
     var faktureradeCnt = aos.filter(function (a) { return a.status === 'fakturerad'; }).length;
     var fakGrad = allKlara.length > 0 ? Math.round((faktureradeCnt / allKlara.length) * 100) : 0;
 
-    /* Totala intäkter */
-    var totalRev = invs.reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
-    var monthRev = invs.filter(function (i) { return (i.invoiceDate || '').slice(0, 7) === month; })
-      .reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
-
-    /* Materialkostnad */
+    /* Material (alla AO) */
     var matCost = 0;
+    var noMatPrice = 0;
     aos.forEach(function (ao) {
       (ao.materials || []).forEach(function (m) {
-        matCost += (parseFloat(m.totalPrice || m.price) || 0) * (parseFloat(m.quantity) || 1);
+        var up = parseFloat(m.totalPrice || m.unitPrice || m.price);
+        if (!up) { noMatPrice++; return; }
+        matCost += up * (parseFloat(m.quantity) || 1);
       });
     });
 
-    /* Intäkter per kund */
+    /* Bidrag före lönekostnad = fakturerat (period) − total materialkostnad (alla)
+       OBS: inte ett fullständigt TB. Lönekostnad, underentreprenörer och OH saknas. */
+    var bidragForeLonel = totalFak - matCost;
+
+    /* Intäkter per kund (period) */
     var byCuRev = {};
-    invs.forEach(function (inv) {
+    fakInvs.forEach(function (inv) {
       var cid = inv.customerId || '—';
       byCuRev[cid] = (byCuRev[cid] || 0) + (parseFloat(inv.amount) || 0);
     });
@@ -449,13 +618,12 @@ const ReportsPage = (function () {
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 10);
     var maxCuRev = topCuRev.length ? topCuRev[0].val : 1;
 
-    /* Intäkter per fastighet (via AO-koppling på faktura) */
+    /* Intäkter per fastighet via AO-koppling (period) */
     var byPropRev = {};
-    invs.forEach(function (inv) {
+    fakInvs.forEach(function (inv) {
       var ao = inv.workOrderId ? aos.find(function (a) { return a.id === inv.workOrderId; }) : null;
-      var pid = (ao && ao.propertyId) ? ao.propertyId : null;
-      if (!pid) return;
-      byPropRev[pid] = (byPropRev[pid] || 0) + (parseFloat(inv.amount) || 0);
+      if (!ao || !ao.propertyId) return;
+      byPropRev[ao.propertyId] = (byPropRev[ao.propertyId] || 0) + (parseFloat(inv.amount) || 0);
     });
     var topPropRev = Object.keys(byPropRev).map(function (k) { return { key: k, val: byPropRev[k] }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 8);
@@ -463,99 +631,113 @@ const ReportsPage = (function () {
 
     /* Intäkter per månad (senaste 12) */
     var monthMap = {};
-    invs.forEach(function (inv) {
-      var m = (inv.invoiceDate || '').slice(0, 7);
+    invs.filter(function (i) { return i.status !== 'makulerad'; }).forEach(function (inv) {
+      var m = (inv.invoiceDate || inv.date || '').slice(0, 7);
       if (m) monthMap[m] = (monthMap[m] || 0) + (parseFloat(inv.amount) || 0);
     });
     var months12 = [];
     for (var i = 11; i >= 0; i--) {
-      var d = new Date();
-      d.setMonth(d.getMonth() - i);
+      var d = new Date(); d.setMonth(d.getMonth() - i);
       var mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       months12.push({ key: mk, label: _monthLabel(mk), val: monthMap[mk] || 0 });
     }
     var maxMonthRev = Math.max.apply(null, months12.map(function (m) { return m.val; }).concat([1]));
 
     /* Klara AO ej fakturerade per kund */
-    var ejFak    = aos.filter(function (a) { return a.status === 'klar' && !a.invoiceId; });
-    var ejFakByCu = _groupBy(ejFak, function (a) { return a.customerId; });
+    var ejFakByCu = _groupBy(klaraEjFak, function (a) { return a.customerId; });
     var topEjFak  = _topN(ejFakByCu, 8);
     var maxEjFak  = topEjFak.length ? topEjFak[0].val : 1;
 
-    /* Täckningsbidrag-estimat (intäkter - materialkostnad; ingen lönekostnad i systemet) */
-    var tb = totalRev - matCost;
+    /* Datakvalitet */
+    var noInvLink = fakInvs.filter(function (i) { return !i.workOrderId; }).length;
+    var qualIssues = [];
+    if (noMatPrice) qualIssues.push(noMatPrice + ' materialposter saknar pris (räknas ej i materialkostnad)');
+    if (noInvLink)  qualIssues.push(noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)');
 
-    return '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('trending-up',   'Totala intäkter',     totalRev ? Math.round(totalRev).toLocaleString('sv-SE') + ' kr' : '—', 'alla fakturerade') +
-      _kpi('receipt',       'Intäkter ' + _monthLabel(month), monthRev ? Math.round(monthRev).toLocaleString('sv-SE') + ' kr' : '—', 'fakturerade denna månad') +
-      _kpi('percent',       'Faktureringsgrad',     fakGrad + ' %', faktureradeCnt + ' av ' + allKlara.length + ' klara AO') +
-      _kpi('shopping-cart', 'Materialkostnad',      matCost ? Math.round(matCost).toLocaleString('sv-SE') + ' kr' : '—', 'summa material på AO') +
-      _kpi('trending-up',   'TB (intäkt–mat)',      tb ? Math.round(tb).toLocaleString('sv-SE') + ' kr' : '—', 'estimat utan lönekostnad') +
+    return _periodBar(range) +
+    _qualityBanner(qualIssues) +
+    /* Intäktsförklaring */
+    '<div style="background:var(--bg2,var(--br));border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--mt);">' +
+      '<strong>Intäktsdefinition:</strong> Fakturerat = summa av <code>state.invoices[].amount</code> med invoiceDate i perioden, exkl. makulerade. ' +
+      'Klara ej fakturerade AO och pågående ordervärde visas som <em>antal</em> — belopp kräver summering av material + tid × timpris.<br>' +
+      '<strong>Faktureringsgrad:</strong> Antal AO med status "fakturerad" / (antal AO med status "klar" + "fakturerad"). ' +
+      'Inte ett värdebaserat mått — saknar prissättning per AO.' +
+    '</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('trending-up',   'Fakturerat ' + range.label,    totalFak ? _fmtKr(totalFak) : '—',         'Källa: fakturor i perioden (ej makulerade)') +
+      _kpi('trending-up',   'Fakturerat totalt',            totalAllFak ? _fmtKr(totalAllFak) : '—',    'alla perioder') +
+      _kpi('percent',       'Faktureringsgr. (antal AO)',   fakGrad + ' %',                              faktureradeCnt + ' av ' + allKlara.length + ' klara · obs: antal-baserat') +
+      _kpi('check-circle',  'Klara ej fakturerade',         klaraEjFak.length + ' AO',                  'belopp beräknas ej utan prissättning',      'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
+      _kpi('clock',         'Pågående ordrar',              pagaende.length + ' AO',                     'status pågående/planerad · inget belopp',   'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
+      _kpi('shopping-cart', 'Materialkostnad (totalt)',      matCost ? _fmtKr(matCost) : '—',            'alla AO, alla perioder') +
+      _kpi('trending-up',   'Bidrag före lönekostnad',      bidragForeLonel ? _fmtKr(bidragForeLonel) : '—', 'Fakturerat (period) − materialkostnad (totalt) · ej fullständigt TB') +
     '</div>' +
     '<div class="ibox" style="margin-bottom:12px;">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('calendar', 14) + ' Intäkter per månad — senaste 12</div>' +
-      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Fakturerade belopp per månad</div>' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('calendar', 14) + ' Fakturerat per månad — senaste 12</div>' +
+      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summa fakturabelopp per månad (ej makulerade)</div>' +
       months12.map(function (m) {
-        return _bar(m.label, m.val ? Math.round(m.val).toLocaleString('sv-SE') + ' kr' : '0 kr', maxMonthRev, 'var(--blue)');
+        return _bar(m.label, m.val ? _fmtKr(m.val) : '0 kr', maxMonthRev, 'var(--blue)');
       }).join('') +
     '</div>' +
     '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('users', 14) + ' Intäkter per kund (top 10)</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summerade fakturerade belopp</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('users', 14) + ' Fakturerat per kund — ' + range.label + '</div>' +
         (topCuRev.length ? topCuRev.map(function (r) {
-          return _bar(_cuName(r.key), Math.round(r.val).toLocaleString('sv-SE') + ' kr', maxCuRev, 'var(--gr)',
-            'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga fakturor registrerade</div>') +
+          return _bar(_cuName(r.key), _fmtKr(r.val), maxCuRev, 'var(--gr)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga fakturor i perioden</div>') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Intäkter per fastighet (top 8)</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Fakturerat per fastighet — ' + range.label + '</div>' +
         '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Via AO-koppling på faktura</div>' +
         (topPropRev.length ? topPropRev.map(function (r) {
-          return _bar(_propName(r.key), Math.round(r.val).toLocaleString('sv-SE') + ' kr', maxPropRev, 'var(--sky)',
-            'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata via fakturor</div>') +
+          return _bar(_propName(r.key), _fmtKr(r.val), maxPropRev, 'var(--sky)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata (fakturor saknar AO-koppling)</div>') +
       '</div>' +
     '</div>' +
     '<div class="ibox">' +
       '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('alert-circle', 14) + ' Klara AO ej fakturerade — per kund</div>' +
-      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Potentiellt ej fakturerade AO per kund</div>' +
+      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Visar antal AO — belopp kräver summering av material och tid × timpris</div>' +
       (topEjFak.length ? topEjFak.map(function (r) {
-        return _bar(_cuName(r.key), r.val + ' st', maxEjFak, 'var(--or)',
-          'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
+        return _bar(_cuName(r.key), r.val + ' AO', maxEjFak, 'var(--or)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
       }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga klara ofakturerade AO</div>') +
     '</div>';
   }
 
   function _material() {
-    var aos = (state.workOrders || []).filter(function (a) { return !a.deleted; });
+    var range = _periodRange();
+    var aos   = (state.workOrders || []).filter(function (a) { return !a.deleted; });
 
-    /* Samla allt material */
-    var allMats = [];
-    var aoCosts = [];
-    aos.forEach(function (ao) {
+    /* Filtrera AO på period */
+    var inPeriod = aos.filter(function (a) { return _inPeriod(a.scheduledDate || a.createdAt, range); });
+
+    var allMats  = [];
+    var aoCosts  = [];
+    var noPrice  = 0;
+    inPeriod.forEach(function (ao) {
       var mats = ao.materials || [];
       var cost = 0;
       mats.forEach(function (m) {
-        var qty       = parseFloat(m.quantity) || 1;
-        var unitPrice = parseFloat(m.totalPrice || m.unitPrice || m.price) || 0;
-        var lineTotal = unitPrice * qty;
-        cost += lineTotal;
-        allMats.push({ aoId: ao.id, name: m.name || m.article || m.description || '—', qty: qty, price: lineTotal });
+        var qty  = parseFloat(m.quantity) || 1;
+        var up   = parseFloat(m.totalPrice || m.unitPrice || m.price);
+        if (!up) { noPrice++; return; }
+        var line = up * qty;
+        cost += line;
+        allMats.push({ aoId: ao.id, name: m.name || m.article || m.description || '—', qty: qty, price: line });
       });
       if (mats.length > 0) aoCosts.push({ aoId: ao.id, cost: cost, ao: ao });
     });
 
+    var qualIssues = [];
+    if (noPrice) qualIssues.push(noPrice + ' materialposter saknar pris (räknas ej i summering)');
+
     if (allMats.length === 0) {
-      return '<div class="ibox"><p style="font-size:13px;color:var(--mt);">Inga material har registrerats på arbetsordrar ännu.</p>' +
-        '<p style="font-size:12px;color:var(--mt);">Material registreras under varje AO i fliken Material/resurser.</p></div>';
+      return _periodBar(range) + _qualityBanner(qualIssues) +
+        '<div class="ibox"><p style="font-size:13px;color:var(--mt);">Inga material har registrerats på arbetsordrar i perioden ' + esc(range.label) + '.</p></div>';
     }
 
     var totalMatCost = allMats.reduce(function (s, m) { return s + m.price; }, 0);
-
-    /* Per AO (top 10 kostnad) */
     aoCosts.sort(function (a, b) { return b.cost - a.cost; });
-    var topAO    = aoCosts.slice(0, 10);
+    var topAO     = aoCosts.slice(0, 10);
     var maxAOCost = topAO.length ? topAO[0].cost : 1;
 
     /* Per artikel */
@@ -571,53 +753,49 @@ const ReportsPage = (function () {
 
     /* Per kund */
     var byCuMat = {};
-    aos.forEach(function (ao) {
+    inPeriod.forEach(function (ao) {
       var cost = (ao.materials || []).reduce(function (s, m) {
-        return s + (parseFloat(m.totalPrice || m.unitPrice || m.price) || 0) * (parseFloat(m.quantity) || 1);
+        var up = parseFloat(m.totalPrice || m.unitPrice || m.price);
+        return s + (up ? up * (parseFloat(m.quantity) || 1) : 0);
       }, 0);
-      if (cost > 0) {
-        var cid = ao.customerId || '—';
-        byCuMat[cid] = (byCuMat[cid] || 0) + cost;
-      }
+      if (cost > 0) { var cid = ao.customerId || '—'; byCuMat[cid] = (byCuMat[cid] || 0) + cost; }
     });
     var topCuMat  = Object.keys(byCuMat).map(function (k) { return { key: k, val: byCuMat[k] }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 8);
     var maxCuMat  = topCuMat.length ? topCuMat[0].val : 1;
 
-    return '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('shopping-cart', 'Totalt material',    Math.round(totalMatCost).toLocaleString('sv-SE') + ' kr', 'alla AO') +
-      _kpi('layers',        'Unika artiklar',     Object.keys(byArt).length + ' st', 'distinkta artikelnamn') +
-      _kpi('clipboard-list','AO med material',    aoCosts.length + ' st', 'arbetsordrar med minst en artikel') +
+    return _periodBar(range) +
+    _qualityBanner(qualIssues) +
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('shopping-cart', 'Material ' + range.label,  _fmtKr(totalMatCost), 'AO i perioden med prissatta material') +
+      _kpi('layers',        'Unika artiklar',            Object.keys(byArt).length + ' st',  'distinkta artikelnamn') +
+      _kpi('clipboard-list','AO med material',           aoCosts.length + ' st',             'i perioden, minst en artikel') +
     '</div>' +
     '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clipboard-list', 14) + ' Materialkostnad per AO (top 10)</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Arbetsordrar med störst materialkostnad</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clipboard-list', 14) + ' Material per AO (top 10) — ' + range.label + '</div>' +
         topAO.map(function (r) {
           var label = r.aoId + (r.ao && r.ao.title ? ' – ' + r.ao.title.slice(0, 20) : '');
-          return _bar(label, Math.round(r.cost).toLocaleString('sv-SE') + ' kr', maxAOCost, 'var(--blue)',
-            'Router.showPage(\'pg-ao-detail\',{aoId:\'' + r.aoId + '\'})');
+          return _bar(label, _fmtKr(r.cost), maxAOCost, 'var(--blue)', 'Router.showPage(\'pg-ao-detail\',{aoId:\'' + r.aoId + '\'})');
         }).join('') +
       '</div>' +
       '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('tag', 14) + ' Vanligaste artiklar (top 10, kostnad)</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Per summerad totalkostnad</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('tag', 14) + ' Vanligaste artiklar (top 10)</div>' +
         topArt.map(function (r) {
-          return _bar(r.key, Math.round(r.val).toLocaleString('sv-SE') + ' kr (' + Math.round(r.qty * 10) / 10 + ' st)', maxArtCost, 'var(--acc)');
+          return _bar(r.key, _fmtKr(r.val) + ' (' + Math.round(r.qty * 10) / 10 + ' st)', maxArtCost, 'var(--acc)');
         }).join('') +
       '</div>' +
     '</div>' +
     '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('users', 14) + ' Materialkostnad per kund (top 8)</div>' +
-      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summerad materialkostnad via AO</div>' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('users', 14) + ' Material per kund (top 8) — ' + range.label + '</div>' +
       (topCuMat.length ? topCuMat.map(function (r) {
-        return _bar(_cuName(r.key), Math.round(r.val).toLocaleString('sv-SE') + ' kr', maxCuMat, 'var(--sky)',
-          'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
+        return _bar(_cuName(r.key), _fmtKr(r.val), maxCuMat, 'var(--sky)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
       }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
     '</div>';
   }
 
   function _serviceIntervall() {
+    var range = _periodRange();
     var today = _today();
     var props = state.properties || [];
     var allSI = [];
@@ -627,34 +805,37 @@ const ReportsPage = (function () {
       });
     });
 
+    /* Datakvalitet */
+    var noNextDate = allSI.filter(function (si) { return !si.nextDate; }).length;
+    var qualIssues = noNextDate ? [noNextDate + ' serviceintervall saknar nästa datum (visas ej i graferna)'] : [];
+
     var overdue = allSI.filter(function (si) { return si.nextDate && si.nextDate < today && si.status !== 'done'; });
     var coming  = allSI.filter(function (si) { return si.nextDate && si.nextDate >= today; })
       .sort(function (a, b) { return a.nextDate > b.nextDate ? 1 : -1; }).slice(0, 20);
 
-    /* Per fastighet — antal förfallna */
+    /* Per fastighet — förfallna */
     var overdueByProp = _groupBy(overdue, function (si) { return si._propId; });
     var topOverProp   = _topN(overdueByProp, 8);
     var maxOverProp   = topOverProp.length ? topOverProp[0].val : 1;
 
     function _siRow(si) {
-      var diff = si.nextDate && today
-        ? Math.round((new Date(si.nextDate) - new Date(today)) / 86400000)
-        : null;
+      var diff  = si.nextDate ? Math.round((new Date(si.nextDate) - new Date(today)) / 86400000) : null;
       var badge = diff == null ? '' :
-        diff < 0  ? '<span class="bdg bdg-red" style="font-size:9px;">'    + Math.abs(diff) + ' dagar sedan</span>'
+        diff < 0  ? '<span class="bdg bdg-red" style="font-size:9px;">' + Math.abs(diff) + ' dagar sedan</span>'
         : diff === 0 ? '<span class="bdg bdg-orange" style="font-size:9px;">Idag</span>'
         :              '<span class="bdg bdg-grey" style="font-size:9px;">Om ' + diff + ' d</span>';
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--br);gap:6px;">' +
         '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:12px;font-weight:600;">' + esc(si.name || si._propName) + '</div>' +
           '<div style="font-size:11px;color:var(--mt);">' + esc(si._propName) + (si.nextDate ? ' · ' + si.nextDate : '') + '</div>' +
-        '</div>' +
-        badge +
+        '</div>' + badge +
       '</div>';
     }
 
-    return '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('alert-circle', 'Förfallna',  overdue.length + ' st', 'serviceintervall passerat datum') +
+    return _periodBar(range) +
+    _qualityBanner(qualIssues) +
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+      _kpi('alert-circle', 'Förfallna',  overdue.length + ' st', 'passerat datum, ej klara') +
       _kpi('calendar',     'Kommande',   coming.length  + ' st', 'schemalagda framöver') +
       _kpi('wrench',       'Totalt',     allSI.length   + ' st', 'aktiva serviceintervall') +
     '</div>' +
@@ -670,37 +851,37 @@ const ReportsPage = (function () {
     '</div>' +
     '<div class="ibox">' +
       '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Förfallna per fastighet (top 8)</div>' +
-      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Antal förfallna serviceintervall per fastighet</div>' +
       (topOverProp.length ? topOverProp.map(function (r) {
-        return _bar(_propName(r.key), r.val + ' st', maxOverProp, 'var(--rd)',
-          'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
+        return _bar(_propName(r.key), r.val + ' st', maxOverProp, 'var(--rd)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
       }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga förfallna</div>') +
     '</div>';
   }
 
-  /* ── Render ──────────────────────────────────────────────────────── */
+  /* ══════════════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════════════ */
 
   function render() {
     var el = document.getElementById('pg-reports-content');
     if (!el) return;
 
     var tabs = [
-      { key: 'oversikt',        label: _ic('layout-dashboard', 12) + ' Översikt'         },
-      { key: 'arbetsordrar',    label: _ic('clipboard-list', 12)   + ' Arbetsordrar'     },
-      { key: 'tid',             label: _ic('clock', 12)             + ' Tid & personal'  },
-      { key: 'avvikelser',      label: _ic('alert-triangle', 12)    + ' Avvikelser'       },
-      { key: 'ekonomi',         label: _ic('trending-up', 12)       + ' Ekonomi'          },
-      { key: 'material',        label: _ic('package', 12)           + ' Material'         },
-      { key: 'serviceintervall',label: _ic('wrench', 12)            + ' Serviceintervall' }
+      { key: 'oversikt',         label: _ic('layout-dashboard', 12) + ' Översikt'          },
+      { key: 'arbetsordrar',     label: _ic('clipboard-list', 12)   + ' Arbetsordrar'      },
+      { key: 'tid',              label: _ic('clock', 12)             + ' Tid & personal'   },
+      { key: 'avvikelser',       label: _ic('alert-triangle', 12)    + ' Avvikelser'        },
+      { key: 'ekonomi',          label: _ic('trending-up', 12)       + ' Ekonomi'           },
+      { key: 'material',         label: _ic('package', 12)           + ' Material'          },
+      { key: 'serviceintervall', label: _ic('wrench', 12)            + ' Serviceintervall'  }
     ];
 
-    var tabBar = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+    var tabBar = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
       '<div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">' +
       tabs.map(function (t) {
         return '<button class="ft ' + (_tab === t.key ? 'on' : '') + '" onclick="ReportsPage._setTab(\'' + t.key + '\')">' + t.label + '</button>';
       }).join('') +
       '</div>' +
-      '<button class="btn bs bsm" id="rep-export-btn" onclick="ReportsPage._exportAll(this)" title="Exportera alla rapporter som XLSX">' +
+      '<button class="btn bs bsm" id="rep-export-btn" onclick="ReportsPage._exportAll(this)" title="Exportera som XLSX (respekterar vald period)">' +
         _ic('download', 13) + ' Exportera' +
       '</button>' +
     '</div>';
@@ -717,21 +898,40 @@ const ReportsPage = (function () {
     el.innerHTML = tabBar + content;
   }
 
-  function _setTab(key) {
-    _tab = key;
+  /* ── Publika metoder ──────────────────────────────────────────── */
+
+  function _setTab(key) { _tab = key; render(); }
+
+  function _setPeriod(preset) {
+    _periodPreset = preset;
+    if (preset !== 'custom') { _periodCustomFrom = ''; _periodCustomTo = ''; }
     render();
   }
 
+  function _setCustomFrom(val) { _periodCustomFrom = val; render(); }
+  function _setCustomTo(val)   { _periodCustomTo   = val; render(); }
+
   function _exportAll(btn) {
     if (typeof ImportExportService !== 'undefined') {
+      /* Gör aktuell period tillgänglig för exportFn */
+      if (typeof IMPORT_EXPORT_CONFIGS !== 'undefined' && IMPORT_EXPORT_CONFIGS.report) {
+        IMPORT_EXPORT_CONFIGS.report._currentRange = _periodRange();
+      }
       ImportExportService.showExportMenu('report', btn);
     }
   }
 
+  /* Exponera period för exportFn i ImportExportConfigs */
+  function getCurrentRange() { return _periodRange(); }
+
   return {
-    render:     render,
-    _setTab:    _setTab,
-    _exportAll: _exportAll
+    render:         render,
+    _setTab:        _setTab,
+    _setPeriod:     _setPeriod,
+    _setCustomFrom: _setCustomFrom,
+    _setCustomTo:   _setCustomTo,
+    _exportAll:     _exportAll,
+    getCurrentRange: getCurrentRange
   };
 
 })();

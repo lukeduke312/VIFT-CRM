@@ -128,12 +128,47 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 74 | Rondering — visningsrapport (PDF, dela) | KLAR | — | RonderingRapportPage v1 (skriv ut + dela via länk) |
 | 75 | Kalender — schemaläggning, dra-och-släpp | KLAR | — | CalendarPage v1 (dag/vecka/månad/agenda, DnD, filter, krockar, pool) |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
-| 77 | Rapporter — statistik, diagram (AO, tid, objekt) | KLAR | — | ReportsPage v3: ekonomi, material, personalbeläggning, per fastighet/objekt, klickbara KPIs |
+| 77 | Rapporter — statistik, diagram (AO, tid, objekt) | BYGGD – BEHÖVER TEST | — | ReportsPage v4: se detaljer nedan |
 | 78 | Mina jobb — tilldelade uppdrag per inloggad personal | KLAR | (befintlig) | MyJobsPage (existerar, fel status i MASTERPLAN) |
 | 79 | Avancerat behörighetssystem (per fastighet, per kundgrupp) | EJ BYGGD | Låg | Auth.js |
 | 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
 | 81 | Kontrakthantering (avtal, betalningsplan, villkor) | EJ BYGGD | Medel | ContractsPage |
 | 82 | Mobil-optimerad offline-läge (SW fallback) | EJ BYGGD | Låg | sw.js, IndexedDB |
+
+---
+
+## Punkt 77 — ReportsPage v4 (detaljer)
+
+**Leveransstatus:** BYGGD – BEHÖVER DATAVERIFIERING OCH WEBBLÄSARTEST  
+**Commit:** 4947923 (v3 bas) + ny commit (v4)
+
+### Vad som är byggd (v4)
+| Funktion | Status | Kommentar |
+|----------|--------|-----------|
+| Gemensamt periodfilter (7 preset + eget intervall) | Byggd | Alla flikar respekterar vald period |
+| 7 flikar: Översikt, Arbetsordrar, Tid, Avvikelser, Ekonomi, Material, Serviceintervall | Byggd | — |
+| Stapeldiagram klickbara till kundkort / fastighetskort / AO-detalj | Byggd | Se kända begränsningar nedan |
+| Datakvalitetsvarning per flik (orange banner) | Byggd | Visar poster utan kundkoppling, pris, personal m.m. |
+| Personalbeläggning (färgkodad med förklaringstext) | Byggd | Estimat baserat på 160 h/mån |
+| Intäkt uppdelat: Fakturerat / Klara ej fakturerade / Pågående | Byggd | Se intäktsdefinitioner nedan |
+| Export-knapp (XLSX, respekterar vald period) | Byggd | Period skickas till exportFn via _currentRange |
+
+### Kända begränsningar och estimat (dokumenteras inline i rapporten)
+- **Beläggning:** 160 h/mån är ett standardvärde. Individuell kapacitet (sysselsättningsgrad, frånvaro, deltid) saknas. Visas som "estimat" med förklaringstext direkt i rapporten.
+- **"Bidrag före lönekostnad"** = Fakturerat (period) − materialkostnad (alla AO, alla perioder). Inte ett fullständigt täckningsbidrag — lönekostnad, underentreprenörer, OH saknas. Benämns tydligt för att skilja sig från TB.
+- **Faktureringsgrad** mäts som antal AO (fakturerade / klara+fakturerade), inte som andel av fakturerbart värde. Beloppsbaserad faktureringsgrad kräver timpris per personal + prissättning per AO.
+- **Klara ej fakturerade AO** visas som antal — belopp kräver summering av material + tid × timpris.
+- **Klickbara staplar → fastighetsfiltrerad AO-lista:** Klick navigerar till fastighetskort (pg-property-detail), inte till filtrerad AO-lista, eftersom WorkOrdersPage saknar propertyId-filterparameter via Router.
+- **Intäktkälla:** `state.invoices[].amount` med `invoiceDate` i period, exkl. makulerade. Inte `workOrders` eller `quotes`.
+
+### Vad som behöver testas
+- [ ] Webbläsarverifiering (Chrome, Safari, iOS, iPad, Edge)
+- [ ] Periodfilter testat med verkliga data (flera månader, kvartal, år)
+- [ ] Datakvalitetsbanners visas korrekt med saknad data
+- [ ] Klick på staplar navigerar till rätt sida
+- [ ] Export (XLSX) respekterar vald period och innehåller rätt data
+- [ ] Beläggningsfärger fungerar korrekt vid >100%
+- [ ] Ekonomi-beräkningar verifierade mot faktiska fakturor i test-data
 
 ---
 
