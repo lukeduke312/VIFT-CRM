@@ -227,6 +227,27 @@ const Schema = {
     lockedSnapshotJSON: ''    // JSON-snapshot av offertens publika fält vid utskick (inga interna fält)
   }),
 
+  /* Bilaga kopplad till offert (Leverans E — E2b) */
+  offerAttachment: () => ({
+    id:                   '',
+    offerId:              '',
+    offerVersionId:       '',
+    storagePath:          '',  // offer-attachments/{offerId}/{id}/{filename} — exponeras ALDRIG i frontend
+    originalFileName:     '',
+    displayName:          '',
+    description:          '',
+    mimeType:             '',
+    sizeBytes:            0,
+    sortOrder:            0,
+    includeInPublicView:  true,
+    includeInCombinedPdf: false,
+    uploadedBy:           '',
+    uploadedAt:           '',
+    active:               true,
+    lockedInVersion:      '',   // offerId-token som låste den (vid digital länk-generering)
+    checksum:             ''    // SHA-256 hex
+  }),
+
   /* Händelselogg per offert (Leverans E — E1) */
   offerEvent: () => ({
     id:                     '',
