@@ -128,7 +128,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
-| 77 | Rapporter — statistik, diagram (AO, tid, objekt) | EJ BYGGD | Medel | ReportsPage |
+| 77 | Rapporter — statistik, diagram (AO, tid, objekt) | KLAR | d8bd9bc | ReportsPage v2 + export |
 | 78 | Mina jobb — tilldelade uppdrag per inloggad personal | EJ BYGGD | Hög | MyJobsPage |
 | 79 | Avancerat behörighetssystem (per fastighet, per kundgrupp) | EJ BYGGD | Låg | Auth.js |
 | 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
@@ -176,7 +176,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | Ronderingspass | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Mall, Fastighet, Kund | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
 | Avvikelser | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Fastighet, Obj | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
 | Serviceintervall | Byggd | Ej import | — | — | — | — | → Fastighet | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Rapporter | Ej byggd | — | — | — | — | — | — | — | Ej byggd | Ej byggd | Ej byggd | — | — | Ej byggd | Ej testad |
+| Rapporter | Byggd | Exportonly | — | — | — | — | — | — | Ej byggd | Byggd | Byggd | — | — | Byggd | Ej testad |
 
 **Säkerhetsregler (permanenta):**
 - `historicalImport:true` på AO/tid/faktura/avvikelse/ronderingspass: supprimerar push, auto-AO, billing, notiser
@@ -198,7 +198,7 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 | 85 | State — state.propertyRoles[], state.propertyContacts[], persist, DataSync | KLAR | af97e9f | state.js v30 |
 | 86 | Titelregister — CRUD i Admin (skapa/redigera titlar, scope, onlyOnePrimary) | KLAR | af97e9f | PageShells v81 |
 | 87 | Fastighetskortet — flik "Ansvariga & kontakter" (CRUD, primär, giltighet) | KLAR | af97e9f | PropertyDetailPage v20 |
-| 88 | Objektskortet — kontakter på objektnivå (hyresgäst, lokalansvarig) | EJ BYGGD | — | PropertyObjectPage |
+| 88 | Objektskortet — kontakter på objektnivå (hyresgäst, lokalansvarig) | KLAR | — | PropertyObjectPage v2 |
 | 89 | AO-wizard — föreslå kontakt baserat på fastighet + kategori + titel | KLAR | — | WorkOrdersPage v37 |
 | 90 | Dagens drift — visa ansvariga per fastighet | KLAR | — | OperationsPage v10 |
 | 91 | PropertyContactService — CRUD, primärkontroll, historikvy | KLAR | af97e9f | PropertyContactService.js v1 |

@@ -344,10 +344,15 @@ const ReportsPage = (function () {
       { key: 'serviceintervall', label: _ic('wrench', 12)          + ' Serviceintervall' }
     ];
 
-    var tabBar = '<div class="ftabs ao-status-tabs" style="margin-bottom:12px;">' +
+    var tabBar = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+      '<div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">' +
       tabs.map(function (t) {
         return '<button class="ft ' + (_tab === t.key ? 'on' : '') + '" onclick="ReportsPage._setTab(\'' + t.key + '\')">' + t.label + '</button>';
       }).join('') +
+      '</div>' +
+      '<button class="btn bs bsm" id="rep-export-btn" onclick="ReportsPage._exportAll(this)" title="Exportera alla rapporter som XLSX">' +
+        _ic('download', 13) + ' Exportera' +
+      '</button>' +
     '</div>';
 
     var content = '';
@@ -365,9 +370,16 @@ const ReportsPage = (function () {
     render();
   }
 
+  function _exportAll(btn) {
+    if (typeof ImportExportService !== 'undefined') {
+      ImportExportService.showExportMenu('report', btn);
+    }
+  }
+
   return {
-    render:   render,
-    _setTab:  _setTab
+    render:    render,
+    _setTab:   _setTab,
+    _exportAll: _exportAll
   };
 
 })();

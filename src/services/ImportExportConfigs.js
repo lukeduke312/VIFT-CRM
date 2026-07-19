@@ -869,6 +869,64 @@ IMPORT_EXPORT_CONFIGS.serviceInterval = {
   }
 };
 
+/* ── Rapporter (exportOnly, aggregerad statistik) ─────────────────────────── */
+IMPORT_EXPORT_CONFIGS.report = {
+  label: 'Rapporter', labelSingular: 'Rapport',
+  stateKey: null,
+  importable: false,
+  fields: [],
+  exportFn: function (opts) {
+    var sheets = [];
+    var ao    = (typeof state !== 'undefined' ? state.workOrders  || [] : []).filter(function(a){ return !a.deleted && !a.archived; });
+    var te    = (typeof state !== 'undefined' ? state.timeEntries || [] : []);
+    var avv   = (typeof state !== 'undefined' ? state.avvikelser  || [] : []);
+    var cus   = (typeof state !== 'undefined' ? state.customers   || [] : []);
+    var props = (typeof state !== 'undefined' ? state.properties  || [] : []);
+    var staff = (typeof state !== 'undefined' ? state.staff       || [] : []);
+
+    function cuName(id) { var c = cus.find(function(x){return x.id===id;}); return c ? (c.name||c.id) : id||''; }
+    function propName(id) { var p = props.find(function(x){return x.id===id;}); return p ? (p.name||p.address||p.id) : id||''; }
+    function staffName(id) { var s = staff.find(function(x){return x.id===id;}); return s ? (s.firstName+' '+s.lastName).trim() : id||''; }
+
+    /* --- Sheet 1: AO per status --- */
+    var statusCount = {};
+    ao.forEach(function(a){ statusCount[a.status] = (statusCount[a.status]||0) + 1; });
+    var s1rows = Object.keys(statusCount).map(function(k){ return [k, statusCount[k]]; });
+    sheets.push({ name: 'AO per status', headers: ['Status','Antal'], rows: s1rows });
+
+    /* --- Sheet 2: AO per kund (topp 20) --- */
+    var cuCount = {};
+    ao.forEach(function(a){ if(a.customerId){ cuCount[a.customerId]=(cuCount[a.customerId]||0)+1; } });
+    var cuRows = Object.keys(cuCount).sort(function(a,b){return cuCount[b]-cuCount[a];}).slice(0,20)
+      .map(function(id){ return [cuName(id), cuCount[id]]; });
+    sheets.push({ name: 'AO per kund', headers: ['Kund','Antal AO'], rows: cuRows });
+
+    /* --- Sheet 3: Tid per personal (tim) --- */
+    var staffMin = {};
+    te.forEach(function(t){ if(t.staffId){ staffMin[t.staffId]=(staffMin[t.staffId]||0)+(t.minutes||0); } });
+    var staffRows = Object.keys(staffMin).sort(function(a,b){return staffMin[b]-staffMin[a];})
+      .map(function(id){ return [staffName(id), Math.round(staffMin[id]/60*10)/10]; });
+    sheets.push({ name: 'Tid per personal', headers: ['Personal','Tim totalt'], rows: staffRows });
+
+    /* --- Sheet 4: Avvikelser per fastighet --- */
+    var avvProp = {};
+    avv.forEach(function(a){ if(a.propertyId){ avvProp[a.propertyId]=(avvProp[a.propertyId]||0)+1; } });
+    var avvRows = Object.keys(avvProp).sort(function(a,b){return avvProp[b]-avvProp[a];})
+      .map(function(id){ return [propName(id), avvProp[id]]; });
+    sheets.push({ name: 'Avvikelser per fastighet', headers: ['Fastighet','Antal avvikelser'], rows: avvRows });
+
+    /* --- Sheet 5: Avvikelser per feltyp --- */
+    var avvType = {};
+    avv.forEach(function(a){ var t=a.issueType||a.type||'okänd'; avvType[t]=(avvType[t]||0)+1; });
+    var avvTypeRows = Object.keys(avvType).sort(function(a,b){return avvType[b]-avvType[a];})
+      .map(function(t){ return [t, avvType[t]]; });
+    sheets.push({ name: 'Avvikelser per feltyp', headers: ['Feltyp','Antal'], rows: avvTypeRows });
+
+    /* Returnera för XLSX-export (headers+rows används ej direkt — returneras som sheets) */
+    return { headers: ['Rapport'], rows: [['Se flikar i XLSX']], _sheets: sheets };
+  }
+};
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Utökning av ImportExportService med generiska metoder
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -1191,8 +1249,10 @@ Object.assign(ImportExportService, {
         label: 'Exportera XLSX' + (label ? ' (' + label + ')' : ''),
         fn: function () {
           var d = ImportExportService.buildExportRowsForType(entityType, recs);
-          ImportExportService.downloadXLSX(base + tag + '-' + ts + '.xlsx', [{ name: cfg.label, headers: d.headers, rows: d.rows }]);
-          if (typeof showToast !== 'undefined') showToast('Exporterar ' + d.rows.length + ' poster som XLSX…');
+          var sheets = d._sheets || [{ name: cfg.label, headers: d.headers, rows: d.rows }];
+          ImportExportService.downloadXLSX(base + tag + '-' + ts + '.xlsx', sheets);
+          var total = sheets.reduce(function(s,sh){ return s + sh.rows.length; }, 0);
+          if (typeof showToast !== 'undefined') showToast('Exporterar rapport som XLSX (' + sheets.length + ' flikar)…');
         }
       },
       {

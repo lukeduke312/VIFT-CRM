@@ -123,6 +123,39 @@ const PropertyObjectPage = {
         </div>
       </div>` : ''}
 
+      <!-- Ansvariga (PropertyContactService) -->
+      ${(()=>{
+        if (typeof PropertyContactService === 'undefined') return '';
+        const pcs = PropertyContactService.getByObject(obj.id);
+        if (!pcs.length && !canManage) return '';
+        const rows = pcs.map(c => {
+          const role = PropertyContactService.getRole(c.roleId);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;">
+                ${c.isPrimary ? '<span style="color:var(--sky);font-weight:900;" title="Primär">★</span> ' : ''}
+                ${esc(c.personNameSnapshot || c.personId || '—')}
+              </div>
+              ${role ? `<div style="font-size:11px;color:var(--mt);">${esc(role.name)}</div>` : ''}
+              ${c.personPhoneSnapshot ? `<div style="font-size:11px;color:var(--mt);">${ic('phone',9)} ${esc(c.personPhoneSnapshot)}</div>` : ''}
+            </div>
+            ${canManage ? `<button class="btn bs bxs" style="font-size:10px;padding:3px 7px;"
+              onclick="PropertyObjectPage._editContact('${c.id}');event.stopPropagation();">${ic('pencil',11)}</button>
+            <button class="btn bxs" style="font-size:10px;padding:3px 7px;color:var(--rd);"
+              onclick="PropertyObjectPage._removeContact('${c.id}');event.stopPropagation();">${ic('trash-2',11)}</button>` : ''}
+          </div>`;
+        }).join('');
+        return `<div class="card" style="margin-bottom:8px;">
+          <div class="card-header">
+            <h3>${ic('user-check',14)} Ansvariga (${pcs.length})</h3>
+            ${canManage ? `<button class="btn bp bxs" onclick="PropertyObjectPage._addContact()">${ic('plus',13)} Lägg till</button>` : ''}
+          </div>
+          <div class="card-body" style="padding-top:6px;" id="propobj-contacts-body">
+            ${rows || '<div style="font-size:12px;color:var(--mt);padding:6px 0;">Inga ansvariga kopplade till objektet.</div>'}
+          </div>
+        </div>`;
+      })()}
+
       <!-- Kopplade AO:er -->
       ${allAOs.length > 0 ? `
       <div class="card" style="margin-bottom:8px;">
@@ -167,6 +200,119 @@ const PropertyObjectPage = {
         Skapad ${fmtDate(obj.createdAt)} · Uppdaterad ${fmtDate(obj.updatedAt)}
       </div>
     `;
+  },
+
+  _addContact() {
+    this._contactForm(null);
+  },
+
+  _editContact(id) {
+    if (typeof PropertyContactService === 'undefined') return;
+    const c = PropertyContactService.getByObject(this.objId, true).find(x => x.id === id);
+    if (c) this._contactForm(c);
+  },
+
+  _removeContact(id) {
+    Modal.confirm('Ta bort ansvarig från objektet?', () => {
+      if (typeof PropertyContactService !== 'undefined') PropertyContactService.remove(id);
+      this.render({ objId: this.objId });
+    });
+  },
+
+  _contactForm(contact) {
+    if (typeof PropertyContactService === 'undefined') return;
+    const roles   = PropertyContactService.activeRoles();
+    const staffList = (state.staff || []).filter(s => s.active !== false);
+    const c       = contact || {};
+    const body = `
+      <div class="fg"><label>Roll</label>
+        <select id="pobj-con-role">
+          <option value="">— Välj roll —</option>
+          ${roles.map(r => `<option value="${r.id}" ${c.roleId===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fg"><label>Person</label>
+        <select id="pobj-con-person-type" onchange="PropertyObjectPage._onPersonTypeChange()">
+          <option value="staff" ${(!c.personType||c.personType==='staff')?'selected':''}>Personal</option>
+          <option value="externalOther" ${c.personType==='externalOther'?'selected':''}>Extern (fritext)</option>
+        </select>
+      </div>
+      <div id="pobj-con-person-wrap">
+        <div class="fg" id="pobj-con-staff-wrap" ${c.personType==='externalOther'?'style="display:none"':''}>
+          <label>Personal</label>
+          <select id="pobj-con-staff">
+            <option value="">— Välj —</option>
+            ${staffList.map(s => `<option value="${s.id}" ${c.personId===s.id?'selected':''}>${esc(s.firstName+' '+s.lastName)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg" id="pobj-con-ext-wrap" ${c.personType!=='externalOther'?'style="display:none"':''}>
+          <label>Namn (fritext)</label>
+          <input id="pobj-con-ext-name" value="${esc(c.personNameSnapshot||'')}" placeholder="Förnamn Efternamn">
+        </div>
+      </div>
+      <div class="fg"><label>Telefon (valfritt)</label>
+        <input id="pobj-con-phone" type="tel" value="${esc(c.personPhoneSnapshot||'')}" placeholder="070-xxx xx xx"></div>
+      <div class="fg"><label>Anteckning</label>
+        <input id="pobj-con-notes" value="${esc(c.notes||'')}"></div>
+      <div class="fg" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="pobj-con-primary" ${c.isPrimary?'checked':''}>
+        <label for="pobj-con-primary" style="margin:0;font-weight:500;">Primär kontakt</label>
+      </div>`;
+
+    Modal.open({
+      title: contact ? 'Redigera ansvarig' : 'Lägg till ansvarig',
+      body,
+      buttons: [
+        { label: contact ? 'Spara' : 'Lägg till', cls: 'btn bp', onClick: () => this._saveContact(contact ? contact.id : null) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _onPersonTypeChange() {
+    const t = document.getElementById('pobj-con-person-type')?.value;
+    const sw = document.getElementById('pobj-con-staff-wrap');
+    const ew = document.getElementById('pobj-con-ext-wrap');
+    if (sw) sw.style.display = t === 'externalOther' ? 'none' : '';
+    if (ew) ew.style.display = t === 'externalOther' ? '' : 'none';
+  },
+
+  _saveContact(id) {
+    if (typeof PropertyContactService === 'undefined') return;
+    const obj = this.objId ? getPropObj(this.objId) : null;
+    if (!obj) return;
+    const personType = document.getElementById('pobj-con-person-type')?.value || 'staff';
+    const isExt      = personType === 'externalOther';
+    const personId   = isExt ? '' : (document.getElementById('pobj-con-staff')?.value || '');
+    const extName    = isExt ? (document.getElementById('pobj-con-ext-name')?.value || '').trim() : '';
+    const roleId     = document.getElementById('pobj-con-role')?.value || '';
+    const notes      = document.getElementById('pobj-con-notes')?.value || '';
+    const phone      = document.getElementById('pobj-con-phone')?.value || '';
+    const isPrimary  = document.getElementById('pobj-con-primary')?.checked || false;
+
+    if (!roleId) { alert('Välj en roll.'); return; }
+    if (!isExt && !personId) { alert('Välj en person.'); return; }
+    if (isExt && !extName) { alert('Ange ett namn.'); return; }
+
+    const data = {
+      propertyId:          obj.propertyId,
+      objectId:            obj.id,
+      roleId,
+      personType,
+      personId,
+      isPrimary,
+      notes,
+      active: true,
+      ...(isExt ? { personNameSnapshot: extName, personPhoneSnapshot: phone } : {})
+    };
+
+    if (id) {
+      PropertyContactService.update(id, data);
+    } else {
+      PropertyContactService.add(data);
+    }
+    Modal.close();
+    this.render({ objId: this.objId });
   },
 
   openCreateAO() {
