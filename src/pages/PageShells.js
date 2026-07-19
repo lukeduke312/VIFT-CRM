@@ -3765,6 +3765,12 @@ ${hasRut?`<div class="rut">
       off.lockedSnapshotJSON = JSON.stringify(snapshot);
       off.updatedAt          = now;
       if (off.status === 'utkast') { off.status = 'skickad'; off.sentAt = now; }
+      /* Versionslås aktiva bilagor som ännu inte är låsta */
+      (state.offerAttachments || []).forEach(function(a) {
+        if (a.offerId === offerId && a.active !== false && !a.lockedInVersion) {
+          a.lockedInVersion = offerId + '-' + token.slice(0, 8);
+        }
+      });
       this._logEvt(off, 'send', 'Digital offertlänk genererad — giltig till ' + expiry + ' (' + days + ' dagar)');
       persist();
       this.render({offerId});
