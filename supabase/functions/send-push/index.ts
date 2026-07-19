@@ -10,10 +10,13 @@
  *   VAPID_EMAIL        — t.ex. "mailto:admin@viftfast.se"
  *
  * Body (JSON):
- *   title   string   — Notisrubrik
- *   body    string   — Notistext
- *   url     string   — URL att öppna vid klick (default "/")
- *   userId  string?  — Skicka till annan user (kräver admin-roll)
+ *   title       string   — Notisrubrik
+ *   body        string   — Notistext
+ *   url         string   — URL att öppna vid klick (default "/")
+ *   propertyId  string?  — Punkt 92: löser ut ansvarig staff via propertyContacts
+ *                          (prio: primär → alla aktiva → fallback broadcast/userId)
+ *   userId      string?  — Skicka till specifik user (om propertyId ej satt)
+ *   broadcast   bool?    — Skicka till ALLA om varken propertyId/userId satt
  *
  * Svar:
  *   { sent: number, revoked: number }
@@ -73,19 +76,83 @@ serve(async (req: Request) => {
     }
 
     /* Läs request body */
-    const body = await req.json().catch(() => ({}))
-    const title     = (body.title  || 'VIFT CRM').slice(0, 100)
-    const text      = (body.body   || '').slice(0, 300)
-    const url       = (body.url    || '/').slice(0, 500)
+    const body      = await req.json().catch(() => ({}))
+    const title     = (body.title      || 'VIFT CRM').slice(0, 100)
+    const text      = (body.body       || '').slice(0, 300)
+    const url       = (body.url        || '/').slice(0, 500)
+    const propertyId: string | null = body.propertyId || null
     const broadcast = body.broadcast === true
 
-    /* Hämta subscriptions: broadcast → alla aktiva, annars target user */
+    /* ── Punkt 92: propertyId-baserad mottagarresolution ─────
+     * Prioritet:
+     *   1. Primärkontakt (staff, isPrimary=true, active, giltig)
+     *   2. Alla aktiva staff-kontakter för fastigheten
+     *   3. Fallback: broadcast / specificerad user                */
+    let targetUserIds: string[] | null = null
+
+    if (propertyId) {
+      const { data: storeRow } = await supabase
+        .from('store')
+        .select('value')
+        .eq('key', 'vift_propertyContacts')
+        .maybeSingle()
+
+      const allContacts: Record<string, unknown>[] =
+        Array.isArray(storeRow?.value) ? storeRow.value as Record<string, unknown>[] : []
+
+      const today = new Date().toISOString().slice(0, 10)
+      const propContacts = allContacts.filter(c =>
+        c.propertyId === propertyId &&
+        c.active     !== false      &&
+        c.personType === 'staff'    &&
+        (!c.validFrom || (c.validFrom as string) <= today) &&
+        (!c.validTo   || (c.validTo   as string) >= today)
+      )
+
+      /* Hämta staff-lista för att mappa personId → email */
+      const { data: staffRow } = await supabase
+        .from('store')
+        .select('value')
+        .eq('key', 'vift_staff')
+        .maybeSingle()
+
+      const staffList: Record<string, unknown>[] =
+        Array.isArray(staffRow?.value) ? staffRow.value as Record<string, unknown>[] : []
+
+      /* email → auth user_id via auth.users */
+      const primaryContacts = propContacts.filter(c => c.isPrimary)
+      const candidates = (primaryContacts.length > 0 ? primaryContacts : propContacts)
+
+      if (candidates.length > 0) {
+        const emails: string[] = candidates
+          .map(c => {
+            const s = staffList.find(x => x.id === c.personId)
+            return (s?.email as string | undefined)?.toLowerCase() || ''
+          })
+          .filter(Boolean)
+
+        if (emails.length > 0) {
+          /* Hämta auth user_id:n för dessa e-postadresser */
+          const { data: authUsers } = await supabase.auth.admin.listUsers()
+          const authMap: Record<string, string> = {}
+          for (const u of authUsers?.users ?? []) {
+            if (u.email) authMap[u.email.toLowerCase()] = u.id
+          }
+          const ids = emails.map(e => authMap[e]).filter(Boolean) as string[]
+          if (ids.length > 0) targetUserIds = ids
+        }
+      }
+    }
+
+    /* Hämta subscriptions baserat på resolverade mottagare */
     let subsQuery = supabase
       .from('push_subscriptions')
       .select('id, endpoint, p256dh, auth_key')
       .is('revoked_at', null)
 
-    if (!broadcast) {
+    if (targetUserIds) {
+      subsQuery = subsQuery.in('user_id', targetUserIds)
+    } else if (!broadcast) {
       const targetUserId: string = body.userId || caller.id
       subsQuery = subsQuery.eq('user_id', targetUserId)
     }
@@ -95,7 +162,8 @@ serve(async (req: Request) => {
     if (subsErr) throw subsErr
 
     if (!subs || subs.length === 0) {
-      return json({ sent: 0, revoked: 0, message: broadcast ? 'Inga aktiva subscriptions' : 'Inga aktiva subscriptions för användaren' })
+      const ctx = propertyId ? 'fastigheten' : broadcast ? 'broadcast' : 'användaren'
+      return json({ sent: 0, revoked: 0, message: 'Inga aktiva subscriptions för ' + ctx })
     }
 
     const payload = JSON.stringify({ title, body: text, url })

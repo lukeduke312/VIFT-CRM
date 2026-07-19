@@ -183,8 +183,9 @@ const PushService = {
   /* ── Notis vid ny AO ────────────────────────────────────── */
 
   /*
-   * Skickar push-notis (broadcast) till alla prenumeranter när en ny AO skapas.
-   * Kräver att send-push Edge Function stöder { broadcast: true }.
+   * Skickar push-notis vid ny AO. Punkt 92: skickar till ansvarig(a) för
+   * fastigheten (via propertyContacts) istället för broadcast.
+   * Prioritet i Edge Function: primär kontakt → alla aktiva → broadcast-fallback.
    * Fire-and-forget — felet loggas men stoppar aldrig AO-skapandet.
    */
   async notifyNewAO(ao) {
@@ -201,20 +202,19 @@ const PushService = {
     const bodyText  = context ? ao.title + ' – ' + context : ao.title;
     const url       = '/#/ao/' + ao.id;
 
+    /* Punkt 92: försök riktad notis via fastighetsansvarig */
+    const pushBody = { title: titleText, body: bodyText, url, aoId: ao.id };
+    if (ao.propertyId) {
+      pushBody.propertyId = ao.propertyId;
+    } else {
+      pushBody.broadcast = true;
+    }
+
     try {
       const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
         method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify({
-          title:     titleText,
-          body:      bodyText,
-          url:       url,
-          aoId:      ao.id,
-          broadcast: true
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(pushBody)
       });
 
       if (!res.ok) {
@@ -226,6 +226,36 @@ const PushService = {
       }
     } catch(e) {
       console.warn('[PushService] notifyNewAO nätverksfel:', e);
+    }
+  },
+
+  /*
+   * Punkt 92: generell hjälpfunktion för att skicka push till ansvarig
+   * för en fastighet. Används av serviceintervall, rondering m.m.
+   * Fire-and-forget.
+   */
+  async notifyProperty(propertyId, title, body, url) {
+    const token = Auth.getAccessToken();
+    if (!token) return;
+    const pushBody = { title, body, url: url || '/' };
+    if (propertyId) {
+      pushBody.propertyId = propertyId;
+    } else {
+      pushBody.broadcast = true;
+    }
+    try {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(pushBody)
+      });
+      if (!res.ok) console.warn('[PushService] notifyProperty fel:', res.status);
+      else {
+        const r = await res.json().catch(()=>({}));
+        console.log('[PushService] notifyProperty skickad:', r.sent, 'enheter, fastighet:', propertyId);
+      }
+    } catch(e) {
+      console.warn('[PushService] notifyProperty nätverksfel:', e);
     }
   },
 
