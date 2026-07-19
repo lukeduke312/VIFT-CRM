@@ -76,6 +76,8 @@ const WorkOrdersPage = {
             <button class="btn ${this.viewMode==='list'?'bp':'bghost'}" title="Listvy" onclick="WorkOrdersPage.setView('list')">${ic('list',14)}</button>
             <button class="btn ${this.viewMode==='grid'?'bp':'bghost'}" title="Kortvy" onclick="WorkOrdersPage.setView('grid')">${ic('grid',14)}</button>
           </div>
+          ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',14)} Importera</button>` : ''}
+          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('workOrder',this)">${ic('download',14)} Exportera</button>
           ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
         </div>
       </div>

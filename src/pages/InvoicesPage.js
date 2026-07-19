@@ -99,7 +99,7 @@ const InvoicesPage = {
       ${readyHtml}
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         ${tabHtml}
-        <button class="btn bs bsm" style="flex-shrink:0;" onclick="InvoicesPage.exportCSV()">${ic('download',14)} CSV</button>
+        <button class="btn bs bsm" style="flex-shrink:0;" onclick="ImportExportService.showExportMenu('invoice',this)">${ic('download',14)} Exportera</button>
         <button class="btn bp bsm" style="flex-shrink:0;" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>
       </div>
       ${listHtml}`;

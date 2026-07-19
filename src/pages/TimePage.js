@@ -87,7 +87,11 @@ const TimePage = {
       <div class="card">
         <div class="card-header">
           <h3>Registrerad tid</h3>
-          <span class="bdg bdg-sky">${TimeService.fmtDuration(TimeService.totalMinutes(TimeService.getAll()))}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="bdg bdg-sky">${TimeService.fmtDuration(TimeService.totalMinutes(TimeService.getAll()))}</span>
+            ${typeof Auth !== 'undefined' && Auth.can('admin') ? `<button class="btn bs bxs" onclick="Router.showPage('pg-import-wizard',{type:'timeEntry'})">${ic('upload',12)} Importera</button>` : ''}
+            <button class="btn bs bxs" onclick="ImportExportService.showExportMenu('timeEntry',this)">${ic('download',12)} Exportera</button>
+          </div>
         </div>
         <div id="time-list">
           ${this._renderList()}
