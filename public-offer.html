@@ -314,9 +314,10 @@ var SUPABASE_URL = (typeof window !== 'undefined' && window.VIFT_CONFIG && windo
   : 'https://hjplzjsbbowiyoyhdghc.supabase.co';
 
 /* ── State ──────────────────────────────────────────────── */
-var _offer      = null;
-var _token      = null;
-var _activeForm = null; /* approve | change_request | decline */
+var _offer       = null;
+var _token       = null;
+var _attachments = [];
+var _activeForm  = null; /* approve | change_request | decline */
 
 /* ── Hjälpfunktioner ────────────────────────────────────── */
 function fmt(n) { return new Intl.NumberFormat('sv-SE').format(Math.round(n||0)); }
@@ -353,7 +354,8 @@ async function loadOffer(token) {
       return;
     }
 
-    _offer = data.offer;
+    _offer       = data.offer;
+    _attachments = Array.isArray(data.attachments) ? data.attachments : [];
     renderOffer(_offer);
   } catch(e) {
     root.innerHTML = '<div class="po-status-banner error">⚠ Nätverksfel — kontrollera din internetanslutning och försök igen.</div>';
@@ -523,8 +525,52 @@ function renderOffer(off) {
     '</div>' +
     termsHtml +
     (off.summary ? '<div class="po-card"><div class="po-card-head"><h2>Sammanfattning</h2></div><div class="po-card-body"><p style="font-size:13px;line-height:1.6;white-space:pre-wrap;">' + esc(off.summary) + '</p></div></div>' : '') +
+    renderAttachments() +
     actionsHtml +
     '<div style="text-align:center;padding:20px 0;font-size:11px;color:var(--mt);">VIFT Fastighetsservice · Frågor? Kontakta din förvaltare.</div>';
+}
+
+/* ── Bilagor ─────────────────────────────────────────────── */
+function renderAttachments() {
+  if (!_attachments || _attachments.length === 0) return '';
+  var rows = _attachments.map(function(a) {
+    var sizeLbl = a.sizeBytes > 1048576
+      ? (a.sizeBytes/1048576).toFixed(1) + ' MB'
+      : Math.round((a.sizeBytes||0)/1024) + ' KB';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--br);">' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(a.displayName||'Bilaga') + '</div>' +
+        (a.description ? '<div style="font-size:11px;color:var(--mt);">' + esc(a.description) + '</div>' : '') +
+        '<div style="font-size:11px;color:var(--mt);">' + esc(a.mimeType||'') + ' · ' + sizeLbl + '</div>' +
+      '</div>' +
+      '<button type="button" onclick="downloadAttachment(' + JSON.stringify(a.id) + ',' + JSON.stringify(a.displayName||a.originalFileName||'bilaga') + ')" ' +
+        'style="padding:6px 12px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;">' +
+        '⬇ Ladda ned</button>' +
+    '</div>';
+  }).join('');
+  return '<div class="po-card"><div class="po-card-head"><h2>Bilagor (' + _attachments.length + ')</h2></div>' +
+    '<div class="po-card-body" style="padding:0 18px;">' + rows + '</div></div>';
+}
+
+async function downloadAttachment(attachmentId, fileName) {
+  try {
+    var res = await fetch(SUPABASE_URL + '/functions/v1/offer-attachment-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: _token, attachmentId: attachmentId })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+    var a = document.createElement('a');
+    a.href = data.url;
+    a.download = data.fileName || fileName || 'bilaga';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch(e) {
+    alert('Kunde inte ladda ned filen: ' + e.message);
+  }
 }
 
 /* ── Formulär per åtgärd ─────────────────────────────────── */

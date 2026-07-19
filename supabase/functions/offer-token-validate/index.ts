@@ -130,7 +130,35 @@ serve(async (req: Request) => {
     /* Bygg publik offertdata — INGA interna fält */
     const publicOffer = buildPublicOffer(off)
 
-    return json({ offer: publicOffer, status: 'ok' })
+    /* Hämta kundsynliga bilagor — exkludera interna (includeInPublicView=false) */
+    const { data: attRow } = await supabase
+      .from('store')
+      .select('value')
+      .eq('key', 'vift_offerAttachments')
+      .maybeSingle()
+
+    const allAtts: Record<string, unknown>[] =
+      Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
+
+    const publicAtts = allAtts
+      .filter(a =>
+        a.offerId === off.id &&
+        a.active  !== false  &&
+        a.includeInPublicView === true
+      )
+      .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+      .map(a => ({
+        id:             a.id,
+        displayName:    a.displayName    || a.originalFileName || 'Bilaga',
+        description:    a.description   ?? '',
+        mimeType:       a.mimeType       ?? '',
+        sizeBytes:      a.sizeBytes      ?? 0,
+        sortOrder:      a.sortOrder      ?? 0,
+        includeInCombinedPdf: a.includeInCombinedPdf ?? false
+        /* storagePath och interna fält exponeras ALDRIG */
+      }))
+
+    return json({ offer: publicOffer, attachments: publicAtts, status: 'ok' })
 
   } catch (err: unknown) {
     console.error('[offer-token-validate] fel:', err)
