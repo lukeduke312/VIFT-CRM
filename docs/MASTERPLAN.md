@@ -124,12 +124,12 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Prioritet | Beroenden |
 |---|----------|--------|-----------|-----------|
-| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | 17 register konfigurerade; markerad export klar (5 sidor); disambiguering klar; historicalImport-guard klar; webbläsarverifiering återstår |
+| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | 18 register konfigurerade (inkl. Rapporter exportonly); markerad export klar (5 sidor); disambiguering klar; historicalImport-guard klar; webbläsarverifiering återstår |
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
 | 77 | Rapporter — statistik, diagram (AO, tid, objekt) | KLAR | d8bd9bc | ReportsPage v2 + export |
-| 78 | Mina jobb — tilldelade uppdrag per inloggad personal | EJ BYGGD | Hög | MyJobsPage |
+| 78 | Mina jobb — tilldelade uppdrag per inloggad personal | KLAR | (befintlig) | MyJobsPage (existerar, fel status i MASTERPLAN) |
 | 79 | Avancerat behörighetssystem (per fastighet, per kundgrupp) | EJ BYGGD | Låg | Auth.js |
 | 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
 | 81 | Kontrakthantering (avtal, betalningsplan, villkor) | EJ BYGGD | Medel | ContractsPage |
@@ -139,7 +139,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 ## Leverans F4 — Generell import/export (punkt 73)
 
-**Leveransstatus:** DELVIS BYGGD — 17 register konfigurerade, markerad export byggd i 5 sidor, disambiguering byggd, historicalImport-guard fixad; webbläsarverifiering ej gjord
+**Leveransstatus:** DELVIS BYGGD — 18 register konfigurerade (rapport exportonly tillagd), markerad export byggd i 5 sidor, disambiguering byggd, historicalImport-guard fixad; webbläsarverifiering ej gjord
 
 | Del | Funktion | Status | Commit |
 |-----|----------|--------|--------|
