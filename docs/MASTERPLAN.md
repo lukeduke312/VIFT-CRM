@@ -70,10 +70,46 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 37 | Stäng relaterade Att göra-poster vid markera utförd | KLAR | b8842db | ServiceIntervalService v3 |
 | 38 | Ansvarig personal visas i Dagens drift | KLAR | b8842db | OperationsPage v9 |
 | 39 | Daglig klientkörning (runDailyCheck, idempotent, duePeriodKey) | KLAR | b8842db | ServiceIntervalService.js |
-| 40 | Schemalagd Edge Function (server-side daglig körning) | EJ BYGGD | — | supabase/functions/service-monitor |
-| 41 | Server-side dubblettskydd (atomisk idempotens) | EJ BYGGD | — | supabase/functions/service-monitor |
-| 42 | Web-push för serviceintervall per ansvarig | EJ BYGGD | — | PushService, send-push Edge Function |
-| 43 | Automatisk AO via Edge Function | FÖRBEREDD | b8842db | ServiceIntervalService.js (koden finns) |
+| 40 | Schemalagd Edge Function (server-side daglig körning) | BYGGD – BEHÖVER DEPLOY | — | supabase/functions/service-monitor/index.ts |
+| 41 | Server-side dubblettskydd (atomisk idempotens) | BYGGD – BEHÖVER DEPLOY | — | supabase/functions/service-monitor/index.ts (duePeriodKey, lastNotificationSentForDueDate, lastAOGeneratedForDueDate) |
+| 42 | Web-push för serviceintervall per ansvarig | BYGGD – BEHÖVER DEPLOY | — | supabase/functions/service-monitor/index.ts (riktad via staff-email → auth user, fallback broadcast) |
+| 43 | Automatisk AO via Edge Function | BYGGD – BEHÖVER DEPLOY | — | supabase/functions/service-monitor/index.ts (buildWorkOrder, nextWorkOrderId) |
+
+### Punkt 40–43 — Driftsättning
+
+Edge Function byggs med `supabase deploy`:
+```bash
+supabase functions deploy service-monitor --no-verify-jwt
+```
+
+Cron via pg_cron (kör dagligen 06:00 UTC):
+```sql
+SELECT cron.schedule(
+  'service-monitor-daily',
+  '0 6 * * *',
+  $$
+  SELECT net.http_post(
+    url := current_setting('app.supabase_url') || '/functions/v1/service-monitor',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
+Alternativt via Supabase Dashboard → Edge Functions → Schedules: lägg till `0 6 * * *`.
+
+Secrets som måste sättas i Supabase:
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL` (samma som send-push)
+- `SERVICE_MONITOR_SECRET` (valfri extra autentisering)
+
+**VAPID private key läggs aldrig i config.js eller frontend — bara i Supabase Secrets.**
+
+Körlogg lagras som `vift_serviceMonitorLog` i store-tabellen (senaste 90 körningar).
+Manuell testkörning: `POST /functions/v1/service-monitor` med `Authorization: Bearer <service_role_key>`.
 
 ---
 
