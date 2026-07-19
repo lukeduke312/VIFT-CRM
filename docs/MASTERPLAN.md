@@ -124,7 +124,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 | # | Funktion | Status | Prioritet | Beroenden |
 |---|----------|--------|-----------|-----------|
-| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | Motor + 11 register klara; 6 register saknas; markerad export ej byggd; inga register UI-verifierade i webbläsare |
+| 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | 17 register konfigurerade; markerad export klar (5 sidor); disambiguering klar; historicalImport-guard klar; webbläsarverifiering återstår |
 | 74 | Rondering — visningsrapport (PDF, dela) | EJ BYGGD | Hög | RonderingRapportPage |
 | 75 | Kalender — schemaläggning, dra-och-släpp | EJ BYGGD | Hög | CalendarPage |
 | 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
@@ -139,7 +139,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
 ## Leverans F4 — Generell import/export (punkt 73)
 
-**Leveransstatus:** DELVIS BYGGD — motor och 11 register finns, 6 saknas, markerad export saknas, ingen webbläsarverifiering gjord
+**Leveransstatus:** DELVIS BYGGD — 17 register konfigurerade, markerad export byggd i 5 sidor, disambiguering byggd, historicalImport-guard fixad; webbläsarverifiering ej gjord
 
 | Del | Funktion | Status | Commit |
 |-----|----------|--------|--------|
@@ -149,32 +149,33 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | F4-6 | Diff/conflict-UI: per-fält before/after, ångra-dialog | Byggd | 22e8ed3 |
 | F4-7 | Exportcenter (ExportCenterPage), kolumnval, känsliga fält av som standard | Byggd | 328e3bf |
 | F4-8 | Stabilisering: logg-pruning, race-condition-skydd | Byggd | 0adbf27 |
-| F4-9 | 6 saknade register (kontaktpersoner, materialrader, ronderingspass, ronderingSchema, serviceintervall) | Pågår | — |
-| F4-10 | Import/export UI på AO, Tid, Faktura, Rondering | Pågår | — |
-| F4-11 | Markerad export — SelectionModel, checkbox per rad | Pågår | — |
-| F4-12 | Relationsdialog för ambiguösa träffar | Ej byggd | — |
-| F4-13 | Webbläsarverifiering med riktiga filer (Bokio, Excel, Numbers) | Ej testad | — |
+| F4-9 | 6 saknade register (kontaktpersoner, materialrader, ronderingspass, ronderingSchema, serviceintervall) | Byggd | 4df7b19 |
+| F4-10 | Import/export UI på AO, Tid, Faktura, Rondering | Byggd | 4df7b19 |
+| F4-11 | Markerad export — SelectionModel, checkboxar i Kunder, AO, Personal, Fastigheter, Artiklar | Byggd | 1cfc543 |
+| F4-12 | Relationsdialog för ambiguösa träffar — ej auto-val, manuell picker i steg 4 | Byggd | 222e976 |
+| F4-historicalImport | PushService-guard i WorkOrderService.create() för historiska importer | Byggd | 5bfa59c |
+| F4-13 | Webbläsarverifiering med riktiga filer (Bokio, Excel, Numbers, Safari iOS) | Ej testad | — |
 
 ### Registermatris — import/export-status
 
 | Register | Config | Wizard | CSV-imp | XLSX-imp | Valid | Dubblett | Relation | Hist.imp | CSV-exp | XLSX-exp | Alla | Filtr | Markerade | UI sida | Testad |
 |----------|--------|--------|---------|----------|-------|----------|----------|----------|---------|----------|------|-------|-----------|---------|--------|
-| Kunder | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
-| Kontaktpersoner | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → Kund | — | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Fastigheter | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Kunder | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Byggd | Byggd | Ej testad |
+| Kontaktpersoner | Byggd | Ej import | — | — | — | — | → Kund | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Fastigheter | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund | — | Byggd | Byggd | Byggd | Ej byggd | Byggd | Byggd | Ej testad |
 | Objekt | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund, Fastighet | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Artiklar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Artiklar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Byggd | Byggd | Ej testad |
 | Prisgrupper | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
-| Personal | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
-| Arbetsordrar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund, Fastighet, Obj, Personal, PG | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Arbetad tid | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → AO, Personal | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Materialrader | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → AO, Artikel | Byggd | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Fakturaunderlag | Byggd | Ej byggd | Ej byggd | Ej byggd | — | — | → Kund, AO | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Ronderingsmallar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Åter.ronderingar | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → Mall, Fastighet | Ej byggd | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Ronderingspass | Pågår | Byggd | Byggd | Byggd | Byggd | Byggd | → Mall, Fastighet, Kund | Byggd | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Avvikelser | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Fastighet, Obj | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
-| Serviceintervall | Pågår | Ej byggd | Ej byggd | Ej byggd | — | — | → Fastighet | — | Pågår | Pågår | Pågår | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Personal | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Byggd | Byggd | Ej testad |
+| Arbetsordrar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Kund, Fastighet, Obj, Personal, PG | Byggd | Byggd | Byggd | Byggd | Ej byggd | Byggd | Byggd | Ej testad |
+| Arbetad tid | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → AO, Personal | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Materialrader | Byggd | Ej import | — | — | — | — | → AO, Artikel | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
+| Fakturaunderlag | Byggd | Ej import | — | — | — | — | → Kund, AO | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Ronderingsmallar | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | — | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Åter.ronderingar | Ej byggd | — | — | — | — | — | — | Ej byggd | Ej byggd | Ej byggd | Ej byggd | — | — | Ej byggd | Ej testad |
+| Ronderingspass | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Mall, Fastighet, Kund | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Avvikelser | Byggd | Byggd | Byggd | Byggd | Byggd | Byggd | → Fastighet, Obj | Byggd | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Byggd | Ej testad |
+| Serviceintervall | Byggd | Ej import | — | — | — | — | → Fastighet | — | Byggd | Byggd | Byggd | Ej byggd | Ej byggd | Ej byggd | Ej testad |
 | Rapporter | Ej byggd | — | — | — | — | — | — | — | Ej byggd | Ej byggd | Ej byggd | — | — | Ej byggd | Ej testad |
 
 **Säkerhetsregler (permanenta):**
