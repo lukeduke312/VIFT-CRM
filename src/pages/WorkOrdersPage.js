@@ -44,6 +44,7 @@ const WorkOrdersPage = {
       if (params.filter === 'mine')            { this._f.mine = true; }
     }
 
+    SelectionModel.init('workOrder');
     const activeCount = this._activeFilterCount();
 
     const STATUS_TABS = [
@@ -81,10 +82,13 @@ const WorkOrdersPage = {
           ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
         </div>
       </div>
-      <div class="ftabs ao-status-tabs" style="margin-bottom:8px;">
-        ${STATUS_TABS.map(t =>
-          `<button class="ft ${this.filter===t.key?'on':''}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}</button>`
-        ).join('')}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
+          ${STATUS_TABS.map(t =>
+            `<button class="ft ${this.filter===t.key?'on':''}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}</button>`
+          ).join('')}
+        </div>
+        <div id="ao-sel-all"></div>
       </div>
       <div id="ao-active-filters">${this._activeChipsHtml()}</div>
       <div id="ao-list"></div>`;
@@ -495,6 +499,10 @@ const WorkOrdersPage = {
       const d = (pOrd[a.priority]||2) - (pOrd[b.priority]||2);
       return d !== 0 ? d : new Date(b.createdAt) - new Date(a.createdAt);
     });
+    const visibleIds = list.map(a => a.id);
+    const selAllEl = document.getElementById('ao-sel-all');
+    if (selAllEl) selAllEl.innerHTML = SelectionModel.selectAllHtml(visibleIds);
+
     if (!list.length) {
       const isSearch = !!this.q;
       const isFilter = this.filter !== 'alla' || this._activeFilterCount() > 0;
@@ -572,29 +580,32 @@ const WorkOrdersPage = {
             <button class="btn bxs bd" onclick="WorkOrderDetailPage._confirmPermanentDelete('${ao.id}');">${ic('trash-2',10)} Radera</button>
           </div>` : '';
         return `
-          <button class="ao-list-item ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-            <div class="ao-item-top">
-              <div style="flex:1;min-width:0;">
-                <div class="ao-item-id">${ao.id}</div>
-                <div class="ao-item-title">${ao.title}</div>
-                ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
+          <div style="display:flex;align-items:flex-start;gap:6px;">
+            <div style="padding:12px 0 0;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id)}</div>
+            <button class="ao-list-item ${priorityClass(ao.priority)}" style="flex:1;min-width:0;" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+              <div class="ao-item-top">
+                <div style="flex:1;min-width:0;">
+                  <div class="ao-item-id">${ao.id}</div>
+                  <div class="ao-item-title">${ao.title}</div>
+                  ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
+                </div>
+                <div class="ao-item-badges" onclick="event.stopPropagation()">
+                  ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
+                    ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
+                    : sbdg(ao.status)}
+                  ${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
+                </div>
               </div>
-              <div class="ao-item-badges" onclick="event.stopPropagation()">
-                ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
-                  ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
-                  : sbdg(ao.status)}
-                ${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
-              </div>
-            </div>
-            ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-            ${ao.category || isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
-              ${ao.category ? catBadge(ao.category) : ''}
-              ${isBillable?`<span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span>`:''}
-              ${noPricing?`<span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span>`:''}
-              ${chkHtml}
-            </div>` : ''}
-            ${archiveActions}${trashActions}
-          </button>`;
+              ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
+              ${ao.category || isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+                ${ao.category ? catBadge(ao.category) : ''}
+                ${isBillable?`<span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span>`:''}
+                ${noPricing?`<span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span>`:''}
+                ${chkHtml}
+              </div>` : ''}
+              ${archiveActions}${trashActions}
+            </button>
+          </div>`;
       }).join('');
     }
   },

@@ -3902,10 +3902,12 @@ const StaffPage = {
   render() {
     const el = document.getElementById('pg-staff-content');
     if (!el) return;
+    SelectionModel.init('staff');
     const all     = state.staff || [];
     const aktiva  = all.filter(s => s.active);
     const inaktiva = all.filter(s => !s.active);
     const list    = this._filter === 'aktiva' ? aktiva : inaktiva;
+    const visibleIds = list.map(s => s.id);
     const roleColor = (rid) => ({ admin:'bdg-red', chef:'bdg-orange', personal:'bdg-blue' }[rid] || 'bdg-grey');
     const roleLabel = (rid) => { const r = (state.roles||[]).find(x=>x.id===rid); return r ? r.label : (rid || '—'); };
 
@@ -3915,6 +3917,7 @@ const StaffPage = {
            <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="StaffPage._filter='aktiva';StaffPage.render()">Aktiva (${aktiva.length})</button>
            <button class="ft ${this._filter==='inaktiva'?'on':''}" onclick="StaffPage._filter='inaktiva';StaffPage.render()">Inaktiva (${inaktiva.length})</button>
          </div>
+         ${SelectionModel.selectAllHtml(visibleIds)}
          ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'staff'})">${ic('upload',14)} Importera</button>` : ''}
          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('staff',this)">${ic('download',14)} Exportera</button>
          <button class="btn bp bsm" onclick="StaffPage.openCreate()">${ic('plus',14)} Ny personal</button>
@@ -3924,7 +3927,8 @@ const StaffPage = {
         : list.map(s => `
           <div class="list-item" onclick="StaffPage.openEdit('${s.id}')">
             <div class="item-row">
-              <div style="display:flex;align-items:center;gap:10px;">
+              ${SelectionModel.checkboxHtml(s.id)}
+              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
                 <div style="width:38px;height:38px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc-text);flex-shrink:0;">${(s.firstName||'?').charAt(0)}${(s.lastName||'').charAt(0)}</div>
                 <div>
                   <div class="item-title">${s.firstName} ${s.lastName}</div>

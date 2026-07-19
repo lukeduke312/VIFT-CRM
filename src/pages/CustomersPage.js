@@ -10,6 +10,7 @@ const CustomersPage = {
   render() {
     const el = document.getElementById('pg-crm-content');
     if (!el) return;
+    SelectionModel.init('customer');
 
     const TYPE_TABS = [
       { key:'alla',            label:'Alla' },
@@ -30,15 +31,18 @@ const CustomersPage = {
         </div>
         <div class="ao-toolbar-right">
           ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'customer'})" title="Importera kunder">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm" onclick="CustomersPage._showExportMenu(this)" title="Exportera">${ic('download',14)} Exportera</button>
+          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('customer',this)" title="Exportera">${ic('download',14)} Exportera</button>
           <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
         </div>
       </div>
-      <div class="ftabs ao-status-tabs" style="margin-bottom:6px;">
-        ${TYPE_TABS.map(t =>
-          `<button class="ft ${this._typeFilter===t.key?'on':''}"
-            onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${t.label}</button>`
-        ).join('')}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
+          ${TYPE_TABS.map(t =>
+            `<button class="ft ${this._typeFilter===t.key?'on':''}"
+              onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${t.label}</button>`
+          ).join('')}
+        </div>
+        <div id="crm-sel-all"></div>
       </div>
       <div id="crm-list"></div>`;
     this.renderList();
@@ -48,6 +52,7 @@ const CustomersPage = {
     const el = document.getElementById('crm-list');
     if (!el) return;
     let list = CustomerService.search(this.q);
+
     if (this._typeFilter === 'inaktiva') {
       list = list.filter(c => c.inactive);
     } else if (this._typeFilter && this._typeFilter !== 'alla') {
@@ -60,6 +65,10 @@ const CustomersPage = {
       const na = CustomerService.displayName(a), nb = CustomerService.displayName(b);
       return na.localeCompare(nb, 'sv');
     });
+    const visibleIds = list.map(c => c.id);
+    const selAll = document.getElementById('crm-sel-all');
+    if (selAll) selAll.innerHTML = SelectionModel.selectAllHtml(visibleIds);
+
     if (list.length === 0) {
       el.innerHTML = `<div class="empty"><span class="empty-ico">${ic('users',36)}</span><h3>Inga kunder</h3>
         <p>${this.q ? 'Inga träffar för sökning' : 'Skapa din första kund'}</p>
@@ -73,7 +82,8 @@ const CustomersPage = {
       return `
         <div class="list-item" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">
           <div class="item-row">
-            <div>
+            ${SelectionModel.checkboxHtml(cu.id)}
+            <div style="flex:1;min-width:0;">
               <div class="item-title">${name}</div>
               <div class="item-sub">${CustomerService.typeLabel(cu.type)}${cu.phone?' · '+cu.phone:''}${cu.city?' · '+cu.city:''}</div>
             </div>
