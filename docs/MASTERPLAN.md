@@ -222,6 +222,122 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 ---
 
+## Leverans E — Digitala offerter och kundsvar
+
+**Leveransstatus:** EJ BYGGD  
+**Prioritet i arbetsordning:** Byggs efter kvarvarande Leverans D, serviceintervall-motor, push och auto-AO. Inget i Leverans E ersätter eller skjuter upp tidigare planerade funktioner.  
+**Säkerhetsregel (permanent):** Tokenkontroll, godkännande, ändringsbegäran och nekande valideras och sparas enbart via säker backend-funktion (Supabase Edge Function). Kunden kan aldrig manipulera offert­status eller belopp via frontendkod. Känsliga interna fält (inköpspris, marginal, TB, interna noter, personalinfo, andra kunder) exponeras aldrig i kundvyn.
+
+### Del E1 — Offertversioner och låsta snapshots
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 93 | Schema — Schema.offerVersion(): versionNumber, lockedAt, lockedSnapshotJSON, versionStatus, changedFields | EJ BYGGD | — | schema.js |
+| 94 | Schema — Schema.offerEvent(): händelselogg per offert/version (typ, datum, användare/kund, version, kommentar, relatedId) | EJ BYGGD | — | schema.js |
+| 95 | State — state.offerVersions[], state.offerEvents[], persist, DataSync | EJ BYGGD | — | state.js |
+| 96 | OffertUI — versionshistorik i offertkortet (lista med versionsnummer, status, datum, lås-ikon) | EJ BYGGD | — | OfferDetailPage.js |
+| 97 | Låsning vid utskick — skickad version är oföränderlig; redigering skapar ny version automatiskt | EJ BYGGD | — | OffersPage.js, OfferDetailPage.js |
+
+**Statusar för offerter:**
+`Utkast` · `Klar att skicka` · `Skickad` · `Öppnad` · `Ändring begärd` · `Reviderad` · `Godkänd` · `Nekad` · `Utgången` · `Återkallad` · `Ersatt av ny version`
+
+**Versionsregel:** Godkännande kopplas alltid till ett specifikt offerId + offerVersionId + versionNumber + låst snapshot. Ett tidigare godkännande flyttas aldrig automatiskt till ny version.
+
+---
+
+### Del E2 — Säker publik offertlänk
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 98 | Schema — publicToken (lång slumpmässig token), tokenCreatedAt, tokenExpiresAt, tokenRevokedAt, accessStatus, openedAt, openCount | EJ BYGGD | — | schema.js |
+| 99 | Edge Function — offer-token-validate: validerar token, kontrollerar giltighetstid och återkallning, returnerar offentlig offertdata (utan känsliga interna fält), rate-limit mot automatiserade anrop | EJ BYGGD | — | supabase/functions/offer-token-validate |
+| 100 | Edge Function — offer-respond: tar emot kundsvar (godkänn/ändring/neka), validerar token + version, sparar auditlogg, uppdaterar status | EJ BYGGD | — | supabase/functions/offer-respond |
+| 101 | CRM-UI — Skicka digital offert: generera token, sätt giltighetstid, visa länk att kopiera/skicka, se aktiv länkstatus | EJ BYGGD | — | OfferDetailPage.js |
+| 102 | CRM-UI — Återkalla länk / förläng giltighetstid / generera ny token (ogiltigförklarar gammal) | EJ BYGGD | — | OfferDetailPage.js |
+
+**Länkkrav:**
+- Token är lång, slumpmässig och ogissningsbar — aldrig internt offert-ID ensamt i URL
+- Länken kan återkallas när som helst
+- Utgången offert visar tydligt meddelande, inga offertuppgifter
+- Återkallad länk visar inget offertinnehåll
+- Kunden har nollåtkomst till övrig CRM-data
+
+---
+
+### Del E3 — Kundvy (extern publik sida)
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 103 | PublicOfferPage — extern kundvy med VIFT-logotyp, kontaktuppgifter, offertnummer, kund, kontaktperson, offertdatum, giltighetstid, rubrik, beskrivning | EJ BYGGD | — | src/pages/PublicOfferPage.js |
+| 104 | Kundvy — offertposter: artikel, antal, enhet, à-pris exkl. moms, moms, à-pris inkl. moms, rabatt, tillägg, delsumma | EJ BYGGD | — | PublicOfferPage.js |
+| 105 | Kundvy — summering: totalbelopp exkl. moms, moms per sats, totalbelopp inkl. moms, ev. ROT/RUT, ev. förskott | EJ BYGGD | — | PublicOfferPage.js |
+| 106 | Kundvy — villkor, betalningsvillkor, omfattning, vad som ingår, vad som inte ingår | EJ BYGGD | — | PublicOfferPage.js |
+| 107 | Kundvy — bilagor (lista med tillåtna bilagor kunden kan öppna), kontakta ansvarig (mailto-länk/telefon) | EJ BYGGD | — | PublicOfferPage.js |
+| 108 | Kundvy — skriv ut (window.print()), spara/ladda ner som PDF | EJ BYGGD | — | PublicOfferPage.js |
+
+**Designkrav:** Ren, professionell, VIFT-profilerad. Fungerar på mobil, iPhone, iPad, desktop, Safari, Chrome. Inga interna fält, noteringar, inköpspris, marginal, TB, annan kundinformation eller personaldata visas.
+
+---
+
+### Del E4 — Godkänn / Begär ändring / Neka
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 109 | Godkänn offert — bekräftelsedialog: namn, företag, e-post, telefon (valfritt), befattning (valfritt), kommentar (valfritt), checkbox "Jag bekräftar att jag tagit del av och godkänner denna offert och dess villkor." | EJ BYGGD | — | PublicOfferPage.js |
+| 110 | Godkänn offert — Edge Function: validerar token+version, låser offertversion, sparar datum/tid, namn, e-post, kommentar, sätter status → Godkänd, skapar offerEvent | EJ BYGGD | — | supabase/functions/offer-respond |
+| 111 | Begär ändring — formulär: fritext vad som behöver ändras, kategori (pris/omfattning/tidplan/villkor/offertpost/annat), ev. hänvisning till specifik rad, kontaktuppgifter | EJ BYGGD | — | PublicOfferPage.js |
+| 112 | Begär ändring — Edge Function: validerar, sparar invändning + kategori + ev. offertpostId, sätter status → Ändring begärd, skapar offerEvent | EJ BYGGD | — | supabase/functions/offer-respond |
+| 113 | Neka offert — bekräftelsedialog: välj anledning (för dyrt / valt annan leverantör / projektet genomförs inte / tidplanen fungerar inte / omfattningen passar inte / annat), kommentar valfri | EJ BYGGD | — | PublicOfferPage.js |
+| 114 | Neka offert — Edge Function: validerar, sparar anledning + kommentar, sätter status → Nekad, skapar offerEvent | EJ BYGGD | — | supabase/functions/offer-respond |
+| 115 | Kundbekräftelse — kunden ser tydligt bekräftelsemeddelande efter varje svar (godkänd/ändring begärd/nekad), möjlighet att skicka bekräftelse-e-post | EJ BYGGD | — | PublicOfferPage.js |
+
+**Godkännandespårbarhet:** Datum, tid, IP (om tillgänglig), namn och e-post sparas. Beskrivs inte som avancerad e-signatur eller BankID eftersom ingen sådan tjänst används — godkännandet är ett spårbart digitalt samtycke.
+
+---
+
+### Del E5 — Notiser och tidslinje
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 116 | Notiser — ansvarig på VIFT får notis vid: första öppning av länk, godkännande, ändringsbegäran, nekande. Ingen notis vid varje återöppning. | EJ BYGGD | — | PushService.js, supabase/functions/offer-respond |
+| 117 | Notiser — format: titel ("Offert godkänd"), text ("Kund AB har godkänt offert OFF-2026-0012, version 2."), deep-link till offerten i CRM | EJ BYGGD | — | PushService.js |
+| 118 | Tidslinje-UI — strukturerade händelser visas kronologiskt i offertkortet: skapad, redigerad, version skapad, skickad, öppnad, ändring begärd, svar, godkänd, nekad, utgången, återkallad, konverterad till AO | EJ BYGGD | — | OfferDetailPage.js |
+| 119 | Visningsstatistik — CRM visar: när länk skickades, när kunden öppnade första gången, senaste visning, antal visningar, vem som svarade, vilket svar, vilken version | EJ BYGGD | — | OfferDetailPage.js |
+
+---
+
+### Del E6 — Konvertering till AO
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 120 | Konvertering — "Skapa arbetsorder från godkänd offert"-knapp visas efter godkännande (standard: manuell bekräftelse av ansvarig) | EJ BYGGD | — | OfferDetailPage.js |
+| 121 | Konvertering — AO ärver: kund, kontakt, fastighet, objekt, offertnummer, offertversion, rubrik, beskrivning, offertposter, priser, material, personal, planering, bilagor, villkor | EJ BYGGD | — | WorkOrderService.js |
+| 122 | Konvertering — bi-direktionell länk: Offert.convertedWorkOrderId + convertedAt ↔ AO.sourceOfferId + sourceOfferVersionId + sourceOfferNumber | EJ BYGGD | — | schema.js, WorkOrderService.js, OfferDetailPage.js |
+| 123 | Dubbelkonverteringsskydd — offert kan inte konverteras till AO mer än en gång av misstag | EJ BYGGD | — | OfferDetailPage.js |
+
+---
+
+### Del E7 — Påminnelser, analys och stabilisering
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 124 | Påminnelseflaggor — CRM visar offerter som: skickade men ej öppnade, öppnade men obesvarade, snart utgångna (konfig. dagar), utgångna, kräver svar på ändringsbegäran | EJ BYGGD | — | OffersPage.js |
+| 125 | Påminnelse — ansvarig kan skicka manuell påminnelse (uppdaterar tokenExpiresAt vid behov). Inga påminnelser skickas efter godkännande, nekande eller återkallande. | EJ BYGGD | — | OfferDetailPage.js |
+| 126 | Analysdata — sparas strukturerat för framtida rapportering: antal skickade, öppningsgrad, godkännandegrad, nekandegrad, svarstid, vanligaste nekandeanledning, offertvärde, vunnet/förlorat värde per kund/ansvarig | EJ BYGGD | — | offerEvents (redan i E1/E5) |
+| 127 | ReportsPage — Offert-flik: öppningsgrad, godkännandegrad, vanligaste invändningar, offertvärde vunnet/förlorat, per kund och ansvarig | EJ BYGGD | — | ReportsPage.js |
+| 128 | Säkerhetsverifiering — fullständig kontroll: inga interna fält i kundvy, tokenkontroll fungerar, rate-limit testad, dubbelkonverteringsskydd verifierat, inga XSS-risker i offertposter | EJ BYGGD | — | — |
+
+### Arbetsordning Leverans E (7 commits)
+1. **E1** — Offertversioner + låsta snapshots (schema, state, versionshistorik i UI, låslogik)
+2. **E2** — Säker publik länk (token-schema, Edge Functions offer-token-validate + offer-respond, CRM send-UI, återkalla)
+3. **E3** — Kundvy / PublicOfferPage (alla offertuppgifter, responsiv, VIFT-profilerad, print/PDF)
+4. **E4** — Godkänn / Begär ändring / Neka (dialoger i kundvy, Edge Function-validering, CRM-statusuppdatering)
+5. **E5** — Notiser + tidslinje (pushnotiser vid kundsvar, strukturerade events, visningsstatistik)
+6. **E6** — Konvertering till AO (ärvning av alla fält, bi-direktionell länk, dubbelskydd)
+7. **E7** — Påminnelser, analys, ReportsPage-offertflik, säkerhetsverifiering
+
+---
+
 ## Kända begränsningar och planerade stabiliseringar
 
 ### AO-snapshot-fält (punkt 12 — KLAR)
