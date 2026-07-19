@@ -163,13 +163,14 @@ Manuell testkörning: `POST /functions/v1/service-monitor` med `Authorization: B
 | 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | 18 register konfigurerade (inkl. Rapporter exportonly); markerad export klar (5 sidor); disambiguering klar; historicalImport-guard klar; webbläsarverifiering återstår |
 | 74 | Rondering — visningsrapport (PDF, dela) | KLAR | — | RonderingRapportPage v1 (skriv ut + dela via länk) |
 | 75 | Kalender — schemaläggning, dra-och-släpp | KLAR | — | CalendarPage v1 (dag/vecka/månad/agenda, DnD, filter, krockar, pool) |
-| 76 | Löneunderlag — export, perioder | EJ BYGGD | Medel | PayrollPage |
+| 76 | Löneunderlag — export, perioder | KLAR | Medel | PayrollPage.js v1: periodfilter, personalfilter, attestering, CSV-export |
 | 77 | Rapporter — statistik, diagram (AO, tid, objekt) | BYGGD – BEHÖVER TEST | — | ReportsPage v4: se detaljer nedan |
 | 78 | Mina jobb — tilldelade uppdrag per inloggad personal | KLAR | (befintlig) | MyJobsPage (existerar, fel status i MASTERPLAN) |
-| 79 | Avancerat behörighetssystem (per fastighet, per kundgrupp) | EJ BYGGD | Låg | Auth.js |
-| 80 | E-post-mallar och automatiska utskick | EJ BYGGD | Medel | emailTemplates, supabase/functions |
-| 81 | Kontrakthantering (avtal, betalningsplan, villkor) | EJ BYGGD | Medel | ContractsPage |
-| 82 | Mobil-optimerad offline-läge (SW fallback) | EJ BYGGD | Låg | sw.js, IndexedDB |
+| 79 | Avancerat behörighetssystem (per fastighet, per kundgrupp) | UPPSKJUTET | Låg | Kräver ombyggnad av Auth.js — planeras ej i nuvarande fas |
+| 80 | E-post-mallar och automatiska utskick | KLAR (UI) | Medel | Admin-flik "E-post-mallar" — CRUD, typfilter, variabler. Edge Function för faktisk sändning planeras separat. |
+| 81 | Kontrakthantering (avtal, betalningsplan, villkor) | KLAR | Medel | ContractsPage.js v1: CRUD, filter, årstotal, tillsvidara/auto-förnyelse |
+| 82 | Mobil-optimerad offline-läge (SW fallback) | UPPSKJUTET | Låg | Kräver IndexedDB-cachning i SW — planeras ej i nuvarande fas |
+| 92 | Push/notiser — använd ansvarig titel vid utskick | KLAR | — | send-push v2 + PushService v5: propertyId → propertyContacts → primär/alla aktiva staff |
 | 129 | Klickbara rapportunderlag — öppna filtrerad lista med aktivt filter och period | KLAR | v38→v39 | WorkOrdersPage stöder nu propertyId/customerId via Router. AO-staplarna i ReportsPage navigerar till filtrerad AO-lista. |
 
 ---
@@ -353,12 +354,12 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 
 | # | Funktion | Status | Commit | Filer |
 |---|----------|--------|--------|-------|
-| E2b-1 | Schema — offerAttachment: id, offerVersionId, name, fileType, fileSize, url/path, sortOrder, addedAt | EJ BYGGD | — | schema.js |
-| E2b-2 | CRM-UI — lägg till / ta bort / sortera bilagor på en offertversion (drag-drop ordning) | EJ BYGGD | — | OfferDetailPage.js |
-| E2b-3 | Låsning — exakt bilageuppsättning (inkl. sortOrder) låses per offertversion vid utskick; ändrad bilaga → ny version | EJ BYGGD | — | OfferDetailPage.js |
-| E2b-4 | Kundvy — bilagor listas efter offertinnehållet i vald sortordning; varje bilaga kan öppnas separat | EJ BYGGD | — | PublicOfferPage.js |
-| E2b-5 | Samlad offert-PDF — möjlighet att generera en PDF med offert + bilagor i en enda fil (via backend/Edge Function) | EJ BYGGD | — | supabase/functions/offer-pdf |
-| E2b-6 | Token-kontroll för bilagor — bilagor servas enbart via giltig offerttoken; ingen publik URL utan auth | EJ BYGGD | — | supabase/functions/offer-token-validate |
+| E2b-1 | Schema — Schema.offerAttachment(): storagePath, checksum, lockedInVersion, includeInPublicView m.m. State.offerAttachments | KLAR | 952508d | schema.js v22, state.js v32 |
+| E2b-2 | CRM-UI — dropzone, fillista, redigering (namn/beskrivning/kundvy/PDF), borttagning. offer-attachment-upload Edge Function | KLAR | 2ab4413 | PageShells.js v85, components.css, offer-attachment-upload/index.ts |
+| E2b-3 | Kundåtkomst — offer-attachment-url ger signerade Supabase Storage-URL:er (3600s). offer-token-validate returnerar public attachments | KLAR | 0a5b7f8 | offer-attachment-url/index.ts, offer-token-validate/index.ts v2, public-offer.html v2 |
+| E2b-4 | Samlad PDF — offer-pdf kombinerar offertinnehåll + inbäddningsbara bilagor (PDF, JPEG, PNG). DOCX/XLSX listas separat | KLAR | 9172c26 | offer-pdf/index.ts |
+| E2b-5 | Versionslåsning — bilagor markeras lockedInVersion vid digital länk-generering | KLAR | 57a691e | PageShells.js (generateDigitalLink) |
+| E2b-6 | Token-kontroll — storagePath exponeras aldrig; offer-attachment-url validerar token/revokering/giltighetstid/includeInPublicView | KLAR | 0a5b7f8 | offer-attachment-url/index.ts |
 
 **Bilage-regler:**
 - Bilagor kopplas till en specifik offerVersionId, inte till offerId
