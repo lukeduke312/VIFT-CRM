@@ -319,7 +319,8 @@ const Router = {
       'pg-operations':        () => OperationsPage.render(),
       'pg-propobj-detail':    () => PropertyObjectPage.render(params),
       'pg-import-wizard':     () => ImportWizardPage.render(params),
-      'pg-import-log':        () => ImportLogPage.render(params)
+      'pg-import-log':        () => ImportLogPage.render(params),
+      'pg-export-center':     () => ExportCenterPage.render(params)
     };
 
     const renderer = renderers[pageId];

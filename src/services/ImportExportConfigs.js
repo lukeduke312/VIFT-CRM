@@ -1002,6 +1002,13 @@ Object.assign(ImportExportService, {
           ImportExportService.downloadXLSX(base + tag + '-' + ts + '.xlsx', [{ name: cfg.label, headers: d.headers, rows: d.rows }]);
           if (typeof showToast !== 'undefined') showToast('Exporterar ' + recs.length + ' poster som XLSX…');
         }
+      },
+      {
+        icon: 'settings',
+        label: 'Avancerat exportcenter…',
+        fn: function () {
+          if (typeof Router !== 'undefined') Router.showPage('pg-export-center', { type: entityType });
+        }
       }
     ];
 
