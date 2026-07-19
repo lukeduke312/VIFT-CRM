@@ -40,6 +40,8 @@ let state = {
   propertyRoles: [],        // Leverans D: titelregister (förvaltare, skötare, etc.)
   propertyContacts: [],     // Leverans D: kopplingar person↔fastighet/objekt
   deviationCategories: [],  // Fas 4B: admin-register för avvikelsekategorier
+  offerEvents: [],          // Leverans E: händelselogg per offert
+  offerAttachments: [],     // Leverans E2b: bilagor per offert
 
   // UI-state
   currentPage: 'dash',
@@ -100,6 +102,7 @@ async function initState() {
   state.propertyRoles         = g('propertyRoles')         || [];
   state.propertyContacts      = g('propertyContacts')      || [];
   state.deviationCategories   = g('deviationCategories')   || [];
+  state.inspections           = g('inspections')           || [];
   state.offerEvents           = g('offerEvents')           || [];
   state.offerAttachments      = g('offerAttachments')      || [];
 
@@ -263,6 +266,7 @@ function persist() {
     ['propertyRoles',         state.propertyRoles],
     ['propertyContacts',      state.propertyContacts],
     ['deviationCategories',   state.deviationCategories],
+    ['inspections',           state.inspections],
     ['offerEvents',           state.offerEvents],
     ['offerAttachments',      state.offerAttachments]
   ]);

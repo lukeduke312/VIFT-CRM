@@ -51,6 +51,7 @@ const Router = {
       case 'pg-service-templates':return '/offerttjanster';
       case 'pg-myjobs':           return '/minajobb';
       case 'pg-operations':       return '/drift';
+      case 'pg-export-center':    return '/exportera';
       default:                    return null;
     }
   },
@@ -123,6 +124,7 @@ const Router = {
       case 'offerttjanster':this.showPage('pg-service-templates',{}, { replace: true }); return;
       case 'minajobb':      this.showPage('pg-myjobs',           {}, { replace: true }); return;
       case 'drift':         this.showPage('pg-operations',       {}, { replace: true }); return;
+      case 'exportera':     this.showPage('pg-export-center',    {}, { replace: true }); return;
       case 'importera':
         if (s1 === 'logg') { this.showPage('pg-import-log', {}, { replace: true }); return; }
         this.showPage('pg-import-wizard', { type: s1 || 'customer' }, { replace: true }); return;
@@ -165,7 +167,8 @@ const Router = {
     'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' },
     'pg-operations':        { title: 'Dagens drift',           sub: 'Chefsöversikt & driftläge' },
     'pg-import-wizard':     { title: 'Importera',              sub: 'CSV- och XLSX-import' },
-    'pg-import-log':        { title: 'Importlogg',             sub: 'Historik och ångra' }
+    'pg-import-log':        { title: 'Importlogg',             sub: 'Historik och ångra' },
+    'pg-export-center':     { title: 'Exportcenter',           sub: 'Exportera data' }
   },
 
   currentPage: null,

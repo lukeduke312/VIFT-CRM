@@ -6777,11 +6777,11 @@ const AdminPage = {
 };
 
 /* ── Shell-sidor utan rendering ───────── */
-const CalendarPage    = { render() { _renderShell('pg-calendar-content',    'Kalender',    'Kalendervy med planerade ordrar byggs i Fas 4.'); } };
+/* CalendarPage definieras i src/pages/CalendarPage.js */
 /* ContractsPage definieras i src/pages/ContractsPage.js (Punkt 81) */
 const InspectionsPage = { render() { RonderingPage.render(); } };
 /* PayrollPage definieras i src/pages/PayrollPage.js (Punkt 76) */
-const ReportsPage     = { render() { _renderShell('pg-reports-content',     'Rapporter',   'Statistik och rapporter byggs i Fas 4.'); } };
+/* ReportsPage definieras i src/pages/ReportsPage.js */
 
 /* ── Hjälpfunktioner ──────────────────── */
 function _shellEmpty(title, msg) {
