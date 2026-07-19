@@ -1,6 +1,7 @@
 /**
  * ImportWizardPage.js — Generisk 6-stegsguide för import
  * F4-1: Gjord generisk — stöder alla register via IMPORT_EXPORT_CONFIGS
+ * F4-6: Diff/conflict-UI — per-fält before/after, ångra-dialog med konfliktstöd
  *
  * Steg 1: Välj fil (drag-and-drop eller klicka, CSV / XLSX)
  * Steg 2: Förhandsgranskning (5 rader, välj profil)
@@ -412,18 +413,26 @@ const ImportWizardPage = (function () {
       _validated.filter(function (v) { return v.status === 'duplicate'; }).forEach(function (v) {
         var ri     = v.rowIndex - 2;
         var action = _conflicts[ri] || 'update';
-        html += '<div class="imp-row-item imp-row-dup">' +
-          '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
-          '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '') + '</span>' +
-          '<span class="imp-row-match bdg bdg-orange">' + esc(v.duplicate.match) + '</span>' +
-          '<span class="imp-row-actions">' +
-            '<select class="imp-conflict-sel" data-ri="' + ri + '" onchange="ImportWizardPage._onConflict(this)">' +
-              ['skip', 'update', 'create'].map(function (opt) {
-                var labels = { skip: 'Hoppa över', update: 'Uppdatera befintlig', create: 'Skapa ny' };
-                return '<option value="' + opt + '"' + (action === opt ? ' selected' : '') + '>' + labels[opt] + '</option>';
-              }).join('') +
-            '</select>' +
-          '</span>' +
+        html += '<div class="imp-row-item imp-row-dup" style="flex-direction:column;align-items:stretch;">' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
+            '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '') + '</span>' +
+            '<span class="imp-row-match bdg bdg-orange">' + esc(v.duplicate.match) + '</span>' +
+            '<span class="imp-row-actions" style="margin-left:auto;">' +
+              '<select class="imp-conflict-sel" data-ri="' + ri + '" onchange="ImportWizardPage._onConflict(this)">' +
+                ['skip', 'update', 'create'].map(function (opt) {
+                  var labels = { skip: 'Hoppa över', update: 'Uppdatera befintlig', create: 'Skapa ny' };
+                  return '<option value="' + opt + '"' + (action === opt ? ' selected' : '') + '>' + labels[opt] + '</option>';
+                }).join('') +
+              '</select>' +
+            '</span>' +
+          '</div>' +
+          '<details style="margin-top:4px;">' +
+            '<summary style="cursor:pointer;font-size:11px;color:var(--mt);padding:2px 0;user-select:none;">' +
+              _ic('git-branch', 11) + ' Visa fältändringar' +
+            '</summary>' +
+            _diffHtml(v) +
+          '</details>' +
         '</div>';
       });
       html += '</div>';
@@ -448,6 +457,40 @@ const ImportWizardPage = (function () {
   function _onConflict(sel) {
     var ri = parseInt(sel.getAttribute('data-ri'), 10);
     _conflicts[ri] = sel.value;
+  }
+
+  function _diffHtml(v) {
+    var cfg = ImportExportService.getConfig(_entityType);
+    if (!cfg || !v.duplicate) return '';
+    var existing = v.duplicate.item;
+    var proposed = v.resolved || {};
+    var rows = [];
+    (cfg.fields || []).forEach(function (f) {
+      if (!f.value || f.value.charAt(0) === '_') return;
+      var oldVal = existing[f.value];
+      var newVal = proposed[f.value];
+      if (newVal === '' || newVal == null) return;
+      if (String(oldVal || '') === String(newVal)) return;
+      rows.push({ label: (f.label || f.value).replace(' *', ''), oldVal: oldVal != null ? oldVal : '(tomt)', newVal: newVal });
+    });
+    if (!rows.length) {
+      return '<p style="font-size:11px;color:var(--mt);margin:4px 0 0">' + _ic('check', 12) + ' Inga fältskillnader.</p>';
+    }
+    return '<div style="overflow-x:auto;margin-top:6px">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
+      '<thead><tr>' +
+        '<th style="text-align:left;padding:3px 6px;color:var(--mt);font-weight:600;border-bottom:1px solid var(--br)">Fält</th>' +
+        '<th style="text-align:left;padding:3px 6px;color:var(--mt);font-weight:600;border-bottom:1px solid var(--br)">Nuvarande</th>' +
+        '<th style="text-align:left;padding:3px 6px;color:var(--mt);font-weight:600;border-bottom:1px solid var(--br)">Från fil</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr>' +
+          '<td style="padding:3px 6px;color:var(--mt)">' + esc(r.label) + '</td>' +
+          '<td style="padding:3px 6px;color:var(--rd);text-decoration:line-through;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(String(r.oldVal)) + '</td>' +
+          '<td style="padding:3px 6px;color:var(--gr);font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(String(r.newVal)) + '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
   }
 
   function _toStep5() {
@@ -625,15 +668,97 @@ const ImportWizardPage = (function () {
 
   function _undoLast() {
     if (!_lastLogId) return;
-    if (!confirm('Ångra importen? Skapade poster raderas och uppdaterade återställs.')) return;
+    var log = (state.importLogs || []).find(function (l) { return l.id === _lastLogId; });
+    if (!log) { alert('Importloggen hittades inte.'); return; }
+
+    var overlay = document.createElement('div');
+    overlay.id = 'imp-undo-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML =
+      '<div style="background:var(--bg);border-radius:12px;max-width:440px;width:100%;padding:24px;">' +
+        '<h3 style="margin:0 0 8px;">' + _ic('rotate-ccw', 16) + ' Ångra import</h3>' +
+        '<p style="font-size:13px;color:var(--mt);margin:0 0 20px;line-height:1.5;">' +
+          '<strong>' + log.createdCount + '</strong> skapade poster raderas. ' +
+          '<strong>' + log.updatedCount + '</strong> uppdaterade poster återställs till sina värden före importen. ' +
+          'Poster som ändrats manuellt efter importen bevaras och flaggas.' +
+        '</p>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+          '<button class="btn bp" onclick="ImportWizardPage._doUndo()">' + _ic('check', 14) + ' Ångra importen</button>' +
+          '<button class="btn bs" onclick="ImportWizardPage._closeUndoDialog()">Avbryt</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function _closeUndoDialog() {
+    var el = document.getElementById('imp-undo-overlay');
+    if (el) el.remove();
+  }
+
+  function _doUndo() {
+    _closeUndoDialog();
     var result = ImportExportService.undoImport(_lastLogId);
-    var msg = 'Ångrat: ' + result.removed + ' borttagna, ' + result.restored + ' återställda.';
+
     if (result.conflicts && result.conflicts.length) {
-      msg += '\n\nOBS: ' + result.conflicts.length + ' poster ändrades efter importen — kontrollera dessa manuellt:\n' +
-        result.conflicts.map(function (c) { return '• ' + (c.name || c.id); }).join('\n');
+      _showUndoConflictResult(result);
+      return;
     }
-    if (result.errors.length) msg += '\n\nFel:\n' + result.errors.join('\n');
-    alert(msg);
+
+    var summary = 'Ångrat: ' + result.removed + ' borttagna, ' + result.restored + ' återställda.';
+    if (result.errors && result.errors.length) {
+      summary += ' ' + result.errors.length + ' fel.';
+    }
+    // Show brief inline notice then navigate
+    var body = document.getElementById('imp-body');
+    if (body) {
+      body.innerHTML = '<div style="text-align:center;padding:40px 20px;">' +
+        '<div style="color:var(--gr);margin-bottom:12px;">' + _ic('check-circle', 36) + '</div>' +
+        '<h3 style="margin:0 0 8px;">Import ångrades</h3>' +
+        '<p style="color:var(--mt);font-size:13px;">' + esc(summary) + '</p>' +
+      '</div>';
+    }
+    var foot = document.getElementById('imp-footer');
+    if (foot) {
+      var cfg = ImportExportService.getConfig(_entityType);
+      foot.innerHTML = '<div style="display:flex;justify-content:center;padding:16px 0;">' +
+        '<button class="btn bp" onclick="Router.showPage(\'' + (cfg ? cfg.targetPage : 'pg-dash') + '\',{})">' + _ic('list', 14) + ' Till registret</button>' +
+      '</div>';
+    }
+  }
+
+  function _showUndoConflictResult(result) {
+    var overlay = document.createElement('div');
+    overlay.id = 'imp-undo-conflict-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    var conflictRows = (result.conflicts || []).map(function (c) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--br);">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;">' + esc(c.name || c.id || '—') + '</div>' +
+          '<div style="font-size:11px;color:var(--mt);">Ändrades manuellt efter importen — ursprungsvärdet bevarades ej</div>' +
+        '</div>' +
+        '<span class="bdg bdg-orange" style="font-size:10px;flex-shrink:0;">Bevarad</span>' +
+      '</div>';
+    }).join('');
+
+    overlay.innerHTML =
+      '<div style="background:var(--bg);border-radius:12px;max-width:520px;width:100%;padding:24px;max-height:80vh;overflow-y:auto;">' +
+        '<h3 style="margin:0 0 8px;">' + _ic('alert-triangle', 16) + ' Konflikter vid ångring</h3>' +
+        '<p style="font-size:13px;color:var(--mt);margin:0 0 16px;line-height:1.5;">' +
+          result.removed + ' poster raderades, ' + result.restored + ' återställdes. ' +
+          '<strong>' + result.conflicts.length + ' poster</strong> ändrades manuellt efter importen och bevarades med sina nuvarande värden.' +
+        '</p>' +
+        '<div style="margin-bottom:16px;max-height:300px;overflow-y:auto;">' + conflictRows + '</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+          '<button class="btn bp" onclick="ImportWizardPage._closeConflictDialog()">' + _ic('check', 14) + ' OK, förstått</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function _closeConflictDialog() {
+    var el = document.getElementById('imp-undo-conflict-overlay');
+    if (el) el.remove();
     var cfg = ImportExportService.getConfig(_entityType);
     Router.showPage(cfg ? cfg.targetPage : 'pg-dash', {});
   }
@@ -688,20 +813,23 @@ const ImportWizardPage = (function () {
   /* ── Publikt API ─────────────────────────────────────────────────────── */
 
   return {
-    render:             render,
-    _parseFile:         _parseFile,
-    _applyBokioProfile: _applyBokioProfile,
-    _applyAutoMatch:    _applyAutoMatch,
-    _onMappingChange:   _onMappingChange,
-    _toStep3:           _toStep3,
-    _toStep4:           _toStep4,
-    _toStep5:           _toStep5,
-    _onConflict:        _onConflict,
-    _runImport:         _runImport,
-    _undoLast:          _undoLast,
-    _reset:             _reset,
-    _back:              _back,
-    _onFileInput:       _onFileInput
+    render:                  render,
+    _parseFile:              _parseFile,
+    _applyBokioProfile:      _applyBokioProfile,
+    _applyAutoMatch:         _applyAutoMatch,
+    _onMappingChange:        _onMappingChange,
+    _toStep3:                _toStep3,
+    _toStep4:                _toStep4,
+    _toStep5:                _toStep5,
+    _onConflict:             _onConflict,
+    _runImport:              _runImport,
+    _undoLast:               _undoLast,
+    _closeUndoDialog:        _closeUndoDialog,
+    _doUndo:                 _doUndo,
+    _closeConflictDialog:    _closeConflictDialog,
+    _reset:                  _reset,
+    _back:                   _back,
+    _onFileInput:            _onFileInput
   };
 
 })();
