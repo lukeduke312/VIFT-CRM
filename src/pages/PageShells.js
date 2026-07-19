@@ -3413,6 +3413,8 @@ const PropertiesPage = {
           <input type="search" placeholder="Sök fastighet…" value="${this._q}"
             oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
         </div>
+        ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',14)} Importera</button>` : ''}
+        <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
         <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
       </div>
       <div class="ftabs" style="margin-bottom:6px;">
@@ -3559,6 +3561,8 @@ const ArticlesPage = {
           <input type="search" placeholder="Sök artikel, artnr…" value="${this._q}"
             oninput="ArticlesPage._q=this.value;ArticlesPage.render()">
         </div>
+        ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'article'})">${ic('upload',14)} Importera</button>` : ''}
+        <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('article',this)">${ic('download',14)} Exportera</button>
         <button class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)} Ny artikel</button>
       </div>
       <div class="ftabs" style="margin-bottom:4px;">
@@ -3709,6 +3713,8 @@ const PriceGroupsPage = {
     el.innerHTML =
       `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
          <h3 style="flex:1;font-size:14px;font-weight:700;">Prisgrupper</h3>
+         ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'priceGroup'})">${ic('upload',14)} Importera</button>` : ''}
+         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('priceGroup',this)">${ic('download',14)} Exportera</button>
          <button class="btn bp bsm" onclick="PriceGroupsPage.openCreate()">${ic('plus',14)} Ny prisgrupp</button>
        </div>` +
       (pgs.length === 0
@@ -3897,6 +3903,8 @@ const StaffPage = {
            <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="StaffPage._filter='aktiva';StaffPage.render()">Aktiva (${aktiva.length})</button>
            <button class="ft ${this._filter==='inaktiva'?'on':''}" onclick="StaffPage._filter='inaktiva';StaffPage.render()">Inaktiva (${inaktiva.length})</button>
          </div>
+         ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'staff'})">${ic('upload',14)} Importera</button>` : ''}
+         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('staff',this)">${ic('download',14)} Exportera</button>
          <button class="btn bp bsm" onclick="StaffPage.openCreate()">${ic('plus',14)} Ny personal</button>
        </div>` +
       (list.length === 0
