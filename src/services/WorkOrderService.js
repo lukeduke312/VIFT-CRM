@@ -17,8 +17,10 @@ const WorkOrderService = {
     persist();
     console.log('[WorkOrderService] persist() skickad till Supabase för', ao.id);
     Sidebar.updateBadges();
-    /* Push-notis — fire-and-forget, blockerar inte AO-skapandet */
-    if (typeof PushService !== 'undefined' && typeof PushService.notifyNewAO === 'function') {
+    /* Push-notis — ej för historiska importer (ao.historicalImport = true) */
+    if (!ao.historicalImport &&
+        typeof PushService !== 'undefined' &&
+        typeof PushService.notifyNewAO === 'function') {
       PushService.notifyNewAO(ao).catch(function(e) {
         console.warn('[WorkOrderService] Push-fel för', ao.id, ':', e);
       });
