@@ -21,8 +21,9 @@ const ImportWizardPage = (function () {
   var _file            = null;
   var _rawParsed       = null;   // { headers, rows }
   var _mapping         = {};     // header → fieldName | null
-  var _validated       = [];     // [{ rowIndex, row, mapped, resolved, status, duplicate, errors }]
+  var _validated       = [];     // [{ rowIndex, row, mapped, resolved, status, duplicate, errors, relationsLog, needsRelation }]
   var _conflicts       = {};     // rowIndex → 'skip' | 'create' | 'update'
+  var _relChoices      = {};     // 'rowIndex:targetField' → chosenId (disambiguation)
   var _lastLogId       = null;
   var _entityType      = 'customer';
   var _caps            = null;   // checkCapabilities() result
@@ -60,13 +61,14 @@ const ImportWizardPage = (function () {
       return;
     }
 
-    _step      = 1;
-    _file      = null;
-    _rawParsed = null;
-    _mapping   = {};
-    _validated = [];
-    _conflicts = {};
-    _lastLogId = null;
+    _step       = 1;
+    _file       = null;
+    _rawParsed  = null;
+    _mapping    = {};
+    _validated  = [];
+    _conflicts  = {};
+    _relChoices = {};
+    _lastLogId  = null;
 
     el.innerHTML = _html(cfg);
     _bindEvents();
@@ -440,7 +442,49 @@ const ImportWizardPage = (function () {
       html += '</div>';
     }
 
-    if (stats.ok === 0 && stats.dup === 0) {
+    /* ── Ambiguösa relationer — kräver manuellt val ──────────────────── */
+    var ambigRows = _validated.filter(function (v) { return v.needsRelation; });
+    if (ambigRows.length > 0) {
+      html += '<div class="imp-section-title" style="margin-top:16px">' +
+        _ic('git-merge', 14) + ' Ambiguösa relationer — välj rätt post manuellt' +
+      '</div>' +
+      '<div class="imp-row-list">';
+
+      ambigRows.forEach(function (v) {
+        var ambigs = (v.relationsLog || []).filter(function (l) { return l.quality === 'ambiguous'; });
+        html += '<div class="imp-row-item" style="flex-direction:column;align-items:stretch;gap:8px;">' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
+            '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '') + '</span>' +
+          '</div>';
+
+        ambigs.forEach(function (log) {
+          var key    = v.rowIndex + ':' + log.targetField;
+          var chosen = _relChoices[key] || '';
+          html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:8px;">' +
+            '<span style="font-size:12px;min-width:90px;color:var(--text-muted);">' + esc(log.label) + ':</span>' +
+            '<span style="font-size:11px;color:var(--mt);">"' + esc(log.refValue) + '" — ' + log.candidates.length + ' träffar</span>' +
+            '<select style="font-size:12px;border:1px solid var(--brd);border-radius:6px;padding:4px 8px;background:var(--card);" ' +
+              'onchange="ImportWizardPage._onRelChoice(\'' + key + '\',this.value)">' +
+              '<option value="">— Välj —</option>' +
+              log.candidates.map(function (c) {
+                var n = (c.item.name || ((c.item.firstName||'') + ' ' + (c.item.lastName||'')).trim() || c.id);
+                return '<option value="' + c.id + '"' + (chosen === c.id ? ' selected' : '') + '>' + esc(n) + ' (' + c.id + ')</option>';
+              }).join('') +
+            '</select>' +
+            (log.required
+              ? '<span style="color:var(--red);font-size:11px;font-weight:600;">Krävs</span>'
+              : '<span style="color:var(--mt);font-size:11px;">Valfri</span>') +
+          '</div>';
+        });
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+    }
+
+    if (stats.ok === 0 && stats.dup === 0 && ambigRows.length === 0) {
       html += '<div class="empty-state" style="padding:30px;text-align:center;">' +
         _ic('alert-circle', 24) + '<p>Inga importerbara rader hittades.</p></div>';
     }
@@ -459,6 +503,11 @@ const ImportWizardPage = (function () {
   function _onConflict(sel) {
     var ri = parseInt(sel.getAttribute('data-ri'), 10);
     _conflicts[ri] = sel.value;
+  }
+
+  function _onRelChoice(key, chosenId) {
+    if (chosenId) _relChoices[key] = chosenId;
+    else delete _relChoices[key];
   }
 
   function _diffHtml(v) {
@@ -496,6 +545,22 @@ const ImportWizardPage = (function () {
   }
 
   function _toStep5() {
+    /* Blockera om obligatoriska ambiguösa relationer är olösta */
+    var missing = [];
+    _validated.forEach(function (v) {
+      (v.relationsLog || []).forEach(function (log) {
+        if (log.quality === 'ambiguous' && log.required) {
+          var key = v.rowIndex + ':' + log.targetField;
+          if (!_relChoices[key]) {
+            missing.push('Rad ' + v.rowIndex + ': ' + log.label);
+          }
+        }
+      });
+    });
+    if (missing.length) {
+      _showError('imp-body', 'Välj relation för: ' + missing.slice(0, 3).join(', ') + (missing.length > 3 ? ' …' : ''));
+      return;
+    }
     _step = 5;
     _renderStep();
   }
@@ -558,6 +623,15 @@ const ImportWizardPage = (function () {
 
     _validated.forEach(function (v) {
       var ri = v.rowIndex - 2;
+
+      /* Applicera manuella relationsval på resolved-objektet */
+      (v.relationsLog || []).forEach(function (log) {
+        if (log.quality === 'ambiguous') {
+          var key = v.rowIndex + ':' + log.targetField;
+          var chosen = _relChoices[key];
+          if (chosen) v.resolved[log.targetField] = chosen;
+        }
+      });
 
       if (v.status === 'error') {
         skippedCount++;
@@ -781,6 +855,7 @@ const ImportWizardPage = (function () {
     _mapping        = {};
     _validated      = [];
     _conflicts      = {};
+    _relChoices     = {};
     _lastLogId      = null;
     _validationTime = null;
     _renderStep();
@@ -834,6 +909,7 @@ const ImportWizardPage = (function () {
     _toStep4:                _toStep4,
     _toStep5:                _toStep5,
     _onConflict:             _onConflict,
+    _onRelChoice:            _onRelChoice,
     _runImport:              _runImport,
     _undoLast:               _undoLast,
     _closeUndoDialog:        _closeUndoDialog,

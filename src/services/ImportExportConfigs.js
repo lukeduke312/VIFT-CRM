@@ -1028,15 +1028,13 @@ Object.assign(ImportExportService, {
         logEntry.candidates   = allCandidates;
 
       } else if (allCandidates.length > 1) {
-        /* Flera träffar — ambiguöst, välj den första men markera */
-        resolved[rel.targetField] = allCandidates[0].id;
+        /* Flera träffar — kräver manuellt val, löses aldrig automatiskt */
         logEntry.quality      = 'ambiguous';
-        logEntry.matchedField = allCandidates[0].matchedField;
-        logEntry.matchedId    = allCandidates[0].id;
+        logEntry.matchedField = null;
+        logEntry.matchedId    = null;
         logEntry.candidates   = allCandidates;
-        if (rel.required) {
-          errors.push('"' + refValue + '" matchar ' + allCandidates.length + ' poster i ' + rel.lookupIn + ' — välj manuellt (tog första: ' + allCandidates[0].id + ')');
-        }
+        logEntry.required     = !!rel.required;
+        /* resolved[rel.targetField] lämnas tomt — ImportWizardPage._relChoices löser det */
 
       } else {
         /* Ingen träff */
@@ -1105,17 +1103,20 @@ Object.assign(ImportExportService, {
       var dup       = errors.length ? null : findDuplicate(mapped, relResult.resolved);
       var status    = errors.length ? 'error' : (dup ? 'duplicate' : 'new');
 
+      var ambigLogs = relResult.relationsLog.filter(function (l) { return l.quality === 'ambiguous'; });
       results.push({
-        rowIndex:     ri + 2,
-        row:          row,
-        mapped:       mapped,
-        resolved:     relResult.resolved,
-        relationsLog: relResult.relationsLog,
-        status:       status,
-        duplicate:    dup,
-        errors:       errors,
-        warnings:     relResult.relationsLog.filter(function (l) { return l.quality === 'ambiguous'; }).map(function (l) {
-          return 'Relation "' + l.label + '": ambiguös matchning — ' + l.candidates.length + ' träffar i ' + l.lookupIn;
+        rowIndex:             ri + 2,
+        row:                  row,
+        mapped:               mapped,
+        resolved:             relResult.resolved,
+        relationsLog:         relResult.relationsLog,
+        status:               status,
+        duplicate:            dup,
+        errors:               errors,
+        needsRelation:        ambigLogs.length > 0,
+        hasRequiredAmbiguous: ambigLogs.some(function (l) { return l.required; }),
+        warnings:             ambigLogs.map(function (l) {
+          return 'Relation "' + l.label + '": ' + l.candidates.length + ' träffar i ' + l.lookupIn + ' — välj manuellt';
         })
       });
     });
