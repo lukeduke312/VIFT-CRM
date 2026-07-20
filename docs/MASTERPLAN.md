@@ -2,7 +2,17 @@
 
 Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 
-**Legenda:** `KLAR` = commit finns + UI fungerar · `DELVIS` = påbörjad, men ofullständig · `FÖRBEREDD` = fält/kod finns, ingen UI · `EJ BYGGD` = ej startat
+**Legenda:**
+- `EJ PÅBÖRJAD` — ej startat
+- `DELVIS BYGGD` — påbörjad, ofullständig
+- `BYGGD – BEHÖVER TEST` — kod finns + UI fungerar, men ej verifierad mot realistisk data i stagingmiljö
+- `TESTAD` — verifierad i stagingmiljö med realistisk data
+- `BLOCKERAD` — blockeras av annan punkt
+- `DEPLOYAD OCH TESTAD` — deploy gjord, verifierad i produktion
+- `UPPSKJUTEN TILL V2` — medvetet utskjutet till nästa version
+- `KLAR` (äldre poster) — commit finns + UI fungerar, ännu ej omklassificerad
+
+**Totalt antal punkter: 130** (punkt 92 förekommer i Fas 4 = den enda definitionen)
 
 ---
 
@@ -14,7 +24,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 | 2 | Supabase single-table blob store (vift_* nycklar) | KLAR | 9b39b63 | Storage.js |
 | 3 | Auth (login, roller, RLS, Auth.can()) | KLAR | 9b39b63 | Auth.js |
 | 4 | Service Worker v10 (network-first, cache-busting) | KLAR | 9b39b63 | sw.js |
-| 5 | DataSync — polling var 30:e sekund | KLAR | 9b39b63 | DataSync.js |
+| 5 | DataSync — polling var 15:e sekund | KLAR | 9b39b63 | DataSync.js |
 | 6 | ActivityService — revisionslogg | KLAR | 9b39b63 | ActivityService.js |
 | 7 | ActivitiesService — Att göra-uppgifter | KLAR | 9b39b63 | ActivitiesService.js |
 | 8 | Push-notiser (PushService, send-push Edge Function, VAPID) | KLAR | 9b39b63 | PushService.js, supabase/functions/send-push |
@@ -139,20 +149,20 @@ Manuell testkörning: `POST /functions/v1/service-monitor` med `Authorization: B
 | 56 | Schema — Schema.propertyObject() (30+ fält inkl. contacts[], equipment[]) | KLAR | f917fdb | schema.js |
 | 57 | State — state.propertyObjects[], initState, persist, getPropObj() | KLAR | f917fdb | state.js |
 | 58 | PropertyObjectService v1 — CRUD, kontakter, utrustning, sökning, typetiketter | KLAR | f917fdb | PropertyObjectService.js |
-| 59 | Raderingsskydd — blockeras vid aktiva AO eller aktiva serviceintervall | DELVIS | f917fdb | PropertyObjectService.js (aktivt SI och ej-arkiverade AO, ej stängda AO) |
+| 59 | Raderingsskydd — blockeras vid aktiva AO eller aktiva serviceintervall | BYGGD – BEHÖVER TEST | 53862af | PropertyObjectService.js v2 — fix: SI lagras i property.serviceIntervals[], inte state.serviceIntervals[] |
 | 60 | PropertyDetailPage — Objekt-flik med filter (typ/status/sökning) och CRUD-modaler | KLAR | 9ef6d01 | PropertyDetailPage v18 |
 | 61 | PropertyObjectPage v1 — detaljkort (info, access, kontakter, AO, utrustning) | KLAR | 9ef6d01 | PropertyObjectPage.js |
-| 62 | Objektskortet — serviceintervall kopplade till objekt | EJ BYGGD | — | PropertyObjectPage.js — planeras i stabilisering |
-| 63 | Objektskortet — avvikelser kopplade till objekt | EJ BYGGD | — | PropertyObjectPage.js — planeras i stabilisering |
-| 64 | Objektskortet — bilder och dokument | EJ BYGGD | — | PropertyObjectPage.js — planeras i stabilisering |
+| 62 | Objektskortet — serviceintervall kopplade till objekt | BYGGD – BEHÖVER TEST | aa70444 | PropertyObjectPage.js v3 — läser property.serviceIntervals[], visar status-badge + SI-länk |
+| 63 | Objektskortet — avvikelser kopplade till objekt | BYGGD – BEHÖVER TEST | aa70444 | PropertyObjectPage.js v3 — filtrerar state.avvikelser[].objectId |
+| 64 | Objektskortet — bilder och dokument | BYGGD – BEHÖVER TEST | aa70444 | PropertyObjectPage.js v3 — asynkron laddning via PropertyImageService, tech_section='obj:'+id |
 | 65 | Router — pg-propobj-detail + /objekt/:objId | KLAR | 9ef6d01 | Router.js v17 |
 | 66 | AO-wizard — objektväljare (filtrerad per fastighet) + autofill portkod | KLAR | 0135856 | WorkOrdersPage v34 |
 | 67 | AO-wizard — prefill adress, kontakt, telefon, e-post från objekt | KLAR | — | WorkOrdersPage v38 (entrance/stairwell/floor/apartmentNumber/contactEmail) |
 | 68 | AO-detalj — visar kopplat objekt med länk | KLAR | 0135856 | WorkOrderDetailPage v47 |
 | 69 | Serviceintervall-formulär — objectId-väljare | KLAR | f61b26a | PropertyDetailPage v19 |
 | 70 | Avvikelse — objectId-väljare i ronderingsvyn | KLAR | f61b26a | RonderingUtforandePage v10 |
-| 71 | Kontakter/hyresgäster — primaryContactId + contacts[]-lista med roller och giltighetstid | FÖRBEREDD | f917fdb | Schema.propertyObject() (fälten finns, ingen CRUD-UI för contacts) |
-| 72 | Rollbaserad åtkomstkontroll för portkod/nyckelinformation | EJ BYGGD | — | PropertyObjectPage.js — planeras i stabilisering |
+| 71 | Kontakter/hyresgäster — CRUD (namn, telefon, e-post, roll, primär, giltighet, anteckning) | BYGGD – BEHÖVER TEST | aa70444 | PropertyObjectPage.js v3 — _addTenantContact, _editTenantContact, _removeTenantContact, sparas i obj.contacts[] |
+| 72 | Rollbaserad åtkomstkontroll för portkod/nyckelinformation | BYGGD – BEHÖVER TEST | 481b323 aa70444 | PropertyObjectPage.js v3 — Auth.can('objects_sensitive') || Auth.can('customer_manage'); AuthService.js — ny permission dokumenterad |
 
 ---
 
@@ -162,12 +172,12 @@ Manuell testkörning: `POST /functions/v1/service-monitor` med `Authorization: B
 |---|----------|--------|-----------|-----------|
 | 73 | Generell import/export — alla register, exportcenter, diff/conflict-UI | DELVIS BYGGD | Hög | 18 register konfigurerade (inkl. Rapporter exportonly); markerad export klar (5 sidor); disambiguering klar; historicalImport-guard klar; webbläsarverifiering återstår |
 | 74 | Rondering — visningsrapport (PDF, dela) | KLAR | — | RonderingRapportPage v1 (skriv ut + dela via länk) |
-| 75 | Kalender — schemaläggning, dra-och-släpp | KLAR | — | CalendarPage v1 (dag/vecka/månad/agenda, DnD, filter, krockar, pool) |
-| 76 | Löneunderlag — export, perioder | KLAR | Medel | PayrollPage.js v1: periodfilter, personalfilter, attestering, CSV-export |
+| 75 | Kalender — schemaläggning, dra-och-släpp | BYGGD – BEHÖVER TEST | 77ed695 | CalendarPage v2 — Pointer Events DnD (long-press 480ms, scroll blockeras ej); desktop HTML5 DnD kvar |
+| 76 | Löneunderlag — export, perioder | BYGGD – BEHÖVER TEST | 481b323 | PayrollPage.js v2: auth-guard i render/export/attest (Auth.can('reports_view')); direkt URL-åtkomst blockeras |
 | 77 | Rapporter — statistik, diagram (AO, tid, objekt) | BYGGD – BEHÖVER TEST | — | ReportsPage v4: se detaljer nedan |
 | 78 | Mina jobb — tilldelade uppdrag per inloggad personal | KLAR | (befintlig) | MyJobsPage (existerar, fel status i MASTERPLAN) |
 | 79 | Avancerat behörighetssystem (per fastighet, per kundgrupp) | UPPSKJUTET | Låg | Kräver ombyggnad av Auth.js — planeras ej i nuvarande fas |
-| 80 | E-post-mallar och automatiska utskick | KLAR (UI) | Medel | Admin-flik "E-post-mallar" — CRUD, typfilter, variabler. Edge Function för faktisk sändning planeras separat. |
+| 80 | E-post-sändning via Edge Function (Resend) | BYGGD – BEHÖVER DEPLOY | 0f70a0f | supabase/functions/send-offer-email/index.ts; PageShells.js v89 — showSendModal med recipients/CC/BCC/mall/offerLink/bilagor/tidslinje-log; mailto fallback |
 | 81 | Kontrakthantering (avtal, betalningsplan, villkor) | KLAR | Medel | ContractsPage.js v1: CRUD, filter, årstotal, tillsvidara/auto-förnyelse |
 | 82 | Mobil-optimerad offline-läge (SW fallback) | UPPSKJUTET | Låg | Kräver IndexedDB-cachning i SW — planeras ej i nuvarande fas |
 | 92 | Push/notiser — använd ansvarig titel vid utskick | KLAR | — | send-push v2 + PushService v5: propertyId → propertyContacts → primär/alla aktiva staff |
@@ -284,11 +294,11 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 | 85 | State — state.propertyRoles[], state.propertyContacts[], persist, DataSync | KLAR | af97e9f | state.js v30 |
 | 86 | Titelregister — CRUD i Admin (skapa/redigera titlar, scope, onlyOnePrimary) | KLAR | af97e9f | PageShells v81 |
 | 87 | Fastighetskortet — flik "Ansvariga & kontakter" (CRUD, primär, giltighet) | KLAR | af97e9f | PropertyDetailPage v20 |
-| 88 | Objektskortet — kontakter på objektnivå (hyresgäst, lokalansvarig) | KLAR | — | PropertyObjectPage v2 |
+| 88 | Objektskortet — kontakter på objektnivå (hyresgäst, lokalansvarig) | BYGGD – BEHÖVER TEST | aa70444 | PropertyObjectPage v3 — full CRUD för hyresgästkontakter (punkt 71) |
 | 89 | AO-wizard — föreslå kontakt baserat på fastighet + kategori + titel | KLAR | — | WorkOrdersPage v37 |
 | 90 | Dagens drift — visa ansvariga per fastighet | KLAR | — | OperationsPage v10 |
 | 91 | PropertyContactService — CRUD, primärkontroll, historikvy | KLAR | af97e9f | PropertyContactService.js v1 |
-| 92 | Push/notiser — använd ansvarig titel vid utskick | EJ BYGGD | — | PushService (kräver Edge Function) |
+| ~~92~~ | *(Se punkt 92 i Fas 4 — Push/notiser ansvarig titel. Dublett borttagen.)* | — | — | — |
 
 ### Datamodell — persontyper
 - `staff` → state.staff[].id
@@ -450,17 +460,17 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 Wizard sparar nu: `customerName`, `objectNumber`, `contactId`, `contactEmail`, `entrance`, `stairwell`, `floor`, `apartmentNumber` + befintliga fält.
 AO-sökning (punkt 13) inkluderar nu alla dessa fält i haystack.
 
-### Objektskortet historik (punkt 62–64)
-PropertyObjectPage visar arbetsordrar och utrustning, men saknar sektioner för serviceintervall, avvikelser, bilder och dokument.
+### Objektskortet (punkt 62–64) — BYGGD – BEHÖVER TEST (commit aa70444)
+PropertyObjectPage v3 visar nu serviceintervall, avvikelser, bilder och dokument. Bilder laddas asynkront via PropertyImageService med tech_section='obj:'+objectId. Kräver stagingtest.
 
 ### Prefill från objekt vid AO-skapande (punkt 67 — KLAR)
 _wizObjectChanged() fyller nu i: adress, portkod, entrance, stairwell, floor, apartmentNumber, kontaktperson, telefon, e-post via PropertyContactService eller obj.contacts[].
 
-### Kontakter/hyresgäster (punkt 71)
-contacts[]-arrayen finns i schema och kan sparas via PropertyObjectService.update(), men det saknas CRUD-UI för att lägga till/ta bort kontakter direkt i objektskortet.
+### Kontakter/hyresgäster (punkt 71) — BYGGD – BEHÖVER TEST (commit aa70444)
+Full CRUD implementerat i PropertyObjectPage v3. Sparas i obj.contacts[] med fält: id, name, phone, email, role, isPrimary, validFrom, validTo, notes, active.
 
-### Rollbaserat döljande av portkod (punkt 72)
-doorCode och keyInformation visas för alla inloggade användare. Kräver rollkontroll (t.ex. Auth.can('objects_sensitive')) innan det är säkert för mobila fältarbetare.
+### Rollbaserat döljande av portkod (punkt 72) — BYGGD – BEHÖVER TEST (commit 481b323)
+doorCode och keyInformation döljs nu för användare som saknar Auth.can('objects_sensitive') OCH Auth.can('customer_manage'). Ny permission 'objects_sensitive' dokumenterad i AuthService. Saknas ännu i rollernas permissions-arrayer — kräver admin-konfiguration per roll.
 
 ### Importera per rad — diff-vy (punkt 50)
 Konfliktlösning har tre val (hoppa/uppdatera/skapa ny) per rad, men saknar en sida-vid-sida diff-vy som jämför importvärdena mot befintliga värden.
@@ -476,6 +486,33 @@ ImportExportService.js är byggd som återanvändbar motor för alla register.
 ImportWizard och kolumnmatchning stöder bara entityType='customer' idag. Fastigheter, objekt, artiklar och personal kräver egna fältmappningar och CRUD-logik — byggs i Fas 4.
 
 ---
+
+## Blockerare kvarstående inför v1.0 staging
+
+| Blockerare | Status | Åtgärd |
+|------------|--------|---------|
+| A1. objects_sensitive ej tilldelad i roller | EJ PÅBÖRJAD | Lägg till i AdminPage rollredigering + tilldela förvaltare/admin-roller |
+| A2. Supabase store RLS — SQL-policy dokumenterad och testad | EJ PÅBÖRJAD | Dokumentera faktiska policies, testa user A vs user B, anon-access |
+| A3. Storage offer-attachments — inga permanenta publika URL:er | EJ PÅBÖRJAD | Verifiera bucket-policy: private, signed-URL only, cross-token-test |
+| B1. offerEvents/offerAttachments DataSync | BYGGD – BEHÖVER TEST | 53862af: lagt till i DataSync._poll(). Verifiera 2-fönster-sync |
+| B2. Övriga 5 entiteter vs DataSync | BYGGD – BEHÖVER TEST | contracts/inspections/recurringOrders/propertyContacts/propertyRoles — verifiera merge/delete/reload |
+| C1. Edge Functions deploy | EJ PÅBÖRJAD | Kräver supabase CLI + secrets. Se checklista nedan |
+| C2. send-offer-email secrets | EJ PÅBÖRJAD | RESEND_API_KEY, FROM_EMAIL, FROM_NAME, PUBLIC_BASE_URL i Supabase Secrets |
+
+## Edge Functions deploy-checklista (7+1 funktioner)
+
+| Funktion | Deploy-status | Secrets |
+|----------|---------------|---------|
+| service-monitor | EJ DEPLOYAD | VAPID_*, SERVICE_MONITOR_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-token-validate | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-respond | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_* |
+| offer-attachment-upload | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-attachment-url | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-pdf | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| send-push | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL |
+| **send-offer-email** | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, **RESEND_API_KEY**, FROM_EMAIL, FROM_NAME, PUBLIC_BASE_URL |
+
+**VAPID private key och RESEND_API_KEY läggs ALDRIG i config.js eller frontend — enbart i Supabase Secrets.**
 
 ## Säkerhetsprinciper (gäller alltid)
 
