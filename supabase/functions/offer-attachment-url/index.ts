@@ -6,14 +6,15 @@
  *
  * SÄKERHET:
  * - Kundanrop: valideras mot publicToken + inkludeInPublicView + aktiv + lockedInVersion
- * - Interna anrop: valideras mot Supabase anon key (apikey header)
+ * - Interna anrop: valideras mot JWT (Authorization: Bearer)
  * - Signerade URL:er från Supabase Storage löper ut efter SIGNED_URL_TTL_SECONDS
  * - Borttagna (active=false) eller återkallade bilagor returneras aldrig
  * - Storage path valideras — traversal blockeras
  *
  * POST /functions/v1/offer-attachment-url
  * Body (kundanrop):   { token: string, attachmentId: string }
- * Body (internt):     { internalKey: string, attachmentId: string, offerId?: string }
+ * Body (internt):     { attachmentId: string }
+ * Headers (internt):  Authorization: Bearer <SUPABASE_JWT>
  *
  * Svar 200: { url: string, expiresAt: string, fileName: string, mimeType: string }
  * Svar 403: { error: 'forbidden' }
@@ -26,13 +27,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const SUPABASE_AKEY     = Deno.env.get('SUPABASE_ANON_KEY')         ?? ''
 const STORAGE_BUCKET    = 'offer-attachments'
 const SIGNED_URL_TTL_SECONDS = 3600  /* 1 timme */
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'content-type, apikey, authorization',
+  'Access-Control-Allow-Headers': 'content-type, authorization',
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
@@ -117,11 +117,14 @@ serve(async (req: Request) => {
         authorized = true
       }
     }
-  } else if (internalKey && (internalKey === SUPABASE_AKEY || req.headers.get('apikey') === SUPABASE_AKEY)) {
-    /* Internt anrop: validera mot anon key */
-    authorized = true
-  } else if (req.headers.get('apikey') === SUPABASE_AKEY) {
-    authorized = true
+  } else {
+    /* Internt anrop: validera JWT */
+    const authHeader = req.headers.get('authorization') || ''
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+    if (jwt) {
+      const { data: { user } } = await supabase.auth.getUser(jwt)
+      if (user) authorized = true
+    }
   }
 
   if (!authorized) return json({ error: 'forbidden' }, 403)

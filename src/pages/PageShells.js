@@ -3705,8 +3705,7 @@ ${hasRut?`<div class="rut">
   },
 
   async _uploadFiles(files, offerId, versionId) {
-    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
-    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
     const progressEl = document.getElementById('att-upload-progress-' + offerId);
     if (progressEl) progressEl.textContent = 'Laddar upp ' + files.length + ' fil(er)…';
 
@@ -3719,7 +3718,9 @@ ${hasRut?`<div class="rut">
       fd.append('uploadedBy', (state.currentUser && state.currentUser.id) || '');
       try {
         const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-upload', {
-          method: 'POST', headers: { apikey: ANON_KEY }, body: fd
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '') },
+          body: fd
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || res.status);
@@ -3739,16 +3740,18 @@ ${hasRut?`<div class="rut">
   },
 
   async _downloadAttachment(attachmentId) {
-    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
-    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
     const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
     if (!att) return;
     try {
       showToast('Hämtar nedladdningslänk…');
       const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY },
-        body: JSON.stringify({ attachmentId, mode: 'internal' })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+        },
+        body: JSON.stringify({ attachmentId })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.status);
@@ -3808,12 +3811,14 @@ ${hasRut?`<div class="rut">
     const confirmed = await Modal.confirm(`Ta bort bilagan "${esc(att.displayName||att.originalFileName)}"?`);
     if (!confirmed) return;
 
-    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
-    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
     try {
       const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-upload', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+        },
         body: JSON.stringify({ attachmentId, offerId })
       });
       if (!res.ok) {
@@ -3854,13 +3859,15 @@ ${hasRut?`<div class="rut">
   },
 
   async _requestCombinedPdf(offerId) {
-    const EDGE_BASE = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
-    const ANON_KEY  = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
     try {
       showToast('Genererar PDF…');
       const res = await fetch(EDGE_BASE + '/functions/v1/offer-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+        },
         body: JSON.stringify({ offerId })
       });
       if (!res.ok) {

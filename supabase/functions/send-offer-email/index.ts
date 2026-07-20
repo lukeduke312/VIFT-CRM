@@ -94,38 +94,33 @@ function normalizeRecipient(r: string | { email: string; name?: string }) {
 /* ── Hämta signerad bilage-URL ──────────────────────────── */
 async function fetchSignedAttachments(
   supabase: ReturnType<typeof createClient>,
-  attachmentIds: string[],
-  storeKey: string
+  attachmentIds: string[]
 ): Promise<Array<{ filename: string; content: string }>> {
   if (!attachmentIds?.length) return []
 
-  // Hämta offerAttachments från store
   const { data: storeRow } = await supabase
     .from('store')
     .select('value')
-    .eq('key', storeKey)
+    .eq('key', 'vift_offerAttachments')
     .maybeSingle()
 
   if (!storeRow?.value) return []
 
-  let state: Record<string, unknown>
-  try { state = JSON.parse(storeRow.value) } catch { return [] }
-
   const offerAttachments: Array<{
-    id: string; offerId: string; storagePath: string; originalFileName: string;
-    mimeType: string; includeInCombinedPdf?: boolean; hidden?: boolean; deleted?: boolean;
-  }> = (state.offerAttachments as typeof [] | undefined) ?? []
+    id: string; storagePath: string; originalFileName: string;
+    active?: boolean;
+  }> = Array.isArray(storeRow.value) ? storeRow.value as typeof [] : []
 
   const results: Array<{ filename: string; content: string }> = []
 
   for (const id of attachmentIds) {
     const att = offerAttachments.find(a => a.id === id)
-    if (!att || att.hidden || att.deleted) continue
+    if (!att || att.active === false) continue
 
-    // Skapa signerad URL (60 sekunder räcker för att ladda ner)
+    const pathInBucket = att.storagePath.replace('offer-attachments/', '')
     const { data: signedData } = await supabase.storage
       .from('offer-attachments')
-      .createSignedUrl(att.storagePath, 60)
+      .createSignedUrl(pathInBucket, 60)
 
     if (!signedData?.signedUrl) continue
 
@@ -153,7 +148,7 @@ serve(async (req: Request) => {
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!jwt) return err({ error: 'unauthorized' }, 401)
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
   /* Verifiera JWT (accepterar både anon och autentiserade, men kräver autentiserad) */
   const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt)
@@ -190,6 +185,8 @@ serve(async (req: Request) => {
   if (!recipients?.length) {
     return err({ error: 'missing_fields', detail: 'Minst en mottagare krävs' }, 400)
   }
+  if (String(subject).length > 200)       return err({ error: 'subject_too_long' }, 400)
+  if (String(bodyHtml).length > 200_000)  return err({ error: 'body_too_large' }, 400)
 
   const normalizedTo = recipients.map(normalizeRecipient)
   for (const r of normalizedTo) {
@@ -200,6 +197,36 @@ serve(async (req: Request) => {
 
   if (!RESEND_API_KEY) return err({ error: 'provider_not_configured' }, 500)
 
+  /* Verifiera att offerToken matchar offerten i store */
+  const { data: offStoreRow } = await supabase
+    .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
+  const allOffers: Record<string, unknown>[] =
+    Array.isArray(offStoreRow?.value) ? offStoreRow.value as Record<string, unknown>[] : []
+  const targetOffer = allOffers.find(o => o.id === offerId)
+  if (!targetOffer) return err({ error: 'offer_not_found' }, 404)
+  if (targetOffer.publicToken !== offerToken) return err({ error: 'token_mismatch' }, 400)
+
+  /* Idempotens: blockera dubbelutskick inom 5 minuter */
+  try {
+    const { data: evRow } = await supabase
+      .from('store').select('value').eq('key', 'vift_offerEvents').maybeSingle()
+    const recentEvents: Record<string, unknown>[] =
+      Array.isArray(evRow?.value) ? evRow.value as Record<string, unknown>[] : []
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const duplicate = recentEvents.find(e =>
+      e.offerId === offerId &&
+      Number(e.offerVersion) === Number(offerVersion) &&
+      e.type === 'email_sent' &&
+      e.status === 'sent' &&
+      String(e.sentAt ?? '') > fiveMinAgo
+    )
+    if (duplicate) {
+      return err({ error: 'already_sent', detail: 'Offerten skickades redan inom de senaste 5 minuterna' }, 409)
+    }
+  } catch {
+    // Gå vidare om kontroll misslyckas
+  }
+
   /* Generera offertlänk */
   const offerLink = `${PUBLIC_BASE_URL}/#/offer/${offerToken}`
 
@@ -209,8 +236,7 @@ serve(async (req: Request) => {
     : bodyHtml + `\n<p><a href="${offerLink}">Visa offert online</a></p>`
 
   /* Bilagor */
-  const storeKey   = 'vift_main'
-  const emailAtts  = await fetchSignedAttachments(supabase, attachmentIds ?? [], storeKey)
+  const emailAtts  = await fetchSignedAttachments(supabase, attachmentIds ?? [])
 
   /* Bygg Resend payload */
   const resendTo = normalizedTo.map(r =>
@@ -259,19 +285,15 @@ serve(async (req: Request) => {
 
   const sentAt = new Date().toISOString()
 
-  /* Spara händelse i offerEvents (i Supabase store) */
+  /* Spara händelse i vift_offerEvents */
   try {
-    const { data: storeRow } = await supabase
+    const { data: evRow } = await supabase
       .from('store')
       .select('value')
-      .eq('key', storeKey)
+      .eq('key', 'vift_offerEvents')
       .maybeSingle()
 
-    const storeState: Record<string, unknown> = storeRow?.value
-      ? JSON.parse(storeRow.value)
-      : {}
-
-    const offerEvents: unknown[] = (storeState.offerEvents as unknown[] | undefined) ?? []
+    const offerEvents: unknown[] = Array.isArray(evRow?.value) ? evRow.value as unknown[] : []
     const eventId = `OEV-${Date.now().toString(36).toUpperCase()}`
 
     offerEvents.push({
@@ -292,12 +314,12 @@ serve(async (req: Request) => {
       attachmentCount: (attachmentIds ?? []).length,
     })
 
-    storeState.offerEvents = offerEvents
+    if (offerEvents.length > 10_000) offerEvents.splice(0, offerEvents.length - 10_000)
+
     await supabase
       .from('store')
-      .upsert({ key: storeKey, value: JSON.stringify(storeState) })
+      .upsert({ key: 'vift_offerEvents', value: offerEvents }, { onConflict: 'key' })
   } catch (logErr) {
-    // Loggfel stoppar inte svaret
     console.error('[send-offer-email] Failed to log event:', logErr)
   }
 

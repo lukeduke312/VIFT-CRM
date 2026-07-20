@@ -15,7 +15,7 @@
  *   Dessa listas separat i svaret. Kräver konvertering som EJ görs här.
  *
  * SÄKERHET:
- *   - Kräver anon key (apikey-header) — intern CRM-användare
+ *   - Kräver giltig JWT (Authorization: Bearer) — intern CRM-användare
  *   - Läser bara bilagor med includeInCombinedPdf=true och active=true
  *   - offerId valideras mot store — okänt offerId → 404
  *   - Signerade nedladdnings-URL:er (1 timme) används för att hämta bilagorna
@@ -33,12 +33,11 @@ import { PDFDocument, rgb, StandardFonts } from 'npm:pdf-lib@1.17.1'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const SUPABASE_AKEY    = Deno.env.get('SUPABASE_ANON_KEY')         ?? ''
 const STORAGE_BUCKET   = 'offer-attachments'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'content-type, apikey, authorization',
+  'Access-Control-Allow-Headers': 'content-type, authorization',
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
@@ -62,8 +61,16 @@ serve(async (req: Request) => {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
   if (!checkRateLimit(ip)) return json({ error: 'rate_limited' }, 429)
 
-  const apikey = req.headers.get('apikey') || ''
-  if (!SUPABASE_AKEY || apikey !== SUPABASE_AKEY) return json({ error: 'forbidden' }, 403)
+  const authHeader = req.headers.get('authorization') || ''
+  const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!jwt) return json({ error: 'forbidden' }, 403)
+
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    auth: { persistSession: false }
+  })
+
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt)
+  if (authErr || !user) return json({ error: 'forbidden' }, 403)
 
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'invalid_json' }, 400) }
@@ -72,10 +79,6 @@ serve(async (req: Request) => {
   const includeAtts       = body.includeAttachments !== false
 
   if (!offerId) return json({ error: 'missing_offerId' }, 400)
-
-  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-    auth: { persistSession: false }
-  })
 
   /* Hämta offert */
   const { data: offRow } = await supabase

@@ -30,7 +30,19 @@ import webpush from 'npm:web-push@3.6.7'
 /* ── CORS ─────────────────────────────────────────────────── */
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+}
+
+/* ── Rate-limit ───────────────────────────────────────────── */
+const _rateMap = new Map<string, { count: number; windowStart: number }>()
+function checkRateLimit(ip: string): boolean {
+  const now  = Date.now()
+  const slot = _rateMap.get(ip)
+  if (!slot || now - slot.windowStart > 60_000) {
+    _rateMap.set(ip, { count: 1, windowStart: now }); return true
+  }
+  slot.count++; return slot.count <= 30
 }
 
 /* ── VAPID-konfiguration ─────────────────────────────────── */
@@ -48,6 +60,9 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS })
   }
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  if (!checkRateLimit(ip)) return json({ error: 'rate_limited' }, 429)
 
   try {
     /* Validera VAPID-konfiguration */
@@ -79,9 +94,26 @@ serve(async (req: Request) => {
     const body      = await req.json().catch(() => ({}))
     const title     = (body.title      || 'VIFT CRM').slice(0, 100)
     const text      = (body.body       || '').slice(0, 300)
-    const url       = (body.url        || '/').slice(0, 500)
+    const rawUrl    = String(body.url || '/').slice(0, 500)
+    /* Tillåt bara relativa sökvägar eller samma origin — blockera javascript: och externa adresser */
+    const url       = rawUrl.startsWith('/') || rawUrl === '' ? rawUrl : '/'
     const propertyId: string | null = body.propertyId || null
     const broadcast = body.broadcast === true
+
+    /* Roll-kontroll: broadcast kräver admin eller förvaltare */
+    if (broadcast) {
+      const { data: staffRow } = await supabase
+        .from('store').select('value').eq('key', 'vift_staff').maybeSingle()
+      const staffList: Record<string, unknown>[] =
+        Array.isArray(staffRow?.value) ? staffRow.value as Record<string, unknown>[] : []
+      const callerStaff = staffList.find(s =>
+        String(s.email ?? '').toLowerCase() === (caller.email ?? '').toLowerCase()
+      )
+      const callerRole = String(callerStaff?.role ?? '')
+      if (!['admin', 'förvaltare'].includes(callerRole)) {
+        return json({ error: 'Broadcast kräver admin eller förvaltare-roll' }, 403)
+      }
+    }
 
     /* ── Punkt 92: propertyId-baserad mottagarresolution ─────
      * Prioritet:
@@ -132,11 +164,17 @@ serve(async (req: Request) => {
           .filter(Boolean)
 
         if (emails.length > 0) {
-          /* Hämta auth user_id:n för dessa e-postadresser */
-          const { data: authUsers } = await supabase.auth.admin.listUsers()
+          /* Hämta auth user_id:n för dessa e-postadresser (paginerat) */
           const authMap: Record<string, string> = {}
-          for (const u of authUsers?.users ?? []) {
-            if (u.email) authMap[u.email.toLowerCase()] = u.id
+          let page = 1
+          let hasMore = true
+          while (hasMore) {
+            const { data: authUsers } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+            for (const u of authUsers?.users ?? []) {
+              if (u.email) authMap[u.email.toLowerCase()] = u.id
+            }
+            hasMore = (authUsers?.users?.length ?? 0) === 1000
+            page++
           }
           const ids = emails.map(e => authMap[e]).filter(Boolean) as string[]
           if (ids.length > 0) targetUserIds = ids

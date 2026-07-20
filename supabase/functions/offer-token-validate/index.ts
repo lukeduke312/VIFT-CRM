@@ -201,8 +201,6 @@ function buildPublicOffer(off: Record<string, unknown>): Record<string, unknown>
     tokenExpiresAt: off.tokenExpiresAt ?? '',
     openCount:      off.openCount      ?? 0,
     openedAt:       off.openedAt       ?? '',
-    /* Offert-snapshot (om den finns — används som fallback för gamla versioner) */
-    lockedSnapshotJSON: off.lockedSnapshotJSON ?? ''
   }
 }
 

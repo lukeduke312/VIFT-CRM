@@ -5,7 +5,7 @@
  * till Supabase Storage samt uppdaterar vift_offerAttachments i store.
  *
  * SÄKERHET:
- * - Kräver giltigt Supabase anon key (apikey header) — intern CRM-användare
+ * - Kräver giltig JWT (Authorization: Bearer) — intern CRM-användare
  * - Filtyp valideras mot ALLOWED_MIME_TYPES (magic bytes + MIME-typ)
  * - Filnamn saniteras — inga path traversal, inga specialtecken
  * - Max filstorlek: MAX_BYTES (50 MB)
@@ -14,7 +14,7 @@
  *
  * POST /functions/v1/offer-attachment-upload
  * Content-Type: multipart/form-data
- * Headers: apikey: <SUPABASE_ANON_KEY>
+ * Headers: Authorization: Bearer <SUPABASE_JWT>
  *
  * Form fields:
  *   file:                 File
@@ -37,13 +37,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const SUPABASE_AKEY    = Deno.env.get('SUPABASE_ANON_KEY')         ?? ''
 const STORAGE_BUCKET   = 'offer-attachments'
 const MAX_BYTES        = 50 * 1024 * 1024  /* 50 MB */
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'content-type, apikey, authorization',
+  'Access-Control-Allow-Headers': 'content-type, authorization',
   'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS'
 }
 
@@ -120,15 +119,17 @@ serve(async (req: Request) => {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
   if (!checkRateLimit(ip)) return json({ error: 'rate_limited' }, 429)
 
-  /* Auth: anon key krävs */
-  const apikey = req.headers.get('apikey') || ''
-  if (!SUPABASE_AKEY || apikey !== SUPABASE_AKEY) {
-    return json({ error: 'forbidden' }, 403)
-  }
+  /* Auth: kräver giltig JWT */
+  const authHeader = req.headers.get('authorization') || ''
+  const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!jwt) return json({ error: 'forbidden' }, 403)
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
   })
+
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt)
+  if (authErr || !user) return json({ error: 'forbidden' }, 403)
 
   /* ── DELETE-hantering (soft delete) ──────────────────────── */
   if (req.method === 'DELETE') {
@@ -155,6 +156,15 @@ serve(async (req: Request) => {
   if (!fileField || !(fileField instanceof File)) return json({ error: 'missing_file' }, 400)
   if (!offerId)        return json({ error: 'missing_fields', field: 'offerId' }, 400)
   if (!offerVersionId) return json({ error: 'missing_fields', field: 'offerVersionId' }, 400)
+
+  /* Validera att offerten existerar */
+  const { data: offRow } = await supabase
+    .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
+  const knownOffers: Record<string, unknown>[] =
+    Array.isArray(offRow?.value) ? offRow.value as Record<string, unknown>[] : []
+  if (!knownOffers.find(o => o.id === offerId)) {
+    return json({ error: 'offer_not_found' }, 404)
+  }
 
   const file = fileField as File
 
@@ -219,8 +229,8 @@ serve(async (req: Request) => {
     })
 
   if (upErr) {
-    console.error('[offer-attachment-upload] storage upload fel:', upErr)
-    return json({ error: 'storage_error', detail: upErr.message }, 500)
+    console.error('[offer-attachment-upload] storage upload fel')
+    return json({ error: 'storage_error' }, 500)
   }
 
   /* Spara metadata i vift_offerAttachments */
