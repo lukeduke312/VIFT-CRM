@@ -83,6 +83,30 @@ CREATE TABLE IF NOT EXISTS store_backup_properties_20260720 AS
   FROM store
   WHERE key = 'vift_properties';
 
+-- Backup-tabeller innehåller originalblob med känslig data (doorCode m.m.).
+-- Nekas för alla utom service_role. Ingen direkt klientåtkomst.
+REVOKE ALL ON store_backup_prop_objects_20260720 FROM PUBLIC;
+REVOKE ALL ON store_backup_prop_objects_20260720 FROM anon;
+REVOKE ALL ON store_backup_prop_objects_20260720 FROM authenticated;
+
+REVOKE ALL ON store_backup_properties_20260720 FROM PUBLIC;
+REVOKE ALL ON store_backup_properties_20260720 FROM anon;
+REVOKE ALL ON store_backup_properties_20260720 FROM authenticated;
+
+ALTER TABLE store_backup_prop_objects_20260720 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_backup_properties_20260720  ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "backup_objects_service_role_all" ON store_backup_prop_objects_20260720;
+DROP POLICY IF EXISTS "backup_props_service_role_all"   ON store_backup_properties_20260720;
+
+CREATE POLICY "backup_objects_service_role_all"
+  ON store_backup_prop_objects_20260720 FOR ALL
+  TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "backup_props_service_role_all"
+  ON store_backup_properties_20260720 FOR ALL
+  TO service_role USING (true) WITH CHECK (true);
+
 
 -- ── Datamigration + stripning (atomisk) ────────────────────────
 DO $$
