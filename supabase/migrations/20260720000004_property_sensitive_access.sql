@@ -1,27 +1,31 @@
 -- ============================================================
--- Migration: property_sensitive_access
+-- Migration: property_sensitive_access  (v2 — reversibel)
 -- Datum:     2026-07-20
 -- Syfte:     Separera känsliga objektfält från den delade store-blobben.
---            Portkod, nyckelinformation och larmuppgifter lagras nu i
---            en separat, hårt kontrollerad tabell.
---            Enbart Edge Function get-sensitive-fields (med giltig JWT
---            + objects_sensitive-rättighet) returnerar dessa värden.
---            Autentiserade frontend-klienter kan INTE nå tabellen direkt.
+--            Portkod, nyckelinformation och larmuppgifter lagras i en
+--            separat, hårt kontrollerad tabell utan direkt klientåtkomst.
+--            Edge Function get-sensitive-fields (med objects_sensitive) är
+--            den enda vägen att läsa dessa värden.
 --
--- Berörda fält (migreras från store-blobbar):
---   vift_propertyObjects[].accessInformation → access_information
---   vift_propertyObjects[].doorCode          → door_code
---   vift_propertyObjects[].keyInformation    → key_information
---   vift_properties[].accessCode             → access_code
---   vift_properties[].keyInfo                → key_information (property-nivå)
+-- SÄKERHET:
+--   - authenticated och anon har REVOKE ALL på tabellen
+--   - Inga RLS-policyer för authenticated → deny-by-default
+--   - Enbart service_role (EF) når tabellen
 --
--- ROLLBACK:
---   DROP TABLE IF EXISTS property_sensitive_access;
---   -- Befintlig data kan återföras till store-blobbar via set-sensitive-fields EF
---   -- eller via manuell SQL om backupdata finns.
+-- REVERSIBILITET:
+--   Migrationen skapar backup-tabeller av blobbar INNAN stripning.
+--   Rollback-SQL återställer originalblob ur backup utan manuell
+--   JSON-manipulation.
+--
+-- ATOMICITET:
+--   Migration och stripning körs i ett DO-block med explicit transaktion.
+--   Om verifierat antal poster inte matchar förväntat antal → rollback.
+--
+-- ROLLBACK (kör i SQL Editor):
+--   Se avsnittet "ROLLBACK-SQL" längst ned i denna fil.
 -- ============================================================
 
--- ── Tabell ─────────────────────────────────────────────────────
+-- ── Tabell: property_sensitive_access ─────────────────────────
 CREATE TABLE IF NOT EXISTS property_sensitive_access (
   id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id         TEXT,
@@ -46,9 +50,6 @@ CREATE INDEX IF NOT EXISTS idx_psa_property_id
   WHERE property_id IS NOT NULL;
 
 -- ── Explicit GRANT/REVOKE ──────────────────────────────────────
--- authenticated och anon får INGA tabellprivilegier.
--- All åtkomst sker via service_role i EFs.
-
 REVOKE ALL ON property_sensitive_access FROM anon;
 REVOKE ALL ON property_sensitive_access FROM authenticated;
 
@@ -57,7 +58,6 @@ ALTER TABLE property_sensitive_access ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "psa_service_role_all" ON property_sensitive_access;
 
--- service_role: full access (get-sensitive-fields och set-sensitive-fields EF)
 CREATE POLICY "psa_service_role_all"
   ON property_sensitive_access FOR ALL
   TO service_role
@@ -67,109 +67,221 @@ CREATE POLICY "psa_service_role_all"
 -- authenticated och anon: inga policyer = RLS deny-by-default
 
 
--- ── Datamigration: extrahera från store-blobbar ────────────────
--- Säker att köra om: INSERT WHERE NOT EXISTS förhindrar dubbletter.
--- Migrerar bara poster som har minst ett icke-tomt känsligt fält.
+-- ── Backup-tabeller (INNAN all databearbetning) ─────────────────
+-- Bevarar originaldata för säker rollback.
+-- Tabellerna bevaras till rollbacken är verifierad och godkänd.
+-- Ta bort med: DROP TABLE IF EXISTS store_backup_prop_objects_20260720;
+--              DROP TABLE IF EXISTS store_backup_properties_20260720;
 
--- 1. Migrera från vift_propertyObjects
-INSERT INTO property_sensitive_access
-  (object_id, property_id, door_code, key_information, access_information, updated_at, updated_by)
-SELECT
-  elem->>'id'                                          AS object_id,
-  elem->>'propertyId'                                  AS property_id,
-  NULLIF(TRIM(elem->>'doorCode'),          '')         AS door_code,
-  NULLIF(TRIM(elem->>'keyInformation'),    '')         AS key_information,
-  NULLIF(TRIM(elem->>'accessInformation'), '')         AS access_information,
-  now()                                                AS updated_at,
-  'migration-20260720'                                 AS updated_by
-FROM (
-  SELECT jsonb_array_elements(value) AS elem
+CREATE TABLE IF NOT EXISTS store_backup_prop_objects_20260720 AS
+  SELECT key, value, now() AS backed_up_at
   FROM store
+  WHERE key = 'vift_propertyObjects';
+
+CREATE TABLE IF NOT EXISTS store_backup_properties_20260720 AS
+  SELECT key, value, now() AS backed_up_at
+  FROM store
+  WHERE key = 'vift_properties';
+
+
+-- ── Datamigration + stripning (atomisk) ────────────────────────
+DO $$
+DECLARE
+  v_obj_count_expected   INT := 0;
+  v_prop_count_expected  INT := 0;
+  v_obj_count_inserted   INT := 0;
+  v_prop_count_inserted  INT := 0;
+BEGIN
+
+  -- Räkna hur många rader som ska migreras INNAN INSERT
+  SELECT count(*) INTO v_obj_count_expected
+  FROM (
+    SELECT jsonb_array_elements(value) AS elem
+    FROM store WHERE key = 'vift_propertyObjects'
+  ) sub
+  WHERE (
+    NULLIF(TRIM(sub.elem->>'doorCode'),          '') IS NOT NULL OR
+    NULLIF(TRIM(sub.elem->>'keyInformation'),    '') IS NOT NULL OR
+    NULLIF(TRIM(sub.elem->>'accessInformation'), '') IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM property_sensitive_access psa
+    WHERE psa.object_id = sub.elem->>'id'
+  );
+
+  SELECT count(*) INTO v_prop_count_expected
+  FROM (
+    SELECT jsonb_array_elements(value) AS elem
+    FROM store WHERE key = 'vift_properties'
+  ) sub
+  WHERE (
+    NULLIF(TRIM(sub.elem->>'accessCode'), '') IS NOT NULL OR
+    NULLIF(TRIM(sub.elem->>'keyInfo'),    '') IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM property_sensitive_access psa
+    WHERE psa.property_id = sub.elem->>'id'
+      AND psa.object_id IS NULL
+  );
+
+  RAISE NOTICE 'Förväntar % objektposter och % fastighetsposter att migrera',
+               v_obj_count_expected, v_prop_count_expected;
+
+  -- 1. Migrera från vift_propertyObjects
+  --    OBS: WHERE-satsen använder explicit parenteser runt OR-villkoren
+  --         för att undvika operatorprioritetsproblem (AND binder hårdare än OR).
+  INSERT INTO property_sensitive_access
+    (object_id, property_id, door_code, key_information, access_information, updated_at, updated_by)
+  SELECT
+    elem->>'id'                                          AS object_id,
+    elem->>'propertyId'                                  AS property_id,
+    NULLIF(TRIM(elem->>'doorCode'),          '')         AS door_code,
+    NULLIF(TRIM(elem->>'keyInformation'),    '')         AS key_information,
+    NULLIF(TRIM(elem->>'accessInformation'), '')         AS access_information,
+    now()                                                AS updated_at,
+    'migration-20260720'                                 AS updated_by
+  FROM (
+    SELECT jsonb_array_elements(value) AS elem
+    FROM store
+    WHERE key = 'vift_propertyObjects'
+  ) sub
+  WHERE (
+    NULLIF(TRIM(elem->>'doorCode'),          '') IS NOT NULL OR
+    NULLIF(TRIM(elem->>'keyInformation'),    '') IS NOT NULL OR
+    NULLIF(TRIM(elem->>'accessInformation'), '') IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM property_sensitive_access psa
+    WHERE psa.object_id = sub.elem->>'id'
+  );
+
+  GET DIAGNOSTICS v_obj_count_inserted = ROW_COUNT;
+
+  -- 2. Migrera från vift_properties
+  INSERT INTO property_sensitive_access
+    (property_id, object_id, access_code, key_information, updated_at, updated_by)
+  SELECT
+    elem->>'id'                                   AS property_id,
+    NULL                                          AS object_id,
+    NULLIF(TRIM(elem->>'accessCode'), '')         AS access_code,
+    NULLIF(TRIM(elem->>'keyInfo'),    '')         AS key_information,
+    now()                                         AS updated_at,
+    'migration-20260720'                          AS updated_by
+  FROM (
+    SELECT jsonb_array_elements(value) AS elem
+    FROM store
+    WHERE key = 'vift_properties'
+  ) sub
+  WHERE (
+    NULLIF(TRIM(sub.elem->>'accessCode'), '') IS NOT NULL OR
+    NULLIF(TRIM(sub.elem->>'keyInfo'),    '') IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM property_sensitive_access psa
+    WHERE psa.property_id = sub.elem->>'id'
+      AND psa.object_id IS NULL
+  );
+
+  GET DIAGNOSTICS v_prop_count_inserted = ROW_COUNT;
+
+  RAISE NOTICE 'Infogade: % objektposter, % fastighetsposter',
+               v_obj_count_inserted, v_prop_count_inserted;
+
+  -- Verifiering: räkna ska matcha förväntat
+  IF v_obj_count_inserted <> v_obj_count_expected THEN
+    RAISE EXCEPTION
+      'Objektmigration mismatch: förväntade %, fick %. ROLLBACK.',
+      v_obj_count_expected, v_obj_count_inserted;
+  END IF;
+
+  IF v_prop_count_inserted <> v_prop_count_expected THEN
+    RAISE EXCEPTION
+      'Fastighetsmigration mismatch: förväntade %, fick %. ROLLBACK.',
+      v_prop_count_expected, v_prop_count_inserted;
+  END IF;
+
+  -- 3. Strip: ta bort känsliga fält ur store-blobbar
+  --    Körs ENBART om ovanstående INSERT lyckades (annars har EXCEPTION kastats).
+
+  UPDATE store
+  SET value = (
+    SELECT jsonb_agg(
+      elem - 'doorCode' - 'keyInformation' - 'accessInformation'
+    )
+    FROM jsonb_array_elements(value) AS elem
+  )
   WHERE key = 'vift_propertyObjects'
-) sub
-WHERE
-  NULLIF(TRIM(elem->>'doorCode'),          '') IS NOT NULL OR
-  NULLIF(TRIM(elem->>'keyInformation'),    '') IS NOT NULL OR
-  NULLIF(TRIM(elem->>'accessInformation'), '') IS NOT NULL
-AND NOT EXISTS (
-  SELECT 1 FROM property_sensitive_access psa
-  WHERE psa.object_id = elem->>'id'
-);
+    AND value IS NOT NULL;
 
--- 2. Migrera från vift_properties (fastighets-nivå accessCode + keyInfo)
-INSERT INTO property_sensitive_access
-  (property_id, object_id, access_code, key_information, updated_at, updated_by)
-SELECT
-  elem->>'id'                                   AS property_id,
-  NULL                                          AS object_id,
-  NULLIF(TRIM(elem->>'accessCode'), '')         AS access_code,
-  NULLIF(TRIM(elem->>'keyInfo'),    '')         AS key_information,
-  now()                                         AS updated_at,
-  'migration-20260720'                          AS updated_by
-FROM (
-  SELECT jsonb_array_elements(value) AS elem
-  FROM store
+  UPDATE store
+  SET value = (
+    SELECT jsonb_agg(
+      elem - 'accessCode' - 'keyInfo'
+    )
+    FROM jsonb_array_elements(value) AS elem
+  )
   WHERE key = 'vift_properties'
-) sub
-WHERE
-  NULLIF(TRIM(elem->>'accessCode'), '') IS NOT NULL OR
-  NULLIF(TRIM(elem->>'keyInfo'),    '') IS NOT NULL
-AND NOT EXISTS (
-  SELECT 1 FROM property_sensitive_access psa
-  WHERE psa.property_id = elem->>'id'
-    AND psa.object_id IS NULL
-);
+    AND value IS NOT NULL;
+
+  RAISE NOTICE 'Migration klar. Känsliga fält strippade ur store-blobbar.';
+  RAISE NOTICE 'Backuptabeller: store_backup_prop_objects_20260720, store_backup_properties_20260720';
+  RAISE NOTICE 'Ta INTE bort backuptabellerna förrän rollback är verifierad och godkänd.';
+
+END;
+$$;
 
 
--- ── Strip: ta bort känsliga fält ur store-blobbar ──────────────
--- VIKTIGT: Kör BARA detta om datamigration ovan lyckades.
--- Verifiera med: SELECT count(*) FROM property_sensitive_access; (> 0 om data finns)
---
--- Tar bort doorCode, keyInformation, accessInformation ur vift_propertyObjects.
-UPDATE store
-SET value = (
-  SELECT jsonb_agg(
-    elem - 'doorCode' - 'keyInformation' - 'accessInformation'
-  )
-  FROM jsonb_array_elements(value) AS elem
-)
-WHERE key = 'vift_propertyObjects'
-  AND value IS NOT NULL;
-
--- Tar bort accessCode, keyInfo ur vift_properties.
-UPDATE store
-SET value = (
-  SELECT jsonb_agg(
-    elem - 'accessCode' - 'keyInfo'
-  )
-  FROM jsonb_array_elements(value) AS elem
-)
-WHERE key = 'vift_properties'
-  AND value IS NOT NULL;
-
-
--- ── Verifiera (kör i SQL Editor efter migration) ────────────────
+-- ── Verifiera (kör i SQL Editor efter migration) ──────────────
 -- 1. Antal migrerade känsliga poster:
 --      SELECT count(*) FROM property_sensitive_access;
 --
--- 2. Känsliga fält borttagna ur store-blobben:
+-- 2. Känsliga fält borttagna ur store:
 --      SELECT jsonb_path_exists(value, '$[*].doorCode')
 --        FROM store WHERE key = 'vift_propertyObjects';
---      → false (doorCode borttagen)
+--      → false
 --
 --      SELECT jsonb_path_exists(value, '$[*].accessCode')
 --        FROM store WHERE key = 'vift_properties';
 --      → false
 --
--- 3. Authenticated nekas direkt access:
+-- 3. Backuptabeller finns:
+--      SELECT count(*) FROM store_backup_prop_objects_20260720;
+--      SELECT count(*) FROM store_backup_properties_20260720;
+--
+-- 4. Authenticated nekas direkt åtkomst:
 --      SET ROLE authenticated;
---      SELECT count(*) FROM property_sensitive_access;
+--      SELECT * FROM property_sensitive_access;
 --      → ERROR: permission denied
 --      RESET ROLE;
 --
--- 4. EF get-sensitive-fields returnerar data korrekt för behörig användare:
---      curl -X POST <SUPABASE_URL>/functions/v1/get-sensitive-fields \
+-- 5. EF returnerar data:
+--      curl -X POST <URL>/functions/v1/get-sensitive-fields \
 --        -H "Authorization: Bearer <JWT-med-objects_sensitive>" \
---        -H "Content-Type: application/json" \
 --        -d '{"objectId":"OBJ-001"}'
 --      → { "doorCode": "...", ... }
+
+
+-- ============================================================
+-- ROLLBACK-SQL
+-- Återställer originalblob ur backup utan manuell JSON-manipulation.
+-- Kör ENBART om EF-verifiering misslyckades och återgång är beslutad.
+-- Varning: ångrar INTE INSERT-rader i property_sensitive_access.
+--          Om rader lagts till via EF (set-sensitive-fields) efter
+--          migrationen bevaras de — de ursprungliga store-fälten
+--          återläggs ovanpå, vilket ger dubblering av ev. ändringar.
+--
+--   -- Steg 1: Återlägg vift_propertyObjects-blob
+--   UPDATE store
+--   SET value = (SELECT value FROM store_backup_prop_objects_20260720 LIMIT 1)
+--   WHERE key = 'vift_propertyObjects';
+--
+--   -- Steg 2: Återlägg vift_properties-blob
+--   UPDATE store
+--   SET value = (SELECT value FROM store_backup_properties_20260720 LIMIT 1)
+--   WHERE key = 'vift_properties';
+--
+--   -- Steg 3 (valfritt, EFTER verifierad återgång):
+--   DROP TABLE IF EXISTS property_sensitive_access;
+--   DROP TABLE IF EXISTS store_backup_prop_objects_20260720;
+--   DROP TABLE IF EXISTS store_backup_properties_20260720;
+-- ============================================================
