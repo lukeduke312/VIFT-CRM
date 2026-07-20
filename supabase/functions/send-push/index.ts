@@ -26,6 +26,7 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @deno-types="npm:@types/web-push@3.6.3"
 import webpush from 'npm:web-push@3.6.7'
+import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 
 /* ── CORS ─────────────────────────────────────────────────── */
 const CORS = {
@@ -84,11 +85,10 @@ serve(async (req: Request) => {
       { auth: { persistSession: false } }
     )
 
-    /* Verifiera JWT → hämta anroparens user */
-    const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(jwt)
-    if (authErr || !caller) {
-      return json({ error: 'Ogiltigt token' }, 401)
-    }
+    /* Kontrollera aktiv VIFT-användare + personal + roll */
+    const auth = await checkViftAuth(supabase, jwt, CORS)
+    if (!auth.ok) return auth.response
+    const { user: caller, userEmail: callerEmail, perms } = auth
 
     /* Läs request body */
     const body      = await req.json().catch(() => ({}))
@@ -100,19 +100,9 @@ serve(async (req: Request) => {
     const propertyId: string | null = body.propertyId || null
     const broadcast = body.broadcast === true
 
-    /* Roll-kontroll: broadcast kräver admin eller förvaltare */
-    if (broadcast) {
-      const { data: staffRow } = await supabase
-        .from('store').select('value').eq('key', 'vift_staff').maybeSingle()
-      const staffList: Record<string, unknown>[] =
-        Array.isArray(staffRow?.value) ? staffRow.value as Record<string, unknown>[] : []
-      const callerStaff = staffList.find(s =>
-        String(s.email ?? '').toLowerCase() === (caller.email ?? '').toLowerCase()
-      )
-      const callerRole = String(callerStaff?.role ?? '')
-      if (!['admin', 'förvaltare'].includes(callerRole)) {
-        return json({ error: 'Broadcast kräver admin eller förvaltare-roll' }, 403)
-      }
+    /* Roll-kontroll: broadcast kräver 'all'-behörighet */
+    if (broadcast && !hasPerm(perms, 'all')) {
+      return json({ error: 'Broadcast kräver admin-behörighet' }, 403)
     }
 
     /* ── Punkt 92: propertyId-baserad mottagarresolution ─────
@@ -191,7 +181,12 @@ serve(async (req: Request) => {
     if (targetUserIds) {
       subsQuery = subsQuery.in('user_id', targetUserIds)
     } else if (!broadcast) {
-      const targetUserId: string = body.userId || caller.id
+      /* body.userId får bara peka på en annan användare om anroparen har 'all' (admin).
+       * Annars begränsas till egna enheter för att förhindra IDOR. */
+      const requestedId: string | undefined = body.userId
+      const targetUserId: string = (requestedId && requestedId !== caller.id && hasPerm(perms, 'all'))
+        ? requestedId
+        : caller.id
       subsQuery = subsQuery.eq('user_id', targetUserId)
     }
 

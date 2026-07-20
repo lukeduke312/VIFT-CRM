@@ -34,6 +34,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -119,7 +120,7 @@ serve(async (req: Request) => {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
   if (!checkRateLimit(ip)) return json({ error: 'rate_limited' }, 429)
 
-  /* Auth: kräver giltig JWT */
+  /* Auth: kräver giltig JWT + aktiv VIFT-användare + offer_manage */
   const authHeader = req.headers.get('authorization') || ''
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!jwt) return json({ error: 'forbidden' }, 403)
@@ -128,8 +129,13 @@ serve(async (req: Request) => {
     auth: { persistSession: false }
   })
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt)
-  if (authErr || !user) return json({ error: 'forbidden' }, 403)
+  const auth = await checkViftAuth(supabase, jwt, CORS)
+  if (!auth.ok) return auth.response
+  const { user, perms } = auth
+
+  if (!hasPerm(perms, 'offer_manage')) {
+    return json({ error: 'forbidden' }, 403)
+  }
 
   /* ── DELETE-hantering (soft delete) ──────────────────────── */
   if (req.method === 'DELETE') {

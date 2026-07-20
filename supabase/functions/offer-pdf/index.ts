@@ -30,6 +30,7 @@
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { PDFDocument, rgb, StandardFonts } from 'npm:pdf-lib@1.17.1'
+import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -69,8 +70,13 @@ serve(async (req: Request) => {
     auth: { persistSession: false }
   })
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt)
-  if (authErr || !user) return json({ error: 'forbidden' }, 403)
+  const auth = await checkViftAuth(supabase, jwt, CORS)
+  if (!auth.ok) return auth.response
+  const { perms } = auth
+
+  if (!hasPerm(perms, 'offer_manage')) {
+    return json({ error: 'forbidden' }, 403)
+  }
 
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'invalid_json' }, 400) }

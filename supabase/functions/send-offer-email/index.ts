@@ -36,6 +36,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -143,16 +144,20 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   if (req.method !== 'POST')    return err({ error: 'method_not_allowed' }, 405)
 
-  /* Autentisering — kräver giltig JWT */
+  /* Autentisering — kräver giltig JWT + aktiv VIFT-användare + offer_manage */
   const authHeader = req.headers.get('Authorization') ?? ''
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!jwt) return err({ error: 'unauthorized' }, 401)
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
-  /* Verifiera JWT (accepterar både anon och autentiserade, men kräver autentiserad) */
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(jwt)
-  if (authErr || !user) return err({ error: 'unauthorized' }, 401)
+  const viftAuth = await checkViftAuth(supabase, jwt, CORS)
+  if (!viftAuth.ok) return viftAuth.response
+  const { user, perms } = viftAuth
+
+  if (!hasPerm(perms, 'offer_manage')) {
+    return err({ error: 'forbidden' }, 403)
+  }
 
   /* Rate-limit per user */
   if (!checkRate(user.id)) return err({ error: 'rate_limited' }, 429)
