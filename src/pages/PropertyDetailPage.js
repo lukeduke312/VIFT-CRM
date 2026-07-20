@@ -1200,16 +1200,18 @@ const PropertyDetailPage = {
             : ''}
         </div>
         <div class="card-body">
-          ${p.accessCode
-            ? `<div class="dr"><span class="dk">Portkod</span>
-               <span class="dv" style="font-family:monospace;font-weight:700;font-size:15px;">${p.accessCode}</span></div>`
-            : ''}
-          ${p.keyInfo
-            ? `<div class="dr"><span class="dk">Nyckelinformation</span><span class="dv">${p.keyInfo}</span></div>`
-            : ''}
-          ${!p.accessCode && !p.keyInfo
-            ? `<p style="font-size:12px;color:var(--mt);">Ingen åtkomstinformation registrerad.</p>`
-            : ''}
+          ${(Auth.can('objects_sensitive') || Auth.can('customer_manage')) ? `
+            ${p.accessCode
+              ? `<div class="dr"><span class="dk">Portkod</span>
+                 <span class="dv" style="font-family:monospace;font-weight:700;font-size:15px;">${p.accessCode}</span></div>`
+              : ''}
+            ${p.keyInfo
+              ? `<div class="dr"><span class="dk">Nyckelinformation</span><span class="dv">${p.keyInfo}</span></div>`
+              : ''}
+            ${!p.accessCode && !p.keyInfo
+              ? `<p style="font-size:12px;color:var(--mt);">Ingen åtkomstinformation registrerad.</p>`
+              : ''}
+          ` : `<p style="font-size:12px;color:var(--mt);">${ic('lock',11)} Du saknar behörighet att se känsliga åtkomstuppgifter.</p>`}
         </div>
       </div>
     `;

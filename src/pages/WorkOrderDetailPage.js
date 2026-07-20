@@ -118,8 +118,8 @@ const WorkOrderDetailPage = {
               ${ao.contactEmail?`<br><a href="mailto:${ao.contactEmail}" style="color:var(--sky);font-size:11px;">${esc(ao.contactEmail)}</a>`:''}
             </span>
           </div>
-          <!-- 2. Portkod (om finns) -->
-          ${ao.accessCode?`<div class="ao-info-row">
+          <!-- 2. Portkod — synlig enbart för objects_sensitive / customer_manage (punkt 72) -->
+          ${ao.accessCode && (Auth.can('objects_sensitive') || Auth.can('customer_manage'))?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('key',11)} Portkod</span>
             <span class="ao-info-val" style="font-weight:800;letter-spacing:.8px;font-size:16px;">${esc(ao.accessCode)}</span>
           </div>`:''}

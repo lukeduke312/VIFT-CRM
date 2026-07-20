@@ -114,7 +114,7 @@ const ExportCenterPage = (function () {
       '</div>' +
 
       /* Känsliga fält */
-      (cfg && (cfg.sensitiveFields || []).length > 0 && typeof Auth !== 'undefined' && Auth.can('admin')
+      (cfg && (cfg.sensitiveFields || []).length > 0 && typeof Auth !== 'undefined' && (Auth.can('admin') || Auth.can('objects_sensitive') || Auth.can('customer_manage')))
         ? '<div style="margin-bottom:16px;padding:10px 14px;background:color-mix(in srgb, var(--or) 8%, transparent);border:1px solid color-mix(in srgb, var(--or) 25%, transparent);border-radius:8px;">' +
             '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">' +
               '<input type="checkbox" ' + (_includeSensitive ? 'checked' : '') +

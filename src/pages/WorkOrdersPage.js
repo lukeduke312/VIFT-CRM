@@ -1264,8 +1264,8 @@ const WorkOrdersPage = {
 
     if (!obj) return;
 
-    /* Tillträdeskod — fyll bara om fältet är tomt */
-    if (obj.accessInformation || obj.doorCode) {
+    /* Tillträdeskod — fyll bara om fältet är tomt och användaren har behörighet */
+    if ((Auth.can('objects_sensitive') || Auth.can('customer_manage')) && (obj.accessInformation || obj.doorCode)) {
       const accessEl = document.getElementById('wiz-access');
       if (accessEl && !accessEl.value) {
         accessEl.value = obj.accessInformation || obj.doorCode || '';
