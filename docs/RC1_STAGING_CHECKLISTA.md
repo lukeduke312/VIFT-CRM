@@ -64,9 +64,10 @@ Spara backup-ID och tidsstämpel i din logg.
 ```bash
 supabase db push --dry-run
 ```
-Förväntat utfall — exakt dessa 8 filer i denna ordning:
+Förväntat utfall — exakt dessa 9 filer i denna ordning:
 ```
-20260720000001_rls_store_table.sql
+20260720000000_create_core_tables.sql        ← skapar store + push_subscriptions
+20260720000001_rls_store_table.sql           ← RLS + app_users
 20260720000002_storage_offer_attachments.sql
 20260720000003_pg_cron_service_monitor.sql   ← no-op (avsiktligt tom)
 20260720000004_property_sensitive_access.sql
@@ -75,21 +76,43 @@ Förväntat utfall — exakt dessa 8 filer i denna ordning:
 20260720000007_sensitive_access_audit.sql
 20260720000008_strip_passwords_from_store.sql
 ```
-→ Cron-SQL (`supabase/manual/setup_service_monitor_cron.sql`) ingår inte — den hanteras inte av migrationshistoriken.  
-→ Om fler eller färre filer visas: **avbryt och undersök.**  
+→ `00000` måste komma först — den skapar grundtabellerna som `00001` förutsätter.  
+→ Cron-SQL (`supabase/manual/setup_service_monitor_cron.sql`) ingår inte — hanteras inte av migrationshistoriken.  
+→ Om fler eller färre filer visas, eller om ordningen avviker: **avbryt och undersök.**  
 → Ingen `migration repair` används.
 
 ---
 
-## STEG 6: Kör migrationer 00001–00008
+## STEG 6: Kör migrationer 00000–00008
 
 ```bash
-supabase db push --include-all
+supabase db push
 ```
-→ Ska köra exakt de 8 migrationerna från dry-run ovan.  
+→ Ska köra exakt de 9 migrationerna från dry-run ovan.  
+→ Använd `--include-all` endast om dry-run eller migrationshistoriken visar ett uttryckligt behov — redovisa i så fall orsaken innan kommandot körs.  
 → Granska ALL output. Stoppa vid varje NOTICE om felbetingelse.
 
 Verifiera per migration:
+
+**00000 — store + push_subscriptions**
+```sql
+-- Tabellerna existerar
+SELECT tablename FROM pg_tables
+  WHERE schemaname = 'public'
+    AND tablename IN ('store', 'push_subscriptions');
+-- → 2 rader
+
+-- Primary keys och unique constraint
+SELECT conname, contype FROM pg_constraint
+  WHERE conrelid IN ('store'::regclass, 'push_subscriptions'::regclass)
+  ORDER BY conname;
+-- → store_pkey (p), push_subscriptions_pkey (p),
+--   push_subscriptions_endpoint_key (u), push_subscriptions_user_id_fkey (f)
+
+-- Tabellerna är tomma (ny staginginstans)
+SELECT count(*) FROM store;              -- → 0
+SELECT count(*) FROM push_subscriptions; -- → 0
+```
 
 **00001 — RLS + app_users**
 ```sql
