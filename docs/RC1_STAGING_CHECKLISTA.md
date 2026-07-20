@@ -64,42 +64,29 @@ Spara backup-ID och tidsstämpel i din logg.
 ```bash
 supabase db push --dry-run
 ```
-Förväntat utfall — exakt dessa 9 filer i denna ordning:
+Förväntat utfall — exakt dessa 8 filer i denna ordning:
 ```
 20260720000001_rls_store_table.sql
 20260720000002_storage_offer_attachments.sql
-20260720000003_pg_cron_service_monitor.sql   ← intentionally empty / no-op
+20260720000003_pg_cron_service_monitor.sql   ← no-op (avsiktligt tom)
 20260720000004_property_sensitive_access.sql
 20260720000005_store_key_rls.sql
 20260720000006_app_users_lifecycle.sql
 20260720000007_sensitive_access_audit.sql
 20260720000008_strip_passwords_from_store.sql
-20260720000009_pg_cron_service_monitor.sql   ← cron-setup; körs MANUELLT
 ```
-→ Om fler eller färre visas: **avbryt och undersök.**
+→ Cron-SQL (`supabase/manual/setup_service_monitor_cron.sql`) ingår inte — den hanteras inte av migrationshistoriken.  
+→ Om fler eller färre filer visas: **avbryt och undersök.**  
+→ Ingen `migration repair` används.
 
 ---
 
-## STEG 6: Förmärk migration 00009 som tillämpad (hindrar auto-körning)
-
-**Migration 00009 ska INTE köras automatiskt av supabase db push.**  
-Kräver Vault-secret och testad EF — se steg 15 och 22.  
-Förmärk den som tillämpad så att db push hoppar över den:
-
-```bash
-supabase migration repair --status applied 20260720000009
-```
-
-→ Verifiera att repair inte returnerade fel.
-
----
-
-## STEG 7: Kör migrationer 00001–00008
+## STEG 6: Kör migrationer 00001–00008
 
 ```bash
 supabase db push --include-all
 ```
-→ Ska köra 00001–00008. **00009 hoppas över** (förmärkt i steg 6).  
+→ Ska köra exakt de 8 migrationerna från dry-run ovan.  
 → Granska ALL output. Stoppa vid varje NOTICE om felbetingelse.
 
 Verifiera per migration:
@@ -475,26 +462,35 @@ Notera svaret. Kontrollera att lämpliga store-uppdateringar sker.
 
 ## STEG 22: Skapa cron-jobbet sist (MANUELLT i SQL Editor)
 
-**Förutsättningar som ska vara uppfyllda:**
-- [x] Vault-secret SERVICE_MONITOR_SECRET skapad (steg 15)
-- [x] service-monitor deployad och testad (steg 16–21)
-- [x] Stagingprojektet verifierat
+Cron-installationen hanteras **inte** av migrationshistoriken.  
+Ingen `migration repair` används. Migrationshistoriken i databasen berörs inte.
 
-Kör i Supabase SQL Editor:
+**Förutsättningar — samtliga ska vara avbockade:**
+- [ ] Vault-secret `SERVICE_MONITOR_SECRET` skapad (steg 15)
+- [ ] `service-monitor` deployad (steg 16)
+- [ ] Felaktig secret testad → 401 (steg 17)
+- [ ] Korrekt secret testad → 200 (steg 17)
+- [ ] Automatisk AO och dubblettskydd verifierade (steg 21)
+- [ ] Stagingprojektet verifierat i föregående steg
+
+Öppna `supabase/manual/setup_service_monitor_cron.sql` och kör hela innehållet i Supabase SQL Editor.
+
+Verifiera efter körning:
 ```sql
--- Hämta innehållet från migration 00009:
--- supabase/migrations/20260720000009_pg_cron_service_monitor.sql
-
--- Kör hela filen i SQL Editor (utan BOOTSTRAP-kommentarerna som redan är gjorda).
--- Funktionen invoke_service_monitor() skapas och cron-jobbet schemaläggs.
-
--- Verifiera:
 SELECT jobname, schedule, command FROM cron.job
   WHERE jobname = 'vift-service-monitor-daily';
 -- → 1 rad
+
+SELECT invoke_service_monitor();
+-- → NOTICE om anrop skickat
 ```
 
-**OBS: 00009 är förmärkt som tillämpad (steg 6). Supabase spårar det korrekt.**
+**Rollback vid behov:**
+```sql
+SELECT cron.unschedule('vift-service-monitor-daily');
+DROP FUNCTION IF EXISTS invoke_service_monitor();
+-- Vault-hemligheten tas bort manuellt i Dashboard → Vault.
+```
 
 ---
 
