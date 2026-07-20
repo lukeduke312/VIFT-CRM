@@ -264,22 +264,55 @@ Alla punkter måste vara KLARA och signerade innan RC1-taggen sätts.
 
 ---
 
+## PRODUKTIONSBLOCKERARE — måste åtgärdas INNAN produktionsrelease
+
+Dessa risker är kända, dokumenterade och **acceptabla för staging med syntetisk testdata**.
+De **BLOCKAR produktion** och måste åtgärdas i v1.1 innan systemet hanterar riktig personaldata.
+
+### BLOCKER-1: Lönedata läcks i HTTP-svar till alla aktiva användare
+
+**Beskrivning:** `vift_timeEntries` (innehåller löneunderlagsdata) hämtas i ett enda `Storage.getAll()`-anrop och skickas till ALLA aktiva användare i HTTP-svaret. Filtreringen till egna poster (`payroll_view`-rollen) sker enbart client-side i `DataSync._poll()`.
+
+**Konsekvens i produktion:** En tekniker kan läsa rådata i Network-fliken i DevTools och se alla kollegors tidrapporter — utan att appen visar dem i UI:t.
+
+**Mitigation i RC1/staging:** Client-side filter begränsar vad som visas i `state.timeEntries`. Staging körs enbart med syntetisk data.
+
+**Krav för produktion (v1.1):**
+- Normaliserat `time_entries`-schema (egen tabell med per-rad RLS)
+- Alternativt: separat Edge Function som returnerar filtrerade poster per roll
+
+---
+
+### BLOCKER-2: Operativa store-nycklar saknar server-side skrivkontroll per behörighet
+
+**Beskrivning:** Aktiva användare kan skriva till operativa store-nycklar (`vift_workOrders`, `vift_serviceIntervals`, `vift_offers`, `vift_invoices` m.fl.) direkt via Supabase REST API utan att behörighetskontroll sker server-side. RLS-policy `store_active_write_safe` blockerar enbart `vift_roles`, `vift_staff` och `vift_settings`.
+
+**Konsekvens i produktion:** En tekniker utan `offer_manage`-behörighet kan ändra en offerts totalbelopp eller status direkt via REST, utan att appen tillåter det via UI:t.
+
+**Mitigation i RC1/staging:** `app_users.active`-krav stoppar oinloggade; `vift_roles/staff/settings` admin-skyddas. Behörighetskontroll vid kritiska operationer (känsliga fält, offertutskick, löner) sker via Edge Functions. Staging körs med syntetisk data och begränsad användargrupp.
+
+**Krav för produktion (v1.1):**
+- Normaliserat schema med egna tabeller och per-tabell RLS-policyer per behörighet
+- Alternativt: Edge Function-gating för alla skrivoperationer på kritiska register
+
+---
+
 ## Kända risker och begränsningar (RC1)
 
-| Risk | Allvarlighet | Mitigation i RC1 | Plan v1.1 |
-|---|---|---|---|
-| `vift_timeEntries` laddas för alla aktiva användare i HTTP-svar | Medel | Client-side filter i DataSync; `state.timeEntries` filtreras per roll | Normaliserat timeEntries-schema med per-rad RLS |
-| Operativ data (workOrders m.fl.) kan skrivas av alla aktiva användare via REST | Medel | app_users.active-krav; vift_roles/staff/settings admin-skyddade | Per-behörighet write-kontroll kräver normaliserat schema |
-| `app_users.is_admin` synkroniseras ej automatiskt vid rolländring | Låg | Manuell uppdatering + dokumentation; `provision_vift_user()` finns | Trigger eller EF för automatisk synk |
-| Signerade URL:er är reusable under TTL (10 min) | Låg | Kort TTL; ny URL per anrop; URL loggas ej | Inget ytterligare planerat |
-| Offerttoken i `#t=` fragment kan kopieras av kunden | Låg | Tokens har TTL; revokering blockerar ny URL-generering | Inget ytterligare planerat |
+| Risk | Allvarlighet | Kategori | Mitigation i RC1 | Plan |
+|---|---|---|---|---|
+| `vift_timeEntries` läcks i HTTP-svar | **HÖG** | **PRODUKTIONSBLOCKER** | Client-side filter; syntetisk stagingdata | v1.1: per-rad RLS |
+| Operativa store-nycklar saknar server-side skrivkontroll | **HÖG** | **PRODUKTIONSBLOCKER** | app_users.active-krav; kritiska register EF-gated | v1.1: normaliserat schema |
+| `app_users.is_admin` synkroniseras ej automatiskt vid rolländring | Låg | Drift | Manuell uppdatering + dokumentation; `provision_vift_user()` finns | v1.1: trigger/EF |
+| Signerade URL:er är reusable under TTL (10 min) | Låg | Design | Kort TTL; ny URL per anrop; URL loggas ej | Inget ytterligare planerat |
+| Offerttoken i `#t=` fragment kan kopieras av kunden | Låg | Design | Tokens har TTL; revokering blockerar ny URL-generering | Inget ytterligare planerat |
 
 ---
 
 ## Vad som är sparat till v1.1
 
-- Normaliserat timeEntries-schema med per-rad RLS
-- Per-permission write-kontroll på operativa store-nycklar
+- **[BLOCKER-1]** Normaliserat timeEntries-schema med per-rad RLS
+- **[BLOCKER-2]** Per-permission write-kontroll på operativa store-nycklar
 - Automatisk `is_admin`-synk vid rolländring via trigger/EF
 - Central dokumenthantering
 - Ytterligare rapporttyper, automatisk fakturering
