@@ -28,7 +28,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const STORAGE_BUCKET    = 'offer-attachments'
-const SIGNED_URL_TTL_SECONDS = 3600  /* 1 timme */
+const SIGNED_URL_TTL_SECONDS = 600   /* 10 minuter — signerad URL är reusable under TTL, INTE engångs */
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
