@@ -42,11 +42,15 @@ const VAPID_EMAIL      = Deno.env.get('VAPID_EMAIL')               ?? 'mailto:ad
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')          ?? ''
 const VAPID_PRIVATE_KEY= Deno.env.get('VAPID_PRIVATE_KEY')         ?? ''
 
-/* ── CORS ─────────────────────────────────────────────────── */
+/* ── CORS + HTTP-säkerhetsrubriker ────────────────────────── */
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Cache-Control':                'no-store, no-cache',
+  'Referrer-Policy':              'no-referrer',
+  'X-Content-Type-Options':       'nosniff',
+  'X-Frame-Options':              'DENY',
 }
 
 /* ── Rate-limit ───────────────────────────────────────────── */

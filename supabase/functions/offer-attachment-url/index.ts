@@ -33,7 +33,11 @@ const SIGNED_URL_TTL_SECONDS = 600   /* 10 minuter — signerad URL är reusable
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'content-type, authorization',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Cache-Control':                'no-store, no-cache',
+  'Referrer-Policy':              'no-referrer',
+  'X-Content-Type-Options':       'nosniff',
+  'X-Frame-Options':              'DENY',
 }
 
 /* ── Rate-limit ───────────────────────────────────────────── */

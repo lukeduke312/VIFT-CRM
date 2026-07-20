@@ -26,11 +26,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-/* ── CORS ─────────────────────────────────────────────────── */
+/* ── CORS + HTTP-säkerhetsrubriker ────────────────────────── */
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS'
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Cache-Control':                'no-store, no-cache',
+  'Referrer-Policy':              'no-referrer',
+  'X-Content-Type-Options':       'nosniff',
+  'X-Frame-Options':              'DENY',
 }
 
 /* ── Enkel in-memory rate-limit (per Edge Function instans) ── */
