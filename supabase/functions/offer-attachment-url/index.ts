@@ -1,34 +1,86 @@
 /**
  * offer-attachment-url — Supabase Edge Function (Leverans E, Del E2b-3)
  *
- * Genererar en tidsbegränsad signerad URL för att ladda ned en bilaga.
- * Används av både kundvy (via offerttoken) och intern CRM-vy (via anon key).
+ * Genererar en tidsbegränsad signerad URL för nedladdning av offertbilaga.
+ * Två separata autentiseringsvägar:
  *
- * SÄKERHET:
- * - Kundanrop: valideras mot publicToken + inkludeInPublicView + aktiv + lockedInVersion
- * - Interna anrop: valideras mot JWT (Authorization: Bearer)
- * - Signerade URL:er från Supabase Storage löper ut efter SIGNED_URL_TTL_SECONDS
- * - Borttagna (active=false) eller återkallade bilagor returneras aldrig
- * - Storage path valideras — traversal blockeras
+ *  A. Publik tokenväg (kund utan inloggning):
+ *     Body: { token: string, attachmentId: string }
+ *     Kontroller: giltig token → ej återkallad → ej utgången →
+ *                 bilaga tillhör offerten → includeInPublicView = true →
+ *                 bilaga aktiv → URL
  *
- * POST /functions/v1/offer-attachment-url
- * Body (kundanrop):   { token: string, attachmentId: string }
- * Body (internt):     { attachmentId: string }
- * Headers (internt):  Authorization: Bearer <SUPABASE_JWT>
+ *  B. Intern JWT-väg (CRM-användare):
+ *     Headers: Authorization: Bearer <JWT>
+ *     Body: { attachmentId: string, offerId: string, offerVersion?: number }
+ *     Kontroller: giltig JWT → app_users.active → offer_manage-behörighet →
+ *                 bilaga aktiv → bilaga tillhör angiven offert →
+ *                 offert existerar → valfri versionsmatchning → URL
  *
- * Svar 200: { url: string, expiresAt: string, fileName: string, mimeType: string }
- * Svar 403: { error: 'forbidden' }
- * Svar 404: { error: 'not_found' }
- * Svar 429: { error: 'rate_limited' }
+ * Signerad URL: TTL = 600 s (10 min), reusable under TTL
+ *
+ * ── Testfall ──────────────────────────────────────────────────────────
+ * Ersätt <URL>, <JWT-utan-offer_manage>, <JWT-med-offer_manage>, <TOKEN>,
+ * <ATTACHMENT_ID>, <OFFER_ID> med verkliga värden vid testning.
+ *
+ * 1. JWT-väg utan offer_manage → 403
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Authorization: Bearer <JWT-utan-offer_manage>" \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"<OFFER_ID>"}'
+ *    Förväntat: {"error":"forbidden"}  HTTP 403
+ *
+ * 2. Inaktiv användare → 403
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Authorization: Bearer <JWT-inaktiv-användare>" \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"<OFFER_ID>"}'
+ *    Förväntat: {"error":"Forbidden"}  HTTP 403
+ *
+ * 3. Manipulerat attachmentId (tillhör annan offert) → 403
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"attachmentId":"<ID-FÖR-BILAGA-TILLHÖRANDE-OFF-999>","offerId":"<OFFER_ID>"}'
+ *    Förväntat: {"error":"forbidden"}  HTTP 403
+ *
+ * 4. Bilaga från annan offert (offerId stämmer ej) → 403
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"ANNAN-OFFER-ID"}'
+ *    Förväntat: {"error":"forbidden"}  HTTP 403
+ *
+ * 5. Borttagen bilaga (active=false) → 404
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"attachmentId":"<RADERAD-ATTACHMENT-ID>","offerId":"<OFFER_ID>"}'
+ *    Förväntat: {"error":"not_found"}  HTTP 404
+ *
+ * 6. Korrekt intern åtkomst → 200
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"<OFFER_ID>"}'
+ *    Förväntat: {"url":"https://...","expiresAt":"...","fileName":"...","mimeType":"..."}  HTTP 200
+ *
+ * 7. Korrekt publik tokenåtkomst → 200
+ *    curl -X POST <URL>/functions/v1/offer-attachment-url \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"token":"<PUBLIK-TOKEN>","attachmentId":"<ATTACHMENT_ID>"}'
+ *    Förväntat: {"url":"https://...","expiresAt":"...","fileName":"...","mimeType":"..."}  HTTP 200
+ * ──────────────────────────────────────────────────────────────────────
  */
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 
-const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')              ?? ''
-const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const STORAGE_BUCKET    = 'offer-attachments'
-const SIGNED_URL_TTL_SECONDS = 600   /* 10 minuter — signerad URL är reusable under TTL, INTE engångs */
+const SUPABASE_URL           = Deno.env.get('SUPABASE_URL')              ?? ''
+const SERVICE_ROLE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const STORAGE_BUCKET         = 'offer-attachments'
+const SIGNED_URL_TTL_SECONDS = 600   /* 10 min — reusable under TTL, INTE engångs */
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -56,12 +108,19 @@ function checkRateLimit(ip: string): boolean {
   return slot.count <= RATE_MAX_PER_IP
 }
 
-/* ── Säker path-validering ── */
+/* ── Säker path-validering ───────────────────────────────── */
 function isValidStoragePath(path: string): boolean {
   if (!path || typeof path !== 'string') return false
   if (path.includes('..') || path.includes('//') || path.startsWith('/')) return false
   if (!/^offer-attachments\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/[^/]+$/.test(path)) return false
   return true
+}
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...CORS, 'Content-Type': 'application/json' }
+  })
 }
 
 /* ── Handler ─────────────────────────────────────────────── */
@@ -75,9 +134,8 @@ serve(async (req: Request) => {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'invalid_json' }, 400) }
 
-  const attachmentId  = String(body.attachmentId ?? '').trim()
-  const customerToken = String(body.token         ?? '').trim()
-  const internalKey   = String(body.internalKey   ?? '').trim()
+  const attachmentId  = String(body.attachmentId  ?? '').trim()
+  const customerToken = String(body.token          ?? '').trim()
 
   if (!attachmentId) return json({ error: 'not_found' }, 404)
 
@@ -85,7 +143,7 @@ serve(async (req: Request) => {
     auth: { persistSession: false }
   })
 
-  /* Hämta bilagor */
+  /* ── Hämta bilagor (delat av båda vägarna) ──────────────── */
   const { data: attRow } = await supabase
     .from('store')
     .select('value')
@@ -96,48 +154,105 @@ serve(async (req: Request) => {
     Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
 
   const att = attachments.find(a => a.id === attachmentId)
+
+  /* Borttagen eller saknad bilaga avslöjar ingenting om anledning */
   if (!att || att.active === false) return json({ error: 'not_found' }, 404)
 
-  /* ── Behörighetskontroll ── */
-  let authorized = false
+  /* ── Välj autentiseringsväg ──────────────────────────────── */
+  const authHeader = req.headers.get('authorization') || ''
+  const jwt        = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
 
-  if (customerToken && customerToken.length >= 32) {
-    /* Kundanrop: validera via offer-token */
+  if (customerToken && customerToken.length >= 32 && !jwt) {
+    /* ════════════════════════════════════════════════════════
+     * A. PUBLIK TOKENVÄG — kund utan Supabase-konto
+     * ════════════════════════════════════════════════════════ */
+
     const { data: offRow } = await supabase
       .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
     const offers: Record<string, unknown>[] =
       Array.isArray(offRow?.value) ? offRow.value as Record<string, unknown>[] : []
-    const off = offers.find(o => o.publicToken === customerToken)
 
-    if (off && !off.tokenRevokedAt) {
-      /* Kolla att token inte har gått ut */
-      if (off.tokenExpiresAt) {
-        if (Date.now() > new Date(off.tokenExpiresAt as string).getTime()) {
-          return json({ error: 'expired' }, 410)
-        }
-      }
-      /* Kolla att bilagan tillhör rätt offert och är synlig för kund */
-      if (att.offerId === off.id && att.includeInPublicView === true) {
-        authorized = true
+    const offer = offers.find(o => o.publicToken === customerToken)
+
+    /* Token okänd eller återkallad */
+    if (!offer || offer.tokenRevokedAt) {
+      return json({ error: 'forbidden' }, 403)
+    }
+
+    /* Token utgången */
+    if (offer.tokenExpiresAt) {
+      if (Date.now() > new Date(offer.tokenExpiresAt as string).getTime()) {
+        return json({ error: 'expired' }, 410)
       }
     }
+
+    /* Bilagan måste tillhöra denna offert och vara synlig för kund */
+    if (att.offerId !== offer.id || att.includeInPublicView !== true) {
+      return json({ error: 'forbidden' }, 403)
+    }
+
+    /* Alla publika kontroller godkända — fall through till URL-generering */
+
+  } else if (jwt) {
+    /* ════════════════════════════════════════════════════════
+     * B. INTERN JWT-VÄG — inloggad CRM-användare
+     * ════════════════════════════════════════════════════════ */
+
+    /* 1. Aktiv VIFT-användare + personal + roll */
+    const auth = await checkViftAuth(supabase, jwt, CORS)
+    if (!auth.ok) return auth.response
+
+    const { perms } = auth
+
+    /* 2. Kräver offer_manage eller all */
+    if (!hasPerm(perms, 'offer_manage')) {
+      return json({ error: 'forbidden' }, 403)
+    }
+
+    /* 3. offerId krävs i body för att förhindra IDOR */
+    const offerId = String(body.offerId ?? '').trim()
+    if (!offerId) {
+      return json({ error: 'offerId required for internal access' }, 400)
+    }
+
+    /* 4. Bilagan måste tillhöra angiven offert */
+    if (att.offerId !== offerId) {
+      return json({ error: 'forbidden' }, 403)
+    }
+
+    /* 5. Offerten måste existera i store */
+    const { data: offRow } = await supabase
+      .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
+    const offers: Record<string, unknown>[] =
+      Array.isArray(offRow?.value) ? offRow.value as Record<string, unknown>[] : []
+
+    const offer = offers.find(o => o.id === offerId)
+    if (!offer) {
+      return json({ error: 'not_found' }, 404)
+    }
+
+    /* 6. Valfri versionsmatchning — om offerVersion anges kontrolleras bilagan */
+    const offerVersionRaw = body.offerVersion
+    if (offerVersionRaw !== undefined && offerVersionRaw !== null) {
+      const requestedVersion = String(offerVersionRaw)
+      const attachmentVersion = String(att.offerVersionId ?? '')
+      if (attachmentVersion && attachmentVersion !== requestedVersion) {
+        return json({ error: 'version_mismatch' }, 409)
+      }
+    }
+
+    /* Alla interna kontroller godkända — fall through till URL-generering */
+
   } else {
-    /* Internt anrop: validera JWT */
-    const authHeader = req.headers.get('authorization') || ''
-    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (jwt) {
-      const { data: { user } } = await supabase.auth.getUser(jwt)
-      if (user) authorized = true
-    }
+    /* Varken token eller JWT — neka utan ledtråd */
+    return json({ error: 'forbidden' }, 403)
   }
 
-  if (!authorized) return json({ error: 'forbidden' }, 403)
-
-  /* Validera storage path */
+  /* ── Validera storage path (delat, sker efter auth) ─────── */
   const storagePath = String(att.storagePath ?? '')
   if (!isValidStoragePath(storagePath)) return json({ error: 'invalid_path' }, 400)
 
-  /* Generera signerad URL */
+  /* ── Generera signerad URL ───────────────────────────────── */
   const pathInBucket = storagePath.replace(`${STORAGE_BUCKET}/`, '')
   const { data: signedData, error: signedErr } = await supabase.storage
     .from(STORAGE_BUCKET)
@@ -146,25 +261,19 @@ serve(async (req: Request) => {
     })
 
   if (signedErr || !signedData?.signedUrl) {
-    console.error('[offer-attachment-url] signedUrl fel:', signedErr)
+    console.error('[offer-attachment-url] signedUrl fel')
     return json({ error: 'storage_error' }, 500)
   }
 
   const expiresAt = new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000).toISOString()
 
+  /* Logga aldrig URL, token eller signerat värde */
   return json({
-    url:          signedData.signedUrl,
+    url:         signedData.signedUrl,
     expiresAt,
-    fileName:     String(att.displayName || att.originalFileName || 'bilaga'),
-    mimeType:     String(att.mimeType   || 'application/octet-stream'),
-    sizeBytes:    Number(att.sizeBytes  || 0),
-    description:  String(att.description || '')
+    fileName:    String(att.displayName || att.originalFileName || 'bilaga'),
+    mimeType:    String(att.mimeType    || 'application/octet-stream'),
+    sizeBytes:   Number(att.sizeBytes   || 0),
+    description: String(att.description || '')
   })
 })
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' }
-  })
-}
