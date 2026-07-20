@@ -78,8 +78,9 @@ CREATE POLICY "offer-attachments service_role delete"
 
 -- ── Noteringar ───────────────────────────────────────────────
 -- 1. Signerade URL:er genereras av offer-attachment-url EF med:
---      supabase.storage.from('offer-attachments').createSignedUrl(path, 3600)
---    URL:erna är unika, tidsbegränsade och kan inte återanvändas.
+--      supabase.storage.from('offer-attachments').createSignedUrl(path, 600)
+--    URL:erna är tidsbegränsade (10 min) och reusable under TTL — INTE engångs-URL.
+--    Ny signerad URL genereras per nedladdningsanrop. URL:en loggas aldrig.
 --
 -- 2. Sökvägsformatet är:
 --      {offerId}/{attachmentId}/{sanitized-filename}

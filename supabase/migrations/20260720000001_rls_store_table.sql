@@ -23,6 +23,9 @@
 --  GRANT återges sedan med RLS som grindvakt.
 --
 -- ROLLBACK (kör i SQL Editor):
+--   OBS: Ta INTE bort app_users med DROP TABLE CASCADE — det raderar
+--        mappningar och kan ta bort beroenden. Inaktivera policyer istället.
+--
 --   DROP POLICY IF EXISTS "store_service_role_all"  ON public.store;
 --   DROP POLICY IF EXISTS "store_vift_users_all"    ON public.store;
 --   DROP POLICY IF EXISTS "push_own_read"           ON public.push_subscriptions;
@@ -31,7 +34,8 @@
 --   DROP POLICY IF EXISTS "push_service_role_all"   ON public.push_subscriptions;
 --   ALTER TABLE public.store              DISABLE ROW LEVEL SECURITY;
 --   ALTER TABLE public.push_subscriptions DISABLE ROW LEVEL SECURITY;
---   DROP TABLE IF EXISTS app_users;
+--   -- app_users bevaras (DROP TABLE är DESTRUKTIVT och ska undvikas):
+--   ALTER TABLE app_users DISABLE ROW LEVEL SECURITY;
 -- ============================================================
 
 -- ── Tabell: app_users ─────────────────────────────────────────
