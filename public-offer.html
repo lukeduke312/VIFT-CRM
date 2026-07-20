@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Cache-Control" content="no-store">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; frame-ancestors 'none';">
 <title>Offert — VIFT Fastighetsservice</title>
 <style>
 /* ── Reset & tokens ─────────────────────────────────────── */
@@ -705,6 +708,11 @@ function showErr(msg) {
 
 /* ── Init ────────────────────────────────────────────────── */
 _token = getToken();
+if (_token) {
+  /* Ta bort token ur URL-baren omedelbart så den inte hamnar i Referer-headers
+     vid vidare navigering, i browserhistorik eller i serverns access-loggar. */
+  try { history.replaceState(null, '', window.location.pathname); } catch(_) {}
+}
 if (!_token) {
   document.getElementById('po-root').innerHTML =
     '<div class="po-status-banner error">⚠ Ogiltig länk — ingen offerttoken hittades.</div>';
