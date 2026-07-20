@@ -59,6 +59,7 @@ CREATE OR REPLACE FUNCTION provision_vift_user(
 ) RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_catalog
 AS $$
 DECLARE
   v_email TEXT;
@@ -95,6 +96,7 @@ CREATE OR REPLACE FUNCTION deactivate_vift_user(p_user_id UUID)
 RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_catalog
 AS $$
 DECLARE
   v_email TEXT;
@@ -128,6 +130,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_catalog
 AS $$
 DECLARE
   v_auth_count    INT;
