@@ -162,7 +162,7 @@ Manuell testkörning: `POST /functions/v1/service-monitor` med `Authorization: B
 | 69 | Serviceintervall-formulär — objectId-väljare | KLAR | f61b26a | PropertyDetailPage v19 |
 | 70 | Avvikelse — objectId-väljare i ronderingsvyn | KLAR | f61b26a | RonderingUtforandePage v10 |
 | 71 | Kontakter/hyresgäster — CRUD (namn, telefon, e-post, roll, primär, giltighet, anteckning) | BYGGD – BEHÖVER TEST | aa70444 | PropertyObjectPage.js v3 — _addTenantContact, _editTenantContact, _removeTenantContact, sparas i obj.contacts[] |
-| 72 | Rollbaserad åtkomstkontroll för portkod/nyckelinformation | BYGGD – BEHÖVER TEST | 481b323 aa70444 | PropertyObjectPage.js v3 — Auth.can('objects_sensitive') || Auth.can('customer_manage'); AuthService.js — ny permission dokumenterad |
+| 72 | Rollbaserad åtkomstkontroll för portkod/nyckelinformation | BYGGD – BEHÖVER TEST | e8edf00 | Fullständig implementation: PropertyObjectPage, PropertyDetailPage, WorkOrdersPage, WorkOrderDetailPage, ExportCenterPage, PageShells (AdminPage rollredigering) |
 
 ---
 
@@ -469,8 +469,14 @@ _wizObjectChanged() fyller nu i: adress, portkod, entrance, stairwell, floor, ap
 ### Kontakter/hyresgäster (punkt 71) — BYGGD – BEHÖVER TEST (commit aa70444)
 Full CRUD implementerat i PropertyObjectPage v3. Sparas i obj.contacts[] med fält: id, name, phone, email, role, isPrimary, validFrom, validTo, notes, active.
 
-### Rollbaserat döljande av portkod (punkt 72) — BYGGD – BEHÖVER TEST (commit 481b323)
-doorCode och keyInformation döljs nu för användare som saknar Auth.can('objects_sensitive') OCH Auth.can('customer_manage'). Ny permission 'objects_sensitive' dokumenterad i AuthService. Saknas ännu i rollernas permissions-arrayer — kräver admin-konfiguration per roll.
+### Rollbaserat döljande av portkod (punkt 72) — BYGGD – BEHÖVER TEST (commit e8edf00)
+objects_sensitive fullständigt implementerat:
+- PropertyObjectPage.js v3: känsliga fält skyddade i objektvyn
+- PropertyDetailPage.js: accessCode/keyInfo omsluts av guard
+- WorkOrdersPage.js: AO-wizard förfyller ej accessCode utan behörighet
+- WorkOrderDetailPage.js: portkod i AO-detalj kräver rätt roll
+- ExportCenterPage.js: sensitive-toggle visas för admin/objects_sensitive/customer_manage
+- PageShells.js: objects_sensitive tillagd i AdminPage rollredigering (gruppen "Säkerhet & Åtkomst")
 
 ### Importera per rad — diff-vy (punkt 50)
 Konfliktlösning har tre val (hoppa/uppdatera/skapa ny) per rad, men saknar en sida-vid-sida diff-vy som jämför importvärdena mot befintliga värden.
@@ -491,28 +497,35 @@ ImportWizard och kolumnmatchning stöder bara entityType='customer' idag. Fastig
 
 | Blockerare | Status | Åtgärd |
 |------------|--------|---------|
-| A1. objects_sensitive ej tilldelad i roller | EJ PÅBÖRJAD | Lägg till i AdminPage rollredigering + tilldela förvaltare/admin-roller |
-| A2. Supabase store RLS — SQL-policy dokumenterad och testad | EJ PÅBÖRJAD | Dokumentera faktiska policies, testa user A vs user B, anon-access |
-| A3. Storage offer-attachments — inga permanenta publika URL:er | EJ PÅBÖRJAD | Verifiera bucket-policy: private, signed-URL only, cross-token-test |
+| A1. objects_sensitive ej tilldelad i roller | ✅ ÅTGÄRDAD (e8edf00) | AdminPage rollredigering: gruppen "Säkerhet & Åtkomst" tillagd |
+| A2. Supabase store RLS — SQL-policy dokumenterad | ✅ ÅTGÄRDAD (b56a705) | supabase/migrations/20260720000001_rls_store_table.sql — kräver körning i SQL Editor |
+| A3. Storage offer-attachments — privat bucket + policies | ✅ ÅTGÄRDAD (b56a705) | supabase/migrations/20260720000002_storage_offer_attachments.sql — kräver körning |
+| A4. EF-säkerhet: anon-key-autentisering i 3 EF:er | ✅ ÅTGÄRDAD (dd7c5df) | offer-attachment-upload/url/pdf: JWT-auth; send-push: rollkontroll+rate-limit; send-offer-email: korrekt store-åtkomst |
 | B1. offerEvents/offerAttachments DataSync | BYGGD – BEHÖVER TEST | 53862af: lagt till i DataSync._poll(). Verifiera 2-fönster-sync |
 | B2. Övriga 5 entiteter vs DataSync | BYGGD – BEHÖVER TEST | contracts/inspections/recurringOrders/propertyContacts/propertyRoles — verifiera merge/delete/reload |
-| C1. Edge Functions deploy | EJ PÅBÖRJAD | Kräver supabase CLI + secrets. Se checklista nedan |
-| C2. send-offer-email secrets | EJ PÅBÖRJAD | RESEND_API_KEY, FROM_EMAIL, FROM_NAME, PUBLIC_BASE_URL i Supabase Secrets |
+| C1. Edge Functions deploy | EJ DEPLOYAD — KRÄVER SUPABASE-ÅTKOMST | Kräver `supabase functions deploy` + secrets. Se RC1_STAGING_CHECKLISTA.md |
+| C2. send-offer-email secrets | EJ KONFIGURERAT — KRÄVER SUPABASE-ÅTKOMST | RESEND_API_KEY, FROM_EMAIL, FROM_NAME, PUBLIC_BASE_URL i Supabase Secrets |
 
-## Edge Functions deploy-checklista (7+1 funktioner)
+## Edge Functions deploy-checklista (8 funktioner)
 
-| Funktion | Deploy-status | Secrets |
-|----------|---------------|---------|
-| service-monitor | EJ DEPLOYAD | VAPID_*, SERVICE_MONITOR_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
-| offer-token-validate | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
-| offer-respond | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_* |
-| offer-attachment-upload | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
-| offer-attachment-url | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
-| offer-pdf | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
-| send-push | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL |
-| **send-offer-email** | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, **RESEND_API_KEY**, FROM_EMAIL, FROM_NAME, PUBLIC_BASE_URL |
+| Funktion | Säkerhetsstatus | Deploy-status | Secrets |
+|----------|-----------------|---------------|---------|
+| service-monitor | ✅ Säker | EJ DEPLOYAD | VAPID_*, MONITOR_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-token-validate | ✅ Säker | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-respond | ✅ Säker | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_* |
+| offer-attachment-upload | ✅ Fixad (dd7c5df) | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-attachment-url | ✅ Fixad (dd7c5df) | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| offer-pdf | ✅ Fixad (dd7c5df) | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY |
+| send-push | ✅ Fixad (dd7c5df) | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL |
+| **send-offer-email** | ✅ Fixad (dd7c5df) | EJ DEPLOYAD | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, **RESEND_API_KEY**, FROM_EMAIL, FROM_NAME, PUBLIC_BASE_URL |
 
 **VAPID private key och RESEND_API_KEY läggs ALDRIG i config.js eller frontend — enbart i Supabase Secrets.**
+
+## RC1-dokumentation
+
+- `docs/RC1_E2E_TESTPROTOKOLL.md` — fullständigt E2E-testprotokoll A–F (74+ testfall)
+- `docs/RC1_STAGING_CHECKLISTA.md` — 16-punkts staging-checklista med deploy-instruktioner
+- `supabase/migrations/` — tre SQL-migreringar (RLS, Storage, pg_cron)
 
 ## Säkerhetsprinciper (gäller alltid)
 
