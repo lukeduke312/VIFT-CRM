@@ -90,8 +90,8 @@ const PropertyObjectPage = {
         </div>
       </div>
 
-      <!-- Tillträdeskod / nyckelinfo -->
-      ${(obj.accessInformation || obj.doorCode || obj.keyInformation) ? `
+      <!-- Tillträdeskod / nyckelinfo — visas bara för behörig roll (objects_sensitive eller customer_manage) -->
+      ${(Auth.can('objects_sensitive') || Auth.can('customer_manage')) && (obj.accessInformation || obj.doorCode || obj.keyInformation) ? `
       <div class="card" style="margin-bottom:8px;border-left:3px solid var(--sky);">
         <div class="card-body" style="padding:12px 14px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--sky);margin-bottom:6px;">${ic('key',12)} Tillträdeskod / access</div>

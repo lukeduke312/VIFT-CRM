@@ -27,6 +27,8 @@
  *   recurring_manage  – Hantera återkommande ärenden
  *   sales_manage      – Hantera säljchanser
  *   reports_view      – Visa rapporter & löneunderlag
+ *   objects_sensitive – Visa portkoder, nyckelinformation och övriga säkerhetskänsliga objektfält
+ *                       (saknas i roll → fälten döljs i UI; ges till förvaltare/admin)
  */
 
 const Auth = {
