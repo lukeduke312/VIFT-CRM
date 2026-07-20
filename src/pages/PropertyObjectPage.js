@@ -99,16 +99,16 @@ const PropertyObjectPage = {
         </div>
       </div>
 
-      <!-- Tillträdeskod / nyckelinfo — visas bara för objects_sensitive eller customer_manage (punkt 72) -->
-      ${(Auth.can('objects_sensitive') || Auth.can('customer_manage')) && (obj.accessInformation || obj.doorCode || obj.keyInformation) ? `
-      <div class="card" style="margin-bottom:8px;border-left:3px solid var(--sky);">
-        <div class="card-body" style="padding:12px 14px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--sky);margin-bottom:6px;">${ic('key',12)} Tillträdeskod / access</div>
-          ${obj.accessInformation ? `<div style="font-size:13px;">${esc(obj.accessInformation)}</div>` : ''}
-          ${obj.doorCode     ? `<div style="font-size:12px;color:var(--mt);">Portkod: <strong>${esc(obj.doorCode)}</strong></div>` : ''}
-          ${obj.keyInformation ? `<div style="font-size:12px;color:var(--mt);">Nyckel: ${esc(obj.keyInformation)}</div>` : ''}
-        </div>
-      </div>` : ''}
+      <!-- Tillträdeskod / nyckelinfo — hämtas via EF (objects_sensitive krävs) -->
+      <div id="sensitive-obj-${obj.id}">
+        ${Auth.can('objects_sensitive')
+          ? `<div class="card" style="margin-bottom:8px;border-left:3px solid var(--sky);">
+               <div class="card-body" style="padding:12px 14px;color:var(--mt);font-size:12px;">
+                 ${ic('loader',12)} Laddar åtkomstuppgifter…
+               </div>
+             </div>`
+          : ''}
+      </div>
 
       <!-- Hyresgäster & kontakter (punkt 71) — obj.contacts[] med direktdata -->
       <div class="card" style="margin-bottom:8px;">
@@ -295,6 +295,37 @@ const PropertyObjectPage = {
 
     // Ladda bilder asynkront (punkt 64)
     this._loadImages(obj);
+    // Ladda känsliga fält via EF om användaren har behörighet
+    if (Auth.can('objects_sensitive')) this._loadSensitiveFields(obj);
+  },
+
+  async _loadSensitiveFields(obj) {
+    const el = document.getElementById('sensitive-obj-' + obj.id);
+    if (!el) return;
+    try {
+      const jwt = Auth.getAccessToken();
+      const res = await fetch(SUPABASE_URL + '/functions/v1/get-sensitive-fields', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectId: obj.id })
+      });
+      if (!res.ok) { el.innerHTML = ''; return; }
+      const d = await res.json();
+      if (!d.doorCode && !d.keyInformation && !d.accessInformation && !d.keyReceipt && !d.alarmInformation) {
+        el.innerHTML = ''; return;
+      }
+      el.innerHTML =
+        '<div class="card" style="margin-bottom:8px;border-left:3px solid var(--sky);">' +
+          '<div class="card-body" style="padding:12px 14px;">' +
+            '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--sky);margin-bottom:6px;">' + ic('key',12) + ' Tillträdeskod / access</div>' +
+            (d.accessInformation ? '<div style="font-size:13px;">' + esc(d.accessInformation) + '</div>' : '') +
+            (d.doorCode     ? '<div style="font-size:12px;color:var(--mt);">Portkod: <strong>' + esc(d.doorCode) + '</strong></div>' : '') +
+            (d.keyInformation ? '<div style="font-size:12px;color:var(--mt);">Nyckel: ' + esc(d.keyInformation) + '</div>' : '') +
+            (d.keyReceipt   ? '<div style="font-size:12px;color:var(--mt);">Nyckelkvittens: ' + esc(d.keyReceipt) + '</div>' : '') +
+            (d.alarmInformation ? '<div style="font-size:12px;color:var(--mt);">Larm: ' + esc(d.alarmInformation) + '</div>' : '') +
+          '</div>' +
+        '</div>';
+    } catch(e) { el.innerHTML = ''; }
   },
 
   /* ── Bilder & dokument (punkt 64) ─────────────────────────── */

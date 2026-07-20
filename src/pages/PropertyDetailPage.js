@@ -194,6 +194,31 @@ const PropertyDetailPage = {
     `;
     /* Auto-load images if images tab is active */
     if (this.activeTab === 'images') this._loadImages(p.id);
+    /* Ladda känsliga fält om contact-fliken är aktiv och användaren har behörighet */
+    if (this.activeTab === 'contact' && Auth.can('objects_sensitive')) {
+      this._loadSensitiveProperty(p.id);
+    }
+  },
+
+  async _loadSensitiveProperty(propertyId) {
+    const el = document.getElementById('sensitive-prop-' + propertyId);
+    if (!el) return;
+    try {
+      const jwt = Auth.getAccessToken();
+      const res = await fetch(SUPABASE_URL + '/functions/v1/get-sensitive-fields', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId })
+      });
+      if (!res.ok) { el.innerHTML = '<p style="font-size:12px;color:var(--mt);">Ingen åtkomstinformation registrerad.</p>'; return; }
+      const d = await res.json();
+      if (!d.accessCode && !d.keyInformation) {
+        el.innerHTML = '<p style="font-size:12px;color:var(--mt);">Ingen åtkomstinformation registrerad.</p>'; return;
+      }
+      el.innerHTML =
+        (d.accessCode ? '<div class="dr"><span class="dk">Portkod</span><span class="dv" style="font-family:monospace;font-weight:700;font-size:15px;">' + esc(d.accessCode) + '</span></div>' : '') +
+        (d.keyInformation ? '<div class="dr"><span class="dk">Nyckelinformation</span><span class="dv">' + esc(d.keyInformation) + '</span></div>' : '');
+    } catch(e) { el.innerHTML = '<p style="font-size:12px;color:var(--mt);">Kunde inte ladda åtkomstuppgifter.</p>'; }
   },
 
   switchTab(tab) {
@@ -218,6 +243,10 @@ const PropertyDetailPage = {
     // Load images from Supabase when switching to images tab
     if (tab === 'images') {
       this._loadImages(this.propId);
+    }
+    // Ladda känsliga fält när contact-fliken aktiveras
+    if (tab === 'contact' && Auth.can('objects_sensitive')) {
+      this._loadSensitiveProperty(this.propId);
     }
   },
 
@@ -375,8 +404,8 @@ const PropertyDetailPage = {
                   ${openAO > 0 ? `<span class="bdg bdg-orange" style="font-size:10px;">${openAO} AO</span>` : ''}
                 </div>
               </div>
-              ${(obj.description || obj.accessInformation) ? `
-              <div class="obj-card-desc">${esc(obj.description || obj.accessInformation)}</div>` : ''}
+              ${obj.description ? `
+              <div class="obj-card-desc">${esc(obj.description)}</div>` : ''}
               <div class="obj-card-actions" onclick="event.stopPropagation()">
                 <button class="btn bghost bsm" onclick="Router.showPage('pg-propobj-detail',{objId:'${obj.id}'})">${ic('eye',13)} Visa</button>
                 ${canManage ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openEditObject('${obj.id}')">${ic('pencil',13)} Redigera</button>` : ''}
@@ -474,7 +503,18 @@ const PropertyDetailPage = {
     const description = (document.getElementById('new-obj-desc')?.value || '').trim();
     const accessInformation = (document.getElementById('new-obj-access')?.value || '').trim();
     try {
-      PropertyObjectService.create({ propertyId: propId, type, objectNumber, name, entrance, stairwell, floor, area, status, description, accessInformation });
+      const newObj = PropertyObjectService.create({ propertyId: propId, type, objectNumber, name, entrance, stairwell, floor, area, status, description });
+      // Routa känsliga fält via EF om angivet
+      if (accessInformation && newObj && newObj.id) {
+        const jwt = Auth.getAccessToken();
+        if (jwt) {
+          fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objectId: newObj.id, propertyId: propId, accessInformation })
+          }).catch(function() {});
+        }
+      }
       closeModal();
       showToast('Objekt sparat');
       const p = getObj(propId);
@@ -554,20 +594,29 @@ const PropertyDetailPage = {
   _saveEditObject(objId) {
     const obj = getPropObj(objId);
     if (!obj) return;
+    const accessInformation = (document.getElementById('edit-obj-access')?.value || '').trim();
     const fields = {
-      type:              document.getElementById('edit-obj-type')?.value || obj.type,
-      objectNumber:      (document.getElementById('edit-obj-num')?.value || '').trim(),
-      name:              (document.getElementById('edit-obj-name')?.value || '').trim(),
-      entrance:          (document.getElementById('edit-obj-entrance')?.value || '').trim(),
-      stairwell:         (document.getElementById('edit-obj-stairwell')?.value || '').trim(),
-      floor:             (document.getElementById('edit-obj-floor')?.value || '').trim(),
-      area:              parseFloat(document.getElementById('edit-obj-area')?.value || '0') || 0,
-      status:            document.getElementById('edit-obj-status')?.value || obj.status,
-      description:       (document.getElementById('edit-obj-desc')?.value || '').trim(),
-      accessInformation: (document.getElementById('edit-obj-access')?.value || '').trim()
+      type:         document.getElementById('edit-obj-type')?.value || obj.type,
+      objectNumber: (document.getElementById('edit-obj-num')?.value || '').trim(),
+      name:         (document.getElementById('edit-obj-name')?.value || '').trim(),
+      entrance:     (document.getElementById('edit-obj-entrance')?.value || '').trim(),
+      stairwell:    (document.getElementById('edit-obj-stairwell')?.value || '').trim(),
+      floor:        (document.getElementById('edit-obj-floor')?.value || '').trim(),
+      area:         parseFloat(document.getElementById('edit-obj-area')?.value || '0') || 0,
+      status:       document.getElementById('edit-obj-status')?.value || obj.status,
+      description:  (document.getElementById('edit-obj-desc')?.value || '').trim(),
     };
     try {
       PropertyObjectService.update(objId, fields);
+      // Routa känsliga fält via EF (lagras ej i state/store)
+      const jwt = Auth.getAccessToken();
+      if (jwt) {
+        fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ objectId: objId, propertyId: obj.propertyId, accessInformation })
+        }).catch(function() {});
+      }
       closeModal();
       showToast('Objekt uppdaterat');
       const p = getObj(obj.propertyId);
@@ -1200,18 +1249,9 @@ const PropertyDetailPage = {
             : ''}
         </div>
         <div class="card-body">
-          ${(Auth.can('objects_sensitive') || Auth.can('customer_manage')) ? `
-            ${p.accessCode
-              ? `<div class="dr"><span class="dk">Portkod</span>
-                 <span class="dv" style="font-family:monospace;font-weight:700;font-size:15px;">${p.accessCode}</span></div>`
-              : ''}
-            ${p.keyInfo
-              ? `<div class="dr"><span class="dk">Nyckelinformation</span><span class="dv">${p.keyInfo}</span></div>`
-              : ''}
-            ${!p.accessCode && !p.keyInfo
-              ? `<p style="font-size:12px;color:var(--mt);">Ingen åtkomstinformation registrerad.</p>`
-              : ''}
-          ` : `<p style="font-size:12px;color:var(--mt);">${ic('lock',11)} Du saknar behörighet att se känsliga åtkomstuppgifter.</p>`}
+          ${Auth.can('objects_sensitive')
+            ? `<div id="sensitive-prop-${p.id}" style="color:var(--mt);font-size:12px;">${ic('loader',12)} Laddar…</div>`
+            : `<p style="font-size:12px;color:var(--mt);">${ic('lock',11)} Du saknar behörighet att se känsliga åtkomstuppgifter.</p>`}
         </div>
       </div>
     `;
@@ -2048,9 +2088,7 @@ const PropertyDetailPage = {
       propertyManager:   document.getElementById('prop-mgr')?.value             || '',
       technician:        document.getElementById('prop-tech')?.value            || '',
       operationalArea:   document.getElementById('prop-oparea')?.value.trim()   || '',
-      accessCode:        document.getElementById('prop-access')?.value.trim()   || '',
       status:            document.getElementById('prop-status')?.value          || 'aktiv',
-      keyInfo:           document.getElementById('prop-keyinfo')?.value.trim()  || '',
       note:              document.getElementById('prop-note')?.value.trim()     || '',
     };
   },
@@ -2071,8 +2109,19 @@ const PropertyDetailPage = {
     if (!data.name) { showToast('Namn krävs'); return; }
     const idx = (state.properties||[]).findIndex(x => x.id === this.propId);
     if (idx < 0) return;
+    // Känsliga fält sparas via EF, ej i state
+    const accessCode = (document.getElementById('prop-access')?.value || '').trim();
+    const keyInfo    = (document.getElementById('prop-keyinfo')?.value || '').trim();
     state.properties[idx] = Object.assign({}, state.properties[idx], data, { updatedAt: new Date().toISOString() });
     persist();
+    const jwt = Auth.getAccessToken();
+    if (jwt && (accessCode || keyInfo)) {
+      fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: this.propId, accessCode, keyInformation: keyInfo })
+      }).catch(function() {});
+    }
     Modal.close();
     showToast('Fastighet uppdaterad');
     this.render({ propId: this.propId });
@@ -2647,8 +2696,8 @@ const PropertyDetailPage = {
       managementType:       src.managementType       || '',
       propertyManager:      src.propertyManager      || '',
       technician:           src.technician           || '',
-      accessCode:           src.accessCode           || '',
-      keyInfo:              src.keyInfo              || '',
+      accessCode:           '',
+      keyInfo:              '',
       note:                 src.note                 || '',
       objectNumber:         '',        /* cleared — varje fastighet har unikt objektnummer */
       status:               'aktiv',

@@ -119,7 +119,7 @@ const WorkOrderDetailPage = {
             </span>
           </div>
           <!-- 2. Portkod — synlig enbart för objects_sensitive / customer_manage (punkt 72) -->
-          ${ao.accessCode && (Auth.can('objects_sensitive') || Auth.can('customer_manage'))?`<div class="ao-info-row">
+          ${ao.accessCode && Auth.can('objects_sensitive')?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('key',11)} Portkod</span>
             <span class="ao-info-val" style="font-weight:800;letter-spacing:.8px;font-size:16px;">${esc(ao.accessCode)}</span>
           </div>`:''}

@@ -1264,12 +1264,26 @@ const WorkOrdersPage = {
 
     if (!obj) return;
 
-    /* Tillträdeskod — fyll bara om fältet är tomt och användaren har behörighet */
-    if ((Auth.can('objects_sensitive') || Auth.can('customer_manage')) && (obj.accessInformation || obj.doorCode)) {
+    /* Tillträdeskod — hämtas via EF om användaren har objects_sensitive */
+    if (Auth.can('objects_sensitive')) {
       const accessEl = document.getElementById('wiz-access');
+      const wiz = this._wiz;
       if (accessEl && !accessEl.value) {
-        accessEl.value = obj.accessInformation || obj.doorCode || '';
-        this._wiz.data.accessCode = accessEl.value;
+        const jwt = Auth.getAccessToken();
+        if (jwt) {
+          fetch(SUPABASE_URL + '/functions/v1/get-sensitive-fields', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objectId: obj.id })
+          }).then(function(r) { return r.ok ? r.json() : {}; })
+            .then(function(d) {
+              const val = (d.accessInformation || d.doorCode || '').trim();
+              if (val && accessEl && !accessEl.value) {
+                accessEl.value = val;
+                if (wiz) wiz.data.accessCode = val;
+              }
+            }).catch(function() {});
+        }
       }
     }
 
