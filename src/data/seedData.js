@@ -1376,7 +1376,7 @@ const SeedData = {
     {
       id: 'ekonomi', label: 'Ekonomi', isBuiltin: true, active: true,
       description: 'Hanterar fakturering, rapporter och löneunderlag. Kan inte hantera personal eller systeminställningar.',
-      permissions: ['dashboard_view','ao_view_all','invoice_view','invoice_create','reports_view']
+      permissions: ['dashboard_view','ao_view_all','invoice_view','invoice_create','reports_view','payroll_view','payroll_manage']
     }
   ],
 

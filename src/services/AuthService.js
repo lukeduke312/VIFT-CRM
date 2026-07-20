@@ -26,7 +26,9 @@
  *   article_manage    – Hantera artiklar & prisgrupper
  *   recurring_manage  – Hantera återkommande ärenden
  *   sales_manage      – Hantera säljchanser
- *   reports_view      – Visa rapporter & löneunderlag
+ *   reports_view      – Visa rapporter (exkluderar löneunderlag)
+ *   payroll_view      – Visa löneunderlag och exportera lönedata
+ *   payroll_manage    – Attestera, korrigera och bulkattestera tidposter
  *   objects_sensitive – Visa portkoder, nyckelinformation och övriga säkerhetskänsliga objektfält
  *                       (saknas i roll → fälten döljs i UI; ges till förvaltare/admin)
  */
@@ -61,7 +63,7 @@ const Auth = {
     'pg-rondering':    ['ao_view_all'],
     'pg-articles':     ['article_manage'],
     'pg-pricegroups':  ['article_manage'],
-    'pg-payroll':      ['reports_view'],
+    'pg-payroll':      ['payroll_view'],
     'pg-reports':      ['reports_view'],
     'pg-staff':        ['staff_view','staff_manage'],
     'pg-admin':        ['admin_manage'],

@@ -6809,7 +6809,9 @@ const AdminPage = {
     { id:'staff_view',         label:'Se personal' },
     { id:'staff_manage',       label:'Hantera personal' },
     { id:'admin_manage',       label:'Adminpanel & systeminställningar' },
-    { id:'reports_view',       label:'Se rapporter & löneunderlag' },
+    { id:'reports_view',       label:'Se rapporter (exkluderar löneunderlag)' },
+    { id:'payroll_view',       label:'Se löneunderlag & exportera lönedata' },
+    { id:'payroll_manage',     label:'Attestera och korrigera löneunderlag' },
     { id:'recurring_manage',   label:'Hantera återkommande ärenden' },
     { id:'sales_manage',       label:'Hantera säljchanser' },
     { id:'objects_sensitive',  label:'Visa känsliga fält (portkod, nyckel, larm)' }
@@ -6836,7 +6838,9 @@ const AdminPage = {
     'article_manage':    'Hantera artiklar & prisgrupper',
     'recurring_manage':  'Hantera återkommande ärenden',
     'sales_manage':      'Hantera säljchanser',
-    'reports_view':      'Visa rapporter & löneunderlag',
+    'reports_view':      'Visa rapporter (exkluderar löneunderlag)',
+    'payroll_view':      'Visa löneunderlag och exportera lönedata',
+    'payroll_manage':    'Attestera, korrigera och bulkattestera tidposter',
     'objects_sensitive': 'Visa känsliga objektfält (portkod, nyckel, larm)',
   },
 
@@ -6847,6 +6851,7 @@ const AdminPage = {
     { label: 'Kunder & Offerter',  perms: ['customer_manage','offer_manage'] },
     { label: 'Fakturering',        perms: ['invoice_view','invoice_create'] },
     { label: 'Personal & Admin',   perms: ['staff_view','staff_manage','admin_manage','article_manage'] },
+    { label: 'Löner',              perms: ['payroll_view','payroll_manage'] },
     { label: 'Övrigt',             perms: ['recurring_manage','sales_manage','reports_view'] },
     { label: 'Säkerhet & Åtkomst', perms: ['objects_sensitive'] }
   ],

@@ -40,7 +40,7 @@ const PayrollPage = (function() {
   /* ── Render ─────────────────────────────────────────────── */
   function render(params) {
     const el = document.getElementById('pg-payroll-content');
-    if (!Auth.can('reports_view')) {
+    if (!Auth.can('payroll_view')) {
       if (el) el.innerHTML = `<div class="empty">${ic('lock',36)}<h3>Behörighet saknas</h3><p style="font-size:13px;color:var(--mt);">Du har inte behörighet att visa löneunderlag.</p></div>`;
       return;
     }
@@ -192,7 +192,7 @@ const PayrollPage = (function() {
 
   /* ── Attestering ──────────────────────────────────────────── */
   function _toggleAttest(entryId, checked) {
-    if (!Auth.can('reports_view')) { showToast('Du saknar behörighet'); return; }
+    if (!Auth.can('payroll_manage')) { showToast('Du saknar behörighet'); return; }
     const e = (state.timeEntries || []).find(x => x.id === entryId);
     if (!e) return;
     const now = new Date().toISOString();
@@ -204,7 +204,7 @@ const PayrollPage = (function() {
   }
 
   function _attestAll(staffId) {
-    if (!Auth.can('reports_view')) { showToast('Du saknar behörighet'); return; }
+    if (!Auth.can('payroll_manage')) { showToast('Du saknar behörighet'); return; }
     const p = _currentPeriod();
     const now = new Date().toISOString();
     const byId = (state.currentUser && state.currentUser.id) || '';
@@ -246,7 +246,7 @@ const PayrollPage = (function() {
 
   /* ── CSV-export ───────────────────────────────────────────── */
   function _exportCsv() {
-    if (!Auth.can('reports_view')) { showToast('Du saknar behörighet'); return; }
+    if (!Auth.can('payroll_view')) { showToast('Du saknar behörighet'); return; }
     const p = _currentPeriod();
     const entries = (state.timeEntries || [])
       .filter(e => _inPeriod(e, p) && (!_staffId || e.staffId === _staffId))
