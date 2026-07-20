@@ -12,13 +12,14 @@
  *   5. Skriver tillbaka uppdaterade blobs (idempotensmarkeringar)
  *   6. Sparar körlogg i vift_serviceMonitorLog (senaste 90 körningar)
  *
- * Autentisering:
- *   Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>   (cron-anrop)
- *   eller X-Monitor-Secret: <SERVICE_MONITOR_SECRET>     (alternativ nyckel)
+ * Autentisering (Model B — verify_jwt: false):
+ *   X-Monitor-Secret: <SERVICE_MONITOR_SECRET>   (obligatorisk, sätts i pg_cron-anropet)
+ *   SUPABASE_SERVICE_ROLE_KEY används ALDRIG som inkommande credential — bara
+ *   som SDK-konstruktorarg internt i funktionen och exponeras aldrig för anroparen.
  *
  * Supabase Secrets som krävs:
  *   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL
- *   SERVICE_MONITOR_SECRET   (valfri extra autentisering)
+ *   SERVICE_MONITOR_SECRET   (obligatorisk — tom sträng blockerar alla anrop)
  *
  * VAPID private key läggs aldrig i config.js eller frontend — bara i Secrets.
  */
@@ -133,14 +134,12 @@ serve(async (req: Request) => {
 
   const startMs = Date.now()
 
-  /* ── Autentisering ──────────────────────────────────────── */
-  const authHeader    = req.headers.get('Authorization') ?? ''
+  /* ── Autentisering (Model B) ────────────────────────────── */
+  /* verify_jwt = false i config.toml — autentisering via X-Monitor-Secret.
+     SERVICE_ROLE_KEY används bara internt som SDK-arg, aldrig som inkommande credential. */
   const monitorSecret = req.headers.get('X-Monitor-Secret') ?? ''
 
-  const validServiceRole  = authHeader === `Bearer ${SERVICE_ROLE_KEY}` && SERVICE_ROLE_KEY !== ''
-  const validMonitorSecret = MONITOR_SECRET !== '' && monitorSecret === MONITOR_SECRET
-
-  if (!validServiceRole && !validMonitorSecret) {
+  if (MONITOR_SECRET === '' || monitorSecret !== MONITOR_SECRET) {
     return json({ error: 'Ej behörig' }, 401)
   }
 

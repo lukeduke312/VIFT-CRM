@@ -1,0 +1,27 @@
+# supabase/config.toml
+# Per-function JWT verification settings.
+# Default (omitted here) is verify_jwt = true.
+#
+# Public functions (no Supabase user session required):
+#   offer-token-validate  — called by public offer page with only a one-time token
+#   offer-respond         — called by offer recipient (no auth session)
+#   offer-attachment-url  — called by offer page to get signed download URL
+#
+# Internal/cron functions (service-only, no JWT):
+#   service-monitor       — called by pg_cron with X-Monitor-Secret header
+#
+# JWT-protected functions (require valid Supabase session):
+#   get-sensitive-fields, set-sensitive-fields, send-push, send-offer-email,
+#   offer-pdf, offer-attachment-upload  — no override needed (default = true)
+
+[functions.offer-token-validate]
+verify_jwt = false
+
+[functions.offer-respond]
+verify_jwt = false
+
+[functions.offer-attachment-url]
+verify_jwt = false
+
+[functions.service-monitor]
+verify_jwt = false
