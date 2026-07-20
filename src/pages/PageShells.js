@@ -3203,13 +3203,14 @@ ${hasRut?`<div class="rut">
     persist();
   },
 
-  /* ── Skicka offert (simulerat) ─── */
+  /* ── Skicka offert via Edge Function (Resend) ─── */
   showSendModal(offerId) {
     const off = getOff(offerId);
     if (!off) return;
     const cu = getCu(off.customerId);
-    const cuEmail = cu ? (cu.email||'') : '';
-    const firstName = cu ? (cu.firstName||cu.name||'') : '';
+    const cuEmail    = cu ? (cu.email||'') : '';
+    const firstName  = cu ? (cu.firstName||cu.name||'') : '';
+    const hasToken   = !!off.publicToken && !off.tokenRevokedAt;
 
     const _interpolate = (tmplStr, extra) => {
       const sentDate = off.sentAt ? new Date(off.sentAt).toLocaleDateString('sv-SE',{day:'numeric',month:'short',year:'numeric'}) : '—';
@@ -3221,7 +3222,7 @@ ${hasRut?`<div class="rut">
         validUntil: off.validUntil || '—',
         paymentLine: off.paymentTerms ? 'Betalningsvillkor: ' + off.paymentTerms + '.' : '',
         sentDate,
-        viftPhone: '',
+        OFFER_LINK: '{{OFFER_LINK}}',
         ...(extra||{})
       };
       return (tmplStr||'').replace(/\{\{(\w+)\}\}/g, (_, k) => data[k] !== undefined ? data[k] : '');
@@ -3229,7 +3230,7 @@ ${hasRut?`<div class="rut">
 
     const defaultTmpl = (state.emailTemplates||[]).find(t=>t.type==='send_offer') || {
       subject: 'Offert ' + off.id + (off.title?' – '+off.title:''),
-      body: 'Hej,\n\nBifogat hittar du offert ' + off.id + (off.title?' – '+off.title:'') + '.\n\nOfferten är giltig till ' + (off.validUntil||'—') + '.\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice'
+      body: 'Hej {{firstName}},\n\nTack för ditt intresse. Bifogat hittar du vår offert ' + off.id + (off.title?' – '+off.title:'') + '.\n\nOfferten är giltig till ' + (off.validUntil||'—') + '.\n\n' + (hasToken ? 'Du kan också se och svara på offerten online: {{OFFER_LINK}}\n\n' : '') + 'Med vänliga hälsningar,\nVIFT Fastighetsservice'
     };
 
     const tmplOpts = (state.emailTemplates||[]).filter(t=>t.active!==false)
@@ -3238,60 +3239,170 @@ ${hasRut?`<div class="rut">
     const subject = _interpolate(defaultTmpl.subject);
     const body2   = _interpolate(defaultTmpl.body);
 
+    // Bilagor för offerten
+    const offerAtts = (state.offerAttachments||[]).filter(a => a.offerId===off.id && !a.deleted && !a.hidden);
+    const attCheckboxes = offerAtts.length > 0
+      ? `<div class="fg"><label>Bifoga filer</label>
+          <div style="display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto;padding:6px;background:var(--bg);border:1px solid var(--br);border-radius:6px;">
+            ${offerAtts.map(a => `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+              <input type="checkbox" class="send-att-cb" value="${esc(a.id)}" ${a.includeInPublicView?'checked':''}>
+              <span>${esc(a.displayName||a.originalFileName)}</span>
+            </label>`).join('')}
+          </div>
+        </div>`
+      : '';
+
     Modal.open({
       title: ic('send',14) + ' Skicka offert',
       wide: true,
       body: `
+        ${!hasToken ? `<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--or);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+          ${ic('alert-triangle',12)} Ingen digital länk genererad — aktivera digital länk för att kunden ska kunna svara online.
+        </div>` : ''}
         ${tmplOpts ? `<div class="fg"><label>Mejlmall</label>
           <select id="send-tmpl" onchange="OfferDetailPage._applySendTemplate('${offerId}',this.value)">${tmplOpts}</select></div>` : ''}
-        <div class="fg"><label>Till (e-post)</label>
-          <input id="send-to" value="${esc(cuEmail)}" placeholder="kund@exempel.se" type="email"></div>
+        <div class="fg"><label>Till <small style="color:var(--mt);font-weight:400;">— kommaseparerade adresser</small></label>
+          <input id="send-to" value="${esc(cuEmail)}" placeholder="kund@exempel.se, annan@exempel.se" type="email" style="width:100%;box-sizing:border-box;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="fg"><label>CC</label>
+            <input id="send-cc" placeholder="cc@exempel.se" type="email" style="width:100%;box-sizing:border-box;"></div>
+          <div class="fg"><label>BCC</label>
+            <input id="send-bcc" placeholder="bcc@exempel.se" type="email" style="width:100%;box-sizing:border-box;"></div>
+        </div>
         <div class="fg"><label>Ämne</label>
-          <input id="send-subject" value="${esc(subject)}"></div>
-        <div class="fg"><label>Meddelande</label>
-          <textarea id="send-body" rows="8">${esc(body2)}</textarea></div>
+          <input id="send-subject" value="${esc(subject)}" style="width:100%;box-sizing:border-box;"></div>
+        <div class="fg"><label>Meddelande <small style="color:var(--mt);font-weight:400;">— ${ic('link',10)} ${hasToken?'{{OFFER_LINK}} ersätts med säker offertlänk':'digital länk ej aktiverad'}</small></label>
+          <textarea id="send-body" rows="8" style="width:100%;box-sizing:border-box;">${esc(body2)}</textarea></div>
+        ${attCheckboxes}
         <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;font-size:12px;">
-          <input type="checkbox" id="send-followup" checked style="width:16px;height:16px;">
+          <input type="checkbox" id="send-followup" checked style="width:15px;height:15px;">
           <span>Skapa uppföljning automatiskt om <strong>3 dagar</strong></span>
         </label>
         <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
-          ${ic('info',10)} Simulerad sändning — inget mejl skickas på riktigt. Status ändras till "Skickad".
+          ${ic('info',10)} Skickar via Resend. Händelselogg sparas i offerttidslinjen.
         </div>`,
       buttons: [
-        { label: ic('send',13) + ' Skicka', cls: 'btn bp', onClick: () => {
-          const to = document.getElementById('send-to')?.value.trim();
-          if (!to) { showToast('Fyll i e-postadress'); return; }
-          this._logEvt(off, 'send', 'Offert skickad till ' + to);
-          off.status      = 'skickad';
-          off.sentAt      = new Date().toISOString();
-          off.emailSentTo = to;
-          off.updatedAt   = new Date().toISOString();
-          // Auto followup
-          if (document.getElementById('send-followup')?.checked) {
-            ActivitiesService.create({
-              title: 'Följ upp offert ' + off.id + (off.title?' – '+off.title:''),
-              type: 'followup',
-              relatedType: 'offer',
-              relatedId: off.id,
-              customerId: off.customerId || null,
-              assignedTo: state.currentUser ? state.currentUser.id : null,
-              dueDate: _ds(3),
-              dueTime: '09:00',
-              note: 'Offert skickad till ' + to + ' — följ upp om 3 dagar',
-              priority: 'normal'
-            });
-            this._logEvt(off, 'followup', 'Uppföljning bokad om 3 dagar (automatisk vid utskick)');
-            Sidebar.updateBadges();
-          }
-          persist();
-          Modal.close();
-          this.render({offerId});
-          showToast('Offert markerad som skickad');
-        }},
+        { label: ic('send',13) + ' Skicka', cls: 'btn bp', onClick: () => this._doSendEmail(off) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
     setTimeout(() => document.getElementById('send-to')?.focus(), 80);
+  },
+
+  async _doSendEmail(off) {
+    const toRaw   = (document.getElementById('send-to')?.value||'').trim();
+    const ccRaw   = (document.getElementById('send-cc')?.value||'').trim();
+    const bccRaw  = (document.getElementById('send-bcc')?.value||'').trim();
+    const subject = (document.getElementById('send-subject')?.value||'').trim();
+    const bodyTxt = (document.getElementById('send-body')?.value||'').trim();
+
+    if (!toRaw)    { showToast('Fyll i e-postadress'); return; }
+    if (!subject)  { showToast('Ämnesrad saknas');     return; }
+    if (!bodyTxt)  { showToast('Meddelandetext saknas'); return; }
+
+    const parseEmails = s => s.split(/[\s,;]+/).map(e=>e.trim()).filter(e=>e.includes('@'));
+    const recipients  = parseEmails(toRaw);
+    const cc          = parseEmails(ccRaw);
+    const bcc         = parseEmails(bccRaw);
+
+    if (!recipients.length) { showToast('Ingen giltig e-postadress'); return; }
+
+    const attachmentIds = [...document.querySelectorAll('.send-att-cb:checked')].map(cb => cb.value);
+
+    // Konvertera plaintext body till enkel HTML
+    const bodyHtml = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1e293b;">' +
+      bodyTxt.replace(/\n/g,'<br>') + '</div>';
+
+    const sentBy = state.currentUser?.id || '';
+
+    // Knapp deaktivera för att undvika dubbelklick
+    const sendBtn = document.querySelector('.modal-footer .btn.bp');
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Skickar…'; }
+
+    let messageId = '';
+    let sendOk    = false;
+    let sendErr   = '';
+
+    // Försök via Edge Function
+    try {
+      const jwt = typeof AuthService !== 'undefined' ? AuthService.getAccessToken() : null;
+      if (!jwt) throw new Error('Inte inloggad');
+
+      const base  = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+      const efUrl = base + '/functions/v1/send-offer-email';
+      const res   = await fetch(efUrl, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + jwt,
+        },
+        body: JSON.stringify({
+          offerId:      off.id,
+          offerVersion: off.version || 1,
+          recipients,
+          cc,
+          bcc,
+          subject,
+          bodyHtml,
+          offerToken:   off.publicToken || '',
+          attachmentIds,
+          sentBy,
+        })
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) {
+        messageId = json.messageId || '';
+        sendOk    = true;
+      } else {
+        sendErr = json.detail || json.error || ('HTTP ' + res.status);
+      }
+    } catch (e) {
+      sendErr = String(e);
+    }
+
+    // Fallback: mailto: om EF inte tillgänglig
+    if (!sendOk) {
+      const mailtoFallback = `mailto:${recipients.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyTxt)}`;
+      console.warn('[send-offer-email] EF failed, mailto fallback:', sendErr);
+      window.open(mailtoFallback, '_blank');
+      showToast('Kunde inte skicka via server — öppnar e-postklient');
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Skicka'; }
+      return;
+    }
+
+    // Uppdatera offert
+    off.status      = 'skickad';
+    off.sentAt      = off.sentAt || new Date().toISOString();
+    off.emailSentTo = recipients[0];
+    off.updatedAt   = new Date().toISOString();
+
+    this._logEvt(off, 'email_sent', 'Offert skickad till ' + recipients.join(', ') + (cc.length?' (CC: '+cc.join(', ')+')':''));
+
+    // Uppföljning
+    if (document.getElementById('send-followup')?.checked) {
+      if (typeof ActivitiesService !== 'undefined') {
+        ActivitiesService.create({
+          title:       'Följ upp offert ' + off.id + (off.title?' – '+off.title:''),
+          type:        'followup',
+          relatedType: 'offer',
+          relatedId:   off.id,
+          customerId:  off.customerId || null,
+          assignedTo:  sentBy || null,
+          dueDate:     _ds(3),
+          dueTime:     '09:00',
+          note:        'Offert skickad till ' + recipients.join(', ') + ' — följ upp om 3 dagar',
+          priority:    'normal',
+        });
+        this._logEvt(off, 'followup', 'Uppföljning bokad om 3 dagar (automatisk)');
+        if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+      }
+    }
+
+    persist();
+    Modal.close();
+    this.render({ offerId: off.id });
+    showToast('Offert skickad till ' + recipients.join(', '));
   },
 
   _applySendTemplate(offerId, tmplId) {
@@ -3304,7 +3415,7 @@ ${hasRut?`<div class="rut">
     const data = {
       offerId: off.id, titleSuffix: off.title?' – '+off.title:'', firstName: firstName||'kund',
       validUntil: off.validUntil||'—', paymentLine: off.paymentTerms?'Betalningsvillkor: '+off.paymentTerms+'.':'',
-      sentDate, viftPhone: ''
+      sentDate, OFFER_LINK: '{{OFFER_LINK}}'
     };
     const interp = s => (s||'').replace(/\{\{(\w+)\}\}/g, (_,k) => data[k]!==undefined?data[k]:'');
     const subj = document.getElementById('send-subject');
@@ -3339,25 +3450,74 @@ ${hasRut?`<div class="rut">
         <div class="fg"><label>Meddelande</label>
           <textarea id="remind-body" rows="7">${esc(body2)}</textarea></div>
         <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
-          ${ic('info',10)} Simulerad sändning. Status ändras till "Påmind".
+          ${ic('info',10)} Skickar via Resend. Status ändras till "Påmind".
         </div>`,
       buttons: [
-        { label: ic('bell',13) + ' Skicka påminnelse', cls: 'btn bp', onClick: () => {
-          const to = document.getElementById('remind-to')?.value.trim();
-          if (!to) { showToast('Fyll i e-postadress'); return; }
-          off.status = 'påmind';
-          off.reminderSentAt = new Date().toISOString();
-          off.updatedAt = new Date().toISOString();
-          this._logEvt(off, 'reminder', 'Påminnelse skickad till ' + to);
-          persist();
-          Modal.close();
-          this.render({offerId});
-          showToast('Påminnelse skickad');
-        }},
+        { label: ic('bell',13) + ' Skicka påminnelse', cls: 'btn bp', onClick: () => this._doSendReminder(off) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
     setTimeout(() => document.getElementById('remind-to')?.focus(), 80);
+  },
+
+  async _doSendReminder(off) {
+    const toRaw   = (document.getElementById('remind-to')?.value||'').trim();
+    const subject = (document.getElementById('remind-subject')?.value||'').trim();
+    const bodyTxt = (document.getElementById('remind-body')?.value||'').trim();
+    if (!toRaw) { showToast('Fyll i e-postadress'); return; }
+
+    const parseEmails = s => s.split(/[\s,;]+/).map(e=>e.trim()).filter(e=>e.includes('@'));
+    const recipients  = parseEmails(toRaw);
+    if (!recipients.length) { showToast('Ingen giltig e-postadress'); return; }
+
+    const bodyHtml = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1e293b;">' +
+      bodyTxt.replace(/\n/g,'<br>') + '</div>';
+
+    const sendBtn = document.querySelector('.modal-footer .btn.bp');
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Skickar…'; }
+
+    let sendOk  = false;
+    let sendErr = '';
+    try {
+      const jwt   = typeof AuthService !== 'undefined' ? AuthService.getAccessToken() : null;
+      if (!jwt) throw new Error('Inte inloggad');
+      const base  = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+      const res   = await fetch(base + '/functions/v1/send-offer-email', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+        body: JSON.stringify({
+          offerId: off.id, offerVersion: off.version || 1,
+          recipients, cc: [], bcc: [], subject, bodyHtml,
+          offerToken: off.publicToken || '',
+          attachmentIds: [],
+          sentBy: state.currentUser?.id || '',
+        })
+      });
+      sendOk = res.ok;
+      if (!sendOk) {
+        const j = await res.json().catch(()=>({}));
+        sendErr = j.detail || j.error || ('HTTP ' + res.status);
+      }
+    } catch(e) {
+      sendErr = String(e);
+    }
+
+    if (!sendOk) {
+      const fallback = `mailto:${recipients.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyTxt)}`;
+      window.open(fallback, '_blank');
+      showToast('EF-fel – öppnar e-postklient');
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Skicka påminnelse'; }
+      return;
+    }
+
+    off.status         = 'påmind';
+    off.reminderSentAt = new Date().toISOString();
+    off.updatedAt      = new Date().toISOString();
+    this._logEvt(off, 'reminder', 'Påminnelse skickad till ' + recipients.join(', '));
+    persist();
+    Modal.close();
+    this.render({ offerId: off.id });
+    showToast('Påminnelse skickad');
   },
 
   createNewVersion(offerId) {
