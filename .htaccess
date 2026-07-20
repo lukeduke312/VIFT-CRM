@@ -1,0 +1,35 @@
+# VIFT CRM — Apache/.htaccess (Loopia-hosting)
+# Säkerhetsheaders för public-offer.html
+#
+# Förutsättning: Apache mod_headers aktiverat (standard på Loopia).
+# Verifiera med: curl -I https://<domän>/public-offer.html
+#
+# OBS: Meta-taggar i public-offer.html är fallback om hosting inte
+#      skickar HTTP-headrar. HTTP-headrar har alltid prioritet.
+
+# ── Headers specifika för public-offer.html ──────────────────────
+<Files "public-offer.html">
+  # Blockera caching av sidan (token i URL/fragment ska inte cachas)
+  Header always set Cache-Control "no-store, no-cache, must-revalidate"
+  Header always set Pragma "no-cache"
+
+  # Blockera token-läckage via Referer till externa resurser
+  Header always set Referrer-Policy "no-referrer"
+
+  # Blockera sökmotorindexering (även om robots-meta finns)
+  Header always set X-Robots-Tag "noindex, nofollow"
+
+  # Content Security Policy
+  # - script-src 'unsafe-inline': nödvändigt för inline <script>
+  # - connect-src: tillåter Supabase EF-anrop
+  # - img-src: tillåter Supabase Storage (bilaga-thumbnails)
+  # - frame-ancestors 'none': blockerar inbäddning i iframe
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; frame-ancestors 'none';"
+
+  # Klicka-skydd
+  Header always set X-Frame-Options "DENY"
+</Files>
+
+# ── Generella säkerhetsheaders för hela webbplatsen ─────────────
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-XSS-Protection "1; mode=block"

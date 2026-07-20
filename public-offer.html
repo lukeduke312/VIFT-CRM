@@ -335,10 +335,28 @@ function esc(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-/* ── Token från URL ─────────────────────────────────────── */
+/* ── Token från URL eller fragment ─────────────────────────
+   Prioritetsordning:
+   1. URL search param ?t=... (befintliga skickade länkar)
+      → Flytta omedelbart till fragment #t=... via replaceState
+        (fragment skickas inte till servern i HTTP-anrop och
+         syns inte i access-loggar eller Referer-headers).
+   2. Fragment #t=... (redan flytt + sidor som länkats med #t=)
+      → Läses direkt; fragmentet bevaras vid sidoändatering.
+   Sidupp­datering fungerar alltid eftersom #t=... finns kvar
+   i adressfältet. */
 function getToken() {
+  // Försök URL-parametrar (äldre offertlänkar)
   var params = new URLSearchParams(window.location.search);
-  return (params.get('t') || '').trim();
+  var t = (params.get('t') || '').trim();
+  if (t) return t;
+
+  // Försök fragment (redan flytt eller ny länkformat)
+  var hash = window.location.hash;
+  if (hash && hash.startsWith('#t=')) {
+    return decodeURIComponent(hash.slice(3)).trim();
+  }
+  return '';
 }
 
 /* ── Hämta offert via Edge Function ─────────────────────── */
@@ -708,11 +726,21 @@ function showErr(msg) {
 
 /* ── Init ────────────────────────────────────────────────── */
 _token = getToken();
-if (_token) {
-  /* Ta bort token ur URL-baren omedelbart så den inte hamnar i Referer-headers
-     vid vidare navigering, i browserhistorik eller i serverns access-loggar. */
-  try { history.replaceState(null, '', window.location.pathname); } catch(_) {}
+
+/* Om token kom från URL-parametern (?t=...) — flytta den till
+   fragment (#t=...) så att:
+   - Token inte skickas till webbservern vid siduppdatering
+   - Token inte läcker via Referer-header till externa resurser
+   - Sidan fortfarande fungerar vid siduppdatering (fragment bevaras) */
+if (_token && window.location.search && window.location.search.includes('t=')) {
+  try {
+    history.replaceState(
+      null, '',
+      window.location.pathname + '#t=' + encodeURIComponent(_token)
+    );
+  } catch(_) {}
 }
+
 if (!_token) {
   document.getElementById('po-root').innerHTML =
     '<div class="po-status-banner error">⚠ Ogiltig länk — ingen offerttoken hittades.</div>';
