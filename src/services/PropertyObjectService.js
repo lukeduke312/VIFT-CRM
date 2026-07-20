@@ -90,9 +90,10 @@ const PropertyObjectService = (() => {
     }
 
     // Skydda mot radering om det finns aktiva serviceintervall
-    const linkedSI = (state.serviceIntervals || []).filter(si =>
-      si.objectId === id && !si.paused
-    );
+    // Serviceintervall lagras nästlat i property.serviceIntervals[], inte i state.serviceIntervals
+    const linkedSI = (state.properties || [])
+      .flatMap(function(p) { return p.serviceIntervals || []; })
+      .filter(function(si) { return si.objectId === id && si.active !== false; });
     if (linkedSI.length > 0) {
       throw new Error(
         `Kan inte ta bort objekt med ${linkedSI.length} aktivt/aktiva serviceintervall. Pausa eller ta bort dem först.`

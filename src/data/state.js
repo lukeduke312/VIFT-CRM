@@ -522,8 +522,12 @@ const DataSync = {
       arr('ronderingspass',     'ronderingspass');
       arr('propertyObjects',    'propertyObjects');
       arr('importLogs',         'importLogs');
-      arr('propertyRoles',      'propertyRoles');
-      arr('propertyContacts',   'propertyContacts');
+      arr('propertyRoles',         'propertyRoles');
+      arr('propertyContacts',      'propertyContacts');
+      arr('deviationCategories',   'deviationCategories');
+      arr('inspections',           'inspections');
+      arr('offerEvents',           'offerEvents');
+      arr('offerAttachments',      'offerAttachments');
 
       /* Staff: strippa lösenordsfält */
       var rawStaff = g('staff');
