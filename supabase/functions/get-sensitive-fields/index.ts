@@ -85,6 +85,12 @@ serve(async (req) => {
     const perms: string[] = role?.permissions || [];
 
     if (!perms.includes('all') && !perms.includes('objects_sensitive')) {
+      // Auditlogg: nekad läsning
+      await supabase.from('sensitive_access_audit').insert({
+        user_id: user.id, user_email: userEmail, action: 'read',
+        object_id: null, property_id: null, fields: [], status: 'denied',
+        detail: 'objects_sensitive saknas'
+      }).catch(() => {});
       return jsonErr('Forbidden: objects_sensitive required', 403);
     }
 
@@ -108,6 +114,21 @@ serve(async (req) => {
     if (dbErr) throw dbErr;
 
     const row = rows?.[0] ?? null;
+
+    // Auditlogg: godkänd läsning — logga fälttyper, ALDRIG värdena
+    const returnedFields = row ? [
+      row.door_code          ? 'doorCode'          : null,
+      row.key_information    ? 'keyInformation'    : null,
+      row.key_receipt        ? 'keyReceipt'        : null,
+      row.alarm_information  ? 'alarmInformation'  : null,
+      row.access_information ? 'accessInformation' : null,
+      row.access_code        ? 'accessCode'        : null,
+    ].filter(Boolean) : [];
+    await supabase.from('sensitive_access_audit').insert({
+      user_id: user.id, user_email: userEmail, action: 'read',
+      object_id: objectId ?? null, property_id: propertyId ?? null,
+      fields: returnedFields, status: 'allowed', detail: null
+    }).catch(() => {});
 
     return new Response(
       JSON.stringify({

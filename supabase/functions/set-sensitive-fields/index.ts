@@ -92,7 +92,14 @@ serve(async (req) => {
     const canWrite =
       perms.includes('all') ||
       perms.includes('objects_sensitive');
-    if (!canWrite) return jsonErr('Forbidden', 403);
+    if (!canWrite) {
+      await supabase.from('sensitive_access_audit').insert({
+        user_id: user.id, user_email: userEmail, action: 'write',
+        object_id: null, property_id: null, fields: [], status: 'denied',
+        detail: 'objects_sensitive saknas'
+      }).catch(() => {});
+      return jsonErr('Forbidden', 403);
+    }
 
     const body = await req.json().catch(() => ({}));
     const {
@@ -155,6 +162,16 @@ serve(async (req) => {
         .insert(record);
       if (error) throw error;
     }
+
+    // Auditlogg: godkänd skrivning — logga fältnamn, ALDRIG värdena
+    const writtenFields = Object.keys(body as object).filter(k =>
+      ['doorCode','keyInformation','keyReceipt','alarmInformation','accessInformation','accessCode'].includes(k)
+    );
+    await supabase.from('sensitive_access_audit').insert({
+      user_id: user.id, user_email: userEmail, action: 'write',
+      object_id: objectId ?? null, property_id: propertyId ?? null,
+      fields: writtenFields, status: 'allowed', detail: existingId ? 'update' : 'insert'
+    }).catch(() => {});
 
     return new Response(
       JSON.stringify({ ok: true }),
