@@ -451,7 +451,8 @@ const CalendarPage = {
       ? `ondragstart="CalendarPage._dragStart('${evt.id}',event)"`
       : `onclick="event.stopPropagation();${evt.onclick}"`;
 
-    return `<div class="cal-timed-evt${conflict?' cal-conflict':''}" ${draggable} ${dragEvts}
+    const dragAttr = evt.draggable ? `data-aoid="${evt.id}"` : '';
+    return `<div class="cal-timed-evt${conflict?' cal-conflict':''}" ${draggable} ${dragAttr} ${dragEvts}
       style="top:${top}px;height:${h}px;background:${evt.color};"
       onclick="event.stopPropagation();${evt.onclick}"
       title="${esc(evt.title)}">
@@ -462,10 +463,11 @@ const CalendarPage = {
 
   _chipHtml(evt) {
     const draggable = evt.draggable ? 'draggable="true"' : '';
+    const dragAttr  = evt.draggable ? `data-aoid="${evt.id}"` : '';
     const dragEvts  = evt.draggable
       ? `ondragstart="CalendarPage._dragStart('${evt.id}',event)"`
       : '';
-    return `<div class="cal-chip" ${draggable} ${dragEvts}
+    return `<div class="cal-chip" ${draggable} ${dragAttr} ${dragEvts}
       style="background:${evt.color};"
       onclick="event.stopPropagation();${evt.onclick}"
       title="${esc(evt.title)}">${esc(evt.title.length>22?evt.title.slice(0,20)+'…':evt.title)}</div>`;
@@ -719,12 +721,52 @@ const CalendarPage = {
 
   /* ── Eventbindning (delegering) ──────────────────────────────────────── */
   _bindDelegated() {
-    // touch-stöd för mobil-flytt
     const el = document.getElementById('cal-view');
     if (!el) return;
-    el.addEventListener('contextmenu', e => {
+
+    // Pointer Events-baserad long-press för mobil-flytt (blockerar inte scroll)
+    let _pressTimer  = null;
+    let _pressTarget = null;
+    let _pressOrigin = null;
+    const HOLD_MS  = 480;
+    const MOVE_PX  = 10;
+
+    el.addEventListener('pointerdown', function(e) {
       const chip = e.target.closest('[data-aoid]');
-      if (chip) { e.preventDefault(); this._touchMove(chip.dataset.aoid); }
+      if (!chip) return;
+      _pressTarget = chip;
+      _pressOrigin = { x: e.clientX, y: e.clientY };
+      _pressTimer  = setTimeout(function() {
+        _pressTimer  = null;
+        _pressTarget = null;
+        if (navigator.vibrate) navigator.vibrate(30);
+        CalendarPage._touchMove(chip.dataset.aoid);
+      }, HOLD_MS);
+    }, { passive: true });
+
+    el.addEventListener('pointermove', function(e) {
+      if (!_pressTimer || !_pressOrigin) return;
+      const dx = Math.abs(e.clientX - _pressOrigin.x);
+      const dy = Math.abs(e.clientY - _pressOrigin.y);
+      if (dx > MOVE_PX || dy > MOVE_PX) {
+        clearTimeout(_pressTimer);
+        _pressTimer  = null;
+        _pressTarget = null;
+      }
+    }, { passive: true });
+
+    function cancelPress() {
+      if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+      _pressTarget = null;
+      _pressOrigin = null;
+    }
+    el.addEventListener('pointerup',     cancelPress, { passive: true });
+    el.addEventListener('pointercancel', cancelPress, { passive: true });
+
+    // Desktopkontextmeny — förhindra webbläsarens standardmeny på dra-bara chip
+    el.addEventListener('contextmenu', function(e) {
+      const chip = e.target.closest('[data-aoid]');
+      if (chip) e.preventDefault();
     }, { passive: false });
   },
 
@@ -787,7 +829,7 @@ const CalendarPage = {
   padding:2px 6px; border-radius:4px; cursor:pointer;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   max-width:100%; margin-bottom:2px;
-  user-select:none;
+  user-select:none; touch-action:manipulation;
 }
 .cal-chip:hover { filter:brightness(.9); }
 
@@ -798,7 +840,7 @@ const CalendarPage = {
   color:#fff; font-size:11px; font-weight:600;
   cursor:pointer; overflow:hidden;
   box-shadow:0 1px 3px rgba(0,0,0,.15);
-  user-select:none; z-index:1;
+  user-select:none; touch-action:manipulation; z-index:1;
 }
 .cal-timed-evt:hover { filter:brightness(.9); z-index:2; }
 .cal-evt-title { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

@@ -294,3 +294,53 @@
   .prop-mobile-quick,
   .off-mobile-quick { display: none !important; }
 }
+
+/* ── iPhone safe-area: sidebar bottom ───────────────── */
+.nav-user {
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+
+/* ── Modal box-sizing ────────────────────────────────── */
+.modal-body > * { box-sizing: border-box; }
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* ── Offer attachments 375px ─────────────────────────── */
+@media (max-width: 420px) {
+  .att-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .att-row > div:first-child {
+    word-break: break-all;
+  }
+  .att-row div[style*="display:flex;gap:4px"] {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ── KPI flex-wrap — Contracts stat cards ────────────── */
+@media (max-width: 479px) {
+  .stat-card {
+    min-width: calc(50% - 5px);
+    flex: 1 1 calc(50% - 5px);
+  }
+}
+
+/* ── Empty state: konsekvent padding ─────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 16px;
+  color: var(--mt);
+  font-size: 13px;
+  text-align: center;
+}

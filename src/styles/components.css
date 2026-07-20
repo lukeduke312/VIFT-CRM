@@ -2835,8 +2835,17 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 }
 
 @media (max-width: 600px) {
-  .imp-mapping-row { grid-template-columns: 130px 20px 1fr; }
+  .imp-mapping-row { grid-template-columns: 120px 18px 1fr; gap: 4px; }
   .imp-sample { display: none; }
+  .imp-wizard { padding: 12px 8px 40px; }
+  .imp-stat-chip { padding: 8px 12px; min-width: 60px; }
+  .imp-confirm-summary { gap: 12px; }
+}
+@media (max-width: 420px) {
+  .imp-mapping-row { grid-template-columns: 1fr; gap: 2px; }
+  .imp-mapping-arrow { display: none; }
+  .imp-preview-table td,
+  .imp-preview-table th { max-width: 120px; padding: 4px 6px; }
 }
 
 /* ── Importlogg ─────────────────────────── */
