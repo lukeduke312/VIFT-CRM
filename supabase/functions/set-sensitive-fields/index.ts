@@ -5,9 +5,7 @@
  * Autentisering (tre lager):
  *  1. Giltig Supabase JWT
  *  2. Aktiv VIFT-användare (app_users.active = true)
- *  3. Rättigheten objects_sensitive ELLER customer_manage (skrivning)
- *     — läsning kräver objects_sensitive, men admin/förvaltare med
- *       customer_manage behöver kunna SÄTTA värden vid objektredigering.
+ *  3. Rättigheten objects_sensitive (eller 'all') — samma krav som läsning.
  *
  * Input:  POST {
  *   objectId?:         string,
@@ -90,11 +88,10 @@ serve(async (req) => {
     const role = roles.find((r) => r.id === staffMember.role);
     const perms: string[] = role?.permissions || [];
 
-    // Skrivning: objects_sensitive ELLER customer_manage krävs
+    // Skrivning: objects_sensitive (eller 'all') krävs — customer_manage räcker INTE
     const canWrite =
       perms.includes('all') ||
-      perms.includes('objects_sensitive') ||
-      perms.includes('customer_manage');
+      perms.includes('objects_sensitive');
     if (!canWrite) return jsonErr('Forbidden', 403);
 
     const body = await req.json().catch(() => ({}));
