@@ -415,7 +415,6 @@ const Schema = {
     phone: '',
     email: '',
     username: '',
-    passwordHash: '',
     role: 'personal',         // admin | chef | personal
     permissions: [],
     active: true,
