@@ -506,6 +506,15 @@ const DataSync = {
       arr('salesOpportunities', 'salesOpps');
       arr('activityLog',        'activityLog');
       arr('timeEntries',        'timeEntries');
+      /* Payroll-skydd: filtrera timeEntries till egna poster om payroll_view saknas.
+         Notera: rådata flödar fortfarande i HTTP-svaret — detta är klient-side mitigation.
+         Fullständigt skydd kräver ett normaliserat timeEntries-schema med per-rad RLS (v1.1). */
+      if (typeof Auth !== 'undefined' && !Auth.can('payroll_view')) {
+        var _myStaffId = state.currentUser ? state.currentUser.id : null;
+        if (_myStaffId && Array.isArray(state.timeEntries)) {
+          state.timeEntries = state.timeEntries.filter(function(e) { return e.staffId === _myStaffId; });
+        }
+      }
       arr('contracts',          'contracts');
       arr('articles',           'articles');
       arr('titles',             'titles');
