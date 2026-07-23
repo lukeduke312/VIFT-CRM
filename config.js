@@ -13,5 +13,5 @@
  */
 window.VIFT_CONFIG = {
   mapboxToken: 'pk.eyJ1IjoibHVrZWR1a2UzMTIiLCJhIjoiY21xbzdpMTFmMTJnMzQ4cXhkZmxwMjY5dyJ9.sVwP6s-mCQBttrSBq0d7Tw',
-  vapidPublicKey: 'BP55TxsBIzoUyYmHiqLjuRde0aEMK219Xhbe83TMsE05jv0CkQGrtJTxqONXnZQpArm3AXEToSqG4Vlj2uDe6nU',
+  vapidPublicKey: 'BK25cYSYrb8Qw6b_7ZIjhloorj4za_s329QEGxKj131aJYRrc5dDTFW0X9NddveFnU4qzqXcX__2AWzblojL-CM',
 };

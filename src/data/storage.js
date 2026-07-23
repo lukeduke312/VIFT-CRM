@@ -6,8 +6,8 @@
  * Auth: JWT från Auth.getAccessToken() injiceras i headers — RLS kräver inloggning.
  * Auth-session hanteras av AuthService — rörs inte här.
  */
-const SUPABASE_URL  = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
-const SUPABASE_AKEY = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
+const SUPABASE_URL  = 'https://yyzljlqyzzcbxmcdbual.supabase.co';
+const SUPABASE_AKEY = 'sb_publishable_PaVoz7hWmkZbt_kUb20bsg_WAtKThox';
 
 const Storage = {
   prefix: 'vift_',
