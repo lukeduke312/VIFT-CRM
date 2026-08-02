@@ -2,6 +2,10 @@
  * PageShells — Placeholder-rendering för sidor som byggs i Fas 3+ (v75)
  * Fas 2-sidor (Kunder, AO, Tid, Faktura) har egna filer.
  * v75: gemensamma beräkningsfunktioner _lineExVat/_offRawExVat, offert-totaler-fix (alla 5 platser)
+ * v93: send-offer-email — offerToken/sentBy server-side; auto-token+snapshot; rätt länk; ingen mailto-fallback
+ * v94: patch state (offerPatch/attachmentPatches/emailEvent) före persist; kundvy via snapshot
+ * v95: v4-patch; serverpatchar vid fel; attachment-validering; snapshot-kontroll; email_sent i tidslinje
+ * v96: v5-patch; persist endast vid verkliga serverpatchar; korrekt misslyckad e-posthändelse
  */
 
 /* ── Offerter (v2 – tjänstemallar + kalkylator) ─────── */
@@ -580,8 +584,8 @@ const OffersPage = {
         ${o.sentAt ? `&nbsp;·&nbsp;${ic('send',9)} Skickad ${fmtDate(o.sentAt)}` : ''}
         ${o.validUntil ? `&nbsp;·&nbsp;${ic('clock',9)} Giltig t.o.m. ${fmtDate(o.validUntil)}` : ''}
       </div>
-      ${o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDate(o.customerApproval.approvedAt):''}</div>` : ''}
       ${nextActLine ? `<div style="margin-top:3px;">${nextActLine}</div>` : ''}
+      ${o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDate(o.customerApproval.approvedAt):''}</div>` : ''}
     </div>
     ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
   </div>
@@ -2232,20 +2236,17 @@ const OfferDetailPage = {
       </div>
 
       ${off.status === 'godkänd' && off.customerApproval ? `
-      <div class="card" style="margin-top:8px;border-left:3px solid var(--gr);">
+      <div class="card" style="border-left:3px solid var(--gr);background:color-mix(in srgb,var(--gr) 6%,var(--bg));">
         <div class="card-body" style="padding:12px 16px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-            <span style="color:var(--gr);">${ic('check-circle',14)}</span>
-            <strong style="font-size:13px;color:var(--gr);">Godkänd av kund</strong>
-            <span style="font-size:11px;color:var(--mt);margin-left:auto;">${fmtDate(off.customerApproval.approvedAt)}</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;color:var(--gr);font-weight:600;font-size:13px;">${ic('check-circle',14)} Offert godkänd av kund</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;font-size:12px;">
+            <div><span style="color:var(--mt);">Namn&nbsp;</span><strong>${esc(off.customerApproval.approvedByName||'—')}</strong></div>
+            <div><span style="color:var(--mt);">E-post&nbsp;</span><strong>${esc(off.customerApproval.approvedByEmail||'—')}</strong></div>
+            ${off.customerApproval.approvedAt?`<div><span style="color:var(--mt);">Datum&nbsp;</span><strong>${fmtDate(off.customerApproval.approvedAt)}</strong></div>`:''}
+            ${off.customerApproval.approvedByPhone?`<div><span style="color:var(--mt);">Telefon&nbsp;</span><strong>${esc(off.customerApproval.approvedByPhone)}</strong></div>`:''}
+            ${off.customerApproval.approvedByPosition?`<div><span style="color:var(--mt);">Befattning&nbsp;</span><strong>${esc(off.customerApproval.approvedByPosition)}</strong></div>`:''}
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px 16px;">
-            <div><div style="font-size:10px;color:var(--mt);">Namn</div><div style="font-size:12px;font-weight:600;">${esc(off.customerApproval.approvedByName||'—')}</div></div>
-            <div><div style="font-size:10px;color:var(--mt);">E-post</div><div style="font-size:12px;">${esc(off.customerApproval.approvedByEmail||'—')}</div></div>
-            ${off.customerApproval.approvedByPhone ? `<div><div style="font-size:10px;color:var(--mt);">Telefon</div><div style="font-size:12px;">${esc(off.customerApproval.approvedByPhone)}</div></div>` : ''}
-            ${off.customerApproval.approvedByPosition ? `<div><div style="font-size:10px;color:var(--mt);">Befattning</div><div style="font-size:12px;">${esc(off.customerApproval.approvedByPosition)}</div></div>` : ''}
-            ${off.customerApproval.comment ? `<div style="grid-column:1/-1;"><div style="font-size:10px;color:var(--mt);">Kommentar</div><div style="font-size:12px;">${esc(off.customerApproval.comment)}</div></div>` : ''}
-          </div>
+          ${off.customerApproval.approvedByComment?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.customerApproval.approvedByComment)}</div>`:''}
         </div>
       </div>` : ''}
 
@@ -2546,18 +2547,24 @@ const OfferDetailPage = {
     const tl = (off.timeline || []).slice().map(function(e) { return Object.assign({}, e, {_src:'internal'}); });
 
     const extEvents = (state.offerEvents || []).filter(function(e) { return e.offerId === off.id; });
-    const _extLabel = { opened:'Kund öppnade länk', approved:'Kund godkände offert', change_requested:'Kund begärde ändring', declined:'Kund nekade offert', revoked:'Länk återkallad', renewed:'Länk förnyad' };
+    const _extLabel = { opened:'Kund öppnade länk', approved:'Kund godkände offert', change_requested:'Kund begärde ändring', declined:'Kund nekade offert', revoked:'Länk återkallad', renewed:'Länk förnyad', email_sent:'Offert skickad via e-post' };
     extEvents.forEach(function(e) {
-      var desc = (_extLabel[e.type] || e.type) + (e.byCustomer ? ' — ' + e.byCustomer : '') + (e.byEmail ? ' (' + e.byEmail + ')' : '') + (e.comment ? ': ' + e.comment.slice(0,120) : '');
-      tl.push({ ts: e.ts, type: e.type, text: desc, user: e.byCustomer || 'Kund', _src:'customer' });
+      var baseLabel = e.type === 'email_sent' && e.status === 'failed'
+        ? 'E-postutskick misslyckades'
+        : (_extLabel[e.type] || e.type);
+      var recipientText = e.type === 'email_sent' && Array.isArray(e.recipients) && e.recipients.length
+        ? ' — ' + e.recipients.join(', ')
+        : '';
+      var desc = baseLabel + recipientText + (e.byCustomer ? ' — ' + e.byCustomer : '') + (e.byEmail ? ' (' + e.byEmail + ')' : '') + (e.comment ? ': ' + e.comment.slice(0,120) : '') + (e.error ? ': ' + String(e.error).slice(0,160) : '');
+      tl.push({ ts: e.ts || e.sentAt || '', type: e.type, text: desc, user: e.sentBy || e.byCustomer || (e.type === 'email_sent' ? 'System' : 'Kund'), _src:'customer' });
     });
 
     tl.sort(function(a, b) { return (b.ts || '').localeCompare(a.ts || ''); });
 
     const typeIcon = {create:'plus-circle', edit:'pencil', status:'refresh-cw', send:'send', pdf:'printer', comment:'message-square', ao:'clipboard-list', ring:'phone', email:'mail', followup:'bell', reminder:'clock', price:'dollar-sign', change:'edit-3', verbal:'thumbs-up', reason:'help-circle', tip:'message-square',
-      opened:'eye', approved:'check-circle', change_requested:'edit-3', declined:'x-circle', revoked:'x-circle', renewed:'refresh-cw' };
+      opened:'eye', approved:'check-circle', change_requested:'edit-3', declined:'x-circle', revoked:'x-circle', renewed:'refresh-cw', email_sent:'send' };
     const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)', tip:'var(--mt)',
-      opened:'var(--sky)', approved:'var(--gr)', change_requested:'var(--or)', declined:'var(--rd)', revoked:'var(--rd)', renewed:'var(--blue)' };
+      opened:'var(--sky)', approved:'var(--gr)', change_requested:'var(--or)', declined:'var(--rd)', revoked:'var(--rd)', renewed:'var(--blue)', email_sent:'var(--blue)' };
     const id = off.id;
     const isSent = off.status === 'skickad' || off.status === 'påmind' || off.status === 'väntar';
     return `<div class="card" style="margin-top:8px;">
@@ -3229,8 +3236,6 @@ ${hasRut?`<div class="rut">
     const cu = getCu(off.customerId);
     const cuEmail    = cu ? (cu.email||'') : '';
     const firstName  = cu ? (cu.firstName||cu.name||'') : '';
-    const hasToken   = !!off.publicToken && !off.tokenRevokedAt;
-
     const _interpolate = (tmplStr, extra) => {
       const sentDate = off.sentAt ? new Date(off.sentAt).toLocaleDateString('sv-SE',{day:'numeric',month:'short',year:'numeric'}) : '—';
       const data = {
@@ -3249,7 +3254,7 @@ ${hasRut?`<div class="rut">
 
     const defaultTmpl = (state.emailTemplates||[]).find(t=>t.type==='send_offer') || {
       subject: 'Offert ' + off.id + (off.title?' – '+off.title:''),
-      body: 'Hej {{firstName}},\n\nTack för ditt intresse. Bifogat hittar du vår offert ' + off.id + (off.title?' – '+off.title:'') + '.\n\nOfferten är giltig till ' + (off.validUntil||'—') + '.\n\n' + (hasToken ? 'Du kan också se och svara på offerten online: {{OFFER_LINK}}\n\n' : '') + 'Med vänliga hälsningar,\nVIFT Fastighetsservice'
+      body: 'Hej {{firstName}},\n\nTack för ditt intresse. Bifogat hittar du vår offert ' + off.id + (off.title?' – '+off.title:'') + '.\n\nOfferten är giltig till ' + (off.validUntil||'—') + '.\n\nDu kan också se och svara på offerten online: {{OFFER_LINK}}\n\nMed vänliga hälsningar,\nVIFT Fastighetsservice'
     };
 
     const tmplOpts = (state.emailTemplates||[]).filter(t=>t.active!==false)
@@ -3275,9 +3280,6 @@ ${hasRut?`<div class="rut">
       title: ic('send',14) + ' Skicka offert',
       wide: true,
       body: `
-        ${!hasToken ? `<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--or);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-          ${ic('alert-triangle',12)} Ingen digital länk genererad — aktivera digital länk för att kunden ska kunna svara online.
-        </div>` : ''}
         ${tmplOpts ? `<div class="fg"><label>Mejlmall</label>
           <select id="send-tmpl" onchange="OfferDetailPage._applySendTemplate('${offerId}',this.value)">${tmplOpts}</select></div>` : ''}
         <div class="fg"><label>Till <small style="color:var(--mt);font-weight:400;">— kommaseparerade adresser</small></label>
@@ -3290,7 +3292,7 @@ ${hasRut?`<div class="rut">
         </div>
         <div class="fg"><label>Ämne</label>
           <input id="send-subject" value="${esc(subject)}" style="width:100%;box-sizing:border-box;"></div>
-        <div class="fg"><label>Meddelande <small style="color:var(--mt);font-weight:400;">— ${ic('link',10)} ${hasToken?'{{OFFER_LINK}} ersätts med säker offertlänk':'digital länk ej aktiverad'}</small></label>
+        <div class="fg"><label>Meddelande <small style="color:var(--mt);font-weight:400;">— ${ic('link',10)} {{OFFER_LINK}} ersätts med säker offertlänk (skapas automatiskt vid utskick)</small></label>
           <textarea id="send-body" rows="8" style="width:100%;box-sizing:border-box;">${esc(body2)}</textarea></div>
         ${attCheckboxes}
         <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;font-size:12px;">
@@ -3306,6 +3308,31 @@ ${hasRut?`<div class="rut">
       ]
     });
     setTimeout(() => document.getElementById('send-to')?.focus(), 80);
+  },
+
+  _applyServerPatches(off, json) {
+    var changed = false;
+    if (json.offerPatch) {
+      var stateOff = (state.offers||[]).find(function(o){ return o.id === off.id; });
+      if (stateOff) Object.assign(stateOff, json.offerPatch);
+      Object.assign(off, json.offerPatch);
+      changed = true;
+    }
+    if (json.attachmentPatches && json.attachmentPatches.length) {
+      (state.offerAttachments||[]).forEach(function(a) {
+        var p = json.attachmentPatches.find(function(x){ return x.id === a.id; });
+        if (p) { a.lockedInVersion = p.lockedInVersion; changed = true; }
+      });
+    }
+    if (json.emailEvent) {
+      if (!Array.isArray(state.offerEvents)) state.offerEvents = [];
+      // Undvik dubbletter (idempotens)
+      if (!state.offerEvents.find(function(e){ return e.id === json.emailEvent.id; })) {
+        state.offerEvents.push(json.emailEvent);
+        changed = true;
+      }
+    }
+    return changed;
   },
 
   async _doSendEmail(off) {
@@ -3332,19 +3359,19 @@ ${hasRut?`<div class="rut">
     const bodyHtml = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1e293b;">' +
       bodyTxt.replace(/\n/g,'<br>') + '</div>';
 
-    const sentBy = state.currentUser?.id || '';
-
     // Knapp deaktivera för att undvika dubbelklick
     const sendBtn = document.querySelector('.modal-footer .btn.bp');
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Skickar…'; }
 
-    let messageId = '';
-    let sendOk    = false;
-    let sendErr   = '';
+    let messageId  = '';
+    let sendOk     = false;
+    let sendErr    = '';
+    let serverJson = {};
+    let patchesApplied = false;
 
-    // Försök via Edge Function
+    // Skicka via Edge Function — offerToken och sentBy hanteras server-side
     try {
-      const jwt = typeof AuthService !== 'undefined' ? AuthService.getAccessToken() : null;
+      const jwt = typeof Auth !== 'undefined' ? Auth.getAccessToken() : null;
       if (!jwt) throw new Error('Inte inloggad');
 
       const base  = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
@@ -3353,52 +3380,54 @@ ${hasRut?`<div class="rut">
         method:  'POST',
         headers: {
           'Content-Type':  'application/json',
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
           'Authorization': 'Bearer ' + jwt,
         },
         body: JSON.stringify({
           offerId:      off.id,
-          offerVersion: off.version || 1,
           recipients,
           cc,
           bcc,
           subject,
           bodyHtml,
-          offerToken:   off.publicToken || '',
           attachmentIds,
-          sentBy,
         })
       });
 
-      const json = await res.json().catch(() => ({}));
+      serverJson = await res.json().catch(() => ({}));
+
+      // Applicera serverpatchar på state INNAN vi kontrollerar res.ok —
+      // token, snapshot och bilagelås är redan sparade server-side
+      patchesApplied = this._applyServerPatches(off, serverJson);
+
       if (res.ok) {
-        messageId = json.messageId || '';
         sendOk    = true;
+        messageId = serverJson.messageId || '';
       } else {
-        sendErr = json.detail || json.error || ('HTTP ' + res.status);
+        sendErr = serverJson.detail || serverJson.error || ('HTTP ' + res.status);
       }
     } catch (e) {
       sendErr = String(e);
     }
 
-    // Fallback: mailto: om EF inte tillgänglig
+    // Vid fel: bevara serverändringar med persist() och stanna kvar i dialogen
     if (!sendOk) {
-      const mailtoFallback = `mailto:${recipients.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyTxt)}`;
-      console.warn('[send-offer-email] EF failed, mailto fallback:', sendErr);
-      window.open(mailtoFallback, '_blank');
-      showToast('Kunde inte skicka via server — öppnar e-postklient');
-      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Skicka'; }
+      console.error('[send-offer-email] Fel:', sendErr);
+      showToast('Kunde inte skicka offerten: ' + sendErr, 'error');
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = ic('send',13) + ' Skicka'; }
+      if (patchesApplied) persist();
       return;
     }
 
-    // Uppdatera offert
+    // Endast vid lyckat utskick: uppdatera CRM-statusfält
     off.status      = 'skickad';
-    off.sentAt      = off.sentAt || new Date().toISOString();
+    off.sentAt      = off.sentAt || serverJson.sentAt || new Date().toISOString();
     off.emailSentTo = recipients[0];
     off.updatedAt   = new Date().toISOString();
 
-    this._logEvt(off, 'email_sent', 'Offert skickad till ' + recipients.join(', ') + (cc.length?' (CC: '+cc.join(', ')+')':''));
+    // LOGGA INTE email_sent internt — serverns emailEvent täcker det i den externa tidslinjen
 
-    // Uppföljning
+    // Uppföljning — detta är en separat intern händelse, inte email_sent
     if (document.getElementById('send-followup')?.checked) {
       if (typeof ActivitiesService !== 'undefined') {
         ActivitiesService.create({
@@ -3407,7 +3436,7 @@ ${hasRut?`<div class="rut">
           relatedType: 'offer',
           relatedId:   off.id,
           customerId:  off.customerId || null,
-          assignedTo:  sentBy || null,
+          assignedTo:  state.currentUser?.id || null,
           dueDate:     _ds(3),
           dueTime:     '09:00',
           note:        'Offert skickad till ' + recipients.join(', ') + ' — följ upp om 3 dagar',
@@ -3495,40 +3524,48 @@ ${hasRut?`<div class="rut">
     const sendBtn = document.querySelector('.modal-footer .btn.bp');
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Skickar…'; }
 
-    let sendOk  = false;
-    let sendErr = '';
+    let sendOk     = false;
+    let sendErr    = '';
+    let remindJson = {};
+    let patchesApplied = false;
     try {
-      const jwt   = typeof AuthService !== 'undefined' ? AuthService.getAccessToken() : null;
+      const jwt   = typeof Auth !== 'undefined' ? Auth.getAccessToken() : null;
       if (!jwt) throw new Error('Inte inloggad');
       const base  = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
       const res   = await fetch(base + '/functions/v1/send-offer-email', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+          'Authorization': 'Bearer ' + jwt
+        },
         body: JSON.stringify({
-          offerId: off.id, offerVersion: off.version || 1,
+          offerId: off.id,
           recipients, cc: [], bcc: [], subject, bodyHtml,
-          offerToken: off.publicToken || '',
           attachmentIds: [],
-          sentBy: state.currentUser?.id || '',
         })
       });
+      remindJson = await res.json().catch(()=>({}));
+
+      // Applicera serverpatchar på state OAVSETT utskicksresultat
+      patchesApplied = this._applyServerPatches(off, remindJson);
+
       sendOk = res.ok;
-      if (!sendOk) {
-        const j = await res.json().catch(()=>({}));
-        sendErr = j.detail || j.error || ('HTTP ' + res.status);
-      }
+      if (!sendOk) sendErr = remindJson.detail || remindJson.error || ('HTTP ' + res.status);
     } catch(e) {
       sendErr = String(e);
     }
 
+    // Vid fel: bevara serverändringar med persist() och stanna kvar i dialogen
     if (!sendOk) {
-      const fallback = `mailto:${recipients.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyTxt)}`;
-      window.open(fallback, '_blank');
-      showToast('EF-fel – öppnar e-postklient');
-      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Skicka påminnelse'; }
+      console.error('[send-offer-email] Påminnelsefel:', sendErr);
+      showToast('Kunde inte skicka påminnelsen: ' + sendErr, 'error');
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = ic('bell',13) + ' Skicka påminnelse'; }
+      if (patchesApplied) persist();
       return;
     }
 
+    // Endast vid lyckat utskick: uppdatera CRM-statusfält
     off.status         = 'påmind';
     off.reminderSentAt = new Date().toISOString();
     off.updatedAt      = new Date().toISOString();
@@ -3652,33 +3689,32 @@ ${hasRut?`<div class="rut">
   },
 
   /* ── Bilagor — panel ─────────────────────────────────────── */
-  _attFileIcon(mimeType) {
-    const m = (mimeType || '').toLowerCase();
-    if (m.includes('pdf'))        return ic('file-text', 16);
-    if (m.includes('image'))      return ic('image', 16);
-    if (m.includes('spreadsheet') || m.includes('excel') || m.includes('csv')) return ic('table', 16);
-    if (m.includes('word') || m.includes('document') || m.includes('text'))    return ic('file-text', 16);
-    if (m.includes('zip') || m.includes('compressed')) return ic('archive', 16);
-    return ic('paperclip', 16);
-  },
-
   _attachmentsPanel(off) {
     if (off.archived || off.deleted) return '';
     const atts = (state.offerAttachments || []).filter(a => a.offerId === off.id && a.active !== false);
     const locked = !!off.publicToken && !off.tokenRevokedAt;
 
+    const _attIcon = (mime) => {
+      const m = (mime||'').toLowerCase();
+      if (m.includes('pdf'))                                              return ic('file-text',15);
+      if (m.includes('image'))                                            return ic('image',15);
+      if (m.includes('spreadsheet')||m.includes('excel')||m.includes('csv')) return ic('table',15);
+      if (m.includes('word')||m.includes('document'))                    return ic('file-text',15);
+      if (m.includes('zip')||m.includes('compressed'))                   return ic('archive',15);
+      return ic('paperclip',15);
+    };
     const attRows = atts.length === 0
       ? `<p style="font-size:12px;color:var(--mt);margin:0;text-align:center;padding:12px 0;">Inga bilagor uppladdade</p>`
       : atts.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).map(a => {
           const displayName = a.displayName || a.originalFileName || 'bilaga';
-          const ext = (a.originalFileName || '').split('.').pop().toUpperCase();
+          const ext    = (a.originalFileName||'').split('.').pop().toUpperCase();
           const sizeLbl = a.sizeBytes > 1048576 ? (a.sizeBytes/1048576).toFixed(1)+' MB' : Math.round(a.sizeBytes/1024)+' KB';
           const metaParts = [ext, sizeLbl];
-          if (a.lockedInVersion) metaParts.push('låst');
-          if (a.includeInPublicView) metaParts.push('kundvy');
+          if (a.lockedInVersion)    metaParts.push('låst');
+          if (a.includeInPublicView)  metaParts.push('kundvy');
           if (a.includeInCombinedPdf) metaParts.push('PDF');
           return `<div class="att-row">
-            <div class="att-row-icon">${this._attFileIcon(a.mimeType)}</div>
+            <div class="att-row-icon">${_attIcon(a.mimeType)}</div>
             <div style="flex:1;min-width:0;">
               <div class="att-row-name" title="${esc(displayName)}">${esc(displayName)}</div>
               <div class="att-row-meta">${metaParts.join(' · ')}</div>
@@ -3748,12 +3784,15 @@ ${hasRut?`<div class="rut">
       const fd = new FormData();
       fd.append('file', file);
       fd.append('offerId', offerId);
-      fd.append('versionId', versionId || offerId);
+      fd.append('offerVersionId', versionId || offerId);
       fd.append('uploadedBy', (state.currentUser && state.currentUser.id) || '');
       try {
         const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-upload', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '') },
+          headers: {
+            'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+            'Authorization': 'Bearer ' + (Auth.getAccessToken() || '')
+          },
           body: fd
         });
         const json = await res.json();
@@ -3770,7 +3809,55 @@ ${hasRut?`<div class="rut">
     persist();
     if (progressEl) progressEl.textContent = uploaded + ' fil(er) uppladdade' + (errors ? ', ' + errors + ' fel' : '') + '.';
     setTimeout(() => { if (progressEl) progressEl.textContent = ''; }, 4000);
-    Router.refresh();
+    this.render({offerId});
+  },
+
+  async _viewAttachment(attachmentId) {
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+    const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
+    if (!att) return;
+
+    const previewWindow = window.open('about:blank', '_blank');
+
+    if (!previewWindow) {
+      showToast('Webbläsaren blockerade visningsfönstret', 'error');
+      return;
+    }
+
+    try {
+      previewWindow.document.title = 'Öppnar bilaga…';
+      showToast('Öppnar bilaga…');
+
+      const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+          'Authorization': 'Bearer ' + (Auth.getAccessToken() || '')
+        },
+        body: JSON.stringify({
+          attachmentId,
+          offerId: att.offerId,
+          mode: 'view'
+        })
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.error || res.status);
+      }
+
+      if (!json.url || typeof json.url !== 'string') {
+        throw new Error('Servern returnerade ingen visningslänk');
+      }
+
+      const targetUrl = new URL(json.url, EDGE_BASE).href;
+      previewWindow.location.replace(targetUrl);
+    } catch (e) {
+      previewWindow.close();
+      showToast('Fel vid visning: ' + e.message, 'error');
+    }
   },
 
   async _downloadAttachment(attachmentId) {
@@ -3783,9 +3870,14 @@ ${hasRut?`<div class="rut">
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+          'Authorization': 'Bearer ' + (Auth.getAccessToken() || '')
         },
-        body: JSON.stringify({ attachmentId, offerId: att.offerId })
+        body: JSON.stringify({
+          attachmentId,
+          offerId: att.offerId,
+          mode: 'download'
+        })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.status);
@@ -3798,28 +3890,6 @@ ${hasRut?`<div class="rut">
       document.body.removeChild(a);
     } catch(e) {
       showToast('Fel vid nedladdning: ' + e.message, 'error');
-    }
-  },
-
-  async _viewAttachment(attachmentId) {
-    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
-    const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
-    if (!att) return;
-    try {
-      showToast('Hämtar visningslänk…');
-      const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-url', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
-        },
-        body: JSON.stringify({ attachmentId, offerId: att.offerId })
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || res.status);
-      window.open(json.url, '_blank', 'noopener');
-    } catch(e) {
-      showToast('Fel vid visning: ' + e.message, 'error');
     }
   },
 
@@ -3855,7 +3925,7 @@ ${hasRut?`<div class="rut">
         att.includeInPublicView  = document.getElementById('att-edit-pub').checked;
         att.includeInCombinedPdf = document.getElementById('att-edit-pdf').checked;
         persist();
-        Router.refresh();
+        this.render({offerId});
         showToast('Bilaga uppdaterad');
       }
     });
@@ -3873,7 +3943,8 @@ ${hasRut?`<div class="rut">
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+          'Authorization': 'Bearer ' + (Auth.getAccessToken() || '')
         },
         body: JSON.stringify({ attachmentId, offerId })
       });
@@ -3887,7 +3958,7 @@ ${hasRut?`<div class="rut">
     }
     att.active = false;
     persist();
-    Router.refresh();
+    this.render({offerId});
     showToast('Bilaga borttagen');
   },
 
@@ -3922,7 +3993,8 @@ ${hasRut?`<div class="rut">
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+          'Authorization': 'Bearer ' + (Auth.getAccessToken() || '')
         },
         body: JSON.stringify({ offerId })
       });
@@ -3977,7 +4049,10 @@ ${hasRut?`<div class="rut">
         validityText: off.validityText, terms: off.terms, includes: off.includes,
         excludes: off.excludes, scope: off.scope, summary: off.summary,
         generalTerms: off.generalTerms, address: off.address,
-        customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })()
+        customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })(),
+        publicAttachmentIds: (state.offerAttachments||[])
+          .filter(function(a){ return a.offerId===offerId && a.active!==false && a.includeInPublicView===true; })
+          .map(function(a){ return a.id; })
       };
       off.publicToken        = token;
       off.tokenCreatedAt     = now;
@@ -4215,16 +4290,25 @@ const PropertiesPage = {
           <input type="search" placeholder="Sök fastighet…" value="${this._q}"
             oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
         </div>
-        ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',14)} Importera</button>` : ''}
-        <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
-        <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
+        <div class="ao-toolbar-right">
+          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',14)} Importera</button>` : ''}
+          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
+          <div class="ao-overflow-wrap">
+            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-prop" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-prop',this)">${ic('more-vertical',14)}</button>
+            <div class="ao-overflow-menu" id="ao-ovf-prop" role="menu">
+              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',13)} Importera</button>` : ''}
+              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('property',this)">${ic('download',13)} Exportera</button>
+            </div>
+          </div>
+          <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <div class="ftabs" style="margin-bottom:0;flex:1;">
           <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
           <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
         </div>
-        ${props.length > 0 ? SelectionModel.selectAllHtml(visibleIds) : ''}
+        ${props.length > 0 ? `<div class="ao-selall-cell">${SelectionModel.selectAllHtml(visibleIds)}</div>` : ''}
       </div>` +
       (props.length === 0
         ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`

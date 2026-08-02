@@ -116,6 +116,8 @@ serve(async (req: Request) => {
   const comment        = String(body.comment ?? '').trim().slice(0, 2000)
   const changeCategory = String(body.changeCategory ?? '').trim()
   const declineReason  = String(body.declineReason  ?? '').trim()
+  const phone          = String(body.phone    ?? '').trim().slice(0, 30)
+  const position       = String(body.position ?? '').trim().slice(0, 100)
   const agreedToTerms  = body.agreedToTerms === true
 
   /* Validera input */
@@ -180,8 +182,8 @@ serve(async (req: Request) => {
         approvedAt:         now,
         approvedByName:     name,
         approvedByEmail:    email,
-        approvedByPhone:    String(body.phone    ?? '').trim(),
-        approvedByPosition: String(body.position ?? '').trim(),
+        approvedByPhone:    phone,
+        approvedByPosition: position,
         ip:                 ip,
         comment:            comment
       }
@@ -197,6 +199,15 @@ serve(async (req: Request) => {
       .upsert({ key: 'vift_offers', value: offers }, { onConflict: 'key' })
 
     if (writeErr) throw new Error('store-skrivfel: ' + writeErr.message)
+
+    /* In-app notiser till VIFT-personal vid godkännande */
+    if (action === 'approve') {
+      await sendInAppNotifications(supabase, {
+        offerId:      off.id as string,
+        approvedBy:   name,
+        now
+      })
+    }
 
     /* Händelselogg */
     const eventType = action === 'approve' ? 'approved'
@@ -325,6 +336,76 @@ async function appendOfferEvent(
       .upsert({ key: 'vift_offerEvents', value: events }, { onConflict: 'key' })
   } catch (e) {
     console.error('[offer-respond] appendOfferEvent fel:', e)
+  }
+}
+
+/* ── In-app notiser: skapa per eligible staff ─────────────── */
+async function sendInAppNotifications(
+  supabase: ReturnType<typeof createClient>,
+  opts: { offerId: string; approvedBy: string; now: string }
+): Promise<void> {
+  try {
+    /* Läs staff och roles */
+    const [staffRow, rolesRow, notifRow] = await Promise.all([
+      supabase.from('store').select('value').eq('key', 'vift_staff').maybeSingle(),
+      supabase.from('store').select('value').eq('key', 'vift_roles').maybeSingle(),
+      supabase.from('store').select('value').eq('key', 'vift_notifications').maybeSingle()
+    ])
+
+    const staff: Record<string, unknown>[] = Array.isArray(staffRow.data?.value)
+      ? staffRow.data.value as Record<string, unknown>[]
+      : []
+    const roles: Record<string, unknown>[] = Array.isArray(rolesRow.data?.value)
+      ? rolesRow.data.value as Record<string, unknown>[]
+      : []
+    const notifications: Record<string, unknown>[] = Array.isArray(notifRow.data?.value)
+      ? notifRow.data.value as Record<string, unknown>[]
+      : []
+
+    /* Bygg rollpermission-map */
+    const rolePerms = new Map<string, string[]>()
+    for (const r of roles) {
+      if (r.id && Array.isArray(r.permissions)) {
+        rolePerms.set(r.id as string, r.permissions as string[])
+      }
+    }
+
+    /* Filtrera aktiv personal med offer_manage eller all */
+    const eligible = staff.filter(s => {
+      if (s.inactive || s.deleted) return false
+      const perms = rolePerms.get(s.roleId as string) ?? []
+      return perms.includes('offer_manage') || perms.includes('all')
+    })
+
+    /* Bygg befintliga notis-IDs för idempotens */
+    const existingIds = new Set(notifications.map(n => n.id as string))
+
+    let added = 0
+    for (const s of eligible) {
+      const notifId = `N-offer-approved-${opts.offerId}-${s.id}`
+      if (existingIds.has(notifId)) continue
+      notifications.push({
+        id:        notifId,
+        userId:    s.id,
+        type:      'offer_approved',
+        message:   `Offert ${opts.offerId} godkänd av ${opts.approvedBy}`,
+        aoId:      '',
+        offerId:   opts.offerId,
+        read:      false,
+        createdAt: opts.now
+      })
+      added++
+    }
+
+    if (added === 0) return
+
+    if (notifications.length > 5_000) notifications.splice(0, notifications.length - 5_000)
+
+    await supabase
+      .from('store')
+      .upsert({ key: 'vift_notifications', value: notifications }, { onConflict: 'key' })
+  } catch (e) {
+    console.warn('[offer-respond] sendInAppNotifications fel:', e)
   }
 }
 

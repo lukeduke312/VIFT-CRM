@@ -68,17 +68,18 @@ const NotificationsService = {
       : list.map(n => {
           const ao  = n.aoId    ? getAO(n.aoId)    : null;
           const off = n.offerId ? (state.offers||[]).find(o => o.id === n.offerId) : null;
-          const target = ao ? 'ao' : off ? 'offer' : null;
+          const target    = ao ? 'ao' : off ? 'offer' : null;
           const itemStyle = target ? 'cursor:pointer;' : '';
           const itemClick = target === 'ao'    ? `onclick="NotificationsService._openAO('${n.aoId}')"`
                           : target === 'offer' ? `onclick="NotificationsService._openOffer('${n.offerId}')"` : '';
-          const typeIcon  = n.type === 'ao_pool'       ? 'inbox'
-                          : n.type === 'offer_approved' ? 'check-circle'
+          const iconName  = n.type === 'offer_approved' ? 'check-circle'
+                          : n.type === 'ao_pool'        ? 'inbox'
                           : 'user-plus';
+          const iconColor = n.type === 'offer_approved' ? 'color:var(--gr);' : '';
           return `
             <div class="list-item" style="padding:10px 12px;${itemStyle}" ${itemClick}>
               <div style="display:flex;gap:10px;align-items:flex-start;">
-                <span style="margin-top:2px;flex-shrink:0;${n.type==='offer_approved'?'color:var(--gr);':''}">${ic(typeIcon, 14)}</span>
+                <span style="margin-top:2px;flex-shrink:0;${iconColor}">${ic(iconName, 14)}</span>
                 <div style="flex:1;">
                   <div style="font-size:12px;font-weight:600;color:var(--tx);">${esc(n.message)}</div>
                   <div style="font-size:10px;color:var(--mt);margin-top:2px;">${relDate(n.createdAt)}</div>

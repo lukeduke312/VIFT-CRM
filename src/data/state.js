@@ -559,26 +559,6 @@ const DataSync = {
         try { localStorage.setItem('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
       });
 
-      /* Skapa notiser för nyligen godkända offerter (idempotent) */
-      var user = typeof Auth !== 'undefined' ? Auth.getUser() : null;
-      if (user && Array.isArray(state.offers)) {
-        state.offers.forEach(function(off) {
-          if (off.status === 'godkänd' && off.customerApproval && off.customerApproval.approvedAt) {
-            var existingNotif = (state.notifications || []).find(function(n) {
-              return n.type === 'offer_approved' && n.offerId === off.id;
-            });
-            if (!existingNotif) {
-              if (typeof NotificationsService !== 'undefined') {
-                NotificationsService.push(user.id, 'offer_approved',
-                  'Offert ' + off.id + ' godkänd av ' + (off.customerApproval.approvedByName || 'kund'),
-                  { offerId: off.id }
-                );
-              }
-            }
-          }
-        });
-      }
-
       /* Uppdatera badge-räknare */
       if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
 
@@ -596,29 +576,58 @@ const DataSync = {
   }
 };
 
-/* ── Overflow-meny för mobilverktygsfält ─────────────────────── */
-function toggleAoOverflow(menuId) {
+/* ── Overflow-meny för mobilverktygsfält ───────────────────────────────────
+ * aoToggleOverflow(menuId, btn) — öppnar/stänger en specifik overflow-meny
+ * aoCloseOverflow()             — stänger alla öppna menyer (anropas av menyalternativ)
+ * ─────────────────────────────────────────────────────────────────────────── */
+function aoToggleOverflow(menuId, btn) {
   var menu = document.getElementById(menuId);
   if (!menu) return;
   var isOpen = menu.classList.contains('open');
-  // Stäng alla öppna menyer
+
+  // Stäng alla öppna menyer och återställ aria-expanded
   document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
     m.classList.remove('open');
   });
+  document.querySelectorAll('.ao-overflow-btn[aria-expanded="true"]').forEach(function(b) {
+    b.setAttribute('aria-expanded', 'false');
+  });
+
   if (!isOpen) {
     menu.classList.add('open');
-    // Stäng vid klick utanför
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+
+    var close = function(e) {
+      if (!e.target.closest('.ao-overflow-wrap')) {
+        menu.classList.remove('open');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('click', close);
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    var escHandler = function(e) {
+      if (e.key === 'Escape') {
+        menu.classList.remove('open');
+        if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.focus(); }
+        document.removeEventListener('click', close);
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    // Timeout: låt aktuell klickhändelse propagera färdigt
     setTimeout(function() {
-      document.addEventListener('click', function _close(e) {
-        if (!e.target.closest('.ao-overflow-wrap')) {
-          document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
-            m.classList.remove('open');
-          });
-          document.removeEventListener('click', _close);
-        }
-      });
+      document.addEventListener('click', close);
+      document.addEventListener('keydown', escHandler);
     }, 0);
   }
+}
+
+function aoCloseOverflow() {
+  document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
+    m.classList.remove('open');
+  });
+  document.querySelectorAll('.ao-overflow-btn[aria-expanded="true"]').forEach(function(b) {
+    b.setAttribute('aria-expanded', 'false');
+  });
 }
 
 // Cross-tab sync (same browser, storage event)

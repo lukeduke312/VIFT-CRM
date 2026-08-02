@@ -691,25 +691,6 @@ body.modal-open { overflow: hidden; touch-action: none; }
   border-left: 1.5px solid var(--br);
 }
 
-/* ── Mobile overflow menu ─── */
-.ao-overflow-wrap { position: relative; display: inline-flex; }
-.ao-overflow-btn  { display: none; padding: 5px 9px; letter-spacing: 2px; }
-.ao-overflow-menu {
-  position: absolute; top: calc(100% + 4px); right: 0;
-  background: var(--card); border: 1px solid var(--br);
-  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
-  min-width: 148px; z-index: 300; display: none;
-}
-.ao-overflow-menu.open { display: block; }
-.ao-overflow-menu-item {
-  display: block; width: 100%; text-align: left;
-  padding: 10px 14px; font-size: 13px; font-weight: 500;
-  background: none; border: none; border-bottom: 1px solid var(--br);
-  color: var(--tx); cursor: pointer; white-space: nowrap;
-}
-.ao-overflow-menu-item:last-child { border-bottom: none; }
-.ao-overflow-menu-item:hover { background: var(--bg); }
-
 /* Active filter chip (mobile, when filter active) */
 .ao-active-filter {
   display: inline-flex; align-items: center; gap: 6px;
@@ -2905,24 +2886,17 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   border-radius: 8px;
   background: var(--card-bg, var(--bg));
 }
-.att-row-icon {
-  width: 32px; height: 32px; border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg); border: 1px solid var(--br);
-  flex-shrink: 0; color: var(--mt);
-}
+.att-row-icon { flex-shrink: 0; color: var(--mt); }
 .att-row-name {
-  font-size: 12px; font-weight: 600;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 200px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
 }
 .att-row-meta { font-size: 10px; color: var(--mt); margin-top: 1px; }
-.att-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
-@media (max-width: 479px) {
-  .att-row { flex-wrap: wrap; }
-  .att-row-name { max-width: 140px; }
-  .att-row-actions { width: 100%; justify-content: flex-end; }
-}
+.att-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: auto; }
 
 /* ── PayrollPage (Punkt 76) ───────────────────────────────── */
 .stat-card {
@@ -2936,3 +2910,41 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 .stat-num { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat-lbl { font-size: 11px; color: var(--mt); margin-top: 2px; }
 .pr-attested td { opacity: .6; }
+
+/* ── Mobile overflow menu (ao-overflow-*) ───────────────────── */
+.ao-overflow-wrap { position: relative; display: inline-flex; }
+.ao-overflow-btn  { display: none; }
+.ao-overflow-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--card-bg, var(--bg));
+  border: 1px solid var(--br);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  min-width: 160px;
+  z-index: 320;
+  padding: 4px 0;
+  flex-direction: column;
+}
+.ao-overflow-menu.open { display: flex; }
+.ao-overflow-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  font-size: 13px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+  width: 100%;
+}
+.ao-overflow-menu-item:hover { background: var(--hover-bg, rgba(0,0,0,.04)); }
+
+/* Tabs row with sel-all */
+.ao-tabs-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ao-tabs-row .ftabs { flex: 1; margin-bottom: 0; }
+.ao-selall-cell { flex-shrink: 0; }

@@ -30,26 +30,26 @@ const CustomersPage = {
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
         <div class="ao-toolbar-right">
-          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'customer'})" title="Importera kunder">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('customer',this)" title="Exportera">${ic('download',14)} Exportera</button>
+          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',14)} Importera</button>` : ''}
+          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('customer',this)">${ic('download',14)} Exportera</button>
           <div class="ao-overflow-wrap">
-            <button class="btn bs bsm ao-overflow-btn" onclick="toggleAoOverflow('ao-ovf-crm')" title="Fler alternativ">···</button>
-            <div class="ao-overflow-menu" id="ao-ovf-crm">
-              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',12)} Importera</button>` : ''}
-              <button class="ao-overflow-menu-item" onclick="ImportExportService.showExportMenu('customer',this)">${ic('download',12)} Exportera</button>
+            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-crm" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-crm',this)">${ic('more-vertical',14)}</button>
+            <div class="ao-overflow-menu" id="ao-ovf-crm" role="menu">
+              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',13)} Importera</button>` : ''}
+              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('customer',this)">${ic('download',13)} Exportera</button>
             </div>
           </div>
           <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
           ${TYPE_TABS.map(t =>
             `<button class="ft ${this._typeFilter===t.key?'on':''}"
               onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${t.label}</button>`
           ).join('')}
         </div>
-        <div id="crm-sel-all"></div>
+        <div class="ao-selall-cell" id="crm-sel-all"></div>
       </div>
       <div id="crm-list"></div>`;
     this.renderList();

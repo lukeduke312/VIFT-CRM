@@ -97,13 +97,13 @@ const InvoicesPage = {
     el.innerHTML = `
       ${kpiHtml}
       ${readyHtml}
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         ${tabHtml}
         <button class="btn bs bsm ao-export-btn" style="flex-shrink:0;" onclick="ImportExportService.showExportMenu('invoice',this)">${ic('download',14)} Exportera</button>
         <div class="ao-overflow-wrap" style="flex-shrink:0;">
-          <button class="btn bs bsm ao-overflow-btn" onclick="toggleAoOverflow('ao-ovf-inv')" title="Fler alternativ">···</button>
-          <div class="ao-overflow-menu" id="ao-ovf-inv">
-            <button class="ao-overflow-menu-item" onclick="ImportExportService.showExportMenu('invoice',this)">${ic('download',12)} Exportera</button>
+          <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-inv" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-inv',this)">${ic('more-vertical',14)}</button>
+          <div class="ao-overflow-menu" id="ao-ovf-inv" role="menu">
+            <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('invoice',this)">${ic('download',13)} Exportera</button>
           </div>
         </div>
         <button class="btn bp bsm" style="flex-shrink:0;" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>

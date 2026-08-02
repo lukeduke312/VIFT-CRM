@@ -84,22 +84,22 @@ const WorkOrdersPage = {
           ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',14)} Importera</button>` : ''}
           <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('workOrder',this)">${ic('download',14)} Exportera</button>
           <div class="ao-overflow-wrap">
-            <button class="btn bs bsm ao-overflow-btn" onclick="toggleAoOverflow('ao-ovf-wo')" title="Fler alternativ">···</button>
-            <div class="ao-overflow-menu" id="ao-ovf-wo">
-              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" onclick="Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',12)} Importera</button>` : ''}
-              <button class="ao-overflow-menu-item" onclick="ImportExportService.showExportMenu('workOrder',this)">${ic('download',12)} Exportera</button>
+            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-wo" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-wo',this)">${ic('more-vertical',14)}</button>
+            <div class="ao-overflow-menu" id="ao-ovf-wo" role="menu">
+              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',13)} Importera</button>` : ''}
+              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('workOrder',this)">${ic('download',13)} Exportera</button>
             </div>
           </div>
           ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
           ${STATUS_TABS.map(t =>
             `<button class="ft ${this.filter===t.key?'on':''}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}</button>`
           ).join('')}
         </div>
-        <div id="ao-sel-all"></div>
+        <div class="ao-selall-cell" id="ao-sel-all"></div>
       </div>
       <div id="ao-active-filters">${this._activeChipsHtml()}</div>
       <div id="ao-list"></div>`;
