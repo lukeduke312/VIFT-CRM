@@ -30,8 +30,15 @@ const CustomersPage = {
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
         <div class="ao-toolbar-right">
-          ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'customer'})" title="Importera kunder">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('customer',this)" title="Exportera">${ic('download',14)} Exportera</button>
+          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'customer'})" title="Importera kunder">${ic('upload',14)} Importera</button>` : ''}
+          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('customer',this)" title="Exportera">${ic('download',14)} Exportera</button>
+          <div class="ao-overflow-wrap">
+            <button class="btn bs bsm ao-overflow-btn" onclick="toggleAoOverflow('ao-ovf-crm')" title="Fler alternativ">···</button>
+            <div class="ao-overflow-menu" id="ao-ovf-crm">
+              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',12)} Importera</button>` : ''}
+              <button class="ao-overflow-menu-item" onclick="ImportExportService.showExportMenu('customer',this)">${ic('download',12)} Exportera</button>
+            </div>
+          </div>
           <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
         </div>
       </div>

@@ -580,6 +580,7 @@ const OffersPage = {
         ${o.sentAt ? `&nbsp;·&nbsp;${ic('send',9)} Skickad ${fmtDate(o.sentAt)}` : ''}
         ${o.validUntil ? `&nbsp;·&nbsp;${ic('clock',9)} Giltig t.o.m. ${fmtDate(o.validUntil)}` : ''}
       </div>
+      ${o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDate(o.customerApproval.approvedAt):''}</div>` : ''}
       ${nextActLine ? `<div style="margin-top:3px;">${nextActLine}</div>` : ''}
     </div>
     ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
@@ -2230,6 +2231,24 @@ const OfferDetailPage = {
         <span style="font-size:11px;font-weight:700;color:var(--navy);margin-left:auto;">Kund: ${fmt(cust)} kr</span>
       </div>
 
+      ${off.status === 'godkänd' && off.customerApproval ? `
+      <div class="card" style="margin-top:8px;border-left:3px solid var(--gr);">
+        <div class="card-body" style="padding:12px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="color:var(--gr);">${ic('check-circle',14)}</span>
+            <strong style="font-size:13px;color:var(--gr);">Godkänd av kund</strong>
+            <span style="font-size:11px;color:var(--mt);margin-left:auto;">${fmtDate(off.customerApproval.approvedAt)}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px 16px;">
+            <div><div style="font-size:10px;color:var(--mt);">Namn</div><div style="font-size:12px;font-weight:600;">${esc(off.customerApproval.approvedByName||'—')}</div></div>
+            <div><div style="font-size:10px;color:var(--mt);">E-post</div><div style="font-size:12px;">${esc(off.customerApproval.approvedByEmail||'—')}</div></div>
+            ${off.customerApproval.approvedByPhone ? `<div><div style="font-size:10px;color:var(--mt);">Telefon</div><div style="font-size:12px;">${esc(off.customerApproval.approvedByPhone)}</div></div>` : ''}
+            ${off.customerApproval.approvedByPosition ? `<div><div style="font-size:10px;color:var(--mt);">Befattning</div><div style="font-size:12px;">${esc(off.customerApproval.approvedByPosition)}</div></div>` : ''}
+            ${off.customerApproval.comment ? `<div style="grid-column:1/-1;"><div style="font-size:10px;color:var(--mt);">Kommentar</div><div style="font-size:12px;">${esc(off.customerApproval.comment)}</div></div>` : ''}
+          </div>
+        </div>
+      </div>` : ''}
+
       ${factItems ? `<div class="off-detail-facts" style="flex-wrap:wrap;">${factItems}</div>` : ''}
 
       ${off.summary||off.scope||off.includes||off.excludes?`
@@ -3633,6 +3652,16 @@ ${hasRut?`<div class="rut">
   },
 
   /* ── Bilagor — panel ─────────────────────────────────────── */
+  _attFileIcon(mimeType) {
+    const m = (mimeType || '').toLowerCase();
+    if (m.includes('pdf'))        return ic('file-text', 16);
+    if (m.includes('image'))      return ic('image', 16);
+    if (m.includes('spreadsheet') || m.includes('excel') || m.includes('csv')) return ic('table', 16);
+    if (m.includes('word') || m.includes('document') || m.includes('text'))    return ic('file-text', 16);
+    if (m.includes('zip') || m.includes('compressed')) return ic('archive', 16);
+    return ic('paperclip', 16);
+  },
+
   _attachmentsPanel(off) {
     if (off.archived || off.deleted) return '';
     const atts = (state.offerAttachments || []).filter(a => a.offerId === off.id && a.active !== false);
@@ -3641,19 +3670,24 @@ ${hasRut?`<div class="rut">
     const attRows = atts.length === 0
       ? `<p style="font-size:12px;color:var(--mt);margin:0;text-align:center;padding:12px 0;">Inga bilagor uppladdade</p>`
       : atts.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).map(a => {
-          const lockedBadge = a.lockedInVersion ? `<span style="font-size:10px;color:var(--or);margin-left:4px;">${ic('lock',10)} låst</span>` : '';
-          const pubBadge = a.includeInPublicView ? `<span style="font-size:10px;color:var(--gr);margin-left:4px;">${ic('eye',10)} kundvy</span>` : '';
-          const pdfBadge = a.includeInCombinedPdf ? `<span style="font-size:10px;color:var(--bl);margin-left:4px;">${ic('file-text',10)} PDF</span>` : '';
+          const displayName = a.displayName || a.originalFileName || 'bilaga';
+          const ext = (a.originalFileName || '').split('.').pop().toUpperCase();
           const sizeLbl = a.sizeBytes > 1048576 ? (a.sizeBytes/1048576).toFixed(1)+' MB' : Math.round(a.sizeBytes/1024)+' KB';
+          const metaParts = [ext, sizeLbl];
+          if (a.lockedInVersion) metaParts.push('låst');
+          if (a.includeInPublicView) metaParts.push('kundvy');
+          if (a.includeInCombinedPdf) metaParts.push('PDF');
           return `<div class="att-row">
+            <div class="att-row-icon">${this._attFileIcon(a.mimeType)}</div>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.displayName||a.originalFileName)}</div>
-              <div style="font-size:10px;color:var(--mt);">${esc(a.mimeType)} · ${sizeLbl}${lockedBadge}${pubBadge}${pdfBadge}</div>
+              <div class="att-row-name" title="${esc(displayName)}">${esc(displayName)}</div>
+              <div class="att-row-meta">${metaParts.join(' · ')}</div>
             </div>
-            <div style="display:flex;gap:4px;flex-shrink:0;">
-              <button type="button" class="btn bs" style="font-size:10px;padding:3px 7px;" onclick="OfferDetailPage._downloadAttachment('${esc(a.id)}')">${ic('download',10)}</button>
-              <button type="button" class="btn bs" style="font-size:10px;padding:3px 7px;" onclick="OfferDetailPage._editAttachment('${esc(a.id)}','${esc(off.id)}')">${ic('edit-2',10)}</button>
-              <button type="button" class="btn bs" style="font-size:10px;padding:3px 7px;color:var(--rd);" onclick="OfferDetailPage._deleteAttachment('${esc(a.id)}','${esc(off.id)}')">${ic('trash-2',10)}</button>
+            <div class="att-row-actions">
+              <button type="button" class="btn bs bsm" title="Visa" onclick="OfferDetailPage._viewAttachment('${esc(a.id)}')">${ic('eye',12)} Visa</button>
+              <button type="button" class="btn bs bsm" title="Ladda ned" onclick="OfferDetailPage._downloadAttachment('${esc(a.id)}')">${ic('download',12)} Ladda ned</button>
+              <button type="button" class="btn bs bsm" title="Redigera" onclick="OfferDetailPage._editAttachment('${esc(a.id)}','${esc(off.id)}')">${ic('edit-2',12)}</button>
+              <button type="button" class="btn bs bsm" title="Ta bort" style="color:var(--rd);" onclick="OfferDetailPage._deleteAttachment('${esc(a.id)}','${esc(off.id)}')">${ic('trash-2',12)}</button>
             </div>
           </div>`;
         }).join('');
@@ -3751,7 +3785,7 @@ ${hasRut?`<div class="rut">
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
         },
-        body: JSON.stringify({ attachmentId })
+        body: JSON.stringify({ attachmentId, offerId: att.offerId })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.status);
@@ -3764,6 +3798,28 @@ ${hasRut?`<div class="rut">
       document.body.removeChild(a);
     } catch(e) {
       showToast('Fel vid nedladdning: ' + e.message, 'error');
+    }
+  },
+
+  async _viewAttachment(attachmentId) {
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+    const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
+    if (!att) return;
+    try {
+      showToast('Hämtar visningslänk…');
+      const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (AuthService.getAccessToken() || '')
+        },
+        body: JSON.stringify({ attachmentId, offerId: att.offerId })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || res.status);
+      window.open(json.url, '_blank', 'noopener');
+    } catch(e) {
+      showToast('Fel vid visning: ' + e.message, 'error');
     }
   },
 

@@ -564,7 +564,7 @@ function renderAttachments() {
         (a.description ? '<div style="font-size:11px;color:var(--mt);">' + esc(a.description) + '</div>' : '') +
         '<div style="font-size:11px;color:var(--mt);">' + esc(a.mimeType||'') + ' · ' + sizeLbl + '</div>' +
       '</div>' +
-      '<button type="button" onclick="downloadAttachment(' + JSON.stringify(a.id) + ',' + JSON.stringify(a.displayName||a.originalFileName||'bilaga') + ')" ' +
+      '<button type="button" data-att-id="' + esc(String(a.id)) + '" data-att-name="' + esc(String(a.displayName||a.originalFileName||'bilaga')) + '" onclick="downloadAttachment(this.dataset.attId,this.dataset.attName)" ' +
         'style="padding:6px 12px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;">' +
         '⬇ Ladda ned</button>' +
     '</div>';
@@ -600,10 +600,13 @@ function showForm(action) {
   var area = document.getElementById('po-form-area');
   if (!area) return;
 
+  var prefillName  = (_offer && _offer.contactName)  ? esc(_offer.contactName)  : '';
+  var prefillEmail = (_offer && _offer.contactEmail) ? esc(_offer.contactEmail) : '';
+
   if (action === 'approve') {
     area.innerHTML = '<div class="po-form" id="po-form">' +
-      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" placeholder="För- och efternamn" autocomplete="name"></div>' +
-      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" placeholder="din@email.se" autocomplete="email"></div></div>' +
+      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" placeholder="För- och efternamn" autocomplete="name" value="' + prefillName + '"></div>' +
+      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" placeholder="din@email.se" autocomplete="email" value="' + prefillEmail + '"></div></div>' +
       '<div class="po-row2"><div class="po-fg"><label>Telefon</label><input id="f-phone" type="tel" autocomplete="tel"></div>' +
       '<div class="po-fg"><label>Befattning</label><input id="f-position" type="text"></div></div>' +
       '<div class="po-fg"><label>Kommentar (valfri)</label><textarea id="f-comment" rows="2" placeholder="Eventuella kommentarer…"></textarea></div>' +
@@ -613,8 +616,8 @@ function showForm(action) {
     '</div>';
   } else if (action === 'change_request') {
     area.innerHTML = '<div class="po-form" id="po-form">' +
-      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" autocomplete="name"></div>' +
-      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" autocomplete="email"></div></div>' +
+      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" autocomplete="name" value="' + prefillName + '"></div>' +
+      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" autocomplete="email" value="' + prefillEmail + '"></div></div>' +
       '<div class="po-fg"><label>Kategori</label><select id="f-cat">' +
         '<option value="pris">Pris</option><option value="omfattning">Omfattning</option><option value="tidplan">Tidplan</option>' +
         '<option value="villkor">Villkor</option><option value="offertpost">Specifik offertpost</option><option value="annat">Annat</option>' +
@@ -625,8 +628,8 @@ function showForm(action) {
     '</div>';
   } else if (action === 'decline') {
     area.innerHTML = '<div class="po-form" id="po-form">' +
-      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" autocomplete="name"></div>' +
-      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" autocomplete="email"></div></div>' +
+      '<div class="po-row2"><div class="po-fg"><label>Ditt namn *</label><input id="f-name" type="text" autocomplete="name" value="' + prefillName + '"></div>' +
+      '<div class="po-fg"><label>E-post *</label><input id="f-email" type="email" autocomplete="email" value="' + prefillEmail + '"></div></div>' +
       '<div class="po-fg"><label>Anledning</label><select id="f-reason">' +
         '<option value="för_dyrt">För dyrt</option><option value="annan_leverantör">Valt annan leverantör</option>' +
         '<option value="genomförs_ej">Projektet genomförs inte</option><option value="tidplan">Tidplanen fungerar inte</option>' +

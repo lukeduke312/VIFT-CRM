@@ -332,6 +332,16 @@
   }
 }
 
+/* ── Mobile toolbar: overflow menu button ────────────── */
+@media (max-width: 639px) {
+  .ao-import-btn,
+  .ao-export-btn { display: none !important; }
+  .ao-overflow-btn { display: inline-flex !important; }
+}
+@media (min-width: 640px) {
+  .ao-overflow-btn { display: none !important; }
+}
+
 /* ── Empty state: konsekvent padding ─────────────────── */
 .empty {
   display: flex;

@@ -691,6 +691,25 @@ body.modal-open { overflow: hidden; touch-action: none; }
   border-left: 1.5px solid var(--br);
 }
 
+/* ── Mobile overflow menu ─── */
+.ao-overflow-wrap { position: relative; display: inline-flex; }
+.ao-overflow-btn  { display: none; padding: 5px 9px; letter-spacing: 2px; }
+.ao-overflow-menu {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: var(--card); border: 1px solid var(--br);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  min-width: 148px; z-index: 300; display: none;
+}
+.ao-overflow-menu.open { display: block; }
+.ao-overflow-menu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 14px; font-size: 13px; font-weight: 500;
+  background: none; border: none; border-bottom: 1px solid var(--br);
+  color: var(--tx); cursor: pointer; white-space: nowrap;
+}
+.ao-overflow-menu-item:last-child { border-bottom: none; }
+.ao-overflow-menu-item:hover { background: var(--bg); }
+
 /* Active filter chip (mobile, when filter active) */
 .ao-active-filter {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1051,14 +1070,14 @@ body.modal-open { overflow: hidden; touch-action: none; }
    ═══════════════════════════════════ */
 .off-wiz-inner {
   padding: 12px 14px;
-  max-width: 760px;
+  max-width: none;
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
 }
 .off-wiz-inner-wide {
   padding: 12px 14px;
-  max-width: 1160px;
+  max-width: none;
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -2885,6 +2904,24 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   border: 1px solid var(--br);
   border-radius: 8px;
   background: var(--card-bg, var(--bg));
+}
+.att-row-icon {
+  width: 32px; height: 32px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); border: 1px solid var(--br);
+  flex-shrink: 0; color: var(--mt);
+}
+.att-row-name {
+  font-size: 12px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 200px;
+}
+.att-row-meta { font-size: 10px; color: var(--mt); margin-top: 1px; }
+.att-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+@media (max-width: 479px) {
+  .att-row { flex-wrap: wrap; }
+  .att-row-name { max-width: 140px; }
+  .att-row-actions { width: 100%; justify-content: flex-end; }
 }
 
 /* ── PayrollPage (Punkt 76) ───────────────────────────────── */

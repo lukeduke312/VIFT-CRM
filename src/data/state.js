@@ -559,6 +559,26 @@ const DataSync = {
         try { localStorage.setItem('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
       });
 
+      /* Skapa notiser för nyligen godkända offerter (idempotent) */
+      var user = typeof Auth !== 'undefined' ? Auth.getUser() : null;
+      if (user && Array.isArray(state.offers)) {
+        state.offers.forEach(function(off) {
+          if (off.status === 'godkänd' && off.customerApproval && off.customerApproval.approvedAt) {
+            var existingNotif = (state.notifications || []).find(function(n) {
+              return n.type === 'offer_approved' && n.offerId === off.id;
+            });
+            if (!existingNotif) {
+              if (typeof NotificationsService !== 'undefined') {
+                NotificationsService.push(user.id, 'offer_approved',
+                  'Offert ' + off.id + ' godkänd av ' + (off.customerApproval.approvedByName || 'kund'),
+                  { offerId: off.id }
+                );
+              }
+            }
+          }
+        });
+      }
+
       /* Uppdatera badge-räknare */
       if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
 
@@ -575,6 +595,31 @@ const DataSync = {
     }
   }
 };
+
+/* ── Overflow-meny för mobilverktygsfält ─────────────────────── */
+function toggleAoOverflow(menuId) {
+  var menu = document.getElementById(menuId);
+  if (!menu) return;
+  var isOpen = menu.classList.contains('open');
+  // Stäng alla öppna menyer
+  document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
+    m.classList.remove('open');
+  });
+  if (!isOpen) {
+    menu.classList.add('open');
+    // Stäng vid klick utanför
+    setTimeout(function() {
+      document.addEventListener('click', function _close(e) {
+        if (!e.target.closest('.ao-overflow-wrap')) {
+          document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
+            m.classList.remove('open');
+          });
+          document.removeEventListener('click', _close);
+        }
+      });
+    }, 0);
+  }
+}
 
 // Cross-tab sync (same browser, storage event)
 window.addEventListener('storage', function(e) {

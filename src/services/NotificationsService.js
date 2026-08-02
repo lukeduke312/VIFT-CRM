@@ -11,7 +11,8 @@ const NotificationsService = {
       userId,
       type,
       message,
-      aoId:   meta.aoId   || '',
+      aoId:    meta.aoId    || '',
+      offerId: meta.offerId || '',
       read:   false,
       createdAt: new Date().toISOString()
     };
@@ -54,19 +55,30 @@ const NotificationsService = {
     Router.showPage('pg-ao-detail', { aoId });
   },
 
+  _openOffer(offerId) {
+    Modal.close();
+    Router.showPage('pg-offer-detail', { offerId });
+  },
+
   showPanel() {
     const list = this.getForUser(20);
     this.markAllRead();
     const rows = list.length === 0
       ? `<div class="empty" style="padding:24px 0;">${ic('bell',28)}<p style="font-size:12px;color:var(--mt);margin-top:8px;">Inga notiser</p></div>`
       : list.map(n => {
-          const ao = n.aoId ? getAO(n.aoId) : null;
-          const itemStyle = ao ? 'cursor:pointer;' : '';
-          const itemClick = ao ? `onclick="NotificationsService._openAO('${n.aoId}')"` : '';
+          const ao  = n.aoId    ? getAO(n.aoId)    : null;
+          const off = n.offerId ? (state.offers||[]).find(o => o.id === n.offerId) : null;
+          const target = ao ? 'ao' : off ? 'offer' : null;
+          const itemStyle = target ? 'cursor:pointer;' : '';
+          const itemClick = target === 'ao'    ? `onclick="NotificationsService._openAO('${n.aoId}')"`
+                          : target === 'offer' ? `onclick="NotificationsService._openOffer('${n.offerId}')"` : '';
+          const typeIcon  = n.type === 'ao_pool'       ? 'inbox'
+                          : n.type === 'offer_approved' ? 'check-circle'
+                          : 'user-plus';
           return `
             <div class="list-item" style="padding:10px 12px;${itemStyle}" ${itemClick}>
               <div style="display:flex;gap:10px;align-items:flex-start;">
-                <span style="margin-top:2px;flex-shrink:0;">${ic(n.type==='ao_pool'?'inbox':'user-plus', 14)}</span>
+                <span style="margin-top:2px;flex-shrink:0;${n.type==='offer_approved'?'color:var(--gr);':''}">${ic(typeIcon, 14)}</span>
                 <div style="flex:1;">
                   <div style="font-size:12px;font-weight:600;color:var(--tx);">${esc(n.message)}</div>
                   <div style="font-size:10px;color:var(--mt);margin-top:2px;">${relDate(n.createdAt)}</div>

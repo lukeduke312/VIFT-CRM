@@ -176,12 +176,14 @@ serve(async (req: Request) => {
 
     if (action === 'approve') {
       off.customerApproval = {
-        token:           token,
-        approvedAt:      now,
-        approvedByName:  name,
-        approvedByEmail: email,
-        ip:              ip,
-        comment:         comment
+        token:              token,
+        approvedAt:         now,
+        approvedByName:     name,
+        approvedByEmail:    email,
+        approvedByPhone:    String(body.phone    ?? '').trim(),
+        approvedByPosition: String(body.position ?? '').trim(),
+        ip:                 ip,
+        comment:            comment
       }
     }
 
