@@ -12,19 +12,31 @@
  *   assets/             → Cache first med network-fallback
  *
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
+ * v19: send-offer-email v2 — PageShells v93 (auto-token, ingen mailto-fallback)
+ * v20: send-offer-email v3 — PageShells v94 (state-patching, offer-token-validate snapshot)
+ * v21: send-offer-email v4 — PageShells v95
+ * v22: send-offer-email v5 — PageShells v96
  */
 
-const CACHE_NAME = 'vift-crm-v13';
+const CACHE_NAME = 'vift-crm-v14';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
   '/',
-  '/index.html',
-  '/assets/vift-logo.svg',
-  '/assets/vift-logo-white.svg',
-  '/assets/icon-192.png',
-  '/assets/icon-512.png',
-  '/assets/icon-180.png'
+  '/manifest.json',
+  '/assets/vift-logo-black.png',
+  '/assets/vift-logo-white.png',
+  '/assets/vift-symbol-black.png',
+  '/assets/vift-symbol-white.png',
+  '/assets/favicon.ico',
+  '/assets/favicon-16x16.png',
+  '/assets/favicon-32x32.png',
+  '/assets/favicon-48x48.png',
+  '/assets/icon-180.png?v=2',
+  '/assets/icon-192.png?v=2',
+  '/assets/icon-512.png?v=2',
+  '/assets/icon-maskable-192.png?v=2',
+  '/assets/icon-maskable-512.png?v=2'
 ];
 
 /* Dessa domäner passeras alltid direkt — ingen intercept */
@@ -131,8 +143,8 @@ self.addEventListener('push', event => {
   const title   = payload.title || 'VIFT CRM';
   const options = {
     body:               payload.body || '',
-    icon:               '/assets/icon-192.png',
-    badge:              '/assets/icon-192.png',
+    icon:               '/assets/icon-192.png?v=2',
+    badge:              '/assets/icon-192.png?v=2',
     data:               { url: payload.url || '/', aoId: payload.aoId || null },
     requireInteraction: false
   };
@@ -166,4 +178,3 @@ self.addEventListener('notificationclick', event => {
       })
   );
 });
-
