@@ -86,6 +86,9 @@ const WorkOrdersPage = {
           <div class="ao-overflow-wrap">
             <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-wo" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-wo',this)">${ic('more-vertical',14)}</button>
             <div class="ao-overflow-menu" id="ao-ovf-wo" role="menu">
+              <button class="ao-overflow-menu-item ao-view-item" role="menuitem" onclick="aoCloseOverflow();WorkOrdersPage.setView('list')">${ic('list',13)} Listvy</button>
+              <button class="ao-overflow-menu-item ao-view-item" role="menuitem" onclick="aoCloseOverflow();WorkOrdersPage.setView('grid')">${ic('grid',13)} Kortvy</button>
+              <div class="ao-overflow-divider ao-view-item"></div>
               ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',13)} Importera</button>` : ''}
               <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('workOrder',this)">${ic('download',13)} Exportera</button>
             </div>

@@ -674,8 +674,9 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ao-toolbar {
   display: flex; gap: 8px; align-items: center;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
-.ao-toolbar .swrap { flex: 1; }
+.ao-toolbar .swrap { flex: 1; min-width: 0; }
 .ao-toolbar-right { display: flex; gap: 6px; align-items: center; }
 
 .view-toggle {
@@ -2943,6 +2944,7 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   width: 100%;
 }
 .ao-overflow-menu-item:hover { background: var(--hover-bg, rgba(0,0,0,.04)); }
+.ao-overflow-divider { height: 1px; background: var(--br); margin: 4px 0; }
 
 /* Tabs row with sel-all */
 .ao-tabs-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

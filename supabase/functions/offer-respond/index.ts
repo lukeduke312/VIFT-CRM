@@ -204,6 +204,9 @@ serve(async (req: Request) => {
     if (action === 'approve') {
       await sendInAppNotifications(supabase, {
         offerId:      off.id as string,
+        offerTitle:   (off.title as string) || String(off.id),
+        customerName: (off.customerName as string) || '',
+        version:      Number(off.versionNumber) || 1,
         approvedBy:   name,
         now
       })
@@ -342,10 +345,17 @@ async function appendOfferEvent(
 /* ── In-app notiser: skapa per eligible staff ─────────────── */
 async function sendInAppNotifications(
   supabase: ReturnType<typeof createClient>,
-  opts: { offerId: string; approvedBy: string; now: string }
+  opts: {
+    offerId: string
+    offerTitle: string
+    customerName: string
+    version: number
+    approvedBy: string
+    now: string
+  }
 ): Promise<void> {
   try {
-    /* Läs staff och roles */
+    /* Läs staff, roles och befintliga notiser parallellt */
     const [staffRow, rolesRow, notifRow] = await Promise.all([
       supabase.from('store').select('value').eq('key', 'vift_staff').maybeSingle(),
       supabase.from('store').select('value').eq('key', 'vift_roles').maybeSingle(),
@@ -362,7 +372,8 @@ async function sendInAppNotifications(
       ? notifRow.data.value as Record<string, unknown>[]
       : []
 
-    /* Bygg rollpermission-map */
+    /* Bygg rollpermission-map: r.id → permissions[]
+       Matchar staff.role (sträng som 'admin', 'chef', 'personal') */
     const rolePerms = new Map<string, string[]>()
     for (const r of roles) {
       if (r.id && Array.isArray(r.permissions)) {
@@ -370,25 +381,36 @@ async function sendInAppNotifications(
       }
     }
 
-    /* Filtrera aktiv personal med offer_manage eller all */
+    /* Filtrera aktiv personal med offer_manage eller all.
+       Schema: staff.active (boolean, default true) — INTE inactive.
+       Schema: staff.role (sträng-ID) — INTE roleId. */
     const eligible = staff.filter(s => {
-      if (s.inactive || s.deleted) return false
-      const perms = rolePerms.get(s.roleId as string) ?? []
+      if (s.active === false || s.deleted) return false
+      const perms = rolePerms.get(s.role as string) ?? []
       return perms.includes('offer_manage') || perms.includes('all')
     })
 
-    /* Bygg befintliga notis-IDs för idempotens */
+    /* Idempotent nyckel: offerId + version + staffId
+       Ny version av offert → ny notis; samma godkännandeanrop → inga dubbletter */
     const existingIds = new Set(notifications.map(n => n.id as string))
+
+    /* Meddelandetext med kund, titel, godkännare och tidpunkt */
+    const dateLabel = new Date(opts.now).toLocaleString('sv-SE', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+    const titlePart    = opts.offerTitle !== opts.offerId ? `${opts.offerTitle} (${opts.offerId})` : opts.offerId
+    const customerPart = opts.customerName ? ` – kund: ${opts.customerName}` : ''
+    const message      = `${titlePart} godkänd av ${opts.approvedBy}${customerPart} · ${dateLabel}`
 
     let added = 0
     for (const s of eligible) {
-      const notifId = `N-offer-approved-${opts.offerId}-${s.id}`
+      const notifId = `N-offer-approved-${opts.offerId}-v${opts.version}-${String(s.id)}`
       if (existingIds.has(notifId)) continue
       notifications.push({
         id:        notifId,
         userId:    s.id,
         type:      'offer_approved',
-        message:   `Offert ${opts.offerId} godkänd av ${opts.approvedBy}`,
+        message,
         aoId:      '',
         offerId:   opts.offerId,
         read:      false,

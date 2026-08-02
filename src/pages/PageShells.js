@@ -585,7 +585,7 @@ const OffersPage = {
         ${o.validUntil ? `&nbsp;·&nbsp;${ic('clock',9)} Giltig t.o.m. ${fmtDate(o.validUntil)}` : ''}
       </div>
       ${nextActLine ? `<div style="margin-top:3px;">${nextActLine}</div>` : ''}
-      ${o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDate(o.customerApproval.approvedAt):''}</div>` : ''}
+      ${o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDateTime(o.customerApproval.approvedAt):''}</div>` : ''}
     </div>
     ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
   </div>
@@ -2242,11 +2242,11 @@ const OfferDetailPage = {
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;font-size:12px;">
             <div><span style="color:var(--mt);">Namn&nbsp;</span><strong>${esc(off.customerApproval.approvedByName||'—')}</strong></div>
             <div><span style="color:var(--mt);">E-post&nbsp;</span><strong>${esc(off.customerApproval.approvedByEmail||'—')}</strong></div>
-            ${off.customerApproval.approvedAt?`<div><span style="color:var(--mt);">Datum&nbsp;</span><strong>${fmtDate(off.customerApproval.approvedAt)}</strong></div>`:''}
+            ${off.customerApproval.approvedAt?`<div><span style="color:var(--mt);">Datum&nbsp;</span><strong>${fmtDateTime(off.customerApproval.approvedAt)}</strong></div>`:''}
             ${off.customerApproval.approvedByPhone?`<div><span style="color:var(--mt);">Telefon&nbsp;</span><strong>${esc(off.customerApproval.approvedByPhone)}</strong></div>`:''}
             ${off.customerApproval.approvedByPosition?`<div><span style="color:var(--mt);">Befattning&nbsp;</span><strong>${esc(off.customerApproval.approvedByPosition)}</strong></div>`:''}
           </div>
-          ${off.customerApproval.approvedByComment?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.customerApproval.approvedByComment)}</div>`:''}
+          ${(off.customerApproval.comment||off.customerApproval.approvedByComment)?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.customerApproval.comment||off.customerApproval.approvedByComment)}</div>`:''}
         </div>
       </div>` : ''}
 

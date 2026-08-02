@@ -332,14 +332,42 @@
   }
 }
 
-/* ── Mobile toolbar: hide import/export, show overflow btn ── */
+/* ── Mobile toolbar layout ────────────────────────────────── */
 @media (max-width: 639px) {
+  /* Sökfält på egen fullbreddsrad */
+  .ao-toolbar .swrap {
+    flex: 1 1 100%;
+    order: 0;
+    min-width: 0;
+  }
+  /* Filter + toolbar-right på rad 2 */
+  .ao-filter-btn {
+    order: 1;
+    flex-shrink: 0;
+  }
+  .ao-toolbar-right {
+    order: 1;
+    flex: 1;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  /* Desktop-only-knappar dolda på mobil */
   .ao-import-btn,
-  .ao-export-btn { display: none !important; }
+  .ao-export-btn,
+  .view-toggle { display: none !important; }
+
+  /* Overflow-knapp synlig på mobil */
   .ao-overflow-btn { display: inline-flex !important; }
+
+  /* List/grid-alternativ synliga i overflow-menyn på mobil */
+  .ao-view-item { display: flex !important; }
 }
+
 @media (min-width: 640px) {
+  /* Overflow-knapp och view-items dolda på desktop */
   .ao-overflow-btn { display: none !important; }
+  .ao-view-item { display: none !important; }
 }
 
 /* ── Tabs row: sel-all wraps below tabs on very small screens ── */

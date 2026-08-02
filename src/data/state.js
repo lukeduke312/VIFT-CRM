@@ -342,6 +342,11 @@ function fmtDate(isoStr) {
   return new Date(isoStr).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function fmtDateTime(isoStr) {
+  if (!isoStr) return '—';
+  return new Date(isoStr).toLocaleString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 /* ── Status/prioritet-helpers ─────────── */
 function statusLabel(s) {
   const m = {
@@ -577,57 +582,63 @@ const DataSync = {
 };
 
 /* ── Overflow-meny för mobilverktygsfält ───────────────────────────────────
- * aoToggleOverflow(menuId, btn) — öppnar/stänger en specifik overflow-meny
- * aoCloseOverflow()             — stänger alla öppna menyer (anropas av menyalternativ)
+ * Enkla globala handlers (registreras en gång) — inga listener-läckor.
+ * aoToggleOverflow(menuId, btn) — öppnar/stänger namngiven overflow-meny
+ * aoCloseOverflow()             — stänger aktuell öppen meny (anropas av menyalternativ)
  * ─────────────────────────────────────────────────────────────────────────── */
+var _aoCurrentMenu = null;
+var _aoCurrentBtn  = null;
+
+document.addEventListener('click', function(e) {
+  if (!_aoCurrentMenu) return;
+  if (!e.target.closest('.ao-overflow-wrap')) {
+    _aoCurrentMenu.classList.remove('open');
+    if (_aoCurrentBtn) _aoCurrentBtn.setAttribute('aria-expanded', 'false');
+    _aoCurrentMenu = null;
+    _aoCurrentBtn  = null;
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && _aoCurrentMenu) {
+    _aoCurrentMenu.classList.remove('open');
+    if (_aoCurrentBtn) { _aoCurrentBtn.setAttribute('aria-expanded', 'false'); _aoCurrentBtn.focus(); }
+    _aoCurrentMenu = null;
+    _aoCurrentBtn  = null;
+  }
+});
+
 function aoToggleOverflow(menuId, btn) {
   var menu = document.getElementById(menuId);
   if (!menu) return;
-  var isOpen = menu.classList.contains('open');
+  var isOpen = menu === _aoCurrentMenu;
 
-  // Stäng alla öppna menyer och återställ aria-expanded
-  document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
-    m.classList.remove('open');
-  });
-  document.querySelectorAll('.ao-overflow-btn[aria-expanded="true"]').forEach(function(b) {
-    b.setAttribute('aria-expanded', 'false');
-  });
+  // Stäng eventuell annan öppen meny
+  if (_aoCurrentMenu && _aoCurrentMenu !== menu) {
+    _aoCurrentMenu.classList.remove('open');
+    if (_aoCurrentBtn) _aoCurrentBtn.setAttribute('aria-expanded', 'false');
+    _aoCurrentMenu = null;
+    _aoCurrentBtn  = null;
+  }
 
-  if (!isOpen) {
+  if (isOpen) {
+    menu.classList.remove('open');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+    _aoCurrentMenu = null;
+    _aoCurrentBtn  = null;
+  } else {
     menu.classList.add('open');
     if (btn) btn.setAttribute('aria-expanded', 'true');
-
-    var close = function(e) {
-      if (!e.target.closest('.ao-overflow-wrap')) {
-        menu.classList.remove('open');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-        document.removeEventListener('click', close);
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    var escHandler = function(e) {
-      if (e.key === 'Escape') {
-        menu.classList.remove('open');
-        if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.focus(); }
-        document.removeEventListener('click', close);
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    // Timeout: låt aktuell klickhändelse propagera färdigt
-    setTimeout(function() {
-      document.addEventListener('click', close);
-      document.addEventListener('keydown', escHandler);
-    }, 0);
+    _aoCurrentMenu = menu;
+    _aoCurrentBtn  = btn || null;
   }
 }
 
 function aoCloseOverflow() {
-  document.querySelectorAll('.ao-overflow-menu.open').forEach(function(m) {
-    m.classList.remove('open');
-  });
-  document.querySelectorAll('.ao-overflow-btn[aria-expanded="true"]').forEach(function(b) {
-    b.setAttribute('aria-expanded', 'false');
-  });
+  if (_aoCurrentMenu) _aoCurrentMenu.classList.remove('open');
+  if (_aoCurrentBtn)  _aoCurrentBtn.setAttribute('aria-expanded', 'false');
+  _aoCurrentMenu = null;
+  _aoCurrentBtn  = null;
 }
 
 // Cross-tab sync (same browser, storage event)
