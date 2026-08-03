@@ -200,12 +200,22 @@ serve(async (req: Request) => {
 
     if (writeErr) throw new Error('store-skrivfel: ' + writeErr.message)
 
+    /* Lös kundnamn: lockedSnapshotJSON → off.customerName */
+    let resolvedCustomerName = (off.customerName as string) || ''
+    if (!resolvedCustomerName && off.lockedSnapshotJSON) {
+      try {
+        const snap = JSON.parse(off.lockedSnapshotJSON as string)
+        resolvedCustomerName = String(snap.customerName || '')
+      } catch (_) { /* ignore parse error */ }
+    }
+
     /* In-app notiser till VIFT-personal vid godkännande */
     if (action === 'approve') {
       await sendInAppNotifications(supabase, {
         offerId:      off.id as string,
         offerTitle:   (off.title as string) || String(off.id),
-        customerName: (off.customerName as string) || '',
+        customerId:   (off.customerId as string) || '',
+        customerName: resolvedCustomerName,
         version:      Number(off.versionNumber) || 1,
         approvedBy:   name,
         now
@@ -236,6 +246,12 @@ serve(async (req: Request) => {
       customerName: name,
       offerTitle:   (off.title as string) || (off.id as string)
     })
+
+    /* Uppdatera synknyckel — öppna CRM-klienter triggar DataSync */
+    const { error: lcErr } = await supabase
+      .from('store')
+      .upsert({ key: 'vift_lastChanged', value: now }, { onConflict: 'key' })
+    if (lcErr) console.warn('[offer-respond] vift_lastChanged-skrivfel:', lcErr.message)
 
     return json({
       ok:        true,
@@ -348,6 +364,7 @@ async function sendInAppNotifications(
   opts: {
     offerId: string
     offerTitle: string
+    customerId: string
     customerName: string
     version: number
     approvedBy: string
@@ -355,11 +372,12 @@ async function sendInAppNotifications(
   }
 ): Promise<void> {
   try {
-    /* Läs staff, roles och befintliga notiser parallellt */
-    const [staffRow, rolesRow, notifRow] = await Promise.all([
+    /* Läs staff, roles, notiser och kunder parallellt */
+    const [staffRow, rolesRow, notifRow, custRow] = await Promise.all([
       supabase.from('store').select('value').eq('key', 'vift_staff').maybeSingle(),
       supabase.from('store').select('value').eq('key', 'vift_roles').maybeSingle(),
-      supabase.from('store').select('value').eq('key', 'vift_notifications').maybeSingle()
+      supabase.from('store').select('value').eq('key', 'vift_notifications').maybeSingle(),
+      supabase.from('store').select('value').eq('key', 'vift_customers').maybeSingle()
     ])
 
     const staff: Record<string, unknown>[] = Array.isArray(staffRow.data?.value)
@@ -368,7 +386,7 @@ async function sendInAppNotifications(
     const roles: Record<string, unknown>[] = Array.isArray(rolesRow.data?.value)
       ? rolesRow.data.value as Record<string, unknown>[]
       : []
-    const notifications: Record<string, unknown>[] = Array.isArray(notifRow.data?.value)
+    const existing: Record<string, unknown>[] = Array.isArray(notifRow.data?.value)
       ? notifRow.data.value as Record<string, unknown>[]
       : []
 
@@ -390,23 +408,43 @@ async function sendInAppNotifications(
       return perms.includes('offer_manage') || perms.includes('all')
     })
 
-    /* Idempotent nyckel: offerId + version + staffId
-       Ny version av offert → ny notis; samma godkännandeanrop → inga dubbletter */
-    const existingIds = new Set(notifications.map(n => n.id as string))
+    /* Lös kundnamn: opts.customerName → vift_customers-lookup
+       Schema.customer: name (foretag/brf), firstName+lastName (privat), contactPerson */
+    let customerName = opts.customerName
+    if (!customerName && opts.customerId) {
+      const customers: Record<string, unknown>[] = Array.isArray(custRow.data?.value)
+        ? custRow.data.value as Record<string, unknown>[]
+        : []
+      const cust = customers.find(c => c.id === opts.customerId)
+      if (cust) {
+        customerName = String(cust.contactPerson || '')
+        if (!customerName && cust.type === 'privat') {
+          customerName = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
+        }
+        if (!customerName) customerName = String(cust.name || '')
+      }
+    }
 
-    /* Meddelandetext med kund, titel, godkännare och tidpunkt */
-    const dateLabel = new Date(opts.now).toLocaleString('sv-SE', {
+    /* Meddelandetext med titel, offert-ID, kundnamn, godkännare och tidpunkt */
+    const dateLabel    = new Date(opts.now).toLocaleString('sv-SE', {
       day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
     })
-    const titlePart    = opts.offerTitle !== opts.offerId ? `${opts.offerTitle} (${opts.offerId})` : opts.offerId
-    const customerPart = opts.customerName ? ` – kund: ${opts.customerName}` : ''
+    const titlePart    = opts.offerTitle !== opts.offerId
+      ? `${opts.offerTitle} (${opts.offerId})`
+      : opts.offerId
+    const customerPart = customerName ? ` – kund: ${customerName}` : ''
     const message      = `${titlePart} godkänd av ${opts.approvedBy}${customerPart} · ${dateLabel}`
 
-    let added = 0
+    /* Idempotent nyckel: offerId + version + staffId
+       Ny version av offert → ny notis; samma godkännandeanrop → inga dubbletter */
+    const existingIds = new Set(existing.map(n => n.id as string))
+
+    /* Bygg nya notiser */
+    const newNotifs: Record<string, unknown>[] = []
     for (const s of eligible) {
       const notifId = `N-offer-approved-${opts.offerId}-v${opts.version}-${String(s.id)}`
       if (existingIds.has(notifId)) continue
-      notifications.push({
+      newNotifs.push({
         id:        notifId,
         userId:    s.id,
         type:      'offer_approved',
@@ -416,16 +454,20 @@ async function sendInAppNotifications(
         read:      false,
         createdAt: opts.now
       })
-      added++
     }
 
-    if (added === 0) return
+    if (newNotifs.length === 0) return
 
-    if (notifications.length > 5_000) notifications.splice(0, notifications.length - 5_000)
+    /* Lägg nya notiser FÖRST (nyaste överst) — bevara befintliga, trimma från slutet */
+    const combined = [...newNotifs, ...existing]
+    const trimmed  = combined.slice(0, 5_000)
 
-    await supabase
+    const { error: notifWriteErr } = await supabase
       .from('store')
-      .upsert({ key: 'vift_notifications', value: notifications }, { onConflict: 'key' })
+      .upsert({ key: 'vift_notifications', value: trimmed }, { onConflict: 'key' })
+    if (notifWriteErr) {
+      console.error('[offer-respond] notisskrivfel:', notifWriteErr.message)
+    }
   } catch (e) {
     console.warn('[offer-respond] sendInAppNotifications fel:', e)
   }

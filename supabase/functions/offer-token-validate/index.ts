@@ -131,8 +131,40 @@ serve(async (req: Request) => {
       })
     }
 
+    /* Lös upp kontaktuppgifter från kunden (off.contactName/Email prioriteras) */
+    let resolvedContactName  = String(off.contactName  ?? '')
+    let resolvedContactEmail = String(off.contactEmail ?? '')
+
+    if (!resolvedContactName || !resolvedContactEmail) {
+      try {
+        const { data: custRow } = await supabase
+          .from('store').select('value').eq('key', 'vift_customers').maybeSingle()
+        const customers: Record<string, unknown>[] =
+          Array.isArray(custRow?.value) ? custRow.value as Record<string, unknown>[] : []
+        const cust = customers.find(c => c.id === off.customerId)
+        if (cust) {
+          if (!resolvedContactName) {
+            /* Precedence: contactPerson → privat firstName+lastName → contacts[0].name */
+            resolvedContactName = String(cust.contactPerson || '')
+            if (!resolvedContactName && cust.type === 'privat') {
+              resolvedContactName = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
+            }
+            if (!resolvedContactName && Array.isArray(cust.contacts) && cust.contacts.length > 0) {
+              const first = cust.contacts[0] as Record<string, unknown>
+              resolvedContactName = String(first.name || '')
+            }
+          }
+          if (!resolvedContactEmail) {
+            resolvedContactEmail = String(cust.email || '')
+          }
+        }
+      } catch (e) {
+        console.warn('[offer-token-validate] kund-lookup fel:', e)
+      }
+    }
+
     /* Bygg publik offertdata — INGA interna fält */
-    const publicOffer = buildPublicOffer(off)
+    const publicOffer = buildPublicOffer(off, resolvedContactName, resolvedContactEmail)
 
     /* Hämta kundsynliga bilagor — exkludera interna (includeInPublicView=false) */
     const { data: attRow } = await supabase
@@ -171,7 +203,11 @@ serve(async (req: Request) => {
 })
 
 /* ── Publika fält — EXKLUDERAR alla interna fält ─────────── */
-function buildPublicOffer(off: Record<string, unknown>): Record<string, unknown> {
+function buildPublicOffer(
+  off: Record<string, unknown>,
+  contactName  = String(off.contactName  ?? ''),
+  contactEmail = String(off.contactEmail ?? '')
+): Record<string, unknown> {
   return {
     id:             off.id,
     title:          off.title,
@@ -179,8 +215,8 @@ function buildPublicOffer(off: Record<string, unknown>): Record<string, unknown>
     status:         off.status,
     /* Kundinfo (ej andra kunder, ej intern kunddata) */
     customerName:   off.customerName   ?? '',   // snapshot
-    contactName:    off.contactName    ?? '',
-    contactEmail:   off.contactEmail   ?? '',
+    contactName,
+    contactEmail,
     /* Offertinnehåll */
     lines:          filterPublicLines(off.lines),
     extras:         filterPublicLines(off.extras),

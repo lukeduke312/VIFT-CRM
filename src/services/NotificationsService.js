@@ -34,7 +34,10 @@ const NotificationsService = {
   getForUser(limit = 30) {
     const user = Auth.getUser();
     if (!user) return [];
-    return (state.notifications || []).filter(n => n.userId === user.id).slice(0, limit);
+    return (state.notifications || [])
+      .filter(n => n.userId === user.id)
+      .sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1)
+      .slice(0, limit);
   },
 
   markRead(id) {

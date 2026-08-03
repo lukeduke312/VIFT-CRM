@@ -309,20 +309,7 @@
   max-width: 100%;
 }
 
-/* ── Offer attachments 375px ─────────────────────────── */
-@media (max-width: 420px) {
-  .att-row {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .att-row > div:first-child {
-    word-break: break-all;
-  }
-  .att-row div[style*="display:flex;gap:4px"] {
-    width: 100%;
-    justify-content: flex-end;
-  }
-}
+/* ── Offer attachments (legacy rule removed — replaced by att-row-* classes below) ── */
 
 /* ── KPI flex-wrap — Contracts stat cards ────────────── */
 @media (max-width: 479px) {
@@ -368,6 +355,21 @@
   /* Overflow-knapp och view-items dolda på desktop */
   .ao-overflow-btn { display: none !important; }
   .ao-view-item { display: none !important; }
+}
+
+/* ── Interna bilagor: mobilvänlig att-row layout ────────── */
+@media (max-width: 639px) {
+  .att-row { flex-wrap: wrap; gap: 6px; }
+  .att-row-icon { flex-shrink: 0; }
+  .att-row-name { max-width: 100%; }
+  .att-row-meta { white-space: normal; }
+  .att-row-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+  .att-row-actions .btn { flex-shrink: 0; }
 }
 
 /* ── Tabs row: sel-all wraps below tabs on very small screens ── */
