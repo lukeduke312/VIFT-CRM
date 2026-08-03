@@ -1,14 +1,28 @@
 /**
- * offer-token-validate — Supabase Edge Function (Leverans E, Del E2)
+ * offer-token-validate — Supabase Edge Function (Leverans E, Del E2, v6)
  *
  * Validerar en publik offerttoken och returnerar offertens publika data.
  * Uppdaterar öppningsräknare och openedAt vid första besök.
  *
+ * v2: när lockedSnapshotJSON finns används det för offertinnehållet (priser,
+ *     rader, villkor, kundnamn). Dynamiska metadata (status, tokenExpiresAt,
+ *     openCount, openedAt) hämtas alltid från live-offerten.
+ * v3: strikt snapshot — inget nullish-fallback till live-offert för innehållsfält;
+ *     bilagor filtreras via snapshot.publicAttachmentIds om tillgängligt (låst vid utskick).
+ * v4: (se v3 — samma version, namnbump i produktionskommit)
+ * v5: kontaktuppgifter förifylls från vift_customers med korrekt prioritetsordning.
+ *     Ingen kunddata utöver contactName/contactEmail exponeras publikt.
+ *     contactName: off.contactName → primary contact → contacts[0] → contactPerson
+ *       → privat firstName+lastName → ''
+ *     contactEmail: off.contactEmail → primary contact → contacts[0] → cust.email → ''
+ *
  * SÄKERHETSREGLER:
  * - Interna fält exponeras ALDRIG (inköpspris, marginal, TB, internalNote,
  *   personaldata, annan kundinformation, customerApproval.token, m.fl.)
+ * - lockedSnapshotJSON parsas säkert — ogiltig JSON faller tillbaka på live-offert
  * - Tokenkontroll, giltighetstid och återkallning kontrolleras server-side
  * - Rate-limit: max 30 req / minut per IP
+ * - Inga kundfält utöver contactName/contactEmail returneras publikt
  *
  * Anrop: GET /functions/v1/offer-token-validate?t={token}
  *        ingen Authorization krävs — publik endpoint
@@ -51,6 +65,20 @@ function checkRateLimit(ip: string): boolean {
   }
   slot.count++
   return slot.count <= RATE_MAX_PER_IP
+}
+
+
+/* ── Validera versionssnapshot ───────────────────────────── */
+function parseValidSnapshot(raw: unknown, offerId: string): Record<string, unknown> | null {
+  try {
+    if (!raw) return null
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const snap = parsed as Record<string, unknown>
+    if (String(snap.id ?? '') !== offerId) return null
+    if (!Array.isArray(snap.lines) || !Array.isArray(snap.extras) || !Array.isArray(snap.publicAttachmentIds)) return null
+    return snap
+  } catch { return null }
 }
 
 /* ── Handler ─────────────────────────────────────────────── */
@@ -131,31 +159,68 @@ serve(async (req: Request) => {
       })
     }
 
-    /* Lös upp kontaktuppgifter från kunden (off.contactName/Email prioriteras) */
+    /* Giltigt snapshot är auktoritativt; ogiltigt/ofullständigt snapshot behandlas som legacy */
+    const snapshot = parseValidSnapshot(off.lockedSnapshotJSON, String(off.id ?? ''))
+
+    /* Lös kontaktuppgifter för förifyllning av signeringsformuläret.
+       Prioritetsordning contactName:
+         1. off.contactName (manuellt satt på offerten)
+         2. contacts.find(primary)?.name
+         3. contacts[0]?.name
+         4. cust.contactPerson
+         5. privat: firstName + lastName
+         6. '' (tom sträng)
+       Prioritetsordning contactEmail:
+         1. off.contactEmail (manuellt satt på offerten)
+         2. contacts.find(primary)?.email
+         3. contacts[0]?.email
+         4. cust.email
+         5. '' (tom sträng)
+       Inga andra kundfält exponeras publikt. */
     let resolvedContactName  = String(off.contactName  ?? '')
     let resolvedContactEmail = String(off.contactEmail ?? '')
 
     if (!resolvedContactName || !resolvedContactEmail) {
       try {
-        const { data: custRow } = await supabase
-          .from('store').select('value').eq('key', 'vift_customers').maybeSingle()
-        const customers: Record<string, unknown>[] =
-          Array.isArray(custRow?.value) ? custRow.value as Record<string, unknown>[] : []
-        const cust = customers.find(c => c.id === off.customerId)
-        if (cust) {
-          if (!resolvedContactName) {
-            /* Precedence: contactPerson → privat firstName+lastName → contacts[0].name */
-            resolvedContactName = String(cust.contactPerson || '')
-            if (!resolvedContactName && cust.type === 'privat') {
-              resolvedContactName = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
+        const { data: custRow, error: custErr } = await supabase
+          .from('store')
+          .select('value')
+          .eq('key', 'vift_customers')
+          .maybeSingle()
+
+        if (custErr) {
+          console.warn('[offer-token-validate] kund-läsfel:', custErr.message)
+        } else {
+          const customers: Record<string, unknown>[] = Array.isArray(custRow?.value)
+            ? custRow.value as Record<string, unknown>[]
+            : []
+          const cust = customers.find(c => c.id === off.customerId) as Record<string, unknown> | undefined
+
+          if (cust) {
+            const contacts: Record<string, unknown>[] = Array.isArray(cust.contacts)
+              ? cust.contacts as Record<string, unknown>[]
+              : []
+            const primaryContact = contacts.find(c => c.primary === true) as Record<string, unknown> | undefined
+            const firstContact   = contacts[0] as Record<string, unknown> | undefined
+
+            if (!resolvedContactName) {
+              resolvedContactName =
+                String(primaryContact?.name ?? '') ||
+                String(firstContact?.name   ?? '') ||
+                String(cust.contactPerson   ?? '')
+              if (!resolvedContactName && cust.type === 'privat') {
+                resolvedContactName = [cust.firstName, cust.lastName]
+                  .filter(Boolean)
+                  .join(' ')
+              }
             }
-            if (!resolvedContactName && Array.isArray(cust.contacts) && cust.contacts.length > 0) {
-              const first = cust.contacts[0] as Record<string, unknown>
-              resolvedContactName = String(first.name || '')
+
+            if (!resolvedContactEmail) {
+              resolvedContactEmail =
+                String(primaryContact?.email ?? '') ||
+                String(firstContact?.email   ?? '') ||
+                String(cust.email            ?? '')
             }
-          }
-          if (!resolvedContactEmail) {
-            resolvedContactEmail = String(cust.email || '')
           }
         }
       } catch (e) {
@@ -164,9 +229,9 @@ serve(async (req: Request) => {
     }
 
     /* Bygg publik offertdata — INGA interna fält */
-    const publicOffer = buildPublicOffer(off, resolvedContactName, resolvedContactEmail)
+    const publicOffer = buildPublicOffer(off, snapshot, resolvedContactName, resolvedContactEmail)
 
-    /* Hämta kundsynliga bilagor — exkludera interna (includeInPublicView=false) */
+    /* Hämta kundsynliga bilagor — filtreras via snapshot.publicAttachmentIds om tillgängligt */
     const { data: attRow } = await supabase
       .from('store')
       .select('value')
@@ -176,12 +241,20 @@ serve(async (req: Request) => {
     const allAtts: Record<string, unknown>[] =
       Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
 
+    const publicAttachmentIds = snapshot
+      ? (snapshot.publicAttachmentIds as unknown[]).map(id => String(id))
+      : null
+
     const publicAtts = allAtts
-      .filter(a =>
-        a.offerId === off.id &&
-        a.active  !== false  &&
-        a.includeInPublicView === true
-      )
+      .filter(a => {
+        if (a.offerId !== off.id || a.active === false) return false
+        /* Om snapshot har publicAttachmentIds — använd dem (låsta vid utskick) */
+        if (publicAttachmentIds !== null) {
+          return publicAttachmentIds.includes(String(a.id))
+        }
+        /* Legacy: inget snapshot → använd aktuellt includeInPublicView */
+        return a.includeInPublicView === true
+      })
       .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
       .map(a => ({
         id:             a.id,
@@ -205,39 +278,40 @@ serve(async (req: Request) => {
 /* ── Publika fält — EXKLUDERAR alla interna fält ─────────── */
 function buildPublicOffer(
   off: Record<string, unknown>,
-  contactName  = String(off.contactName  ?? ''),
-  contactEmail = String(off.contactEmail ?? '')
+  snap: Record<string, unknown> | null,
+  resolvedContactName  = String(off.contactName  ?? ''),
+  resolvedContactEmail = String(off.contactEmail ?? '')
 ): Record<string, unknown> {
+  /* Giltigt snapshot är strikt auktoritativt för innehållsfält. */
+  const s = (key: string): unknown => snap !== null ? snap[key] : off[key]
+
   return {
     id:             off.id,
-    title:          off.title,
-    versionNumber:  off.versionNumber,
+    /* Innehållsfält — från snapshot om tillgängligt */
+    title:          s('title'),
+    versionNumber:  s('versionNumber'),
+    customerName:   s('customerName')  ?? '',
+    lines:          filterPublicLines(s('lines')),
+    extras:         filterPublicLines(s('extras')),
+    discount:       s('discount')      ?? null,
+    taxType:        s('taxType')       ?? 'moms',
+    rotRutAmount:   s('rotRutAmount')  ?? 0,
+    date:           snap !== null ? (s('date') ?? '') : (off.date ?? off.createdAt ?? ''),
+    validUntil:     s('validUntil')    ?? '',
+    paymentTerms:   s('paymentTerms')  ?? '',
+    validityText:   s('validityText')  ?? '',
+    terms:          s('terms')         ?? '',
+    includes:       s('includes')      ?? '',
+    excludes:       s('excludes')      ?? '',
+    scope:          s('scope')         ?? '',
+    summary:        s('summary')       ?? '',
+    generalTerms:   s('generalTerms')  ?? '',
+    address:        s('address')       ?? '',
+    /* Dynamiska metadata — alltid från live-offerten */
     status:         off.status,
-    /* Kundinfo (ej andra kunder, ej intern kunddata) */
-    customerName:   off.customerName   ?? '',   // snapshot
-    contactName,
-    contactEmail,
-    /* Offertinnehåll */
-    lines:          filterPublicLines(off.lines),
-    extras:         filterPublicLines(off.extras),
-    discount:       off.discount       ?? null,
-    taxType:        off.taxType        ?? 'moms',
-    rotRutAmount:   off.rotRutAmount   ?? 0,
-    /* Datum & villkor */
-    date:           off.date           ?? off.createdAt ?? '',
-    validUntil:     off.validUntil     ?? '',
-    paymentTerms:   off.paymentTerms   ?? '',
-    validityText:   off.validityText   ?? '',
-    terms:          off.terms          ?? '',
-    includes:       off.includes       ?? '',
-    excludes:       off.excludes       ?? '',
-    scope:          off.scope          ?? '',
-    summary:        off.summary        ?? '',
-    generalTerms:   off.generalTerms   ?? '',
-    /* Fastighetsreferens */
-    address:        off.address        ?? '',
+    contactName:    resolvedContactName,
+    contactEmail:   resolvedContactEmail,
     propertyId:     off.propertyId     ?? '',
-    /* Tokeninfo */
     tokenExpiresAt: off.tokenExpiresAt ?? '',
     openCount:      off.openCount      ?? 0,
     openedAt:       off.openedAt       ?? '',

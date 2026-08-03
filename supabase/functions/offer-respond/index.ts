@@ -1,5 +1,5 @@
 /**
- * offer-respond — Supabase Edge Function (Leverans E, Del E4)
+ * offer-respond — Supabase Edge Function (Leverans E, Del E4, v5)
  *
  * Tar emot kundsvar på digital offert (godkänn / ändring begärd / neka).
  * Validerar token + version, sparar auditlogg, uppdaterar status.
@@ -200,14 +200,16 @@ serve(async (req: Request) => {
 
     if (writeErr) throw new Error('store-skrivfel: ' + writeErr.message)
 
-    /* Lös kundnamn: lockedSnapshotJSON → off.customerName */
-    let resolvedCustomerName = (off.customerName as string) || ''
-    if (!resolvedCustomerName && off.lockedSnapshotJSON) {
+    /* Lös kundnamn: lockedSnapshotJSON → off.customerName
+       Prioritet: snap.customerName → off.customerName → kund-lookup → '' */
+    let resolvedCustomerName = ''
+    if (off.lockedSnapshotJSON) {
       try {
         const snap = JSON.parse(off.lockedSnapshotJSON as string)
         resolvedCustomerName = String(snap.customerName || '')
       } catch (_) { /* ignore parse error */ }
     }
+    if (!resolvedCustomerName) resolvedCustomerName = String(off.customerName || '')
 
     /* In-app notiser till VIFT-personal vid godkännande */
     if (action === 'approve') {
@@ -380,6 +382,22 @@ async function sendInAppNotifications(
       supabase.from('store').select('value').eq('key', 'vift_customers').maybeSingle()
     ])
 
+    /* Felkontroll på läsningar — staff och roles är nödvändiga för att veta vem som ska notifieras */
+    if (staffRow.error) {
+      console.error('[offer-respond] staff-läsfel:', staffRow.error.message)
+      return
+    }
+    if (rolesRow.error) {
+      console.error('[offer-respond] roles-läsfel:', rolesRow.error.message)
+      return
+    }
+    if (notifRow.error) {
+      console.warn('[offer-respond] notif-läsfel:', notifRow.error.message)
+    }
+    if (custRow.error) {
+      console.warn('[offer-respond] kund-läsfel:', custRow.error.message)
+    }
+
     const staff: Record<string, unknown>[] = Array.isArray(staffRow.data?.value)
       ? staffRow.data.value as Record<string, unknown>[]
       : []
@@ -409,7 +427,8 @@ async function sendInAppNotifications(
     })
 
     /* Lös kundnamn: opts.customerName → vift_customers-lookup
-       Schema.customer: name (foretag/brf), firstName+lastName (privat), contactPerson */
+       Schema.customer: name (foretag/brf/fastighetsagare), firstName+lastName (privat).
+       contactPerson är inte kundnamnet — det är en kontaktpersons namn, inte organisationens. */
     let customerName = opts.customerName
     if (!customerName && opts.customerId) {
       const customers: Record<string, unknown>[] = Array.isArray(custRow.data?.value)
@@ -417,8 +436,7 @@ async function sendInAppNotifications(
         : []
       const cust = customers.find(c => c.id === opts.customerId)
       if (cust) {
-        customerName = String(cust.contactPerson || '')
-        if (!customerName && cust.type === 'privat') {
+        if (cust.type === 'privat') {
           customerName = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
         }
         if (!customerName) customerName = String(cust.name || '')

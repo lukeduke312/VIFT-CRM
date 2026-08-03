@@ -36,7 +36,7 @@ const NotificationsService = {
     if (!user) return [];
     return (state.notifications || [])
       .filter(n => n.userId === user.id)
-      .sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
       .slice(0, limit);
   },
 
