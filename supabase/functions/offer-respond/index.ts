@@ -1,5 +1,5 @@
 /**
- * offer-respond — Supabase Edge Function (Leverans E, Del E4, v5)
+ * offer-respond — Supabase Edge Function (Leverans E, Del E4, v6)
  *
  * Tar emot kundsvar på digital offert (godkänn / ändring begärd / neka).
  * Validerar token + version, sparar auditlogg, uppdaterar status.
@@ -200,22 +200,25 @@ serve(async (req: Request) => {
 
     if (writeErr) throw new Error('store-skrivfel: ' + writeErr.message)
 
-    /* Lös kundnamn: lockedSnapshotJSON → off.customerName
-       Prioritet: snap.customerName → off.customerName → kund-lookup → '' */
+    /* Lös offerttitel och kundnamn från lockedSnapshotJSON → live-offert.
+       Notisen ska beskriva den version kunden faktiskt godkände. */
     let resolvedCustomerName = ''
+    let resolvedOfferTitle   = ''
     if (off.lockedSnapshotJSON) {
       try {
         const snap = JSON.parse(off.lockedSnapshotJSON as string)
         resolvedCustomerName = String(snap.customerName || '')
+        resolvedOfferTitle   = String(snap.title        || '')
       } catch (_) { /* ignore parse error */ }
     }
     if (!resolvedCustomerName) resolvedCustomerName = String(off.customerName || '')
+    if (!resolvedOfferTitle)   resolvedOfferTitle   = String(off.title || '') || String(off.id || '')
 
     /* In-app notiser till VIFT-personal vid godkännande */
     if (action === 'approve') {
       await sendInAppNotifications(supabase, {
         offerId:      off.id as string,
-        offerTitle:   (off.title as string) || String(off.id),
+        offerTitle:   resolvedOfferTitle,
         customerId:   (off.customerId as string) || '',
         customerName: resolvedCustomerName,
         version:      Number(off.versionNumber) || 1,
@@ -392,7 +395,14 @@ async function sendInAppNotifications(
       return
     }
     if (notifRow.error) {
-      console.warn('[offer-respond] notif-läsfel:', notifRow.error.message)
+      /* Läsfel på notiser — avbryt utan skrivning för att inte radera notishistoriken */
+      console.error('[offer-respond] notif-läsfel — avbryter för att inte radera notishistorik:', notifRow.error.message)
+      return
+    }
+    /* Om raden finns men value är i oväntat format — avbryt utan skrivning */
+    if (notifRow.data !== null && !Array.isArray(notifRow.data?.value)) {
+      console.error('[offer-respond] notisdata har ogiltigt format — avbryter utan skrivning')
+      return
     }
     if (custRow.error) {
       console.warn('[offer-respond] kund-läsfel:', custRow.error.message)
@@ -404,6 +414,7 @@ async function sendInAppNotifications(
     const roles: Record<string, unknown>[] = Array.isArray(rolesRow.data?.value)
       ? rolesRow.data.value as Record<string, unknown>[]
       : []
+    /* Här är det säkert att bygga ny array: antingen finns ingen rad alls (null), eller value är en giltig array */
     const existing: Record<string, unknown>[] = Array.isArray(notifRow.data?.value)
       ? notifRow.data.value as Record<string, unknown>[]
       : []
@@ -443,10 +454,12 @@ async function sendInAppNotifications(
       }
     }
 
-    /* Meddelandetext med titel, offert-ID, kundnamn, godkännare och tidpunkt */
-    const dateLabel    = new Date(opts.now).toLocaleString('sv-SE', {
+    /* Meddelandetext med titel, offert-ID, kundnamn, godkännare och tidpunkt.
+       Visar svensk lokal tid — createdAt lagras alltid som ISO/UTC. */
+    const dateLabel = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Stockholm',
       day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    })
+    }).format(new Date(opts.now))
     const titlePart    = opts.offerTitle !== opts.offerId
       ? `${opts.offerTitle} (${opts.offerId})`
       : opts.offerId
