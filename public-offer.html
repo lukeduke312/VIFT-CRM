@@ -340,7 +340,7 @@ a { color: var(--blue); text-decoration: none; }
   </div>
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     <span class="po-version-badge" id="po-ver-badge"></span>
-    <button id="po-dl-pdf-btn" class="po-print-btn" onclick="downloadOffer()">⬇ Ladda ner PDF</button>
+    <button id="po-dl-pdf-btn" class="po-print-btn" onclick="downloadOffer()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Ladda ner offert</button>
     <button class="po-print-btn" onclick="window.print()">🖨 Skriv ut</button>
   </div>
 </div>
@@ -682,7 +682,7 @@ async function downloadOffer() {
   } catch(e) {
     alert('Kunde inte ladda ner PDF: ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '⬇ Ladda ner PDF'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Ladda ner offert'; }
   }
 }
 

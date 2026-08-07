@@ -255,7 +255,6 @@ function persist() {
     ['ronderingsmallar', state.ronderingsmallar],
     ['ronderingar',      state.ronderingar],
     ['avvikelser',       state.avvikelser],
-    ['activities',       state.activities],
     ['serviceTemplates', state.serviceTemplates],
     ['emailTemplates',   state.emailTemplates],
     ['propertyCategories', state.propertyCategories],
@@ -276,6 +275,14 @@ function persist() {
 function persistNotifs() {
   Storage.setAll([
     ['notifications', state.notifications]
+  ]);
+}
+
+/* Spara bara aktiviteter — anropas av ActivitiesService för att undvika
+   race condition där persist() skriver över EF-skrivna aktiviteter */
+function persistActivities() {
+  Storage.setAll([
+    ['activities', state.activities]
   ]);
 }
 

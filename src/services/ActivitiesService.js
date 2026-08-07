@@ -33,7 +33,7 @@ const ActivitiesService = {
       completedBy: null
     }, data, { id });
     state.activities.push(act);
-    persist();
+    persistActivities();
     return act;
   },
 
@@ -44,7 +44,7 @@ const ActivitiesService = {
     act.status      = 'done';
     act.completedAt = new Date().toISOString();
     act.completedBy = user ? user.id : null;
-    persist();
+    persistActivities();
     return act;
   },
 
@@ -54,7 +54,7 @@ const ActivitiesService = {
     act.dueDate  = newDate;
     act.dueTime  = newTime || act.dueTime;
     act.status   = 'open';
-    persist();
+    persistActivities();
     return act;
   },
 
@@ -62,13 +62,13 @@ const ActivitiesService = {
     const act = this._get(id);
     if (!act) return;
     Object.assign(act, changes);
-    persist();
+    persistActivities();
     return act;
   },
 
   delete(id) {
     const idx = (state.activities || []).findIndex(a => a.id === id);
-    if (idx !== -1) { state.activities.splice(idx, 1); persist(); }
+    if (idx !== -1) { state.activities.splice(idx, 1); persistActivities(); }
   },
 
   _get(id) {

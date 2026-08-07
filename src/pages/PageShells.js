@@ -694,7 +694,7 @@ const OffersPage = {
     if (!con) return;
     con.dataset.wiz = '1';
     // Override .con padding/gap so wizard fills the area cleanly
-    con.style.cssText = 'padding:0;gap:0;display:block;box-sizing:border-box;';
+    con.style.cssText = 'padding:0;gap:0;display:block;box-sizing:border-box;max-width:none;width:100%;margin-left:0;margin-right:0;';
     con.innerHTML = '<div id="off-wizard"></div>';
     document.getElementById('off-wizard').innerHTML = this._wizardHtml();
     const scroll = document.getElementById('content-scroll');
@@ -2182,13 +2182,7 @@ const OfferDetailPage = {
             <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
             <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
-            <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-              ${sbdg(off.status)}
-              <div style="min-width:160px;">${CustomSelect.render('offd-status',{
-                options:[{v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'påmind',l:'Påmind'},{v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},{v:'utgången',l:'Utgången'},{v:'ersatt',l:'Ersatt'}],
-                value:off.status, onchange:'OfferDetailPage.setStatus(this.value)'
-              })}</div>
-            </div>
+            ${OfferDetailPage._statusPickerHtml(off.status)}
           </div>
         </div>
 
@@ -2359,6 +2353,58 @@ const OfferDetailPage = {
     showToast('Status: ' + statusLabel(status));
   },
 
+  _statusPickerHtml(currentStatus) {
+    const opts = [
+      {v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'påmind',l:'Påmind'},
+      {v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},
+      {v:'utgången',l:'Utgången'},{v:'ersatt',l:'Ersatt'}
+    ];
+    const rows = opts.map(o => {
+      const bold = o.v === currentStatus ? 'font-weight:700;' : '';
+      return `<div onclick="OfferDetailPage._statusPickerSelect('${o.v}')"
+        onmouseenter="this.style.background='var(--hover,rgba(0,0,0,.06))'"
+        onmouseleave="this.style.background=''"
+        style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;${bold}">
+        <span class="bdg ${statusClass(o.v)}" style="font-size:11px;">${o.l}</span>
+      </div>`;
+    }).join('');
+    return `<div style="position:relative;display:inline-flex;align-items:center;gap:4px;">
+      ${sbdg(currentStatus)}
+      <button type="button" onclick="OfferDetailPage._statusPickerToggle(event)"
+        aria-label="Byt status"
+        style="background:none;border:none;cursor:pointer;padding:2px 5px;color:rgba(255,255,255,.7);font-size:12px;line-height:1;">&#9660;</button>
+      <div id="offd-status-popover" style="display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:9000;
+        background:var(--card);border:1px solid var(--br);border-radius:8px;
+        box-shadow:0 4px 20px rgba(0,0,0,.18);min-width:240px;max-width:calc(100vw - 32px);padding:4px 0;">
+        ${rows}
+      </div>
+    </div>`;
+  },
+
+  _statusPickerToggle(e) {
+    e.stopPropagation();
+    const pop = document.getElementById('offd-status-popover');
+    if (!pop) return;
+    const open = pop.style.display === 'block';
+    pop.style.display = open ? 'none' : 'block';
+    if (!open) {
+      const closeClick = function(ev) {
+        if (!pop.contains(ev.target)) { pop.style.display = 'none'; document.removeEventListener('click', closeClick, true); }
+      };
+      const closeEsc = function(ev) {
+        if (ev.key === 'Escape') { pop.style.display = 'none'; document.removeEventListener('keydown', closeEsc); }
+      };
+      setTimeout(function() { document.addEventListener('click', closeClick, true); }, 0);
+      document.addEventListener('keydown', closeEsc);
+    }
+  },
+
+  _statusPickerSelect(value) {
+    const pop = document.getElementById('offd-status-popover');
+    if (pop) pop.style.display = 'none';
+    OfferDetailPage.setStatus(value);
+  },
+
   duplicate(offerId) {
     const off = getOff(offerId);
     if (!off) return;
@@ -2527,6 +2573,7 @@ const OfferDetailPage = {
     (state.activities || [])
       .filter(a => a.relatedType === 'offer' && a.relatedId === off.id && !a.done)
       .forEach(a => { a.done = true; a.doneAt = new Date().toISOString(); });
+    persistActivities();
 
     persist();
     this.render({offerId: this.offerId});
