@@ -2184,10 +2184,10 @@ const OfferDetailPage = {
             <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
             <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
               ${sbdg(off.status)}
-              ${CustomSelect.render('offd-status',{
+              <div style="min-width:160px;">${CustomSelect.render('offd-status',{
                 options:[{v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'påmind',l:'Påmind'},{v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},{v:'utgången',l:'Utgången'},{v:'ersatt',l:'Ersatt'}],
                 value:off.status, onchange:'OfferDetailPage.setStatus(this.value)'
-              })}
+              })}</div>
             </div>
           </div>
         </div>
@@ -2619,7 +2619,7 @@ const OfferDetailPage = {
               <span class="off-tl-dot" style="color:${typeColor[e.type]||'var(--mt)'};">${ic(typeIcon[e.type]||'circle',10)}</span>
               <div class="off-tl-body">
                 <div class="off-tl-text">${e.text||''}</div>
-                <div class="off-tl-meta">${fmtDate(e.ts)} · ${e.user||''}</div>
+                <div class="off-tl-meta">${fmtDateTime(e.ts)} · ${e.user||''}</div>
               </div>
             </div>`).join('')}
         <div class="off-tl-comment">

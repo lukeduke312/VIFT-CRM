@@ -379,6 +379,23 @@
   .ao-selall-cell { order: 2; width: 100%; }
 }
 
+/* ── Mobil filter-flikar: wrap till 3 kolumner ─────────── */
+@media (max-width: 639px) {
+  .ftabs,
+  .ao-status-tabs {
+    flex-wrap: wrap !important;
+    overflow-x: hidden !important;
+    white-space: normal !important;
+  }
+  .ftabs .ft,
+  .ao-status-tabs .ft {
+    flex: 1 1 calc(33.33% - 5px);
+    min-width: 80px;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
 /* ── Empty state: konsekvent padding ─────────────────── */
 .empty {
   display: flex;

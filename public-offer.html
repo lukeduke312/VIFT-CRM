@@ -298,7 +298,7 @@ a { color: var(--blue); text-decoration: none; }
   gap: 4px;
 }
 @media print {
-  .po-actions, .po-print-btn, .po-action-btns { display: none !important; }
+  .po-actions, .po-print-btn, .po-action-btns, #po-dl-pdf-btn { display: none !important; }
   .po-header { background: #0A1628 !important; }
   body { background: #fff; }
 }
@@ -340,6 +340,7 @@ a { color: var(--blue); text-decoration: none; }
   </div>
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     <span class="po-version-badge" id="po-ver-badge"></span>
+    <button id="po-dl-pdf-btn" class="po-print-btn" onclick="downloadOffer()">⬇ Ladda ner PDF</button>
     <button class="po-print-btn" onclick="window.print()">🖨 Skriv ut</button>
   </div>
 </div>
@@ -636,6 +637,10 @@ function renderAttachments() {
 async function viewAttachment(attachmentId) {
   /* Öppna fönster synkront före await — undviker popup-blockering */
   var win = window.open('', '_blank');
+  if (win) {
+    win.document.write('<!doctype html><html><head><meta charset="UTF-8"><title>Laddar…</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f8f9fa;font-family:system-ui,sans-serif;}</style></head><body><div style="text-align:center;color:#374151;"><div style="font-size:36px;margin-bottom:14px;">⏳</div><div style="font-size:16px;font-weight:600;">Laddar filen…</div><div style="font-size:12px;color:#6b7280;margin-top:6px;">Det kan ta ett ögonblick</div></div></body></html>');
+    win.document.close();
+  }
   try {
     var res = await fetch(SUPABASE_URL + '/functions/v1/offer-attachment-url', {
       method: 'POST',
@@ -646,8 +651,38 @@ async function viewAttachment(attachmentId) {
     if (!res.ok) throw new Error(data.error || res.status);
     win.location.href = data.url;
   } catch(e) {
-    if (win) win.close();
-    alert('Kunde inte visa filen: ' + e.message);
+    if (win) {
+      win.document.open();
+      win.document.write('<!doctype html><html><head><meta charset="UTF-8"><title>Fel</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff1f2;font-family:system-ui,sans-serif;}</style></head><body><div style="text-align:center;padding:24px;color:#dc2626;"><div style="font-size:36px;margin-bottom:12px;">⚠️</div><div style="font-size:16px;font-weight:600;margin-bottom:8px;">Kunde inte visa filen</div><div style="font-size:13px;color:#6b7280;margin-bottom:16px;">' + (e.message || 'Okänt fel') + '</div><button onclick="window.close()" style="padding:8px 20px;background:#1e5fad;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;">Stäng</button></div></body></html>');
+      win.document.close();
+    }
+  }
+}
+
+async function downloadOffer() {
+  if (!_token) return;
+  var btn = document.getElementById('po-dl-pdf-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Laddar…'; }
+  try {
+    var res = await fetch(SUPABASE_URL + '/functions/v1/offer-public-pdf?t=' + encodeURIComponent(_token));
+    if (!res.ok) {
+      var errData = await res.json().catch(function() { return {}; });
+      throw new Error(errData.error || String(res.status));
+    }
+    var blob = await res.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = _offer ? ('Offert-' + (_offer.id || '') + '.pdf') : 'offert.pdf';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Kunde inte ladda ner PDF: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇ Ladda ner PDF'; }
   }
 }
 

@@ -19,7 +19,7 @@ const NotificationsService = {
     state.notifications.unshift(n);
     // Keep max 200 per user
     state.notifications = state.notifications.slice(0, 200);
-    persist();
+    persistNotifs();
     Sidebar.updateBadges();
   },
 
@@ -42,14 +42,14 @@ const NotificationsService = {
 
   markRead(id) {
     const n = (state.notifications || []).find(x => x.id === id);
-    if (n && !n.read) { n.read = true; persist(); Sidebar.updateBadges(); }
+    if (n && !n.read) { n.read = true; persistNotifs(); Sidebar.updateBadges(); }
   },
 
   markAllRead() {
     const user = Auth.getUser();
     if (!user) return;
     (state.notifications || []).forEach(n => { if (n.userId === user.id) n.read = true; });
-    persist();
+    persistNotifs();
     Sidebar.updateBadges();
   },
 

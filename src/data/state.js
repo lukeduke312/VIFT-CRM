@@ -258,7 +258,6 @@ function persist() {
     ['activities',       state.activities],
     ['serviceTemplates', state.serviceTemplates],
     ['emailTemplates',   state.emailTemplates],
-    ['notifications',    state.notifications],
     ['propertyCategories', state.propertyCategories],
     ['ronderingspass',   state.ronderingspass],
     ['propertyObjects',  state.propertyObjects],
@@ -269,6 +268,14 @@ function persist() {
     ['inspections',           state.inspections],
     ['offerEvents',           state.offerEvents],
     ['offerAttachments',      state.offerAttachments]
+  ]);
+}
+
+/* Spara bara notiser — anropas av NotificationsService för att undvika
+   race condition där persist() skriver över EF-skrivna notiser */
+function persistNotifs() {
+  Storage.setAll([
+    ['notifications', state.notifications]
   ]);
 }
 
