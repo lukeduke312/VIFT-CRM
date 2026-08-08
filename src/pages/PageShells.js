@@ -2353,6 +2353,10 @@ const OfferDetailPage = {
     showToast('Status: ' + statusLabel(status));
   },
 
+  /* ─ Single-instance event handlers — inga läckor vid upprepad öppning ─ */
+  _spCloseClick: null,
+  _spCloseEsc:   null,
+
   _statusPickerHtml(currentStatus) {
     const opts = [
       {v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'påmind',l:'Påmind'},
@@ -2361,7 +2365,7 @@ const OfferDetailPage = {
     ];
     const rows = opts.map(o => {
       const bold = o.v === currentStatus ? 'font-weight:700;' : '';
-      return `<div onclick="OfferDetailPage._statusPickerSelect('${o.v}')"
+      return `<div role="option" tabindex="-1" onclick="OfferDetailPage._statusPickerSelect('${o.v}')"
         onmouseenter="this.style.background='var(--hover,rgba(0,0,0,.06))'"
         onmouseleave="this.style.background=''"
         style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;${bold}">
@@ -2370,10 +2374,12 @@ const OfferDetailPage = {
     }).join('');
     return `<div style="position:relative;display:inline-flex;align-items:center;gap:4px;">
       ${sbdg(currentStatus)}
-      <button type="button" onclick="OfferDetailPage._statusPickerToggle(event)"
-        aria-label="Byt status"
+      <button type="button" id="offd-status-btn"
+        onclick="OfferDetailPage._statusPickerToggle(event)"
+        aria-haspopup="listbox" aria-expanded="false" aria-label="Byt status"
         style="background:none;border:none;cursor:pointer;padding:2px 5px;color:rgba(255,255,255,.7);font-size:12px;line-height:1;">&#9660;</button>
-      <div id="offd-status-popover" style="display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:9000;
+      <div id="offd-status-popover" role="listbox" aria-label="Välj status"
+        style="display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:9000;
         background:var(--card);border:1px solid var(--br);border-radius:8px;
         box-shadow:0 4px 20px rgba(0,0,0,.18);min-width:240px;max-width:calc(100vw - 32px);padding:4px 0;">
         ${rows}
@@ -2381,27 +2387,47 @@ const OfferDetailPage = {
     </div>`;
   },
 
+  _statusPickerClose() {
+    const pop = document.getElementById('offd-status-popover');
+    const btn = document.getElementById('offd-status-btn');
+    if (pop) { pop.style.display = 'none'; }
+    if (btn) { btn.setAttribute('aria-expanded', 'false'); }
+    if (this._spCloseClick) { document.removeEventListener('click', this._spCloseClick, true); this._spCloseClick = null; }
+    if (this._spCloseEsc)   { document.removeEventListener('keydown', this._spCloseEsc);      this._spCloseEsc   = null; }
+  },
+
   _statusPickerToggle(e) {
     e.stopPropagation();
     const pop = document.getElementById('offd-status-popover');
+    const btn = document.getElementById('offd-status-btn');
     if (!pop) return;
-    const open = pop.style.display === 'block';
-    pop.style.display = open ? 'none' : 'block';
-    if (!open) {
-      const closeClick = function(ev) {
-        if (!pop.contains(ev.target)) { pop.style.display = 'none'; document.removeEventListener('click', closeClick, true); }
-      };
-      const closeEsc = function(ev) {
-        if (ev.key === 'Escape') { pop.style.display = 'none'; document.removeEventListener('keydown', closeEsc); }
-      };
-      setTimeout(function() { document.addEventListener('click', closeClick, true); }, 0);
-      document.addEventListener('keydown', closeEsc);
+
+    /* Rensa alltid gamla handlers före eventuell ny registrering */
+    if (this._spCloseClick) { document.removeEventListener('click', this._spCloseClick, true); this._spCloseClick = null; }
+    if (this._spCloseEsc)   { document.removeEventListener('keydown', this._spCloseEsc);      this._spCloseEsc   = null; }
+
+    const opening = pop.style.display !== 'block';
+    if (!opening) {
+      pop.style.display = 'none';
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      return;
     }
+
+    pop.style.display = 'block';
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+
+    this._spCloseClick = function(ev) {
+      if (!pop.contains(ev.target) && ev.target !== btn) { OfferDetailPage._statusPickerClose(); }
+    };
+    this._spCloseEsc = function(ev) {
+      if (ev.key === 'Escape') { OfferDetailPage._statusPickerClose(); if (btn) btn.focus(); }
+    };
+    setTimeout(function() { document.addEventListener('click', OfferDetailPage._spCloseClick, true); }, 0);
+    document.addEventListener('keydown', this._spCloseEsc);
   },
 
   _statusPickerSelect(value) {
-    const pop = document.getElementById('offd-status-popover');
-    if (pop) pop.style.display = 'none';
+    this._statusPickerClose();
     OfferDetailPage.setStatus(value);
   },
 
@@ -2570,9 +2596,15 @@ const OfferDetailPage = {
     this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert v' + (off.versionNumber||1));
 
     // Mark any open follow-up activity for this offer as done
+    const _actUser = state.currentUser;
+    const _actNow  = new Date().toISOString();
     (state.activities || [])
-      .filter(a => a.relatedType === 'offer' && a.relatedId === off.id && !a.done)
-      .forEach(a => { a.done = true; a.doneAt = new Date().toISOString(); });
+      .filter(a => a.relatedType === 'offer' && a.relatedId === off.id && a.status !== 'done')
+      .forEach(a => {
+        a.status      = 'done';
+        a.completedAt = _actNow;
+        a.completedBy = _actUser ? _actUser.id : null;
+      });
     persistActivities();
 
     persist();
@@ -3864,7 +3896,10 @@ ${hasRut?`<div class="rut">
     const att = (state.offerAttachments || []).find(a => a.id === attachmentId);
     if (!att) return;
 
-    const previewWindow = window.open('about:blank', '_blank');
+    /* Öppna same-origin laddningssida synkront — undviker about:blank i adressfältet
+       och popup-blockering (fönster öppnat i direkt user-event, inte efter await). */
+    const loadingUrl = window.location.origin + '/public-offer.html#attachment-loading';
+    const previewWindow = window.open(loadingUrl, '_blank');
 
     if (!previewWindow) {
       showToast('Webbläsaren blockerade visningsfönstret', 'error');
@@ -3872,7 +3907,6 @@ ${hasRut?`<div class="rut">
     }
 
     try {
-      previewWindow.document.title = 'Öppnar bilaga…';
       showToast('Öppnar bilaga…');
 
       const res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-url', {
@@ -3902,7 +3936,9 @@ ${hasRut?`<div class="rut">
       const targetUrl = new URL(json.url, EDGE_BASE).href;
       previewWindow.location.replace(targetUrl);
     } catch (e) {
-      previewWindow.close();
+      previewWindow.location.replace(
+        window.location.origin + '/public-offer.html#attachment-error:' + encodeURIComponent(e.message || 'Okänt fel')
+      );
       showToast('Fel vid visning: ' + e.message, 'error');
     }
   },

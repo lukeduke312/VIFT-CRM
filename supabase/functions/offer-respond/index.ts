@@ -1,5 +1,5 @@
 /**
- * offer-respond — Supabase Edge Function (Leverans E, Del E4, v7)
+ * offer-respond — Supabase Edge Function (Leverans E, Del E4, v8)
  *
  * Tar emot kundsvar på digital offert (godkänn / ändring begärd / neka).
  * Validerar token + version, sparar auditlogg, uppdaterar status.

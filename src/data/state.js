@@ -278,12 +278,28 @@ function persistNotifs() {
   ]);
 }
 
-/* Spara bara aktiviteter — anropas av ActivitiesService för att undvika
-   race condition där persist() skriver över EF-skrivna aktiviteter */
-function persistActivities() {
-  Storage.setAll([
-    ['activities', state.activities]
-  ]);
+/* Spara aktiviteter — merge-safe mot EF-skrivna aktiviteter.
+ *
+ * Läser aktuell remote-lista före skrivning och bevarar aktiviteter med
+ * id-prefix "ACT-offer-" som klienten ännu inte synkat (skapade av offer-respond
+ * EF). Klient-skapade och klient-raderade aktiviteter påverkas inte eftersom
+ * id:n är separata sekvenser. Faller tillbaka på enkel skrivning vid nätverksfel.
+ */
+async function persistActivities() {
+  try {
+    const remote = await Storage.get('activities');
+    if (Array.isArray(remote)) {
+      const localIds = new Set((state.activities || []).map(function(a) { return a.id; }));
+      /* Bevara EF-skrivna aktiviteter som klienten inte sett än */
+      const efOnly = remote.filter(function(a) {
+        return typeof a.id === 'string' && a.id.indexOf('ACT-offer-') === 0 && !localIds.has(a.id);
+      });
+      if (efOnly.length > 0) {
+        state.activities = (state.activities || []).concat(efOnly).slice(-5000);
+      }
+    }
+  } catch (_) { /* nätverksfel — fortsätt med enkel skrivning */ }
+  Storage.setAll([['activities', state.activities || []]]);
 }
 
 /* ── Hjälpfunktioner ──────────────────── */

@@ -635,11 +635,13 @@ function renderAttachments() {
 }
 
 async function viewAttachment(attachmentId) {
-  /* Öppna fönster synkront före await — undviker popup-blockering */
-  var win = window.open('', '_blank');
-  if (win) {
-    win.document.write('<!doctype html><html><head><meta charset="UTF-8"><title>Laddar…</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f8f9fa;font-family:system-ui,sans-serif;}</style></head><body><div style="text-align:center;color:#374151;"><div style="font-size:36px;margin-bottom:14px;">⏳</div><div style="font-size:16px;font-weight:600;">Laddar filen…</div><div style="font-size:12px;color:#6b7280;margin-top:6px;">Det kan ta ett ögonblick</div></div></body></html>');
-    win.document.close();
+  /* Öppna same-origin laddningssida synkront — undviker about:blank i adressfältet
+     och popup-blockering (fönster öppnat i direkt user-event, inte efter await). */
+  var loadingUrl = window.location.origin + '/public-offer.html#attachment-loading';
+  var win = window.open(loadingUrl, '_blank');
+  if (!win) {
+    alert('Webbläsaren blockerade visningsfönstret. Tillåt popup-fönster och försök igen.');
+    return;
   }
   try {
     var res = await fetch(SUPABASE_URL + '/functions/v1/offer-attachment-url', {
@@ -648,21 +650,20 @@ async function viewAttachment(attachmentId) {
       body: JSON.stringify({ token: _token, attachmentId: attachmentId, mode: 'view' })
     });
     var data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.status);
-    win.location.href = data.url;
+    if (!res.ok) throw new Error(data.error || String(res.status));
+    if (!data.url) throw new Error('Servern returnerade ingen länk');
+    win.location.replace(data.url);
   } catch(e) {
-    if (win) {
-      win.document.open();
-      win.document.write('<!doctype html><html><head><meta charset="UTF-8"><title>Fel</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff1f2;font-family:system-ui,sans-serif;}</style></head><body><div style="text-align:center;padding:24px;color:#dc2626;"><div style="font-size:36px;margin-bottom:12px;">⚠️</div><div style="font-size:16px;font-weight:600;margin-bottom:8px;">Kunde inte visa filen</div><div style="font-size:13px;color:#6b7280;margin-bottom:16px;">' + (e.message || 'Okänt fel') + '</div><button onclick="window.close()" style="padding:8px 20px;background:#1e5fad;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;">Stäng</button></div></body></html>');
-      win.document.close();
-    }
+    win.location.replace(
+      window.location.origin + '/public-offer.html#attachment-error:' + encodeURIComponent(e.message || 'Okänt fel')
+    );
   }
 }
 
 async function downloadOffer() {
   if (!_token) return;
   var btn = document.getElementById('po-dl-pdf-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Laddar…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Laddar…'; }
   try {
     var res = await fetch(SUPABASE_URL + '/functions/v1/offer-public-pdf?t=' + encodeURIComponent(_token));
     if (!res.ok) {
@@ -841,6 +842,50 @@ function showErr(msg) {
 }
 
 /* ── Init ────────────────────────────────────────────────── */
+
+/* Bilageladdnings-läge: öppnad av intern CRM-knapp "Visa" via same-origin URL.
+   Detekteras FÖRE token-logik så att #attachment-loading aldrig tolkas som offerttoken.
+   Vid #attachment-error:msg visas felvy i samma fönster. */
+(function() {
+  var _h = window.location.hash;
+  var _isLoad  = _h === '#attachment-loading';
+  var _isErr   = !_isLoad && _h.indexOf('#attachment-error:') === 0;
+  if (!_isLoad && !_isErr) return;
+
+  /* Dölj PDF/Print-knappar — inte relevanta för bilagefönstret */
+  var _hdrBtns = document.querySelector('.po-header > div:last-child');
+  if (_hdrBtns) _hdrBtns.style.display = 'none';
+  var _hdrSub = document.querySelector('.po-header-sub');
+  if (_hdrSub) _hdrSub.textContent = 'Bilagevisning';
+
+  var _root = document.getElementById('po-root');
+  if (_root) {
+    if (_isLoad) {
+      document.title = 'Laddar bilaga…';
+      _root.innerHTML = '<div class="po-loader"><div class="po-spinner"></div><span>Laddar bilaga…</span></div>';
+    } else {
+      var _errMsg = '';
+      try { _errMsg = decodeURIComponent(_h.slice(_h.indexOf(':') + 1)); } catch(_) {}
+      var _safeMsg = _errMsg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      document.title = 'Fel vid öppning';
+      _root.innerHTML =
+        '<div class="po-loader" style="gap:10px;">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+            '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' +
+          '</svg>' +
+          '<span style="font-weight:600;">Kunde inte öppna bilagan</span>' +
+          (_safeMsg ? '<span style="font-size:12px;color:var(--mt);">' + _safeMsg + '</span>' : '') +
+          '<button onclick="window.close()" style="margin-top:4px;padding:6px 20px;background:#1e5fad;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">Stäng</button>' +
+        '</div>';
+    }
+  }
+
+  /* Blockera resten av init-skriptet */
+  window._poAttachmentMode = true;
+})();
+
+if (!window._poAttachmentMode) {
+
 _token = getToken();
 
 /* Om token kom från URL-parametern (?t=...) — flytta den till
@@ -859,10 +904,12 @@ if (_token && window.location.search && window.location.search.includes('t=')) {
 
 if (!_token) {
   document.getElementById('po-root').innerHTML =
-    '<div class="po-status-banner error">⚠ Ogiltig länk — ingen offerttoken hittades.</div>';
+    '<div class="po-status-banner error">Ogiltig länk — ingen offerttoken hittades.</div>';
 } else {
   loadOffer(_token);
 }
+
+} /* end !_poAttachmentMode */
 </script>
 </body>
 </html>
