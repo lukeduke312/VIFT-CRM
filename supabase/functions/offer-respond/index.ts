@@ -1,5 +1,5 @@
 /**
- * offer-respond — Supabase Edge Function (Leverans E, Del E4, v8)
+ * offer-respond — Supabase Edge Function (Leverans E, Del E4, v9)
  *
  * Tar emot kundsvar på digital offert (godkänn / ändring begärd / neka).
  * Validerar token + version, sparar auditlogg, uppdaterar status.
@@ -214,18 +214,9 @@ serve(async (req: Request) => {
     if (!resolvedCustomerName) resolvedCustomerName = String(off.customerName || '')
     if (!resolvedOfferTitle)   resolvedOfferTitle   = String(off.title || '') || String(off.id || '')
 
-    /* In-app notiser och Att göra-aktivitet till VIFT-personal vid godkännande */
+    /* In-app notiser till VIFT-personal vid godkännande */
     if (action === 'approve') {
       await sendInAppNotifications(supabase, {
-        offerId:      off.id as string,
-        offerTitle:   resolvedOfferTitle,
-        customerId:   (off.customerId as string) || '',
-        customerName: resolvedCustomerName,
-        version:      Number(off.versionNumber) || 1,
-        approvedBy:   name,
-        now
-      })
-      await createApprovalActivity(supabase, {
         offerId:      off.id as string,
         offerTitle:   resolvedOfferTitle,
         customerId:   (off.customerId as string) || '',
@@ -513,78 +504,11 @@ async function sendInAppNotifications(
   }
 }
 
-/* ── Skapa Att göra-aktivitet vid godkänd offert ──────────── */
-async function createApprovalActivity(
-  supabase: ReturnType<typeof createClient>,
-  opts: {
-    offerId: string
-    offerTitle: string
-    customerId: string
-    customerName: string
-    version: number
-    approvedBy: string
-    now: string
-  }
-): Promise<void> {
-  try {
-    const activityId = `ACT-offer-${opts.offerId}-v${opts.version}`
-
-    const { data: actRow, error: actErr } = await supabase
-      .from('store')
-      .select('value')
-      .eq('key', 'vift_activities')
-      .maybeSingle()
-
-    if (actErr) {
-      console.warn('[offer-respond] activities-läsfel:', actErr.message)
-      return
-    }
-
-    const activities: Record<string, unknown>[] = Array.isArray(actRow?.value)
-      ? actRow.value as Record<string, unknown>[]
-      : []
-
-    /* Idempotent — skapa inte dubblett om samma version redan har en aktivitet */
-    if (activities.some(a => a.id === activityId)) return
-
-    const titlePart    = opts.offerTitle && opts.offerTitle !== opts.offerId
-      ? `${opts.offerTitle} (${opts.offerId})`
-      : opts.offerId
-    const customerPart = opts.customerName ? ` – ${opts.customerName}` : ''
-
-    const newActivity: Record<string, unknown> = {
-      id:          activityId,
-      title:       `Godkänd offert – ${titlePart}${customerPart}`,
-      type:        'followup',
-      relatedType: 'offer',
-      relatedId:   opts.offerId,
-      customerId:  opts.customerId || null,
-      assignedTo:  null,
-      dueDate:     null,
-      dueTime:     '',
-      priority:    'normal',
-      note:        `${opts.approvedBy} godkände offerten.`,
-      status:      'open',
-      createdAt:   opts.now,
-      createdBy:   null,
-      completedAt: null,
-      completedBy: null
-    }
-
-    activities.push(newActivity)
-    if (activities.length > 5_000) activities.splice(0, activities.length - 5_000)
-
-    const { error: writeErr } = await supabase
-      .from('store')
-      .upsert({ key: 'vift_activities', value: activities }, { onConflict: 'key' })
-
-    if (writeErr) {
-      console.warn('[offer-respond] activities-skrivfel:', writeErr.message)
-    }
-  } catch (e) {
-    console.warn('[offer-respond] createApprovalActivity fel:', e)
-  }
-}
+/* ── createApprovalActivity borttagen i v9 ──────────────────────────── */
+/* Activities-blob är inte tillräckligt race-safe för server-side skrivningar
+   i nuvarande arkitektur. Godkännandenotisen (sendInAppNotifications) är
+   kvar och fungerar korrekt. Automatisk Att göra implementeras separat när
+   activities-storage kan normaliseras med per-rad RLS. */
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {

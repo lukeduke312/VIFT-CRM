@@ -255,6 +255,7 @@ function persist() {
     ['ronderingsmallar', state.ronderingsmallar],
     ['ronderingar',      state.ronderingar],
     ['avvikelser',       state.avvikelser],
+    ['activities',       state.activities],
     ['serviceTemplates', state.serviceTemplates],
     ['emailTemplates',   state.emailTemplates],
     ['propertyCategories', state.propertyCategories],
@@ -270,36 +271,29 @@ function persist() {
   ]);
 }
 
-/* Spara bara notiser — anropas av NotificationsService för att undvika
-   race condition där persist() skriver över EF-skrivna notiser */
-function persistNotifs() {
-  Storage.setAll([
-    ['notifications', state.notifications]
-  ]);
-}
-
-/* Spara aktiviteter — merge-safe mot EF-skrivna aktiviteter.
- *
- * Läser aktuell remote-lista före skrivning och bevarar aktiviteter med
- * id-prefix "ACT-offer-" som klienten ännu inte synkat (skapade av offer-respond
- * EF). Klient-skapade och klient-raderade aktiviteter påverkas inte eftersom
- * id:n är separata sekvenser. Faller tillbaka på enkel skrivning vid nätverksfel.
- */
-async function persistActivities() {
+/* Spara bara notiser — anropas av NotificationsService.
+   Läser remote före skrivning för att undvika race mot EF-skrivna notiser. */
+async function persistNotifs() {
   try {
-    const remote = await Storage.get('activities');
+    const remote = await Storage.get('notifications');
     if (Array.isArray(remote)) {
-      const localIds = new Set((state.activities || []).map(function(a) { return a.id; }));
-      /* Bevara EF-skrivna aktiviteter som klienten inte sett än */
-      const efOnly = remote.filter(function(a) {
-        return typeof a.id === 'string' && a.id.indexOf('ACT-offer-') === 0 && !localIds.has(a.id);
-      });
-      if (efOnly.length > 0) {
-        state.activities = (state.activities || []).concat(efOnly).slice(-5000);
+      const localMap = new Map((state.notifications || []).map(function(n) { return [n.id, n]; }));
+      const merged = (state.notifications || []).slice();
+      for (var i = 0; i < remote.length; i++) {
+        if (!localMap.has(remote[i].id)) merged.push(remote[i]);
       }
+      merged.sort(function(a, b) { return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(); });
+      var _final = merged.slice(0, 5000);
+      state.notifications = _final;
+      var _now = new Date().toISOString();
+      if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
+      Storage.setAll([['notifications', _final], ['lastChanged', _now]]);
+    } else {
+      Storage.setAll([['notifications', state.notifications || []]]);
     }
-  } catch (_) { /* nätverksfel — fortsätt med enkel skrivning */ }
-  Storage.setAll([['activities', state.activities || []]]);
+  } catch(e) {
+    console.warn('[persistNotifs] remote-läsning misslyckades — skriver inte stale data:', e);
+  }
 }
 
 /* ── Hjälpfunktioner ──────────────────── */
@@ -374,7 +368,7 @@ function fmtDate(isoStr) {
 
 function fmtDateTime(isoStr) {
   if (!isoStr) return '—';
-  return new Date(isoStr).toLocaleString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(isoStr).toLocaleString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' });
 }
 
 /* ── Status/prioritet-helpers ─────────── */

@@ -1,5 +1,5 @@
 /**
- * offer-public-pdf — Supabase Edge Function (v1)
+ * offer-public-pdf — Supabase Edge Function (v2)
  *
  * Genererar och returnerar en PDF av en offert via publik token.
  * Kräver ingen JWT — autentiseras enbart via publicToken.
@@ -130,15 +130,20 @@ serve(async (req: Request) => {
     const snap = parseValidSnapshot(off.lockedSnapshotJSON, String(off.id ?? ''))
     const s    = (key: string): unknown => snap !== null ? snap[key] : off[key]
 
-    /* Filtrera bort interna fält */
-    const allowedLineFields = ['type','description','templateName','qty','unit',
-                               'unitPrice','discount','total','vatRate','exVat','text','subLines']
-    function filterLines(lines: unknown): Record<string, unknown>[] {
-      if (!Array.isArray(lines)) return []
-      return lines.map((l: Record<string, unknown>) => {
-        if (!l || typeof l !== 'object') return {} as Record<string, unknown>
+    /* Filtrera bort interna fält (inköpspris, marginal, TB, internalNote exponeras aldrig).
+       Bevara alla fält som krävs för korrekt visning och beräkning. */
+    const ALLOWED_LINE_FIELDS = new Set([
+      'id','type','description','templateName','qty','unit','unitPrice',
+      'discount','total','vatRate','exVat','rutAmount','reductionType','subLines','text'
+    ])
+    function filterLines(linesRaw: unknown): Record<string, unknown>[] {
+      if (!Array.isArray(linesRaw)) return []
+      return linesRaw.map((l: unknown) => {
+        if (!l || typeof l !== 'object' || Array.isArray(l)) return {}
         const pub: Record<string, unknown> = {}
-        for (const k of allowedLineFields) { if (k in l) pub[k] = l[k] }
+        for (const [k, v] of Object.entries(l as Record<string, unknown>)) {
+          if (ALLOWED_LINE_FIELDS.has(k)) pub[k] = v
+        }
         return pub
       })
     }
@@ -146,23 +151,51 @@ serve(async (req: Request) => {
     const lines  = filterLines(s('lines'))
     const extras = filterLines(s('extras'))
 
-    /* Beräkna totaler */
-    let exVatTotal   = 0
-    let incVatTotal  = 0
-    let rutTotal     = 0
-    const discountPct = Number(s('discount')) || 0
-    const taxType     = String(s('taxType') ?? 'moms')
+    /* ── Beräkna totaler — exakt samma logik som renderOffer() i public-offer.html ──
+     *
+     * discount: { type: 'percent'|'fixed'|'none', value: number }
+     * vatRate:  25 = 25 % (heltal, INTE 0.25)
+     * rutAmount: på service-rader
+     * Moms: fast 25 % på hela summan (taxType='none' → 0 kr moms)
+     */
+    const taxType  = String(s('taxType') ?? 'moms')
+    const prLines  = lines.filter((l: Record<string, unknown>) => l.type !== 'text')
 
-    for (const l of [...lines, ...extras]) {
-      if (l.type === 'text') continue
-      const lineTotal  = Number(l.total)  || 0
-      const lineExVat  = Number(l.exVat)  || 0
-      const lineRut    = Number(l.rutAmount) || 0
-      const vatRate    = Number(l.vatRate) ?? 0.25
-      exVatTotal  += lineExVat  || lineTotal
-      incVatTotal += lineExVat ? lineExVat * (1 + vatRate) : lineTotal * 1.25
-      rutTotal    += lineRut
+    let rawEx = 0
+    for (const l of prLines) {
+      if (l.type === 'service') {
+        rawEx += Number(l.exVat) || 0
+      } else {
+        rawEx += Number(l.total) || Math.round((Number(l.qty) || 1) * (Number(l.unitPrice) || 0))
+      }
     }
+    for (const e of extras) {
+      if (e.type === 'text') continue
+      rawEx += Math.round((Number(e.qty) || 1) * (Number(e.unitPrice) || 0))
+    }
+
+    const discRaw   = s('discount') as Record<string, unknown> | null | undefined
+    const disc: Record<string, unknown> =
+      (discRaw && typeof discRaw === 'object' && !Array.isArray(discRaw))
+        ? discRaw as Record<string, unknown>
+        : { type: 'none', value: 0 }
+    const discValue = Number(disc.value) || 0
+    let discAmt = 0
+    if (discValue > 0) {
+      if (disc.type === 'percent') {
+        discAmt = Math.round(rawEx * Math.min(discValue, 100) / 100)
+      } else if (disc.type === 'fixed') {
+        discAmt = Math.min(Math.round(discValue), rawEx)
+      }
+    }
+
+    const exVatTotal  = rawEx - discAmt
+    const vatAmt      = taxType === 'none' ? 0 : Math.round(exVatTotal * 0.25)
+    const incVatTotal = exVatTotal + vatAmt
+    const rutTotal    = prLines
+      .filter((l: Record<string, unknown>) => l.type === 'service')
+      .reduce((acc: number, l: Record<string, unknown>) => acc + (Number(l.rutAmount) || 0), 0)
+    const customerPrice = incVatTotal - rutTotal
 
     /* ── PDF-generation ─────────────────────────────────────── */
     const pdfDoc = await PDFDocument.create()
@@ -385,9 +418,12 @@ serve(async (req: Request) => {
       y -= sz + 5
     }
 
-    const vatAmt = incVatTotal - exVatTotal
-    if (discountPct > 0) {
-      totalRow('Rabatt (' + fmtNum(discountPct) + ' %)', '−' + fmtNum(exVatTotal * discountPct / 100) + ' kr')
+    if (discAmt > 0) {
+      totalRow('Delsumma:', fmtNum(rawEx) + ' kr')
+      const discLabel = disc.type === 'percent'
+        ? 'Rabatt (' + fmtNum(discValue) + ' %)'
+        : 'Rabatt (fast)'
+      totalRow(discLabel, '−' + fmtNum(discAmt) + ' kr')
     }
     totalRow('Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
     if (taxType !== 'none') {
@@ -399,7 +435,6 @@ serve(async (req: Request) => {
     y -= 2
     hline(y + 2)
     y -= 8
-    const customerPrice = rutTotal > 0 ? incVatTotal - rutTotal : incVatTotal
     totalRow('Totalt att betala:', fmtNum(customerPrice) + ' kr', true)
 
     y -= 14

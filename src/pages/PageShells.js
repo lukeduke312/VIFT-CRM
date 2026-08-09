@@ -6,6 +6,7 @@
  * v94: patch state (offerPatch/attachmentPatches/emailEvent) före persist; kundvy via snapshot
  * v95: v4-patch; serverpatchar vid fel; attachment-validering; snapshot-kontroll; email_sent i tidslinje
  * v96: v5-patch; persist endast vid verkliga serverpatchar; korrekt misslyckad e-posthändelse
+ * v102: ta bort auto-Att-göra från createAO; status-kontroll hel yta 44px; inga persistActivities-anrop
  */
 
 /* ── Offerter (v2 – tjänstemallar + kalkylator) ─────── */
@@ -2372,12 +2373,14 @@ const OfferDetailPage = {
         <span class="bdg ${statusClass(o.v)}" style="font-size:11px;">${o.l}</span>
       </div>`;
     }).join('');
-    return `<div style="position:relative;display:inline-flex;align-items:center;gap:4px;">
-      ${sbdg(currentStatus)}
+    return `<div style="position:relative;display:inline-block;">
       <button type="button" id="offd-status-btn"
         onclick="OfferDetailPage._statusPickerToggle(event)"
         aria-haspopup="listbox" aria-expanded="false" aria-label="Byt status"
-        style="background:none;border:none;cursor:pointer;padding:2px 5px;color:rgba(255,255,255,.7);font-size:12px;line-height:1;">&#9660;</button>
+        style="display:inline-flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:6px;min-height:44px;">
+        ${sbdg(currentStatus)}
+        <span style="color:rgba(255,255,255,.7);font-size:12px;">&#9660;</span>
+      </button>
       <div id="offd-status-popover" role="listbox" aria-label="Välj status"
         style="display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:9000;
         background:var(--card);border:1px solid var(--br);border-radius:8px;
@@ -2594,18 +2597,6 @@ const OfferDetailPage = {
     off.convertedAt    = now3;
     off.updatedAt      = now3;
     this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert v' + (off.versionNumber||1));
-
-    // Mark any open follow-up activity for this offer as done
-    const _actUser = state.currentUser;
-    const _actNow  = new Date().toISOString();
-    (state.activities || [])
-      .filter(a => a.relatedType === 'offer' && a.relatedId === off.id && a.status !== 'done')
-      .forEach(a => {
-        a.status      = 'done';
-        a.completedAt = _actNow;
-        a.completedBy = _actUser ? _actUser.id : null;
-      });
-    persistActivities();
 
     persist();
     this.render({offerId: this.offerId});
