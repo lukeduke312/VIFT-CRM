@@ -1,5 +1,5 @@
 /**
- * offer-public-pdf — Supabase Edge Function (v2)
+ * offer-public-pdf — Supabase Edge Function (v3)
  *
  * Genererar och returnerar en PDF av en offert via publik token.
  * Kräver ingen JWT — autentiseras enbart via publicToken.
@@ -23,6 +23,16 @@
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { PDFDocument, StandardFonts, rgb, PageSizes } from 'https://esm.sh/pdf-lib@1.17.1'
+
+/* ── VIFT Logotyp (PNG, base64 — assets/icon-512.png) ──────── */
+const LOGO_PNG_B64 = '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'
+
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64)
+  const buf = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+  return buf
+}
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -259,14 +269,23 @@ serve(async (req: Request) => {
       page.drawLine({ start: { x: ML, y: yPos }, end: { x: W - MR, y: yPos }, thickness: 0.5, color })
     }
 
-    /* ── Header-block ── */
-    page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: navy })
-    page.drawText('VIFT', { x: ML, y: H - 38, size: 22, font: fontBold, color: white })
-    page.drawText('Fastighetsservice', { x: ML + 57, y: H - 38, size: 11, font: fontReg, color: rgb(0.38, 0.65, 0.98) })
-    page.drawText('OFFERT', { x: W - MR - fontBold.widthOfTextAtSize('OFFERT', 18), y: H - 38, size: 18, font: fontBold, color: white })
-    page.drawText('Digital offert — säker länk', { x: ML, y: H - 55, size: 8, font: fontReg, color: rgb(0.7, 0.75, 0.85) })
+    /* ── Header-block: VIFT-logga på vit yta ── */
+    const LOGO_H = 40
+    try {
+      const logoImg = await pdfDoc.embedPng(b64ToBytes(LOGO_PNG_B64))
+      const dims    = logoImg.scaleToFit(LOGO_H, LOGO_H)
+      page.drawImage(logoImg, { x: ML, y: H - MT - LOGO_H, width: dims.width, height: dims.height })
+    } catch (_logoErr) {
+      /* Fallback: text-baserad logga */
+      page.drawText('VIFT', { x: ML, y: H - MT - 20, size: 22, font: fontBold, color: navy })
+      page.drawText('Fastighetsservice', { x: ML + 57, y: H - MT - 20, size: 11, font: fontReg, color: blue })
+    }
+    const offerLblW = fontBold.widthOfTextAtSize('OFFERT', 18)
+    page.drawText('OFFERT', { x: W - MR - offerLblW, y: H - MT - 20, size: 18, font: fontBold, color: navy })
+    page.drawText('Digital offert — säker länk', { x: ML, y: H - MT - LOGO_H - 8, size: 8, font: fontReg, color: muted })
+    hline(H - MT - LOGO_H - 14)
 
-    y = H - 90
+    y = H - MT - LOGO_H - 28
 
     /* ── Offertinfo-rad ── */
     const offId  = String(off.id ?? '')
@@ -372,7 +391,8 @@ serve(async (req: Request) => {
         const desc     = String(l.description || l.templateName || '')
         const qty      = l.qty != null ? String(l.qty) + (l.unit ? ' ' + l.unit : '') : ''
         const unitP    = l.unitPrice != null ? fmtNum(l.unitPrice) : ''
-        const discTxt  = l.discount ? fmtNum(Number(l.discount)) + ' %' : ''
+        const discNum  = (typeof l.discount === 'number' && l.discount > 0) ? l.discount : 0
+        const discTxt  = discNum > 0 ? fmtNum(discNum) + ' %' : ''
         const exVatVal = Number(l.exVat) || (Number(l.total) || 0)
         const tot      = fmtNum(exVatVal) + ' kr'
 
@@ -384,9 +404,9 @@ serve(async (req: Request) => {
           for (const sub of l.subLines as Record<string, unknown>[]) {
             if (!sub || typeof sub !== 'object') continue
             checkY(14)
-            const subDesc = '  · ' + String(sub.description || '')
+            const subDesc = '  · ' + String(sub.desc || sub.description || '')
             const subQty  = sub.qty != null ? String(sub.qty) + (sub.unit ? ' ' + sub.unit : '') : ''
-            const subP    = sub.unitPrice != null ? fmtNum(sub.unitPrice) : ''
+            const subP    = sub.price != null ? fmtNum(sub.price) : (sub.unitPrice != null ? fmtNum(sub.unitPrice) : '')
             const subEx   = Number(sub.exVat) || Number(sub.total) || 0
             const subTot  = fmtNum(subEx) + ' kr'
             drawTableRow(subDesc, subQty, subP, '', subTot, { size: 8 })
@@ -448,7 +468,7 @@ serve(async (req: Request) => {
       ['Ingår ej',       String(s('excludes') ?? '')],
       ['Villkor',        String(s('terms') ?? '')],
       ['Betalningsvillkor', String(s('paymentTerms') ?? '')],
-      ['Giltighetstexxt',  String(s('validityText') ?? '')],
+      ['Giltighetsbetingelse', String(s('validityText') ?? '')],
       ['Allmänna villkor', String(s('generalTerms') ?? '')],
     ]
     for (const [label, val] of textFields) {

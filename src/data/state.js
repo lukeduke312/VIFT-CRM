@@ -272,11 +272,13 @@ function persist() {
 }
 
 /* Spara bara notiser — anropas av NotificationsService.
-   Läser remote före skrivning för att undvika race mot EF-skrivna notiser. */
+   Läser remote före skrivning för att undvika race mot EF-skrivna notiser.
+   Storage.get() semantik: Array = rad finns, null = ingen rad, annat = ogiltigt format. */
 async function persistNotifs() {
   try {
     const remote = await Storage.get('notifications');
     if (Array.isArray(remote)) {
+      /* Giltig remote-array: merge (lokal read-status vinner, nya EF-notiser bevaras) */
       const localMap = new Map((state.notifications || []).map(function(n) { return [n.id, n]; }));
       const merged = (state.notifications || []).slice();
       for (var i = 0; i < remote.length; i++) {
@@ -288,11 +290,15 @@ async function persistNotifs() {
       var _now = new Date().toISOString();
       if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
       Storage.setAll([['notifications', _final], ['lastChanged', _now]]);
-    } else {
+    } else if (remote === null) {
+      /* Ingen notifications-rad finns — säkert att skriva lokal array som startvärde */
       Storage.setAll([['notifications', state.notifications || []]]);
+    } else {
+      /* Oväntat format (varken array eller null) — skriv INTE för att inte radera data */
+      console.warn('[persistNotifs] notifications returnerade oväntat format — skriver inte:', typeof remote);
     }
   } catch(e) {
-    console.warn('[persistNotifs] remote-läsning misslyckades — skriver inte stale data:', e);
+    console.warn('[persistNotifs] fel — skriver inte stale data:', e);
   }
 }
 
