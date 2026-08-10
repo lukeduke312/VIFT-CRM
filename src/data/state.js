@@ -272,33 +272,49 @@ function persist() {
 }
 
 /* Spara bara notiser — anropas av NotificationsService.
-   Läser remote före skrivning för att undvika race mot EF-skrivna notiser.
-   Storage.get() semantik: Array = rad finns, null = ingen rad, annat = ogiltigt format. */
-async function persistNotifs() {
+   Serialiserad via _notifPersistQueue — aldrig parallella read/write-flöden.
+   Använder Storage.getRemoteStrict() — ingen localStorage-fallback vid nätverksfel. */
+var _notifPersistQueue = Promise.resolve();
+
+function persistNotifs() {
+  _notifPersistQueue = _notifPersistQueue
+    .then(function() { return _doNotifPersist(); })
+    .catch(function(e) { console.warn('[persistNotifs] queue-fel:', e); });
+}
+
+async function _doNotifPersist() {
+  const now = new Date().toISOString();
+  var result;
   try {
-    const remote = await Storage.get('notifications');
-    if (Array.isArray(remote)) {
-      /* Giltig remote-array: merge (lokal read-status vinner, nya EF-notiser bevaras) */
-      const localMap = new Map((state.notifications || []).map(function(n) { return [n.id, n]; }));
-      const merged = (state.notifications || []).slice();
-      for (var i = 0; i < remote.length; i++) {
-        if (!localMap.has(remote[i].id)) merged.push(remote[i]);
-      }
-      merged.sort(function(a, b) { return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(); });
-      var _final = merged.slice(0, 5000);
-      state.notifications = _final;
-      var _now = new Date().toISOString();
-      if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
-      Storage.setAll([['notifications', _final], ['lastChanged', _now]]);
-    } else if (remote === null) {
-      /* Ingen notifications-rad finns — säkert att skriva lokal array som startvärde */
-      Storage.setAll([['notifications', state.notifications || []]]);
-    } else {
-      /* Oväntat format (varken array eller null) — skriv INTE för att inte radera data */
-      console.warn('[persistNotifs] notifications returnerade oväntat format — skriver inte:', typeof remote);
-    }
+    result = await Storage.getRemoteStrict('notifications');
   } catch(e) {
-    console.warn('[persistNotifs] fel — skriver inte stale data:', e);
+    console.warn('[persistNotifs] remote-läsning misslyckades — skriver inte:', e);
+    return;
+  }
+  var toWrite;
+  if (result.found && Array.isArray(result.value)) {
+    /* Giltig remote-array: merge (lokal read-status vinner, nya EF-notiser bevaras) */
+    const localMap = new Map((state.notifications || []).map(function(n) { return [n.id, n]; }));
+    const merged = (state.notifications || []).slice();
+    for (var i = 0; i < result.value.length; i++) {
+      if (!localMap.has(result.value[i].id)) merged.push(result.value[i]);
+    }
+    merged.sort(function(a, b) { return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(); });
+    toWrite = merged.slice(0, 5000);
+    state.notifications = toWrite;
+  } else if (result.found) {
+    /* Oväntat format — skriv INTE för att inte radera data */
+    console.warn('[persistNotifs] oväntat format — skriver inte:', typeof result.value);
+    return;
+  } else {
+    /* Ingen rad finns — skriv lokal array som startvärde */
+    toWrite = state.notifications || [];
+  }
+  try {
+    await Storage.setRemoteStrict([['notifications', toWrite], ['lastChanged', now]]);
+    if (typeof DataSync !== 'undefined') DataSync._lastSig = now;
+  } catch(e) {
+    console.warn('[persistNotifs] remote-skrivning misslyckades:', e);
   }
 }
 

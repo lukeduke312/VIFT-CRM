@@ -1,5 +1,5 @@
 /**
- * storage.js v5 — Supabase REST-backend med localStorage-cache
+ * storage.js v7 — Supabase REST-backend med localStorage-cache
  *
  * Läsning vid start: Supabase i ett enda bulk-anrop, localStorage som fallback.
  * Skrivning: localStorage direkt + Supabase i bakgrunden (fire-and-forget).
@@ -89,6 +89,39 @@ const Storage = {
     } catch(e) {
       try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : null; } catch(e2) { return null; }
     }
+  },
+
+  /* Strikt remote-läsning — ingen localStorage-fallback. Kastar vid nätverksfel.
+     Returnerar {ok:true, found:true, value} eller {ok:true, found:false, value:null} */
+  async getRemoteStrict(key) {
+    const k = this.prefix + key;
+    const res = await fetch(
+      SUPABASE_URL + '/rest/v1/store?key=eq.' + encodeURIComponent(k) + '&select=value',
+      { headers: this._h(false) }
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    return rows.length
+      ? { ok: true, found: true,  value: rows[0].value }
+      : { ok: true, found: false, value: null };
+  },
+
+  /* Strikt remote-skrivning — väntar på svar, kastar vid fel. Uppdaterar localStorage efter lyckad write. */
+  async setRemoteStrict(pairs) {
+    const body = pairs.map(function([key, value]) { return { key: Storage.prefix + key, value: value }; });
+    const res = await fetch(SUPABASE_URL + '/rest/v1/store', {
+      method:  'POST',
+      headers: Object.assign({}, this._h(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body:    JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(function() { return ''; });
+      throw new Error('HTTP ' + res.status + ': ' + txt.substring(0, 200));
+    }
+    pairs.forEach(function([key, value]) {
+      try { localStorage.setItem(Storage.prefix + key, JSON.stringify(value)); } catch(_) {}
+    });
+    return true;
   },
 
   /* Enstaka set */
