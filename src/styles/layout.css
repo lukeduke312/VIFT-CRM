@@ -506,6 +506,28 @@
   body.sidebar-collapsed .nav-user-row > span:last-child {
     display: none;
   }
+
+  /* Notis-rad i collapsed mode — matchar .ni:s collapsed-beteende */
+  body.sidebar-collapsed .nav-bell-row {
+    justify-content: center !important;
+    padding: 9px 0 !important;
+    gap: 0 !important;
+    position: relative;
+  }
+  /* Dölj "Notiser"-texten (andra span-barnet) */
+  body.sidebar-collapsed .nav-bell-row > span:nth-child(2) {
+    display: none;
+  }
+  /* Badge som liten overlay uppe/höger om ikonen */
+  body.sidebar-collapsed .nav-bell-row .nbdg {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    font-size: 8px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+  }
 }
 
 /* ── Right-positioned sidebar ─────────────────────── */
