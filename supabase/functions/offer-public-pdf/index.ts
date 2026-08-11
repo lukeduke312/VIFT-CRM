@@ -1,5 +1,5 @@
 /**
- * offer-public-pdf — Supabase Edge Function (v5)
+ * offer-public-pdf — Supabase Edge Function (v6)
  *
  * Genererar och returnerar en PDF av en offert via publik token.
  * Kräver ingen JWT — autentiseras enbart via publicToken.
@@ -84,13 +84,30 @@ function fmtNum(n: unknown): string {
 }
 
 function fmtDate(d: unknown): string {
-  if (!d) return '—'
+  if (!d) return '-'
   const s = String(d).slice(0, 10)
   try {
     return new Date(s + 'T12:00:00').toLocaleDateString('sv-SE', {
       year: 'numeric', month: 'long', day: 'numeric'
     })
   } catch { return s }
+}
+/* ── WinAnsi-säker text ──────────────────────────────────────── */
+function pdfSafeText(v: unknown): string {
+  const R: Record<string, string> = {
+    '\u00A0': ' ',    // NBSP
+    '\u2212': '-',    // MINUS SIGN
+    '\u2013': '-',    // EN DASH
+    '\u2014': '-',    // EM DASH
+    '\u2018': "'",    // LEFT SINGLE QUOTATION MARK
+    '\u2019': "'",    // RIGHT SINGLE QUOTATION MARK
+    '\u201C': '"',    // LEFT DOUBLE QUOTATION MARK
+    '\u201D': '"',    // RIGHT DOUBLE QUOTATION MARK
+    '\u2026': '...', // HORIZONTAL ELLIPSIS
+    '\u2022': '*',    // BULLET
+  }
+  // Replace NBSP and any code point above U+00FF with mapped value or '?'
+  return String(v ?? '').replace(/[\u00A0\u0100-\uFFFF]/g, ch => R[ch] ?? '?')
 }
 
 /* ── Handler ─────────────────────────────────────────────── */
@@ -238,6 +255,7 @@ serve(async (req: Request) => {
       text: string, x: number, yPos: number,
       opts: { size?: number; font?: typeof fontReg; color?: ReturnType<typeof rgb>; maxWidth?: number } = {}
     ): void {
+      text = pdfSafeText(text)
       const size  = opts.size  ?? 10
       const font  = opts.font  ?? fontReg
       const color = opts.color ?? black
@@ -281,7 +299,7 @@ serve(async (req: Request) => {
     }
     const offerLblW = fontBold.widthOfTextAtSize('OFFERT', 18)
     page.drawText('OFFERT', { x: W - MR - offerLblW, y: H - MT - 20, size: 18, font: fontBold, color: navy })
-    page.drawText('Digital offert — säker länk', { x: ML, y: H - MT - LOGO_H - 8, size: 8, font: fontReg, color: muted })
+    page.drawText('Digital offert - säker länk', { x: ML, y: H - MT - LOGO_H - 8, size: 8, font: fontReg, color: muted })
     hline(H - MT - LOGO_H - 14)
 
     y = H - MT - LOGO_H - 28
@@ -302,21 +320,26 @@ serve(async (req: Request) => {
       y -= 18
     }
     /* Datum, höger */
-    const dateLabel = 'Datum: ' + fmtDate(dateStr)
+    const dateLabel = pdfSafeText('Datum: ' + fmtDate(dateStr))
     const dateLabelW = fontReg.widthOfTextAtSize(dateLabel, 9)
     page.drawText(dateLabel, { x: W - MR - dateLabelW, y: y + 16, size: 9, font: fontReg, color: muted })
     if (validUntil) {
-      const vlLabel = 'Giltig t.o.m.: ' + fmtDate(validUntil)
+      const vlLabel = pdfSafeText('Giltig t.o.m.: ' + fmtDate(validUntil))
       const vlLabelW = fontReg.widthOfTextAtSize(vlLabel, 9)
       page.drawText(vlLabel, { x: W - MR - vlLabelW, y: y + 4, size: 9, font: fontReg, color: muted })
     }
     y -= 10
     hline(y); y -= 12
 
-    /* Kund */
+    /* Kund och fastighet */
+    const address = String(s('address') ?? '')
     if (custNm) {
       drawText('Kund: ' + custNm, ML, y, { size: 10, font: fontBold })
       y -= 16
+    }
+    if (address) {
+      drawText('Fastighet: ' + address, ML, y, { size: 9, color: muted })
+      y -= 14
     }
     if (versionNo > 1) {
       drawText('Version: ' + versionNo, ML, y, { size: 9, color: muted })
@@ -337,6 +360,8 @@ serve(async (req: Request) => {
       desc: string, qty: string, price: string, disc: string, total: string,
       opts: { bold?: boolean; bg?: boolean; size?: number } = {}
     ): void {
+      qty = pdfSafeText(qty); price = pdfSafeText(price)
+      disc = pdfSafeText(disc); total = pdfSafeText(total)
       const sz   = opts.size ?? 9
       const font = opts.bold ? fontBold : fontReg
       if (opts.bg) {
@@ -421,6 +446,7 @@ serve(async (req: Request) => {
 
     function totalRow(label: string, amount: string, bold = false): void {
       checkY(14)
+      amount = pdfSafeText(amount)
       const font = bold ? fontBold : fontReg
       const sz   = bold ? 10 : 9
       drawText(label, COL_DISC - 120, y, { size: sz, font })
@@ -434,12 +460,12 @@ serve(async (req: Request) => {
       const discLabel = disc.type === 'percent'
         ? 'Rabatt (' + fmtNum(discValue) + ' %)'
         : 'Rabatt (fast)'
-      totalRow(discLabel, '−' + fmtNum(discAmt) + ' kr')
+      totalRow(discLabel, '-' + fmtNum(discAmt) + ' kr')
     }
     totalRow('Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
     totalRow('Moms (25 %):', fmtNum(vatAmt) + ' kr')
     if (rutTotal > 0) {
-      totalRow('RUT/ROT-avdrag:', '−' + fmtNum(rutTotal) + ' kr')
+      totalRow('RUT/ROT-avdrag:', '-' + fmtNum(rutTotal) + ' kr')
     }
     y -= 2
     hline(y + 2)
@@ -475,7 +501,8 @@ serve(async (req: Request) => {
         drawText(sec.label, ML, y, { size: 9, font: fontBold })
         y -= 12
         /* Multirad-text */
-        const words = sec.value.split(/\s+/)
+        const safeVal = pdfSafeText(sec.value)
+        const words = safeVal.split(/\s+/)
         let   line  = ''
         for (const w of words) {
           const cand = line ? line + ' ' + w : w
