@@ -1,5 +1,5 @@
 /**
- * offer-respond — Supabase Edge Function (Leverans E, Del E4, v9)
+ * offer-respond — Supabase Edge Function (Leverans E, Del E4, v10)
  *
  * Tar emot kundsvar på digital offert (godkänn / ändring begärd / neka).
  * Validerar token + version, sparar auditlogg, uppdaterar status.
@@ -154,11 +154,34 @@ serve(async (req: Request) => {
       if (Date.now() > exp)    return json({ error: 'expired' }, 410)
     }
 
-    /* Kontrollera att version matchar */
-    if (Number(off.versionNumber) !== offerVersion) {
+    /* Validera lockedSnapshotJSON och jämför version mot snapshot (inte live-fält).
+       off.versionNumber kan vara undefined på äldre offerter → NaN vid Number() → mismatch.
+       Snapshot-versionering är auktoritativ: kunden svarar på den LÅSTA skickade versionen. */
+    const _snapRaw = off.lockedSnapshotJSON
+    let   _snapObj: Record<string, unknown> | null = null
+    if (_snapRaw) {
+      try {
+        const _parsed = typeof _snapRaw === 'string' ? JSON.parse(_snapRaw) : _snapRaw
+        if (_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) {
+          const _s = _parsed as Record<string, unknown>
+          if (String(_s.id ?? '') === String(off.id ?? '') &&
+              Array.isArray(_s.lines) &&
+              Array.isArray(_s.extras) &&
+              Array.isArray(_s.publicAttachmentIds)) {
+            _snapObj = _s
+          }
+        }
+      } catch (_) { /* ogiltig JSON */ }
+    }
+    if (_snapObj === null) {
+      return json({ error: 'snapshot_unavailable' }, 409)
+    }
+    const lockedVersion    = Number(_snapObj.versionNumber) || 1
+    const submittedVersion = Number(body.offerVersion) || 1
+    if (lockedVersion !== submittedVersion) {
       return json({
         error: 'version_mismatch',
-        currentVersion: Number(off.versionNumber)
+        currentVersion: lockedVersion
       }, 400)
     }
 

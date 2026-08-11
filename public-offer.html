@@ -813,7 +813,8 @@ async function submitForm() {
               : data.error === 'already_answered'  ? 'Offerten har redan besvarats.'
               : data.error === 'expired'           ? 'Offertlänken har gått ut.'
               : data.error === 'revoked'           ? 'Offertlänken har återkallats.'
-              : data.error === 'version_mismatch'  ? 'Offertversionen har ändrats — ladda om sidan.'
+              : data.error === 'version_mismatch'      ? 'Offertversionen har ändrats — ladda om sidan.'
+              : data.error === 'snapshot_unavailable' ? 'Offertversionen kunde inte verifieras. Kontakta VIFT Fastighetsservice.'
               : 'Ett fel uppstod. Försök igen.';
       showErr(msg);
       if (btn) { btn.disabled = false; btn.textContent = _activeForm==='decline'?'✕ Neka offert':'Skicka'; }

@@ -1,5 +1,5 @@
 /**
- * offer-token-validate — Supabase Edge Function (Leverans E, Del E2, v6)
+ * offer-token-validate — Supabase Edge Function (Leverans E, Del E2, v7)
  *
  * Validerar en publik offerttoken och returnerar offertens publika data.
  * Uppdaterar öppningsräknare och openedAt vid första besök.
@@ -289,7 +289,7 @@ function buildPublicOffer(
     id:             off.id,
     /* Innehållsfält — från snapshot om tillgängligt */
     title:          s('title'),
-    versionNumber:  s('versionNumber'),
+    versionNumber:  Number(s('versionNumber')) || 1,
     customerName:   s('customerName')  ?? '',
     lines:          filterPublicLines(s('lines')),
     extras:         filterPublicLines(s('extras')),

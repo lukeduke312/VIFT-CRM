@@ -4110,7 +4110,7 @@ ${hasRut?`<div class="rut">
 
       /* Lås snapshot av publika fält */
       const snapshot = {
-        id: off.id, title: off.title, versionNumber: off.versionNumber,
+        id: off.id, title: off.title, versionNumber: Number(off.versionNumber) || 1,
         lines: (off.lines||[]).map(function(l) {
           const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','subLines','text'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
         }),

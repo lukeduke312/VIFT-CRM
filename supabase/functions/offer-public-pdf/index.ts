@@ -1,5 +1,5 @@
 /**
- * offer-public-pdf — Supabase Edge Function (v6)
+ * offer-public-pdf — Supabase Edge Function (v7)
  *
  * Genererar och returnerar en PDF av en offert via publik token.
  * Kräver ingen JWT — autentiseras enbart via publicToken.
@@ -350,11 +350,13 @@ serve(async (req: Request) => {
     y -= 8
 
     /* ── Radtabell — rubrikrad ── */
-    const COL_DESC  = ML
-    const COL_QTY   = W - MR - 200
-    const COL_PRICE = W - MR - 130
-    const COL_DISC  = W - MR - 65
-    const COL_TOTAL = W - MR - 0
+    /* Kolumnankare — RIGHT EDGES för alla numeriska kolumner,
+       garanterar inga överlapp oavsett taletlängd */
+    const COL_DESC_L  = ML              // Beskrivning: vänsterkant
+    const COL_QTY_R   = W - MR - 195   // Antal: högerkant  (350 pt)
+    const COL_PRICE_R = W - MR - 130   // À-pris: högerkant (415 pt)
+    const COL_DISC_R  = W - MR - 65    // Rabatt: högerkant (480 pt)
+    const COL_TOTAL_R = W - MR         // Summa: högerkant  (545 pt)
 
     function drawTableRow(
       desc: string, qty: string, price: string, disc: string, total: string,
@@ -367,19 +369,22 @@ serve(async (req: Request) => {
       if (opts.bg) {
         page.drawRectangle({ x: ML - 5, y: y - 3, width: W - ML - MR + 10, height: sz + 6, color: lightBg })
       }
-      const maxDescW = COL_QTY - COL_DESC - 8
-      drawText(desc, COL_DESC, y, { size: sz, font, maxWidth: maxDescW })
-      page.drawText(qty,   { x: COL_QTY,   y, size: sz, font, color: opts.bold ? black : muted })
-      page.drawText(price, { x: COL_PRICE, y, size: sz, font, color: opts.bold ? black : muted })
-      page.drawText(disc,  { x: COL_DISC,  y, size: sz, font, color: opts.bold ? black : muted })
+      /* Alla numeriska kolumner högerjusteras mot sin RIGHT EDGE */
+      const maxDescW = COL_QTY_R - COL_DESC_L - 12
+      drawText(desc, COL_DESC_L, y, { size: sz, font, maxWidth: maxDescW })
+      const qtyW   = font.widthOfTextAtSize(qty,   sz)
+      const priceW = font.widthOfTextAtSize(price, sz)
+      const discW  = font.widthOfTextAtSize(disc,  sz)
       const totalW = font.widthOfTextAtSize(total, sz)
-      page.drawText(total, { x: COL_TOTAL - totalW, y, size: sz, font })
+      page.drawText(qty,   { x: COL_QTY_R   - qtyW,   y, size: sz, font, color: opts.bold ? black : muted })
+      page.drawText(price, { x: COL_PRICE_R - priceW, y, size: sz, font, color: opts.bold ? black : muted })
+      page.drawText(disc,  { x: COL_DISC_R  - discW,  y, size: sz, font, color: opts.bold ? black : muted })
+      page.drawText(total, { x: COL_TOTAL_R - totalW, y, size: sz, font })
       y -= sz + 5
     }
 
     checkY(30)
-    drawTableRow('Beskrivning', 'Antal', 'Á-pris', 'Rabatt', 'Summa (exkl.)', { bold: true, bg: true })
-    hline(y + 2)
+    drawTableRow('Beskrivning', 'Antal', 'À-pris', 'Rabatt', 'Summa exkl.', { bold: true, bg: true })
     y -= 4
 
     let hasLines = false
@@ -449,9 +454,9 @@ serve(async (req: Request) => {
       amount = pdfSafeText(amount)
       const font = bold ? fontBold : fontReg
       const sz   = bold ? 10 : 9
-      drawText(label, COL_DISC - 120, y, { size: sz, font })
+      drawText(label, COL_DISC_R - 120, y, { size: sz, font })
       const w = font.widthOfTextAtSize(amount, sz)
-      page.drawText(amount, { x: COL_TOTAL - w, y, size: sz, font })
+      page.drawText(amount, { x: COL_TOTAL_R - w, y, size: sz, font })
       y -= sz + 5
     }
 
