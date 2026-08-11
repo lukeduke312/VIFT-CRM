@@ -304,6 +304,29 @@
   margin-top: 1px;
 }
 
+/* ── Notis-rad (bell + badge) ───────────────────── */
+.nav-bell-row {
+  color: color-mix(in srgb, var(--brand-primary-text) 65%, transparent);
+}
+.nav-bell-row .nbdg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--brand-primary-text) 18%, transparent);
+  color: color-mix(in srgb, var(--brand-primary-text) 90%, transparent);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+}
+.nav-bell-row .nbdg.nbdg-alert {
+  background: var(--rd);
+  color: #fff;
+}
+
 /* ── Topbar elements ────────────────────────────── */
 .topbar-hamburger {
   background: color-mix(in srgb, var(--brand-primary-text) 15%, transparent);
