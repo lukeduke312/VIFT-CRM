@@ -167,8 +167,8 @@ const WorkOrderDetailPage = {
         </div>
       </div>
 
-      <!-- Stämpling -->
-      ${this._stampSection(ao, isStampedOnThis)}
+      <!-- Stämpling — V22: kräver ao_time specifikt (payroll_manage räcker inte) -->
+      ${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}
 
       <!-- Checklista (hopfällbar) -->
       <details class="card ao-section" ${hasChk?'open':''}>
@@ -204,7 +204,7 @@ const WorkOrderDetailPage = {
           <span class="ao-section-title">${ic('clock',14)} Arbetstid</span>
           <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
             <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>`:''}</span>
-            ${Auth.can('ao_time')?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>`:''}
+            ${Auth.canAny(['ao_time','payroll_manage'])?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>`:''}
             <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
           </div>
         </summary>
@@ -944,20 +944,31 @@ const WorkOrderDetailPage = {
   _renderTimeEntries(ao) {
     const entries = TimeService.getByAO(ao.id);
     if (!entries.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Ingen tid registrerad</p>`;
-    return entries.map(t => `
+    /* V21: samma behörighetsprincip som TimePage._renderList() — inte längre
+       antagandet att alla som når denna sida får redigera/radera vad som helst. */
+    const isSuper    = typeof Auth !== 'undefined' && Auth.can('all');
+    const canPayroll  = typeof Auth !== 'undefined' && Auth.can('payroll_manage');
+    const canOwnTime  = typeof Auth !== 'undefined' && Auth.can('ao_time');
+    return entries.map(t => {
+      const isOwn    = state.currentUser && t.staffId === state.currentUser.id;
+      const isLocked = !!t.attested && !isSuper;
+      const canEdit  = !isLocked && (isSuper || (isOwn ? (canOwnTime || canPayroll) : canPayroll));
+      return `
       <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}</div>
+          <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}${t.attested ? ` <span class="bdg bdg-green" style="font-size:9px;">${ic('lock',9)} Attesterad</span>` : ''}</div>
           <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+t.comment:''}</div>
           ${t.priceGroupName ? `<div style="font-size:11px;color:var(--sky);">${t.priceGroupName} – ${fmt(t.hourRate)} kr/tim ex moms</div>` : ''}
           ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
           ${!t.billable ? `<span style="font-size:10px;color:var(--mt);font-style:italic;">Ej debiterbar</span>` : ''}
         </div>
+        ${canEdit ? `
         <div style="display:flex;gap:4px;flex-shrink:0;">
           <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditTime('${t.id}')">${ic('pencil',12)}</button>
           <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteTime('${t.id}')">${ic('trash',12)}</button>
-        </div>
-      </div>`).join('');
+        </div>` : ''}
+      </div>`;
+    }).join('');
   },
 
   /* ── Tidslinje/logg ───────────────────────── */
@@ -1643,12 +1654,14 @@ const WorkOrderDetailPage = {
   },
 
   toggleStamp() {
+    if (!Auth.require('ao_time')) return;
     if (state.stampActive && state.stampAoId !== this.aoId) {
       showToast('Du är inklockat på ett annat jobb');
       return;
     }
     if (!state.stampActive) {
-      TimeService.clockIn(this.aoId);
+      const ok = TimeService.clockIn(this.aoId);
+      if (!ok) { showToast('Kunde inte klocka in — kontrollera din behörighet.'); return; }
       showToast('Inklockat');
       this.render({ aoId: this.aoId });
     } else {
@@ -1657,6 +1670,7 @@ const WorkOrderDetailPage = {
   },
 
   _openClockOutModal() {
+    if (!Auth.require('ao_time')) return;
     const mins = Math.round((Date.now() - state.stampTimestamp) / 60000);
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
@@ -1678,11 +1692,12 @@ const WorkOrderDetailPage = {
         { label: 'Klocka ut', cls: 'btn bsu', onClick: () => {
           const comment = document.getElementById('co-comment')?.value.trim();
           if (!comment) { showToast('Beskriv vad som gjordes'); return; }
-          TimeService.clockOut({
+          const entry = TimeService.clockOut({
             priceGroupId: document.getElementById('co-pg')?.value || '',
             comment,
             billable: document.getElementById('co-billable')?.checked !== false
           });
+          if (!entry) { showToast('Kunde inte klocka ut — kontrollera din behörighet.'); return; }
           Modal.close();
           showToast('Utloggad');
           this.render({ aoId: this.aoId });
@@ -1851,7 +1866,10 @@ const WorkOrderDetailPage = {
 
   /* ── Tid ───────────────────────────────── */
   openAddTime() {
-    if (!Auth.require('ao_time')) return;
+    /* V22: ao_time (registrera egen tid) ELLER payroll_manage (registrera åt
+       annan, löneadministrativt) — inte längre bara ao_time. Klocka in/ut har
+       ett eget, separat ao_time-krav (toggleStamp/_openClockOutModal). */
+    if (!Auth.canAny(['ao_time','payroll_manage'])) { showToast('Du saknar behörighet för den åtgärden'); return; }
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
@@ -1860,8 +1878,8 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: 'Registrera tid',
       body: `
-        ${(state.currentUser && ['admin','chef'].includes(state.currentUser.role)) ? `
-        <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Admin</span></label>
+        ${(typeof Auth !== 'undefined' && Auth.can('payroll_manage')) ? `
+        <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Lönebehörighet</span></label>
           <select id="t-staff">
             <option value="">— Inloggad användare (${state.currentUser ? state.currentUser.firstName : ''}) —</option>
             ${(state.staff||[]).filter(s=>s.active).map(s=>
@@ -1890,6 +1908,8 @@ const WorkOrderDetailPage = {
   openEditTime(entryId) {
     const t = (state.timeEntries||[]).find(x=>x.id===entryId);
     if (!t) return;
+    const guard = TimeService._guardMutation(t);
+    if (!guard.ok) { showToast(guard.error); return; }
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
       `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
@@ -1934,7 +1954,8 @@ const WorkOrderDetailPage = {
     const [overrideStaffId, overrideStaffName] = staffSel ? staffSel.split(':') : ['', ''];
     if (existingId) {
       if (overrideStaffId) { data.staffId = overrideStaffId; data.staffName = overrideStaffName; }
-      TimeService.update(existingId, data);
+      const result = TimeService.update(existingId, data);
+      if (!result.ok) { showToast(result.error); return; }
       showToast('Tid uppdaterad');
     } else {
       const result = TimeService.saveManual({ ...data, aoId: this.aoId, staffId: overrideStaffId || undefined, staffName: overrideStaffName || undefined });
@@ -1947,7 +1968,8 @@ const WorkOrderDetailPage = {
 
   deleteTime(entryId) {
     Modal.confirm('Ta bort tidspost?', () => {
-      TimeService.delete(entryId);
+      const result = TimeService.delete(entryId);
+      if (!result.ok) { showToast(result.error); return; }
       this._refreshTimeSection();
       showToast('Tidspost borttagen');
     });

@@ -47,8 +47,8 @@ const TimePage = {
             <div class="fg"><label>Starttid</label><input type="time" id="mt-start" value="08:00"></div>
             <div class="fg"><label>Sluttid</label><input type="time" id="mt-end" value="16:00"></div>
           </div>
-          ${(state.currentUser && ['admin','chef'].includes(state.currentUser.role)) ? `
-          <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Admin</span></label>
+          ${(typeof Auth !== 'undefined' && Auth.can('payroll_manage')) ? `
+          <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Lönebehörighet</span></label>
             <select id="mt-staff">
               <option value="">— Inloggad användare (${state.currentUser.firstName}) —</option>
               ${(state.staff||[]).filter(s=>s.active).map(s=>
@@ -89,7 +89,7 @@ const TimePage = {
           <h3>Registrerad tid</h3>
           <div style="display:flex;align-items:center;gap:6px;">
             <span class="bdg bdg-sky">${TimeService.fmtDuration(TimeService.totalMinutes(TimeService.getAll()))}</span>
-            ${typeof Auth !== 'undefined' && Auth.can('admin') ? `<button class="btn bs bxs" onclick="Router.showPage('pg-import-wizard',{type:'timeEntry'})">${ic('upload',12)} Importera</button>` : ''}
+            ${typeof Auth !== 'undefined' && Auth.can('payroll_manage') ? `<button class="btn bs bxs" onclick="Router.showPage('pg-import-wizard',{type:'timeEntry'})">${ic('upload',12)} Importera</button>` : ''}
             <button class="btn bs bxs" onclick="ImportExportService.showExportMenu('timeEntry',this)">${ic('download',12)} Exportera</button>
           </div>
         </div>
@@ -220,13 +220,17 @@ const TimePage = {
   _renderList() {
     const entries = TimeService.getAll();
     if (!entries.length) return `<p style="padding:14px;color:var(--mt);font-size:13px;">Ingen tid registrerad</p>`;
+    const isSuper = typeof Auth !== 'undefined' && Auth.can('all');
     return entries.slice(0, 50).map(t => {
       const cu  = t.customerId ? getCu(t.customerId) : null;
       const ao  = t.aoId ? getAO(t.aoId) : null;
+      const isOwn   = state.currentUser && t.staffId === state.currentUser.id;
+      const isLocked = !!t.attested && !isSuper;
+      const canEdit  = !isLocked && (isOwn || isSuper || (typeof Auth !== 'undefined' && Auth.can('payroll_manage')));
       return `
         <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}</div>
+            <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}${t.attested ? ` <span class="bdg bdg-green" style="font-size:9px;">${ic('lock',9)} Attesterad</span>` : ''}</div>
             <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+t.comment:''}</div>
             <div style="font-size:11px;color:var(--sky);">
               ${cu?CustomerService.displayName(cu):''}
@@ -236,10 +240,11 @@ const TimePage = {
             ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
           </div>
           <span class="bdg ${t.billable?'bdg-green':'bdg-grey'}">${t.billable?'Deb.':'Intern'}</span>
+          ${canEdit ? `
           <div style="display:flex;gap:4px;">
             <button class="btn bxs bs" onclick="TimePage.openEditEntry('${t.id}')">${ic('pencil',12)}</button>
             <button class="btn bxs bd" onclick="TimePage.deleteEntry('${t.id}')">${ic('trash',12)}</button>
-          </div>
+          </div>` : ''}
         </div>`;
     }).join('');
   },
@@ -277,7 +282,7 @@ const TimePage = {
         <div class="fg"><label><input type="checkbox" id="et-billable" ${t.billable?'checked':''} style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
-          TimeService.update(id, {
+          const result = TimeService.update(id, {
             date:         document.getElementById('et-date')?.value || t.date,
             startStr:     document.getElementById('et-start')?.value || t.startStr,
             endStr:       document.getElementById('et-end')?.value || t.endStr,
@@ -287,6 +292,7 @@ const TimePage = {
             comment:      document.getElementById('et-comment')?.value.trim() || '',
             billable:     document.getElementById('et-billable')?.checked !== false
           });
+          if (!result.ok) { showToast(result.error); return; }
           Modal.close();
           document.getElementById('time-list').innerHTML = this._renderList();
           showToast('Tid uppdaterad');
@@ -298,7 +304,8 @@ const TimePage = {
 
   deleteEntry(id) {
     Modal.confirm('Ta bort tidspost?', () => {
-      TimeService.delete(id);
+      const result = TimeService.delete(id);
+      if (!result.ok) { showToast(result.error); return; }
       document.getElementById('time-list').innerHTML = this._renderList();
       showToast('Borttagen');
     });

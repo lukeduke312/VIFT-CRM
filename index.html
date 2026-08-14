@@ -15,17 +15,17 @@
 <title>VIFT CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- DEPLOY: SW=v10 (CACHE_NAME=v14) responsive=v22 WorkOrdersPage=v41 WorkOrderDetailPage=v48 components=v59 PageShells=v103 SelectionModel=v1 PropertyDetailPage=v20 ServiceIntervalService=v3 OperationsPage=v10 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v21 schema=v22 state=v42 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v6 ImportLogPage=v1 CustomersPage=v12 ImportExportConfigs=v6 ExportCenterPage=v1 ReportsPage=v6 TimePage=v5 InvoicesPage=v21 RonderingRapportPage=v1 CalendarPage=v2 RonderingPage=v8 service-monitor=v1 offer-token-validate=v7 offer-respond=v10 offer-public-pdf=v7 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v3 public-offer=v6 send-push=v2 PushService=v5 PayrollPage=v2 ContractsPage=v1 AuthService=v9 send-offer-email=v6 BrandingService=v6 Sidebar=v25 NotificationsService=v6 ActivitiesService=v2 storage=v8 layout=v29 -->
+<!-- DEPLOY: SW=v10 (CACHE_NAME=v14) responsive=v23 WorkOrdersPage=v47 WorkOrderDetailPage=v51 components=v62 PageShells=v109 SelectionModel=v7 PropertyDetailPage=v21 ServiceIntervalService=v3 OperationsPage=v10 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v23 schema=v22 state=v42 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v7 ImportLogPage=v2 CustomersPage=v18 ImportExportConfigs=v9 ExportCenterPage=v5 ReportsPage=v6 TimePage=v7 TimeService=v8 InvoicesPage=v30 BillingQueueService=v5 InvoiceService=v11 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 service-monitor=v1 offer-token-validate=v7 offer-respond=v10 offer-public-pdf=v7 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v3 public-offer=v6 send-push=v2 PushService=v5 PayrollPage=v2 ContractsPage=v1 AuthService=v15 send-offer-email=v6 BrandingService=v6 Sidebar=v25 NotificationsService=v6 ActivitiesService=v2 storage=v9 layout=v29 MyJobsPage=v10 -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
 <link rel="stylesheet" href="src/styles/layout.css?v=29">
-<link rel="stylesheet" href="src/styles/components.css?v=59">
+<link rel="stylesheet" href="src/styles/components.css?v=62">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=21">
-<link rel="stylesheet" href="src/styles/responsive.css?v=22">
+<link rel="stylesheet" href="src/styles/responsive.css?v=23">
 </head>
 <body>
 
@@ -332,7 +332,7 @@
 <script src="config.js?v=3"></script>
 
 <!-- 1. Data-lager -->
-<script src="src/data/storage.js?v=8"></script>
+<script src="src/data/storage.js?v=9"></script>
 <script src="src/data/schema.js?v=20"></script>
 <script src="src/data/seedData.js?v=25"></script>
 <script src="src/data/state.js?v=42"></script>
@@ -342,11 +342,12 @@
 <script src="src/services/BrandingService.js?v=6"></script>
 <script src="src/services/ActivityService.js?v=3"></script>
 <script src="src/services/SalesService.js?v=3"></script>
-<script src="src/services/AuthService.js?v=10"></script>
+<script src="src/services/AuthService.js?v=15"></script>
 <script src="src/services/CustomerService.js?v=2"></script>
 <script src="src/services/WorkOrderService.js?v=9"></script>
-<script src="src/services/TimeService.js?v=4"></script>
-<script src="src/services/InvoiceService.js?v=5"></script>
+<script src="src/services/TimeService.js?v=8"></script>
+<script src="src/services/InvoiceService.js?v=11"></script>
+<script src="src/services/BillingQueueService.js?v=5"></script>
 <script src="src/services/ProfitabilityService.js?v=1"></script>
 <script src="src/services/RecurringOrderService.js?v=3"></script>
 <script src="src/services/RonderingService.js?v=6"></script>
@@ -358,11 +359,11 @@
 <script src="src/services/PropertyObjectService.js?v=2"></script>
 <script src="src/services/PropertyContactService.js?v=1"></script>
 <script src="src/services/ImportExportService.js?v=3"></script>
-<script src="src/services/ImportExportConfigs.js?v=6"></script>
-<script src="src/services/SelectionModel.js?v=1"></script>
-<script src="src/pages/ImportWizardPage.js?v=6"></script>
-<script src="src/pages/ImportLogPage.js?v=1"></script>
-<script src="src/pages/ExportCenterPage.js?v=1"></script>
+<script src="src/services/ImportExportConfigs.js?v=9"></script>
+<script src="src/services/SelectionModel.js?v=7"></script>
+<script src="src/pages/ImportWizardPage.js?v=7"></script>
+<script src="src/pages/ImportLogPage.js?v=2"></script>
+<script src="src/pages/ExportCenterPage.js?v=5"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
 <script src="src/services/AddressService.js?v=4"></script>
 <script src="src/services/PushService.js?v=5"></script>
@@ -374,28 +375,32 @@
 <script src="src/components/Sidebar.js?v=25"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=21"></script>
+<script src="src/pages/Router.js?v=23"></script>
 <script src="src/pages/Dashboard.js?v=32"></script>
-<script src="src/pages/CustomersPage.js?v=12"></script>
-<script src="src/pages/WorkOrdersPage.js?v=41"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=48"></script>
-<script src="src/pages/TimePage.js?v=5"></script>
+<script src="src/pages/CustomersPage.js?v=18"></script>
+<script src="src/pages/WorkOrdersPage.js?v=47"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=51"></script>
+<script src="src/pages/TimePage.js?v=7"></script>
 <script src="src/pages/PayrollPage.js?v=2"></script>
 <script src="src/pages/ContractsPage.js?v=1"></script>
-<script src="src/pages/InvoicesPage.js?v=21"></script>
+<script src="src/pages/InvoicesPage.js?v=30"></script>
 <script src="src/pages/RecurringPage.js?v=9"></script>
 <script src="src/pages/SalesPage.js?v=4"></script>
-<script src="src/pages/PropertyDetailPage.js?v=20"></script>
+<script src="src/pages/PropertyDetailPage.js?v=21"></script>
 <script src="src/pages/PropertyObjectPage.js?v=3"></script>
-<script src="src/pages/PageShells.js?v=103"></script>
-<script src="src/pages/RonderingPage.js?v=8"></script>
+<script src="src/pages/PageShells.js?v=109"></script>
+<script src="src/pages/RonderingPage.js?v=9"></script>
 <script src="src/pages/OperationsPage.js?v=10"></script>
 <script src="src/pages/ReportsPage.js?v=6"></script>
 <script src="src/pages/CalendarPage.js?v=2"></script>
-<script src="src/pages/MyJobsPage.js?v=9"></script>
+<script src="src/pages/MyJobsPage.js?v=10"></script>
 <script src="src/pages/RonderingUtforandePage.js?v=11"></script>
 <script src="src/pages/RonderingWizardPage.js?v=8"></script>
-<script src="src/pages/RonderingRapportPage.js?v=1"></script>
+<!-- V19: src/pages/RonderingRapportPage.js borttagen från laddningskedjan — filen
+     deklarerar samma globala const som RonderingUtforandePage.js (rad 556), vilket
+     orsakade "Identifier 'RonderingRapportPage' has already been declared" i klassisk
+     script-global scope. Den mer kompletta versionen lever i RonderingUtforandePage.js.
+     Filen RonderingRapportPage.js finns kvar i repot men är avsiktligt oladdad. -->
 
 <!-- 5. App bootstrap -->
 <script>
@@ -472,6 +477,12 @@ const App = {
   },
 
   showLogin() {
+    /* V29 §5: samma JS-session kan leva vidare från utloggning till nästa
+       inloggning (SPA, ingen sidladdning) — en kvarliggande bulk-markering
+       från föregående användare får aldrig ärvas av nästa. showLogin()
+       anropas vid både explicit utloggning och misslyckad sessionsåterställning,
+       så en clearAll() här täcker båda vägarna in i inloggningsskärmen. */
+    if (typeof SelectionModel !== 'undefined') SelectionModel.clearAll();
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
     this._loginPanel('lp-login');
@@ -601,6 +612,11 @@ const App = {
 
     errEl.style.display = 'none';
     if (btn) btn.textContent = 'Laddar data…';
+
+    /* V29 §5: rensa defensivt en eventuell kvarliggande markering från en
+       tidigare inloggad användare i samma JS-session, innan den nya
+       användarens state/app visas. */
+    if (typeof SelectionModel !== 'undefined') SelectionModel.clearAll();
 
     await initState();
     Auth._resolveUser();

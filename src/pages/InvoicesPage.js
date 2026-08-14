@@ -1,14 +1,398 @@
 /**
- * InvoicesPage — Fakturaunderlag lista + detalj
+ * InvoicesPage — Fakturering: "Att fakturera" (SPRINT2/V32 faktureringskö)
+ * + "Fakturaunderlag" (den befintliga listan från SPRINT1).
+ * InvoiceDetailPage (fakturadetalj) ligger kvar längre ner i samma fil.
  */
 const InvoicesPage = {
-  _tab: 'alla',
+  _view: 'queue',     /* 'queue' = Att fakturera, 'list' = Fakturaunderlag */
+  _tab: 'alla',        /* status-flik i Fakturaunderlag-vyn */
+
+  /* Att fakturera — filter-state */
+  _qQuery: '', _qCustomerId: '', _qPropertyId: '', _qType: 'alla', _qPeriod: 'alla', _qOnlyIssues: false,
+  _createBusy: false,
 
   render() {
     const el = document.getElementById('pg-invoices-content');
     if (!el) return;
+    el.innerHTML = `
+      <div class="ftabs" style="margin-bottom:8px;">
+        <button class="ft ${this._view==='queue'?'on':''}" onclick="InvoicesPage._setView('queue')">Att fakturera</button>
+        <button class="ft ${this._view==='list'?'on':''}" onclick="InvoicesPage._setView('list')">Fakturaunderlag</button>
+      </div>
+      <div id="inv-view-body"></div>`;
+    this._renderViewBody();
+  },
+
+  _setView(v) {
+    this._view = v;
+    this.render();
+  },
+
+  _renderViewBody() {
+    const body = document.getElementById('inv-view-body');
+    if (!body) return;
+    if (this._view === 'queue') this._renderQueueView(body);
+    else this._renderListView(body);
+  },
+
+  /* ══════════════════════════════════════════════════════════════════
+     ATT FAKTURERA — faktureringskön (V32)
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Tvåfas-render (SPRINT1 §1-fixen): skelettet med sökfältet byggs EN
+     gång här; _renderQueueList() fyller bara header/lista/filterresultat
+     på varje sök-/filterändring. Sökfältets DOM-nod byts aldrig ut. */
+  _renderQueueView(body) {
+    const customers = (state.customers || []).slice().sort((a,b) => CustomerService.displayName(a).localeCompare(CustomerService.displayName(b), 'sv'));
+    /* V33 §13: fastighetsfiltret begränsas till den valda kundens
+       fastigheter (om någon kund är vald) — annars alla. */
+    const properties = (state.properties || [])
+      .filter(p => !this._qCustomerId || p.customerId === this._qCustomerId)
+      .slice().sort((a,b) => (a.name||'').localeCompare(b.name||'', 'sv'));
+    body.innerHTML = `
+      <div id="bq-header"></div>
+      <div class="ao-toolbar" style="margin-bottom:6px;">
+        <div class="swrap">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" id="bq-search" placeholder="Sök kund, fastighet, AO, personal…" value="${esc(this._qQuery)}"
+            oninput="InvoicesPage._qQuery=this.value;InvoicesPage._renderQueueList()">
+        </div>
+        <div class="ao-toolbar-right" style="flex-wrap:wrap;">
+          <select onchange="InvoicesPage._onCustomerFilterChange(this.value)">
+            <option value="">Alla kunder</option>
+            ${customers.map(c => `<option value="${c.id}" ${this._qCustomerId===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`).join('')}
+          </select>
+          <select onchange="InvoicesPage._qPropertyId=this.value;InvoicesPage._renderQueueList()">
+            <option value="">Alla fastigheter</option>
+            ${properties.map(p => `<option value="${p.id}" ${this._qPropertyId===p.id?'selected':''}>${esc(p.name||p.id)}</option>`).join('')}
+          </select>
+          <select onchange="InvoicesPage._qType=this.value;InvoicesPage._renderQueueList()">
+            <option value="alla" ${this._qType==='alla'?'selected':''}>Alla typer</option>
+            <option value="time" ${this._qType==='time'?'selected':''}>Tid</option>
+            <option value="material" ${this._qType==='material'?'selected':''}>Material</option>
+            <option value="fixed" ${this._qType==='fixed'?'selected':''}>Fastpris</option>
+          </select>
+          <select onchange="InvoicesPage._qPeriod=this.value;InvoicesPage._renderQueueList()">
+            <option value="alla" ${this._qPeriod==='alla'?'selected':''}>Alla perioder</option>
+            <option value="denna_manad" ${this._qPeriod==='denna_manad'?'selected':''}>Denna månad</option>
+            <option value="forra_manaden" ${this._qPeriod==='forra_manaden'?'selected':''}>Förra månaden</option>
+            <option value="senaste_30" ${this._qPeriod==='senaste_30'?'selected':''}>Senaste 30 dagarna</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mt);white-space:nowrap;">
+            <input type="checkbox" id="bq-issues-toggle" ${this._qOnlyIssues?'checked':''}
+              onchange="InvoicesPage._qOnlyIssues=this.checked;InvoicesPage._renderQueueList()"> Endast Kräver åtgärd
+          </label>
+        </div>
+      </div>
+      <div id="bq-list"></div>`;
+    this._renderQueueList();
+  },
+
+  /* V33 §13: byte av kundfilter kan göra det valda fastighetsfiltret
+     ogiltigt (fastigheten hör inte längre till den valda kunden) — då
+     nollställs det automatiskt. Bygger om HELA toolbaren (fastighets-
+     dropdownens options beror på vald kund) — påverkar inte sökfältets
+     fokus eftersom detta bara triggas av ett select-byte, aldrig av en
+     tangenttryckning i sökfältet. */
+  _onCustomerFilterChange(value) {
+    this._qCustomerId = value;
+    if (this._qPropertyId) {
+      const prop = (state.properties || []).find(p => p.id === this._qPropertyId);
+      if (!prop || (value && prop.customerId !== value)) this._qPropertyId = '';
+    }
+    const body = document.getElementById('inv-view-body');
+    if (body) this._renderQueueView(body);
+  },
+
+  _matchesPeriod(dateStr, period) {
+    if (!dateStr) return period === 'alla';
+    if (period === 'alla') return true;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+    if (period === 'senaste_30') return (now - d) <= 30 * 86400000 && d <= now;
+    if (period === 'denna_manad') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    if (period === 'forra_manaden') {
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
+    }
+    return true;
+  },
+
+  _renderQueueList() {
+    const headerEl = document.getElementById('bq-header');
+    const listEl   = document.getElementById('bq-list');
+    if (!listEl) return; /* användaren har hunnit byta vy */
+
+    const all = BillingQueueService.getCandidates();
+    const byKey = {};
+    all.forEach(c => { byKey[c.id] = c; });
+
+    let filtered = all;
+    if (this._qType !== 'alla')      filtered = filtered.filter(c => c.sourceType === this._qType);
+    if (this._qCustomerId)           filtered = filtered.filter(c => c.customerId === this._qCustomerId);
+    if (this._qPropertyId)           filtered = filtered.filter(c => c.propertyId === this._qPropertyId);
+    if (this._qPeriod !== 'alla')    filtered = filtered.filter(c => this._matchesPeriod(c.date, this._qPeriod));
+    if (this._qQuery) {
+      const q = this._qQuery.toLowerCase();
+      filtered = filtered.filter(c => [c.customerName, c.propertyName, c.workOrderNumber, c.workOrderTitle, c.staffName, c.description]
+        .filter(Boolean).join(' ').toLowerCase().includes(q));
+    }
+
+    const selectableList = this._qOnlyIssues ? [] : filtered.filter(c => c.selectable);
+    const issueList = filtered.filter(c => !c.selectable);
+
+    if (headerEl) headerEl.innerHTML = this._queueHeaderHtml(BillingQueueService.getSummary(all));
+
+    const actions = [
+      { id: 'create', label: 'Skapa fakturautkast', icon: 'file-plus', permission: 'invoice_create', type: 'custom',
+        open: ids => InvoicesPage._openCreateConfirm(ids) }
+    ];
+    SelectionModel.init('billingSource', {
+      itemsProvider: () => BillingQueueService.getCandidates().filter(c => c.selectable),
+      labelSingular: 'underlag', labelPlural: 'underlag',
+      selectionSummary: () => {
+        const ids = SelectionModel.getSelected();
+        const sum = ids.reduce((s, id) => s + (byKey[id] ? byKey[id].amount : 0), 0);
+        return fkr(Math.round(sum * 100) / 100);
+      },
+      actions
+    });
+
+    const visibleIds = selectableList.map(c => c.id);
+    const selAllHtml = visibleIds.length > 0 ? `<div style="margin-bottom:6px;">${SelectionModel.selectAllHtml(visibleIds)}</div>` : '';
+
+    const groupsHtml = selectableList.length > 0 ? this._renderGroupsHtml(this._buildGroups(selectableList)) : '';
+    const issuesHtml = issueList.length > 0 ? `
+      <div class="card" style="border-left:3px solid var(--or);margin-top:10px;">
+        <div class="card-header"><h3>${ic('alert-triangle',13)} Kräver åtgärd (${issueList.length})</h3></div>
+        <div class="card-body" style="padding:4px 0;">
+          ${issueList.map(c => this._issueRowHtml(c)).join('')}
+        </div>
+      </div>` : '';
+
+    const totallyEmpty = all.filter(c => c.selectable).length === 0 && all.filter(c => !c.selectable).length === 0;
+    const nothingMatchesFilter = filtered.length === 0 && !totallyEmpty;
+
+    let mainHtml;
+    if (totallyEmpty) {
+      mainHtml = `<div class="empty">${ic('check-circle',36)}<h3>Inget att fakturera</h3><p>Alla debiterbara underlag är redan kopplade till fakturautkast.</p></div>`;
+    } else if (nothingMatchesFilter) {
+      mainHtml = `<div class="empty">${ic('search',32)}<h3>Inga träffar</h3><p>Inga underlag matchar filtret.</p></div>`;
+    } else if (selectableList.length === 0 && !this._qOnlyIssues) {
+      mainHtml = `<div class="empty">${ic('check-circle',32)}<h3>Inget faktureringsbart underlag matchar filtret</h3></div>`;
+    } else {
+      mainHtml = selAllHtml + groupsHtml;
+    }
+
+    listEl.innerHTML = mainHtml + issuesHtml;
+  },
+
+  _queueHeaderHtml(s) {
+    return `
+      <div class="card bq-header-card">
+        <div class="bq-header-total">
+          <div class="bq-header-amount">${fkr(s.totalAmount)}</div>
+          <div class="bq-header-label">Redo att fakturera, ex moms</div>
+        </div>
+        <div class="bq-header-breakdown">
+          <div class="bq-hb-row"><span class="bq-hb-label">${ic('clock',11)} Tid (ex moms)</span><span class="bq-hb-val">${fkr(s.timeAmount)}</span></div>
+          <div class="bq-hb-row"><span class="bq-hb-label">${ic('package',11)} Material (ex moms)</span><span class="bq-hb-val">${fkr(s.materialAmount)}</span></div>
+          <div class="bq-hb-row"><span class="bq-hb-label">${ic('file-check',11)} Fastpris (ex moms)</span><span class="bq-hb-val">${fkr(s.fixedAmount)}</span></div>
+        </div>
+        ${s.issuesCount > 0 ? `<div class="bq-header-issues" onclick="InvoicesPage._qOnlyIssues=true;document.getElementById('bq-issues-toggle').checked=true;InvoicesPage._renderQueueList();">
+          ${ic('alert-triangle',12)} ${s.issuesCount} post${s.issuesCount===1?'':'er'} kräver åtgärd
+        </div>` : ''}
+      </div>`;
+  },
+
+  /* Gruppering: kund → fastighet → arbetsorder → sources (SPRINT2 §17) */
+  _buildGroups(list) {
+    const customers = {};
+    list.forEach(c => {
+      const cKey = c.customerId || '—';
+      if (!customers[cKey]) customers[cKey] = { name: c.customerName, total: 0, properties: {} };
+      customers[cKey].total += c.amount;
+      const pKey = c.propertyId || '—';
+      if (!customers[cKey].properties[pKey]) customers[cKey].properties[pKey] = { name: c.propertyName || 'Utan fastighet', total: 0, workOrders: {} };
+      customers[cKey].properties[pKey].total += c.amount;
+      const wKey = c.workOrderId || '—';
+      if (!customers[cKey].properties[pKey].workOrders[wKey]) customers[cKey].properties[pKey].workOrders[wKey] = { id: c.workOrderId, title: c.workOrderTitle, total: 0, items: [] };
+      customers[cKey].properties[pKey].workOrders[wKey].total += c.amount;
+      customers[cKey].properties[pKey].workOrders[wKey].items.push(c);
+    });
+    return customers;
+  },
+
+  _groupCbHtml(ids) {
+    const allSelected = ids.length > 0 && ids.every(id => SelectionModel.isSelected(id));
+    return `<label class="sel-cb-wrap" onclick="event.stopPropagation()">
+      <input type="checkbox" class="bq-group-cb" data-group-ids="${ids.join('|')}" ${allSelected?'checked':''}
+        aria-label="Markera grupp" onchange="event.stopPropagation();InvoicesPage._onGroupCheckboxChange(this)"
+        style="width:15px;height:15px;cursor:pointer;accent-color:var(--acc);">
+    </label>`;
+  },
+
+  _onGroupCheckboxChange(cbEl) {
+    const ids = (cbEl.getAttribute('data-group-ids') || '').split('|').filter(Boolean);
+    const checked = cbEl.checked;
+    ids.forEach(id => {
+      const isSel = SelectionModel.isSelected(id);
+      if (checked && !isSel) SelectionModel.toggle(id);
+      if (!checked && isSel) SelectionModel.toggle(id);
+    });
+    /* Full omrendering av listan — enklaste sättet att hålla ALLA
+       gruppnivåers kryssrutor (kund/fastighet/AO) konsekventa efter en
+       gruppmarkering, utan att bygga en separat sync-mekanism för
+       flernivågrupperingen (V31:s _syncRowStates hanterar bara enskilda
+       rader, inte gruppsummeringar). Kön är typiskt inte tillräckligt
+       stor för att detta ska vara ett prestandaproblem. */
+    InvoicesPage._renderQueueList();
+  },
+
+  _renderGroupsHtml(customers) {
+    return Object.values(customers).sort((a, b) => b.total - a.total).map(cu => {
+      const custIds = [];
+      Object.values(cu.properties).forEach(p => Object.values(p.workOrders).forEach(w => w.items.forEach(i => custIds.push(i.id))));
+      return `
+      <div class="bq-cust-group">
+        <div class="bq-group-header bq-cust-header">
+          ${this._groupCbHtml(custIds)}
+          <span class="bq-group-title">${esc(cu.name)}</span>
+          <span class="bq-group-amount">${fkr(cu.total)}</span>
+        </div>
+        ${Object.values(cu.properties).map(p => {
+          const propIds = [];
+          Object.values(p.workOrders).forEach(w => w.items.forEach(i => propIds.push(i.id)));
+          return `
+          <div class="bq-prop-group">
+            <div class="bq-group-header bq-prop-header">
+              ${this._groupCbHtml(propIds)}
+              <span class="bq-group-title">${esc(p.name)}</span>
+              <span class="bq-group-amount">${fkr(p.total)}</span>
+            </div>
+            ${Object.values(p.workOrders).map(w => {
+              const woIds = w.items.map(i => i.id);
+              return `
+              <div class="bq-ao-group">
+                <div class="bq-group-header bq-ao-header" onclick="Router.showPage('pg-ao-detail',{aoId:'${w.id}'})">
+                  ${this._groupCbHtml(woIds)}
+                  <span class="bq-group-title">${w.id} · ${esc(w.title || '')}</span>
+                  <span class="bq-group-amount">${fkr(w.total)}</span>
+                </div>
+                ${w.items.map(item => this._sourceRowHtml(item)).join('')}
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+  },
+
+  _sourceRowHtml(c) {
+    const selected = SelectionModel.isSelected(c.id);
+    const typeIcon  = { time: 'clock', material: 'package', fixed: 'file-check' }[c.sourceType] || 'file-text';
+    const typeLabel = { time: 'Tid', material: 'Material', fixed: 'Fastpris' }[c.sourceType] || c.sourceType;
+    const meta = c.sourceType === 'time'
+      ? `${fmtDate(c.date)}${c.staffName ? ' · ' + esc(c.staffName) : ''}${c.attested === false ? ` <span class="bdg bdg-grey" style="font-size:9px;">Ej attesterad</span>` : ''}`
+      : esc(c.description);
+    return `
+      <div class="bq-source-row${selected ? ' selected' : ''}" data-sel-row-id="${c.id}">
+        <label class="sel-cb-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" class="_sel-cb" data-sel-id="${c.id}" ${selected ? 'checked' : ''}
+            aria-label="Markera ${esc(c.description)}"
+            onchange="SelectionModel.toggle('${c.id}');InvoicesPage._renderQueueList();"
+            style="width:15px;height:15px;cursor:pointer;accent-color:var(--acc);">
+        </label>
+        <div class="bq-source-main">
+          <div class="bq-source-meta">${ic(typeIcon,10)} ${typeLabel} · ${meta}</div>
+          <div class="bq-source-detail">${c.quantity} ${esc(c.unit)} × ${fmt(c.unitPrice)} kr</div>
+        </div>
+        <div class="bq-source-amount">${fkr(c.amount)}</div>
+      </div>`;
+  },
+
+  _issueRowHtml(c) {
+    const typeIcon = { time: 'clock', material: 'package', fixed: 'file-check' }[c.sourceType] || 'file-text';
+    const clickable = !!c.workOrderId;
+    return `
+      <div class="bq-issue-row" ${clickable ? `onclick="Router.showPage('pg-ao-detail',{aoId:'${c.workOrderId}'})" style="cursor:pointer;"` : ''}>
+        <div class="bq-source-main">
+          <div class="bq-source-meta">${ic(typeIcon,10)} ${esc(c.description)}${c.date ? ' · ' + fmtDate(c.date) : ''}${c.staffName ? ' · ' + esc(c.staffName) : ''}${c.workOrderId ? ' · ' + c.workOrderId : ''}</div>
+          <div class="bq-issue-text">${c.issues.map(i => esc(i)).join(', ')}</div>
+        </div>
+      </div>`;
+  },
+
+  /* ── Skapa fakturautkast: förhandsgranskning + atomisk create (§21/§22/§40/§41) ── */
+  _openCreateConfirm(ids) {
+    if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) { showToast('Du saknar behörighet för denna åtgärd.'); return; }
+    const all = BillingQueueService.getCandidates();
+    const byKey = {};
+    all.forEach(c => { byKey[c.id] = c; });
+    const valid = ids.map(id => byKey[id]).filter(c => c && c.selectable);
+    if (!valid.length) { showToast('Inga av de markerade underlagen kan längre faktureras.'); return; }
+
+    const byCustomer = {};
+    valid.forEach(c => { (byCustomer[c.customerId] = byCustomer[c.customerId] || []).push(c); });
+    const customerIds = Object.keys(byCustomer);
+    const totalAmount = valid.reduce((s, c) => s + c.amount, 0);
+
+    const body = `
+      <p style="font-size:13px;color:var(--mt);margin-bottom:10px;">
+        ${customerIds.length} kund${customerIds.length===1?'':'er'} · ${valid.length} underlag · ${fkr(totalAmount)}
+      </p>
+      ${customerIds.map(cid => {
+        const group = byCustomer[cid];
+        const sum = group.reduce((s, c) => s + c.amount, 0);
+        return `<div class="crow"><div><strong>${esc(group[0].customerName)}</strong><div style="font-size:11px;color:var(--mt);">${group.length} underlag</div></div><div style="font-weight:700;">${fkr(sum)}</div></div>`;
+      }).join('')}`;
+
+    Modal.open({
+      title: 'Skapa fakturautkast?',
+      body,
+      buttons: [
+        { label: customerIds.length > 1 ? `Skapa ${customerIds.length} fakturautkast` : 'Skapa fakturautkast', cls: 'btn bp',
+          onClick: () => InvoicesPage._confirmCreate() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _confirmCreate() {
+    if (InvoicesPage._createBusy) return; /* dubbelklicksskydd */
+    InvoicesPage._createBusy = true;
+    const ids = SelectionModel.getSelected();
+    const result = BillingQueueService.createInvoicesFromSourceKeys(ids);
+    InvoicesPage._createBusy = false;
+    Modal.close();
+
+    if (!result.ok) { showToast(result.error || 'Kunde inte skapa fakturautkast.'); return; }
+
+    SelectionModel.clearAll();
+    if (result.created.length === 1) {
+      showToast(`${result.created[0].id} skapat.`);
+      Router.showPage('pg-inv-detail', { invoiceId: result.created[0].id });
+    } else {
+      InvoicesPage._view = 'list';
+      InvoicesPage._tab  = 'utkast';
+      showToast(`${result.created.length} fakturautkast skapades från ${result.sources} underlag.`);
+      InvoicesPage.render();
+    }
+  },
+
+  /* ══════════════════════════════════════════════════════════════════
+     FAKTURAUNDERLAG — den befintliga listan (SPRINT1), oförändrad logik,
+     bara flyttad in i sin egen vy-metod.
+     ══════════════════════════════════════════════════════════════════ */
+
+  _renderListView(el) {
     const invoices = state.invoices || [];
     const ready    = WorkOrderService.readyForInvoice();
+
+    SelectionModel.init('invoice', { stateKey: 'invoices', actions: [
+      { id: 'export', label: 'Exportera', icon: 'download', type: 'export' }
+    ] });
 
     const TAB_LABELS = { alla:'Alla', utkast:'Utkast', skickad:'Skickade', betald:'Betalda', förfallen:'Förfallna', makulerad:'Makulerade' };
     const tabs = Object.keys(TAB_LABELS);
@@ -68,21 +452,29 @@ const InvoicesPage = {
 
     // Filtered invoice list
     const filtered = this._tab === 'alla' ? invoices : invoices.filter(i => i.status === this._tab);
+    const visibleIds = filtered.map(i => i.id);
+    const selMode = SelectionModel.count() > 0;
     const listHtml = filtered.length === 0
       ? `<div class="empty">${ic('receipt',32)}<h3>${this._tab==='alla'?'Inga fakturaunderlag':'Inga '+TAB_LABELS[this._tab].toLowerCase()}</h3><p>Skapa från en klar arbetsorder</p></div>`
       : filtered.map(inv => {
           const cu = getCu(inv.customerId);
           const t  = InvoiceService.calcTotals(inv);
-          const ao = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
+          const woIds = (inv.workOrderIds && inv.workOrderIds.length) ? inv.workOrderIds : (inv.workOrderId ? [inv.workOrderId] : []);
+          const ao = woIds.length === 1 ? (state.workOrders||[]).find(a=>a.id===woIds[0]) : null;
           const cuName = cu ? CustomerService.displayName(cu) : null;
           const title  = inv.title || (ao ? ao.title : null);
-          return `<div class="list-item-v2" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">
+          const selected = SelectionModel.isSelected(inv.id);
+          /* SPRINT2 §32: tydligare hierarki — fakturanummer/titel överst,
+             kund på egen rad, AO(er)+datum sekundärt, status+belopp höger. */
+          return `<div class="list-item-v2${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${inv.id}"
+            onclick="SelectionModel.rowClick('${inv.id}', function(){ Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'}); })">
             <div class="list-item-v2-row">
+              <div style="padding-top:2px;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(inv.id, inv.id)}</div>
               <div class="list-item-v2-main">
                 <div class="list-item-v2-title">${inv.id}${title?' — '+esc(title):''}</div>
+                ${cuName ? `<div class="list-item-v2-cust">${ic('user',10)} ${esc(cuName)}</div>` : ''}
                 <div class="list-item-v2-meta">
-                  ${cuName ? `<span>${ic('user',10)} ${esc(cuName)}</span>` : ''}
-                  ${inv.workOrderId ? `<span style="color:var(--sky);">${ic('clipboard',10)} ${inv.workOrderId}</span>` : ''}
+                  ${woIds.length ? `<span style="color:var(--sky);">${ic('clipboard',10)} ${woIds.length>1?woIds.length+' AO':woIds[0]}</span>` : ''}
                   <span>${fmtDate(inv.createdAt)}</span>
                 </div>
               </div>
@@ -90,6 +482,7 @@ const InvoicesPage = {
                 ${sbdg(inv.status)}
                 <span style="font-size:13px;font-weight:800;color:var(--navy);white-space:nowrap;">${fkr(t.total)}</span>
               </div>
+              <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna faktura" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">${ic('chevron-right',16)}</button>
             </div>
           </div>`;
         }).join('');
@@ -99,6 +492,7 @@ const InvoicesPage = {
       ${readyHtml}
       <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         ${tabHtml}
+        ${filtered.length > 0 ? `<div class="ao-selall-cell">${SelectionModel.selectAllHtml(visibleIds)}</div>` : ''}
         <button class="btn bs bsm ao-export-btn" style="flex-shrink:0;" onclick="ImportExportService.showExportMenu('invoice',this)">${ic('download',14)} Exportera</button>
         <div class="ao-overflow-wrap" style="flex-shrink:0;">
           <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-inv" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-inv',this)">${ic('more-vertical',14)}</button>
@@ -113,36 +507,18 @@ const InvoicesPage = {
 
   _setTab(tab) {
     this._tab = tab;
-    this.render();
+    this._renderViewBody();
   },
 
+  /* V33 §6: den gamla "Skapa ny faktura ändå"-bypassen (temporär
+     ao.invoiceId=''-manipulation) är borttagen. InvoiceService.createFromAO()
+     avgör nu helt själv, via BillingQueueService, om det finns tillgängliga
+     source-aware candidates för AO:t — legacy-fakturerade AO:er har inga
+     (BillingQueueService exkluderar dem helt), och source-aware AO:er med
+     nya, ännu inte claimade sources fungerar automatiskt utan någon
+     specialhantering här. Ingen risk att kringgå legacy-exkluderingen. */
   createFromAO(aoId) {
     if (!Auth.require('invoice_create')) return;
-    const ao = getAO(aoId);
-    if (ao && ao.invoiceId) {
-      Modal.open({
-        title: 'Faktura finns redan',
-        body: `<p>Arbetsorder ${aoId} har redan faktura <strong>${ao.invoiceId}</strong>.</p><p style="margin-top:8px;color:var(--mt);font-size:13px;">Vill du skapa ytterligare en faktura? (t.ex. tilläggsfaktura)</p>`,
-        buttons: [
-          { label: 'Skapa ny faktura ändå', cls: 'btn bsu', onClick: () => {
-            Modal.close();
-            const originalInvoiceId = ao.invoiceId;
-            ao.invoiceId = '';
-            const result = InvoiceService.createFromAO(aoId);
-            if (!result.ok) {
-              ao.invoiceId = originalInvoiceId;
-              persist();
-              showToast(result.error); return;
-            }
-            showToast(`${result.invoice.id} skapat`);
-            Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });
-          }},
-          { label: 'Visa befintlig', cls: 'btn bp', onClick: () => { Modal.close(); Router.showPage('pg-inv-detail', { invoiceId: ao.invoiceId }); }},
-          { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-        ]
-      });
-      return;
-    }
     const result = InvoiceService.createFromAO(aoId);
     if (!result.ok) { showToast(result.error); return; }
     showToast(`${result.invoice.id} skapat`);
@@ -206,7 +582,10 @@ const InvoiceDetailPage = {
 
   _renderFull(el, inv) {
     const cu   = getCu(inv.customerId);
-    const statusOpts = ['utkast','skickad','betald','förfallen','makulerad'];
+    /* V34 §12: dropdownen visar bara nuvarande status + de övergångar som
+       InvoiceService.getAllowedStatusTransitions() faktiskt tillåter —
+       ingen egen transition-matris duplicerad i UI:t. */
+    const statusOpts = [inv.status].concat(InvoiceService.getAllowedStatusTransitions(inv));
     const ao   = inv.workOrderId ? (state.workOrders||[]).find(a=>a.id===inv.workOrderId) : null;
     const off  = inv.offerId ? (state.offers||[]).find(o=>o.id===inv.offerId) : null;
     const tots = InvoiceService.calcTotals(inv);
@@ -214,10 +593,18 @@ const InvoiceDetailPage = {
     const hasRot = summ.trAmount > 0;
     const cuName = cu ? CustomerService.displayName(cu) : '—';
 
+    /* SPRINT2 §33: en faktura kan nu representera FLERA AO (inv.workOrderIds)
+       för samma kund. Legacy inv.workOrderId (singular) behålls som fält
+       för bakåtkompatibla konsumenter, men hero-metan visar hela listan
+       när den finns. */
+    const woIds = (inv.workOrderIds && inv.workOrderIds.length) ? inv.workOrderIds : (inv.workOrderId ? [inv.workOrderId] : []);
     const heroMeta = [];
     if (inv.sentAt) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;">${ic('send',10)} Skickad ${fmtDate(inv.sentAt)}</span>`);
     if (inv.paidAt) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;color:#86efac;">${ic('check-circle',10)} Betald ${fmtDate(inv.paidAt)}</span>`);
-    if (inv.workOrderId) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-ao-detail',{aoId:'${inv.workOrderId}'})">${ic('clipboard',10)} ${inv.workOrderId}${ao?' – '+esc(ao.title.substring(0,28))+(ao.title.length>28?'…':''):''}</span>`);
+    woIds.forEach(woId => {
+      const woAo = (state.workOrders||[]).find(a=>a.id===woId);
+      heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-ao-detail',{aoId:'${woId}'})">${ic('clipboard',10)} ${woId}${woAo?' – '+esc(woAo.title.substring(0,28))+(woAo.title.length>28?'…':''):''}</span>`);
+    });
     if (inv.offerId) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${ic('file-text',10)} Offert ${inv.offerId}</span>`);
 
     el.innerHTML = `
@@ -229,9 +616,10 @@ const InvoiceDetailPage = {
             <span style="font-size:11px;font-weight:700;opacity:.6;letter-spacing:.3px;">${inv.id}</span>
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
               ${sbdg(inv.status)}
+              ${Auth.can('invoice_create') ? `
               <select class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);font-weight:600;font-size:11px;" onchange="InvoiceDetailPage.setStatus(this.value)">
                 ${statusOpts.map(s=>`<option value="${s}" ${inv.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
-              </select>
+              </select>` : ''}
             </div>
           </div>
           <div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:2px;">${cuName}</div>
@@ -262,7 +650,7 @@ const InvoiceDetailPage = {
           <div class="card">
             <div class="card-header">
               <h3>Fakturarader</h3>
-              <button class="btn bs bxs" onclick="InvoiceDetailPage.openAddLine()">${ic('plus',13)}</button>
+              ${(Auth.can('invoice_create') && InvoiceService.canEditLines(inv)) ? `<button class="btn bs bxs" onclick="InvoiceDetailPage.openAddLine()">${ic('plus',13)}</button>` : ''}
             </div>
             <div id="inv-lines">
               ${this._renderLines(inv)}
@@ -276,7 +664,7 @@ const InvoiceDetailPage = {
         <div class="inv-right">
           <div class="card">
             <div class="card-header"><h3>Faktureras till</h3>
-              <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera</button>
+              ${(Auth.can('invoice_create') && InvoiceService.canEditDraft(inv)) ? `<button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera</button>` : ''}
             </div>
             <div class="card-body">
               ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${esc(cu.address||'—')}${cu.city?', '+esc(cu.city):''}</span></div>` : ''}
@@ -291,9 +679,10 @@ const InvoiceDetailPage = {
           </div>
 
           <div class="inv-actions-card">
-            ${inv.status === 'utkast'  ? `<button class="btn bp bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
-            ${inv.status === 'skickad' ? `<button class="btn bsu bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
+            ${(inv.status === 'utkast'  && Auth.can('invoice_create')) ? `<button class="btn bp bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
+            ${(inv.status === 'skickad' && Auth.can('invoice_create')) ? `<button class="btn bsu bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
             <button class="btn bs bsm inv-action-btn" onclick="InvoiceDetailPage.showPrintView()">${ic('printer',14)} PDF / Skriv ut</button>
+            ${(inv.status === 'utkast' && Auth.can('invoice_create')) ? `<button class="btn bd bsm inv-action-btn" onclick="InvoiceDetailPage.deleteDraft()">${ic('trash-2',14)} Radera utkast</button>` : ''}
           </div>
 
           ${inv.workOrderId ? `<details class="inv-intern-wrap">
@@ -306,10 +695,11 @@ const InvoiceDetailPage = {
 
   _renderLines(inv) {
     const lines = inv.lines || [];
+    const canEdit = InvoiceService.canEditLines(inv);
     if (!lines.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Inga rader</p>`;
     return lines.map(l => {
       const exVat  = (l.qty||0) * (l.unitPrice||0);
-      const vatAmt = exVat * ((l.vatRate||25) / 100);
+      const vatAmt = exVat * (InvoiceService.normalizeVatRate(l.vatRate) / 100);
       const typeIcon = { Tid:'clock', Material:'package', Fastpris:'file-check', Manuell:'pencil', Övrigt:'more-horizontal', Fritext:'align-left' }[l.source] || 'file-text';
       const typeCls  = { Tid:'bdg-sky', Material:'bdg-orange', Fastpris:'bdg-green', Manuell:'bdg-grey', Övrigt:'bdg-grey', Fritext:'bdg-grey' }[l.source] || 'bdg-grey';
       return `
@@ -325,10 +715,11 @@ const InvoiceDetailPage = {
                 <span style="margin-left:6px;color:var(--mt);">ex ${fmt(exVat)} kr</span>
               </div>
             </div>
+            ${(Auth.can('invoice_create') && canEdit) ? `
             <div style="display:flex;gap:4px;flex-shrink:0;">
               <button class="btn bxs bs" onclick="InvoiceDetailPage.openEditLine('${l.id}')">${ic('pencil',12)}</button>
               <button class="btn bxs bd" onclick="InvoiceDetailPage.deleteLine('${l.id}')">${ic('trash',12)}</button>
-            </div>
+            </div>` : ''}
           </div>
         </div>`;
     }).join('');
@@ -390,7 +781,7 @@ const InvoiceDetailPage = {
     ).join('');
 
     const artOpts = (state.articles||[]).filter(a=>a.active).map(a =>
-      `<option value="${a.id}" data-name="${esc(a.name||'')}" data-unit="${a.unit||'st'}" data-price="${a.sellPrice||0}" data-vat="${a.vatRate||25}">${a.articleNumber?a.articleNumber+' – ':''}${esc(a.name)} (${fmt(a.sellPrice||0)} kr/${a.unit||'st'})</option>`
+      `<option value="${a.id}" data-name="${esc(a.name||'')}" data-unit="${a.unit||'st'}" data-price="${a.sellPrice||0}" data-vat="${InvoiceService.normalizeVatRate(a.vatRate)}">${a.articleNumber?a.articleNumber+' – ':''}${esc(a.name)} (${fmt(a.sellPrice||0)} kr/${a.unit||'st'})</option>`
     ).join('');
 
     const vis = (t) => t === curType ? '' : 'display:none';
@@ -529,7 +920,7 @@ const InvoiceDetailPage = {
     const name  = opt.dataset.name  || '';
     const unit  = opt.dataset.unit  || 'st';
     const price = parseFloat(opt.dataset.price) || 0;
-    const vat   = parseInt(opt.dataset.vat)     || 25;
+    const vat   = InvoiceService.normalizeVatRate(opt.dataset.vat);
     const descEl  = document.getElementById('il-desc-mat');
     const unitEl  = document.getElementById('il-unit-mat');
     const priceEl = document.getElementById('il-price-mat');
@@ -612,7 +1003,7 @@ const InvoiceDetailPage = {
         qty:       parseFloat(document.getElementById('il-qty-tid')?.value)   || 1,
         unit:      'tim',
         unitPrice: parseFloat(document.getElementById('il-price-tid')?.value) || 0,
-        vatRate:   parseFloat(document.getElementById('il-vat-tid')?.value)   || 25,
+        vatRate:   InvoiceService.normalizeVatRate(document.getElementById('il-vat-tid')?.value),
         source:    'Tid'
       };
     }
@@ -624,7 +1015,7 @@ const InvoiceDetailPage = {
         qty:       parseFloat(document.getElementById('il-qty-mat')?.value)   || 1,
         unit:      document.getElementById('il-unit-mat')?.value              || 'st',
         unitPrice: parseFloat(document.getElementById('il-price-mat')?.value) || 0,
-        vatRate:   parseFloat(document.getElementById('il-vat-mat')?.value)   || 25,
+        vatRate:   InvoiceService.normalizeVatRate(document.getElementById('il-vat-mat')?.value),
         source:    'Material'
       };
     }
@@ -636,7 +1027,7 @@ const InvoiceDetailPage = {
         qty:       1,
         unit:      'st',
         unitPrice: parseFloat(document.getElementById('il-price-fast')?.value) || 0,
-        vatRate:   parseFloat(document.getElementById('il-vat-fast')?.value)   || 25,
+        vatRate:   InvoiceService.normalizeVatRate(document.getElementById('il-vat-fast')?.value),
         source:    'Fastpris'
       };
     }
@@ -648,7 +1039,7 @@ const InvoiceDetailPage = {
       qty:       parseFloat(document.getElementById('il-qty-ovr')?.value)   || 1,
       unit:      document.getElementById('il-unit-ovr')?.value              || 'st',
       unitPrice: parseFloat(document.getElementById('il-price-ovr')?.value) || 0,
-      vatRate:   parseFloat(document.getElementById('il-vat-ovr')?.value)   || 25,
+      vatRate:   InvoiceService.normalizeVatRate(document.getElementById('il-vat-ovr')?.value),
       source:    'Övrigt'
     };
   },
@@ -662,7 +1053,8 @@ const InvoiceDetailPage = {
         { label: 'Lägg till', cls: 'btn bp', onClick: () => {
           const data = InvoiceDetailPage._getLineData();
           if (!data) return;
-          InvoiceService.addLine(this.invoiceId, data);
+          const result = InvoiceService.addLine(this.invoiceId, data);
+          if (!result.ok) { showToast(result.error); return; }
           Modal.close();
           this._refresh();
         }},
@@ -691,9 +1083,11 @@ const InvoiceDetailPage = {
   },
 
   openEditLine(lineId) {
+    if (!Auth.require('invoice_create')) return;
     const inv  = getInv(this.invoiceId);
     const line = (inv.lines||[]).find(l=>l.id===lineId);
     if (!line) return;
+    if (!InvoiceService.canEditLines(inv)) { showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras`); return; }
     Modal.open({
       title: 'Redigera rad',
       body: this._lineFormHtml(line),
@@ -701,7 +1095,8 @@ const InvoiceDetailPage = {
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const data = InvoiceDetailPage._getLineData();
           if (!data) return;
-          InvoiceService.updateLine(this.invoiceId, lineId, data);
+          const result = InvoiceService.updateLine(this.invoiceId, lineId, data);
+          if (!result.ok) { showToast(result.error); return; }
           Modal.close();
           this._refresh();
         }},
@@ -711,23 +1106,46 @@ const InvoiceDetailPage = {
     setTimeout(() => { InvoiceDetailPage._calcLineTotals(); }, 80);
   },
 
+  /* V33 §10: samma redigeringslås (InvoiceService.canEditLines — endast
+     'utkast') används här som i knapp-villkoren, så UI:t aldrig visar en
+     handling servicelagret ändå skulle neka. */
   deleteLine(lineId) {
+    if (!Auth.require('invoice_create')) return;
     const inv = getInv(this.invoiceId);
     if (!inv) return;
-    const locked = ['skickad', 'betald', 'makulerad'];
-    if (locked.includes(inv.status)) {
+    if (!InvoiceService.canEditLines(inv)) {
       showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras`);
       return;
     }
     const line = (inv.lines || []).find(l => l.id === lineId);
     const desc = line ? `"${line.description}"` : 'raden';
     Modal.confirm(`Ta bort ${desc}?`, () => {
-      InvoiceService.deleteLine(this.invoiceId, lineId);
+      const result = InvoiceService.deleteLine(this.invoiceId, lineId);
+      if (!result.ok) { showToast(result.error); return; }
       this._refresh();
     });
   },
 
+  /* V33 §12: riktig delete av ett redigerbart utkast — endast synlig/
+     tillåten för status 'utkast'. Efter delete: tillbaka till
+     Fakturaunderlag, sources tillbaka i Att fakturera (reconciliation sker
+     redan i InvoiceService.deleteDraft()). */
+  deleteDraft() {
+    if (!Auth.require('invoice_create')) return;
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    if (inv.status !== 'utkast') { showToast('Endast utkast kan raderas.'); return; }
+    Modal.confirm(`Radera utkast ${inv.id}? Detta går inte att ångra.`, () => {
+      const result = InvoiceService.deleteDraft(this.invoiceId);
+      if (!result.ok) { showToast(result.error); return; }
+      showToast(`${inv.id} raderat.`);
+      InvoicesPage._view = 'list';
+      Router.showPage('pg-invoices');
+    });
+  },
+
   setStatus(newStatus) {
+    if (!Auth.require('invoice_create')) return;
     const inv = getInv(this.invoiceId);
     if (!inv) return;
     const prev = inv.status;
@@ -747,7 +1165,8 @@ const InvoiceDetailPage = {
         buttons: [
           { label: 'Bekräfta', cls: 'btn bp', onClick: () => {
             Modal.close();
-            InvoiceService.setStatus(this.invoiceId, newStatus);
+            const result = InvoiceService.setStatus(this.invoiceId, newStatus);
+            if (!result.ok) { showToast(result.error); this._refresh(); return; }
             showToast(`Status: ${statusLabel(newStatus)}`);
             this._refresh();
           }},
@@ -755,7 +1174,8 @@ const InvoiceDetailPage = {
         ]
       });
     } else {
-      InvoiceService.setStatus(this.invoiceId, newStatus);
+      const result = InvoiceService.setStatus(this.invoiceId, newStatus);
+      if (!result.ok) { showToast(result.error); this._refresh(); return; }
       showToast(`Status: ${statusLabel(newStatus)}`);
       this._refresh();
     }
@@ -796,16 +1216,19 @@ const InvoiceDetailPage = {
           <span class="dk" style="color:var(--navy);">Kunden betalar</span>
           <span class="dv" style="color:var(--navy);">${fkr(s.customerPays)}</span>
         </div>` : ''}
+        ${(Auth.can('invoice_create') && InvoiceService.canEditDraft(inv)) ? `
         <div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--bg);">
           <button class="btn bxs bs" onclick="InvoiceDetailPage.openDiscount()" title="Sätt rabatt">${ic('tag',11)} Rabatt</button>
           <button class="btn bxs bs" onclick="InvoiceDetailPage.openTaxReduction()" title="RUT/ROT-avdrag">${ic('percent',11)} RUT/ROT</button>
-        </div>
+        </div>` : ''}
       </div>`;
   },
 
   openEditMeta() {
+    if (!Auth.require('invoice_create')) return;
     const inv = getInv(this.invoiceId);
     if (!inv) return;
+    if (!InvoiceService.canEditDraft(inv)) { showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras.`); return; }
     Modal.open({
       title: `${ic('edit',15)} Referens & OCR`,
       body: `
@@ -818,11 +1241,14 @@ const InvoiceDetailPage = {
           <textarea id="em-note" rows="2">${esc(inv.note||'')}</textarea></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
-          inv.customerReference = document.getElementById('em-ref')?.value.trim() || '';
-          inv.ocr               = document.getElementById('em-ocr')?.value.trim() || '';
-          inv.note              = document.getElementById('em-note')?.value.trim() || '';
-          inv.updatedAt = new Date().toISOString();
-          persist(); Modal.close(); this._refresh();
+          const data = {
+            customerReference: document.getElementById('em-ref')?.value.trim() || '',
+            ocr:               document.getElementById('em-ocr')?.value.trim() || '',
+            note:              document.getElementById('em-note')?.value.trim() || ''
+          };
+          const result = InvoiceService.updateMeta(this.invoiceId, data);
+          if (!result.ok) { showToast(result.error); return; }
+          Modal.close(); this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -830,8 +1256,10 @@ const InvoiceDetailPage = {
   },
 
   openDiscount() {
+    if (!Auth.require('invoice_create')) return;
     const inv  = getInv(this.invoiceId);
     if (!inv) return;
+    if (!InvoiceService.canEditDraft(inv)) { showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras.`); return; }
     const disc = inv.discount || { type: 'none', value: 0 };
     Modal.open({
       title: `${ic('tag',15)} Rabatt`,
@@ -850,7 +1278,8 @@ const InvoiceDetailPage = {
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const type  = document.getElementById('disc-type')?.value  || 'none';
           const value = parseFloat(document.getElementById('disc-value')?.value) || 0;
-          InvoiceService.setDiscount(this.invoiceId, type, value);
+          const result = InvoiceService.setDiscount(this.invoiceId, type, value);
+          if (!result.ok) { showToast(result.error); return; }
           Modal.close(); this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -867,8 +1296,10 @@ const InvoiceDetailPage = {
   },
 
   openTaxReduction() {
+    if (!Auth.require('invoice_create')) return;
     const inv = getInv(this.invoiceId);
     if (!inv) return;
+    if (!InvoiceService.canEditDraft(inv)) { showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras.`); return; }
     const tr = inv.taxReduction || { type: 'none', amount: 0, basis: 0, note: '' };
     Modal.open({
       title: `${ic('percent',15)} RUT/ROT-avdrag`,
@@ -894,7 +1325,8 @@ const InvoiceDetailPage = {
           const basis  = parseFloat(document.getElementById('tr-basis')?.value)  || 0;
           const amount = parseFloat(document.getElementById('tr-amount')?.value) || 0;
           const note   = document.getElementById('tr-note')?.value.trim() || '';
-          InvoiceService.setTaxReduction(this.invoiceId, type, amount, basis, note);
+          const result = InvoiceService.setTaxReduction(this.invoiceId, type, amount, basis, note);
+          if (!result.ok) { showToast(result.error); return; }
           Modal.close(); this._refresh();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -957,7 +1389,7 @@ const InvoiceDetailPage = {
 
     const linesHtml = (inv.lines||[]).map(l => {
       const ex = Math.round((l.qty||0)*(l.unitPrice||0));
-      return `<tr><td>${esc(l.description)}</td><td class="r">${l.qty}</td><td>${esc(l.unit||'')}</td><td class="r">${fmt(l.unitPrice||0)}</td><td class="r">${l.vatRate||25}%</td><td class="r">${fmt(ex)}</td></tr>`;
+      return `<tr><td>${esc(l.description)}</td><td class="r">${l.qty}</td><td>${esc(l.unit||'')}</td><td class="r">${fmt(l.unitPrice||0)}</td><td class="r">${InvoiceService.normalizeVatRate(l.vatRate)}%</td><td class="r">${fmt(ex)}</td></tr>`;
     }).join('');
 
     const refs = [];
@@ -1064,7 +1496,7 @@ ${refs.length ? '<div class="refs">' + refs.join(' &nbsp;·&nbsp; ') + '</div>' 
   <div class="trow tgreen"><span>Rabatt (${disc.type==='percent'?disc.value+'%':'fast belopp'})</span><span>− ${fmt(s.discAmt)} kr</span></div>
   <div class="tdiv"></div>` : ''}
   <div class="trow"><span>Summa ex. moms</span><span>${fmt(s.exVat)} kr</span></div>
-  <div class="trow"><span>Moms 25%</span><span>${fmt(s.vat)} kr</span></div>
+  <div class="trow"><span>Moms</span><span>${fmt(s.vat)} kr</span></div>
   <div class="tdiv"></div>
   <div class="tfinal"><span>Totalt inkl. moms</span><span>${fmt(s.totalInclVat)} kr</span></div>
   ${hasRot ? `<div class="tdiv" style="margin-top:6px;"></div>

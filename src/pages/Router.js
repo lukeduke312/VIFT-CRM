@@ -213,6 +213,12 @@ const Router = {
 
     // ── Behörighetskontroll ──────────────────────────────────
     if (!Auth.canViewPage(pageId)) {
+      // V29 §6: access-denied skickar alltid till Dashboard, oavsett vilken
+      // sida som begärdes — så en kvarliggande markering ska behandlas som
+      // att man navigerat till pg-dash, annars hinner den early-return
+      // nedan förbi den vanliga onNavigate()-raden och bulkbaren blir kvar
+      // ovanpå Dashboard.
+      if (typeof SelectionModel !== 'undefined' && SelectionModel.onNavigate) SelectionModel.onNavigate('pg-dash');
       showToast('Du saknar behörighet för den sidan');
       // Visa "Ingen behörighet"-meddelande på dashboarden
       document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
@@ -247,6 +253,11 @@ const Router = {
       }
       return;
     }
+
+    // Rensa en ev. kvarliggande bulk-markering om vi lämnar den listsida
+    // den hör till (V28 §9) — bulkbaren får inte ligga kvar ovanpå en
+    // orelaterad sida. Rör aldrig markeringen om vi stannar på samma sida.
+    if (typeof SelectionModel !== 'undefined' && SelectionModel.onNavigate) SelectionModel.onNavigate(pageId);
 
     // Stäng sidebar på mobil
     if (window.innerWidth < 1024) Sidebar.close();

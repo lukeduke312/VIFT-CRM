@@ -357,6 +357,18 @@
   .ao-view-item { display: none !important; }
 }
 
+/* ── SPRINT1: BulkActionBar — inline-knappar på desktop, konsoliderad
+   "Åtgärder"-meny på mobil (samma brytpunkt som ao-overflow ovan) ── */
+@media (max-width: 639px) {
+  .selbar { left: 8px; right: 8px; transform: none; max-width: none; padding-left: 12px; }
+  .selbar-actions { display: none !important; }
+  .selbar-overflow-wrap { display: block !important; }
+  .selbar-count { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (min-width: 640px) {
+  .selbar-overflow-wrap { display: none !important; }
+}
+
 /* ── Interna bilagor: mobilvänlig att-row layout ────────── */
 @media (max-width: 639px) {
   .att-row { flex-wrap: wrap; gap: 6px; }

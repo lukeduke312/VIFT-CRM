@@ -41,6 +41,25 @@ const Auth = {
   /* Intern session-state */
   _session: null,   // { access_token, refresh_token, expires_at, user_email }
 
+  /* V24: EN gemensam refresh-promise — alla samtidiga anrop (DataSync-poll,
+     persist(), persistNotifs(), 401-retry m.fl. som alla kan trigga refresh
+     oberoende av varandra) väntar på SAMMA promise istället för att var och
+     en skicka ett eget /auth/v1/token?grant_type=refresh_token-anrop.
+     Nödvändigt eftersom Supabase roterar refresh_token vid varje förnyelse —
+     parallella anrop med samma (redan förbrukade) refresh_token gör att alla
+     utom den första nekas, vilket tidigare rensade en session som en samtidig
+     lyckad refresh precis hade satt.
+     V26: _refreshPromiseToken knyter den pågående promisen till EXAKT den
+     session (refresh_token) den startades för. Detta löser ett andra race
+     utöver V25:s token-write-guard: utan denna koppling kunde en gammal
+     refresh-promises .finally() nollställa _refreshPromise även efter att en
+     NY session (efter omloggning) redan hunnit starta en egen, fortfarande
+     pågående refresh-promise — vilket i sin tur bröt single-flight för den
+     nya sessionen. Båda fälten nollställs bara av den promise som fortfarande
+     ÄR _refreshPromise (identitetskontroll i .finally(), se _doRefresh). */
+  _refreshPromise: null,
+  _refreshPromiseToken: null,
+
   /* ── Sidors behörighetskrav ───────────────────────────── */
   PAGE_PERMISSIONS: {
     'pg-dash':         [],
@@ -68,6 +87,23 @@ const Auth = {
     'pg-staff':        ['staff_view','staff_manage'],
     'pg-admin':        ['admin_manage'],
     'pg-recurring':    ['recurring_manage'],
+
+    /* V19 — tidigare ogatade routes (Auth.canViewPage() returnerade true för alla
+       inloggade när pageId saknades här). Permissions valda utifrån sidans faktiska
+       funktion, se VIFT-CRM-STABILIZATION-V19-rapporten för motivering per rad. */
+    'pg-propobj-detail':    ['customer_manage'],
+    'pg-import-wizard':     ['customer_manage','article_manage','staff_manage','ao_edit','payroll_manage','admin_manage'],
+    'pg-import-log':        ['admin_manage'],
+    /* V20: matchar exakt unionen av ExportCenterPage.js EXPORT_PERMISSIONS-kartan —
+       varje permission här kan ge minst ett exporterbart register. admin_manage är
+       medvetet UTESLUTET (ger inte i sig tillgång till något register att exportera);
+       'all' fungerar redan universellt via Auth.can(). */
+    'pg-export-center':     ['customer_manage','article_manage','staff_view','ao_view_all','payroll_view','invoice_view','reports_view'],
+    'pg-activities':        ['ao_view_all','ao_view_own'],
+    'pg-service-templates': ['offer_manage'],
+    'pg-rondering-wizard':  ['ao_view_all'],
+    'pg-rondering-utfor':   ['ao_view_all'],
+    'pg-rondering-rapport': ['ao_view_all'],
   },
 
   /* ── JWT ──────────────────────────────────────────────── */
@@ -90,29 +126,104 @@ const Auth = {
     } catch(e) { return false; }
   },
 
-  /* ── Token refresh (async) ────────────────────────────── */
+  /* ── Token refresh (async, single-flight) ─────────────── */
 
-  /* Förnya JWT om det löper ut inom 60s. Returnerar true om token är giltig. */
+  /* Förnya JWT om det löper ut inom 60s. Returnerar true om token är giltig.
+     Säkerhetsmarginal 60s täcker normal nätverkslatens; själva refresh-anropet
+     är dessutom alltid single-flight (se _doRefresh) så flera samtidiga
+     anrop med samma marginal aldrig triggar dubbla /auth/v1/token-anrop. */
   async refreshIfNeeded() {
     if (!this._session) return false;
     if (this._session.expires_at && Date.now() < this._session.expires_at - 60000) return true;
+    return this._doRefresh();
+  },
+
+  /* Tvinga en förnyelse oavsett lokal expires_at — används av Storage._authFetch
+     efter ett faktiskt 401-svar, då den lokala tidsuppskattningen redan visat
+     sig vara fel (t.ex. klockdrift) och inte får hindra en riktig förnyelse.
+     Delar samma single-flight-promise som refreshIfNeeded(). */
+  async forceRefresh() {
+    if (!this._session) return false;
+    return this._doRefresh();
+  },
+
+  /* Single-flight PER SESSION: om en refresh redan pågår FÖR SAMMA session
+     (samma refresh_token), återanvänd samma promise. En annan/ny session
+     (t.ex. efter omloggning medan en gammal refresh fortfarande är i flykt)
+     får alltid starta sin egen, separata refresh-promise — den återanvänder
+     aldrig en promise som hör till en annan session.
+
+     Identitetsskyddet i .finally() är avgörande: en promise nollställer bara
+     _refreshPromise/_refreshPromiseToken om DEN SJÄLV fortfarande är den
+     aktuella referensen. Om en nyare promise (för en annan session) redan
+     tagit över _refreshPromise när den äldre landar, rör den äldre då INGET
+     — annars skulle den kunna radera referensen till den nyare, fortfarande
+     pågående refreshen och därmed bryta single-flight för den nya sessionen. */
+  _doRefresh() {
+    const token = this._session && this._session.refresh_token;
+    if (!token) return Promise.resolve(false);
+
+    if (this._refreshPromise && this._refreshPromiseToken === token) {
+      return this._refreshPromise;
+    }
+
+    const promise = this._performRefresh().finally(() => {
+      if (this._refreshPromise === promise) {
+        this._refreshPromise = null;
+        this._refreshPromiseToken = null;
+      }
+    });
+    this._refreshPromise = promise;
+    this._refreshPromiseToken = token;
+    return promise;
+  },
+
+  async _performRefresh() {
+    /* Snapshotta vilken session (via dess refresh_token) denna förnyelse
+       startar för. Anropet är async — inloggningsstatus kan hinna ändras
+       (utloggning, eller en helt ny inloggning) innan svaret kommer tillbaka.
+       Ett svar får ENDAST tillämpas om _session fortfarande är exakt den
+       session förnyelsen startade för, annars är resultatet inaktuellt:
+       det får varken skriva över en nyare session eller återuppliva en
+       utloggad session. */
+    if (!this._session || !this._session.refresh_token) { this._clearSession(); return false; }
+    const refreshToken = this._session.refresh_token;
     try {
       const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
         method:  'POST',
         headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ refresh_token: this._session.refresh_token })
+        body:    JSON.stringify({ refresh_token: refreshToken })
       });
-      if (!res.ok) { this._clearSession(); return false; }
+
+      /* V25: är detta svaret fortfarande för den aktuella sessionen? */
+      const stillCurrent = !!(this._session && this._session.refresh_token === refreshToken);
+
+      if (!res.ok) {
+        /* Rensa BARA om den förnyelsen faktiskt gällde är den som fortfarande
+           är aktuell. En session som redan ersatts (ny inloggning) eller
+           redan är utloggad (_session===null) ska aldrig röras härifrån. */
+        if (stillCurrent) this._clearSession();
+        return !!(this._session && this._session.access_token);
+      }
+
       const d = await res.json();
+      if (!stillCurrent) {
+        /* Inaktuellt svar — kasta bort de nya tokens, skriv ingenting,
+           anropa inte _saveSession(). Rapportera bara sanningen om vad som
+           faktiskt gäller just nu. */
+        return !!(this._session && this._session.access_token);
+      }
+
       this._session.access_token  = d.access_token;
       this._session.refresh_token = d.refresh_token;
       this._session.expires_at    = Date.now() + (d.expires_in * 1000);
       this._session.user_email    = d.user?.email || this._session.user_email;
       this._saveSession();
+      console.log('[Auth] Access token refreshed');
       return true;
     } catch(e) {
-      /* Nätverksfel — behåll befintlig token och försök igen nästa anrop */
-      return !!this._session.access_token;
+      /* Nätverksfel — ingen mutation skedde, rapportera bara aktuellt läge */
+      return !!(this._session && this._session.access_token);
     }
   },
 
@@ -133,6 +244,13 @@ const Auth = {
         }
         return { ok: false, error: 'Inloggning misslyckades. Försök igen.' };
       }
+      /* V26: inget manuellt _refreshPromise-nollställande behövs här längre —
+         _doRefresh()s per-session token-koppling (_refreshPromiseToken) gör
+         att en eventuell kvarvarande promise från FÖREGÅENDE session aldrig
+         återanvänds för den nya (olika refresh_token), och dess .finally()
+         kan inte radera referensen till en nyare promise tack vare identitets-
+         kontrollen där. Ett explicit reset här skulle bara duplicera det
+         skyddet utan att fylla någon egen funktion. */
       this._session = {
         access_token:  data.access_token,
         refresh_token: data.refresh_token,
@@ -401,6 +519,11 @@ const Auth = {
 
   _clearSession() {
     this._session = null;
+    /* V26: inget manuellt _refreshPromise-nollställande behövs här längre —
+       se motiveringen i login(). Om en refresh fortfarande pågår för den nu
+       utloggade sessionen städar dess egen .finally() (identitetsskyddad)
+       upp sig själv när den landar; ingen ny refresh kan starta för att
+       refreshIfNeeded()/forceRefresh() redan kräver en icke-null _session. */
     try { localStorage.removeItem(this.SESSION_KEY); } catch(e) {}
   }
 };

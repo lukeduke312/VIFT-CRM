@@ -157,13 +157,13 @@ const PropertyDetailPage = {
           ${Auth.can('ao_create')
             ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openCreateAO()">${ic('plus',13)} Ny AO</button>`
             : ''}
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`
             : ''}
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
             : ''}
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openFlerAtgarder('${p.id}')">${ic('more-vertical',13)}</button>`
             : ''}
         </div>
@@ -314,14 +314,14 @@ const PropertyDetailPage = {
       <div class="card">
         <div class="card-header">
           <h3>${ic('info',14)} Grundinformation</h3>
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
             : ''}
         </div>
         <div class="card-body">
           ${rows.length === 0
             ? `<p style="font-size:12px;color:var(--mt);">Ingen utökad information registrerad.
-               ${Auth.can('properties_manage') ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">Redigera</button>` : ''}</p>`
+               ${Auth.can('customer_manage') ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">Redigera</button>` : ''}</p>`
             : rows.map(([k,v]) =>
                 `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`
               ).join('')}
@@ -350,7 +350,7 @@ const PropertyDetailPage = {
   _renderObjectsTab(p) {
     const POS = typeof PropertyObjectService !== 'undefined' ? PropertyObjectService : null;
     if (!POS) return '<div class="empty"><h3>PropertyObjectService saknas</h3></div>';
-    const canManage = Auth.can('properties_manage');
+    const canManage = Auth.can('customer_manage');
     const f = this._objFilter;
 
     const objects = POS.search(p.id, { query: f.search, type: f.type, status: f.status });
@@ -664,7 +664,7 @@ const PropertyDetailPage = {
     if (!SIS) return '<div class="empty"><h3>ServiceIntervalService saknas</h3></div>';
     let siList = (p.serviceIntervals || []).slice();
 
-    const canManage = Auth.can('properties_manage');
+    const canManage = Auth.can('customer_manage');
     const canMark   = canManage || Auth.can('ao_edit');
     const f = this._siFilter;
 
@@ -947,7 +947,7 @@ const PropertyDetailPage = {
   },
 
   openAddInterval(propId) {
-    if (!Auth.can('properties_manage')) return;
+    if (!Auth.can('customer_manage')) return;
     Modal.open({
       title: 'Lägg till serviceintervall',
       wide:  true,
@@ -973,7 +973,7 @@ const PropertyDetailPage = {
   },
 
   openEditInterval(propId, siId) {
-    if (!Auth.can('properties_manage')) return;
+    if (!Auth.can('customer_manage')) return;
     const p  = getObj(propId);
     const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
     if (!si) return;
@@ -1002,7 +1002,7 @@ const PropertyDetailPage = {
   },
 
   deleteInterval(propId, siId) {
-    if (!Auth.can('properties_manage')) return;
+    if (!Auth.can('customer_manage')) return;
     if (!confirm('Ta bort detta serviceintervall?')) return;
     ServiceIntervalService.delete(propId, siId);
     showToast('Serviceintervall borttaget');
@@ -1079,7 +1079,7 @@ const PropertyDetailPage = {
   },
 
   toggleSIPaused(propId, siId) {
-    if (!Auth.can('properties_manage')) return;
+    if (!Auth.can('customer_manage')) return;
     const p  = getObj(propId);
     const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
     if (!si) return;
@@ -1125,7 +1125,7 @@ const PropertyDetailPage = {
   _renderAnsvarigaTab(p) {
     const contacts = PropertyContactService.getForProperty(p.id);
     const roles    = PropertyContactService.activeRoles();
-    const canEdit  = Auth.can('properties_manage');
+    const canEdit  = Auth.can('customer_manage');
 
     const rows = contacts.length
       ? contacts.map(c => `
@@ -1232,7 +1232,7 @@ const PropertyDetailPage = {
       <div class="card">
         <div class="card-header">
           <h3>${ic('users',14)} Kontaktpersoner</h3>
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddContact()">${ic('plus',13)}</button>`
             : ''}
         </div>
@@ -1244,7 +1244,7 @@ const PropertyDetailPage = {
       <div class="card">
         <div class="card-header">
           <h3>${ic('key',14)} Åtkomst & nycklar</h3>
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
             : ''}
         </div>
@@ -1271,7 +1271,7 @@ const PropertyDetailPage = {
             ${c.email ? `<a href="mailto:${c.email}" style="font-size:11px;color:var(--sky);">${ic('mail',10)} ${c.email}</a>` : ''}
           </div>
         </div>
-        ${Auth.can('properties_manage') ? `
+        ${Auth.can('customer_manage') ? `
           <button class="btn bxs bs" onclick="PropertyDetailPage.openAddContact(${i})">${ic('pencil',11)}</button>
           <button class="btn bxs bd" onclick="PropertyDetailPage.removeContact(${i})">${ic('trash',11)}</button>
         ` : ''}
@@ -1332,7 +1332,7 @@ const PropertyDetailPage = {
             <div class="prop-acc-body">
               ${this._renderTechSystem(sys.slug, tObj, sys.fields)}
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-                ${Auth.can('properties_manage')
+                ${Auth.can('customer_manage')
                   ? `<button class="btn bs bsm"
                        onclick="PropertyDetailPage.openEditTechSystem('${sys.slug}')">
                        ${ic('pencil',13)} Redigera</button>`
@@ -1352,7 +1352,7 @@ const PropertyDetailPage = {
       <div class="card">
         <div class="card-header">
           <h3>${ic('clipboard-check',14)} Besiktningar & lagstadgade krav</h3>
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEditInsp()">${ic('pencil',13)}</button>`
             : ''}
         </div>
@@ -1716,7 +1716,7 @@ const PropertyDetailPage = {
       <div class="card" id="prop-images-card">
         <div class="card-header">
           <h3>${ic('image',14)} Bilder</h3>
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till</button>`
             : ''}
         </div>
@@ -1748,7 +1748,7 @@ const PropertyDetailPage = {
               Lägg till bilder på entré, teknikrum, undercentral, garage m.m.<br>
               Bilderna sparas i molnet och syns för alla inloggade användare.
             </p>
-            ${Auth.can('properties_manage')
+            ${Auth.can('customer_manage')
               ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till bild</button>`
               : ''}
           </div>`
@@ -1897,7 +1897,7 @@ const PropertyDetailPage = {
       <div class="card">
         <div class="card-header">
           <h3>${ic('file-text',14)} Anteckningar</h3>
-          ${Auth.can('properties_manage')
+          ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddNote()">${ic('plus',13)}</button>`
             : ''}
         </div>
@@ -2657,7 +2657,7 @@ const PropertyDetailPage = {
   },
 
   _executeCopy() {
-    if (!Auth.can('properties_manage')) { showToast('Du saknar behörighet'); return; }
+    if (!Auth.can('customer_manage')) { showToast('Du saknar behörighet'); return; }
     const p = getObj(this.propId);
     if (!p) return;
 

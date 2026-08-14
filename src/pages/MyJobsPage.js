@@ -71,8 +71,8 @@ const MyJobsPage = {
 
     let html = catChipsHtml;
 
-    // ── Stamp banner ─────────────────────────────────────────────────────────
-    if (isStamped) {
+    // ── Stamp banner — V23: kräver ao_time (aktiv stämplingskontroll/action) ──
+    if (isStamped && Auth.can('ao_time')) {
       const elapsed = TimeService.elapsedStr(state.stampTimestamp);
       const timeStr = state.stampTimestamp
         ? new Date(state.stampTimestamp).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})
@@ -197,7 +197,7 @@ const MyJobsPage = {
     let primaryBtn = '';
     let secondaryBtns = '';
     if (!compact) {
-      if (active) {
+      if (active && Auth.can('ao_time')) {
         primaryBtn = `<button class="btn bfull" style="background:#f0fdf4;color:var(--gr);border:1.5px solid var(--gr);font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockOut()">${ic('log-out',14)} Stämpla ut</button>`;
       } else if (!isStamped && Auth.can('ao_time')) {
         primaryBtn = `<button class="btn bp bfull" style="font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockIn('${ao.id}')">${ic('log-in',14)} Stämpla in</button>`;
@@ -264,11 +264,16 @@ const MyJobsPage = {
   },
 
   /* ── Åtgärder ─────────────────────────────────────────────────────────── */
+  /* V23: fail-closed handler-guard (UI-only räckte inte — knappen var redan
+     ao_time-gated, men själva metoden hade ingen egen spärr och kollade
+     aldrig TimeService.clockIn()s returvärde innan AO-logg/success-toast). */
   clockIn(aoId) {
+    if (!Auth.require('ao_time')) return;
     if (state.stampActive) { showToast('Stämpla ut från nuvarande jobb först'); return; }
     const ao   = getAO(aoId);
     const user = Auth.getUser();
-    TimeService.clockIn(aoId);
+    const ok = TimeService.clockIn(aoId);
+    if (!ok) { showToast('Kunde inte klocka in — kontrollera din behörighet.'); return; }
     if (ao && user) {
       ao.log = ao.log || [];
       ao.log.push({
@@ -284,11 +289,16 @@ const MyJobsPage = {
     this.render();
   },
 
+  /* V23: samma princip — kontrollera TimeService.clockOut()s returvärde
+     (post-objekt eller null) INNAN entry.staffName/entry.minutes används
+     eller någon success-toast visas. */
   clockOut() {
+    if (!Auth.require('ao_time')) return;
     if (!state.stampActive) return;
     const prevAoId = state.stampAoId;
     const entry    = TimeService.clockOut();
-    if (entry && prevAoId) {
+    if (!entry) { showToast('Kunde inte klocka ut — kontrollera din behörighet.'); return; }
+    if (prevAoId) {
       const ao = getAO(prevAoId);
       if (ao) {
         ao.log = ao.log || [];

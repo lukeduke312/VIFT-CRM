@@ -10,7 +10,20 @@ const CustomersPage = {
   render() {
     const el = document.getElementById('pg-crm-content');
     if (!el) return;
-    SelectionModel.init('customer');
+    const custActions = [
+      { id: 'export', label: 'Exportera', icon: 'download', type: 'export' },
+      this._typeFilter === 'inaktiva'
+        ? { id: 'reactivate', label: 'Återaktivera', icon: 'rotate-ccw', permission: 'customer_manage', type: 'confirm',
+            confirmTitle: n => `Återaktivera ${n} kund${n===1?'':'er'}?`,
+            confirmButtonLabel: n => `Återaktivera ${n}`,
+            run: ids => CustomersPage._bulkSetInactive(ids, false) }
+        : { id: 'archive', label: 'Arkivera', icon: 'archive', permission: 'customer_manage', type: 'confirm', destructive: true,
+            confirmTitle: n => `Arkivera ${n} kund${n===1?'':'er'}?`,
+            confirmDetail: 'Kunderna markeras som inaktiva och döljs i standardlistan. Kan återaktiveras senare.',
+            confirmButtonLabel: n => `Arkivera ${n}`,
+            run: ids => CustomersPage._bulkSetInactive(ids, true) }
+    ];
+    SelectionModel.init('customer', { stateKey: 'customers', actions: custActions });
 
     const TYPE_TABS = [
       { key:'alla',            label:'Alla' },
@@ -30,12 +43,12 @@ const CustomersPage = {
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
         <div class="ao-toolbar-right">
-          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',14)} Importera</button>` : ''}
+          ${Auth.can('customer_manage') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',14)} Importera</button>` : ''}
           <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('customer',this)">${ic('download',14)} Exportera</button>
           <div class="ao-overflow-wrap">
             <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-crm" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-crm',this)">${ic('more-vertical',14)}</button>
             <div class="ao-overflow-menu" id="ao-ovf-crm" role="menu">
-              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',13)} Importera</button>` : ''}
+              ${Auth.can('customer_manage') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',13)} Importera</button>` : ''}
               <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('customer',this)">${ic('download',13)} Exportera</button>
             </div>
           </div>
@@ -83,13 +96,16 @@ const CustomersPage = {
       </div>`;
       return;
     }
+    const selMode = SelectionModel.count() > 0;
     el.innerHTML = list.map(cu => {
       const name = CustomerService.displayName(cu);
       const aos  = CustomerService.getActiveAOs(cu.id).length;
+      const selected = SelectionModel.isSelected(cu.id);
       return `
-        <div class="list-item" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">
+        <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${cu.id}"
+          onclick="SelectionModel.rowClick('${cu.id}', function(){ Router.showPage('pg-crm-detail',{customerId:'${cu.id}'}); })">
           <div class="item-row">
-            ${SelectionModel.checkboxHtml(cu.id)}
+            ${SelectionModel.checkboxHtml(cu.id, name)}
             <div style="flex:1;min-width:0;">
               <div class="item-title">${name}</div>
               <div class="item-sub">${CustomerService.typeLabel(cu.type)}${cu.phone?' · '+cu.phone:''}${cu.city?' · '+cu.city:''}</div>
@@ -98,9 +114,33 @@ const CustomersPage = {
               ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
               <span class="bdg bdg-grey">${cu.id}</span>
             </div>
+            <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna kund" onclick="event.stopPropagation();Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${ic('chevron-right',16)}</button>
           </div>
         </div>`;
     }).join('');
+  },
+
+  /* Bulk arkivera/återaktivera — samma fält som CustomerDetailPage.toggleInactive()
+     (cu.inactive, cu.updatedAt), men EN persist() för hela batchen (SPRINT1 §18/V28 §1/§3/§7).
+     Fail-closed: kräver customer_manage själv (publikt anropbar). Räknar
+     bara faktiskt ändrade poster; redan-samma-värde = unchanged, ingen
+     persist om inget ändrades. */
+  _bulkSetInactive(ids, inactive) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      return { ok: false, error: 'Du saknar behörighet för denna åtgärd.', updated: 0, unchanged: 0 };
+    }
+    if (typeof inactive !== 'boolean') {
+      return { ok: false, error: 'Ogiltigt värde.', updated: 0, unchanged: 0 };
+    }
+    const now = new Date().toISOString();
+    let updated = 0, unchanged = 0;
+    (state.customers || []).forEach(cu => {
+      if (ids.indexOf(cu.id) === -1) return;
+      if (!!cu.inactive === !!inactive) { unchanged++; return; }
+      cu.inactive = inactive; cu.updatedAt = now; updated++;
+    });
+    if (updated > 0) { persist(); this.render(); }
+    return { ok: true, updated, unchanged };
   },
 
   _onCreated: null,

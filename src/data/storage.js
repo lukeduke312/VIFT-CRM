@@ -1,16 +1,23 @@
 /**
- * storage.js v8 — Supabase REST-backend med localStorage-cache
+ * storage.js v9 — Supabase REST-backend med localStorage-cache
  *
  * Läsning vid start: Supabase i ett enda bulk-anrop, localStorage som fallback.
  * Skrivning: localStorage direkt + Supabase i bakgrunden (fire-and-forget).
  * Auth: JWT från Auth.getAccessToken() injiceras i headers — RLS kräver inloggning.
- * Auth-session hanteras av AuthService — rörs inte här.
+ * Auth-session (inkl. refresh) hanteras helt av AuthService — rörs inte här.
  *
  * V8: _authFetch() — asynkron central fetch-wrapper.
  *   • Kallar Auth.refreshIfNeeded() proaktivt före varje autentiserat anrop.
  *   • Vid HTTP 401: forcerar en extra refresh-försök + en retry (aldrig loop).
  *   • Vid dubbel 401 eller misslyckat refresh: stoppar DataSync och visar inloggning.
  *   • _authFailed återställs automatiskt vid nästa lyckade anrop (efter ny inloggning).
+ *
+ * V24: 401-retryn använder nu Auth.forceRefresh() istället för att manipulera
+ *   Auth._session.expires_at direkt härifrån — AuthService är den enda platsen
+ *   som äger token-refresh-logiken (inkl. single-flight, se AuthService.js).
+ *   Detta fixar upprepade "JWT expired"-fel i produktion som berodde på att
+ *   flera samtidiga Storage-anrop (DataSync-poll, persist, persistNotifs)
+ *   kunde trigga parallella /auth/v1/token-anrop som race:ade mot varandra.
  */
 const SUPABASE_URL  = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
 const SUPABASE_AKEY = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
@@ -75,12 +82,14 @@ const Storage = {
     /* Steg 2: Utför anrop */
     let res = await fetch(url, buildOpts());
 
-    /* Steg 3: Hantera 401 — ett extra refresh-försök + en retry */
+    /* Steg 3: Hantera 401 — EN riktig force refresh (inte bara "redan färsk?"-
+       kontrollen i refreshIfNeeded) + en retry. Auth.forceRefresh() delar
+       AuthService.js:s single-flight-promise, så en 401-utlöst refresh här
+       kolliderar aldrig med en samtidig proaktiv refresh från ett annat anrop. */
     if (res.status === 401) {
-      /* Nolla expires_at så refreshIfNeeded() faktiskt försöker förnya (inte "fresh"-grenen) */
-      if (typeof Auth !== 'undefined' && Auth._session) Auth._session.expires_at = 0;
-      const retryOk = (typeof Auth !== 'undefined' && Auth.refreshIfNeeded)
-        ? await Auth.refreshIfNeeded()
+      console.log('[Storage] 401 — refreshing session and retrying once');
+      const retryOk = (typeof Auth !== 'undefined' && Auth.forceRefresh)
+        ? await Auth.forceRefresh()
         : false;
       if (!retryOk) {
         this._signalAuthFailure();
@@ -112,7 +121,7 @@ const Storage = {
   _signalAuthFailure() {
     if (this._authFailed) return;
     this._authFailed = true;
-    console.error('[Storage] Autentisering misslyckades — stoppar DataSync och loggar ut');
+    console.error('[Auth] Session expired — re-login required');
     if (typeof DataSync !== 'undefined') DataSync.stop();
     if (typeof Auth !== 'undefined') {
       try { Auth._clearSession(); } catch(e) {}

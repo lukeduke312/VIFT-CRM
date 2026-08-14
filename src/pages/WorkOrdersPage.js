@@ -48,7 +48,16 @@ const WorkOrdersPage = {
       if (params.customerId) { this._f.customer = params.customerId; this.filter = 'alla'; }
     }
 
-    SelectionModel.init('workOrder');
+    const aoActions = [
+      /* filterItems: export-boundary (V29 §4) — en markering kan i teorin
+         innehålla ID:n som lagts till programmatiskt (SelectionModel.toggle()
+         från konsolen), utanför vad renderList() någonsin visat den här
+         användaren. Export får ALDRIG läcka en AO utanför _canAccessAo(). */
+      { id: 'export', label: 'Exportera', icon: 'download', type: 'export', filterItems: items => items.filter(ao => WorkOrdersPage._canAccessAo(ao)) },
+      { id: 'status', label: 'Ändra status', icon: 'refresh-cw', permission: 'ao_edit', type: 'custom', open: (ids) => WorkOrdersPage._openBulkStatus(ids) },
+      { id: 'assign', label: 'Lägg till personal', icon: 'user-plus', permission: 'ao_edit', type: 'custom', open: (ids) => WorkOrdersPage._openBulkAssign(ids) }
+    ];
+    SelectionModel.init('workOrder', { stateKey: 'workOrders', actions: aoActions });
     const activeCount = this._activeFilterCount();
 
     const STATUS_TABS = [
@@ -81,7 +90,7 @@ const WorkOrdersPage = {
             <button class="btn ${this.viewMode==='list'?'bp':'bghost'}" title="Listvy" onclick="WorkOrdersPage.setView('list')">${ic('list',14)}</button>
             <button class="btn ${this.viewMode==='grid'?'bp':'bghost'}" title="Kortvy" onclick="WorkOrdersPage.setView('grid')">${ic('grid',14)}</button>
           </div>
-          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',14)} Importera</button>` : ''}
+          ${Auth.can('ao_edit') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',14)} Importera</button>` : ''}
           <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('workOrder',this)">${ic('download',14)} Exportera</button>
           <div class="ao-overflow-wrap">
             <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-wo" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-wo',this)">${ic('more-vertical',14)}</button>
@@ -89,7 +98,7 @@ const WorkOrdersPage = {
               <button class="ao-overflow-menu-item ao-view-item" role="menuitem" onclick="aoCloseOverflow();WorkOrdersPage.setView('list')">${ic('list',13)} Listvy</button>
               <button class="ao-overflow-menu-item ao-view-item" role="menuitem" onclick="aoCloseOverflow();WorkOrdersPage.setView('grid')">${ic('grid',13)} Kortvy</button>
               <div class="ao-overflow-divider ao-view-item"></div>
-              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',13)} Importera</button>` : ''}
+              ${Auth.can('ao_edit') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',13)} Importera</button>` : ''}
               <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('workOrder',this)">${ic('download',13)} Exportera</button>
             </div>
           </div>
@@ -527,6 +536,7 @@ const WorkOrdersPage = {
     const visibleIds = list.map(a => a.id);
     const selAllEl = document.getElementById('ao-sel-all');
     if (selAllEl) selAllEl.innerHTML = SelectionModel.selectAllHtml(visibleIds);
+    const selMode = SelectionModel.count() > 0;
 
     if (!list.length) {
       const isSearch = !!this.q;
@@ -604,10 +614,12 @@ const WorkOrdersPage = {
             <button class="btn bxs bghost" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',10)} Återställ</button>
             <button class="btn bxs bd" onclick="WorkOrderDetailPage._confirmPermanentDelete('${ao.id}');">${ic('trash-2',10)} Radera</button>
           </div>` : '';
+        const selected = SelectionModel.isSelected(ao.id);
         return `
-          <div style="display:flex;align-items:flex-start;gap:6px;">
-            <div style="padding:12px 0 0;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id)}</div>
-            <button class="ao-list-item ${priorityClass(ao.priority)}" style="flex:1;min-width:0;" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+          <div style="display:flex;align-items:flex-start;gap:6px;"
+            onclick="SelectionModel.rowClick('${ao.id}', function(){ Router.showPage('pg-ao-detail',{aoId:'${ao.id}'}); })">
+            <div style="padding:12px 0 0;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id, ao.title)}</div>
+            <div class="ao-list-item ${priorityClass(ao.priority)}${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${ao.id}" style="flex:1;min-width:0;">
               <div class="ao-item-top">
                 <div style="flex:1;min-width:0;">
                   <div class="ao-item-id">${ao.id}</div>
@@ -629,7 +641,8 @@ const WorkOrdersPage = {
                 ${chkHtml}
               </div>` : ''}
               ${archiveActions}${trashActions}
-            </button>
+            </div>
+            <button type="button" class="row-open-btn" style="margin-top:8px;" title="Öppna" aria-label="Öppna arbetsorder" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('chevron-right',16)}</button>
           </div>`;
       }).join('');
     }
@@ -1623,5 +1636,260 @@ const WorkOrdersPage = {
       if (sel) sel.addEventListener('change', () => CustomersPage._toggleTypeFields(sel.value));
       CustomersPage._toggleTypeFields(sel?.value || 'foretag');
     }, 60);
+  },
+
+  /* En AO som är raderad, arkiverad eller redan fakturerad är låst för
+     bulk-mutation (samma spärr som den enskilda redigerings-UI:n redan
+     använder, se rad ~568/623: !ao.archived&&!ao.deleted). Markeringar kan
+     ligga kvar över flikbyten (avsiktligt, SPRINT1 §7) — så en dold, låst
+     AO kan fortfarande vara markerad när en bulk-åtgärd körs. UI-gömning
+     räcker alltså inte; varje vald AO valideras här, i mutationslagret. */
+  _isAoLockedForBulk(ao) {
+    return !!(ao.archived || ao.deleted || ao.status === 'fakturerad');
+  },
+
+  /* View-scope-boundary för bulk-mutation/export (V29 §3/§4): EXAKT samma
+     semantik som renderList()/_baseList() rad ~441-446 använder för att
+     bygga den lista kryssrutorna renderas från. SelectionModel.toggle()/
+     selectAllVisible() är publika metoder — ett ID kan i teorin läggas in
+     programmatiskt (t.ex. via konsolen) utan att ha passerat renderad UI.
+     Denna helper är boundary-kontrollen i MUTATIONS-/EXPORT-lagret, inte
+     bara UI-filtrering, så det spelar ingen roll hur ID:t hamnade i
+     markeringen. */
+  _canAccessAo(ao) {
+    const canViewAll = Auth.can('ao_view_all') || Auth.can('all');
+    if (canViewAll) return true;
+    if (Auth.can('ao_view_own') && state.currentUser) {
+      const myId = state.currentUser.id;
+      return (ao.staff || []).includes(myId) || ao.status === 'pool';
+    }
+    return false;
+  },
+
+  /* Poster i state.workOrders som anroparen både FÅR se och som är kända
+     (existerar). Används av bulk-mutation OCH av export-boundary-filtret
+     (V29 §4) — samma regel på båda ställena. */
+  _authorizedAos(ids) {
+    return (state.workOrders || []).filter(ao => ids.indexOf(ao.id) !== -1 && WorkOrdersPage._canAccessAo(ao));
+  },
+
+  _bulkBusy: false,
+
+  /* ── Bulk: ändra status ─────────────────────────────────────────────
+     "Klar" utesluts medvetet ur bulk-menyn (SPRINT1 §13): enskild
+     klarmarkering (WorkOrderDetailPage.markComplete) varnar och kräver
+     ett aktivt beslut per order om checklistan är ofullständig — det
+     går inte att generalisera till en batch utan att antingen tysta
+     den varningen (osäkert) eller kräva en per-order-granskning i
+     dialogen (ingen "bulk" kvar). Öppna ordern individuellt istället.
+     V29 §1: allowlisten är den ENDA källan för vilka statusar bulk-UI:t
+     visar OCH vilka mutationslagret accepterar — ett direktanrop med
+     'klar', 'fakturerad' eller ett påhittat värde nekas identiskt. */
+  _BULK_ALLOWED_STATUSES: ['nytt', 'pool', 'planerad', 'pågående', 'avbruten'],
+
+  _bulkStatusIds: [],
+
+  _openBulkStatus(ids) {
+    if (!Auth.can('ao_edit')) { showToast('Du saknar behörighet för denna åtgärd.'); return; }
+    WorkOrdersPage._bulkStatusIds = ids;
+    Modal.open({
+      title: `Ändra status — ${ids.length} arbetsorder`,
+      body: `
+        <p style="font-size:12px;color:var(--mt);margin-bottom:10px;">"Klar" kan inte sättas i bulk — checklistan måste granskas per order. Öppna varje order individuellt för att klarmarkera. Fakturerade, arkiverade och raderade order hoppas alltid över.</p>
+        ${WorkOrdersPage._BULK_ALLOWED_STATUSES.map(s => `<div class="crow" onclick="Modal.close();setTimeout(()=>WorkOrdersPage._confirmBulkStatus('${s}'),50);">${sbdg(s)}</div>`).join('')}
+      `
+    });
+  },
+
+  _confirmBulkStatus(status) {
+    if (WorkOrdersPage._bulkBusy) return;
+    if (!Auth.can('ao_edit')) { showToast('Du saknar behörighet för denna åtgärd.'); return; }
+    if (WorkOrdersPage._BULK_ALLOWED_STATUSES.indexOf(status) === -1) { showToast('Den statusen kan inte sättas i bulk.'); return; }
+    const ids = WorkOrdersPage._bulkStatusIds || [];
+    if (!ids.length) return;
+    Modal.confirm(`Ändra status till "${statusLabel(status)}" för ${ids.length} arbetsorder${ids.length===1?'':'ar'}?`, () => {
+      if (WorkOrdersPage._bulkBusy) return;
+      WorkOrdersPage._bulkBusy = true;
+      const r = WorkOrdersPage._bulkSetStatus(ids, status);
+      WorkOrdersPage._bulkBusy = false;
+      if (!r.ok) { showToast(r.error); return; }
+      SelectionModel.clearAll();
+      showToast(WorkOrdersPage._bulkResultMessage(r, `till "${statusLabel(status)}"`, 'redan hade den statusen', 'inte kan hanteras (låsta eller utanför din behörighet)'));
+    });
+  },
+
+  /* Samma fält som WorkOrderService.setStatus() (ao.status, ao.updatedAt,
+     ActivityService-logg), men EN persist() för hela batchen (SPRINT1 §18).
+     Fail-closed på tre oberoende villkor, samtliga krävda (V29 §1/§3/§9):
+     (1) Auth.can('ao_edit'), (2) status finns i _BULK_ALLOWED_STATUSES,
+     (3) per post: _canAccessAo() (view-scope) OCH !_isAoLockedForBulk()
+     (fakturerad/arkiverad/raderad). Räknar bara poster som FAKTISKT bytte
+     status som "updated" — redan rätt status blir "unchanged", allt annat
+     (låst ELLER utanför view-scope) blir "skipped". */
+  _bulkSetStatus(ids, status) {
+    if (!Auth.can('ao_edit')) return { ok: false, error: 'Du saknar behörighet för denna åtgärd.', updated: 0, skipped: 0, unchanged: 0 };
+    if (WorkOrdersPage._BULK_ALLOWED_STATUSES.indexOf(status) === -1) return { ok: false, error: 'Den statusen kan inte sättas i bulk.', updated: 0, skipped: 0, unchanged: 0 };
+    const now = new Date().toISOString();
+    let updated = 0, skipped = 0, unchanged = 0;
+    (state.workOrders || []).forEach(ao => {
+      if (ids.indexOf(ao.id) === -1) return;
+      if (!WorkOrdersPage._canAccessAo(ao) || WorkOrdersPage._isAoLockedForBulk(ao)) { skipped++; return; }
+      if (ao.status === status) { unchanged++; return; }
+      const prev = ao.status;
+      ao.status = status;
+      ao.updatedAt = now;
+      ActivityService.log('work_order_status',
+        `Arbetsorder ${ao.id} ändrad: ${statusLabel(prev)} → ${statusLabel(status)}`,
+        { customerId: ao.customerId, workOrderId: ao.id });
+      updated++;
+    });
+    if (updated > 0) { persist(); Sidebar.updateBadges(); this.render(); }
+    return { ok: true, updated, skipped, unchanged };
+  },
+
+  /* ── Bulk: lägg till personal ─────────────────────────────────────────
+     Uttryckligen ADDITIV, aldrig ersättande (SPRINT1 §13): befintlig
+     tilldelning på varje markerad order rörs inte. Detta undviker den
+     tvetydighet en "ersätt"-variant skulle innebära (olika ordrar kan ha
+     helt olika befintlig personal) och matchar kravet att UI:t tydligt
+     ska ange add-vs-replace INNAN bekräftelse. */
+  _bulkAssignIds: [],
+
+  /* V30 §4: dialogen visar nuläget PER person över hela den valda batchen
+     (bara de AO som faktiskt är muterbara — samma _canAccessAo/
+     _isAoLockedForBulk-regler som mutationen använder, så N alltid matchar
+     vad som verkligen kommer hända). Additiv-principen är oförändrad:
+     "Tilldelad på alla" är bara disabled eftersom det inte finns något
+     kvar att lägga till för den personen, inte för att additiv-logiken
+     ändrats. */
+  _openBulkAssign(ids) {
+    if (!Auth.can('ao_edit')) { showToast('Du saknar behörighet för denna åtgärd.'); return; }
+    const eligible = (state.workOrders || []).filter(ao =>
+      ids.indexOf(ao.id) !== -1 && WorkOrdersPage._canAccessAo(ao) && !WorkOrdersPage._isAoLockedForBulk(ao));
+    if (!eligible.length) { showToast('Ingen av de markerade arbetsordrarna kan tilldelas personal (låsta eller utanför din behörighet).'); return; }
+
+    WorkOrdersPage._bulkAssignIds = ids;
+    const activeStaff = (state.staff || []).filter(s => s.active);
+    if (!activeStaff.length) { showToast('Ingen aktiv personal att tilldela.'); return; }
+
+    const N = eligible.length;
+    const coverage = activeStaff.map(s => ({
+      staff: s,
+      count: eligible.filter(ao => (ao.staff || []).includes(s.id)).length
+    }));
+    const anySelectable = coverage.some(c => c.count < N);
+
+    let body = `<p style="font-size:12px;color:var(--mt);margin-bottom:10px;">Vald personal <strong>läggs till</strong> på de markerade arbetsordrarna. Befintlig tilldelning ersätts inte.${eligible.length < ids.length ? ' ' + (ids.length - eligible.length) + ' av de markerade hoppas över (låsta eller utanför din behörighet).' : ''}</p>`;
+
+    if (!anySelectable) {
+      body += `<div class="nbox" style="font-size:13px;">${ic('check-circle',14)} Alla aktiva medarbetare är redan tilldelade på de markerade arbetsordrarna.</div>`;
+      Modal.open({
+        title: `Lägg till personal — ${N} arbetsorder`,
+        body,
+        buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
+      });
+      return;
+    }
+
+    body += coverage.map(c => {
+      const s = c.staff;
+      const full = c.count === N;
+      const partial = c.count > 0 && !full;
+      const statusText = full ? 'Redan tilldelad på alla' : partial ? `Tilldelad på ${c.count} av ${N}` : '';
+      return `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:${full?'default':'pointer'};border-bottom:1px solid var(--br);${full?'opacity:.55;':''}">
+        <input type="checkbox" id="bulkassign-${esc(s.id)}" ${full?'disabled':''}>
+        <span style="flex:1;min-width:0;">
+          <span style="font-size:13px;font-weight:600;">${esc(s.firstName)} ${esc(s.lastName)}</span>
+          ${statusText ? `<span style="display:block;font-size:11px;color:var(--mt);">${statusText}</span>` : ''}
+        </span>
+      </label>`;
+    }).join('');
+
+    Modal.open({
+      title: `Lägg till personal — ${N} arbetsorder`,
+      body,
+      buttons: [
+        { label: 'Lägg till', cls: 'btn bp', onClick: () => WorkOrdersPage._confirmBulkAssign() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _confirmBulkAssign() {
+    if (WorkOrdersPage._bulkBusy) return;
+    if (!Auth.can('ao_edit')) { showToast('Du saknar behörighet för denna åtgärd.'); Modal.close(); return; }
+    const ids = WorkOrdersPage._bulkAssignIds || [];
+    const activeStaff = (state.staff || []).filter(s => s.active);
+    const chosen = activeStaff
+      .filter(s => { const cb = document.getElementById('bulkassign-' + s.id); return cb && cb.checked; })
+      .map(s => s.id);
+    Modal.close();
+    if (!chosen.length) { showToast('Ingen personal vald.'); return; }
+    WorkOrdersPage._bulkBusy = true;
+    const r = WorkOrdersPage._bulkAddStaff(ids, chosen);
+    WorkOrdersPage._bulkBusy = false;
+    if (!r.ok) { showToast(r.error); return; }
+    SelectionModel.clearAll();
+    showToast(WorkOrdersPage._bulkResultMessage(r, null, 'redan hade vald personal', 'inte kan hanteras (låsta eller utanför din behörighet)'));
+  },
+
+  /* Validerar den inkommande staffIdsToAdd-arrayen mot state.staff (V29 §2)
+     — muterar aldrig baserat på ett obekräftat värde. Returnerar antingen
+     en canonical, deduplicerad lista med bekräftat existerande OCH aktiva
+     ID:n, eller null om NÅGOT ID var ogiltigt (hela anropet nekas, ingen
+     partial mutation — samma "allt eller inget"-princip som statuslistan). */
+  _validateStaffIds(staffIdsToAdd) {
+    if (!Array.isArray(staffIdsToAdd) || staffIdsToAdd.length === 0) return null;
+    const unique = Array.from(new Set(staffIdsToAdd));
+    const activeStaffIds = new Set((state.staff || []).filter(s => s.active).map(s => s.id));
+    const allValid = unique.every(id => activeStaffIds.has(id));
+    return allValid ? unique : null;
+  },
+
+  /* Samma fält/loggtyp som WorkOrderService.updateStaff() (ao.staff,
+     pool→planerad-övergång, ao.log staff_added-post), men additiv och
+     med EN persist() för hela batchen istället för en per order.
+     Fail-closed på flera oberoende villkor (V29 §2/§3/§9): (1) ao_edit,
+     (2) staffIdsToAdd validerad mot state.staff (okänt/inaktivt ID nekar
+     HELA anropet, ingen partial mutation), (3) per post: _canAccessAo()
+     OCH !_isAoLockedForBulk(). "updated" räknas ENDAST när minst en
+     person faktiskt lades till. */
+  _bulkAddStaff(ids, staffIdsToAdd) {
+    if (!Auth.can('ao_edit')) return { ok: false, error: 'Du saknar behörighet för denna åtgärd.', updated: 0, skipped: 0, unchanged: 0 };
+    const validStaffIds = WorkOrdersPage._validateStaffIds(staffIdsToAdd);
+    if (!validStaffIds) return { ok: false, error: 'Ogiltig eller inaktiv personal vald.', updated: 0, skipped: 0, unchanged: 0 };
+    const now = new Date().toISOString();
+    const user = state.currentUser;
+    const by = user ? `${user.firstName} ${user.lastName}`.trim() : 'Okänd';
+    let updated = 0, skipped = 0, unchanged = 0;
+    (state.workOrders || []).forEach(ao => {
+      if (ids.indexOf(ao.id) === -1) return;
+      if (!WorkOrdersPage._canAccessAo(ao) || WorkOrdersPage._isAoLockedForBulk(ao)) { skipped++; return; }
+      const oldStaff = ao.staff || [];
+      const added = validStaffIds.filter(id => !oldStaff.includes(id));
+      if (added.length === 0) { unchanged++; return; }
+      ao.staff = oldStaff.concat(added);
+      if (ao.status === 'pool') ao.status = 'planerad';
+      ao.log = ao.log || [];
+      const names = added.map(id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; }).join(', ');
+      ao.log.push({ id: 'L' + Date.now() + Math.random().toString(36).slice(2, 6), type: 'staff_added', text: `${by} lade till (bulk): ${names}`, userName: by, timestamp: now });
+      ao.updatedAt = now;
+      updated++;
+    });
+    if (updated > 0) { persist(); Sidebar.updateBadges(); this.render(); }
+    return { ok: true, updated, skipped, unchanged };
+  },
+
+  /* Bygger ett läsbart, korrekt toast-meddelande från { updated, skipped, unchanged }
+     — ingen tyst partial mutation (SPRINT1 §4/§18). */
+  _bulkResultMessage(r, updatedSuffix, unchangedReason, skippedReason) {
+    if (r.updated === 0 && r.skipped === 0 && r.unchanged > 0) return 'Ingen ändring — alla markerade ' + unchangedReason + '.';
+    let msg = r.updated + ' arbetsorder uppdaterade' + (updatedSuffix ? ' ' + updatedSuffix : '') + '.';
+    const notes = [];
+    if (r.skipped > 0)   notes.push(r.skipped + ' hoppades över eftersom de ' + skippedReason);
+    if (r.unchanged > 0) notes.push(r.unchanged + ' ' + unchangedReason);
+    if (notes.length) msg += ' ' + notes.join(', ') + '.';
+    return msg;
   }
 };

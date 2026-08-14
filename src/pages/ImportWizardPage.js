@@ -10,7 +10,8 @@
  * Steg 5: Bekräftelse (sammanfattning + konfliktlösning)
  * Steg 6: Resultat (logg, ångra)
  *
- * Kräver: Auth.can('admin'), ImportExportService, ImportExportConfigs
+ * V19: Kräver den permission som styr respektive register (se TYPE_PERMISSIONS),
+ * inte längre den ogiltiga 'admin'-strängen. ImportExportService, ImportExportConfigs.
  */
 
 const ImportWizardPage = (function () {
@@ -28,6 +29,21 @@ const ImportWizardPage = (function () {
   var _entityType      = 'customer';
   var _caps            = null;   // checkCapabilities() result
   var _validationTime  = null;   // ISO timestamp när steg 4 kördes (för konfliktsdetektering)
+
+  /* Vilken permission som krävs för att importera respektive register.
+     Okänd/ej listad typ faller tillbaka på admin_manage (säker default). */
+  var TYPE_PERMISSIONS = {
+    customer:       'customer_manage',
+    property:       'customer_manage',
+    propertyObject: 'customer_manage',
+    article:        'article_manage',
+    priceGroup:     'article_manage',
+    staff:          'staff_manage',
+    workOrder:      'ao_edit',
+    timeEntry:      'payroll_manage',
+    ronderingsmall: 'ao_edit',
+    ronderingPass:  'ao_edit'
+  };
 
   var STEPS = [
     'Välj fil', 'Förhandsgranskning', 'Kolumnmatchning',
@@ -48,10 +64,11 @@ const ImportWizardPage = (function () {
     var el = document.getElementById('pg-import-wizard-content');
     if (!el) return;
 
-    if (typeof Auth !== 'undefined' && !Auth.can('admin')) {
+    var _requiredPerm = TYPE_PERMISSIONS[_entityType] || 'admin_manage';
+    if (typeof Auth !== 'undefined' && !Auth.can(_requiredPerm)) {
       el.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center;">' +
         _ic('lock', 32) + '<h3 style="margin-top:12px">Åtkomst nekad</h3>' +
-        '<p>Importfunktionen kräver administratörsbehörighet.</p></div>';
+        '<p>Du saknar behörighet att importera detta register.</p></div>';
       return;
     }
 

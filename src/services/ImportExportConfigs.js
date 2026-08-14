@@ -1296,7 +1296,7 @@ Object.assign(ImportExportService, {
         }
       },
       {
-        icon: 'table',
+        icon: 'grid',
         label: 'Exportera XLSX' + (label ? ' (' + label + ')' : ''),
         fn: function () {
           var d = ImportExportService.buildExportRowsForType(entityType, recs);
@@ -1311,7 +1311,17 @@ Object.assign(ImportExportService, {
         icon: 'settings',
         label: 'Avancerat exportcenter…',
         fn: function () {
-          if (typeof Router !== 'undefined') Router.showPage('pg-export-center', { type: entityType });
+          /* V30 §3: origin-aware "Tillbaka"-navigation i Exportcenter.
+             Router.currentPage är redan den enda källan till "var är
+             användaren nu" — inga nya router-mekanismer, bara vidarebefordra
+             det till ExportCenterPage via params. */
+          if (typeof Router === 'undefined') return;
+          var opts = { type: entityType };
+          if (Router.currentPage && Router.currentPage !== 'pg-export-center') {
+            opts.sourcePage = Router.currentPage;
+            opts.sourceLabel = (Router.PAGE_TITLES && Router.PAGE_TITLES[Router.currentPage] || {}).title || '';
+          }
+          Router.showPage('pg-export-center', opts);
         }
       }
     ];
@@ -1337,18 +1347,34 @@ Object.assign(ImportExportService, {
 
     document.body.appendChild(menu);
 
-    /* Positionera under knappen */
-    var rect = btn.getBoundingClientRect();
-    var mw   = 220;
-    var left = Math.min(rect.left, window.innerWidth - mw - 8);
-    menu.style.top  = (rect.bottom + 4) + 'px';
+    /* Positionera under knappen — men öppna UPPÅT istället om menyn annars
+       skulle hamna utanför viewporten nedåt (t.ex. när knappen sitter i den
+       fasta BulkActionBar:en längst ner). SPRINT1 §8/§21: menyn får aldrig
+       rendera utanför synligt fönster. */
+    var rect      = btn.getBoundingClientRect();
+    var mw        = 220;
+    var menuH     = menu.offsetHeight || (items.length * 38 + 8);
+    var left      = Math.min(Math.max(8, rect.left), window.innerWidth - mw - 8);
+    var fitsBelow = (rect.bottom + 4 + menuH) <= window.innerHeight;
     menu.style.left = left + 'px';
-
-    /* Stäng vid klick utanför */
-    function _close(e) {
-      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close, true); }
+    if (fitsBelow) {
+      menu.style.top = (rect.bottom + 4) + 'px';
+    } else {
+      menu.style.top = Math.max(8, rect.top - menuH - 4) + 'px';
     }
-    setTimeout(function () { document.addEventListener('click', _close, true); }, 10);
+
+    /* Stäng vid klick utanför eller Escape */
+    function _close(e) {
+      if (e && e.type === 'keydown' && e.key !== 'Escape') return;
+      if (e && e.type === 'click' && menu.contains(e.target)) return;
+      menu.remove();
+      document.removeEventListener('click', _close, true);
+      document.removeEventListener('keydown', _close, true);
+    }
+    setTimeout(function () {
+      document.addEventListener('click', _close, true);
+      document.addEventListener('keydown', _close, true);
+    }, 10);
   }
 
 });

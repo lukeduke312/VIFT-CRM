@@ -4342,9 +4342,47 @@ const PropertiesPage = {
   _q: '',
   _filter: 'aktiva',
 
+  /* V30 §1: render() bygger bara SKELETTET (sökfält, flikar, tomma
+     containers) en gång. renderList() fyller listan + select-all-cellen
+     och anropas separat vid varje sök-/filterändring — sökfältets DOM-nod
+     byts då aldrig ut, så den tappar aldrig fokus. Samma tvåfas-mönster
+     som WorkOrdersPage/CustomersPage redan använde (rotorsaken till att
+     BARA Fastigheter/Artiklar/Personal hade fokus-buggen: de saknade denna
+     uppdelning och körde hela render() på varje tecken). */
   render() {
     const el = document.getElementById('pg-objects-content');
     if (!el) return;
+    el.innerHTML = `
+      <div class="ao-toolbar" style="margin-bottom:6px;">
+        <div class="swrap">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" id="prop-search" placeholder="Sök fastighet…" value="${this._q}"
+            oninput="PropertiesPage._q=this.value;PropertiesPage.renderList()">
+        </div>
+        <div class="ao-toolbar-right">
+          ${Auth.can('customer_manage') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',14)} Importera</button>` : ''}
+          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
+          <div class="ao-overflow-wrap">
+            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-prop" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-prop',this)">${ic('more-vertical',14)}</button>
+            <div class="ao-overflow-menu" id="ao-ovf-prop" role="menu">
+              ${Auth.can('customer_manage') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',13)} Importera</button>` : ''}
+              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('property',this)">${ic('download',13)} Exportera</button>
+            </div>
+          </div>
+          <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
+        </div>
+      </div>
+      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div class="ftabs" id="prop-filter-tabs" style="margin-bottom:0;flex:1;"></div>
+        <div class="ao-selall-cell" id="prop-sel-all"></div>
+      </div>
+      <div id="prop-list"></div>`;
+    this.renderList();
+  },
+
+  renderList() {
+    const listEl = document.getElementById('prop-list');
+    if (!listEl) return;
     const allProps = state.properties || [];
     const aktiva    = allProps.filter(p => p.status !== 'inaktiv');
     const arkiverade = allProps.filter(p => p.status === 'inaktiv');
@@ -4355,54 +4393,80 @@ const PropertiesPage = {
         p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.city||'').toLowerCase().includes(q)
       );
     }
-    SelectionModel.init('property');
+    const propActions = [
+      { id: 'export', label: 'Exportera', icon: 'download', type: 'export' },
+      this._filter === 'arkiverade'
+        ? { id: 'reactivate', label: 'Återaktivera', icon: 'rotate-ccw', permission: 'customer_manage', type: 'confirm',
+            confirmTitle: n => `Återaktivera ${n} fastighet${n===1?'':'er'}?`,
+            confirmButtonLabel: n => `Återaktivera ${n}`,
+            run: ids => PropertiesPage._bulkSetStatus(ids, 'aktiv') }
+        : { id: 'archive', label: 'Arkivera', icon: 'archive', permission: 'customer_manage', type: 'confirm', destructive: true,
+            confirmTitle: n => `Arkivera ${n} fastighet${n===1?'':'er'}?`,
+            confirmDetail: 'Fastigheterna flyttas till Arkiverade och kan återaktiveras senare.',
+            confirmButtonLabel: n => `Arkivera ${n}`,
+            run: ids => PropertiesPage._bulkSetStatus(ids, 'inaktiv') }
+    ];
+    SelectionModel.init('property', { stateKey: 'properties', actions: propActions });
     const visibleIds = props.map(p => p.id);
-    el.innerHTML = `
-      <div class="ao-toolbar" style="margin-bottom:6px;">
-        <div class="swrap">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" placeholder="Sök fastighet…" value="${this._q}"
-            oninput="PropertiesPage._q=this.value;PropertiesPage.render()">
-        </div>
-        <div class="ao-toolbar-right">
-          ${Auth.can('admin') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
-          <div class="ao-overflow-wrap">
-            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-prop" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-prop',this)">${ic('more-vertical',14)}</button>
-            <div class="ao-overflow-menu" id="ao-ovf-prop" role="menu">
-              ${Auth.can('admin') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',13)} Importera</button>` : ''}
-              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('property',this)">${ic('download',13)} Exportera</button>
-            </div>
-          </div>
-          <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
-        </div>
-      </div>
-      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <div class="ftabs" style="margin-bottom:0;flex:1;">
-          <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.render()">Aktiva (${aktiva.length})</button>
-          <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.render()">Arkiverade (${arkiverade.length})</button>
-        </div>
-        ${props.length > 0 ? `<div class="ao-selall-cell">${SelectionModel.selectAllHtml(visibleIds)}</div>` : ''}
-      </div>` +
-      (props.length === 0
-        ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
-        : props.map(p => {
-            const cu = getCu(p.customerId);
-            const cuName = cu ? CustomerService.displayName(cu) : '—';
-            const aos = (state.workOrders||[]).filter(a => a.propertyId === p.id).length;
-            return `
-              <div class="list-item" onclick="PropertiesPage.openDetail('${p.id}')">
-                <div class="item-row">
-                  ${SelectionModel.checkboxHtml(p.id)}
-                  <div style="flex:1;min-width:0;">
-                    <div class="item-title">${p.name}</div>
-                    <div class="item-sub">${[p.address, p.city].filter(Boolean).join(', ')}${cuName!=='—'?' · '+cuName:''}</div>
-                    ${p.type||p.area ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${[p.type,p.area?p.area+' m²':null].filter(Boolean).join(' · ')}</div>` : ''}
-                  </div>
-                  ${aos > 0 ? `<span class="bdg bdg-sky" style="align-self:flex-start;">${aos} AO</span>` : ''}
+    const selMode = SelectionModel.count() > 0;
+
+    const tabsEl = document.getElementById('prop-filter-tabs');
+    if (tabsEl) tabsEl.innerHTML = `
+      <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.renderList()">Aktiva (${aktiva.length})</button>
+      <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.renderList()">Arkiverade (${arkiverade.length})</button>`;
+    const selAllEl = document.getElementById('prop-sel-all');
+    if (selAllEl) selAllEl.innerHTML = props.length > 0 ? SelectionModel.selectAllHtml(visibleIds) : '';
+
+    listEl.innerHTML = props.length === 0
+      ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
+      : props.map(p => {
+          const cu = getCu(p.customerId);
+          const cuName = cu ? CustomerService.displayName(cu) : '—';
+          const aos = (state.workOrders||[]).filter(a => a.propertyId === p.id).length;
+          const selected = SelectionModel.isSelected(p.id);
+          return `
+            <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${p.id}"
+              onclick="SelectionModel.rowClick('${p.id}', function(){ PropertiesPage.openDetail('${p.id}'); })">
+              <div class="item-row">
+                ${SelectionModel.checkboxHtml(p.id, p.name)}
+                <div style="flex:1;min-width:0;">
+                  <div class="item-title">${p.name}</div>
+                  <div class="item-sub">${[p.address, p.city].filter(Boolean).join(', ')}${cuName!=='—'?' · '+cuName:''}</div>
+                  ${p.type||p.area ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${[p.type,p.area?p.area+' m²':null].filter(Boolean).join(' · ')}</div>` : ''}
                 </div>
-              </div>`;
-          }).join(''));
+                ${aos > 0 ? `<span class="bdg bdg-sky" style="align-self:flex-start;">${aos} AO</span>` : ''}
+                <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna fastighet" onclick="event.stopPropagation();PropertiesPage.openDetail('${p.id}')">${ic('chevron-right',16)}</button>
+              </div>
+            </div>`;
+        }).join('');
+  },
+
+  /* Bulk arkivera/återaktivera — samma fält som PropertyDetailPage.toggleStatus()
+     (p.status='aktiv'/'inaktiv', p.updatedAt), men EN persist() för hela batchen
+     istället för en per post (SPRINT1 §18/V28 §1/§3/§7).
+     Fail-closed: kräver customer_manage själv, inte bara i UI:t (V28 §1) —
+     denna metod är publikt anropbar och skyddas annars bara av
+     SelectionModel.runAction()s behörighetsfilter. Räknar bara poster som
+     FAKTISKT bytte status; redan rätt status = unchanged (V28 §12), ingen
+     persist om inget ändrades (V28 §7). */
+  _BULK_ALLOWED_PROPERTY_STATUSES: ['aktiv', 'inaktiv'],
+
+  _bulkSetStatus(ids, status) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      return { ok: false, error: 'Du saknar behörighet för denna åtgärd.', updated: 0, unchanged: 0 };
+    }
+    if (this._BULK_ALLOWED_PROPERTY_STATUSES.indexOf(status) === -1) {
+      return { ok: false, error: 'Ogiltig status.', updated: 0, unchanged: 0 };
+    }
+    const now = new Date().toISOString();
+    let updated = 0, unchanged = 0;
+    (state.properties || []).forEach(p => {
+      if (ids.indexOf(p.id) === -1) return;
+      if (p.status === status) { unchanged++; return; }
+      p.status = status; p.updatedAt = now; updated++;
+    });
+    if (updated > 0) { persist(); this.render(); }
+    return { ok: true, updated, unchanged };
   },
 
   _formHtml(p) {
@@ -4507,62 +4571,94 @@ const ArticlesPage = {
   _filter: 'alla',
   _q: '',
 
+  /* V30 §1: samma tvåfas-uppdelning som PropertiesPage (se kommentar där)
+     — render() bygger skelettet en gång, renderList() uppdaterar bara
+     listan/select-all/flikräknare vid sök- och filterändring, så
+     sökfältet aldrig byts ut och tappar fokus. */
+  _catLabels: { alla:'Alla', kemikalier:'Kemikalier', material:'Byggmaterial', forbruk:'Förbrukning', arbete:'Arbete', kostnad:'Kostnader' },
+
   render() {
     const el = document.getElementById('pg-articles-content');
     if (!el) return;
+    el.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+        <div class="swrap" style="flex:1;">
+          <span class="sico">${ic('search',16)}</span>
+          <input type="search" id="art-search" placeholder="Sök artikel, artnr…" value="${this._q}"
+            oninput="ArticlesPage._q=this.value;ArticlesPage.renderList()">
+        </div>
+        ${Auth.can('article_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'article'})">${ic('upload',14)} Importera</button>` : ''}
+        <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('article',this)">${ic('download',14)} Exportera</button>
+        <button class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)} Ny artikel</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="ftabs" id="art-filter-tabs" style="margin-bottom:0;flex:1;"></div>
+        <div id="art-sel-all"></div>
+      </div>
+      <div id="art-list"></div>`;
+    this.renderList();
+  },
+
+  renderList() {
+    const listEl = document.getElementById('art-list');
+    if (!listEl) return;
     const cats = ['alla','kemikalier','material','forbruk','arbete','kostnad'];
-    const catLabels = { alla:'Alla', kemikalier:'Kemikalier', material:'Byggmaterial', forbruk:'Förbrukning', arbete:'Arbete', kostnad:'Kostnader' };
+    const catLabels = this._catLabels;
     let arts = state.articles || [];
     if (this._filter !== 'alla') arts = arts.filter(a => a.category === this._filter);
     if (this._q) {
       const q = this._q.toLowerCase();
       arts = arts.filter(a => a.name.toLowerCase().includes(q) || (a.articleNumber||'').includes(q));
     }
-    SelectionModel.init('article');
+    const artActions = [
+      { id: 'export', label: 'Exportera', icon: 'download', type: 'export' },
+      { id: 'activate', label: 'Aktivera', icon: 'eye', permission: 'article_manage', type: 'confirm',
+        confirmTitle: n => `Aktivera ${n} artikel${n===1?'':'ar'}?`,
+        confirmButtonLabel: n => `Aktivera ${n}`,
+        run: ids => ArticlesPage._bulkSetActive(ids, true) },
+      { id: 'deactivate', label: 'Inaktivera', icon: 'eye-off', permission: 'article_manage', type: 'confirm', destructive: true,
+        confirmTitle: n => `Inaktivera ${n} artikel${n===1?'':'ar'}?`,
+        confirmButtonLabel: n => `Inaktivera ${n}`,
+        run: ids => ArticlesPage._bulkSetActive(ids, false) }
+    ];
+    SelectionModel.init('article', { stateKey: 'articles', actions: artActions });
     const artVisibleIds = arts.map(a => a.id);
-    el.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <div class="swrap" style="flex:1;">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" placeholder="Sök artikel, artnr…" value="${this._q}"
-            oninput="ArticlesPage._q=this.value;ArticlesPage.render()">
-        </div>
-        ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'article'})">${ic('upload',14)} Importera</button>` : ''}
-        <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('article',this)">${ic('download',14)} Exportera</button>
-        <button class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)} Ny artikel</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <div class="ftabs" style="margin-bottom:0;flex:1;">
-          ${cats.map(c=>`<button class="ft ${this._filter===c?'on':''}" onclick="ArticlesPage._filter='${c}';ArticlesPage.render()">${catLabels[c]}</button>`).join('')}
-        </div>
-        ${arts.length > 0 ? SelectionModel.selectAllHtml(artVisibleIds) : ''}
-      </div>
-      ${arts.length === 0
-        ? `<div class="empty">${ic('package',32)}<h3>Inga artiklar</h3></div>`
-        : arts.map(a => {
-            const margin = a.buyPrice > 0 && a.sellPrice > 0
-              ? Math.round((1 - a.buyPrice / a.sellPrice) * 100)
-              : null;
-            return `
-          <div class="list-item" onclick="ArticlesPage.openEdit('${a.id}')">
-            <div class="item-row">
-              ${SelectionModel.checkboxHtml(a.id)}
-              <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-                  ${a.active===false?`<span style="width:6px;height:6px;border-radius:50%;background:var(--mt);flex-shrink:0;display:inline-block;"></span>`:''}
-                  <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${a.articleNumber} – </span>` : ''}${a.name}</span>
-                </div>
-                <div class="item-sub">
-                  ${fmt(a.sellPrice)} kr/${a.unit} inkl ${a.vatRate||25}% moms
-                  ${margin !== null ? `· <span style="color:${margin>=30?'var(--gr)':margin>=10?'var(--or)':'var(--rd)'};">${margin}% marginal</span>` : ''}
-                </div>
+    const selMode = SelectionModel.count() > 0;
+
+    const tabsEl = document.getElementById('art-filter-tabs');
+    if (tabsEl) tabsEl.innerHTML = cats.map(c=>`<button class="ft ${this._filter===c?'on':''}" onclick="ArticlesPage._filter='${c}';ArticlesPage.renderList()">${catLabels[c]}</button>`).join('');
+    const selAllEl = document.getElementById('art-sel-all');
+    if (selAllEl) selAllEl.innerHTML = arts.length > 0 ? SelectionModel.selectAllHtml(artVisibleIds) : '';
+
+    listEl.innerHTML = arts.length === 0
+      ? `<div class="empty">${ic('package',32)}<h3>Inga artiklar</h3></div>`
+      : arts.map(a => {
+          const margin = a.buyPrice > 0 && a.sellPrice > 0
+            ? Math.round((1 - a.buyPrice / a.sellPrice) * 100)
+            : null;
+          const selected = SelectionModel.isSelected(a.id);
+          return `
+        <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${a.id}"
+          onclick="SelectionModel.rowClick('${a.id}', function(){ ArticlesPage.openEdit('${a.id}'); })">
+          <div class="item-row">
+            ${SelectionModel.checkboxHtml(a.id, a.name)}
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                ${a.active===false?`<span style="width:6px;height:6px;border-radius:50%;background:var(--mt);flex-shrink:0;display:inline-block;"></span>`:''}
+                <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${a.articleNumber} – </span>` : ''}${a.name}</span>
               </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
-                <span class="bdg ${catLabels[a.category]?'bdg-sky':'bdg-grey'}" style="font-size:9px;">${catLabels[a.category]||a.category||'—'}</span>
-                ${a.active===false?`<span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>`:''}
+              <div class="item-sub">
+                ${fmt(a.sellPrice)} kr/${a.unit} inkl ${a.vatRate||25}% moms
+                ${margin !== null ? `· <span style="color:${margin>=30?'var(--gr)':margin>=10?'var(--or)':'var(--rd)'};">${margin}% marginal</span>` : ''}
               </div>
             </div>
-          </div>`;}).join('')}`;
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+              <span class="bdg ${catLabels[a.category]?'bdg-sky':'bdg-grey'}" style="font-size:9px;">${catLabels[a.category]||a.category||'—'}</span>
+              ${a.active===false?`<span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>`:''}
+            </div>
+            <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna artikel" onclick="event.stopPropagation();ArticlesPage.openEdit('${a.id}')">${ic('chevron-right',16)}</button>
+          </div>
+        </div>`;}).join('');
   },
 
   _formHtml(a) {
@@ -4655,6 +4751,30 @@ const ArticlesPage = {
     persist(); Modal.close();
     showToast(state.articles[idx].active ? 'Aktiverad' : 'Inaktiverad');
     this.render();
+  },
+
+  /* Bulk aktivera/inaktivera — samma fält som _toggleActive() (active,
+     updatedAt), men EN persist() för hela batchen (SPRINT1 §18/V28 §1/§3/§7).
+     Fail-closed: kräver article_manage själv (publikt anropbar). Räknar
+     bara faktiskt ändrade poster; redan-samma-värde = unchanged, ingen
+     persist om inget ändrades. */
+  _bulkSetActive(ids, active) {
+    if (typeof Auth === 'undefined' || !Auth.can('article_manage')) {
+      return { ok: false, error: 'Du saknar behörighet för denna åtgärd.', updated: 0, unchanged: 0 };
+    }
+    if (typeof active !== 'boolean') {
+      return { ok: false, error: 'Ogiltigt värde.', updated: 0, unchanged: 0 };
+    }
+    const now = new Date().toISOString();
+    let updated = 0, unchanged = 0;
+    (state.articles || []).forEach(a => {
+      if (ids.indexOf(a.id) === -1) return;
+      var current = a.active !== false; // saknat fält tolkas som aktiv, matchar renderingens a.active===false-check
+      if (current === !!active) { unchanged++; return; }
+      a.active = active; a.updatedAt = now; updated++;
+    });
+    if (updated > 0) { persist(); this.render(); }
+    return { ok: true, updated, unchanged };
   }
 };
 
@@ -4683,7 +4803,7 @@ const PriceGroupsPage = {
     el.innerHTML =
       `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
          <h3 style="flex:1;font-size:14px;font-weight:700;">Prisgrupper</h3>
-         ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'priceGroup'})">${ic('upload',14)} Importera</button>` : ''}
+         ${Auth.can('article_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'priceGroup'})">${ic('upload',14)} Importera</button>` : ''}
          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('priceGroup',this)">${ic('download',14)} Exportera</button>
          <button class="btn bp bsm" onclick="PriceGroupsPage.openCreate()">${ic('plus',14)} Ny prisgrupp</button>
        </div>` +
@@ -4841,7 +4961,7 @@ const PriceGroupsPage = {
     state.priceProfiles = state.priceProfiles || [];
     if (!ppId) {
       const maxSort = state.priceProfiles.reduce((m,p)=>Math.max(m,p.sortOrder||0),0);
-      state.priceProfiles.push({ ...data, id: 'PP-' + String(state.priceProfiles.length+1).padStart(3,'0'), active: true, sortOrder: maxSort+10, createdAt: new Date().toISOString() });
+      state.priceProfiles.push({ ...data, id: newId(state.priceProfiles, 'PP'), active: true, sortOrder: maxSort+10, createdAt: new Date().toISOString() });
       showToast(`${name} skapad`);
     } else {
       const idx = state.priceProfiles.findIndex(x=>x.id===ppId);
@@ -4860,12 +4980,21 @@ const StaffPage = {
   render() {
     const el = document.getElementById('pg-staff-content');
     if (!el) return;
-    SelectionModel.init('staff');
+    /* SPRINT1 §15: bara export i bulk. StaffPage._toggleActive() saknar
+       skydd mot att inaktivera sig själv eller den sista superadmin-
+       kontot — en bulk-variant av samma funktion skulle ärva den luckan
+       och göra den mycket lättare att råka ut för. Ingen ny säkerhets-
+       modell byggs i denna sprint, så bulk-inaktivering utelämnas
+       medvetet tills den enskilda funktionen har motsvarande skydd. */
+    SelectionModel.init('staff', { stateKey: 'staff', actions: [
+      { id: 'export', label: 'Exportera', icon: 'download', type: 'export' }
+    ] });
     const all     = state.staff || [];
     const aktiva  = all.filter(s => s.active);
     const inaktiva = all.filter(s => !s.active);
     const list    = this._filter === 'aktiva' ? aktiva : inaktiva;
     const visibleIds = list.map(s => s.id);
+    const selMode = SelectionModel.count() > 0;
     const roleColor = (rid) => ({ admin:'bdg-red', chef:'bdg-orange', personal:'bdg-blue' }[rid] || 'bdg-grey');
     const roleLabel = (rid) => { const r = (state.roles||[]).find(x=>x.id===rid); return r ? r.label : (rid || '—'); };
 
@@ -4876,16 +5005,19 @@ const StaffPage = {
            <button class="ft ${this._filter==='inaktiva'?'on':''}" onclick="StaffPage._filter='inaktiva';StaffPage.render()">Inaktiva (${inaktiva.length})</button>
          </div>
          ${SelectionModel.selectAllHtml(visibleIds)}
-         ${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'staff'})">${ic('upload',14)} Importera</button>` : ''}
+         ${Auth.can('staff_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'staff'})">${ic('upload',14)} Importera</button>` : ''}
          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('staff',this)">${ic('download',14)} Exportera</button>
          <button class="btn bp bsm" onclick="StaffPage.openCreate()">${ic('plus',14)} Ny personal</button>
        </div>` +
       (list.length === 0
         ? `<div class="empty">${ic('users',32)}<h3>Inga ${this._filter} medarbetare</h3></div>`
-        : list.map(s => `
-          <div class="list-item" onclick="StaffPage.openEdit('${s.id}')">
+        : list.map(s => {
+            const selected = SelectionModel.isSelected(s.id);
+            return `
+          <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${s.id}"
+            onclick="SelectionModel.rowClick('${s.id}', function(){ StaffPage.openEdit('${s.id}'); })">
             <div class="item-row">
-              ${SelectionModel.checkboxHtml(s.id)}
+              ${SelectionModel.checkboxHtml(s.id, s.firstName + ' ' + s.lastName)}
               <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
                 <div style="width:38px;height:38px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc-text);flex-shrink:0;">${(s.firstName||'?').charAt(0)}${(s.lastName||'').charAt(0)}</div>
                 <div>
@@ -4900,8 +5032,9 @@ const StaffPage = {
                   ${s.active?ic('user-x',11)+' Inaktivera':ic('user-check',11)+' Aktivera'}
                 </button>
               </div>
+              <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna personal" onclick="event.stopPropagation();StaffPage.openEdit('${s.id}')">${ic('chevron-right',16)}</button>
             </div>
-          </div>`).join('')
+          </div>`;}).join('')
       );
   },
 

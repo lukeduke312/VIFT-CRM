@@ -3,7 +3,7 @@
  *
  * Visar alla genomförda importer med status, statistik och ångra-knapp.
  * Tillgänglig via Admin-sidan → Importlogg, eller /importera/logg.
- * Kräver Auth.can('admin').
+ * Visar historik över ALLA registertyper i en lista — kräver admin_manage.
  */
 
 const ImportLogPage = (function () {
@@ -12,7 +12,7 @@ const ImportLogPage = (function () {
     var el = document.getElementById('pg-import-log-content');
     if (!el) return;
 
-    if (typeof Auth !== 'undefined' && !Auth.can('admin')) {
+    if (typeof Auth !== 'undefined' && !Auth.can('admin_manage')) {
       el.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center;">' +
         ic('lock', 32) + '<h3 style="margin-top:12px">Åtkomst nekad</h3>' +
         '<p>Importloggen kräver administratörsbehörighet.</p></div>';

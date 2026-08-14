@@ -48,12 +48,12 @@ const RonderingPage = {
         btn.innerHTML = '';
       } else if (this._tab === 'ronderingar') {
         btn.innerHTML =
-          `${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'ronderingPass'})">${ic('upload',13)} Importera pass</button>` : ''}` +
+          `${Auth.can('ao_edit') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'ronderingPass'})">${ic('upload',13)} Importera pass</button>` : ''}` +
           `<button class="btn bs bsm" onclick="ImportExportService.showExportMenu('ronderingSchema',this)">${ic('download',13)} Exportera</button>` +
           `<button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">+ Ny rondering</button>`;
       } else {
         btn.innerHTML =
-          `${Auth.can('admin') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'ronderingsmall'})">${ic('upload',13)} Importera</button>` : ''}` +
+          `${Auth.can('ao_edit') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'ronderingsmall'})">${ic('upload',13)} Importera</button>` : ''}` +
           `<button class="btn bs bsm" onclick="ImportExportService.showExportMenu('ronderingsmall',this)">${ic('download',13)} Exportera</button>` +
           `<button class="btn bp bsm" onclick="RonderingPage.openNewMall()">+ Ny mall</button>`;
       }

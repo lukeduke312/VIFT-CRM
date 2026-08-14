@@ -2950,3 +2950,155 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 .ao-tabs-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .ao-tabs-row .ftabs { flex: 1; margin-bottom: 0; }
 .ao-selall-cell { flex-shrink: 0; }
+
+/* ── SPRINT1: Delad BulkActionBar (ersätter SelectionModel's tidigare
+   hårdkodade export-bar) — ETT gemensamt utseende för alla listsidor. ── */
+.selbar {
+  position: fixed;
+  bottom: calc(56px + env(safe-area-inset-bottom) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--navy);
+  color: #fff;
+  border-radius: 28px;
+  padding: 8px 8px 8px 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.35);
+  font-size: 13px;
+  max-width: calc(100vw - 24px);
+  animation: selbar-in .15s ease-out;
+}
+.selbar-busy { opacity: .85; }
+.selbar-count { font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.selbar-actions { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow: hidden; }
+.selbar-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,.14); border: none; border-radius: 16px;
+  color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+  padding: 6px 12px; white-space: nowrap; line-height: 1;
+}
+.selbar-btn:hover:not(:disabled) { background: rgba(255,255,255,.24); }
+.selbar-btn:disabled { opacity: .5; cursor: default; }
+.selbar-btn-danger { background: rgba(216,64,64,.28); }
+.selbar-btn-danger:hover:not(:disabled) { background: rgba(216,64,64,.4); }
+.selbar-close {
+  background: none; border: none; color: rgba(255,255,255,.75); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+}
+.selbar-close:hover:not(:disabled) { background: rgba(255,255,255,.14); color: #fff; }
+.selbar-close:disabled { opacity: .5; cursor: default; }
+
+.selbar-overflow-wrap { position: relative; display: none; flex-shrink: 0; }
+.selbar-overflow-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 200px;
+  background: var(--card, #fff);
+  color: var(--tx, #16213a);
+  border: 1px solid var(--border, #e3e6ee);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.22);
+  padding: 4px;
+}
+.selbar-overflow-menu.open { display: flex; flex-direction: column; }
+.selbar-overflow-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 12px; background: none; border: none; border-radius: 7px;
+  font-size: 13px; color: inherit; cursor: pointer; text-align: left;
+}
+.selbar-overflow-item:hover:not(:disabled) { background: var(--bg, #f4f6fb); }
+.selbar-overflow-item:disabled { opacity: .5; cursor: default; }
+.selbar-overflow-item-danger { color: var(--rd, #d84040); }
+
+@keyframes selbar-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── V30: markeringsläge — större klick-yta på checkbox, tydlig
+   selected-rad, och en diskret "öppna"-ikon som alltid öppnar posten
+   oavsett läge (radens egen yta togglar bara markering i markeringsläge). ── */
+.sel-cb-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; margin: -8px -8px -8px -4px;
+  cursor: pointer; flex-shrink: 0;
+}
+.list-item.selected,
+.list-item-v2.selected,
+.ao-list-item.selected {
+  background: var(--acc);
+  border-color: var(--sky);
+}
+.list-item.sel-mode,
+.list-item-v2.sel-mode,
+.ao-list-item.sel-mode {
+  cursor: pointer;
+}
+.row-open-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex-shrink: 0;
+  background: none; border: none; border-radius: 50%;
+  color: var(--mt); cursor: pointer;
+}
+.row-open-btn:hover { background: var(--bg); color: var(--tx); }
+
+/* ── V32: "Att fakturera" — faktureringskön ─────────────────────────── */
+.bq-header-card {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  padding: 14px 16px; margin-bottom: 10px;
+}
+.bq-header-total { flex-shrink: 0; }
+.bq-header-amount { font-size: 26px; font-weight: 900; color: var(--navy); line-height: 1.1; }
+.bq-header-label { font-size: 11px; color: var(--mt); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; margin-top: 2px; }
+.bq-header-breakdown { display: flex; gap: 18px; flex-wrap: wrap; }
+.bq-hb-row { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.bq-hb-label { display: flex; align-items: center; gap: 4px; color: var(--mt); font-weight: 600; }
+.bq-hb-val { font-weight: 800; color: var(--tx); font-size: 14px; }
+.bq-header-issues {
+  margin-left: auto; display: flex; align-items: center; gap: 5px;
+  background: rgba(251,191,36,.12); color: var(--or); border: 1px solid rgba(251,191,36,.3);
+  border-radius: 16px; padding: 5px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+
+.bq-cust-group { margin-bottom: 10px; }
+.bq-group-header {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  border-radius: var(--rs); cursor: default;
+}
+.bq-cust-header { background: var(--navy); color: #fff; font-weight: 700; }
+.bq-prop-header { background: var(--bg); margin-left: 14px; margin-top: 3px; font-weight: 600; }
+.bq-ao-header { background: #fff; border: 1px solid var(--br); margin-left: 28px; margin-top: 3px; cursor: pointer; }
+.bq-ao-header:hover { border-color: var(--sky); }
+.bq-group-title { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bq-group-amount { font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+
+.bq-source-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  margin-left: 42px; border-bottom: 1px solid var(--bg);
+}
+.bq-source-row.selected { background: var(--acc); border-radius: 6px; }
+.bq-source-main { flex: 1; min-width: 0; }
+.bq-source-meta { font-size: 11.5px; color: var(--mt); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.bq-source-detail { font-size: 11.5px; color: var(--tx); margin-top: 1px; }
+.bq-source-amount { font-size: 13px; font-weight: 800; color: var(--navy); white-space: nowrap; }
+
+.bq-issue-row { padding: 8px 14px; border-bottom: 1px solid var(--bg); }
+.bq-issue-row:hover { background: var(--bg); }
+.bq-issue-text { font-size: 11.5px; color: var(--rd); font-weight: 600; margin-top: 2px; }
+
+.list-item-v2-cust { font-size: 11.5px; color: var(--mt); margin: 1px 0 2px; display: flex; align-items: center; gap: 4px; }
+
+@media (max-width: 639px) {
+  .bq-header-card { gap: 14px; }
+  .bq-header-issues { margin-left: 0; width: 100%; justify-content: center; }
+  .bq-prop-header { margin-left: 8px; }
+  .bq-ao-header { margin-left: 16px; }
+  .bq-source-row { margin-left: 24px; }
+}
