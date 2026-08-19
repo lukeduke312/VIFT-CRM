@@ -101,8 +101,13 @@ const SalesService = {
   linkOffer(id, offerId) {
     const opp = getSO(id);
     if (!opp) return;
-    opp.status            = 'quote_created';
     opp.convertedQuoteId  = offerId;
+    /* V47 §4: pipelinen får inte gå bakåt — om AO redan skapats
+       (work_order_created) ska en offert som skapas därefter inte backa
+       statusen till quote_created. */
+    if (opp.status !== 'work_order_created') {
+      opp.status = 'quote_created';
+    }
     opp.updatedAt         = new Date().toISOString();
 
     ActivityService.log(

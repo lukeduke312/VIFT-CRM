@@ -179,7 +179,12 @@ const SalesPage = {
             </div>` : ''}
           ${!isDone ? `
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
-            <button class="btn bsm bp" onclick="SalesPage.createAO('${op.id}')">${ic('clipboard-list',13)} Skapa AO</button>
+            ${op.convertedQuoteId
+              ? `<button class="btn bsm bs" onclick="Router.showPage('pg-offer-detail',{offerId:'${op.convertedQuoteId}'})">${ic('file-text',13)} Öppna offert</button>`
+              : `<button class="btn bsm bp" onclick="SalesPage.createOffer('${op.id}')">${ic('file-text',13)} Skapa offert</button>`}
+            ${op.convertedWorkOrderId
+              ? `<button class="btn bsm bs" onclick="Router.showPage('pg-ao-detail',{aoId:'${op.convertedWorkOrderId}'})">${ic('clipboard-list',13)} Öppna AO</button>`
+              : `<button class="btn bsm bp" onclick="SalesPage.createAO('${op.id}')">${ic('clipboard-list',13)} Skapa AO</button>`}
             ${op.status !== 'snoozed' ? `<button class="btn bsm bs" onclick="SalesPage.openSnooze('${op.id}')">${ic('pause-circle',13)} Skjut upp</button>` : `<button class="btn bsm bsu" onclick="SalesPage.wakeUp('${op.id}')">${ic('play-circle',13)} Återaktivera</button>`}
             <button class="btn bsm bs" onclick="SalesPage.markWon('${op.id}')">${ic('check-circle',13)} Vunnen</button>
             <button class="btn bsm bs" onclick="SalesPage.markLost('${op.id}')">${ic('x-circle',13)} Förlorad</button>
@@ -358,20 +363,58 @@ const SalesPage = {
     SalesPage.render();
   },
 
+  /* V47: skapa riktig offert från säljchansen. Kopplingen (SalesService.linkOffer)
+     sker EFTER lyckad, riktig persist i OffersPage._save() — aldrig vid öppning
+     av modalen, avbrutet flöde, valideringsfel eller misslyckad sparning. */
+  createOffer(opId) {
+    const op = getSO(opId);
+    if (!op) return;
+    OffersPage.openCreate(op.customerId || '', {
+      onCreated: (offer) => SalesPage._onOfferCreated(opId, offer)
+    });
+  },
+
+  _onOfferCreated(opId, offer) {
+    const op = getSO(opId);
+    if (!op || !offer || !offer.id) return;
+    /* V47 §7: fail closed — länka aldrig en offert vars kund inte matchar
+       säljchansens kund (kan hända om användaren bytte kund i wizarden). */
+    if (offer.customerId !== op.customerId) {
+      console.warn('[SalesPage] Offertens kund matchar inte säljchansens kund — länkar inte.', offer.id, op.id);
+      showToast('Offert skapad, men kunde inte kopplas (annan kund)');
+      return;
+    }
+    SalesService.linkOffer(opId, offer.id);
+    SalesPage.render();
+  },
+
   createAO(opId) {
     const op = getSO(opId);
     if (!op) return;
-    const cu = op.customerId ? getCu(op.customerId) : null;
     Router.showPage('pg-ao');
-    setTimeout(() => WorkOrdersPage.openCreate(op.customerId || null), 100);
-    // Mark as contacted if still new
-    if (op.status === 'new') {
-      op.status = 'contacted';
-      op.updatedAt = new Date().toISOString();
-      persist();
-      Sidebar.updateBadges();
-    }
+    /* V47 R2: ingen säljchansmutation här — säljchansen ska förbli helt
+       oförändrad om användaren avbryter/får valideringsfel. Kopplingen
+       (SalesService.linkWorkOrder, som sätter status direkt new -> ... ->
+       work_order_created) sker ENDAST efter lyckad, riktig persist i
+       WorkOrdersPage._wizSave(); ingen contacted-mellanstatus behövs. */
+    setTimeout(() => WorkOrdersPage.openCreate(op.customerId || null, null, {
+      onCreated: (ao) => SalesPage._onWorkOrderCreated(opId, ao)
+    }), 100);
     showToast('Skapar arbetsorder…');
+  },
+
+  _onWorkOrderCreated(opId, ao) {
+    const op = getSO(opId);
+    if (!op || !ao || !ao.id) return;
+    /* V47 §7: fail closed — länka aldrig en AO vars kund inte matchar
+       säljchansens kund (kan hända om användaren bytte kund i wizarden). */
+    if (ao.customerId !== op.customerId) {
+      console.warn('[SalesPage] AO:ns kund matchar inte säljchansens kund — länkar inte.', ao.id, op.id);
+      showToast('AO skapad, men kunde inte kopplas (annan kund)');
+      return;
+    }
+    SalesService.linkWorkOrder(opId, ao.id);
+    SalesPage.render();
   },
 
   openSnooze(opId) {

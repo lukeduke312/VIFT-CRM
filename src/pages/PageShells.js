@@ -735,13 +735,18 @@ const OffersPage = {
   },
 
   /* ── Wizard open ─── */
-  openCreate(preCustomerId) {
+  /* V47: opts är en bakåtkompatibel, optional tredje parameter — gamla anrop
+     som bara skickar (preCustomerId) fortsätter fungera exakt som tidigare.
+     opts.onCreated(offer) anropas EFTER lyckad, riktig persist i _save() —
+     aldrig vid avbrutet/misslyckat sparande. Används av SalesPage.createOffer(). */
+  openCreate(preCustomerId, opts) {
     const T = this._TERMS;
     const today    = new Date().toISOString().split('T')[0];
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     this._editLines    = [];
     this._editExtras   = [];
     this._editOfferId  = null;
+    this._createOnCreated = (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null;
     this._wizardStep   = 1;
     this._activeSvcId  = null;
     this._svcFields    = {};
@@ -765,6 +770,7 @@ const OffersPage = {
     this._editLines    = (off.lines  || []).map(l => ({...l}));
     this._editExtras   = (off.extras || []).map(e => ({...e}));
     this._editOfferId  = off.id;
+    this._createOnCreated = null; /* V47: aldrig callback vid redigering av befintlig offert */
     this._wizardStep   = 1;
     this._activeSvcId  = null;
     this._svcFields    = {};
@@ -2177,6 +2183,12 @@ const OffersPage = {
       OfferDetailPage._logEvt(newOff, 'create', 'Offert skapad');
       state.offers.push(newOff);
       persist();
+      /* V47: callback körs EFTER lyckad persist, aldrig innan — se openCreate(). */
+      const onCreated = this._createOnCreated;
+      this._createOnCreated = null;
+      if (typeof onCreated === 'function') {
+        try { onCreated(newOff); } catch (e) { console.warn('[OffersPage] onCreated-fel:', e); }
+      }
       this._wizardClose();
       Router.showPage('pg-offer');
       showToast('Offert ' + newOff.id + ' skapad');

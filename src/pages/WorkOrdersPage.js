@@ -649,9 +649,19 @@ const WorkOrdersPage = {
   },
 
   /* ── Skapa AO – wizard ─────────────────── */
-  openCreate(prefillCustomerId = null, prefillPropertyId = null) {
+  /* V47: opts är en bakåtkompatibel, optional tredje parameter — gamla anrop
+     som bara skickar (prefillCustomerId, prefillPropertyId) fortsätter fungera
+     exakt som tidigare. opts.onCreated(ao) anropas EFTER lyckad, riktig persist
+     i _wizSave() — aldrig vid avbrutet/misslyckat sparande. Används av
+     SalesPage.createAO(). */
+  openCreate(prefillCustomerId = null, prefillPropertyId = null, opts = null) {
     if (!Auth.require('ao_create')) return;
-    this._wiz = { step: 1, data: { customerId: prefillCustomerId || '', propertyId: prefillPropertyId || '' }, modalId: null };
+    this._wiz = {
+      step: 1,
+      data: { customerId: prefillCustomerId || '', propertyId: prefillPropertyId || '' },
+      modalId: null,
+      onCreated: (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null
+    };
     this._showWizard();
   },
 
@@ -1569,7 +1579,13 @@ const WorkOrdersPage = {
       log:             [],
       timeEntries:     []
     });
+    /* V47: callback körs EFTER lyckad persist (WorkOrderService.create() har
+       redan persistat synkront ovan), aldrig innan — se openCreate(). */
+    const onCreated = this._wiz.onCreated;
     this._wiz.modalId = null;
+    if (typeof onCreated === 'function') {
+      try { onCreated(ao); } catch (e) { console.warn('[WorkOrdersPage] onCreated-fel:', e); }
+    }
     Modal.close();
     Sidebar.updateBadges();
     showToast(`${ao.id} skapad`);
