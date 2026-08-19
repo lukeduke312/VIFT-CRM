@@ -14,6 +14,11 @@
  *   PushService._listenForPushDiag()        — registrerar SW-diagnostiklyssnaren
  *                                              (anropas en gång från index.html)
  *
+ * V45: PushService.notifyStaffAssigned(ao, staffIds) — push till personal
+ *      som NYLIGEN tilldelats en BEFINTLIG AO (WorkOrderDetailPage._saveStaff,
+ *      WorkOrdersPage bulk "Lägg till personal"). EN request per AO, resolveras
+ *      server-side (send-push §staffIds). Rör inte notifyNewAO()/sendTest().
+ *
  * VAPID public key: window.VIFT_CONFIG.vapidPublicKey (config.js)
  * Edge Function:    SUPABASE_URL/functions/v1/send-push
  * JWT:             Auth.getAccessToken()
@@ -462,6 +467,60 @@ const PushService = {
       }
     } catch(e) {
       console.warn('[PushService] notifyNewAO nätverksfel:', e);
+    }
+  },
+
+  /*
+   * V45: skickar push-notis till personal som NYLIGEN tilldelats en
+   * BEFINTLIG arbetsorder (WorkOrderDetailPage._saveStaff / WorkOrdersPage
+   * bulk "Lägg till personal"). Fire-and-forget — felet loggas men
+   * påverkar aldrig AO-sparningen/bulkresultatet (anropas alltid EFTER
+   * att WorkOrderService.updateStaff()/bulk-mutationen redan lyckats).
+   *
+   * EN request per AO (inte en per person) — backend (send-push §staffIds)
+   * resolverar staffIds → auth-konton → subscriptions server-side.
+   * Ändrar INTE notifyNewAO()/sendTest()/V44-diagnostiken.
+   */
+  async notifyStaffAssigned(ao, staffIds) {
+    if (!ao || !ao.id) {
+      console.warn('[PushService] notifyStaffAssigned: ogiltig AO, hoppar över push');
+      return;
+    }
+    const ids = Array.from(new Set(
+      (Array.isArray(staffIds) ? staffIds : []).filter(id => typeof id === 'string' && id)
+    ));
+    if (ids.length === 0) return;
+
+    const token = Auth.getAccessToken();
+    if (!token) {
+      console.warn('[PushService] notifyStaffAssigned: ej inloggad, hoppar över push');
+      return;
+    }
+
+    const pushBody = {
+      title: 'Arbetsorder tilldelad',
+      body:  'Du har tilldelats ' + ao.id + ': ' + (ao.title || ao.id),
+      url:   '/#/ao/' + ao.id,
+      aoId:  ao.id,
+      staffIds: ids
+    };
+
+    try {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(pushBody)
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[PushService] notifyStaffAssigned svar', res.status, ':', txt);
+      } else {
+        const result = await res.json().catch(() => ({}));
+        console.log('[PushService] notifyStaffAssigned skickad — enheter:', result.sent || 0, '/ revokade:', result.revoked || 0);
+      }
+    } catch(e) {
+      console.warn('[PushService] notifyStaffAssigned nätverksfel:', e);
     }
   },
 

@@ -24,8 +24,16 @@
  *                          anroparens EGEN, icke-revokerade endpoint (diagnostik).
  *                          Ignorerar propertyId/broadcast/userId helt. Om endpointen
  *                          inte hör till caller.id → 403, ingen fallback.
+ *   staffIds    string[]? — V45: riktar sändningen mot 1–25 specifika VIFT-
+ *                          personal-ID:n (personalen som NYSS tilldelats en AO).
+ *                          HELT SEPARAT target-mode från testEndpoint/propertyId/
+ *                          userId/broadcast — dessa ignoreras helt om staffIds satt.
+ *                          Kräver `ao_edit` + giltig `aoId`. staffId är ALDRIG
+ *                          auth.users.id — mappas server-side via personalens
+ *                          registrerade, aktiva e-post. Ogiltig input → 400,
+ *                          otillräcklig behörighet → 403. Inga fallbacks.
  *
- * Svar (normalflöde):
+ * Svar (normalflöde, staffIds-flöde):
  *   { sent: number, revoked: number }
  * Svar (testEndpoint-flöde):
  *   { sent: number, revoked: number, diagnostics: { statusCode, apnsId, provider, endpointSuffix, body } }
@@ -206,6 +214,13 @@ serve(async (req: Request) => {
     })
     /* V43-PAYLOAD-BLOCK-END */
 
+    /* V44 §5 / V45: TTL/urgency verifierat stödda av web-push@3.6.7 —
+     * en enda delad konstant, återanvänd av ALLA tre sändningsvägar
+     * (testEndpoint-diagnostik, V45 staffIds-targeting, normalflödet)
+     * så att ingen väg av misstag kan avvika i format. Ingen ändring av
+     * VAPID-nycklar/secrets. */
+    const SEND_OPTIONS = { TTL: 60, urgency: 'high' as const }
+
     /* V44 §3: riktad endpoint för diagnostik-testväg (Admin → Notiser →
        "Skicka testnotis" riktar sig nu mot EXAKT den aktuella browserns
        endpoint, se PushService.sendTest()). Flyttad hit — direkt efter
@@ -256,7 +271,7 @@ serve(async (req: Request) => {
         const result = await webpush.sendNotification(
           { endpoint: ownSub.endpoint, keys: { p256dh: ownSub.p256dh, auth: ownSub.auth_key } },
           payload,
-          { TTL: 60, urgency: 'high' }
+          SEND_OPTIONS
         )
         sentCount = 1
         const r = result as { statusCode?: number; headers?: unknown; body?: unknown }
@@ -279,6 +294,140 @@ serve(async (req: Request) => {
       return json({ sent: sentCount, revoked: revokedCount, diagnostics })
     }
     /* V44-TESTENDPOINT-FLOW-END */
+
+    /* V45 §3/§4: staffIds-targeting — en HELT SEPARAT target-mode från
+     * testEndpoint/propertyId/userId/broadcast. Läses och valideras här,
+     * INNAN broadcast-behörighetskontrollen och INNAN propertyId/broadcast/
+     * userId-resolutionen nedan, så att grenen (om staffIds skickades med)
+     * kan returnera tidigt utan att någonsin nå den logiken. */
+    /* V45-STAFFIDS-START */
+    const staffIdsRaw = body.staffIds
+    let staffIdsError: string | null = null
+    let staffIds: string[] | null = null
+    if (staffIdsRaw !== undefined) {
+      if (!Array.isArray(staffIdsRaw)) {
+        staffIdsError = 'staffIds måste vara en array.'
+      } else if (staffIdsRaw.length < 1 || staffIdsRaw.length > 25) {
+        staffIdsError = 'staffIds måste innehålla 1–25 poster.'
+      } else if (!staffIdsRaw.every((id: unknown) => typeof id === 'string' && id.length >= 1 && id.length <= 64)) {
+        staffIdsError = 'Varje staffId måste vara en sträng på 1–64 tecken.'
+      } else {
+        const unique = Array.from(new Set(staffIdsRaw as string[]))
+        if (unique.length !== staffIdsRaw.length) {
+          staffIdsError = 'staffIds måste vara unika (inga dubletter).'
+        } else {
+          staffIds = unique
+        }
+      }
+    }
+    /* V45-STAFFIDS-END */
+
+    /* V45-STAFFIDS-FLOW-START — extraheras ordagrant av testsviten
+       (run-tests-v45.js) och körs mot mockad supabase/webpush för att
+       verifiera DEN FAKTISKA säkerhets- och resolutionslogiken. */
+    if (staffIdsRaw !== undefined) {
+      if (staffIdsError) {
+        return json({ error: staffIdsError }, 400)
+      }
+      /* Behörighet: caller måste ha ao_edit (inte 'broadcast'/'all' som
+       * det generella broadcast-flödet nedan kräver — staffIds är en helt
+       * annan, smalare targeting-mekanism). */
+      if (!hasPerm(perms, 'ao_edit')) {
+        return json({ error: 'ao_edit krävs för att skicka personaltilldelnings-push.' }, 403)
+      }
+      /* aoId måste finnas och vara giltigt (samma validering som ovan —
+       * `aoId` är redan `null` om body.aoId saknades eller var ogiltigt). */
+      if (!aoId) {
+        return json({ error: 'aoId krävs och måste vara giltigt vid staffIds-targeting.' }, 400)
+      }
+
+      /* Resolvering: läs vift_staff, matcha varje staffId mot ett AKTIVT
+       * VIFT-personal-ID, mappa dess registrerade e-post → auth.users.id
+       * SERVERSIDE. staffIds är VIFT-personal-ID:n och behandlas ALDRIG
+       * som auth.users.id direkt — bara den härledda e-posten används för
+       * att slå upp rätt auth-konto, exakt som propertyId-flödet ovan gör. */
+      const { data: staffRowForIds } = await supabase
+        .from('store')
+        .select('value')
+        .eq('key', 'vift_staff')
+        .maybeSingle()
+
+      const staffListForIds: Record<string, unknown>[] =
+        Array.isArray(staffRowForIds?.value) ? staffRowForIds.value as Record<string, unknown>[] : []
+
+      const resolvedEmails: string[] = (staffIds as string[])
+        .map(sid => staffListForIds.find(s => s.id === sid))
+        .filter((s): s is Record<string, unknown> => !!s && s.active !== false)
+        .map(s => (s.email as string | undefined)?.toLowerCase() || '')
+        .filter(Boolean)
+
+      let staffAuthIds: string[] = []
+      if (resolvedEmails.length > 0) {
+        const authMap: Record<string, string> = {}
+        let page = 1
+        let hasMore = true
+        while (hasMore) {
+          const { data: authUsers } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+          for (const u of authUsers?.users ?? []) {
+            if (u.email) authMap[u.email.toLowerCase()] = u.id
+          }
+          hasMore = (authUsers?.users?.length ?? 0) === 1000
+          page++
+        }
+        staffAuthIds = Array.from(new Set(resolvedEmails.map(e => authMap[e]).filter(Boolean))) as string[]
+      }
+
+      if (staffAuthIds.length === 0) {
+        /* Fail closed: INGEN fallback till caller/property contacts/
+         * broadcast/annan användare — bara ett tomt, ärligt svar. */
+        return json({ sent: 0, revoked: 0, message: 'Inga aktiva push-prenumerationer för tilldelad personal' })
+      }
+
+      const { data: staffSubs, error: staffSubsErr } = await supabase
+        .from('push_subscriptions')
+        .select('id, endpoint, p256dh, auth_key')
+        .in('user_id', staffAuthIds)
+        .is('revoked_at', null)
+
+      if (staffSubsErr) throw staffSubsErr
+
+      if (!staffSubs || staffSubs.length === 0) {
+        return json({ sent: 0, revoked: 0, message: 'Inga aktiva push-prenumerationer för tilldelad personal' })
+      }
+
+      const staffRevokedIds: string[] = []
+      let staffSent = 0
+
+      await Promise.allSettled(
+        staffSubs.map(async (sub: { id: string; endpoint: string; p256dh: string; auth_key: string }) => {
+          try {
+            await webpush.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
+              payload,
+              SEND_OPTIONS
+            )
+            staffSent++
+          } catch (err: unknown) {
+            const status = (err as { statusCode?: number }).statusCode
+            if (status === 410 || status === 404) {
+              staffRevokedIds.push(sub.id)
+            } else {
+              console.error('[send-push] staffIds-fel för endpoint:', endpointSuffix(sub.endpoint), err)
+            }
+          }
+        })
+      )
+
+      if (staffRevokedIds.length > 0) {
+        await supabase
+          .from('push_subscriptions')
+          .update({ revoked_at: new Date().toISOString() })
+          .in('id', staffRevokedIds)
+      }
+
+      return json({ sent: staffSent, revoked: staffRevokedIds.length })
+    }
+    /* V45-STAFFIDS-FLOW-END */
 
     /* Roll-kontroll: broadcast kräver 'all'-behörighet */
     if (broadcast && !hasPerm(perms, 'all')) {
@@ -385,13 +534,8 @@ serve(async (req: Request) => {
     const revokedIds: string[] = []
     let sent = 0
 
-    /* V44 §5: TTL/urgency NU VERIFIERAT stödda av web-push@3.6.7 (uppdragets
-     * egen bekräftelse — se rapportens §5/§11). Appliceras här på ALLA VIFT-
-     * notiser (inte bara diagnostik-testvägen), ingen ändring av VAPID-
-     * nycklar/secrets. */
-    const SEND_OPTIONS = { TTL: 60, urgency: 'high' as const }
-
-    /* Skicka till alla enheter parallellt */
+    /* Skicka till alla enheter parallellt (SEND_OPTIONS deklarerad ovan,
+       delad med testEndpoint- och staffIds-vägarna). */
     await Promise.allSettled(
       subs.map(async (sub: { id: string; endpoint: string; p256dh: string; auth_key: string }) => {
         try {

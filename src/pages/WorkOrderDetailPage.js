@@ -2116,6 +2116,13 @@ const WorkOrderDetailPage = {
           NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${aoId}: ${ao.title || aoId}`, { aoId });
         });
       }
+      /* V45: riktig Web Push till nyligen tillagd personal — fire-and-forget,
+         får ALDRIG blockera/påverka AO-sparningen ovan (redan genomförd).
+         Skickas bara för `added` (aldrig befintlig personal/borttagen
+         personal/pool-flytt) — matchar exakt samma diff som in-app-notisen. */
+      if (typeof PushService !== 'undefined') {
+        PushService.notifyStaffAssigned(ao, added).catch(e => console.warn('[WorkOrderDetailPage] notifyStaffAssigned fel:', e));
+      }
     }
     Modal.close();
     WorkOrderDetailPage.render({ aoId });

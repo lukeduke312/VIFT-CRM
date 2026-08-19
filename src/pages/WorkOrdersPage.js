@@ -1863,6 +1863,11 @@ const WorkOrdersPage = {
     const user = state.currentUser;
     const by = user ? `${user.firstName} ${user.lastName}`.trim() : 'Okänd';
     let updated = 0, skipped = 0, unchanged = 0;
+    /* V45: samlar {ao, added} bara för AO som FAKTISKT fick ny personal —
+       aldrig skipped/unchanged — så notiser (in-app + Web Push) kan skickas
+       EFTER den enda batch-persist() nedan, utan att skapa en mutation/
+       persist per AO. */
+    const assignments = [];
     (state.workOrders || []).forEach(ao => {
       if (ids.indexOf(ao.id) === -1) return;
       if (!WorkOrdersPage._canAccessAo(ao) || WorkOrdersPage._isAoLockedForBulk(ao)) { skipped++; return; }
@@ -1876,8 +1881,26 @@ const WorkOrdersPage = {
       ao.log.push({ id: 'L' + Date.now() + Math.random().toString(36).slice(2, 6), type: 'staff_added', text: `${by} lade till (bulk): ${names}`, userName: by, timestamp: now });
       ao.updatedAt = now;
       updated++;
+      assignments.push({ ao, added });
     });
-    if (updated > 0) { persist(); Sidebar.updateBadges(); this.render(); }
+    if (updated > 0) {
+      persist(); Sidebar.updateBadges(); this.render();
+      /* V45: in-app-notis + riktig Web Push, bara för AO som faktiskt fick
+         ny personal (assignments) — aldrig för skipped/unchanged eller
+         personal som redan fanns. EN PushService-anrop per AO (inte per
+         person). Fire-and-forget — push-fel får inte påverka bulkresultatet
+         ovan (redan returnerat/beräknat). */
+      assignments.forEach(({ ao, added }) => {
+        if (typeof NotificationsService !== 'undefined') {
+          added.forEach(id => {
+            NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${ao.id}: ${ao.title || ao.id}`, { aoId: ao.id });
+          });
+        }
+        if (typeof PushService !== 'undefined') {
+          PushService.notifyStaffAssigned(ao, added).catch(e => console.warn('[WorkOrdersPage] notifyStaffAssigned fel:', e));
+        }
+      });
+    }
     return { ok: true, updated, skipped, unchanged };
   },
 
