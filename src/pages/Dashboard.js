@@ -708,6 +708,11 @@ const Dashboard = {
   },
 
   /* ── Widget: Säljchanser ───────────────────────────────────────────── */
+  /* V46 R3: samma pipeline-statusar som SalesPage.ACTIVE_STATUSES avgör om en
+     säljchans räknas som aktiv i Förfallen-beräkningen — hålls som en lokal,
+     identisk kopia här eftersom Dashboard.js inte får bero på att SalesPage.js
+     laddats i en viss ordning. */
+  _SALES_ACTIVE_STATUSES: ['new', 'contact_needed', 'contacted', 'quote_created', 'work_order_created'],
   _widgetSales() {
     const active   = SalesService.getActive();
     const prioSv   = { high:'Hög', medium:'Normal', low:'Låg', akut:'Akut', hög:'Hög', normal:'Normal', låg:'Låg' };
@@ -729,7 +734,11 @@ const Dashboard = {
               var val = opp.estimatedValue ? ` · ${fmt(opp.estimatedValue)} kr` : '';
               var pBadge = `<span class="bdg ${prioCls[opp.priority]||'bdg-grey'}" style="font-size:9px;flex-shrink:0;">${prioSv[opp.priority]||opp.priority}</span>`;
               var tip = opp.aiTip ? `<div style="font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💡 ${opp.aiTip}</div>` : '';
-              var deadline = opp.deadline ? `<span class="bdg" style="font-size:9px;flex-shrink:0;">${ic('calendar',9)} ${opp.deadline}</span>` : '';
+              /* V46: bugfix — fältet heter dueDate i Schema.salesOpportunity(), inte deadline (opp.deadline var alltid undefined, badgen visades aldrig). */
+              var isOverdue = !!(opp.dueDate && opp.dueDate < tdy() && this._SALES_ACTIVE_STATUSES.includes(opp.status));
+              var deadline = opp.dueDate ? `<span class="bdg" style="font-size:9px;flex-shrink:0;${isOverdue?'color:var(--rd);font-weight:700;':''}">${ic('calendar',9)} ${fmtDate(opp.dueDate)}</span>` : '';
+              /* V46 R3: samma Förfallen-semantik som SalesPage._renderCard() — aktiv status + passerat dueDate. */
+              var overdueBadge = isOverdue ? `<span class="bdg bdg-red" style="font-size:9px;flex-shrink:0;">${ic('alert-triangle',9)} Förfallen</span>` : '';
               return `<div class="crow" style="cursor:pointer;" onclick="Router.showPage('pg-sales')">
                 <div style="flex:1;min-width:0;">
                   <div class="crow-title">${opp.title}</div>
@@ -738,6 +747,7 @@ const Dashboard = {
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">
                   ${pBadge}
+                  ${overdueBadge}
                   ${deadline}
                 </div>
               </div>`;
@@ -957,11 +967,18 @@ const Dashboard = {
     }
 
     if (Auth.can('sales_manage')) {
-      const salesCount = SalesService.getActive().length;
+      const salesActive = SalesService.getActive();
+      const salesCount = salesActive.length;
+      /* V46 R3: samma Förfallen-semantik som SalesPage/Dashboard-widgeten. */
+      const salesOverdueCount = salesActive.filter(o =>
+        o.dueDate && o.dueDate < tdy() && this._SALES_ACTIVE_STATUSES.includes(o.status)
+      ).length;
       if (salesCount > 0) todos.push({
         icon:'target', iconCls:'purple',
         title:'Säljchanser att agera på',
-        sub:salesCount+' aktiv'+(salesCount===1?'':'a')+' säljchans'+(salesCount===1?'':'er'),
+        sub: salesOverdueCount > 0
+          ? salesOverdueCount+' '+(salesOverdueCount===1?'förfallen':'förfallna')+' · '+salesCount+' aktiv'+(salesCount===1?'':'a')+' säljchans'+(salesCount===1?'':'er')
+          : salesCount+' aktiv'+(salesCount===1?'':'a')+' säljchans'+(salesCount===1?'':'er'),
         badge:salesCount, badgeCls:'purple',
         onClick:"Router.showPage('pg-sales')"
       });

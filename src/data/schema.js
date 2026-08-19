@@ -372,6 +372,8 @@ const Schema = {
     id: '',
     customerId: '',
     propertyId: '',
+    contactId: '',             // V46: index i vald kunds customer.contacts[] — kontakter saknar ett stabilt globalt id i befintlig modell, så index (inom samma customerId) ÄR den faktiska, redan existerande referensmodellen (samma sätt CustomersPage._saveContact()/removeContact() redan adresserar kontakter på). Tomt = ingen kontaktperson vald.
+    assignedStaffId: '',       // V46: ansvarig säljare — VIFT-personal-ID (state.staff[].id), samma modell som t.ex. WorkOrder.responsibleStaffId. Tomt = ej tilldelad.
     type: '',                 // service_agreement | seasonal_job | upsell | quote_followup | win_back
     title: '',
     reason: '',

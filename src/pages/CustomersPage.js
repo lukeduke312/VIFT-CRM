@@ -574,15 +574,55 @@ const CustomerDetailPage = {
     }).join('');
   },
 
+  /* V46 R3: samma aktiv-pipeline-statusar som SalesPage.ACTIVE_STATUSES, hållna
+     som en lokal kopia här eftersom SalesPage.js inte får ändras/beros på i R3. */
+  _SALES_ACTIVE_STATUSES: ['new', 'contact_needed', 'contacted', 'quote_created', 'work_order_created'],
+  _salesTypeLabel(type) {
+    const m = {
+      service_agreement:'Serviceavtal', seasonal_job:'Säsongsarbete',
+      upsell:'Merförsäljning', quote_followup:'Offertuppföljning', win_back:'Vinn tillbaka',
+      new_customer:'Ny kund', other:'Övrigt'
+    };
+    return m[type] || type;
+  },
+  _salesStatusBadge(status) {
+    /* sbdg()/statusClass()/statusLabel() (state.js) saknar Svenska etiketter för
+       säljpipelinens tre mellansteg — lokal komplettering, återanvänder befintlig
+       .bdg-komponent, ingen ny CSS-klass. Övriga statusar (new/contacted/snoozed/
+       won/lost/done/dismissed) renderas redan korrekt av befintlig sbdg(). */
+    const extraLabels = { contact_needed: 'Kontakt behövs', quote_created: 'Offert skapad', work_order_created: 'AO skapad' };
+    const extraCls    = { contact_needed: 'bdg-orange', quote_created: 'bdg-sky', work_order_created: 'bdg-sky' };
+    if (extraLabels[status]) return `<span class="bdg ${extraCls[status]}">${extraLabels[status]}</span>`;
+    return sbdg(status);
+  },
   _tabSales(cu) {
     const sales = (state.salesOpportunities||[]).filter(s => s.customerId === cu.id);
     if (!sales.length) return `<div class="empty"><p>Inga säljchanser</p></div>`;
-    return sales.map(s => `
-      <div class="sales-card ${s.priority}">
-        <div class="sales-title">${s.title}</div>
-        <div class="sales-meta">${s.reason}</div>
-        <div style="display:flex;gap:6px;margin-top:6px;">${sbdg(s.status)}</div>
-      </div>`).join('');
+    return sales.map(s => {
+      const isOverdue = !!(s.dueDate && s.dueDate < tdy() && this._SALES_ACTIVE_STATUSES.includes(s.status));
+      const overdueBadge = isOverdue ? `<span class="bdg bdg-red">${ic('alert-triangle',9)} Förfallen</span>` : '';
+      const typeBadge = s.type && s.type !== 'other' ? `<span class="bdg bdg-grey">${this._salesTypeLabel(s.type)}</span>` : '';
+      const staffName = s.assignedStaffId ? getStaff(s.assignedStaffId) : null;
+      const staffLabel = staffName ? (staffName.firstName+' '+staffName.lastName).trim() : '';
+      const sub = [
+        s.suggestedAction ? s.suggestedAction : '',
+        staffLabel ? 'Ansvarig: '+staffLabel : '',
+        s.dueDate ? (isOverdue ? '<span style="color:var(--rd);font-weight:700;">'+fmtDate(s.dueDate)+'</span>' : fmtDate(s.dueDate)) : '',
+        s.estimatedValue > 0 ? fmt(s.estimatedValue)+' kr' : ''
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="list-item" onclick="Router.showPage('pg-sales')">
+          <div class="item-row">
+            <div>
+              <div class="item-title">${s.title}</div>
+              ${sub ? `<div class="item-sub">${sub}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+              ${this._salesStatusBadge(s.status)}${typeBadge}${overdueBadge}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
   },
 
   _tabActivity(cu) {
@@ -645,6 +685,17 @@ const CustomerDetailPage = {
       if (!cu) return;
       cu.contacts = (cu.contacts || []).filter((_, i) => i !== idx);
       cu.updatedAt = new Date().toISOString();
+      /* V46 R2: säljchansers contactId är ett array-index i cu.contacts[] — när ett
+         index tas bort måste kopplingen justeras i SAMMA mutation, annars pekar
+         chansen fel efter borttagningen. */
+      (state.salesOpportunities || []).forEach(op => {
+        if (!op || op.customerId !== this.customerId) return;
+        if (op.contactId === undefined || op.contactId === null || op.contactId === '') return;
+        const n = Number(op.contactId);
+        if (!Number.isInteger(n)) return;
+        if (n === idx) op.contactId = '';
+        else if (n > idx) op.contactId = String(n - 1);
+      });
       persist();
       this._renderFull(document.getElementById('pg-crm-detail-content'));
       showToast('Kontaktperson borttagen');
