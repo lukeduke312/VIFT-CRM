@@ -17,9 +17,33 @@
  *                          (prio: primär → alla aktiva → fallback broadcast/userId)
  *   userId      string?  — Skicka till specifik user (om propertyId ej satt)
  *   broadcast   bool?    — Skicka till ALLA om varken propertyId/userId satt
+ *   aoId        string?  — V42 §9: vidarebefordras oförändrat i push-payloaden
+ *                          (max 64 tecken) så service worker kan navigera
+ *                          direkt till AO:t vid klick när appen redan är öppen
+ *   testEndpoint string? — V44 §3: riktar sändningen mot EXAKT en enskild,
+ *                          anroparens EGEN, icke-revokerade endpoint (diagnostik).
+ *                          Ignorerar propertyId/broadcast/userId helt. Om endpointen
+ *                          inte hör till caller.id → 403, ingen fallback.
  *
- * Svar:
+ * Svar (normalflöde):
  *   { sent: number, revoked: number }
+ * Svar (testEndpoint-flöde):
+ *   { sent: number, revoked: number, diagnostics: { statusCode, apnsId, provider, endpointSuffix, body } }
+ *   — diagnostics avslöjar ALDRIG p256dh/auth_key/JWT/VAPID-nycklar eller
+ *   hela endpointen (bara de sista 10 tecknen).
+ *
+ * V43: push-payloaden som skickas till webpush.sendNotification() är nu
+ * Declarative Web Push-kompatibel (Apple/WebKit, iOS/iPadOS 18.4+):
+ *   { web_push: 8030, notification: { title, body, navigate, silent }, aoId }
+ * `notification.navigate` är alltid en ABSOLUT URL på VIFT CRM-produktionsorigin
+ * (https://crm.viftfast.se) — byggd från den redan relativpath-validerade `url`,
+ * aldrig från en extern/klienttillhandahållen origin. Äldre browsers/webkit utan
+ * stöd för declarative push hanterar samma JSON i service-worker.js:s push-handler
+ * (backward-compat, se där).
+ *
+ * V44: sendNotification() anropas nu med { TTL: 60, urgency: 'high' } (verifierat
+ * stöd i web-push@3.6.7 enligt uppdragets §5) — gäller både testEndpoint-vägen
+ * och normala VIFT-notiser. Ingen ändring av VAPID-nycklar/secrets.
  */
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -54,6 +78,55 @@ const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY') || ''
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 }
+
+/* V43: produktionsorigin för `notification.navigate` — ALDRIG klienttillhandahållen.
+ * `url` (se nedan) är redan validerad till en relativ sökväg (startar med '/' eller
+ * tom sträng) innan den når hit, så konkatenering här kan inte producera en extern
+ * redirect eller en javascript:-URL. */
+const CRM_ORIGIN = 'https://crm.viftfast.se'
+
+/* V44-HELPERS-START — extraheras ordagrant av testsviten.
+ * V44 §4/§7: diagnostikhjälpare för den riktade testvägen. Läser ALDRIG ut
+ * eller loggar p256dh/auth_key/JWT/VAPID-nycklar/hela endpoints — bara ett
+ * proveniens-gissat providernamn, värdhostnamn (indirekt via provider) och
+ * de sista tecknen av endpointen som identifierare. */
+function detectProvider(endpoint: string): string {
+  try {
+    const host = new URL(endpoint).hostname
+    if (host.includes('web.push.apple.com'))                                  return 'apple'
+    if (host.includes('fcm.googleapis.com') || host.includes('android.googleapis.com')) return 'google'
+    if (host.includes('push.services.mozilla.com') || host.includes('mozilla.com'))      return 'mozilla'
+    return host
+  } catch { return 'unknown' }
+}
+
+function endpointSuffix(endpoint: string): string {
+  return typeof endpoint === 'string' ? endpoint.slice(-10) : ''
+}
+
+/* Case-insensitiv header-läsning — web-push@3.6.7s sendNotification()-resultat
+ * (och fel-objekt vid kastade exceptions) kan ha headers som ett vanligt
+ * objekt; Apple/APNs skickar tillbaka `apns-id`, ibland med annan casing. */
+function extractApnsId(headers: unknown): string | null {
+  if (!headers || typeof headers !== 'object') return null
+  const h = headers as Record<string, unknown>
+  for (const k of Object.keys(h)) {
+    if (k.toLowerCase() === 'apns-id') {
+      const v = h[k]
+      return typeof v === 'string' ? v : (v != null ? String(v) : null)
+    }
+  }
+  return null
+}
+
+/* Trunkerar provider-svarskroppen säkert innan den skickas till klienten —
+ * det här är push-providerns EGET textsvar (t.ex. "BadDeviceToken" från
+ * APNs), aldrig subscription-nycklar eller annan känslig data. */
+function safeTruncate(s: string, max: number): string {
+  if (!s) return ''
+  return s.length > max ? s.slice(0, max) + '…' : s
+}
+/* V44-HELPERS-END */
 
 /* ── Handler ─────────────────────────────────────────────── */
 serve(async (req: Request) => {
@@ -91,14 +164,121 @@ serve(async (req: Request) => {
     const { user: caller, userEmail: callerEmail, perms } = auth
 
     /* Läs request body */
+    /* V43-URLBLOCK-START — extraheras ordagrant av testsviten (run-tests-v43.js)
+       för att köra DEN FAKTISKA valideringen, inte en omskriven kopia. */
     const body      = await req.json().catch(() => ({}))
     const title     = (body.title      || 'VIFT CRM').slice(0, 100)
     const text      = (body.body       || '').slice(0, 300)
     const rawUrl    = String(body.url || '/').slice(0, 500)
     /* Tillåt bara relativa sökvägar eller samma origin — blockera javascript: och externa adresser */
     const url       = rawUrl.startsWith('/') || rawUrl === '' ? rawUrl : '/'
+    /* V43-URLBLOCK-END */
     const propertyId: string | null = body.propertyId || null
     const broadcast = body.broadcast === true
+    /* V42 §9: vidarebefordra aoId till service workerns push-payload så
+       att ett klick på notisen kan navigera till rätt AO när CRM redan är
+       öppet (service-worker.js läser payload.aoId och postMessage:ar
+       OPEN_AO — se index.html:641). Endast bunden, redan validerad
+       stränglängd vidarebefordras; ingen ny behörighetslogik. */
+    /* V43-AOIDBLOCK-START */
+    const aoIdRaw = body.aoId
+    const aoId: string | null = (typeof aoIdRaw === 'string' && aoIdRaw.length > 0 && aoIdRaw.length <= 64) ? aoIdRaw : null
+    /* V43-AOIDBLOCK-END */
+
+    /* V43-PAYLOAD-BLOCK-START — extraheras ordagrant av testsviten.
+     * Declarative Web Push-format (RFC 8030 / WebKit iOS 18.4+).
+     * `navigate` är ALLTID absolut på CRM_ORIGIN — `url` kan här bara vara en
+     * redan validerad relativ sökväg eller tom sträng (se valideringen ovan),
+     * så det finns ingen möjlighet till extern redirect eller javascript:-injektion.
+     * `notification.title` kan aldrig vara tom — `title` har redan fallback 'VIFT CRM'. */
+    const navigateUrl = CRM_ORIGIN + (url || '/')
+    const payload = JSON.stringify({
+      web_push: 8030,
+      notification: {
+        title,
+        body: text,
+        navigate: navigateUrl,
+        silent: false
+      },
+      /* Bakåtkompatibel/VIFT-specifik metadata — läses av service-worker.js:s
+         legacy-fallback och av notificationclick → OPEN_AO (oförändrat sedan V42). */
+      aoId
+    })
+    /* V43-PAYLOAD-BLOCK-END */
+
+    /* V44 §3: riktad endpoint för diagnostik-testväg (Admin → Notiser →
+       "Skicka testnotis" riktar sig nu mot EXAKT den aktuella browserns
+       endpoint, se PushService.sendTest()). Flyttad hit — direkt efter
+       payload-konstruktionen — så att testEndpoint-grenen nedan kan
+       returnera tidigt UTAN att någonsin nå broadcast/propertyId/userId-
+       resolutionen. */
+    /* V44-TESTENDPOINT-START */
+    const testEndpointRaw = body.testEndpoint
+    const testEndpoint: string | null = (typeof testEndpointRaw === 'string' && testEndpointRaw.length > 0 && testEndpointRaw.length <= 2000) ? testEndpointRaw : null
+    /* V44-TESTENDPOINT-END */
+
+    /* V44-TESTENDPOINT-FLOW-START — extraheras ordagrant av testsviten
+       (run-tests-v44.js) och körs mot mockad supabase/webpush för att
+       verifiera DEN FAKTISKA säkerhets- och diagnostiklogiken. */
+    if (testEndpoint) {
+      /* SÄKERHETSKRAV (V44 §3): endast anroparens EGEN, icke-revokerade
+       * endpoint accepteras. Ingen fallback till broadcast eller till en
+       * annan användares subscription — om exakt denna endpoint inte finns
+       * för exakt denna user_id, avvisas hela anropet med 403. Denna gren
+       * läser eller använder ALDRIG body.propertyId/body.broadcast/body.userId. */
+      const { data: ownSub, error: ownSubErr } = await supabase
+        .from('push_subscriptions')
+        .select('id, endpoint, p256dh, auth_key')
+        .eq('endpoint', testEndpoint)
+        .eq('user_id', caller.id)
+        .is('revoked_at', null)
+        .maybeSingle()
+
+      if (ownSubErr) throw ownSubErr
+      if (!ownSub) {
+        return json({ error: 'Okänd eller ej tillgänglig endpoint för denna användare.' }, 403)
+      }
+
+      /* V44 §4/§5: fångar den råa svarskroppen från push-providern och
+       * applicerar TTL/urgency (nu verifierat stödda av web-push@3.6.7 enligt
+       * uppdragets §5 — ingen ändring av VAPID-nycklar/secrets). */
+      const diagnostics: { statusCode: number | null; apnsId: string | null; provider: string; endpointSuffix: string; body: string } = {
+        statusCode: null,
+        apnsId: null,
+        provider: detectProvider(ownSub.endpoint),
+        endpointSuffix: endpointSuffix(ownSub.endpoint),
+        body: ''
+      }
+      let sentCount = 0
+      let revokedCount = 0
+
+      try {
+        const result = await webpush.sendNotification(
+          { endpoint: ownSub.endpoint, keys: { p256dh: ownSub.p256dh, auth: ownSub.auth_key } },
+          payload,
+          { TTL: 60, urgency: 'high' }
+        )
+        sentCount = 1
+        const r = result as { statusCode?: number; headers?: unknown; body?: unknown }
+        diagnostics.statusCode = typeof r?.statusCode === 'number' ? r.statusCode : 201
+        diagnostics.apnsId = extractApnsId(r?.headers)
+        diagnostics.body = safeTruncate(String(r?.body ?? ''), 200)
+      } catch (err: unknown) {
+        const e = err as { statusCode?: number; headers?: unknown; body?: unknown; message?: string }
+        diagnostics.statusCode = typeof e?.statusCode === 'number' ? e.statusCode : null
+        diagnostics.apnsId = extractApnsId(e?.headers)
+        diagnostics.body = safeTruncate(String(e?.body ?? e?.message ?? ''), 200)
+        if (e?.statusCode === 410 || e?.statusCode === 404) {
+          revokedCount = 1
+          await supabase.from('push_subscriptions').update({ revoked_at: new Date().toISOString() }).eq('id', ownSub.id)
+        } else {
+          console.error('[send-push] diagnostik-fel för endpoint (suffix):', endpointSuffix(ownSub.endpoint), err)
+        }
+      }
+
+      return json({ sent: sentCount, revoked: revokedCount, diagnostics })
+    }
+    /* V44-TESTENDPOINT-FLOW-END */
 
     /* Roll-kontroll: broadcast kräver 'all'-behörighet */
     if (broadcast && !hasPerm(perms, 'all')) {
@@ -199,9 +379,17 @@ serve(async (req: Request) => {
       return json({ sent: 0, revoked: 0, message: 'Inga aktiva subscriptions för ' + ctx })
     }
 
-    const payload = JSON.stringify({ title, body: text, url })
+    /* `payload` byggd tidigare (se V43-PAYLOAD-BLOCK ovan, flyttad i V44 så
+       att testEndpoint-grenen kan använda samma payload och returnera innan
+       den här mottagarlistan ens hämtas). */
     const revokedIds: string[] = []
     let sent = 0
+
+    /* V44 §5: TTL/urgency NU VERIFIERAT stödda av web-push@3.6.7 (uppdragets
+     * egen bekräftelse — se rapportens §5/§11). Appliceras här på ALLA VIFT-
+     * notiser (inte bara diagnostik-testvägen), ingen ändring av VAPID-
+     * nycklar/secrets. */
+    const SEND_OPTIONS = { TTL: 60, urgency: 'high' as const }
 
     /* Skicka till alla enheter parallellt */
     await Promise.allSettled(
@@ -212,7 +400,8 @@ serve(async (req: Request) => {
               endpoint: sub.endpoint,
               keys: { p256dh: sub.p256dh, auth: sub.auth_key }
             },
-            payload
+            payload,
+            SEND_OPTIONS
           )
           sent++
         } catch (err: unknown) {

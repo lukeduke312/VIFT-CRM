@@ -428,6 +428,20 @@ async function loadOffer(token) {
   }
 }
 
+/* V38 §5: kanonisk 0-safe momsnormalisering — samma semantik som
+   InvoiceService.normalizeVatRate/PageShells._normVat (V35-V38).
+   null/undefined/tomsträng (inkl. whitespace-only) = inget värde satt ->
+   fallback 25; explicit 0/'0' = 0 % (behålls exakt); giltigt 0-100
+   behålls exakt; NaN/Infinity/negativt/>100 -> fallback. */
+function _poNormVat(value, fallback) {
+  if (fallback === undefined) fallback = 25;
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string' && value.trim() === '') return fallback;
+  var n = Number(value);
+  if (!isFinite(n) || n < 0 || n > 100) return fallback;
+  return n;
+}
+
 /* ── Render offert ──────────────────────────────────────── */
 function renderOffer(off) {
   var root = document.getElementById('po-root');
@@ -448,12 +462,25 @@ function renderOffer(off) {
   }, 0);
   extras.forEach(function(e) { rawEx += Math.round((e.qty||1)*(e.unitPrice||0)); });
 
+  /* V38 §5: momsen räknas per rad/tillägg (dess egna vatRate, 0-safe),
+     inte ett generellt * 0.25 på summan — samma metod/formel som CRM:s
+     kanoniska _offerCalcTotals() (PageShells.js). */
+  var rawVat = prLines.reduce(function(s,l) {
+    var lEx = (l.type === 'service') ? (l.exVat || 0) : (l.total || Math.round((l.qty||1)*(l.unitPrice||0)));
+    return s + Math.round(lEx * _poNormVat(l.vatRate) / 100);
+  }, 0);
+  extras.forEach(function(e) {
+    var eEx = Math.round((e.qty||1)*(e.unitPrice||0));
+    rawVat += Math.round(eEx * _poNormVat(e.vatRate) / 100);
+  });
+
   var disc  = off.discount || {type:'none', value:0};
   var discAmt = disc.value
     ? (disc.type==='percent' ? Math.round(rawEx * Math.min(disc.value,100)/100) : Math.min(Math.round(disc.value), rawEx))
     : 0;
   var exVat  = rawEx - discAmt;
-  var vat    = Math.round(exVat * 0.25);
+  var vatRatio = rawEx > 0 ? (exVat / rawEx) : 1;
+  var vat    = Math.round(rawVat * vatRatio);
   var incVat = exVat + vat;
   var rutAmt = prLines.filter(function(l){return l.type==='service';}).reduce(function(s,l){return s+(l.rutAmount||0);},0);
   var cust   = incVat - rutAmt;
@@ -500,7 +527,7 @@ function renderOffer(off) {
     var rows = prLines.map(function(l) {
       if (l.type === 'service') {
         var lEx  = l.exVat || 0;
-        var lVat = Math.round(lEx*(l.vatRate||25)/100);
+        var lVat = Math.round(lEx*_poNormVat(l.vatRate)/100);
         var lInc = lEx + lVat;
         var lRut = l.rutAmount || 0;
         var lCust2 = lInc - lRut;
@@ -510,7 +537,7 @@ function renderOffer(off) {
           '</td><td>' + (lRut ? fmt(lCust2) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : fmt(lInc) + ' kr') + '</td></tr>';
       }
       var tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
-      var totInc = tot + Math.round(tot * 0.25);
+      var totInc = tot + Math.round(tot * _poNormVat(l.vatRate) / 100);
       return '<tr><td>' + esc(l.description||l.templateName||'Rad') +
         (l.qty && l.unit ? '<div class="po-line-desc">' + l.qty + ' ' + esc(l.unit) + ' × ' + fmt(l.unitPrice||0) + ' kr</div>' : '') +
         '</td><td>' + fmt(totInc) + ' kr</td></tr>';
@@ -529,9 +556,10 @@ function renderOffer(off) {
     extrasHtml = '<div style="margin-top:8px;"><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Tillägg</div>' +
       extras.map(function(e) {
         var tot = Math.round((e.qty||1)*(e.unitPrice||0));
+        var eRate = _poNormVat(e.vatRate);
         return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--br);">' +
           '<span>' + esc(e.description||'') + (e.qty&&e.unit ? ' (' + e.qty + ' ' + esc(e.unit) + ')' : '') + '</span>' +
-          '<span style="font-weight:600;font-variant-numeric:tabular-nums;">' + fmt(tot+Math.round(tot*.25)) + ' kr</span></div>';
+          '<span style="font-weight:600;font-variant-numeric:tabular-nums;">' + fmt(tot+Math.round(tot*eRate/100)) + ' kr</span></div>';
       }).join('') + '</div>';
   }
 
@@ -540,7 +568,7 @@ function renderOffer(off) {
     (discAmt ? '<div class="po-total-row"><span>Delsumma</span><span>' + fmt(rawEx) + ' kr</span></div>' : '') +
     (discAmt ? '<div class="po-total-row"><span>Rabatt</span><span>−' + fmt(discAmt) + ' kr</span></div>' : '') +
     '<div class="po-total-row"><span>Totalt exkl. moms</span><span>' + fmt(exVat) + ' kr</span></div>' +
-    '<div class="po-total-row"><span>Moms (25 %)</span><span>' + fmt(vat) + ' kr</span></div>' +
+    '<div class="po-total-row"><span>Moms</span><span>' + fmt(vat) + ' kr</span></div>' +
     (rutAmt ? '<div class="po-total-row"><span>RUT/ROT-avdrag</span><span>−' + fmt(rutAmt) + ' kr</span></div>' : '') +
     '<div class="po-total-row main"><span>Totalt att betala</span><span>' + fmt(rutAmt ? cust : incVat) + ' kr</span></div>' +
     (rutAmt ? '<div style="font-size:10px;color:var(--mt);margin-top:6px;">Totalt inkl. moms: ' + fmt(incVat) + ' kr — RUT/ROT-avdrag: −' + fmt(rutAmt) + ' kr = Kundpris: ' + fmt(cust) + ' kr</div>' : '') +

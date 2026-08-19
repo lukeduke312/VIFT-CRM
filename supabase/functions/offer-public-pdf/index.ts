@@ -187,17 +187,34 @@ serve(async (req: Request) => {
      */
     const prLines  = lines.filter((l: Record<string, unknown>) => l.type !== 'text')
 
+    /* V38 §7: kanonisk 0-safe momsnormalisering — samma semantik som
+       InvoiceService.normalizeVatRate/PageShells._normVat/public-offer.html
+       _poNormVat (V35-V38). null/undefined/tomsträng (inkl. whitespace-
+       only) = inget värde satt -> fallback 25; explicit 0 = 0 % (behålls
+       exakt); giltigt 0-100 behålls exakt; NaN/Infinity/negativt/>100 ->
+       fallback. */
+    function normVat(value: unknown, fallback = 25): number {
+      if (value === null || value === undefined) return fallback
+      if (typeof value === 'string' && value.trim() === '') return fallback
+      const n = Number(value)
+      if (!Number.isFinite(n) || n < 0 || n > 100) return fallback
+      return n
+    }
+
     let rawEx = 0
+    let rawVat = 0
     for (const l of prLines) {
-      if (l.type === 'service') {
-        rawEx += Number(l.exVat) || 0
-      } else {
-        rawEx += Number(l.total) || Math.round((Number(l.qty) || 1) * (Number(l.unitPrice) || 0))
-      }
+      const lEx = l.type === 'service'
+        ? (Number(l.exVat) || 0)
+        : (Number(l.total) || Math.round((Number(l.qty) || 1) * (Number(l.unitPrice) || 0)))
+      rawEx  += lEx
+      rawVat += Math.round(lEx * normVat(l.vatRate) / 100)
     }
     for (const e of extras) {
       if (e.type === 'text') continue
-      rawEx += Math.round((Number(e.qty) || 1) * (Number(e.unitPrice) || 0))
+      const eEx = Math.round((Number(e.qty) || 1) * (Number(e.unitPrice) || 0))
+      rawEx  += eEx
+      rawVat += Math.round(eEx * normVat(e.vatRate) / 100)
     }
 
     const discRaw   = s('discount') as Record<string, unknown> | null | undefined
@@ -216,7 +233,12 @@ serve(async (req: Request) => {
     }
 
     const exVatTotal  = rawEx - discAmt
-    const vatAmt      = Math.round(exVatTotal * 0.25)
+    /* Momsens rabatteffekt fördelas proportionellt mot fördelningen FÖRE
+       rabatt — samma metod som _offerCalcTotals (PageShells.js) och
+       InvoiceService.calcSummary (V35) — istället för ett generellt
+       * 0.25 som antog att HELA offerten alltid hade 25 % moms. */
+    const vatRatio    = rawEx > 0 ? (exVatTotal / rawEx) : 1
+    const vatAmt      = Math.round(rawVat * vatRatio)
     const incVatTotal = exVatTotal + vatAmt
     const rutTotal    = prLines
       .filter((l: Record<string, unknown>) => l.type === 'service')
@@ -468,7 +490,10 @@ serve(async (req: Request) => {
       totalRow(discLabel, '-' + fmtNum(discAmt) + ' kr')
     }
     totalRow('Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
-    totalRow('Moms (25 %):', fmtNum(vatAmt) + ' kr')
+    /* V38 §7: fler momssatser kan förekomma på samma offert -> neutral
+       etikett istället för en hårdkodad "(25 %)". */
+    const vatLabel = prLines.every((l: Record<string, unknown>) => normVat(l.vatRate) === 25) ? 'Moms (25 %):' : 'Moms:'
+    totalRow(vatLabel, fmtNum(vatAmt) + ' kr')
     if (rutTotal > 0) {
       totalRow('RUT/ROT-avdrag:', '-' + fmtNum(rutTotal) + ' kr')
     }

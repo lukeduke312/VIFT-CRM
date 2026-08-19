@@ -4,8 +4,15 @@
  * Flöde:
  *   1. PushService.canSubscribe()  — kontrollera stöd + iOS standalone-krav
  *   2. PushService.subscribe()     — begär permission + skapa subscription + spara i DB
- *   3. PushService.sendTest()      — anropa Edge Function send-push med testnotis
+ *   3. PushService.sendTest()      — anropa Edge Function send-push med testnotis,
+ *                                    riktad mot EXAKT aktuell enhets endpoint (V44)
  *   4. PushService.unsubscribe()   — avregistrera enheten
+ *
+ * V44 iOS-diagnostik (utan att röra V42/V43-flödet ovan):
+ *   PushService.showLocalTestNotification() — lokal notis, ingen server/push
+ *   PushService.getDiagnostics()            — PWA/push-diagnostik för Admin-UI
+ *   PushService._listenForPushDiag()        — registrerar SW-diagnostiklyssnaren
+ *                                              (anropas en gång från index.html)
  *
  * VAPID public key: window.VIFT_CONFIG.vapidPublicKey (config.js)
  * Edge Function:    SUPABASE_URL/functions/v1/send-push
@@ -67,41 +74,247 @@ const PushService = {
     } catch { return false; }
   },
 
+  /* V42 §5: skiljer "browser har en lokal PushSubscription" från
+     "servern har en giltig, icke-revokerad rad för den subscriptionen".
+     isSubscribed() (ovan) svarar bara på det förra — det räcker inte för
+     att avgöra om push faktiskt kommer fram. Läser push_subscriptions
+     via användarens egen JWT; RLS begränsar till anroparens egna rader,
+     ingen service-role/admin-åtkomst i frontend. */
+  async getSubscriptionStatus() {
+    const result = { browserSubscribed: false, serverRegistered: false, endpoint: null };
+    if (!this.isSupported()) return result;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) return result;
+      result.browserSubscribed = true;
+      result.endpoint = sub.endpoint;
+
+      const token = Auth.getAccessToken();
+      if (!token) return result;
+
+      const res = await fetch(
+        SUPABASE_URL + '/rest/v1/push_subscriptions?endpoint=eq.' + encodeURIComponent(sub.endpoint) + '&select=id,revoked_at',
+        {
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'apikey':        SUPABASE_AKEY
+          }
+        }
+      );
+      if (res.ok) {
+        const rows = await res.json().catch(() => []);
+        result.serverRegistered = Array.isArray(rows) && rows.some(r => !r.revoked_at);
+      }
+    } catch(e) {
+      console.warn('[PushService] getSubscriptionStatus fel:', e);
+    }
+    return result;
+  },
+
+  /* V42 §1: dekodar JWT-payloadens `sub`-claim (= auth.users.id) direkt ur
+     access_token. Ingen signaturverifiering görs eller behövs här — vi
+     litar redan på tokenet för att autentisera fetch-anropet nedan, och
+     RLS (`user_id = auth.uid()`) är den faktiska säkerhetsbarriären på
+     serversidan. state.currentUser.id representerar VIFT-personal, INTE
+     nödvändigtvis samma UUID som auth.users.id, och får därför aldrig
+     användas här. */
+  _decodeJwtSub(token) {
+    try {
+      const parts = String(token).split('.');
+      if (parts.length < 2) return null;
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const pad = '='.repeat((4 - b64.length % 4) % 4);
+      const json = decodeURIComponent(
+        atob(b64 + pad).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+      );
+      const claims = JSON.parse(json);
+      return (claims && typeof claims.sub === 'string' && claims.sub) ? claims.sub : null;
+    } catch { return null; }
+  },
+
+  /* V42 §2: jämför en befintlig browser-subscriptions applicationServerKey
+     mot den just nu konfigurerade VAPID-nyckeln. Om browsern inte
+     exponerar sub.options (äldre Safari) kan vi inte verifiera — då
+     återanvänds subscriptionen ändå snarare än att tvinga en ny
+     permission-prompt i onödan. */
+  _subMatchesCurrentKey(sub, wantedKey) {
+    try {
+      const opts = sub.options;
+      if (!opts || !opts.applicationServerKey) return true;
+      const actual = new Uint8Array(opts.applicationServerKey);
+      if (actual.length !== wantedKey.length) return false;
+      for (let i = 0; i < actual.length; i++) {
+        if (actual[i] !== wantedKey[i]) return false;
+      }
+      return true;
+    } catch { return true; }
+  },
+
+  /* ── V44 §1: Lokal notistest — INGEN server/push involverad ──
+     Isolerar exakt om iOS/browsern kan visa en notis alls, oberoende av
+     hela push-kedjan. Använder MEDVETET reg.showNotification() (Service
+     Worker Notifications API), ALDRIG `new Notification()` — iOS Safari/PWA
+     stödjer inte det senare från en vanlig sida. */
+  async showLocalTestNotification() {
+    if (Notification.permission !== 'granted') {
+      throw new Error('Notification.permission är "' + Notification.permission + '", inte "granted".');
+    }
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service worker stöds inte i den här browsern.');
+    }
+    const reg = await navigator.serviceWorker.ready.catch(() => null);
+    if (!reg) {
+      throw new Error('Ingen service worker-registrering hittades.');
+    }
+    /* Låt ett ev. fel från showNotification() propagera med sitt EGNA,
+       exakta felmeddelande — ingen omskrivning här. */
+    await reg.showNotification('VIFT lokal test', {
+      body: 'Om du ser detta fungerar iPhones lokala notisvisning.',
+      data: { url: '/' }
+    });
+  },
+
+  /* ── V44 §2: PWA/push-diagnostik ──────────────────────────
+     Visar ALDRIG p256dh/auth_key/JWT/VAPID private key eller hela
+     endpointen — bara sista 10 tecknen av endpointen som identifierare
+     samt värdnamnet (t.ex. "web.push.apple.com"), inte hela URL:en. */
+  async getDiagnostics() {
+    const diag = {
+      permission: this.permissionState(),
+      standalone: this.isStandalone(),
+      serviceWorker: { registered: false, active: false, scriptURL: null, state: null },
+      hasPushManagerOnRegistration: false,
+      browserSubscription: { exists: false, endpointSuffix: null, providerHost: null },
+      windowPushManager: { exists: ('pushManager' in window), matchesSwSubscription: null }
+    };
+    if (!('serviceWorker' in navigator)) return diag;
+
+    let swEndpoint = null;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        diag.serviceWorker.registered = true;
+        diag.hasPushManagerOnRegistration = 'pushManager' in reg;
+        if (reg.active) {
+          diag.serviceWorker.active     = true;
+          diag.serviceWorker.scriptURL  = reg.active.scriptURL;
+          diag.serviceWorker.state      = reg.active.state;
+        }
+        if (diag.hasPushManagerOnRegistration) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            swEndpoint = sub.endpoint;
+            diag.browserSubscription.exists         = true;
+            diag.browserSubscription.endpointSuffix = this._endpointSuffix(sub.endpoint);
+            diag.browserSubscription.providerHost   = this._endpointHost(sub.endpoint);
+          }
+        }
+      }
+    } catch(e) {
+      console.warn('[PushService] getDiagnostics fel:', e);
+    }
+
+    /* window.pushManager är INTE standard (PushManager nås normalt bara via
+       en ServiceWorkerRegistration) — men kontrolleras exakt som efterfrågat.
+       Full endpoint jämförs bara INTERNT här, aldrig returnerad. */
+    if (diag.windowPushManager.exists && window.pushManager && typeof window.pushManager.getSubscription === 'function') {
+      try {
+        const wSub = await window.pushManager.getSubscription();
+        diag.windowPushManager.matchesSwSubscription = !!(wSub && swEndpoint && wSub.endpoint === swEndpoint);
+      } catch { diag.windowPushManager.matchesSwSubscription = null; }
+    }
+
+    return diag;
+  },
+
+  _endpointSuffix(endpoint) {
+    return (endpoint && typeof endpoint === 'string') ? endpoint.slice(-10) : null;
+  },
+
+  _endpointHost(endpoint) {
+    try { return new URL(endpoint).hostname; } catch { return null; }
+  },
+
+  /* ── V44 §6: registrerar lyssnaren för service workerns
+     VIFT_PUSH_RECEIVED_DIAG-meddelande (bevis att SW mottog push-eventet).
+     Innehåller ALDRIG payload/endpoint/känslig data, bara en timestamp. */
+  _diag: { lastPushReceivedAt: null },
+
+  _listenForPushDiag() {
+    if (!('serviceWorker' in navigator) || this.__diagListenerRegistered) return;
+    this.__diagListenerRegistered = true;
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'VIFT_PUSH_RECEIVED_DIAG') {
+        this._diag.lastPushReceivedAt = e.data.receivedAt || Date.now();
+      }
+    });
+  },
+
   /* ── Prenumerera ─────────────────────────────────────────── */
 
   async subscribe(deviceLabel = '') {
     const reason = this.blockReason();
     if (reason) throw new Error(reason);
 
-    /* Begär notisbehörighet */
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') throw new Error('permission-denied');
+    /* V42 §1: user_id måste hämtas INNAN vi rör browser-subscriptionen,
+       så vi aldrig skapar/återanvänder en subscription vi ändå inte kan
+       spara korrekt. */
+    const token = Auth.getAccessToken();
+    if (!token) throw new Error('Ej inloggad');
+    const userId = this._decodeJwtSub(token);
+    if (!userId) throw new Error('Kunde inte identifiera användar-ID från sessionen.');
 
     /* Hämta aktiv service worker */
     const reg = await navigator.serviceWorker.ready;
 
-    /* Skapa Web Push subscription */
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly:      true,
-      applicationServerKey: this._toUint8Array(this._vapidKey())
-    });
+    /* V42 §2: reparationsflöde — återanvänd en redan befintlig
+       browser-subscription (t.ex. en mobil som lokalt är "subscribed"
+       men saknar DB-rad) istället för att alltid skapa en ny och riskera
+       en onödig permission-prompt eller en duplicerad endpoint. Om den
+       befintliga subscriptionen hör till en ANNAN VAPID-nyckel än den
+       aktuella konfigurationen kan den inte återanvändas — då avregistreras
+       den lokalt och en ny skapas. */
+    const wantedKey = this._toUint8Array(this._vapidKey());
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !this._subMatchesCurrentKey(sub, wantedKey)) {
+      await sub.unsubscribe();
+      sub = null;
+    }
+
+    if (!sub) {
+      /* Begär notisbehörighet */
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('permission-denied');
+
+      /* Skapa Web Push subscription */
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly:      true,
+        applicationServerKey: wantedKey
+      });
+    }
 
     const json = sub.toJSON();
 
-    /* Spara i Supabase */
-    const token = Auth.getAccessToken();
-    if (!token) throw new Error('Ej inloggad');
-
     const payload = {
+      user_id:      userId,
       endpoint:     json.endpoint,
       p256dh:       json.keys.p256dh,
       auth_key:     json.keys.auth,
       platform:     this._detectPlatform(),
       browser:      this._detectBrowser(),
       device_label: deviceLabel || (this._detectPlatform() + ' — ' + new Date().toLocaleDateString('sv-SE')),
-      last_seen_at: new Date().toISOString()
+      last_seen_at: new Date().toISOString(),
+      /* V42 §2: nollställ ev. tidigare revoked_at — en reparerad/återanvänd
+         subscription ska räknas som aktiv igen. */
+      revoked_at:   null
     };
 
+    /* V42 §3: success returneras ENDAST om både browser-subscription och
+       DB-upsert lyckas. Ett DB-fel kastar ett tydligt fel och rör INTE
+       den redan skapade/återanvända browser-subscriptionen — nästa
+       Activate-försök kan reparera enligt §2 utan att användaren behöver
+       rensa webbläsardata. */
     const res = await fetch(
       SUPABASE_URL + '/rest/v1/push_subscriptions?on_conflict=endpoint',
       {
@@ -116,8 +329,9 @@ const PushService = {
       }
     );
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error('DB-fel: ' + err);
+      const err = await res.text().catch(() => '');
+      console.error('[PushService] subscribe: DB-upsert misslyckades', res.status, err);
+      throw new Error('DB-fel (' + res.status + '): kunde inte spara prenumerationen på servern.');
     }
 
     return sub;
@@ -159,17 +373,39 @@ const PushService = {
     const token = Auth.getAccessToken();
     if (!token) throw new Error('Ej inloggad');
 
+    /* V44 §3: rikta testet mot EXAKT den här browserns aktuella endpoint —
+       inte "någon av användarens subscriptions". Utan detta diagnostiserar
+       vi fel enhet så fort användaren har fler än en registrerad enhet.
+       send-push validerar servern-sidan att endpointen faktiskt tillhör
+       anroparen (se dess §3-säkerhetskrav) — ingen egen validering krävs
+       här utöver att bara skicka med den. */
+    let testEndpoint = null;
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg && reg.pushManager) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) testEndpoint = sub.endpoint;
+        }
+      }
+    } catch(e) {
+      console.warn('[PushService] sendTest: kunde inte läsa aktuell endpoint:', e);
+    }
+
+    const body = {
+      title: 'VIFT CRM — Testnotis',
+      body:  'Pushnotiser fungerar! Du får notiser när AO tilldelas dig.',
+      url:   '/'
+    };
+    if (testEndpoint) body.testEndpoint = testEndpoint;
+
     const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
         'Authorization': 'Bearer ' + token
       },
-      body: JSON.stringify({
-        title: 'VIFT CRM — Testnotis',
-        body:  'Pushnotiser fungerar! Du får notiser när AO tilldelas dig.',
-        url:   '/'
-      })
+      body: JSON.stringify(body)
     });
 
     if (!res.ok) {

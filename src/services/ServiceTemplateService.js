@@ -2,6 +2,52 @@
  * ServiceTemplateService — Offerttjänster & prismodeller
  * CRUD + calc-logic för serviceTemplates i state
  */
+/* V38 §3: kanonisk 0-safe momsnormalisering — samma semantik som
+   InvoiceService.normalizeVatRate/PageShells._normVat (V35-V38).
+   null/undefined/tomsträng (inkl. whitespace-only) = inget värde satt ->
+   fallback (25); explicit 0/'0' = 0 % (behålls exakt); giltigt 0-100
+   behålls exakt; NaN/Infinity/negativt/>100 = ogiltigt -> fallback. */
+function _svcNormVat(value, fallback) {
+  if (fallback === undefined) fallback = 25;
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string' && value.trim() === '') return fallback;
+  const n = Number(value);
+  if (!isFinite(n) || n < 0 || n > 100) return fallback;
+  return n;
+}
+
+/* V39 §2 / V40: minsta möjliga canonical write-validering — service-lagret
+   ska inte kunna kringgås genom direktanrop som hoppar över UI:ts egen
+   _strictVat()-kontroll (PageShells.js). Returnerar null om ett EXPLICIT
+   angivet vatRate-fält är ogiltigt — create()/update() returnerar då null
+   (samma "avvisat"-kontrakt som update() redan använder för "hittades
+   inte"), ingen mutation, ingen persist. Fältet är valfritt att skicka
+   in — saknas det helt lämnas befintlig default/oförändrat värde orört,
+   exakt som innan.
+
+   V40: STRIKT TYPKONTROLL — V39:s `Number(value)` på en godtycklig
+   JS-typ accepterade tyst felaktiga icke-numeriska värden via JS egna
+   coercion-regler: `Number(null)===0`, `Number(false)===0`,
+   `Number(true)===1`, `Number([])===0` — så t.ex.
+   `update(id, {vatRate:null})` ändrade tyst en befintlig momssats till
+   0 % istället för att avvisas. Nu accepteras ENDAST ett faktiskt
+   `typeof value === 'number'` eller en icke-tom (efter trim)
+   `typeof value === 'string'` — allt annat (null/undefined/boolean/
+   array/object) avvisas direkt utan att ens nå Number()-konverteringen.
+   Efter det måste resultatet vara Number.isFinite() och 0–100. */
+function _svcStrictVatOrNull(value) {
+  let n;
+  if (typeof value === 'number') {
+    n = value;
+  } else if (typeof value === 'string' && value.trim() !== '') {
+    n = Number(value);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return n;
+}
+
 const ServiceTemplateService = {
 
   getAll() { return state.serviceTemplates || []; },
@@ -9,6 +55,15 @@ const ServiceTemplateService = {
   get(id) { return this.getAll().find(s => s.id === id) || null; },
 
   create(data) {
+    /* V40 Krav 2: valideras INNAN state muteras — ett avvisat create()
+       ska lämna state.serviceTemplates helt orört (inklusive kvar som
+       undefined om det var undefined innan anropet), inte bara oförändrat
+       INNEHÅLL i en redan-initierad array. */
+    if (data && Object.prototype.hasOwnProperty.call(data, 'vatRate')) {
+      const v = _svcStrictVatOrNull(data.vatRate);
+      if (v === null) return null;
+      data = Object.assign({}, data, { vatRate: v });
+    }
     if (!state.serviceTemplates) state.serviceTemplates = [];
     const id = data.id || ('svc_' + Date.now());
     const svc = Object.assign({
@@ -30,6 +85,11 @@ const ServiceTemplateService = {
   update(id, changes) {
     const svc = this.get(id);
     if (!svc) return null;
+    if (changes && Object.prototype.hasOwnProperty.call(changes, 'vatRate')) {
+      const v = _svcStrictVatOrNull(changes.vatRate);
+      if (v === null) return null;
+      changes = Object.assign({}, changes, { vatRate: v });
+    }
     Object.assign(svc, changes, {id, updatedAt: new Date().toISOString()});
     persist();
     return svc;
@@ -71,7 +131,7 @@ const ServiceTemplateService = {
       id:               svc.id,
       name:             svc.name,
       icon:             svc.icon || 'zap',
-      vatRate:          svc.vatRate || 25,
+      vatRate:          _svcNormVat(svc.vatRate),
       defaultReduction: svc.defaultReduction || 'ingen',
       defaultDesc:      svc.defaultDescription || svc.name,
       fields:           (svc.fields || []).filter(f => !f.isRut && !f.isRot),
@@ -87,7 +147,7 @@ const ServiceTemplateService = {
 
   _buildCalcFn(svc) {
     return function(f) {
-      const vatRate   = svc.vatRate || 25;
+      const vatRate   = _svcNormVat(svc.vatRate);
       const minCharge = svc.minChargeExVat || 0;
       const qtyField  = svc.qtyField || 'area';
       const qty       = parseFloat(f[qtyField] || 0);

@@ -42,6 +42,106 @@ function _offRawExVat(off) {
   return Math.round(lineSum + extrSum);
 }
 
+/**
+ * V38 §1/§4: kanonisk 0-safe momsnormalisering — samma semantik som
+ * InvoiceService.normalizeVatRate (V35-V37). null/undefined/tomsträng
+ * (inkl. whitespace-only) = inget värde satt -> fallback (25); explicit
+ * numeriskt 0 eller '0' = 0 % (behålls exakt); giltigt 0-100 behålls
+ * exakt; NaN/Infinity/negativt/>100 = ogiltigt -> fallback. Duplicerad
+ * här (istället för att InvoicesPage/PageShells beror på InvoiceService)
+ * eftersom offertflödet historiskt inte har något beroende på
+ * InvoiceService, och vi inte ska koppla ihop de två modulerna i denna
+ * smala VAT-hardening-omgång.
+ */
+function _normVat(value, fallback) {
+  if (fallback === undefined) fallback = 25;
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string' && value.trim() === '') return fallback;
+  const n = Number(value);
+  if (!isFinite(n) || n < 0 || n > 100) return fallback;
+  return n;
+}
+
+/**
+ * V39 §2: STRIKT write-validering för moms — medvetet SKILD från
+ * _normVat()'s read/display-fallback-semantik. _normVat() är rätt för
+ * att VISA/RÄKNA på redan lagrad data (ett odefinierat/ogiltigt värde
+ * ska visas som om det vore 25 % snarare än att krascha). Men den får
+ * ALDRIG användas för att avgöra vad som får SPARAS — annars kan ett
+ * felaktigt värde (t.ex. 500, eller en trasig DOM-manipulation) tystas
+ * till ett falskt giltigt 25 % i själva lagringen. Saknat/tomt värde
+ * räknas HÄR som ogiltigt (ingen fallback vid skrivning) — används av
+ * ArticlesPage._save() och ServiceTemplatesPage._save(), båda ställen
+ * där fältet alltid förväntas ha ett värde vid sparning.
+ */
+function _strictVat(value) {
+  if (value === null || value === undefined) return { ok: false, error: 'Momssats saknas.' };
+  if (typeof value === 'string' && value.trim() === '') return { ok: false, error: 'Momssats saknas.' };
+  const n = Number(value);
+  if (!isFinite(n) || n < 0 || n > 100) return { ok: false, error: 'Ogiltig momssats.' };
+  return { ok: true, value: n };
+}
+
+/**
+ * V38 §4: summa moms (kr) för offertens rader+extras INNAN rabatt — varje
+ * rad/tillägg använder sin EGEN vatRate (0-safe via _normVat), inte ett
+ * hårdkodat 25 %. Textblock ger ingen moms (_lineExVat returnerar redan 0
+ * för dem).
+ */
+function _offRawVat(off) {
+  const prLines = (off.lines || []).filter(l => l.type !== 'text');
+  const extras  = off.extras || [];
+  const lineVat  = prLines.reduce((s, l) => s + Math.round(_lineExVat(l) * _normVat(l.vatRate) / 100), 0);
+  const extraVat = extras.reduce((s, e) => {
+    const exVat = Math.round((+(e.qty||1)) * (+(e.unitPrice||0)));
+    return s + Math.round(exVat * _normVat(e.vatRate) / 100);
+  }, 0);
+  return lineVat + extraVat;
+}
+
+/**
+ * V38 §4: rabattbelopp — samma formel som tidigare fanns dupplicerad på
+ * flera separata ställen (offertlista, wizard, detaljvy, print). Ingen
+ * ändring av rabattens affärsregler, bara EN plats för formeln.
+ */
+function _offDiscountAmount(off, rawExVat) {
+  const d = off.discount || { type: 'none', value: 0 };
+  if (!d.value) return 0;
+  if (d.type === 'percent') return Math.round(rawExVat * Math.min(d.value, 100) / 100);
+  return Math.min(Math.round(d.value), rawExVat);
+}
+
+/**
+ * V38 §4: KANONISK offertekonomi — den enda platsen som räknar ut en
+ * offerts ekonomiska totaler. Används av offertlistan, wizardens
+ * sammanfattning, offertdetalj, kalkyl/preview och print/PDF-HTML.
+ * (public-offer.html samt Edge Functions offer-pdf/offer-public-pdf kan
+ * inte dela JS-kod med frontend-bundeln, men implementerar samma formel
+ * — se V38-leveransrapporten.)
+ *
+ * Momsen räknas per rad/tillägg (dess egna vatRate, 0-safe), och
+ * rabattens momseffekt fördelas PROPORTIONELLT mot fördelningen FÖRE
+ * rabatt — exakt samma metod som redan används för fakturor i
+ * InvoiceService.calcSummary (V35) — istället för ett generellt * 0.25
+ * på den rabatterade ex-moms-summan (vilket antog att HELA offerten
+ * alltid hade 25 % moms).
+ *
+ * RUT/ROT-beloppet är HELT OFÖRÄNDRAT (samma summering av l.rutAmount på
+ * service-rader som redan användes) — bara momsdelen är fixad.
+ */
+function _offerCalcTotals(off) {
+  const rawExVat = _offRawExVat(off);
+  const rawVat   = _offRawVat(off);
+  const discountAmount = _offDiscountAmount(off, rawExVat);
+  const exVatAfterDiscount = rawExVat - discountAmount;
+  const ratio = rawExVat > 0 ? (exVatAfterDiscount / rawExVat) : 1;
+  const vatAmount = Math.round(rawVat * ratio);
+  const totalInclVat = exVatAfterDiscount + vatAmount;
+  const rutRotAmount = Math.round((off.lines||[]).filter(l => l.type === 'service').reduce((s,l) => s + (l.rutAmount||0), 0));
+  const customerPays = totalInclVat - rutRotAmount;
+  return { rawExVat, discountAmount, exVatAfterDiscount, vatAmount, totalInclVat, rutRotAmount, customerPays };
+}
+
 /* ── PART 1: OfferPriceRules — alla priser EXKLUSIVE MOMS ─── */
 const OfferPriceRules = {
   altan: {
@@ -301,7 +401,10 @@ const OffersPage = {
         const ls = [{desc:'Fastighetsservice – ' + type + (per>1?' × '+per+' ggr':'') + ' (' + hrs + ' tim/period)', qty:hrs*per, unit:'tim', price:rate}];
         if (mat) ls.push({desc:'Material och förbrukningsmaterial', qty:1, unit:'st', price:mat});
         const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
-        const totalIncVat = exVat + Math.round(exVat * 0.25);
+        /* V38: respektera denna kalkylregels EGEN vatRate (satt på samma
+           objekt, id:'fs' ovan) — this.vatRate, inte ett hårdkodat 0.25.
+           calc() anropas alltid som tmpl.calc(f), så this === kalkylregeln. */
+        const totalIncVat = exVat + Math.round(exVat * this.vatRate / 100);
         const rutAmt = f.rut ? Math.round(totalIncVat * 0.5) : f.rot ? Math.round(totalIncVat * 0.3) : 0;
         return {ls, exVat, rutAmt, tierLbl:'', pricePerM2:rate, inputValues:{...f}, priceRuleRef:'fs'};
       }
@@ -344,7 +447,8 @@ const OffersPage = {
         const ls   = [{desc:f.desc_svc||'Arbete', qty, unit:'tim', price:rate}];
         if (mat) ls.push({desc:'Material', qty:1, unit:'st', price:mat});
         const exVat = Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0));
-        const totalIncVat = exVat + Math.round(exVat * 0.25);
+        /* V38: this.vatRate — samma resonemang som fs-regeln ovan. */
+        const totalIncVat = exVat + Math.round(exVat * this.vatRate / 100);
         const rutAmt = f.rut ? Math.round(totalIncVat * 0.5) : f.rot ? Math.round(totalIncVat * 0.3) : 0;
         return {ls, exVat, rutAmt, tierLbl:'', pricePerM2:rate, inputValues:{...f}, priceRuleRef:'ovr'};
       }
@@ -538,13 +642,11 @@ const OffersPage = {
       const disp    = o.title || o.id;
       const prLines = (o.lines||[]).filter(l=>l.type!=='text');
       const extras  = o.extras||[];
-      const rawExVat= _offRawExVat(o);
-      const _disc   = o.discount||{type:'percent',value:0};
-      const discAmt = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
-      const exVatD  = rawExVat - discAmt;
-      const incVat  = exVatD + Math.round(exVatD*0.25);
-      const rutAmt  = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-      const cust    = incVat - rutAmt;
+      const _tot    = _offerCalcTotals(o);
+      const rawExVat= _tot.rawExVat;
+      const incVat  = _tot.totalInclVat;
+      const rutAmt  = _tot.rutRotAmount;
+      const cust    = _tot.customerPays;
       const insight = OffersPage._offerInsight(o);
       const statusColors = {utkast:'#94a3b8',skickad:'var(--blue)',påmind:'var(--pu)',väntar:'var(--or)',godkänd:'var(--gr)',nekad:'var(--rd)',utgången:'var(--mt)',ersatt:'#94a3b8'};
       const borderColor = statusColors[o.status] || 'var(--br)';
@@ -990,19 +1092,22 @@ const OffersPage = {
   },
 
   _totalsBarHtml() {
-    const rawExVat = this._calcExVat(this._editLines, this._editExtras);
-    const discAmt  = this._calcDiscount(rawExVat);
-    const exVat    = rawExVat - discAmt;
-    const vat      = Math.round(exVat * 0.25);
-    const incVat   = exVat + vat;
-    const rutAmt   = this._calcRutAmt(this._editLines);
-    const cust     = incVat - rutAmt;
+    /* V38 §4: kanonisk beräkning istället för lokal * 0.25 — respekterar
+       varje rads/tilläggs egen vatRate. RUT/ROT-summeringen (_calcRutAmt)
+       är oförändrad. */
+    const _tot     = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
+    const rawExVat = _tot.rawExVat;
+    const discAmt  = _tot.discountAmount;
+    const vat      = _tot.vatAmount;
+    const incVat   = _tot.totalInclVat;
+    const rutAmt   = _tot.rutRotAmount;
+    const cust     = _tot.customerPays;
     return `<div class="off-totals-card">
       <div class="off-totals-card-hd">Sammanfattning</div>
       <div class="off-totals-card-body">
         <div class="off-totals-row"><span>Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
         ${discAmt ? `<div class="off-totals-rut" style="color:#b45309;"><span>Rabatt</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
-        <div class="off-totals-row"><span>Moms 25 %</span><strong>${fmt(vat)} kr</strong></div>
+        <div class="off-totals-row"><span>Moms</span><strong>${fmt(vat)} kr</strong></div>
         <div class="off-totals-divider"></div>
         <div class="off-totals-total"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
         ${rutAmt ? `
@@ -1060,7 +1165,7 @@ const OffersPage = {
 
   _renderServiceCard(l, i) {
     const exVat  = l.exVat || 0;
-    const vat    = Math.round(exVat * (l.vatRate||25) / 100);
+    const vat    = Math.round(exVat * _normVat(l.vatRate) / 100);
     const incVat = exVat + vat;
     const rutAmt = l.rutAmount || 0;
     const cust   = incVat - rutAmt;
@@ -1074,7 +1179,7 @@ const OffersPage = {
         </div>
         <div style="flex-shrink:0;text-align:right;">
           <div class="off-svc-card-price">${fmt(exVat)} kr</div>
-          <div class="off-svc-card-price-sub">ex. moms</div>
+          <div class="off-svc-card-price-sub">ex. moms · Moms ${_normVat(l.vatRate)}%</div>
           ${rutAmt ? `<div class="off-svc-card-rut">Kund: ${fmt(cust)} kr inkl.</div>` : ''}
         </div>
       </div>
@@ -1100,7 +1205,7 @@ const OffersPage = {
       </div>
       <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning" style="margin-bottom:6px;font-size:12px;"
         oninput="OffersPage._editLines[${i}].description=this.value">
-      <div style="display:grid;grid-template-columns:72px 72px 1fr;gap:5px;">
+      <div style="display:grid;grid-template-columns:72px 72px 1fr 68px;gap:5px;">
         <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Antal</label>
           <input type="number" value="${l.qty!=null?l.qty:1}" min="0" step="0.5"
             oninput="OffersPage._editLines[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
@@ -1111,6 +1216,10 @@ const OffersPage = {
         <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">À-pris ex. moms (kr)</label>
           <input type="number" value="${l.unitPrice||0}" min="0" step="1"
             oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Moms</label>
+          <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
+            ${this._vatOptionsHtml(_normVat(l.vatRate))}
+          </select></div>
       </div>
     </div>`;
   },
@@ -1134,18 +1243,28 @@ const OffersPage = {
     const units = ['st','tim','m','m²','kg','paket'];
     if (!this._editExtras.length) return `<p style="font-size:12px;color:var(--mt);margin:0 0 4px;">Inga tillval ännu.</p>`;
     return this._editExtras.map((e, i) => `
-      <div style="display:grid;grid-template-columns:1fr 65px 75px 90px 28px;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid var(--bg);">
-        <input value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="Tillval"
+      <div class="off-extra-row">
+        <input class="off-extra-desc" value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="Tillval"
           oninput="OffersPage._editExtras[${i}].description=this.value">
-        <input type="number" value="${e.qty||1}" min="0" step="0.5"
+        <input class="off-extra-qty" type="number" value="${e.qty||1}" min="0" step="0.5"
           oninput="OffersPage._editExtras[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()">
-        <select onchange="OffersPage._editExtras[${i}].unit=this.value">
+        <select class="off-extra-unit" onchange="OffersPage._editExtras[${i}].unit=this.value">
           ${units.map(u=>`<option${(e.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
         </select>
-        <input type="number" value="${e.unitPrice||0}" min="0" step="1" placeholder="À-pris"
+        <input class="off-extra-price" type="number" value="${e.unitPrice||0}" min="0" step="1" placeholder="À-pris"
           oninput="OffersPage._editExtras[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()">
-        <button type="button" class="btn bd bxs" onclick="OffersPage._removeExtra(${i})">${ic('x',10)}</button>
+        <select class="off-extra-vat" title="Moms" onchange="OffersPage._editExtras[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
+          ${this._vatOptionsHtml(_normVat(e.vatRate))}
+        </select>
+        <button type="button" class="off-extra-remove btn bd bxs" onclick="OffersPage._removeExtra(${i})">${ic('x',10)}</button>
       </div>`).join('');
+  },
+
+  /* V41 §1: liten delad markup-helper för momsväljaren — INGEN ny
+     ekonomisk beräkning, bara HTML för <option>-listan. Samma fyra
+     satser (0/6/12/25) som artikelregistret redan använder. */
+  _vatOptionsHtml(selectedVat) {
+    return [0,6,12,25].map(r=>`<option value="${r}" ${r===selectedVat?'selected':''}>${r}%</option>`).join('');
   },
 
   _addExtra() {
@@ -1183,7 +1302,7 @@ const OffersPage = {
 
   _renderFixedCard(l, i) {
     const tot    = Math.round(l.unitPrice || 0);
-    const incVat = tot + Math.round(tot * 0.25);
+    const incVat = tot + Math.round(tot * _normVat(l.vatRate) / 100);
     return `<div class="off-svc-card" style="border-left-color:#0ea5e9;">
       <div class="off-svc-card-hd">
         <div style="flex:1;min-width:0;">
@@ -1193,13 +1312,17 @@ const OffersPage = {
         </div>
         <div style="flex-shrink:0;text-align:right;">
           <div class="off-svc-card-price" id="off-lt-${i}">${fmt(tot)} kr</div>
-          <div class="off-svc-card-price-sub">ex. moms · ${fmt(incVat)} kr inkl.</div>
+          <div class="off-svc-card-price-sub" id="off-lsub-${i}">ex. moms · ${fmt(incVat)} kr inkl.</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:130px 1fr;gap:6px;margin-top:6px;">
+      <div style="display:grid;grid-template-columns:110px 68px 1fr;gap:6px;margin-top:6px;">
         <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Pris ex moms (kr)</label>
           <input type="number" value="${l.unitPrice||0}" min="0" step="1"
             oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Moms</label>
+          <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
+            ${this._vatOptionsHtml(_normVat(l.vatRate))}
+          </select></div>
         <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Intern anteckning</label>
           <input value="${(l.note||'').replace(/"/g,'&quot;')}" placeholder="Syns ej för kund"
             oninput="OffersPage._editLines[${i}].note=this.value" style="font-size:11px;"></div>
@@ -1534,8 +1657,20 @@ const OffersPage = {
   _refreshTotals() {
     this._editLines.forEach((l, i) => {
       if (l.type === 'manual' || l.type === 'fixed') {
+        const total = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
         const el = document.getElementById('off-lt-' + i);
-        if (el) el.textContent = fmt(Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))) + ' kr';
+        if (el) el.textContent = fmt(total) + ' kr';
+        /* V41 §3: fastprisradens "ex. moms · X kr inkl."-subtext hade
+           tidigare INGET id och uppdaterades aldrig här — en momsändring
+           (eller prisändring) uppdaterade bara ex-momsbeloppet, inte det
+           inkl-moms-belopp som redan stod skrivet på kortet. */
+        if (l.type === 'fixed') {
+          const subEl = document.getElementById('off-lsub-' + i);
+          if (subEl) {
+            const incVat = total + Math.round(total * _normVat(l.vatRate) / 100);
+            subEl.textContent = 'ex. moms · ' + fmt(incVat) + ' kr inkl.';
+          }
+        }
       }
     });
     const bar = document.getElementById('off-totals-bar');
@@ -1893,7 +2028,7 @@ const OffersPage = {
         prev.innerHTML = `<div style="font-size:10px;opacity:.65;">Fyll i obligatoriska fält för att se kalkylen.</div>`;
         return;
       }
-      const vat    = Math.round(exVat * (tmpl.vatRate||25) / 100);
+      const vat    = Math.round(exVat * _normVat(tmpl.vatRate) / 100);
       const incVat = exVat + vat;
       const custPr = incVat - (rutAmt||0);
       const redLbl = this._svcReduction === 'rut' ? 'RUT' : this._svcReduction === 'rot' ? 'ROT' : '';
@@ -1911,7 +2046,7 @@ const OffersPage = {
 
       // Price rows
       html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:1px;"><span>Ex. moms</span><span>${fmt(exVat)} kr</span></div>`;
-      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:4px;"><span>Moms ${tmpl.vatRate||25}%</span><span>${fmt(vat)} kr</span></div>`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:4px;"><span>Moms ${_normVat(tmpl.vatRate)}%</span><span>${fmt(vat)} kr</span></div>`;
       html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;padding-top:4px;border-top:1px solid rgba(255,255,255,.15);margin-bottom:${rutAmt?'3px':'6px'};">
         <span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>`;
 
@@ -2081,16 +2216,19 @@ const OfferDetailPage = {
     /* Diagnostik: logga raddata i konsolen för felsökning */
     console.log('[OfferDetail] off.id=', off.id, 'lines=', JSON.stringify(off.lines||[]), 'rawExVat=', _offRawExVat(off));
 
-    const rawExVat = _offRawExVat(off);
-    const _disc   = off.discount || {type:'percent', value:0};
-    const discAmt = _disc.value
-      ? (_disc.type==='percent' ? Math.round(rawExVat * Math.min(_disc.value,100) / 100) : Math.min(Math.round(_disc.value), rawExVat))
-      : 0;
-    const exVat  = rawExVat - discAmt;
-    const vat    = Math.round(exVat * 0.25);
-    const incVat = exVat + vat;
-    const rutAmt = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-    const cust   = incVat - rutAmt;
+    /* V38 §4: kanonisk beräkning — respekterar varje rads/tilläggs egen
+       vatRate istället för ett generellt * 0.25 på den rabatterade
+       summan. RUT/ROT-summeringen (l.rutAmount på service-rader) och
+       rabattformeln är oförändrade. */
+    const _tot     = _offerCalcTotals(off);
+    const rawExVat = _tot.rawExVat;
+    const _disc    = off.discount || {type:'percent', value:0};
+    const discAmt  = _tot.discountAmount;
+    const exVat    = _tot.exVatAfterDiscount;
+    const vat      = _tot.vatAmount;
+    const incVat   = _tot.totalInclVat;
+    const rutAmt   = _tot.rutRotAmount;
+    const cust     = _tot.customerPays;
 
     const cuName = cu ? CustomerService.displayName(cu) : '—';
     const now2 = Date.now();
@@ -2136,7 +2274,7 @@ const OfferDetailPage = {
       : prLines.map((l, idx) => {
           if (l.type === 'service') {
             const lExVat  = l.exVat || 0;
-            const lVat    = Math.round(lExVat * (l.vatRate||25) / 100);
+            const lVat    = Math.round(lExVat * _normVat(l.vatRate) / 100);
             const lIncVat = lExVat + lVat;
             const lRut    = l.rutAmount || 0;
             const lCust   = lIncVat - lRut;
@@ -2154,12 +2292,12 @@ const OfferDetailPage = {
               `<button class="off-line-kalk-btn" onclick="OfferDetailPage._toggleKalk('${kId}')">Visa beräkning</button>` +
               `<div id="${kId}" style="display:none;" class="off-line-kalk">` +
                 (l.calculationNote ? `<div style="font-size:11px;color:var(--mt);margin-bottom:4px;">${l.calculationNote}</div>` : '') +
-                `<div style="font-size:11px;color:var(--mt);">Ex. moms: ${fmt(lExVat)} kr · Moms ${l.vatRate||25}%: ${fmt(lVat)} kr · Inkl. moms: ${fmt(lIncVat)} kr</div>` +
+                `<div style="font-size:11px;color:var(--mt);">Ex. moms: ${fmt(lExVat)} kr · Moms ${_normVat(l.vatRate)}%: ${fmt(lVat)} kr · Inkl. moms: ${fmt(lIncVat)} kr</div>` +
               `</div>` +
             `</div>`;
           }
           const tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
-          const totInc = tot + Math.round(tot * 0.25);
+          const totInc = tot + Math.round(tot * _normVat(l.vatRate) / 100);
           return `<div class="off-line-row">` +
             `<div class="off-line-row-header">` +
               `<div class="off-line-row-name">${l.description||'—'}</div>` +
@@ -2201,7 +2339,7 @@ const OfferDetailPage = {
           <div>
             <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</div>
             <div class="off-hero-pg-val off-hero-pg-val--big">${fmt(cust)} kr</div>
-            ${rutAmt?`<div class="off-hero-pg-sub" style="color:#86efac;">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. 25% moms</div>`}
+            ${rutAmt?`<div class="off-hero-pg-sub" style="color:#86efac;">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. moms</div>`}
           </div>
         </div>
 
@@ -2269,7 +2407,7 @@ const OfferDetailPage = {
         <div class="off-detail-sum" style="margin:0;border-radius:0 0 var(--rs) var(--rs);border-left:none;border-right:none;border-bottom:none;">
           <div class="off-detail-sum-row"><span class="dk">Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
           ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">Rabatt (${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
-          <div class="off-detail-sum-row"><span class="dk">Moms 25 %</span><span>${fmt(vat)} kr</span></div>
+          <div class="off-detail-sum-row"><span class="dk">Moms</span><span>${fmt(vat)} kr</span></div>
           <div class="off-detail-sum-row"><span class="dk">Totalt inkl. moms</span><strong>${fmt(incVat)} kr</strong></div>
           ${rutAmt?`<div class="off-detail-sum-row rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>`:''}
           <div class="off-detail-sum-final">
@@ -2871,13 +3009,12 @@ const OfferDetailPage = {
     const daysLeft  = validDate ? Math.round((validDate - now) / 86400000) : null;
     const prLines   = (off.lines||[]).filter(l => l.type !== 'text');
     const extras    = off.extras||[];
-    const rawExVat  = _offRawExVat(off);
-    const _disc     = off.discount||{type:'percent',value:0};
-    const discAmt   = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
-    const exVat     = rawExVat - discAmt;
-    const incVat    = exVat + Math.round(exVat*0.25);
-    const rutAmt    = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-    const cust      = incVat - rutAmt;
+    const _tot      = _offerCalcTotals(off);
+    const rawExVat  = _tot.rawExVat;
+    const exVat     = _tot.exVatAfterDiscount;
+    const incVat    = _tot.totalInclVat;
+    const rutAmt    = _tot.rutRotAmount;
+    const cust      = _tot.customerPays;
     const tips = [];
 
     // Check open activities for this offer
@@ -2992,14 +3129,15 @@ const OfferDetailPage = {
     const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
     const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
     const extras   = off.extras||[];
-    const rawExVat = _offRawExVat(off);
+    const _tot     = _offerCalcTotals(off);
+    const rawExVat = _tot.rawExVat;
     const _disc    = off.discount||{type:'percent',value:0};
-    const discAmt  = _disc.value?(_disc.type==='percent'?Math.round(rawExVat*Math.min(_disc.value,100)/100):Math.min(Math.round(_disc.value),rawExVat)):0;
-    const exVat    = rawExVat - discAmt;
-    const vat      = Math.round(exVat*0.25);
-    const incVat   = exVat+vat;
-    const rutAmt   = Math.round(prLines.filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
-    const cust     = incVat - rutAmt;
+    const discAmt  = _tot.discountAmount;
+    const exVat    = _tot.exVatAfterDiscount;
+    const vat      = _tot.vatAmount;
+    const incVat   = _tot.totalInclVat;
+    const rutAmt   = _tot.rutRotAmount;
+    const cust     = _tot.customerPays;
     const hasRut   = rutAmt > 0;
     const fmt2     = n => (n||0).toLocaleString('sv-SE');
     const esc2     = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -3015,30 +3153,32 @@ const OfferDetailPage = {
     // Line rows — customer-facing, no internal kalkyl
     const lineRows = prLines.map(l => {
       if (l.type==='service') {
-        const lExVat=l.exVat||0, lVat=Math.round(lExVat*(l.vatRate||25)/100);
+        const lExVat=l.exVat||0, lRate=_normVat(l.vatRate), lVat=Math.round(lExVat*lRate/100);
         return `<tr>
           <td><strong>${esc2(l.templateName||'Tjänst')}</strong>${l.description&&l.description!==l.templateName?'<br><span class="ld">'+esc2(l.description)+'</span>':''}</td>
           <td class="r">${fmt2(lExVat)} kr</td>
-          <td class="r">${l.vatRate||25}%</td>
+          <td class="r">${lRate}%</td>
           <td class="r fw">${fmt2(lExVat+lVat)} kr</td>
         </tr>`;
       }
       const tot=Math.round((l.qty||1)*(l.unitPrice||0));
+      const lRate=_normVat(l.vatRate);
       return `<tr>
         <td>${esc2(l.description||'—')}<br><span class="ld">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr ex. moms</span></td>
         <td class="r">${fmt2(tot)} kr</td>
-        <td class="r">25%</td>
-        <td class="r fw">${fmt2(tot+Math.round(tot*0.25))} kr</td>
+        <td class="r">${lRate}%</td>
+        <td class="r fw">${fmt2(tot+Math.round(tot*lRate/100))} kr</td>
       </tr>`;
     }).join('');
 
     const extrasRows = extras.length ? extras.map(e => {
       const tot=Math.round((e.qty||1)*(e.unitPrice||0));
+      const eRate=_normVat(e.vatRate);
       return `<tr class="xtra">
         <td>${esc2(e.description||'Tillval')}<br><span class="ld">${e.qty||1} ${e.unit||'st'} × ${fmt2(e.unitPrice||0)} kr</span></td>
         <td class="r">${fmt2(tot)} kr</td>
-        <td class="r">25%</td>
-        <td class="r">${fmt2(tot+Math.round(tot*0.25))} kr</td>
+        <td class="r">${eRate}%</td>
+        <td class="r">${fmt2(tot+Math.round(tot*eRate/100))} kr</td>
       </tr>`;
     }).join('') : '';
 
@@ -3199,7 +3339,7 @@ ${txtBlks.map(tb=>`<div class="sec" style="margin-top:14px;">${tb.blockTitle?`<d
   <div class="tot-box">
     <div class="tot-r"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
     ${discAmt?`<div class="tot-r disc"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
-    <div class="tot-r"><span>Moms 25 %</span><span>${fmt2(vat)} kr</span></div>
+    <div class="tot-r"><span>Moms</span><span>${fmt2(vat)} kr</span></div>
     <hr class="tot-div">
     <div class="tot-fin"><span>${hasRut?'Totalt inkl. moms':'Totalt att betala'}</span><span>${fmt2(incVat)} kr</span></div>
     ${hasRut?`<div class="tot-r rut-deduct" style="margin-top:4px;"><span>${rutLabel}</span><span>−${fmt2(rutAmt)} kr</span></div>`:''}
@@ -4114,8 +4254,12 @@ ${hasRut?`<div class="rut">
         lines: (off.lines||[]).map(function(l) {
           const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','subLines','text'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
         }),
+        /* V39 §3: vatRate måste bevaras för extras precis som för lines —
+           annars tappar snapshotet en tilläggsrads faktiska momssats och
+           public-offer/offer-public-pdf tvingas gissa (fallback 25 %)
+           istället för att räkna med den verkliga satsen. */
         extras: (off.extras||[]).map(function(l) {
-          const p = {}; ['id','description','qty','unit','unitPrice'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+          const p = {}; ['id','description','qty','unit','unitPrice','vatRate'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
         }),
         discount: off.discount, taxType: off.taxType, rotRutAmount: off.rotRutAmount,
         date: off.date || off.createdAt?.slice(0,10) || now.slice(0,10),
@@ -4648,7 +4792,7 @@ const ArticlesPage = {
                 <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${a.articleNumber} – </span>` : ''}${a.name}</span>
               </div>
               <div class="item-sub">
-                ${fmt(a.sellPrice)} kr/${a.unit} inkl ${a.vatRate||25}% moms
+                ${fmt(a.sellPrice)} kr/${a.unit} inkl ${_normVat(a.vatRate)}% moms
                 ${margin !== null ? `· <span style="color:${margin>=30?'var(--gr)':margin>=10?'var(--or)':'var(--rd)'};">${margin}% marginal</span>` : ''}
               </div>
             </div>
@@ -4679,7 +4823,18 @@ const ArticlesPage = {
           <select id="art-unit">${unitsHtml(a?a.unit:'st')}</select></div>
         <div class="fg"><label>Momssats</label>
           <select id="art-vat">
-            ${[0,6,12,25].map(r=>`<option value="${r}" ${a&&a.vatRate===r?'selected':r===25?'selected':''} >${r}%</option>`).join('')}
+            ${(() => {
+              /* V39 §1: EXAKT en option ska vara selected. Den gamla
+                 `a&&a.vatRate===r?'selected':r===25?'selected':''`
+                 markerade FELAKTIGT även 25% som selected för alla
+                 artiklar (villkoret r===25 utvärderas oavsett a.vatRate
+                 så fort a.vatRate inte matchade just den aktuella r:en) —
+                 en artikel med vatRate:0 fick både "0% selected" OCH
+                 "25% selected" i samma <select>. Nu beräknas den
+                 normaliserade momssatsen EN gång och jämförs mot den. */
+              const selVat = a ? _normVat(a.vatRate) : 25;
+              return [0,6,12,25].map(r=>`<option value="${r}" ${r===selVat?'selected':''}>${r}%</option>`).join('');
+            })()}
           </select></div>
       </div>
       <div class="g2">
@@ -4722,12 +4877,16 @@ const ArticlesPage = {
   _save(artId) {
     const name = document.getElementById('art-name')?.value.trim();
     if (!name) { showToast('Benämning krävs'); return; }
+    /* V39 §2: strikt write-validering — en ogiltig momssats ska blockera
+       hela sparningen, INTE tystas till 25 % (_strictVat, ej _normVat). */
+    const vatCheck = _strictVat(document.getElementById('art-vat')?.value);
+    if (!vatCheck.ok) { showToast(vatCheck.error); return; }
     const data = {
       articleNumber: document.getElementById('art-num')?.value.trim() || '',
       name,
       category: document.getElementById('art-cat')?.value || 'material',
       unit:     document.getElementById('art-unit')?.value || 'st',
-      vatRate:  parseInt(document.getElementById('art-vat')?.value) || 25,
+      vatRate:  vatCheck.value,
       buyPrice: parseFloat(document.getElementById('art-buy')?.value) || 0,
       sellPrice:parseFloat(document.getElementById('art-sell')?.value) || 0,
       updatedAt: new Date().toISOString()
@@ -5375,7 +5534,7 @@ const ServiceTemplatesPage = {
       </div>
       <div class="g2" style="margin-bottom:8px;">
         <div class="fg"><label>Moms %</label>
-          <input id="svc-ed-vat" type="number" value="${svc.vatRate||25}" min="0" max="100"></div>
+          <input id="svc-ed-vat" type="number" value="${_normVat(svc.vatRate)}" min="0" max="100"></div>
         <div class="fg"><label>Minimidebitering ex moms</label>
           <input id="svc-ed-mincharge" type="number" value="${svc.minChargeExVat||0}" min="0"></div>
       </div>
@@ -5553,6 +5712,12 @@ const ServiceTemplatesPage = {
     const id   = this._editSvcId;
     const name = document.getElementById('svc-ed-name')?.value?.trim();
     if (!name) { showToast('Ange ett namn'); return; }
+    /* V39 §2: strikt write-validering — svc-ed-vat är ett fritt
+       number-input (min/max är bara UI-hintar, inte en verklig spärr).
+       Ett ogiltigt värde (-1/101/500/NaN/Infinity/tomt) blockerar hela
+       sparningen istället för att tystas till 25 %. */
+    const vatCheck = _strictVat(document.getElementById('svc-ed-vat')?.value);
+    if (!vatCheck.ok) { showToast(vatCheck.error); return; }
     const model  = document.getElementById('svc-ed-model')?.value || 'fixed';
     const base   = parseFloat(document.getElementById('svc-ed-base')?.value || 0) || 0;
     const qtyFld = document.getElementById('svc-ed-qtyfield')?.value?.trim() || 'qty';
@@ -5561,7 +5726,7 @@ const ServiceTemplatesPage = {
       category:           (document.getElementById('svc-ed-cat')?.value  || '').trim(),
       icon:               document.getElementById('svc-ed-icon')?.value  || 'zap',
       unit:               (document.getElementById('svc-ed-unit')?.value || 'st').trim(),
-      vatRate:            parseFloat(document.getElementById('svc-ed-vat')?.value) || 25,
+      vatRate:            vatCheck.value,
       minChargeExVat:     parseFloat(document.getElementById('svc-ed-mincharge')?.value) || 0,
       defaultReduction:   document.getElementById('svc-ed-red')?.value  || 'ingen',
       sortOrder:          parseInt(document.getElementById('svc-ed-sort')?.value) || 0,
@@ -5576,7 +5741,11 @@ const ServiceTemplatesPage = {
       excludes:           (document.getElementById('svc-ed-excludes')?.value || '').split('\n').map(s=>s.trim()).filter(Boolean),
       internalNote:       (document.getElementById('svc-ed-note')?.value  || '').trim()
     };
-    ServiceTemplateService.update(id, changes);
+    /* V39 §2: servicelagret validerar vatRate igen (defense-in-depth mot
+       direktanrop) — result blir null om det av någon anledning ändå
+       nekas där. */
+    const result = ServiceTemplateService.update(id, changes);
+    if (!result) { showToast('Kunde inte spara — ogiltig momssats.'); return; }
     Modal.close();
     this.render();
     showToast(`"${name}" sparad`);
@@ -5685,7 +5854,7 @@ const ServiceTemplatesPage = {
     try {
       const r = tmpl.calc(fields);
       const {ls, exVat, rutAmt} = r;
-      const vat    = Math.round(exVat * (svc.vatRate||25) / 100);
+      const vat    = Math.round(exVat * _normVat(svc.vatRate) / 100);
       const incVat = exVat + vat;
       const custPr = incVat - (rutAmt||0);
       let html = '';
@@ -5694,7 +5863,7 @@ const ServiceTemplatesPage = {
       ls.forEach(l => { html += `<div>${l.desc} · ${l.qty} ${l.unit} × ${fmt(l.price)} kr = ${fmt(Math.round(l.qty*l.price))} kr</div>`; });
       html += `</div>`;
       html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:2px;"><span>Ex. moms</span><span>${fmt(exVat)} kr</span></div>`;
-      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:5px;"><span>Moms ${svc.vatRate||25}%</span><span>${fmt(vat)} kr</span></div>`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:5px;"><span>Moms ${_normVat(svc.vatRate)}%</span><span>${fmt(vat)} kr</span></div>`;
       html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;padding-top:5px;border-top:1px solid rgba(255,255,255,.15);margin-bottom:${rutAmt?'4px':'8px'};"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>`;
       if (rutAmt) {
         const redLbl = this._testReduction==='rut'?'RUT':'ROT';
@@ -5989,7 +6158,7 @@ const AdminPage = {
               <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--acc-text);flex-shrink:0;">${ic(t.icon,13)}</span>
               <div style="flex:1;min-width:0;">
                 <div style="font-size:12px;font-weight:700;">${t.name}</div>
-                <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${t.vatRate||25} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
+                <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${_normVat(t.vatRate)} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
               </div>
               <span class="bdg bdg-green" style="font-size:9px;">Aktiv</span>
             </div>`).join('')}
@@ -6102,14 +6271,28 @@ const AdminPage = {
       </div>` : '';
 
     const canAct = pSupp && (!pIOS || pSA) && pKey && pState !== 'denied';
+    /* V44 §1: lokal-notistest kräver INGEN VAPID-nyckel, INGEN subscription
+       och ingen server — bara Notification API + service worker. Ska alltså
+       vara tillgänglig oberoende av `canAct` (som bland annat kräver VAPID). */
+    const canLocalTest = 'serviceWorker' in navigator && 'Notification' in window;
 
     sections.notiser = `
       <div class="card">
         <div class="card-header" style="gap:10px;">
           <div>${ic('bell',16)} Mobilnotiser</div>
-          ${statusBadge()}
+          <span id="push-status-badge">${statusBadge()}</span>
         </div>
         <div class="card-body" style="padding:14px 16px;">
+
+          <!-- V42 §5: fylls i asynkront av _refreshPushStatus() efter render —
+               visar reparationsläge om browsern har en lokal subscription
+               som saknas/är revokad på servern. -->
+          <div id="push-server-note"></div>
+
+          <!-- V44 §2: fylls i asynkront av _refreshPushDiagBox() — PWA/push-
+               diagnostik (permission/standalone/service worker/subscription),
+               visar ALDRIG nycklar/JWT/hela endpointen. -->
+          <div id="push-diag-box" style="font-size:11px;color:var(--mt);background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">Läser diagnostik…</div>
 
           ${iosNote}${deniedNote}${vapidNote}
 
@@ -6160,9 +6343,18 @@ const AdminPage = {
                 'Kan ej aktivera just nu'
               }</span>
             `}
+            ${canLocalTest ? `
+              <button class="btn bs bsm" onclick="AdminPage._testLocalNotification()">
+                ${ic('smartphone',13)} Testa lokal iPhone-notis
+              </button>
+            ` : ''}
           </div>
 
           <div id="push-status-msg" style="font-size:12px;margin-bottom:12px;"></div>
+          <!-- V44 §7: fylls i av _renderPushTestDiagBox() efter Skicka testnotis —
+               Server (provider/HTTP/APNs-ID/endpoint-suffix) + Push-event
+               (mottaget/ej mottaget hos service workern). -->
+          <div id="push-test-result-box"></div>
 
           <!-- Enhetsinformation -->
           <div style="font-size:11px;color:var(--mt);">
@@ -6294,6 +6486,133 @@ const AdminPage = {
       </div>`;
 
     el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+
+    /* V42 §5: statusBadge() ovan speglar bara browser-permission (synkront,
+       tillgängligt vid render-tid). Serverregistreringen kan bara kollas
+       async (nätverksanrop) — patchas in i DOM:et separat, utan att göra
+       hela render() async. Fire-and-forget; om användaren hunnit byta
+       flik innan svaret kommer skippas patchningen tyst (se _refreshPushStatus). */
+    if (this._tab === 'notiser') { this._refreshPushStatus(); this._refreshPushDiagBox(); }
+  },
+
+  /* V44 §2: hämtar PWA/push-diagnostik (permission/standalone/service worker/
+     subscription) och patchar in den i redan renderad DOM. Samma "fire-and-
+     forget, skippa om elementet är borta"-mönster som _refreshPushStatus(). */
+  async _refreshPushDiagBox() {
+    if (typeof PushService === 'undefined') return;
+    let d;
+    try { d = await PushService.getDiagnostics(); }
+    catch { return; }
+
+    const el = document.getElementById('push-diag-box');
+    if (!el) return; /* användaren bytte flik under tiden */
+
+    el.innerHTML = `
+      <strong>PWA/push-diagnostik</strong><br>
+      Notification.permission: <b>${esc(d.permission)}</b><br>
+      Standalone (display-mode): <b>${d.standalone ? 'Ja' : 'Nej'}</b><br>
+      Service worker: registrerad ${d.serviceWorker.registered ? '✓' : '✗'} ·
+      aktiv ${d.serviceWorker.active ? '✓' : '✗'} · state: <b>${esc(d.serviceWorker.state || '—')}</b><br>
+      scriptURL: <code style="font-size:10px;">${esc(d.serviceWorker.scriptURL || '—')}</code><br>
+      registration.pushManager: <b>${d.hasPushManagerOnRegistration ? 'Ja' : 'Nej'}</b><br>
+      Browser-subscription: <b>${d.browserSubscription.exists ? 'Ja' : 'Nej'}</b>${
+        d.browserSubscription.exists
+          ? ' · …' + esc(d.browserSubscription.endpointSuffix || '') + ' (' + esc(d.browserSubscription.providerHost || '?') + ')'
+          : ''
+      }<br>
+      window.pushManager: <b>${d.windowPushManager.exists ? 'Ja' : 'Nej'}</b>${
+        d.windowPushManager.exists
+          ? ' · matchar SW-subscription: ' + (d.windowPushManager.matchesSwSubscription === null ? 'okänt' : (d.windowPushManager.matchesSwSubscription ? 'Ja' : 'Nej'))
+          : ''
+      }
+    `;
+  },
+
+  /* V44 §1: kör lokalt notistest — anropar bara PushService, ingen server/push. */
+  async _testLocalNotification() {
+    const msg = document.getElementById('push-status-msg');
+    if (msg) msg.textContent = 'Skapar lokal testnotis…';
+    try {
+      await PushService.showLocalTestNotification();
+      if (msg) msg.innerHTML = '<span style="color:var(--gr);">Lokal test skickad till Notifications API.</span>';
+    } catch(e) {
+      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Lokal notis kunde inte skapas: ' + esc(e.message) + '</span>';
+    }
+  },
+
+  /* V44 §7: rik diagnostikruta efter "Skicka testnotis" — Server (provider/
+     HTTP/APNs-ID/endpoint-suffix) + Push-event (mottaget hos service workern,
+     se _pollPushDiagReceived). */
+  _renderPushTestDiagBox(result, sentAt) {
+    const el = document.getElementById('push-test-result-box');
+    if (!el) return;
+    const diag = result && result.diagnostics;
+    const serverHtml = diag ? `
+      <div><strong>Server:</strong></div>
+      <div>Provider: ${esc(diag.provider || '—')}</div>
+      <div>HTTP: ${diag.statusCode != null ? diag.statusCode : '—'}</div>
+      <div>APNs-ID: ${esc(diag.apnsId || '—')}</div>
+      <div>Endpoint: …${esc(diag.endpointSuffix || '—')}</div>
+      ${diag.body ? `<div>Svar: ${esc(diag.body)}</div>` : ''}
+    ` : `<div><strong>Server:</strong> ingen riktad diagnostik tillgänglig för det här svaret (t.ex. ingen aktuell enhets-endpoint kunde skickas).</div>`;
+
+    el.innerHTML = `
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-top:2px;margin-bottom:12px;font-size:12px;line-height:1.8;">
+        ${serverHtml}
+        <div style="margin-top:6px;"><strong>Enhet:</strong></div>
+        <div>Permission: ${esc(PushService.permissionState())}</div>
+        <div>Standalone: ${PushService.isStandalone() ? 'Ja' : 'Nej'}</div>
+        <div style="margin-top:6px;"><strong>Push-event:</strong> <span id="push-diag-received-status">Väntar…</span></div>
+      </div>`;
+
+    this._pollPushDiagReceived(sentAt, 0);
+  },
+
+  /* V44 §6/§7: pollar PushService._diag.lastPushReceivedAt (satt av SW:s
+     VIFT_PUSH_RECEIVED_DIAG-meddelande) tills den syns eller det gått ~8s. */
+  _pollPushDiagReceived(sentAt, attempt) {
+    const statusEl = document.getElementById('push-diag-received-status');
+    if (!statusEl) return; /* boxen borta — sluta polla */
+    const receivedAt = (typeof PushService !== 'undefined') ? PushService._diag.lastPushReceivedAt : null;
+    if (receivedAt && receivedAt >= sentAt) {
+      statusEl.textContent = '✓ Mottaget (' + new Date(receivedAt).toLocaleTimeString('sv-SE') + ')';
+      return;
+    }
+    if (attempt >= 16) {
+      statusEl.textContent = 'Ej mottaget (efter 8s)';
+      return;
+    }
+    setTimeout(() => this._pollPushDiagReceived(sentAt, attempt + 1), 500);
+  },
+
+  /* V42 §5: hämtar faktisk serverregistreringsstatus och patchar in den i
+     redan renderad DOM (badge + ev. reparationsnotis). Anropas efter varje
+     render() av Notiser-fliken samt efter aktivera/testa/stäng av. */
+  async _refreshPushStatus() {
+    if (typeof PushService === 'undefined') return;
+    let status;
+    try { status = await PushService.getSubscriptionStatus(); }
+    catch { return; }
+
+    const badgeEl = document.getElementById('push-status-badge');
+    const noteEl  = document.getElementById('push-server-note');
+    if (!badgeEl && !noteEl) return; /* användaren bytte flik under tiden */
+
+    if (status.browserSubscribed && status.serverRegistered) {
+      if (badgeEl) badgeEl.innerHTML = '<span class="bdg bdg-green">✓ Aktiv på den här enheten</span>';
+      if (noteEl) noteEl.innerHTML = '';
+    } else if (status.browserSubscribed && !status.serverRegistered) {
+      if (badgeEl) badgeEl.innerHTML = '<span class="bdg" style="background:#fef9c3;color:#854d0e;">⚠ Behöver repareras</span>';
+      if (noteEl) noteEl.innerHTML = `
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;line-height:1.6;">
+          ${ic('alert-triangle',13)} <strong>Prenumerationen behöver repareras</strong><br>
+          Den här enheten har en lokal notisprenumeration, men den saknas (eller har gått ut) på servern — inga notiser kommer fram just nu.
+          Klicka <strong>Aktivera notiser</strong> igen för att reparera. Ingen data rensas och du behöver inte tillåta notiser på nytt.
+        </div>`;
+    }
+    /* browserSubscribed=false: den ursprungliga permission-baserade badgen
+       (Ej aktiverad / Blockerad / VAPID saknas m.fl.) är redan korrekt —
+       lämnas orörd. */
   },
 
   /* ── E-post-mallar CRUD (Punkt 80) ──────────────────────── */
@@ -6861,16 +7180,39 @@ const AdminPage = {
   },
 
   async _testPush() {
-    const msg = document.getElementById('push-status-msg');
+    const msg     = document.getElementById('push-status-msg');
+    const diagBox = document.getElementById('push-test-result-box');
     const ok  = await PushService.isSubscribed();
     if (!ok) {
       if (msg) msg.innerHTML = '<span style="color:var(--rd);">Aktivera notiser först.</span>';
       return;
     }
     if (msg) msg.textContent = 'Skickar testnotis…';
+    if (diagBox) diagBox.innerHTML = '';
+    /* V44 §6/§7: tidsstämpel INNAN sändningen — Push-event-pollningen räknar
+       bara diagnostikmeddelanden mottagna EFTER denna tidpunkt som "detta
+       testets" träff, så en gammal, tidigare push inte felaktigt visas som svar. */
+    const sentAt = Date.now();
     try {
-      await PushService.sendTest();
-      if (msg) msg.innerHTML = '<span style="color:var(--gr);">✓ Testnotis skickad — kolla din mobil!</span>';
+      const result  = await PushService.sendTest();
+      const sent    = Number(result && result.sent)    || 0;
+      const revoked = Number(result && result.revoked) || 0;
+      /* V42 §4: send-push svarar HTTP 200 även när sent===0 (t.ex. ingen
+         registrerad enhet). Ett HTTP-OK-svar är INTE detsamma som att en
+         notis faktiskt skickades — måste kontrollera response-body,
+         annars visas falsk grön success trots att inget nått mobilen. */
+      if (sent > 0) {
+        if (msg) msg.innerHTML = '<span style="color:var(--gr);">✓ Testnotis skickad till ' + sent + ' enhet' + (sent === 1 ? '' : 'er') + '.</span>';
+      } else if (revoked > 0) {
+        if (msg) msg.innerHTML = '<span style="color:var(--rd);">En gammal push-prenumeration hade gått ut och har avregistrerats. Aktivera notiser på nytt.</span>';
+      } else {
+        const extra = result && result.message ? ' (' + esc(String(result.message)) + ')' : '';
+        if (msg) msg.innerHTML = '<span style="color:var(--rd);">Ingen registrerad mobilenhet hittades. Aktivera notiser på nytt.' + extra + '</span>';
+      }
+      this._refreshPushStatus();
+      /* V44 §7: rik diagnostikruta (Server/Enhet/Push-event) — inte bara
+         toast-meddelandet ovan. */
+      this._renderPushTestDiagBox(result, sentAt);
     } catch(e) {
       if (msg) msg.innerHTML = '<span style="color:var(--rd);">Fel: ' + e.message + '</span>';
     }

@@ -2,6 +2,45 @@
  * WorkOrderDetailPage — Fullständig AO-detaljvy (v46)
  * v46: Adressrad klickbar (öppnar karta), ta bort Navigera-knapp
  */
+
+/* V38 §2: kanonisk 0-safe momsnormalisering för AO-material — samma
+   semantik som InvoiceService.normalizeVatRate/PageShells._normVat
+   (V35-V38). null/undefined/tomsträng (inkl. whitespace-only) = inget
+   värde satt -> fallback 25; explicit 0/'0' = 0 % (behålls exakt);
+   giltigt 0-100 behålls exakt; NaN/Infinity/negativt/>100 -> fallback.
+   Materialets vatRate är källan BillingQueueService sedan fakturerar
+   från (V33/V36), så konsistens här är kritisk. */
+function _matNormVat(value, fallback) {
+  if (fallback === undefined) fallback = 25;
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string' && value.trim() === '') return fallback;
+  const n = Number(value);
+  if (!isFinite(n) || n < 0 || n > 100) return fallback;
+  return n;
+}
+
+/* V39 §2: STRIKT write-validering för materialets moms — skild från
+   _matNormVat()'s read/display-fallback-semantik. Saknat/tomt värde
+   (inget angivet) är enligt befintlig datamodell fortsatt giltigt och
+   ska falla tillbaka på 25 % som vanligt (value:null signalerar detta
+   till anroparen). Men ett SATT, matematiskt ogiltigt värde (t.ex. en
+   redan korrupt källa) får INTE tyst "repareras" till 25 % vid save —
+   det ska blockera hela sparningen. */
+function _matStrictVat(value) {
+  if (value === null || value === undefined) return { ok: true, value: null };
+  if (typeof value === 'string' && value.trim() === '') return { ok: true, value: null };
+  const n = Number(value);
+  if (!isFinite(n) || n < 0 || n > 100) return { ok: false, error: 'Ogiltig momssats.' };
+  return { ok: true, value: n };
+}
+
+/* V41 §6: liten delad markup-helper för momsväljaren på AO-materialraden
+   — INGEN ny ekonomisk beräkning, bara HTML för <option>-listan. Samma
+   fyra satser som artikelregistrets egen momsväljare (0/6/12/25). */
+function _matVatOptionsHtml(selectedVat) {
+  return [0,6,12,25].map(r=>`<option value="${r}" ${r===selectedVat?'selected':''}>${r}%</option>`).join('');
+}
+
 const WorkOrderDetailPage = {
   aoId: null,
   _stampInterval: null,
@@ -876,7 +915,7 @@ const WorkOrderDetailPage = {
     let exMoms = 0, momsAmt = 0;
     mats.forEach(m => {
       const ex = (m.qty||0) * (m.sellPrice||0);
-      const vat = m.vatRate != null ? m.vatRate : 25;
+      const vat = _matNormVat(m.vatRate);
       exMoms  += ex;
       momsAmt += ex * vat / 100;
     });
@@ -887,7 +926,7 @@ const WorkOrderDetailPage = {
           <span>Totalt ex moms</span><span>${fmt(exMoms)} kr</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);margin-bottom:3px;">
-          <span>Moms (25%)</span><span>${fmt(momsAmt)} kr</span>
+          <span>Moms</span><span>${fmt(momsAmt)} kr</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;">
           <span>Totalt inkl moms</span><span>${fmt(inkl)} kr</span>
@@ -915,7 +954,7 @@ const WorkOrderDetailPage = {
             const qty = m.qty || 0;
             const sell = m.sellPrice || 0;
             const buy  = m.buyPrice || 0;
-            const vat  = m.vatRate != null ? m.vatRate : 25;
+            const vat  = _matNormVat(m.vatRate);
             const exMoms  = qty * sell;
             const momsAmt = exMoms * vat / 100;
             const inklMoms = exMoms + momsAmt;
@@ -1216,7 +1255,7 @@ const WorkOrderDetailPage = {
     if (!Auth.require('ao_material')) return;
     const articles = (state.articles||[]).filter(a=>a.active);
     const artListHtml = articles.length ? articles.map(a => `
-      <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${a.vatRate||25}" data-cat="${a.category||''}"
+      <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${a.category||''}"
         onclick="WorkOrderDetailPage._matSelectArticle(this)"
         style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .1s;"
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
@@ -1255,13 +1294,18 @@ const WorkOrderDetailPage = {
             </select></div>
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
-        <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
-          <input type="number" id="mat-sell" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
-        <input type="hidden" id="mat-vat" value="25">
+        <div class="g2">
+          <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+            <input type="number" id="mat-sell" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Moms</label>
+            <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
+              ${_matVatOptionsHtml(25)}
+            </select></div>
+        </div>
         <input type="hidden" id="mat-article-id" value="">
         <div id="mat-calc" style="display:none;background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">0 kr</span></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms 25%</span><span id="mat-moms">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span id="mat-vat-lbl" style="color:var(--mt)">Moms 25%</span><span id="mat-moms">0 kr</span></div>
           <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">0 kr</span></div>
         </div>`,
       buttons: [
@@ -1345,11 +1389,13 @@ const WorkOrderDetailPage = {
   _matUpdateCalc() {
     const qty  = parseFloat(document.getElementById('mat-qty')?.value) || 0;
     const sell = parseFloat(document.getElementById('mat-sell')?.value) || 0;
-    const vat  = parseFloat(document.getElementById('mat-vat')?.value) || 25;
+    const vat  = _matNormVat(document.getElementById('mat-vat')?.value);
     const calc = document.getElementById('mat-calc');
     if (!calc) return;
     const exV = qty * sell;
     const momsV = exV * vat / 100;
+    const vatLbl = document.getElementById('mat-vat-lbl');
+    if (vatLbl) vatLbl.textContent = `Moms ${vat}%`;
     if (exV > 0 || sell > 0) {
       calc.style.display = '';
       document.getElementById('mat-ex').textContent    = fmt(exV) + ' kr';
@@ -1364,7 +1410,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const m  = (ao.materials||[]).find(x=>x.id===matId);
     if (!m) return;
-    const vat = m.vatRate != null ? m.vatRate : 25;
+    const vat = _matNormVat(m.vatRate);
     Modal.open({
       title: 'Redigera material',
       body: `
@@ -1377,9 +1423,14 @@ const WorkOrderDetailPage = {
             </select></div>
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
-        <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
-          <input type="number" id="mat-sell" value="${m.sellPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
-        <input type="hidden" id="mat-vat" value="${vat}">
+        <div class="g2">
+          <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+            <input type="number" id="mat-sell" value="${m.sellPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Moms</label>
+            <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
+              ${_matVatOptionsHtml(vat)}
+            </select></div>
+        </div>
         <input type="hidden" id="mat-article-id" value="${m.articleId||''}">
         <div id="mat-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
@@ -1396,13 +1447,18 @@ const WorkOrderDetailPage = {
   _saveMaterial(existingId) {
     const name = document.getElementById('mat-name')?.value.trim();
     if (!name) { showToast('Benämning krävs'); return; }
+    /* V39 §2: strikt write-validering. Saknat/tomt -> fallback 25 (som
+       innan). Ett satt men ogiltigt värde blockerar hela sparningen —
+       ingen tyst "reparation" till 25 %. */
+    const vatCheck = _matStrictVat(document.getElementById('mat-vat')?.value);
+    if (!vatCheck.ok) { showToast(vatCheck.error); return; }
     const data = {
       name,
       qty:      parseFloat(document.getElementById('mat-qty')?.value) || 1,
       unit:     document.getElementById('mat-unit')?.value || 'st',
       buyPrice: parseFloat(document.getElementById('mat-buy')?.value)  || 0,
       sellPrice:parseFloat(document.getElementById('mat-sell')?.value) || 0,
-      vatRate:  parseFloat(document.getElementById('mat-vat')?.value)  || 25,
+      vatRate:  vatCheck.value !== null ? vatCheck.value : 25,
       articleId:document.getElementById('mat-article-id')?.value || '',
       addedAt:  existingId ? undefined : new Date().toISOString()
     };

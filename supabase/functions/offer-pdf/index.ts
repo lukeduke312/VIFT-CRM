@@ -228,7 +228,80 @@ serve(async (req: Request) => {
   ctx = drawHRule(ctx)
 
   const fmt = (n: number) => n.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  /* V39-CALC-BLOCK-START — se run-tests-v39.js: denna sentinel avgränsar
+     exakt den ekonomiska beräkningen som V39-testsviten extraherar och
+     kör direkt (transpilerad via TypeScript-kompilatorn) för att
+     verifiera parity med CRM/public-offer/offer-public-pdf mot den
+     riktiga koden, inte en omskriven pseudokod-kopia. Ändra inte denna
+     kommentar utan att uppdatera testsviten i samma leverans. */
+  /* V38 §6 / V39 §4: kanonisk 0-safe momsnormalisering — samma semantik
+     som InvoiceService.normalizeVatRate/PageShells._normVat (V35-V39).
+     null/undefined/tomsträng (inkl. whitespace-only) = inget värde satt
+     -> fallback 25; explicit 0 = 0 % (behålls exakt); giltigt 0-100
+     behålls exakt; NaN/Infinity/negativt/>100 -> fallback. */
+  const normVat = (value: unknown, fallback = 25): number => {
+    if (value === null || value === undefined) return fallback
+    if (typeof value === 'string' && value.trim() === '') return fallback
+    const n = Number(value)
+    if (!Number.isFinite(n) || n < 0 || n > 100) return fallback
+    return n
+  }
+  /* V39 §4: ex-moms för en prisrad — samma fallback-kedja som
+     PageShells._lineExVat(): service-rader använder sitt förkalkylerade
+     exVat, övriga radtyper använder total (med säker fallback till
+     qty × unitPrice). */
+  const lineExVat = (l: Record<string, unknown>): number => {
+    if (l.type === 'service') return Number(l.exVat) || 0
+    return Number(l.total) || Math.round((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))
+  }
   const allLines = [...(Array.isArray(off.lines)?off.lines as Record<string,unknown>[]:[])]
+  const prLines  = allLines.filter(l => l.type !== 'text')
+  const extras   = Array.isArray(off.extras) ? off.extras as Record<string,unknown>[] : []
+
+  /* Totaler — V39 §4: speglar exakt PageShells._offerCalcTotals() /
+     public-offer.html / offer-public-pdf. Ingen Number(off.discount)
+     (legacy platt-tal-antagande) kvar — off.discount är alltid
+     { type:'none'|'percent'|'fixed', value:number }. RUT/ROT summeras
+     från service-radernas egna rutAmount, inte off.rotRutAmount/taxType.
+     Beräknas HÄR (innan sidan ritas) så att både radlistan och
+     totalsummeringen använder exakt samma härledda tal. */
+  const rawExVat = prLines.reduce((s,l) => s + lineExVat(l), 0)
+    + extras.reduce((s,e) => s + Math.round((Number(e.qty)||1) * (Number(e.unitPrice)||0)), 0)
+  const rawVat = prLines.reduce((s,l) => s + Math.round(lineExVat(l) * normVat(l.vatRate) / 100), 0)
+    + extras.reduce((s,e) => {
+        const eEx = Math.round((Number(e.qty)||1) * (Number(e.unitPrice)||0))
+        return s + Math.round(eEx * normVat(e.vatRate) / 100)
+      }, 0)
+
+  const discRaw = off.discount as Record<string, unknown> | null | undefined
+  const disc: Record<string, unknown> = (discRaw && typeof discRaw === 'object' && !Array.isArray(discRaw))
+    ? discRaw
+    : { type: 'none', value: 0 }
+  const discValue = Number(disc.value) || 0
+  let discountAmount = 0
+  if (discValue > 0) {
+    if (disc.type === 'percent') discountAmount = Math.round(rawExVat * Math.min(discValue, 100) / 100)
+    else if (disc.type === 'fixed') discountAmount = Math.min(Math.round(discValue), rawExVat)
+  }
+
+  const exVatAfterDiscount = rawExVat - discountAmount
+  const vatRatio    = rawExVat > 0 ? (exVatAfterDiscount / rawExVat) : 1
+  const vatAmount   = Math.round(rawVat * vatRatio)
+  const totalInclVat = exVatAfterDiscount + vatAmount
+  const rutRotAmount = Math.round(prLines
+    .filter(l => l.type === 'service')
+    .reduce((s,l) => s + (Number(l.rutAmount) || 0), 0))
+  const customerPays = totalInclVat - rutRotAmount
+
+  /* V39 §5: vatLabel baseras på ALLA prissatta poster (lines + extras) —
+     tidigare räknade den bara lines, vilket kunde ge en missvisande
+     "(25%)" när en tom lines-array men prissatta extras med annan sats
+     fanns (every() på [] är alltid true). */
+  const allPricedItems = [...prLines, ...extras]
+  const vatLabel = allPricedItems.length > 0 && allPricedItems.every(item => normVat(item.vatRate) === 25)
+    ? 'Moms (25%)' : 'Moms'
+  /* V39-CALC-BLOCK-END */
+
   for (const l of allLines) {
     if (l.type === 'text') {
       ctx = drawText(ctx, String(l.text || l.description || ''), { size: 9, color: [80,80,80], indent: 0 })
@@ -239,7 +312,7 @@ serve(async (req: Request) => {
     const desc  = String(l.description || l.templateName || '')
     const qty   = Number(l.qty || 0)
     const up    = Number(l.unitPrice || 0)
-    const tot   = Number(l.total || qty * up)
+    const tot   = lineExVat(l)
     ctx.page.drawText(desc.slice(0,55), { x: MARGIN,    y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
     ctx.page.drawText(qty + ' ' + String(l.unit||'st'), { x: MARGIN+270, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
     ctx.page.drawText(fmt(up) + ' kr', { x: MARGIN+320, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
@@ -247,25 +320,44 @@ serve(async (req: Request) => {
     ctx.y -= 14
   }
 
+  /* V39 §4: extras saknades tidigare helt ur den ekonomiska summeringen
+     — de listas nu som egna rader (samma sätt som lines) så PDF:en
+     faktiskt redovisar dem, inte bara CRM/public-offer. */
+  if (extras.length) {
+    if (ctx.y < MARGIN + 40) ctx = newPage()
+    ctx.page.drawText('Tillägg', { x: MARGIN, y: ctx.y, size: 8, font: fontB, color: rgb(0.4,0.4,0.4) })
+    ctx.y -= 12
+    for (const e of extras) {
+      if (ctx.y < MARGIN + 40) ctx = newPage()
+      const desc = String(e.description || '')
+      const qty  = Number(e.qty || 1)
+      const up   = Number(e.unitPrice || 0)
+      const tot  = Math.round(qty * up)
+      ctx.page.drawText(desc.slice(0,55), { x: MARGIN,    y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
+      ctx.page.drawText(qty + ' ' + String(e.unit||'st'), { x: MARGIN+270, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
+      ctx.page.drawText(fmt(up) + ' kr', { x: MARGIN+320, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
+      ctx.page.drawText(fmt(tot) + ' kr',{ x: PAGE_W-MARGIN-60, y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
+      ctx.y -= 14
+    }
+  }
+
   ctx.y -= 4
   ctx = drawHRule(ctx)
 
-  /* Totaler */
-  const taxType   = String(off.taxType || 'moms')
-  const rotRut    = Number(off.rotRutAmount || 0)
-  const discount  = Number(off.discount || 0)
-  const sumExVat  = allLines.filter(l=>l.type!=='text').reduce((s,l)=>s+Number(l.exVat||l.total||0),0)
-  const vatAmt    = allLines.filter(l=>l.type!=='text').reduce((s,l)=>s+Number(l.total||0)*0.25,0)
-  const sumInkVat = allLines.reduce((s,l)=>s+Number(l.total||0)*(1+(l.type!=='text'?0.25:0)),0)
-  const afterRot  = sumInkVat - rotRut
-
   const totRows: [string, string, boolean][] = [
-    ['Summa exkl. moms', fmt(sumExVat) + ' kr', false],
-    ['Moms (25%)',       fmt(vatAmt)   + ' kr', false],
-    ['Summa inkl. moms', fmt(sumInkVat) + ' kr', true],
+    ['Summa exkl. moms', fmt(rawExVat) + ' kr', false],
   ]
-  if (discount > 0) totRows.splice(0,0,['Rabatt','-'+fmt(discount)+' kr', false])
-  if (rotRut > 0)   totRows.push(['ROT/RUT-avdrag','-'+fmt(rotRut)+' kr', false],['Att betala efter avdrag', fmt(afterRot)+' kr', true])
+  if (discountAmount > 0) {
+    const discLabel = disc.type === 'percent' ? `Rabatt (${fmt(discValue)}%)` : 'Rabatt'
+    totRows.push([discLabel, '-' + fmt(discountAmount) + ' kr', false])
+    totRows.push(['Summa exkl. moms efter rabatt', fmt(exVatAfterDiscount) + ' kr', false])
+  }
+  totRows.push([vatLabel, fmt(vatAmount) + ' kr', false])
+  totRows.push(['Totalt inkl. moms', fmt(totalInclVat) + ' kr', true])
+  if (rutRotAmount > 0) {
+    totRows.push(['ROT/RUT-avdrag', '-' + fmt(rutRotAmount) + ' kr', false])
+    totRows.push(['Kundpris', fmt(customerPays) + ' kr', true])
+  }
 
   for (const [k,v,bold] of totRows) {
     if (ctx.y < MARGIN+40) ctx = newPage()

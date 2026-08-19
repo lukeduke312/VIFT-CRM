@@ -1,8 +1,21 @@
 /**
- * VIFT CRM — Service Worker v10
+ * VIFT CRM — Service Worker v12
  *
  * v10: bugfixar — behörigheter, snabb status, mobil iOS-zoom
  *      Rensar v7/v8/v9 cacher.
+ * v11: push-handlern förstår nu BÅDE Declarative Web Push
+ *      ({ web_push, notification: {...} }, RFC 8030/iOS 18.4+) och det
+ *      tidigare legacy-formatet ({ title, body, url, aoId }) — se
+ *      'push'-lyssnaren nedan. Ingen ändring av cache-strategin i sig;
+ *      CACHE_NAME bumpas ändå så att LIVE garanterat hämtar den nya
+ *      push-hanteringen (activate() rensar föregående cache).
+ * v12: push-handlern skickar nu även ett rent diagnostikmeddelande
+ *      (VIFT_PUSH_RECEIVED_DIAG, bara en timestamp — ingen payload/endpoint/
+ *      känslig data) till öppna VIFT-klienter, som bevis för att service
+ *      workern faktiskt mottog push-eventet — oberoende av om showNotification()
+ *      lyckades visa något synligt. Körs parallellt med showNotification(),
+ *      ersätter eller fördröjer den aldrig. Ingen ändring av cache-strategin;
+ *      CACHE_NAME bumpas ändå så att LIVE garanterat hämtar den nya koden.
  *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only)
@@ -14,7 +27,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v10';
+const CACHE_NAME = 'vift-crm-v12';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
@@ -121,6 +134,15 @@ self.addEventListener('fetch', event => {
 });
 
 /* ── Push notification received ──────────────────────────── */
+/* V43 §2: send-push skickar sedan V43 en Declarative Web Push-kompatibel
+ * payload ({ web_push: 8030, notification: {title,body,navigate,silent}, aoId }).
+ * WebKit (iOS/iPadOS 18.4+) kan visa notisen deklarativt INNAN denna handler
+ * ens körs — i så fallet kör webbläsaren denna 'push'-lyssnare som en valfri
+ * (optional) efterbehandling enligt specifikationen, inte som en andra,
+ * separat notisväg. Vi anropar därför showNotification() precis som förut
+ * (en enda väg, inga dubbletter) — men läser fälten från vilket format som
+ * än kom in, så äldre browsers utan stöd för declarative push fortsätter
+ * fungera exakt som i V42 via samma showNotification()-anrop. */
 self.addEventListener('push', event => {
   if (!event.data) return;
 
@@ -128,17 +150,34 @@ self.addEventListener('push', event => {
   try { payload = event.data.json(); }
   catch { payload = { title: 'VIFT CRM', body: event.data.text() }; }
 
-  const title   = payload.title || 'VIFT CRM';
+  const decl  = payload && payload.notification;
+  const title = (decl ? decl.title : payload.title) || 'VIFT CRM';
+  const body  = (decl ? decl.body  : payload.body)  || '';
+  const url   = (decl ? decl.navigate : payload.url) || '/';
+  const aoId  = payload.aoId || null;
+
   const options = {
-    body:               payload.body || '',
+    body,
     icon:               '/assets/icon-192.png',
     badge:              '/assets/icon-192.png',
-    data:               { url: payload.url || '/', aoId: payload.aoId || null },
+    data:               { url, aoId },
     requireInteraction: false
   };
 
+  /* V44 §6: bevis för att SERVICE WORKERN faktiskt mottog push-eventet,
+   * oberoende av om showNotification() lyckades visa något synligt (det är
+   * exakt det V44 ska isolera). Körs SAMTIDIGT med showNotification() via
+   * Promise.all — ersätter eller fördröjer den aldrig. Innehåller bara en
+   * timestamp, aldrig payload/endpoint/känslig data. */
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    Promise.all([
+      self.registration.showNotification(title, options),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientsList => {
+        clientsList.forEach(client => {
+          client.postMessage({ type: 'VIFT_PUSH_RECEIVED_DIAG', receivedAt: Date.now() });
+        });
+      })
+    ])
   );
 });
 

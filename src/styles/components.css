@@ -1127,6 +1127,37 @@ body.modal-open { overflow: hidden; touch-action: none; }
   text-align: right;
 }
 
+/* V41 §4: tillvalsrad (extras) — nu 6 kolumner (beskrivning/antal/enhet/
+   à-pris/moms/ta bort) istället för 5. Egen klass (tidigare helt inline)
+   just för att kunna ge den en mobilanpassad omflödning nedan utan att
+   röra det övriga, orelaterade designsystemet. */
+.off-extra-row {
+  display: grid;
+  grid-template-columns: 1fr 60px 65px 75px 68px 28px;
+  gap: 5px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--bg);
+}
+@media (max-width: 639px) {
+  /* Sex fasta kolumner ryms inte på en mobilbredd utan horisontell
+     scroll — bryts om till tre rader istället, ingen sidscroll. */
+  .off-extra-row {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "desc  desc  desc"
+      "qty   unit  vat"
+      "price price remove";
+    row-gap: 4px;
+  }
+  .off-extra-row .off-extra-desc   { grid-area: desc; }
+  .off-extra-row .off-extra-qty    { grid-area: qty; }
+  .off-extra-row .off-extra-unit   { grid-area: unit; }
+  .off-extra-row .off-extra-vat    { grid-area: vat; }
+  .off-extra-row .off-extra-price  { grid-area: price; }
+  .off-extra-row .off-extra-remove { grid-area: remove; justify-self: end; }
+}
+
 /* Offer totals premium card */
 .off-totals-card {
   background: #fff;
