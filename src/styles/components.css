@@ -1565,6 +1565,113 @@ body.modal-open { overflow: hidden; touch-action: none; }
   flex-wrap: wrap;
 }
 
+/* ── V48A / R3 §1,§8,§9: offertdetaljens statusmeny — ersätter den gamla,
+   fritt valbara 9-statusars popovern med en badge + (bara när det finns
+   tillåtna kontextuella actions) en kompakt meny. Riktiga CSS-klasser
+   istället för inline-style-block.
+   R3-fix: popoverns bakgrund använde `var(--card)`, en CSS-egenskap som
+   ALDRIG definieras globalt i denna kodbas (bara använd på enstaka andra
+   ställen alltid MED egen fallback, t.ex. `var(--card, #fff)`) — utan
+   fallback blir `background` ogiltig och deklarationen faller tillbaka på
+   sitt CSS-default (transparent), vilket lät offertheroens mörka
+   gradient lysa igenom popovern. Fixat genom att använda exakt samma
+   solida vita yta som redan är den etablerade "popover/menu/surface"-
+   konventionen i denna fil (.card, .modal-sheet, .action-sheet-btn) —
+   ingen ny färgpalett. ── */
+.off-status-wrap {
+  position: relative;
+  display: inline-block;
+}
+.off-status-badge-only {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 4px;
+}
+.off-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px 4px 4px;
+  border-radius: 6px;
+  min-height: 44px;
+}
+.off-status-btn:hover { background: rgba(255,255,255,.08); }
+.off-status-btn:focus-visible {
+  outline: 2px solid rgba(255,255,255,.65);
+  outline-offset: 2px;
+}
+.off-status-arrow {
+  display: inline-flex;
+  color: rgba(255,255,255,.7);
+}
+.off-status-scrim {
+  display: none;
+}
+.off-status-popover {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 9000;
+  background: #fff;
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15,23,42,.16);
+  /* R6 §2: bredare min-width så "Registrera godkännande" (och andra
+     svenska actiontexter) alltid får plats på en rad på normal desktop-
+     bredd utan att kännas avklippt — fortsatt kompakt, fortsatt aldrig
+     bredare än viewporten. */
+  min-width: 264px;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+}
+.off-status-popover.open { display: block; }
+.off-status-popover-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--mt);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 6px 10px 4px;
+}
+.off-status-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: none;
+  background: #fff;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+  text-align: left;
+}
+.off-status-popover-item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.off-status-popover-item-label {
+  /* R6 §2: ingen ellipsis/clipping — texten får radbryta snyggt om
+     viewporten kräver det istället för att klippas eller kännas avklippt. */
+  white-space: normal;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.off-status-popover-item:hover,
+.off-status-popover-item:focus-visible {
+  background: var(--bg);
+  outline: none;
+}
+
 /* VIFT brand badge in hero — fallback when img fails */
 .off-hero-vift-badge {
   display: flex;
@@ -1578,6 +1685,26 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-hero-vift-badge { font-size: 14px; font-weight: 700; color: var(--navy); letter-spacing: -.4px; }
 .off-hero-vift-badge span { font-size: 7px; font-weight: 600; color: var(--mt); letter-spacing: .2px; text-transform: uppercase; margin-top: 1px; }
+
+/* R6 §3: kund + giltighetsdatum-raden i hero:n — datumet ska hållas ihop
+   som EN enhet och hellre flytta till en egen rad än att brytas mitt i.
+   Ersätter den tidigare stora inline-style-strängen med riktiga klasser. */
+.off-detail-customer-validity-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.off-detail-validity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: .7;
+  color: #fff;
+}
 
 /* Hero price grid — shows ex.moms + kundpris side by side */
 .off-hero-price-grid {
@@ -1650,6 +1777,30 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-detail-sum-final-lbl { font-size: 13px; font-weight: 700; color: var(--navy); }
 .off-detail-sum-final-val { font-size: 22px; font-weight: 700; color: var(--navy); }
+
+/* ── V48A: progressiv disclosure — Digital länk/Bilagor/Säljtips/Historik
+   på offertdetaljen, stängda som default. Panelernas innehåll (redan
+   befintlig .card-markup från _digitalLinkPanel/_attachmentsPanel/
+   _salesAssistantHtml/_timelineHtml) är helt oförändrat — de renderas
+   bara bakom denna rubrikknapp istället för att alltid stå öppna. ── */
+.off-collapse { margin-top: 8px; }
+.off-collapse-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--br);
+  border-radius: var(--rs);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tx);
+}
+.off-collapse-summary:hover { background: var(--bg); }
+.off-collapse-summary:focus-visible { outline: 2px solid var(--sky); outline-offset: -2px; }
 
 /* ── SALES TIMELINE ACTIONS ── */
 .off-tl-action-bar {

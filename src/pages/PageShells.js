@@ -474,10 +474,14 @@ const OffersPage = {
     if (!el) return;
     const all = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // KPI — always over all offers, unaffected by filter/search
+    /* R6 §1: huvud-KPI:erna ska representera AKTIVA offerter — samma
+       exkluderingsprincip som _getKpi() (som redan används korrekt för
+       flik-räknarna) redan följer. `all` (obeskuret) används fortfarande
+       oförändrat av list-/arkiv-/papperskorgsflödena längre ned. */
+    const active = all.filter(o => !o.deleted && !o.archived);
     const kpi = {utkast:0, skickad:0, godkänd:0, nekad:0, total:0};
     let totalGodkändVal = 0;
-    all.forEach(o => {
+    active.forEach(o => {
       if (kpi[o.status] !== undefined) kpi[o.status]++;
       kpi.total++;
       if (o.status === 'godkänd') totalGodkändVal += OffersPage._offerExVat(o);
@@ -688,7 +692,7 @@ const OffersPage = {
         ${o.validUntil ? `&nbsp;·&nbsp;${ic('clock',9)} Giltig t.o.m. ${fmtDate(o.validUntil)}` : ''}
       </div>
       ${nextActLine ? `<div style="margin-top:3px;">${nextActLine}</div>` : ''}
-      ${o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDateTime(o.customerApproval.approvedAt):''}</div>` : ''}
+      ${o.status === 'godkänd' && o.manualApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkännande registrerat via ${esc(o.manualApproval.method||'—')}${o.manualApproval.registeredAt?' · '+fmtDate(o.manualApproval.registeredAt):''}</div>` : (o.status === 'godkänd' && o.customerApproval ? `<div style="margin-top:3px;font-size:10px;color:var(--gr);display:flex;align-items:center;gap:3px;">${ic('check-circle',9)} Godkänd av ${esc(o.customerApproval.approvedByName||'—')}${o.customerApproval.approvedAt?' · '+fmtDateTime(o.customerApproval.approvedAt):''}</div>` : '')}
     </div>
     ${insight ? `<span class="off-offer-insight ${insight.cls}" style="margin-top:0;">${insight.txt}</span>` : ''}
   </div>
@@ -2333,13 +2337,13 @@ const OfferDetailPage = {
             <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
             <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
-            ${OfferDetailPage._statusPickerHtml(off.status)}
+            ${OfferDetailPage._statusMenuHtml(off)}
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;">
+        <div class="off-detail-customer-validity-row">
           <span style="font-size:15px;font-weight:800;color:#fff;">${cuName}</span>
-          ${off.validUntil?`<span style="font-size:11px;opacity:.7;">· ${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
+          ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
         </div>
 
         <div class="off-hero-price-grid">
@@ -2358,13 +2362,12 @@ const OfferDetailPage = {
         ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
 
         <div class="off-detail-hero-actions">
-          <!-- Status-based primary actions (alltid synliga) -->
-          ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`
-            <button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.setStatus('godkänd')">${ic('check-circle',12)} Godkänd</button>
-            <button type="button" class="off-hero-btn off-hero-btn--red" onclick="OfferDetailPage.setStatus('nekad')">${ic('x-circle',12)} Nekad</button>
-            <button type="button" class="off-hero-btn" onclick="OfferDetailPage._quickAction('${off.id}','verbal')">${ic('thumbs-up',12)} Muntligt godkänd</button>
-            <button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>
-          `:''}
+          <!-- V48A: Godkänd/Nekad/Registrera godkännande/Markera-actions ligger i
+               statusmenyn i hero-headern (_statusMenuHtml) — statusrelaterade
+               åtgärder samlade på ett ställe. R3 §2: "Skicka påminnelse" är en
+               kommunikationsåtgärd, inte en statusåtgärd — flyttad tillbaka hit,
+               samma villkor/funktion som innan V48A. -->
+          ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>`:''}
           ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
           ${(off.archived||off.deleted)?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
@@ -2380,7 +2383,18 @@ const OfferDetailPage = {
         <span style="font-size:11px;font-weight:700;color:var(--navy);margin-left:auto;">Kund: ${fmt(cust)} kr</span>
       </div>
 
-      ${off.status === 'godkänd' && off.customerApproval ? `
+      ${off.status === 'godkänd' && off.manualApproval ? `
+      <div class="card" style="border-left:3px solid var(--gr);background:color-mix(in srgb,var(--gr) 6%,var(--bg));">
+        <div class="card-body" style="padding:12px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;color:var(--gr);font-weight:600;font-size:13px;">${ic('check-circle',14)} Godkännande registrerat</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;font-size:12px;">
+            <div><span style="color:var(--mt);">Via&nbsp;</span><strong>${esc(off.manualApproval.method||'—')}</strong></div>
+            <div><span style="color:var(--mt);">Registrerat av&nbsp;</span><strong>${esc(off.manualApproval.registeredBy||'—')}</strong></div>
+            ${off.manualApproval.registeredAt?`<div><span style="color:var(--mt);">Datum&nbsp;</span><strong>${fmtDateTime(off.manualApproval.registeredAt)}</strong></div>`:''}
+          </div>
+          ${off.manualApproval.comment?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.manualApproval.comment)}</div>`:''}
+        </div>
+      </div>` : (off.status === 'godkänd' && off.customerApproval ? `
       <div class="card" style="border-left:3px solid var(--gr);background:color-mix(in srgb,var(--gr) 6%,var(--bg));">
         <div class="card-body" style="padding:12px 16px;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;color:var(--gr);font-weight:600;font-size:13px;">${ic('check-circle',14)} Offert godkänd av kund</div>
@@ -2393,7 +2407,7 @@ const OfferDetailPage = {
           </div>
           ${(off.customerApproval.comment||off.customerApproval.approvedByComment)?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.customerApproval.comment||off.customerApproval.approvedByComment)}</div>`:''}
         </div>
-      </div>` : ''}
+      </div>` : '')}
 
       ${factItems ? `<div class="off-detail-facts" style="flex-wrap:wrap;">${factItems}</div>` : ''}
 
@@ -2455,13 +2469,81 @@ const OfferDetailPage = {
 
       ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${off.internalNote}</div>`:''}
 
-      ${OfferDetailPage._digitalLinkPanel(off)}
+      ${(() => {
+        const attCount = (state.offerAttachments || []).filter(a => a.offerId === off.id && a.active !== false).length;
+        const histCount = (off.timeline || []).length + (state.offerEvents || []).filter(e => e.offerId === off.id).length;
+        /* R3 §10: default open/closed beräknas av faktisk data, inte alltid
+           stängd. "Aktiv digital länk" = samma definition som
+           _digitalLinkPanel redan använder internt (publicToken satt,
+           inte återkallad). */
+        /* R4 §3: "aktiv" ska matcha samma faktiska semantik som
+           _digitalLinkPanel() redan använder internt (hasToken/revoked/
+           expired) — en utgången token räknas INTE som aktiv för
+           default-open-syftet, bara en riktigt aktiv länk gör. */
+        const tokenExpired = !!off.tokenExpiresAt && new Date(off.tokenExpiresAt).getTime() < Date.now();
+        const digitalLinkActive = !!off.publicToken && !off.tokenRevokedAt && !tokenExpired;
+        return [
+          this._sectionWrap(off.id, 'digitalLink',    'Digital länk', null,     this._digitalLinkPanel(off),   digitalLinkActive),
+          this._sectionWrap(off.id, 'attachments',    'Bilagor',      attCount, this._attachmentsPanel(off),   attCount > 0),
+          this._sectionWrap(off.id, 'salesAssistant', 'Säljtips',     null,     this._salesAssistantHtml(off), false),
+          this._sectionWrap(off.id, 'timeline',       'Historik',     histCount,this._timelineHtml(off),       false)
+        ].join('');
+      })()}`;
+  },
 
-      ${OfferDetailPage._attachmentsPanel(off)}
+  /* V48A §9 / R3 §10: progressiv disclosure — Digital länk/Bilagor/Säljtips/
+     Historik. R3 ändrar defaultbeteendet från "alltid stängd" till
+     datastyrt: Digital länk öppen om en aktiv länk finns, Bilagor öppen om
+     minst en aktiv bilaga finns, Säljtips/Historik alltid stängda som
+     default. Om användaren manuellt togglar en sektion under den aktuella
+     detalj-sessionen (this._detailSections, inget persist/ny datamodell)
+     respekteras det valet vid efterföljande render() tills sidan lämnas —
+     _detailSections[offerId][key] är då explicit satt (true/false) och
+     override:ar defaultOpen. Panelernas EGEN markup/logik (_digitalLinkPanel
+     etc.) är helt oförändrad — de returnerar exakt samma HTML som innan, vi
+     bara visar/döljer den bakom en rubrikknapp. Om panelen redan idag
+     returnerar '' (t.ex. arkiverad/borttagen offert, inga säljtips) visas
+     ingenting alls, precis som innan. */
+  _detailSections: {},
 
-      ${OfferDetailPage._salesAssistantHtml(off)}
+  _sectionIsOpen(offerId, key, defaultOpen) {
+    const rec = this._detailSections[offerId];
+    if (rec && Object.prototype.hasOwnProperty.call(rec, key)) return rec[key];
+    return !!defaultOpen;
+  },
 
-      ${OfferDetailPage._timelineHtml(off)}`;
+  _toggleSection(offerId, key, defaultOpen) {
+    const current = this._sectionIsOpen(offerId, key, defaultOpen);
+    if (!this._detailSections[offerId]) this._detailSections[offerId] = {};
+    this._detailSections[offerId][key] = !current;
+    this.render({offerId});
+  },
+
+  _sectionWrap(offerId, key, title, count, innerHtml, defaultOpen) {
+    if (!innerHtml) return '';
+    const open = this._sectionIsOpen(offerId, key, defaultOpen);
+    const countLabel = (count !== null && count !== undefined) ? ` (${count})` : '';
+    return `<div class="off-collapse">
+      <button type="button" class="off-collapse-summary" aria-expanded="${open}" onclick="OfferDetailPage._toggleSection('${offerId}','${key}',${!!defaultOpen})">
+        <span>${title}${countLabel}</span>
+        ${ic(open ? 'chevron-up' : 'chevron-down', 14)}
+      </button>
+      ${open ? innerHtml : ''}
+    </div>`;
+  },
+
+  /* R3 (tillägg): action-sheet → confirm/modal-övergång. Gamla mönstret
+     "X(id);Modal.close()" stänger FEL modal när X() själv öppnar en ny
+     Modal.confirm()/Modal.open() synkront (t.ex. archiveOffer/deleteOffer/
+     permanentDeleteOffer/createNewVersion) — Modal.close() kör EFTER att
+     den nya modalen redan öppnats och stänger då den nyöppnade istället
+     för action-sheeten. Minsta säkra fix: stäng action-sheeten FÖRST,
+     öppna sedan den riktiga åtgärden i nästa tick (setTimeout 0) så de
+     aldrig krockar. printPdf/openEdit/duplicate öppnar ingen egen modal —
+     lämnade oförändrade (X(id);Modal.close() är korrekt för dem). */
+  _flerAtgarderThen(fn) {
+    Modal.close();
+    setTimeout(fn, 0);
   },
 
   openFlerAtgarder(offerId) {
@@ -2472,27 +2554,102 @@ const OfferDetailPage = {
       btns.push(`<button class="action-sheet-btn" onclick="OffersPage.openEdit('${off.id}');Modal.close()">${ic('pencil',16)} Redigera offert</button>`);
     btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.printPdf('${off.id}');Modal.close()">${ic('printer',16)} Skriv ut / PDF</button>`);
     if (!off.deleted)
-      btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.createNewVersion('${off.id}');Modal.close()">${ic('git-branch',16)} Skapa ny version</button>`);
+      btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.createNewVersion('${off.id}'))">${ic('git-branch',16)} Skapa ny version</button>`);
     if (!off.deleted)
       btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.duplicate('${off.id}');Modal.close()">${ic('copy',16)} Duplicera</button>`);
     if (!off.archived && !off.deleted) {
       btns.push(`<hr style="border:none;border-top:1px solid var(--br);margin:6px 0;">`);
-      btns.push(`<button class="action-sheet-btn action-sheet-btn--warn" onclick="OfferDetailPage.archiveOffer('${off.id}');Modal.close()">${ic('archive',16)} Arkivera</button>`);
-      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage.deleteOffer('${off.id}');Modal.close()">${ic('trash',16)} Flytta till papperskorgen</button>`);
+      btns.push(`<button class="action-sheet-btn action-sheet-btn--warn" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.archiveOffer('${off.id}'))">${ic('archive',16)} Arkivera</button>`);
+      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.deleteOffer('${off.id}'))">${ic('trash',16)} Flytta till papperskorgen</button>`);
     }
     if (off.deleted)
-      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage.permanentDeleteOffer('${off.id}');Modal.close()">${ic('trash-2',16)} Radera permanent</button>`);
+      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.permanentDeleteOffer('${off.id}'))">${ic('trash-2',16)} Radera permanent</button>`);
     Modal.open({
-      title: ic('more-horizontal',14) + ' Fler åtgärder',
+      /* R6 §4: ren textrubrik utan ikon — .modal-title är inte byggd som
+         en icon+text-flexrad, så ikonen kunde hamna på egen rad ovanför
+         texten. Hero-knappen som öppnar modalen visar fortfarande sin
+         egen ikon. */
+      title: 'Fler åtgärder',
       body: `<div class="action-sheet-list">${btns.join('')}</div>`,
       buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
     });
   },
 
+  /* V48A §1-4 / R2 §1 / R3 §3-5: setStatus() är nu den enda kvarvarande
+     generella statusmutatorn (kallas av hero-menyns kontextuella actions),
+     och den har en inbyggd övergångsspärr. Detta rör INTE de fristående,
+     redan kanoniska vägarna som skriver off.status direkt (_doSendEmail →
+     'skickad', _doSendReminder → 'påmind', generateDigitalLink → 'skickad'
+     från utkast, createNewVersion → 'ersatt', kundens publika svar via
+     offer-respond) — de är oförändrade.
+
+     R2/R3: 'godkänd' är BORTTAGET ur denna lista helt — status godkänd får
+     ALDRIG sättas via setStatus()/en generell statusaction. Godkänd nås
+     uteslutande via (1) kundens digitala svar (offer-respond, server-side)
+     eller (2) det explicita registrerings-godkännandeflödet
+     (openApprovalModal/_confirmApproval, R3 §3-4 — ersätter den gamla
+     "Muntligt godkänd" som bara täckte muntliga godkännanden; nu täcker
+     samma flöde även e-post/telefon/SMS/annat, och är tillgängligt även
+     från 'nekad' enligt R3 §5). customerApproval representerar bara
+     kundens faktiska digitala svar och får aldrig skapas/förfalskas via
+     en generell statusändring eller via _confirmApproval().
+
+     Tillåtna manuella övergångar via setStatus() (exakt de knappar/
+     menyalternativ som nu erbjuds i _statusMenuActions()):
+       skickad  → nekad | väntar | utgången
+       påmind   → nekad | väntar | utgången
+       väntar   → nekad | utgången
+       nekad    → väntar   (R3 §6: "Återöppna offert" — en nekad offert kan senare accepteras/blir aktiv igen)
+       utgången → väntar   (R3 §6: "Återöppna offert")
+     Allt annat (bl.a. från/till utkast, godkänd, ersatt, ändring-begärd)
+     blockeras — ingen mutation, ingen persist, ingen logg. 'godkänd' är
+     INTE en målstatus någonstans i denna tabell (R2/R3): den nås
+     uteslutande via kundens digitala svar eller det explicita, egna
+     godkännande-registreringsflödet (openApprovalModal/_confirmApproval,
+     se nedan) — aldrig via setStatus(). 'ersatt' är fortsatt låst (finns
+     inte som källa i tabellen, kan bara nås framåt via createNewVersion()).
+     Dessutom: en offert som redan har en kopplad AO (off.workOrderId) kan
+     ALDRIG flyttas tillbaka till en aktiv pipeline-status via denna
+     funktion (fail closed) — detta gäller även "Återöppna offert", men
+     kan i praktiken inte inträffa idag eftersom workOrderId bara sätts
+     från status 'godkänd', som inte är en källstatus i tabellen. */
+  _MANUAL_STATUS_TRANSITIONS: {
+    skickad:  ['nekad', 'väntar', 'utgången'],
+    påmind:   ['nekad', 'väntar', 'utgången'],
+    väntar:   ['nekad', 'utgången'],
+    nekad:    ['väntar'],
+    utgången: ['väntar']
+  },
+
   setStatus(status) {
     const off = getOff(this.offerId);
     if (!off) return;
+    /* R4 §2: fail closed — en arkiverad/borttagen offert får aldrig
+       statusmuteras via setStatus(), oavsett vad transition-tabellen annars
+       skulle tillåtit. Andra, oberoende skyddslager utöver att menyn redan
+       döljer actions för arkiverade/borttagna offerter. */
+    if (off.archived || off.deleted) {
+      console.warn('[OfferDetailPage] Statusändring blockerad — offerten är arkiverad eller borttagen:', off.id);
+      showToast('Kan inte ändra status — offerten är arkiverad eller borttagen');
+      return;
+    }
     const prev = off.status;
+    const allowedTargets = this._MANUAL_STATUS_TRANSITIONS[prev] || [];
+    if (!allowedTargets.includes(status)) {
+      console.warn('[OfferDetailPage] Otillåten statusövergång blockerad:', prev, '->', status);
+      showToast('Den statusändringen är inte tillåten just nu');
+      return;
+    }
+    /* V48A §4: fail closed — en offert med kopplad AO får aldrig flyttas
+       tillbaka till en aktiv pipeline-status via en generell åtgärd. Detta
+       kan i praktiken inte inträffa idag (workOrderId sätts bara från
+       status 'godkänd', som saknar utgående transitioner ovan), men
+       skyddet ligger kvar explicit som ett andra, oberoende lager. */
+    if (off.workOrderId && ['utkast', 'skickad', 'påmind', 'väntar'].includes(status)) {
+      console.warn('[OfferDetailPage] Statusändring blockerad — offerten har redan en kopplad AO:', off.workOrderId);
+      showToast('Kan inte ändra status — offerten är redan kopplad till en arbetsorder');
+      return;
+    }
     off.status    = status;
     off.updatedAt = new Date().toISOString();
     if (status === 'skickad') off.sentAt          = new Date().toISOString();
@@ -2508,80 +2665,206 @@ const OfferDetailPage = {
   _spCloseClick: null,
   _spCloseEsc:   null,
 
-  _statusPickerHtml(currentStatus) {
-    const opts = [
-      {v:'utkast',l:'Utkast'},{v:'skickad',l:'Skickad'},{v:'påmind',l:'Påmind'},
-      {v:'väntar',l:'Väntar svar'},{v:'godkänd',l:'Godkänd'},{v:'nekad',l:'Nekad'},
-      {v:'utgången',l:'Utgången'},{v:'ersatt',l:'Ersatt'}
-    ];
-    const rows = opts.map(o => {
-      const bold = o.v === currentStatus ? 'font-weight:700;' : '';
-      return `<div role="option" tabindex="-1" onclick="OfferDetailPage._statusPickerSelect('${o.v}')"
-        onmouseenter="this.style.background='var(--hover,rgba(0,0,0,.06))'"
-        onmouseleave="this.style.background=''"
-        style="padding:7px 14px;cursor:pointer;display:flex;align-items:center;${bold}">
-        <span class="bdg ${statusClass(o.v)}" style="font-size:11px;">${o.l}</span>
-      </div>`;
-    }).join('');
-    return `<div style="position:relative;display:inline-block;">
-      <button type="button" id="offd-status-btn"
-        onclick="OfferDetailPage._statusPickerToggle(event)"
-        aria-haspopup="listbox" aria-expanded="false" aria-label="Byt status"
-        style="display:inline-flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:6px;min-height:44px;">
-        ${sbdg(currentStatus)}
-        <span style="color:rgba(255,255,255,.7);font-size:12px;">&#9660;</span>
+  /* V48A §6 / R2 §1 / R3 §2,§5,§6,§7: kontextuella menyalternativ för
+     aktuell status — ENDAST redan befintliga, kanoniska actions, ren
+     statusrelaterade affärsåtgärder. Ingen ny affärslogik.
+     R3: "Skicka påminnelse" är INTE längre en statusåtgärd — flyttad
+     tillbaka till hero-actionsraden (se render(), samma villkor som förut).
+     R3: "Muntligt godkänd" ersatt av "Registrera godkännande"
+     (openApprovalModal) — samma mål (status→godkänd) men med explicit
+     metodval (E-post/Telefon/SMS/Annat), tillgänglig även från 'nekad'.
+     R3: "Nekad" → "Markera som nekad" (tydligare actiontext).
+     R3: "Återöppna offert" tillagd för nekad/utgången → väntar. */
+  _statusMenuActions(off) {
+    /* R4 §2: fail closed — en arkiverad/borttagen offert ska INTE kunna
+       statusändras via menyn (Registrera godkännande/Markera som .../
+       Återöppna). Övrig historikvisning påverkas inte. */
+    if (off.archived || off.deleted) return [];
+
+    const id = off.id;
+    const sentLike = off.status === 'skickad' || off.status === 'påmind' || off.status === 'väntar';
+
+    if (sentLike) {
+      const actions = [
+        { icon:'check-circle', label:'Registrera godkännande', onClick:`OfferDetailPage.openApprovalModal('${id}')` },
+        { icon:'x-circle',     label:'Markera som nekad',        onClick:`OfferDetailPage.setStatus('nekad')` }
+      ];
+      if (off.status === 'skickad' || off.status === 'påmind') {
+        actions.push({ icon:'clock', label:'Markera som väntar svar', onClick:`OfferDetailPage.setStatus('väntar')` });
+      }
+      actions.push({ icon:'alert-circle', label:'Markera som utgången', onClick:`OfferDetailPage.setStatus('utgången')` });
+      return actions;
+    }
+
+    if (off.status === 'nekad') {
+      return [
+        { icon:'check-circle', label:'Registrera godkännande', onClick:`OfferDetailPage.openApprovalModal('${id}')` },
+        { icon:'rotate-ccw',   label:'Återöppna offert',         onClick:`OfferDetailPage.setStatus('väntar')` }
+      ];
+    }
+
+    if (off.status === 'utgången') {
+      return [
+        { icon:'rotate-ccw', label:'Återöppna offert', onClick:`OfferDetailPage.setStatus('väntar')` }
+      ];
+    }
+
+    return [];
+  },
+
+  /* V48A §6-7 / R3 §8-9: ersätter den gamla, fritt-valbara 9-statusars
+     popovern med en badge + (endast om kontextuella actions finns) en
+     kompakt, ljus meny med en liten rubrik. Riktiga CSS-klasser istället
+     för inline-style-block (components.css/responsive.css). */
+  _statusMenuHtml(off) {
+    const actions = this._statusMenuActions(off);
+    const badge = sbdg(off.status);
+    if (actions.length === 0) {
+      return `<div class="off-status-wrap"><span class="off-status-badge-only">${badge}</span></div>`;
+    }
+    const rows = actions.map((a, i) => `<button type="button" role="menuitem" tabindex="-1" id="offd-status-item-${i}"
+        class="off-status-popover-item" onclick="${a.onClick};OfferDetailPage._statusMenuClose();">
+        <span class="off-status-popover-item-icon">${ic(a.icon,13)}</span><span class="off-status-popover-item-label">${a.label}</span>
+      </button>`).join('');
+    return `<div class="off-status-wrap">
+      <button type="button" id="offd-status-btn" class="off-status-btn"
+        onclick="OfferDetailPage._statusMenuToggle(event)"
+        aria-haspopup="menu" aria-expanded="false" aria-label="Statusåtgärder">
+        ${badge}
+        <span class="off-status-arrow">${ic('chevron-down',12)}</span>
       </button>
-      <div id="offd-status-popover" role="listbox" aria-label="Välj status"
-        style="display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:9000;
-        background:var(--card);border:1px solid var(--br);border-radius:8px;
-        box-shadow:0 4px 20px rgba(0,0,0,.18);min-width:240px;max-width:calc(100vw - 32px);padding:4px 0;">
+      <div id="offd-status-popover" role="menu" aria-label="Statusåtgärder" class="off-status-popover">
+        <div class="off-status-popover-title">Ändra status</div>
         ${rows}
       </div>
+      <div id="offd-status-scrim" class="off-status-scrim" onclick="OfferDetailPage._statusMenuClose()"></div>
     </div>`;
   },
 
-  _statusPickerClose() {
-    const pop = document.getElementById('offd-status-popover');
-    const btn = document.getElementById('offd-status-btn');
-    if (pop) { pop.style.display = 'none'; }
+  _statusMenuClose() {
+    const pop   = document.getElementById('offd-status-popover');
+    const btn   = document.getElementById('offd-status-btn');
+    const scrim = document.getElementById('offd-status-scrim');
+    if (pop)   { pop.classList.remove('open'); }
+    if (scrim) { scrim.classList.remove('open'); }
     if (btn) { btn.setAttribute('aria-expanded', 'false'); }
     if (this._spCloseClick) { document.removeEventListener('click', this._spCloseClick, true); this._spCloseClick = null; }
     if (this._spCloseEsc)   { document.removeEventListener('keydown', this._spCloseEsc);      this._spCloseEsc   = null; }
   },
 
-  _statusPickerToggle(e) {
+  _statusMenuToggle(e) {
     e.stopPropagation();
-    const pop = document.getElementById('offd-status-popover');
-    const btn = document.getElementById('offd-status-btn');
+    const pop   = document.getElementById('offd-status-popover');
+    const btn   = document.getElementById('offd-status-btn');
+    const scrim = document.getElementById('offd-status-scrim');
     if (!pop) return;
 
     /* Rensa alltid gamla handlers före eventuell ny registrering */
     if (this._spCloseClick) { document.removeEventListener('click', this._spCloseClick, true); this._spCloseClick = null; }
     if (this._spCloseEsc)   { document.removeEventListener('keydown', this._spCloseEsc);      this._spCloseEsc   = null; }
 
-    const opening = pop.style.display !== 'block';
+    const opening = !pop.classList.contains('open');
     if (!opening) {
-      pop.style.display = 'none';
+      pop.classList.remove('open');
+      if (scrim) scrim.classList.remove('open');
       if (btn) btn.setAttribute('aria-expanded', 'false');
       return;
     }
 
-    pop.style.display = 'block';
+    pop.classList.add('open');
+    if (scrim) scrim.classList.add('open');
     if (btn) btn.setAttribute('aria-expanded', 'true');
 
+    /* R2 §2: containment-check istället för exakt !== btn — ev.target är
+       ofta ett barn av knappen (badge-span/text/svg-ikon), inte btn själv,
+       vilket gjorde att klick på knappens innehåll felaktigt räknades som
+       "utanför" och genast stängde menyn igen (kapp-fas-lyssnare). */
     this._spCloseClick = function(ev) {
-      if (!pop.contains(ev.target) && ev.target !== btn) { OfferDetailPage._statusPickerClose(); }
+      if (!pop.contains(ev.target) && !(btn && btn.contains(ev.target))) { OfferDetailPage._statusMenuClose(); }
     };
     this._spCloseEsc = function(ev) {
-      if (ev.key === 'Escape') { OfferDetailPage._statusPickerClose(); if (btn) btn.focus(); }
+      if (ev.key === 'Escape') { OfferDetailPage._statusMenuClose(); if (btn) btn.focus(); }
     };
     setTimeout(function() { document.addEventListener('click', OfferDetailPage._spCloseClick, true); }, 0);
     document.addEventListener('keydown', this._spCloseEsc);
   },
 
-  _statusPickerSelect(value) {
-    this._statusPickerClose();
-    OfferDetailPage.setStatus(value);
+  /* R3 §3-5: minimal intern helper som ersätter/utvecklar den gamla
+     "Muntligt godkänd" (_quickAction('verbal')) — LIVE-flödet visade att
+     kunder godkänner via fler kanaler än bara muntligt (e-post/telefon/
+     SMS/annat), inte bara via den publika digitala offertlänken. Öppnar
+     en liten, befintlig VIFT-modal (samma .fg/label-mönster som övriga
+     formulär i denna fil) med obligatoriskt metodval + valfri kommentar.
+     Tillgänglig från skickad/påmind/väntar (som gamla "Muntligt godkänd")
+     OCH från nekad (R3 §5 — en nekad offert är inte ett dead-end). */
+  openApprovalModal(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    /* R4 §2: fail closed redan här — inte bara i _confirmApproval(). */
+    if (off.archived || off.deleted) { showToast('Kan inte registrera godkännande — offerten är arkiverad eller borttagen'); return; }
+    Modal.open({
+      title: ic('check-circle',14) + ' Registrera godkännande',
+      body: `
+        <div class="fg"><label>Godkännande via *</label>
+          <select id="appr-method">
+            <option value="">Välj...</option>
+            <option value="E-post">E-post</option>
+            <option value="Telefon">Telefon</option>
+            <option value="SMS">SMS</option>
+            <option value="Annat">Annat</option>
+          </select></div>
+        <div class="fg"><label>Kommentar / referens (valfritt)</label>
+          <textarea id="appr-comment" rows="3" placeholder="T.ex. kontaktperson, referens…"></textarea></div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
+          ${ic('info',10)} Detta registrerar ett manuellt godkännande från personal — inte kundens digitala svar.
+        </div>`,
+      buttons: [
+        { label: ic('check-circle',12) + ' Bekräfta godkännande', cls: 'btn bp', onClick: () => this._confirmApproval(offerId) },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    setTimeout(() => document.getElementById('appr-method')?.focus(), 80);
+  },
+
+  _confirmApproval(offerId) {
+    const off = getOff(offerId);
+    if (!off) return;
+    /* R4 §2: andra, oberoende skyddslager — en arkiverad/borttagen offert
+       får aldrig statusmuteras via detta flöde, oavsett vad ett direkt
+       funktionsanrop försöker (fail closed, samma princip som setStatus()). */
+    if (off.archived || off.deleted) { showToast('Kan inte registrera godkännande — offerten är arkiverad eller borttagen'); return; }
+    const method = (document.getElementById('appr-method')?.value || '').trim();
+    if (!method) { showToast('Välj hur godkännandet mottogs'); return; }
+    /* Samma källstatusar som statusmenyns "Registrera godkännande"-alternativ
+       erbjuds från (se _statusMenuActions) — fail closed om något annat. */
+    const allowedFrom = ['skickad', 'påmind', 'väntar', 'nekad'];
+    if (!allowedFrom.includes(off.status)) { showToast('Kan inte registrera godkännande i detta läge'); return; }
+    const comment = (document.getElementById('appr-comment')?.value || '').trim();
+    const now = new Date().toISOString();
+    /* R5: currentUser-modellen använder normalt firstName/lastName, inte
+       ett samlat .name-fält — bygg det riktiga namnet från dem i första
+       hand, med samma robusta fallback-kedja (.name/.username/'Admin')
+       som tidigare för konton som saknar för-/efternamn. */
+    const _u = (typeof state !== 'undefined') ? state.currentUser : null;
+    const registeredBy = _u
+      ? ([_u.firstName, _u.lastName].filter(Boolean).join(' ') || _u.name || _u.username || 'Admin')
+      : 'Admin';
+    off.status    = 'godkänd';
+    off.answeredAt = now;
+    off.updatedAt  = now;
+    /* R4 §1: manuellt registrerade godkännanden får sin EGEN provenienspost
+       — customerApproval rörs ALDRIG här, den representerar uteslutande
+       kundens egna digitala svar via offer-respond. Detta förhindrar att
+       en gammal digital respons (t.ex. ett tidigare digitalt NEKANDE, vars
+       customerApproval-fält historiskt kan innehålla svarsdata) av misstag
+       tolkas som "kunden godkände digitalt" när det i själva verket är
+       personal som registrerat ett manuellt godkännande i efterhand. */
+    off.manualApproval = { method: method, comment: comment, registeredAt: now, registeredBy: registeredBy };
+    this._logEvt(off, 'status', 'Godkännande registrerat via ' + method + (comment ? ': ' + comment : ''));
+    persist();
+    Modal.close();
+    this.render({offerId});
+    showToast('Godkännande registrerat (' + method + ')');
   },
 
   duplicate(offerId) {
@@ -2594,6 +2877,24 @@ const OfferDetailPage = {
       versionNumber: 1, parentOfferId: '',
       sentAt: '', answeredAt: '', reminderSentAt: '', emailSentTo: '', workOrderId: '',
       archived: false, deleted: false,
+      /* R4 §1: manuellt godkännande får ALDRIG följa med till en ny/duplicerad
+         offert — den nya offerten har inte blivit godkänd av någon ännu. */
+      manualApproval: null,
+      /* R5: en duplicerad offert är en NY offert och ska börja utan
+         gammalt kundsvar — annars ärver kopian originalets digitala
+         customerApproval trots att JSON.parse(JSON.stringify(off)) klonar
+         hela objektet. Samma tomma canonical struktur som Schema.offer(). */
+      customerApproval: { token: '', approvedAt: null, approvedByName: '', approvedByEmail: '', ip: '', comment: '' },
+      /* R5: digital offertlänk/publik snapshot tillhör den GAMLA offertens
+         session och får ALDRIG delas med en ny offert — annars skulle
+         originalets publika länk/lockedSnapshotJSON av misstag peka på/
+         gälla för kopian. En ny länk måste alltid genereras separat via
+         det befintliga generateDigitalLink()-flödet. */
+      publicToken: '', tokenCreatedAt: '', tokenExpiresAt: '', tokenRevokedAt: '',
+      openCount: 0, openedAt: '', lockedSnapshotJSON: '',
+      /* R5: entydiga lifecycle-/responsfält som hör till originalets
+         historik, inte den nya kopian. */
+      declineReason: '', convertedAt: '',
       createdAt: now, updatedAt: now, timeline: []
     });
     this._logEvt(newOff, 'create', 'Duplicerad från ' + offerId);
@@ -2799,8 +3100,9 @@ const OfferDetailPage = {
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reminder')">${ic('clock',11)} Påminnelse</button>
         ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','price')">${ic('dollar-sign',11)} Prisförhandling</button>`:''}
         ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','change')">${ic('edit-3',11)} Kund vill ändra</button>`:''}
-        ${isSent?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','verbal')" style="background:rgba(21,128,61,.08);color:var(--gr);">${ic('thumbs-up',11)} Muntligt godkänd</button>`:''}
+        ${(!off.archived&&!off.deleted&&(isSent||off.status==='nekad'))?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage.openApprovalModal('${id}')" style="background:rgba(21,128,61,.08);color:var(--gr);">${ic('check-circle',11)} Registrera godkännande</button>`:''}
         ${off.status==='nekad'?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','reason')">${ic('help-circle',11)} Orsak nekad</button>`:''}
+        ${(!off.archived&&!off.deleted&&off.status==='nekad')?`<button type="button" class="off-tl-action-btn" onclick="OfferDetailPage.setStatus('väntar')">${ic('rotate-ccw',11)} Återöppna offert</button>`:''}
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','tip')">${ic('message-square',11)} Intern notering</button>
       </div>
       ${(() => {
@@ -3827,6 +4129,25 @@ ${hasRut?`<div class="rut">
           newOff.updatedAt      = now;
           newOff.timeline       = [];
           newOff.customerApproval = { token:'', approvedAt:null, approvedByName:'', approvedByEmail:'', ip:'', comment:'' };
+          /* R4 §1: manuellt godkännande får ALDRIG följa med till en ny
+             version — den nya versionen har inte blivit godkänd ännu. */
+          newOff.manualApproval = null;
+          /* R5: digital offertlänk/publik snapshot tillhör den GAMLA
+             versionens session och får ALDRIG delas med den nya versionen
+             — annars skulle den nya versionen kunna visa/ärva originalets
+             publika länk/lockedSnapshotJSON innan en egen länk faktiskt
+             genererats. Originalversionens värden (kvar på `off`) rörs inte. */
+          newOff.publicToken        = '';
+          newOff.tokenCreatedAt     = '';
+          newOff.tokenExpiresAt     = '';
+          newOff.tokenRevokedAt     = '';
+          newOff.openCount          = 0;
+          newOff.openedAt           = '';
+          newOff.lockedSnapshotJSON = '';
+          /* R5: entydiga lifecycle-/responsfält som hör till den ersatta
+             versionens historik, inte den nya versionen. */
+          newOff.declineReason = '';
+          newOff.convertedAt   = '';
           this._logEvt(newOff, 'create', 'Version ' + newVer + ' skapad från ' + offerId + ' v' + (off.versionNumber||1));
           state.offers.push(newOff);
           persist();

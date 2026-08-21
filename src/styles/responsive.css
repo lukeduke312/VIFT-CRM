@@ -169,6 +169,44 @@
   }
 }
 
+/* ── V48A / R3 §9: offertdetaljens statusmeny på mobil (360–430px) — en
+   tydlig, ljus bottom-sheet med scrim istället för en absolut positionerad
+   ruta som kan hamna delvis utanför en smal skärm eller synas dåligt.
+   Testad logiskt vid 360/390/430px — .off-status-popover-title ("Ändra
+   status") ger sheeten sin egen rubrik, samma klass som på desktop. ── */
+@media (max-width: 480px) {
+  .off-status-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,.35);
+    z-index: 8999;
+  }
+  .off-status-scrim.open { display: block; }
+  .off-status-popover {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    z-index: 9000;
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: 16px 16px 0 0;
+    border: none;
+    box-shadow: 0 -4px 24px rgba(15,23,42,.22);
+    padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  .off-status-popover-title {
+    font-size: 12px;
+    padding: 6px 8px 8px;
+    border-bottom: 1px solid var(--br);
+    margin-bottom: 4px;
+  }
+}
+
 /* ── Mobil AO-detalj ────────────────────────────────── */
 @media (max-width: 639px) {
   /* Back-knapp: bara ikon på mobil */
