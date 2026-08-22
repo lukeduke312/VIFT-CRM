@@ -320,6 +320,15 @@
   gap: 2px;
   box-shadow: 0 1px 3px rgba(0,0,0,.04);
 }
+/* V48B1 §7: mobil statusfilter — native <select> istället för horisontellt
+   scrollande flikrad. Döljs på desktop; visas via responsive.css. Samma
+   OffersPage._filter/_setFilter() som desktop-flikarna, bara en annan
+   presentation av samma state (se _renderTabRow()). */
+.off-tabs-mobile-wrap { display: none; }
+.off-tabs-mobile-label {
+  display: block;
+  margin-bottom: 4px;
+}
 .ft {
   flex-shrink: 0;
   padding: 8px 16px;
@@ -1396,6 +1405,8 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 @media (max-width: 600px) {
   .off-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .off-kpi-card { padding: 8px 8px; }
+  .off-kpi-val { font-size: 17px; }
 }
 .off-kpi-card {
   background: #fff;
@@ -1406,20 +1417,41 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-kpi-card--green { border-color: #86efac; background: #f0fdf4; }
 .off-kpi-card--navy  { border-color: var(--navy); background: var(--acc); }
-.off-kpi-card--navy .off-kpi-val { color: var(--acc-text); }
-.off-kpi-card--navy .off-kpi-lbl { color: var(--acc-text); opacity: .75; }
-.off-kpi-val {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--navy);
-  line-height: 1;
-  margin-bottom: 3px;
-}
+.off-kpi-card--navy .off-kpi-val   { color: var(--acc-text); }
+.off-kpi-card--navy .off-kpi-lbl   { color: var(--acc-text); opacity: .75; }
+.off-kpi-card--navy .off-kpi-count { color: var(--acc-text); opacity: .75; }
+.off-kpi-card--navy .off-kpi-unit  { color: var(--acc-text); opacity: .6; }
 .off-kpi-lbl {
   font-size: 11px;
   font-weight: 600;
   color: var(--mt);
   letter-spacing: .1px;
+  margin-bottom: 3px;
+}
+/* V48B1: beloppet är kortets primära visuella fokus — "st"/"exkl. moms"
+   är sekundär metadata under det. */
+.off-kpi-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy);
+  line-height: 1.15;
+}
+.off-kpi-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+.off-kpi-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mt);
+}
+.off-kpi-unit {
+  font-size: 10px;
+  color: var(--mt);
+  opacity: .75;
 }
 
 /* ── OFFER TIMELINE ── */
@@ -1471,7 +1503,19 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-new-cu-btn:hover { border-color: #1d4ed8; background: #dbeafe; }
 
 /* ── OFFER LIST CARDS ── */
-.off-offer-card { border-left-width: 4px !important; padding: 12px 14px; }
+.off-offer-card { border-left-width: 4px !important; border-left-color: var(--br); padding: 12px 14px; }
+/* V48B1 §5: kortets accentfärg härleds från canonical statusClass()/sbdg()
+   (state.js) via data-status-accent — INGEN egen statuskarta i JS. De 8
+   klassnamnen nedan är den redan etablerade, slutna mängden bdg-*-klasser
+   som statusClass() returnerar överallt i appen. */
+.off-offer-card[data-status-accent="bdg-blue"]   { border-left-color: #1e40af; }
+.off-offer-card[data-status-accent="bdg-green"]  { border-left-color: var(--gr); }
+.off-offer-card[data-status-accent="bdg-red"]    { border-left-color: var(--rd); }
+.off-offer-card[data-status-accent="bdg-orange"] { border-left-color: var(--or); }
+.off-offer-card[data-status-accent="bdg-purple"] { border-left-color: var(--pu); }
+.off-offer-card[data-status-accent="bdg-grey"]   { border-left-color: #94a3b8; }
+.off-offer-card[data-status-accent="bdg-sky"]    { border-left-color: #0369a1; }
+.off-offer-card[data-status-accent="bdg-yellow"] { border-left-color: var(--yl); }
 .off-offer-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
 .off-offer-card-id { font-size: 11px; font-weight: 700; color: var(--mt); letter-spacing: .2px; }
 .off-offer-card-title { font-size: 14px; font-weight: 600; color: var(--tx); margin-bottom: 3px; line-height: 1.25; }
@@ -1486,6 +1530,24 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ins-godkand { background: #f0fdf4; color: var(--gr); }
 .ins-nekad   { background: #fef2f2; color: var(--rd); }
 .ins-expiry  { background: #fff7ed; color: var(--or); font-weight: 600; }
+
+/* V48B1 R2: kompakt inline-felruta i offertens SEND/REMINDER-modaler —
+   diskret istället för en aggressiv helröd yta. */
+.off-send-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--rs);
+  color: #991b1b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.off-send-error svg { flex-shrink: 0; margin-top: 1px; color: var(--rd); }
+.off-send-error[hidden] { display: none; }
 
 /* ── OFFER DETAIL HERO ── */
 .off-detail-hero {

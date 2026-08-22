@@ -207,6 +207,15 @@
   }
 }
 
+/* ── V48B1: Mobil offertlista — statusfilter som <select>, ─────────
+   inte horisontellt scrollande flikrad (uttryckligt VIFT UX-krav).
+   Testat strukturellt vid 360/390/430px — se RAPPORT-V48B1.md. */
+@media (max-width: 639px) {
+  .off-tabs-desktop { display: none; }
+  .off-tabs-mobile-wrap { display: block; margin-bottom: 6px; }
+  .off-tabs-mobile-select { width: 100%; }
+}
+
 /* ── Mobil AO-detalj ────────────────────────────────── */
 @media (max-width: 639px) {
   /* Back-knapp: bara ikon på mobil */

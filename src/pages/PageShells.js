@@ -469,32 +469,56 @@ const OffersPage = {
   },
 
   /* ── Offertlista ─── */
+  /* V48B1 §1/§2: KPI-beloppen bygger ALLTID på den kanoniska ekonomimotorn
+     (_offerCalcTotals) — se _kpiOfferValue() nedan. Ingen duplicerad
+     ekonomiberäkning i denna funktion. */
+  _KPI_PAGAENDE_STATUSES:  ['skickad', 'påmind', 'väntar', 'ändring-begärd'],
+  _KPI_OFFERERAT_STATUSES: ['skickad', 'påmind', 'väntar', 'ändring-begärd', 'godkänd', 'nekad', 'utgången'],
+
+  /* Presentationshelper — returnerar ENDAST det kanoniska ex-moms-värdet
+     efter rabatt. Duplicerar ingen logik: delegerar rakt av till
+     _offerCalcTotals(), som förblir den enda platsen som räknar. */
+  _kpiOfferValue(o) {
+    return _offerCalcTotals(o).exVatAfterDiscount;
+  },
+
   render() {
     const el = document.getElementById('pg-offer-content');
     if (!el) return;
     const all = (state.offers || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    /* R6 §1: huvud-KPI:erna ska representera AKTIVA offerter — samma
-       exkluderingsprincip som _getKpi() (som redan används korrekt för
-       flik-räknarna) redan följer. `all` (obeskuret) används fortfarande
-       oförändrat av list-/arkiv-/papperskorgsflödena längre ned. */
+    /* V48B1 §2: huvud-KPI:erna representerar AKTIVA offerter (samma
+       exkluderingsprincip som _getKpi() redan följer för flik-räknarna).
+       `all` (obeskuret) används fortfarande oförändrat av
+       list-/arkiv-/papperskorgsflödena längre ned. */
     const active = all.filter(o => !o.deleted && !o.archived);
-    const kpi = {utkast:0, skickad:0, godkänd:0, nekad:0, total:0};
-    let totalGodkändVal = 0;
+    const kUtkast   = {n: 0, v: 0};
+    const kPagaende = {n: 0, v: 0};
+    const kGodkand  = {n: 0, v: 0};
+    const kTotalt   = {n: 0, v: 0};
     active.forEach(o => {
-      if (kpi[o.status] !== undefined) kpi[o.status]++;
-      kpi.total++;
-      if (o.status === 'godkänd') totalGodkändVal += OffersPage._offerExVat(o);
+      const val = OffersPage._kpiOfferValue(o);
+      if (o.status === 'utkast') { kUtkast.n++; kUtkast.v += val; }
+      if (OffersPage._KPI_PAGAENDE_STATUSES.includes(o.status))  { kPagaende.n++; kPagaende.v += val; }
+      if (o.status === 'godkänd') { kGodkand.n++; kGodkand.v += val; }
+      if (OffersPage._KPI_OFFERERAT_STATUSES.includes(o.status)) { kTotalt.n++; kTotalt.v += val; }
     });
+
+    const kpiCard = (lbl, k, variantCls) =>
+      `<div class="off-kpi-card${variantCls?' '+variantCls:''}">
+         <div class="off-kpi-lbl">${lbl}</div>
+         <div class="off-kpi-val">${fmt(k.v)} kr</div>
+         <div class="off-kpi-meta"><span class="off-kpi-count">${k.n} st</span><span class="off-kpi-unit">exkl. moms</span></div>
+       </div>`;
 
     // Render static shell (KPI + toolbar + tabs container + results container).
     // The search input is part of the shell and is NOT re-rendered on keystroke.
     el.innerHTML =
       `<div class="off-kpi-row">
-         <div class="off-kpi-card"><div class="off-kpi-val">${kpi.utkast}</div><div class="off-kpi-lbl">Utkast</div></div>
-         <div class="off-kpi-card"><div class="off-kpi-val">${kpi.skickad}</div><div class="off-kpi-lbl">Skickade</div></div>
-         <div class="off-kpi-card off-kpi-card--green"><div class="off-kpi-val">${kpi.godkänd}</div><div class="off-kpi-lbl">Godkända</div></div>
-         <div class="off-kpi-card off-kpi-card--navy"><div class="off-kpi-val">${fmt(totalGodkändVal)}</div><div class="off-kpi-lbl">Godkänt värde ex. moms</div></div>
+         ${kpiCard('Utkast', kUtkast)}
+         ${kpiCard('Pågående', kPagaende)}
+         ${kpiCard('Godkända', kGodkand, 'off-kpi-card--green')}
+         ${kpiCard('Totalt offererat', kTotalt, 'off-kpi-card--navy')}
        </div>
        <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;">
          <div class="swrap" style="flex:1;">
@@ -506,10 +530,16 @@ const OffersPage = {
          </div>
          <button class="btn bp bsm" onclick="OffersPage.openCreate()">${ic('plus',14)} Ny offert</button>
        </div>
-       <div id="off-tabs-row" class="ftabs" style="margin-bottom:6px;"></div>
+       <div class="off-tabs-wrap">
+         <div id="off-tabs-row" class="ftabs off-tabs-desktop"></div>
+         <div class="off-tabs-mobile-wrap">
+           <label class="off-tabs-mobile-label" for="off-tabs-mobile">Status</label>
+           <select id="off-tabs-mobile" class="off-tabs-mobile-select" onchange="OffersPage._setFilter(this.value)"></select>
+         </div>
+       </div>
        <div id="off-results"></div>`;
 
-    this._renderTabRow(kpi);
+    this._renderTabRow();
     this._renderResults();
   },
 
@@ -523,25 +553,31 @@ const OffersPage = {
     return kpi;
   },
 
+  /* V48B1 §4: EN sanningskälla för "Behöver åtgärd" — anropas identiskt
+     från både _renderTabRow() (badge-räkning) och _renderResults()
+     (faktisk filtrering), så de aldrig kan divergera. Exakt samma
+     affärsdefinition som tidigare, bara konsoliderad till en plats. */
+  _offerNeedsAction(o, now) {
+    if (o.deleted || o.archived) return false;
+    if (o.status === 'ändring-begärd') return true;
+    if (o.status === 'godkänd' && !o.workOrderId) return true;
+    const tokenActive = o.publicToken && !o.tokenRevokedAt && !(o.tokenExpiresAt && new Date(o.tokenExpiresAt).getTime() < now);
+    if (tokenActive && !o.openCount && o.sentAt && (now - new Date(o.sentAt).getTime()) > 2 * 86400000) return true;
+    if (o.tokenExpiresAt && !o.tokenRevokedAt && new Date(o.tokenExpiresAt).getTime() > now && (new Date(o.tokenExpiresAt).getTime() - now) < 3 * 86400000) return true;
+    return false;
+  },
+
   _renderTabRow(kpi) {
-    const el = document.getElementById('off-tabs-row');
-    if (!el) return;
+    const elDesktop = document.getElementById('off-tabs-row');
+    const elMobile  = document.getElementById('off-tabs-mobile');
+    if (!elDesktop && !elMobile) return;
     const c = kpi || this._getKpi();
     const f = this._filter || 'alla';
     const kpiPamind   = (state.offers||[]).filter(o=>!o.deleted&&!o.archived&&o.status==='påmind').length;
     const kpiArkiv    = (state.offers||[]).filter(o=>o.archived&&!o.deleted).length;
     const kpiPapperskorg = (state.offers||[]).filter(o=>o.deleted).length;
-    /* Punkt 124 — "Behöver åtgärd": ändring-begärd + digitala länkflaggor */
     const now7d = Date.now();
-    const kpiAtgard = (state.offers||[]).filter(o => {
-      if (o.deleted || o.archived) return false;
-      if (o.status === 'ändring-begärd') return true;
-      if (o.status === 'godkänd' && !o.workOrderId) return true;
-      const tokenActive = o.publicToken && !o.tokenRevokedAt && !(o.tokenExpiresAt && new Date(o.tokenExpiresAt).getTime() < now7d);
-      if (tokenActive && !o.openCount && o.sentAt && (now7d - new Date(o.sentAt).getTime()) > 2 * 86400000) return true;
-      if (o.tokenExpiresAt && !o.tokenRevokedAt && new Date(o.tokenExpiresAt).getTime() > now7d && (new Date(o.tokenExpiresAt).getTime() - now7d) < 3 * 86400000) return true;
-      return false;
-    }).length;
+    const kpiAtgard = (state.offers||[]).filter(o => OffersPage._offerNeedsAction(o, now7d)).length;
     const tabs = [
       {v:'alla',         l:'Alla',                   n:c.total},
       {v:'utkast',       l:'Utkast',                 n:c.utkast},
@@ -553,9 +589,19 @@ const OffersPage = {
       {v:'arkiverade',   l:'Arkiverade',             n:kpiArkiv},
       {v:'papperskorg',  l:'Papperskorg',            n:kpiPapperskorg},
     ];
-    el.innerHTML = tabs.map(t =>
-      `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')" style="${t.urgent?'color:var(--or);':''}">${t.l}${t.n?` <span style="background:${t.urgent?'var(--or)':'rgba(0,0,0,.10)'};${t.urgent?'color:#fff;':''}border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
-    ).join('');
+    if (elDesktop) {
+      elDesktop.innerHTML = tabs.map(t =>
+        `<button class="ft ${f===t.v?'on':''}" onclick="OffersPage._setFilter('${t.v}')" style="${t.urgent?'color:var(--or);':''}">${t.l}${t.n?` <span style="background:${t.urgent?'var(--or)':'rgba(0,0,0,.10)'};${t.urgent?'color:#fff;':''}border-radius:9px;padding:0 5px;font-size:9px;">${t.n}</span>`:''}</button>`
+      ).join('');
+    }
+    if (elMobile) {
+      /* V48B1 §7: samma `tabs`-array som desktop-flikarna, samma
+         OffersPage._filter-state, samma _setFilter()-anrop — mobilselect
+         är enbart en annan PRESENTATION av exakt samma filterlogik. */
+      elMobile.innerHTML = tabs.map(t =>
+        `<option value="${t.v}"${f===t.v?' selected':''}>${t.l}${t.n?` (${t.n})`:''}</option>`
+      ).join('');
+    }
   },
 
   _setFilter(v) {
@@ -607,15 +653,7 @@ const OffersPage = {
       offers = offers.filter(o => !o.archived && !o.deleted);
     } else if (filterTab === 'atgard') {
       const nowA = Date.now();
-      offers = offers.filter(o => {
-        if (o.deleted || o.archived) return false;
-        if (o.status === 'ändring-begärd') return true;
-        if (o.status === 'godkänd' && !o.workOrderId) return true;
-        const tokActive = o.publicToken && !o.tokenRevokedAt && !(o.tokenExpiresAt && new Date(o.tokenExpiresAt).getTime() < nowA);
-        if (tokActive && !o.openCount && o.sentAt && (nowA - new Date(o.sentAt).getTime()) > 2 * 86400000) return true;
-        if (o.tokenExpiresAt && !o.tokenRevokedAt && new Date(o.tokenExpiresAt).getTime() > nowA && (new Date(o.tokenExpiresAt).getTime() - nowA) < 3 * 86400000) return true;
-        return false;
-      });
+      offers = offers.filter(o => OffersPage._offerNeedsAction(o, nowA));
     } else {
       offers = offers.filter(o => !o.archived && !o.deleted && o.status === filterTab);
     }
@@ -652,8 +690,10 @@ const OffersPage = {
       const rutAmt  = _tot.rutRotAmount;
       const cust    = _tot.customerPays;
       const insight = OffersPage._offerInsight(o);
-      const statusColors = {utkast:'#94a3b8',skickad:'var(--blue)',påmind:'var(--pu)',väntar:'var(--or)',godkänd:'var(--gr)',nekad:'var(--rd)',utgången:'var(--mt)',ersatt:'#94a3b8'};
-      const borderColor = statusColors[o.status] || 'var(--br)';
+      /* V48B1 §5: ingen egen JS-statusfärgkarta — kortets accent härleds
+         från samma kanoniska statusClass()/sbdg() som statusbadgen ovan i
+         kortet, via en data-attribut-baserad CSS-mappning (components.css). */
+      const accentClass = statusClass(o.status);
       // Nästa aktivitet
       const nextActLine = (() => {
         const acts = (state.activities||[]).filter(a => a.relatedType==='offer' && a.relatedId===o.id && a.status==='open');
@@ -671,7 +711,7 @@ const OffersPage = {
           ? `<span style="font-size:10px;color:var(--rd);font-weight:700;">${ic('alert-circle',9)} Uppföljning försenad: ${dateStr}</span>`
           : `<span style="font-size:10px;color:var(--gr);">${ic('calendar-check',9)} Uppföljning: ${dateStr}</span>`;
       })();
-      return `<div class="list-item off-offer-card" style="border-left-color:${borderColor};" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
+      return `<div class="list-item off-offer-card" data-status-accent="${accentClass}" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
   <div class="off-offer-card-top">
     <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
       <span class="off-offer-card-id">${o.id}</span>
@@ -2621,6 +2661,44 @@ const OfferDetailPage = {
     utgången: ['väntar']
   },
 
+  /* V48B1 R2: samma grundprincip som Edge Function-valideringen — enbart
+     pre-flight UX i frontend, Edge Function förblir auktoritativ. */
+  _EMAIL_RE: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+
+  /* Visar/döljer ett kompakt inline-fel i SEND/REMINDER-modalerna.
+     Ersätter INTE global showToast() — se rapportens backlog-fynd om
+     showToast(msg, 'error')-buggen (out of scope för denna hotfix). */
+  _showInlineError(id, msg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = ic('alert-circle', 12) + ' <span>' + esc(msg) + '</span>';
+    el.hidden = false;
+  },
+
+  _clearInlineError(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.hidden = true;
+    el.innerHTML = '';
+  },
+
+  /* Mappar Edge Function-fel (serverJson.error) till användarvänlig text.
+     Rå providertext/tekniska fel visas ALDRIG som primär text — de loggas
+     separat via console.error på anropsplatsen. */
+  _friendlySendError(serverJson) {
+    const code = (serverJson && serverJson.error) || '';
+    const map = {
+      invalid_recipient:       'E-postadressen verkar inte vara giltig. Kontrollera mottagaren och försök igen.',
+      already_sent:            'Offerten har redan skickats under de senaste 5 minuterna.',
+      rate_limited:            'För många utskick på kort tid. Vänta en minut och försök igen.',
+      unauthorized:            'Du saknar behörighet att skicka offerten. Logga in igen eller kontakta administratör.',
+      forbidden:                'Du saknar behörighet att skicka offerten. Logga in igen eller kontakta administratör.',
+      provider_not_configured: 'E-posttjänsten är inte korrekt konfigurerad. Kontakta administratör.',
+      send_failed:              'Offerten kunde inte skickas. Kontrollera e-postadressen och försök igen.'
+    };
+    return map[code] || 'Offerten kunde inte skickas. Försök igen.';
+  },
+
   setStatus(status) {
     const off = getOff(this.offerId);
     if (!off) return;
@@ -3825,7 +3903,8 @@ ${hasRut?`<div class="rut">
         </label>
         <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
           ${ic('info',10)} Skickar via Resend. Händelselogg sparas i offerttidslinjen.
-        </div>`,
+        </div>
+        <div id="send-error" class="off-send-error" hidden></div>`,
       buttons: [
         { label: ic('send',13) + ' Skicka', cls: 'btn bp', onClick: () => this._doSendEmail(off) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -3860,6 +3939,8 @@ ${hasRut?`<div class="rut">
   },
 
   async _doSendEmail(off) {
+    this._clearInlineError('send-error');
+
     const toRaw   = (document.getElementById('send-to')?.value||'').trim();
     const ccRaw   = (document.getElementById('send-cc')?.value||'').trim();
     const bccRaw  = (document.getElementById('send-bcc')?.value||'').trim();
@@ -3870,12 +3951,20 @@ ${hasRut?`<div class="rut">
     if (!subject)  { showToast('Ämnesrad saknas');     return; }
     if (!bodyTxt)  { showToast('Meddelandetext saknas'); return; }
 
-    const parseEmails = s => s.split(/[\s,;]+/).map(e=>e.trim()).filter(e=>e.includes('@'));
+    const parseEmails = s => s.split(/[\s,;]+/).map(e=>e.trim()).filter(Boolean);
     const recipients  = parseEmails(toRaw);
     const cc          = parseEmails(ccRaw);
     const bcc         = parseEmails(bccRaw);
 
     if (!recipients.length) { showToast('Ingen giltig e-postadress'); return; }
+
+    /* V48B1 R2: pre-flight formatvalidering — samma grundprincip som
+       Edge Function. Endast syntax, ingen DNS/mailbox-verifiering. Edge
+       Function förblir auktoritativ. */
+    if ([...recipients, ...cc, ...bcc].some(e => !this._EMAIL_RE.test(e))) {
+      this._showInlineError('send-error', 'Kontrollera e-postadressen. En eller flera adresser är inte giltiga.');
+      return;
+    }
 
     const attachmentIds = [...document.querySelectorAll('.send-att-cb:checked')].map(cb => cb.value);
 
@@ -3937,8 +4026,8 @@ ${hasRut?`<div class="rut">
     // Vid fel: bevara serverändringar med persist() och stanna kvar i dialogen
     if (!sendOk) {
       console.error('[send-offer-email] Fel:', sendErr);
-      showToast('Kunde inte skicka offerten: ' + sendErr, 'error');
-      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = ic('send',13) + ' Skicka'; }
+      this._showInlineError('send-error', this._friendlySendError(serverJson));
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.innerHTML = ic('send',13) + ' Skicka'; }
       if (patchesApplied) persist();
       return;
     }
@@ -4023,7 +4112,8 @@ ${hasRut?`<div class="rut">
           <textarea id="remind-body" rows="7">${esc(body2)}</textarea></div>
         <div style="background:var(--bg);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--mt);">
           ${ic('info',10)} Skickar via Resend. Status ändras till "Påmind".
-        </div>`,
+        </div>
+        <div id="remind-error" class="off-send-error" hidden></div>`,
       buttons: [
         { label: ic('bell',13) + ' Skicka påminnelse', cls: 'btn bp', onClick: () => this._doSendReminder(off) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -4033,14 +4123,24 @@ ${hasRut?`<div class="rut">
   },
 
   async _doSendReminder(off) {
+    this._clearInlineError('remind-error');
+
     const toRaw   = (document.getElementById('remind-to')?.value||'').trim();
     const subject = (document.getElementById('remind-subject')?.value||'').trim();
     const bodyTxt = (document.getElementById('remind-body')?.value||'').trim();
     if (!toRaw) { showToast('Fyll i e-postadress'); return; }
 
-    const parseEmails = s => s.split(/[\s,;]+/).map(e=>e.trim()).filter(e=>e.includes('@'));
+    const parseEmails = s => s.split(/[\s,;]+/).map(e=>e.trim()).filter(Boolean);
     const recipients  = parseEmails(toRaw);
     if (!recipients.length) { showToast('Ingen giltig e-postadress'); return; }
+
+    /* V48B1 R2: pre-flight formatvalidering — samma grundprincip som
+       Edge Function. Endast syntax, ingen DNS/mailbox-verifiering. Edge
+       Function förblir auktoritativ. */
+    if (recipients.some(e => !this._EMAIL_RE.test(e))) {
+      this._showInlineError('remind-error', 'Kontrollera e-postadressen. En eller flera adresser är inte giltiga.');
+      return;
+    }
 
     const bodyHtml = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1e293b;">' +
       bodyTxt.replace(/\n/g,'<br>') + '</div>';
@@ -4083,8 +4183,8 @@ ${hasRut?`<div class="rut">
     // Vid fel: bevara serverändringar med persist() och stanna kvar i dialogen
     if (!sendOk) {
       console.error('[send-offer-email] Påminnelsefel:', sendErr);
-      showToast('Kunde inte skicka påminnelsen: ' + sendErr, 'error');
-      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = ic('bell',13) + ' Skicka påminnelse'; }
+      this._showInlineError('remind-error', this._friendlySendError(remindJson));
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.innerHTML = ic('bell',13) + ' Skicka påminnelse'; }
       if (patchesApplied) persist();
       return;
     }
