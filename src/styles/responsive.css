@@ -131,19 +131,6 @@
     font-size: 11px;
   }
 
-  /* Offertkalkylator — inputs */
-  .off-calc-fields {
-    display: block;
-  }
-  .off-calc-fields .g2,
-  .off-calc-fields .g3 {
-    grid-template-columns: 1fr;
-  }
-  .off-calc-chip-row {
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
   /* AO material-tabell */
   .ao-mat-table {
     display: block;

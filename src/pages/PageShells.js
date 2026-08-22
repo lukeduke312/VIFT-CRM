@@ -957,12 +957,12 @@ const OffersPage = {
               <input type="date" id="off-valid" value="${esc(d.validUntil)}"
                 oninput="OffersPage._wizardData.validUntil=this.value"></div>
           </div>
-          <details style="margin-bottom:10px;">
-            <summary style="font-size:12px;font-weight:600;color:var(--navy);cursor:pointer;padding:6px 0;list-style:none;display:flex;align-items:center;gap:5px;">
+          <details class="off-wiz-collapse-plain">
+            <summary>
               ${ic('zap',11)} Lägg till uppdragsbeskrivning
             </summary>
             <summary style="display:none;"></summary>
-            <div style="padding-top:6px;">
+            <div class="off-wiz-collapse-plain-body">
               <div class="fg">
                 <label>Kort sammanfattning</label>
                 <textarea id="off-summary" rows="3" placeholder="T.ex. Stentvätt av marksten, ca 120 m², med algbehandling…"
@@ -976,11 +976,11 @@ const OffersPage = {
           </details>
         </div>
         <div class="off-s1-col">
-          <details style="margin-bottom:10px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;" ${d.scope||d.includes||d.excludes?'open':''}>
-            <summary style="padding:10px 12px;font-size:12px;font-weight:600;color:var(--navy);cursor:pointer;background:var(--bg);list-style:none;display:flex;align-items:center;gap:6px;">
+          <details class="off-wiz-collapse-boxed off-wiz-collapse-boxed--s1" ${d.scope||d.includes||d.excludes?'open':''}>
+            <summary>
               ${ic('align-left',12)} Uppdragsbeskrivning (valfritt)
             </summary>
-            <div style="padding:10px 12px;">
+            <div class="off-wiz-collapse-boxed-body">
               <div class="fg">
                 <label>Uppdragets omfattning</label>
                 ${this._toolbarHtml('off-scope','scope')}
@@ -1053,28 +1053,28 @@ const OffersPage = {
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
-          <div class="off-action-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
-            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._openSvcCalc(null)">
+          <div class="off-action-cards">
+            <button type="button" class="off-action-card" onclick="OffersPage._openSvcCalc(null)">
               <span class="off-action-card-icon">${ic('zap',14)}</span>
               <div><div class="off-action-card-title">Tjänst / kalkyl</div><div class="off-action-card-sub">VIFT:s prismodell</div></div>
             </button>
-            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._addFixedLine()">
+            <button type="button" class="off-action-card" onclick="OffersPage._addFixedLine()">
               <span class="off-action-card-icon">${ic('tag',14)}</span>
               <div><div class="off-action-card-title">Fastpris</div><div class="off-action-card-sub">Eget fast pris</div></div>
             </button>
-            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._addManualLine()">
+            <button type="button" class="off-action-card" onclick="OffersPage._addManualLine()">
               <span class="off-action-card-icon">${ic('plus',14)}</span>
               <div><div class="off-action-card-title">Löpande rad</div><div class="off-action-card-sub">Antal × à-pris</div></div>
             </button>
-            <button type="button" class="off-action-card" style="padding:8px 10px;" onclick="OffersPage._addTextBlock()">
+            <button type="button" class="off-action-card" onclick="OffersPage._addTextBlock()">
               <span class="off-action-card-icon">${ic('align-left',14)}</span>
               <div><div class="off-action-card-title">Fritext</div><div class="off-action-card-sub">Info utan pris</div></div>
             </button>
           </div>
           <div id="off-lines">${this._linesHtml()}</div>
-          <details style="margin-top:7px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
-            <summary style="padding:8px 11px;font-size:11px;font-weight:700;cursor:pointer;background:#fff;display:flex;align-items:center;gap:5px;">${ic('plus',11)} Tillval (valfria extratjänster)</summary>
-            <div style="padding:7px 11px 11px;">
+          <details class="off-wiz-collapse-tillval">
+            <summary>${ic('plus',11)} Tillval (valfria extratjänster)</summary>
+            <div class="off-wiz-collapse-tillval-body">
               <div id="off-extras">${this._extrasInnerHtml()}</div>
               <button type="button" class="btn bs bxs" style="margin-top:5px;" onclick="OffersPage._addExtra()">${ic('plus',10)} Lägg till tillval</button>
             </div>
@@ -1084,14 +1084,14 @@ const OffersPage = {
           <div id="off-totals-bar">${this._totalsBarHtml()}</div>
           <div class="off-discount-ctrl">
             <label>Rabatt</label>
-            <div style="display:flex;gap:4px;align-items:center;">
-              <select id="off-disc-type" style="width:auto;"
+            <div class="off-discount-ctrl-row">
+              <select id="off-disc-type" class="off-discount-ctrl-type"
                 onchange="OffersPage._discount.type=this.value;OffersPage._refreshTotals()">
                 <option value="percent"${discType==='percent'?' selected':''}>%</option>
                 <option value="fixed"${discType==='fixed'?' selected':''}>kr</option>
               </select>
               <input type="number" id="off-disc-val" value="${discVal}" min="0" step="1" placeholder="0"
-                style="width:64px;"
+                class="off-discount-ctrl-value"
                 oninput="OffersPage._discount.value=parseFloat(this.value)||0;OffersPage._refreshTotals()">
             </div>
           </div>
@@ -1106,14 +1106,14 @@ const OffersPage = {
     const prLines = this._editLines.filter(l => l.type !== 'text').length;
     const txtLines = this._editLines.filter(l => l.type === 'text').length;
     return `
-      <div style="margin-bottom:16px;border:2px solid var(--navy);border-radius:var(--rs);overflow:hidden;">
-        <div style="background:var(--navy);padding:8px 14px;">
-          <div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;">Offertsummering</div>
+      <div class="off-wiz-summary-card">
+        <div class="off-wiz-summary-card-hd">
+          <div class="off-wiz-summary-card-hd-txt">Offertsummering</div>
         </div>
-        <div style="background:#fff;padding:4px 0;">
-          ${this._totalsBarHtml().replace('<div class="off-totals-card">','<div class="off-totals-card" style="border:none;border-radius:0;margin:0;">').replace('<div class="off-totals-card-hd">Sammanfattning</div>','')}
+        <div class="off-wiz-summary-card-body">
+          ${this._totalsBarHtml().replace('<div class="off-totals-card">','<div class="off-totals-card off-totals-card--bare">').replace('<div class="off-totals-card-hd">Sammanfattning</div>','')}
         </div>
-        <div style="padding:4px 14px 8px;font-size:10px;color:var(--mt);background:#f8f9fa;border-top:1px solid var(--bg);">
+        <div class="off-wiz-summary-card-ft">
           ${prLines} pristrader · ${txtLines} textblock
         </div>
       </div>
@@ -1130,11 +1130,11 @@ const OffersPage = {
         <textarea id="off-terms" rows="4" placeholder="Allmänna villkor…"
           oninput="OffersPage._wizardData.generalTerms=this.value">${esc(d.generalTerms)}</textarea>
       </div>
-      <details style="margin-top:10px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;" ${d.internalNote?'open':''}>
-        <summary style="padding:10px 12px;font-size:12px;font-weight:600;color:var(--mt);cursor:pointer;background:var(--bg);list-style:none;display:flex;align-items:center;gap:6px;">
+      <details class="off-wiz-collapse-boxed off-wiz-collapse-boxed--s3" ${d.internalNote?'open':''}>
+        <summary>
           ${ic('lock',11)} Intern anteckning (valfritt, visas ej för kund)
         </summary>
-        <div style="padding:10px 12px;">
+        <div class="off-wiz-collapse-boxed-body">
           <textarea id="off-note" rows="2" placeholder="Intern anteckning…"
             oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
         </div>
@@ -1156,7 +1156,7 @@ const OffersPage = {
       <div class="off-totals-card-hd">Sammanfattning</div>
       <div class="off-totals-card-body">
         <div class="off-totals-row"><span>Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
-        ${discAmt ? `<div class="off-totals-rut" style="color:#b45309;"><span>Rabatt</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
+        ${discAmt ? `<div class="off-totals-rut off-totals-rut--discount"><span>Rabatt</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
         <div class="off-totals-row"><span>Moms</span><strong>${fmt(vat)} kr</strong></div>
         <div class="off-totals-divider"></div>
         <div class="off-totals-total"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
@@ -1221,22 +1221,22 @@ const OffersPage = {
     const cust   = incVat - rutAmt;
     return `<div class="off-svc-card">
       <div class="off-svc-card-hd">
-        <div style="flex:1;min-width:0;">
+        <div class="off-svc-card-hd-main">
           <div class="off-svc-card-title">${l.templateName||'Tjänst'}</div>
           <div class="off-svc-card-meta">${ic('zap',9)} Tjänst</div>
-          ${l.calculationNote ? `<div class="off-svc-card-sub" style="margin-bottom:2px;">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>` : ''}
+          ${l.calculationNote ? `<div class="off-svc-card-sub off-svc-card-sub--tight">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>` : ''}
           ${(l.subLines||[]).map(sl=>`<div class="off-svc-card-sub">${sl.desc} · ${sl.qty} ${sl.unit} × ${fmt(sl.price)} = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
         </div>
-        <div style="flex-shrink:0;text-align:right;">
+        <div class="off-svc-card-hd-price">
           <div class="off-svc-card-price">${fmt(exVat)} kr</div>
           <div class="off-svc-card-price-sub">ex. moms · Moms ${_normVat(l.vatRate)}%</div>
           ${rutAmt ? `<div class="off-svc-card-rut">Kund: ${fmt(cust)} kr inkl.</div>` : ''}
         </div>
       </div>
       <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Beskrivning på offerten…"
-        style="font-size:11px;margin-bottom:6px;"
+        class="off-svc-card-desc-input"
         oninput="OffersPage._editLines[${i}].description=this.value">
-      <div style="display:flex;gap:5px;">
+      <div class="off-svc-card-actions">
         <button type="button" class="btn bs bxs" onclick="OffersPage._openSvcCalc(${i})">${ic('pencil',10)} Redigera</button>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('trash-2',10)} Ta bort</button>
       </div>
@@ -1246,27 +1246,27 @@ const OffersPage = {
   _renderManualCard(l, i) {
     const units = ['st','tim','m','m²','m³','lm','kg','l','paket','mån'];
     const total  = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
-    return `<div style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:10px 12px;margin-bottom:7px;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
-        <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">${ic('minus',9)} Manuell rad</span>
-        <div style="flex:1;"></div>
-        <strong style="font-size:12px;color:var(--navy);" id="off-lt-${i}">${fmt(total)} kr</strong>
+    return `<div class="off-wiz-line-card">
+      <div class="off-wiz-line-card-hd">
+        <span class="off-wiz-line-card-type">${ic('minus',9)} Manuell rad</span>
+        <div class="off-wiz-line-card-spacer"></div>
+        <strong class="off-wiz-line-card-total" id="off-lt-${i}">${fmt(total)} kr</strong>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
       </div>
-      <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning" style="margin-bottom:6px;font-size:12px;"
+      <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning" class="off-wiz-line-field-desc"
         oninput="OffersPage._editLines[${i}].description=this.value">
-      <div style="display:grid;grid-template-columns:72px 72px 1fr 68px;gap:5px;">
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Antal</label>
+      <div class="off-wiz-line-manual-grid">
+        <div><label class="off-wiz-line-field-label">Antal</label>
           <input type="number" value="${l.qty!=null?l.qty:1}" min="0" step="0.5"
             oninput="OffersPage._editLines[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Enhet</label>
+        <div><label class="off-wiz-line-field-label">Enhet</label>
           <select onchange="OffersPage._editLines[${i}].unit=this.value">
             ${units.map(u=>`<option${(l.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
           </select></div>
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">À-pris ex. moms (kr)</label>
+        <div><label class="off-wiz-line-field-label">À-pris ex. moms (kr)</label>
           <input type="number" value="${l.unitPrice||0}" min="0" step="1"
             oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Moms</label>
+        <div><label class="off-wiz-line-field-label">Moms</label>
           <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
             ${this._vatOptionsHtml(_normVat(l.vatRate))}
           </select></div>
@@ -1275,13 +1275,13 @@ const OffersPage = {
   },
 
   _renderTextCard(l, i) {
-    return `<div style="background:#fff;border:1px solid var(--br);border-radius:var(--rs);padding:10px 12px;margin-bottom:7px;border-left:3px solid #cbd5e1;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
-        <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">${ic('align-left',9)} Fritextblock</span>
-        <div style="flex:1;"></div>
+    return `<div class="off-wiz-line-card off-wiz-line-card--text">
+      <div class="off-wiz-line-card-hd">
+        <span class="off-wiz-line-card-type">${ic('align-left',9)} Fritextblock</span>
+        <div class="off-wiz-line-card-spacer"></div>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
       </div>
-      <input value="${(l.blockTitle||'').replace(/"/g,'&quot;')}" placeholder="Rubrik (t.ex. Förutsättningar)" style="margin-bottom:6px;font-weight:600;font-size:12px;"
+      <input value="${(l.blockTitle||'').replace(/"/g,'&quot;')}" placeholder="Rubrik (t.ex. Förutsättningar)" class="off-wiz-line-field-title"
         oninput="OffersPage._editLines[${i}].blockTitle=this.value">
       <textarea rows="2" placeholder="Fritext som visas på offerten…"
         oninput="OffersPage._editLines[${i}].text=this.value">${l.text||''}</textarea>
@@ -1353,31 +1353,31 @@ const OffersPage = {
   _renderFixedCard(l, i) {
     const tot    = Math.round(l.unitPrice || 0);
     const incVat = tot + Math.round(tot * _normVat(l.vatRate) / 100);
-    return `<div class="off-svc-card" style="border-left-color:#0ea5e9;">
+    return `<div class="off-svc-card off-svc-card--fixed">
       <div class="off-svc-card-hd">
-        <div style="flex:1;min-width:0;">
+        <div class="off-svc-card-hd-main">
           <div class="off-svc-card-meta">${ic('tag',9)} Fastpris</div>
           <input class="off-fixed-name" value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning…"
             oninput="OffersPage._editLines[${i}].description=this.value">
         </div>
-        <div style="flex-shrink:0;text-align:right;">
+        <div class="off-svc-card-hd-price">
           <div class="off-svc-card-price" id="off-lt-${i}">${fmt(tot)} kr</div>
           <div class="off-svc-card-price-sub" id="off-lsub-${i}">ex. moms · ${fmt(incVat)} kr inkl.</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:110px 68px 1fr;gap:6px;margin-top:6px;">
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Pris ex moms (kr)</label>
+      <div class="off-wiz-line-fixed-grid">
+        <div><label class="off-wiz-line-field-label">Pris ex moms (kr)</label>
           <input type="number" value="${l.unitPrice||0}" min="0" step="1"
             oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Moms</label>
+        <div><label class="off-wiz-line-field-label">Moms</label>
           <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
             ${this._vatOptionsHtml(_normVat(l.vatRate))}
           </select></div>
-        <div><label style="font-size:9px;color:var(--mt);font-weight:600;display:block;margin-bottom:2px;">Intern anteckning</label>
+        <div><label class="off-wiz-line-field-label">Intern anteckning</label>
           <input value="${(l.note||'').replace(/"/g,'&quot;')}" placeholder="Syns ej för kund"
-            oninput="OffersPage._editLines[${i}].note=this.value" style="font-size:11px;"></div>
+            oninput="OffersPage._editLines[${i}].note=this.value" class="off-wiz-line-field-note"></div>
       </div>
-      <div style="margin-top:6px;">
+      <div class="off-wiz-line-card-actions">
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('trash-2',10)} Ta bort</button>
       </div>
     </div>`;
@@ -1767,11 +1767,6 @@ const OffersPage = {
       this._svcFields    = {};
       this._svcReduction = 'ingen';
     }
-    // Respect sidebar on desktop: overlay starts at page-area left edge
-    const isDesktop = window.innerWidth >= 1024;
-    const sidebarW  = isDesktop ? (document.getElementById('bottom-nav')?.offsetWidth || 240) : 0;
-    const alignItems = isDesktop ? 'center' : 'flex-end';
-    const ovPad      = isDesktop ? '20px' : '0';
 
     let ov = document.getElementById('off-svc-overlay');
     if (!ov) {
@@ -1780,38 +1775,67 @@ const OffersPage = {
       ov.onclick = e => { if (e.target === ov) OffersPage._closeSvcCalc(); };
       document.body.appendChild(ov);
     }
-    ov.style.cssText = `position:fixed;top:0;right:0;bottom:0;left:${sidebarW}px;z-index:600;
-      background:rgba(0,0,0,.42);display:flex;align-items:${alignItems};justify-content:center;padding:${ovPad};box-sizing:border-box;`;
-    ov.innerHTML = this._svcOverlayHtml(isDesktop);
+    this._svcOverlayUpdateOffset();
+    /* V48B2: reaktiv istället för engångssnapshot — offsetten uppdateras
+       om viewport-brytpunkten ändras medan overlayn är öppen (t.ex.
+       rotation av surfplatta). Lyssnaren tas bort igen i _closeSvcCalc(). */
+    if (!this._svcOverlayMQL) {
+      this._svcOverlayMQL = window.matchMedia('(min-width: 1024px)');
+      this._svcOverlayMQLHandler = () => this._svcOverlayUpdateOffset();
+      this._svcOverlayMQL.addEventListener('change', this._svcOverlayMQLHandler);
+    }
+    ov.innerHTML = this._svcOverlayHtml();
     if (this._activeSvcId) setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
+  },
+
+  /* V48B2: overlayns vänsteroffset måste följa sidebarens FAKTISKA
+     renderade bredd (240/56/xl beroende på breakpoint OCH ihopfälld-state
+     — se layout.css #bottom-nav/body.sidebar-collapsed), vilket inte kan
+     uttryckas via en statisk CSS-brytpunkt eftersom --sidebar-w är en fast
+     token, inte den faktiskt renderade bredden. Detta är den enda
+     kvarvarande JS-styrda layoutberäkningen i kalkylatorn. */
+  _svcOverlayUpdateOffset() {
+    const ov = document.getElementById('off-svc-overlay');
+    if (!ov) return;
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+    const sidebarW  = isDesktop ? (document.getElementById('bottom-nav')?.offsetWidth || 240) : 0;
+    ov.style.left = sidebarW + 'px';
   },
 
   _closeSvcCalc() {
     document.getElementById('off-svc-overlay')?.remove();
     this._svcEditIdx = null;
+    if (this._svcOverlayMQL && this._svcOverlayMQLHandler) {
+      this._svcOverlayMQL.removeEventListener('change', this._svcOverlayMQLHandler);
+    }
+    this._svcOverlayMQL = null;
+    this._svcOverlayMQLHandler = null;
   },
 
-  _svcOverlayHtml(isDesktop) {
+  /* V48B2: EN kalkylator, EN state, responsiv presentation — meny
+     (desktop) och chip-rad (mobil) renderas nu ALLTID båda i samma DOM
+     och CSS-brytpunkten (@media min-width:1024px, components.css) avgör
+     vilken som visas, istället för att JS byggde två separata
+     markup-varianter utifrån ett engångs-window.innerWidth-värde. */
+  _svcOverlayHtml() {
     const isEdit     = this._svcEditIdx !== null && this._svcEditIdx !== undefined;
     const activeTmpl = this._getT().find(t => t.id === this._activeSvcId);
-    const maxH       = isDesktop ? '84vh' : '92vh';
-    const radius     = isDesktop ? '10px' : '14px 14px 0 0';
 
     const calcBody = activeTmpl
       ? this._svcCalcHtml(activeTmpl)
-      : `<div style="padding:36px 16px;text-align:center;color:var(--mt);">
-          <div style="margin-bottom:10px;">${ic('zap',28)}</div>
-          <div style="font-size:13px;font-weight:600;">Välj en tjänst ${isDesktop ? 'till vänster' : 'ovan'}</div>
-          <div style="font-size:11px;margin-top:4px;">Alla priser exklusive moms</div>
+      : `<div class="off-svc-empty">
+          <div class="off-svc-empty-icon">${ic('zap',28)}</div>
+          <div class="off-svc-empty-title">Välj en tjänst <span class="off-svc-empty-hint-desktop">till vänster</span><span class="off-svc-empty-hint-mobile">ovan</span></div>
+          <div class="off-svc-empty-sub">Alla priser exklusive moms</div>
         </div>`;
 
     const descVal  = activeTmpl ? (activeTmpl.defaultDesc||'').replace(/"/g,'&quot;') : '';
     const addLabel = isEdit ? 'Uppdatera tjänst' : 'Lägg till i offert';
 
     const hdr = `<div class="off-svc-hdr">
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:800;color:var(--navy);">${ic('zap',13)} ${isEdit ? 'Redigera tjänst' : 'Lägg till tjänst'}</div>
-        <div style="font-size:10px;color:var(--mt);">Alla priser exklusive moms</div>
+      <div class="off-svc-hdr-title">
+        <div class="off-svc-hdr-title-main">${ic('zap',13)} ${isEdit ? 'Redigera tjänst' : 'Lägg till tjänst'}</div>
+        <div class="off-svc-hdr-title-sub">Alla priser exklusive moms</div>
       </div>
       <button type="button" onclick="OffersPage._closeSvcCalc()" class="off-close-btn">${ic('x',14)}</button>
     </div>`;
@@ -1828,32 +1852,25 @@ const OffersPage = {
       </div>
     </div>`;
 
-    if (!isDesktop) {
-      const chips = this._getT().map(t => {
-        const active = t.id === this._activeSvcId;
-        return `<button type="button" id="off-svc-chip-${t.id}"
-          onclick="OffersPage._activateSvc('${t.id}',false)"
-          class="off-svc-chip${active ? ' off-svc-chip--active' : ''}">${t.name}</button>`;
-      }).join('');
-      return `<div class="off-svc-modal" style="max-height:${maxH};border-radius:${radius};">
-        ${hdr}
-        <div class="off-svc-chips-bar">${chips}</div>
-        <div id="off-svc-body" class="off-svc-body">${calcBody}</div>
-        ${footer}
-      </div>`;
-    }
+    const chips = this._getT().map(t => {
+      const active = t.id === this._activeSvcId;
+      return `<button type="button" id="off-svc-chip-${t.id}"
+        onclick="OffersPage._activateSvc('${t.id}',false)"
+        class="off-svc-chip${active ? ' off-svc-chip--active' : ''}">${t.name}</button>`;
+    }).join('');
 
     const svcList = this._getT().map(t => {
       const active = t.id === this._activeSvcId;
-      return `<button type="button" id="off-svc-chip-${t.id}"
+      return `<button type="button" id="off-svc-menu-${t.id}"
         onclick="OffersPage._activateSvc('${t.id}',false)"
         class="off-svc-menu-item${active ? ' off-svc-menu-item--active' : ''}">
         ${ic(t.icon,12)}<span>${t.name}</span>
       </button>`;
     }).join('');
 
-    return `<div class="off-svc-modal" style="max-height:${maxH};border-radius:${radius};">
+    return `<div class="off-svc-modal">
       ${hdr}
+      <div class="off-svc-chips-bar">${chips}</div>
       <div class="off-svc-layout">
         <div class="off-svc-menu">${svcList}</div>
         <div id="off-svc-body" class="off-svc-body">${calcBody}</div>
@@ -1865,11 +1882,11 @@ const OffersPage = {
   _activateSvc(tId, keepFields) {
     this._activeSvcId = tId;
     this._getT().forEach(t => {
-      const btn = document.getElementById('off-svc-chip-' + t.id);
-      if (!btn) return;
       const a = t.id === tId;
-      btn.classList.toggle('off-svc-menu-item--active', a);
-      btn.classList.toggle('off-svc-chip--active', a);
+      const menuBtn = document.getElementById('off-svc-menu-' + t.id);
+      if (menuBtn) menuBtn.classList.toggle('off-svc-menu-item--active', a);
+      const chipBtn = document.getElementById('off-svc-chip-' + t.id);
+      if (chipBtn) chipBtn.classList.toggle('off-svc-chip--active', a);
     });
     const tmpl = this._getT().find(t => t.id === tId);
     if (!tmpl) return;
@@ -1909,20 +1926,20 @@ const OffersPage = {
     const pgF   = tmpl.fields.filter(f=>f.type==='pricegroup');
     const boolF = tmpl.fields.filter(f=>f.type==='bool'&&!f.isRut&&!f.isRot);
     const curRed = this._svcReduction;
+    const reqMark = f => f.req ? ` <span class="off-svc-field-req">*</span>` : '';
     let html = '';
 
     // ── Quantity / number inputs ──
     numF.forEach(f => {
       const unit = {area:'m²',length:'lm',hours:'tim',qty:'tim',months:'mån'}[f.id]||'';
       const val  = this._svcFields[f.id]!=null&&this._svcFields[f.id]!==0 ? this._svcFields[f.id] : (f.def||'');
-      html += `<div style="margin-bottom:10px;">
-        <label style="font-size:10px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <input type="number" id="svc-f-${f.id}" value="${val}" min="0"
+      html += `<div class="off-svc-field">
+        <label class="off-svc-field-label">${f.label}${reqMark(f)}</label>
+        <div class="off-svc-field-row">
+          <input type="number" id="svc-f-${f.id}" class="off-svc-field-number" value="${val}" min="0"
             step="${['rate','monthly','material'].includes(f.id)?'1':'0.5'}" placeholder="0"
-            style="font-size:18px;font-weight:800;width:80px;text-align:center;padding:6px 8px;border:2px solid var(--navy);border-radius:var(--rs);color:var(--navy);"
             oninput="OffersPage._svcFields['${f.id}']=parseFloat(this.value)||0;OffersPage._updateSvcPreview()">
-          ${unit?`<span style="font-size:14px;color:var(--mt);font-weight:700;">${unit}</span>`:''}
+          ${unit?`<span class="off-svc-field-unit">${unit}</span>`:''}
         </div>
       </div>`;
     });
@@ -1931,9 +1948,9 @@ const OffersPage = {
     pgF.forEach(f => {
       const pgs = (state.priceGroups || []).filter(p => p.active !== false && p.billingType !== 'monthly');
       const curVal = this._svcFields[f.id] || f.def || (pgs[0] && pgs[0].id) || '';
-      html += `<div style="margin-bottom:10px;">
-        <label style="font-size:10px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
-        <select id="svc-f-${f.id}" style="width:100%;font-size:13px;font-weight:600;padding:6px 8px;border:1.5px solid var(--br);border-radius:var(--rs);"
+      html += `<div class="off-svc-field">
+        <label class="off-svc-field-label">${f.label}${reqMark(f)}</label>
+        <select id="svc-f-${f.id}" class="off-svc-field-select"
           onchange="OffersPage._svcFields['${f.id}']=this.value;var _pg=(state.priceGroups||[]).find(p=>p.id===this.value);if(_pg){OffersPage._svcFields['rate']=_pg.hourRate;var rEl=document.getElementById('svc-f-rate');if(rEl)rEl.value=_pg.hourRate;}OffersPage._updateSvcPreview()">
           ${pgs.map(pg => `<option value="${pg.id}" ${curVal===pg.id?'selected':''}>${esc(pg.name)} (${fmt(pg.hourRate)} kr/tim)</option>`).join('')}
         </select>
@@ -1942,20 +1959,19 @@ const OffersPage = {
 
     // ── Text inputs ──
     txtF.forEach(f => {
-      html += `<div style="margin-bottom:10px;">
-        <label style="font-size:10px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;">${f.label}${f.req?' <span style="color:var(--rd)">*</span>':''}</label>
-        <input type="text" id="svc-f-${f.id}" value="${this._svcFields[f.id]||''}" placeholder="${f.label}" style="width:100%;"
+      html += `<div class="off-svc-field">
+        <label class="off-svc-field-label">${f.label}${reqMark(f)}</label>
+        <input type="text" id="svc-f-${f.id}" class="off-svc-field-text" value="${this._svcFields[f.id]||''}" placeholder="${f.label}"
           oninput="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()">
       </div>`;
     });
 
     // ── Chip selectors ──
     chipF.forEach(f => {
-      html += `<div style="margin-bottom:8px;">
-        <label style="font-size:9px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">${f.label}</label>
-        <div data-chips="${f.id}" style="display:flex;flex-wrap:wrap;gap:3px;">
-          ${(f.opts||[]).map(o=>`<button type="button" data-val="${o}"
-            style="padding:4px 9px;border-radius:20px;border:1.5px solid var(--br);font-size:10px;font-weight:600;cursor:pointer;background:#fff;color:var(--tx);transition:all .1s;"
+      html += `<div class="off-svc-field off-svc-field--compact">
+        <label class="off-svc-field-label--sub">${f.label}</label>
+        <div class="off-svc-field-chip-row" data-chips="${f.id}">
+          ${(f.opts||[]).map(o=>`<button type="button" data-val="${o}" class="off-svc-field-chip"
             onclick="OffersPage._setChip('${f.id}','${o.replace(/'/g,"\\'")}',this)">${o}</button>`).join('')}
         </div>
       </div>`;
@@ -1963,12 +1979,12 @@ const OffersPage = {
 
     // ── Bool add-ons ──
     if (boolF.length) {
-      html += `<div style="margin-bottom:8px;">
-        <label style="font-size:9px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Tillval</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">`;
+      html += `<div class="off-svc-field off-svc-field--compact">
+        <label class="off-svc-field-label--sub">Tillval</label>
+        <div class="off-svc-option-grid">`;
       boolF.forEach(f => {
-        html += `<label style="display:flex;align-items:center;gap:6px;padding:5px 8px;border:1.5px solid var(--br);border-radius:var(--rs);cursor:pointer;font-size:10px;font-weight:600;line-height:1.3;">
-          <input type="checkbox" id="svc-f-${f.id}" style="width:14px;height:14px;flex-shrink:0;" ${this._svcFields[f.id]?'checked':''}
+        html += `<label class="off-svc-option">
+          <input type="checkbox" id="svc-f-${f.id}" ${this._svcFields[f.id]?'checked':''}
             onchange="OffersPage._svcFields['${f.id}']=this.checked;OffersPage._updateSvcPreview()">
           <span>${f.addLabel||f.label}</span></label>`;
       });
@@ -1981,38 +1997,31 @@ const OffersPage = {
       {v:'rut',   l:'RUT – 50 %'},
       {v:'rot',   l:'ROT – 30 %'},
     ];
-    html += `<div style="margin-bottom:8px;padding-top:6px;border-top:1px solid var(--br);">
-      <label style="font-size:9px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Skattereduktion</label>
-      <div style="display:flex;gap:3px;">
-        ${redOpts.map(o=>`<button type="button" id="svc-red-${o.v}"
-          onclick="OffersPage._setReduction('${o.v}')"
-          style="flex:1;padding:5px 6px;border-radius:6px;border:1.5px solid ${curRed===o.v?'var(--navy)':'var(--br)'};
-            font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;
-            background:${curRed===o.v?'var(--navy)':'#fff'};
-            color:${curRed===o.v?'#fff':'var(--mt)'};">${o.l}</button>`).join('')}
+    html += `<div class="off-svc-reduction">
+      <label class="off-svc-field-label--sub">Skattereduktion</label>
+      <div class="off-svc-reduction-row">
+        ${redOpts.map(o=>`<button type="button" id="svc-red-${o.v}" class="off-svc-reduction-btn${curRed===o.v?' is-selected':''}"
+          onclick="OffersPage._setReduction('${o.v}')">${o.l}</button>`).join('')}
       </div>
-      <div style="font-size:9px;color:var(--mt);margin-top:3px;">Förutsätter att kunden har rätt till avdraget</div>
+      <div class="off-svc-reduction-hint">Förutsätter att kunden har rätt till avdraget</div>
     </div>`;
 
     // ── Live preview ──
-    html += `<div id="svc-preview" style="background:var(--navy);color:#fff;border-radius:var(--rs);padding:9px 11px;margin-top:4px;min-height:44px;">
-      <div style="font-size:10px;opacity:.65;">Fyll i fälten ovan för att se kalkylen…</div>
+    html += `<div id="svc-preview" class="off-svc-preview">
+      <div class="off-svc-preview-empty">Fyll i fälten ovan för att se kalkylen…</div>
     </div>`;
     return html;
   },
 
   /* ── Chips ─── */
+  /* V48B2: state-klass (.is-selected) istället för att skriva
+     el.style.background/color/borderColor/fontWeight direkt i JS.
+     Samma tillstånd sätts i inputValues/reductionType som förut. */
   _setChip(fieldId, value, btn) {
     this._svcFields[fieldId] = value;
     const group = btn.closest('[data-chips]');
     if (group) {
-      group.querySelectorAll('button').forEach(b => {
-        const a = b === btn;
-        b.style.background  = a ? 'var(--navy)' : '#fff';
-        b.style.color       = a ? '#fff'        : 'var(--tx)';
-        b.style.borderColor = a ? 'var(--navy)' : 'var(--br)';
-        b.style.fontWeight  = a ? '700'         : '600';
-      });
+      group.querySelectorAll('button').forEach(b => b.classList.toggle('is-selected', b === btn));
     }
     this._updateSvcPreview();
   },
@@ -2022,10 +2031,7 @@ const OffersPage = {
     ['ingen','rut','rot'].forEach(v => {
       const btn = document.getElementById('svc-red-' + v);
       if (!btn) return;
-      const active = v === val;
-      btn.style.background  = active ? 'var(--navy)' : '#fff';
-      btn.style.color       = active ? '#fff'        : 'var(--mt)';
-      btn.style.borderColor = active ? 'var(--navy)' : 'var(--br)';
+      btn.classList.toggle('is-selected', v === val);
     });
     this._updateSvcPreview();
   },
@@ -2039,10 +2045,7 @@ const OffersPage = {
       if (!group) return;
       group.querySelectorAll('button').forEach(btn => {
         const a = btn.dataset.val === val || btn.textContent.trim() === val;
-        btn.style.background  = a ? 'var(--navy)' : '#fff';
-        btn.style.color       = a ? '#fff'        : 'var(--tx)';
-        btn.style.borderColor = a ? 'var(--navy)' : 'var(--br)';
-        btn.style.fontWeight  = a ? '700'         : '600';
+        btn.classList.toggle('is-selected', a);
       });
     });
   },
@@ -2075,7 +2078,7 @@ const OffersPage = {
       const result = tmpl.calc(fields);
       const {ls, exVat, rutAmt} = result;
       if (!exVat && exVat !== 0) {
-        prev.innerHTML = `<div style="font-size:10px;opacity:.65;">Fyll i obligatoriska fält för att se kalkylen.</div>`;
+        prev.innerHTML = `<div class="off-svc-preview-empty">Fyll i obligatoriska fält för att se kalkylen.</div>`;
         return;
       }
       const vat    = Math.round(exVat * _normVat(tmpl.vatRate) / 100);
@@ -2086,38 +2089,38 @@ const OffersPage = {
       // Internal calc detail (small, muted)
       let html = '';
       if (result.tierLbl) {
-        html += `<div style="font-size:8px;opacity:.5;margin-bottom:3px;letter-spacing:.3px;">Prisnivå: ${result.tierLbl}</div>`;
+        html += `<div class="off-svc-preview-tier">Prisnivå: ${result.tierLbl}</div>`;
       }
-      html += `<div style="font-size:9px;opacity:.65;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,.12);">`;
+      html += `<div class="off-svc-preview-detail">`;
       ls.forEach(l => {
-        html += `<div style="margin-bottom:1px;">${l.desc} · ${l.qty} ${l.unit} × ${fmt(l.price)} kr = ${fmt(Math.round(l.qty*l.price))} kr</div>`;
+        html += `<div class="off-svc-preview-detail-line">${l.desc} · ${l.qty} ${l.unit} × ${fmt(l.price)} kr = ${fmt(Math.round(l.qty*l.price))} kr</div>`;
       });
       html += `</div>`;
 
       // Price rows
-      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:1px;"><span>Ex. moms</span><span>${fmt(exVat)} kr</span></div>`;
-      html += `<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-bottom:4px;"><span>Moms ${_normVat(tmpl.vatRate)}%</span><span>${fmt(vat)} kr</span></div>`;
-      html += `<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;padding-top:4px;border-top:1px solid rgba(255,255,255,.15);margin-bottom:${rutAmt?'3px':'6px'};">
+      html += `<div class="off-svc-preview-row"><span>Ex. moms</span><span>${fmt(exVat)} kr</span></div>`;
+      html += `<div class="off-svc-preview-row off-svc-preview-row--vat"><span>Moms ${_normVat(tmpl.vatRate)}%</span><span>${fmt(vat)} kr</span></div>`;
+      html += `<div class="off-svc-preview-row--total${rutAmt?' has-deduction':''}">
         <span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>`;
 
       if (rutAmt) {
-        html += `<div style="display:flex;justify-content:space-between;font-size:10px;color:#86efac;margin-bottom:4px;">
+        html += `<div class="off-svc-preview-deduction">
           <span>Prelim. ${redLbl}-avdrag</span><span>-${fmt(rutAmt)} kr</span></div>`;
       }
 
       // Customer price — always shown, prominent
       const displayPrice = rutAmt ? custPr : incVat;
-      html += `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.13);border-radius:6px;padding:6px 9px;">
-        <span style="font-size:10px;opacity:.8;">Kundpris inkl. moms</span>
-        <span style="font-size:17px;font-weight:800;">${fmt(displayPrice)} kr</span>
+      html += `<div class="off-svc-preview-price">
+        <span class="off-svc-preview-price-label">Kundpris inkl. moms</span>
+        <span class="off-svc-preview-price-val">${fmt(displayPrice)} kr</span>
       </div>`;
       if (rutAmt) {
-        html += `<div style="font-size:8px;opacity:.45;margin-top:3px;text-align:right;">* Prelim., förutsätter rätt till avdraget</div>`;
+        html += `<div class="off-svc-preview-note">* Prelim., förutsätter rätt till avdraget</div>`;
       }
 
       prev.innerHTML = html;
     } catch(e) {
-      prev.innerHTML = `<div style="font-size:10px;opacity:.65;">Fyll i obligatoriska fält (markerade *) för att se kalkyl.</div>`;
+      prev.innerHTML = `<div class="off-svc-preview-empty">Fyll i obligatoriska fält (markerade *) för att se kalkyl.</div>`;
     }
   },
 

@@ -1135,6 +1135,18 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin-top: 2px;
   text-align: right;
 }
+/* V48B2: presentation-only additions — service-card layout wrappers that
+   were previously inline style="..." attributes. Same computed values. */
+.off-svc-card-hd-main  { flex: 1; min-width: 0; }
+.off-svc-card-hd-price { flex-shrink: 0; text-align: right; }
+.off-svc-card-sub--tight { margin-bottom: 2px; }
+.off-svc-card-desc-input { font-size: 11px; margin-bottom: 6px; }
+.off-svc-card-actions { display: flex; gap: 5px; }
+.off-svc-card--fixed { border-left-color: #0ea5e9; }
+/* V48B2 R2: font-size förlorar mot forms.css:s input-regel (0,0,3,1 > 0,0,1,0).
+   margin-bottom kolliderar INTE (forms.css sätter det aldrig på bara <input>,
+   bara på .fg-wrappern, som denna raden inte använder) — behöver ingen fix. */
+#off-wizard input.off-svc-card-desc-input { font-size: 11px; }
 
 /* V41 §4: tillvalsrad (extras) — nu 6 kolumner (beskrivning/antal/enhet/
    à-pris/moms/ta bort) istället för 5. Egen klass (tidigare helt inline)
@@ -1226,6 +1238,50 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-totals-cust-lbl { font-size: 11px; font-weight: 600; opacity: .8; }
 .off-totals-cust-val { font-size: 16px; font-weight: 600; }
+/* V48B2: steg 3 återanvänder totalsbaren "bar" (utan kort-chrome) via en
+   modifier-klass istället för en inline style="..."-sträng i .replace(). */
+.off-totals-card--bare { border: none; border-radius: 0; margin: 0; }
+.off-totals-rut--discount { color: #b45309; }
+
+/* V48B2: steg 3:s sammanfattningskort (navy-ram runt _totalsBarHtml()). */
+.off-wiz-summary-card { margin-bottom: 16px; border: 2px solid var(--navy); border-radius: var(--rs); overflow: hidden; }
+.off-wiz-summary-card-hd { background: var(--navy); padding: 8px 14px; }
+.off-wiz-summary-card-hd-txt { font-size: 11px; font-weight: 800; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .5px; }
+.off-wiz-summary-card-body { background: #fff; padding: 4px 0; }
+.off-wiz-summary-card-ft { padding: 4px 14px 8px; font-size: 10px; color: var(--mt); background: #f8f9fa; border-top: 1px solid var(--bg); }
+
+/* V48B2: wizardens kollapsbara paneler (steg 1/2/3) — tre visuella
+   varianter som redan fanns, nu som klasser istället för upprepade
+   inline style="..."-block. Namn/värden matchar exakt respektive
+   ursprungliga block (ingen visuell förändring). */
+.off-wiz-collapse-plain { margin-bottom: 10px; }
+.off-wiz-collapse-plain > summary {
+  font-size: 12px; font-weight: 600; color: var(--navy); cursor: pointer;
+  padding: 6px 0; list-style: none; display: flex; align-items: center; gap: 5px;
+}
+.off-wiz-collapse-plain-body { padding-top: 6px; }
+
+.off-wiz-collapse-boxed {
+  border: 1px solid var(--br); border-radius: var(--rs); overflow: hidden;
+}
+.off-wiz-collapse-boxed--s1 { margin-bottom: 10px; }
+.off-wiz-collapse-boxed--s3 { margin-top: 10px; }
+.off-wiz-collapse-boxed > summary {
+  padding: 10px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  background: var(--bg); list-style: none; display: flex; align-items: center; gap: 6px;
+}
+.off-wiz-collapse-boxed--s1 > summary { color: var(--navy); }
+.off-wiz-collapse-boxed--s3 > summary { color: var(--mt); }
+.off-wiz-collapse-boxed-body { padding: 10px 12px; }
+
+.off-wiz-collapse-tillval {
+  margin-top: 7px; border: 1px solid var(--br); border-radius: var(--rs); overflow: hidden;
+}
+.off-wiz-collapse-tillval > summary {
+  padding: 8px 11px; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: #fff; display: flex; align-items: center; gap: 5px;
+}
+.off-wiz-collapse-tillval-body { padding: 7px 11px 11px; }
 
 /* ── OFFER STEP 1 TWO-COLUMN GRID ── */
 .off-s1-grid {
@@ -1240,6 +1296,25 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 
 /* ── SERVICE CALCULATOR OVERLAY ── */
+/* V48B2: overlayns backdrop är nu en egen CSS-styrd klass — tidigare ett
+   engångsberäknat window.innerWidth-baserat inline style="..." per
+   öppning. align-items/padding/max-height/border-radius är rena
+   brytpunktsvärden och styrs nu av CSS. Den enda kvarvarande JS-styrda
+   layoutdelen är overlayns vänsteroffset (ov.style.left), eftersom den
+   måste följa sidebarens FAKTISKA renderade bredd (240/56/xl beroende på
+   breakpoint OCH ihopfälld-state) — ett värde CSS inte kan härleda utan
+   en strukturell ändring av layout.css:s befintliga --sidebar-w-hantering,
+   vilket är utanför denna foundation-omgångs scope. Se OffersPage._svcOverlayUpdateOffset(). */
+#off-svc-overlay {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 600;
+  background: rgba(0,0,0,.42);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0; box-sizing: border-box;
+}
+@media (min-width: 1024px) {
+  #off-svc-overlay { align-items: center; padding: 20px; }
+}
 .off-svc-modal {
   background: #fff;
   width: 100%;
@@ -1247,6 +1322,11 @@ body.modal-open { overflow: hidden; touch-action: none; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  max-height: 92vh;
+  border-radius: 14px 14px 0 0;
+}
+@media (min-width: 1024px) {
+  .off-svc-modal { max-height: 84vh; border-radius: 10px; }
 }
 .off-svc-hdr {
   padding: 10px 14px;
@@ -1257,6 +1337,9 @@ body.modal-open { overflow: hidden; touch-action: none; }
   flex-shrink: 0;
   background: #fff;
 }
+.off-svc-hdr-title { flex: 1; }
+.off-svc-hdr-title-main { font-size: 13px; font-weight: 800; color: var(--navy); }
+.off-svc-hdr-title-sub  { font-size: 10px; color: var(--mt); }
 .off-close-btn {
   width: 28px; height: 28px;
   border: none; background: rgba(0,0,0,.07);
@@ -1267,10 +1350,19 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-svc-layout {
   display: flex; flex: 1; overflow: hidden; min-height: 0;
 }
+/* V48B2: EN kalkylator, EN state — meny (desktop) och chip-rad (mobil)
+   renderas nu alltid BÅDA i samma DOM och växlas via CSS-brytpunkt,
+   istället för att JS byggde två separata markup-varianter beroende på
+   ett engångs-window.innerWidth-värde vid öppningstillfället. */
 .off-svc-menu {
+  display: none;
   width: 182px; flex-shrink: 0;
   border-right: 1px solid var(--br);
   overflow-y: auto; padding: 6px 5px; background: #fafbfc;
+}
+@media (min-width: 1024px) {
+  .off-svc-menu { display: block; }
+  .off-svc-chips-bar { display: none; }
 }
 .off-svc-menu-item {
   display: flex; align-items: center; gap: 7px;
@@ -1306,6 +1398,114 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 .off-svc-chip--active { background: var(--navy); border-color: var(--navy); color: #fff; }
 
+/* V48B2: kalkylatorns fält-lager — tidigare 100% inline style="..." i
+   _svcCalcHtml(). Samma beräknade värden som förut, nu som klasser så B3
+   kan responsivanpassa utan att röra JS-template-strängar igen. */
+.off-svc-empty { padding: 36px 16px; text-align: center; color: var(--mt); }
+.off-svc-empty-icon { margin-bottom: 10px; }
+.off-svc-empty-title { font-size: 13px; font-weight: 600; }
+.off-svc-empty-sub { font-size: 11px; margin-top: 4px; }
+.off-svc-empty-hint-desktop { display: none; }
+.off-svc-empty-hint-mobile  { display: inline; }
+@media (min-width: 1024px) {
+  .off-svc-empty-hint-desktop { display: inline; }
+  .off-svc-empty-hint-mobile  { display: none; }
+}
+
+.off-svc-field { margin-bottom: 10px; }
+.off-svc-field--compact { margin-bottom: 8px; }
+.off-svc-field-label {
+  font-size: 10px; font-weight: 700; color: var(--navy);
+  display: block; margin-bottom: 3px;
+}
+.off-svc-field-label--sub {
+  font-size: 9px; font-weight: 700; color: var(--mt);
+  text-transform: uppercase; letter-spacing: .5px;
+  display: block; margin-bottom: 4px;
+}
+.off-svc-field-req { color: var(--rd); }
+.off-svc-field-row { display: flex; align-items: center; gap: 6px; }
+.off-svc-field-number {
+  font-size: 18px; font-weight: 800; width: 80px; text-align: center;
+  padding: 6px 8px; border: 2px solid var(--navy); border-radius: var(--rs);
+  color: var(--navy);
+}
+/* V48B2 R2: forms.css:s generella input:not([type=checkbox]):not([type=radio]):not([type=file])
+   -regel har högre specificitet (0,0,3,1) än en enkel klass (0,0,1,0) och
+   vinner annars för width/font-size/padding/border/border-radius/color —
+   en verklig visuell regression mot pre-B2:s inline-styling (som alltid
+   vann, specificitet 1,0,0,0). Lokalt ID-scopat mot den faktiska
+   overlay-containern (#off-svc-overlay) ger specificitet (0,1,1,1), vilket
+   slår forms.css utan !important och utan att påverka något annat
+   inputfält i appen. min-height ingår MEDVETET INTE här — det ersattes
+   aldrig av inline-styling före B2 och ska fortsatt komma från forms.css. */
+#off-svc-overlay input.off-svc-field-number {
+  width: 80px; font-size: 18px; padding: 6px 8px;
+  border: 2px solid var(--navy); border-radius: var(--rs);
+  color: var(--navy);
+}
+.off-svc-field-unit { font-size: 14px; color: var(--mt); font-weight: 700; }
+.off-svc-field-select {
+  width: 100%; font-size: 13px; font-weight: 600;
+  padding: 6px 8px; border: 1.5px solid var(--br); border-radius: var(--rs);
+}
+.off-svc-field-text { width: 100%; }
+
+.off-svc-field-chip-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.off-svc-field-chip {
+  padding: 4px 9px; border-radius: 20px; border: 1.5px solid var(--br);
+  font-size: 10px; font-weight: 600; cursor: pointer;
+  background: #fff; color: var(--tx);
+  transition: background .1s, color .1s, border-color .1s;
+}
+.off-svc-field-chip.is-selected { background: var(--navy); color: #fff; border-color: var(--navy); font-weight: 700; }
+
+.off-svc-option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.off-svc-option {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border: 1.5px solid var(--br); border-radius: var(--rs);
+  cursor: pointer; font-size: 10px; font-weight: 600; line-height: 1.3;
+}
+.off-svc-option input[type="checkbox"] { width: 14px; height: 14px; flex-shrink: 0; }
+
+.off-svc-reduction { margin-bottom: 8px; padding-top: 6px; border-top: 1px solid var(--br); }
+.off-svc-reduction-row { display: flex; gap: 3px; }
+.off-svc-reduction-btn {
+  flex: 1; padding: 5px 6px; border-radius: 6px; border: 1.5px solid var(--br);
+  font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  background: #fff; color: var(--mt);
+}
+.off-svc-reduction-btn.is-selected { border-color: var(--navy); background: var(--navy); color: #fff; }
+.off-svc-reduction-hint { font-size: 9px; color: var(--mt); margin-top: 3px; }
+
+.off-svc-preview {
+  background: var(--navy); color: #fff; border-radius: var(--rs);
+  padding: 9px 11px; margin-top: 4px; min-height: 44px;
+}
+.off-svc-preview-empty { font-size: 10px; opacity: .65; }
+.off-svc-preview-tier { font-size: 8px; opacity: .5; margin-bottom: 3px; letter-spacing: .3px; }
+.off-svc-preview-detail {
+  font-size: 9px; opacity: .65; margin-bottom: 5px; padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.off-svc-preview-detail-line { margin-bottom: 1px; }
+.off-svc-preview-row { display: flex; justify-content: space-between; font-size: 10px; opacity: .7; margin-bottom: 1px; }
+.off-svc-preview-row--vat { margin-bottom: 4px; }
+.off-svc-preview-row--total {
+  display: flex; justify-content: space-between; font-size: 11px; font-weight: 700;
+  padding-top: 4px; border-top: 1px solid rgba(255,255,255,.15);
+}
+.off-svc-preview-row--total.has-deduction { margin-bottom: 3px; }
+.off-svc-preview-row--total:not(.has-deduction) { margin-bottom: 6px; }
+.off-svc-preview-deduction { display: flex; justify-content: space-between; font-size: 10px; color: #86efac; margin-bottom: 4px; }
+.off-svc-preview-price {
+  display: flex; justify-content: space-between; align-items: center;
+  background: rgba(255,255,255,.13); border-radius: 6px; padding: 6px 9px;
+}
+.off-svc-preview-price-label { font-size: 10px; opacity: .8; }
+.off-svc-preview-price-val { font-size: 17px; font-weight: 800; }
+.off-svc-preview-note { font-size: 8px; opacity: .45; margin-top: 3px; text-align: right; }
+
 /* Service card improvements */
 .off-svc-card-title {
   font-size: 12px; font-weight: 700; color: var(--navy); margin-bottom: 2px;
@@ -1317,6 +1517,53 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-lines-empty-icon { margin-bottom: 6px; }
 .off-lines-empty-txt  { font-size: 12px; font-weight: 600; }
 .off-lines-empty-sub  { font-size: 11px; margin-top: 2px; }
+
+/* V48B2: manuell/fastpris/text-radkort i wizardens steg 2 — presentation
+   flyttad från inline style="..." till klasser. Namngivet off-wiz-line-*
+   (inte off-line-*) för att inte kollidera med OfferDetailPage:s
+   off-line-row-familj som redan finns och betyder något annat (läsvy). */
+.off-wiz-line-card {
+  background: #fff;
+  border: 1px solid var(--br);
+  border-radius: var(--rs);
+  padding: 10px 12px;
+  margin-bottom: 7px;
+}
+.off-wiz-line-card--text { border-left: 3px solid #cbd5e1; }
+.off-wiz-line-card-hd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.off-wiz-line-card-type {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--mt);
+}
+.off-wiz-line-card-spacer { flex: 1; }
+.off-wiz-line-card-total { font-size: 12px; color: var(--navy); }
+.off-wiz-line-card-actions { margin-top: 6px; }
+.off-wiz-line-field-label {
+  font-size: 9px;
+  color: var(--mt);
+  font-weight: 600;
+  display: block;
+  margin-bottom: 2px;
+}
+.off-wiz-line-manual-grid { display: grid; grid-template-columns: 72px 72px 1fr 68px; gap: 5px; }
+.off-wiz-line-fixed-grid  { display: grid; grid-template-columns: 110px 68px 1fr; gap: 6px; margin-top: 6px; }
+.off-wiz-line-field-desc  { margin-bottom: 6px; font-size: 12px; }
+.off-wiz-line-field-title { margin-bottom: 6px; font-weight: 600; font-size: 12px; }
+.off-wiz-line-field-note  { font-size: 11px; }
+/* V48B2 R2: font-size förlorar mot forms.css:s input-regel (0,0,3,1 > 0,0,1,0)
+   på alla tre. margin-bottom/font-weight kolliderar inte (forms.css sätter
+   dem aldrig på bara <input>) — behöver ingen fix. */
+#off-wizard input.off-wiz-line-field-desc  { font-size: 12px; }
+#off-wizard input.off-wiz-line-field-title { font-size: 12px; }
+#off-wizard input.off-wiz-line-field-note  { font-size: 11px; }
 
 /* ── OFFER ACTION CARDS ── */
 .off-action-cards {
@@ -1366,6 +1613,18 @@ body.modal-open { overflow: hidden; touch-action: none; }
   letter-spacing: .5px;
   margin: 0;
 }
+.off-discount-ctrl-row { display: flex; gap: 4px; align-items: center; }
+.off-discount-ctrl-type { width: auto; }
+.off-discount-ctrl-value { width: 64px; }
+/* V48B2 R2: .off-discount-ctrl-value sitter på ett <input type="number">,
+   som matchar forms.css:s input:not([type=checkbox]):not([type=radio]):not([type=file])
+   -regel (0,0,3,1) — den vinner annars över den enkla klassen (0,0,1,0) och
+   width blir 100% istället för 64px (exakt blockern som rapporterades).
+   .off-discount-ctrl-type sitter på ett <select>, som i forms.css bara
+   matchas av det låg-specifika "select"-selektorn (0,0,0,1) — där vinner
+   redan en enkel klass (0,0,1,0) utan scoping, verifierat i test, ingen
+   fix behövs för den. */
+#off-wizard input.off-discount-ctrl-value { width: 64px; }
 
 /* ── TEXT TOOLBAR ── */
 .off-toolbar { display: flex; gap: 3px; margin-bottom: 3px; flex-wrap: wrap; }
