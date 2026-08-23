@@ -155,8 +155,19 @@ const Storage = {
     return out;
   },
 
-  /* Skriv ALLA nyckel/värde-par i ett enda HTTP-anrop (används av persist) */
-  setAll(pairs) {
+  /* Skriv ALLA nyckel/värde-par i ett enda HTTP-anrop (används av persist).
+     V48B3B0 R1: tidigare gömdes Supabase-skrivningen i en oawaitad async
+     IIFE ("fire-and-forget") — callern fick aldrig veta om den faktiskt
+     lyckades, vilket var en av tre nödvändiga ingredienser i det verifierade
+     dataförlust-racet (se RAPPORT-RACE-VERIFIERING.md/RAPPORT-V48B3B0-R1.md).
+     setAll() är nu `async` och returnerar en riktig Promise<boolean> —
+     `true` vid bekräftad lyckad server-write, `false` vid varje typ av
+     misslyckande (aldrig ett kastat/reject:at fel — se catch nedan). Den
+     enda anropsplatsen i kodbasen är persist() (state.js), som nu `await`ar
+     detta värde. localStorage-cachningen är oförändrad — sker fortfarande
+     synkront, direkt, oavsett vad server-skrivningen senare ger för resultat
+     (offline-first-designen är avsiktligt bevarad). */
+  async setAll(pairs) {
     pairs.forEach(([key, value]) => {
       try { localStorage.setItem(this.prefix + key, JSON.stringify(value)); } catch(e) {}
     });
@@ -164,22 +175,34 @@ const Storage = {
     const aoEntry = pairs.find(function(p) { return p[0] === 'workOrders'; });
     const aoCount = Array.isArray(aoEntry && aoEntry[1]) ? aoEntry[1].filter(function(a) { return !a.deleted && !a.archived; }).length : '?';
     console.log('[Storage.setAll] Skriver ' + pairs.length + ' nycklar till Supabase — aktiva AO: ' + aoCount);
-    (async () => {
-      try {
-        const res = await this._authFetch(SUPABASE_URL + '/rest/v1/store', {
-          body: JSON.stringify(body),
-          extraHeaders: { 'Prefer': 'resolution=merge-duplicates' }
-        });
-        if (res.ok) {
-          console.log('[Storage.setAll] Supabase write OK — ' + pairs.length + ' nycklar (inkl. vift_workOrders)');
-        } else {
-          const txt = await res.text().catch(function() { return ''; });
-          console.error('[Storage.setAll] Supabase write MISSLYCKADES HTTP ' + res.status + ':', txt.substring(0, 300));
-        }
-      } catch(e) {
-        if (!e.isAuthExpired) console.error('[Storage.setAll] Nätverksfel vid write:', e.message || e);
+    try {
+      const res = await this._authFetch(SUPABASE_URL + '/rest/v1/store', {
+        body: JSON.stringify(body),
+        extraHeaders: { 'Prefer': 'resolution=merge-duplicates' }
+      });
+      if (res.ok) {
+        console.log('[Storage.setAll] Supabase write OK — ' + pairs.length + ' nycklar (inkl. vift_workOrders)');
+        return true;
+      } else {
+        const txt = await res.text().catch(function() { return ''; });
+        console.error('[Storage.setAll] Supabase write MISSLYCKADES HTTP ' + res.status + ':', txt.substring(0, 300));
+        return false;
       }
-    })();
+    } catch(e) {
+      if (!e.isAuthExpired) console.error('[Storage.setAll] Nätverksfel vid write:', e.message || e);
+      return false;
+    }
+  },
+
+  /* V48B3B0 R1.1: skriver ENDAST till localStorage, ingen nätverksskrivning.
+     Används för att återställa den lokala cachen efter en misslyckad
+     server-write vars synkrona localStorage.setItem() i setAll() redan
+     hunnit skriva ett värde som sedan visade sig ALDRIG bli bekräftat
+     server-sidigt (se RAPPORT-V48B3B0-R1.1.md). Utan detta skulle en
+     offline-reload (initState() → Storage._localAll()) kunna återuppliva
+     en mutation som callern redan rullat tillbaka i minnet. */
+  setLocal(key, value) {
+    try { localStorage.setItem(this.prefix + key, JSON.stringify(value)); } catch(e) {}
   },
 
   /* Enstaka get */

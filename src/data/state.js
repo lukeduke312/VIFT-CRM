@@ -225,50 +225,147 @@ async function initState() {
 }
 
 /**
- * Spara hela state — localStorage direkt + Supabase i bakgrunden (ett enda HTTP-anrop)
+ * Spara hela state — localStorage direkt + Supabase (serialiserad, bekräftad skrivning).
+ *
+ * V48B3B0 R1 (kritisk data consistency-hotfix): tidigare satte persist() både
+ * DataSync._lastSig OCH skickade Supabase-skrivningen helt fire-and-forget,
+ * innan skrivningen någonsin bekräftats. Det race:et är verifierat och
+ * dokumenterat i RAPPORT-RACE-VERIFIERING.md/run-race-repro.js — en pågående
+ * DataSync-poll kunde då applicera en förlegad remote-snapshot rakt över en
+ * precis skapad, ännu obekräftad lokal offert och radera den permanent,
+ * inklusive att newId() sedan återanvände det "försvunna" ID:t.
+ *
+ * Fixen har tre delar, se RAPPORT-V48B3B0-R1.md för fullständig motivering:
+ *   1. persist() är nu serialiserad via en enkel promise-kö (_persistQueue,
+ *      samma etablerade mönster som _notifPersistQueue/persistNotifs() i
+ *      denna fil) — två persist()-anrop kan aldrig skicka sina Supabase-
+ *      writes i parallell/omvänd ordning.
+ *   2. DataSync._pendingWrites/_localWriteGeneration ökas SYNKRONT här,
+ *      innan någon await — DataSync._poll() kontrollerar båda före den
+ *      någonsin applicerar en remote-snapshot (se DataSync._poll()).
+ *   3. DataSync._lastSig sätts ENDAST efter en BEKRÄFTAD lyckad
+ *      server-write — aldrig optimistiskt innan, vilket var precis den
+ *      falska "redan synkad"-signalen som lurade den ursprungliga pollen
+ *      att fortsätta trots att skrivningen ännu inte fanns server-sidigt.
+ *
+ * Returnerar en Promise<boolean> som ALDRIG rejectar (alla fel fångas och
+ * ger `false`) — så de ~200 befintliga anropsställena som gör `persist();`
+ * utan att invänta returvärdet fortsätter fungera oförändrat, utan risk för
+ * unhandled promise rejections. Nya/kritiska anropsställen (t.ex.
+ * OffersPage._save()) kan göra `const ok = await persist();` och agera på
+ * resultatet.
  */
+var _persistQueue = Promise.resolve();
+
 function persist() {
-  const _now = new Date().toISOString();
-  /* Sätt _lastSig lokalt så DataSync inte triggar en omedelbar re-läsning av egna skrivningar */
-  if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
-  const _persistAoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a) { return !a.deleted && !a.archived; }).length : 0;
-  console.log('[persist] Sparar state — aktiva AO: ' + _persistAoCount + ' — ts: ' + _now);
-  Storage.setAll([
-    ['lastChanged',      _now],
-    ['customers',        state.customers],
-    ['workOrders',       state.workOrders],
-    ['offers',           state.offers],
-    ['invoices',         state.invoices],
-    ['staff',            state.staff],
-    ['properties',       state.properties],
-    ['priceGroups',      state.priceGroups],
-    ['priceProfiles',    state.priceProfiles],
-    ['salesOpps',        state.salesOpportunities],
-    ['activityLog',      state.activityLog],
-    ['settings',         state.settings],
-    ['timeEntries',      state.timeEntries],
-    ['contracts',        state.contracts],
-    ['articles',         state.articles],
-    ['titles',           state.titles],
-    ['roles',            state.roles],
-    ['recurringOrders',  state.recurringOrders],
-    ['ronderingsmallar', state.ronderingsmallar],
-    ['ronderingar',      state.ronderingar],
-    ['avvikelser',       state.avvikelser],
-    ['activities',       state.activities],
-    ['serviceTemplates', state.serviceTemplates],
-    ['emailTemplates',   state.emailTemplates],
-    ['propertyCategories', state.propertyCategories],
-    ['ronderingspass',   state.ronderingspass],
-    ['propertyObjects',  state.propertyObjects],
-    ['importLogs',       state.importLogs],
-    ['propertyRoles',         state.propertyRoles],
-    ['propertyContacts',      state.propertyContacts],
-    ['deviationCategories',   state.deviationCategories],
-    ['inspections',           state.inspections],
-    ['offerEvents',           state.offerEvents],
-    ['offerAttachments',      state.offerAttachments]
-  ]);
+  /* Måste ske SYNKRONT, före all await — annars hinner en poll som redan
+     startat aldrig se att en lokal write är på väg. Se DataSync._poll(). */
+  if (typeof DataSync !== 'undefined') {
+    DataSync._pendingWrites = (DataSync._pendingWrites || 0) + 1;
+    DataSync._localWriteGeneration = (DataSync._localWriteGeneration || 0) + 1;
+  }
+  const task = _persistQueue.then(function() { return _doPersist(); });
+  /* V48B3B0 R1.2 (kritisk fix): EN och SAMMA promise (`safeTask`) används
+     nu för både _persistQueue OCH returvärdet till callern — tidigare
+     skapade `_persistQueue = task.catch(A)` och `return task.catch(B)` två
+     SEPARATA reaction-kedjor på `task`. Per Promise/A+ körs reactions på
+     samma promise i REGISTRERINGSORDNING — eftersom _persistQueue-grenen
+     registrerades FÖRE retur-grenen, kunde nästa köade persist()-anrops
+     `_persistQueue.then(...)`-fortsättning faktiskt köras FÖRE callerns
+     egen `await persist()`-fortsättning (t.ex. OffersPage._save():s
+     rollback vid fel) — verifierat, reproducerat och dokumenterat i
+     RAPPORT-V48B3B0-R1.2.md. Det bröt R1/R1.1:s failure-invariant: en
+     misslyckad, ännu ej tillbakarullad mutation kunde hinna serialiseras
+     av en senare, lyckad köad write innan callern hunnit rulla tillbaka
+     den ur state.offers/localStorage.
+     Med EN delad `safeTask`: callerns `await persist()` (registrerat
+     synkront, direkt vid anropet) och en SENARE persist()-anrops
+     `_persistQueue.then(...)` (som med nödvändighet registreras EFTER,
+     eftersom den bara kan ske efter att den förra callern redan fått sin
+     egen väntande promise) körs garanterat i den ordningen — callerns
+     fortsättning (och ev. rollback) FÖRE nästa köade writes start. */
+  const safeTask = task.catch(function(e) {
+    console.error('[persist] Ohanterat fel i persist-kön:', e);
+    return false;
+  });
+  /* Kön måste leva vidare även om detta specifika anrop misslyckas —
+     annars fastnar alla senare persist()-anrop bakom ett permanent
+     avvisat promise. safeTask rejectar aldrig (se catch ovan), så detta
+     är redan säkert utan ytterligare .catch(). */
+  _persistQueue = safeTask;
+  return safeTask;
+}
+
+async function _doPersist() {
+  try {
+    const _now = new Date().toISOString();
+    const _persistAoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a) { return !a.deleted && !a.archived; }).length : 0;
+    console.log('[persist] Sparar state — aktiva AO: ' + _persistAoCount + ' — ts: ' + _now);
+    /* Byggs HÄR (vid faktisk exekvering i kön), inte vid persist()-anropet —
+       om detta anrop stod i kö bakom ett tidigare pågående anrop innehåller
+       state.X-arrayerna då garanterat även eventuella mutationer som skett
+       under tiden, eftersom mutation alltid sker synkront FÖRE persist()
+       anropas (etablerat mönster i hela kodbasen). Se RAPPORT §4. */
+    const ok = await Storage.setAll([
+      ['lastChanged',      _now],
+      ['customers',        state.customers],
+      ['workOrders',       state.workOrders],
+      ['offers',           state.offers],
+      ['invoices',         state.invoices],
+      ['staff',            state.staff],
+      ['properties',       state.properties],
+      ['priceGroups',      state.priceGroups],
+      ['priceProfiles',    state.priceProfiles],
+      ['salesOpps',        state.salesOpportunities],
+      ['activityLog',      state.activityLog],
+      ['settings',         state.settings],
+      ['timeEntries',      state.timeEntries],
+      ['contracts',        state.contracts],
+      ['articles',         state.articles],
+      ['titles',           state.titles],
+      ['roles',            state.roles],
+      ['recurringOrders',  state.recurringOrders],
+      ['ronderingsmallar', state.ronderingsmallar],
+      ['ronderingar',      state.ronderingar],
+      ['avvikelser',       state.avvikelser],
+      ['activities',       state.activities],
+      ['serviceTemplates', state.serviceTemplates],
+      ['emailTemplates',   state.emailTemplates],
+      ['propertyCategories', state.propertyCategories],
+      ['ronderingspass',   state.ronderingspass],
+      ['propertyObjects',  state.propertyObjects],
+      ['importLogs',       state.importLogs],
+      ['propertyRoles',         state.propertyRoles],
+      ['propertyContacts',      state.propertyContacts],
+      ['deviationCategories',   state.deviationCategories],
+      ['inspections',           state.inspections],
+      ['offerEvents',           state.offerEvents],
+      ['offerAttachments',      state.offerAttachments]
+    ]);
+    if (ok) {
+      /* R1: lastSig sätts ENDAST efter bekräftad write — se filhuvud-
+         kommentaren ovan för varför detta är kärnan i fixen. */
+      if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
+    } else {
+      console.error('[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).');
+      /* R1.1: Storage.setAll() ovan hann redan (synkront, före nätverkssvaret
+         var känt) skriva DENNA misslyckade skrivnings _now-tidsstämpel till
+         localStorage['vift_lastChanged']. Utan denna rad skulle den lokala
+         cachen påstå en NYARE "sanning" än vad som faktiskt persisterats —
+         och en offline initState()-fallback (Storage._localAll()) sätter
+         DataSync._lastSig direkt från just den cachade signaturen (se
+         initState(), rad ~154-155), vilket annars skulle sprida den aldrig
+         bekräftade signaturen vidare. Återställ cachen till den senast
+         BEKRÄFTADE signaturen (kan vara null om ingen write någonsin
+         lyckats denna session — korrekt, då finns ingen bekräftad signatur). */
+      if (typeof DataSync !== 'undefined') Storage.setLocal('lastChanged', DataSync._lastSig);
+    }
+    return ok;
+  } finally {
+    if (typeof DataSync !== 'undefined') {
+      DataSync._pendingWrites = Math.max(0, (DataSync._pendingWrites || 0) - 1);
+    }
+  }
 }
 
 /* Spara bara notiser — anropas av NotificationsService.
@@ -527,20 +624,58 @@ const DataSync = {
     if (this._timer) { clearInterval(this._timer); this._timer = null; }
   },
 
+  /* R1: pending-write/generation-räknare, ökade synkront av persist() innan
+     någon await — se persist() i denna fil. En poll som redan hunnit förbi
+     sig-kontrollen (giltigt, av en ANNAN anledning) MÅSTE ändå kunna
+     upptäcka och avbryta om en lokal write startar under de återstående
+     await-punkterna nedan, annars kan den fortfarande applicera en
+     förlegad snapshot ovanpå en färsk, ännu obekräftad lokal mutation. */
+  _pendingWrites: 0,
+  _localWriteGeneration: 0,
+
   async _poll() {
     if (document.hidden) return;
     /* Avbryt om användaren skriver eller en modal är öppen */
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
     if (document.body.classList.contains('modal-open')) return;
+    /* R1: starta aldrig en ny pollcykel medan en lokal write pågår/köad. */
+    if (DataSync._pendingWrites > 0) return;
+    const startGeneration = DataSync._localWriteGeneration;
 
     try {
       const sig = await Storage.get('lastChanged');
       if (!sig || sig === DataSync._lastSig) return;
 
+      /* R1 (DEL 6, absolut krav): en lokal write kan ha startat under
+         awaiten ovan — kontrollera igen innan vi ens hämtar full snapshot. */
+      if (DataSync._pendingWrites > 0 || DataSync._localWriteGeneration !== startGeneration) {
+        console.log('[DataSync] Avbryter poll — lokal write startade under GET lastChanged');
+        return;
+      }
+
       console.log('[DataSync] Fjärruppdatering detekterad (' + sig + ') — hämtar data…');
       const remote = await Storage.getAll();
       if (!remote) return;
+
+      /* R1 (DEL 6, absolut krav): kontrollera IGEN efter den andra
+         await-gränsen — detta är exakt det fönster som orsakade den
+         verifierade dataförlusten (se RAPPORT-RACE-VERIFIERING.md). */
+      if (DataSync._pendingWrites > 0 || DataSync._localWriteGeneration !== startGeneration) {
+        console.log('[DataSync] Avbryter poll — lokal write startade under GET all (den verifierade racefönstret)');
+        return;
+      }
+
+      /* R1 (DEL 7): snapshot-koherens — om ytterligare en fjärrändring
+         (t.ex. från en annan enhet) hann ske MELLAN de två läsningarna
+         ovan kan lastChanged inuti denna snapshot skilja sig från den sig
+         som utlöste cykeln. Applicera då inte en eventuellt inkonsekvent
+         blandning — låt nästa poll (som ändå triggas av den nya sig:en)
+         hämta en självkonsekvent snapshot istället. */
+      if (remote['lastChanged'] !== sig) {
+        console.log('[DataSync] Avbryter poll — lastChanged ändrades mellan de två läsningarna (' + sig + ' → ' + remote['lastChanged'] + ')');
+        return;
+      }
 
       DataSync._lastSig = sig;
 

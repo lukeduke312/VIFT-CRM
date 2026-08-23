@@ -153,6 +153,11 @@ serve(async (req: Request) => {
       const exp = new Date(off.tokenExpiresAt as string).getTime()
       if (Date.now() > exp)    return json({ error: 'expired' }, 410)
     }
+    /* V48B3B0 (säkerhetshotfix): en ersatt offertversion (status === 'ersatt')
+       får aldrig ta emot ett kundsvar (approve/change_request/decline) — en
+       nyare version finns redan. Måste stå FÖRE snapshot-/versionsvalidering
+       och FÖRE all mutation, så ett avvisat anrop lämnar posten helt orörd. */
+    if (off.status === 'ersatt') return json({ error: 'replaced' }, 410)
 
     /* Validera lockedSnapshotJSON och jämför version mot snapshot (inte live-fält).
        off.versionNumber kan vara undefined på äldre offerter → NaN vid Number() → mismatch.
@@ -185,8 +190,13 @@ serve(async (req: Request) => {
       }, 400)
     }
 
-    /* Förhindra alla svar efter att offerten redan fått ett slutgiltigt svar */
-    const alreadyAnswered = off.status === 'godkänd' || off.status === 'nekad'
+    /* Förhindra alla svar efter att offerten redan fått ett slutgiltigt/
+       terminalt svar. V48B3B0 (säkerhetshotfix): utökad med 'ändring-begärd'
+       — kunden har redan skickat ett svar för denna version, ytterligare
+       svar/replay på SAMMA version ska inte accepteras (matchar det
+       publika UI:t, som redan behandlar 'ändring-begärd' som besvarad).
+       'ersatt' blockeras separat och tidigare ovan (error:'replaced'). */
+    const alreadyAnswered = off.status === 'godkänd' || off.status === 'nekad' || off.status === 'ändring-begärd'
     if (alreadyAnswered) {
       return json({ error: 'already_answered', status: off.status }, 410)
     }

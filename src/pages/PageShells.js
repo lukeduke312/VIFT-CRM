@@ -793,6 +793,7 @@ const OffersPage = {
     this._editExtras   = [];
     this._editOfferId  = null;
     this._createOnCreated = (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null;
+    this._saveInFlight = false;
     this._wizardStep   = 1;
     this._activeSvcId  = null;
     this._svcFields    = {};
@@ -819,6 +820,7 @@ const OffersPage = {
     this._editExtras   = (off.extras || []).map(e => ({...e}));
     this._editOfferId  = off.id;
     this._createOnCreated = null; /* V47: aldrig callback vid redigering av befintlig offert */
+    this._saveInFlight = false;
     this._wizardStep   = 1;
     this._activeSvcId  = null;
     this._svcFields    = {};
@@ -2414,72 +2416,116 @@ const OffersPage = {
   },
 
   /* ── Save ─── */
-  _save() {
-    if (this._wizardStep === 3) {
-      const map = {'off-payment':'paymentTerms','off-validity':'validityText','off-terms':'generalTerms','off-note':'internalNote'};
-      Object.entries(map).forEach(([id,key]) => {
-        const el = document.getElementById(id);
-        if (el) this._wizardData[key] = el.value;
-      });
-    }
-    const d = this._wizardData;
-    if (!d.customerId) { showToast('Välj en kund'); return; }
-    const cleanLines = this._editLines.filter(l => {
-      if (l.type==='text')    return (l.blockTitle||'').trim()||(l.text||'').trim();
-      if (l.type==='service') return true;
-      return (l.description||'').trim()||(l.unitPrice||0)>0;
-    });
-    if (!cleanLines.some(l=>l.type!=='text')) { showToast('Lägg till minst en offertrad eller tjänst'); return; }
-    const cleanExtras = this._editExtras.filter(e=>(e.description||'').trim()||(e.unitPrice||0)>0);
-    const now  = new Date().toISOString();
-    const data = {
-      customerId:   d.customerId,
-      title:        d.title        || '',
-      summary:      d.summary      || '',
-      scope:        d.scope        || '',
-      includes:     d.includes     || '',
-      excludes:     d.excludes     || '',
-      lines:        cleanLines.map(l=>{
-        if(l.type==='service'||l.type==='text') return {...l};
-        return {...l, total: Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))};
-      }),
-      extras:       cleanExtras,
-      validUntil:   d.validUntil   || '',
-      paymentTerms: d.paymentTerms || '',
-      validityText: d.validityText || '',
-      generalTerms: d.generalTerms || '',
-      internalNote: d.internalNote || '',
-      discount:     this._discount || {type:'percent', value:0},
-      updatedAt:    now
-    };
-    const offerId = this._editOfferId;
-    if (!offerId) {
-      const newOff = Object.assign(Schema.offer(), data, {
-        id: newId(state.offers,'OFF'), status:'utkast', timeline: [],
-        createdAt: d.date ? d.date + 'T00:00:00.000Z' : now
-      });
-      OfferDetailPage._logEvt(newOff, 'create', 'Offert skapad');
-      state.offers.push(newOff);
-      persist();
-      /* V47: callback körs EFTER lyckad persist, aldrig innan — se openCreate(). */
-      const onCreated = this._createOnCreated;
-      this._createOnCreated = null;
-      if (typeof onCreated === 'function') {
-        try { onCreated(newOff); } catch (e) { console.warn('[OffersPage] onCreated-fel:', e); }
+  /* V48B3B0 R1: _save() är nu async och väntar på ett BEKRÄFTAT persist()
+     (Promise<boolean>, se state.js) innan success/onCreated/navigation körs
+     — se RAPPORT-V48B3B0-R1.md DEL 10/12 för fullständig motivering. Detta
+     är den kritiska anropsplatsen som tidigare kunde visa "Offert skapad"
+     och köra V47:s opts.onCreated(newOff) trots att skrivningen till servern
+     ännu inte ens hade skickats, än mindre bekräftats.
+     _saveInFlight (DEL 11) förhindrar dubbla samtidiga sparningar om
+     användaren dubbelklickar/trycker snabbt medan en sparning pågår. */
+  async _save() {
+    if (this._saveInFlight) return;
+    this._saveInFlight = true;
+    try {
+      if (this._wizardStep === 3) {
+        const map = {'off-payment':'paymentTerms','off-validity':'validityText','off-terms':'generalTerms','off-note':'internalNote'};
+        Object.entries(map).forEach(([id,key]) => {
+          const el = document.getElementById(id);
+          if (el) this._wizardData[key] = el.value;
+        });
       }
-      this._wizardClose();
-      Router.showPage('pg-offer');
-      showToast('Offert ' + newOff.id + ' skapad');
-    } else {
-      const idx = (state.offers||[]).findIndex(o=>o.id===offerId);
-      if (idx < 0) return;
-      const updated = Object.assign({}, state.offers[idx], data);
-      OfferDetailPage._logEvt(updated, 'edit', 'Offert redigerad');
-      state.offers[idx] = updated;
-      persist();
-      this._wizardClose();
-      OfferDetailPage.render({offerId});
-      showToast('Offert uppdaterad');
+      const d = this._wizardData;
+      if (!d.customerId) { showToast('Välj en kund'); return; }
+      const cleanLines = this._editLines.filter(l => {
+        if (l.type==='text')    return (l.blockTitle||'').trim()||(l.text||'').trim();
+        if (l.type==='service') return true;
+        return (l.description||'').trim()||(l.unitPrice||0)>0;
+      });
+      if (!cleanLines.some(l=>l.type!=='text')) { showToast('Lägg till minst en offertrad eller tjänst'); return; }
+      const cleanExtras = this._editExtras.filter(e=>(e.description||'').trim()||(e.unitPrice||0)>0);
+      const now  = new Date().toISOString();
+      const data = {
+        customerId:   d.customerId,
+        title:        d.title        || '',
+        summary:      d.summary      || '',
+        scope:        d.scope        || '',
+        includes:     d.includes     || '',
+        excludes:     d.excludes     || '',
+        lines:        cleanLines.map(l=>{
+          if(l.type==='service'||l.type==='text') return {...l};
+          return {...l, total: Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))};
+        }),
+        extras:       cleanExtras,
+        validUntil:   d.validUntil   || '',
+        paymentTerms: d.paymentTerms || '',
+        validityText: d.validityText || '',
+        generalTerms: d.generalTerms || '',
+        internalNote: d.internalNote || '',
+        discount:     this._discount || {type:'percent', value:0},
+        updatedAt:    now
+      };
+      const offerId = this._editOfferId;
+      if (!offerId) {
+        const newOff = Object.assign(Schema.offer(), data, {
+          id: newId(state.offers,'OFF'), status:'utkast', timeline: [],
+          createdAt: d.date ? d.date + 'T00:00:00.000Z' : now
+        });
+        OfferDetailPage._logEvt(newOff, 'create', 'Offert skapad');
+        state.offers.push(newOff);
+        const ok = await persist();
+        if (!ok) {
+          /* Rollback (strategi A, se RAPPORT DEL 12): ta bort den nyss
+             pushade offerten ur lokal state igen så den inte visas som
+             skapad. Wizarddata (_wizardData/_editLines/_editExtras) lämnas
+             helt orörd — wizarden stängs INTE — så användaren kan trycka
+             Spara igen utan att fylla i något på nytt. Ingen risk för
+             dubblett-offert vid retry: ett nytt _save()-anrop bygger ett
+             helt nytt newOff med ett nytt newId(). */
+          const idx = state.offers.indexOf(newOff);
+          if (idx !== -1) state.offers.splice(idx, 1);
+          /* V48B3B0 R1.1: persist() -> Storage.setAll() hann redan skriva
+             den nu tillbakarullade offerten till localStorage['vift_offers']
+             synkront, innan nätverkssvaret var känt. Utan denna rad skulle
+             en offline-reload (initState() -> Storage._localAll()) kunna
+             återuppliva OFF-xxx trots att den aldrig sparades server-sidigt
+             — se RAPPORT-V48B3B0-R1.1.md. */
+          Storage.setLocal('offers', state.offers);
+          showToast('Kunde inte spara offerten — kontrollera anslutningen och försök igen');
+          return;
+        }
+        /* V47: callback körs EFTER lyckad, BEKRÄFTAD persist, aldrig innan — se openCreate(). */
+        const onCreated = this._createOnCreated;
+        this._createOnCreated = null;
+        if (typeof onCreated === 'function') {
+          try { onCreated(newOff); } catch (e) { console.warn('[OffersPage] onCreated-fel:', e); }
+        }
+        this._wizardClose();
+        Router.showPage('pg-offer');
+        showToast('Offert ' + newOff.id + ' skapad');
+      } else {
+        const idx = (state.offers||[]).findIndex(o=>o.id===offerId);
+        if (idx < 0) return;
+        const prevOffer = state.offers[idx];
+        const updated = Object.assign({}, state.offers[idx], data);
+        OfferDetailPage._logEvt(updated, 'edit', 'Offert redigerad');
+        state.offers[idx] = updated;
+        const ok = await persist();
+        if (!ok) {
+          /* Samma rollback-princip som ovan — återställ till exakt det
+             offer-objekt som fanns innan detta redigeringsförsök. */
+          state.offers[idx] = prevOffer;
+          /* V48B3B0 R1.1: samma lokala cache-synk som vid failed create. */
+          Storage.setLocal('offers', state.offers);
+          showToast('Kunde inte spara ändringarna — kontrollera anslutningen och försök igen');
+          return;
+        }
+        this._wizardClose();
+        OfferDetailPage.render({offerId});
+        showToast('Offert uppdaterad');
+      }
+    } finally {
+      this._saveInFlight = false;
     }
   }
 };
@@ -3383,6 +3429,14 @@ const OfferDetailPage = {
 
     const extEvents = (state.offerEvents || []).filter(function(e) { return e.offerId === off.id; });
     const _extLabel = { opened:'Kund öppnade länk', approved:'Kund godkände offert', change_requested:'Kund begärde ändring', declined:'Kund nekade offert', revoked:'Länk återkallad', renewed:'Länk förnyad', email_sent:'Offert skickad via e-post' };
+    /* V48B3B0 (säkerhetshotfix): e.comment/e.byCustomer/e.byEmail är kunddata,
+       skickad av en extern, oautentiserad part via offer-respond. Den lagras
+       verbatim (avsiktligt, för historik) men får ALDRIG tolkas som HTML vid
+       rendering — bygg hela beskrivningen som ren text först, escapa den
+       EN gång med kanoniska esc(), interpolera sedan i HTML. Interna
+       labels (_extLabel, baseLabel) genereras av applikationen själv och
+       innehåller inga special-tecken, så en gemensam esc() av hela strängen
+       är säker och ändrar inget synligt för dem. */
     extEvents.forEach(function(e) {
       var baseLabel = e.type === 'email_sent' && e.status === 'failed'
         ? 'E-postutskick misslyckades'
@@ -3390,8 +3444,9 @@ const OfferDetailPage = {
       var recipientText = e.type === 'email_sent' && Array.isArray(e.recipients) && e.recipients.length
         ? ' — ' + e.recipients.join(', ')
         : '';
-      var desc = baseLabel + recipientText + (e.byCustomer ? ' — ' + e.byCustomer : '') + (e.byEmail ? ' (' + e.byEmail + ')' : '') + (e.comment ? ': ' + e.comment.slice(0,120) : '') + (e.error ? ': ' + String(e.error).slice(0,160) : '');
-      tl.push({ ts: e.ts || e.sentAt || '', type: e.type, text: desc, user: e.sentBy || e.byCustomer || (e.type === 'email_sent' ? 'System' : 'Kund'), _src:'customer' });
+      var rawDesc = baseLabel + recipientText + (e.byCustomer ? ' — ' + e.byCustomer : '') + (e.byEmail ? ' (' + e.byEmail + ')' : '') + (e.comment ? ': ' + e.comment.slice(0,120) : '') + (e.error ? ': ' + String(e.error).slice(0,160) : '');
+      var rawUser = e.sentBy || e.byCustomer || (e.type === 'email_sent' ? 'System' : 'Kund');
+      tl.push({ ts: e.ts || e.sentAt || '', type: e.type, text: esc(rawDesc), user: esc(rawUser), _src:'customer' });
     });
 
     tl.sort(function(a, b) { return (b.ts || '').localeCompare(a.ts || ''); });
@@ -4439,6 +4494,15 @@ ${hasRut?`<div class="rut">
   createNewVersion(offerId) {
     const off = getOff(offerId);
     if (!off) return;
+    /* V48B3B0 (säkerhetshotfix, fail-closed guard): en redan ersatt offert
+       får inte versioneras igen — den har redan en efterträdare (annars
+       skulle stale/dubbla versionskedjor kunna skapas). Full concurrency-/
+       revisionspolicy för alla statusar kommer i B3B1; detta är endast en
+       snäv spärr mot den uppenbara stale-operationen. */
+    if (off.status === 'ersatt') {
+      showToast('Denna offert är redan ersatt av en nyare version — kan inte versioneras igen.');
+      return;
+    }
     const newVer = (off.versionNumber || 1) + 1;
     Modal.open({
       title: ic('git-branch',14) + ' Skapa ny version',
@@ -4449,6 +4513,16 @@ ${hasRut?`<div class="rut">
           const now = new Date().toISOString();
           off.status    = 'ersatt';
           off.updatedAt = now;
+          /* V48B3B0 (säkerhetshotfix, defense-in-depth): den GAMLA versionens
+             publika kundlänk får inte förbli aktiv efter att den ersatts —
+             annars kan kunden fortsatt öppna/svara på en inaktuell offert
+             (stängs även server-sidigt i offer-token-validate/offer-respond,
+             se DEL 6/7). Endast tokenRevokedAt sätts — publicToken/
+             tokenCreatedAt/tokenExpiresAt/lockedSnapshotJSON på DEN GAMLA
+             posten rörs INTE, för att bevara intern historik. */
+          if (off.publicToken && !off.tokenRevokedAt) {
+            off.tokenRevokedAt = now;
+          }
           this._logEvt(off, 'status', 'Version ' + (off.versionNumber||1) + ' ersatt av ny version');
           // Create new version
           const newOff = JSON.parse(JSON.stringify(off));

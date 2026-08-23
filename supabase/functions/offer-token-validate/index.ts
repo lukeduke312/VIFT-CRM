@@ -134,6 +134,15 @@ serve(async (req: Request) => {
       }
     }
 
+    /* V48B3B0 (säkerhetshotfix): en ersatt offertversion (status === 'ersatt')
+       ska inte längre vara publikt öppningsbar via sin gamla länk — en nyare
+       version finns redan. Måste stå FÖRE alla sidoeffekter (openCount,
+       openedAt, updatedAt, store-skrivning, 'opened'-event) så att ett
+       avvisat anrop mot en ersatt offert lämnar posten helt orörd. */
+    if (off.status === 'ersatt') {
+      return json({ error: 'replaced' }, 410)
+    }
+
     /* Uppdatera öppningsstatistik */
     const isFirstOpen = !off.openedAt
     const now = new Date().toISOString()
