@@ -102,6 +102,15 @@ IMPORT_EXPORT_CONFIGS.customer = {
   validate: function (mapped) {
     var e = [];
     if (!mapped.name) e.push('Namn saknas');
+    /* V49A1: okänd, icke-tom kundtyp blockeras HÄR (innan coerce/import) —
+       raden får status 'error' och skippas av ImportWizardPage._runImport()
+       (se dess befintliga `if (v.status === 'error') { skippedCount++; ... return; }`).
+       Ett okänt värde ska ALDRIG nå fram till att skrivas som customer.type.
+       Källa: CustomerService.normalizeType() — samma normalisering som
+       coerce() nedan använder, en enda source of truth. Se RAPPORT-V49A1.md. */
+    if (mapped.type && typeof CustomerService !== 'undefined' && CustomerService.normalizeType(mapped.type) === null) {
+      e.push('Okänd kundtyp "' + mapped.type + '". Tillåtna typer är Företag, Privatperson, BRF eller Fastighetsägare.');
+    }
     return e;
   },
   coerce: function (obj) {
@@ -109,8 +118,20 @@ IMPORT_EXPORT_CONFIGS.customer = {
       var n = parseInt(obj.paymentTerms, 10); obj.paymentTerms = isNaN(n) ? 30 : n;
     }
     if (typeof obj.active === 'string') obj.active = obj.active.toLowerCase() !== 'nej' && obj.active !== '0' && obj.active !== 'false';
-    var tm = { privatperson: 'privat', företag: 'foretag', bostadsrättsförening: 'brf' };
-    if (obj.type && tm[obj.type.toLowerCase()]) obj.type = tm[obj.type.toLowerCase()];
+    /* V49A1: EN gemensam normaliserare (CustomerService.normalizeType())
+       ersätter den tidigare lokala 3-posters tm-tabellen, som varken kände
+       igen engelska varianter (company/private/…) eller normaliserade
+       casing på redan-nästan-korrekta värden (t.ex. "Foretag"). Se
+       RAPPORT-V49A1.md §9 för verifiering av laddningsordningen som gör
+       detta anrop säkert. Okända värden ska aldrig nå hit — validate()
+       ovan blockerar raden innan _runImport() någonsin anropar coerce()
+       för den — men om obj.type ändå är okänt (t.ex. en framtida
+       anropsväg som hoppar över validate()) lämnas det medvetet ORÖRT
+       istället för att gissa, exakt som normalizeType() själv gör. */
+    if (obj.type && typeof CustomerService !== 'undefined') {
+      var norm = CustomerService.normalizeType(obj.type);
+      if (norm) obj.type = norm;
+    }
   }
 };
 

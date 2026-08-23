@@ -76,7 +76,11 @@ const CustomersPage = {
     if (this._typeFilter === 'inaktiva') {
       list = list.filter(c => c.inactive);
     } else if (this._typeFilter && this._typeFilter !== 'alla') {
-      list = list.filter(c => c.type === this._typeFilter && !c.inactive);
+      /* V49A1: jämför NORMALISERAT värde, inte rått c.type — annars
+         försvinner en legacy-kund (type='company' e.dyl.) tyst ur
+         Företag-fliken trots att typeLabel() redan visar "Företag" för
+         den överallt annars. Se RAPPORT-V49A1.md §12. */
+      list = list.filter(c => CustomerService.normalizeType(c.type) === this._typeFilter && !c.inactive);
     } else {
       list = list.filter(c => !c.inactive);
     }
@@ -155,8 +159,7 @@ const CustomersPage = {
   },
 
   _openForm(id) {
-    const cu   = id ? getCu(id) : null;
-    const type = cu ? cu.type : 'foretag';
+    const cu = id ? getCu(id) : null;
 
     Modal.open({
       title: id ? 'Redigera kund' : 'Ny kund',
@@ -172,22 +175,47 @@ const CustomersPage = {
     setTimeout(() => {
       const sel = document.getElementById('cu-type');
       if (sel) sel.addEventListener('change', () => this._toggleTypeFields(sel.value));
-      this._toggleTypeFields(type);
+      /* V49A1 R1: initial fältvisning MÅSTE utgå från samma värde dropdownen
+         faktiskt visar (sel.value), inte rå cu.type — annars normaliserar
+         _formHtml() en legacy-synonym (t.ex. 'Private' -> dropdown visar
+         "Privatperson") medan denna kod jämförde mot den orörda råsträngen
+         ('Private' !== 'privat') och visade fel fältgrupp. Se RAPPORT-V49A1-R1.md §2. */
+      if (sel) this._toggleTypeFields(sel.value);
     }, 50);
   },
 
   _formHtml(cu) {
     const v = (key, def='') => cu ? (cu[key] || def) : def;
     const diffInv = cu && (cu.invoiceAddress || cu.invoiceZip || cu.invoiceCity);
+    /* V49A1: en BEFINTLIG kunds lagrade cu.type kan vara ett känt legacy-/
+       import-värde (t.ex. "company") eller — mer allvarligt — ett HELT
+       okänt värde. Det gamla beteendet lät webbläsaren tyst falla tillbaka
+       till det FÖRSTA <option>-elementet ("Företag") när INGEN <option>
+       matchade, utan att någonsin visa detta för användaren — nästa spar
+       skrev då tyst över det verkliga (trasiga) värdet med 'foretag'.
+       Se RAPPORT-V49A1.md §3/§7.
+       normType: '' (ny kund/inget värde), en kanonisk sträng (känd, även
+       legacy-synonym), eller null (explicit, icke-tomt, okänt värde). */
+    const rawType  = cu ? (cu.type || '') : '';
+    const normType = CustomerService.normalizeType(rawType);
+    const isUnknown = !!rawType && normType === null;
+    /* Nytt kund-formulär: förvalt 'foretag' precis som innan. Befintlig
+       kund med känt värde: dess kanoniska typ. Befintlig kund med okänt
+       värde: INGEN av de fyra riktiga alternativen förvalt — se
+       placeholder-optionen nedan, som tvingar ett aktivt, medvetet val
+       innan Spara går att lita på. */
+    const selectedType = cu ? (normType || '') : 'foretag';
     return `
       <div class="fg">
         <label>Kundtyp</label>
         <select id="cu-type">
-          <option value="foretag"         ${v('type')==='foretag'        ?'selected':''}>Företag</option>
-          <option value="brf"             ${v('type')==='brf'            ?'selected':''}>BRF</option>
-          <option value="fastighetsagare" ${v('type')==='fastighetsagare'?'selected':''}>Fastighetsägare</option>
-          <option value="privat"          ${v('type')==='privat'         ?'selected':''}>Privatperson</option>
+          ${isUnknown ? `<option value="" disabled selected>— Okänd kundtyp, välj rätt typ —</option>` : ''}
+          <option value="foretag"         ${selectedType==='foretag'        ?'selected':''}>Företag</option>
+          <option value="brf"             ${selectedType==='brf'            ?'selected':''}>BRF</option>
+          <option value="fastighetsagare" ${selectedType==='fastighetsagare'?'selected':''}>Fastighetsägare</option>
+          <option value="privat"          ${selectedType==='privat'         ?'selected':''}>Privatperson</option>
         </select>
+        ${isUnknown ? `<div style="font-size:11px;font-weight:600;color:var(--rd);margin-top:4px;">⚠ Nuvarande sparade värde kunde inte tolkas: "${esc(rawType)}" — välj rätt kundtyp ovan innan du sparar.</div>` : ''}
       </div>
 
       <div id="cu-company-fields">
@@ -258,6 +286,12 @@ const CustomersPage = {
 
   _save(id) {
     const type = document.getElementById('cu-type').value;
+    /* V49A1: tom value betyder att den disabled placeholder-optionen ("—
+       Okänd kundtyp, välj rätt typ —", se _formHtml()) fortfarande är
+       vald — dvs. användaren har INTE aktivt bekräftat en kundtyp för en
+       kund vars lagrade värde inte gick att tolka. Blockera spar istället
+       för att låta ett tomt/felaktigt värde skrivas. Se RAPPORT-V49A1.md §7. */
+    if (!type) { showToast('Välj en kundtyp innan du sparar'); return; }
     const data = { type };
 
     if (type === 'privat') {
@@ -291,12 +325,21 @@ const CustomersPage = {
     }
 
     if (id) {
-      CustomerService.update(id, data);
+      /* V49A1: defense-in-depth — type är i praktiken alltid ett av de
+         fyra kanoniska värdena här (dropdownens enda väljbara alternativ,
+         se _formHtml()/_save()s tomt-värde-guard ovan), så detta bör
+         aldrig faktiskt trigga. Men CustomerService.update() kan numera
+         returnera null om ett explicit okänt värde ändå skulle nå den
+         (t.ex. ett framtida anropsställe) — visa då INTE en felaktig
+         "Kund uppdaterad"-bekräftelse. */
+      const updated = CustomerService.update(id, data);
+      if (!updated) { showToast('Kunde inte spara kundtyp — okänt värde'); return; }
       showToast('Kund uppdaterad');
       Modal.close();
       this.render();
     } else {
       const newCu = CustomerService.create(data);
+      if (!newCu) { showToast('Kunde inte spara kundtyp — okänt värde'); return; }
       showToast('Kund skapad');
       Modal.close();
       if (this._onCreated) {
@@ -357,7 +400,11 @@ const CustomersPage = {
     if (this._typeFilter === 'inaktiva') {
       list = list.filter(c => c.inactive);
     } else if (this._typeFilter && this._typeFilter !== 'alla') {
-      list = list.filter(c => c.type === this._typeFilter && !c.inactive);
+      /* V49A1: jämför NORMALISERAT värde, inte rått c.type — annars
+         försvinner en legacy-kund (type='company' e.dyl.) tyst ur
+         Företag-fliken trots att typeLabel() redan visar "Företag" för
+         den överallt annars. Se RAPPORT-V49A1.md §12. */
+      list = list.filter(c => CustomerService.normalizeType(c.type) === this._typeFilter && !c.inactive);
     } else {
       list = list.filter(c => !c.inactive);
     }
