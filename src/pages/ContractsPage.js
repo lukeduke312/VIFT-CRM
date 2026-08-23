@@ -178,10 +178,6 @@ const ContractsPage = (function() {
     const typeOpts  = CONTRACT_TYPES.map(t=>`<option value="${t.key}"${(c?.type||'service')===t.key?' selected':''}>${t.label}</option>`).join('');
     const statusOpts= CONTRACT_STATUSES.map(s=>`<option value="${s.key}"${(c?.status||'utkast')===s.key?' selected':''}>${s.label}</option>`).join('');
     const periOpts  = PERIODS.map(p=>`<option value="${p.key}"${(c?.period||'månad')===p.key?' selected':''}>${p.label}</option>`).join('');
-    const cuOpts    = [{ id:'', name:'— välj kund —' }].concat(
-      (state.customers||[]).filter(x=>!x.deleted).map(x=>({ id:x.id, name:x.name||(x.firstName+' '+(x.lastName||'')).trim()||x.id }))
-        .sort((a,b)=>a.name.localeCompare(b.name,'sv'))
-    ).map(x=>`<option value="${x.id}"${(c?.customerId||'')===x.id?' selected':''}>${esc(x.name)}</option>`).join('');
     const propOpts  = [{ id:'', name:'— välj fastighet —' }].concat(
       (state.properties||[]).filter(x=>!x.deleted).map(x=>({ id:x.id, name:x.name||x.objectNumber||x.id }))
         .sort((a,b)=>a.name.localeCompare(b.name,'sv'))
@@ -195,7 +191,7 @@ const ContractsPage = (function() {
           <div class="fg"><label>Typ</label><select class="form-control" id="co-type">${typeOpts}</select></div>
           <div class="fg"><label>Status</label><select class="form-control" id="co-status">${statusOpts}</select></div>
         </div>
-        <div class="fg"><label>Kund</label><select class="form-control" id="co-cu">${cuOpts}</select></div>
+        <div class="fg"><label>Kund</label>${CustomerPicker.render('co-cu', { value: c?.customerId || '', placeholder: '— välj kund —' })}</div>
         <div class="fg"><label>Fastighet</label><select class="form-control" id="co-prop">${propOpts}</select></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <div class="fg"><label>Startdatum</label><input type="date" class="form-control" id="co-start" value="${esc(c?.startDate||'')}"></div>

@@ -1968,13 +1968,7 @@ const PropertyDetailPage = {
 
       <div style="font-size:11px;font-weight:800;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px;">Kund / ägare</div>
       <div style="display:flex;gap:6px;align-items:flex-end;">
-        <div class="fg" style="flex:1;margin-bottom:0;"><label>Kund / ägare</label>
-          <select id="prop-cu">
-            <option value="">— Välj kund —</option>
-            ${(state.customers||[]).map(c=>
-              `<option value="${c.id}" ${v('customerId')===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
-            ).join('')}
-          </select></div>
+        <div class="fg" style="flex:1;margin-bottom:0;"><label>Kund / ägare</label>${CustomerPicker.render('prop-cu', { value: v('customerId'), placeholder: '— Välj kund —' })}</div>
         <button class="btn bs bsm" style="flex-shrink:0;white-space:nowrap;"
           onclick="PropertyDetailPage._createCustomerFromForm()">${ic('plus',13)} Ny kund</button>
       </div>

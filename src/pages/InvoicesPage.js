@@ -531,11 +531,7 @@ const InvoicesPage = {
       title: 'Ny faktura / redovisning',
       wide: true,
       body: `
-        <div class="fg"><label>Kund</label>
-          <select id="blank-cu">
-            <option value="">— Välj kund (valfritt) —</option>
-            ${(state.customers||[]).map(c=>`<option value="${c.id}">${CustomerService.displayName(c)}</option>`).join('')}
-          </select></div>
+        <div class="fg"><label>Kund</label>${CustomerPicker.render('blank-cu', { value: '', placeholder: '— Välj kund (valfritt) —' })}</div>
         <div class="fg"><label>Rubrik</label>
           <input id="blank-title" placeholder="T.ex. Tilläggsarbete, Extrakostnader…"></div>
         <div class="fg"><label>Intern kommentar (visas ej på faktura)</label>

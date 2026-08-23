@@ -5361,11 +5361,7 @@ const PropertiesPage = {
     return `
       <div class="fg"><label>Namn / beteckning <span style="color:var(--rd)">*</span></label>
         <input id="prop-name" value="${v('name')}" placeholder="T.ex. Solvägen 1, Fastighet A…"></div>
-      <div class="fg"><label>Ägare / kund</label>
-        <select id="prop-cu">
-          <option value="">— Välj kund —</option>
-          ${(state.customers||[]).map(c=>`<option value="${c.id}" ${v('customerId')===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
-        </select></div>
+      <div class="fg"><label>Ägare / kund</label>${CustomerPicker.render('prop-cu', { value: v('customerId'), placeholder: '— Välj kund —' })}</div>
       <div class="fg"><label>Gatuadress</label>
         <input id="prop-addr" value="${v('address')}" placeholder="Börja skriva adress…"
           autocomplete="off"
