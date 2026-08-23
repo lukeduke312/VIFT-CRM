@@ -1073,6 +1073,38 @@ body.modal-open { overflow: hidden; touch-action: none; }
   margin: 0 auto;
   box-sizing: border-box;
 }
+@media (min-width: 1024px) {
+  /* DEL 20: lite mer luft på desktop, utan att göra om till samma
+     komprimerade mobilkänsla eller ändra wizardens struktur. */
+  .off-wiz-inner, .off-wiz-inner-wide { padding: 20px 28px; max-width: 1280px; }
+}
+
+/* V48B3A R4 DEL 7: skärmdump visade stort tomt vitt utrymme UNDER
+   Tillbaka/Nästa-footern på mobil när steg 2 har lite innehåll — footern
+   låg i normalt dokumentflöde direkt efter det korta innehållet istället
+   för att hamna vid sidans nederkant.
+   Verifierad kedja innan implementation: #app (height:100dvh) →
+   #page-area (flex:1;min-height:0) → #content-scroll (flex:1;min-height:0;
+   overflow-y:auto) → .page.active (min-height:100%, redan etablerat
+   mönster i layout.css) → .con/#pg-offer-content (flex:1 från sin
+   klassregel — _showWizard() skriver bara över display/padding/gap/
+   max-width/margin inline, INTE flex, så flex:1 gäller fortfarande och
+   ger .con en verklig, beräknad höjd via flexbox, inte "auto"). Det gör
+   min-height:100% på #off-wizard giltigt (samma teknik som .page redan
+   använder mot #content-scroll).
+   #off-wizard blir en egen flex-kolumn som fyller minst den tillgängliga
+   höjden; endast innehålls-diven (.off-wiz-inner/-wide) får flex:1 så den
+   växer och trycker footern mot nederkanten när innehållet är kort — utan
+   flex-grow på footern själv förblir den sin naturliga höjd. Ingen extra
+   scroll-container skapas (samma enda #content-scroll som innan), och
+   långt innehåll överskrider bara min-height och skrollar normalt.
+   >=1024px helt opåverkat (egen media-regel, ingen ändring av
+   #off-wizard/.off-wiz-inner-wide-regler där). */
+@media (max-width: 1023px) {
+  #off-wizard { min-height: 100%; display: flex; flex-direction: column; }
+  #off-wizard > .off-wiz-inner,
+  #off-wizard > .off-wiz-inner-wide { flex: 1; }
+}
 .off-wiz-s2 {
   display: flex;
   flex-direction: column;
@@ -1082,11 +1114,214 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-wiz-s2-lines { width: 100%; min-width: 0; }
 .off-wiz-s2-summ  { width: 100%; }
 
-@media (min-width: 860px) {
+/* V48B3A DEL 25: harmoniserad lokalt med kalkylatorns brytpunkt (1024px,
+   tidigare 860px) — mobil/tablet delar samma enkolumns-layout med sticky
+   totalsrad i botten (se .off-wiz-mobile-totals), desktop får den
+   sticky-till-toppen sidopanelen. Ingen ändring av global app-layout. */
+@media (min-width: 1024px) {
   .off-wiz-s2 { flex-direction: row; }
   .off-wiz-s2-lines { flex: 1; }
   .off-wiz-s2-summ  { width: 256px; flex-shrink: 0; position: sticky; top: 52px; }
 }
+
+/* V48B3A R4 DEL 6: skärmdump visade DUBBLERAD summering på mobil/tablet —
+   det stora SAMMANFATTNING-kortet (#off-totals-bar) mitt på sidan OCH den
+   nya sticky/kompakta .off-wiz-mobile-totals-raden i footern samtidigt.
+   På <1024px ska ENDAST mobile-totals-raden vara den primära summeringen.
+   Döljer BARA #off-totals-bar (det stora totalskortet) — INTE hela
+   .off-wiz-s2-summ, eftersom rabattkontrollen (.off-discount-ctrl) sitter
+   i samma container och måste förbli synlig/funktionell (ingen annan väg
+   in till rabatt på mobil). Desktop (>=1024px) oförändrat — stora
+   sidopanelen visas exakt som idag. */
+@media (max-width: 1023px) {
+  .off-wiz-s2-summ #off-totals-bar { display: none; }
+  .off-wiz-s2-summ .off-discount-ctrl { margin-top: 0; }
+}
+
+/* ── V48B3A: WIZARD HEADER — kompakt mobil, cirkel-indikator på desktop ── */
+.off-wiz-hdr {
+  background: #fff; border-bottom: 1px solid var(--br);
+  padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 6px rgba(0,0,0,.07);
+}
+.off-wiz-hdr-titlebox { flex: 1; min-width: 0; }
+.off-wiz-hdr-title { font-size: 13px; font-weight: 800; color: var(--navy); line-height: 1.2; }
+.off-wiz-hdr-close {
+  width: 44px; height: 44px; border: none; background: rgba(0,0,0,.07);
+  border-radius: 8px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.off-wiz-hdr-close--mobile  { display: flex; }
+.off-wiz-hdr-close--desktop { display: none; }
+.off-wiz-hdr-steps-mobile   { margin-top: 3px; }
+.off-wiz-mobile-step-txt { font-size: 10px; font-weight: 600; color: var(--mt); }
+.off-wiz-mobile-step-bar { width: 100%; max-width: 140px; height: 3px; background: #e5e7eb; border-radius: 2px; margin-top: 3px; overflow: hidden; }
+.off-wiz-mobile-step-bar-fill { height: 100%; background: var(--navy); border-radius: 2px; transition: width .2s ease; }
+.off-wiz-hdr-steps-desktop { display: none; }
+@media (min-width: 1024px) {
+  .off-wiz-hdr { padding: 10px 20px; }
+  .off-wiz-hdr-title { font-size: 14px; }
+  .off-wiz-hdr-close--mobile  { display: none; }
+  .off-wiz-hdr-close--desktop { display: flex; width: 30px; height: 30px; border-radius: 6px; }
+  .off-wiz-hdr-steps-mobile   { display: none; }
+  .off-wiz-hdr-steps-desktop  { display: flex; align-items: flex-end; }
+}
+
+/* ── V48B3A: WIZARD FOOTER — sticky primär-CTA + kompakt totalsrad (steg 2) ── */
+.off-wiz-ftr {
+  background: #fff; border-top: 1px solid var(--br);
+  padding: 8px 14px; display: flex; gap: 7px; justify-content: space-between;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+@media (max-width: 1023px) {
+  .off-wiz-ftr { position: sticky; bottom: 0; z-index: 9; box-shadow: 0 -2px 10px rgba(0,0,0,.06); }
+}
+.off-wiz-ftr-secondary { flex-shrink: 0; }
+.off-wiz-ftr-primary   { flex-shrink: 0; }
+.off-wiz-ftr-primary--full { flex: 1; }
+@media (max-width: 1023px) {
+  .off-wiz-ftr-secondary,
+  .off-wiz-ftr-primary { min-height: 44px; }
+  /* Upptäckt via det riktiga webbläsartestet vid 390px: två knappar med
+     lång text ("Tillbaka" + "Nästa: Villkor") i en justify-content:
+     space-between-rad överskred annars viewportens bredd eftersom
+     flex-items default till min-width:auto (kan inte krympa under sitt
+     textinnehåll). flex:1 + min-width:0 låter båda knapparna dela raden
+     och krympa/radbryta text vid behov istället för att tvinga fram
+     horisontell scroll. */
+  .off-wiz-ftr-secondary,
+  .off-wiz-ftr-primary { flex: 1; min-width: 0; white-space: normal; }
+}
+.off-wiz-ftr--step2 { flex-direction: column; gap: 6px; }
+.off-wiz-ftr-row { display: flex; gap: 7px; justify-content: space-between; }
+
+/* Sticky mobile/tablet running-total (DEL 7) — dold på desktop, sidopanelens
+   egen sticky-till-topp totalskort räcker där. */
+.off-wiz-mobile-totals { display: block; }
+@media (min-width: 1024px) { .off-wiz-mobile-totals { display: none; } }
+.off-wiz-mobile-totals-toggle {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border: 1px solid var(--br); border-radius: var(--rs);
+  padding: 8px 12px; cursor: pointer; min-height: 44px;
+}
+.off-wiz-mobile-totals-lbl { font-size: 11px; font-weight: 600; color: var(--mt); flex: 1; text-align: left; }
+.off-wiz-mobile-totals-val { font-size: 15px; font-weight: 800; color: var(--navy); }
+.off-wiz-mobile-totals-chevron { color: var(--mt); display: flex; }
+.off-wiz-mobile-totals-detail {
+  margin-top: 4px; padding: 8px 12px; background: #fff;
+  border: 1px solid var(--br); border-radius: var(--rs);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.off-wiz-mobile-totals-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--mt); }
+.off-wiz-mobile-totals-row--total { font-weight: 700; color: var(--tx); font-size: 12px; }
+.off-wiz-mobile-totals-row--rut { color: #16a34a; }
+
+/* ── V48B3A: "+ Lägg till arbete" — mobil/tablet-ersättning för de fyra
+   desktop-actioncardsen (DEL 5, DEL 20). ── */
+/* Compound-selector (.off-action-cards.off-action-cards--desktop, inte
+   bara .off-action-cards--desktop ensam) för att garanterat slå den
+   redan existerande .off-action-cards{display:grid}-basregeln oavsett
+   var i filen den står — samma lärdom som .off-svc-modal-buggen ovan,
+   men löst med specificitet istället för omordning eftersom
+   .off-action-cards är en delad, oberoende basklass vi inte vill flytta. */
+.off-action-cards.off-action-cards--desktop { display: none; }
+.off-add-work-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 48px; margin-bottom: 10px;
+  background: var(--navy); color: #fff; border: none; border-radius: var(--rs);
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+@media (min-width: 1024px) {
+  .off-action-cards.off-action-cards--desktop { display: grid; }
+  .off-add-work-btn { display: none; }
+}
+
+.off-addwork-sheet {
+  position: fixed; inset: 0; z-index: 610; background: rgba(0,0,0,0);
+  display: flex; align-items: flex-end; justify-content: center;
+  transition: background .18s ease;
+}
+.off-addwork-sheet.open { background: rgba(0,0,0,.42); }
+.off-addwork-sheet-panel {
+  width: 100%; max-width: 480px; background: #fff;
+  border-radius: 16px 16px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  transform: translateY(100%); transition: transform .2s ease;
+  max-height: 80vh; overflow-y: auto;
+}
+.off-addwork-sheet.open .off-addwork-sheet-panel { transform: translateY(0); }
+@media (min-width: 768px) {
+  .off-addwork-sheet-panel { border-radius: 16px; margin-bottom: 40px; }
+}
+.off-addwork-sheet-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.off-addwork-sheet-title { font-size: 15px; font-weight: 800; color: var(--navy); }
+.off-addwork-option {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  min-height: 56px; padding: 12px; margin-bottom: 8px;
+  border: 1px solid var(--br); border-radius: 10px; background: #fff; cursor: pointer;
+  text-align: left;
+}
+.off-addwork-option:last-child { margin-bottom: 0; }
+.off-addwork-option-icon { flex-shrink: 0; color: var(--navy); background: var(--bg); border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+.off-addwork-option-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.off-addwork-option-title { font-size: 13px; font-weight: 700; color: var(--tx); }
+.off-addwork-option-sub { font-size: 11px; color: var(--mt); }
+
+/* ── V48B3A: manuell/fastpris/fritext-radkort — läskort + Redigera på
+   mobil/tablet (<1024px), oförändrad alltid-synlig editor på desktop
+   (DEL 6). Se _toggleLineExpanded()/data-expanded. ── */
+.off-wiz-line-summary,
+.off-wiz-line-summary-actions { display: none; }
+.off-wiz-line-editor { display: block; }
+@media (max-width: 1023px) {
+  .off-wiz-line-card[data-expanded="0"] .off-wiz-line-summary { display: flex; }
+  .off-wiz-line-card[data-expanded="0"] .off-wiz-line-summary-actions { display: flex; }
+  .off-wiz-line-card[data-expanded="0"] .off-wiz-line-editor { display: none; }
+}
+.off-wiz-line-summary {
+  align-items: center; gap: 10px; padding: 2px 0 8px;
+}
+.off-wiz-line-summary-icon { flex-shrink: 0; color: var(--navy); background: var(--bg); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.off-wiz-line-summary-body { flex: 1; min-width: 0; }
+.off-wiz-line-summary-title { font-size: 13px; font-weight: 700; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.off-wiz-line-summary-meta  { font-size: 11px; color: var(--mt); margin-top: 1px; }
+.off-wiz-line-summary-price { font-size: 14px; font-weight: 800; color: var(--navy); flex-shrink: 0; }
+.off-wiz-line-summary-actions { gap: 8px; border-top: 1px solid var(--bg); padding-top: 8px; }
+.off-wiz-line-summary-edit,
+.off-wiz-line-summary-remove {
+  display: flex; align-items: center; gap: 5px; min-height: 44px; padding: 0 10px;
+  border-radius: 8px; border: 1px solid var(--br); background: #fff; cursor: pointer;
+  font-size: 11px; font-weight: 600;
+}
+.off-wiz-line-summary-edit { color: var(--navy); }
+.off-wiz-line-summary-remove { color: var(--rd); }
+.off-wiz-line-editor-done { display: none; }
+/* V48B3A R2: DEL 3 — "Klar"-knappen är bara synlig <1024px, härdad till
+   samma 44px touch-target som övriga mobila actions. */
+@media (max-width: 1023px) { .off-wiz-line-editor-done { display: inline-flex; min-height: 44px; padding-left: 12px; padding-right: 12px; } }
+/* Fastprisradens blå accentkant fanns tidigare på .off-svc-card--fixed
+   (den gamla outer-wrappern) — .off-wiz-line-card har ingen egen
+   accentkant, så den återges här explicit för att inte tappas. */
+.off-wiz-line-card--fixed { border-left: 3px solid #0ea5e9; }
+
+/* ── V48B3A: klickbart kundnamn (DEL 19) ── */
+.off-detail-customer-link {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 15px; font-weight: 800; color: #fff; min-height: 32px;
+}
+.off-detail-customer-link:hover { text-decoration: underline; }
+.off-offer-card-cu--link {
+  background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+  font: inherit; min-height: 28px;
+}
+.off-offer-card-cu--link:hover { text-decoration: underline; }
+
+/* ── V48B3A DEL 13: lokal scroll-lock för kalkylator/add-work-sheet —
+   delar INTE body.modal-open med Modal.js (se dokumenterad risk i
+   V48B2-rapporten: Modal.js gör en ovillkorlig add/remove utan
+   referensräkning). Egna, oberoende klasser istället. ── */
+body.off-svc-open,
+body.off-addwork-open { overflow: hidden; touch-action: none; }
 
 /* Offer service card */
 .off-svc-card {
@@ -1142,11 +1377,34 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-svc-card-sub--tight { margin-bottom: 2px; }
 .off-svc-card-desc-input { font-size: 11px; margin-bottom: 6px; }
 .off-svc-card-actions { display: flex; gap: 5px; }
+/* V48B3A R2 DEL 3: tjänsteradens Redigera/Ta bort är annars den globala,
+   kompakta .bxs-knappstorleken (padding 3px 8px) — för smått för ett
+   pålitligt mobilt tryckmål. Scopat till just denna actions-rad så den
+   delade, app-omfattande .bxs-klassen INTE ändras någon annanstans. */
+@media (max-width: 1023px) {
+  .off-svc-card-actions .btn { min-height: 44px; padding-left: 12px; padding-right: 12px; }
+}
 .off-svc-card--fixed { border-left-color: #0ea5e9; }
 /* V48B2 R2: font-size förlorar mot forms.css:s input-regel (0,0,3,1 > 0,0,1,0).
    margin-bottom kolliderar INTE (forms.css sätter det aldrig på bara <input>,
    bara på .fg-wrappern, som denna raden inte använder) — behöver ingen fix. */
 #off-wizard input.off-svc-card-desc-input { font-size: 11px; }
+
+/* V48B3A R2: tjänsteradens beskrivning är på mobil/tablet (<1024px) ren
+   text i ett läskort — inte ett direkt redigerbart fält (det öppna
+   redigerbara inputfältet gjorde att tjänsteraden fortfarande kändes som
+   en ihoptryckt desktop-editor). "Redigera" öppnar fortsatt den befintliga
+   tjänstekalkylatorn där både kalkyl och kundbeskrivning kan ändras.
+   Desktop (>=1024px) behåller B2/B3A:s inputfält synligt direkt, oförändrat. */
+.off-svc-card-desc-preview {
+  display: none;
+  font-size: 12px; color: var(--mt); line-height: 1.4;
+  margin-bottom: 8px;
+}
+@media (max-width: 1023px) {
+  .off-svc-card-desc-preview { display: block; }
+  .off-svc-card-desc-input   { display: none; }
+}
 
 /* V41 §4: tillvalsrad (extras) — nu 6 kolumner (beskrivning/antal/enhet/
    à-pris/moms/ta bort) istället för 5. Egen klass (tidigare helt inline)
@@ -1296,24 +1554,20 @@ body.modal-open { overflow: hidden; touch-action: none; }
 }
 
 /* ── SERVICE CALCULATOR OVERLAY ── */
-/* V48B2: overlayns backdrop är nu en egen CSS-styrd klass — tidigare ett
-   engångsberäknat window.innerWidth-baserat inline style="..." per
-   öppning. align-items/padding/max-height/border-radius är rena
-   brytpunktsvärden och styrs nu av CSS. Den enda kvarvarande JS-styrda
-   layoutdelen är overlayns vänsteroffset (ov.style.left), eftersom den
-   måste följa sidebarens FAKTISKA renderade bredd (240/56/xl beroende på
-   breakpoint OCH ihopfälld-state) — ett värde CSS inte kan härleda utan
-   en strukturell ändring av layout.css:s befintliga --sidebar-w-hantering,
-   vilket är utanför denna foundation-omgångs scope. Se OffersPage._svcOverlayUpdateOffset(). */
+/* V48B2: overlayns backdrop är en egen CSS-styrd klass — align-items/
+   padding/max-height/border-radius är rena brytpunktsvärden. Den enda
+   kvarvarande JS-styrda layoutdelen är overlayns vänsteroffset
+   (ov.style.left), som måste följa sidebarens FAKTISKA renderade bredd —
+   se OffersPage._svcOverlayUpdateOffset().
+   V48B3A: modalen är nu markant större på desktop (DEL 14), och listan/
+   fältformuläret växlar via data-svc-phase på <1024px istället för att
+   visa båda samtidigt i en trång layout (DEL 9/16). */
 #off-svc-overlay {
   position: fixed; top: 0; right: 0; bottom: 0; left: 0;
   z-index: 600;
   background: rgba(0,0,0,.42);
   display: flex; align-items: flex-end; justify-content: center;
   padding: 0; box-sizing: border-box;
-}
-@media (min-width: 1024px) {
-  #off-svc-overlay { align-items: center; padding: 20px; }
 }
 .off-svc-modal {
   background: #fff;
@@ -1325,8 +1579,54 @@ body.modal-open { overflow: hidden; touch-action: none; }
   max-height: 92vh;
   border-radius: 14px 14px 0 0;
 }
+/* V48B3A: brytpunktsöverskrivningarna MÅSTE stå EFTER basregeln ovan —
+   samma selector (.off-svc-modal), samma specificitet, så source-order
+   avgör vinnaren oavsett media query. Denna ordning saknades i första
+   utkastet av B3A (basregeln råkade stå sist och vann alltid tillbaka
+   till 920px), upptäckt och fixat via det riktiga webbläsartestet. */
+@media (min-width: 768px) {
+  /* DEL 16: tablet får en tydligt egen storlek — inte telefonens fullbredd,
+     inte desktopens stora modal — innan den blir en klassisk desktop-editor vid >=1024px. */
+  .off-svc-modal { max-width: 640px; border-radius: 16px 16px 0 0; }
+}
+/* V48B3A R4 DEL 1 (TABLET, 768-1023px): dvh istället för vh — dynamisk
+   viewport-höjd (t.ex. iOS-adressfältet som visas/döljs) räknas in, så
+   max-height inte blir fel när webbläsarens UI ändrar faktisk höjd.
+   V48B3A R5: intervallet begränsat till tablet — phone (<=767px) har nu
+   sin egen, betydligt större höjdregel nedan (DEL 2), annars skulle denna
+   92dvh-cap vinna tillbaka mot phone-regeln (samma selector/specificitet,
+   source-order avgör — samma lärdom som alltid). Måste ändå stå EFTER
+   basregeln, PÅVERKAR INTE >=1024px. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .off-svc-modal { max-height: 92dvh; }
+}
+/* V48B3A R5 DEL 2 (BLOCKER, PHONE <=767px): LIVE-feedback på riktig
+   iPhone visade att kalkylatorn fortfarande betedde sig som en klassisk
+   max-height-bottom-sheet — stor tom bakgrundsyta ovanför modalen och
+   stor oanvänd yta under footern, trots R4:s dvh-fix. På phone ska
+   kalkylatorn istället vara en NÄSTAN FULLSKÄRMS app-vy: både height och
+   max-height sätts explicit (inte bara ett tak) till nästan hela den
+   dynamiska viewport-höjden, minus safe-area-top och en liten visuell
+   luft (6px) så det fortfarande känns som en sheet med rundade
+   överhörn, inte en tvär helskärmsyta. #off-svc-overlay:s befintliga
+   align-items:flex-end (oförändrad) gör att denna EXPLICITA höjd
+   automatiskt placerar modalens överkant precis vid
+   env(safe-area-inset-top)+6px och underkanten flush mot viewportens
+   nederkant — ingen extra JS-positionering behövs.
+   Tablet (768-1023px, regeln ovan) och desktop (>=1024px, regeln nedan)
+   är helt opåverkade — egna separata media-queries. */
+@media (max-width: 767px) {
+  .off-svc-modal {
+    height: calc(100dvh - env(safe-area-inset-top) - 6px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 6px);
+  }
+}
 @media (min-width: 1024px) {
-  .off-svc-modal { max-height: 84vh; border-radius: 10px; }
+  #off-svc-overlay { align-items: center; padding: 20px; }
+  /* DEL 14: betydligt större arbetsyta än B2:s 920px — utnyttjar nästan
+     hela tillgängliga content-arean (sidebar är redan exkluderad via
+     overlayns egen left-offset) utan att bli en obalanserad fullskärm. */
+  .off-svc-modal { max-width: min(1180px, 96vw); max-height: 90vh; border-radius: 12px; }
 }
 .off-svc-hdr {
   padding: 10px 14px;
@@ -1337,9 +1637,30 @@ body.modal-open { overflow: hidden; touch-action: none; }
   flex-shrink: 0;
   background: #fff;
 }
+/* V48B3A R4 DEL 1 (TABLET, 768-1023px): på riktig iPhone/PWA
+   (viewport-fit=cover, env(safe-area-inset-top) tillgänglig) kolliderade
+   kalkylator-headern med statusfältet/dynamic island. Extra top-padding
+   så headern börjar visuellt nedanför statusfältet.
+   V48B3A R5 DEL 3: intervallet begränsat till tablet. På phone (<=767px)
+   börjar HELA MODALEN nu redan nedanför safe-area-top (DEL 2 ovan, modalens
+   egen height/max-height räknar in env(safe-area-inset-top)) — om headern
+   DÄRUTÖVER lade till samma safe-area-top igen skulle den räknas dubbelt
+   och skapa onödigt tomt utrymme överst i headern. Phone faller därför
+   tillbaka till basregelns vanliga padding-top:10px (ingen env() alls),
+   tablet behåller R4:s lösning oförändrad, desktop (>=1024px) har sin
+   egen separata 1024px-regel nedan. Safe-area-top räknas EXAKT EN gång
+   på phone — av modalen, inte av headern. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .off-svc-hdr { padding-top: calc(10px + env(safe-area-inset-top)); }
+}
+@media (min-width: 1024px) { .off-svc-hdr { padding: 16px 22px; } }
 .off-svc-hdr-title { flex: 1; }
 .off-svc-hdr-title-main { font-size: 13px; font-weight: 800; color: var(--navy); }
 .off-svc-hdr-title-sub  { font-size: 10px; color: var(--mt); }
+@media (min-width: 1024px) {
+  .off-svc-hdr-title-main { font-size: 16px; }
+  .off-svc-hdr-title-sub  { font-size: 11px; }
+}
 .off-close-btn {
   width: 28px; height: 28px;
   border: none; background: rgba(0,0,0,.07);
@@ -1347,22 +1668,29 @@ body.modal-open { overflow: hidden; touch-action: none; }
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
+/* DEL 18: touch target ≥44px på mobil/tablet, kompakt på desktop */
+@media (max-width: 1023px) { .off-close-btn { width: 44px; height: 44px; } }
 .off-svc-layout {
   display: flex; flex: 1; overflow: hidden; min-height: 0;
 }
-/* V48B2: EN kalkylator, EN state — meny (desktop) och chip-rad (mobil)
-   renderas nu alltid BÅDA i samma DOM och växlas via CSS-brytpunkt,
-   istället för att JS byggde två separata markup-varianter beroende på
-   ett engångs-window.innerWidth-värde vid öppningstillfället. */
+/* V48B2/B3A: EN kalkylator, EN state — listan återanvänds vid ALLA
+   bredder. Desktop (>=1024px): smal, alltid synlig sidomeny. Mobil/tablet
+   (<1024px): fullbredds "välj tjänst"-lista, visad i pick-fasen och dold
+   i fields-fasen via data-svc-phase på .off-svc-modal (satt i JS,
+   _svcOverlayHtml()). */
 .off-svc-menu {
   display: none;
-  width: 182px; flex-shrink: 0;
-  border-right: 1px solid var(--br);
-  overflow-y: auto; padding: 6px 5px; background: #fafbfc;
+  overflow-y: auto; background: #fafbfc;
+  min-height: 0;
+}
+.off-svc-modal[data-svc-phase="pick"] .off-svc-menu {
+  display: block; width: 100%; padding: 8px; border-right: none;
 }
 @media (min-width: 1024px) {
-  .off-svc-menu { display: block; }
-  .off-svc-chips-bar { display: none; }
+  .off-svc-menu, .off-svc-modal[data-svc-phase="pick"] .off-svc-menu, .off-svc-modal[data-svc-phase="fields"] .off-svc-menu {
+    display: block; width: 220px; flex-shrink: 0;
+    border-right: 1px solid var(--br); padding: 10px 8px;
+  }
 }
 .off-svc-menu-item {
   display: flex; align-items: center; gap: 7px;
@@ -1372,31 +1700,60 @@ body.modal-open { overflow: hidden; touch-action: none; }
   background: transparent; color: var(--tx);
   margin-bottom: 1px; box-sizing: border-box;
 }
+/* DEL 9/18: stora, tydliga touch-rader istället för små chips på mobil/tablet */
+@media (max-width: 1023px) {
+  .off-svc-menu-item {
+    padding: 13px 12px; font-size: 14px; font-weight: 600;
+    min-height: 48px; gap: 12px; border-radius: 10px;
+    border: 1px solid var(--br); margin-bottom: 6px; background: #fff;
+  }
+}
+@media (min-width: 1024px) { .off-svc-menu-item { font-size: 12px; padding: 9px 10px; } }
 .off-svc-menu-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .off-svc-menu-item--active { background: var(--navy); color: #fff; font-weight: 700; }
-.off-svc-body { flex: 1; overflow-y: auto; padding: 12px 14px; min-width: 0; }
+.off-svc-body { flex: 1; overflow-y: auto; padding: 12px 14px; min-width: 0; min-height: 0; }
+.off-svc-modal[data-svc-phase="pick"] .off-svc-body { display: none; }
+@media (min-width: 1024px) {
+  .off-svc-modal[data-svc-phase="pick"] .off-svc-body,
+  .off-svc-modal[data-svc-phase="fields"] .off-svc-body { display: block; }
+  .off-svc-body { padding: 20px 26px; }
+}
+/* DEL 9: "Byt tjänst" — enda vägen tillbaka till pick-listan på <1024px;
+   overflödig på desktop där listan alltid är synlig bredvid fälten. */
+.off-svc-back-to-picker {
+  display: none;
+}
+/* V48B3A R4 DEL 8: mindre död yta ovan/under "Byt tjänst" — endast synlig
+   <1024px ändå (desktop döljer den helt via !important nedan), så
+   padding-bottom kan minskas direkt i basregeln utan mediaquery-scoping. */
+.off-svc-modal[data-svc-phase="fields"] .off-svc-back-to-picker {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; padding: 0 0 8px; margin: 0;
+  font-size: 12px; font-weight: 700; color: var(--navy); cursor: pointer;
+  min-height: 44px;
+}
+@media (min-width: 1024px) { .off-svc-back-to-picker { display: none !important; } }
 .off-svc-footer {
   border-top: 1px solid var(--br); padding: 9px 14px;
   flex-shrink: 0; background: #fff;
+  /* DEL 12: safe-area på iPhone — footern är redan strukturellt "sticky"
+     eftersom den ligger utanför .off-svc-body:s scroll-region inom en
+     höjdbegränsad flex-kolumnmodal (bakgrundssidan scrollar aldrig med). */
+  padding-bottom: calc(9px + env(safe-area-inset-bottom));
 }
+@media (min-width: 1024px) { .off-svc-footer { padding: 16px 22px; } }
 .off-svc-footer-inner { display: flex; align-items: flex-end; gap: 10px; }
-.off-svc-footer-inner .fg { flex: 1; margin-bottom: 0; }
+.off-svc-footer-inner .fg { flex: 1; margin-bottom: 0; min-width: 0; }
 .off-svc-add-btn { white-space: nowrap; flex-shrink: 0; align-self: flex-end; }
-
-/* Mobile chips for service selector */
-.off-svc-chips-bar {
-  display: flex; overflow-x: auto; gap: 5px;
-  padding: 8px 10px; border-bottom: 1px solid var(--br);
-  flex-shrink: 0; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+@media (max-width: 1023px) {
+  /* DEL 12: beskrivningsfält OVANFÖR knappen (inte sida vid sida) på
+     mobil/tablet — löser en tidigare känd, dokumenterad risk (V48B2 R2 R2 §14)
+     där en lång nowrap-knapp + textfält kunde tränga ihop/overflow:a vid
+     ~360-390px. Upptäckt konkret via det riktiga webbläsartestet: ett
+     0-360px-scenario gav faktisk horisontell overflow innan denna fix. */
+  .off-svc-footer-inner { flex-direction: column; align-items: stretch; }
+  .off-svc-add-btn { min-height: 44px; padding-left: 16px; padding-right: 16px; align-self: stretch; width: 100%; justify-content: center; }
 }
-.off-svc-chips-bar::-webkit-scrollbar { display: none; }
-.off-svc-chip {
-  padding: 5px 12px; border-radius: 20px;
-  border: 1.5px solid var(--br); font-size: 11px; font-weight: 600;
-  white-space: nowrap; cursor: pointer;
-  background: #fff; color: var(--tx); flex-shrink: 0;
-}
-.off-svc-chip--active { background: var(--navy); border-color: var(--navy); color: #fff; }
 
 /* V48B2: kalkylatorns fält-lager — tidigare 100% inline style="..." i
    _svcCalcHtml(). Samma beräknade värden som förut, nu som klasser så B3
@@ -1505,6 +1862,87 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .off-svc-preview-price-label { font-size: 10px; opacity: .8; }
 .off-svc-preview-price-val { font-size: 17px; font-weight: 800; }
 .off-svc-preview-note { font-size: 8px; opacity: .45; margin-top: 3px; text-align: right; }
+
+/* V48B3A: prisförhandsvisningen hålls synlig i botten av det skrollbara
+   fältområdet (DEL 11/15 — "pris ska inte gömmas") — universellt på alla
+   bredder, inte bara desktop, eftersom det inte kostar något extra och
+   hjälper på mobil minst lika mycket. */
+.off-svc-preview { position: sticky; bottom: 0; }
+
+/* V48B3A R4 DEL 2 (BLOCKER): på riktig iPhone visade konkreta skärmdumpar
+   att den sticky prisrutan lägger sig OVANPÅ formulärinnehåll (Tillval,
+   Avtalstyp) på mobil/tablet — sticky bottom:0 inom det skrollbara
+   #off-svc-body-området har inte tillräckligt med utrymme för att inte
+   överlappa fält när fältlistan är kort/medellång. Måste stå EFTER
+   basregeln ovan (samma selector/specificitet). Beskrivning + Lägg
+   till/Uppdatera-knappen ligger redan i en egen separat sticky
+   .off-svc-footer utanför denna scroll-region och är alltid nåbar, så
+   priset förblir synligt genom att skrolla ett kort stycke — det försvinner
+   inte, det slutar bara flyta ovanpå fälten. Desktop (>=1024px) påverkas
+   inte och behåller sticky. */
+@media (max-width: 1023px) {
+  .off-svc-preview { position: static; bottom: auto; }
+}
+
+/* DEL 17: option-grid — 1 kolumn på smal mobil, 2 kolumner där det får
+   plats (större mobil/tablet), oförändrat på desktop.
+   V48B3A R4 DEL 5: brytpunkten höjd från 419px till 479px — riktiga
+   iPhone-bredder (t.ex. ~390-430px) låg fortfarande KVAR i 2-kolumnsläget
+   vid 419px och klämde ihop längre Tillval-etiketter (t.ex. "Algbehandling",
+   "Bortforsling"). Tablet (>=480px) fortsätter oförändrat med 2 kolumner. */
+@media (max-width: 479px) {
+  .off-svc-option-grid { grid-template-columns: 1fr; }
+}
+
+/* DEL 10/11/18: mobil/tablet-specifik förstoring — samma properties som
+   redan finns i basklassen, bara större värden. Ingen ändring av vilka
+   fält som visas eller vilka värden som sparas.
+   VIKTIGT (samma cascade-lärdom som V48B2 R2): .off-svc-field-number och
+   .off-svc-field-text sitter på <input>, som forms.css:s
+   input:not([type=checkbox]):not([type=radio]):not([type=file])-regel
+   (specificitet 0,0,3,1) matchar och slår en vanlig klass (0,0,1,0) för
+   width/font-size/padding/min-height — oavsett media query. Dessa MÅSTE
+   därför ID-scopas mot #off-svc-overlay precis som i R2, annars vinner
+   aldrig denna förstoring på mobil. .off-svc-field-select (ett <select>)
+   och knappar/labels (.off-svc-field-chip/.off-svc-option/
+   .off-svc-reduction-btn) berörs INTE av detta — se komponentkommentaren
+   vid den ursprungliga R2-hårdningen för varför. */
+@media (max-width: 1023px) {
+  #off-svc-overlay input.off-svc-field-number {
+    font-size: 22px; width: 96px; padding: 10px; min-height: 44px;
+  }
+  #off-svc-overlay input.off-svc-field-text {
+    min-height: 44px; font-size: 15px;
+  }
+  .off-svc-field-select { min-height: 44px; font-size: 15px; }
+  /* V48B3A R4 DEL 4: samma min-height:44px touch-yta bibehållen, men
+     mindre horisontell densitet (font/padding) — skärmdumpar visade breda
+     chip-rader ("Trä / Komposit", "Månadsavtal", "Engångsuppdrag") som tog
+     onödigt mycket plats. Höjden ändras INTE, bara bredden/typsnittet. */
+  .off-svc-field-chip { padding: 9px 11px; font-size: 12px; min-height: 44px; }
+  .off-svc-option { padding: 10px 12px; font-size: 13px; min-height: 44px; }
+  .off-svc-option input[type="checkbox"] { width: 20px; height: 20px; }
+  .off-svc-reduction-btn { padding: 10px 8px; font-size: 12px; min-height: 44px; }
+
+  /* V48B3A R4 DEL 3: prisrutan behåller sin tydlighet men görs ~15-20%
+     lägre på mobil/tablet (mindre vertical padding + marginal mellan
+     rader) — den är inte längre sticky (se DEL 2 ovan) så dess höjd
+     konkurrerar direkt med synligt fältutrymme. Kundpris (price-val)
+     förblir den tydligaste siffran, bara något mindre än tidigare 24px.
+     Inga siffror/beräkningar ändras, endast CSS. */
+  .off-svc-field { margin-bottom: 8px; }
+  .off-svc-preview { padding: 11px 13px; margin-top: 3px; }
+  .off-svc-preview-tier { margin-bottom: 2px; }
+  .off-svc-preview-detail { margin-bottom: 4px; padding-bottom: 4px; }
+  .off-svc-preview-row { font-size: 11px; margin-bottom: 1px; }
+  .off-svc-preview-row--total { font-size: 13px; padding-top: 3px; }
+  .off-svc-preview-row--total.has-deduction { margin-bottom: 2px; }
+  .off-svc-preview-row--total:not(.has-deduction) { margin-bottom: 4px; }
+  .off-svc-preview-price { padding: 5px 8px; }
+  .off-svc-preview-price-label { font-size: 10px; }
+  .off-svc-preview-price-val { font-size: 20px; }
+  .off-svc-preview-deduction { font-size: 11px; margin-bottom: 3px; }
+}
 
 /* Service card improvements */
 .off-svc-card-title {

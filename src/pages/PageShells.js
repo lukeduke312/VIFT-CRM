@@ -725,7 +725,9 @@ const OffersPage = {
   <div class="off-offer-card-title">${disp}</div>
   <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:6px;flex-wrap:wrap;">
     <div>
-      <div class="off-offer-card-cu">${ic('user',11)} ${cuName}</div>
+      ${cu
+        ? `<button type="button" class="off-offer-card-cu off-offer-card-cu--link" onclick="event.stopPropagation();Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${ic('user',11)} ${esc(cuName)}</button>`
+        : `<div class="off-offer-card-cu">${ic('user',11)} ${cuName}</div>`}
       <div class="off-offer-card-meta">
         ${ic('calendar',9)} ${fmtDate(o.createdAt)}
         ${o.sentAt ? `&nbsp;·&nbsp;${ic('send',9)} Skickad ${fmtDate(o.sentAt)}` : ''}
@@ -797,6 +799,8 @@ const OffersPage = {
     this._svcEditIdx   = null;
     this._svcReduction = 'ingen';
     this._discount     = {type:'percent', value:0};
+    this._expandedLineIds = new Set();
+    this._mobileTotalsExpanded = false;
     this._wizardData   = {
       customerId: preCustomerId || '', title: '', date: today, validUntil: validDef,
       summary: '', scope: '', includes: '', excludes: '',
@@ -821,6 +825,8 @@ const OffersPage = {
     this._svcEditIdx   = null;
     this._svcReduction = 'ingen';
     this._discount     = off.discount ? {...off.discount} : {type:'percent', value:0};
+    this._expandedLineIds = new Set();
+    this._mobileTotalsExpanded = false;
     this._wizardData  = {
       customerId:   off.customerId   || '',
       title:        off.title        || '',
@@ -875,7 +881,11 @@ const OffersPage = {
     const isEdit = !!this._editOfferId;
     const labels = ['Kund & info', 'Tjänster & rader', 'Villkor & spara'];
 
-    const stepInd = labels.map((lbl, i) => {
+    /* V48B3A: två renderingar av samma stegstatus — samma "rendera båda,
+       CSS växlar" mönster som redan etablerats (V48B1 tabs, V48B2
+       meny/chips). Desktop behåller cirkel+etikett-indikatorn oförändrad;
+       mobil/tablet visar en kompakt "Steg X av 3 — Etikett"-rad istället. */
+    const stepIndDesktop = labels.map((lbl, i) => {
       const n = i + 1;
       const done   = n < step;
       const active = n === step;
@@ -891,33 +901,131 @@ const OffersPage = {
       }${bar}</div>`;
     }).join('');
 
+    const stepIndMobile = `
+      <div class="off-wiz-mobile-step-txt">Steg ${step} av ${labels.length} — ${labels[step-1]}</div>
+      <div class="off-wiz-mobile-step-bar"><div class="off-wiz-mobile-step-bar-fill" style="width:${Math.round(step/labels.length*100)}%;"></div></div>`;
+
     // Header sticks to top of #content-scroll (no fixed overlay — wizard lives inside the page)
-    const hdr = `<div style="background:#fff;border-bottom:1px solid var(--br);padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;box-shadow:0 1px 6px rgba(0,0,0,.07);">
-      <div style="flex:1;font-size:13px;font-weight:800;color:var(--navy);">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
-      <div style="display:flex;align-items:flex-end;">${stepInd}</div>
-      <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" style="width:30px;height:30px;border:none;background:rgba(0,0,0,.07);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('x',15)}</button>
+    const hdr = `<div class="off-wiz-hdr">
+      <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--mobile">${ic('arrow-left',16)}</button>
+      <div class="off-wiz-hdr-titlebox">
+        <div class="off-wiz-hdr-title">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
+        <div class="off-wiz-hdr-steps-mobile">${stepIndMobile}</div>
+      </div>
+      <div class="off-wiz-hdr-steps-desktop">${stepIndDesktop}</div>
+      <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--desktop">${ic('x',15)}</button>
     </div>`;
 
     let ftr;
     if (step === 1) {
-      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:8px 14px;display:flex;gap:7px;justify-content:flex-end;">
-        <button type="button" class="btn bs bsm" onclick="OffersPage._wizardClose()">Avbryt</button>
-        <button type="button" class="btn bp bsm" onclick="OffersPage._nextStep()">${ic('arrow-right',12)} Nästa: Tjänster</button>
+      ftr = `<div class="off-wiz-ftr">
+        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._wizardClose()">Avbryt</button>
+        <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">${ic('arrow-right',12)} Nästa: Tjänster</button>
       </div>`;
     } else if (step === 2) {
-      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:8px 14px;display:flex;gap:7px;justify-content:space-between;">
-        <button type="button" class="btn bs bsm" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
-        <button type="button" class="btn bp bsm" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',12)}</button>
+      ftr = `<div class="off-wiz-ftr off-wiz-ftr--step2">
+        <div class="off-wiz-mobile-totals" id="off-mobile-totals">${this._mobileTotalsHtml()}</div>
+        <div class="off-wiz-ftr-row">
+          <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
+          <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',12)}</button>
+        </div>
       </div>`;
     } else {
-      ftr = `<div style="background:#fff;border-top:1px solid var(--br);padding:8px 14px;display:flex;gap:7px;justify-content:space-between;">
-        <button type="button" class="btn bs bsm" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
-        <button type="button" class="btn bp" style="flex:1;" onclick="OffersPage._save()">${ic('save',13)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
+      ftr = `<div class="off-wiz-ftr">
+        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
+        <button type="button" class="btn bp off-wiz-ftr-primary off-wiz-ftr-primary--full" onclick="OffersPage._save()">${ic('save',13)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
       </div>`;
     }
 
     const innerCls = this._wizardStep === 3 ? 'off-wiz-inner' : 'off-wiz-inner-wide';
     return hdr + `<div class="${innerCls}">${this._stepHtml()}</div>` + ftr;
+  },
+
+  /* V48B3A: kompakt sticky totalsrad för mobil/tablet i steg 2 — bygger på
+     EXAKT samma kanoniska _offerCalcTotals()-kedja som _totalsBarHtml(),
+     ingen ny ekonomilogik. Uppdateras av _refreshTotals() precis som
+     desktop-sidopanelens totalsbar. */
+  _mobileTotalsHtml() {
+    const _tot   = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
+    const exVat  = _tot.exVatAfterDiscount;
+    const vat    = _tot.vatAmount;
+    const incVat = _tot.totalInclVat;
+    const rutAmt = _tot.rutRotAmount;
+    const cust   = _tot.customerPays;
+    const expanded = !!this._mobileTotalsExpanded;
+    return `<button type="button" class="off-wiz-mobile-totals-toggle" onclick="OffersPage._toggleMobileTotals()">
+        <span class="off-wiz-mobile-totals-lbl">${rutAmt?'Kund betalar':'Totalt inkl. moms'}</span>
+        <span class="off-wiz-mobile-totals-val">${fmt(rutAmt?cust:incVat)} kr</span>
+        <span class="off-wiz-mobile-totals-chevron">${ic(expanded?'chevron-down':'chevron-up',13)}</span>
+      </button>
+      ${expanded ? `<div class="off-wiz-mobile-totals-detail">
+        <div class="off-wiz-mobile-totals-row"><span>Exkl. moms</span><span>${fmt(exVat)} kr</span></div>
+        <div class="off-wiz-mobile-totals-row"><span>Moms</span><span>${fmt(vat)} kr</span></div>
+        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
+        ${rutAmt ? `<div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--rut"><span>RUT/ROT-avdrag</span><span>−${fmt(rutAmt)} kr</span></div>
+        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>Kund betalar</span><span>${fmt(cust)} kr</span></div>` : ''}
+      </div>` : ''}`;
+  },
+
+  _toggleMobileTotals() {
+    this._mobileTotalsExpanded = !this._mobileTotalsExpanded;
+    const el = document.getElementById('off-mobile-totals');
+    if (el) el.innerHTML = this._mobileTotalsHtml();
+  },
+
+  /* V48B3A: "+ Lägg till arbete" — mobil/tablet-ersättning för de fyra
+     desktop-actioncardsen. En bottom sheet med samma fyra val, samma
+     underliggande skapa-funktioner (_openSvcCalc/_addFixedLine/
+     _addManualLine/_addTextBlock) — inga nya radtyper, ingen ny
+     datamodell, bara en annan ingång till exakt samma funktioner. */
+  _openAddWorkSheet() {
+    let sh = document.getElementById('off-addwork-sheet');
+    if (!sh) {
+      sh = document.createElement('div');
+      sh.id = 'off-addwork-sheet';
+      sh.className = 'off-addwork-sheet';
+      sh.onclick = e => { if (e.target === sh) OffersPage._closeAddWorkSheet(); };
+      document.body.appendChild(sh);
+    }
+    sh.innerHTML = `<div class="off-addwork-sheet-panel">
+      <div class="off-addwork-sheet-hd">
+        <div class="off-addwork-sheet-title">Lägg till arbete</div>
+        <button type="button" class="off-close-btn" onclick="OffersPage._closeAddWorkSheet()">${ic('x',14)}</button>
+      </div>
+      <button type="button" class="off-addwork-option" onclick="OffersPage._closeAddWorkSheet();OffersPage._openSvcCalc(null)">
+        <span class="off-addwork-option-icon">${ic('zap',18)}</span>
+        <span class="off-addwork-option-txt"><span class="off-addwork-option-title">Tjänst / kalkyl</span><span class="off-addwork-option-sub">VIFT:s prismodell — yta, tid, material</span></span>
+      </button>
+      <button type="button" class="off-addwork-option" onclick="OffersPage._closeAddWorkSheet();OffersPage._addFixedLine()">
+        <span class="off-addwork-option-icon">${ic('tag',18)}</span>
+        <span class="off-addwork-option-txt"><span class="off-addwork-option-title">Fastpris</span><span class="off-addwork-option-sub">Eget fast pris för uppdraget</span></span>
+      </button>
+      <button type="button" class="off-addwork-option" onclick="OffersPage._closeAddWorkSheet();OffersPage._addManualLine()">
+        <span class="off-addwork-option-icon">${ic('plus',18)}</span>
+        <span class="off-addwork-option-txt"><span class="off-addwork-option-title">Löpande rad</span><span class="off-addwork-option-sub">Antal × à-pris</span></span>
+      </button>
+      <button type="button" class="off-addwork-option" onclick="OffersPage._closeAddWorkSheet();OffersPage._addTextBlock()">
+        <span class="off-addwork-option-icon">${ic('align-left',18)}</span>
+        <span class="off-addwork-option-txt"><span class="off-addwork-option-title">Fritext</span><span class="off-addwork-option-sub">Information utan pris</span></span>
+      </button>
+    </div>`;
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => sh.classList.add('open'));
+    else sh.classList.add('open');
+
+    document.body.classList.add('off-addwork-open');
+    if (!this._addWorkEscHandler) {
+      this._addWorkEscHandler = e => { if (e.key === 'Escape') OffersPage._closeAddWorkSheet(); };
+      document.addEventListener('keydown', this._addWorkEscHandler);
+    }
+  },
+
+  _closeAddWorkSheet() {
+    document.getElementById('off-addwork-sheet')?.remove();
+    document.body.classList.remove('off-addwork-open');
+    if (this._addWorkEscHandler) {
+      document.removeEventListener('keydown', this._addWorkEscHandler);
+      this._addWorkEscHandler = null;
+    }
   },
 
   _stepHtml() {
@@ -1053,7 +1161,7 @@ const OffersPage = {
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
-          <div class="off-action-cards">
+          <div class="off-action-cards off-action-cards--desktop">
             <button type="button" class="off-action-card" onclick="OffersPage._openSvcCalc(null)">
               <span class="off-action-card-icon">${ic('zap',14)}</span>
               <div><div class="off-action-card-title">Tjänst / kalkyl</div><div class="off-action-card-sub">VIFT:s prismodell</div></div>
@@ -1071,6 +1179,9 @@ const OffersPage = {
               <div><div class="off-action-card-title">Fritext</div><div class="off-action-card-sub">Info utan pris</div></div>
             </button>
           </div>
+          <button type="button" class="off-add-work-btn" onclick="OffersPage._openAddWorkSheet()">
+            ${ic('plus',16)} Lägg till arbete
+          </button>
           <div id="off-lines">${this._linesHtml()}</div>
           <details class="off-wiz-collapse-tillval">
             <summary>${ic('plus',11)} Tillval (valfria extratjänster)</summary>
@@ -1203,7 +1314,7 @@ const OffersPage = {
       <div class="off-lines-empty">
         <div class="off-lines-empty-icon">${ic('file-text',22)}</div>
         <div class="off-lines-empty-txt">Inga rader ännu</div>
-        <div class="off-lines-empty-sub">Lägg till en tjänst ovan</div>
+        <div class="off-lines-empty-sub">Lägg till ett arbete ovan</div>
       </div>`;
     return this._editLines.map((l, i) => {
       if (l.type === 'text')    return this._renderTextCard(l, i);
@@ -1233,6 +1344,7 @@ const OffersPage = {
           ${rutAmt ? `<div class="off-svc-card-rut">Kund: ${fmt(cust)} kr inkl.</div>` : ''}
         </div>
       </div>
+      ${l.description ? `<div class="off-svc-card-desc-preview">${esc(l.description)}</div>` : ''}
       <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Beskrivning på offerten…"
         class="off-svc-card-desc-input"
         oninput="OffersPage._editLines[${i}].description=this.value">
@@ -1243,14 +1355,42 @@ const OffersPage = {
     </div>`;
   },
 
+  /* V48B3A: kort mobil "läskort"-summering med Redigera-knapp för
+     manuell/fastpris/fritext-rader — expand/collapse-state hålls i
+     _expandedLineIds (per l.id), CSS avgör om summering eller editor visas
+     (<1024px) medan desktop ALLTID visar editorn oförändrat (>=1024px,
+     samma markup/inputs/onclick-handlers som innan B3A — bara omslutna i
+     en .off-wiz-line-editor-wrapper). Ingen ny datamodell, ingen ny
+     sparlogik — bara vilken DEL av samma markup som är synlig. */
+  _toggleLineExpanded(id) {
+    if (this._expandedLineIds.has(id)) this._expandedLineIds.delete(id);
+    else this._expandedLineIds.add(id);
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+  },
+
   _renderManualCard(l, i) {
     const units = ['st','tim','m','m²','m³','lm','kg','l','paket','mån'];
     const total  = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
-    return `<div class="off-wiz-line-card">
+    const expanded = this._expandedLineIds.has(l.id);
+    const summary = `<div class="off-wiz-line-summary">
+        <div class="off-wiz-line-summary-icon">${ic('minus',14)}</div>
+        <div class="off-wiz-line-summary-body">
+          <div class="off-wiz-line-summary-title">${esc(l.description)||'Löpande rad'}</div>
+          <div class="off-wiz-line-summary-meta">${l.qty!=null?l.qty:1} ${esc(l.unit||'st')} × ${fmt(l.unitPrice||0)} kr</div>
+        </div>
+        <div class="off-wiz-line-summary-price">${fmt(total)} kr</div>
+      </div>
+      <div class="off-wiz-line-summary-actions">
+        <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
+        <button type="button" class="off-wiz-line-summary-remove" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)} Ta bort</button>
+      </div>`;
+    const editor = `<div class="off-wiz-line-editor">
       <div class="off-wiz-line-card-hd">
         <span class="off-wiz-line-card-type">${ic('minus',9)} Manuell rad</span>
         <div class="off-wiz-line-card-spacer"></div>
         <strong class="off-wiz-line-card-total" id="off-lt-${i}">${fmt(total)} kr</strong>
+        <button type="button" class="btn bs bxs off-wiz-line-editor-done" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('check',10)} Klar</button>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
       </div>
       <input value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning" class="off-wiz-line-field-desc"
@@ -1272,13 +1412,28 @@ const OffersPage = {
           </select></div>
       </div>
     </div>`;
+    return `<div class="off-wiz-line-card" data-expanded="${expanded?'1':'0'}">${summary}${editor}</div>`;
   },
 
   _renderTextCard(l, i) {
-    return `<div class="off-wiz-line-card off-wiz-line-card--text">
+    const expanded = this._expandedLineIds.has(l.id);
+    const preview = (l.text||'').slice(0, 80) + ((l.text||'').length > 80 ? '…' : '');
+    const summary = `<div class="off-wiz-line-summary">
+        <div class="off-wiz-line-summary-icon">${ic('align-left',14)}</div>
+        <div class="off-wiz-line-summary-body">
+          <div class="off-wiz-line-summary-title">${esc(l.blockTitle)||'Fritextblock'}</div>
+          ${preview ? `<div class="off-wiz-line-summary-meta">${esc(preview)}</div>` : ''}
+        </div>
+      </div>
+      <div class="off-wiz-line-summary-actions">
+        <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
+        <button type="button" class="off-wiz-line-summary-remove" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)} Ta bort</button>
+      </div>`;
+    const editor = `<div class="off-wiz-line-editor">
       <div class="off-wiz-line-card-hd">
         <span class="off-wiz-line-card-type">${ic('align-left',9)} Fritextblock</span>
         <div class="off-wiz-line-card-spacer"></div>
+        <button type="button" class="btn bs bxs off-wiz-line-editor-done" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('check',10)} Klar</button>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
       </div>
       <input value="${(l.blockTitle||'').replace(/"/g,'&quot;')}" placeholder="Rubrik (t.ex. Förutsättningar)" class="off-wiz-line-field-title"
@@ -1286,6 +1441,7 @@ const OffersPage = {
       <textarea rows="2" placeholder="Fritext som visas på offerten…"
         oninput="OffersPage._editLines[${i}].text=this.value">${l.text||''}</textarea>
     </div>`;
+    return `<div class="off-wiz-line-card off-wiz-line-card--text" data-expanded="${expanded?'1':'0'}">${summary}${editor}</div>`;
   },
 
   /* ── Extras ─── */
@@ -1340,7 +1496,9 @@ const OffersPage = {
   },
 
   _addFixedLine() {
-    this._editLines.push({id:'F'+Date.now(), type:'fixed', description:'', unitPrice:0, vatRate:25});
+    const newId = 'F'+Date.now();
+    this._editLines.push({id:newId, type:'fixed', description:'', unitPrice:0, vatRate:25});
+    this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._refreshTotals();
@@ -1353,7 +1511,20 @@ const OffersPage = {
   _renderFixedCard(l, i) {
     const tot    = Math.round(l.unitPrice || 0);
     const incVat = tot + Math.round(tot * _normVat(l.vatRate) / 100);
-    return `<div class="off-svc-card off-svc-card--fixed">
+    const expanded = this._expandedLineIds.has(l.id);
+    const summary = `<div class="off-wiz-line-summary">
+        <div class="off-wiz-line-summary-icon">${ic('tag',14)}</div>
+        <div class="off-wiz-line-summary-body">
+          <div class="off-wiz-line-summary-title">${esc(l.description)||'Fastpris'}</div>
+          <div class="off-wiz-line-summary-meta">Moms ${_normVat(l.vatRate)}%</div>
+        </div>
+        <div class="off-wiz-line-summary-price">${fmt(tot)} kr</div>
+      </div>
+      <div class="off-wiz-line-summary-actions">
+        <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
+        <button type="button" class="off-wiz-line-summary-remove" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)} Ta bort</button>
+      </div>`;
+    const editor = `<div class="off-wiz-line-editor">
       <div class="off-svc-card-hd">
         <div class="off-svc-card-hd-main">
           <div class="off-svc-card-meta">${ic('tag',9)} Fastpris</div>
@@ -1378,9 +1549,11 @@ const OffersPage = {
             oninput="OffersPage._editLines[${i}].note=this.value" class="off-wiz-line-field-note"></div>
       </div>
       <div class="off-wiz-line-card-actions">
+        <button type="button" class="btn bs bxs off-wiz-line-editor-done" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('check',10)} Klar</button>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('trash-2',10)} Ta bort</button>
       </div>
     </div>`;
+    return `<div class="off-wiz-line-card off-wiz-line-card--fixed" data-expanded="${expanded?'1':'0'}">${summary}${editor}</div>`;
   },
 
   _toolbarHtml(fieldId, key) {
@@ -1725,11 +1898,15 @@ const OffersPage = {
     });
     const bar = document.getElementById('off-totals-bar');
     if (bar) bar.innerHTML = this._totalsBarHtml();
+    const mobileBar = document.getElementById('off-mobile-totals');
+    if (mobileBar) mobileBar.innerHTML = this._mobileTotalsHtml();
   },
 
   /* ── Line management ─── */
   _addManualLine() {
-    this._editLines.push({id:'M'+Date.now(),type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0});
+    const newId = 'M'+Date.now();
+    this._editLines.push({id:newId,type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0});
+    this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._refreshTotals();
@@ -1740,7 +1917,9 @@ const OffersPage = {
   },
 
   _addTextBlock() {
-    this._editLines.push({id:'T'+Date.now(),type:'text',blockTitle:'',text:''});
+    const newId = 'T'+Date.now();
+    this._editLines.push({id:newId,type:'text',blockTitle:'',text:''});
+    this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
   },
@@ -1786,6 +1965,19 @@ const OffersPage = {
     }
     ov.innerHTML = this._svcOverlayHtml();
     if (this._activeSvcId) setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
+
+    /* V48B3A DEL 13: egen, lokal scroll-lock-klass — delar INTE
+       body.modal-open med Modal.js, som gör en ovillkorlig add/remove utan
+       referensräkning (dokumenterad risk i V48B2:s rapport: en samtidigt
+       öppnad/stängd vanlig Modal skulle annars kunna ta bort klassen
+       medan kalkylatorn fortfarande är öppen). Städas i _closeSvcCalc(),
+       som är den enda vägen ut (X, backdrop, Escape, och _addSvcLine():s
+       lyckade spara-flöde anropar alla _closeSvcCalc()). */
+    document.body.classList.add('off-svc-open');
+    if (!this._svcEscHandler) {
+      this._svcEscHandler = e => { if (e.key === 'Escape') OffersPage._closeSvcCalc(); };
+      document.addEventListener('keydown', this._svcEscHandler);
+    }
   },
 
   /* V48B2: overlayns vänsteroffset måste följa sidebarens FAKTISKA
@@ -1810,6 +2002,11 @@ const OffersPage = {
     }
     this._svcOverlayMQL = null;
     this._svcOverlayMQLHandler = null;
+    document.body.classList.remove('off-svc-open');
+    if (this._svcEscHandler) {
+      document.removeEventListener('keydown', this._svcEscHandler);
+      this._svcEscHandler = null;
+    }
   },
 
   /* V48B2: EN kalkylator, EN state, responsiv presentation — meny
@@ -1829,7 +2026,19 @@ const OffersPage = {
           <div class="off-svc-empty-sub">Alla priser exklusive moms</div>
         </div>`;
 
-    const descVal  = activeTmpl ? (activeTmpl.defaultDesc||'').replace(/"/g,'&quot;') : '';
+    /* V48B3A R3: vid redigering av en BEFINTLIG tjänsterad ska
+       beskrivningsfältet förifyllas med den sparade l.description — inte
+       mallens defaultDesc. Detta är nu kritiskt sedan R2 gjorde
+       description-fältet till mobilens ENDA sätt att se/ändra
+       kundbeskrivningen (ingen direkt input i read-cardet <1024px längre).
+       Ny tjänst (ej edit) och tjänstebyte under edit (_activateSvc(...,
+       false), som skriver ett NYTT defaultDesc till #svc-custom-desc
+       separat) är oförändrade — se _activateSvc(). */
+    const editLine = (isEdit && this._editLines[this._svcEditIdx]) ? this._editLines[this._svcEditIdx] : null;
+    const descSource = (editLine && editLine.type === 'service')
+      ? (editLine.description || (activeTmpl && activeTmpl.defaultDesc) || '')
+      : ((activeTmpl && activeTmpl.defaultDesc) || '');
+    const descVal  = esc(descSource);
     const addLabel = isEdit ? 'Uppdatera tjänst' : 'Lägg till i offert';
 
     const hdr = `<div class="off-svc-hdr">
@@ -1852,31 +2061,52 @@ const OffersPage = {
       </div>
     </div>`;
 
-    const chips = this._getT().map(t => {
-      const active = t.id === this._activeSvcId;
-      return `<button type="button" id="off-svc-chip-${t.id}"
-        onclick="OffersPage._activateSvc('${t.id}',false)"
-        class="off-svc-chip${active ? ' off-svc-chip--active' : ''}">${t.name}</button>`;
-    }).join('');
-
+    /* V48B3A: den tidigare separata mobila chip-raden (.off-svc-chips-bar,
+       små pills) är borttagen — DEL 9 kräver stora, tydliga touch-rader
+       istället för små chips. EN lista (.off-svc-menu) återanvänds nu vid
+       ALLA bredder: på desktop (>=1024px) en smal, alltid synlig
+       sidomeny (oförändrat beteende från B2); på mobil/tablet (<1024px)
+       en fullbredds "välj tjänst"-lista som visas i "pick"-fasen och
+       döljs i "fields"-fasen (se data-svc-phase nedan och DEL 9/16). */
     const svcList = this._getT().map(t => {
       const active = t.id === this._activeSvcId;
       return `<button type="button" id="off-svc-menu-${t.id}"
         onclick="OffersPage._activateSvc('${t.id}',false)"
         class="off-svc-menu-item${active ? ' off-svc-menu-item--active' : ''}">
-        ${ic(t.icon,12)}<span>${t.name}</span>
+        ${ic(t.icon,16)}<span>${t.name}</span>
       </button>`;
     }).join('');
 
-    return `<div class="off-svc-modal">
+    /* Fasen härleds direkt ur activeTmpl — inget separat state att hålla i
+       synk. <1024px: "pick" visar listan och döljer fältformuläret;
+       "fields" gör tvärtom och visar en "Byt tjänst"-knapp. >=1024px
+       ignorerar CSS:n denna attribut helt (båda alltid synliga, som i B2). */
+    const phase = activeTmpl ? 'fields' : 'pick';
+    const backBtn = activeTmpl
+      ? `<button type="button" class="off-svc-back-to-picker" onclick="OffersPage._svcBackToPicker()">${ic('arrow-left',13)} Byt tjänst</button>`
+      : '';
+
+    return `<div class="off-svc-modal" data-svc-phase="${phase}">
       ${hdr}
-      <div class="off-svc-chips-bar">${chips}</div>
       <div class="off-svc-layout">
         <div class="off-svc-menu">${svcList}</div>
-        <div id="off-svc-body" class="off-svc-body">${calcBody}</div>
+        <div id="off-svc-body" class="off-svc-body">
+          ${backBtn}
+          <div id="off-svc-fields">${calcBody}</div>
+        </div>
       </div>
       ${footer}
     </div>`;
+  },
+
+  /* V48B3A: mobil/tablet "byt tjänst" — går tillbaka till pick-fasen utan
+     att stänga overlayn. Fält/state för den övergivna tjänsten kastas
+     (samma väg som _activateSvc redan tar när !keepFields), ingen
+     sparlogik/beräkning påverkas. */
+  _svcBackToPicker() {
+    this._activeSvcId = null;
+    const ov = document.getElementById('off-svc-overlay');
+    if (ov) ov.innerHTML = this._svcOverlayHtml();
   },
 
   _activateSvc(tId, keepFields) {
@@ -1885,8 +2115,6 @@ const OffersPage = {
       const a = t.id === tId;
       const menuBtn = document.getElementById('off-svc-menu-' + t.id);
       if (menuBtn) menuBtn.classList.toggle('off-svc-menu-item--active', a);
-      const chipBtn = document.getElementById('off-svc-chip-' + t.id);
-      if (chipBtn) chipBtn.classList.toggle('off-svc-chip--active', a);
     });
     const tmpl = this._getT().find(t => t.id === tId);
     if (!tmpl) return;
@@ -1908,9 +2136,12 @@ const OffersPage = {
         else                               this._svcFields[f.id] = '';
       });
     }
-    const body = document.getElementById('off-svc-body');
-    if (body) {
-      body.innerHTML = this._svcCalcHtml(tmpl);
+    // Full re-render (not just #off-svc-fields) — needed so the mobile
+    // "Byt tjänst"-knapp/data-svc-phase-attributet uppdateras korrekt när
+    // användaren väljer en tjänst för första gången från pick-listan.
+    const ov = document.getElementById('off-svc-overlay');
+    if (ov) {
+      ov.innerHTML = this._svcOverlayHtml();
       setTimeout(() => { this._initChips(); this._updateSvcPreview(); }, 20);
     }
     // Update footer description to match the new service's default
@@ -2385,7 +2616,9 @@ const OfferDetailPage = {
         </div>
 
         <div class="off-detail-customer-validity-row">
-          <span style="font-size:15px;font-weight:800;color:#fff;">${cuName}</span>
+          ${cu
+            ? `<button type="button" class="off-detail-customer-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}${ic('chevron-right',12)}</button>`
+            : `<span style="font-size:15px;font-weight:800;color:#fff;">${cuName}</span>`}
           ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
         </div>
 
