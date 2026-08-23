@@ -762,9 +762,6 @@ const WorkOrdersPage = {
   },
 
   _wizStep1Html(d) {
-    const cuOptions = (state.customers||[]).map(c =>
-      `<option value="${c.id}" ${d.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
-    ).join('');
     const cu = d.customerId ? getCu(d.customerId) : null;
     const cuProps = d.customerId
       ? (state.properties||[]).filter(p => p.customerId === d.customerId)
@@ -808,9 +805,7 @@ const WorkOrdersPage = {
       <div class="fg"><label>Beskrivning</label>
         <textarea id="wiz-desc" rows="2" placeholder="Mer detaljer om jobbet…">${d.description||''}</textarea></div>
       <div class="fg"><label>Kund <span style="color:var(--rd)">*</span></label>
-        <select id="wiz-customer" onchange="WorkOrdersPage._wizCustomerChanged()">
-          <option value="">— Välj kund —</option>${cuOptions}
-        </select>
+        ${CustomerPicker.render('wiz-customer', { value: d.customerId || '', placeholder: '— Välj kund —', onchange: 'WorkOrdersPage._wizCustomerChanged()' })}
         <button class="btn bs bxs" style="margin-top:4px;" onclick="WorkOrdersPage.openNewCustomerFromWizard()">
           + Ny kund
         </button></div>
@@ -1629,16 +1624,13 @@ const WorkOrdersPage = {
           const cu = CustomerService.create(data);
           Modal.close();
 
-          // Add new customer to wizard dropdown and select it
+          // V49A2A: ren omrendering av CustomerPicker mot uppdaterad
+          // state.customers, istället för manuell createElement('option')-
+          // splicing i den gamla koden. Se RAPPORT-V49A2A.md §9.
           const wiz = document.getElementById(this._wiz.modalId);
-          const sel = wiz?.querySelector('#wiz-customer');
-          if (sel) {
-            const opt = document.createElement('option');
-            opt.value = cu.id;
-            opt.textContent = CustomerService.displayName(cu);
-            opt.selected = true;
-            sel.appendChild(opt);
+          if (wiz?.querySelector('#cpouter-wiz-customer')) {
             this._wiz.data.customerId = cu.id;
+            CustomerPicker.refresh('wiz-customer', { value: cu.id, placeholder: '— Välj kund —', onchange: 'WorkOrdersPage._wizCustomerChanged()' });
             this._wizCustomerChanged();
           }
           showToast(`Kund ${CustomerService.displayName(cu)} skapad`);

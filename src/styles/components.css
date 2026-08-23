@@ -913,6 +913,22 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .csoa:hover { background: #dbeafe; }
 
 /* ═══════════════════════════════════
+   CUSTOMER PICKER (V49A2A) — two-line result rows on top of .cso
+   ═══════════════════════════════════ */
+.cpo { white-space: normal; }
+.cpo-name { font-size: 13px; color: var(--tx); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.cpo-sub  { font-size: 12px; color: var(--mt); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; }
+.cpo-active { background: #f0f4ff; }
+.cpo-empty { padding: 14px 12px; font-size: 13px; color: var(--mt); text-align: center; }
+.cpclr {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; flex-shrink: 0;
+  border: none; background: transparent; border-radius: 5px;
+  color: var(--mt); cursor: pointer;
+}
+.cpclr:hover { background: #eef2f7; color: var(--tx); }
+
+/* ═══════════════════════════════════
    RONDERING UTFÖRANDE — compact rows
    ═══════════════════════════════════ */
 .ronpt {
