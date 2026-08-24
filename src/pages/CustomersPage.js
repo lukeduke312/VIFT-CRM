@@ -205,6 +205,30 @@ const CustomersPage = {
        placeholder-optionen nedan, som tvingar ett aktivt, medvetet val
        innan Spara går att lita på. */
     const selectedType = cu ? (normType || '') : 'foretag';
+
+    /* CUSTOMER LEGACY R1: gör legacy/importerad data SYNLIG istället för att
+       låta den ligga dold i ett fält edit-formuläret aldrig läser. Visar
+       ENDAST — flyttar/gissar/skriver ALDRIG något automatiskt. Se
+       RAPPORT-CUSTOMER-LEGACY-R1.md §1-§3. */
+    const hasCanonicalPrivateName = !!(cu && cu.firstName && cu.lastName);
+    const showLegacyNameBanner = !!(cu && normType === 'privat' && cu.name && !hasCanonicalPrivateName);
+    const showLegacyIdBanner   = !!(cu && normType === 'privat' && !cu.personnr && cu.orgNr);
+
+    const legacyNameBannerHtml = showLegacyNameBanner ? `
+      <div class="ibox" style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Importerat namn</div>
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:4px;">${esc(cu.name)}</div>
+        <div style="font-size:11px;color:var(--mt);">Namnet är importerat i ett äldre kundfält. Fyll i förnamn och efternamn för att strukturera kunden.</div>
+      </div>` : '';
+
+    const legacyIdBannerHtml = showLegacyIdBanner ? `
+      <div class="ibox" id="cu-legacy-id-box" style="margin-top:6px;">
+        <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Importerat nummer</div>
+        <div id="cu-legacy-id-value" style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:4px;">${esc(cu.orgNr)}</div>
+        <div style="font-size:11px;color:var(--mt);margin-bottom:6px;">Detta värde ligger idag i fältet Organisationsnummer. Bekräfta innan det eventuellt används som personnummer.</div>
+        <button type="button" class="btn bs bxs" onclick="CustomersPage._applyLegacyIdAsPersonnr()">Använd som personnummer</button>
+      </div>` : '';
+
     return `
       <div class="fg">
         <label>Kundtyp</label>
@@ -226,6 +250,7 @@ const CustomersPage = {
       </div>
 
       <div id="cu-private-fields" style="display:none;">
+        ${legacyNameBannerHtml}
         <div class="g2">
           <div class="fg"><label>Förnamn <span style="color:var(--rd)">*</span></label>
             <input id="cu-firstname" value="${v('firstName')}" placeholder="Anna"></div>
@@ -234,6 +259,7 @@ const CustomersPage = {
         </div>
         <div class="fg"><label>Personnummer</label>
           <input id="cu-personnr" value="${v('personnr')}" placeholder="YYYYMMDD-XXXX"></div>
+        ${legacyIdBannerHtml}
       </div>
 
       <div class="g2">
@@ -284,6 +310,83 @@ const CustomersPage = {
     if (el) el.style.display = checked ? '' : 'none';
   },
 
+  /* CUSTOMER LEGACY R1 §10/§11: privat och (foretag/brf/fastighetsagare)
+     delar samma två fältgrupper i formuläret — "organisation" samlar de tre
+     icke-privata typerna, eftersom de alla använder cu-company-fields. */
+  _typeGroup(normType) {
+    if (!normType) return null;
+    return normType === 'privat' ? 'privat' : 'organisation';
+  },
+
+  /* Vilka FÖRE-värden på kundposten skulle bli föräldralösa skräpdata om
+     typen byts bort från originalGroup utan explicit rensning — dvs. exakt
+     de fält V49A2-audit-rapporten (§6/§9) visade blir kvarliggande idag.
+     `name` ingår avsiktligt INTE här — det sätts alltid på nytt oavsett typ,
+     det är aldrig kvarliggande skräp. Se RAPPORT-CUSTOMER-LEGACY-R1.md §6. */
+  _staleFieldsForTypeGroup(cu, originalGroup) {
+    if (originalGroup === 'organisation') {
+      return [
+        cu.orgNr         ? { label: 'Organisationsnummer', value: cu.orgNr }         : null,
+        cu.contactPerson ? { label: 'Kontaktperson',        value: cu.contactPerson } : null
+      ].filter(Boolean);
+    }
+    return [
+      (cu.firstName || cu.lastName) ? { label: 'Namn',         value: `${cu.firstName||''} ${cu.lastName||''}`.trim() } : null,
+      cu.personnr                   ? { label: 'Personnummer', value: cu.personnr } : null
+    ].filter(Boolean);
+  },
+
+  /* Explicit bekräftelse-modal INNAN ett faktiskt kundtyp-byte (privat ↔
+     organisation) sparas — R1 §9/§10. Cancel gör INGEN state-mutation (den
+     underliggande redigera-modalen ligger orörd kvar i Modal._stack).
+     Confirm kör onConfirm(), som i sin tur anropar _doSave() — samma
+     Modal.close()-anrop där stänger DÅ både bekräftelse-modalen (redan
+     poppad här) och den underliggande redigera-modalen. */
+  _confirmTypeSwitch(cuTypeRaw, newType, staleFields, onConfirm) {
+    const fromLabel = CustomerService.typeLabel(cuTypeRaw);
+    const toLabel    = CustomerService.typeLabel(newType);
+    const hasStale = staleFields.length > 0;
+    const listHtml = staleFields.map(f =>
+      `<div class="dr"><span class="dk">${esc(f.label)}</span><span class="dv">${esc(f.value)}</span></div>`
+    ).join('');
+    /* R1.1 §3: bekräftelse krävs för VARJE faktiskt privat↔organisation-byte,
+       även om staleFields är tom (t.ex. type=foretag, name='Bolag AB', inga
+       orgNr/contactPerson ifyllda) — R1 lät sådana byten passera helt tyst,
+       vilket bröt "TYPE SWITCH MUST BE EXPLICIT"-principen. Om det inte finns
+       konkreta fält att lista, förklara ändå tydligt att fältstrukturen byts. */
+    Modal.open({
+      title: 'Bekräfta byte av kundtyp',
+      body: `
+        <p style="font-size:14px;line-height:1.5;color:var(--tx);margin-bottom:10px;">
+          Du ändrar kundtyp från <strong>${esc(fromLabel)}</strong> till <strong>${esc(toLabel)}</strong>.
+        </p>
+        ${hasStale ? `
+        <p style="font-size:13px;color:var(--mt);margin-bottom:6px;">Följande uppgifter kommer att tas bort från den aktiva kundposten:</p>
+        <div class="card" style="margin-bottom:10px;"><div class="card-body">${listHtml}</div></div>` : `
+        <p style="font-size:13px;color:var(--mt);margin-bottom:10px;">Kundens fält byter struktur till den nya kundtypens uppgifter (företags- respektive privatfält).</p>`}
+        <p style="font-size:13px;color:var(--tx);">Vill du fortsätta?</p>`,
+      buttons: [
+        { label: 'Byt kundtyp', cls: 'btn bp', onClick: () => { Modal.close(); onConfirm(); } },
+        { label: 'Avbryt',      cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  /* R1 §7: "Använd som personnummer" — kopierar ENDAST det redan synliga,
+     escapade legacy-värdet till #cu-personnr och sätter en form-lokal
+     marker (dataset, ingen global state). Persistar INGET — användaren
+     måste fortfarande trycka Spara. _doSave() läser markern och rensar då
+     explicit orgNr, se R1 §15. */
+  _applyLegacyIdAsPersonnr() {
+    const valueEl = document.getElementById('cu-legacy-id-value');
+    const input   = document.getElementById('cu-personnr');
+    if (!valueEl || !input) return;
+    input.value = valueEl.textContent;
+    input.dataset.legacyRepair = '1';
+    const box = document.getElementById('cu-legacy-id-box');
+    if (box) box.innerHTML = `<div style="font-size:11px;font-weight:600;color:var(--gr);">${ic('check',12)} Kopierat till Personnummer ovan — kom ihåg att trycka Spara.</div>`;
+  },
+
   _save(id) {
     const type = document.getElementById('cu-type').value;
     /* V49A1: tom value betyder att den disabled placeholder-optionen ("—
@@ -292,19 +395,113 @@ const CustomersPage = {
        kund vars lagrade värde inte gick att tolka. Blockera spar istället
        för att låta ett tomt/felaktigt värde skrivas. Se RAPPORT-V49A1.md §7. */
     if (!type) { showToast('Välj en kundtyp innan du sparar'); return; }
+
+    /* CUSTOMER LEGACY R1/R1.1 §9/§3: om det redan sparade kundtyp-facket
+       faktiskt byts (privat ↔ organisation), kräv ALLTID explicit
+       bekräftelse INNAN något sparas — oavsett om det gamla facket bär
+       konkreta legacy-fält eller inte (R1.1 §3: ett tyst genomsläppt byte,
+       t.ex. type=foretag med bara `name` ifyllt, bröt "TYPE SWITCH MUST BE
+       EXPLICIT"-principen i R1). Endast för BEFINTLIG kund — en ny kund har
+       inget "från"-tillstånd att byta bort från. Organisationstyper
+       sinsemellan (foretag/brf/fastighetsagare) är samma _typeGroup() och
+       triggar INTE denna bekräftelse. */
+    if (id) {
+      const cu = getCu(id);
+      if (cu) {
+        const originalGroup = this._typeGroup(CustomerService.normalizeType(cu.type));
+        const newGroup      = this._typeGroup(type);
+        if (originalGroup && newGroup && originalGroup !== newGroup) {
+          const staleFields = this._staleFieldsForTypeGroup(cu, originalGroup);
+          this._confirmTypeSwitch(cu.type, type, staleFields, () => this._doSave(id, type));
+          return;
+        }
+      }
+    }
+    this._doSave(id, type);
+  },
+
+  _doSave(id, type) {
     const data = { type };
+    const cu = id ? getCu(id) : null;
+    const originalGroup = cu ? this._typeGroup(CustomerService.normalizeType(cu.type)) : null;
+    const newGroup       = this._typeGroup(type);
+    /* Sant ENDAST om typen faktiskt byts (privat↔organisation) på en
+       BEFINTLIG kund — antingen direkt (inget legacy-data att förlora, se
+       _save() ovan) eller efter explicit bekräftelse i _confirmTypeSwitch().
+       Används för att explicit rensa den GAMLA typgruppens fält — R1 §11. */
+    const groupChanged = !!(originalGroup && newGroup && originalGroup !== newGroup);
 
     if (type === 'privat') {
       data.firstName = (document.getElementById('cu-firstname').value || '').trim();
       data.lastName  = (document.getElementById('cu-lastname').value || '').trim();
       data.personnr  = (document.getElementById('cu-personnr')?.value || '').trim();
-      data.name      = `${data.firstName} ${data.lastName}`.trim();
-      if (!data.firstName) { showToast('Förnamn krävs'); return; }
+      /* R1.2 §1-§5: R1.1 gjorde firstName ensamt avgörande för om ett
+         canonical namn skrevs — men ett icke-tomt firstName är INTE samma
+         sak som ett KOMPLETT canonical namn. En legacy-privatkund med
+         name='Alexandra Stadin', firstName='Alexandra', lastName='' (partial
+         legacy — precis det UI:t redan flaggar via hasCanonicalPrivateName i
+         _formHtml(), se dess `!!(cu && cu.firstName && cu.lastName)`) fick i
+         R1.1 sitt fullständiga legacy-namn tyst trunkerat till bara 'Alexandra'
+         vid en helt orelaterad ändring (t.ex. telefon), eftersom
+         `if (data.firstName)` triggade direkt utan att bry sig om lastName.
+         Save-logiken måste följa SAMMA "komplett canonical namn"-definition
+         som edit-formulärets egen legacy-banner redan använder — annars kan
+         formuläret visa en varning samtidigt som ett sparande tyst skriver
+         över den data varningen handlade om.
+         Se RAPPORT-CUSTOMER-LEGACY-R1-2.md §1-§3. */
+      const hadIncompleteLegacyPrivateName = !!(
+        cu && originalGroup === 'privat' && cu.name && !(cu.firstName && cu.lastName)
+      );
+      const nowHasCompletePrivateName = !!(data.firstName && data.lastName);
+
+      if (hadIncompleteLegacyPrivateName && !nowHasCompletePrivateName) {
+        /* Posten hade redan ett ofullständigt legacy-namn INNAN denna
+           redigering, och användaren har INTE fyllt i ett komplett
+           canonical namn (förnamn+efternamn) vid detta sparande — bevara
+           legacy cu.name EXAKT, oavsett om ett enskilt firstName eller
+           lastName råkar vara ifyllt (R1.2 fall A/B/C). */
+        data.name = cu.name;
+      } else if (data.firstName) {
+        /* Antingen ett HELT NYTT canonical namn (inget legacy-problem att
+           bevara), eller en KOMPLETT reparation/uppdatering av ett tidigare
+           ofullständigt legacy-namn (R1.2 fall D/E) — skriv det canonical
+           härledda namnet. */
+        data.name = `${data.firstName} ${data.lastName}`.trim();
+      } else if (cu && originalGroup === 'privat' && cu.name) {
+        /* R1.1: samma-typ-bevarande för en REDAN CANONICAL kund vars
+           firstName-fält just nu är tomt i formuläret (t.ex. tömt av
+           misstag) — bevara befintligt namn oförändrat istället för att
+           kräva Förnamn på en kund som redan hade ett komplett namn. */
+        data.name = cu.name;
+      } else {
+        showToast('Förnamn krävs'); return;
+      }
+      /* R1.1 §4/§5: en tom Personnummer-input får ALDRIG konsumera/radera
+         legacy orgNr — även om repair-markern är satt. Markern ensam räckte
+         inte: användaren kunde klicka "Använd som personnummer", sedan
+         manuellt tömma fältet igen, och Spara skulle då tyst radera BÅDA
+         identitetsnumren (orgNr→'' via markern, personnr redan ''). Kräver nu
+         explicit att det FAKTISKT KVARSTÅR ett icke-tomt personnummer vid
+         sparande innan orgNr rensas som repair — annars bevaras orgNr
+         oförändrat, exakt som en vanlig sparning utan repair redan gjorde.
+         Vid ett BEKRÄFTAT typbyte till privat rensas orgNr/contactPerson
+         fortsatt alltid explicit (R1 §11), oavsett repair-status. */
+      const legacyRepair = document.getElementById('cu-personnr')?.dataset.legacyRepair === '1';
+      if ((legacyRepair && data.personnr) || groupChanged) data.orgNr = '';
+      if (groupChanged) data.contactPerson = '';
     } else {
       data.name = (document.getElementById('cu-name').value || '').trim();
       if (!data.name) { showToast('Kundnamn krävs'); return; }
       data.orgNr         = document.getElementById('cu-orgnr').value.trim();
       data.contactPerson = document.getElementById('cu-contact').value.trim();
+      /* R1 §11: BEKRÄFTAT typbyte till organisation rensar alltid explicit
+         de gamla privat-fälten — annars ligger de kvar som skräpdata
+         (V49A2-fyndet, se RAPPORT-CUSTOMER-IMPORT-LEGACY-MAPPING-AUDIT.md §6). */
+      if (groupChanged) {
+        data.firstName = '';
+        data.lastName  = '';
+        data.personnr  = '';
+      }
     }
 
     data.phone   = document.getElementById('cu-phone').value.trim();
@@ -536,13 +733,22 @@ const CustomerDetailPage = {
   },
 
   _tabInfo(cu) {
+    /* CUSTOMER LEGACY R1 §16: en privatkund vars enda identitetsnummer
+       ligger legacy i orgNr (personnr tomt) ska INTE visas som om det vore
+       ett vanligt, canonical Org.nr — det vore en tyst felaktig omtolkning.
+       Visa istället explicit att värdet är importerat/legacy, utan att
+       flytta/gissa/ändra något i data. Se RAPPORT-CUSTOMER-LEGACY-R1.md §6/§16. */
+    const normType = CustomerService.normalizeType(cu.type);
+    const isLegacyIdOnPrivate = normType === 'privat' && !cu.personnr && !!cu.orgNr;
     const rows = [
       ['Typ',         CustomerService.typeLabel(cu.type)],
       ['Telefon',     cu.phone   || '—'],
       ['E-post',      cu.email   || '—'],
       ['Adress',      [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') || '—'],
-      cu.orgNr         ? ['Org.nr',          cu.orgNr]         : null,
-      cu.personnr      ? ['Personnummer',     cu.personnr]      : null,
+      isLegacyIdOnPrivate
+        ? ['Importerat nummer', `${esc(cu.orgNr)} <span style="color:var(--mt);font-weight:500;">(ligger i fältet Org.nr)</span>`]
+        : (cu.orgNr ? ['Org.nr', cu.orgNr] : null),
+      (!isLegacyIdOnPrivate && cu.personnr) ? ['Personnummer', cu.personnr] : null,
       cu.contactPerson ? ['Kontaktperson',   cu.contactPerson] : null,
     ].filter(Boolean);
 
