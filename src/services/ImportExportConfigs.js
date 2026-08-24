@@ -47,9 +47,15 @@ IMPORT_EXPORT_CONFIGS.customer = {
   schemaFn: function () { return Schema.customer(); },
   targetPage: 'pg-crm',
   sensitiveFields: [],
+  /* CUSTOMER IMPORT R2: `name` är INTE längre ovillkorligen required:true —
+     kundimport tillåter numera antingen `name` ELLER ett komplett
+     (firstName+lastName) privatpersonsnamn (se den kund-specifika
+     mapping-kontrollen i ImportWizardPage._toStep4() och
+     RAPPORT-CUSTOMER-IMPORT-R2.md §2). Labels förtydligade enligt samma
+     rapport §1. */
   fields: [
-    { value: 'name',           label: 'Namn *',                    required: true },
-    { value: 'type',           label: 'Typ (privat/foretag/brf)'                  },
+    { value: 'name',           label: 'Kund-/företagsnamn'                        },
+    { value: 'type',           label: 'Kundtyp'                                   },
     { value: 'orgNr',          label: 'Organisationsnummer'                        },
     { value: 'personnr',       label: 'Personnummer'                               },
     { value: 'firstName',      label: 'Förnamn'                                    },
@@ -57,12 +63,12 @@ IMPORT_EXPORT_CONFIGS.customer = {
     { value: 'contactPerson',  label: 'Kontaktperson'                              },
     { value: 'phone',          label: 'Telefon'                                    },
     { value: 'email',          label: 'E-post'                                     },
-    { value: 'address',        label: 'Adress'                                     },
+    { value: 'address',        label: 'Huvudadress'                                },
     { value: 'zip',            label: 'Postnummer'                                 },
     { value: 'city',           label: 'Ort'                                        },
     { value: 'invoiceAddress', label: 'Fakturaadress'                              },
-    { value: 'invoiceZip',     label: 'Faktura postnummer'                         },
-    { value: 'invoiceCity',    label: 'Faktura ort'                                },
+    { value: 'invoiceZip',     label: 'Faktura-postnummer'                         },
+    { value: 'invoiceCity',    label: 'Fakturaort'                                 },
     { value: 'customerNumber', label: 'Kundnummer'                                 },
     { value: 'externalId',     label: 'Externt ID'                                 },
     { value: 'externalSystem', label: 'Externt system'                             },
@@ -99,19 +105,133 @@ IMPORT_EXPORT_CONFIGS.customer = {
     { field: 'email',          label: 'E-post',   priority: 4, caseInsensitive: true },
     { fields: ['name','city'], label: 'Namn+ort', priority: 5, caseInsensitive: true }
   ],
+  /* CUSTOMER IMPORT R2: körs på den REDAN FÖRBEREDDA raden (efter
+     prepareImportRow() nedan har normaliserat `type` och ev. syntetiserat
+     `name` från ett komplett firstName+lastName-par) — se
+     validateImportRowsForType()s anropsordning
+     (mapRow → prepareImportRow → resolveRelations → validate → warnings).
+     Se RAPPORT-CUSTOMER-IMPORT-R2.md §2/§6/§7 för exakt block-matris. */
   validate: function (mapped) {
     var e = [];
-    if (!mapped.name) e.push('Namn saknas');
-    /* V49A1: okänd, icke-tom kundtyp blockeras HÄR (innan coerce/import) —
-       raden får status 'error' och skippas av ImportWizardPage._runImport()
-       (se dess befintliga `if (v.status === 'error') { skippedCount++; ... return; }`).
-       Ett okänt värde ska ALDRIG nå fram till att skrivas som customer.type.
-       Källa: CustomerService.normalizeType() — samma normalisering som
-       coerce() nedan använder, en enda source of truth. Se RAPPORT-V49A1.md. */
-    if (mapped.type && typeof CustomerService !== 'undefined' && CustomerService.normalizeType(mapped.type) === null) {
-      e.push('Okänd kundtyp "' + mapped.type + '". Tillåtna typer är Företag, Privatperson, BRF eller Fastighetsägare.');
+    var hasCS = typeof CustomerService !== 'undefined';
+
+    /* R2 §7/§9: typ är nu ALLTID obligatorisk på radnivå — saknas den helt
+       (tom cell trots mappad kolumn) blockeras raden, den får aldrig tyst
+       defaultas till schema-defaulten 'foretag' längre. */
+    if (!mapped.type) {
+      e.push('Kundtyp saknas.');
+      return e;
     }
+    /* V49A1/R1: okänd, icke-tom kundtyp blockeras — samma normalisering
+       (CustomerService.normalizeType()) som prepareImportRow()/coerce()
+       använder, en enda source of truth. Gissar aldrig. */
+    var normType = hasCS ? CustomerService.normalizeType(mapped.type) : null;
+    if (normType === null) {
+      e.push('Okänd kundtyp "' + mapped.type + '". Tillåtna typer är Företag, Privatperson, BRF eller Fastighetsägare.');
+      return e;
+    }
+
+    /* R2 §10-14: namnkrav är nu typmedvetet. Privatperson: name ELLER ett
+       komplett firstName+lastName-par (prepareImportRow() syntetiserar
+       redan `name` när båda finns, så denna gren blockerar bara genuint
+       ofullständiga rader — bara firstName, bara lastName, eller inget
+       alls). Organisation (foretag/brf/fastighetsagare): name krävs alltid
+       — firstName/lastName kan ALDRIG ersätta ett organisationsnamn. */
+    if (normType === 'privat') {
+      var hasStructuredName = !!(mapped.firstName && mapped.lastName);
+      if (!mapped.name && !hasStructuredName) {
+        e.push('Privatperson saknar namn. Ange Kund-/företagsnamn eller både Förnamn och Efternamn.');
+      }
+    } else if (!mapped.name) {
+      e.push('Organisation saknar Kund-/företagsnamn.');
+    }
+
     return e;
+  },
+
+  /* CUSTOMER IMPORT R2 §8-11: liten, EXPLICIT förberedelsehook — INGEN ny
+     generisk arkitektur, bara en valfri config-metod som
+     validateImportRowsForType() anropar OM den finns (se dess ändrade
+     anropsordning). Andra register (properties/articles/staff/…) saknar
+     denna metod helt och deras beteende är därmed 100% oförändrat.
+     Muterar ALDRIG originalraden — returnerar alltid en NY kopia, som sedan
+     används genomgående för validate/warnings/dubblettdetektering OCH det
+     faktiska importerade objektet (via resolveRelationsForRow()s
+     Object.assign({}, mapped) — customer har inga relations[], så det
+     förberedda värdet flödar oförändrat igenom). Detta garanterar att
+     förhandsgranskning och faktisk import ser EXAKT samma data. */
+  prepareImportRow: function (mapped) {
+    var prepared = Object.assign({}, mapped);
+    if (typeof CustomerService !== 'undefined') {
+      /* Normaliserar type TIDIGT (inte bara vid coerce() som tidigare) så
+         att validate()/warnings() nedan kan resonera typmedvetet redan vid
+         förhandsgranskning. Följer samma tre-lägen-kontrakt som
+         normalizeType() själv: känt värde normaliseras, tomt/okänt värde
+         lämnas ORÖRT (gissar aldrig) — validate() fångar båda de senare
+         fallen explicit. */
+      var norm = CustomerService.normalizeType(prepared.type);
+      if (norm) prepared.type = norm;
+    }
+    /* R2 §10/§11: SÄKER syntes, INTE gissning — två REDAN STRUKTURERADE
+       källfält (firstName+lastName, användaren har redan delat upp namnet
+       explicit) slås ihop till kompatibilitetsfältet `name`. Detta är
+       motsatsen till namnsplit (som ALDRIG görs, se §11) — att slå ihop två
+       kända, fullständiga delar är entydigt; att dela upp en okänd sträng
+       är det aldrig. Körs ENDAST för privat, ENDAST om `name` saknas,
+       ENDAST om BÅDA fälten finns — annars orört, validate() blockerar
+       ofullständiga fall (bara firstName eller bara lastName). */
+    if (prepared.type === 'privat' && !prepared.name && prepared.firstName && prepared.lastName) {
+      prepared.name = (prepared.firstName + ' ' + prepared.lastName).trim();
+    }
+    return prepared;
+  },
+
+  /* CUSTOMER IMPORT R2 §16-18: WARN ONLY — blockerar aldrig, flyttar/gissar
+     aldrig något. Körs på samma förberedda rad som validate(). Återanvänder
+     den redan existerande `warnings`-arkitekturen i
+     validateImportRowsForType()s resultatobjekt (tidigare bara använd för
+     "ambiguous"-relationsträffar; customer har inga relations[] så detta är
+     den första faktiska användningen av den för kunder). */
+  warnings: function (mapped) {
+    var w = [];
+    var hasCS = typeof CustomerService !== 'undefined';
+    var normType = hasCS ? CustomerService.normalizeType(mapped.type) : null;
+
+    if (normType === 'privat') {
+      var hasStructuredName = !!(mapped.firstName && mapped.lastName);
+      if (mapped.name && !hasStructuredName) {
+        w.push('Privatpersonen saknar komplett Förnamn/Efternamn och importeras med ett ostrukturerat namn. Kunden kan behöva granskas senare.');
+      }
+      if (mapped.name && hasStructuredName) {
+        /* Enkel, säker jämförelse — trim + kollapsa whitespace + case-
+           insensitive. Ingen avancerad namntolkning. Kastar ALDRIG data:
+           båda källvärdena bevaras oförändrade, bara en varning läggs till. */
+        var norm = function (s) { return (s || '').toLowerCase().trim().replace(/\s+/g, ' '); };
+        if (norm(mapped.name) !== norm(mapped.firstName + ' ' + mapped.lastName)) {
+          w.push('Fullständigt namn och Förnamn/Efternamn skiljer sig åt. Kontrollera uppgifterna.');
+        }
+      }
+      if (mapped.orgNr && !mapped.personnr) {
+        w.push('Privatpersonen har Organisationsnummer men saknar Personnummer. Kontrollera mappningen.');
+      }
+    } else if (normType) {
+      if (mapped.personnr && !mapped.orgNr) {
+        w.push('Organisationen har Personnummer men saknar Organisationsnummer. Kontrollera mappningen.');
+      }
+    }
+
+    if (mapped.orgNr && mapped.personnr) {
+      w.push('Både Organisationsnummer och Personnummer är ifyllda. Kontrollera uppgifterna.');
+    }
+
+    if (mapped.invoiceAddress && !mapped.address) {
+      w.push('Fakturaadress finns men Huvudadress saknas. Kontrollera adressmappningen.');
+    }
+    if (mapped.invoiceAddress && (!mapped.invoiceZip || !mapped.invoiceCity)) {
+      w.push('Fakturaadressen är ofullständig. Kontrollera faktura-postnummer och fakturaort.');
+    }
+
+    return w;
   },
   coerce: function (obj) {
     if (obj.paymentTerms !== undefined && obj.paymentTerms !== '') {
@@ -1226,14 +1346,32 @@ Object.assign(ImportExportService, {
     }
 
     rows.forEach(function (row, ri) {
-      var mapped    = mapRow(row);
+      var mapped = mapRow(row);
+      /* CUSTOMER IMPORT R2 §8/§19/§20: valfri, EXPLICIT per-config
+         förberedelsehook — körs INNAN relationsupplösning/validering, så att
+         förhandsgranskning, dubblettdetektering OCH den faktiska importerade
+         posten (via resolveRelationsForRow()s passthrough för register utan
+         relations[]) alla ser EXAKT samma, förberedda data. Register utan
+         `prepareImportRow` (properties/articles/staff/…) är helt opåverkade
+         — `mapped` förblir precis mapRow()s råa utdata för dem, som innan. */
+      if (cfg.prepareImportRow) mapped = cfg.prepareImportRow(mapped) || mapped;
+
       var relResult = ImportExportService.resolveRelationsForRow(mapped, entityType);
       var errors    = cfg.validate ? cfg.validate(mapped) : [];
       errors        = errors.concat(relResult.errors);
       var dup       = errors.length ? null : findDuplicate(mapped, relResult.resolved);
       var status    = errors.length ? 'error' : (dup ? 'duplicate' : 'new');
 
-      var ambigLogs = relResult.relationsLog.filter(function (l) { return l.quality === 'ambiguous'; });
+      var ambigLogs   = relResult.relationsLog.filter(function (l) { return l.quality === 'ambiguous'; });
+      var relWarnings = ambigLogs.map(function (l) {
+        return 'Relation "' + l.label + '": ' + l.candidates.length + ' träffar i ' + l.lookupIn + ' — välj manuellt';
+      });
+      /* CUSTOMER IMPORT R2 §17: valfri per-config warn-only-hook (WARN,
+         aldrig BLOCK) — kombineras med de redan existerande
+         relations-varningarna. Register utan `cfg.warnings` (alla utom
+         customer idag) är helt opåverkade. */
+      var cfgWarnings = cfg.warnings ? cfg.warnings(mapped) : [];
+
       results.push({
         rowIndex:             ri + 2,
         row:                  row,
@@ -1245,9 +1383,7 @@ Object.assign(ImportExportService, {
         errors:               errors,
         needsRelation:        ambigLogs.length > 0,
         hasRequiredAmbiguous: ambigLogs.some(function (l) { return l.required; }),
-        warnings:             ambigLogs.map(function (l) {
-          return 'Relation "' + l.label + '": ' + l.candidates.length + ' träffar i ' + l.lookupIn + ' — välj manuellt';
-        })
+        warnings:             relWarnings.concat(cfgWarnings)
       });
     });
 

@@ -362,19 +362,74 @@ const ImportWizardPage = (function () {
     _renderStep();
   }
 
-  function _toStep4() {
-    // Kontrollera att minst ett obligatoriskt fält är mappat
-    var cfg = ImportExportService.getConfig(_entityType);
-    var requiredFields = (cfg ? cfg.fields : []).filter(function (f) { return f.required; });
-    var mappedValues = Object.values(_mapping).filter(Boolean);
-
-    var missing = requiredFields.filter(function (f) {
-      return f.value.charAt(0) !== '_' && mappedValues.indexOf(f.value) === -1;
+  /* CUSTOMER IMPORT R2 §5/§6: två eller fler källkolumner mappade till SAMMA
+     målfält — mapRow() (ImportExportConfigs.js) har ingen precedence-logik,
+     sist processade kolumn vinner tyst och tidigare kolumners värde
+     försvinner utan varning. Generiskt (gäller alla entity types) hårt
+     block, inte bara warning — det finns ingen definierad merge-semantik,
+     så att fortsätta skulle vara medveten dataförlust. */
+  function _findDuplicateTargetMappings() {
+    var targetToSources = {};
+    Object.keys(_mapping).forEach(function (h) {
+      var t = _mapping[h];
+      if (!t) return;
+      (targetToSources[t] = targetToSources[t] || []).push(h);
     });
+    var dups = [];
+    Object.keys(targetToSources).forEach(function (t) {
+      if (targetToSources[t].length > 1) dups.push({ target: t, sources: targetToSources[t] });
+    });
+    return dups;
+  }
 
-    if (missing.length) {
-      _showError('imp-body', 'Obligatoriska fält saknas: ' + missing.map(function (f) { return f.label.replace(' *', ''); }).join(', '));
+  function _toStep4() {
+    var cfg    = ImportExportService.getConfig(_entityType);
+    var fields = cfg ? cfg.fields : [];
+
+    var fieldLabel = function (v) {
+      var f = fields.filter(function (x) { return x.value === v; })[0];
+      return f ? f.label.replace(' *', '') : v;
+    };
+
+    // §5/§6: duplicate target mapping — hårt block, före allt annat.
+    var dupTargets = _findDuplicateTargetMappings();
+    if (dupTargets.length) {
+      var dupMsg = 'Flera kolumner är kopplade till samma fält: ' +
+        dupTargets.map(function (d) { return fieldLabel(d.target) + ' ← ' + d.sources.join(', '); }).join('; ') +
+        '. Välj vilket värde som ska användas innan du fortsätter.';
+      _showError('imp-body', dupMsg);
       return;
+    }
+
+    if (_entityType === 'customer') {
+      /* R2 §7: kund-specifik mapping-precheck — ersätter den generiska
+         fields[].required-kontrollen (name har inte längre required:true,
+         se ImportExportConfigs.js). Kräver `type` mappad, samt antingen
+         `name` ELLER BÅDE `firstName` och `lastName` mappade. Detta är
+         ENDAST en kolumn-nivå-precheck — radvalidering (ImportExportConfigs
+         .customer.validate()) avgör därefter om VARJE enskild rad faktiskt
+         är giltig för SIN typ (viktigt för blandade filer, se R2 §30). */
+      var mappedValues = Object.values(_mapping).filter(Boolean);
+      var hasType       = mappedValues.indexOf('type') !== -1;
+      var hasName       = mappedValues.indexOf('name') !== -1;
+      var hasStructured = mappedValues.indexOf('firstName') !== -1 && mappedValues.indexOf('lastName') !== -1;
+      if (!hasType || !(hasName || hasStructured)) {
+        _showError('imp-body', 'Kundimport kräver Kundtyp och antingen Kund-/företagsnamn eller både Förnamn och Efternamn.');
+        return;
+      }
+    } else {
+      // Generisk kontroll (oförändrad) för alla andra entity types.
+      var requiredFields = fields.filter(function (f) { return f.required; });
+      var mappedValues2  = Object.values(_mapping).filter(Boolean);
+
+      var missing = requiredFields.filter(function (f) {
+        return f.value.charAt(0) !== '_' && mappedValues2.indexOf(f.value) === -1;
+      });
+
+      if (missing.length) {
+        _showError('imp-body', 'Obligatoriska fält saknas: ' + missing.map(function (f) { return f.label.replace(' *', ''); }).join(', '));
+        return;
+      }
     }
 
     _step = 4;
@@ -454,6 +509,30 @@ const ImportWizardPage = (function () {
             '</summary>' +
             _diffHtml(v) +
           '</details>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+
+    /* R2 §17/§24: rader som INTE blockeras men har varningar (t.ex.
+       typmedvetna orgNr/personnr- eller adress-varningar för customer, se
+       ImportExportConfigs.js cfg.warnings()) — v.warnings fanns redan i
+       resultatobjektet (tidigare bara fyllt av ambiguösa relationer) men
+       renderades ALDRIG i denna sida. Visas nu explicit, tydligt skilt från
+       felraderna: dessa rader ÄR importerbara, bara flaggade för granskning. */
+    var warnRows = _validated.filter(function (v) { return v.status !== 'error' && (v.warnings || []).length > 0; });
+    if (warnRows.length > 0) {
+      html += '<div class="imp-section-title" style="margin-top:16px">' +
+        _ic('alert-triangle', 14) + ' Rader med varningar (importeras ändå)' +
+      '</div>' +
+      '<div class="imp-row-list">';
+      warnRows.forEach(function (v) {
+        html += '<div class="imp-row-item imp-row-dup" style="flex-direction:column;align-items:stretch;">' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
+            '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '') + '</span>' +
+          '</div>' +
+          '<div class="imp-row-msg" style="color:var(--orange);margin-top:2px;">' + esc(v.warnings.join(' · ')) + '</div>' +
         '</div>';
       });
       html += '</div>';
