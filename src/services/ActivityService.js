@@ -8,9 +8,17 @@ const ActivityService = {
   MAX_ENTRIES: 500,
 
   /**
-   * Logga en aktivitet
-   */
-  log(type, description, meta = {}) {
+   * Logga en aktivitet.
+   *
+   * GLOBAL LIVE UI R1A.1: `opts.persist` är ett bakåtkompatibelt OPT-OUT —
+   * default (`opts` utelämnat, eller `opts.persist` inte explicit `false`)
+   * är EXAKT det beteende log() alltid haft: skriv entry + eget persist().
+   * Alla ~40 befintliga anropsplatser (WorkOrderService, InvoiceService,
+   * SalesService, m.fl.) är OFÖRÄNDRADE av detta — bara CustomerServices
+   * confirmed-write-path (updateConfirmed()) använder `{persist:false}`,
+   * för att undvika en andra, dold persist()-skrivning utöver den EN
+   * väntade skrivning callern redan gör. Se RAPPORT-GLOBAL-LIVE-UI-R1A-1.md. */
+  log(type, description, meta = {}, opts = {}) {
     const entry = {
       id: 'ACT-' + Date.now(),
       type,
@@ -36,7 +44,7 @@ const ActivityService = {
       state.activityLog = state.activityLog.slice(0, this.MAX_ENTRIES);
     }
 
-    persist();
+    if (opts.persist !== false) persist();
     return entry;
   },
 

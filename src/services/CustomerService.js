@@ -88,16 +88,79 @@ const CustomerService = {
     return cu;
   },
 
-  update(id, data) {
+  /* GLOBAL LIVE UI R1A.1: gemensam mutationslogik för update()/updateConfirmed()
+     — normalisering/validering/Object.assign/ActivityService-loggning finns
+     på EXAKT ETT ställe, ingen duplicering. Returnerar `null` vid okänt
+     id/okänd typ (samma kontrakt som update() alltid haft), annars
+     `{cu, before, beforeActivityLog}` — `before` är en FÖRE-mutation-
+     ögonblicksbild av hela kundobjektet, `beforeActivityLog` är en FÖRE-
+     mutation-ögonblicksbild av HELA `state.activityLog`-arrayen (tagen
+     INNAN ActivityService.log() körs, eftersom log() både unshiftar en ny
+     post OCH kan trimma bort den äldsta vid MAX_ENTRIES — en enkel "ta
+     bort den nya posten"-rollback räcker alltså INTE i alla fall, en
+     trimmad svanspost skulle vara permanent förlorad). Används av
+     updateConfirmed()s caller för fullständig rollback vid misslyckad
+     persist (se CustomersPage._doSave()).
+     KORRIGERAT KONTRAKT (R1A.1 — R1A:s ursprungliga kommentar här var
+     FELAKTIG): `_applyUpdate()` anropar INTE persist() DIREKT själv, men
+     `ActivityService.log()` gör det via SITT EGET interna anrop om inte
+     `opts.activityPersist === false` uttryckligen skickas in — default
+     (`update()`s väg, oförändrad) behåller alltså activity-loggens
+     egen persist() PLUS ett eget, separat persist()-anrop (två writes,
+     precis som innan R1A/R1A.1 — se §10/§9 i RAPPORT-GLOBAL-LIVE-UI-R1A-1.md,
+     detta är MEDVETET INTE städat för update()-vägen i denna release).
+     `updateConfirmed()` skickar explicit `{activityPersist:false}` för att
+     undertrycka activity-loggens interna persist(), så att DEN ENDA,
+     väntade `await persist()` i updateConfirmed() är den EV SOM SKRIVER
+     — och den skrivningen innehåller redan både den muterade kunden OCH
+     den nya activity-posten (activityLog muterades redan synkront innan
+     denna enda persist() anropas). */
+  _applyUpdate(id, data, opts = {}) {
     const cu = getCu(id);
     if (!cu) return null;
     const safeData = this._normalizeTypeForWrite(data);
     if (safeData === null) return null;
+    const before = Object.assign({}, cu);
+    const beforeActivityLog = Array.isArray(state.activityLog) ? state.activityLog.slice() : [];
     Object.assign(cu, safeData, { updatedAt: new Date().toISOString() });
+    const activityPersist = opts.activityPersist !== false;
     ActivityService.log('customer_updated', `Kund redigerad: ${this.displayName(cu)}`,
-      { customerId: cu.id });
+      { customerId: cu.id }, { persist: activityPersist });
+    return { cu, before, beforeActivityLog };
+  },
+
+  update(id, data) {
+    const result = this._applyUpdate(id, data);
+    if (!result) return null;
     persist();
-    return cu;
+    return result.cu;
+  },
+
+  /* GLOBAL LIVE UI R1A.1: opt-in confirmed-write-kontrakt — samma
+     in-memory-mutation som update(), men EXAKT EN väntad persist() vars
+     resultat callern faktiskt kan agera på (rollback vid `ok:false`, se
+     CustomersPage._doSave()). Undertrycker ActivityService.log()s egen
+     interna persist() (`{activityPersist:false}` → `_applyUpdate()`) så
+     att den enda persist() som väntas in är den SOM FAKTISKT avgör om
+     hela mutationen (kund + activity-post) bekräftades — inte en av två
+     separata, potentiellt olika resultat (se R1A:s ursprungliga bugg,
+     RAPPORT-GLOBAL-LIVE-UI-R1A-1.md §2). Befintliga callers av update()
+     påverkas INTE — update()s eget beteende/returkontrakt är oförändrat.
+     Returnerar alltid ett objekt (aldrig null), så callern slipper två
+     olika kontroll-vägar:
+       { ok:false, customer:null,  before:null, beforeActivityLog:null }
+         — okänt id eller okänd, icke-tom typ (ingen mutation skedde alls)
+       { ok:true,  customer, before, beforeActivityLog }
+         — muterat (kund + activity-post) OCH bekräftat sparat på servern
+       { ok:false, customer, before, beforeActivityLog }
+         — muterat i minnet (kund + activity-post), men persist()
+           misslyckades (server/nätverk) — callern MÅSTE rulla tillbaka
+           BÅDA via `before`/`beforeActivityLog`. */
+  async updateConfirmed(id, data) {
+    const result = this._applyUpdate(id, data, { activityPersist: false });
+    if (!result) return { ok: false, customer: null, before: null, beforeActivityLog: null };
+    const ok = await persist();
+    return { ok, customer: result.cu, before: result.before, beforeActivityLog: result.beforeActivityLog };
   },
 
   delete(id) {

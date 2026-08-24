@@ -351,5 +351,19 @@ const Router = {
     // Scrolla till topp
     const scroll = document.getElementById('content-scroll');
     if (scroll) scroll.scrollTop = 0;
+  },
+
+  /* GLOBAL LIVE UI R1A: liten, explicit primitive för "rerendera aktuell
+     vy" utan navigation. Återanvänder showPage() oförändrad — samma pageId
+     med {replace:true} triggar INTE historik-push (se history-guarden
+     ovan, `pageId !== this.currentPage`-villkoret är redan falskt) och gör
+     history.replaceState (inte pushState) för URL-hashen, så ingen ny
+     bakåt-post skapas. Ren UI-refresh, ingen mutation, ingen persist,
+     inget nytt navigationsläge. Callern (t.ex. CustomersPage) ansvarar
+     själv för ATT och NÄR den ska anropas — denna primitive vet ingenting
+     om entiteter/routes/relevans. */
+  refreshCurrent() {
+    if (!this.currentPage) return;
+    this.showPage(this.currentPage, this.currentParams || {}, { replace: true });
   }
 };

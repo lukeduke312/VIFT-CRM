@@ -420,7 +420,7 @@ const CustomersPage = {
     this._doSave(id, type);
   },
 
-  _doSave(id, type) {
+  async _doSave(id, type) {
     const data = { type };
     const cu = id ? getCu(id) : null;
     const originalGroup = cu ? this._typeGroup(CustomerService.normalizeType(cu.type)) : null;
@@ -525,15 +525,64 @@ const CustomersPage = {
       /* V49A1: defense-in-depth — type är i praktiken alltid ett av de
          fyra kanoniska värdena här (dropdownens enda väljbara alternativ,
          se _formHtml()/_save()s tomt-värde-guard ovan), så detta bör
-         aldrig faktiskt trigga. Men CustomerService.update() kan numera
-         returnera null om ett explicit okänt värde ändå skulle nå den
-         (t.ex. ett framtida anropsställe) — visa då INTE en felaktig
-         "Kund uppdaterad"-bekräftelse. */
-      const updated = CustomerService.update(id, data);
-      if (!updated) { showToast('Kunde inte spara kundtyp — okänt värde'); return; }
+         aldrig faktiskt trigga. Men CustomerService.updateConfirmed() kan
+         numera returnera `customer:null` om ett explicit okänt värde ändå
+         skulle nå den (t.ex. ett framtida anropsställe) — visa då INTE en
+         felaktig "Kund uppdaterad"-bekräftelse. */
+      const result = await CustomerService.updateConfirmed(id, data);
+      if (!result.customer) { showToast('Kunde inte spara kundtyp — okänt värde'); return; }
+
+      /* GLOBAL LIVE UI R1A.1 §6/§7: persist misslyckades — rulla tillbaka
+         EXAKT till pre-save-versionen (samma princip som OffersPage._save()s
+         beprövade rollback, se PageShells.js), håll redigeringsmodalen
+         ÖPPEN, visa INGEN framgångs-toast, gör INGEN vy-refresh (det skulle
+         framställa den ej sparade ändringen som sparad). state.customers
+         syftar redan på result.customer (samma objekt-referens som
+         muterades i _applyUpdate()), så Object.assign(...) här återställer
+         det i-minnet-objektet till exakt `before`. `state.activityLog`
+         återställs SEPARAT till result.beforeActivityLog — den enda
+         persist() som misslyckades täckte BÅDE kunden och den nya
+         customer_updated-posten (R1A.1 undertrycker ActivityService.log()s
+         egen persist() för denna väg, se CustomerService._applyUpdate()),
+         så bägge måste rullas tillbaka tillsammans, annars blir en
+         "spökpost" kvar lokalt i aktivitetsloggen för en ändring som
+         aldrig bekräftades sparad. Full array-ersättning (inte bara att ta
+         bort den nya posten) krävs eftersom ActivityService.log() kan ha
+         trimmat bort en äldre post vid MAX_ENTRIES — den trimningen måste
+         också ogöras. */
+      if (!result.ok) {
+        Object.assign(result.customer, result.before);
+        if (result.beforeActivityLog) state.activityLog = result.beforeActivityLog;
+        Storage.setLocal('customers', state.customers);
+        Storage.setLocal('activityLog', state.activityLog);
+        showToast('Kunde inte spara kunden. Försök igen.');
+        return;
+      }
+
       showToast('Kund uppdaterad');
       Modal.close();
-      this.render();
+
+      /* GLOBAL LIVE UI R1A §11: refresh ENDAST om AKTUELL vy faktiskt
+         visar den sparade kunden — ingen bred rollout, ingen global
+         rerender. Detaljvyn rendras via _renderFull() direkt (inte
+         Router.refreshCurrent()) eftersom _renderFull() redan bevarar
+         aktiv flik (CustomerDetailPage.tab är en modul-property som
+         _renderFull() aldrig rör) och undviker showPage()s bieffekter
+         (scroll-reset till toppen, SelectionModel.onNavigate, etc.) som
+         inte behövs för en ren data-refresh av samma sida. Listvyn
+         återanvänder Router.refreshCurrent(), vilket i praktiken bara
+         återanropar CustomersPage.render() — identiskt med det
+         "this.render()"-anrop som redan gjordes här innan R1A, så inget
+         nytt beteende (sök/filter/sortering ligger redan i modul-scope
+         properties, inte DOM, och överlever därför oförändrat). */
+      if (Router.currentPage === 'pg-crm-detail' &&
+          Router.currentParams && Router.currentParams.customerId === id) {
+        CustomerDetailPage._renderFull(document.getElementById('pg-crm-detail-content'));
+      } else if (Router.currentPage === 'pg-crm') {
+        Router.refreshCurrent();
+      }
+      /* Alla andra rutter: ingen forced refresh i R1A (§11 C) — dolda
+         moduler renderas ändå fräscht när de senare öppnas. */
     } else {
       const newCu = CustomerService.create(data);
       if (!newCu) { showToast('Kunde inte spara kundtyp — okänt värde'); return; }
