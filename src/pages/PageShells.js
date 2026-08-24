@@ -785,7 +785,38 @@ const OffersPage = {
      som bara skickar (preCustomerId) fortsätter fungera exakt som tidigare.
      opts.onCreated(offer) anropas EFTER lyckad, riktig persist i _save() —
      aldrig vid avbrutet/misslyckat sparande. Används av SalesPage.createOffer(). */
+  /* V48B4A: standalone ny-offert (inget opts.onCreated) kontrollerar FÖRST
+     om ett giltigt, osparat lokalt utkast finns för denna användare — se
+     _draftRead()/§9-§10 i RAPPORT-V48B4A. Kontextuella anrop (Sales→Offer
+     m.fl., dvs. opts.onCreated är satt) och redigering av befintlig offert
+     (openEdit) berörs ALDRIG av draft-autosave/recovery — se §22/§23. */
   openCreate(preCustomerId, opts) {
+    /* V48B4A.1: DEFAULT flush (inte {flush:false}) — annars kastas en
+       VÄNTANDE, ännu icke-debounce-utlöst ändring från en tidigare
+       standalone-session bort tyst om användaren hinner byta authoring-läge
+       (t.ex. öppna en kontextuell offert från Sales) innan 750ms passerat.
+       Se _stopDraftAutosave()s kommentar och §7/§8 i RAPPORT-V48B4A-1. */
+    this._stopDraftAutosave();
+    const isStandalone = !(opts && typeof opts.onCreated === 'function');
+    if (isStandalone) {
+      const userId = this._resolveDraftUserId();
+      if (userId) {
+        this._draftUserId = userId;
+        const draft = this._draftRead();
+        if (draft) {
+          this._pendingDraftOpenArgs = { preCustomerId: preCustomerId, opts: opts };
+          this._showDraftRecoveryPrompt(draft);
+          return;
+        }
+      }
+      this._draftUserId = null;
+    }
+    this._initFreshOffer(preCustomerId, opts);
+    this._showWizard();
+    if (isStandalone) this._startDraftAutosave(null);
+  },
+
+  _initFreshOffer(preCustomerId, opts) {
     const T = this._TERMS;
     const today    = new Date().toISOString().split('T')[0];
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
@@ -807,10 +838,11 @@ const OffersPage = {
       summary: '', scope: '', includes: '', excludes: '',
       paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: ''
     };
-    this._showWizard();
   },
 
   openEdit(offerId) {
+    /* V48B4A.1: DEFAULT flush — se openCreate()s kommentar. */
+    this._stopDraftAutosave();
     const off = getOff(offerId);
     if (!off) return;
     const T = this._TERMS;
@@ -846,6 +878,281 @@ const OffersPage = {
     this._showWizard();
   },
 
+  /* ── V48B4A: Offert-utkast (lokal autosave/recovery) ─────────────────────
+     Skyddar ENDAST fristående "Ny offert" (inget opts.onCreated). Rör
+     ALDRIG state.offers, persist(), Storage.setAll() eller DataSync — ren
+     lokal, transient UI-skyddsmekanism. Se RAPPORT-V48B4A. */
+
+  _DRAFT_VERSION: 1,
+  _DRAFT_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+  _draftEnabled: false,
+  _draftUserId: null,
+  _draftCreatedAt: null,
+  _draftSaveTimer: null,
+  _draftWriteFailed: false,
+  _draftInputHandler: null,
+  _draftBeforeUnloadHandler: null,
+  _draftStatusText: '',
+  _pendingDraftOpenArgs: null,
+
+  /* Stabil, opak användaridentitet — samma id som UserPrefsService/
+     DashboardConfig redan namnrymdar sina localStorage-nycklar med.
+     Returnerar null (inte 'unknown') om ingen säker identitet finns —
+     draft ska då INTE aktiveras, se openCreate()/_startDraftAutosave(). */
+  _resolveDraftUserId() {
+    const u = (typeof state !== 'undefined') ? state.currentUser : null;
+    if (u && u.id && u.id !== 'unknown') return u.id;
+    return null;
+  },
+
+  _draftKey() {
+    return this._draftUserId ? ('offerDraft_v1_new_' + this._draftUserId) : null;
+  },
+
+  /* Läser och validerar ett lokalt utkast. Fail-safe: korrupt JSON, fel
+     envelope-shape, okänd version eller för gammalt utkast (>7 dagar)
+     tas bort tyst och null returneras — ALDRIG en krasch, ALDRIG ett
+     blint Object.assign av opålitligt innehåll in i wizardens state. */
+  _draftRead() {
+    const key = this._draftKey();
+    if (!key) return null;
+    let raw;
+    try { raw = localStorage.getItem(key); } catch (e) { return null; }
+    if (!raw) return null;
+    let envelope;
+    try { envelope = JSON.parse(raw); } catch (e) { this._draftRemove(); return null; }
+    if (!envelope || typeof envelope !== 'object') { this._draftRemove(); return null; }
+    if (envelope.version !== this._DRAFT_VERSION) { this._draftRemove(); return null; }
+    if (envelope.kind !== 'new-offer') { this._draftRemove(); return null; }
+    const d = envelope.data;
+    if (!d || typeof d !== 'object') { this._draftRemove(); return null; }
+    if (!d.wizardData || typeof d.wizardData !== 'object') { this._draftRemove(); return null; }
+    if (!Array.isArray(d.lines)) { this._draftRemove(); return null; }
+    if (!Array.isArray(d.extras)) { this._draftRemove(); return null; }
+    if (!d.discount || typeof d.discount !== 'object') { this._draftRemove(); return null; }
+    if (d.wizardStep !== 1 && d.wizardStep !== 2 && d.wizardStep !== 3) { this._draftRemove(); return null; }
+    const stamp = Date.parse(envelope.updatedAt || envelope.createdAt || '');
+    if (!isFinite(stamp)) { this._draftRemove(); return null; }
+    if (Date.now() - stamp > this._DRAFT_TTL_MS) { this._draftRemove(); return null; }
+    return envelope;
+  },
+
+  _draftRemove() {
+    const key = this._draftKey();
+    if (!key) return;
+    try { localStorage.removeItem(key); } catch (e) {}
+  },
+
+  /* Ett HELT tomt utkast (ingen kund, ingen text, inga rader/tillval) ska
+     varken skrivas eller ligga kvar — annars skulle t.ex. ett obetänksamt
+     "Börja om" (som omedelbart startar en NY, tom draft-session) följt av
+     en beforeunload-sista-flush kunna skapa en meningslös "återställ
+     utkast"-prompt nästa gång, för ett utkast som facto inte innehöll
+     något att återställa. */
+  _isDraftEmpty() {
+    const d = this._wizardData || {};
+    const hasText = ['title','summary','scope','includes','excludes','internalNote']
+      .some(k => (d[k] || '').trim());
+    const hasCustomer = !!d.customerId;
+    const hasLines  = (this._editLines  || []).length > 0;
+    const hasExtras = (this._editExtras || []).length > 0;
+    return !hasText && !hasCustomer && !hasLines && !hasExtras;
+  },
+
+  /* Skriver EXAKT den whitelistade, JSON-säkra delmängden av wizard-state —
+     aldrig funktioner/DOM-referenser/opts.onCreated/svc-kalkylator-scratch
+     (se §7/§19 i RAPPORT-V48B4A). `localStorage.setItem` kan kasta (kvot,
+     privat läge) — try/catch, appen får ALDRIG krascha, och en spammig
+     varning visas bara EN gång tills nästa lyckade skrivning. */
+  _draftWrite() {
+    if (!this._draftEnabled) return;
+    const key = this._draftKey();
+    if (!key) return;
+    if (this._isDraftEmpty()) { this._draftRemove(); this._setDraftStatusText(''); return; }
+    if (!this._draftCreatedAt) this._draftCreatedAt = new Date().toISOString();
+    const envelope = {
+      version: this._DRAFT_VERSION,
+      kind: 'new-offer',
+      createdAt: this._draftCreatedAt,
+      updatedAt: new Date().toISOString(),
+      data: {
+        wizardStep: this._wizardStep,
+        wizardData: Object.assign({}, this._wizardData),
+        lines:      (this._editLines  || []).map(l => Object.assign({}, l)),
+        extras:     (this._editExtras || []).map(e => Object.assign({}, e)),
+        discount:   Object.assign({}, this._discount || { type: 'percent', value: 0 })
+      }
+    };
+    try {
+      localStorage.setItem(key, JSON.stringify(envelope));
+      this._draftWriteFailed = false;
+      this._setDraftStatusText('Lokalt utkast sparat ' +
+        new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
+    } catch (e) {
+      if (!this._draftWriteFailed) {
+        this._draftWriteFailed = true;
+        showToast('Kunde inte autospara offertutkastet lokalt.');
+      }
+    }
+  },
+
+  _setDraftStatusText(text) {
+    this._draftStatusText = text || '';
+    const el = document.getElementById('off-draft-status');
+    if (!el) return;
+    el.textContent = this._draftStatusText;
+    el.style.display = this._draftStatusText ? '' : 'none';
+  },
+
+  /* Delegerad input/change-lyssnare på #off-wizard-roten — täcker alla
+     vanliga fält (text/number/select, inkl. CustomSelects riktiga
+     bubblande change-event, se CustomSelect.js) UTAN att behöva röra
+     dussintals enskilda inline-handlers. #off-wizard-elementet SJÄLVT
+     byts aldrig ut av _rerender() (bara dess innerHTML), så lyssnaren
+     överlever stegbyten/radändringar automatiskt. Strukturella actions
+     (lägg till/ta bort rad, stegbyte, m.fl.) flushar explicit direkt —
+     se respektive funktion. */
+  _bindDraftListeners() {
+    const wiz = document.getElementById('off-wizard');
+    if (wiz) {
+      this._draftInputHandler = () => this._scheduleDraftSave();
+      wiz.addEventListener('input', this._draftInputHandler);
+      wiz.addEventListener('change', this._draftInputHandler);
+    }
+    /* beforeunload är window-scopat, INTE knutet till #off-wizard-DOM-noden
+       — måste tas bort explicit (se _unbindDraftListeners) annars läcker
+       en ny lyssnare vid varje wizard-öppning (V48B4A §14/§32). Ingen
+       preventDefault/returnValue — ren, icke-blockerande sista-flush. */
+    this._draftBeforeUnloadHandler = () => { this._flushDraftNow(); };
+    window.addEventListener('beforeunload', this._draftBeforeUnloadHandler);
+  },
+
+  _unbindDraftListeners() {
+    const wiz = document.getElementById('off-wizard');
+    if (wiz && this._draftInputHandler) {
+      wiz.removeEventListener('input', this._draftInputHandler);
+      wiz.removeEventListener('change', this._draftInputHandler);
+    }
+    this._draftInputHandler = null;
+    if (this._draftBeforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this._draftBeforeUnloadHandler);
+      this._draftBeforeUnloadHandler = null;
+    }
+    if (this._draftSaveTimer) { clearTimeout(this._draftSaveTimer); this._draftSaveTimer = null; }
+  },
+
+  _scheduleDraftSave() {
+    if (!this._draftEnabled) return;
+    if (this._draftSaveTimer) clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = setTimeout(() => { this._draftSaveTimer = null; this._draftWrite(); }, 750);
+  },
+
+  _flushDraftNow() {
+    if (!this._draftEnabled) return;
+    if (this._draftSaveTimer) { clearTimeout(this._draftSaveTimer); this._draftSaveTimer = null; }
+    this._draftWrite();
+  },
+
+  /* Startar draft-läge för en fristående ny-offert-session. Ingen stabil
+     användaridentitet → draft avstängs helt för sessionen, wizarden
+     fungerar i övrigt precis som vanligt (§4 i RAPPORT-V48B4A). */
+  _startDraftAutosave(existingDraftEnvelope) {
+    const userId = this._resolveDraftUserId();
+    if (!userId) {
+      this._draftEnabled = false;
+      this._draftUserId = null;
+      showToast('Lokalt utkast kan inte autosparas i den här sessionen.');
+      return;
+    }
+    this._draftEnabled     = true;
+    this._draftUserId      = userId;
+    this._draftWriteFailed = false;
+    this._draftCreatedAt   = existingDraftEnvelope ? existingDraftEnvelope.createdAt : null;
+    this._bindDraftListeners();
+    this._setDraftStatusText(existingDraftEnvelope ? 'Lokalt utkast återställt' : '');
+  },
+
+  /* opts.flush===false hoppar över sista-flush (används av success-save,
+     som redan explicit rensat draften — en flush där skulle återuppliva
+     den precis borttagna draften, se _save()). Alla andra vägar (Avbryt/
+     X/navigering/mode-switch) flushar som vanligt INNAN lyssnarna kopplas
+     bort — se särskilt öppningsraderna i openCreate()/openEdit(), där
+     DETTA flush-anrop (default, INTE {flush:false}) är vad som räddar en
+     VÄNTANDE 750ms-debounced ändring från en tidigare standalone-session
+     undan att kastas bort tyst när en ny authoring-session (edit eller
+     kontextuell create) tar över samma wizard-instans (V48B4A.1 §7/§8).
+     `_draftStatusText` nollställs alltid HÄR — annars skulle en gammal
+     "Lokalt utkast sparat HH:MM"-status kunna läcka in i en SENARE,
+     orelaterad authoring-session (kontextuell create eller edit) vars
+     egen render bara villkorar synligheten på `!isEdit`, inte på
+     `_draftEnabled` (V48B4A.1 §5/§6). En genuin restore-session sätter
+     ändå ALLTID sin egen statustext explicit direkt efteråt, se
+     _startDraftAutosave(). */
+  _stopDraftAutosave(opts) {
+    opts = opts || {};
+    if (this._draftEnabled && opts.flush !== false) this._flushDraftNow();
+    this._unbindDraftListeners();
+    this._draftEnabled   = false;
+    this._draftUserId    = null;
+    this._draftCreatedAt = null;
+    this._setDraftStatusText('');
+  },
+
+  _showDraftRecoveryPrompt(draft) {
+    const stamp = draft.updatedAt || draft.createdAt;
+    const dt = stamp ? new Date(stamp) : null;
+    const timeStr = dt ? dt.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isToday = dt && dt.toISOString().split('T')[0] === todayStr;
+    const whenText = dt
+      ? (isToday ? ('idag ' + timeStr) : (dt.toLocaleDateString('sv-SE') + ' ' + timeStr))
+      : '';
+    Modal.open({
+      title: 'Osparat offertutkast',
+      body: `<p style="font-size:14px;line-height:1.5;color:var(--tx);">Du har ett osparat offertutkast${whenText ? ' från ' + esc(whenText) : ''}.</p>`,
+      buttons: [
+        { label: 'Återställ utkast', cls: 'btn bp', onClick: () => { Modal.close(); OffersPage._restoreDraft(draft); } },
+        { label: 'Börja om',         cls: 'btn bs', onClick: () => { Modal.close(); OffersPage._discardDraftAndStartFresh(); } }
+      ]
+    });
+  },
+
+  _restoreDraft(draft) {
+    const T = this._TERMS;
+    const d = draft.data;
+    this._editLines    = (d.lines  || []).map(l => Object.assign({}, l));
+    this._editExtras   = (d.extras || []).map(e => Object.assign({}, e));
+    this._editOfferId  = null;
+    this._createOnCreated = null;
+    this._saveInFlight = false;
+    this._wizardStep   = (d.wizardStep === 2 || d.wizardStep === 3) ? d.wizardStep : 1;
+    this._activeSvcId  = null;
+    this._svcFields    = {};
+    this._svcEditIdx   = null;
+    this._svcReduction = 'ingen';
+    this._discount     = Object.assign({ type: 'percent', value: 0 }, d.discount || {});
+    this._expandedLineIds = new Set();
+    this._mobileTotalsExpanded = false;
+    this._wizardData   = Object.assign({
+      customerId: '', title: '', date: new Date().toISOString().split('T')[0], validUntil: '',
+      summary: '', scope: '', includes: '', excludes: '',
+      paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: ''
+    }, d.wizardData || {});
+    this._pendingDraftOpenArgs = null;
+    this._showWizard();
+    this._startDraftAutosave(draft);
+    showToast('Offertutkast återställt');
+  },
+
+  _discardDraftAndStartFresh() {
+    this._draftRemove();
+    const args = this._pendingDraftOpenArgs || {};
+    this._pendingDraftOpenArgs = null;
+    this._initFreshOffer(args.preCustomerId, args.opts);
+    this._showWizard();
+    this._startDraftAutosave(null);
+  },
+
   /* ── Wizard core ─── */
   _showWizard() {
     // Render wizard inside the content area so sidebar stays visible
@@ -862,7 +1169,13 @@ const OffersPage = {
     if (scroll) scroll.scrollTop = 0;
   },
 
-  _wizardClose() {
+  /* V48B4A: opts.skipDraftFlush=true används ENDAST av _save()s bekräftade
+     success-grenar, som redan explicit rensat draften (_draftRemove()) —
+     en vanlig flush här skulle annars återuppliva den precis borttagna
+     draften. Alla andra vägar (Avbryt/X/ingen opts) flushar som vanligt
+     och lämnar draften orörd, se _stopDraftAutosave(). */
+  _wizardClose(opts) {
+    this._stopDraftAutosave({ flush: !(opts && opts.skipDraftFlush) });
     const con = document.getElementById('pg-offer-content');
     if (con) { delete con.dataset.wiz; con.style.cssText = ''; }
     document.getElementById('off-svc-overlay')?.remove();
@@ -912,6 +1225,7 @@ const OffersPage = {
       <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--mobile">${ic('arrow-left',16)}</button>
       <div class="off-wiz-hdr-titlebox">
         <div class="off-wiz-hdr-title">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
+        ${!isEdit ? `<div id="off-draft-status" class="off-wiz-draft-status" style="font-size:11px;color:var(--mt);display:${this._draftStatusText?'':'none'};">${esc(this._draftStatusText||'')}</div>` : ''}
         <div class="off-wiz-hdr-steps-mobile">${stepIndMobile}</div>
       </div>
       <div class="off-wiz-hdr-steps-desktop">${stepIndDesktop}</div>
@@ -1148,6 +1462,11 @@ const OffersPage = {
           this._wizardData.customerId = cu.id;
           Modal.close();
           this._rerender();
+          /* V48B4A.1: programmatisk mutation, inget input/change-event
+             uppstår på #off-wizard för den delegerade draft-lyssnaren att
+             fånga — måste flushas explicit. No-op om draft-läge inte är
+             aktivt (kontextuell/edit), se _flushDraftNow(). */
+          this._flushDraftNow();
           showToast(name + ' skapad och vald');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -1296,7 +1615,7 @@ const OffersPage = {
         showToast('Lägg till minst en rad eller tjänst'); return;
       }
     }
-    if (this._wizardStep < 3) { this._wizardStep++; this._rerender(); }
+    if (this._wizardStep < 3) { this._wizardStep++; this._rerender(); this._flushDraftNow(); }
   },
 
   _prevStep() {
@@ -1307,7 +1626,7 @@ const OffersPage = {
         if (el) this._wizardData[key] = el.value;
       });
     }
-    if (this._wizardStep > 1) { this._wizardStep--; this._rerender(); }
+    if (this._wizardStep > 1) { this._wizardStep--; this._rerender(); this._flushDraftNow(); }
   },
 
   /* ── Line card HTML ─── */
@@ -1479,6 +1798,7 @@ const OffersPage = {
     this._editExtras.push({id:'E'+Date.now(), description:'', qty:1, unit:'st', unitPrice:0, vatRate:25});
     const el = document.getElementById('off-extras');
     if (el) el.innerHTML = this._extrasInnerHtml();
+    this._flushDraftNow();
   },
 
   _removeExtra(idx) {
@@ -1486,6 +1806,7 @@ const OffersPage = {
     const el = document.getElementById('off-extras');
     if (el) el.innerHTML = this._extrasInnerHtml();
     this._refreshTotals();
+    this._flushDraftNow();
   },
 
   /* ── New offer helpers ─── */
@@ -1504,6 +1825,7 @@ const OffersPage = {
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._refreshTotals();
+    this._flushDraftNow();
     setTimeout(() => {
       const inputs = document.querySelectorAll('#off-lines .off-fixed-name');
       if (inputs.length) inputs[inputs.length-1].focus();
@@ -1578,6 +1900,10 @@ const OffersPage = {
     el.setSelectionRange(s + prefix.length, s + prefix.length + sel.length);
     const keyMap = {scope:'scope', includes:'includes', excludes:'excludes', summary:'summary'};
     if (keyMap[key]) this._wizardData[keyMap[key]] = el.value;
+    /* V48B4A.1: programmatisk `el.value = ...` dispatchar INGET native
+       input/change-event — den delegerade draft-lyssnaren ser det aldrig.
+       Flusha explicit. No-op om draft-läge inte är aktivt. */
+    this._flushDraftNow();
   },
 
   _genTextSuggestion() {
@@ -1865,6 +2191,10 @@ const OffersPage = {
     this._wizardData.excludes    = excludes;
     this._wizardData._lastGenFrom = label + ' (' + new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) + ')';
     this._rerender();
+    /* V48B4A.1: scope/includes/excludes sätts programmatiskt ovan — inget
+       input/change-event uppstår. Flusha explicit. No-op om draft-läge
+       inte är aktivt. */
+    this._flushDraftNow();
     showToast('Textförslag baserat på: ' + label);
   },
 
@@ -1912,6 +2242,7 @@ const OffersPage = {
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._refreshTotals();
+    this._flushDraftNow();
     setTimeout(() => {
       const inputs = document.querySelectorAll('#off-lines input[placeholder="Benämning"]');
       if (inputs.length) inputs[inputs.length-1].focus();
@@ -1924,6 +2255,7 @@ const OffersPage = {
     this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
+    this._flushDraftNow();
   },
 
   _removeLine(idx) {
@@ -1931,6 +2263,7 @@ const OffersPage = {
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._refreshTotals();
+    this._flushDraftNow();
   },
 
   /* ── Service calc overlay ─── */
@@ -2412,6 +2745,7 @@ const OffersPage = {
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
     this._refreshTotals();
+    this._flushDraftNow();
     showToast(editIdx !== null && editIdx !== undefined ? tmpl.name + ' uppdaterad' : tmpl.name + ' tillagd');
   },
 
@@ -2500,7 +2834,12 @@ const OffersPage = {
         if (typeof onCreated === 'function') {
           try { onCreated(newOff); } catch (e) { console.warn('[OffersPage] onCreated-fel:', e); }
         }
-        this._wizardClose();
+        /* V48B4A: draften rensas HÄR, ENDAST efter bekräftad, lyckad
+           persist — aldrig tidigare (se §21/§26). skipDraftFlush:true
+           förhindrar att _wizardClose()s vanliga flush återuppliver den
+           precis borttagna draften. */
+        this._draftRemove();
+        this._wizardClose({ skipDraftFlush: true });
         Router.showPage('pg-offer');
         showToast('Offert ' + newOff.id + ' skapad');
       } else {
