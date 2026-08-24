@@ -7,6 +7,79 @@ const CustomersPage = {
   _typeFilter: 'alla',
   _sortBy: 'name', // 'name' | 'created' | 'aos'
 
+  /* GLOBAL LIVE UI R1A.2: transient (rent modul-minne, ALDRIG persist()ad,
+     se openDetail()/_consumeScrollRestore() nedan) return-state för
+     listposition. `null` = ingen väntande return. Satt av openDetail()
+     precis innan navigation bort från listan, konsumerat (nollställt)
+     ENGÅNGS av _consumeScrollRestore() nästa gång pg-crm rendras —
+     oavsett om återställningen faktiskt tillämpas eller inte (se dess
+     kommentar för varför den ALLTID konsumeras). */
+  _pendingReturn: null,
+
+  /* Öppnar en kunds detaljvy FRÅN listan. Enda syftet med denna
+     mellanhand (istället för att låta radernas onclick anropa
+     Router.showPage direkt) är att fånga aktuell scrollposition
+     OMEDELBART innan navigationen — se R1A.2 §6. Ingen annan
+     sidoeffekt, inget nytt navigationsbeteende: anropar Router.showPage
+     exakt som raderna gjorde innan. */
+  openDetail(id) {
+    const scrollEl = document.getElementById('content-scroll');
+    this._pendingReturn = { scrollTop: scrollEl ? scrollEl.scrollTop : 0 };
+    Router.showPage('pg-crm-detail', { customerId: id });
+  },
+
+  /* GLOBAL LIVE UI R1A.2: anropas av Router.showPage() (se Router.js,
+     den generiska, valfria hooken precis innan dess egen
+     scroll-till-topp-rad) VARJE gång pg-crm just renderats — oavsett
+     ANLEDNING (return-navigation, ny explicit navigation, etc). Denna
+     funktion, inte Router, avgör om en återställning faktiskt ska ske.
+
+     Regel: återställ ENDAST om (a) det finns en väntande return-post,
+     OCH (b) DENNA specifika navigation till pg-crm skedde via
+     Router.back()/webbläsarens Back (Router._lastNavigationWasBack ===
+     true) — INTE via en ny, explicit navigation (t.ex. klick på "Kunder"
+     i Sidebar, som anropar Router.showPage('pg-crm') utan _goingBack).
+     Detta är exakt skillnaden R1A.2 §5 kräver mellan RETURN TO LIST och
+     NEW NAVIGATION TO LIST.
+
+     VIKTIGT — Router anropar denna hook efter VARJE sidrendering, inte
+     bara pg-crm (se Router.js). Sidkontrollen (`Router.currentPage !==
+     'pg-crm'`) måste därför ske FÖRST, INNAN `_pendingReturn` rörs —
+     annars skulle t.ex. själva navigationen list→detalj (som körs i
+     SAMMA showPage()-anrop som satte `_pendingReturn`, se openDetail())
+     omedelbart nollställa flaggan igen redan innan användaren hunnit
+     lämna listan.
+
+     `_pendingReturn` konsumeras (nollställs) däremot OVILLKORLIGET så
+     fort vi VET att detta är en pg-crm-rendering — oavsett om
+     återställningen faktiskt tillämpas (dvs. även om det inte var en
+     back-navigation) — annars skulle en gammal return-post kunna dyka
+     upp igen vid en SENARE, orelaterad back-navigation (t.ex.
+     list→A→(sidebar bort)→tillbaka till en helt annan sida→...). Ett
+     engångsvärde ska bara kunna konsumeras en gång. */
+  _consumeScrollRestore(scrollEl) {
+    if (Router.currentPage !== 'pg-crm') return false;
+    const pending = this._pendingReturn;
+    this._pendingReturn = null;
+    if (!pending) return false;
+    if (!Router._lastNavigationWasBack) return false;
+
+    /* Defensiv clamping (R1A.2 §11): ett sparat värde kan i teorin vara
+       NaN/negativt/oändligt (aldrig i praktiken från denna kodväg, men
+       ingen exception ska kunna uppstå), eller större än vad listan nu
+       faktiskt kan scrolla till (t.ex. om en kund arkiverats/tagits bort
+       under tiden och listan blivit kortare) — då används närmast
+       möjliga giltiga position istället för att skriva ett ogiltigt
+       scrollTop-värde. */
+    let target = pending.scrollTop;
+    if (typeof target !== 'number' || !isFinite(target) || target < 0) target = 0;
+    const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+    if (target > maxScroll) target = maxScroll;
+
+    scrollEl.scrollTop = target;
+    return true;
+  },
+
   render() {
     const el = document.getElementById('pg-crm-content');
     if (!el) return;
@@ -107,7 +180,7 @@ const CustomersPage = {
       const selected = SelectionModel.isSelected(cu.id);
       return `
         <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${cu.id}"
-          onclick="SelectionModel.rowClick('${cu.id}', function(){ Router.showPage('pg-crm-detail',{customerId:'${cu.id}'}); })">
+          onclick="SelectionModel.rowClick('${cu.id}', function(){ CustomersPage.openDetail('${cu.id}'); })">
           <div class="item-row">
             ${SelectionModel.checkboxHtml(cu.id, name)}
             <div style="flex:1;min-width:0;">
@@ -118,7 +191,7 @@ const CustomersPage = {
               ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
               <span class="bdg bdg-grey">${cu.id}</span>
             </div>
-            <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna kund" onclick="event.stopPropagation();Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${ic('chevron-right',16)}</button>
+            <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna kund" onclick="event.stopPropagation();CustomersPage.openDetail('${cu.id}')">${ic('chevron-right',16)}</button>
           </div>
         </div>`;
     }).join('');

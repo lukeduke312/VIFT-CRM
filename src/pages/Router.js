@@ -209,6 +209,13 @@ const Router = {
       this.history.push({ page: this.currentPage, params: Object.assign({}, this.currentParams) });
       if (this.history.length > 30) this.history.shift();
     }
+    /* GLOBAL LIVE UI R1A.2: en läsbar ÖGONBLICKSBILD av _goingBack, tagen
+       INNAN den (som redan tidigare) nollställs på nästa rad. Publicerar
+       ENDAST "var detta en tillbaka-navigation (Router.back()/browser
+       popstate)?" till sidmoduler som vill skilja på RETURN-navigation och
+       NY, explicit navigation (t.ex. CustomersPage — se _consumeScrollRestore
+       nedan). Ändrar INGET i _goingBack:s egen, befintliga timing/semantik. */
+    this._lastNavigationWasBack = this._goingBack;
     this._goingBack = false;
 
     // ── Behörighetskontroll ──────────────────────────────────
@@ -348,9 +355,25 @@ const Router = {
       }
     }
 
-    // Scrolla till topp
+    /* Scrolla till topp — GLOBAL LIVE UI R1A.2: EN liten, generisk,
+       valfri hook. Om den JUST renderade sidmodulen definierar
+       `_consumeScrollRestore(scrollEl)`, får den först chansen att sätta
+       sin EGEN scrollposition (t.ex. CustomersPage vid return-navigation
+       från kunddetalj, se CustomersPage.js) och signalera det genom att
+       returnera `true` — då hoppar Router ÖVER sin egen scroll-till-topp.
+       Detta MÅSTE ske HÄR, efter renderer(), eftersom det annars vore just
+       DENNA rad som skulle radera en redan utförd återställning. Ingen
+       annan sidmodul definierar denna hook idag — de får därför exakt
+       samma "alltid scrolla till toppen"-beteende som innan, oförändrat.
+       Inget nytt globalt scroll-arkitektur-system — bara en enda,
+       opt-in-kontrollerad avvikelse för pg-crm↔pg-crm-detail. */
     const scroll = document.getElementById('content-scroll');
-    if (scroll) scroll.scrollTop = 0;
+    if (scroll) {
+      var handledByPage = typeof CustomersPage !== 'undefined' && typeof CustomersPage._consumeScrollRestore === 'function'
+        ? CustomersPage._consumeScrollRestore(scroll)
+        : false;
+      if (!handledByPage) scroll.scrollTop = 0;
+    }
   },
 
   /* GLOBAL LIVE UI R1A: liten, explicit primitive för "rerendera aktuell
