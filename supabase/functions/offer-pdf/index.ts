@@ -218,14 +218,13 @@ serve(async (req: Request) => {
   }
   ctx.y -= 8
 
-  /* Offertposter — rubrikrad */
-  ctx = drawHRule(ctx)
-  ctx.page.drawText('Beskrivning',   { x: MARGIN,     y: ctx.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
-  ctx.page.drawText('Antal',         { x: MARGIN + 270, y: ctx.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
-  ctx.page.drawText('À-pris',        { x: MARGIN + 320, y: ctx.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
-  ctx.page.drawText('Summa',         { x: PAGE_W - MARGIN - 60, y: ctx.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
-  ctx.y -= 6
-  ctx = drawHRule(ctx)
+  /* V48B5 R2 §1: den gamla, ovillkorliga pris-tabell-rubriken som stod
+     HÄR (mellan kundfakta och V39-CALC-BLOCK) togs bort — den ritades
+     ALLTID, oavsett sectionOrder, och skapade en dubblett/särkopplad
+     rubrik utöver renderPricingBlock()'s egen rubrikrad nedan. Nu
+     ritas EXAKT en pris-tabell-rubrik, och bara när/om "pricing" faktiskt
+     ingår i den lösta sectionOrder-sekvensen — se blockRenderers-loopen
+     längre ner. */
 
   const fmt = (n: number) => n.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   /* V39-CALC-BLOCK-START — se run-tests-v39.js: denna sentinel avgränsar
@@ -252,7 +251,8 @@ serve(async (req: Request) => {
      qty × unitPrice). */
   const lineExVat = (l: Record<string, unknown>): number => {
     if (l.type === 'service') return Number(l.exVat) || 0
-    return Number(l.total) || Math.round((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))
+    const qty = (l.qty !== null && l.qty !== undefined && l.qty !== '') ? Number(l.qty) : 1
+    return Number(l.total) || Math.round(qty * (Number(l.unitPrice) || 0))
   }
   const allLines = [...(Array.isArray(off.lines)?off.lines as Record<string,unknown>[]:[])]
   const prLines  = allLines.filter(l => l.type !== 'text')
@@ -289,7 +289,6 @@ serve(async (req: Request) => {
   const vatAmount   = Math.round(rawVat * vatRatio)
   const totalInclVat = exVatAfterDiscount + vatAmount
   const rutRotAmount = Math.round(prLines
-    .filter(l => l.type === 'service')
     .reduce((s,l) => s + (Number(l.rutAmount) || 0), 0))
   const customerPays = totalInclVat - rutRotAmount
 
@@ -302,87 +301,168 @@ serve(async (req: Request) => {
     ? 'Moms (25%)' : 'Moms'
   /* V39-CALC-BLOCK-END */
 
-  for (const l of allLines) {
-    if (l.type === 'text') {
-      ctx = drawText(ctx, String(l.text || l.description || ''), { size: 9, color: [80,80,80], indent: 0 })
-      ctx.y -= 2
-      continue
+  /* V48B5 R1 (blocker-korrigering): innehållet ritas nu som FYRA
+     narrow block-render-funktioner (description/pricing/
+     commercialTerms/generalTerms), anropade i off.sectionOrder-ordning
+     — inte längre en fast litterär sekvens. Varje funktion tar/returnerar
+     ctx (samma checkY/newPage-mekanik som innan) och rör ALDRIG
+     ekonomin (V39-CALC-BLOCK ovan är oförändrat — pricing-blocket bara
+     RITAR redan beräknade tal). "description" renderar nu FAKTISKT
+     summary/scope/includes/excludes (fanns tidigare inte alls på denna
+     yta — ett krav i denna korrigering, se RAPPORT §16), så att
+     fyra-block-modellens löfte om samma innehållsstruktur som övriga
+     ytor faktiskt stämmer. */
+
+  function renderDescriptionBlock(c: PageCtx): PageCtx {
+    const fields: [string, unknown][] = [
+      ['Sammanfattning', off!.summary],
+      ['Omfattning', off!.scope],
+      ['Ingår', off!.includes],
+      ['Ingår ej', off!.excludes],
+    ]
+    const present = fields.filter(([,v]) => v && String(v).trim())
+    if (!present.length) return c
+    c = drawHRule(c)
+    c.y -= 4
+    for (const [k, v] of present) {
+      c = drawText(c, k + ':', { size: 8, bold: true, color: [90,90,90] })
+      c = drawText(c, String(v), { size: 9, color: [30,30,30], indent: 4 })
+      c.y -= 4
     }
-    if (ctx.y < MARGIN + 40) ctx = newPage()
-    const desc  = String(l.description || l.templateName || '')
-    const qty   = Number(l.qty || 0)
-    const up    = Number(l.unitPrice || 0)
-    const tot   = lineExVat(l)
-    ctx.page.drawText(desc.slice(0,55), { x: MARGIN,    y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
-    ctx.page.drawText(qty + ' ' + String(l.unit||'st'), { x: MARGIN+270, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
-    ctx.page.drawText(fmt(up) + ' kr', { x: MARGIN+320, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
-    ctx.page.drawText(fmt(tot) + ' kr',{ x: PAGE_W-MARGIN-60, y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
-    ctx.y -= 14
+    return c
   }
 
-  /* V39 §4: extras saknades tidigare helt ur den ekonomiska summeringen
-     — de listas nu som egna rader (samma sätt som lines) så PDF:en
-     faktiskt redovisar dem, inte bara CRM/public-offer. */
-  if (extras.length) {
-    if (ctx.y < MARGIN + 40) ctx = newPage()
-    ctx.page.drawText('Tillägg', { x: MARGIN, y: ctx.y, size: 8, font: fontB, color: rgb(0.4,0.4,0.4) })
-    ctx.y -= 12
-    for (const e of extras) {
-      if (ctx.y < MARGIN + 40) ctx = newPage()
-      const desc = String(e.description || '')
-      const qty  = Number(e.qty || 1)
-      const up   = Number(e.unitPrice || 0)
-      const tot  = Math.round(qty * up)
-      ctx.page.drawText(desc.slice(0,55), { x: MARGIN,    y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
-      ctx.page.drawText(qty + ' ' + String(e.unit||'st'), { x: MARGIN+270, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
-      ctx.page.drawText(fmt(up) + ' kr', { x: MARGIN+320, y: ctx.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
-      ctx.page.drawText(fmt(tot) + ' kr',{ x: PAGE_W-MARGIN-60, y: ctx.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
-      ctx.y -= 14
+  function renderPricingBlock(c: PageCtx): PageCtx {
+    if (c.y < MARGIN + 40) c = newPage()
+    c = drawHRule(c)
+    c.page.drawText('Beskrivning',   { x: MARGIN,     y: c.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
+    c.page.drawText('Antal',         { x: MARGIN + 270, y: c.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
+    c.page.drawText('À-pris',        { x: MARGIN + 320, y: c.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
+    c.page.drawText('Summa',         { x: PAGE_W - MARGIN - 60, y: c.y, size: 9, font: fontB, color: rgb(0.3,0.3,0.3) })
+    c.y -= 6
+    c = drawHRule(c)
+
+    for (const l of allLines) {
+      if (l.type === 'text') {
+        /* V48B5 R4 §6/§8: en kundsynlig textrad består av blockTitle +
+           text — blockTitle saknades tidigare helt här. Ritas bara om
+           satt (ingen tom rubrik). */
+        const blockTitle = String(l.blockTitle || '').trim()
+        if (blockTitle) {
+          c = drawText(c, blockTitle, { size: 9, bold: true, color: [50,50,50], indent: 0 })
+        }
+        const bodyText = String(l.text || (blockTitle ? '' : l.description) || '')
+        if (bodyText) {
+          c = drawText(c, bodyText, { size: 9, color: [80,80,80], indent: 0 })
+        }
+        c.y -= 2
+        continue
+      }
+      if (c.y < MARGIN + 40) c = newPage()
+      const desc = String(l.description || l.templateName || '')
+      const qty  = Number(l.qty || 0)
+      const up   = Number(l.unitPrice || 0)
+      const tot  = lineExVat(l)
+      c.page.drawText(desc.slice(0,55), { x: MARGIN,    y: c.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
+      c.page.drawText(qty + ' ' + String(l.unit||'st'), { x: MARGIN+270, y: c.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
+      c.page.drawText(fmt(up) + ' kr', { x: MARGIN+320, y: c.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
+      c.page.drawText(fmt(tot) + ' kr',{ x: PAGE_W-MARGIN-60, y: c.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
+      c.y -= 14
     }
-  }
 
-  ctx.y -= 4
-  ctx = drawHRule(ctx)
-
-  const totRows: [string, string, boolean][] = [
-    ['Summa exkl. moms', fmt(rawExVat) + ' kr', false],
-  ]
-  if (discountAmount > 0) {
-    const discLabel = disc.type === 'percent' ? `Rabatt (${fmt(discValue)}%)` : 'Rabatt'
-    totRows.push([discLabel, '-' + fmt(discountAmount) + ' kr', false])
-    totRows.push(['Summa exkl. moms efter rabatt', fmt(exVatAfterDiscount) + ' kr', false])
-  }
-  totRows.push([vatLabel, fmt(vatAmount) + ' kr', false])
-  totRows.push(['Totalt inkl. moms', fmt(totalInclVat) + ' kr', true])
-  if (rutRotAmount > 0) {
-    totRows.push(['ROT/RUT-avdrag', '-' + fmt(rutRotAmount) + ' kr', false])
-    totRows.push(['Kundpris', fmt(customerPays) + ' kr', true])
-  }
-
-  for (const [k,v,bold] of totRows) {
-    if (ctx.y < MARGIN+40) ctx = newPage()
-    ctx.page.drawText(k+':',       { x: MARGIN+270,       y: ctx.y, size: bold?10:9, font: bold?fontB:font, color: rgb(0.1,0.1,0.1) })
-    ctx.page.drawText(v,           { x: PAGE_W-MARGIN-80, y: ctx.y, size: bold?10:9, font: bold?fontB:font, color: rgb(0.1,0.1,0.1) })
-    ctx.y -= bold?16:13
-  }
-  ctx.y -= 8
-
-  /* Villkor (kortform) */
-  const terms = [
-    ['Betalningsvillkor', off.paymentTerms],
-    ['Giltighetsbetingelse', off.validityText],
-    ['Villkor', off.terms],
-    ['Omfattning', off.scope],
-    ['Allmänna villkor', off.generalTerms]
-  ].filter(([,v]) => v) as [string,string][]
-
-  if (terms.length) {
-    ctx = drawHRule(ctx)
-    ctx.y -= 4
-    for (const [k,v] of terms) {
-      ctx = drawText(ctx, k + ': ' + String(v), { size: 8, color: [80,80,80] })
-      ctx.y -= 2
+    /* V39 §4: extras saknades tidigare helt ur den ekonomiska summeringen
+       — de listas nu som egna rader (samma sätt som lines) så PDF:en
+       faktiskt redovisar dem, inte bara CRM/public-offer. */
+    if (extras.length) {
+      if (c.y < MARGIN + 40) c = newPage()
+      c.page.drawText('Tillägg', { x: MARGIN, y: c.y, size: 8, font: fontB, color: rgb(0.4,0.4,0.4) })
+      c.y -= 12
+      for (const e of extras) {
+        if (c.y < MARGIN + 40) c = newPage()
+        const desc = String(e.description || '')
+        const qty  = Number(e.qty || 1)
+        const up   = Number(e.unitPrice || 0)
+        const tot  = Math.round(qty * up)
+        c.page.drawText(desc.slice(0,55), { x: MARGIN,    y: c.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
+        c.page.drawText(qty + ' ' + String(e.unit||'st'), { x: MARGIN+270, y: c.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
+        c.page.drawText(fmt(up) + ' kr', { x: MARGIN+320, y: c.y, size: 9, font, color: rgb(0.2,0.2,0.2) })
+        c.page.drawText(fmt(tot) + ' kr',{ x: PAGE_W-MARGIN-60, y: c.y, size: 9, font, color: rgb(0.1,0.1,0.1) })
+        c.y -= 14
+      }
     }
+
+    c.y -= 4
+    c = drawHRule(c)
+
+    const totRows: [string, string, boolean][] = [
+      ['Summa exkl. moms', fmt(rawExVat) + ' kr', false],
+    ]
+    if (discountAmount > 0) {
+      const discLabel = disc.type === 'percent' ? `Rabatt (${fmt(discValue)}%)` : 'Rabatt'
+      totRows.push([discLabel, '-' + fmt(discountAmount) + ' kr', false])
+      totRows.push(['Summa exkl. moms efter rabatt', fmt(exVatAfterDiscount) + ' kr', false])
+    }
+    totRows.push([vatLabel, fmt(vatAmount) + ' kr', false])
+    totRows.push(['Totalt inkl. moms', fmt(totalInclVat) + ' kr', true])
+    if (rutRotAmount > 0) {
+      totRows.push(['ROT/RUT-avdrag', '-' + fmt(rutRotAmount) + ' kr', false])
+      totRows.push(['Kundpris', fmt(customerPays) + ' kr', true])
+    }
+
+    for (const [k,v,bold] of totRows) {
+      if (c.y < MARGIN+40) c = newPage()
+      c.page.drawText(k+':',       { x: MARGIN+270,       y: c.y, size: bold?10:9, font: bold?fontB:font, color: rgb(0.1,0.1,0.1) })
+      c.page.drawText(v,           { x: PAGE_W-MARGIN-80, y: c.y, size: bold?10:9, font: bold?fontB:font, color: rgb(0.1,0.1,0.1) })
+      c.y -= bold?16:13
+    }
+    c.y -= 8
+    return c
+  }
+
+  function renderCommercialTermsBlock(c: PageCtx): PageCtx {
+    const fields: [string, unknown][] = [
+      ['Betalningsvillkor', off!.paymentTerms],
+      ['Giltighetsbetingelse', off!.validityText],
+    ]
+    const present = fields.filter(([,v]) => v && String(v).trim())
+    if (!present.length) return c
+    c = drawHRule(c)
+    c.y -= 4
+    for (const [k,v] of present) {
+      c = drawText(c, k + ': ' + String(v), { size: 8, color: [80,80,80] })
+      c.y -= 2
+    }
+    return c
+  }
+
+  function renderGeneralTermsBlock(c: PageCtx): PageCtx {
+    if (!off!.generalTerms) return c
+    c = drawHRule(c)
+    c.y -= 4
+    c = drawText(c, 'Allmänna villkor: ' + String(off!.generalTerms), { size: 8, color: [80,80,80] })
+    c.y -= 2
+    return c
+  }
+
+  const sectionOrderRaw = Array.isArray(off!.sectionOrder)
+    ? (off.sectionOrder as unknown[]).filter((id): id is string => typeof id === 'string')
+    : []
+  const sectionKnownIds = ['description', 'pricing', 'commercialTerms', 'generalTerms']
+  const sectionSeen: Record<string, boolean> = {}
+  const sectionResolved: string[] = []
+  for (const id of sectionOrderRaw) {
+    if (sectionKnownIds.indexOf(id) !== -1 && !sectionSeen[id]) { sectionSeen[id] = true; sectionResolved.push(id) }
+  }
+  for (const id of sectionKnownIds) { if (!sectionSeen[id]) { sectionSeen[id] = true; sectionResolved.push(id) } }
+
+  const blockRenderers: Record<string, (c: PageCtx) => PageCtx> = {
+    description: renderDescriptionBlock,
+    pricing: renderPricingBlock,
+    commercialTerms: renderCommercialTermsBlock,
+    generalTerms: renderGeneralTermsBlock,
+  }
+  for (const id of sectionResolved) {
+    ctx = blockRenderers[id](ctx)
   }
 
   /* ── Bilagor — infoga PDF/bilder ─────────────────────── */

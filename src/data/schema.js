@@ -191,6 +191,7 @@ const Schema = {
     lines: [],                // [{id, description, qty, unit, unitPrice, discount, total}]
     taxType: 'moms',          // moms | rot | rut | none
     rotRutAmount: 0,
+    sectionOrder: null,       // V48B5 Gate C: array av kanoniska sektions-ID:n, eller null (-> standardordning, se PageShells._resolveSectionOrder)
     terms: '',
     includes: '',
     excludes: '',

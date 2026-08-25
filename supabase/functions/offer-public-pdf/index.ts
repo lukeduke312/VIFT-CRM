@@ -162,7 +162,7 @@ serve(async (req: Request) => {
        Bevara alla fält som krävs för korrekt visning och beräkning. */
     const ALLOWED_LINE_FIELDS = new Set([
       'id','type','description','templateName','qty','unit','unitPrice',
-      'discount','total','vatRate','exVat','rutAmount','reductionType','subLines','text'
+      'discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle'
     ])
     function filterLines(linesRaw: unknown): Record<string, unknown>[] {
       if (!Array.isArray(linesRaw)) return []
@@ -241,7 +241,6 @@ serve(async (req: Request) => {
     const vatAmt      = Math.round(rawVat * vatRatio)
     const incVatTotal = exVatTotal + vatAmt
     const rutTotal    = prLines
-      .filter((l: Record<string, unknown>) => l.type === 'service')
       .reduce((acc: number, l: Record<string, unknown>) => acc + (Number(l.rutAmount) || 0), 0)
     const customerPrice = incVatTotal - rutTotal
 
@@ -405,10 +404,6 @@ serve(async (req: Request) => {
       y -= sz + 5
     }
 
-    checkY(30)
-    drawTableRow('Beskrivning', 'Antal', 'À-pris', 'Rabatt', 'Summa exkl.', { bold: true, bg: true })
-    y -= 4
-
     let hasLines = false
 
     function renderLines(lineArr: Record<string, unknown>[], sectionLabel?: string): void {
@@ -422,6 +417,15 @@ serve(async (req: Request) => {
       }
       for (const l of lineArr) {
         if (l.type === 'text') {
+          /* V48B5 R4 §7/§8: en kundsynlig textrad består av blockTitle +
+             text — blockTitle saknades tidigare helt här. Ritas bara om
+             satt (ingen tom rubrik). */
+          const blockTitle = String(l.blockTitle || '').trim()
+          if (blockTitle) {
+            checkY(14)
+            drawText(blockTitle, ML + 4, y, { size: 8, font: fontBold, maxWidth: W - ML - MR - 8 })
+            y -= 12
+          }
           if (l.text) {
             checkY(16)
             drawText(String(l.text), ML + 4, y, { size: 8, color: muted, maxWidth: W - ML - MR - 8 })
@@ -458,19 +462,6 @@ serve(async (req: Request) => {
       }
     }
 
-    renderLines(lines)
-    if (extras.length > 0) renderLines(extras, 'Tillägg')
-
-    hline(y + 2)
-    y -= 10
-
-    /* ── Totaler ── */
-    if (!hasLines) {
-      checkY(14)
-      drawText('(Inga rader)', ML, y, { size: 9, color: muted })
-      y -= 14
-    }
-
     function totalRow(label: string, amount: string, bold = false): void {
       checkY(14)
       amount = pdfSafeText(amount)
@@ -482,77 +473,126 @@ serve(async (req: Request) => {
       y -= sz + 5
     }
 
-    if (discAmt > 0) {
-      totalRow('Delsumma:', fmtNum(rawEx) + ' kr')
-      const discLabel = disc.type === 'percent'
-        ? 'Rabatt (' + fmtNum(discValue) + ' %)'
-        : 'Rabatt (fast)'
-      totalRow(discLabel, '-' + fmtNum(discAmt) + ' kr')
-    }
-    totalRow('Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
     /* V38 §7: fler momssatser kan förekomma på samma offert -> neutral
        etikett istället för en hårdkodad "(25 %)". */
     const vatLabel = prLines.every((l: Record<string, unknown>) => normVat(l.vatRate) === 25) ? 'Moms (25 %):' : 'Moms:'
-    totalRow(vatLabel, fmtNum(vatAmt) + ' kr')
-    if (rutTotal > 0) {
-      totalRow('RUT/ROT-avdrag:', '-' + fmtNum(rutTotal) + ' kr')
-    }
-    y -= 2
-    hline(y + 2)
-    y -= 8
-    totalRow('Totalt att betala:', fmtNum(customerPrice) + ' kr', true)
 
-    y -= 14
-
-    /* ── Villkor och beskrivning ── */
-    const textSections: Array<{ label: string; value: string }> = []
-    const textFields: Array<[string, string]> = [
-      ['Sammanfattning', String(s('summary') ?? '')],
-      ['Omfattning',     String(s('scope') ?? '')],
-      ['Ingår',          String(s('includes') ?? '')],
-      ['Ingår ej',       String(s('excludes') ?? '')],
-      ['Villkor',        String(s('terms') ?? '')],
-      ['Betalningsvillkor', String(s('paymentTerms') ?? '')],
-      ['Giltighetsbetingelse', String(s('validityText') ?? '')],
-      ['Allmänna villkor', String(s('generalTerms') ?? '')],
-    ]
-    for (const [label, val] of textFields) {
-      if (val.trim()) textSections.push({ label, value: val.trim() })
-    }
-
-    if (textSections.length > 0) {
-      checkY(20)
-      hline(y); y -= 14
-      drawText('Villkor och information', ML, y, { size: 11, font: fontBold })
-      y -= 14
-
-      for (const sec of textSections) {
-        checkY(24)
-        drawText(sec.label, ML, y, { size: 9, font: fontBold })
-        y -= 12
-        /* Multirad-text */
-        const safeVal = pdfSafeText(sec.value)
-        const words = safeVal.split(/\s+/)
-        let   line  = ''
-        for (const w of words) {
-          const cand = line ? line + ' ' + w : w
-          if (fontReg.widthOfTextAtSize(cand, 8) > W - ML - MR && line) {
-            checkY(11)
-            drawText(line, ML + 6, y, { size: 8, color: muted })
-            y -= 11
-            line = w
-          } else {
-            line = cand
-          }
-        }
-        if (line) {
+    function drawWrappedField(label: string, value: string): void {
+      checkY(24)
+      drawText(label, ML, y, { size: 9, font: fontBold })
+      y -= 12
+      const safeVal = pdfSafeText(value)
+      const words = safeVal.split(/\s+/)
+      let line = ''
+      for (const w of words) {
+        const cand = line ? line + ' ' + w : w
+        if (fontReg.widthOfTextAtSize(cand, 8) > W - ML - MR && line) {
           checkY(11)
           drawText(line, ML + 6, y, { size: 8, color: muted })
           y -= 11
+          line = w
+        } else {
+          line = cand
         }
-        y -= 8
       }
+      if (line) {
+        checkY(11)
+        drawText(line, ML + 6, y, { size: 8, color: muted })
+        y -= 11
+      }
+      y -= 8
     }
+
+    /* V48B5 R1 (blocker-korrigering): innehållet ritas nu som FYRA
+       narrow block-render-funktioner (description/pricing/
+       commercialTerms/generalTerms), anropade i off.sectionOrder-
+       ordning — "pricing" flyttar nu FYSISKT rad-tabellen/tillägg/
+       totalerna som EN enhet, precis som på övriga ytor (tidigare låg
+       den alltid fast; det var en HARD-STOP-överträdelse mot B5-
+       kontraktet, åtgärdad här). */
+    function renderPricingBlock(): void {
+      checkY(30)
+      drawTableRow('Beskrivning', 'Antal', 'À-pris', 'Rabatt', 'Summa exkl.', { bold: true, bg: true })
+      y -= 4
+      renderLines(lines)
+      if (extras.length > 0) renderLines(extras, 'Tillägg')
+      hline(y + 2)
+      y -= 10
+      if (!hasLines) {
+        checkY(14)
+        drawText('(Inga rader)', ML, y, { size: 9, color: muted })
+        y -= 14
+      }
+      if (discAmt > 0) {
+        totalRow('Delsumma:', fmtNum(rawEx) + ' kr')
+        const discLabel = disc.type === 'percent'
+          ? 'Rabatt (' + fmtNum(discValue) + ' %)'
+          : 'Rabatt (fast)'
+        totalRow(discLabel, '-' + fmtNum(discAmt) + ' kr')
+      }
+      totalRow('Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
+      totalRow(vatLabel, fmtNum(vatAmt) + ' kr')
+      if (rutTotal > 0) {
+        totalRow('RUT/ROT-avdrag:', '-' + fmtNum(rutTotal) + ' kr')
+      }
+      y -= 2
+      hline(y + 2)
+      y -= 8
+      totalRow('Totalt att betala:', fmtNum(customerPrice) + ' kr', true)
+      y -= 14
+    }
+
+    function renderDescriptionBlock(): void {
+      const fields: [string, string][] = [
+        ['Sammanfattning', String(s('summary') ?? '')],
+        ['Omfattning', String(s('scope') ?? '')],
+        ['Ingår', String(s('includes') ?? '')],
+        ['Ingår ej', String(s('excludes') ?? '')],
+        ['Villkor', String(s('terms') ?? '')],
+      ].filter(([, v]) => v.trim()) as [string, string][]
+      if (!fields.length) return
+      checkY(20)
+      hline(y); y -= 14
+      for (const [label, value] of fields) drawWrappedField(label, value)
+    }
+
+    function renderCommercialTermsBlock(): void {
+      const fields: [string, string][] = [
+        ['Betalningsvillkor', String(s('paymentTerms') ?? '')],
+        ['Giltighetsbetingelse', String(s('validityText') ?? '')],
+      ].filter(([, v]) => v.trim()) as [string, string][]
+      if (!fields.length) return
+      checkY(20)
+      hline(y); y -= 14
+      for (const [label, value] of fields) drawWrappedField(label, value)
+    }
+
+    function renderGeneralTermsBlock(): void {
+      const value = String(s('generalTerms') ?? '')
+      if (!value.trim()) return
+      checkY(20)
+      hline(y); y -= 14
+      drawWrappedField('Allmänna villkor', value)
+    }
+
+    const sectionOrderRaw = Array.isArray((s('sectionOrder') as unknown))
+      ? (s('sectionOrder') as unknown[]).filter((id): id is string => typeof id === 'string')
+      : []
+    const sectionKnownIds = ['description', 'pricing', 'commercialTerms', 'generalTerms']
+    const sectionSeen: Record<string, boolean> = {}
+    const sectionResolved: string[] = []
+    for (const id of sectionOrderRaw) {
+      if (sectionKnownIds.indexOf(id) !== -1 && !sectionSeen[id]) { sectionSeen[id] = true; sectionResolved.push(id) }
+    }
+    for (const id of sectionKnownIds) { if (!sectionSeen[id]) { sectionSeen[id] = true; sectionResolved.push(id) } }
+
+    const blockRenderers: Record<string, () => void> = {
+      description: renderDescriptionBlock,
+      pricing: renderPricingBlock,
+      commercialTerms: renderCommercialTermsBlock,
+      generalTerms: renderGeneralTermsBlock,
+    }
+    for (const id of sectionResolved) blockRenderers[id]()
 
     /* ── Footer på sista sidan ── */
     const pageCount = pdfDoc.getPageCount()

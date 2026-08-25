@@ -442,6 +442,28 @@ function _poNormVat(value, fallback) {
   return n;
 }
 
+/* V48B5 R1 (blocker-korrigering): kanoniska sektions-ID:n — EXAKT samma
+   fyra block som PageShells.OFFER_SECTION_IDS (duplicerad här av samma
+   skäl som _poNormVat ovan, ingen delad modulkedja finns mellan detta
+   fristående-HTML-dokument och src/). B5 har aldrig gått live, så det
+   finns ingen gammal produktionsordning att bevara — en offert utan
+   sparad off.sectionOrder faller tillbaka på PO_DEFAULT_ORDER, som är
+   samma fyra-block-standard som övriga ytor. */
+var PO_SECTION_IDS = ['description', 'pricing', 'commercialTerms', 'generalTerms'];
+var PO_DEFAULT_ORDER = PO_SECTION_IDS.slice();
+function _poResolveSectionOrder(order) {
+  if (!Array.isArray(order) || !order.length) return PO_DEFAULT_ORDER.slice();
+  var seen = {};
+  var out = [];
+  order.forEach(function(id) {
+    if (typeof id === 'string' && PO_SECTION_IDS.indexOf(id) !== -1 && !seen[id]) {
+      seen[id] = true; out.push(id);
+    }
+  });
+  PO_DEFAULT_ORDER.forEach(function(id) { if (!seen[id]) { seen[id] = true; out.push(id); } });
+  return out;
+}
+
 /* ── Render offert ──────────────────────────────────────── */
 function renderOffer(off) {
   var root = document.getElementById('po-root');
@@ -454,7 +476,6 @@ function renderOffer(off) {
   var lines    = Array.isArray(off.lines)  ? off.lines  : [];
   var extras   = Array.isArray(off.extras) ? off.extras : [];
   var prLines  = lines.filter(function(l) { return l.type !== 'text'; });
-  var txtBlks  = lines.filter(function(l) { return l.type === 'text'; });
 
   var rawEx = prLines.reduce(function(s,l) {
     if (l.type === 'service') return s + (l.exVat || 0);
@@ -482,7 +503,7 @@ function renderOffer(off) {
   var vatRatio = rawEx > 0 ? (exVat / rawEx) : 1;
   var vat    = Math.round(rawVat * vatRatio);
   var incVat = exVat + vat;
-  var rutAmt = prLines.filter(function(l){return l.type==='service';}).reduce(function(s,l){return s+(l.rutAmount||0);},0);
+  var rutAmt = prLines.reduce(function(s,l){return s+(l.rutAmount||0);},0);
   var cust   = incVat - rutAmt;
 
   /* Statusbanner */
@@ -506,25 +527,35 @@ function renderOffer(off) {
     }
   }
 
-  /* Faktarader */
+  /* Faktarader — V48B5 R1: paymentTerms/validityText FLYTTAT ut härifrån
+     till ett eget flyttbart "commercialTerms"-block (se längre ner) —
+     bara fast metadata (kund/fastighet/datum/giltig-till) kvar här. */
   var factsHtml = '';
   var facts = [];
   if (off.customerName) facts.push({l:'Kund', v: off.customerName});
   if (off.address)      facts.push({l:'Fastighet', v: off.address});
   if (off.date)         facts.push({l:'Datum', v: fmtD(off.date)});
   if (off.validUntil)   facts.push({l:'Giltig till', v: fmtD(off.validUntil)});
-  if (off.paymentTerms) facts.push({l:'Betalning', v: off.paymentTerms});
-  if (off.validityText) facts.push({l:'Giltighetstid', v: off.validityText});
   if (facts.length) {
     factsHtml = '<div class="po-facts">' + facts.map(function(f) {
       return '<div class="po-fact"><span class="po-fact-lbl">' + esc(f.l) + '</span><span class="po-fact-val">' + esc(f.v) + '</span></div>';
     }).join('') + '</div>';
   }
 
-  /* Offertposter */
+  /* Offertposter — V48B5 R4 §5: raderna (inkl. textblock) MÅSTE fysiskt
+     återges i EXAKT off.lines-arrayordning. Itererar hela `lines`
+     (inte den type-filtrerade `prLines`) och bygger en textrad med
+     colspan="2" på sin exakta position i SAMMA tabell. Text-rader
+     visar nu även blockTitle (tidigare tappades den helt här). */
   var linesHtml = '';
-  if (prLines.length) {
-    var rows = prLines.map(function(l) {
+  if (lines.length) {
+    var rows = lines.map(function(l) {
+      if (l.type === 'text') {
+        if (!l.blockTitle && !l.text) return '';
+        var titleHtml = l.blockTitle ? '<strong>' + esc(l.blockTitle) + '</strong>' : '';
+        var textHtml  = l.text ? (l.blockTitle ? '<br>' : '') + '<span style="white-space:pre-wrap;">' + esc(l.text) + '</span>' : '';
+        return '<tr><td colspan="2" style="padding:10px 0;border-bottom:1px solid var(--br);font-size:13px;line-height:1.6;">' + titleHtml + textHtml + '</td></tr>';
+      }
       if (l.type === 'service') {
         var lEx  = l.exVat || 0;
         var lVat = Math.round(lEx*_poNormVat(l.vatRate)/100);
@@ -538,17 +569,15 @@ function renderOffer(off) {
       }
       var tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
       var totInc = tot + Math.round(tot * _poNormVat(l.vatRate) / 100);
+      var lRut2   = l.rutAmount || 0;
+      var lCust3  = totInc - lRut2;
       return '<tr><td>' + esc(l.description||l.templateName||'Rad') +
+        (lRut2 ? '<span class="po-rut-badge">' + (l.reductionType==='rot'?'ROT':'RUT') + '</span>' : '') +
         (l.qty && l.unit ? '<div class="po-line-desc">' + l.qty + ' ' + esc(l.unit) + ' × ' + fmt(l.unitPrice||0) + ' kr</div>' : '') +
-        '</td><td>' + fmt(totInc) + ' kr</td></tr>';
+        '</td><td>' + (lRut2 ? fmt(lCust3) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : fmt(totInc) + ' kr') + '</td></tr>';
     }).join('');
     linesHtml = '<div style="overflow-x:auto;"><table class="po-line-table"><thead><tr><th>Beskrivning</th><th>Pris inkl. moms</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
-
-  /* Textblock */
-  var txtHtml = txtBlks.map(function(b) {
-    return b.text ? '<div style="padding:10px 0;border-bottom:1px solid var(--br);font-size:13px;line-height:1.6;">' + esc(b.text) + '</div>' : '';
-  }).join('');
 
   /* Tilläggsrader */
   var extrasHtml = '';
@@ -589,36 +618,78 @@ function renderOffer(off) {
     '</div>';
   }
 
-  /* Villkor */
-  var termsHtml = '';
-  var termsFields = [];
-  if (off.scope)        termsFields.push({l:'Omfattning', v:off.scope});
-  if (off.includes)     termsFields.push({l:'Ingår', v:off.includes});
-  if (off.excludes)     termsFields.push({l:'Ingår ej', v:off.excludes});
-  if (off.terms)        termsFields.push({l:'Villkor', v:off.terms});
-  if (off.generalTerms) termsFields.push({l:'Allmänna villkor', v:off.generalTerms});
-  if (termsFields.length) {
-    termsHtml = '<div class="po-card"><div class="po-card-head"><h2>Villkor och omfattning</h2></div><div class="po-card-body" style="display:flex;flex-direction:column;gap:14px;">' +
-      termsFields.map(function(f) {
+  /* V48B5 R1/R2: EXAKT FYRA fysiskt flyttbara block — description/
+     pricing/commercialTerms/generalTerms — samma modell som
+     CRM-detaljvyn/printPdf() (PageShells.js). "pricing" omfattar ENDAST
+     prisrelaterat innehåll (rader/tillägg/textblock/totaler) — titel/
+     version/ID/fakta är FAST dokumentmetadata (R2 §3-korrigering, se
+     metaHtml nedan), inte en del av pricing. "description" slår ihop
+     sammanfattning + omfattning + ingår/ingår ej till ETT kort.
+     "commercialTerms" (betalning/giltighetstid) är ett eget riktigt
+     flyttbart block, INTE fast i facts-raden. B5 har aldrig gått
+     live -> ingen legacy-position att bevara, se _poResolveSectionOrder. */
+  var descFields = [];
+  if (off.summary)  descFields.push({l:'Sammanfattning', v:off.summary});
+  if (off.scope)     descFields.push({l:'Omfattning', v:off.scope});
+  if (off.includes) descFields.push({l:'Ingår', v:off.includes});
+  if (off.excludes) descFields.push({l:'Ingår ej', v:off.excludes});
+  if (off.terms)     descFields.push({l:'Villkor', v:off.terms});
+  var descriptionHtml = '';
+  if (descFields.length) {
+    descriptionHtml = '<div class="po-card"><div class="po-card-head"><h2>Uppdragsbeskrivning</h2></div><div class="po-card-body" style="display:flex;flex-direction:column;gap:14px;">' +
+      descFields.map(function(f) {
         return '<div><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">' + esc(f.l) + '</div>' +
           '<p class="po-terms-text">' + esc(f.v) + '</p></div>';
       }).join('') + '</div></div>';
   }
 
-  root.innerHTML =
-    statusBanner +
-    expiryNote +
-    '<div class="po-card">' +
+  var generalTermsHtml = off.generalTerms ?
+    '<div class="po-card"><div class="po-card-head"><h2>Allmänna villkor</h2></div><div class="po-card-body"><p class="po-terms-text">' + esc(off.generalTerms) + '</p></div></div>' : '';
+
+  var commercialTermsHtml = '';
+  if (off.paymentTerms || off.validityText) {
+    commercialTermsHtml = '<div class="po-card"><div class="po-card-head"><h2>Offertvillkor</h2></div><div class="po-card-body" style="display:flex;flex-direction:column;gap:14px;">' +
+      (off.paymentTerms ? '<div><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Betalningsvillkor</div><p class="po-terms-text">' + esc(off.paymentTerms) + '</p></div>' : '') +
+      (off.validityText ? '<div><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Giltighetstid</div><p class="po-terms-text">' + esc(off.validityText) + '</p></div>' : '') +
+      '</div></div>';
+  }
+
+  /* V48B5 R2 §3: offertens IDENTITET (titel/version/ID) + fasta fakta
+     (kund/fastighet/datum/giltig-till) är DOKUMENTMETADATA, inte
+     "pricing" — låg tidigare felaktigt inne i det flyttbara
+     pricing-kortet, vilket gjorde att offertens rubrik/identitet
+     försvann från toppen av sidan om användaren flyttade pricing
+     längre ner. Nu ett eget FAST kort, alltid överst, före de fyra
+     flyttbara blocken. */
+  var metaHtml = '<div class="po-card">' +
       '<div class="po-card-head">' +
         '<h2>' + esc(off.title || ('Offert ' + off.id)) + '</h2>' +
         '<span style="font-size:11px;color:var(--mt);">Version ' + (off.versionNumber||1) + ' · ' + esc(off.id) + '</span>' +
       '</div>' +
       factsHtml +
-      (linesHtml||txtHtml||extrasHtml ? '<div class="po-card-body" style="padding:0;">' + (txtHtml?'<div style="padding:12px 18px;">'+txtHtml+'</div>':'') + linesHtml + (extrasHtml?'<div style="padding:12px 18px;">'+extrasHtml+'</div>':'') + '</div>' : '') +
+    '</div>';
+
+  /* V48B5 R4: textblocken ritas nu INLINE i linesHtml (ovan), på sin
+     exakta position i off.lines — inte längre samlade separat före
+     prisraderna. */
+  var pricingHtml = (linesHtml||extrasHtml||totalsHtml) ? '<div class="po-card">' +
+      (linesHtml||extrasHtml ? '<div class="po-card-body" style="padding:0;">' + linesHtml + (extrasHtml?'<div style="padding:12px 18px;">'+extrasHtml+'</div>':'') + '</div>' : '') +
       totalsHtml +
-    '</div>' +
-    termsHtml +
-    (off.summary ? '<div class="po-card"><div class="po-card-head"><h2>Sammanfattning</h2></div><div class="po-card-body"><p style="font-size:13px;line-height:1.6;white-space:pre-wrap;">' + esc(off.summary) + '</p></div></div>' : '') +
+    '</div>' : '';
+
+  var renderers = {
+    description: descriptionHtml,
+    pricing: pricingHtml,
+    commercialTerms: commercialTermsHtml,
+    generalTerms: generalTermsHtml
+  };
+  var orderedSectionsHtml = _poResolveSectionOrder(off.sectionOrder).map(function(id) { return renderers[id] || ''; }).join('');
+
+  root.innerHTML =
+    statusBanner +
+    expiryNote +
+    metaHtml +
+    orderedSectionsHtml +
     renderAttachments() +
     actionsHtml +
     '<div style="text-align:center;padding:20px 0;font-size:11px;color:var(--mt);">VIFT Fastighetsservice · Frågor? Kontakta din förvaltare.</div>';

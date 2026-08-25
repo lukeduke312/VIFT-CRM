@@ -43,6 +43,55 @@ function _offRawExVat(off) {
 }
 
 /**
+ * V48B5 R1 (blocker-korrigering av Gate C): kanoniska offert-BLOCK-ID:n.
+ * Ersätter den tidigare, ALDRIG livegångna 8-ID-utvecklingsmodellen —
+ * den lovade individuell flytt av 8 delar men flera outputytor
+ * grupperade/ignorerade dem eller höll pris-blocket fast, så vald
+ * ordning var inte sann över CRM/PDF/public. Eftersom V48B5 aldrig
+ * committats/deployats finns inget produktionskontrakt att bevara:
+ * denna fyra-block-modell är den enda som någonsin gått live.
+ *
+ * Vart och ett av de fyra blocken MÅSTE fysiskt kunna flyttas till
+ * valfri position (1:a/2:a/3:e/4:e) på ALLA fem ytor (CRM-detaljvy,
+ * printPdf, public-offer.html, offer-pdf, offer-public-pdf) — se
+ * respektive ytas render*Block()-funktioner.
+ *
+ *   description:      Sammanfattning, Uppdragets omfattning, Ingår, Ingår ej
+ *   pricing:           Offertrader, Tillval, delsumma/rabatt/moms/ROT-RUT/kundpris
+ *   commercialTerms:  Betalningsvillkor, Giltighetstid
+ *   generalTerms:      Allmänna villkor
+ *
+ * internalNote ingår ALDRIG (kundsynligt/interna fält blandas inte).
+ * Bilagor ligger alltid fast EFTER offertinnehållet i denna release.
+ */
+const OFFER_SECTION_IDS = ['description', 'pricing', 'commercialTerms', 'generalTerms'];
+const DEFAULT_OFFER_SECTION_ORDER = OFFER_SECTION_IDS.slice();
+
+/**
+ * Validerar/normaliserar en sparad sektionsordning: okända ID:n
+ * kasseras (inkl. hela den gamla 8-ID-modellen — ingen migrering
+ * behövs, se motivering ovan), dubbletter kasseras (första
+ * förekomsten vinner), ID:n som saknas läggs till sist i
+ * standardordning. Ogiltig/tom/icke-array-indata -> hela
+ * standardordningen. En BEFINTLIG produktionsoffert (som aldrig haft
+ * off.sectionOrder, eftersom B5 aldrig gått live) faller alltså
+ * korrekt tillbaka på standardordningen.
+ */
+function _resolveSectionOrder(order) {
+  if (!Array.isArray(order) || !order.length) return DEFAULT_OFFER_SECTION_ORDER.slice();
+  const seen = {};
+  const out = [];
+  order.forEach(id => {
+    if (typeof id === 'string' && OFFER_SECTION_IDS.indexOf(id) !== -1 && !seen[id]) {
+      seen[id] = true;
+      out.push(id);
+    }
+  });
+  DEFAULT_OFFER_SECTION_ORDER.forEach(id => { if (!seen[id]) { seen[id] = true; out.push(id); } });
+  return out;
+}
+
+/**
  * V38 §1/§4: kanonisk 0-safe momsnormalisering — samma semantik som
  * InvoiceService.normalizeVatRate (V35-V37). null/undefined/tomsträng
  * (inkl. whitespace-only) = inget värde satt -> fallback (25); explicit
@@ -60,6 +109,26 @@ function _normVat(value, fallback) {
   const n = Number(value);
   if (!isFinite(n) || n < 0 || n > 100) return fallback;
   return n;
+}
+
+/**
+ * V48B5 R3 §10-12: gemensam parser/formatterare för penningfält som
+ * bytt från <input type="number"> (aldrig grupperad visning i någon
+ * webbläsare) till text-inputs med Svensk tusentalsgruppering vid
+ * blur. Det INTERNA/sparade värdet är ALLTID ett rått numeriskt tal —
+ * ALDRIG en formaterad sträng. Parsern tar bort mellanslag/NBSP
+ * (tusentalsavskiljare, inkl. inklistrad NBSP) och tolkar svensk
+ * decimalkomma. Formaterarens utdata används ENDAST för visning
+ * (onblur) — aldrig sparat/skickat till någon beräkning.
+ */
+function _parseMoneyInput(v) {
+  if (v === null || v === undefined) return 0;
+  const cleaned = String(v).replace(/[\s ]/g, '').replace(',', '.');
+  const n = parseFloat(cleaned);
+  return isFinite(n) ? n : 0;
+}
+function _formatMoneyInput(n) {
+  return Number(n || 0).toLocaleString('sv-SE');
 }
 
 /**
@@ -137,7 +206,7 @@ function _offerCalcTotals(off) {
   const ratio = rawExVat > 0 ? (exVatAfterDiscount / rawExVat) : 1;
   const vatAmount = Math.round(rawVat * ratio);
   const totalInclVat = exVatAfterDiscount + vatAmount;
-  const rutRotAmount = Math.round((off.lines||[]).filter(l => l.type === 'service').reduce((s,l) => s + (l.rutAmount||0), 0));
+  const rutRotAmount = Math.round((off.lines||[]).filter(l => l.type !== 'text').reduce((s,l) => s + (l.rutAmount||0), 0));
   const customerPays = totalInclVat - rutRotAmount;
   return { rawExVat, discountAmount, exVatAfterDiscount, vatAmount, totalInclVat, rutRotAmount, customerPays };
 }
@@ -237,6 +306,9 @@ function _offTierLabel(area, tiers) {
 const OffersPage = {
   _editLines:    [],
   _editExtras:   [],
+  _editSectionOrder: null,
+  _sectionDragIdx: null,
+  _lineDragIdx: null,
   _editOfferId:  null,
   _wizardStep:   1,
   _wizardData:   {},
@@ -822,6 +894,8 @@ const OffersPage = {
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     this._editLines    = [];
     this._editExtras   = [];
+    this._editSectionOrder = DEFAULT_OFFER_SECTION_ORDER.slice();
+    this._sectionDragIdx = null;
     this._editOfferId  = null;
     this._createOnCreated = (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null;
     this._saveInFlight = false;
@@ -850,6 +924,8 @@ const OffersPage = {
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     this._editLines    = (off.lines  || []).map(l => ({...l}));
     this._editExtras   = (off.extras || []).map(e => ({...e}));
+    this._editSectionOrder = _resolveSectionOrder(off.sectionOrder);
+    this._sectionDragIdx = null;
     this._editOfferId  = off.id;
     this._createOnCreated = null; /* V47: aldrig callback vid redigering av befintlig offert */
     this._saveInFlight = false;
@@ -956,7 +1032,14 @@ const OffersPage = {
     const hasCustomer = !!d.customerId;
     const hasLines  = (this._editLines  || []).length > 0;
     const hasExtras = (this._editExtras || []).length > 0;
-    return !hasText && !hasCustomer && !hasLines && !hasExtras;
+    /* V48B5 Gate C: en offert vars ENDA ändring är en omordnad
+       sektionsordning ska fortfarande räknas som "påbörjad" av
+       stängningsvakten (Gate A) — annars skulle en användare som bara
+       drar om avsnitten kunna stänga wizarden utan varning och tappa
+       den ändringen. */
+    const hasReorderedSections = Array.isArray(this._editSectionOrder) &&
+      JSON.stringify(_resolveSectionOrder(this._editSectionOrder)) !== JSON.stringify(DEFAULT_OFFER_SECTION_ORDER);
+    return !hasText && !hasCustomer && !hasLines && !hasExtras && !hasReorderedSections;
   },
 
   /* Skriver EXAKT den whitelistade, JSON-säkra delmängden av wizard-state —
@@ -980,7 +1063,13 @@ const OffersPage = {
         wizardData: Object.assign({}, this._wizardData),
         lines:      (this._editLines  || []).map(l => Object.assign({}, l)),
         extras:     (this._editExtras || []).map(e => Object.assign({}, e)),
-        discount:   Object.assign({}, this._discount || { type: 'percent', value: 0 })
+        discount:   Object.assign({}, this._discount || { type: 'percent', value: 0 }),
+        /* V48B5 Gate C: valfritt fält — INGEN version-bump av draft-
+           envelopet. Ett äldre utkast (sparat innan denna gate fanns)
+           saknar helt enkelt fältet vid återställning, vilket
+           _resolveSectionOrder()/_restoreDraft() redan hanterar
+           korrekt (-> standardordningen, exakt som innan). */
+        sectionOrder: _resolveSectionOrder(this._editSectionOrder)
       }
     };
     try {
@@ -1122,6 +1211,8 @@ const OffersPage = {
     const d = draft.data;
     this._editLines    = (d.lines  || []).map(l => Object.assign({}, l));
     this._editExtras   = (d.extras || []).map(e => Object.assign({}, e));
+    this._editSectionOrder = _resolveSectionOrder(d.sectionOrder);
+    this._sectionDragIdx = null;
     this._editOfferId  = null;
     this._createOnCreated = null;
     this._saveInFlight = false;
@@ -1167,6 +1258,39 @@ const OffersPage = {
     document.getElementById('off-wizard').innerHTML = this._wizardHtml();
     const scroll = document.getElementById('content-scroll');
     if (scroll) scroll.scrollTop = 0;
+  },
+
+  /* V48B5 Gate A: SMAL seam för användarinitierad stängning (mobil-
+     tillbaka, desktop-X, step-1 "Avbryt") — INTE för intern, bekräftad
+     success-save (som fortsätter anropa _wizardClose() direkt, oförändrat)
+     och INTE för step-tillbaka (_prevStep(), som aldrig stänger wizarden).
+     Visar en bekräftelseruta ENDAST om ett standalone draft-läge är
+     aktivt OCH något faktiskt fyllts i (_isDraftEmpty()===false) — en tom
+     "Ny offert" stängs alltid direkt, precis som idag. Kontextuell create
+     och redigering av befintlig offert har ALDRIG _draftEnabled===true
+     (se V48B4A/§4/§21-22 i tidigare rundor), så de får AUTOMATISKT ingen
+     guard, utan att behöva ett separat isEdit/kontextuell-villkor här. */
+  _requestWizardClose() {
+    if (this._draftEnabled && !this._isDraftEmpty()) {
+      Modal.open({
+        title: 'Stäng offert?',
+        body: '<p style="font-size:14px;line-height:1.5;color:var(--tx);">Du har påbörjat en offert. Ditt lokala utkast sparas och kan återställas nästa gång.</p>',
+        buttons: [
+          { label: 'Fortsätt redigera',        cls: 'btn bs', onClick: () => Modal.close() },
+          { label: 'Stäng och behåll utkast',  cls: 'btn bp', onClick: () => {
+            Modal.close();
+            /* Flusha den absolut senaste ändringen INNAN wizarden stängs —
+               samma princip som redan används vid mode-switch (V48B4A.1
+               §7/§8) — sedan _wizardClose() direkt, INTE
+               _requestWizardClose(), så ingen rekursiv guard uppstår. */
+            this._flushDraftNow();
+            this._wizardClose();
+          }}
+        ]
+      });
+      return;
+    }
+    this._wizardClose();
   },
 
   /* V48B4A: opts.skipDraftFlush=true används ENDAST av _save()s bekräftade
@@ -1222,20 +1346,20 @@ const OffersPage = {
 
     // Header sticks to top of #content-scroll (no fixed overlay — wizard lives inside the page)
     const hdr = `<div class="off-wiz-hdr">
-      <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--mobile">${ic('arrow-left',16)}</button>
+      <button type="button" onclick="OffersPage._requestWizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--mobile">${ic('arrow-left',16)}</button>
       <div class="off-wiz-hdr-titlebox">
         <div class="off-wiz-hdr-title">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
         ${!isEdit ? `<div id="off-draft-status" class="off-wiz-draft-status" style="font-size:11px;color:var(--mt);display:${this._draftStatusText?'':'none'};">${esc(this._draftStatusText||'')}</div>` : ''}
         <div class="off-wiz-hdr-steps-mobile">${stepIndMobile}</div>
       </div>
       <div class="off-wiz-hdr-steps-desktop">${stepIndDesktop}</div>
-      <button type="button" onclick="OffersPage._wizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--desktop">${ic('x',15)}</button>
+      <button type="button" onclick="OffersPage._requestWizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--desktop">${ic('x',15)}</button>
     </div>`;
 
     let ftr;
     if (step === 1) {
       ftr = `<div class="off-wiz-ftr">
-        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._wizardClose()">Avbryt</button>
+        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._requestWizardClose()">Avbryt</button>
         <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">${ic('arrow-right',12)} Nästa: Tjänster</button>
       </div>`;
     } else if (step === 2) {
@@ -1546,7 +1670,7 @@ const OffersPage = {
           ${this._totalsBarHtml().replace('<div class="off-totals-card">','<div class="off-totals-card off-totals-card--bare">').replace('<div class="off-totals-card-hd">Sammanfattning</div>','')}
         </div>
         <div class="off-wiz-summary-card-ft">
-          ${prLines} pristrader · ${txtLines} textblock
+          ${prLines} ${prLines===1?'prisrad':'prisrader'} · ${txtLines} textblock
         </div>
       </div>
       <div class="g2">
@@ -1570,7 +1694,8 @@ const OffersPage = {
           <textarea id="off-note" rows="2" placeholder="Intern anteckning…"
             oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
         </div>
-      </details>`;
+      </details>
+      ${this._sectionOrderHtml()}`;
   },
 
   _totalsBarHtml() {
@@ -1637,12 +1762,63 @@ const OffersPage = {
         <div class="off-lines-empty-txt">Inga rader ännu</div>
         <div class="off-lines-empty-sub">Lägg till ett arbete ovan</div>
       </div>`;
+    const n = this._editLines.length;
     return this._editLines.map((l, i) => {
-      if (l.type === 'text')    return this._renderTextCard(l, i);
-      if (l.type === 'service') return this._renderServiceCard(l, i);
-      if (l.type === 'fixed')   return this._renderFixedCard(l, i);
-      return this._renderManualCard(l, i);
+      let cardHtml;
+      if (l.type === 'text')    cardHtml = this._renderTextCard(l, i);
+      else if (l.type === 'service') cardHtml = this._renderServiceCard(l, i);
+      else if (l.type === 'fixed')   cardHtml = this._renderFixedCard(l, i);
+      else cardHtml = this._renderManualCard(l, i);
+      return this._wrapLineReorder(cardHtml, i, n);
     }).join('');
+  },
+
+  /* V48B5 R3 §1-4: RADORDNING (LEVEL 2) — helt separat från
+     off.sectionOrder (LEVEL 1, de fyra stora blocken). Alla fyra
+     radtyper (service/fixed/manual/text) omsluts av SAMMA generiska
+     omslag istället för att varje _render*Card()-funktion skulle
+     behöva sin egen dupplicerade dra/pil-uppmärkning. `draggable` sätts
+     ENDAST på det lilla drag-handtaget — inte hela raden — så att
+     textmarkering/inmatning i kortets fält inte störs (desktop). Mobil
+     använder ALLTID de explicita pilknapparna, aldrig HTML5 drag/drop.
+     _editLines-arrayens ordning ÄR den sparade radordningen — inget
+     nytt ordningsfält. */
+  _wrapLineReorder(cardHtml, i, total) {
+    return `<div class="off-line-reorder-row" data-idx="${i}"
+        ondragover="event.preventDefault()"
+        ondrop="event.preventDefault();OffersPage._lineDrop(${i})">
+      <div class="off-line-reorder-controls">
+        <span class="off-line-reorder-handle" draggable="true" aria-hidden="true"
+          ondragstart="OffersPage._lineDragIdx=${i}">⋮⋮</span>
+        <button type="button" class="off-line-reorder-btn" ${i===0?'disabled':''}
+          onclick="OffersPage._moveLine(${i},-1)" aria-label="Flytta raden upp">${ic('chevron-up',12)}</button>
+        <button type="button" class="off-line-reorder-btn" ${i===total-1?'disabled':''}
+          onclick="OffersPage._moveLine(${i},1)" aria-label="Flytta raden ner">${ic('chevron-down',12)}</button>
+      </div>
+      <div class="off-line-reorder-content">${cardHtml}</div>
+    </div>`;
+  },
+
+  _moveLine(index, delta) {
+    const j = index + delta;
+    if (j < 0 || j >= this._editLines.length) return;
+    const tmp = this._editLines[index];
+    this._editLines[index] = this._editLines[j];
+    this._editLines[j] = tmp;
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._flushDraftNow();
+  },
+
+  _lineDrop(targetIdx) {
+    const from = this._lineDragIdx;
+    this._lineDragIdx = null;
+    if (from == null || from === targetIdx) return;
+    const moved = this._editLines.splice(from, 1)[0];
+    this._editLines.splice(targetIdx, 0, moved);
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._flushDraftNow();
   },
 
   _renderServiceCard(l, i) {
@@ -1693,12 +1869,18 @@ const OffersPage = {
   _renderManualCard(l, i) {
     const units = ['st','tim','m','m²','m³','lm','kg','l','paket','mån'];
     const total  = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
+    const incVat = total + Math.round(total * _normVat(l.vatRate) / 100);
+    const rutAmt = l.rutAmount || 0;
+    const cust   = incVat - rutAmt;
+    const curRed = l.reductionType || 'ingen';
+    const base   = Math.max(0, Math.min(+l.reductionBaseExVat || 0, total));
+    const eligibleInclVat = base + Math.round(base * _normVat(l.vatRate) / 100);
     const expanded = this._expandedLineIds.has(l.id);
     const summary = `<div class="off-wiz-line-summary">
         <div class="off-wiz-line-summary-icon">${ic('minus',14)}</div>
         <div class="off-wiz-line-summary-body">
           <div class="off-wiz-line-summary-title">${esc(l.description)||'Löpande rad'}</div>
-          <div class="off-wiz-line-summary-meta">${l.qty!=null?l.qty:1} ${esc(l.unit||'st')} × ${fmt(l.unitPrice||0)} kr</div>
+          <div class="off-wiz-line-summary-meta">${l.qty!=null?l.qty:1} ${esc(l.unit||'st')} × ${fmt(l.unitPrice||0)} kr${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
         </div>
         <div class="off-wiz-line-summary-price">${fmt(total)} kr</div>
       </div>
@@ -1706,6 +1888,11 @@ const OffersPage = {
         <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
         <button type="button" class="off-wiz-line-summary-remove" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)} Ta bort</button>
       </div>`;
+    const redOpts = [
+      {v:'ingen', l:'Ingen reduktion'},
+      {v:'rut',   l:'RUT – 50 %'},
+      {v:'rot',   l:'ROT – 30 %'},
+    ];
     const editor = `<div class="off-wiz-line-editor">
       <div class="off-wiz-line-card-hd">
         <span class="off-wiz-line-card-type">${ic('minus',9)} Manuell rad</span>
@@ -1725,12 +1912,34 @@ const OffersPage = {
             ${units.map(u=>`<option${(l.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
           </select></div>
         <div><label class="off-wiz-line-field-label">À-pris ex. moms (kr)</label>
-          <input type="number" value="${l.unitPrice||0}" min="0" step="1"
-            oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+          <input type="text" inputmode="decimal" class="off-money-input" value="${_formatMoneyInput(l.unitPrice||0)}"
+            oninput="OffersPage._editLines[${i}].unitPrice=_parseMoneyInput(this.value);OffersPage._refreshTotals()"
+            onblur="this.value=_formatMoneyInput(OffersPage._editLines[${i}].unitPrice||0)"></div>
         <div><label class="off-wiz-line-field-label">Moms</label>
           <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
             ${this._vatOptionsHtml(_normVat(l.vatRate))}
           </select></div>
+      </div>
+      <div class="off-svc-reduction off-svc-reduction--line">
+        <label class="off-svc-field-label--sub">Skattereduktion</label>
+        <div class="off-svc-reduction-row">
+          ${redOpts.map(o=>`<button type="button" class="off-svc-reduction-btn${curRed===o.v?' is-selected':''}"
+            onclick="OffersPage._setLineReduction(${i},'${o.v}')">${o.l}</button>`).join('')}
+        </div>
+        <div class="off-svc-reduction-hint">Förutsätter att kunden har rätt till avdraget</div>
+      </div>
+      ${curRed !== 'ingen' ? `<div class="off-wiz-line-field" style="margin-top:8px;">
+        <label class="off-wiz-line-field-label">Arbetskostnad för ROT/RUT, exkl. moms</label>
+        <input type="text" inputmode="decimal" class="off-money-input" id="off-lredbase-${i}" value="${_formatMoneyInput(base)}"
+          oninput="OffersPage._setLineReductionBase(${i}, this.value)"
+          onblur="this.value=_formatMoneyInput(OffersPage._editLines[${i}].reductionBaseExVat||0)">
+        <div class="off-wiz-line-field-hint">Endast arbetskostnaden får ligga till grund för avdraget.</div>
+        <div class="off-wiz-line-field-hint off-wiz-line-field-hint--neutral" id="off-lredhint-${i}"${base?' style="display:none;"':''}>Ange arbetskostnaden för att beräkna avdraget.</div>
+      </div>` : ''}
+      <div class="off-line-reduction-calc" id="off-lredcalc-${i}"${rutAmt?'':' style="display:none;"'}>
+        <div class="off-line-reduction-calc-row"><span>Avdragsgrundande arbetskostnad inkl. moms</span><span id="off-leligincl-${i}">${fmt(eligibleInclVat)} kr</span></div>
+        <div class="off-line-reduction-calc-row"><span>Preliminärt ${curRed==='rot'?'ROT':'RUT'}-avdrag</span><span id="off-lrutamt-${i}">−${fmt(rutAmt)} kr</span></div>
+        <div class="off-line-reduction-calc-row off-line-reduction-calc-row--total"><span>Kund betalar</span><span id="off-lcustpay-${i}">${fmt(cust)} kr</span></div>
       </div>
     </div>`;
     return `<div class="off-wiz-line-card" data-expanded="${expanded?'1':'0'}">${summary}${editor}</div>`;
@@ -1818,9 +2027,121 @@ const OffersPage = {
     return Math.min(Math.round(d.value), rawExVat);
   },
 
+  /* V48B5 R1 (blocker-korrigering): fastpris/manuella rader räknar INTE
+     längre RUT/ROT på hela radens inkl.-moms-belopp — det inkluderade
+     ev. material/övriga kostnader och gav ett osäkert avdragsunderlag.
+     Kanoniskt fält `reductionBaseExVat` (numeriskt, ex. moms, satt av
+     användaren, klampat till [0, radens exVat]) anger hur stor del av
+     raden som faktiskt är avdragsgrundande ARBETSKOSTNAD. RUT/ROT
+     räknas bara på den delen, inkl. moms:
+       eligibleExVat    = clamp(reductionBaseExVat, 0, _lineExVat(l))
+       eligibleInclVat  = eligibleExVat + moms på eligibleExVat
+       rutAmount        = round(eligibleInclVat * 0.30|0.50)
+     Tjänsterader (type:'service') är OFÖRÄNDRADE i denna korrigering —
+     de fortsätter använda sitt egna, redan testade calc()-kontrakt (se
+     backlog-post "Offer Tax Reduction 2.0" i rapporten för en framtida
+     audit av service-mallarnas arbets/material-uppdelning). */
+  _calcLineRutAmount(l) {
+    if (!l || !l.reductionType || l.reductionType === 'ingen') return 0;
+    const exVat = _lineExVat(l);
+    const base = Math.max(0, Math.min(+l.reductionBaseExVat || 0, exVat));
+    const eligibleVat = Math.round(base * _normVat(l.vatRate) / 100);
+    const eligibleInclVat = base + eligibleVat;
+    const rate = l.reductionType === 'rot' ? 0.30 : 0.50;
+    return Math.round(eligibleInclVat * rate);
+  },
+
+  /* V48B5 R1: etiketter för de FYRA kanoniska block-ID:na i
+     reorder-UI:t (se OFFER_SECTION_IDS-kommentaren för vad varje block
+     innehåller). "pricing" avser HELA pris-/rad-blocket (inte
+     radernas egen inbördes ordning, som fortfarande styrs av
+     _editLines-arrayens ordning precis som innan). */
+  _sectionLabels: {
+    description: 'Uppdragsbeskrivning', pricing: 'Pris och arbeten',
+    commercialTerms: 'Offertvillkor', generalTerms: 'Allmänna villkor'
+  },
+
+  _sectionOrderHtml() {
+    const order = _resolveSectionOrder(this._editSectionOrder);
+    this._editSectionOrder = order;
+    const labels = this._sectionLabels;
+    return `<div class="off-section-order" id="off-section-order-wrap">
+      <label class="off-svc-field-label--sub">Ordning på offerten</label>
+      <div class="off-section-order-hint">Ändra i vilken ordning avsnitten visas för kunden — dra i listan (desktop) eller använd pilarna.</div>
+      <div class="off-section-order-list">
+        ${order.map((id, i) => `
+          <div class="off-section-order-row" draggable="true" data-idx="${i}"
+            ondragstart="OffersPage._sectionDragIdx=${i}"
+            ondragover="event.preventDefault()"
+            ondrop="event.preventDefault();OffersPage._sectionDrop(${i})">
+            <span class="off-section-order-handle" aria-hidden="true">⋮⋮</span>
+            <span class="off-section-order-label">${labels[id] || id}</span>
+            <div class="off-section-order-btns">
+              <button type="button" class="off-section-order-btn" ${i === 0 ? 'disabled' : ''} onclick="OffersPage._moveSection(${i},-1)" aria-label="Flytta upp">${ic('chevron-up', 12)}</button>
+              <button type="button" class="off-section-order-btn" ${i === order.length - 1 ? 'disabled' : ''} onclick="OffersPage._moveSection(${i},1)" aria-label="Flytta ner">${ic('chevron-down', 12)}</button>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  },
+
+  _moveSection(idx, dir) {
+    const order = _resolveSectionOrder(this._editSectionOrder);
+    const j = idx + dir;
+    if (j < 0 || j >= order.length) return;
+    const t = order[idx]; order[idx] = order[j]; order[j] = t;
+    this._editSectionOrder = order;
+    const wrap = document.getElementById('off-section-order-wrap');
+    if (wrap) wrap.outerHTML = this._sectionOrderHtml();
+    this._flushDraftNow();
+  },
+
+  _sectionDrop(targetIdx) {
+    const from = this._sectionDragIdx;
+    this._sectionDragIdx = null;
+    if (from == null || from === targetIdx) return;
+    const order = _resolveSectionOrder(this._editSectionOrder);
+    const moved = order.splice(from, 1)[0];
+    order.splice(targetIdx, 0, moved);
+    this._editSectionOrder = order;
+    const wrap = document.getElementById('off-section-order-wrap');
+    if (wrap) wrap.outerHTML = this._sectionOrderHtml();
+    this._flushDraftNow();
+  },
+
+  _setLineReduction(idx, val) {
+    const l = this._editLines[idx];
+    if (!l) return;
+    l.reductionType = val;
+    /* V48B5 R2 §4 (säker default): "ingen" nollställer, OCH att välja
+       ROT/RUT nollställer arbetskostnadsunderlaget också — det förifylls
+       ALDRIG längre med hela radens belopp (det antog tyst att hela
+       raden var avdragsgrundande arbete, en osäker default). Användaren
+       måste alltid själv ange den faktiska arbetskostnaden explicit; om
+       hela raden verkligen är arbete kan användaren manuellt skriva in
+       samma belopp som radens ex.-moms-summa. Avdraget är 0 kr tills
+       dess (giltigt sparbart tillstånd, ingen skrämmande varningsruta). */
+    l.reductionBaseExVat = 0;
+    l.rutAmount = this._calcLineRutAmount(l);
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._refreshTotals();
+    this._flushDraftNow();
+  },
+
+  _setLineReductionBase(idx, value) {
+    const l = this._editLines[idx];
+    if (!l) return;
+    const exVat = _lineExVat(l);
+    l.reductionBaseExVat = Math.max(0, Math.min(_parseMoneyInput(value), exVat));
+    l.rutAmount = this._calcLineRutAmount(l);
+    this._refreshTotals();
+    this._flushDraftNow();
+  },
+
   _addFixedLine() {
     const newId = 'F'+Date.now();
-    this._editLines.push({id:newId, type:'fixed', description:'', unitPrice:0, vatRate:25});
+    this._editLines.push({id:newId, type:'fixed', description:'', unitPrice:0, vatRate:25, reductionType:'ingen', reductionBaseExVat:0, rutAmount:0});
     this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
@@ -1835,12 +2156,17 @@ const OffersPage = {
   _renderFixedCard(l, i) {
     const tot    = Math.round(l.unitPrice || 0);
     const incVat = tot + Math.round(tot * _normVat(l.vatRate) / 100);
+    const rutAmt = l.rutAmount || 0;
+    const cust   = incVat - rutAmt;
+    const curRed = l.reductionType || 'ingen';
+    const base   = Math.max(0, Math.min(+l.reductionBaseExVat || 0, tot));
+    const eligibleInclVat = base + Math.round(base * _normVat(l.vatRate) / 100);
     const expanded = this._expandedLineIds.has(l.id);
     const summary = `<div class="off-wiz-line-summary">
         <div class="off-wiz-line-summary-icon">${ic('tag',14)}</div>
         <div class="off-wiz-line-summary-body">
           <div class="off-wiz-line-summary-title">${esc(l.description)||'Fastpris'}</div>
-          <div class="off-wiz-line-summary-meta">Moms ${_normVat(l.vatRate)}%</div>
+          <div class="off-wiz-line-summary-meta">Moms ${_normVat(l.vatRate)}%${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
         </div>
         <div class="off-wiz-line-summary-price">${fmt(tot)} kr</div>
       </div>
@@ -1848,6 +2174,11 @@ const OffersPage = {
         <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
         <button type="button" class="off-wiz-line-summary-remove" onclick="OffersPage._removeLine(${i})">${ic('trash-2',11)} Ta bort</button>
       </div>`;
+    const redOpts = [
+      {v:'ingen', l:'Ingen reduktion'},
+      {v:'rut',   l:'RUT – 50 %'},
+      {v:'rot',   l:'ROT – 30 %'},
+    ];
     const editor = `<div class="off-wiz-line-editor">
       <div class="off-svc-card-hd">
         <div class="off-svc-card-hd-main">
@@ -1862,8 +2193,9 @@ const OffersPage = {
       </div>
       <div class="off-wiz-line-fixed-grid">
         <div><label class="off-wiz-line-field-label">Pris ex moms (kr)</label>
-          <input type="number" value="${l.unitPrice||0}" min="0" step="1"
-            oninput="OffersPage._editLines[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
+          <input type="text" inputmode="decimal" class="off-money-input" value="${_formatMoneyInput(l.unitPrice||0)}"
+            oninput="OffersPage._editLines[${i}].unitPrice=_parseMoneyInput(this.value);OffersPage._refreshTotals()"
+            onblur="this.value=_formatMoneyInput(OffersPage._editLines[${i}].unitPrice||0)"></div>
         <div><label class="off-wiz-line-field-label">Moms</label>
           <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
             ${this._vatOptionsHtml(_normVat(l.vatRate))}
@@ -1871,6 +2203,27 @@ const OffersPage = {
         <div><label class="off-wiz-line-field-label">Intern anteckning</label>
           <input value="${(l.note||'').replace(/"/g,'&quot;')}" placeholder="Syns ej för kund"
             oninput="OffersPage._editLines[${i}].note=this.value" class="off-wiz-line-field-note"></div>
+      </div>
+      <div class="off-svc-reduction off-svc-reduction--line">
+        <label class="off-svc-field-label--sub">Skattereduktion</label>
+        <div class="off-svc-reduction-row">
+          ${redOpts.map(o=>`<button type="button" class="off-svc-reduction-btn${curRed===o.v?' is-selected':''}"
+            onclick="OffersPage._setLineReduction(${i},'${o.v}')">${o.l}</button>`).join('')}
+        </div>
+        <div class="off-svc-reduction-hint">Förutsätter att kunden har rätt till avdraget</div>
+      </div>
+      ${curRed !== 'ingen' ? `<div class="off-wiz-line-field">
+        <label class="off-wiz-line-field-label">Arbetskostnad för ROT/RUT, exkl. moms</label>
+        <input type="text" inputmode="decimal" class="off-money-input" id="off-lredbase-${i}" value="${_formatMoneyInput(base)}"
+          oninput="OffersPage._setLineReductionBase(${i}, this.value)"
+          onblur="this.value=_formatMoneyInput(OffersPage._editLines[${i}].reductionBaseExVat||0)">
+        <div class="off-wiz-line-field-hint">Endast arbetskostnaden får ligga till grund för avdraget.</div>
+        <div class="off-wiz-line-field-hint off-wiz-line-field-hint--neutral" id="off-lredhint-${i}"${base?' style="display:none;"':''}>Ange arbetskostnaden för att beräkna avdraget.</div>
+      </div>` : ''}
+      <div class="off-line-reduction-calc" id="off-lredcalc-${i}"${rutAmt?'':' style="display:none;"'}>
+        <div class="off-line-reduction-calc-row"><span>Avdragsgrundande arbetskostnad inkl. moms</span><span id="off-leligincl-${i}">${fmt(eligibleInclVat)} kr</span></div>
+        <div class="off-line-reduction-calc-row"><span>Preliminärt ${curRed==='rot'?'ROT':'RUT'}-avdrag</span><span id="off-lrutamt-${i}">−${fmt(rutAmt)} kr</span></div>
+        <div class="off-line-reduction-calc-row off-line-reduction-calc-row--total"><span>Kund betalar</span><span id="off-lcustpay-${i}">${fmt(cust)} kr</span></div>
       </div>
       <div class="off-wiz-line-card-actions">
         <button type="button" class="btn bs bxs off-wiz-line-editor-done" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('check',10)} Klar</button>
@@ -2206,24 +2559,64 @@ const OffersPage = {
   },
 
   _calcRutAmt(lines) {
-    return Math.round((lines||[]).filter(l=>l.type==='service').reduce((s,l)=>s+(l.rutAmount||0),0));
+    return Math.round((lines||[]).filter(l=>l.type!=='text').reduce((s,l)=>s+(l.rutAmount||0),0));
   },
 
   _refreshTotals() {
     this._editLines.forEach((l, i) => {
       if (l.type === 'manual' || l.type === 'fixed') {
         const total = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
+        /* V48B5 R1 §5: om pris/antal sänks så att radens exVat blir lägre
+           än det sparade arbetskostnadsunderlaget, klampas underlaget ner
+           till radens nya exVat INNAN rutAmount räknas om — annars skulle
+           avdraget kunna räknas på ett belopp som inte längre finns kvar
+           på raden. */
+        if (l.reductionType && l.reductionType !== 'ingen') {
+          l.reductionBaseExVat = Math.max(0, Math.min(+l.reductionBaseExVat || 0, total));
+          l.rutAmount = this._calcLineRutAmount(l);
+        } else {
+          l.reductionBaseExVat = 0;
+          l.rutAmount = 0;
+        }
         const el = document.getElementById('off-lt-' + i);
         if (el) el.textContent = fmt(total) + ' kr';
         /* V41 §3: fastprisradens "ex. moms · X kr inkl."-subtext hade
            tidigare INGET id och uppdaterades aldrig här — en momsändring
            (eller prisändring) uppdaterade bara ex-momsbeloppet, inte det
            inkl-moms-belopp som redan stod skrivet på kortet. */
+        const incVat = total + Math.round(total * _normVat(l.vatRate) / 100);
         if (l.type === 'fixed') {
           const subEl = document.getElementById('off-lsub-' + i);
-          if (subEl) {
-            const incVat = total + Math.round(total * _normVat(l.vatRate) / 100);
-            subEl.textContent = 'ex. moms · ' + fmt(incVat) + ' kr inkl.';
+          if (subEl) subEl.textContent = 'ex. moms · ' + fmt(incVat) + ' kr inkl.';
+        }
+        /* V48B5 R1 §4 / R3 §11: arbetskostnadsfältets (om klampat) värde
+           måste hänga med live — annars kan fältet visa ett tal högre än
+           vad som faktiskt går att avdragsberäkna. R3: fältet är nu ett
+           formaterat text-fält — vi rör ALDRIG dess DOM-värde medan
+           användaren aktivt har det fokuserat (annars skulle skrivandet
+           avbrytas av en programmatisk omformatering mitt i); annars
+           visas det korrekt Svensk-grupperat. */
+        const baseEl = document.getElementById('off-lredbase-' + i);
+        if (baseEl && document.activeElement !== baseEl) {
+          baseEl.value = _formatMoneyInput(l.reductionBaseExVat || 0);
+        }
+        const hintEl = document.getElementById('off-lredhint-' + i);
+        if (hintEl) hintEl.style.display = (l.reductionType && l.reductionType !== 'ingen' && !l.reductionBaseExVat) ? '' : 'none';
+        const calcEl = document.getElementById('off-lredcalc-' + i);
+        if (calcEl) {
+          if (l.rutAmount) {
+            const eligibleVat = Math.round((l.reductionBaseExVat||0) * _normVat(l.vatRate) / 100);
+            const eligibleInclVat = (l.reductionBaseExVat||0) + eligibleVat;
+            const cust = incVat - l.rutAmount;
+            calcEl.style.display = '';
+            const eligEl = document.getElementById('off-leligincl-' + i);
+            const rutAmtEl = document.getElementById('off-lrutamt-' + i);
+            const custEl = document.getElementById('off-lcustpay-' + i);
+            if (eligEl) eligEl.textContent = fmt(eligibleInclVat) + ' kr';
+            if (rutAmtEl) rutAmtEl.textContent = '−' + fmt(l.rutAmount) + ' kr';
+            if (custEl) custEl.textContent = fmt(cust) + ' kr';
+          } else {
+            calcEl.style.display = 'none';
           }
         }
       }
@@ -2237,7 +2630,7 @@ const OffersPage = {
   /* ── Line management ─── */
   _addManualLine() {
     const newId = 'M'+Date.now();
-    this._editLines.push({id:newId,type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0});
+    this._editLines.push({id:newId,type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0,reductionType:'ingen',reductionBaseExVat:0,rutAmount:0});
     this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
@@ -2797,6 +3190,7 @@ const OffersPage = {
         generalTerms: d.generalTerms || '',
         internalNote: d.internalNote || '',
         discount:     this._discount || {type:'percent', value:0},
+        sectionOrder: _resolveSectionOrder(this._editSectionOrder),
         updatedAt:    now
       };
       const offerId = this._editOfferId;
@@ -2884,8 +3278,11 @@ const OfferDetailPage = {
 
     const cu       = getCu(off.customerId);
     const allLines = off.lines || [];
+    /* V48B5 R4: `prLines` behålls (för antal-badge/minimidebitering-
+       kontroll) men styr INTE längre radernas renderingsordning —
+       linesHtml (nedan) itererar allLines direkt så textblock hamnar på
+       sin exakta array-position mellan prissatta rader. */
     const prLines  = allLines.filter(l => l.type !== 'text');
-    const txtBlks  = allLines.filter(l => l.type === 'text');
     const extras   = off.extras || [];
 
     /* Diagnostik: logga raddata i konsolen för felsökning */
@@ -2933,20 +3330,35 @@ const OfferDetailPage = {
       `<span class="off-detail-fact-icon" style="color:${col};">${ic(icon,12)}</span>` +
       `<div><span class="off-detail-fact-lbl">${lbl}</span><span class="off-detail-fact-val">${val}</span></div>` +
       `</div>`;
+    /* V48B5 R1 §14/§18: paymentTerms/validityText hörde tidigare hemma i
+       den här FASTA faktarutan — nu ett eget flyttbart "commercialTerms"-
+       block (se sectionRenderers nedan) eftersom sectionOrder måste
+       styra dem på riktigt, inte bara metadata som kund/offert-ID/
+       version/datum (vilka FÅR förbli fast enligt kravet). */
     const factItems = [
       cu && cu.email   ? _fa('mail','var(--blue)','E-post', cu.email) : '',
       cu && cu.phone   ? _fa('phone','var(--blue)','Telefon', cu.phone) : '',
       cu && (cu.address||cu.zip||cu.city) ? _fa('building-2','var(--mt)','Adress', [cu.address,cu.zip,cu.city].filter(Boolean).join(', ')) : '',
       off.createdAt    ? _fa('calendar','var(--mt)','Datum', fmtDate(off.createdAt)) : '',
       off.validUntil   ? _fa('clock', expiring?'var(--or)':'var(--mt)', 'Giltig till', fmtDate(off.validUntil)+(expiring?` · ${daysLeft}d kvar`:''), expiring) : '',
-      off.paymentTerms ? _fa('receipt','var(--mt)','Betalning', off.paymentTerms) : '',
-      off.validityText ? _fa('info','var(--mt)','Giltighetstid', off.validityText) : '',
     ].filter(Boolean).join('');
 
     // ── Offer line rows (customer-facing, kalkyl hidden by default) ──
-    const linesHtml = prLines.length === 0
+    /* V48B5 R4 §3: raderna (inkl. textblock) MÅSTE renderas i EXAKT
+       off.lines-arrayordning — INTE grupperat efter typ. Iterera
+       `allLines` (inte den type-filtrerade `prLines`) så att ett
+       textblock hamnar precis där användaren placerade det, mellan
+       prissatta rader. */
+    const linesHtml = allLines.length === 0
       ? `<p style="padding:12px 14px;font-size:12px;color:var(--mt);">Inga offertrader</p>`
-      : prLines.map((l, idx) => {
+      : allLines.map((l, idx) => {
+          if (l.type === 'text') {
+            if (!l.blockTitle && !l.text) return '';
+            return `<div class="off-line-row off-line-row--text">` +
+              (l.blockTitle ? `<div class="off-line-row-header"><div class="off-line-row-name">${ic('align-left',11)} ${l.blockTitle}</div></div>` : '') +
+              (l.text ? `<div class="off-line-desc" style="white-space:pre-wrap;">${l.text}</div>` : '') +
+            `</div>`;
+          }
           if (l.type === 'service') {
             const lExVat  = l.exVat || 0;
             const lVat    = Math.round(lExVat * _normVat(l.vatRate) / 100);
@@ -2973,12 +3385,18 @@ const OfferDetailPage = {
           }
           const tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
           const totInc = tot + Math.round(tot * _normVat(l.vatRate) / 100);
+          const lRut2  = l.rutAmount || 0;
+          const lCust2 = totInc - lRut2;
           return `<div class="off-line-row">` +
             `<div class="off-line-row-header">` +
               `<div class="off-line-row-name">${l.description||'—'}</div>` +
-              `<div class="off-line-row-price"><span class="off-line-kundpris">${fmt(totInc)} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">inkl. moms</span></div>` +
+              `<div class="off-line-row-price">` +
+                (lRut2 ? `<span class="off-line-rut-badge">${l.reductionType==='rot'?'ROT':'RUT'}</span>` : '') +
+                `<span class="off-line-kundpris">${fmt(lRut2 ? lCust2 : totInc)} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">inkl. moms</span>` +
+              `</div>` +
             `</div>` +
             `<div class="off-line-desc">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||0)} kr ex. moms</div>` +
+            (lRut2 > 0 ? `<div class="off-line-rut-row">${ic('info',10)} Kundpris efter ${l.reductionType==='rot'?'ROT':'RUT'}-avdrag — totalt inkl. moms ${fmt(totInc)} kr, avdrag −${fmt(lRut2)} kr</div>` : '') +
           `</div>`;
         }).join('');
 
@@ -3072,61 +3490,88 @@ const OfferDetailPage = {
 
       ${factItems ? `<div class="off-detail-facts" style="flex-wrap:wrap;">${factItems}</div>` : ''}
 
-      ${off.summary||off.scope||off.includes||off.excludes?`
-      <div class="card">
-        <div class="card-header"><h3>${ic('align-left',13)} Uppdragsbeskrivning</h3></div>
-        <div class="card-body">
-          ${off.summary?`<div class="off-field-stack"><div class="off-field-label">Sammanfattning</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.summary)}</div></div>`:''}
-          ${off.scope?`<div class="off-field-stack"><div class="off-field-label">Uppdragets omfattning</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.scope)}</div></div>`:''}
-          ${off.includes||off.excludes?`<div class="off-incl-excl">
-            ${off.includes?`<div class="off-incl-col"><div class="off-incl-hd">${ic('check',11)} Ingår</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.includes)}</div></div>`:''}
-            ${off.excludes?`<div class="off-excl-col"><div class="off-excl-hd">${ic('x',11)} Ingår ej</div><div class="off-field-content off-rt" style="color:var(--mt);">${OfferDetailPage._renderText(off.excludes)}</div></div>`:''}
-          </div>`:''}
-        </div>
-      </div>`:''}
+      ${(() => {
+        /* V48B5 R1 (blocker-korrigering): EXAKT FYRA fysiskt flyttbara
+           block — description/pricing/commercialTerms/generalTerms —
+           ritas i off.sectionOrder-ordning. Ingen gruppning/undantag
+           längre: varje kanoniskt ID mappar 1:1 mot en renderare.
+           Saknas off.sectionOrder -> _resolveSectionOrder() returnerar
+           standardordningen (samma som innan denna korrigering fanns,
+           eftersom B5 aldrig gått live — se motivering vid
+           OFFER_SECTION_IDS). */
+        const descriptionHtml = (off.summary||off.scope||off.includes||off.excludes) ? `
+          <div class="card">
+            <div class="card-header"><h3>${ic('align-left',13)} Uppdragsbeskrivning</h3></div>
+            <div class="card-body">
+              ${off.summary?`<div class="off-field-stack"><div class="off-field-label">Sammanfattning</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.summary)}</div></div>`:''}
+              ${off.scope?`<div class="off-field-stack"><div class="off-field-label">Uppdragets omfattning</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.scope)}</div></div>`:''}
+              ${off.includes||off.excludes?`<div class="off-incl-excl">
+                ${off.includes?`<div class="off-incl-col"><div class="off-incl-hd">${ic('check',11)} Ingår</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.includes)}</div></div>`:''}
+                ${off.excludes?`<div class="off-excl-col"><div class="off-excl-hd">${ic('x',11)} Ingår ej</div><div class="off-field-content off-rt" style="color:var(--mt);">${OfferDetailPage._renderText(off.excludes)}</div></div>`:''}
+              </div>`:''}
+            </div>
+          </div>`:'';
 
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('file-text',13)} Offertrader</h3>
-          ${prLines.length>0?`<span class="bdg bdg-grey">${prLines.length} rad${prLines.length===1?'':'er'}</span>`:''}
-        </div>
-        ${linesHtml}
-        <div class="off-detail-sum" style="margin:0;border-radius:0 0 var(--rs) var(--rs);border-left:none;border-right:none;border-bottom:none;">
-          <div class="off-detail-sum-row"><span class="dk">Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
-          ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">Rabatt (${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
-          <div class="off-detail-sum-row"><span class="dk">Moms</span><span>${fmt(vat)} kr</span></div>
-          <div class="off-detail-sum-row"><span class="dk">Totalt inkl. moms</span><strong>${fmt(incVat)} kr</strong></div>
-          ${rutAmt?`<div class="off-detail-sum-row rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>`:''}
-          <div class="off-detail-sum-final">
-            <span class="off-detail-sum-final-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</span>
-            <span class="off-detail-sum-final-val">${fmt(cust)} kr</span>
+        const linesCardHtml = `<div class="card">
+          <div class="card-header">
+            <h3>${ic('file-text',13)} Offertrader</h3>
+            ${prLines.length>0?`<span class="bdg bdg-grey">${prLines.length} rad${prLines.length===1?'':'er'}</span>`:''}
           </div>
-          ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:6px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}
-          ${prLines.some(l=>(l.description||'').includes('minimidebitering'))?`<div style="font-size:10px;color:var(--mt);margin-top:6px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;border-radius:0 4px 4px 0;">${ic('info',10)} <strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
-        </div>
-      </div>
-
-      ${extras.length?`<div class="card">
-        <div class="card-header"><h3>${ic('plus',13)} Tillval</h3></div>
-        ${extras.map(e=>`<div class="off-line-row">
-          <div class="off-line-row-header">
-            <div class="off-line-row-name">${e.description||'—'}</div>
-            <div class="off-line-row-price"><span class="off-line-kundpris">${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">ex. moms</span></div>
+          ${linesHtml}
+          <div class="off-detail-sum" style="margin:0;border-radius:0 0 var(--rs) var(--rs);border-left:none;border-right:none;border-bottom:none;">
+            <div class="off-detail-sum-row"><span class="dk">Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
+            ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">Rabatt (${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
+            <div class="off-detail-sum-row"><span class="dk">Moms</span><span>${fmt(vat)} kr</span></div>
+            <div class="off-detail-sum-row"><span class="dk">Totalt inkl. moms</span><strong>${fmt(incVat)} kr</strong></div>
+            ${rutAmt?`<div class="off-detail-sum-row rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>`:''}
+            <div class="off-detail-sum-final">
+              <span class="off-detail-sum-final-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</span>
+              <span class="off-detail-sum-final-val">${fmt(cust)} kr</span>
+            </div>
+            ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:6px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}
+            ${prLines.some(l=>(l.description||'').includes('minimidebitering'))?`<div style="font-size:10px;color:var(--mt);margin-top:6px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;border-radius:0 4px 4px 0;">${ic('info',10)} <strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
           </div>
-          <div class="off-line-desc">${e.qty||1} ${e.unit||'st'} × ${fmt(e.unitPrice||0)} kr</div>
-        </div>`).join('')}
-      </div>`:''}
+        </div>`;
 
-      ${txtBlks.filter(tb=>tb.blockTitle||tb.text).map(tb=>`
-      <div class="card">
-        ${tb.blockTitle?`<div class="card-header"><h3>${ic('align-left',13)} ${tb.blockTitle}</h3></div>`:''}
-        <div class="card-body"><p style="white-space:pre-wrap;font-size:13px;line-height:1.6;">${tb.text||''}</p></div>
-      </div>`).join('')}
+        /* V48B5 R4: textblocken (type:'text'-rader) renderas nu INLINE i
+           linesHtml (se ovan) på sin exakta array-position — inte längre
+           som egna kort samlade efter Tillval. Tillval ligger kvar som
+           ett eget kort, EFTER hela den interfolierade offertrads-listan
+           (extras interfolieras inte i denna release, per kontraktet). */
+        const extrasCardHtml = extras.length?`<div class="card">
+          <div class="card-header"><h3>${ic('plus',13)} Tillval</h3></div>
+          ${extras.map(e=>`<div class="off-line-row">
+            <div class="off-line-row-header">
+              <div class="off-line-row-name">${e.description||'—'}</div>
+              <div class="off-line-row-price"><span class="off-line-kundpris">${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">ex. moms</span></div>
+            </div>
+            <div class="off-line-desc">${e.qty||1} ${e.unit||'st'} × ${fmt(e.unitPrice||0)} kr</div>
+          </div>`).join('')}
+        </div>`:'';
 
-      ${off.generalTerms?`<div class="card">
-        <div class="card-header"><h3>${ic('file-text',13)} Allmänna villkor</h3></div>
-        <div class="card-body"><p style="font-size:12px;color:var(--mt);white-space:pre-wrap;line-height:1.6;">${off.generalTerms}</p></div>
-      </div>`:''}
+        const pricingHtml = linesCardHtml + extrasCardHtml;
+
+        const commercialTermsHtml = (off.paymentTerms||off.validityText) ? `<div class="card">
+          <div class="card-header"><h3>${ic('receipt',13)} Offertvillkor</h3></div>
+          <div class="card-body">
+            ${off.paymentTerms?`<div class="off-field-stack"><div class="off-field-label">Betalningsvillkor</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.paymentTerms)}</div></div>`:''}
+            ${off.validityText?`<div class="off-field-stack"><div class="off-field-label">Giltighetstid</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.validityText)}</div></div>`:''}
+          </div>
+        </div>`:'';
+
+        const generalTermsCardHtml = off.generalTerms?`<div class="card">
+          <div class="card-header"><h3>${ic('file-text',13)} Allmänna villkor</h3></div>
+          <div class="card-body"><p style="font-size:12px;color:var(--mt);white-space:pre-wrap;line-height:1.6;">${off.generalTerms}</p></div>
+        </div>`:'';
+
+        const renderers = {
+          description: descriptionHtml,
+          pricing: pricingHtml,
+          commercialTerms: commercialTermsHtml,
+          generalTerms: generalTermsCardHtml
+        };
+        return _resolveSectionOrder(off.sectionOrder).map(id => renderers[id] || '').join('');
+      })()}
 
       ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${off.internalNote}</div>`:''}
 
@@ -4148,8 +4593,8 @@ const OfferDetailPage = {
     const orgNr     = s.orgNr          || '';
     const logoUrl   = BrandingService.logoLightAbsolute();
 
-    const prLines  = (off.lines||[]).filter(l=>l.type!=='text');
-    const txtBlks  = (off.lines||[]).filter(l=>l.type==='text'&&(l.blockTitle||l.text));
+    const allLines = off.lines||[];
+    const prLines  = allLines.filter(l=>l.type!=='text');
     const extras   = off.extras||[];
     const _tot     = _offerCalcTotals(off);
     const rawExVat = _tot.rawExVat;
@@ -4167,13 +4612,23 @@ const OfferDetailPage = {
 
     // RUT or ROT label
     const rutLabel = (() => {
-      const svcs = prLines.filter(l=>l.type==='service'&&(l.rutAmount||0)>0);
+      const svcs = prLines.filter(l=>(l.rutAmount||0)>0);
       if (svcs.length === 0) return 'RUT/ROT-avdrag';
       return svcs.every(l=>l.reductionType==='rot') ? 'ROT-avdrag' : 'RUT-avdrag';
     })();
 
-    // Line rows — customer-facing, no internal kalkyl
-    const lineRows = prLines.map(l => {
+    /* V48B5 R4 §4: rader (inkl. textblock) MÅSTE fysiskt återges i EXAKT
+       off.lines-arrayordning — text-rader ritas som en <tr> med
+       colspan="4" i SAMMA tabell, på sin exakta position, istället för
+       att samlas separat efter Tillval. */
+    const lineRows = allLines.map(l => {
+      if (l.type==='text') {
+        if (!l.blockTitle && !l.text) return '';
+        return `<tr class="txt-row"><td colspan="4">` +
+          (l.blockTitle ? `<strong>${esc2(l.blockTitle)}</strong>` : '') +
+          (l.text ? (l.blockTitle?'<br>':'') + `<span class="ld" style="white-space:pre-wrap;">${esc2(l.text)}</span>` : '') +
+        `</td></tr>`;
+      }
       if (l.type==='service') {
         const lExVat=l.exVat||0, lRate=_normVat(l.vatRate), lVat=Math.round(lExVat*lRate/100);
         return `<tr>
@@ -4205,6 +4660,10 @@ const OfferDetailPage = {
     }).join('') : '';
 
     const defaultTerms = 'Offerten är giltig enligt angiven giltighetstid från offererat datum. Betalning 30 dagar netto. Dröjsmålsränta 8 % per år. Vid godkänd offert upprättas skriftlig orderbekräftelse. VIFT förbehåller sig rätten att justera priset vid väsentliga förändringar av uppdragets omfattning. Priser angivna exklusive moms om inget annat framgår.';
+    const generalTermsBlock = `<div class="terms">
+  <div class="terms-h">Allmänna villkor</div>
+  <div class="terms-t">${off.generalTerms ? esc2(off.generalTerms).replace(/\n/g,'<br>') : esc2(defaultTerms)}</div>
+</div>`;
     const footerLine = [coPhone?'Tel: '+coPhone:'', coEmail||'', orgNr?'Org.nr: '+orgNr:''].filter(Boolean).join('  ·  ');
 
     const html = `<!DOCTYPE html>
@@ -4330,20 +4789,29 @@ td.fw{font-weight:600;color:#0d2b4e;}
     <div class="p-det">${[cuContact?esc2(cuContact):'', cuPhone?'Tel: '+esc2(cuPhone):'', cuEmail?esc2(cuEmail):'', cuAddr?esc2(cuAddr):''].filter(Boolean).join('<br>')}</div>
   </div>
   <div class="party">
-    <div class="p-lbl">Offertvillkor</div>
-    <div class="p-det">${[off.paymentTerms?'Betalning: '+esc2(off.paymentTerms):'', off.validityText?'Giltighetstid: '+esc2(off.validityText):'Giltighetstid: 30 dagar', orgNr?'Org.nr: '+esc2(orgNr):''].filter(Boolean).join('<br>')}</div>
+    <div class="p-lbl">Utfärdare</div>
+    <div class="p-det">${[orgNr?'Org.nr: '+esc2(orgNr):''].filter(Boolean).join('<br>')}</div>
   </div>
 </div>
 
-${off.summary?`<div class="sec"><div class="sec-h">Sammanfattning</div><div class="sec-t">${esc2(off.summary).replace(/\n/g,'<br>')}</div></div>`:''}
-${off.scope?`<div class="sec"><div class="sec-h">Uppdragets omfattning</div><div class="sec-t">${esc2(off.scope).replace(/\n/g,'<br>')}</div></div>`:''}
-
-${off.includes||off.excludes?`<div class="ie">
-  ${off.includes?`<div class="ie-in"><div class="ie-lbl-in">✓ Ingår i uppdraget</div><div class="ie-t">${esc2(san2(off.includes))}</div></div>`:''}
-  ${off.excludes?`<div class="ie-out"><div class="ie-lbl-out">✗ Ingår ej</div><div class="ie-t muted">${esc2(san2(off.excludes))}</div></div>`:''}
-</div>`:''}
-
-<div class="sec-h">Offertrader</div>
+${(() => {
+  /* V48B5 R1/R2: EXAKT FYRA fysiskt flyttbara block — description/
+     pricing/commercialTerms/generalTerms. "pricing" omfattar HELA det
+     prisrelaterade innehållet (rader, tillval, textblock, delsumma/
+     rabatt/moms/ROT-RUT-box, kundpris) och flyttas som en enhet.
+     Godkännande-signaturrutan är INTE ett av de fyra blocken (R2 §2-
+     korrigering — låg tidigare felaktigt inbäddad i pricing och
+     flyttade med det) — den ligger FAST direkt efter den ordnade
+     sekvensen, se koden efter renderers-loopen nedan. Sidfoten ligger
+     alltid allra sist (administrativ metadata, inget offertinnehåll).
+     B5 har aldrig gått live -> ingen legacy-position att bevara. */
+  const descriptionBlock = off.summary?`<div class="sec"><div class="sec-h">Sammanfattning</div><div class="sec-t">${esc2(off.summary).replace(/\n/g,'<br>')}</div></div>`:'';
+  const scopeBlock = off.scope?`<div class="sec"><div class="sec-h">Uppdragets omfattning</div><div class="sec-t">${esc2(off.scope).replace(/\n/g,'<br>')}</div></div>`:'';
+  const includesExcludesBlock = off.includes||off.excludes?`<div class="ie">
+    ${off.includes?`<div class="ie-in"><div class="ie-lbl-in">✓ Ingår i uppdraget</div><div class="ie-t">${esc2(san2(off.includes))}</div></div>`:''}
+    ${off.excludes?`<div class="ie-out"><div class="ie-lbl-out">✗ Ingår ej</div><div class="ie-t muted">${esc2(san2(off.excludes))}</div></div>`:''}
+  </div>`:'';
+  const linesBlock = `<div class="sec-h">Offertrader</div>
 <table>
   <thead><tr>
     <th>Tjänst / Beskrivning</th>
@@ -4352,12 +4820,13 @@ ${off.includes||off.excludes?`<div class="ie">
     <th class="r">Inkl. moms</th>
   </tr></thead>
   <tbody>${lineRows}</tbody>
-</table>
+</table>`;
+  /* V48B5 R4: textblocken ritas nu INLINE i lineRows (ovan), på sin
+     exakta position i off.lines — inte längre samlade separat efter
+     Tillval. */
+  const extrasBlock = extras.length?`<table style="margin-top:8px;"><thead><tr><th colspan="4" style="background:#475569;font-size:10px;">Tillval (ej inkluderat i totalpriset)</th></tr></thead><tbody>${extrasRows}</tbody></table>`:'';
 
-${extras.length?`<table style="margin-top:8px;"><thead><tr><th colspan="4" style="background:#475569;font-size:10px;">Tillval (ej inkluderat i totalpriset)</th></tr></thead><tbody>${extrasRows}</tbody></table>`:''}
-${txtBlks.map(tb=>`<div class="sec" style="margin-top:14px;">${tb.blockTitle?`<div class="sec-h">${esc2(tb.blockTitle)}</div>`:''}${tb.text?`<div class="sec-t">${esc2(tb.text).replace(/\n/g,'<br>')}</div>`:''}</div>`).join('')}
-
-<div class="tot-wrap">
+  const totalsBlock = `<div class="tot-wrap">
   <div class="tot-box">
     <div class="tot-r"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
     ${discAmt?`<div class="tot-r disc"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
@@ -4367,9 +4836,7 @@ ${txtBlks.map(tb=>`<div class="sec" style="margin-top:14px;">${tb.blockTitle?`<d
     ${hasRut?`<div class="tot-r rut-deduct" style="margin-top:4px;"><span>${rutLabel}</span><span>−${fmt2(rutAmt)} kr</span></div>`:''}
   </div>
 </div>
-
 ${(off.lines||[]).some(l=>(l.description||'').includes('minimidebitering'))?`<div style="margin-bottom:12px;padding:7px 10px;background:#fffbeb;border-left:3px solid #d97706;font-size:10px;color:#555;line-height:1.5;border-radius:0 4px 4px 0;"><strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
-
 ${hasRut?`<div class="rut">
   <div class="rut-icon">${rutLabel.startsWith('ROT')?'ROT':'RUT'}</div>
   <div class="rut-body">
@@ -4378,8 +4845,28 @@ ${hasRut?`<div class="rut">
     <div class="rut-sub">Kundpris inkl. moms &nbsp;·&nbsp; Preliminärt avdrag: −${fmt2(rutAmt)} kr &nbsp;·&nbsp; Totalt inkl. moms: ${fmt2(incVat)} kr</div>
     <div class="rut-note">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion. VIFT administrerar ansökan direkt till Skatteverket.</div>
   </div>
-</div>`:''}
+</div>`:''}`;
 
+  const commercialTermsBlock = (off.paymentTerms||off.validityText) ? `<div class="sec">
+    <div class="sec-h">Offertvillkor</div>
+    ${off.paymentTerms?`<div class="p-det" style="margin-bottom:6px;"><strong>Betalningsvillkor:</strong> ${esc2(off.paymentTerms)}</div>`:''}
+    ${off.validityText?`<div class="p-det"><strong>Giltighetstid:</strong> ${esc2(off.validityText)}</div>`:''}
+  </div>`:'';
+
+  const renderers = {
+    description: descriptionBlock + scopeBlock + includesExcludesBlock,
+    pricing: linesBlock + extrasBlock + totalsBlock,
+    commercialTerms: commercialTermsBlock,
+    generalTerms: generalTermsBlock
+  };
+  return _resolveSectionOrder(off.sectionOrder).map(id => renderers[id] || '').join('');
+})()}
+
+<!-- V48B5 R2 §2: Godkännande/signaturrutan är INTE ett av de fyra
+     flyttbara innehållsblocken (description/pricing/commercialTerms/
+     generalTerms) — den ligger alltid FAST direkt efter den ordnade
+     sekvensen, oavsett vald sectionOrder (fanns tidigare felaktigt
+     inbäddad i pricing-blocket och flyttade med det). -->
 <div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:18px;">
   <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#94a3b8;margin-bottom:14px;">Godkännande</div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
@@ -4396,11 +4883,6 @@ ${hasRut?`<div class="rut">
       <div style="font-size:10px;color:#64748b;">Namnförtydligande</div>
     </div>
   </div>
-</div>
-
-<div class="terms">
-  <div class="terms-h">Allmänna villkor</div>
-  <div class="terms-t">${off.generalTerms ? esc2(off.generalTerms).replace(/\n/g,'<br>') : esc2(defaultTerms)}</div>
 </div>
 
 <div class="ftr">
@@ -5271,17 +5753,40 @@ ${hasRut?`<div class="rut">
       <strong>Hämtas separat:</strong> ${separate.map(a=>esc(a.displayName||a.originalFileName)).join(', ')}
     </div>` : '';
 
+    /* V48B5 R3 §16: "okLabel"/"ok" är INGA fält Modal.open() faktiskt
+       stödjer (den läser bara opts.buttons) — modalen renderade tidigare
+       HELT UTAN knapp, så "Generera PDF" gick aldrig att klicka på.
+       Fixat till samma buttons-array-form som resten av kodbasen
+       använder (se _requestWizardClose()). */
     Modal.open({
       title: 'Samlad PDF',
       body: `<p style="font-size:12px;margin:0 0 10px;">Genererar en PDF med offertinnehållet plus ${embeddable.length} inbäddningsbara bilagor.</p>
         ${sepHtml}
         <p style="font-size:11px;color:var(--mt);margin-top:10px;">DOCX, XLSX och TXT-filer kan inte bäddas in utan konvertering och listas på en sista sida.</p>`,
-      okLabel: 'Generera PDF',
-      ok: () => OfferDetailPage._requestCombinedPdf(offerId)
+      buttons: [
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: 'Generera PDF', cls: 'btn bp', onClick: () => {
+          Modal.close();
+          /* V48B5 R3 §17: öppnar en tom flik SYNKRONT, direkt i den
+             riktiga klick-händelsen — innan någon async-väntan — så att
+             Safari/mobilens popup-blockerare räknar den som en direkt
+             användarinitierad åtgärd. */
+          const pdfWindow = window.open('', '_blank');
+          OfferDetailPage._requestCombinedPdf(offerId, pdfWindow);
+        }}
+      ]
     });
   },
 
-  async _requestCombinedPdf(offerId) {
+  /* V48B5 R3 §15-19: den interna "Samlad PDF"-åtgärden ska öppna PDF:en
+     direkt för visning istället för en blind nedladdning. `pdfWindow` är
+     redan öppnad SYNKRONT av anroparens klick-händelse (se
+     _generateCombinedPdf) — här navigerar vi bara den fönsterreferensen
+     till blob-URL:en när PDF:en är klar. Om `pdfWindow` är null (t.ex.
+     popup ändå blockerad, eller anropad utan ett fönster) faller vi
+     tillbaka till den tidigare nedladdningsvägen så funktionen aldrig
+     tyst misslyckas. */
+  async _requestCombinedPdf(offerId, pdfWindow) {
     const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
     try {
       showToast('Genererar PDF…');
@@ -5300,15 +5805,26 @@ ${hasRut?`<div class="rut">
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'offert-' + offerId + '.pdf';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      if (pdfWindow && !pdfWindow.closed) {
+        pdfWindow.location = url;
+        /* Fördröjd cleanup — den nya fliken måste hinna ladda in
+           blob-URL:en innan den återkallas, annars kan sidan visas tom. */
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        /* Popup blockerad (eller inget fönster skickades med) — säker
+           nedladdningsfallback, samma beteende som innan denna gate. */
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'offert-' + offerId + '.pdf';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        showToast('PDF nedladdad (popup blockerades av webbläsaren).');
+      }
     } catch(e) {
+      if (pdfWindow && !pdfWindow.closed) pdfWindow.close();
       showToast('PDF-generering misslyckades: ' + e.message, 'error');
     }
   },
@@ -5334,7 +5850,7 @@ ${hasRut?`<div class="rut">
       const snapshot = {
         id: off.id, title: off.title, versionNumber: Number(off.versionNumber) || 1,
         lines: (off.lines||[]).map(function(l) {
-          const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','subLines','text'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+          const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
         }),
         /* V39 §3: vatRate måste bevaras för extras precis som för lines —
            annars tappar snapshotet en tilläggsrads faktiska momssats och
@@ -5349,6 +5865,7 @@ ${hasRut?`<div class="rut">
         validityText: off.validityText, terms: off.terms, includes: off.includes,
         excludes: off.excludes, scope: off.scope, summary: off.summary,
         generalTerms: off.generalTerms, address: off.address,
+        sectionOrder: _resolveSectionOrder(off.sectionOrder),
         customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })(),
         publicAttachmentIds: (state.offerAttachments||[])
           .filter(function(a){ return a.offerId===offerId && a.active!==false && a.includeInPublicView===true; })

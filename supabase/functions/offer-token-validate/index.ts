@@ -316,6 +316,7 @@ function buildPublicOffer(
     summary:        s('summary')       ?? '',
     generalTerms:   s('generalTerms')  ?? '',
     address:        s('address')       ?? '',
+    sectionOrder:   filterPublicSectionOrder(s('sectionOrder')),
     /* Dynamiska metadata — alltid från live-offerten */
     status:         off.status,
     contactName:    resolvedContactName,
@@ -328,6 +329,31 @@ function buildPublicOffer(
 }
 
 /* Filtrera bort interna fält från rader (inköpspris, marginal, kalkyl) */
+/* V48B5 R1 (blocker-korrigering av Gate C): EXAKT de fyra kanoniska
+   block-ID:na — samma modell som PageShells.OFFER_SECTION_IDS. Ingen
+   migrering av den gamla 8-ID-utvecklingsmodellen behövs (B5 gick
+   aldrig live). Sektions-ID:na mappar ENDAST till fördefinierade
+   render-mallar i public-offer.html/offer-public-pdf — aldrig godtycklig
+   HTML/kod. Okända ID:n kasseras, dubbletter kasseras, saknade ID:n
+   läggs till sist i standardordning; ogiltig/tom indata -> hela
+   standardordningen (= samma fallback-princip som PageShells.
+   _resolveSectionOrder / public-offer.html._poResolveSectionOrder). */
+const PUBLIC_SECTION_IDS = ['description', 'pricing', 'commercialTerms', 'generalTerms']
+function filterPublicSectionOrder(order: unknown): string[] {
+  const fallback = PUBLIC_SECTION_IDS.slice()
+  if (!Array.isArray(order) || order.length === 0) return fallback
+  const seen: Record<string, boolean> = {}
+  const out: string[] = []
+  for (const id of order) {
+    if (typeof id === 'string' && PUBLIC_SECTION_IDS.indexOf(id) !== -1 && !seen[id]) {
+      seen[id] = true
+      out.push(id)
+    }
+  }
+  for (const id of fallback) { if (!seen[id]) { seen[id] = true; out.push(id) } }
+  return out
+}
+
 function filterPublicLines(lines: unknown): unknown[] {
   if (!Array.isArray(lines)) return []
   return lines.map((l: Record<string, unknown>) => {
@@ -335,7 +361,7 @@ function filterPublicLines(lines: unknown): unknown[] {
     const pub: Record<string, unknown> = {}
     const allowed = ['id','type','description','templateName','qty','unit',
                      'unitPrice','discount','total','vatRate','exVat','rutAmount',
-                     'subLines','text']
+                     'reductionType','reductionBaseExVat','subLines','text','blockTitle']
     for (const k of allowed) {
       if (k in l) pub[k] = l[k]
     }
