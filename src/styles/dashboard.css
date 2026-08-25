@@ -52,11 +52,14 @@
   padding: 10px 12px;
   border: 1px solid var(--br);
   cursor: pointer;
-  transition: all .15s;
+  transition: box-shadow .15s, border-color .15s, background .15s;
   box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
-.kpi-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.07); transform: translateY(-1px); }
-.kpi-card:active { transform: scale(.98); }
+/* V51A §9: inga dimensionsändrande hover-effekter — bounding box är
+   pixel-identisk i vila/hover/aktiv. Endast skugga/kant/ton signalerar
+   interaktivitet. */
+.kpi-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.07); border-color: #a5c4e4; }
+.kpi-card:active { background: var(--bg); }
 
 .kpi-number {
   font-size: 22px;
@@ -104,15 +107,20 @@
 /* ── Quick action list ────────────────────── */
 .quick-list { display: flex; flex-direction: column; }
 
+/* V51A §9: padding/margin are now IDENTICAL in rest and hover — the
+   "bleed" inset that used to only appear on :hover (widening the row via
+   a negative margin) is now part of the row's permanent box model, so
+   hovering only ever toggles background-color, never the bounding box. */
 .quick-action-row {
   display: flex; align-items: center; gap: 12px;
-  padding: 9px 0; border: none; border-bottom: 1px solid var(--bg);
-  background: none; cursor: pointer; width: 100%; text-align: left;
-  transition: background .1s; border-radius: 0;
+  padding: 9px 14px; margin: 0 -14px; width: calc(100% + 28px);
+  border: none; border-bottom: 1px solid var(--bg);
+  background: none; cursor: pointer; text-align: left;
+  transition: background .1s; border-radius: 6px;
 }
 .quick-action-row:last-child { border-bottom: none; }
-.quick-action-row:hover { background: var(--bg); margin: 0 -14px; padding: 9px 14px; border-radius: 6px; }
-.quick-action-row:active { opacity: .75; }
+.quick-action-row:hover { background: var(--bg); }
+.quick-action-row:active { background: var(--br); }
 
 .qar-icon {
   width: 30px; height: 30px; border-radius: 7px;
@@ -126,13 +134,16 @@
 .qar-arrow { color: #cbd5e1; flex-shrink: 0; }
 
 /* ── Crow (compact row in widgets) ────────── */
+/* V51A §9: same permanent-inset pattern as .quick-action-row — padding/
+   margin no longer change between rest and hover, only background does. */
 .crow {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 0; border-bottom: 1px solid var(--bg);
-  cursor: pointer; transition: background .1s;
+  padding: 8px 12px; margin: 0 -12px; width: calc(100% + 24px);
+  border-bottom: 1px solid var(--bg);
+  cursor: pointer; transition: background .1s; border-radius: 6px; box-sizing: border-box;
 }
 .crow:last-child { border-bottom: none; }
-.crow:hover { background: var(--bg); margin: 0 -12px; padding: 8px 12px; border-radius: 6px; }
+.crow:hover { background: var(--bg); }
 
 /* ── Activity log ─────────────────────────── */
 .act-item { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--bg); }
@@ -142,7 +153,13 @@
 .act-dot.red    { background: var(--rd); }
 .act-dot.orange { background: var(--or); }
 .act-dot.purple { background: var(--pu); }
-.act-text { font-size: 12px; font-weight: 600; color: var(--tx); flex: 1; line-height: 1.4; }
+/* V51A R5 §4 — flex-item utan min-width:0 vägrar krympa under sin
+   innehålls-minimibredd; en lång sammanhängande textsträng (t.ex. en
+   URL eller ett långt namn utan mellanslag) i aktivitetstexten kunde
+   därför tvinga raden bredare än kortet. Kontrollerad radbrytning
+   (flera rader tillåtna, ingen ellipsis — händelsetexten ska förbli
+   läsbar) i stället för att låta den svälla ut ur kortet. */
+.act-text { font-size: 12px; font-weight: 600; color: var(--tx); flex: 1; min-width: 0; line-height: 1.4; overflow-wrap: break-word; }
 .act-time { font-size: 10px; color: var(--mt); flex-shrink: 0; margin-top: 2px; }
 
 /* ── Pair wrapper (always 2-col) ──────────── */
@@ -437,4 +454,70 @@ body[data-density="spacious"] .quick-icon  { width: 40px; height: 40px; }
   background: none; border: none; cursor: pointer;
   color: #1e40af; font-weight: 700; font-size: 13px;
   padding: 0 0 0 2px; line-height: 1;
+}
+
+/* ── V51A: Aktiva jobb — karta + lista ─────── */
+.dash-ops-map-wrap { display: flex; flex-direction: column; gap: 10px; }
+@media (min-width: 1024px) {
+  .dash-ops-map-wrap { flex-direction: row-reverse; align-items: stretch; }
+  .dash-ops-map-list { flex: 1 1 0; min-width: 0; }
+  .dash-ops-map-canvas-wrap { flex: 1.3 1 0; min-width: 0; }
+}
+.dash-ops-map-list {
+  display: flex; flex-direction: column; gap: 5px;
+  max-height: 340px; overflow-y: auto; overflow-x: hidden;
+}
+.dash-ops-map-canvas-wrap {
+  height: 300px; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--br); position: relative; background: var(--bg);
+}
+@media (min-width: 1024px) { .dash-ops-map-canvas-wrap { height: 340px; } }
+#dash-ops-map { width: 100%; height: 100%; }
+.dash-ops-map-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: 6px; color: var(--mt); font-size: 12px; text-align: center; padding: 16px;
+}
+.dash-ops-map-count {
+  font-size: 10.5px; color: var(--mt); padding: 0 2px 6px;
+}
+
+/* V51A R5 §5/§6 — HORISONTELL SCROLLBAR-FIX: raden återanvände tidigare
+   samma "bleed till kortkanten"-mönster som .crow/.quick-action-row
+   (negativ margin + width: calc(100% + Npx)), men till skillnad från de
+   andra raderna sitter denna INTE direkt i en .card-body — den sitter i
+   .dash-ops-map-list, en EGEN, smalare flex-/scroll-container utan egen
+   padding att kompensera mot. Bleeden gjorde därför raden bokstavligen
+   20px BREDARE än sin faktiska förälder, vilket (i kombination med att
+   CSS tvingar overflow-x till 'auto' så snart overflow-y är satt på
+   samma element) gav listan en egen, oönskad horisontell scrollbar —
+   käll-bevisat i webbläsare vid 1366/1440/1920px (10px överskott,
+   exakt motsvarande bleedens 2×10px minus vad den negativa marginalen
+   kunde kompensera). Bleed-tekniken behövs inte här (listan är redan en
+   egen, avgränsad panel, inte kortets egen padding-yta) — raden hålls
+   nu inom sin egen 100%-bredd. */
+.dash-job-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 7px; cursor: pointer; transition: background .1s;
+  width: 100%; box-sizing: border-box; min-width: 0;
+}
+.dash-job-row:hover { background: var(--bg); }
+.dash-job-row-body { flex: 1; min-width: 0; }
+.dash-job-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dash-job-row-top > .bdg { flex-shrink: 0; }
+.dash-job-row-title {
+  font-size: 12px; font-weight: 700; color: var(--tx);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dash-job-row-sub { font-size: 10.5px; color: var(--mt); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-job-progress-track { height: 5px; background: var(--br); border-radius: 5px; overflow: hidden; margin-top: 5px; }
+.dash-job-progress-fill { height: 100%; border-radius: 5px; transition: width .2s; }
+.dash-job-progress-label { font-size: 9.5px; color: var(--mt); flex-shrink: 0; font-weight: 700; }
+
+.dash-map-popup { font-family: inherit; font-size: 12px; min-width: 160px; }
+.dash-map-popup-title { font-weight: 800; color: var(--navy); font-size: 12.5px; margin-bottom: 2px; }
+.dash-map-popup-sub { color: var(--mt); font-size: 11px; margin-bottom: 6px; }
+.dash-map-popup-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--navy); color: #fff; border: none; border-radius: 6px;
+  padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
 }

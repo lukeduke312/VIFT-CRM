@@ -81,7 +81,18 @@ const Dashboard = {
     const todayStr2 = todayStr.charAt(0).toUpperCase() + todayStr.slice(1);
 
     // Quick urgent summary for hero
-    const allWos   = (state.workOrders||[]).filter(a => !a.archived && !a.deleted);
+    /* V51A R3 §6 — blockerare A: heroSub byggdes tidigare från ALLA
+       state.workOrders utan någon AO-behörighetskontroll alls — en
+       användare helt utan ao_view_all/ao_view_own (eller med
+       ao_view_own men oupplösbar identitet) kunde ändå se bolagets
+       globala akut-/försenat-/idag-räknare i hero:n. Nu via samma
+       kanoniska hjälpfunktion som resten av AO-ytorna: admin/all →
+       oförändrat globalt; own+giltigt id → endast egna+pool-synliga
+       ordrar; annars → tom lista (inga hero-chips visas alls). */
+    const allWos   = this._scopeWorkOrdersForCurrentUser(
+      (state.workOrders||[]).filter(a => !a.archived && !a.deleted),
+      { includeSharedPool: true }
+    );
     const alive    = a => !['klar','fakturerad','avbruten'].includes(a.status);
     const urgCount = allWos.filter(a => a.priority==='akut' && alive(a)).length;
     const overdueC = allWos.filter(a => a.scheduledDate && a.scheduledDate < tdy() && alive(a) && a.status !== 'pool').length;
@@ -105,6 +116,33 @@ const Dashboard = {
       `</div>` +
       (heroSub ? `<div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">${heroSub}</div>` : '') +
       `<div class="dash-layout">${parts.join('')}</div>`;
+
+    /* V51A R1 §9/§10 — GENERATIONSSPÄRR mot asynkrona kart-race:er.
+       Kartan kan bara initieras EFTER att innerHTML ovan satts (DOM-noden
+       #dash-ops-map måste faktiskt existera). VARJE render()-anrop
+       ogiltigförklarar alla tidigare, ev. fortfarande väntande
+       kart-initieringar OVILLKORLIGT (även om denna omgång inte visar
+       ops_map alls) — annars kan en gammal, långsam geokodningsrunda
+       hinna slutföras EFTER en nyare rendering och skriva över dess
+       kartcontainer med inaktuell data.
+       `jobsSnapshot` fångas HÄR, synkront, i SAMMA render()-anrop som satte
+       _opsMapJobs — inte lästs lat inifrån den asynkrona funktionen — så
+       en efterföljande render() (som synkront skriver över _opsMapJobs
+       igen innan den första kartinitieringen ens hunnit starta) aldrig kan
+       smyga in fel data i ett äldre, redan schemalagt pass. */
+    clearTimeout(this._mapInitTimer);
+    this._mapGeneration = (this._mapGeneration || 0) + 1;
+    const myGen = this._mapGeneration;
+    if (sorted.some(m => m.id === 'ops_map') && document.getElementById('dash-ops-map-canvas-wrap')) {
+      const jobsSnapshot = this._opsMapJobs;
+      this._mapInitTimer = setTimeout(() => this._initOpsMap(myGen, jobsSnapshot), 30);
+    } else if (this._mapInstance) {
+      // ops_map inte längre synlig i denna layout (t.ex. avstängd via
+      // Anpassa) — städa bort en ev. kvarvarande karta, ingen framtida
+      // generation kommer annars göra det åt oss.
+      try { this._mapInstance.remove(); } catch(e) {}
+      this._mapInstance = null;
+    }
   },
 
   /* ── Behörighet ────────────────────────────────────────────────────── */
@@ -112,6 +150,55 @@ const Dashboard = {
     const mod = DashboardConfig.getModule(moduleId);
     if (!mod) return false;
     return Auth.canAny(mod.requiredPermissions || []);
+  },
+
+  /* ── Kanonisk AO-synlighet (V51A R3) ──────────────────────────────────
+     EN gemensam, ren hjälpfunktion för samtliga Dashboard-ytor som läser
+     state.workOrders — ersätter tidigare separata, lätt divergerande
+     kopior av samma behörighetslogik i varje enskild widget.
+
+     Käll-verifierad mot den kanoniska frontend-kontrakt som redan gäller
+     i WorkOrdersPage (_baseList()/renderList()/_canOpenAo(), tre
+     oberoende ställen med identisk logik):
+       const canViewAll = Auth.can('ao_view_all') || Auth.can('all');
+       if (!canViewAll && Auth.can('ao_view_own') && state.currentUser) {
+         list = list.filter(a => (a.staff||[]).includes(myId) || a.status === 'pool');
+       }
+     dvs: en ao_view_own-användare ser sina EGNA tilldelade arbetsorder
+     PLUS hela den delade arbetspoolen (status:'pool', ingen tilldelad
+     resurs) — pool är per produktkontrakt avsiktligt delad, inte privat.
+
+     Dashboard skärper detta kontrakt ytterligare, konsekvent överallt
+     (samma härdning som redan infördes för _widgetOpsMap() i R1 och
+     _widgetToday() i R2): om identiteten inte går att fastställa med
+     säkerhet (Auth.getUser() null, saknar id, tomt id, eller
+     sentinelvärdet 'unknown' som AuthService sätter vid ett osäkert
+     user-match) visas ALDRIG någon arbetsorderdata alls — FAIL CLOSED,
+     aldrig fail open. (WorkOrdersPage:s källkod har inte denna extra
+     härdning — den litar på att state.currentUser är satt om
+     ao_view_own är sant. Det är en känd, separat observation dokumenterad
+     i R3-rapporten, INTE något som ändras i WorkOrdersPage här.)
+
+     options.includeSharedPool (default false): tar med delade pool-jobb
+     (status:'pool') även för own-only-användare, enligt den
+     käll-verifierade regeln ovan. Widgets som representerar en persons
+     egna relevanta arbetsbelastning (KPI, kategorier, "Kräver åtgärd",
+     hero-sammanfattningen, poolwidgeten själv) sätter detta till true.
+     Kalender-/kartbundna widgets (Ordrar idag, Aktiva jobb — karta)
+     behåller sitt R1/R2-beteende OFÖRÄNDRAT (ingen pool) via false. */
+  _scopeWorkOrdersForCurrentUser(list, options) {
+    options = options || {};
+    const includeSharedPool = !!options.includeSharedPool;
+    const hasAll = Auth.can('ao_view_all');
+    const hasOwn = Auth.can('ao_view_own');
+    const user   = Auth.getUser();
+    const userId = user && user.id && user.id !== 'unknown' ? user.id : null;
+
+    if (hasAll) return list;
+    if (hasOwn && userId) {
+      return list.filter(a => (a.staff||[]).includes(userId) || (includeSharedPool && a.status === 'pool'));
+    }
+    return [];
   },
 
   _sizeClass(size) {
@@ -147,6 +234,7 @@ const Dashboard = {
         case 'quickbtns':      return this._widgetQuickbtns();
         case 'operations':     return this._widgetOperations();
         case 'ao_categories':  return this._widgetAoCategories();
+        case 'ops_map':        return this._widgetOpsMap();
         default: return null;
       }
     } catch(e) {
@@ -410,6 +498,19 @@ const Dashboard = {
   },
 
   /* ── Widget: Dagens drift (chef/admin) ────────────────────────────── */
+  /* V51A R3 §13 — AUDITERAD, medvetet OFÖRÄNDRAD: denna widget styrs av
+     staff_view/reports_view, INTE ao_view_all/ao_view_own. Dessa två
+     permissions är per CLAUDE.md:s behörighetstabell chefs-/rapportnivå
+     ("Visa personal", "Rapporter och löneunderlag") — helt separata från
+     och strikt bredare än den vanliga fälttekniker-behörigheten
+     ao_view_own. En roll som har staff_view/reports_view men INTE
+     ao_view_all representerar ändå en operativ chefsöversiktsroll (t.ex.
+     "ekonomi" eller "chef" utan direkt AO-hantering), inte en enskild
+     tekniker — de globala räknarna här är alltså en AVSIKTLIG,
+     rollmässigt separat chefsvy, inte en läcka av ao_view_own-data.
+     Ingen AO-behörighet (ao_view_all/ao_view_own) krävs eller kontrolleras
+     här eftersom widgeten aldrig är nåbar av en ren fälttekniker-roll utan
+     staff_view/reports_view. Lämnas därför global, precis som innan R3. */
   _widgetOperations() {
     if (!Auth.canAny(['staff_view','reports_view'])) return null;
     const today = tdy();
@@ -449,13 +550,38 @@ const Dashboard = {
 
   /* ── Widget: Öppna AO per kategori ───────────────────────────────── */
   _widgetAoCategories() {
-    const all    = (state.workOrders||[]).filter(a => !a.archived && !a.deleted);
+    /* V51A R3 §9 — blockerare D: kategorifördelning och "klara denna
+       månad"/"öppna nu"-talen byggdes tidigare från ALLA bolagets
+       arbetsorder, oavsett om användaren bara hade ao_view_own. En
+       own-only-tekniker kunde alltså se hela bolagets öppna backlog och
+       kategorifördelning. Nu skopat via samma kanoniska hjälpfunktion
+       (inkl. delad pool, konsekvent med KPI/hero/todos). */
+    const all    = this._scopeWorkOrdersForCurrentUser(
+      (state.workOrders||[]).filter(a => !a.archived && !a.deleted),
+      { includeSharedPool: true }
+    );
     const isOpen = a => !['klar','fakturerad','avbruten'].includes(a.status);
-    const isDone = a => ['klar','fakturerad'].includes(a.status);
     const openAos = all.filter(isOpen);
-    const total   = all.length;
-    const doneN   = all.filter(isDone).length;
-    const pct     = total > 0 ? Math.round(doneN / total * 100) : 0;
+    /* V51A R1 §14/§15 — blockerare D: den fejkade färdigställandeprocenten
+       togs bort helt.
+       V51A (första rundan) bytte den GAMLA missvisande "för evigt mot
+       100%"-livstidsandelen mot doneThisMonth/(openNow+doneThisMonth) —
+       men det löste inte det underliggande problemet: täljaren är ett
+       MÅNADSFLÖDE (ordrar färdiga DENNA månad) och nämnaren blandar in ett
+       LAGERSALDO (alla ordrar öppna just nu, oavsett när de skapades) —
+       två storheter som mäter olika saker och som ALDRIG utgör en giltig
+       färdigställandegrad, oavsett hur formeln skalas. Ersatt med ett
+       rent FAKTAPÅSTÅENDE utan påhittad procent: "N klara denna månad" +
+       "M öppna nu" — två separata, var för sig korrekta tal, ingen
+       kombinerad/antydd completion-rate.
+       Kategoriradernas staplar NEDANFÖR är OFÖRÄNDRADE och behöver ingen
+       fix — de visar redan `categoryCount / totalOpenCount`, dvs. varje
+       kategoris ANDEL AV NUVARANDE ÖPPEN ARBETSBELASTNING, vilket är en
+       koherent nämnare (till skillnad från den borttagna toppsiffran). */
+    const monthStr = tdy().substring(0, 7);
+    const doneThisMonth = all.filter(a => ['klar','fakturerad'].includes(a.status) && (a.completedAt||'').startsWith(monthStr));
+    const doneN  = doneThisMonth.length;
+    const openN  = openAos.length;
 
     const rows = AO_CATEGORIES
       .map(c => {
@@ -495,18 +621,294 @@ const Dashboard = {
         <button class="btn bghost bxs" style="font-size:11px;padding:3px 8px;" onclick="Router.showPage('pg-ao')">${ic('arrow-right',11)} Se alla</button>
       </div>
       <div class="card-body" style="padding:8px 14px 4px;">
-        <div style="margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <span style="font-size:11px;color:var(--mt);">Totalt färdigställt</span>
-            <span style="font-size:11px;font-weight:700;color:var(--navy);">${pct}% &nbsp;(${doneN}/${total})</span>
-          </div>
-          <div style="height:6px;background:var(--br);border-radius:6px;overflow:hidden;">
-            <div style="width:${pct}%;height:100%;background:var(--gr);border-radius:6px;"></div>
-          </div>
+        <div style="display:flex;gap:14px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--br);">
+          <span style="font-size:11px;color:var(--mt);"><strong style="color:var(--navy);font-size:12px;">${doneN}</strong> klara denna månad</span>
+          <span style="font-size:11px;color:var(--mt);"><strong style="color:var(--navy);font-size:12px;">${openN}</strong> öppna nu</span>
         </div>
         ${rows}
       </div>
     </div>`;
+  },
+
+  /* ── Widget: Aktiva jobb — karta (V51A) ───────────────────────────────
+     Karta + kompakt lista över operativa arbetsorder med känd adress.
+     Återanvänder VIFT:s BEFINTLIGA Mapbox-integration (samma
+     window.VIFT_CONFIG.mapboxToken som AddressService redan använder för
+     adress-autokomplettering) — ingen ny kartleverantör. Ingen ny
+     koordinat lagras/persisteras någonstans (rent läsande widget); adresser
+     geokodas on-demand via AddressService.search() och cachas ENDAST i
+     minnet för sessionen (Dashboard._geoCache), aldrig i localStorage/
+     state/Supabase. */
+  _opsMapJobs: [],
+  _geoCache: {},
+  _mapInstance: null,
+  _mapGeneration: 0,
+  _mapInitTimer: null,
+  _mapboxLoadPromise: null,
+
+  _widgetOpsMap() {
+    if (!Auth.canAny(['ao_view_all','ao_view_own'])) return null;
+
+    /* V51A §14: samma kanoniska "operativ/aktiv"-status-uppsättning som
+       redan används i _calcKPIs/_widgetOperations — inga gissade
+       statussträngar. Uttryckligen uteslutet: fakturerad/klar/avbruten
+       (ej längre operativa) samt naturligtvis deleted/archived. */
+    const ACTIVE_STATUSES = ['nytt','pool','planerad','pågående'];
+    const allOperational = (state.workOrders || []).filter(a =>
+      !a.archived && !a.deleted && ACTIVE_STATUSES.includes(a.status)
+    );
+
+    /* V51A R1 §6 — FAIL-CLOSED behörighetskontrakt (blockerare B).
+       V51A R3 §10: numera implementerad via den kanoniska
+       _scopeWorkOrdersForCurrentUser()-hjälpen (samma kontrakt som
+       _widgetToday() och alla andra AO-ytor delar) istället för en egen
+       kopia av logiken — men det FUNKTIONELLA beteendet är exakt
+       oförändrat mot R1/R2:
+         ao_view_all              → alla operativa jobb
+         ao_view_own + giltigt id → ENDAST jobb tilldelade exakt det id:t
+                                     (ingen delad pool på kartan — samma
+                                     som tidigare, includeSharedPool:false)
+         annars                   → inga jobb alls (fail closed) */
+    let jobs = this._scopeWorkOrdersForCurrentUser(allOperational, { includeSharedPool: false });
+
+    // Sortera: idag/försenat/akut överst, sedan planerat datum
+    const today = tdy();
+    jobs = jobs.slice().sort((a, b) => {
+      const aUrgent = a.priority === 'akut' ? 0 : 1;
+      const bUrgent = b.priority === 'akut' ? 0 : 1;
+      if (aUrgent !== bUrgent) return aUrgent - bUrgent;
+      return (a.scheduledDate || '9999') < (b.scheduledDate || '9999') ? -1 : 1;
+    });
+    this._opsMapJobs = jobs;
+
+    if (jobs.length === 0) {
+      return `<div class="card">
+        <div class="card-header"><h3 class="ch3">${ic('map-pin',14)} Aktiva jobb — karta</h3></div>
+        <div class="card-body"><div class="empty" style="padding:12px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;">Inga aktiva jobb just nu</p></div></div>
+      </div>`;
+    }
+
+    const jobRow = ao => {
+      const cu = getCu(ao.customerId);
+      const prop = ao.propertyId ? getObj(ao.propertyId) : null;
+      /* V51A R4 — adress-precedensfix. ao.address (om satt) är den
+         KANONISKA arbetsplatsadressen överallt annars i appen
+         (WorkOrderDetailPage, MyJobsPage, OperationsPage visar alltid
+         ao.address rakt av, utan någon fastighets-precedens) — Dashboard
+         var den ENDA ytan i hela kodbasen som lät en länkad fastighets
+         (ev. inaktuella) adress permanent övertrumfa AO:ns egen,
+         redigerbara adressfält. Resultat: en användare som redigerade
+         AO:ns adress via redigera-ordern-modalen såg sin nya adress
+         korrekt på AO-sidan, men Dashboard fortsatte tyst visa den gamla
+         fastighetsadressen oavsett hur många gånger Dashboard
+         renderades om — inte en cache-/race-bugg, utan en
+         precedensbugg isolerad till denna widget. Fastighetens adress
+         används nu bara som FALLBACK när AO:n saknar egen adress. */
+      const locLabel = ao.address || (prop && prop.address) || (cu ? CustomerService.displayName(cu) : '—');
+      const cl = ao.checklist || [];
+      const clDone = cl.filter(c => c.done).length;
+      const hasChecklist = cl.length > 0;
+      const barColor = ao.priority === 'akut' ? 'var(--rd)' : (ao.status === 'pågående' ? 'var(--gr)' : 'var(--sky)');
+      return `<div class="dash-job-row" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+        <div class="dash-job-row-body">
+          <div class="dash-job-row-top">
+            <span class="dash-job-row-title">${esc(ao.title||ao.id)}</span>
+            ${sbdg(ao.status)}
+          </div>
+          <div class="dash-job-row-sub">${esc(locLabel)}${ao.scheduledStart ? ' · '+ao.scheduledStart : ''}</div>
+          ${hasChecklist ? `
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div class="dash-job-progress-track" style="flex:1;"><div class="dash-job-progress-fill" style="width:${Math.round(clDone/cl.length*100)}%;background:${barColor};"></div></div>
+              <span class="dash-job-progress-label">${clDone}/${cl.length}</span>
+            </div>` : ''}
+        </div>
+      </div>`;
+    };
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3 class="ch3">${ic('map-pin',14)} Aktiva jobb — karta</h3>
+        <button class="btn bghost bxs" style="font-size:11px;padding:3px 8px;" onclick="Router.showPage('pg-ao',{filter:'active'})">${ic('arrow-right',11)} Se alla</button>
+      </div>
+      <div class="card-body" style="padding:10px 14px;">
+        <div class="dash-ops-map-count" id="dash-ops-map-count">${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb</div>
+        <div class="dash-ops-map-wrap">
+          <div class="dash-ops-map-list">${jobs.map(jobRow).join('')}</div>
+          <div class="dash-ops-map-canvas-wrap" id="dash-ops-map-canvas-wrap">
+            <div id="dash-ops-map"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  /* V51A R1 §13: Mapbox GL JS laddas nu LAT/ON-DEMAND — bara när
+     dashboardens kart-widget faktiskt ska visas — istället för som en
+     blockerande global <script>-tagg i index.html som skulle göra HELA
+     CRM-startens laddningskedja beroende av en extern karta-CDN även för
+     användare som aldrig öppnar Dashboard/kartan. En enda cachad Promise
+     delas mellan samtliga samtidiga anrop (t.ex. flera snabba
+     Dashboard.render()) så skriptet/CSS:en injiceras högst en gång. */
+  _loadMapboxGl() {
+    if (typeof mapboxgl !== 'undefined') return Promise.resolve();
+    if (this._mapboxLoadPromise) return this._mapboxLoadPromise;
+    this._mapboxLoadPromise = new Promise((resolve, reject) => {
+      const cssHref = 'https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css';
+      if (!document.querySelector('link[href="' + cssHref + '"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = cssHref;
+        document.head.appendChild(link);
+      }
+      const jsSrc = 'https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js';
+      const existing = document.querySelector('script[src="' + jsSrc + '"]');
+      if (existing) {
+        if (typeof mapboxgl !== 'undefined') { resolve(); return; }
+        existing.addEventListener('load', () => resolve());
+        existing.addEventListener('error', () => reject(new Error('Mapbox GL JS kunde inte laddas')));
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = jsSrc;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Mapbox GL JS kunde inte laddas'));
+      document.head.appendChild(script);
+    });
+    return this._mapboxLoadPromise;
+  },
+
+  /* Körs EFTER att render() satt innerHTML (måste vänta på att DOM-noden
+     #dash-ops-map faktiskt finns). Anropas via setTimeout från render()
+     med (generation, jobsSnapshot) — se render()s generationsspärr-
+     kommentar. Skapar ALDRIG en ny mapboxgl.Map-instans utan att först
+     städa bort en ev. redan existerande — så inga dubbla instanser/
+     lyssnare kan ackumuleras över upprepade Dashboard.render()-anrop.
+
+     V51A R1 §9/§10: `generation` kontrolleras INNAN varje DOM-/kart-
+     muterande steg (start, efter Mapbox-laddning, efter varje geokodning,
+     före kartskapande) — en föråldrad generation avbryter TYST utan att
+     röra DOM eller en nyare generations karta. */
+  async _initOpsMap(generation, jobs) {
+    if (generation !== this._mapGeneration) return; // redan föråldrad innan start
+
+    const wrap = document.getElementById('dash-ops-map-canvas-wrap');
+    const countEl = document.getElementById('dash-ops-map-count');
+    if (!wrap) return; // widgeten är inte synlig i aktuell layout
+
+    if (this._mapInstance) {
+      try { this._mapInstance.remove(); } catch(e) {}
+      this._mapInstance = null;
+    }
+
+    const token = (window.VIFT_CONFIG && window.VIFT_CONFIG.mapboxToken) || '';
+    if (!token) {
+      wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Kartan kunde inte laddas</span></div>`;
+      return;
+    }
+
+    try {
+      await this._loadMapboxGl();
+    } catch(e) {
+      if (generation !== this._mapGeneration) return;
+      wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Kartan kunde inte laddas</span></div>`;
+      return;
+    }
+    if (generation !== this._mapGeneration) return;
+
+    jobs = jobs || [];
+    const geocoded = [];
+    const MAX_LOOKUPS = 20; // V51A §19: begränsa antal NYA geokodningsanrop per uppdatering
+    let newLookups = 0;
+
+    for (const ao of jobs) {
+      if (generation !== this._mapGeneration) return; // avbruten mitt i geokodningsloopen av en nyare render()
+
+      const prop = ao.propertyId ? getObj(ao.propertyId) : null;
+      /* V51A R4 — samma precedensfix som jobRow() ovan (måste hållas
+         identisk, annars kan listan och kartfrågan divergera för samma
+         AO): ao.address vinner om satt, fastighetens adress är bara
+         fallback. */
+      const address = ao.address || (prop && prop.address) || '';
+      if (!address) continue;
+
+      let coord = this._geoCache[address];
+      if (coord === undefined) {
+        if (newLookups >= MAX_LOOKUPS) continue; // hoppa över — visas fortfarande i listan, bara inte på kartan denna gång
+        newLookups++;
+        try {
+          const results = await AddressService.search(address);
+          if (generation !== this._mapGeneration) return; // svaret hann bli inaktuellt medan vi väntade
+          /* V51A R1 §12: ENDAST ett äkta, LYCKAT API-svar med noll träffar
+             cachas som null. Ett undantag (nätverksfel, timeout etc.)
+             cachas ALDRIG — adressen lämnas `undefined` i _geoCache så en
+             SENARE rendering får försöka igen istället för att adressen
+             blir permanent "okartläggningsbar" för resten av
+             webbläsarsessionen på grund av ett tillfälligt fel. */
+          coord = (results && results[0] && results[0].lat && results[0].lng)
+            ? { lat: results[0].lat, lng: results[0].lng }
+            : null;
+          this._geoCache[address] = coord;
+        } catch(e) {
+          coord = null; // visas inte i DENNA runda, men försöks igen nästa gång (ej cachat)
+        }
+      }
+      if (coord) geocoded.push({ ao, coord });
+    }
+
+    if (generation !== this._mapGeneration) return;
+
+    if (countEl) {
+      countEl.textContent = geocoded.length === jobs.length
+        ? `${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb`
+        : `${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb · ${geocoded.length} visas på karta`;
+    }
+
+    if (geocoded.length === 0) {
+      wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Inga jobb kunde placeras på kartan${jobs.length?' — se listan':''}</span></div>`;
+      return;
+    }
+
+    // Återställ canvas-elementet (kan ha ersatts av tom-läge ovan i ett tidigare pass)
+    if (!document.getElementById('dash-ops-map')) {
+      if (generation !== this._mapGeneration) return;
+      wrap.innerHTML = '<div id="dash-ops-map"></div>';
+    }
+    if (generation !== this._mapGeneration || !document.getElementById('dash-ops-map-canvas-wrap')) return;
+
+    try {
+      mapboxgl.accessToken = token;
+      const map = new mapboxgl.Map({
+        container: 'dash-ops-map',
+        style: 'mapbox://styles/mapbox/light-v11',
+        center: [geocoded[0].coord.lng, geocoded[0].coord.lat],
+        zoom: 11
+      });
+      this._mapInstance = map;
+
+      const bounds = new mapboxgl.LngLatBounds();
+      geocoded.forEach(({ ao, coord }) => {
+        const color = ao.priority === 'akut' ? '#dc2626' : (ao.status === 'pågående' ? '#16a34a' : '#2b7fd4');
+        const cu = getCu(ao.customerId);
+        const cuName = cu ? CustomerService.displayName(cu) : '—';
+        const popupHtml = `<div class="dash-map-popup">
+          <div class="dash-map-popup-title">${esc(ao.title||ao.id)}</div>
+          <div class="dash-map-popup-sub">${esc(cuName)}${ao.scheduledStart ? ' · '+esc(ao.scheduledStart) : ''}</div>
+          <button type="button" class="dash-map-popup-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">Öppna</button>
+        </div>`;
+        new mapboxgl.Marker({ color })
+          .setLngLat([coord.lng, coord.lat])
+          .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
+          .addTo(map);
+        bounds.extend([coord.lng, coord.lat]);
+      });
+      if (geocoded.length > 1) map.fitBounds(bounds, { padding: 36, maxZoom: 14 });
+    } catch(e) {
+      console.error('[Dashboard] kartfel:', e);
+      if (generation === this._mapGeneration) {
+        wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Kartan kunde inte laddas</span></div>`;
+      }
+    }
   },
 
   /* ── Widget: Snabbknappar (behörighetsfiltrad) ────────────────────── */
@@ -557,19 +959,23 @@ const Dashboard = {
   /* ── Widget: Idag ──────────────────────────────────────────────────── */
   _widgetToday() {
     const today    = tdy();
-    const user     = Auth.getUser();
-    const userId   = user ? user.id : null;
-    const isAdmin  = Auth.can('all') || Auth.canAny(['ao_view_all']);
     const hasAll   = Auth.can('ao_view_all');
 
-    // Tekniker utan ao_view_all: visa bara sina ordrar
-    let todayAOs = (state.workOrders || []).filter(a =>
+    const eligibleToday = (state.workOrders || []).filter(a =>
       !a.archived && !a.deleted &&
       a.scheduledDate === today && !['klar','fakturerad','avbruten'].includes(a.status)
     );
-    if (!hasAll && userId) {
-      todayAOs = todayAOs.filter(a => (a.staff||[]).includes(userId));
-    }
+
+    /* V51A R2 — FAIL-CLOSED behörighetskontrakt (samma som _widgetOpsMap()
+       sedan R1 §6). V51A R3 §10: numera implementerad via den kanoniska
+       _scopeWorkOrdersForCurrentUser()-hjälpen istället för en egen kopia
+       av logiken — det FUNKTIONELLA beteendet är exakt oförändrat:
+         ao_view_all              → alla dagens operativa jobb
+         ao_view_own + giltigt id → ENDAST jobb tilldelade exakt det id:t
+         annars                   → inga jobb alls (fail closed) — widgeten
+                                     visar då sitt normala tomma-läge, ALDRIG
+                                     ett fall tillbaka till global data. */
+    const todayAOs = this._scopeWorkOrdersForCurrentUser(eligibleToday, { includeSharedPool: false });
 
     const dateStr = new Date().toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'short'});
     return `<div class="card">
@@ -597,8 +1003,22 @@ const Dashboard = {
   },
 
   /* ── Widget: Arbetspool ────────────────────────────────────────────── */
+  /* V51A R3 §5/§11 — poolen är per källverifierad kontrakt (WorkOrdersPage
+     _baseList()) AVSIKTLIGT delad: alla med ao_view_own ser HELA den
+     delade poolen, inte bara sina egna ordrar. Detta var redan widgetens
+     tidigare beteende (inget filter alls) och ändras INTE i sak för en
+     användare med giltig identitet. Det som ändras: om ao_view_own är
+     satt men identiteten inte går att fastställa (Auth.getUser() null/
+     utan giltigt id) visas nu poolen INTE längre — samma fail-closed-
+     härdning som resten av Dashboardens AO-ytor, istället för att lita på
+     att "poolen är ändå delad så det spelar ingen roll". En bruten
+     identitetsupplösning ska aldrig tolkas som "visa ändå". */
   _widgetPool() {
-    const pool = (state.workOrders || []).filter(a => a.status === 'pool' && !a.archived && !a.deleted);
+    const poolScope = this._scopeWorkOrdersForCurrentUser(
+      (state.workOrders || []).filter(a => !a.archived && !a.deleted),
+      { includeSharedPool: true }
+    );
+    const pool = poolScope.filter(a => a.status === 'pool');
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('inbox',14)} Arbetspool</h3>
@@ -679,13 +1099,25 @@ const Dashboard = {
   },
 
   /* ── Widget: Planerade ─────────────────────────────────────────────── */
+  /* V51A R3 §14 — denna widget nås via 'recurring'-modulens fallback,
+     som styrs av recurring_manage — EN behörighet som inte alls
+     garanterar ao_view_all/ao_view_own. En användare med enbart
+     recurring_manage (t.ex. en roll fokuserad på återkommande avtal utan
+     daglig AO-hantering) kunde tidigare ändå se bolagets samtliga
+     planerade arbetsorder för kommande vecka här — en AO-läcka helt
+     utanför AO-behörighetssystemet. Nu skopat via samma kanoniska
+     hjälpfunktion som resten av Dashboard: ao_view_all → oförändrat;
+     ao_view_own + giltigt id → endast egna planerade ordrar; ingen
+     AO-behörighet alls (eller oupplösbar identitet) → tom lista, widgeten
+     visar sitt normala tomma-läge utan att avslöja någon AO-data. */
   _widgetPlanned() {
     const today   = tdy();
     const week    = _ds(7);
-    const planned = (state.workOrders||[]).filter(a =>
+    const eligible = (state.workOrders||[]).filter(a =>
       a.status === 'planerad' && !a.archived && !a.deleted &&
       a.scheduledDate > today && a.scheduledDate <= week
     );
+    const planned = this._scopeWorkOrdersForCurrentUser(eligible, { includeSharedPool: false });
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('calendar-check',14)} Planerade</h3>
@@ -759,7 +1191,13 @@ const Dashboard = {
 
   /* ── Widget: Offerter väntar ───────────────────────────────────────── */
   _widgetOffers() {
-    const pending = (state.offers||[]).filter(o => ['skickad','väntar'].includes(o.status));
+    /* V51A §2/§3: en offert i papperskorgen (deleted:true) eller arkiverad
+       (archived:true) är INTE en aktiv, väntande offert — dessa fält är
+       egna, oberoende flaggor i Schema.offer(), skilda från `status`, och
+       måste alltid uteslutas ur operativa dashboard-vyer (samma princip
+       som redan gäller konsekvent för arbetsorder via !a.archived &&
+       !a.deleted överallt i denna fil). */
+    const pending = (state.offers||[]).filter(o => !o.deleted && !o.archived && ['skickad','väntar'].includes(o.status));
     return `<div class="card">
       <div class="card-header">
         <h3 class="ch3">${ic('file-text',14)} Offerter väntar</h3>
@@ -903,14 +1341,39 @@ const Dashboard = {
   _calcKPIs() {
     const today    = tdy();
     const monthStr = today.substring(0, 7);
-    const aos      = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
-    const sales    = state.salesOpportunities || [];
+    const allAos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
+    /* V51A R3 §8 — blockerare C: "Aktiva ordrar"/"Klara denna månad"
+       räknades tidigare från ALLA bolagets arbetsorder oavsett om
+       användaren bara hade ao_view_own — en own-only-tekniker fick alltså
+       se hela bolagets globala AO-räknare i KPI-raden. Skopat via samma
+       kanoniska hjälpfunktion (inkl. delad pool, eftersom 'pool' redan
+       ingick i den aktiva statuslistan nedan). `readyBill` (fakturering)
+       styrs av ett HELT separat behörighetsdomän (invoice_view/
+       invoice_create, se _widgetKpi()) och ska INTE skopas mot AO-ägande
+       — den beräknas därför medvetet kvar från `allAos`, oskopad. */
+    const aos = this._scopeWorkOrdersForCurrentUser(allAos, { includeSharedPool: true });
     return {
       activeOrders:  aos.filter(a => ['nytt','pool','planerad','pågående'].includes(a.status)).length,
-      doneThisMonth: aos.filter(a => a.status==='klar' && (a.completedAt||'').startsWith(monthStr)).length,
-      readyBill:     aos.filter(a => a.status==='klar' && !a.invoiceId).length,
-      openOffers:    (state.offers||[]).filter(o => ['skickad','väntar'].includes(o.status)).length,
-      salesActive:   sales.filter(s => ['new','contacted','contact_needed'].includes(s.status)).length
+      /* V51A §4/D.2: en order som fortfarande blev "klar" denna månad ska
+         räknas som klar denna månad även om den senare flyttats vidare
+         till fakturerad — completedAt sätts EN gång när status blir
+         'klar' (WorkOrderService.js) och nollställs aldrig, så statusen
+         måste kollas som klar ELLER fakturerad, inte bara exakt 'klar'
+         (annars försvann ordern tyst ur måttet så fort den fakturerades). */
+      doneThisMonth: aos.filter(a => ['klar','fakturerad'].includes(a.status) && (a.completedAt||'').startsWith(monthStr)).length,
+      readyBill:     allAos.filter(a => a.status==='klar' && !a.invoiceId).length,
+      /* V51A §2/§3: se _widgetOffers — samma saknade deleted/archived-
+         kontroll fanns här (ett papperskorgs-offert kunde tidigare räknas
+         med i "Offerter ute"-KPI:n). */
+      openOffers:    (state.offers||[]).filter(o => !o.deleted && !o.archived && ['skickad','väntar'].includes(o.status)).length,
+      /* V51A: denna KPI hade tidigare en EGEN, snävare whitelist
+         (new/contacted/contact_needed) än den kanoniska
+         SalesService.getActive() (som "Säljchanser"-widgeten och
+         "Kräver åtgärd" redan använder — new/contact_needed/contacted/
+         quote_created/work_order_created, minus snoozade med framtida
+         datum). De två talen kunde alltså skilja sig åt på SAMMA
+         sidladdning för samma data. Enad mot den kanoniska källan. */
+      salesActive:   SalesService.getActive().length
     };
   },
 
@@ -918,7 +1381,18 @@ const Dashboard = {
     const todos = [];
     const today = tdy();
     const week  = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const aos   = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
+    const allAos = (state.workOrders || []).filter(a => !a.archived && !a.deleted);
+    /* V51A R3 §7 — blockerare B: "Akuta ordrar"/"Försenade arbetsorder"
+       (inklusive faktiska AO-TITLAR i `sub`) beräknades tidigare från
+       ALLA bolagets arbetsorder — en own-only-tekniker U1 kunde alltså få
+       U2:s AO-titlar/kunder visade i "Kräver åtgärd" via Dashboard, trots
+       att WorkOrdersPage aldrig skulle visa dem för U1. Skopat via samma
+       kanoniska hjälpfunktion (inkl. delad pool, konsekvent med KPI/
+       kategorier/hero — en akut pool-order är lika relevant att larma om
+       för en own-only-tekniker som för alla andra). `readyBill` nedan
+       styrs av det separata invoice_view/invoice_create-behörighetsdomänet
+       och beräknas medvetet kvar från `allAos`, oskopat mot AO-ägande. */
+    const aos = this._scopeWorkOrdersForCurrentUser(allAos, { includeSharedPool: true });
 
     if (Auth.canAny(['ao_view_all','ao_view_own'])) {
       const akut = aos.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));
@@ -943,7 +1417,7 @@ const Dashboard = {
     }
 
     if (Auth.canAny(['invoice_view','invoice_create'])) {
-      const readyBill = aos.filter(a => a.status==='klar' && !a.invoiceId);
+      const readyBill = allAos.filter(a => a.status==='klar' && !a.invoiceId);
       if (readyBill.length > 0) todos.push({
         icon:'receipt', iconCls:'orange',
         title:'Klara ordrar utan fakturaunderlag',
@@ -954,8 +1428,14 @@ const Dashboard = {
     }
 
     if (Auth.can('offer_manage')) {
+      /* V51A §2 — GHOST-OFFER-FIXEN: en offert i papperskorgen (deleted)
+         eller arkiverad (archived) visades tidigare ändå här om den
+         råkade ha status:'skickad' och ett gammalt sentAt kvar — dessa två
+         fält rensas/ändras inte automatiskt av papperskorgs-flödet, så en
+         borttagen offert kunde permanent "spöka" i "Kräver åtgärd" tills
+         någon manuellt bytte dess status. */
       const staleOff = (state.offers||[]).filter(o =>
-        o.status==='skickad' && o.sentAt && o.sentAt.split('T')[0] <= week
+        !o.deleted && !o.archived && o.status==='skickad' && o.sentAt && o.sentAt.split('T')[0] <= week
       );
       if (staleOff.length > 0) todos.push({
         icon:'file-text', iconCls:'blue',

@@ -871,6 +871,42 @@ body.modal-open { overflow: hidden; touch-action: none; }
 .ao-item-progress.done { color: var(--gr); background: var(--lgr); }
 .ao-item-progress.has-dev { color: var(--or); background: var(--lor); }
 
+/* ── V51A R5 §9-§16: kompakt checklista-progressbar (AO-listan) ──────
+   Segmenterad stapel: klara (grön) + avvikelse (röd) fyller den andel
+   av bredden deras andel av totalen motsvarar; kvarstående lämnas
+   som den grå bakgrunden — inget separat grått segment behövs.
+   position:relative/absolute-tooltip ligger UTANFÖR normalt flöde så
+   hover/fokus aldrig ändrar radens boundingbox (R5 §21-krav). */
+.ao-chk-progress {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 5px;
+  cursor: default; flex-shrink: 0;
+}
+.ao-chk-bar {
+  display: flex; width: 42px; height: 5px;
+  border-radius: 4px; overflow: hidden; background: var(--br);
+  flex-shrink: 0;
+}
+.ao-chk-seg { height: 100%; }
+.ao-chk-seg-done { background: var(--gr); }
+.ao-chk-seg-avv  { background: var(--rd); }
+.ao-chk-count {
+  font-size: 10px; font-weight: 700; color: var(--mt); white-space: nowrap;
+}
+.ao-chk-tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--navy); color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 1.5;
+  padding: 6px 10px; border-radius: 6px; white-space: nowrap;
+  z-index: 40; opacity: 0; visibility: hidden;
+  transition: opacity .12s; pointer-events: none;
+}
+.ao-chk-progress:hover .ao-chk-tip,
+.ao-chk-progress:focus .ao-chk-tip,
+.ao-chk-progress:focus-within .ao-chk-tip { opacity: 1; visibility: visible; }
+.ao-chk-progress:focus { outline: 2px solid var(--sky); outline-offset: 2px; border-radius: 4px; }
+
 /* ═══════════════════════════════════
    CUSTOM SELECT
    ═══════════════════════════════════ */

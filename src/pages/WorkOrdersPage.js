@@ -437,6 +437,50 @@ const WorkOrdersPage = {
   _fpSetCust(id)        { this._fDraft.customer=id||null; this._fpRefresh(); },
   _fpSetSort(key)       { this._fDraft.sort=key; this._fpRefresh(); },
 
+  /* ── V51A R5 §9-§16: kompakt checklista-progressbar för AO-listan ────
+     Käll-auditerat checklistdatamodell (Schema.workOrder(): checklist:
+     [{id, text, done, avvikelse}]) — VARJE punkt har bara TVÅ verkliga
+     tillstånd: löst (done===true ELLER avvikelse==='ok') eller olöst
+     (done===false, avvikelse===null). Det finns INGET "påbörjad men ej
+     klar"-fält någonstans i modellen eller i WorkOrderDetailPage.js:s
+     checklist-UI (_renderChecklist, setAvvikelse, saveChecklist) — en
+     punkt går direkt från "orörd" till "OK" eller "Avvikelse", aldrig via
+     ett mellanläge. Att kalla "Avvikelse" för "Påbörjade" hade varit
+     missvisande (en avvikelse-flaggad punkt ÄR färdigbehandlad, bara med
+     ett upptäckt problem — inte en pågående uppgift). R5 implementerar
+     därför INTE det efterfrågade "Påbörjade"-tillståndet (det skulle
+     kräva att fabricera data som inte finns) utan använder istället den
+     verkliga, redan existerande tre-läges-semantiken:
+       Klara       = done===true ELLER avvikelse==='ok'
+       Avvikelse   = avvikelse==='avvikelse'
+       Kvarstående = varken det ovanstående (orörd punkt)
+     Rent LÄSANDE — muterar aldrig checklist/AO-status, persisterar
+     ingenting. */
+  _chkProgress(ao) {
+    const items = ao.checklist || [];
+    const total = items.length;
+    if (!total) return null;
+    const done = items.filter(c => c.done || c.avvikelse === 'ok').length;
+    const avv  = items.filter(c => c.avvikelse === 'avvikelse').length;
+    const rest = Math.max(0, total - done - avv);
+    return { total, done, avv, rest };
+  },
+
+  _chkProgressHtml(ao) {
+    const p = this._chkProgress(ao);
+    if (!p) return '';
+    const pct = (n) => Math.round((n / p.total) * 100);
+    const label = `Klara: ${p.done} · Avvikelse: ${p.avv} · Kvarstående: ${p.rest} · Totalt: ${p.total}`;
+    return `<span class="ao-chk-progress" tabindex="0" role="img" aria-label="Checklista — ${esc(label)}">
+      <span class="ao-chk-bar">
+        ${p.done > 0 ? `<span class="ao-chk-seg ao-chk-seg-done" style="width:${pct(p.done)}%"></span>` : ''}
+        ${p.avv  > 0 ? `<span class="ao-chk-seg ao-chk-seg-avv"  style="width:${pct(p.avv)}%"></span>`  : ''}
+      </span>
+      <span class="ao-chk-count">${p.done + p.avv}/${p.total}</span>
+      <span class="ao-chk-tip" role="tooltip">Klara: ${p.done}<br>Avvikelse: ${p.avv}<br>Kvarstående: ${p.rest}</span>
+    </span>`;
+  },
+
   renderList() {
     const el = document.getElementById('ao-list');
     if (!el) return;
@@ -556,12 +600,7 @@ const WorkOrdersPage = {
       el.innerHTML = `<div class="ao-grid">${list.map(ao => {
         const cu     = getCu(ao.customerId);
         const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const chkOk  = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
-        const chkAvv = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
-        const total  = (ao.checklist||[]).length;
-        const chkText = total > 0
-          ? `<span class="ao-item-progress ${chkOk===total&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${total} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
-          : '';
+        const chkText = this._chkProgressHtml(ao);
         const needsInvoice = ao.status==='klar' && !ao.invoiceId;
         const isBillable   = needsInvoice && WorkOrderService._hasBillableContent(ao);
         const noPricing    = needsInvoice && !isBillable;
@@ -590,9 +629,6 @@ const WorkOrdersPage = {
       el.innerHTML = list.map(ao => {
         const cu     = getCu(ao.customerId);
         const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const chkOk  = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
-        const chkAvv = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
-        const total  = (ao.checklist||[]).length;
         const needsInvoice = ao.status==='klar' && !ao.invoiceId;
         const isBillable   = needsInvoice && WorkOrderService._hasBillableContent(ao);
         const noPricing    = needsInvoice && !isBillable;
@@ -600,9 +636,7 @@ const WorkOrdersPage = {
         if (cuName !== '—') metaParts.push(cuName);
         if (ao.scheduledDate) metaParts.push(ao.scheduledDate+(ao.scheduledStart?' '+ao.scheduledStart:''));
         const metaHtml = metaParts.join(' · ');
-        const chkHtml = total > 0
-          ? `<span class="ao-item-progress ${chkOk===total&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${total} ✓${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
-          : '';
+        const chkHtml = this._chkProgressHtml(ao);
         const archiveActions = ao.archived ? `
           <div style="display:flex;gap:6px;align-items:center;margin-top:6px;" onclick="event.stopPropagation()">
             <span class="bdg bdg-grey">${ic('archive',9)} Arkiverad${ao.archivedAt?' · '+fmtDate(ao.archivedAt):''}</span>
