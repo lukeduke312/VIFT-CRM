@@ -4113,3 +4113,224 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   .bq-ao-header { margin-left: 16px; }
   .bq-source-row { margin-left: 24px; }
 }
+
+/* ── V50A: Global Search MVP ──────────── */
+body.gsearch-open { overflow: hidden; touch-action: none; }
+
+#global-search-trigger { display: flex; align-items: center; gap: 5px; }
+
+.gsearch-trigger-kbd {
+  font-size: 10px; font-weight: 700; opacity: .7; margin-left: 5px;
+  padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.14);
+}
+
+.gsearch-overlay {
+  position: fixed; inset: 0; z-index: 700;
+  background: rgba(15,23,42,.55);
+  display: none; align-items: flex-start; justify-content: center;
+  padding: 12vh 16px 16px; backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity .15s ease;
+}
+.gsearch-overlay.open { display: flex; opacity: 1; }
+
+.gsearch-panel {
+  width: 100%; max-width: 560px; max-height: 70vh;
+  background: #fff; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  display: flex; flex-direction: column;
+  transform: translateY(-8px); transition: transform .15s ease;
+}
+.gsearch-overlay.open .gsearch-panel { transform: translateY(0); }
+
+.gsearch-inputrow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--br); flex-shrink: 0;
+}
+.gsearch-icon { display: flex; color: var(--mt); flex-shrink: 0; }
+.gsearch-input {
+  flex: 1; min-width: 0; border: none; outline: none; background: none;
+  font-size: 15px; color: var(--tx); font-family: inherit;
+}
+.gsearch-input::placeholder { color: var(--mt); }
+.gsearch-close {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; color: var(--mt);
+  background: var(--bg);
+}
+.gsearch-close:hover { background: var(--br); }
+
+.gsearch-results { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px 0; }
+
+.gsearch-hint, .gsearch-empty { padding: 22px 18px; text-align: center; }
+.gsearch-hint { font-size: 13px; color: var(--mt); text-align: left; padding: 16px 18px; }
+.gsearch-empty-title { font-size: 13.5px; font-weight: 700; color: var(--tx); }
+.gsearch-empty-hint { font-size: 12px; color: var(--mt); margin-top: 4px; }
+
+.gsearch-group-label {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--mt); padding: 10px 14px 4px;
+}
+
+.gsearch-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; cursor: pointer; min-height: 44px;
+  /* R2 §8: en STABIL, alltid-närvarande vänsterkant (transparent i vila) —
+     bara färgen ändras vid val/hover, aldrig bredden, så raden aldrig
+     hoppar/ändrar storlek. */
+  border-left: 3px solid transparent;
+}
+/* R2 §8/§29: musens hover ska vara märkbar men SVAGARE än tangentbordets
+   valda rad — ingen skalning/förstoring, samma boxstorlek som vila. */
+.gsearch-row:hover { background: var(--bg); }
+.gsearch-row.sel {
+  background: color-mix(in srgb, var(--sky) 12%, var(--bg));
+  border-left-color: var(--sky);
+}
+.gsearch-row.sel:hover {
+  background: color-mix(in srgb, var(--sky) 16%, var(--bg));
+}
+.gsearch-row-icon { flex-shrink: 0; display: flex; color: var(--mt); }
+.gsearch-row-text { flex: 1; min-width: 0; }
+.gsearch-row-title {
+  font-size: 13.5px; font-weight: 700; color: var(--tx);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gsearch-row-sub {
+  font-size: 11.5px; color: var(--mt); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gsearch-row-badge {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 700; color: var(--mt);
+  background: var(--bg); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+
+/* R2 §3-6: inaktiva poster försvinner ALDRIG — förblir fullt läsbara/
+   klickbara. Endast lätt urblekt titel/undertext + en tydlig grå badge.
+   Ingen opacity på hela raden, ingen genomstrykning, ingen röd/fel-styling
+   — detta är "historisk/inaktiv", inte "fel/borttagen". */
+.gsearch-row--inactive .gsearch-row-title { color: var(--mt); font-weight: 600; }
+.gsearch-row--inactive .gsearch-row-sub { opacity: .8; }
+.gsearch-row-badge--inactive {
+  background: var(--br); color: var(--mt); font-weight: 800;
+}
+
+/* R2 §16-27: sökhistorik (endast söktermer, aldrig CRM-poster) */
+.gsearch-history-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--mt);
+}
+.gsearch-history-clear {
+  font-size: 11px; font-weight: 700; color: var(--sky); text-transform: none;
+  letter-spacing: normal; padding: 2px 4px;
+}
+.gsearch-history-clear:hover { text-decoration: underline; }
+.gsearch-history-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; cursor: pointer; min-height: 40px;
+}
+.gsearch-history-row:hover { background: var(--bg); }
+.gsearch-history-text { font-size: 13px; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* R2/R3 §3-4: permanent, riktigt sökfält i topbaren — desktop ≥1024px.
+   Dolt som standard (mobil-first); tas fram i den befintliga
+   @media(min-width:1024px)-brytpunkten nedan. Den kompakta mobil-triggern
+   (#global-search-trigger) döljs på samma brytpunkt.
+
+   R3: topbaren själv får `position:relative` HÄR (i components.css, som
+   laddas EFTER layout.css — så regeln vinner i kascaden utan att röra
+   layout.css, vilket R3:s filomfång inte tillåter) så att sökfältet kan
+   CENTRERAS oberoende av sidtitelns bredd via absolut positionering,
+   istället för att bara hamna där flex-flödet råkar lämna plats. */
+.topbar { position: relative; }
+
+/* R4 §2-3: ROTORSAK till "stort grått fält med en klar vit ruta inuti"
+   hittad — `forms.css`s globala regel
+   `input:not([type="checkbox"]):not([type="radio"]):not([type="file"])`
+   (laddas EFTER components.css, och har HÖGRE specificitet — tre
+   :not()-satser — än en enkel klass-selektor) satte `background:#fff`,
+   en riktig `border`, `padding:8px 10px` och `min-height:40px` på
+   #gsearch-topbar-input hela tiden, oavsett vad `.gsearch-topbar-input`
+   här försökte sätta. Wrappern var alltså aldrig ensam om att se
+   "påklistrad" ut — INUTI den låg dessutom ett riktigt, ogenomskinligt
+   vitt formulärfält hela R2/R3. Fixat genom att rikta fältets EGNA regler
+   mot ID:t (#gsearch-topbar-input) istället för klassen — en ID-selektor
+   vinner alltid över forms.css:s :not()-kedja utan att behöva !important. */
+.gsearch-topbar-wrap {
+  display: none; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  align-items: center; gap: 6px;
+  width: clamp(300px, 24vw, 380px);
+  /* R4 §4: wrappern bär nu BARA en mycket låg ton — samma återhållsamma
+     mönster som redan används för `.tbtn`/`.topbar-hamburger` på övriga
+     header-kontroller (color-mix mot --brand-primary-text), men svagare,
+     så sökfältet läses som underordnat dem, inte som ett eget kort. */
+  background: color-mix(in srgb, var(--brand-primary-text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-primary-text) 13%, transparent);
+  border-radius: 7px; padding: 5px 8px;
+  transition: background .12s ease, border-color .12s ease;
+}
+/* R3/R4 §6: tydligt men lugnt fokusläge — bara ton/kant ändras, aldrig
+   storlek/position, så inget hoppar i layouten. */
+.gsearch-topbar-wrap:focus-within {
+  background: color-mix(in srgb, var(--brand-primary-text) 15%, transparent);
+  border-color: color-mix(in srgb, var(--brand-primary-text) 26%, transparent);
+}
+#gsearch-topbar-input {
+  flex: 1; min-width: 0; width: auto; box-sizing: border-box;
+  border: none; outline: none; background: none; appearance: none;
+  padding: 0; margin: 0; min-height: 0; height: 18px;
+  font-size: 13px; line-height: 18px; color: var(--brand-primary-text); font-family: inherit;
+}
+#gsearch-topbar-input:focus { border: none; box-shadow: none; }
+#gsearch-topbar-input::placeholder { color: color-mix(in srgb, var(--brand-primary-text) 50%, transparent); }
+.gsearch-topbar-wrap .gsearch-icon { color: var(--brand-primary-text); opacity: .65; flex-shrink: 0; display: flex; }
+.gsearch-topbar-wrap .gsearch-trigger-kbd {
+  flex-shrink: 0; font-size: 9.5px; padding: 1px 4px; opacity: .6;
+}
+
+.gsearch-expand-btn {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+  color: color-mix(in srgb, var(--brand-primary-text) 55%, transparent);
+  background: none;
+}
+.gsearch-expand-btn:hover {
+  background: color-mix(in srgb, var(--brand-primary-text) 16%, transparent);
+  color: var(--brand-primary-text);
+}
+
+.gsearch-dropdown {
+  display: none; position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+  background: #fff; border-radius: 10px; border: 1px solid var(--br);
+  box-shadow: 0 16px 40px rgba(0,0,0,.22);
+  max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  z-index: 701; padding: 6px 0;
+}
+.gsearch-dropdown.open { display: block; }
+.gsearch-dropdown .gsearch-results { padding: 0; }
+
+@media (max-width: 639px) {
+  .gsearch-trigger-kbd { display: none; }
+  .gsearch-overlay { padding: 0; align-items: stretch; }
+  .gsearch-panel { max-width: none; max-height: none; height: 100%; border-radius: 0; }
+  .gsearch-inputrow { padding: 14px; padding-top: calc(14px + env(safe-area-inset-top)); }
+  .gsearch-results { flex: 1; }
+  .gsearch-row { min-height: 48px; }
+}
+
+@media (min-width: 1024px) {
+  .gsearch-topbar-wrap { display: flex; }
+  #global-search-trigger { display: none; }
+  /* R3 §4: hindrar sidtiteln från att någonsin kunna hamna visuellt under
+     det centrerade sökfältet — titeln ellipserar istället för att
+     kollidera, oavsett hur lång den är. `50% - 240px` håller titelns
+     högerkant konsekvent minst ~30-40px till vänster om sökrutans
+     vänsterkant (rutan är max 420px bred, halva ≈210px, plus marginal) —
+     verifierat via faktisk bounding-box-kollisionskontroll i Chromium vid
+     1024/1366/1440/1920px, ingen överlappning i något av dem. En enkel
+     procentandel (t.ex. 38%) visade sig INTE räcka vid 1366px eftersom
+     den centrerade rutans position skalar med topbar-bredden på ett sätt
+     en ren procentsats av titelutrymmet inte kompenserar för. */
+  .topbar-title { max-width: calc(50% - 240px); }
+}
