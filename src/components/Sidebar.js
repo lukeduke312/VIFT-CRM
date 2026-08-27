@@ -168,7 +168,12 @@ const Sidebar = {
     if (!uid) return;
     const p   = UserPrefsService.get(uid);
     const pos = p.sidebarPosition || 'left';
-    const den = p.density || 'normal';
+    /* V51B R7.1 §5 — Sidebar historiskt sparade 'airy' här medan Dashboard.js
+       alltid använt 'spacious' för samma "Luftig"-val (pre-R7-bugg). Normalisera
+       bara VILKEN KNAPP SOM VISAS SOM AKTIV — det sparade localStorage-värdet
+       rörs inte här (icke-destruktivt), se UserPrefsService.apply(). */
+    const denRaw = p.density || 'normal';
+    const den = denRaw === 'airy' ? 'spacious' : denRaw;
     const acc = p.accentColor || '';
 
     Modal.open({
@@ -184,9 +189,9 @@ const Sidebar = {
         <div class="fg" style="margin-top:14px;">
           <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Täthet</label>
           <div style="display:flex;gap:6px;margin-top:6px;">
-            <button id="pref-den-compact" class="btn bsm ${den==='compact'?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','compact','den')">Kompakt</button>
-            <button id="pref-den-normal"  class="btn bsm ${den==='normal' ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','normal', 'den')">Normal</button>
-            <button id="pref-den-airy"    class="btn bsm ${den==='airy'   ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','airy',   'den')">Luftig</button>
+            <button id="pref-den-compact"  class="btn bsm ${den==='compact' ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','compact', 'den')">Kompakt</button>
+            <button id="pref-den-normal"   class="btn bsm ${den==='normal'  ?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','normal',  'den')">Normal</button>
+            <button id="pref-den-spacious" class="btn bsm ${den==='spacious'?'bp':'bs'}" style="flex:1;" onclick="Sidebar._setPref('density','spacious','den')">Luftig</button>
           </div>
         </div>
         <div class="fg" style="margin-top:14px;">
@@ -233,7 +238,7 @@ const Sidebar = {
       });
     }
     if (group === 'den') {
-      ['compact','normal','airy'].forEach(v => {
+      ['compact','normal','spacious'].forEach(v => {
         const btn = document.getElementById('pref-den-' + v);
         if (btn) { btn.classList.toggle('bp', v === value); btn.classList.toggle('bs', v !== value); }
       });

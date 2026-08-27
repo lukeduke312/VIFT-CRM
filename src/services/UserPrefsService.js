@@ -116,7 +116,16 @@ const UserPrefsService = {
     }
 
     // Layout-täthet (kompakt/normal/luftig)
-    document.body.dataset.density = p.density || 'normal';
+    // V51B R7.1 §5: Sidebar.js sparade tidigare 'airy' för Luftig medan
+    // Dashboard.js/dashboard.css alltid använt 'spacious' för samma val —
+    // ett enum-mismatch som fanns innan R7. Sidebar sparar numera 'spacious'
+    // (se Sidebar.showSettings()/_setPref()), men ett REDAN SPARAT 'airy'-
+    // värde i localStorage rörs INTE (ingen destruktiv migrering) — det
+    // normaliseras bara HÄR, vid applicering på DOM-roten, så gammalt och
+    // nytt värde alltid renderas identiskt. dashboard.css matchar även
+    // [data-density="airy"] direkt som ett andra skyddslager.
+    const rawDensity = p.density || 'normal';
+    document.body.dataset.density = rawDensity === 'airy' ? 'spacious' : rawDensity;
 
     // Fällbar sidopanel (desktop only — CSS hanterar mobilundantag)
     if (p.sidebarCollapsed) {

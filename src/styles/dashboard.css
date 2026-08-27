@@ -2,7 +2,16 @@
    DASHBOARD — layout, KPI, widgets
    ═══════════════════════════════════════════ */
 
-/* ── Dashboard grid ───────────────────────── */
+/* ── Dashboard grid — V51B: 12-kolumnersgrid ───────────────────────────
+   Ersätter det gamla 1/2/3-kolumners dw-full/half/third/twothird-systemet
+   med ETT deterministiskt 12-kolumnersgrid (order + span, ingen fri
+   pixel-positionering, ingen masonry) — samma grid används både för den
+   ORÖRDA rollstandarden (med kategirirubriker, se .dgw-12[data-sec-hdr])
+   och en sparad PERSONLIG (V51B) layout (utan rubriker, ett
+   sammanhängande tvärkategoriskt grid). Mobilanpassat enligt spec §16/§17:
+     < 768px  (mobil):  alla widgets full bredd, ingen horisontell scroll
+     768–1023 (tablet): 12-kol-grid, men ¼ (span 3) klamras upp till ½ (6)
+     >= 1024  (desktop): exakta sparade spans 3/6/9/12 */
 .dash-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -14,27 +23,52 @@
 /* Grid items must have min-width: 0 to prevent content blowout with 1fr */
 .dash-layout > * { min-width: 0; }
 
-/* Tablet: 2 columns */
+/* Mobil (bas): samtliga bredder — nya OCH gamla legacy-klasser kvar för
+   bakåtkompatibilitet — staplas i full bredd. */
+.dash-layout .dw-full, .dash-layout .dw-main, .dash-layout .dw-side,
+.dash-layout .dw-third, .dash-layout .dw-half, .dash-layout .dw-twothird,
+.dash-layout .dgw-3, .dash-layout .dgw-6, .dash-layout .dgw-9, .dash-layout .dgw-12 {
+  grid-column: 1 / -1;
+}
+
+/* Tablet: 12-kolumnersgrid, ¼ klamras upp till ½ (ingen liten 3-kolumnskort) */
 @media (min-width: 700px) {
-  .dash-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; }
-  .dash-layout .dw-full   { grid-column: 1 / -1; }
-  .dash-layout .dw-main   { grid-column: 1; }
-  .dash-layout .dw-side   { grid-column: 2; }
-  .dash-layout .dw-third  { grid-column: span 1; }
+  .dash-layout { grid-template-columns: repeat(12, minmax(0,1fr)); gap: 14px; }
+  .dash-layout .dw-full, .dash-layout .dgw-12 { grid-column: 1 / -1; }
+  .dash-layout .dw-main   { grid-column: span 8; }
+  .dash-layout .dw-side   { grid-column: span 4; }
+  .dash-layout .dw-third, .dash-layout .dw-half { grid-column: span 6; }
+  .dash-layout .dw-twothird { grid-column: span 8; }
+  .dash-layout .dgw-3 { grid-column: span 6; }
+  .dash-layout .dgw-6 { grid-column: span 6; }
+  .dash-layout .dgw-9 { grid-column: span 9; }
 }
 
-/* Desktop: 3 columns */
+/* Desktop: exakta sparade spans */
 @media (min-width: 1024px) {
-  .dash-layout { grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 16px; }
-  .dash-layout .dw-full   { grid-column: 1 / -1; }
-  .dash-layout .dw-main   { grid-column: span 2; }
-  .dash-layout .dw-side   { grid-column: span 1; }
-  .dash-layout .dw-third  { grid-column: span 1; }
+  .dash-layout { grid-template-columns: repeat(12, minmax(0,1fr)); gap: 16px; }
+  .dash-layout .dw-full, .dash-layout .dgw-12 { grid-column: 1 / -1; }
+  .dash-layout .dw-main   { grid-column: span 8; }
+  .dash-layout .dw-side   { grid-column: span 4; }
+  .dash-layout .dw-third  { grid-column: span 4; }
+  .dash-layout .dw-half   { grid-column: span 6; }
+  .dash-layout .dw-twothird { grid-column: span 8; }
+  .dash-layout .dgw-3 { grid-column: span 3; }
+  .dash-layout .dgw-6 { grid-column: span 6; }
+  .dash-layout .dgw-9 { grid-column: span 9; }
 }
 
-/* ── Tighter card padding on dashboard ── */
-.dash-layout .card-body   { padding: 10px 12px; }
-.dash-layout .card-header { padding: 10px 12px 9px; }
+/* ── Tighter card padding on dashboard ──
+   V51B R7: horizontal inset raised from 12px to 14px (top of the
+   10-14px "comfortable inset" range) — at 1/4 span (~390-400px card,
+   the width Lucas's real production viewport actually renders), 12px
+   read as text sitting almost against the card border. 14px applies to
+   EVERY span (header/body here, .crow rows below) so header, list rows,
+   footer buttons and empty-states all share one consistent inset —
+   verified visually unchanged-for-the-better at 1/2, 3/4 and Full too
+   (see RAPPORT-V51B-R7 screenshots), not just 1/4. */
+.dash-layout .card-body   { padding: 10px 14px; }
+.dash-layout .card-header { padding: 10px 14px 9px; }
 
 /* ── KPI row ──────────────────────────────── */
 .kpi-row {
@@ -145,6 +179,71 @@
 .crow:last-child { border-bottom: none; }
 .crow:hover { background: var(--bg); }
 
+/* ── V51B R4/R5 — compact widget rows (Dashboard only) ────────────────
+   Global .crow (above, and its components.css base) intentionally keeps
+   its row layout + justify-content:space-between — other pages
+   (CustomersPage, InvoicesPage, PropertyDetailPage, RecurringPage,
+   WorkOrderDetailPage, WorkOrdersPage, PageShells) rely on that and are
+   NOT touched here; every override below is scoped to .dash-layout.
+
+   R4 changed the title/sub wrapper from flex:1 (grow-to-fill) to
+   flex:0 1 auto, which stopped the row from stretching to the card's far
+   edge — but LIVE testing showed this was NOT enough: the wrapper (old
+   .crow-text) contained BOTH the title line and the (often wider)
+   subtitle line stacked in a block column, so the wrapper's rendered
+   width was governed by whichever of the two lines was WIDEST — usually
+   the subtitle ("16 500 kr · 1 dagar", "Sigillet Norra Hamngatan 4 AB").
+   The badge, sitting as the wrapper's flex sibling, therefore trailed
+   the SUBTITLE's width, not the title's — so it still visually landed far
+   from the title it actually belongs next to.
+
+   R5 fix: restructure each row into a genuine two-line composition
+   instead of trying to tune a single shrink-to-fit wrapper's width:
+     .crow             now flex-direction:column (title-line stacked
+                        directly above the sub-line, full row width each)
+     .crow-top         the title line: a flex ROW containing ONLY the
+                        title + its badge(s), grouped tightly (6px gap) —
+                        its width is governed by title+badge alone, never
+                        by the subtitle below it
+     .crow-title       (existing rule) still ellipsis-truncates, now
+                        shrinking within .crow-top specifically
+     .crow-sub         (existing rule) sits on its own full-width line
+                        below .crow-top — unaffected by the title/badge
+                        grouping above it
+     .crow-extra-badges secondary badges that don't belong on the title
+                        line (e.g. Säljchanser's "Förfallen"/deadline
+                        notices) — small left-aligned row below .crow-sub,
+                        never pinned to the card's far edge
+   Net effect: the badge sits ~6-8px after the TITLE specifically,
+   regardless of subtitle length; the subtitle remains on its own full
+   line below; long titles still truncate via ellipsis; badges never
+   clip or disappear. Grid span semantics (3/6/9/12) are completely
+   untouched — this is purely the widgets' internal row composition. */
+.dash-layout .crow { flex-direction: column; align-items: stretch; gap: 2px; }
+.dash-layout .crow-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dash-layout .crow-top .crow-title { flex: 0 1 auto; min-width: 0; }
+.dash-layout .crow-top > .bdg { flex-shrink: 0; }
+
+/* V51B R7 — 1/4 widget compact-card polish (Dashboard only).
+   .crow's global "bleed" pattern (margin: 0 -12px + padding: 8px 12px,
+   see the base .crow rule above) makes the row's own padding the ONLY
+   thing governing its horizontal inset from the card edge, cancelling
+   out .card-body's padding so the two never simply add up. That inset
+   (12px) matched .card-body's OLD 12px too, so header/rows/footer were
+   already internally consistent — but at the ~390-400px card width Lucas's
+   real production 1/4 widgets actually render at, 12px still read as
+   text sitting almost against the border. Raised to 14px here (matching
+   card-body/card-header's new inset above) so header, list rows, empty
+   states and footer buttons ("Visa alla") all share ONE consistent
+   14px inset — not just 1/4: this is the shared row style so 1/2, 3/4 and
+   Full get the same calmer inset too (verified visually unregressed at
+   all four spans, see RAPPORT-V51B-R7 screenshots). Vertical padding
+   raised from 8px to 10px to match .card-body's own 10px vertical inset
+   for a less cramped row rhythm — title/badge/subtitle font sizes,
+   line-heights and icon sizes are completely untouched. */
+.dash-layout .crow { padding: 10px 14px; margin: 0 -14px; width: calc(100% + 28px); }
+.dash-layout .crow-extra-badges { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 1px; }
+
 /* ── Activity log ─────────────────────────── */
 .act-item { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--bg); }
 .act-item:last-child { border-bottom: none; }
@@ -201,17 +300,23 @@
   .dash-layout .dw-twothird { grid-column: span 2; }  /* 2 of 3 cols */
 }
 
-/* 4 columns on very wide screens */
-@media (min-width: 1600px) {
-  .dash-layout {
-    grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
-    gap: 16px;
-  }
-  .dash-layout .dw-full     { grid-column: 1 / -1; }
-  .dash-layout .dw-twothird { grid-column: span 3; }
-  .dash-layout .dw-half     { grid-column: span 2; }
-  .dash-layout .dw-third    { grid-column: span 1; }
-}
+/* V51B R1 — BLOCKER A-FIX: denna sektion innehöll tidigare ett kvarglömt
+   pre-V51B "4 kolumner på mycket breda skärmar"-block som vid >=1600px
+   satte om .dash-layout till grid-template-columns: 4 EXPLICITA kolumner
+   — vilket i praktiken körde om V51B:s repeat(12, minmax(0,1fr)) (satt
+   vid >=1024px, se toppen av filen). En .dgw-9/.dgw-3 (span 9/span 3)
+   syftar på ett 12-kolumnersgrid, men landade i ett 4-kolumnersgrid: en
+   span-9-widget fyllde alla 4 explicita kolumner + svämmade över i
+   implicita, näst intill breddlösa kolumner, och span-3-widgeten fick
+   inte plats kvar på samma rad — bekräftat i riktig Chromium vid
+   1600/1920px (computed grid-template-columns blev en trasig blandning
+   av 313px/59px/0px-spår istället för tolv jämna spår, och Offerter
+   hamnade på en helt NY rad under kartan).
+   V51B:s 12-kolumnersgrid (satt vid >=1024px) behöver INGEN ändring vid
+   bredare skärmar — samma tolv spår gäller obrutet hela vägen till
+   ultra-breda skärmar, exakt enligt uppdragets krav. Blocket är därför
+   borttaget helt, inte omskrivet — det fanns ingen kvarstående legitim
+   anledning till en fjärde brytpunkt. */
 
 /* ── Dashboard topbar (greeting + action buttons) */
 .dash-topbar {
@@ -362,26 +467,110 @@
   .dash-config-actions select { width: auto; flex: 1; }
 }
 
-/* ── Layout density ───────────────────────── */
-body[data-density="compact"] .card-body   { padding: 7px 10px !important; }
-body[data-density="compact"] .card-header { padding: 7px 10px 6px !important; }
-body[data-density="compact"] .dash-layout { gap: 8px; }
-body[data-density="compact"] .kpi-card    { padding: 9px 10px 8px; }
-body[data-density="compact"] .kpi-number  { font-size: 24px; }
-body[data-density="compact"] .crow        { padding: 5px 0; }
-body[data-density="compact"] .dash-action-item { padding: 5px 8px; }
-body[data-density="compact"] .quick-btn   { padding: 8px 4px; }
-body[data-density="compact"] .quick-icon  { width: 28px; height: 28px; }
+/* ── Layout density ───────────────────────────────────────────────────
+   V51B R7.1 §3 fix: the .crow overrides below used to be `padding: Npx 0`
+   — ZERO horizontal — while .crow's own bleed geometry (margin: 0 -Xpx;
+   width: calc(100% + 2*Xpx), set in the R7 block above) was left
+   completely unchanged by density. Compact ended up effectively
+   `card-body 10px horizontal padding, crow margin -14px, crow padding 0`
+   — content could start ~4px BEFORE the card's padding-box edge. Spacious
+   was similarly inconsistent the other way. Fixed by giving each
+   density's .crow its own matching padding/margin/width triple, so
+   "if card-body uses Xpx horizontal padding, the row bleed pattern uses
+   padding:Xpx / margin:-Xpx / width:calc(100% + 2*Xpx)" holds for EVERY
+   density tier, not just the default.
+   Legacy `airy` compatibility (R7.1 §4/§5): Sidebar's settings UI used to
+   persist `density:'airy'` while Dashboard's own preferences modal (and
+   this CSS) only ever recognized `spacious` for the same "Luftig" option
+   — a pre-existing enum mismatch, not introduced by R7. Sidebar now saves
+   `spacious` going forward (UserPrefsService.apply() also normalizes any
+   already-stored `airy` value to `spacious` on the `data-density`
+   attribute it writes — see UserPrefsService.js), but every selector
+   below ALSO matches the literal `[data-density="airy"]` attribute value
+   as defensive belt-and-braces, per spec, so an old raw "airy" value
+   render identically to "spacious" even if some future code path ever
+   sets data-density directly without going through apply(). Scope is
+   intentionally left UNCHANGED (still body[data-density=...] .card-body,
+   NOT re-scoped under .dash-layout) — density has always applied
+   app-wide (Sidebar's entry point is the global "Mina inställningar", not
+   a Dashboard-only setting, and UserPrefsService.apply() sets it at
+   document.body level), and .card-body/.card-header/.crow are shared,
+   non-Dashboard-exclusive classes (e.g. InvoicesPage's KPI cards use
+   .kpi-card too) — re-scoping now would silently remove existing,
+   working app-wide compacting/spacing behaviour on other pages, which
+   was never reported as broken and is out of this round's scope. */
+body[data-density="compact"] .card-body,
+body[data-density="airy"]     .card-body   { padding: 7px 10px !important; }
+body[data-density="compact"] .card-header,
+body[data-density="airy"]     .card-header { padding: 7px 10px 6px !important; }
+body[data-density="compact"] .dash-layout,
+body[data-density="airy"]     .dash-layout { gap: 8px; }
+body[data-density="compact"] .kpi-card,
+body[data-density="airy"]     .kpi-card    { padding: 9px 10px 8px; }
+body[data-density="compact"] .kpi-number,
+body[data-density="airy"]     .kpi-number  { font-size: 24px; }
+body[data-density="compact"] .crow,
+body[data-density="airy"]     .crow        { padding: 5px 10px; margin: 0 -10px; width: calc(100% + 20px); }
+body[data-density="compact"] .dash-action-item,
+body[data-density="airy"]     .dash-action-item { padding: 5px 8px; }
+body[data-density="compact"] .quick-btn,
+body[data-density="airy"]     .quick-btn   { padding: 8px 4px; }
+body[data-density="compact"] .quick-icon,
+body[data-density="airy"]     .quick-icon  { width: 28px; height: 28px; }
 
-body[data-density="spacious"] .card-body   { padding: 16px 18px !important; }
-body[data-density="spacious"] .card-header { padding: 14px 18px 13px !important; }
-body[data-density="spacious"] .dash-layout { gap: 20px; }
-body[data-density="spacious"] .kpi-card    { padding: 18px 18px 15px; }
-body[data-density="spacious"] .kpi-number  { font-size: 36px; }
-body[data-density="spacious"] .crow        { padding: 10px 0; }
-body[data-density="spacious"] .dash-action-item { padding: 10px 14px; }
-body[data-density="spacious"] .quick-btn   { padding: 16px 8px; }
-body[data-density="spacious"] .quick-icon  { width: 40px; height: 40px; }
+body[data-density="spacious"] .card-body,
+body[data-density="airy"]      .card-body   { padding: 16px 18px !important; }
+body[data-density="spacious"] .card-header,
+body[data-density="airy"]      .card-header { padding: 14px 18px 13px !important; }
+body[data-density="spacious"] .dash-layout,
+body[data-density="airy"]      .dash-layout { gap: 20px; }
+body[data-density="spacious"] .kpi-card,
+body[data-density="airy"]      .kpi-card    { padding: 18px 18px 15px; }
+body[data-density="spacious"] .kpi-number,
+body[data-density="airy"]      .kpi-number  { font-size: 36px; }
+body[data-density="spacious"] .crow,
+body[data-density="airy"]      .crow        { padding: 10px 18px; margin: 0 -18px; width: calc(100% + 36px); }
+body[data-density="spacious"] .dash-action-item,
+body[data-density="airy"]      .dash-action-item { padding: 10px 14px; }
+body[data-density="spacious"] .quick-btn,
+body[data-density="airy"]      .quick-btn   { padding: 16px 8px; }
+body[data-density="spacious"] .quick-icon,
+body[data-density="airy"]      .quick-icon  { width: 40px; height: 40px; }
+
+/* ── 1/4 (.dgw-3) compact-card presentation — R7.1 §6 ──────────────────
+   1/4 is the narrowest span and the one Lucas specifically reported as
+   cramped. It now gets a deliberately MORE generous horizontal inset
+   than the shared Dashboard base (R7's 14px) or any other span — a real,
+   visually distinct 1/4 treatment, not another 1-2px nudge. Layered per
+   density tier so Kompakt/Normal/Luftig each still differ from each
+   other at 1/4, exactly as they do at every other span. Each tier's
+   bleed equation (.card-body padding-X ⇒ .crow padding:X / margin:-X /
+   width:calc(100% + 2X)) is kept internally consistent, same fix as
+   above. .dgw-3 only ever appears inside the Dashboard grid, so no other
+   page is affected by scoping these under .dash-layout .dgw-3. The
+   !important on .card-body/.card-header matches the specificity/
+   !important already used by the density rules above, so these need
+   their own !important + higher specificity to reliably win over them
+   regardless of source order; .crow needs neither (its higher
+   specificity alone is enough since the density .crow rules above carry
+   no !important). */
+.dash-layout .dgw-3 .card-body   { padding: 10px 18px; }
+.dash-layout .dgw-3 .card-header { padding: 10px 18px 9px; }
+.dash-layout .dgw-3 .crow        { padding: 10px 18px; margin: 0 -18px; width: calc(100% + 36px); }
+
+body[data-density="compact"] .dash-layout .dgw-3 .card-body,
+body[data-density="airy"]     .dash-layout .dgw-3 .card-body   { padding: 7px 14px !important; }
+body[data-density="compact"] .dash-layout .dgw-3 .card-header,
+body[data-density="airy"]     .dash-layout .dgw-3 .card-header { padding: 7px 14px 6px !important; }
+body[data-density="compact"] .dash-layout .dgw-3 .crow,
+body[data-density="airy"]     .dash-layout .dgw-3 .crow        { padding: 5px 14px; margin: 0 -14px; width: calc(100% + 28px); }
+
+body[data-density="spacious"] .dash-layout .dgw-3 .card-body,
+body[data-density="airy"]      .dash-layout .dgw-3 .card-body   { padding: 16px 20px !important; }
+body[data-density="spacious"] .dash-layout .dgw-3 .card-header,
+body[data-density="airy"]      .dash-layout .dgw-3 .card-header { padding: 14px 20px 13px !important; }
+body[data-density="spacious"] .dash-layout .dgw-3 .crow,
+body[data-density="airy"]      .dash-layout .dgw-3 .crow        { padding: 10px 20px; margin: 0 -20px; width: calc(100% + 40px); }
 
 /* ── Card-header icon+title alignment ──────── */
 .ch3 {
@@ -520,4 +709,83 @@ body[data-density="spacious"] .quick-icon  { width: 40px; height: 40px; }
   display: inline-flex; align-items: center; gap: 4px;
   background: var(--navy); color: #fff; border: none; border-radius: 6px;
   padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+
+/* ── V51B — Personlig Dashboard / redigeringsläge ─────────────────────
+   Endast synligt när Dashboard._editMode är sant (§6: normal Dashboard
+   förblir helt fri från redigerings-chrome). */
+.dash-edit-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+  background: #fff; border: 1px solid var(--br); border-radius: var(--rs);
+  padding: 10px 14px; margin-bottom: 10px;
+  position: sticky; top: 0; z-index: 20;
+}
+.dash-edit-toolbar-title { font-size: 13px; font-weight: 800; color: var(--navy); display: flex; align-items: center; gap: 6px; }
+.dash-edit-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.dash-edit-hint { font-size: 11px; color: var(--mt); margin: 0 0 10px; }
+
+/* Redigeringskort — samma .dgw-N-bredd som normalläget, men med en
+   extra "chrome"-rad (handtag, titel, pil-/bredd-/dölj-kontroller) ovanpå
+   själva widgetens vanliga innehåll. min-width:0 ärvs redan från
+   .dash-layout > *. */
+.dash-edit-card {
+  border: 1px dashed var(--br); border-radius: var(--rs);
+  background: rgba(43,127,212,.02);
+  padding: 6px; box-sizing: border-box;
+}
+.dash-edit-card[data-widget-id] { transition: opacity .1s; }
+body.dash-dragging .dash-edit-card { cursor: grabbing; }
+
+.dash-edit-chrome {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 4px 8px; flex-wrap: wrap;
+}
+.dash-edit-handle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px;
+  color: var(--mt); cursor: grab; flex-shrink: 0;
+  touch-action: none; user-select: none;
+}
+.dash-edit-handle:hover { background: var(--bg); color: var(--navy); }
+.dash-edit-handle:active { cursor: grabbing; }
+.dash-edit-title {
+  font-size: 11px; font-weight: 700; color: var(--navy);
+  flex: 1; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-edit-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; flex-wrap: wrap; }
+.dash-edit-actions select {
+  font-size: 10.5px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--br);
+  background: #fff; min-height: 28px;
+}
+.dash-edit-actions .btn[disabled] { opacity: .35; cursor: default; pointer-events: none; }
+.dash-edit-card-body { pointer-events: none; }
+.dash-edit-card-body .card { box-shadow: none; }
+
+/* Dolda widgets-hylla */
+.dash-edit-hidden-tray {
+  margin-top: 14px; padding: 12px 14px;
+  border: 1px dashed var(--br); border-radius: var(--rs);
+  background: var(--bg);
+}
+.dash-edit-hidden-title { font-size: 11px; font-weight: 700; color: var(--mt); display: flex; align-items: center; gap: 5px; margin-bottom: 8px; }
+.dash-edit-hidden-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-edit-hidden-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; border: 1px solid var(--br); border-radius: 100px;
+  padding: 5px 10px 5px 12px; font-size: 11px; font-weight: 600; color: var(--tx);
+  cursor: pointer; transition: border-color .1s, background .1s;
+}
+.dash-edit-hidden-chip:hover { border-color: #a5c4e4; background: #f8fbff; }
+.dash-edit-hidden-restore {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 10px; font-weight: 700; color: var(--sky);
+}
+
+/* Mobil: dölj upp/ned-pilar (inte behövda när allt ändå är full bredd —
+   handtaget räcker som primär reorder-metod; pilarna finns kvar
+   funktionellt men görs mindre framträdande) */
+@media (max-width: 767px) {
+  .dash-edit-toolbar { position: static; }
+  .dash-edit-chrome { padding-bottom: 6px; }
 }

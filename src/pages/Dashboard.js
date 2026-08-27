@@ -29,6 +29,16 @@ const Dashboard = {
     if (caret) caret.innerHTML = ic(isCollapsed ? 'chevron-right' : 'chevron-down', 11);
   },
 
+  /* ── V51B — giltig, stabil användaridentitet för layoutpersistens.
+     Samma konvention som redan etablerad i _scopeWorkOrdersForCurrentUser
+     (R1–R5): null/undefined/tom sträng/sentinelvärdet 'unknown' räknas
+     ALDRIG som en giltig identitet. Personlig Dashboard-layout får
+     ALDRIG läsas/skrivas under en ogiltig identitet — se
+     DashboardConfig._validUserId (samma regel, käll-delad). */
+  _layoutUserId(user) {
+    return (user && user.id && user.id !== 'unknown') ? user.id : null;
+  },
+
   /* ── Huvud-render ──────────────────────────────────────────────────── */
   render() {
     const el = document.getElementById('dash-content');
@@ -37,12 +47,23 @@ const Dashboard = {
     const user   = Auth.getUser();
     const userId = user ? user.id   : null;
     const roleId = user ? user.role : 'personal';
+    const layoutUserId = this._layoutUserId(user);
 
     // Applicera personliga preferenser (accentfärg, täthet)
     if (userId) UserPrefsService.apply(userId);
 
-    // Hämta layout för användaren (sparad eller rollstandard)
-    const layout = DashboardConfig.getUserLayout(userId, roleId);
+    if (this._editMode) { this._renderEditMode(el, user, roleId); return; }
+
+    // Hämta layout för användaren (sparad V51B-personlig, migrerad legacy, eller rollstandard)
+    const layout = DashboardConfig.getUserLayout(layoutUserId, roleId);
+    /* V51B §3: en genuin sparad PERSONLIG layout renderas som ETT
+       sammanhängande, tvärkategoriskt 12-kolumnersgrid — INGA
+       kategorirubriker infogas, eftersom dessa annars skulle tvinga en
+       widget (t.ex. Offerter) till en ny rad även om användaren
+       medvetet placerat den bredvid kartan. Den ORÖRDA rollstandarden
+       (ingen sparad personlig layout ännu) behåller den befintliga,
+       kategorigrupperade visuella hierarkin precis som innan V51B. */
+    const isCustomLayout = DashboardConfig.hasCustomLayout(layoutUserId);
 
     // Bygg widgets i rätt ordning, filtrerat på behörighet
     this._loadCollapsed();
@@ -59,9 +80,9 @@ const Dashboard = {
         const mod = DashboardConfig.getModule(m.id);
         const cat = mod ? (mod.category || null) : null;
         const key = cat ? cat.toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'other';
-        if (cat && cat !== lastCat) {
+        if (!isCustomLayout && cat && cat !== lastCat) {
           const collapsed = !!this._collapsed[key];
-          parts.push(`<div class="dw-full" data-sec-hdr="${key}">
+          parts.push(`<div class="dgw-12" data-sec-hdr="${key}">
             <div class="dash-sec-toggle" onclick="Dashboard.toggleSection('${key}')">
               <span class="dash-sec-label">${esc(cat)}</span>
               <span class="dash-sec-line"></span>
@@ -70,8 +91,9 @@ const Dashboard = {
           </div>`);
           lastCat = cat;
         }
-        const cls = this._sizeClass(m.size || (mod || {}).defaultSize || 'full');
-        const collapsed = !!this._collapsed[key];
+        const span = typeof m.span === 'number' ? m.span : DashboardConfig.clampSpan(DashboardConfig.sizeToSpan(m.size), m.id);
+        const cls = 'dgw-' + DashboardConfig.clampSpan(span, m.id);
+        const collapsed = !isCustomLayout && !!this._collapsed[key];
         parts.push(`<div class="${cls}" data-sec="${key}"${collapsed ? ' style="display:none;"' : ''}>${html}</div>`);
       }
     }
@@ -111,7 +133,7 @@ const Dashboard = {
         `</div>` +
         `<div style="display:flex;gap:4px;">` +
           `<button class="btn bghost bxs" onclick="Dashboard.openUserPrefs()" title="Mina inställningar" style="padding:6px;">${ic('user',14)}</button>` +
-          `<button class="btn bghost bxs" onclick="Dashboard.openCustomize()" title="Anpassa dashboard" style="padding:6px;">${ic('settings',14)}</button>` +
+          `<button class="btn bghost bxs" onclick="Dashboard.enterEditMode()" title="Anpassa dashboard" style="padding:6px;">${ic('settings',14)}</button>` +
         `</div>` +
       `</div>` +
       (heroSub ? `<div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">${heroSub}</div>` : '') +
@@ -130,16 +152,26 @@ const Dashboard = {
        en efterföljande render() (som synkront skriver över _opsMapJobs
        igen innan den första kartinitieringen ens hunnit starta) aldrig kan
        smyga in fel data i ett äldre, redan schemalagt pass. */
+    this._scheduleMapInit(sorted.some(m => m.id === 'ops_map'));
+  },
+
+  /* V51B — utbruten ur render() så att BÅDE normalläget och redigeringsläget
+     (_renderEditMode) kan trigga samma generationsspärrade kart-initiering.
+     Kartan måste förbli funktionell även under redigering (§19) — annars
+     skulle den bara stå tom/trasig varje gång användaren öppnar
+     "Anpassa dashboard" med kart-widgeten synlig. */
+  _scheduleMapInit(hasOpsMap) {
     clearTimeout(this._mapInitTimer);
     this._mapGeneration = (this._mapGeneration || 0) + 1;
     const myGen = this._mapGeneration;
-    if (sorted.some(m => m.id === 'ops_map') && document.getElementById('dash-ops-map-canvas-wrap')) {
+    if (hasOpsMap && document.getElementById('dash-ops-map-canvas-wrap')) {
       const jobsSnapshot = this._opsMapJobs;
       this._mapInitTimer = setTimeout(() => this._initOpsMap(myGen, jobsSnapshot), 30);
     } else if (this._mapInstance) {
       // ops_map inte längre synlig i denna layout (t.ex. avstängd via
-      // Anpassa) — städa bort en ev. kvarvarande karta, ingen framtida
-      // generation kommer annars göra det åt oss.
+      // Anpassa, eller dold i redigeringsläget) — städa bort en ev.
+      // kvarvarande karta, ingen framtida generation kommer annars göra
+      // det åt oss.
       try { this._mapInstance.remove(); } catch(e) {}
       this._mapInstance = null;
     }
@@ -201,11 +233,6 @@ const Dashboard = {
     return [];
   },
 
-  _sizeClass(size) {
-    const map = { full:'dw-full', half:'dw-half', third:'dw-third', twothird:'dw-twothird' };
-    return map[size] || 'dw-full';
-  },
-
   /* ── Widget-dispatcher ─────────────────────────────────────────────── */
   _renderWidget(id) {
     try {
@@ -243,123 +270,380 @@ const Dashboard = {
     }
   },
 
-  /* ── Anpassa dashboard ─────────────────────────────────────────────── */
-  _custRows: [],
+  /* ── V51B — Personlig Dashboard / Grid Builder ────────────────────────
+     Ersätter den gamla modal-listan (§7 DRAFT/SAVE-kontrakt):
+       enterEditMode()  → klona NUVARANDE normaliserade layout till en
+                           draft. Ingen persistens.
+       drag/resize/hide → uppdaterar ENDAST draften (this._editDraft).
+                           Ingen persistens.
+       saveEditMode()   → EN skrivning via DashboardConfig.saveUserLayout
+                           (den kanoniska vägen) — OM INTE draften just nu
+                           representerar en äkta återställning (se
+                           _editResetToDefault nedan), i vilket fall en
+                           RIKTIG återställning görs istället.
+       exitEditModeCancel() → kastar draften. NOLL persistens.
+       resetEditDraft() → nollställer draften till rollens standard.
+                           Persisteras INTE förrän Spara.
 
-  openCustomize() {
+     V51B R1 — BLOCKER B-FIX: "Återställ standard" laddade tidigare BARA
+     rollens standardlayout in i draften, men Spara anropade OVILLKORLIGT
+     saveUserLayout() — vilket SKAPADE dashLayoutV2_<uid> (med
+     standardlayoutens innehåll). Eftersom hasCustomLayout() bara
+     kontrollerar OM den nyckeln existerar (inte VAD den innehåller),
+     förblev Dashboard därefter felaktigt i "personligt grid utan
+     kategirirubriker"-läge — trots att widget-ordning/storlek/synlighet
+     visuellt RÅKADE matcha standarden. Det är INTE samma sak som en
+     genuin återställning: rubrikerna (Kräver åtgärd/Idag & drift/
+     Verksamhet) hörde till den ORÖRDA presentationen och försvann ändå.
+
+     Fix: `_editResetToDefault`-flaggan markerar att draften just nu ÄR
+     en ren, oförändrad kopia av rollstandarden (satt av
+     resetEditDraft(), nollställd av ALLA andra draft-mutationer — se
+     kommentarerna vid varje _edit*-metod nedan). Om flaggan fortfarande
+     är sann när Spara klickas anropas DashboardConfig.resetUserLayout()
+     (som tar bort BÅDA lagringsnycklarna, inte bara sparar
+     standardinnehållet) — annars (flaggan har nollställts av en
+     efterföljande genuin ändring) sparas draften som en vanlig personlig
+     V51B-layout, exakt som förut. */
+  _editMode: false,
+  _editDraft: null,
+  _editSourceLayout: null,
+  _editResetToDefault: false,
+  _drag: null,
+
+  enterEditMode() {
     const user = Auth.getUser();
     if (!user) return;
-
-    const layout    = DashboardConfig.getUserLayout(user.id, user.role);
-    const permitted = DashboardConfig.getAllModules().filter(m => this._canSee(m.id));
-
-    // Bygg rader: permitted modules sorterade på order
-    const rows = permitted.map(m => {
-      const entry = layout.find(e => e.id === m.id) || { id:m.id, visible:false, size:m.defaultSize||'full', order:999 };
-      return { id:m.id, visible:!!entry.visible, size:entry.size||m.defaultSize||'full', order:entry.order, title:m.title, icon:m.icon||'square', description:m.description||'' };
-    }).sort((a, b) => a.order - b.order);
-
-    this._custRows = rows;
-
-    Modal.open({
-      title: `${ic('settings',15)} Anpassa dashboard`,
-      body:
-        `<p style="font-size:11px;color:var(--mt);margin-bottom:10px;">Välj vilka moduler som visas, flytta om ordningen och välj storlek. Layouten sparas per användare.</p>` +
-        `<div id="dash-cust-list" style="display:flex;flex-direction:column;gap:5px;">${this._custListHtml()}</div>`,
-      buttons: [
-        { label: `${ic('check',13)} Spara layout`,     cls: 'btn bp',    onClick: () => Dashboard.saveCustomize() },
-        { label: 'Återställ standard', cls: 'btn bs',    onClick: () => Dashboard._confirmResetLayout() },
-        { label: 'Avbryt',             cls: 'btn bghost', onClick: () => Modal.close() }
-      ],
-      wide: true
-    });
+    const layoutUserId = this._layoutUserId(user);
+    const roleId = user.role || 'personal';
+    const layout = DashboardConfig.getUserLayout(layoutUserId, roleId);
+    /* V51B R2 §4 — spara en PRIVAT, ren minnessnapshot av HELA den
+       normaliserade käll-layouten (innan behörighetsfiltrering) — inte
+       persisterad, bara i minnet under redigeringssessionen. Detta är
+       vad som gör det möjligt att BEVARA en tillfälligt obehörig
+       widgets sparade konfiguration vid Spara (se saveEditMode()),
+       utan att den någonsin visas i själva redigerings-UI:t (draften
+       nedan förblir strikt behörighetsfiltrerad, precis som förut). */
+    this._editSourceLayout = layout;
+    this._editDraft = this._buildDraftFrom(layout, user);
+    this._editResetToDefault = false;
+    this._editMode = true;
+    this.render();
   },
 
-  _custListHtml() {
-    const sizeOpts = [
-      { v:'full',  l:'Fullbredd'    },
-      { v:'half',  l:'Halvbredd'    },
-      { v:'third', l:'En tredjedel' },
-    ];
-    let lastCat = null;
-    return this._custRows.map((r, i) => {
-      const mod = DashboardConfig.getModule(r.id);
-      const cat = mod ? (mod.category || '') : '';
-      let header = '';
-      if (cat && cat !== lastCat) {
-        header = `<div class="dash-config-category">${esc(cat)}</div>`;
-        lastCat = cat;
-      }
-      return header + `
-        <div class="dash-config-row${r.visible ? ' on' : ''}" data-idx="${i}">
-          <label class="dash-config-main">
-            <input type="checkbox" ${r.visible ? 'checked' : ''} onchange="Dashboard._custToggle(${i})">
-            <div class="dash-config-info">
-              <span class="dash-config-name">${ic(r.icon||'square', 11)} ${esc(r.title)}</span>
-              ${r.description ? `<span class="dash-config-desc" title="${esc(r.description)}">${esc(r.description)}</span>` : ''}
-            </div>
-          </label>
-          <div class="dash-config-actions">
-            <select onchange="Dashboard._custSize(${i},this.value)">
-              ${sizeOpts.map(s => `<option value="${s.v}" ${r.size === s.v ? 'selected' : ''}>${s.l}</option>`).join('')}
-            </select>
-            <button type="button" class="btn bs bxs" style="padding:6px 10px;min-height:36px;" title="Flytta upp" onclick="Dashboard._custMove(${i},-1)">${ic('chevron-up',14)} Upp</button>
-            <button type="button" class="btn bs bxs" style="padding:6px 10px;min-height:36px;" title="Flytta ned" onclick="Dashboard._custMove(${i},1)">${ic('chevron-down',14)} Ned</button>
-          </div>
-        </div>`;
-    }).join('');
+  exitEditModeCancel() {
+    this._editMode = false;
+    this._editDraft = null;
+    this._editSourceLayout = null;
+    this._editResetToDefault = false;
+    this.render();
   },
 
-  _custToggle(i) {
-    const cb  = document.querySelector(`[data-idx="${i}"] input[type="checkbox"]`);
-    const row = document.querySelector(`[data-idx="${i}"].dash-config-row`);
-    if (this._custRows[i] && cb) {
-      this._custRows[i].visible = cb.checked;
-      if (row) row.classList.toggle('on', cb.checked);
+  saveEditMode() {
+    const user = Auth.getUser();
+    const layoutUserId = this._layoutUserId(user);
+    if (!layoutUserId) {
+      showToast('Kunde inte spara — okänd användaridentitet');
+      return;
     }
-  },
+    if (this._editResetToDefault) {
+      /* Äkta återställning: ta bort BÅDA lagringsnycklarna (legacy +
+         V51B) via den kanoniska vägen, så hasCustomLayout() blir false
+         och Dashboard genuint återgår till den orörda, kategigrupperade
+         rollstandard-presentationen — inte bara samma widget-innehåll
+         under en "personlig layout finns"-flagga. En ÄKTA återställning
+         ska INTE bevara gamla, tillfälligt obehöriga widgets sparade
+         inställningar (§8 — det vore motsatsen till vad "återställ
+         till standard" betyder). */
+      DashboardConfig.resetUserLayout(layoutUserId);
+      this._editMode = false;
+      this._editDraft = null;
+      this._editSourceLayout = null;
+      this._editResetToDefault = false;
+      this.render();
+      showToast('Dashboard återställd till standard');
+      return;
+    }
+    /* V51B R2 §5 / R3 — BLOCKERARE-FIX: sparade tidigare BARA den
+       behörighetsfiltrerade draften rakt av, vilket TYST RADERADE en
+       giltig sparad konfiguration för varje widget användaren för
+       tillfället saknar behörighet till (t.ex. "Offerter" om
+       offer_manage temporärt saknas) — även om ändringen som faktiskt
+       gjordes handlade om en helt annan widget. Behörighetsfiltrering
+       och persistens är två separata frågor (§3): en obehörig widget
+       får ALDRIG synas, men dess sparade inställning ska ändå överleva
+       en icke-relaterad Spara.
 
-  _custSize(i, val) {
-    if (this._custRows[i]) this._custRows[i].size = val;
-  },
+       R2:s FÖRSTA version av sammanslagningen bevarade rätt
+       id/visible/span, men flyttade ALLTID de obehöriga posterna sist
+       — vilket i praktiken ändrade en tillfälligt obehörig widgets
+       PLATS i layouten trots att inget faktiskt sparbart beslut om just
+       den widgeten hade fattats. R3 bevarar nu ÄVEN den ursprungliga
+       platsen (§4):
 
-  _custMove(i, dir) {
-    const rows = this._custRows;
-    const j    = i + dir;
-    if (j < 0 || j >= rows.length) return;
-    [rows[i], rows[j]] = [rows[j], rows[i]];
-    const list = document.getElementById('dash-cust-list');
-    if (list) list.innerHTML = this._custListHtml();
-  },
+       1. `_editSourceLayout` (fångad, oförändrad, vid enterEditMode())
+          representerar de ORIGINALA "platserna" i ordning.
+       2. Ett käll-id som INTE finns i den behörighetsfiltrerade
+          draften är "reserverat" — den platsen ska behållas EXAKT som
+          den var (id/visible/span oförändrade).
+       3. Övriga ("icke-reserverade") platser fylls, i tur och ordning,
+          med den redigerade draftens poster I DRAFTENS NYA ordning —
+          detta är vad som gör att en genuin användar-omordning bland de
+          AUKTORISERADE widgetsen fortfarande slår igenom fullt ut,
+          samtidigt som den reserverade platsen inte rör sig.
+       4. Eventuella draft-poster utan en käll-plats (nya moduler som
+          inte fanns med i källan alls) läggs till sist, deterministiskt.
+       5. Sekventiella order-nummer 0..N-1 tilldelas till sist.
 
-  saveCustomize() {
-    const user = Auth.getUser();
-    if (!user) return;
+       Exempel (käll-verifierat, se PRE-bevis i rapporten):
+         KÄLLA:  [A, U, B, C]   (U tillfälligt obehörig)
+         DRAFT (efter omordning av A/B/C): [C, A, B]
+         RESULTAT: [C, U, A, B]  — U kvar på sin plats (index 1),
+                    C/A/B i sin NYA inbördes ordning på de kvarvarande
+                    platserna.
 
-    // Spara permitted-modulers ordning/synlighet
-    const layout = this._custRows.map((r, i) => ({ id:r.id, visible:r.visible, size:r.size, order:i }));
+       Endast KÄND, redan normaliserad modul-id kan någonsin hamna i den
+       reserverade delen — okända/borttagna modul-id:n filtrerades redan
+       bort av normalizePersonalLayout() när _editSourceLayout byggdes,
+       så inget nytt säkerhetshål öppnas här (oförändrat sedan R2). */
+    const source = this._editSourceLayout || [];
+    const draftIds = new Set(this._editDraft.map(e => e.id));
+    const draftQueue = this._editDraft.map(e => ({ id: e.id, visible: e.visible, span: e.span }));
+    let draftPtr = 0;
 
-    // Behåll icke-permitted modulers befintliga inställningar
-    const existing = DashboardConfig.getUserLayout(user.id, user.role);
-    existing.forEach(e => {
-      if (!layout.find(l => l.id === e.id)) layout.push(e);
+    const merged = source.map(srcEntry => {
+      if (draftIds.has(srcEntry.id)) {
+        // Behörig plats — fyll med nästa post i draftens NYA ordning
+        // (inte nödvändigtvis samma id som ursprungligen låg i just
+        // denna källplats — det är precis poängen: den redigerade
+        // inbördes ordningen bland de behöriga widgetsen ska slå
+        // igenom, medan de reserverade platserna inte rör sig).
+        const next = draftQueue[draftPtr++];
+        return next;
+      }
+      // Reserverad (för tillfället obehörig) plats — behåll oförändrad.
+      return { id: srcEntry.id, visible: srcEntry.visible, span: srcEntry.span };
     });
+    // Draft-poster utan en käll-plats (t.ex. helt nya moduler som aldrig
+    // funnits i den sparade layouten) läggs till sist, deterministiskt.
+    while (draftPtr < draftQueue.length) merged.push(draftQueue[draftPtr++]);
 
-    DashboardConfig.saveUserLayout(user.id, layout);
-    Modal.close();
+    const layout = merged.map((e, i) => ({ id: e.id, visible: e.visible, span: e.span, order: i }));
+    DashboardConfig.saveUserLayout(layoutUserId, layout);
+    this._editMode = false;
+    this._editDraft = null;
+    this._editSourceLayout = null;
     this.render();
     showToast('Dashboard-layout sparad');
   },
 
-  _confirmResetLayout() {
-    Modal.close();
-    Modal.confirm('Återställa till standardlayout för din roll?', () => {
-      const user = Auth.getUser();
-      if (!user) return;
-      DashboardConfig.resetUserLayout(user.id);
-      Dashboard.render();
-      showToast('Dashboard återställd till standard');
+  /* Nollställer BARA draften (§13) — inte persisterat förrän Spara.
+     Markerar draften som en ÄKTA återställning (se _editResetToDefault
+     ovan) tills en genuin efterföljande ändring (resize/dölj/återställ-
+     widget/flytta/drag) nollställer flaggan igen — se respektive metod. */
+  resetEditDraft() {
+    const user = Auth.getUser();
+    if (!user) return;
+    const roleId = user.role || 'personal';
+    const def = DashboardConfig.getDefaultLayout(roleId);
+    this._editDraft = this._buildDraftFrom(def, user);
+    this._editResetToDefault = true;
+    this.render();
+    showToast('Standardlayout inläst i redigeringsläget — klicka Spara för att bekräfta');
+  },
+
+  /* Bygger redigeringsdraften: EN rad per modul användaren faktiskt har
+     behörighet att se (§11 — obehöriga moduler kan aldrig dyka upp i
+     draften eller i den dolda-widgets-hyllan, oavsett vad en sparad
+     layout råkar innehålla). Ordning följer den inkommande layoutens
+     `order`; moduler som saknas i layouten (nya, ej ännu sparade)
+     hamnar sist. */
+  _buildDraftFrom(layout, user) {
+    const permitted = DashboardConfig.getAllModules().filter(m => this._canSee(m.id));
+    const draft = permitted.map(m => {
+      const e = layout.find(x => x.id === m.id);
+      return {
+        id: m.id,
+        visible: e ? !!e.visible : false,
+        span: e && typeof e.span === 'number' ? DashboardConfig.clampSpan(e.span, m.id) : DashboardConfig.clampSpan(DashboardConfig.sizeToSpan(m.defaultSize), m.id)
+      };
     });
+    draft.sort((a, b) => {
+      const ia = layout.findIndex(x => x.id === a.id);
+      const ib = layout.findIndex(x => x.id === b.id);
+      return (ia === -1 ? 9999 : ia) - (ib === -1 ? 9999 : ib);
+    });
+    return draft;
+  },
+
+  /* ── Draft-mutationer (ALLA renderar om draften, ALDRIG persistens) ───
+     V51B R1 §9: VARJE genuin draft-mutation nedan nollställer
+     _editResetToDefault — en "Återställ standard" följt av en faktisk
+     ändring är INTE längre en ren återställning, och Spara ska då
+     persistera den resulterande anpassade layouten via saveUserLayout()
+     (inte resetUserLayout()). */
+  _editSetSpan(id, span) {
+    const e = this._editDraft.find(x => x.id === id);
+    if (!e) return;
+    e.span = DashboardConfig.clampSpan(parseInt(span, 10), id);
+    this._editResetToDefault = false;
+    this.render();
+  },
+
+  _editHideWidget(id) {
+    const e = this._editDraft.find(x => x.id === id);
+    if (!e) return;
+    e.visible = false;
+    this._editResetToDefault = false;
+    this.render();
+  },
+
+  /* §12: återställd widget använder sitt sparade/standard-span och
+     placeras deterministiskt sist i griddet. */
+  _editRestoreWidget(id) {
+    const idx = this._editDraft.findIndex(x => x.id === id);
+    if (idx === -1) return;
+    const [e] = this._editDraft.splice(idx, 1);
+    e.visible = true;
+    this._editDraft.push(e);
+    this._editResetToDefault = false;
+    this.render();
+  },
+
+  /* Tillgänglig/tangentbords-/touch-säker ordningsfallback (§15) — flyttar
+     widgeten ett steg upp/ned bland de SYNLIGA widgetsen. Detta är INTE
+     en andra, separat layout-editor — det är samma draft, samma
+     grid, bara manipulerad utan pekardrag. */
+  _editMoveWidget(id, dir) {
+    const draft = this._editDraft;
+    const visibleIds = draft.filter(e => e.visible).map(e => e.id);
+    const vIdx = visibleIds.indexOf(id);
+    if (vIdx === -1) return;
+    const targetVIdx = vIdx + dir;
+    if (targetVIdx < 0 || targetVIdx >= visibleIds.length) return;
+    const targetId = visibleIds[targetVIdx];
+    const i1 = draft.findIndex(e => e.id === id);
+    const i2 = draft.findIndex(e => e.id === targetId);
+    [draft[i1], draft[i2]] = [draft[i2], draft[i1]];
+    this._editResetToDefault = false;
+    this.render();
+  },
+
+  /* ── Pekar-/musbaserad drag-omordning ──────────────────────────────────
+     V51B §14: native HTML5 drag-and-drop (dragstart/dragover/drop) kräver
+     att draggable="true" sitter på HELA kortet, vilket gör det svårt att
+     begränsa dragstart till bara draghandtaget utan bräckliga workarounds
+     — och är notoriskt opålitligt att simulera i automatiserad testning.
+     En enkel pekar-baserad (mousedown/mousemove/mouseup) drag som bara
+     LYSSNAR från handtaget är enklare, mer förutsägbar och lättare att
+     verifiera med riktiga musrörelser i Chromium. */
+  _dragStart(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    this._drag = { id, moveHandler: null, upHandler: null };
+    document.body.classList.add('dash-dragging');
+    const move = (ev) => this._dragMove(ev);
+    const up   = (ev) => this._dragEnd(ev);
+    this._drag.moveHandler = move;
+    this._drag.upHandler = up;
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', up);
+  },
+
+  _dragMove(e) {
+    if (!this._drag) return;
+    if (e.touches) e.preventDefault();
+    const point = e.touches ? e.touches[0] : e;
+    const el = document.elementFromPoint(point.clientX, point.clientY);
+    const card = el && el.closest ? el.closest('.dash-edit-card') : null;
+    if (!card) return;
+    const overId = card.getAttribute('data-widget-id');
+    if (!overId || overId === this._drag.id) return;
+    const draft = this._editDraft;
+    const fromIdx = draft.findIndex(x => x.id === this._drag.id);
+    const toIdx   = draft.findIndex(x => x.id === overId);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+    const [moved] = draft.splice(fromIdx, 1);
+    draft.splice(toIdx, 0, moved);
+    this._editResetToDefault = false;
+    this.render();
+  },
+
+  _dragEnd() {
+    if (!this._drag) return;
+    document.removeEventListener('mousemove', this._drag.moveHandler);
+    document.removeEventListener('mouseup', this._drag.upHandler);
+    document.removeEventListener('touchmove', this._drag.moveHandler);
+    document.removeEventListener('touchend', this._drag.upHandler);
+    document.body.classList.remove('dash-dragging');
+    this._drag = null;
+  },
+
+  /* ── Redigeringsläge — render ──────────────────────────────────────── */
+  _renderEditMode(el, user, roleId) {
+    const draft = this._editDraft || [];
+    const visible = draft.filter(e => e.visible);
+    const hidden  = draft.filter(e => !e.visible);
+
+    const cardHtml = (e, idx) => {
+      const mod = DashboardConfig.getModule(e.id);
+      if (!mod) return '';
+      const minSpan = DashboardConfig.getMinSpan(e.id);
+      const widgetHtml = this._renderWidget(e.id) ||
+        `<div class="card"><div class="card-header"><h3 class="ch3">${ic(mod.icon||'square',14)} ${esc(mod.title)}</h3></div><div class="card-body"><div class="empty" style="padding:12px 0;gap:4px;">${ic('inbox',20)}<p style="font-size:11px;">Inget att visa just nu</p></div></div></div>`;
+      const spanOpts = DashboardConfig.VALID_SPANS
+        .filter(s => s >= minSpan)
+        .map(s => `<option value="${s}" ${s === e.span ? 'selected' : ''}>${DashboardConfig.SPAN_LABELS[s]}</option>`)
+        .join('');
+      return `<div class="dgw-${e.span} dash-edit-card" data-widget-id="${e.id}">
+        <div class="dash-edit-chrome">
+          <span class="dash-edit-handle" title="Dra för att flytta" onmousedown="Dashboard._dragStart(event,'${e.id}')" ontouchstart="Dashboard._dragStart(event,'${e.id}')">${ic('more-vertical',13)}</span>
+          <span class="dash-edit-title">${esc(mod.title)}</span>
+          <div class="dash-edit-actions">
+            <button type="button" class="btn bghost bxs" title="Flytta upp" aria-label="Flytta ${esc(mod.title)} upp" ${idx===0?'disabled':''} onclick="Dashboard._editMoveWidget('${e.id}',-1)">${ic('chevron-up',12)}</button>
+            <button type="button" class="btn bghost bxs" title="Flytta ned" aria-label="Flytta ${esc(mod.title)} ned" ${idx===visible.length-1?'disabled':''} onclick="Dashboard._editMoveWidget('${e.id}',1)">${ic('chevron-down',12)}</button>
+            <select title="Bredd" aria-label="Bredd för ${esc(mod.title)}" onchange="Dashboard._editSetSpan('${e.id}',this.value)">${spanOpts}</select>
+            <button type="button" class="btn bghost bxs" title="Dölj widget" aria-label="Dölj ${esc(mod.title)}" onclick="Dashboard._editHideWidget('${e.id}')">${ic('eye-off',12)}</button>
+          </div>
+        </div>
+        <div class="dash-edit-card-body">${widgetHtml}</div>
+      </div>`;
+    };
+
+    const gridHtml = visible.map((e, i) => cardHtml(e, i)).join('');
+
+    const hiddenHtml = hidden.length ? `
+      <div class="dash-edit-hidden-tray">
+        <div class="dash-edit-hidden-title">${ic('eye-off',12)} Dolda widgets</div>
+        <div class="dash-edit-hidden-list">
+          ${hidden.map(e => {
+            const mod = DashboardConfig.getModule(e.id);
+            if (!mod) return '';
+            return `<button type="button" class="dash-edit-hidden-chip" onclick="Dashboard._editRestoreWidget('${e.id}')">
+              ${ic(mod.icon||'square',12)} ${esc(mod.title)}
+              <span class="dash-edit-hidden-restore">${ic('plus',10)} Visa</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </div>` : '';
+
+    el.innerHTML = `
+      <div class="dash-edit-toolbar">
+        <div class="dash-edit-toolbar-title">${ic('settings',15)} Anpassa dashboard</div>
+        <div class="dash-edit-toolbar-actions">
+          <button type="button" class="btn bs bsm" onclick="Dashboard.resetEditDraft()">${ic('rotate-ccw',12)} Återställ standard</button>
+          <button type="button" class="btn bghost bsm" onclick="Dashboard.exitEditModeCancel()">Avbryt</button>
+          <button type="button" class="btn bp bsm" onclick="Dashboard.saveEditMode()">${ic('check',13)} Spara</button>
+        </div>
+      </div>
+      <p class="dash-edit-hint">Dra i handtaget ${ic('more-vertical',10)} för att ändra ordning, eller använd pilknapparna. Välj bredd, eller dölj widgets du inte vill se.</p>
+      <div class="dash-layout">${gridHtml}</div>
+      ${hiddenHtml}
+    `;
+
+    this._scheduleMapInit(visible.some(e => e.id === 'ops_map'));
   },
 
   /* ── Personliga inställningar ──────────────────────────────────────── */
@@ -368,7 +652,12 @@ const Dashboard = {
     if (!user) return;
     const prefs   = UserPrefsService.get(user.id);
     const accent  = prefs.accentColor || '';
-    const density = prefs.density || 'normal';
+    /* V51B R7.1 §5 — Sidebar sparade historiskt 'airy' för samma "Luftig"-val
+       som denna dialog alltid kallat 'spacious' (pre-R7-enum-mismatch). Ett
+       redan sparat 'airy'-värde ska fortfarande visas som Luftig valt här,
+       utan att själva localStorage-värdet skrivs om (icke-destruktivt). */
+    const densityRaw = prefs.density || 'normal';
+    const density = densityRaw === 'airy' ? 'spacious' : densityRaw;
     const name    = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
 
     Modal.open({
@@ -989,7 +1278,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-today';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${ao.title}</div><div class="crow-sub">${ao.scheduledStart||'?'}–${ao.scheduledEnd||'?'} · ${cu?CustomerService.displayName(cu):'—'}</div></div>${sbdg(ao.status)}</div>`; };
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${ao.title}</div>${sbdg(ao.status)}</div><div class="crow-sub">${ao.scheduledStart||'?'}–${ao.scheduledEnd||'?'} · ${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
               const visible = todayAOs.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = todayAOs.length > LIMIT ? `<div id="${uid}" style="display:none;">${todayAOs.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${todayAOs.length})</button>` : '';
               return visible + hidden;
@@ -1033,7 +1322,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-pool';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${ao.title}</div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div>${pbdg(ao.priority)}</div>`; };
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${ao.title}</div>${pbdg(ao.priority)}</div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
               const visible = pool.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = pool.length > LIMIT ? `<div id="${uid}" style="display:none;">${pool.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pool.length})</button>` : '';
               return visible + hidden;
@@ -1086,7 +1375,7 @@ const Dashboard = {
         ${(() => {
           const LIMIT = 4;
           const uid = 'vm-recur';
-          const renderRow = r => { var days = Math.ceil((new Date(r.nextDate)-new Date(tdy()))/86400000); var cu = getCu(r.customerId); return `<div class="crow" onclick="Router.showPage('pg-recurring')"><div style="min-width:0;flex:1;"><div class="crow-title">${r.title}</div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div><span class="bdg ${days<=0?'bdg-red':'bdg-orange'}" style="font-size:10px;white-space:nowrap;flex-shrink:0;">${days<=0?'Förfallen':days===0?'Idag':days+' d'}</span></div>`; };
+          const renderRow = r => { var days = Math.ceil((new Date(r.nextDate)-new Date(tdy()))/86400000); var cu = getCu(r.customerId); return `<div class="crow" onclick="Router.showPage('pg-recurring')"><div class="crow-top"><div class="crow-title">${r.title}</div><span class="bdg ${days<=0?'bdg-red':'bdg-orange'}" style="font-size:10px;white-space:nowrap;flex-shrink:0;">${days<=0?'Förfallen':days===0?'Idag':days+' d'}</span></div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
           const visible = recurring.slice(0, LIMIT).map(renderRow).join('');
           const hidden  = recurring.length > LIMIT ? `<div id="${uid}" style="display:none;">${recurring.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${recurring.length})</button>` : '';
           return visible + hidden;
@@ -1129,7 +1418,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-planned';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${ao.title}</div><div class="crow-sub">${fmtDate(ao.scheduledDate)} · ${cu?CustomerService.displayName(cu):'—'}</div></div>${sbdg(ao.status)}</div>`; };
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${ao.title}</div>${sbdg(ao.status)}</div><div class="crow-sub">${fmtDate(ao.scheduledDate)} · ${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
               const visible = planned.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = planned.length > LIMIT ? `<div id="${uid}" style="display:none;">${planned.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${planned.length})</button>` : '';
               return visible + hidden;
@@ -1172,16 +1461,13 @@ const Dashboard = {
               /* V46 R3: samma Förfallen-semantik som SalesPage._renderCard() — aktiv status + passerat dueDate. */
               var overdueBadge = isOverdue ? `<span class="bdg bdg-red" style="font-size:9px;flex-shrink:0;">${ic('alert-triangle',9)} Förfallen</span>` : '';
               return `<div class="crow" style="cursor:pointer;" onclick="Router.showPage('pg-sales')">
-                <div style="flex:1;min-width:0;">
+                <div class="crow-top">
                   <div class="crow-title">${opp.title}</div>
-                  <div class="crow-sub">${cuName}${val}</div>
-                  ${tip}
-                </div>
-                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">
                   ${pBadge}
-                  ${overdueBadge}
-                  ${deadline}
                 </div>
+                <div class="crow-sub">${cuName}${val}</div>
+                ${(overdueBadge || deadline) ? `<div class="crow-extra-badges">${overdueBadge}${deadline}</div>` : ''}
+                ${tip}
               </div>`;
             }).join('')}
         ${active.length > 3 ? `<button class="btn bghost bfull bsm" style="margin-top:4px;" onclick="Router.showPage('pg-sales')">+${active.length-3} fler säljchanser</button>` : ''}
@@ -1209,7 +1495,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 3;
               const uid = 'vm-offers';
-              const renderRow = o => { var cu = getCu(o.customerId); var cuName = cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):'—'; var total = (o.lines||[]).reduce((s,l)=>s+(l.total||0),0); var age = o.sentAt?Math.floor((Date.now()-new Date(o.sentAt))/86400000):null; return `<div class="crow" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})"><div style="min-width:0;flex:1;"><div class="crow-title">${cuName}</div><div class="crow-sub">${fmt(total)} kr${age!==null?' · '+age+' dagar':''}</div></div>${sbdg(o.status)}</div>`; };
+              const renderRow = o => { var cu = getCu(o.customerId); var cuName = cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):'—'; var total = (o.lines||[]).reduce((s,l)=>s+(l.total||0),0); var age = o.sentAt?Math.floor((Date.now()-new Date(o.sentAt))/86400000):null; return `<div class="crow" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})"><div class="crow-top"><div class="crow-title">${cuName}</div>${sbdg(o.status)}</div><div class="crow-sub">${fmt(total)} kr${age!==null?' · '+age+' dagar':''}</div></div>`; };
               const visible = pending.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = pending.length > LIMIT ? `<div id="${uid}" style="display:none;">${pending.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pending.length})</button>` : '';
               return visible + hidden;

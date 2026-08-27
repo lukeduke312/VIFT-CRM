@@ -65,6 +65,33 @@ const BrandingService = {
     document.dispatchEvent(new CustomEvent('brandingUpdated'));
   },
 
+  /* V51B R6 — ROTORSAK till "sidebar syns bara som en smal, klippt
+     remsa": Sidebar.render() anropar BrandingService.logoForBg(bg) för
+     att välja rätt logotypvariant för sidopanelens bakgrundsfärg — men
+     denna metod har ALDRIG funnits i BrandingService (bara logoLight()/
+     logoDark() fanns). Anropet kastade därför ett synkront TypeError
+     ("BrandingService.logoForBg is not a function") så fort
+     Sidebar.render() kördes — INNAN `nav.innerHTML` någonsin sattes och
+     INNAN App.showApp() hann nå Router.initFromHash(). Sidopanelen
+     renderades alltså som en tom, korrekt bred låda (själva #bottom-nav
+     har redan sin CSS-bakgrundsfärg) helt utan nav-poster/ikoner — vilket
+     matchar den rapporterade "smal klippt remsa"-observationen exakt.
+     Bevisat via en riktig, oförändrad produktions-appskal-reproduktion
+     (se RAPPORT-V51B-R6) — felet försvann helt, och ingen ytterligare
+     bredd-/overflow-bugg kunde reproduceras, så snart detta metodanrop
+     faktiskt gick att köra. Samma ljushetslogik som _yiqText() nedan
+     (samma YIQ-formel) — mörk bakgrund → ljus (vit) logotyp, ljus
+     bakgrund → mörk/vanlig logotyp, för läsbar kontrast. */
+  logoForBg(hex) {
+    try {
+      const h = (hex || '').replace('#', '');
+      const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+      const r = parseInt(full.slice(0, 2), 16), g = parseInt(full.slice(2, 4), 16), b = parseInt(full.slice(4, 6), 16);
+      const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+      return yiq >= 128 ? this.logoLight() : this.logoDark();
+    } catch (e) { return this.logoDark(); }
+  },
+
   _yiqText(hex) {
     // Returns '#fff' or '#111' for legible contrast on the given background
     try {
