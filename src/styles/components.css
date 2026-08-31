@@ -474,6 +474,44 @@
   line-height: 1.5;
 }
 
+/* V52A — den resolverade arbetsadress-kortet (Ny arbetsorder-guiden och
+   redigera-dialogens standardläge) återanvände tidigare .ibox: en HEL
+   yta i den fritt valbara --acc-accentfärgen, med gatan i --acc-text
+   (kalibrerad för kontrast) men postnr/ort hårdkodat till --mt — en
+   toning avsedd för VIT bakgrund, inte en godtycklig mättad accentfärg.
+   Resultat: gatan läsbar, postnr/ort ofta svårläst. Egen, lätt
+   komponent istället för hela .ibox: en DISKRET ton av accentfärgen
+   (samma color-mix-mönster som redan används i denna fil) så texten
+   alltid kan vara den vanliga läsfärgen — aldrig beroende av vilken
+   accentfärg användaren råkat välja. */
+.addr-card {
+  background: color-mix(in srgb, var(--acc) 14%, #fff);
+  border: 1.5px solid color-mix(in srgb, var(--acc) 35%, var(--br));
+  border-radius: var(--rx);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--tx);
+  line-height: 1.5;
+}
+/* V52A R1 (oberoende reproducerad blockerare) — `color:var(--mt)` (#64748b,
+   avsedd för VIT bakgrund) gav INTE bevisat ≥4.5:1 mot den ljusa
+   color-mix()-tonen för alla fritt valbara accentfärger (t.ex. mörka
+   accenter gav ~3.4:1). --mt är en FAST färg — den kan inte "vinna" mot
+   en godtycklig ljus ton oavsett hur ljus tonen görs. Sekundär hierarki
+   (postnr/ort vs. gata) markeras nu istället med storlek, INTE en
+   lägre-kontrast-färg: samma `var(--tx)` som gatan (redan alltid mörk,
+   alltid läsbar mot den ljusa kortbakgrunden). Medvetet INTE `opacity` —
+   opacity blandas in vid rendering men syns aldrig i
+   getComputedStyle().color, så ett kontrast-test byggt på beräknade
+   stilar (uppdragets egen §-krav) skulle kunna visa fel, för hög,
+   siffra jämfört med vad som faktiskt visas. En helt solid färg är den
+   enda som är bevisbar från riktiga computed styles. */
+.addr-card-city {
+  color: var(--tx);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 /* ── Timeline ─────────────────────────── */
 .tl {
   padding-left: 22px;
@@ -3992,6 +4030,11 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 }
 .ao-overflow-menu-item:hover { background: var(--hover-bg, rgba(0,0,0,.04)); }
 .ao-overflow-divider { height: 1px; background: var(--br); margin: 4px 0; }
+/* V52A — destruktiv åtgärd (t.ex. "Ta bort") i en ankrad meny: röd text +
+   ikon, tydligt skild från vanliga navigationsval, samma tona-hover-
+   princip som resten av menyn. */
+.ao-overflow-menu-item--red { color: var(--rd); }
+.ao-overflow-menu-item--red:hover { background: rgba(220,38,38,.08); }
 
 /* Tabs row with sel-all */
 .ao-tabs-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -4077,11 +4120,32 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   width: 32px; height: 32px; margin: -8px -8px -8px -4px;
   cursor: pointer; flex-shrink: 0;
 }
+/* V52A — TIDIGARE fyllde vald rad HELA kortet med den råa
+   --acc-variabeln (en fritt valbar personlig accentfärg, UserPrefsService,
+   kan vara en mättad stark färg) som bakgrund — dålig textkontrast, märken
+   svåra att läsa, och en vald rad såg ut som en primär CTA-knapp snarare
+   än ett markerat listobjekt. Nu: en LÄTT ton av accentfärgen (via
+   color-mix, samma mönster som redan används för brand-toner i denna
+   fil) + en tydlig kantlinje/inre ram — texten förblir alltid den vanliga
+   mörka läsfärgen, aldrig --acc-text (som bara är kalibrerad för en HEL
+   mättad yta, inte en diskret markering). */
 .list-item.selected,
 .list-item-v2.selected,
 .ao-list-item.selected {
-  background: var(--acc);
-  border-color: var(--sky);
+  background: color-mix(in srgb, var(--acc) 14%, #fff);
+  border-color: color-mix(in srgb, var(--acc) 45%, var(--br));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent);
+}
+@media (min-width: 1024px) {
+  /* Hover får aldrig tysta ner den redan vanligare, tydligare
+     markeringsramen — utan denna regel skulle .ao-list-item:hover ovan
+     (samma specificitet) kunna vinna beroende på framtida CSS-ordning. */
+  .list-item.selected:hover,
+  .list-item-v2.selected:hover,
+  .ao-list-item.selected:hover {
+    border-color: color-mix(in srgb, var(--acc) 55%, var(--sky));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent), 0 2px 10px rgba(43,127,212,.1);
+  }
 }
 .list-item.sel-mode,
 .list-item-v2.sel-mode,

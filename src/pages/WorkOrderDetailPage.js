@@ -366,23 +366,79 @@ const WorkOrderDetailPage = {
       return `<button class="${cls}" onclick="${it.fn}">${ic(it.icon,13)} ${it.label}</button>`;
     };
 
-    const desktopMoreBtn = desktopRest.length
-      ? `<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openMoreActions('${ao.id}','desktop')">${ic('more-horizontal',13)}</button>`
+    /* V52A — "Fler åtgärder" öppnade tidigare en generisk full Modal
+       (mobilbottensheet-stilad, med en stor primärfärgad "Stäng"-knapp)
+       för BÅDA skrivbord och mobil, med gott om tom yta för ett fåtal
+       rader. Ersatt med den redan befintliga, tillgängliga, ankrade
+       overflow-menykomponenten (aoToggleOverflow/aoCloseOverflow,
+       state.js) — samma komponent som redan används av Kunder/Fakturor/
+       Fastigheter/Arbetsorder-listans egna "fler alternativ"-menyer.
+       Ingen ny menyram uppfinns. */
+    const desktopMenu = desktopRest.length
+      ? this._moreActionsMenuHtml(desktopRest, 'ao-more-desktop', false)
       : '';
-    const mobileMoreBtn = secondary.length
-      ? `<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openMoreActions('${ao.id}','mobile')">${ic('more-horizontal',13)} Fler åtgärder</button>`
+    const mobileMenu = secondary.length
+      ? this._moreActionsMenuHtml(secondary, 'ao-more-mobile', true)
       : '';
 
     return `
       <div class="ao-acts-desktop">
         ${primary.join('')}
         ${desktopInline.map(_inlineBtn).join('')}
-        ${desktopMoreBtn}
+        ${desktopMenu}
       </div>
       <div class="ao-acts-mobile">
         ${primary.join('')}
-        ${mobileMoreBtn}
+        ${mobileMenu}
       </div>`;
+  },
+
+  /* V52A — kompakt ankrad meny, ersätter openMoreActions()s Modal.
+     Renderar ALLA skickade items (fixar en tidigare bugg — se
+     _secondaryActions()-kommentaren nedan): ett objekt med `divider:true`
+     infogade tidigare en avdelare men returnerade sedan UTAN att rendera
+     objektet självt, så "Redigera" och "Arkivera" kunde tystna helt ur
+     menyn (LIVE-observationen "endast Ta bort" var denna bugg, inte bara
+     ett visuellt problem). */
+  _moreActionsMenuHtml(items, idBase, showLabel) {
+    const menuId = idBase + '-menu';
+    const btnId  = idBase + '-btn';
+    let rows = '';
+    items.forEach((it, idx) => {
+      if (it.divider && idx > 0) rows += '<div class="ao-overflow-divider"></div>';
+      const cls = it.destructive ? 'ao-overflow-menu-item ao-overflow-menu-item--red' : 'ao-overflow-menu-item';
+      rows += `<button class="${cls}" role="menuitem" onclick="aoCloseOverflow();${it.fn}">${ic(it.icon,13)} ${it.label}</button>`;
+    });
+    return `
+      <div class="ao-overflow-wrap">
+        <button class="btn bghost bsm" id="${btnId}" aria-label="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" onclick="WorkOrderDetailPage._toggleActionsMenu('${menuId}',this)">${ic('more-horizontal',13)}${showLabel ? ' Fler åtgärder' : ''}</button>
+        <div class="ao-overflow-menu" id="${menuId}" role="menu">${rows}</div>
+      </div>`;
+  },
+
+  /* Titelkortet (.ao-title-card) har `overflow:hidden` (för att klippa
+     de rundade hörnen kring hero-sektionen) — ett vanligt
+     `position:absolute`-ankrat dropdown (den delade .ao-overflow-menu-
+     modellen som redan används oförändrad på Kunder/Fakturor/Fastigheter/
+     Arbetsorder-listan) skulle klippas bort där. Löst utan att röra den
+     delade komponentens standardbeteende (noll regressionsrisk för de
+     andra fyra sidorna): denna wrapper anropar det delade
+     aoToggleOverflow() (för Escape/klicka-utanför/en-meny-i-taget) men
+     sätter DESSUTOM `position:fixed` med viewport-koordinater beräknade
+     från knappens egen `getBoundingClientRect()` — `position:fixed`
+     begränsas inte av en icke-transformerad förälders `overflow:hidden`. */
+  _toggleActionsMenu(menuId, btn) {
+    const menu = document.getElementById(menuId);
+    if (!menu || !btn) return;
+    const wasOpen = menu.classList.contains('open');
+    aoToggleOverflow(menuId, btn);
+    if (!wasOpen && menu.classList.contains('open')) {
+      const r = btn.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      menu.style.top   = (r.bottom + 4) + 'px';
+      menu.style.left  = 'auto';
+      menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    }
   },
 
   _primaryActionBtns(ao) {
@@ -474,35 +530,6 @@ const WorkOrderDetailPage = {
       items.push({ label:'Radera permanent', icon:'trash-2', fn:`WorkOrderDetailPage._confirmPermanentDelete('${ao.id}')`, destructive: true, divider: true });
     }
     return items;
-  },
-
-  openMoreActions(aoId, mode) {
-    const ao = getAO(aoId || this.aoId);
-    if (!ao) return;
-    const allItems = this._secondaryActions(ao);
-    // On desktop, the inline buttons already show common actions — only show the rest
-    const DESKTOP_INLINE = new Set(['Planera','Omplanera','Till pool','Pausa','Redigera','Personal','Visa fakturaunderlag']);
-    const items = (mode === 'desktop')
-      ? allItems.filter(it => !DESKTOP_INLINE.has(it.label))
-      : allItems;
-    if (!items.length) return;
-    let rows = '<div class="action-sheet-list">';
-    let needDivider = false;
-    items.forEach(it => {
-      if (it.divider) needDivider = true;
-      if (needDivider && !it.divider) { rows += '<div class="action-sheet-divider"></div>'; needDivider = false; }
-      if (it.divider) { needDivider = true; return; }
-      const cls = it.destructive ? 'action-sheet-btn action-sheet-btn--red' : 'action-sheet-btn';
-      rows += `<button class="${cls}" onclick="Modal.close();${it.fn}">
-        <span style="opacity:.65;flex-shrink:0;">${ic(it.icon,16)}</span>${it.label}
-      </button>`;
-    });
-    rows += '</div>';
-    Modal.open({
-      title: `${ic('more-horizontal',14)} Fler åtgärder`,
-      body: rows,
-      buttons: [{ label:'Stäng', cls:'btn bs bfull', onClick:() => Modal.close() }]
-    });
   },
 
   openReschedule() {
@@ -2319,9 +2346,9 @@ const WorkOrderDetailPage = {
 
     const pendingLine2 = [st.zip, st.city].filter(Boolean).join(' ');
     const primaryHtml = `
-      <div class="ibox" data-role="ao-work-address" style="font-size:13px;line-height:1.5;">
+      <div class="addr-card" data-role="ao-work-address">
         ${st.address
-          ? `<div>${esc(st.address)}</div>${pendingLine2 ? `<div style="color:var(--mt);font-size:12px;">${esc(pendingLine2)}</div>` : ''}`
+          ? `<div>${esc(st.address)}</div>${pendingLine2 ? `<div class="addr-card-city">${esc(pendingLine2)}</div>` : ''}`
           : `<span style="color:var(--mt);">Ingen adress att visa — välj en kund med adress, eller ange en särskild adress nedan.</span>`}
       </div>`;
 

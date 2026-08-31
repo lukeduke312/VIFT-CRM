@@ -928,9 +928,9 @@ const WorkOrdersPage = {
     const resolvedLine2 = [resolved.zip, resolved.city].filter(Boolean).join(' ');
 
     const resolvedHtml = `
-      <div class="ibox" style="font-size:13px;line-height:1.5;">
+      <div class="addr-card">
         ${resolved.address
-          ? `<div>${esc(resolved.address)}</div>${resolvedLine2 ? `<div style="color:var(--mt);font-size:12px;">${esc(resolvedLine2)}</div>` : ''}`
+          ? `<div>${esc(resolved.address)}</div>${resolvedLine2 ? `<div class="addr-card-city">${esc(resolvedLine2)}</div>` : ''}`
           : `<span style="color:var(--mt);">Ingen adress att visa — välj kund/fastighet med adress, eller ange en särskild adress nedan.</span>`}
       </div>`;
 
