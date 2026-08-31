@@ -979,7 +979,6 @@ const Dashboard = {
 
     const jobRow = ao => {
       const cu = getCu(ao.customerId);
-      const prop = ao.propertyId ? getObj(ao.propertyId) : null;
       /* V51A R4 — adress-precedensfix. ao.address (om satt) är den
          KANONISKA arbetsplatsadressen överallt annars i appen
          (WorkOrderDetailPage, MyJobsPage, OperationsPage visar alltid
@@ -992,8 +991,22 @@ const Dashboard = {
          fastighetsadressen oavsett hur många gånger Dashboard
          renderades om — inte en cache-/race-bugg, utan en
          precedensbugg isolerad till denna widget. Fastighetens adress
-         används nu bara som FALLBACK när AO:n saknar egen adress. */
-      const locLabel = ao.address || (prop && prop.address) || (cu ? CustomerService.displayName(cu) : '—');
+         används bara som FALLBACK när AO:n saknar egen adress (nu via
+         AddressService.resolveWorkOrderDisplayAddress(), samma precedens,
+         se nedan). */
+      /* R2 §4, kompletterad i R2.1 §10 — visa AO:ns strukturerade postnr/
+         ort tillsammans med gatan (om de finns) istället för att kasta
+         bort den kontext denna omgång just lagt till. Kompakt: "Gata,
+         Postnr Ort" på en rad, konsekvent med AO-detaljens
+         ao-address-link-formattering (AddressService.displayAddress).
+         AddressService.displayAddress() FALLER SJÄLV TILLBAKA till
+         fastighetens/kundens strukturerade adress om AO:n helt saknar
+         egen (resolveWorkOrderDisplayAddress) — samma legacy-gap som
+         AO-detaljen hade (bara den bara gatan visades, inte postnr/ort)
+         fanns tidigare även här. Sista utvägen (ingen adress alls
+         någonstans) är fortfarande kundens NAMN, inte en tom sträng. */
+      const resolvedDisplay = AddressService.displayAddress(ao);
+      const locLabel = resolvedDisplay || (cu ? CustomerService.displayName(cu) : '—');
       const cl = ao.checklist || [];
       const clDone = cl.filter(c => c.done).length;
       const hasChecklist = cl.length > 0;
@@ -1078,6 +1091,16 @@ const Dashboard = {
      muterande steg (start, efter Mapbox-laddning, efter varje geokodning,
      före kartskapande) — en föråldrad generation avbryter TYST utan att
      röra DOM eller en nyare generations karta. */
+  /* R1 §1 — den lokala kopian av fallback-kedjan (tidigare `_resolveAOAddress`
+     här) är BORTTAGEN. Den kunde divergera från WorkOrderService's egen,
+     enklare kopia (exakt det som orsakade blockerare #1: en legacy-AO
+     geokodades med fel/ingen stadskontext varje gång update() kördes, trots
+     att kartan visste bättre). Nu finns EN kanonisk resolver,
+     AddressService.resolveWorkOrderQuery(ao) — se dess kommentar för hela
+     prioritetskedjan. Både kartan (nedan) och
+     WorkOrderService.geocodeAddressIfNeeded() anropar SAMMA funktion och kan
+     därför aldrig divergera igen. */
+
   async _initOpsMap(generation, jobs) {
     if (generation !== this._mapGeneration) return; // redan föråldrad innan start
 
@@ -1113,31 +1136,42 @@ const Dashboard = {
     for (const ao of jobs) {
       if (generation !== this._mapGeneration) return; // avbruten mitt i geokodningsloopen av en nyare render()
 
-      const prop = ao.propertyId ? getObj(ao.propertyId) : null;
-      /* V51A R4 — samma precedensfix som jobRow() ovan (måste hållas
-         identisk, annars kan listan och kartfrågan divergera för samma
-         AO): ao.address vinner om satt, fastighetens adress är bara
-         fallback. */
-      const address = ao.address || (prop && prop.address) || '';
-      if (!address) continue;
+      /* V51B ARBETSORDER §7/§9 — persisterade koordinater (satta av
+         WorkOrderService.geocodeAddressIfNeeded() efter en AO-spara)
+         vinner ALLTID och kräver ingen geokodning alls här. Detta är den
+         AVSEDDA, vanliga vägen för varje AO som skapats/redigerats sedan
+         denna omgång — kartan geokodar bara ÄLDRE AO:er som saknar egna
+         koordinater, via AddressService.resolveWorkOrderQuery()s
+         fallback-kedja nedan. */
+      if (typeof ao.lat === 'number' && typeof ao.lng === 'number') {
+        geocoded.push({ ao, coord: { lat: ao.lat, lng: ao.lng } });
+        continue;
+      }
 
-      let coord = this._geoCache[address];
+      const resolved = AddressService.resolveWorkOrderQuery(ao);
+      if (!resolved) continue;
+      const { query, hasCityContext } = resolved;
+
+      let coord = this._geoCache[query];
       if (coord === undefined) {
         if (newLookups >= MAX_LOOKUPS) continue; // hoppa över — visas fortfarande i listan, bara inte på kartan denna gång
         newLookups++;
         try {
-          const results = await AddressService.search(address);
+          /* V51B ARBETSORDER §6/§8 — geocodeTrusted() bygger på samma
+             AddressService.search() som tidigare, men (a) skickar en
+             fullständig gata+postnr+ort-fråga när vi har den kontexten
+             (hasCityContext) istället för bara en bar gatuadress, och (b)
+             kräver ett minimikonfidenspoäng från Mapbox innan en bar
+             gatuadress (sista utvägen, ingen postnr/ort-kontext alls)
+             tillåts sätta en nål — hellre ingen nål än en nål i fel stad. */
+          coord = await AddressService.geocodeTrusted(query, hasCityContext);
           if (generation !== this._mapGeneration) return; // svaret hann bli inaktuellt medan vi väntade
-          /* V51A R1 §12: ENDAST ett äkta, LYCKAT API-svar med noll träffar
-             cachas som null. Ett undantag (nätverksfel, timeout etc.)
-             cachas ALDRIG — adressen lämnas `undefined` i _geoCache så en
-             SENARE rendering får försöka igen istället för att adressen
-             blir permanent "okartläggningsbar" för resten av
-             webbläsarsessionen på grund av ett tillfälligt fel. */
-          coord = (results && results[0] && results[0].lat && results[0].lng)
-            ? { lat: results[0].lat, lng: results[0].lng }
-            : null;
-          this._geoCache[address] = coord;
+          /* V51A R1 §12 (oförändrat): ENDAST ett äkta, LYCKAT API-svar
+             cachas (inkl. som null om inget tillräckligt säkert resultat
+             hittades). Ett undantag (nätverksfel, timeout etc.) cachas
+             ALDRIG — frågan lämnas `undefined` i _geoCache så en SENARE
+             rendering får försöka igen. */
+          this._geoCache[query] = coord;
         } catch(e) {
           coord = null; // visas inte i DENNA runda, men försöks igen nästa gång (ej cachat)
         }

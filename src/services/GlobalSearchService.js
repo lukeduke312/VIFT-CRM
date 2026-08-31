@@ -98,7 +98,14 @@ const GlobalSearchService = {
     return (state.workOrders || []).map(a => {
       const customerName = a.customerName || (getCu(a.customerId) || {}).name || '';
       const title = a.title || (a.description ? String(a.description).slice(0, 60) : a.id);
-      const subtitleParts = [customerName, a.address].filter(Boolean);
+      /* R2.5 §13 — visa/indexera AO:ns FULLSTÄNDIGA strukturerade adress
+         (via den delade AddressService.displayAddress()), inte bara den
+         bara gatan — konsekvent med Dashboard/AO-detalj/MyJobs/Drift.
+         zip/city läggs även till i secondaryTexts så att sökning på
+         "412 54" eller "Göteborg" hittar AO:t här precis som i
+         WorkOrdersPage._filteredList()s haystack (R2 §5). */
+      const fullAddr = (typeof AddressService !== 'undefined') ? AddressService.displayAddress(a) : (a.address || '');
+      const subtitleParts = [customerName, fullAddr].filter(Boolean);
       const staffNames = (a.staff || []).map(sid => (getStaff(sid) || {}).firstName).filter(Boolean);
       return {
         type: 'workOrder',
@@ -114,7 +121,14 @@ const GlobalSearchService = {
         inactiveLabel: null,
         idText: a.id,
         titleText: title,
-        secondaryTexts: [customerName, a.address, a.description, a.contactPerson, a.phone, a.contactEmail, a.category].concat(staffNames).filter(Boolean),
+        /* R2.6 §13 (oberoende reproducerad blockerare) — TIDIGARE indexerades
+           bara AO:ns EGNA a.address/zip/city, som är TOMMA för en legacy-AO
+           vars adress bara visas via länkad fastighets-/kundfallback
+           (fullAddr ovan) — sökning på t.ex. "Göteborg" hittade då inte
+           AO:n trots att adressen VISADES i undertiteln. Lägg till det
+           REDAN RESOLVERADE fullAddr i sökbar text (utöver de egna rå-
+           fälten, som fortfarande är rätt att söka på när de faktiskt finns). */
+        secondaryTexts: [customerName, a.address, a.zip, a.city, fullAddr, a.description, a.contactPerson, a.phone, a.contactEmail, a.category].concat(staffNames).filter(Boolean),
         digitsFields: [a.phone].filter(Boolean),
         nav: { pageId: 'pg-ao-detail', params: { aoId: a.id } }
       };

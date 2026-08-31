@@ -447,7 +447,7 @@ const OperationsPage = {
           ${timeChip}
         </div>
         <div style="font-size:11px;color:var(--mt);">
-          ${cu ? esc(cu.name) + ' · ' : ''}${esc(ao.address||'')}
+          ${cu ? esc(cu.name) + ' · ' : ''}${esc(AddressService.displayAddress(ao))}
           ${timeStr ? ` · ${timeStr}` : ''}
           ${clStr ? ` · ${clStr}` : ''}
         </div>

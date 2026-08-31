@@ -538,7 +538,7 @@ const WorkOrdersPage = {
         const stfNames = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? s.firstName+' '+s.lastName : ''; }).join(' ');
         const matText  = (ao.materials||[]).map(m => m.description||m.name||'').join(' ');
         const haystack = nrm([
-          ao.id, ao.title, ao.description, ao.address, ao.contactPerson,
+          ao.id, ao.title, ao.description, ao.address, ao.zip, ao.city, ao.contactPerson,
           ao.phone, ao.email, ao.category,
           catObj ? catObj.label : '',
           ao.status, ao.priority,
@@ -696,6 +696,7 @@ const WorkOrdersPage = {
       modalId: null,
       onCreated: (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null
     };
+    this._wizSeedDefaultAddress();
     this._showWizard();
   },
 
@@ -713,7 +714,26 @@ const WorkOrdersPage = {
       },
       modalId: null
     };
+    this._wizSeedDefaultAddress();
     this._showWizard();
+  },
+
+  /* FINAL INVARIANTS AUDIT — `d.address/zip/city/country/addressSource`
+     är den enda sanningskällan från och med GUIDENS ÖPPNING, inte bara
+     efter första kund-/fastighetsbytet. Utan detta kunde flöde "A. D ->
+     Spara" (aldrig röra kund/fastighet-väljarna alls) spara en TOM
+     adress, eftersom _wizCollectAddress() inte längre räknar ut något
+     eget (§6, förenklad till ren serialisering av `d`) — se dess
+     kommentar. Anropas en gång direkt vid _wiz-initiering. */
+  _wizSeedDefaultAddress() {
+    const d = this._wiz.data;
+    d.addressOverride = false;
+    const resolved = this._wizResolvedAddress(d);
+    d.address = resolved.address;
+    d.zip     = resolved.zip;
+    d.city    = resolved.city;
+    d.country = '';
+    d.addressSource = resolved.source;
   },
 
   _showWizard() {
@@ -847,11 +867,7 @@ const WorkOrdersPage = {
       <div id="wiz-prop-wrap">${propSelectHtml}</div>
       <div id="wiz-obj-wrap">${objSelectHtml}</div>
       <div id="wiz-contacts">${this._wizContactsHtml(d.propertyId)}</div>
-      <div class="fg"><label>Arbetsadress</label>
-        <input id="wiz-address" value="${d.address||cu&&cu.address||''}" placeholder="Gatuadress"
-          autocomplete="off"
-          oninput="AddressService.handleInput(this)"
-          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"></div>
+      <div id="wiz-addr-wrap">${this._wizAddressBlockHtml(d)}</div>
       <div class="g2">
         <div class="fg"><label>Kontaktperson</label>
           <input id="wiz-contact" value="${d.contactPerson||cu&&cu.contactPerson||''}" placeholder="Namn"></div>
@@ -864,6 +880,136 @@ const WorkOrdersPage = {
         <div class="fg"><label>Intern notering</label>
           <input id="wiz-intnote" value="${d.internalNote||''}" placeholder="Visas ej för kund"></div>
       </div>`;
+  },
+
+  /* ── Arbetsadress: fastighet/kund-ärvd som default, med explicit
+     "särskild adress"-läge ─────────────────────────────────────────────
+     V51B ARBETSORDER §3/§4 — fastighet (om vald) har ALLTID företräde
+     framför kund, samma precedens som redan användes i Dashboard-kartan
+     och jobRow() (ao.address || prop.address) innan denna omgång — nu
+     bara flyttad hit till ETT ställe som räknar ut den föreslagna adressen
+     från strukturerade fält (inkl. zip/city), inte bara gatan. */
+  _wizResolvedAddress(d) {
+    const prop = d.propertyId ? (state.properties||[]).find(p => p.id === d.propertyId) : null;
+    if (prop && prop.address) {
+      return { address: prop.address, zip: prop.zip || '', city: prop.city || '', source: 'property' };
+    }
+    const cu = d.customerId ? getCu(d.customerId) : null;
+    if (cu && cu.address) {
+      return { address: cu.address, zip: cu.zip || '', city: cu.city || '', source: 'customer' };
+    }
+    return { address: '', zip: '', city: '', source: '' };
+  },
+
+  /* Renderar HELA arbetsadress-blocket (resolved-visning ELLER redigerbara
+     särskild-adress-fält, plus togglen) — en enda återanvändbar funktion så
+     att både förstarendering (_wizStep1Html) och punktvisa uppdateringar
+     (kund/fastighet byts, togglen klickas) alltid ger identiskt resultat.
+     Patchas in i #wiz-addr-wrap istället för att köra _showWizard() (som
+     skulle bygga om HELA steg 1 från `d` och tappa ev. redan inskrivna,
+     ännu ej insamlade fältvärden — samma försiktighetsprincip som redan
+     används av _wizPropertyChanged()/_wizCustomerChanged() för övriga fält). */
+  /* FINAL INVARIANTS AUDIT — `d` (this._wiz.data) är den ENDA
+     sanningskällan för den väntande adressen, alltid. De redigerbara
+     särskilt-adress-fälten synkas nu in i `d` vid VARJE tangenttryckning
+     (`_wizSyncAddr()`, kopplad via oninput/onchange nedan — täcker både
+     vanlig inskrivning och Mapbox-autocompletens `selectSuggestion()`,
+     som dispatchar riktiga 'change'-event på varje satt fält). Det
+     betyder att `d` ALDRIG kan bli inaktuell jämfört med det som visas —
+     invariant B (VISNING == PENDING == INSAMLAT == SPARAT) håller
+     bokstavligen, inte bara "råkar stämma överens". Kundbytes-/
+     fastighetsbytes-hanterarna kan därför även fortsättningsvis hoppa
+     över omrendering i särskilt-adress-läge (ren UX-hänsyn, undviker att
+     tappa markörposition/fokus mitt i skrivning) UTAN att det någonsin
+     är en förutsättning för korrekthet. */
+  _wizAddressBlockHtml(d) {
+    const override = !!d.addressOverride;
+    const resolved = this._wizResolvedAddress(d);
+    const resolvedLine2 = [resolved.zip, resolved.city].filter(Boolean).join(' ');
+
+    const resolvedHtml = `
+      <div class="ibox" style="font-size:13px;line-height:1.5;">
+        ${resolved.address
+          ? `<div>${esc(resolved.address)}</div>${resolvedLine2 ? `<div style="color:var(--mt);font-size:12px;">${esc(resolvedLine2)}</div>` : ''}`
+          : `<span style="color:var(--mt);">Ingen adress att visa — välj kund/fastighet med adress, eller ange en särskild adress nedan.</span>`}
+      </div>`;
+
+    const editHtml = `
+      <input id="wiz-address" value="${esc(d.address||'')}" placeholder="Gatuadress"
+        autocomplete="off"
+        data-addr-zip="wiz-zip" data-addr-city="wiz-city" data-addr-country="wiz-country" data-addr-lat="wiz-lat" data-addr-lng="wiz-lng"
+        oninput="AddressService.handleInput(this); WorkOrdersPage._wizSyncAddr()"
+        onchange="WorkOrdersPage._wizSyncAddr()"
+        onblur="setTimeout(()=>AddressService.hideSuggestions(),150)">
+      <div class="g2" style="margin-top:6px;">
+        <div class="fg" style="margin:0;"><label>Postnummer</label>
+          <input id="wiz-zip" value="${esc(d.zip||'')}" placeholder="T.ex. 412 54" oninput="WorkOrdersPage._wizSyncAddr()" onchange="WorkOrdersPage._wizSyncAddr()"></div>
+        <div class="fg" style="margin:0;"><label>Ort</label>
+          <input id="wiz-city" value="${esc(d.city||'')}" placeholder="T.ex. Göteborg" oninput="WorkOrdersPage._wizSyncAddr()" onchange="WorkOrdersPage._wizSyncAddr()"></div>
+      </div>
+      <input type="hidden" id="wiz-country" value="${esc(d.country||'')}" onchange="WorkOrdersPage._wizSyncAddr()">
+      <input type="hidden" id="wiz-lat" value="${d.lat!=null?d.lat:''}">
+      <input type="hidden" id="wiz-lng" value="${d.lng!=null?d.lng:''}">`;
+
+    return `
+      <div class="fg"><label>Arbetsadress</label>
+        ${override ? editHtml : resolvedHtml}
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:500;color:var(--tx);cursor:pointer;">
+          <input type="checkbox" id="wiz-addr-override" ${override?'checked':''} onchange="WorkOrdersPage._wizToggleAddressOverride(this.checked)">
+          Välj en särskild adress för denna arbetsorder
+        </label>
+      </div>`;
+  },
+
+  /* Synkar de levande särskilt-adress-fälten in i `d` — den enda
+     sanningskällan. Anropas på varje input/change i editHtml (manuell
+     inskrivning OCH Mapbox-autocomplete via selectSuggestion()s riktiga
+     'change'-event). Ingen effekt om särskilt-adress-läget inte är
+     aktivt (fälten finns då inte i DOM:en). */
+  _wizSyncAddr() {
+    const d = this._wiz.data;
+    if (!d || !d.addressOverride) return;
+    d.address = (document.getElementById('wiz-address')?.value || '').trim();
+    d.zip     = (document.getElementById('wiz-zip')?.value || '').trim();
+    d.city    = (document.getElementById('wiz-city')?.value || '').trim();
+    d.country = (document.getElementById('wiz-country')?.value || '').trim();
+    d.addressSource = 'manual'; // ev. Mapbox-valdhet är rent kosmetisk metadata, se AddressService.selectSuggestion()
+  },
+
+  /* FINAL INVARIANTS AUDIT §7 (oberoende reproducerad R2.3-restbugg) —
+     Invariant E: att gå in i särskilt-adress-läge MÅSTE alltid utgå från
+     den NUVARANDE länkade standardadressen, ALDRIG från en tidigare,
+     ev. inaktuell `d.address` (t.ex. en tidigare kunds adress som blev
+     kvarliggande efter en AV-växling). R2.3s villkor `checked && !d.address`
+     kunde tysta behålla en gammal kunds adress om `d.address` råkade
+     redan vara ifylld (t.ex. efter en tidigare S->AV-cykel som INTE
+     skrev tillbaka den nya standardadressen till `d`) — reproducerat:
+     K1 -> S PÅ -> K2 -> S AV (visar K2 korrekt via live-beräkning, men
+     `d.address` förblev K1) -> S PÅ igen -> K1 dyker upp igen.
+     Fix, båda hälfterna:
+       PÅ:  reseedar ALLTID `d` från den nuvarande standardadressen —
+            aldrig villkorat, aldrig en gissning baserad på om `d.address`
+            råkar vara tomt.
+       AV:  skriver ALLTID den nuvarande standardadressen in i `d` (inte
+            bara visningen) — så `d` är den sanna, uppdaterade
+            sanningskällan även i standardläge, och en efterföljande
+            PÅ-växling reseedar från RÄTT data. */
+  _wizToggleAddressOverride(checked) {
+    const d = this._wiz.data;
+    d.addressOverride = checked;
+    /* Både PÅ och AV seedar/synkar `d` med den NUVARANDE länkade
+       standardadressen — se kommentaren ovan. Symmetriskt med avsikt:
+       PÅ ger användaren en känd, aktuell startpunkt att justera från;
+       AV gör `d` till den sanna, uppdaterade standardadress-posten så
+       en EVENTUELL efterföljande PÅ-växling reseedar korrekt. */
+    const resolved = this._wizResolvedAddress(d);
+    d.address = resolved.address;
+    d.zip     = resolved.zip;
+    d.city    = resolved.city;
+    d.country = '';
+    d.addressSource = resolved.source;
+    const wrap = document.getElementById('wiz-addr-wrap');
+    if (wrap) wrap.innerHTML = this._wizAddressBlockHtml(d);
   },
 
   _fmtSwedishDate(isoStr) {
@@ -1022,15 +1168,12 @@ const WorkOrdersPage = {
     const d = this._wiz.data;
     d._sources = d._sources || {};
 
-    /* Återställ addrSource på DOM-elementet (förloras vid omrendering av steg) */
-    const addrEl = document.getElementById('wiz-address');
-    if (addrEl && d._sources.address) {
-      addrEl.dataset.addrSource = d._sources.address;
-    }
-
-    /* Fyll kunduppgifter om kund redan vald */
+    /* Fyll kunduppgifter om kund redan vald — preserveProperty:true eftersom
+       detta är en REN OMBINDNING (första render eller Nästa/Tillbaka), inte
+       ett äkta kundbyte; en redan vald fastighet (t.ex. förifylld via
+       openCreate(customerId, propertyId)) ska inte tystnat nollställas. */
     if (document.getElementById('wiz-customer') && d.customerId) {
-      this._wizCustomerChanged();
+      this._wizCustomerChanged(true);
     }
 
     /* Spåra manuella ändringar i kontakt/telefon */
@@ -1145,20 +1288,14 @@ const WorkOrdersPage = {
     const d   = this._wiz.data;
     d._sources = d._sources || {};
 
-    const addr = document.getElementById('wiz-address');
     const cont = document.getElementById('wiz-contact');
     const ph   = document.getElementById('wiz-phone');
 
-    /* Adress: använd dataset.addrSource (hanteras av AddressService + oss) */
-    if (addr) {
-      const src = addr.dataset.addrSource || d._sources.address || '';
-      if (!addr.value || src === 'customer') {
-        addr.value = cu.address || '';
-        const newSrc = cu.address ? 'customer' : '';
-        addr.dataset.addrSource = newSrc;
-        d._sources.address = newSrc;
-      }
-    }
+    /* Arbetsadress: hanteras numera av _wizResolvedAddress()/
+       _wizAddressBlockHtml() — den ärvda adressen räknas alltid ut live
+       från d.propertyId/d.customerId, ingen DOM-synk behövs här längre.
+       Ett aktivt "särskild adress"-läge (d.addressOverride) rörs
+       medvetet INTE av ett kundbyte — se uppdragets §4. */
 
     /* Kontaktperson: fyll om tomt eller kom från kund */
     if (cont && d._sources.contact !== 'manual') {
@@ -1181,18 +1318,9 @@ const WorkOrdersPage = {
     const d = this._wiz.data;
     d._sources = d._sources || {};
 
-    const addr = document.getElementById('wiz-address');
     const cont = document.getElementById('wiz-contact');
     const ph   = document.getElementById('wiz-phone');
 
-    if (addr) {
-      const src = addr.dataset.addrSource || d._sources.address || '';
-      if (src === 'customer') {
-        addr.value = '';
-        addr.dataset.addrSource = '';
-        d._sources.address = '';
-      }
-    }
     if (cont && d._sources.contact === 'customer') {
       cont.value = '';
       d._sources.contact = '';
@@ -1203,14 +1331,26 @@ const WorkOrdersPage = {
     }
   },
 
-  _wizCustomerChanged() {
+  /* V51B ARBETSORDER — `preserveProperty` (default false, dvs. oförändrat
+     beteende vid ett ÄKTA kundbyte) förhindrar att en redan vald fastighet
+     (t.ex. förifylld via openCreate(customerId, propertyId) från
+     PropertyDetailPage/PropertyObjectPage/SalesPage) tyst nollställs av
+     _bindWizStep1()s ren ombindning av redan befintligt state — se
+     anropet i _bindWizStep1() nedan. Utan detta kunde en förvald fastighet
+     försvinna bara av att öppna guiden eller gå Nästa/Tillbaka, vilket i
+     sin tur gjorde att arbetsadressen tystnat föll tillbaka till kundens
+     adress istället för fastighetens (upptäckt via genuin Chromium-
+     reproduktion under denna omgångs testning). */
+  _wizCustomerChanged(preserveProperty) {
     const sel = document.getElementById('wiz-customer');
     if (!sel) return;
     const id = sel.value;
     this._wiz.data.customerId = id;
-    this._wiz.data.propertyId = ''; // reset fastighet vid kundyte
-    this._wiz.data.objectId   = '';
-    this._wiz.data.objectName = '';
+    if (!preserveProperty) {
+      this._wiz.data.propertyId = ''; // reset fastighet vid ÄKTA kundbyte
+      this._wiz.data.objectId   = '';
+      this._wiz.data.objectName = '';
+    }
     const cu = id ? getCu(id) : null;
 
     if (cu) {
@@ -1227,18 +1367,54 @@ const WorkOrdersPage = {
     const propWrap = document.getElementById('wiz-prop-wrap');
     if (propWrap) {
       const cuProps = id ? (state.properties||[]).filter(p => p.customerId === id) : [];
+      const selectedPropertyId = preserveProperty ? (this._wiz.data.propertyId || '') : '';
       propWrap.innerHTML = cuProps.length
         ? `<div class="fg"><label>Fastighet (valfritt)</label>
              <select id="wiz-property" onchange="WorkOrdersPage._wizPropertyChanged()">
                <option value="">— Välj fastighet —</option>
-               ${cuProps.map(p=>`<option value="${p.id}">${esc(p.name||p.address||p.id)}</option>`).join('')}
+               ${cuProps.map(p=>`<option value="${p.id}" ${selectedPropertyId===p.id?'selected':''}>${esc(p.name||p.address||p.id)}</option>`).join('')}
              </select>
            </div>`
         : '';
     }
-    // Töm objekt-väljaren när kund byts
-    const objWrap = document.getElementById('wiz-obj-wrap');
-    if (objWrap) objWrap.innerHTML = '';
+    // Töm objekt-väljaren när kund BYTS (rör inte vid ren ombindning)
+    if (!preserveProperty) {
+      const objWrap = document.getElementById('wiz-obj-wrap');
+      if (objWrap) objWrap.innerHTML = '';
+    }
+
+    /* R2.3 §1/§2 (oberoende reproducerad blockerare, samma klass som
+       R2.2:s edit-mode-fix) — OSPARAD SÄRSKILD ADRESS FÖRSVANN VID
+       KUNDBYTE I SKAPA-GUIDEN: i särskilt-adress-läge (addressOverride
+       ===true) är #wiz-address/-zip/-city/-country LEVANDE DOM-inputs
+       som medvetet INTE speglas in i this._wiz.data vid varje
+       knapptryckning (de läses direkt från DOM:en i _wizCollectAddress()
+       vid nästa steg/Spara). Koden nedan renderade TIDIGARE alltid om
+       #wiz-addr-wrap från this._wiz.data oavsett override-läge — vilket
+       byggde om formuläret från denna (nu inaktuella) datan och FÖRSTÖRDE
+       allt oskrivet den använda skrivit i de levande fälten. En särskild
+       adress är oberoende av kunden tills användaren EXPLICIT slår av
+       läget — rör därför INTE formuläret alls här när override är på;
+       kundId/fastighet/objekt/kontakter uppdateras ändå som avsett ovan. */
+    /* FINAL INVARIANTS AUDIT §Q (upptäckt via den nya multi-cykel-
+       testmatrisen) — i standardläge räckte det INTE att bara rendera om
+       visningen (som räknar ut adressen LIVE varje gång); `d.address/
+       zip/city` SJÄLVA måste också skrivas här, annars blir `d` stillastående
+       inaktuell så fort en efterföljande kod litar på `d` direkt istället
+       för att räkna om (exakt det _wizCollectAddress() nu gör sedan §6:s
+       förenkling till en ren serialisering). Utan detta kunde `d.address`
+       fortsätta peka på en tidigare kund/fastighet trots att både
+       visningen och den faktiska länkningen redan bytt. */
+    if (!this._wiz.data.addressOverride) {
+      const resolved = this._wizResolvedAddress(this._wiz.data);
+      this._wiz.data.address       = resolved.address;
+      this._wiz.data.zip           = resolved.zip;
+      this._wiz.data.city          = resolved.city;
+      this._wiz.data.country       = '';
+      this._wiz.data.addressSource = resolved.source;
+      const addrWrap = document.getElementById('wiz-addr-wrap');
+      if (addrWrap) addrWrap.innerHTML = this._wizAddressBlockHtml(this._wiz.data);
+    }
   },
 
   _wizPropertyChanged() {
@@ -1248,17 +1424,6 @@ const WorkOrdersPage = {
     this._wiz.data.propertyId = id;
     this._wiz.data.objectId   = '';
     this._wiz.data.objectName = '';
-    // Om fastigheten har adress, fyll i adressfältet
-    if (id) {
-      const prop = (state.properties||[]).find(p => p.id === id);
-      const addrEl = document.getElementById('wiz-address');
-      if (prop && addrEl && (!addrEl.value || addrEl.dataset.addrSource === 'customer' || addrEl.dataset.addrSource === 'property')) {
-        addrEl.value = prop.address || prop.name || '';
-        addrEl.dataset.addrSource = 'property';
-        this._wiz.data._sources = this._wiz.data._sources || {};
-        this._wiz.data._sources.address = 'property';
-      }
-    }
     // Uppdatera objekt-väljaren
     const objWrap = document.getElementById('wiz-obj-wrap');
     if (objWrap) {
@@ -1276,6 +1441,22 @@ const WorkOrdersPage = {
     // Uppdatera kontaktförslag
     const conWrap = document.getElementById('wiz-contacts');
     if (conWrap) conWrap.innerHTML = this._wizContactsHtml(id);
+
+    /* R2.3 §1/§3 — samma skydd som _wizCustomerChanged() ovan: en
+       fastighetsändring rör INTE adressformuläret medan särskild adress
+       är aktiv, för att inte förstöra osparade levande fältvärden.
+       FINAL INVARIANTS AUDIT §J — samma skrivning av `d` som i
+       _wizCustomerChanged() ovan, se den kommentaren. */
+    if (!this._wiz.data.addressOverride) {
+      const resolved = this._wizResolvedAddress(this._wiz.data);
+      this._wiz.data.address       = resolved.address;
+      this._wiz.data.zip           = resolved.zip;
+      this._wiz.data.city          = resolved.city;
+      this._wiz.data.country       = '';
+      this._wiz.data.addressSource = resolved.source;
+      const addrWrap = document.getElementById('wiz-addr-wrap');
+      if (addrWrap) addrWrap.innerHTML = this._wizAddressBlockHtml(this._wiz.data);
+    }
   },
 
   _wizContactsHtml(propertyId) {
@@ -1493,13 +1674,60 @@ const WorkOrdersPage = {
   },
 
   /* ── Wizard collect ────────────────────── */
+  /* Slutgiltig arbetsadress vid spara — särskild adress (om påslagen) från
+     de redigerbara fälten, annars den ärvda fastighets-/kundadressen kopierad
+     rakt in i AO:ns EGNA fält (Schema.workOrder(): address/zip/city/country).
+     d.lat/d.lng sätts ALDRIG här (heller inte ens vid en nyss vald Mapbox-
+     autokomplettering) — endast WorkOrderService.geocodeAddressIfNeeded()
+     (körs automatiskt efter create()/update()) äger all geokodning. En
+     tidigare version litade på de dolda lat/lng-fälten som Mapbox-
+     autokompletteringen fyller i (som en snabbhets-optimering för att slippa
+     en extra geokodningsfråga direkt efter spara) — men de fälten kan bli
+     INAKTUELLA om användaren sedan redigerar postnummer/ort-fälten direkt
+     (dessa har ingen egen lyssnare som ogiltigförklarar koordinaterna, bara
+     gatuadressfältets AddressService.handleInput() gör det), vilket kunde
+     spara en koordinat som INTE hörde till den slutgiltiga adressen — exakt
+     den risk uppdragets §8 varnar för. Riktig, alltid korrekt geokodning
+     efter varje spara väger tyngre än en enstaka extra API-fråga. */
+  _wizCollectAddress(d) {
+    /* FINAL INVARIANTS AUDIT §6 — förenklad till en ren serialisering.
+       `d.address/zip/city/country/addressSource` är REDAN den enda,
+       aktuella sanningskällan vid det här laget: `_wizSyncAddr()` håller
+       dem synkade i särskilt-adress-läge (varje tangenttryckning/
+       autocomplete-val), och `_wizCustomerChanged()`/`_wizPropertyChanged()`/
+       `_wizToggleAddressOverride()` håller dem synkade i standardläge.
+       Ingen ny läsning av DOM:en eller ny beräkning behövs eller görs här
+       längre — den här funktionen är inte en andra beslutsmotor. */
+    const overrideEl = document.getElementById('wiz-addr-override');
+    d.addressOverride = overrideEl ? overrideEl.checked : !!d.addressOverride;
+    /* lat/lng/geocodedAddress sätts ALDRIG härifrån — en helt NY AO har dem
+       redan null/'' via Schema.workOrder(), och WorkOrderService.
+       geocodeAddressIfNeeded() (körs automatiskt efter create()) äger all
+       geokodning centralt, race-skyddad. Se motsvarande, mer utförliga
+       kommentar i WorkOrderDetailPage._editCollectAddress(). */
+    d.lat = null; d.lng = null; d.geocodedAddress = '';
+  },
+
+  /* R1 §6 — särskild-adress-validering: ett manuellt satt "särskild adress"
+     utan postnummer ELLER ort skulle kunna återskapa exakt den ursprungliga
+     tvetydigheten (samma gatunamn i flera städer) — se
+     AddressService.geocodeTrusted(), som numera aldrig sätter en nål utan
+     stadskontext. Kräver gata + minst postnr ELLER ort innan spara tillåts;
+     återanvänds av både guiden och redigera-AO-dialogen. */
+  _validateAddressOverride(d) {
+    if (!d.addressOverride) return true;
+    if (!d.address) { showToast('Ange en gatuadress för den särskilda adressen'); return false; }
+    if (!d.zip && !d.city) { showToast('Ange postnummer eller ort för den särskilda adressen (annars kan kartan hamna i fel stad)'); return false; }
+    return true;
+  },
+
   _wizCollectStep1() {
     const d = this._wiz.data;
     d.title         = (document.getElementById('wiz-title')?.value || '').trim();
     d.category      = document.getElementById('wiz-category')?.value || '';
     d.description   = (document.getElementById('wiz-desc')?.value || '').trim();
     d.customerId    = document.getElementById('wiz-customer')?.value || '';
-    d.address       = document.getElementById('wiz-address')?.value.trim() || '';
+    this._wizCollectAddress(d);
     d.contactPerson = document.getElementById('wiz-contact')?.value.trim() || '';
     d.phone         = document.getElementById('wiz-phone')?.value.trim() || '';
     d.accessCode    = document.getElementById('wiz-access')?.value.trim() || '';
@@ -1525,6 +1753,7 @@ const WorkOrdersPage = {
 
     if (!d.title)      { showToast('Rubrik krävs'); return false; }
     if (!d.customerId) { showToast('Välj en kund'); return false; }
+    if (!this._validateAddressOverride(d)) return false;
     return true;
   },
 
@@ -1582,6 +1811,14 @@ const WorkOrdersPage = {
       objectName:      d.objectName      || '',
       objectNumber:    d.objectNumber    || '',
       address:         d.address,
+      zip:             d.zip             || '',
+      city:            d.city            || '',
+      country:         d.country         || '',
+      lat:             d.lat != null ? d.lat : null,
+      lng:             d.lng != null ? d.lng : null,
+      geocodedAddress: d.geocodedAddress || '',
+      addressOverride: !!d.addressOverride,
+      addressSource:   d.addressSource   || '',
       contactPerson:   d.contactPerson,
       contactEmail:    d.contactEmail    || '',
       contactId:       d.contactId       || '',

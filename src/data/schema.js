@@ -154,6 +154,20 @@ const Schema = {
     floor: '',            // snapshot: våning från objekt
     apartmentNumber: '',  // snapshot: lägenhetsnummer från objekt
     address: '',
+    /* Strukturerad arbetsadress (postnr/ort/land + koordinater) — kartan/
+       geokodningen behövde postnummer och ort för att inte träffa fel stad
+       vid en gatuadress som finns i flera kommuner (t.ex. "Södra Vägen 4").
+       `address` ovan behålls OFÖRÄNDRAT som fri gatuadress-text (bakåt-
+       kompatibelt — befintliga AO:er har bara detta fält satt). Dessa nya
+       fält är en TILLÄGGSSTRUKTUR, ingen ersättning. */
+    zip: '',               // arbetsadressens postnummer
+    city: '',               // arbetsadressens ort
+    country: '',            // tom = Sverige (standard, se AddressService._normalizeMapbox)
+    lat: null,               // geokodad latitud, eller null om ej geokodad/misslyckad
+    lng: null,               // geokodad longitud
+    geocodedAddress: '',    // exakt adressträng som senast gav lat/lng — jämförs vid spara för att undvika onödig omgeokodning
+    addressOverride: false, // true = "särskild adress för denna AO", false = ärvd från fastighet/kund
+    addressSource: '',      // 'property' | 'customer' | 'mapbox' | 'manual' | ''
     internalNote: '',
     status: 'nytt',           // nytt | pool | planerad | pågående | klar | fakturerad | avbruten
     substatus: '',            // inväntar_material | inväntar_kund | pausad | behöver_återbesök | blockerad
@@ -440,6 +454,14 @@ const Schema = {
     customerId: '',
     propertyId: '',
     address: '',
+    /* R2.5 §9 — strukturerad adress-snapshot, analogt med
+       Schema.workOrder()s motsvarande fält (R1). Historiska poster
+       saknar dessa (bara `address` som en hopslagen sträng) — se
+       AddressService.parseLegacyCombinedAddress() för den bakåtkompatibla
+       parsningen som körs vid AO-generering för sådana poster. */
+    zip: '',
+    city: '',
+    addressSource: '', // 'property' | 'customer' | 'manual' | ''
     description: '',
     contactPerson: '',
     phone: '',

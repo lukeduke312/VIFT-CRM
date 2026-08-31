@@ -78,11 +78,29 @@ const RecurringPage = {
       title:        ao.title,
       description:  ao.description || '',
       customerId:   ao.customerId || '',
+      /* R2.6 §1 (HARD BLOCKER, oberoende reproducerad) — TIDIGARE bar denna
+         prefill redan med propertyId, men _openForm()/_save() hade ingen
+         plats att spara det vidare — "Gör återkommande" från en
+         fastighetslänkad AO tappade tyst kopplingen. propertyId är nu en
+         egen, av adressläget OBEROENDE fält (se _openForm()s
+         Fastighet-väljare och _save()) — en särskild arbetsadress och en
+         fastighetskoppling är INTE ömsesidigt uteslutande. */
+      propertyId:   ao.propertyId || '',
       address:      ao.address || '',
+      zip:          ao.zip || '',
+      city:         ao.city || '',
+      /* R2.6 §2 — bär med AO:ns EGEN addressSource ('property'/'customer'/
+         'manual', satt av den kanoniska skapande-tids-normaliseraren eller
+         av redigera-dialogen) rakt av när den finns. En äldre AO som saknar
+         fältet helt lämnas tom här — _openForm()s egen legacy-inferens
+         (gatumatchning mot fastighet, sedan kund, R2.6 §4) avgör då läget
+         konservativt, istället för att denna funktion gissar fel och tvingar
+         fram "annan arbetsadress" för en adress som i själva verket redan
+         är fastighetens/kundens. */
+      addressSource: ao.addressSource || '',
       category:     ao.category || '',
       priority:     ao.priority || 'normal',
       priceGroupId: ao.priceGroupId || '',
-      propertyId:   ao.propertyId || '',
       staff:        (ao.staff || []).slice(),
       checklist:    (ao.checklist || []).map(c => ({ text: c.text, description: c.description || '' }))
     };
@@ -131,7 +149,7 @@ const RecurringPage = {
           <span class="bdg bdg-sky">${RecurringOrderService.intervalLabel(ro.interval)}</span>
         </div>
         <div class="dr"><span class="dk">Kund</span><span class="dv">${cu ? CustomerService.displayName(cu) : '—'}</span></div>
-        ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${ro.address}</span></div>` : ''}
+        ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${esc(AddressService.formatQuery(ro.address, ro.zip, ro.city, ''))}</span></div>` : ''}
         ${ro.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${ro.accessCode}</span></div>` : ''}
         ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
         <div class="dr"><span class="dk">Nästa datum</span><span class="dv">${ro.nextDate ? fmtDate(ro.nextDate) : '—'}${days !== null && days <= 0 ? ` <span class="bdg bdg-red" style="font-size:10px;">Förfallen</span>` : ''}</span></div>
@@ -194,22 +212,47 @@ const RecurringPage = {
 
     const intervals = RecurringOrderService.INTERVALS;
 
-    // Address mode — parse stored address back into fields (best-effort)
+    /* R2.6 §2/§4 — Adressläge avgörs i första hand av det EXPLICITA
+       `addressSource`-fältet ('property'/'customer'/'manual', samma mönster
+       som AO:ns eget) — robust, till skillnad från sträng-jämförelse.
+       Genuint legacy-poster (skapade innan R2.6, saknar `addressSource`
+       helt) infereras KONSERVATIVT i strikt ordning, ingen fuzzy-matchning:
+         1. den (ev. legacy-parsade) gatan matchar den länkade FASTIGHETENS
+            gata → fastighetsläge
+         2. annars matchar den länkade KUNDENS gata → kundläge
+         3. annars, om ingen adress alls finns → fastighetsläge om en
+            fastighet är vald (annars kundläge, som tidigare)
+         4. annars → eget/särskilt läge. */
     const roAddr  = src.address || '';
     const cu0     = src.customerId ? getCu(src.customerId) : null;
     const cu0Addr = cu0 ? [cu0.address, cu0.zip, cu0.city].filter(Boolean).join(', ') : '';
-    const addrIsCu = (roAddr === cu0Addr || !roAddr);
-    const addrMode = addrIsCu ? 'cu' : 'custom';
+    const prop0   = src.propertyId ? getObj(src.propertyId) : null;
+    const propsForCustomer = src.customerId
+      ? (state.properties||[]).filter(p => p.customerId === src.customerId)
+      : (state.properties||[]);
 
-    // Try to parse existing address string into street / zip / city
-    var parsedStreet = '', parsedZip = '', parsedCity = '';
-    if (addrMode === 'custom' && roAddr) {
-      var parts = roAddr.split(',').map(function(p){ return p.trim(); });
-      parsedStreet = parts[0] || '';
-      var rest = parts[1] || '';
-      var zipMatch = rest.match(/^(\d{3}\s?\d{2})\s+(.+)$/);
-      if (zipMatch) { parsedZip = zipMatch[1]; parsedCity = zipMatch[2]; }
-      else { parsedCity = rest; }
+    /* Fält att förifylla i eget/särskilt-läget: föredra REDAN strukturerade
+       zip/city (nya poster, eller från openFromAO()) — annars, för genuint
+       legacy-poster som bara har en hopslagen sträng, använd den delade,
+       bakåtkompatibla parsern (R2.5 §8/§9). Beräknas alltid (inte bara i
+       custom-läge) eftersom den legacy-parsade gatan även används för
+       läges-inferensen nedan. */
+    var parsedStreet = roAddr, parsedZip = src.zip || '', parsedCity = src.city || '';
+    if (!parsedZip && !parsedCity && roAddr) {
+      const parsed = AddressService.parseLegacyCombinedAddress(roAddr);
+      parsedStreet = parsed.street; parsedZip = parsed.zip; parsedCity = parsed.city;
+    }
+
+    let addrMode; // 'property' | 'cu' | 'custom'
+    if (src.addressSource === 'manual') addrMode = 'custom';
+    else if (src.addressSource === 'property') addrMode = 'property';
+    else if (src.addressSource === 'customer') addrMode = 'cu';
+    else {
+      const streetNorm = AddressService._normalizeStreet(parsedStreet);
+      if (roAddr && prop0 && streetNorm && streetNorm === AddressService._normalizeStreet(prop0.address)) addrMode = 'property';
+      else if (roAddr && cu0 && streetNorm && streetNorm === AddressService._normalizeStreet(cu0.address)) addrMode = 'cu';
+      else if (!roAddr) addrMode = prop0 ? 'property' : 'cu';
+      else addrMode = 'custom';
     }
 
     Modal.open({
@@ -225,15 +268,27 @@ const RecurringPage = {
               <option value="">— Välj kund —</option>
               ${(state.customers||[]).map(c=>`<option value="${c.id}" ${src.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
             </select></div>
-          <div class="fg"><label>Prioritet</label>
-            <select id="ro-priority">
-              ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${(src.priority||'normal')===p?'selected':''}>${priorityLabel(p)}</option>`).join('')}
+          <div class="fg"><label>Fastighet (valfritt)</label>
+            <select id="ro-prop" onchange="RecurringPage._propertyChanged()">
+              <option value="">— Ingen fastighet —</option>
+              ${propsForCustomer.map(p=>`<option value="${p.id}" ${src.propertyId===p.id?'selected':''}>${esc(p.name||p.address||p.id)}</option>`).join('')}
             </select></div>
         </div>
+
+        <div class="fg"><label>Prioritet</label>
+          <select id="ro-priority">
+            ${['akut','hög','normal','låg'].map(p=>`<option value="${p}" ${(src.priority||'normal')===p?'selected':''}>${priorityLabel(p)}</option>`).join('')}
+          </select></div>
 
         <div class="fg">
           <label>Arbetsadress</label>
           <div style="margin-top:4px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;cursor:pointer;">
+              <input type="radio" name="ro-addr-mode" id="ro-addr-prop" value="property"
+                ${addrMode==='property'?'checked':''} ${prop0?'':'disabled'} onchange="RecurringPage._addrModeChanged()">
+              Använd fastighetens adress
+            </label>
+            <div id="ro-prop-addr-display" style="font-size:12px;color:var(--mt);margin-left:22px;">${prop0 ? [prop0.address, prop0.zip, prop0.city].filter(Boolean).join(', ') : '(välj fastighet ovan)'}</div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;cursor:pointer;">
               <input type="radio" name="ro-addr-mode" id="ro-addr-cu" value="cu"
                 ${addrMode==='cu'?'checked':''} onchange="RecurringPage._addrModeChanged()">
@@ -431,22 +486,61 @@ const RecurringPage = {
     const addr = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
     const display = document.getElementById('ro-cu-addr-display');
     if (display) display.textContent = addr || '(ingen adress registrerad)';
-    // If in custom mode, optionally pre-fill fields from the customer
-    const isCuMode = document.getElementById('ro-addr-cu')?.checked;
-    if (!isCuMode && cu) {
-      const street = document.getElementById('ro-street');
-      const zip    = document.getElementById('ro-zip');
-      const city   = document.getElementById('ro-city');
-      if (street && !street.value) street.value = cu.address || '';
-      if (zip    && !zip.value)    zip.value    = cu.zip     || '';
-      if (city   && !city.value)   city.value   = cu.city    || '';
+
+    /* R2.6 §3 — "Changing customer must safely clear an incompatible
+       selected property": fastighetsväljaren filtreras om till den nya
+       kundens fastigheter, och en redan vald fastighet som INTE tillhör
+       den nya kunden rensas (kund/fastighet får aldrig peka åt olika håll
+       i samma post). */
+    const propSel = document.getElementById('ro-prop');
+    if (propSel) {
+      const currentPropId = propSel.value;
+      const props = cuId ? (state.properties||[]).filter(p => p.customerId === cuId) : (state.properties||[]);
+      const stillValid = props.some(p => p.id === currentPropId);
+      propSel.innerHTML = '<option value="">— Ingen fastighet —</option>' +
+        props.map(p => `<option value="${p.id}" ${stillValid && p.id===currentPropId?'selected':''}>${esc(p.name||p.address||p.id)}</option>`).join('');
+      if (!stillValid) {
+        propSel.value = '';
+        RecurringPage._propertyChanged();
+      }
+    }
+
+    /* R2.7 §1/§2 (HARD BLOCKER, oberoende reproducerad) — TIDIGARE
+       förifylldes tomma fält i "annan arbetsadress"-läget tyst med den nya
+       kundens adress vid ett kundbyte. Det bröt manuell-lägets grundregel:
+       en särskild arbetsadress är ANVÄNDARENS EGNA data, oberoende av
+       kund/fastighet, tills användaren SJÄLV explicit byter adressläge.
+       Ett kundbyte medan "gata" var ifylld men "postnr" tom kunde alltså
+       tyst skapa en HYBRIDADRESS (gammal gata + ny kunds postnr) som
+       användaren aldrig skrev in. Manuella fält rörs nu ALDRIG av ett
+       kund- eller fastighetsbyte — bara av användarens egen inmatning,
+       eller vid det EXPLICITA ögonblick användaren väljer manuellt läge
+       (se _addrModeChanged()). */
+  },
+
+  /* R2.6 §2/§3 — fastighetens adress-visning + radioknappens av/på-läge.
+     En "Använd fastighetens adress"-radio kan bara vara vald/aktiv när en
+     fastighet faktiskt är vald — om fastigheten rensas medan det läget är
+     aktivt faller adressläget säkert tillbaka till kundens adress. */
+  _propertyChanged() {
+    const propId  = document.getElementById('ro-prop')?.value;
+    const prop    = propId ? getObj(propId) : null;
+    const display = document.getElementById('ro-prop-addr-display');
+    if (display) display.textContent = prop ? [prop.address, prop.zip, prop.city].filter(Boolean).join(', ') : '(välj fastighet ovan)';
+    const propRadio = document.getElementById('ro-addr-prop');
+    if (propRadio) {
+      propRadio.disabled = !prop;
+      if (!prop && propRadio.checked) {
+        const cuRadio = document.getElementById('ro-addr-cu');
+        if (cuRadio) { cuRadio.checked = true; RecurringPage._addrModeChanged(); }
+      }
     }
   },
 
   _addrModeChanged() {
-    const isCu  = document.getElementById('ro-addr-cu')?.checked;
+    const isCustom = document.getElementById('ro-addr-custom')?.checked;
     const wrap  = document.getElementById('ro-addr-custom-wrap');
-    if (wrap) wrap.style.display = isCu ? 'none' : '';
+    if (wrap) wrap.style.display = isCustom ? '' : 'none';
   },
 
   _toggleCustomInterval() {
@@ -508,28 +602,59 @@ const RecurringPage = {
     const interval    = document.getElementById('ro-interval')?.value || 'månadsvis';
     const days        = parseInt(document.getElementById('ro-days')?.value) || 30;
 
-    // Resolve address from split fields
-    const isCuAddr = document.getElementById('ro-addr-cu')?.checked;
-    let address = '';
-    let accessCode = '';
-    if (isCuAddr) {
-      const cuId = document.getElementById('ro-cu')?.value;
-      const cu   = cuId ? getCu(cuId) : null;
-      address    = cu ? [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') : '';
+    /* R2.6 §1/§3 — adressen sparas fortsatt STRUKTURERAD (gata/postnr/ort
+       som egna fält, R2.5), och `propertyId` sparas nu ALLTID separat från
+       adressläget — HARD BLOCKER (oberoende reproducerad): tidigare fanns
+       ingen fastighets-koppling i formuläret alls, så "Gör återkommande"
+       från en fastighetslänkad AO tappade tyst kopplingen redan här, innan
+       posten ens sparats en gång. En särskild arbetsadress och en
+       fastighetskoppling är INTE ömsesidigt uteslutande (§2/§7) — därför
+       läses propertyId helt oberoende av vilket av de tre adresslägena
+       (fastighet/kund/eget) som är valt. */
+    const addrMode    = document.querySelector('input[name="ro-addr-mode"]:checked')?.value || 'cu';
+    const propertyId  = document.getElementById('ro-prop')?.value || '';
+    const customerId  = document.getElementById('ro-cu')?.value || '';
+
+    let address = '', zip = '', city = '', accessCode = '', addressSource = '';
+    if (addrMode === 'property') {
+      const prop = propertyId ? getObj(propertyId) : null;
+      address    = prop ? (prop.address || '') : '';
+      zip        = prop ? (prop.zip || '') : '';
+      city       = prop ? (prop.city || '') : '';
+      accessCode = prop ? (prop.accessCode || '') : '';
+      addressSource = 'property';
+    } else if (addrMode === 'cu') {
+      const cu   = customerId ? getCu(customerId) : null;
+      address    = cu ? (cu.address || '') : '';
+      zip        = cu ? (cu.zip || '') : '';
+      city       = cu ? (cu.city || '') : '';
       accessCode = cu ? (cu.accessCode || '') : '';
+      addressSource = 'customer';
     } else {
-      const street = (document.getElementById('ro-street')?.value || '').trim();
-      const zip    = (document.getElementById('ro-zip')?.value    || '').trim();
-      const city   = (document.getElementById('ro-city')?.value   || '').trim();
-      accessCode   = (document.getElementById('ro-access')?.value || '').trim();
-      const zipCity = [zip, city].filter(Boolean).join(' ');
-      address = [street, zipCity].filter(Boolean).join(', ');
+      address    = (document.getElementById('ro-street')?.value || '').trim();
+      zip        = (document.getElementById('ro-zip')?.value    || '').trim();
+      city       = (document.getElementById('ro-city')?.value   || '').trim();
+      accessCode = (document.getElementById('ro-access')?.value || '').trim();
+      addressSource = 'manual';
+      /* R2.7 §5/§6 (oberoende reproducerad blockerare) — samma praktiska
+         regel som redan gäller för AO:ns egen särskilda adress (skapa/
+         redigera-flödena): en manuellt angiven arbetsadress kräver gata
+         OCH minst postnummer ELLER ort — annars skapar VIFT SJÄLVT ny,
+         tvetydig adressdata, exakt det ursprungliga produktionsproblemet.
+         Fastighets-/kundläget spärras ALDRIG av detta — de får använda
+         vilken strukturerad kontext masterposten faktiskt har, ofullständig
+         eller ej (se AddressService.resolveCreateAddressSnapshot()). */
+      if (!address || (!zip && !city)) {
+        showToast('Ange postnummer eller ort för den särskilda adressen.');
+        return;
+      }
     }
 
     const data = {
       title,
-      customerId:   document.getElementById('ro-cu')?.value || '',
-      address,
+      customerId,
+      propertyId,
+      address, zip, city, addressSource,
       description:  document.getElementById('ro-desc')?.value.trim() || '',
       priority:     document.getElementById('ro-priority')?.value || 'normal',
       interval,

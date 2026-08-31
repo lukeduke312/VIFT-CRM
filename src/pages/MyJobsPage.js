@@ -175,6 +175,12 @@ const MyJobsPage = {
   _jobCard(ao, myId, isStamped, stampAoId, compact=false) {
     const cu       = getCu(ao.customerId);
     const cuName   = cu ? CustomerService.displayName(cu) : '—';
+    /* R2.6 §12 (oberoende reproducerad blockerare) — TIDIGARE villkorades
+       adressraden på `ao.address`, vilket dolde en giltig fallback-adress
+       (länkad fastighet/kund) för en legacy-AO utan egen adress, trots att
+       AddressService.displayAddress() korrekt kunde lösa den. Villkora nu
+       på det RESOLVERADE resultatet istället. */
+    const workAddr = AddressService.displayAddress(ao);
     const chkOk    = (ao.checklist||[]).filter(c => c.done).length;
     const chkAvv   = (ao.checklist||[]).filter(c => c.avvikelse==='avvikelse').length;
     const chkTotal = (ao.checklist||[]).length;
@@ -221,7 +227,7 @@ const MyJobsPage = {
         </div>
         <div class="job-card-v2-meta">
           ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} <span>${esc(cuName)}</span></div>` : ''}
-          ${ao.address     ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} <span>${esc(ao.address)}</span></div>` : ''}
+          ${workAddr        ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} <span>${esc(workAddr)}</span></div>` : ''}
           ${ao.scheduledDate ? `<div class="job-card-v2-meta-row" style="color:${isLate?'var(--rd)':'var(--mt)'};">${ic('calendar',11)} <span>${isLate?'⚠ Försenad — ':''} ${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart:''}</span></div>` : ''}
           ${ao.substatus ? `<div class="job-card-v2-meta-row" style="color:var(--or);">${subLbls[ao.substatus]||ao.substatus}</div>` : ''}
           ${chkTotal>0 ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkHtml}</div>` : ''}
@@ -240,6 +246,7 @@ const MyJobsPage = {
     const cu       = getCu(ao.customerId);
     const cuName   = cu ? CustomerService.displayName(cu) : '—';
     const chkTotal = (ao.checklist||[]).length;
+    const workAddr = AddressService.displayAddress(ao);
 
     return `
       <div class="job-card-v2" style="border-left-color:var(--pu);" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
@@ -252,7 +259,7 @@ const MyJobsPage = {
         </div>
         <div class="job-card-v2-meta">
           ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} ${esc(cuName)}</div>` : ''}
-          ${ao.address     ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} ${esc(ao.address)}</div>` : ''}
+          ${workAddr        ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} ${esc(workAddr)}</div>` : ''}
           ${ao.description ? `<div class="job-card-v2-meta-row" style="color:var(--mt);">${esc(ao.description.slice(0,80))}${ao.description.length>80?'…':''}</div>` : ''}
           ${chkTotal       ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkTotal} checkpunkt${chkTotal!==1?'er':''}</div>` : ''}
         </div>

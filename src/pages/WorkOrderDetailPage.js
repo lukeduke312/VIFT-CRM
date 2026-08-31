@@ -116,11 +116,30 @@ const WorkOrderDetailPage = {
           <h2 class="ao-title-main">${esc(ao.title)}</h2>
           <div class="ao-title-meta">
             ${cu?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('user',11)}</span><a style="color:var(--sky);text-decoration:none;font-weight:600;cursor:pointer;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a></div>`:''}
-            ${ao.address?`<a class="ao-title-meta-row ao-address-link" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ao.address)}" target="_blank" rel="noopener">
+            ${(() => {
+              /* R2 §2/§3, kompletterad i R2.1 §10 — visa den FULLSTÄNDIGA
+                 strukturerade adressen (gata + postnr/ort[, land]), inte
+                 bara den bara gatan, och bygg Google Maps-destinationen
+                 med samma fullständiga sträng. Använder nu
+                 AddressService.resolveWorkOrderDisplayAddress()/
+                 displayAddress() — som prioriterar AO:ns EGEN sparade
+                 snapshot, men FALLER TILLBAKA till den länkade
+                 fastighetens/kundens strukturerade adress för en legacy-
+                 AO som helt saknar egen adress (annars visades varken
+                 adressrad eller Maps-länk alls för sådana AO:er, trots
+                 att en fallback-koordinat kunde finnas på kartan). Ren
+                 läsning — skriver ALDRIG in fallbacken i AO:n bara för
+                 att sidan visas; det sker bara via ett explicit
+                 spara-event (t.ex. i redigera-dialogen). */
+              const resolved = AddressService.resolveWorkOrderDisplayAddress(ao);
+              if (!resolved.address) return '';
+              const fullAddr = AddressService.displayAddress(ao);
+              return `<a class="ao-title-meta-row ao-address-link" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullAddr)}" target="_blank" rel="noopener">
               <span style="color:var(--mt);flex-shrink:0;">${ic('map-pin',11)}</span>
-              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ao.address)}</span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(fullAddr)}</span>
               <span style="color:var(--sky);flex-shrink:0;">${ic('external-link',11)}</span>
-            </a>`:''}
+            </a>`;
+            })()}
             ${ao.objectId?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('layout',11)}</span><a style="color:var(--sky);text-decoration:none;font-size:12px;cursor:pointer;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectName || ao.objectId)}</a></div>`:''}
             ${ao.scheduledDate?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('calendar',11)}</span><span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span></div>`:''}
           </div>
@@ -2137,6 +2156,76 @@ const WorkOrderDetailPage = {
     const cuOptions = (state.customers||[]).map(c =>
       `<option value="${c.id}" ${ao.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
     ).join('');
+    /* V51B ARBETSORDER §11 — samma särskild-adress-togglemönster som
+       skapa-guiden (WorkOrdersPage._wizAddressBlockHtml), men här skrivs
+       redigeringsläget till en egen liten state (_editAddr) istället för
+       _wiz.data eftersom den här modalen inte har någon wizard-omgärdning.
+       Startas alltid från AO:ns SPARADE värden, aldrig från fastighetens/
+       kundens LIVE-adress om override redan var aktivt — annars skulle
+       bara ÖPPNA redigera-dialogen kunna tysta byta adress.
+
+       R1 §3 (blockerare #3, oberoende reproducerad) — LEGACY-HÄRLEDNING:
+       `ao.addressOverride` finns inte på AO:er från före denna omgång
+       (fältet är `undefined`). `!!ao.addressOverride` gjorde det tyst till
+       `false` ("standardläge, spåra fastighet/kund") — men en legacy-AO:s
+       sparade `ao.address` KAN vara en medvetet satt, egen adress som
+       aldrig hade något med den länkade fastigheten att göra (fastigheten
+       kan ha bytt adress sedan AO:n skapades, eller AO:n kan alltid ha haft
+       en annan arbetsplats än fastighetens registrerade adress). Att
+       tolka den som "standardläge" riskerade att en OFÖRENLIG redigering
+       (t.ex. bara ändra rubriken) tyst skrev över AO:ns historiska adress
+       med fastighetens/kundens NUVARANDE adress.
+       Säker härledning när fältet saknas (typeof !== 'boolean'):
+         - Om AO:n har en sparad adress som SKILJER SIG från vad som just nu
+           skulle resolveras som standard (eller om det inte finns någon
+           resolverbar standardadress alls) → behandla som en egen/särskild
+           adress (override=true) — bevara den, redigera den inte tyst bort.
+         - Om AO:ns sparade adress redan RÅKAR matcha den aktuella
+           standardadressen → override=false är ofarligt HÄR (samma värde),
+           men se _editCollectAddress() nedan för det som FAKTISKT skyddar
+           mot framtida tyst omskrivning: en oförändrad länkning skriver
+           ALDRIG om adressen, oavsett override-läge.
+       Om `ao.addressOverride` REDAN är en explicit boolean (satt av denna
+       omgångens egen create/edit-kod) respekteras den rakt av — ingen
+       gissning behövs. */
+    let inferredOverride;
+    if (typeof ao.addressOverride === 'boolean') {
+      inferredOverride = ao.addressOverride;
+    } else {
+      const defaultNow = this._editResolvedAddress(ao, ao.customerId);
+      const addressDiffers = (ao.address || '') !== (defaultNow.address || '');
+      const noDefaultAtAll = !defaultNow.address;
+      inferredOverride = !!(ao.address && (addressDiffers || noDefaultAtAll));
+    }
+    /* R2.1 §3/§4 — EN PENDING ADRESS-STATE, enda sanningskälla för BÅDE
+       visning och sparning (oberoende reproducerad blockerare — R2:s
+       default-visning läste `ao.*` direkt medan `_editCollectAddress()`
+       kunde besluta något annat vid Spara; ett klick på "Använd aktuell
+       fastighetsadress" uppdaterade bara denna state-objektets fält, men
+       visningen fortsatte läsa `ao.*` tills faktisk sparning — användaren
+       kunde alltså SE den gamla adressen trots att Spara skulle skriva
+       den NYA). Nu är `this._editAddr` (härifrån och nedåt kallat `st`
+       i denna fils kommentarer) den ENDA platsen där den väntande
+       adressen lever: varje händelse (öppning, kryssruta av/på,
+       kundbyte, resync-knapp) uppdaterar `st` DIREKT och renderar om
+       FRÅN `st` — `_editCollectAddress()` läser bara av `st`, den fattar
+       inga egna beslut längre (se dess kommentar).
+       Initieras från AO:ns SPARADE snapshot om AO:n har en egen adress
+       (den historiska sanningen) — annars, och ENDAST då, från den just
+       nu gällande länkade fastighets-/kundadressen (inget att bevara). */
+    let initAddr;
+    if (ao.address) {
+      initAddr = { address: ao.address, zip: ao.zip || '', city: ao.city || '', country: ao.country || '', addressSource: ao.addressSource || '' };
+    } else {
+      const resolvedInit = this._editResolvedAddress(ao, ao.customerId);
+      initAddr = { address: resolvedInit.address, zip: resolvedInit.zip, city: resolvedInit.city, country: '', addressSource: resolvedInit.source };
+    }
+    this._editAddr = {
+      addressOverride: inferredOverride,
+      address: initAddr.address, zip: initAddr.zip, city: initAddr.city,
+      country: initAddr.country, addressSource: initAddr.addressSource,
+      lat: ao.lat != null ? ao.lat : null, lng: ao.lng != null ? ao.lng : null
+    };
     Modal.open({
       title: 'Redigera order',
       wide: true,
@@ -2147,11 +2236,9 @@ const WorkOrderDetailPage = {
           <select id="edit-cu" onchange="WorkOrderDetailPage._editCustomerChanged('${this.aoId}')">
             ${cuOptions}
           </select></div>
-        <div class="fg"><label>Adress</label><input id="edit-addr" value="${ao.address||''}"
-          autocomplete="off"
-          data-addr-source="${ao.address ? 'existing' : ''}"
-          oninput="AddressService.handleInput(this)"
-          onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"></div>
+        <div class="fg"><label>Arbetsadress</label>
+          <div id="edit-addr-wrap">${this._editAddressBlockHtml(ao)}</div>
+        </div>
         <div class="g2">
           <div class="fg"><label>Datum</label><input type="date" id="edit-date" value="${ao.scheduledDate||''}"></div>
           <div class="fg"><label>Prioritet</label>
@@ -2168,15 +2255,20 @@ const WorkOrderDetailPage = {
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const title = document.getElementById('edit-title')?.value.trim();
           if (!title) { showToast('Rubrik krävs'); return; }
-          WorkOrderService.update(this.aoId, {
+          const addrPatch = this._editCollectAddress(getAO(this.aoId));
+          /* R1 §6 — samma särskild-adress-validering som skapa-guiden
+             (WorkOrdersPage._validateAddressOverride), återanvänd rakt av
+             eftersom kontraktet ({addressOverride, address, zip, city}) är
+             identiskt. */
+          if (!WorkOrdersPage._validateAddressOverride(addrPatch)) return;
+          WorkOrderService.update(this.aoId, Object.assign({
             title,
             description:   document.getElementById('edit-desc')?.value.trim() || '',
             customerId:    document.getElementById('edit-cu')?.value || '',
-            address:       document.getElementById('edit-addr')?.value.trim() || '',
             scheduledDate: document.getElementById('edit-date')?.value || '',
             priority:      document.getElementById('edit-prio')?.value || 'normal',
             category:      document.getElementById('edit-category')?.value || ''
-          });
+          }, addrPatch));
           Modal.close();
           this.render({ aoId: this.aoId });
           showToast('Order uppdaterad');
@@ -2186,28 +2278,225 @@ const WorkOrderDetailPage = {
     });
   },
 
-  /*
-   * Autofyll adress från ny kund i redigera-AO-modal.
-   * Fyller adressen om: fältet är tomt, ELLER adressen matchar gamla AO-adressen
-   * (dvs. användaren har inte skrivit något manuellt).
-   */
+  /* Ärvd adress för redigera-modalen — samma precedens (fastighet före kund)
+     som WorkOrdersPage._wizResolvedAddress(), men läser AO:ns EGET propertyId
+     (som inte går att ändra i denna modal) + den just nu valda kunden. */
+  _editResolvedAddress(ao, customerId) {
+    const prop = ao.propertyId ? (state.properties||[]).find(p => p.id === ao.propertyId) : null;
+    if (prop && prop.address) {
+      return { address: prop.address, zip: prop.zip || '', city: prop.city || '', source: 'property' };
+    }
+    const cu = customerId ? getCu(customerId) : null;
+    if (cu && cu.address) {
+      return { address: cu.address, zip: cu.zip || '', city: cu.city || '', source: 'customer' };
+    }
+    return { address: '', zip: '', city: '', source: '' };
+  },
+
+  /* R2.1 §3/§6 (oberoende reproducerad blockerare, härdad efter R2) —
+     PRIMÄR VISNING LÄSER NU UTESLUTANDE FRÅN `st` (this._editAddr), ALDRIG
+     från `ao` direkt. R2:s version läste `ao.address/zip/city` för
+     default-lägets snapshot-visning — korrekt för den ANVÄNDA scenen vid
+     öppning, men eftersom `_editResyncToDefault()`/`_editToggleAddressOverride()`
+     bara uppdaterade `st` (utan att `ao` någonsin muterades förrän
+     faktisk Spara), fortsatte visningen tyst visa den GAMLA `ao`-adressen
+     efter ett klick på "Använd aktuell fastighetsadress" — trots att det
+     som FAKTISKT skulle sparas redan var den NYA adressen. `st` är nu den
+     enda sanningskällan: samma objekt som varje händelse uppdaterar OCH
+     som `_editCollectAddress()` läser av vid Spara — vad användaren SER
+     är alltid exakt vad som SPARAS.
+     `data-role="ao-work-address"`/`"linked-current-address"` låter tester
+     (och ev. framtida UI) skilja den PRIMÄRA väntande adressen från den
+     sekundära jämförelsetexten mot den nuvarande länkade adressen — de
+     två innehåller ofta samma ord (staden) och en test som bara letar i
+     hela wrappern kan ge en falsk grön träff, se R2.1 §2. */
+  _editAddressBlockHtml(ao) {
+    const st = this._editAddr;
+    const customerId = document.getElementById('edit-cu')?.value || ao.customerId || '';
+    const resolved = this._editResolvedAddress(ao, customerId);
+    const resolvedLine2 = [resolved.zip, resolved.city].filter(Boolean).join(' ');
+    const resyncLabel = resolved.source === 'property' ? 'Använd aktuell fastighetsadress' : 'Använd aktuell kundadress';
+
+    const pendingLine2 = [st.zip, st.city].filter(Boolean).join(' ');
+    const primaryHtml = `
+      <div class="ibox" data-role="ao-work-address" style="font-size:13px;line-height:1.5;">
+        ${st.address
+          ? `<div>${esc(st.address)}</div>${pendingLine2 ? `<div style="color:var(--mt);font-size:12px;">${esc(pendingLine2)}</div>` : ''}`
+          : `<span style="color:var(--mt);">Ingen adress att visa — välj en kund med adress, eller ange en särskild adress nedan.</span>`}
+      </div>`;
+
+    const pendingDiffersFromResolved = !!resolved.address && (
+      (st.address || '') !== resolved.address || (st.zip || '') !== (resolved.zip || '') || (st.city || '') !== (resolved.city || '')
+    );
+    const resyncBlockHtml = pendingDiffersFromResolved ? `
+      <div data-role="linked-current-address" style="margin-top:8px;padding:8px;border-radius:6px;background:var(--bg2,#f8fafc);font-size:12px;">
+        <div style="color:var(--mt);margin-bottom:4px;">${resolved.source === 'property' ? 'Fastighetens' : 'Kundens'} nuvarande adress: ${esc(resolved.address)}${resolvedLine2 ? ', ' + esc(resolvedLine2) : ''}</div>
+        <button type="button" class="btn bsm" onclick="WorkOrderDetailPage._editResyncToDefault('${this.aoId}')">${resyncLabel}</button>
+      </div>` : '';
+
+    const editHtml = `
+      <div data-role="ao-work-address">
+      <input id="edit-addr" value="${esc(st.address||'')}" placeholder="Gatuadress"
+        autocomplete="off"
+        data-addr-zip="edit-addr-zip" data-addr-city="edit-addr-city" data-addr-country="edit-addr-country" data-addr-lat="edit-addr-lat" data-addr-lng="edit-addr-lng"
+        oninput="AddressService.handleInput(this); WorkOrderDetailPage._editSyncAddr()"
+        onchange="WorkOrderDetailPage._editSyncAddr()"
+        onblur="setTimeout(()=>AddressService.hideSuggestions(),150)">
+      <div class="g2" style="margin-top:6px;">
+        <div class="fg" style="margin:0;"><label>Postnummer</label>
+          <input id="edit-addr-zip" value="${esc(st.zip||'')}" placeholder="T.ex. 412 54" oninput="WorkOrderDetailPage._editSyncAddr()" onchange="WorkOrderDetailPage._editSyncAddr()"></div>
+        <div class="fg" style="margin:0;"><label>Ort</label>
+          <input id="edit-addr-city" value="${esc(st.city||'')}" placeholder="T.ex. Göteborg" oninput="WorkOrderDetailPage._editSyncAddr()" onchange="WorkOrderDetailPage._editSyncAddr()"></div>
+      </div>
+      <input type="hidden" id="edit-addr-country" value="${esc(st.country||'')}" onchange="WorkOrderDetailPage._editSyncAddr()">
+      <input type="hidden" id="edit-addr-lat" value="${st.lat!=null?st.lat:''}">
+      <input type="hidden" id="edit-addr-lng" value="${st.lng!=null?st.lng:''}">
+      </div>`;
+
+    return `
+      ${st.addressOverride ? editHtml : primaryHtml + resyncBlockHtml}
+      <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:500;color:var(--tx);cursor:pointer;">
+        <input type="checkbox" id="edit-addr-override" ${st.addressOverride?'checked':''} onchange="WorkOrderDetailPage._editToggleAddressOverride(this.checked)">
+        Välj en särskild adress för denna arbetsorder
+      </label>`;
+  },
+
+  /* R2 §7 — EXPLICIT, avsiktlig handling: byt AO:ns adressfält (i
+     redigeringsläget, inte AO:t självt förrän Spara trycks) mot den NU
+     gällande länkade fastighets-/kundadressen. Detta är den ENDA vägen
+     att medvetet överge en avvikande historisk snapshot — se
+     _editAddressBlockHtml()s kommentar. _explicitResync läses av
+     _editCollectAddress() för att veta att detta INTE ska tolkas som
+     "orört, bevara snapshoten". */
+  _editResyncToDefault(aoId) {
+    const ao = getAO(aoId);
+    if (!ao) return;
+    const st = this._editAddr;
+    const customerId = document.getElementById('edit-cu')?.value || ao.customerId || '';
+    const resolved = this._editResolvedAddress(ao, customerId);
+    st.address = resolved.address;
+    st.zip     = resolved.zip;
+    st.city    = resolved.city;
+    st.country = '';
+    st.addressSource = resolved.source;
+    st.addressOverride = false;
+    /* R2.1: uppdatera `st` OCH rendera om FRÅN `st` — inget mellanled,
+       ingen väntan på Spara. Se _editAddressBlockHtml()s kommentar. */
+    const wrap = document.getElementById('edit-addr-wrap');
+    if (wrap) wrap.innerHTML = this._editAddressBlockHtml(ao);
+  },
+
+  /* FINAL INVARIANTS AUDIT §7 (samma buggklass som R2.3s guide-restbugg,
+     härdad här defensivt) — Invariant E: att gå in i särskilt-adress-läge
+     MÅSTE alltid utgå från den NUVARANDE länkade standardadressen,
+     ALDRIG villkorat av om `st.address` råkar redan vara ifyllt. AV-
+     grenen skrev redan (sedan R2.1/R2.2) ALLTID in den aktuella
+     standardadressen i `st` — vilket redan skyddade denna specifika
+     redigera-dialog mot R2.3-buggen (eftersom `st.address` alltid är
+     korrekt när man växlar PÅ igen). PÅ-grenen görs nu ändå ovillkorlig
+     av samma skäl som guiden — inget beteende ska bero på en tillfällig
+     tomhets-kontroll. */
+  _editToggleAddressOverride(checked) {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const st = this._editAddr;
+    st.addressOverride = checked;
+    const customerId = document.getElementById('edit-cu')?.value || ao.customerId || '';
+    const resolved = this._editResolvedAddress(ao, customerId);
+    st.address = resolved.address;
+    st.zip     = resolved.zip;
+    st.city    = resolved.city;
+    st.country = '';
+    st.addressSource = resolved.source;
+    const wrap = document.getElementById('edit-addr-wrap');
+    if (wrap) wrap.innerHTML = this._editAddressBlockHtml(ao);
+  },
+
+  /* Synkar de levande särskilt-adress-fälten in i `st` — den enda
+     sanningskällan, se _editAddressBlockHtml()s kommentar. Anropas på
+     varje input/change (manuell inskrivning OCH Mapbox-autocomplete via
+     selectSuggestion()s riktiga 'change'-event). */
+  _editSyncAddr() {
+    const st = this._editAddr;
+    if (!st || !st.addressOverride) return;
+    st.address = (document.getElementById('edit-addr')?.value || '').trim();
+    st.zip     = (document.getElementById('edit-addr-zip')?.value || '').trim();
+    st.city    = (document.getElementById('edit-addr-city')?.value || '').trim();
+    st.country = (document.getElementById('edit-addr-country')?.value || '').trim();
+    st.addressSource = 'manual';
+  },
+
+  /* R2.1 §7 — kundbyte i default/spårningsläge är, precis som i R1/R2,
+     en genuin ny länkning: den väntande adressen resolveras nu OMEDELBART
+     mot den NYA kunden (istället för att bara uppdatera visningen och
+     låta _editCollectAddress() räkna om något annat vid Spara) — det
+     som visas är alltid exakt det som skulle sparas.
+
+     R2.2 §1/§2 (oberoende reproducerad blockerare) — OSPARAD SÄRSKILD
+     ADRESS FÖRSVANN VID KUNDBYTE: i särskilt-adress-läge (addressOverride
+     ===true) är de redigerbara fälten (#edit-addr/-zip/-city/-country)
+     LEVANDE DOM-inputs som medvetet INTE speglas in i `st` vid varje
+     knapptryckning (se _editCollectAddress()s kommentar — de läses
+     direkt från DOM:en vid Spara). Den tidigare koden lät medvetet BLI
+     `st` orörd i override-läge (korrekt — en override är en override
+     tills användaren själv slår av den) MEN renderade ändå OVILLKORLIGT
+     om `#edit-addr-wrap` från den (nu inaktuella) `st` efteråt — vilket
+     byggde OM formuläret från `st`s gamla värden och därmed FÖRSTÖRDE
+     allt oskrivet den använda skrivit in i de levande fälten, innan
+     Spara ens tryckts.
+     Fix (Option A, minsta robusta lösning): i särskilt-adress-läge rörs
+     `#edit-addr-wrap` INTE ALLS av ett kundbyte — en särskild adress är
+     medvetet oberoende av kunden tills användaren EXPLICIT slår av
+     "särskild adress"-läget (samma princip som redan gällde för `st`,
+     nu konsekvent även för DOM:en). Jämförelserutan mot den länkade
+     adressen visas ändå inte i override-läge, så det finns inget att
+     uppdatera där heller. */
   _editCustomerChanged(aoId) {
     const ao = getAO(aoId);
     if (!ao) return;
-    const sel    = document.getElementById('edit-cu');
-    const addrEl = document.getElementById('edit-addr');
-    if (!sel || !addrEl) return;
+    const st = this._editAddr;
+    if (st.addressOverride) return;
+    const customerId = document.getElementById('edit-cu')?.value || '';
+    const resolved = this._editResolvedAddress(ao, customerId);
+    st.address = resolved.address;
+    st.zip     = resolved.zip;
+    st.city    = resolved.city;
+    st.country = '';
+    st.addressSource = resolved.source;
+    const wrap = document.getElementById('edit-addr-wrap');
+    if (wrap) wrap.innerHTML = this._editAddressBlockHtml(ao);
+  },
 
-    const newCu      = sel.value ? getCu(sel.value) : null;
-    const currentVal = addrEl.value.trim();
-    const origAddr   = ao.address || '';
-    const src        = addrEl.dataset.addrSource || '';
-
-    /* Fyll adress om: tomt, oförändrat från AO, eller tidigare kundadress */
-    if (!currentVal || currentVal === origAddr || src === 'customer') {
-      addrEl.value = newCu ? (newCu.address || '') : '';
-      addrEl.dataset.addrSource = newCu && newCu.address ? 'customer' : '';
-    }
+  /* R2.1 §3/§8 — FÖRENKLAD till en ren serialisering/validering av den
+     redan beslutade "pending state" (`st`, this._editAddr), inte längre
+     en andra, dold beslutsmotor. All ADRESS-BESLUTSLOGIK (bevara historisk
+     snapshot vs. resolvera mot en ny länkad standardadress) sker nu vid
+     själva UTLÖSANDE HÄNDELSEN — openEdit()s initiering,
+     _editToggleAddressOverride(), _editCustomerChanged(), eller
+     _editResyncToDefault() — och skrivs DIREKT till `st`, som samtidigt
+     är det ENDA som _editAddressBlockHtml() renderar. Den här funktionen
+     läser bara av det som redan visas — den fattar inga egna beslut,
+     vilket eliminerar hela klassen av "UI visar en sak, Spara bestämmer
+     en annan" (R2:s blockerare, se _editAddressBlockHtml()s kommentar).
+     ao.lat/ao.lng sätts ALDRIG härifrån — WorkOrderService.
+     geocodeAddressIfNeeded() (körs automatiskt efter update()) äger all
+     geokodning centralt, race-skyddad med en generationstoken (R1 §2). */
+  /* FINAL INVARIANTS AUDIT §6 — förenklad till en ren serialisering.
+     `st.address/zip/city/country/addressSource` är REDAN den enda,
+     aktuella sanningskällan vid det här laget: `_editSyncAddr()` håller
+     dem synkade i särskilt-adress-läge (varje tangenttryckning/
+     autocomplete-val), och `_editToggleAddressOverride()`/
+     `_editResyncToDefault()`/`_editCustomerChanged()` håller dem synkade
+     i standardläge. Ingen ny DOM-läsning eller beräkning görs här
+     längre — den här funktionen är inte en andra beslutsmotor. */
+  _editCollectAddress(ao) {
+    const st = this._editAddr || { addressOverride: false, address: '', zip: '', city: '', country: '', addressSource: '' };
+    const overrideEl = document.getElementById('edit-addr-override');
+    const override = overrideEl ? overrideEl.checked : !!st.addressOverride;
+    return {
+      address: st.address || '', zip: st.zip || '', city: st.city || '', country: st.country || '',
+      addressOverride: override, addressSource: st.addressSource || (override ? 'manual' : '')
+    };
   },
 
   /* ── Gör återkommande ─────────────────── */

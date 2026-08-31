@@ -70,12 +70,33 @@ const RecurringOrderService = {
     const ro = this.getById(roId);
     if (!ro || ro.status !== 'aktiv') return { ok: false, error: 'Ärende ej aktivt' };
 
+    /* R2.5 §3/§9 (oberoende reproducerad blockerare) — `ro.address` var
+       TIDIGARE ibland en hopslagen "Gata, 123 45 Ort"-sträng (skriven av
+       den gamla RecurringPage._save(), se dess kommentar) medan
+       `ro.zip`/`ro.city` alltid var tomma — det gjorde den nya AO:ns
+       "gata" i praktiken till en sträng som redan innehöll postnr/ort,
+       vilket bröt den kanoniska gatunormaliseringen (R2 §1) och kunde
+       göra att en i övrigt korrekt adress aldrig fick stadskontext.
+       Nya poster (efter denna omgång) har redan strukturerade zip/city
+       — använd dem direkt. Genuint LEGACY-poster (bara den hopslagna
+       strängen) parsas konservativt via den delade
+       AddressService.parseLegacyCombinedAddress() — samma "hellre ingen
+       nål än fel stad"-princip om formatet inte känns igen. */
+    let aoAddress = ro.address || '', aoZip = ro.zip || '', aoCity = ro.city || '';
+    if (!aoZip && !aoCity && aoAddress && typeof AddressService !== 'undefined') {
+      const parsed = AddressService.parseLegacyCombinedAddress(aoAddress);
+      aoAddress = parsed.street; aoZip = parsed.zip; aoCity = parsed.city;
+    }
+
     const aoData = {
       title:         ro.title,
       description:   ro.description || '',
       customerId:    ro.customerId,
       propertyId:    ro.propertyId || '',
-      address:       ro.address || '',
+      address:       aoAddress,
+      zip:           aoZip,
+      city:          aoCity,
+      addressSource: ro.addressSource || '',
       accessCode:    ro.accessCode || '',
       contactPerson: ro.contactPerson || '',
       phone:         ro.phone || '',

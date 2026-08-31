@@ -22,7 +22,7 @@
      som AddressService.js redan geokodar adresser mot — ingen ny
      kartleverantör, bara en annan laddningstidpunkt. -->
 
-<!-- DEPLOY: SW=v12 (CACHE_NAME=vift-crm-v12) responsive=v27 WorkOrdersPage=v51 WorkOrderDetailPage=v55 components=v84 CustomerPicker=v4 PageShells=v135 GlobalSearchService=v2 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v22 ServiceIntervalService=v3 OperationsPage=v10 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v25 schema=v22 state=v46 Dashboard=v46 DashboardConfig=v10 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v28 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v6 TimePage=v7 TimeService=v8 InvoicesPage=v31 BillingQueueService=v5 InvoiceService=v11 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v11 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v9 public-offer=v11 send-push=v6 PushService=v8 PayrollPage=v2 ContractsPage=v2 AuthService=v15 send-offer-email=v6 BrandingService=v7 Sidebar=v27 Icons=v11 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v2 storage=v11 layout=v29 MyJobsPage=v10 -->
+<!-- DEPLOY: SW=v12 (CACHE_NAME=vift-crm-v12) responsive=v27 WorkOrdersPage=v56 WorkOrderDetailPage=v61 components=v84 CustomerPicker=v4 PageShells=v135 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v22 ServiceIntervalService=v3 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v25 schema=v25 state=v46 Dashboard=v50 DashboardConfig=v10 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v28 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v6 TimePage=v7 TimeService=v8 InvoicesPage=v31 BillingQueueService=v5 InvoiceService=v11 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 RecurringPage=v12 RecurringOrderService=v4 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v11 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v9 public-offer=v11 send-push=v6 PushService=v8 WorkOrderService=v12 AddressService=v12 PayrollPage=v2 ContractsPage=v2 AuthService=v15 send-offer-email=v6 BrandingService=v7 Sidebar=v27 Icons=v11 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v2 storage=v11 layout=v29 MyJobsPage=v12 -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
@@ -362,7 +362,7 @@
 
 <!-- 1. Data-lager -->
 <script src="src/data/storage.js?v=11"></script>
-<script src="src/data/schema.js?v=22"></script>
+<script src="src/data/schema.js?v=25"></script>
 <script src="src/data/seedData.js?v=25"></script>
 <script src="src/data/state.js?v=46"></script>
 <script src="src/data/DashboardConfig.js?v=10"></script>
@@ -373,12 +373,12 @@
 <script src="src/services/SalesService.js?v=4"></script>
 <script src="src/services/AuthService.js?v=15"></script>
 <script src="src/services/CustomerService.js?v=5"></script>
-<script src="src/services/WorkOrderService.js?v=9"></script>
+<script src="src/services/WorkOrderService.js?v=12"></script>
 <script src="src/services/TimeService.js?v=8"></script>
 <script src="src/services/InvoiceService.js?v=11"></script>
 <script src="src/services/BillingQueueService.js?v=5"></script>
 <script src="src/services/ProfitabilityService.js?v=1"></script>
-<script src="src/services/RecurringOrderService.js?v=3"></script>
+<script src="src/services/RecurringOrderService.js?v=4"></script>
 <script src="src/services/RonderingService.js?v=6"></script>
 <script src="src/services/ActivitiesService.js?v=2"></script>
 <script src="src/services/ServiceTemplateService.js?v=5"></script>
@@ -394,9 +394,9 @@
 <script src="src/pages/ImportLogPage.js?v=2"></script>
 <script src="src/pages/ExportCenterPage.js?v=5"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
-<script src="src/services/AddressService.js?v=4"></script>
+<script src="src/services/AddressService.js?v=12"></script>
 <script src="src/services/PushService.js?v=8"></script>
-<script src="src/services/GlobalSearchService.js?v=2"></script>
+<script src="src/services/GlobalSearchService.js?v=4"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=11"></script>
@@ -408,24 +408,24 @@
 
 <!-- 4. Pages -->
 <script src="src/pages/Router.js?v=25"></script>
-<script src="src/pages/Dashboard.js?v=46"></script>
+<script src="src/pages/Dashboard.js?v=50"></script>
 <script src="src/pages/CustomersPage.js?v=28"></script>
-<script src="src/pages/WorkOrdersPage.js?v=51"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=55"></script>
+<script src="src/pages/WorkOrdersPage.js?v=56"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=61"></script>
 <script src="src/pages/TimePage.js?v=7"></script>
 <script src="src/pages/PayrollPage.js?v=2"></script>
 <script src="src/pages/ContractsPage.js?v=2"></script>
 <script src="src/pages/InvoicesPage.js?v=31"></script>
-<script src="src/pages/RecurringPage.js?v=9"></script>
+<script src="src/pages/RecurringPage.js?v=12"></script>
 <script src="src/pages/SalesPage.js?v=6"></script>
 <script src="src/pages/PropertyDetailPage.js?v=22"></script>
 <script src="src/pages/PropertyObjectPage.js?v=3"></script>
 <script src="src/pages/PageShells.js?v=135"></script>
 <script src="src/pages/RonderingPage.js?v=9"></script>
-<script src="src/pages/OperationsPage.js?v=10"></script>
+<script src="src/pages/OperationsPage.js?v=11"></script>
 <script src="src/pages/ReportsPage.js?v=6"></script>
 <script src="src/pages/CalendarPage.js?v=2"></script>
-<script src="src/pages/MyJobsPage.js?v=10"></script>
+<script src="src/pages/MyJobsPage.js?v=12"></script>
 <script src="src/pages/RonderingUtforandePage.js?v=11"></script>
 <script src="src/pages/RonderingWizardPage.js?v=8"></script>
 <!-- V19: src/pages/RonderingRapportPage.js borttagen från laddningskedjan — filen
