@@ -692,7 +692,13 @@ const WorkOrdersPage = {
     if (!Auth.require('ao_create')) return;
     this._wiz = {
       step: 1,
-      data: { customerId: prefillCustomerId || '', propertyId: prefillPropertyId || '' },
+      /* V54B — opts.projectId (samma opts-mönster som onCreated redan
+         använder) förhandsifyller EN kontextuell projektkoppling, aldrig
+         ett nytt AO-skapandeflöde. Se _wizCustomerChanged()/
+         _wizPropertyChanged() för hur den rensas om användaren aktivt
+         väljer en oförenlig kund/fastighet, och _wizSave() för det
+         defensiva slutlagret. */
+      data: { customerId: prefillCustomerId || '', propertyId: prefillPropertyId || '', projectId: (opts && opts.projectId) || '' },
       modalId: null,
       onCreated: (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null
     };
@@ -1346,6 +1352,16 @@ const WorkOrdersPage = {
     if (!sel) return;
     const id = sel.value;
     this._wiz.data.customerId = id;
+    /* V54B — en buren projektkoppling (från openCreate(...,{projectId}))
+       hör alltid till EN specifik kund. Ett genuint kundbyte (inte en
+       ren ombindning, se preserveProperty) som lämnar den kunden bakom
+       rensar kopplingen tyst istället för att riskera en motsägelsefull
+       AO/Projekt/Kund-kombination — samma princip som V53B R1:s
+       AO-är-auktoritativ-mönster, tillämpad här på Projekt/Kund. */
+    if (!preserveProperty && this._wiz.data.projectId) {
+      const proj = typeof ProjectService !== 'undefined' ? ProjectService.getById(this._wiz.data.projectId) : null;
+      if (!proj || proj.customerId !== id) this._wiz.data.projectId = '';
+    }
     if (!preserveProperty) {
       this._wiz.data.propertyId = ''; // reset fastighet vid ÄKTA kundbyte
       this._wiz.data.objectId   = '';
@@ -1424,6 +1440,19 @@ const WorkOrdersPage = {
     this._wiz.data.propertyId = id;
     this._wiz.data.objectId   = '';
     this._wiz.data.objectName = '';
+    /* V54B — samma invariant som kundbytet ovan: en buren projektkoppling
+       till ett projekt utan allowMultiProperty får bara kombineras med
+       projektets EGEN fastighet eller ingen fastighet alls (aldrig en
+       ANNAN fastighet) — se RAPPORT-V54-PROJEKT-DISCOVERY.md §5. Ett
+       projekt med allowMultiProperty=true tillåter valfri fastighet hos
+       SAMMA kund (redan säkrat av kundbytes-kontrollen ovan/i
+       _wizCustomerChanged). */
+    if (this._wiz.data.projectId) {
+      const proj = typeof ProjectService !== 'undefined' ? ProjectService.getById(this._wiz.data.projectId) : null;
+      if (proj && !proj.allowMultiProperty && proj.propertyId && id && id !== proj.propertyId) {
+        this._wiz.data.projectId = '';
+      }
+    }
     // Uppdatera objekt-väljaren
     const objWrap = document.getElementById('wiz-obj-wrap');
     if (objWrap) {
@@ -1800,6 +1829,22 @@ const WorkOrdersPage = {
     if (!this._wizCollectStep3()) return;
     const d  = this._wiz.data;
     const _prop = d.propertyId ? (state.properties||[]).find(p => p.id === d.propertyId) : null;
+    /* V54B — defensivt slutlager (samma disciplin som V53B R1): den
+       interaktiva synkroniseringen i _wizCustomerChanged()/
+       _wizPropertyChanged() räcker inte ensam — detta garanterar
+       invarianten oavsett DOM-tillstånd. */
+    /* V54B R2 — blockerare 3: en icke-tom, INKOMPATIBEL `projectId`
+       rensades tidigare tyst till '' och AO:n skapades ändå okopplad —
+       en användare som uttryckligen skapade en AO FRÅN ett Projekt fick
+       alltså ingen indikation på att kopplingen tappades. En sådan
+       kombination BLOCKERAR nu sparningen helt istället — ingen AO
+       skapas, ingen tyst frikoppling. Endast ETT tomt `projectId`
+       (dvs. inget projekt-sammanhang alls) fortsätter oförändrat. */
+    const _projectId = d.projectId || '';
+    if (_projectId && !(typeof ProjectService !== 'undefined' && ProjectService.isChildCompatible(_projectId, d.customerId, d.propertyId || ''))) {
+      showToast('Arbetsordern kan inte skapas i projektet eftersom kund eller fastighet inte är förenlig med projektet.');
+      return;
+    }
     const ao = WorkOrderService.create({
       title:           d.title,
       description:     d.description,
@@ -1843,8 +1888,24 @@ const WorkOrdersPage = {
       materials:       [],
       notes:           [],
       log:             [],
-      timeEntries:     []
+      timeEntries:     [],
+      projectId:       _projectId
     });
+    /* V54B R2 — blockerare 4: WorkOrderService.create() har sedan R1 TVÅ
+       giltiga returkontrakt — AO-objektet vid lyckat skapande, eller
+       `{ok:false, error}` om en icke-tom `projectId` visade sig
+       inkompatibel (defensivt slutlager, se WorkOrderService.js).
+       Denna kod antog tidigare ALLTID success och läste `ao.id` direkt
+       — vid ett `{ok:false}`-svar hade det kraschat eller (värre) tyst
+       navigerat till en obefintlig AO. Nu kontrolleras resultatet
+       INNAN modal stängs/callback körs/navigering sker: vid fel visas
+       felmeddelandet, modalen förblir öppen, ingen callback, ingen
+       navigering, ingen "AO skapad" — inget delvis lyckat tillstånd.
+       Befintliga lyckade anrop är helt oförändrade. */
+    if (!ao || ao.ok === false) {
+      showToast((ao && ao.error) || 'Arbetsordern kunde inte skapas.');
+      return;
+    }
     /* V47: callback körs EFTER lyckad persist (WorkOrderService.create() har
        redan persistat synkront ovan), aldrig innan — se openCreate(). */
     const onCreated = this._wiz.onCreated;

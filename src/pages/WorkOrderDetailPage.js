@@ -357,7 +357,7 @@ const WorkOrderDetailPage = {
     const secondary = this._secondaryActions(ao);
 
     // Desktop: visa dessa sekundäråtgärder direkt i knappraden
-    const DESKTOP_INLINE = new Set(['Planera','Omplanera','Till pool','Pausa','Redigera','Personal','Visa fakturaunderlag']);
+    const DESKTOP_INLINE = new Set(['Ny uppgift','Planera','Omplanera','Till pool','Pausa','Redigera','Personal','Visa fakturaunderlag']);
     const desktopInline = secondary.filter(it => DESKTOP_INLINE.has(it.label));
     const desktopRest   = secondary.filter(it => !DESKTOP_INLINE.has(it.label)); // Arkivera, Ta bort, etc.
 
@@ -493,6 +493,15 @@ const WorkOrderDetailPage = {
     const canEdit    = Auth.can('ao_edit');
     const canInvoice = Auth.can('invoice_create');
     const items = [];
+    /* V53B §5 — kontextuell "Ny uppgift": gated på sidåtkomst till
+       Uppgifter (samma spärr som knappen på Kund-/Fastighetskortet),
+       INTE ao_edit — vem som helst som kan öppna Uppgifter-sidan ska
+       kunna skapa en uppgift kopplad till denna AO. Återanvänder den
+       BEFINTLIGA AO-relationsmekanismen (relatedType/relatedId via
+       ActivitiesPage._openForm/_save) — ingen ny, egen `workOrderId`. */
+    if (Auth.canViewPage('pg-activities')) {
+      items.push({ label:'Ny uppgift', icon:'check-square', fn:`ActivitiesPage.openCreate({customerId:'${ao.customerId||''}',propertyId:'${ao.propertyId||''}',relatedType:'workOrder',relatedId:'${ao.id}'})` });
+    }
     // Plan / reschedule
     if (canEdit && ['nytt','pool'].includes(ao.status)) {
       items.push({ label:'Planera',   icon:'calendar',    fn:`WorkOrderDetailPage.setStatus('planerad')` });
@@ -2266,6 +2275,9 @@ const WorkOrderDetailPage = {
         <div class="fg"><label>Arbetsadress</label>
           <div id="edit-addr-wrap">${this._editAddressBlockHtml(ao)}</div>
         </div>
+        <div class="fg"><label>Projekt (valfritt)</label>
+          <div id="edit-project-wrap">${this._editProjectOptionsHtml(ao.customerId, ao.propertyId, ao.projectId)}</div>
+        </div>
         <div class="g2">
           <div class="fg"><label>Datum</label><input type="date" id="edit-date" value="${ao.scheduledDate||''}"></div>
           <div class="fg"><label>Prioritet</label>
@@ -2288,17 +2300,88 @@ const WorkOrderDetailPage = {
              eftersom kontraktet ({addressOverride, address, zip, city}) är
              identiskt. */
           if (!WorkOrdersPage._validateAddressOverride(addrPatch)) return;
-          WorkOrderService.update(this.aoId, Object.assign({
+          const newCustomerId = document.getElementById('edit-cu')?.value || '';
+          /* V54B R2 — blockerare 6: en icke-tom men INKOMPATIBEL vald
+             Projekt-koppling omvandlades tidigare tyst till en
+             frikoppling (`finalProjectId = projectOk ? selectedProjectId
+             : ''`) — användaren valde ett projekt, men fick istället en
+             tyst avlänkning utan varsel, vilket ALDRIG är korrekt
+             beteende. Ett ogiltigt, icke-tomt val BLOCKERAR nu hela
+             sparningen (ingen fältmutation, ingen Projekt-mutation) med
+             ett tydligt meddelande. Endast ett UTTRYCKLIGET tomt val
+             ('') tolkas som en avsiktlig frikoppling — den vägen har
+             fortsatt sin egen bekräftelsedialog nedan, oförändrad. */
+          const selectedProjectId = document.getElementById('edit-project')?.value || '';
+          if (selectedProjectId && (typeof ProjectService === 'undefined' || !ProjectService.isChildCompatible(selectedProjectId, newCustomerId, getAO(this.aoId).propertyId))) {
+            showToast('Arbetsordern kan inte kopplas till det valda projektet — kund eller fastighet stämmer inte överens.');
+            return;
+          }
+          const finalProjectId = selectedProjectId;
+          const fieldPatch = Object.assign({
             title,
             description:   document.getElementById('edit-desc')?.value.trim() || '',
-            customerId:    document.getElementById('edit-cu')?.value || '',
+            customerId:    newCustomerId,
             scheduledDate: document.getElementById('edit-date')?.value || '',
             priority:      document.getElementById('edit-prio')?.value || 'normal',
             category:      document.getElementById('edit-category')?.value || ''
-          }, addrPatch));
-          Modal.close();
-          this.render({ aoId: this.aoId });
-          showToast('Order uppdaterad');
+          }, addrPatch);
+
+          /* V54B R1 — blockerare 5: en byte av Projekt fick tidigare köras
+             genom med `{confirmedMove:true}` OVILLKORLIGT, så fort värdet
+             skilde sig — dvs. ALDRIG någon faktisk bekräftelsedialog för
+             användaren, trots att kravet är att en flytt MÅSTE bekräftas
+             explicit. INGEN mutation (varken de vanliga fälten eller
+             Projekt-relationen) sparas nu förrän en ev. nödvändig
+             bekräftelse har besvarats — annars kunde andra fältändringar
+             hinna sparas innan dialogen ens visats. */
+          const oldAo = getAO(this.aoId);
+          const oldProjectId = oldAo.projectId || '';
+          /* V54B R2 — blockerare 6 (forts.): setProject()s resultat
+             kontrolleras nu innan "Order uppdaterad" visas/modalen
+             stängs — valideringen ovan gör visserligen ett ok-svar
+             mycket sannolikt (samma isChildCompatible-kontroll körs i
+             båda), men setProject() är den enda instans som får sätta
+             `projectId` (se WorkOrderService R1) och dess svar är
+             därför den auktoritativa sanningen, inte ett antagande. Ett
+             `!ok`-svar rapporteras ALDRIG som framgång. */
+          const doSave = () => {
+            WorkOrderService.update(this.aoId, fieldPatch);
+            if (oldProjectId !== finalProjectId) {
+              const relResult = WorkOrderService.setProject(this.aoId, finalProjectId, { confirmedMove: true });
+              if (!relResult.ok) {
+                showToast(relResult.error || 'Projektkopplingen kunde inte uppdateras.');
+                return;
+              }
+            }
+            Modal.close();
+            this.render({ aoId: this.aoId });
+            showToast('Order uppdaterad');
+          };
+
+          if (oldProjectId && finalProjectId && oldProjectId !== finalProjectId) {
+            const oldProj = ProjectService.getById(oldProjectId);
+            const newProj = ProjectService.getById(finalProjectId);
+            Modal.open({
+              title: 'Flytta arbetsorder till annat projekt?',
+              body: `<p style="font-size:13px;">Arbetsordern flyttas från <strong>${esc(oldProj ? oldProj.name : oldProjectId)}</strong> till <strong>${esc(newProj ? newProj.name : finalProjectId)}</strong>.</p>`,
+              buttons: [
+                { label: 'Flytta och spara', cls: 'btn bsu', onClick: doSave },
+                { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+              ]
+            });
+          } else if (oldProjectId && !finalProjectId) {
+            const oldProj = ProjectService.getById(oldProjectId);
+            Modal.open({
+              title: 'Koppla loss från projekt?',
+              body: `<p style="font-size:13px;">Arbetsordern kopplas loss från <strong>${esc(oldProj ? oldProj.name : oldProjectId)}</strong>.</p>`,
+              buttons: [
+                { label: 'Koppla loss och spara', cls: 'btn bd', onClick: doSave },
+                { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+              ]
+            });
+          } else {
+            doSave();
+          }
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -2482,16 +2565,46 @@ const WorkOrderDetailPage = {
     const ao = getAO(aoId);
     if (!ao) return;
     const st = this._editAddr;
-    if (st.addressOverride) return;
-    const customerId = document.getElementById('edit-cu')?.value || '';
-    const resolved = this._editResolvedAddress(ao, customerId);
-    st.address = resolved.address;
-    st.zip     = resolved.zip;
-    st.city    = resolved.city;
-    st.country = '';
-    st.addressSource = resolved.source;
-    const wrap = document.getElementById('edit-addr-wrap');
-    if (wrap) wrap.innerHTML = this._editAddressBlockHtml(ao);
+    if (!st.addressOverride) {
+      const customerId = document.getElementById('edit-cu')?.value || '';
+      const resolved = this._editResolvedAddress(ao, customerId);
+      st.address = resolved.address;
+      st.zip     = resolved.zip;
+      st.city    = resolved.city;
+      st.country = '';
+      st.addressSource = resolved.source;
+      const wrap = document.getElementById('edit-addr-wrap');
+      if (wrap) wrap.innerHTML = this._editAddressBlockHtml(ao);
+    }
+    /* V54B §10 — Projekt-väljaren byggs om mot den NYA kunden. En
+       redan vald projektkoppling som inte längre är förenlig med den
+       nya kunden (kund-gränsen är aldrig eftergivlig) rensas tyst,
+       exakt samma disciplin som Fastighet/AO-fälten fick i V53B R1. */
+    const projSel = document.getElementById('edit-project');
+    const currentProjectId = projSel ? projSel.value : (ao.projectId || '');
+    const newCustomerId = document.getElementById('edit-cu')?.value || '';
+    const projWrap = document.getElementById('edit-project-wrap');
+    if (projWrap) projWrap.innerHTML = this._editProjectOptionsHtml(newCustomerId, ao.propertyId, currentProjectId);
+  },
+
+  /* V54B §10 — Projekt-väljaren på den kanoniska AO-redigeringen.
+     Listan begränsas ALLTID till projekt förenliga med (customerId,
+     propertyId) via ProjectService.isChildCompatible() — samma
+     kanoniska kontroll som save-time-lagret nedan använder, så de två
+     aldrig kan divergera. */
+  _editProjectOptionsHtml(customerId, propertyId, selectedProjectId) {
+    if (typeof ProjectService === 'undefined') return '';
+    const compatible = ProjectService.getCompatibleProjects(customerId, propertyId);
+    /* En redan vald, men nu oförenlig, koppling erbjuds INTE kvar här
+       (till skillnad från V54A R1:s "inaktiv ansvarig"-mönster) —
+       Projekt-fältet är rent frivilligt kontextuellt, ingen historisk
+       tilldelning att bevara; _editCustomerChanged()/onchange håller
+       redan valet i synk, och en genuint oförenlig kombination kan
+       ändå aldrig sparas (se openEdit()s Spara-hanterare). */
+    let html = `<select id="edit-project"><option value="">— Inget projekt —</option>`;
+    html += compatible.map(p => `<option value="${esc(p.id)}" ${selectedProjectId === p.id ? 'selected' : ''}>${esc(p.id)} – ${esc(p.name)}</option>`).join('');
+    html += `</select>`;
+    return html;
   },
 
   /* R2.1 §3/§8 — FÖRENKLAD till en ren serialisering/validering av den

@@ -250,6 +250,7 @@ const Dashboard = {
         case 'pool':         return this._widgetPool();
         case 'stamp':        return this._widgetStamp();
         case 'activities':   return this._widgetActivities() || null;
+        case 'my_tasks':     return this._widgetMyTasks() || null;
         case 'recurring': {
           const r = this._recurringDue();
           return r.length > 0 ? this._widgetRecurring(r) : this._widgetPlanned();
@@ -1605,6 +1606,80 @@ const Dashboard = {
           }).join('')}
         </div>` : ''}
       </div>
+    </div>`;
+  },
+
+  /* ── Widget: Mina uppgifter (V53B) ───────────────────────────────────
+     V53B §7/§8/§9 — integrerar det befintliga Uppgifter-systemet
+     (state.activities/ActivitiesService, se ActivitiesPage) i den
+     BEFINTLIGA widget-registern (DashboardConfig) istället för ett
+     eget, parallellt dashboard-block. Läser STRIKT
+     assignedTo === egen userId (INTE "obemannad OK" som
+     _widgetActivities() ovan tillåter) — det är precis skillnaden
+     mellan "Aktiviteter" (bolagsbrett, äldre widget) och "Mina
+     uppgifter" (uttryckligen bara EGNA uppgifter, §9: "Dashboard only
+     shows task widget content where task access is permitted" och
+     "MUST show ONLY current user's own open tasks — never another
+     user's task under 'Mina'"). Sortering återanvänder
+     ActivitiesService.sortOpen() rakt av — ingen egen, andra
+     sorteringsimplementation (§8, frysningskrav §18: V53A:s
+     hink-sortering får inte dupliceras/omtolkas här). */
+  _widgetMyTasks() {
+    const user   = Auth.getUser();
+    const userId = user && user.id && user.id !== 'unknown' ? user.id : null;
+    if (!userId) return '';
+
+    const today = tdy();
+    const mine   = ActivitiesService.getOpen().filter(a => a.assignedTo === userId);
+    const sorted = ActivitiesService.sortOpen(mine);
+    const overdueN = mine.filter(a => a.dueDate && a.dueDate < today).length;
+    const todayN   = mine.filter(a => a.dueDate === today).length;
+    const totalN   = mine.length;
+
+    const _taskContext = (a) => {
+      if (a.relatedType === 'workOrder' && a.relatedId) {
+        const ao = getAO(a.relatedId);
+        return ao ? (ao.id + (ao.title ? ' – ' + ao.title : '')) : '';
+      }
+      if (a.relatedType === 'offer' && a.relatedId) return 'Offert ' + a.relatedId;
+      const prop = a.propertyId ? getObj(a.propertyId) : null;
+      if (prop) return prop.name || prop.address || '';
+      const cu = ActivitiesService.resolveCustomer(a);
+      return cu ? CustomerService.displayName(cu) : '';
+    };
+
+    const bodyHtml = totalN === 0
+      ? `<div class="empty" style="padding:10px 0;gap:3px;">${ic('check-square',18)}<p style="font-size:11px;color:var(--mt);">Inga öppna uppgifter</p></div>`
+      : `<div style="display:flex;gap:6px;margin-bottom:10px;font-size:11px;font-weight:600;flex-wrap:wrap;">
+          ${overdueN > 0 ? `<span style="color:var(--rd);">${overdueN} försenad${overdueN===1?'':'e'}</span>` : ''}
+          ${todayN   > 0 ? `<span style="color:var(--or);">${todayN} idag</span>` : ''}
+          <span style="color:var(--mt);">${totalN} öppna totalt</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          ${sorted.slice(0, 5).map(a => {
+            const isOverdue = !!(a.dueDate && a.dueDate < today);
+            const isToday   = a.dueDate === today;
+            const dueColor  = isOverdue ? 'var(--rd)' : isToday ? 'var(--or)' : 'var(--mt)';
+            const dueText   = a.dueDate ? (isOverdue ? 'Försenad — ' + fmtDate(a.dueDate) : isToday ? 'Idag' : fmtDate(a.dueDate)) : 'Inget datum';
+            const showPrio  = a.priority === 'akut' || a.priority === 'hög';
+            const ctx       = _taskContext(a);
+            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg);border-radius:var(--rx);cursor:pointer;border-left:3px solid ${isOverdue?'var(--rd)':isToday?'var(--or)':'var(--br)'};" onclick="ActivitiesPage.openEdit('${a.id}')">
+              <span style="color:${dueColor};flex-shrink:0;">${ic(ActivitiesService.typeIcon(a.type),13)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.title || ActivitiesService.typeLabel(a.type))}</div>
+                <div style="font-size:10px;color:${dueColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${dueText}${ctx ? ' · ' + esc(ctx) : ''}</div>
+              </div>
+              ${showPrio ? `<span style="font-size:9px;font-weight:700;color:${a.priority==='akut'?'var(--rd)':'var(--or)'};background:${a.priority==='akut'?'var(--lrd)':'var(--lor)'};border-radius:5px;padding:2px 6px;flex-shrink:0;">${ActivitiesService.priorityLabel(a.priority)}</span>` : ''}
+            </div>`;
+          }).join('')}
+        </div>`;
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3 class="ch3">${ic('check-square',14)} Mina uppgifter</h3>
+        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;" onclick="Router.showPage('pg-activities',{filter:'mina'})">Visa alla ${ic('arrow-right',10)}</button>
+      </div>
+      <div class="card-body" style="padding:10px 12px;">${bodyHtml}</div>
     </div>`;
   },
 

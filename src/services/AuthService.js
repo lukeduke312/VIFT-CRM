@@ -79,6 +79,12 @@ const Auth = {
     'pg-tid':          ['ao_time'],
     'pg-calendar':     ['ao_view_all','ao_view_own'],
     'pg-contracts':    ['customer_manage'],
+    /* V54A — återanvänder customer_manage rakt av, ingen ny
+       project_view/project_edit/project_manage-behörighet ännu (se
+       RAPPORT-V54-PROJEKT-DISCOVERY.md §17). Samma avgränsning som
+       Kontrakt/Fastigheter redan använder. */
+    'pg-projects':         ['customer_manage'],
+    'pg-project-detail':   ['customer_manage'],
     'pg-rondering':    ['ao_view_all'],
     'pg-articles':     ['article_manage'],
     'pg-pricegroups':  ['article_manage'],

@@ -287,26 +287,50 @@
 }
 .mpicker-item.sel .mpicker-cb { background: var(--navy); border-color: var(--navy); color: #fff; }
 
-/* ── Toast ────────────────────────────── */
+/* ── Toast ────────────────────────────────────────────────
+   AO-050-fixen: föregående version hade `white-space: nowrap` och ingen
+   `max-width` — ett längre, faktabaserat felmeddelande (t.ex. exakt
+   VILKEN tidpost som saknar timpris, se InvoiceService/BillingQueueService)
+   överflödade då viewporten på mobil och gick inte att läsa. Nu: en
+   viewport-relativ `max-width` (aldrig bredare än skärmen minus säkra
+   marginaler), radbrytning på ord, och vänsterjusterad text — fungerar
+   lika bra för korta engradsmeddelanden som för flerradiga. */
 #toast {
   position: fixed;
   bottom: calc(24px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 32px));
+  width: max-content;
+  box-sizing: border-box;
   background: var(--navy);
   color: #fff;
-  padding: 10px 18px;
-  border-radius: 100px;
+  padding: 12px 18px;
+  border-radius: 14px;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  word-break: break-word;
   z-index: 9999;
   opacity: 0;
   pointer-events: none;
-  white-space: nowrap;
   transition: opacity .3s;
   box-shadow: 0 4px 20px rgba(0,0,0,.22);
 }
 #toast.show { opacity: 1; }
+
+@media (max-width: 480px) {
+  #toast {
+    max-width: calc(100vw - 24px);
+    left: 12px;
+    right: 12px;
+    transform: none;
+    width: auto;
+  }
+}
 
 /* ── Tabs ─────────────────────────────── */
 .ftabs {
@@ -511,6 +535,29 @@
   font-size: 12px;
   margin-top: 2px;
 }
+
+/* V53A — Uppgifter: kompakt rad, INTE ett stort kort per uppgift.
+   Kryssrutan har en egen klickyta (samma "generöst osynligt klickmål,
+   liten synlig kontroll"-mönster som redan finns för listornas
+   sel-cb-wrap) så kryssning/återöppning aldrig triggar radens egen
+   onclick (öppna redigera). Slutförda uppgifter tonas ned diskret —
+   ingen mättad färgplatta (samma lärdom som V52A:s vald-rad-fix). */
+.task-row { padding: 0; cursor: pointer; transition: box-shadow .12s; }
+.task-row:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.task-row-body { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+.task-row-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; margin: -6px -6px -6px -4px; flex-shrink: 0;
+  cursor: pointer;
+}
+.task-row-check input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--gr); pointer-events: none; }
+/* V53A R1 §1/§2 — behörighetsspärrad kryssruta: fortfarande synlig (ett
+   ärligt statusmärke), men inte klickbar och visuellt dämpad. */
+.task-row-check--disabled { cursor: default; opacity: .5; }
+.task-row-check--disabled input[type="checkbox"] { cursor: default; }
+.task-row-title { font-size: 13px; font-weight: 700; color: var(--navy); }
+.task-row-title--done { color: var(--mt); text-decoration: line-through; font-weight: 600; }
+.task-row--done { opacity: .72; }
 
 /* ── Timeline ─────────────────────────── */
 .tl {

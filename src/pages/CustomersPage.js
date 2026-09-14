@@ -820,10 +820,13 @@ const CustomerDetailPage = {
 
       <div id="cu-tab-content"></div>
 
-      <div style="margin-top:8px;">
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate('${cu.id}')">
           ${ic('plus',14)} Ny arbetsorder från kund
         </button>
+        ${Auth.canViewPage('pg-activities') ? `<button class="btn bs bsm" onclick="ActivitiesPage.openCreate({customerId:'${cu.id}'})">
+          ${ic('check-square',14)} Ny uppgift
+        </button>` : ''}
       </div>`;
 
     this._renderTab();

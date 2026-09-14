@@ -163,6 +163,9 @@ const PropertyDetailPage = {
           ${Auth.can('customer_manage')
             ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
             : ''}
+          ${Auth.canViewPage('pg-activities')
+            ? `<button class="btn bs bxs" onclick="ActivitiesPage.openCreate({customerId:'${p.customerId||''}',propertyId:'${p.id}'})">${ic('check-square',13)} Ny uppgift</button>`
+            : ''}
           ${Auth.can('customer_manage')
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openFlerAtgarder('${p.id}')">${ic('more-vertical',13)}</button>`
             : ''}

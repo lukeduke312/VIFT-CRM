@@ -49,9 +49,37 @@ const InvoiceService = {
     }
     const issueSources = allSources.filter(c => !c.selectable);
     if (issueSources.length > 0) {
+      /* AO-050-fixen: istället för ett generiskt "kräver åtgärd" — vilket
+         gav ingen ledtråd om VAD som var fel eller VAR — namnger meddelandet
+         nu FAKTISKT vilka tidposter som saknar timpris (personal + datum/
+         tid, ALDRIG belopp/pris — denna knapp är redan gated bakom
+         `invoice_create`, se WorkOrderDetailPage/InvoicesPage, men beloppet
+         hör ändå inte hemma i en felruta). Stödjer flera personal med
+         SKILDA saknade prisgrupper på samma AO (AO-050-scenariot) — varje
+         drabbad tidpost listas för sig, inte bara ett aggregerat antal. */
+      const missingRateTime = issueSources.filter(c =>
+        c.sourceType === 'time' && Array.isArray(c.issues) && c.issues.includes('Saknar timpris')
+      );
+      let detail = '';
+      if (missingRateTime.length > 0) {
+        const MAX_LISTED = 3;
+        const lines = missingRateTime.slice(0, MAX_LISTED).map(c => {
+          const entry = (state.timeEntries || []).find(t => t.id === c.sourceId);
+          const timeRange = entry && entry.startStr && entry.endStr ? ' ' + entry.startStr + '–' + entry.endStr : '';
+          return `${c.staffName || 'Okänd personal'} · ${fmtDate(c.date)}${timeRange}`;
+        });
+        if (missingRateTime.length > MAX_LISTED) {
+          lines.push(`… och ${missingRateTime.length - MAX_LISTED} till`);
+        }
+        detail = `\n${missingRateTime.length} tidspost${missingRateTime.length === 1 ? '' : 'er'} saknar timpris:\n${lines.join('\n')}`;
+      }
+      const otherCount = issueSources.length - missingRateTime.length;
+      if (otherCount > 0) {
+        detail += `${detail ? '\n' : '\n'}${otherCount} annat underlag${otherCount === 1 ? '' : ''} kräver också åtgärd.`;
+      }
       return {
         ok: false,
-        error: `${issueSources.length} underlag på arbetsordern kräver åtgärd innan hela arbetsordern kan faktureras. Öppna Att fakturera.`,
+        error: `Kan inte skapa fakturaunderlag.${detail}\nÖppna Att fakturera för att åtgärda.`,
         needsAction: true
       };
     }

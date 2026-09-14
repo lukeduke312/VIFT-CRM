@@ -256,6 +256,71 @@ const TimeService = {
       this._OWNERSHIP_FIELDS.forEach(function (f) { delete safeData[f]; });
     }
 
+    /* AO-050-fixen (R0 + R1): ett faktiskt priceGroupId-byte MÅSTE koherent
+       uppdatera priceGroupName OCH hourRate härlett från den AKTUELLA
+       PriceGroup-posten — annars kan en post hamna i ett partiellt
+       tillstånd, vilket är exakt vad BillingQueueService.getCandidates()
+       läser (`t.hourRate`) för att avgöra "Saknar timpris". Samma
+       härledningsmönster som redan finns i saveManual()/clockOut() ovan.
+
+       R1-tillägget: den GAMLA buggen (innan R0) hann redan i produktion
+       persistera EXAKT detta trasiga tillstånd på riktiga poster:
+       `priceGroupId` satt, men `priceGroupName`/`hourRate` kvar på sina
+       gamla tomma värden. En sådan post har INGEN "ändring" att upptäcka
+       nästa gång användaren öppnar redigeringsdialogen (samma priceGroupId
+       står redan förvalt i dropdownen) — `changed('priceGroupId')` blir då
+       FALSE, och R0:s logik skulle aldrig självläka den. Fyra distinkta
+       fall hanteras nu explicit:
+         A) priceGroupId FAKTISKT ändrat, satt till ett giltigt värde
+            → härled om från den nya, aktuella PriceGroup-posten.
+         B) SAMMA priceGroupId skickas explicit igen, OCH den lagrade
+            posten är i det kända trasiga tillståndet (tomt namn och/eller
+            hourRate <= 0) → självläk genom att härleda om, ÄVEN UTAN att
+            `changed()` ser en skillnad — detta är den faktiska
+            reparationen av redan drabbade produktionsposter.
+         C) SAMMA priceGroupId skickas igen, och den lagrade pris-
+            snapshotten är REDAN giltig → bevara den orört. En redan
+            debiterbar historisk tidpost ska ALDRIG omprissättas bara för
+            att dagens PriceGroup-kurs råkat ändras sedan arbetet
+            utfördes — det vore en tyst, oönskad efterhandsjustering av
+            redan godkänd/registrerad tid.
+         D) priceGroupId rörs inte alls i denna redigering (fältet saknas
+            i payloaden, t.ex. en ren kommentarsredigering) → rör aldrig
+            pris-fälten.
+       (E, priceGroupId rensas till tomt, hanteras av samma A-gren nedan.)
+       I samtliga fall gäller fortsatt R0:s grundregel: ett payload som
+       INTE faktiskt initierar en av dessa vägar kan aldrig smuggla in ett
+       eget, egenhändigt satt priceGroupName/hourRate. */
+    if (changed('priceGroupId')) {
+      if (safeData.priceGroupId) {
+        const pg = (state.priceGroups || []).find(p => p.id === safeData.priceGroupId);
+        if (!pg) return { ok: false, error: 'Angiven prisgrupp hittades inte.' };
+        safeData.priceGroupName = pg.name;
+        safeData.hourRate = pg.hourRate;
+      } else {
+        safeData.priceGroupName = '';
+        safeData.hourRate = 0;
+      }
+    } else if (Object.prototype.hasOwnProperty.call(safeData, 'priceGroupId') && safeData.priceGroupId) {
+      const isKnownPartialState = !entry.priceGroupName || !(entry.hourRate > 0);
+      if (isKnownPartialState) {
+        const pg = (state.priceGroups || []).find(p => p.id === safeData.priceGroupId);
+        if (pg) {
+          safeData.priceGroupName = pg.name;
+          safeData.hourRate = pg.hourRate;
+        } else {
+          delete safeData.priceGroupName;
+          delete safeData.hourRate;
+        }
+      } else {
+        delete safeData.priceGroupName;
+        delete safeData.hourRate;
+      }
+    } else {
+      delete safeData.priceGroupName;
+      delete safeData.hourRate;
+    }
+
     Object.assign(entry, safeData);
     if (safeData.startStr && safeData.endStr) {
       const [sh, sm] = safeData.startStr.split(':').map(Number);

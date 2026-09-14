@@ -32,51 +32,7 @@ const TimePage = {
           <h3>Registrera tid manuellt</h3>
         </div>
         <div class="card-body">
-          <div class="g2">
-            <div class="fg"><label>Datum</label><input type="date" id="mt-date" value="${tdy()}"></div>
-            <div class="fg"><label>Prisgrupp / Typ</label>
-              <select id="mt-pg">
-                <option value="">— Välj —</option>
-                ${(state.priceGroups||[]).filter(p=>p.active).map(p=>
-                  `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
-                ).join('')}
-              </select>
-            </div>
-          </div>
-          <div class="g2">
-            <div class="fg"><label>Starttid</label><input type="time" id="mt-start" value="08:00"></div>
-            <div class="fg"><label>Sluttid</label><input type="time" id="mt-end" value="16:00"></div>
-          </div>
-          ${(typeof Auth !== 'undefined' && Auth.can('payroll_manage')) ? `
-          <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Lönebehörighet</span></label>
-            <select id="mt-staff">
-              <option value="">— Inloggad användare (${state.currentUser.firstName}) —</option>
-              ${(state.staff||[]).filter(s=>s.active).map(s=>
-                `<option value="${s.id}:${s.firstName} ${s.lastName}">${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`
-              ).join('')}
-            </select>
-          </div>` : ''}
-          <div class="g2">
-            <div class="fg"><label>Kund (valfritt)</label>
-              <select id="mt-customer" onchange="TimePage._customerChanged()">
-                <option value="">— Välj kund —</option>
-                ${(state.customers||[]).map(c=>`<option value="${c.id}">${CustomerService.displayName(c)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="fg"><label>Arbetsorder (valfritt)</label>
-              <select id="mt-ao">
-                <option value="">— Välj AO —</option>
-                ${(state.workOrders||[]).filter(a=>!['avbruten'].includes(a.status)).map(a=>
-                  `<option value="${a.id}">${a.id} – ${a.title}</option>`
-                ).join('')}
-              </select>
-            </div>
-          </div>
-          <div class="fg"><label>Kommentar / Vad utfördes</label>
-            <textarea id="mt-comment" rows="2" placeholder="Beskriv kort vad som gjordes…"></textarea></div>
-          <div class="fg">
-            <label><input type="checkbox" id="mt-billable" checked style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label>
-          </div>
+          ${this._manualFieldsHtml()}
           <button class="btn bp bfull" style="margin-top:4px;" onclick="TimePage.saveManual()">
             ${ic('check',14)} Spara tid
           </button>
@@ -196,15 +152,151 @@ const TimePage = {
     });
   },
 
-  saveManual() {
+  /* V54B R1 — blockerare 9: KANONISK, delad manuell tidsregistrering.
+     `_manualFieldsHtml(opts)` bygger fältmarkeringen (identisk med den
+     ursprungliga inline-kortets markup när `opts` utelämnas — samma
+     `mt-*`-id:n, samma etiketter/beteende, ingen regression för den
+     vanliga Tid-sidan) och stöder valfritt `opts.allowedAoIds` (låser
+     AO-listan till en given delmängd — används av Projekt) och
+     `opts.lockCustomer`+`opts.customerId` (visar kunden som låst text
+     istället för en fri väljare). `_collectAndSaveManual(opts)` är den
+     ENDA platsen som läser fälten och anropar
+     `TimeService.saveManual()` — både Tid-sidans inline-kort
+     (`saveManual()`) och Projektets modal (`openManual()`) går via
+     samma kod, aldrig två parallella formulär-implementationer som kan
+     divergera (vilket redan hade hänt en gång: Projekt-modalen saknade
+     "Utförd av"-fältet som fanns här). En sparad post får ALDRIG bara
+     ett `projectId` utan `aoId` — `allowedAoIds` begränsar bara VILKEN
+     AO som får väljas, det finns inget Projekt-bara tidsregistrerings-
+     läge. */
+  /* V54B R2 — blockerare 2: `allowedAoIds` filtrerade tidigare ENDAST på
+     ID — en avbruten Projekt-AO kunde alltså fortfarande visas och
+     väljas i Projekt-sammanhanget, trots att den vanliga Tid-sidan
+     redan uteslöt `avbruten`-AO:er. Snittet är nu ALLTID
+     allowedAoIds ∩ AO finns ∩ status!=='avbruten' — samma regel som
+     den icke-Projekt-kontextuella listan redan följde. */
+  _manualFieldsHtml(opts) {
+    opts = opts || {};
+    const lockCustomer  = !!opts.lockCustomer;
+    const allowedAoIds  = opts.allowedAoIds || null;
+    const aoList = allowedAoIds
+      ? (state.workOrders||[]).filter(a => allowedAoIds.includes(a.id) && a.status !== 'avbruten')
+      : (opts.customerId
+          ? (state.workOrders||[]).filter(a => a.customerId === opts.customerId && !['avbruten'].includes(a.status))
+          : (state.workOrders||[]).filter(a => !['avbruten'].includes(a.status)));
+    const cuName = lockCustomer ? (opts.customerName || (opts.customerId && getCu(opts.customerId) ? CustomerService.displayName(getCu(opts.customerId)) : '')) : '';
+    return `
+      <div class="g2">
+        <div class="fg"><label>Datum</label><input type="date" id="mt-date" value="${tdy()}"></div>
+        <div class="fg"><label>Prisgrupp / Typ</label>
+          <select id="mt-pg">
+            <option value="">— Välj —</option>
+            ${(state.priceGroups||[]).filter(p=>p.active).map(p=>
+              `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Starttid</label><input type="time" id="mt-start" value="08:00"></div>
+        <div class="fg"><label>Sluttid</label><input type="time" id="mt-end" value="16:00"></div>
+      </div>
+      ${(typeof Auth !== 'undefined' && Auth.can('payroll_manage')) ? `
+      <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Lönebehörighet</span></label>
+        <select id="mt-staff">
+          <option value="">— Inloggad användare (${state.currentUser.firstName}) —</option>
+          ${(state.staff||[]).filter(s=>s.active).map(s=>
+            `<option value="${s.id}:${s.firstName} ${s.lastName}">${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`
+          ).join('')}
+        </select>
+      </div>` : ''}
+      <div class="g2">
+        <div class="fg"><label>Kund${lockCustomer?'':' (valfritt)'}</label>
+          ${lockCustomer
+            ? `<input type="text" disabled value="${esc(cuName)}"><input type="hidden" id="mt-customer" value="${esc(opts.customerId||'')}">`
+            : `<select id="mt-customer" onchange="TimePage._customerChanged()">
+                <option value="">— Välj kund —</option>
+                ${(state.customers||[]).map(c=>`<option value="${c.id}">${CustomerService.displayName(c)}</option>`).join('')}
+              </select>`}
+        </div>
+        <div class="fg"><label>Arbetsorder${allowedAoIds?'':' (valfritt)'}</label>
+          <select id="mt-ao">
+            ${!allowedAoIds ? `<option value="">— Välj AO —</option>` : ''}
+            ${aoList.map(a => `<option value="${a.id}">${a.id} – ${a.title}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label>Kommentar / Vad utfördes</label>
+        <textarea id="mt-comment" rows="2" placeholder="Beskriv kort vad som gjordes…"></textarea></div>
+      <div class="fg">
+        <label><input type="checkbox" id="mt-billable" checked style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label>
+      </div>`;
+  },
+
+  /* Öppnar den kanoniska manuella tidsregistreringen i en modal — det
+     ENDA sättet ett annat sammanhang (t.ex. Projekt) får registrera tid
+     på. `opts.allowedAoIds` begränsar AO-valet, `opts.onSaved` körs
+     efter lyckad sparning (istället för Tid-sidans standardbeteende). */
+  openManual(opts) {
+    opts = opts || {};
+    Modal.open({
+      title: opts.title || 'Registrera tid',
+      body: this._manualFieldsHtml(opts),
+      buttons: [
+        { label: 'Spara tid', cls: 'btn bsu', onClick: () => {
+          this._collectAndSaveManual(Object.assign({}, opts, {
+            onSuccess: () => { Modal.close(); if (typeof opts.onSaved === 'function') opts.onSaved(); }
+          }));
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  /* V54B R2 — blockerare 1: `opts.allowedAoIds && aoId && !includes()`
+     lämnade tidigare ETT hål — ett TOMT `aoId` (manipulerad DOM, eller
+     en framtida ändring av fältmarkeringen) klarade villkoret helt
+     eftersom `aoId &&`-delen då var falsk, och `TimeService.saveManual()`
+     självt tillåter `aoId=''`. En Projekt-kontextuell registrering
+     kunde alltså i praktiken skapa en AO-lös TimeEntry — en hård
+     invariant-överträdelse (Projekt-tid MÅSTE alltid tillhöra en
+     Projekt-länkad arbetsorder). Kontrollen är nu: när
+     `opts.allowedAoIds` är satt (dvs. ett begränsat sammanhang) KRÄVS
+     ett `aoId` som (a) finns, (b) ingår i `allowedAoIds`, (c) inte är
+     avbruten, och (d) — om `opts.customerId` angetts — tillhör den
+     kunden. Alla fyra kontrolleras oberoende av vad `_manualFieldsHtml`
+     redan filtrerat fram, exakt samma tvålagersdisciplin som övriga
+     V54B-invarianter. Normal Tid-sida (`allowedAoIds` ej satt) är
+     helt oförändrad.
+
+     V54B R3 — blockerare 2: `allowedAoIds` är bara en ÖGONBLICKSBILD
+     tagen när modalen öppnades — om AO:n flyttas/kopplas loss från
+     PROJEKTET (en annan flik, en annan användare, en DataSync-cykel)
+     EFTER att modalen öppnats men INNAN Spara klickas, skulle den
+     gamla ögonblicksbilden ändå godkänna den. `getAO(aoId)` läser
+     redan `state` live (ingen egen kopia), så det räcker att jämföra
+     AO:ns FAKTISKA, aktuella `projectId` mot `opts.projectId` (skickas
+     nu med av `ProjectDetailPage.openRegisterTime()`) — inte bara
+     kontrollera medlemskap i den ursprungliga listan. AO:n omkopplas
+     ALDRIG tyst till projektet igen; sparningen blockeras bara. */
+  _collectAndSaveManual(opts) {
+    opts = opts || {};
     const staffSel = document.getElementById('mt-staff')?.value || '';
     const [overrideStaffId, overrideStaffName] = staffSel ? staffSel.split(':') : ['', ''];
+    const aoId = document.getElementById('mt-ao')?.value || '';
+    if (opts.allowedAoIds) {
+      const ao = aoId ? getAO(aoId) : null;
+      const valid = !!ao && opts.allowedAoIds.includes(aoId) && ao.status !== 'avbruten' &&
+        (!opts.customerId || ao.customerId === opts.customerId) &&
+        (!opts.projectId || ao.projectId === opts.projectId);
+      if (!valid) { showToast('Välj en giltig arbetsorder i projektet.'); return; }
+    }
     const result = TimeService.saveManual({
       date:         document.getElementById('mt-date')?.value || '',
       startStr:     document.getElementById('mt-start')?.value || '',
       endStr:       document.getElementById('mt-end')?.value || '',
-      aoId:         document.getElementById('mt-ao')?.value || '',
-      customerId:   document.getElementById('mt-customer')?.value || '',
+      aoId:         aoId,
+      customerId:   document.getElementById('mt-customer')?.value || opts.customerId || '',
       priceGroupId: document.getElementById('mt-pg')?.value || '',
       comment:      document.getElementById('mt-comment')?.value.trim() || '',
       billable:     document.getElementById('mt-billable')?.checked !== false,
@@ -212,9 +304,17 @@ const TimePage = {
       staffName:    overrideStaffName || undefined
     });
     if (!result.ok) { showToast(result.error); return; }
-    showToast('Tid sparad');
-    document.getElementById('mt-comment').value = '';
-    document.getElementById('time-list').innerHTML = this._renderList();
+    if (typeof opts.onSuccess === 'function') {
+      opts.onSuccess();
+    } else {
+      showToast('Tid sparad');
+      const c = document.getElementById('mt-comment'); if (c) c.value = '';
+      const l = document.getElementById('time-list'); if (l) l.innerHTML = this._renderList();
+    }
+  },
+
+  saveManual() {
+    this._collectAndSaveManual({});
   },
 
   _renderList() {

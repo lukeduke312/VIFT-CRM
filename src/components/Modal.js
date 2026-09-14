@@ -101,9 +101,18 @@ const Modal = {
   }
 };
 
-function showToast(msg, duration = 2500) {
+/* AO-050-fixen: längre, flerradiga faktameddelanden (se BillingQueueService/
+   InvoiceService) behöver mer lästid än det ursprungliga 2.5s-standardvärdet
+   — annars hinner en användare inte läsa klart innan den försvinner. Ingen
+   explicit `duration`-anropare påverkas (deras värde används alltid
+   oförändrat); bara det implicita standardvärdet skalas med meddelandets
+   längd. */
+function showToast(msg, duration) {
   const el = document.getElementById('toast');
   if (!el) return;
+  if (duration === undefined) {
+    duration = msg && msg.length > 60 ? 5000 : 2500;
+  }
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), duration);

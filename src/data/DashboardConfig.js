@@ -57,6 +57,12 @@ const DashboardConfig = {
     pool:          { id:'pool',          title:'Arbetspool',             icon:'inbox',           category:'Idag & drift',   description:'Arbetsorder i poolen utan tilldelad resurs',                  requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
     stamp:         { id:'stamp',         title:'Stämpla tid',            icon:'clock',           category:'Idag & drift',   description:'Klocka in och ut, se aktiv stämplingstid',                   requiredPermissions:['ao_time'],                              defaultSize:'third' },
     activities:    { id:'activities',    title:'Aktiviteter',            icon:'bell',            category:'Idag & drift',   description:'Uppföljningar, bokade möten och påminnelser',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    /* V53B: "Mina uppgifter" — samma requiredPermissions som pg-activities
+       sidans egna åtkomstspärr (PAGE_PERMISSIONS['pg-activities']), inte
+       en ny, egen behörighet — widgeten ska bara synas för användare som
+       ändå kan öppna Uppgifter-sidan den länkar till. Ingen minSpan: en
+       kompakt radlista fungerar lika bra i alla fyra bredder. */
+    my_tasks:      { id:'my_tasks',      title:'Mina uppgifter',         icon:'check-square',    category:'Idag & drift',   description:'Dina öppna uppgifter — försenade, dagens och kommande',       requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
     rondering:     { id:'rondering',     title:'Rondering',              icon:'clipboard-check', category:'Idag & drift',   description:'Ronderingsschema, ronderingsmallar och öppna avvikelser',      requiredPermissions:['ao_view_all'],                          defaultSize:'full'  },
     recurring:     { id:'recurring',     title:'Återkommande',           icon:'refresh-cw',      category:'Idag & drift',   description:'Återkommande uppdrag som snart ska skapas',                   requiredPermissions:['recurring_manage'],                      defaultSize:'third' },
     /* kpi: upp till 5 nyckeltalskort i en rad, med EGEN viewport-baserad
@@ -78,9 +84,9 @@ const DashboardConfig = {
      Moduler som inte listas visas med visible:false (kan aktiveras manuellt).
   ─────────────────────────────────────────────────────────────────────── */
   ROLE_DEFAULTS: {
-    admin:    ['overdue_alert','todos','operations','ops_map','today','pool','stamp','activities','rondering','recurring','kpi','ao_categories','sales','offers','activity_log','quickbtns'],
-    chef:     ['overdue_alert','todos','operations','ops_map','today','pool','stamp','activities','rondering','recurring','kpi','ao_categories','sales','offers','activity_log','quickbtns'],
-    personal: ['overdue_alert','ops_map','today','pool','stamp','activities','rondering','kpi','quickbtns'],
+    admin:    ['overdue_alert','todos','operations','ops_map','today','pool','stamp','activities','my_tasks','rondering','recurring','kpi','ao_categories','sales','offers','activity_log','quickbtns'],
+    chef:     ['overdue_alert','todos','operations','ops_map','today','pool','stamp','activities','my_tasks','rondering','recurring','kpi','ao_categories','sales','offers','activity_log','quickbtns'],
+    personal: ['overdue_alert','ops_map','today','pool','stamp','activities','my_tasks','rondering','kpi','quickbtns'],
     ekonomi:  ['overdue_alert','todos','kpi','offers','activity_log','quickbtns'],
   },
 

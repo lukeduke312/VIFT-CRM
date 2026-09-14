@@ -27,6 +27,17 @@ const PROPERTY_OBJECT_STATUSES = [
   { key: 'inaktiv',    label: 'Inaktiv'          }
 ];
 
+/* ── Projekt-statusar (V54A) — manuellt livscykel-fält, se
+   Schema.project()s kommentar. Ordningen här är den kanoniska
+   visningsordningen (planeringsstadiet → avslutat). */
+const PROJECT_STATUSES = [
+  { key: 'planerad', label: 'Planerad' },
+  { key: 'pågående',  label: 'Pågående' },
+  { key: 'pausad',    label: 'Pausad'   },
+  { key: 'klar',      label: 'Klar'     },
+  { key: 'avslutad',  label: 'Avslutad' }
+];
+
 /* ── AO-kategorier ──────────────────────────── */
 const AO_CATEGORIES = [
   { slug: 'felanmalan',        label: 'Felanmälan',            icon: 'alert-circle',    color: '#ef4444' },
@@ -190,6 +201,7 @@ const Schema = {
     offerId: '',
     salesOpportunityId: '',
     recurringOrderId: '',
+    projectId: '',            // V54B — valfri koppling till Schema.project(), samma tomt-värde-mönster som övriga id-fält här
     createdAt: '',
     updatedAt: '',
     completedAt: '',
@@ -200,6 +212,7 @@ const Schema = {
     id: '',
     customerId: '',
     propertyId: '',
+    projectId: '',            // V54B — valfri koppling till Schema.project(), se WorkOrder.projectId
     address: '',
     internalNote: '',
     lines: [],                // [{id, description, qty, unit, unitPrice, discount, total}]
@@ -379,6 +392,73 @@ const Schema = {
     services: [],
     status: 'aktiv',          // aktiv | pausad | avslutad | utkast
     note: '',
+    createdAt: '',
+    updatedAt: ''
+  }),
+
+  /* V54A — Projekt-kärna. Ett Projekt är en namngiven affärshelhet hos
+     EN kund som senare (V54B+) kan samla Arbetsordrar/Offerter/
+     Uppgifter — men i V54A finns INGEN sådan koppling än (inga
+     barn-ID-arrayer, ingen cachad ekonomi, se RAPPORT-V54-PROJEKT-
+     DISCOVERY.md §4). `propertyId` är den PRIMÄRA/representativa
+     fastigheten (valfri). `allowMultiProperty` styr en FRAMTIDA
+     invariant (V54B): om `true` får barn-entiteter senare tillhöra
+     ANDRA fastigheter hos SAMMA kund; kund-gränsen är ALDRIG
+     eftergivlig, oavsett detta fält. `status` är ett MANUELLT
+     livscykel-fält — ingen automatik får någonsin ändra det baserat
+     på barn-entiteters status (se ProjectService.js). `archived` är
+     medvetet separat från `status`, samma mönster som `Offer`. */
+  project: () => ({
+    id: '',
+    name: '',
+    customerId: '',
+    propertyId: '',
+    allowMultiProperty: false,
+    status: 'planerad',        // planerad | pågående | pausad | klar | avslutad
+    responsibleUserId: '',
+    startDate: '',
+    endDate: '',
+    description: '',
+    note: '',
+    archived: false,
+    createdAt: '',
+    updatedAt: '',
+    createdBy: ''
+  }),
+
+  /* V54C1 — Projekt-dokument. Generaliserad direkt från
+     `Schema.offerAttachment()`s redan etablerade, granskade mönster
+     (privat Supabase Storage-bucket + service-role-signerade URL:er,
+     ALDRIG en permanent publik `storagePath`-exponering i frontend) —
+     ingen fjärde, fristående filhanteringsmodell. `documentType`
+     'ue_offert' är den viktiga verksamhetsanvändningen (leverantörs-/
+     UE-offert) och bär EGNA fält (`supplierName`/`amountExVat`/
+     `documentDate`/`validUntil`/`supplierQuoteStatus`) — en UE-offert
+     är INTE och blandas ALDRIG ihop med ett VIFT `Offer`-objekt.
+     `workOrderId` är valfri och MÅSTE (kontrolleras i både UI och
+     ProjectDocumentService) peka på en AO som just nu tillhör SAMMA
+     projekt — se ProjectDocumentService._validate(). */
+  projectDocument: () => ({
+    id: '',
+    projectId: '',
+    documentType: 'ovrigt',    // ue_offert | orderbekraftelse | avtal | leverantorsfaktura | ritning | protokoll | foto | ovrigt
+    displayName: '',
+    originalFileName: '',
+    storagePath: '',           // project-documents/{projectId}/{id}/{filnamn} — exponeras ALDRIG direkt i UI, endast via signerad URL
+    mimeType: '',
+    sizeBytes: 0,
+    checksum: '',              // SHA-256 hex
+    supplierName: '',          // endast meningsfullt för documentType='ue_offert', fritext (inget leverantörsregister i V54C1)
+    amountExVat: null,         // endast meningsfullt för documentType='ue_offert'
+    documentDate: '',
+    validUntil: '',            // endast meningsfullt för documentType='ue_offert'
+    supplierQuoteStatus: '',   // endast meningsfullt för documentType='ue_offert': inkommen | vald | ej_vald
+    workOrderId: '',           // valfri — måste tillhöra SAMMA projekt, se §C7
+    note: '',
+    uploadedBy: '',
+    uploadedAt: '',
+    active: true,              // mjuk borttagning, samma mönster som offerAttachment.active
+    deletedAt: '',
     createdAt: '',
     updatedAt: ''
   }),

@@ -42,6 +42,8 @@ let state = {
   deviationCategories: [],  // Fas 4B: admin-register för avvikelsekategorier
   offerEvents: [],          // Leverans E: händelselogg per offert
   offerAttachments: [],     // Leverans E2b: bilagor per offert
+  projects: [],             // V54A: Projekt-kärna (se ProjectService.js)
+  projectDocuments: [],     // V54C1: Projekt-dokument (se ProjectDocumentService.js)
 
   // UI-state
   currentPage: 'dash',
@@ -105,6 +107,8 @@ async function initState() {
   state.inspections           = g('inspections')           || [];
   state.offerEvents           = g('offerEvents')           || [];
   state.offerAttachments      = g('offerAttachments')      || [];
+  state.projects               = g('projects')               || [];
+  state.projectDocuments        = g('projectDocuments')        || [];
 
   /* ── Konfigurations- och referensdata: SeedData ger vettiga standardvärden ── */
   state.priceGroups        = g('priceGroups')        || SeedData.priceGroups        || [];
@@ -340,7 +344,23 @@ async function _doPersist() {
       ['deviationCategories',   state.deviationCategories],
       ['inspections',           state.inspections],
       ['offerEvents',           state.offerEvents],
-      ['offerAttachments',      state.offerAttachments]
+      ['offerAttachments',      state.offerAttachments],
+      ['projects',              state.projects]
+      /* V54C1 R1 — Blockerare 4: `projectDocuments` skrivs MEDVETET INTE
+         här längre. Detta är den generiska "spara allt"-vägen som varje
+         obesläktad CRM-ändring (t.ex. att byta namn på en kund) rullar
+         genom — om den skickade med `state.projectDocuments` skulle en
+         parallell Edge Function-uppladdning/borttagning (som skriver
+         samma serverpost atomiskt, se backend/) kunna skrivas över av en
+         ANNAN klients gamla, i minnet cachade kopia av samma array
+         ("sista skrivaren vinner" på en hel array = förlorad rad). Enda
+         skrivvägen för `vift_projectDocuments` är nu Edge Functionernas
+         radlåsta RPC:er (project_documents_append/update_one/
+         finalize_delete, se backend/supabase/migrations/). DataSync
+         fortsätter LÄSA denna nyckel som vanligt (se arr()-listan nedan)
+         — endast den generiska SKRIVvägen är borttagen. Lokal cache
+         uppdateras istället av ProjectDocumentService via
+         Storage.setLocal() efter varje bekräftad server-mutation. */
     ]);
     if (ok) {
       /* R1: lastSig sätts ENDAST efter bekräftad write — se filhuvud-
@@ -438,6 +458,7 @@ function getRon(id)   { return state.ronderingar.find(r => r.id === id) || null;
 function getAvv(id)   { return state.avvikelser.find(a => a.id === id) || null; }
 function getPass(id)    { return state.ronderingspass.find(p => p.id === id) || null; }
 function getPropObj(id) { return state.propertyObjects.find(o => o.id === id) || null; }
+function getProject(id)  { return (state.projects||[]).find(p => p.id === id) || null; }
 
 function tdy() {
   return new Date().toISOString().split('T')[0];
@@ -724,6 +745,8 @@ const DataSync = {
       arr('inspections',           'inspections');
       arr('offerEvents',           'offerEvents');
       arr('offerAttachments',      'offerAttachments');
+      arr('projects',              'projects');
+      arr('projectDocuments',      'projectDocuments');
 
       /* Staff: strippa lösenordsfält */
       var rawStaff = g('staff');

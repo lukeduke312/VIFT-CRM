@@ -35,6 +35,8 @@ const Router = {
       case 'pg-tid':              return '/tid';
       case 'pg-calendar':         return '/kalender';
       case 'pg-contracts':        return '/kontrakt';
+      case 'pg-projects':         return '/projekt';
+      case 'pg-project-detail':   return p.projectId ? '/projekt/' + p.projectId : '/projekt';
       case 'pg-rondering':        return '/rondering';
       case 'pg-rondering-wizard': return '/rondering/ny';
       case 'pg-rondering-utfor':  return p.passId ? '/rondering/utfor/' + p.passId : '/rondering';
@@ -47,7 +49,7 @@ const Router = {
       case 'pg-admin':            return '/admin';
       case 'pg-recurring':        return '/aterkommande';
       case 'pg-sales':            return '/saljchanser';
-      case 'pg-activities':       return '/aktiviteter';
+      case 'pg-activities':       return '/uppgifter';
       case 'pg-service-templates':return '/offerttjanster';
       case 'pg-myjobs':           return '/minajobb';
       case 'pg-operations':       return '/drift';
@@ -114,13 +116,17 @@ const Router = {
       case 'tid':           this.showPage('pg-tid',              {}, { replace: true }); return;
       case 'kalender':      this.showPage('pg-calendar',         {}, { replace: true }); return;
       case 'kontrakt':      this.showPage('pg-contracts',        {}, { replace: true }); return;
+      case 'projekt':
+        if (s1) { this.showPage('pg-project-detail', { projectId: s1 }, { replace: true }); return; }
+        this.showPage('pg-projects', {}, { replace: true }); return;
       case 'loneunderlag':  this.showPage('pg-payroll',          {}, { replace: true }); return;
       case 'rapporter':     this.showPage('pg-reports',          {}, { replace: true }); return;
       case 'artiklar':      this.showPage('pg-articles',         {}, { replace: true }); return;
       case 'prisgrupper':   this.showPage('pg-pricegroups',      {}, { replace: true }); return;
       case 'personal':      this.showPage('pg-staff',            {}, { replace: true }); return;
       case 'saljchanser':   this.showPage('pg-sales',            {}, { replace: true }); return;
-      case 'aktiviteter':   this.showPage('pg-activities',       {}, { replace: true }); return;
+      case 'aktiviteter':   this.showPage('pg-activities',       {}, { replace: true }); return; // V53A: gammal hash, bakåtkompatibel alias
+      case 'uppgifter':     this.showPage('pg-activities',       {}, { replace: true }); return;
       case 'offerttjanster':this.showPage('pg-service-templates',{}, { replace: true }); return;
       case 'minajobb':      this.showPage('pg-myjobs',           {}, { replace: true }); return;
       case 'drift':         this.showPage('pg-operations',       {}, { replace: true }); return;
@@ -150,6 +156,8 @@ const Router = {
     'pg-tid':         { title: 'Tid & stämpla',         sub: 'Tidregistrering' },
     'pg-calendar':    { title: 'Kalender',              sub: '' },
     'pg-contracts':   { title: 'Kontrakt',              sub: 'Avtalsregister' },
+    'pg-projects':        { title: 'Projekt',              sub: 'Projektregister' },
+    'pg-project-detail':  { title: 'Projektkort',           sub: '' },
     'pg-rondering':         { title: 'Rondering',             sub: 'Ronderingsrapporter' },
     'pg-rondering-wizard':  { title: 'Ny rondering',         sub: 'Steg-för-steg setup' },
     'pg-rondering-utfor':   { title: 'Utför rondering',      sub: 'Kontrollpunkter' },
@@ -162,7 +170,7 @@ const Router = {
     'pg-admin':       { title: 'Admin',                 sub: 'Systeminställningar' },
     'pg-recurring':   { title: 'Återkommande ärenden',  sub: 'Schemalagda serviceärenden' },
     'pg-sales':       { title: 'Säljchanser',           sub: 'CRM pipeline' },
-    'pg-activities':        { title: 'Att göra',              sub: 'Uppföljningar & åtgärder' },
+    'pg-activities':        { title: 'Uppgifter',             sub: 'Att göra, köpa, ringa & följa upp' },
     'pg-service-templates': { title: 'Offerttjänster',         sub: 'Tjänster & prismodeller' },
     'pg-myjobs':            { title: 'Mina jobb',              sub: 'Tilldelade uppdrag & pool' },
     'pg-operations':        { title: 'Dagens drift',           sub: 'Chefsöversikt & driftläge' },
@@ -322,6 +330,8 @@ const Router = {
       'pg-tid':         () => TimePage.render(),
       'pg-calendar':    () => CalendarPage.render(),
       'pg-contracts':   () => ContractsPage.render(),
+      'pg-projects':        () => ProjectsPage.render(),
+      'pg-project-detail':  () => ProjectDetailPage.render(params),
       'pg-rondering':         () => RonderingPage.render(params),
       'pg-rondering-wizard':  () => RonderingWizardPage.render(params),
       'pg-rondering-utfor':   () => RonderingUtforandePage.render(params),

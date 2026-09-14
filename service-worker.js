@@ -1,5 +1,5 @@
 /**
- * VIFT CRM — Service Worker v12
+ * VIFT CRM — Service Worker v13
  *
  * v10: bugfixar — behörigheter, snabb status, mobil iOS-zoom
  *      Rensar v7/v8/v9 cacher.
@@ -16,18 +16,43 @@
  *      lyckades visa något synligt. Körs parallellt med showNotification(),
  *      ersätter eller fördröjer den aldrig. Ingen ändring av cache-strategin;
  *      CACHE_NAME bumpas ändå så att LIVE garanterat hämtar den nya koden.
+ * v13: CACHE/SW-HOTFIX — root cause för "ny fönster visar gammal sida,
+ *      hård omladdning fixar det direkt": `fetch(req)` utan explicit
+ *      `cache`-läge ÄRVER webbläsarens vanliga HTTP-cache-beteende
+ *      (styrt av serverns Cache-Control/Last-Modified-headers på
+ *      Loopia-webbhotellet), OBEROENDE av service workerns egen
+ *      CacheStorage. "Network first"-logiken för index.html/HTML var
+ *      alltså ALDRIG garanterat en genuint färsk nätverksbegäran — en
+ *      normal `fetch()` kan tystnad tillfredsställas av webbläsarens
+ *      HTTP-disk-cache om servern tillåter det, vilket delas mellan
+ *      ALLA fönster/flikar i samma browserprofil (därför upprepades
+ *      felet i nya fönster) men kringgås av en hård omladdning
+ *      (Ctrl+F5 tvingar bort HTTP-cachen helt). Fix: `fetch(req, {
+ *      cache: 'no-store' })` för BÅDE HTML (index.html m.fl.) och
+ *      config.js — tvingar en genuint färsk nätverksbegäran varje gång,
+ *      exakt vad "network first" alltid avsåg. De versionssatta
+ *      `?v=N`-filerna berördes INTE av denna bugg (CacheStorage.match()
+ *      jämför redan hela URL:en inklusive querysträngen som standard —
+ *      en ny `?v=N` är redan en distinkt cache-nyckel), men en explicit
+ *      `{ ignoreSearch: false }` har lagts till som dokumentation/
+ *      försvar mot en framtida oavsiktlig regression av just detta.
+ *      Se även index.html: SW-registreringen har fått
+ *      `updateViaCache: 'none'` så att SJÄLVA service worker-skriptet
+ *      aldrig riskerar att läsas ur webbläsarens HTTP-cache vid
+ *      uppdateringskontrollen — annars hade en ny SW-version i värsta
+ *      fall kunnat missas helt, inte bara försenas.
  *
  * Cache-strategi:
- *   config.js           → Aldrig cachad (network only)
+ *   config.js           → Aldrig cachad (network only, no-store)
  *   Supabase/Mapbox     → Aldrig cachad (passeras direkt)
- *   index.html          → Network first, cache-fallback (offline)
- *   Versionsatta filer  → Cache first (?v= i URL garanterar busting)
+ *   index.html          → Network first (no-store), cache-fallback (offline)
+ *   Versionsatta filer  → Cache first (?v= i URL garanterar busting, hela URL:en är cache-nyckeln)
  *   assets/             → Cache first med network-fallback
  *
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v12';
+const CACHE_NAME = 'vift-crm-v13';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [
@@ -88,10 +113,14 @@ self.addEventListener('fetch', event => {
 
   const path = url.pathname;
 
-  /* 3. config.js — network only, aldrig cachad */
+  /* 3. config.js — network only, aldrig cachad.
+     v13: `cache: 'no-store'` — utan detta ärver fetch() webbläsarens
+     vanliga HTTP-cache-beteende (serverns Cache-Control/Last-Modified),
+     vilket helt kan undergräva "aldrig cachad" om värden tillåter
+     browser-caching av filen. Se filhuvud-kommentaren v13. */
   if (path === '/config.js' || path.endsWith('/config.js')) {
     event.respondWith(
-      fetch(req).catch(() =>
+      fetch(req, { cache: 'no-store' }).catch(() =>
         new Response('window.VIFT_CONFIG={mapboxToken:""};', {
           headers: { 'Content-Type': 'application/javascript' }
         })
@@ -100,10 +129,14 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  /* 4. Versionsatta JS/CSS (?v=N) och assets/ — cache first */
+  /* 4. Versionsatta JS/CSS (?v=N) och assets/ — cache first.
+     `ignoreSearch: false` (standardvärdet, satt explicit här som
+     dokumentation/regressionsskydd) — hela URL:en INKLUSIVE
+     querysträngen är cache-nyckeln, så en ny `?v=N` är alltid en
+     distinkt post och kan aldrig råka matcha en äldre versions cache. */
   if (url.search.includes('v=') || path.startsWith('/assets/')) {
     event.respondWith(
-      caches.match(req).then(cached => {
+      caches.match(req, { ignoreSearch: false }).then(cached => {
         if (cached) return cached;
         return fetch(req).then(response => {
           if (response.ok) {
@@ -118,9 +151,18 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  /* 5. index.html och övriga HTML — network first, cache fallback */
+  /* 5. index.html och övriga HTML — network first, cache fallback.
+     v13: `cache: 'no-store'` är KÄRNAN i denna hotfix — se filhuvud-
+     kommentaren. Utan detta kan en "normal" sidladdning (inklusive ett
+     helt nytt webbläsarfönster, som delar samma HTTP-disk-cache som
+     alla andra fönster i samma profil) tystnad få en cachad, gammal
+     index.html från webbläsarens HTTP-lager, HELT UTANFÖR service
+     workerns egen CacheStorage — även om denna kod "ser ut" som
+     network-first. En hård omladdning (Ctrl+F5) råkade dölja buggen
+     eftersom den explicit kringgår HTTP-cachen, vilket gav intrycket
+     att strategin fungerade. */
   event.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-store' })
       .then(response => {
         if (response.ok) {
           /* clone() måste anropas synkront innan response returneras */

@@ -910,7 +910,11 @@ const OffersPage = {
     this._wizardData   = {
       customerId: preCustomerId || '', title: '', date: today, validUntil: validDef,
       summary: '', scope: '', includes: '', excludes: '',
-      paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: ''
+      paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: '',
+      /* V54B — samma "kontextuellt förhandsifyllnadsvärde"-mönster som
+         preCustomerId ovan, buret via opts precis som opts.onCreated
+         redan är. Ingen egen offertformulär-arkitektur duplicerad. */
+      projectId: (opts && opts.projectId) || ''
     };
   },
 
@@ -949,7 +953,8 @@ const OffersPage = {
       paymentTerms: off.paymentTerms || T.payment,
       validityText: off.validityText || T.validity,
       generalTerms: off.generalTerms || T.general,
-      internalNote: off.internalNote || ''
+      internalNote: off.internalNote || '',
+      projectId:    off.projectId    || ''
     };
     this._showWizard();
   },
@@ -3193,6 +3198,33 @@ const OffersPage = {
         sectionOrder: _resolveSectionOrder(this._editSectionOrder),
         updatedAt:    now
       };
+      /* V54B R1 — blockerare 6: kontrollerade tidigare ENDAST
+         `proj.customerId === d.customerId` — dvs. helt utan hänsyn till
+         offertens fastighet, trots att offertformuläret INTE har något
+         eget redigerbart fastighetsfält (offertens `propertyId` sätts
+         bara vid skapande via kontext, se _initFreshOffer(), och rörs
+         aldrig av detta formulär i övrigt). Den EFFEKTIVA fastigheten —
+         den befintliga offertens `propertyId` vid redigering, annars
+         tom vid nyskapande — måste ändå vägas in via den kanoniska
+         `ProjectService.isChildCompatible()`, exakt som AO/Uppgift
+         redan gör, annars kunde en offert bära en Projekt-koppling som
+         är fastighets-inkompatibel (t.ex. ett enfastighetsprojekt med
+         en annan fastighet hos samma kund). Vid inkompatibilitet
+         BLOCKERAS sparningen istället för att tyst rensa kopplingen —
+         samma disciplin som §15/blockerare 3 för Uppgifter. */
+      const existingOffForSave = this._editOfferId ? getOff(this._editOfferId) : null;
+      const effectivePropertyId = existingOffForSave ? (existingOffForSave.propertyId || '') : '';
+      if (d.projectId) {
+        const compatible = typeof ProjectService !== 'undefined' &&
+          ProjectService.isChildCompatible(d.projectId, d.customerId, effectivePropertyId);
+        if (!compatible) {
+          showToast('Offerten kan inte kopplas till projektet — kund eller fastighet stämmer inte överens.');
+          return;
+        }
+        data.projectId = d.projectId;
+      } else {
+        data.projectId = '';
+      }
       const offerId = this._editOfferId;
       if (!offerId) {
         const newOff = Object.assign(Schema.offer(), data, {
@@ -4178,6 +4210,11 @@ const OfferDetailPage = {
       priceType:           'fast',
       fixedPrice:          OffersPage._offerExVat(off),
       offerId:             off.id,
+      /* V54B §12/J — en AO skapad från en projekt-kopplad offert ÄRVER
+         projectId automatiskt (samma kund-/fastighetsinvariant gäller
+         redan via propertyId/customerId ovan, som alltid härleds från
+         offerten). Ingen kopiering av arrayer, ett enkelt fältvärde. */
+      projectId:           off.projectId || '',
       sourceOfferId:       off.parentOfferId || off.id,
       sourceOfferVersionId:off.id,
       sourceOfferNumber:   off.id,
@@ -4186,6 +4223,23 @@ const OfferDetailPage = {
       log:                 aoLog,
       staff: [], materials: [], notes: [], timeEntries: []
     });
+
+    /* V54B R2 — blockerare 5: WorkOrderService.create() kan sedan R1
+       returnera `{ok:false, error}` om offertens (potentiellt
+       inaktuella/legacy) `projectId` inte längre är förenlig med
+       kund/fastighet — koden antog tidigare ALLTID success och
+       muterade offerten (`off.workOrderId`/`convertedAt`, händelselogg,
+       persist, navigering) OVILLKORLIGT direkt efter. Ett create()-fel
+       gav då en KORRUPT offert: markerad konverterad utan att någon AO
+       faktiskt existerar. Offerten muteras nu ALDRIG förrän create()
+       bekräftat success — vid fel visas ett tydligt felmeddelande,
+       inget muteras, ingen navigering sker, dubbelkonverteringsskyddet
+       ovan förblir intakt (offerten kan försökas konverteras igen efter
+       att projektkopplingen korrigerats). */
+    if (!ao || ao.ok === false) {
+      showToast((ao && ao.error) || 'Offerten kan inte konverteras till arbetsorder eftersom dess projektkoppling inte längre är giltig. Kontrollera projekt, kund och fastighet.');
+      return;
+    }
 
     const now3 = new Date().toISOString();
     off.workOrderId    = ao.id;
@@ -9261,186 +9315,734 @@ function _renderShell(elId, title, msg) {
   el.innerHTML = _shellFull(title, msg);
 }
 
-/* ── Aktiviteter ──────────────────────── */
+/* ── Uppgifter (V53A) ────────────────────
+ * V53A bygger vidare på det BEFINTLIGA aktivitets-konceptet (se
+ * ActivitiesService.js:s huvudkommentar) — inget parallellt
+ * uppgifts-system. Sidan har fått ett riktigt "Ny uppgift"-flöde,
+ * redigering, ta bort, sökning, återöppning och en icke-scrollande
+ * mobilfiltrering, men datamodellen (state.activities) och all
+ * befintlig kontextuell skapande-kod (offert-/AO-uppföljningar) är
+ * oförändrad och fortsätter fungera exakt som förut. */
 const ActivitiesPage = {
   _filter: 'alla',
+  _search: '',
+  _tempCustomerId: '', // formulärets tillfälliga kund-val, styr fastighet/AO-listorna
+
+  /* ── V53A R1 §1/§2 (oberoende reproducerad blockerare) ────────────────
+     Sidåtkomst (['ao_view_all','ao_view_own']) räcker INTE som
+     auktorisation för varje enskild mutation — en tekniker med bara
+     ao_view_own kunde tidigare redigera/permanent-radera VILKEN uppgift
+     som helst, inte bara sina egna. Centraliserade behörighetshjälpare
+     istället för spridda, inkonsekventa kontroller — och de anropas BÅDE
+     i UI:t (döljer/inaktiverar knappar) OCH i de faktiska muterande
+     metoderna (UI-döljning räcker inte ensamt, se uppdraget). Modell:
+       SKAPA     — vem som helst med sidåtkomst (samma konvention som
+                    RecurringPage/SalesPage — inget extra skydd behövs).
+       KLARMARKERA/ÅTERÖPPNA — egen tilldelad uppgift, ELLER ao_edit/
+                    ao_view_all för valfri uppgift.
+       REDIGERA  — samma regel som ovan.
+       TA BORT   — kräver en HÖJD behörighet (ao_edit eller admin_manage)
+                    — ren ao_view_own räcker ALDRIG för permanent radering,
+                    oavsett ägarskap. */
+  _isOwnTask(act) {
+    const user = Auth.getUser();
+    return !!(user && act && act.assignedTo === user.id);
+  },
+  _canEditTask(act) {
+    return Auth.can('ao_edit') || Auth.can('ao_view_all') || this._isOwnTask(act);
+  },
+  _canCompleteTask(act) {
+    return Auth.can('ao_edit') || Auth.can('ao_view_all') || this._isOwnTask(act);
+  },
+  _canDeleteTask(act) {
+    return Auth.can('ao_edit') || Auth.can('admin_manage');
+  },
 
   render(params = {}) {
     const el = document.getElementById('pg-activities-content');
     if (!el) return;
     if (params.filter) this._filter = params.filter;
 
-    const today     = tdy();
-    const acts      = state.activities || [];
-    const user      = state.currentUser;
+    const today = tdy();
+    const acts  = state.activities || [];
+    const user  = state.currentUser;
 
-    // Counts for filter tabs
-    const overdueCnt  = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate < today).length;
-    const todayCnt    = acts.filter(a => a.status === 'open' && a.dueDate === today).length;
-    const upcomingCnt = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate > today).length;
-    const minaCnt     = acts.filter(a => a.status === 'open' && user && a.assignedTo === user.id).length;
+    const openAll   = acts.filter(a => a.status === 'open');
+    const overdue   = openAll.filter(a => a.dueDate && a.dueDate < today);
+    const dueToday  = openAll.filter(a => a.dueDate === today);
+    const upcoming  = openAll.filter(a => a.dueDate && a.dueDate > today);
+    const mine      = openAll.filter(a => user && a.assignedTo === user.id);
+    const done      = acts.filter(a => a.status === 'done');
+
+    /* V53A R1 §3 (legacy-regression, oberoende bekräftad) — dessa två
+       filter fanns i den ursprungliga "Att göra"-sidan (offert-/AO-
+       uppföljningar, oavsett status) och togs tyst bort i V53A. Återställda
+       identiskt (matchar HELA `acts`, inte bara öppna — precis som förut). */
+    const offerLinked = acts.filter(a => a.relatedType === 'offer');
+    const aoLinked     = acts.filter(a => a.relatedType === 'workOrder');
 
     const filter = this._filter;
-    let filtered = acts;
-    if (filter === 'mina')           filtered = acts.filter(a => a.status === 'open' && user && a.assignedTo === user.id);
-    else if (filter === 'idag')      filtered = acts.filter(a => a.status === 'open' && a.dueDate === today);
-    else if (filter === 'försenade') filtered = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate < today);
-    else if (filter === 'kommande')  filtered = acts.filter(a => a.status === 'open' && a.dueDate && a.dueDate > today);
-    else if (filter === 'klara')     filtered = acts.filter(a => a.status === 'done');
-    else if (filter === 'offerter')  filtered = acts.filter(a => a.relatedType === 'offer');
-    else if (filter === 'ao')        filtered = acts.filter(a => a.relatedType === 'workOrder');
-    else filtered = acts.filter(a => a.status === 'open'); // 'alla' = all open
+    let filtered;
+    if (filter === 'mina')           filtered = mine;
+    else if (filter === 'idag')      filtered = dueToday;
+    else if (filter === 'försenade') filtered = overdue;
+    else if (filter === 'kommande')  filtered = upcoming;
+    else if (filter === 'klara')     filtered = done;
+    else if (filter === 'offerter')  filtered = offerLinked;
+    else if (filter === 'ao')        filtered = aoLinked;
+    else                             filtered = openAll; // 'alla' = alla öppna
 
-    // Sort: overdue first, then by date
-    filtered = filtered.slice().sort((a,b) => {
-      const ad = a.dueDate || '9999', bd = b.dueDate || '9999';
-      return ad.localeCompare(bd);
-    });
+    if (this._search) filtered = ActivitiesService.search(filtered, this._search);
+
+    filtered = (filter === 'klara') ? ActivitiesService.sortCompleted(filtered) : ActivitiesService.sortOpen(filtered);
 
     const _tab = (key, label, cnt) =>
-      `<button class="ft ${filter===key?'on':''}" onclick="ActivitiesPage._filter='${key}';ActivitiesPage.render()">${label}${cnt>0?` (${cnt})`:''}</button>`;
+      `<button class="filter-panel-chip ${filter===key?'on':''}" data-filter="${key}" onclick="ActivitiesPage.setFilter('${key}')">${esc(label)}${cnt>0?` (${cnt})`:''}</button>`;
 
-    const _item = (act) => {
+    const _relationHtml = (act) => {
+      const parts = [];
+      /* V53A R1 §6 — visa den KANONISKT upplösta kunden (offertens egen
+         kund för en offert-länkad uppgift), inte ett ev. motsägelsefullt
+         eget customerId-fält. */
+      const resolvedCu = ActivitiesService.resolveCustomer(act);
+      if (resolvedCu) {
+        parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-crm-detail',{customerId:'${resolvedCu.id}'})">${ic('user',10)} ${esc(CustomerService.displayName(resolvedCu))}</span>`);
+      }
+      if (act.propertyId) {
+        const prop = getObj(act.propertyId);
+        if (prop) parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-obj-detail',{propId:'${act.propertyId}'})">${ic('building-2',10)} ${esc(prop.name || prop.address || prop.id)}</span>`);
+      }
+      if (act.relatedType === 'offer' && act.relatedId) {
+        const off = getOff(act.relatedId);
+        if (off) parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-offer-detail',{offerId:'${act.relatedId}'})">${ic('file-text',10)} Offert ${esc(act.relatedId)}</span>`);
+      } else if (act.relatedType === 'workOrder' && act.relatedId) {
+        const ao = getAO(act.relatedId);
+        parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${act.relatedId}'})">${ic('clipboard-list',10)} ${esc(act.relatedId)}${ao?' – '+esc(ao.title):''}</span>`);
+      }
+      return parts.join(' &nbsp;·&nbsp; ');
+    };
+
+    const _row = (act) => {
       const isOverdue = act.status === 'open' && act.dueDate && act.dueDate < today;
       const isToday   = act.status === 'open' && act.dueDate === today;
       const isDone    = act.status === 'done';
-      const staff     = getStaff(act.assignedTo);
-      const staffName = staff ? `${staff.firstName} ${staff.lastName}` : '—';
-
-      let relLink = '';
-      if (act.relatedType === 'offer') {
-        const off = getOff(act.relatedId);
-        relLink = off ? `<a style="color:var(--blue);cursor:pointer;text-decoration:none;" onclick="Router.showPage('pg-offer-detail',{offerId:'${act.relatedId}'})">${ic('file-text',11)} Offert ${act.relatedId}</a>` : '';
-      } else if (act.relatedType === 'workOrder') {
-        relLink = `<a style="color:var(--blue);cursor:pointer;text-decoration:none;" onclick="Router.showPage('pg-ao-detail',{aoId:'${act.relatedId}'})">${ic('clipboard-list',11)} AO ${act.relatedId}</a>`;
-      }
+      const staff     = act.assignedTo ? getStaff(act.assignedTo) : null;
+      const staffName = staff ? `${staff.firstName} ${staff.lastName}` : 'Ej tilldelad';
+      const relHtml   = _relationHtml(act);
+      /* V53A R1 §1/§2 — kryssrutan togglar bara komplett/återöppna om
+         användaren faktiskt har rätt till det (egen tilldelad uppgift,
+         eller ao_edit/ao_view_all). Annars visas den bara som ett
+         icke-klickbart statusmärke — INTE bara stilistiskt "dold", knappen
+         har helt enkelt inget onclick alls, och toggleComplete() själv
+         nekar ändå om den ändå anropas (se dess kommentar). */
+      const canComplete = this._canCompleteTask(act);
 
       const dateColor = isDone ? 'var(--mt)' : isOverdue ? 'var(--rd)' : isToday ? 'var(--or)' : 'var(--mt)';
       const dateLabel = isDone
         ? `Klar ${act.completedAt ? fmtDate(act.completedAt) : ''}`
-        : (act.dueDate ? (isOverdue ? `Försenad (${fmtDate(act.dueDate)})` : `${fmtDate(act.dueDate)}${act.dueTime?' kl '+act.dueTime:''}`) : '—');
+        : (act.dueDate ? `${fmtDate(act.dueDate)}${act.dueTime?' kl '+act.dueTime:''}` : 'Inget förfallodatum');
 
-      return `<div class="card" style="margin-bottom:0;${isDone?'opacity:.65;':''}">
-        <div style="padding:10px 14px;display:flex;gap:10px;align-items:flex-start;">
-          <span style="color:${dateColor};flex-shrink:0;margin-top:2px;">${ic(ActivitiesService.typeIcon(act.type),16)}</span>
+      return `<div class="card task-row${isDone?' task-row--done':''}" onclick="ActivitiesPage.openEdit('${act.id}')">
+        <div class="task-row-body">
+          <span class="task-row-check${canComplete?'':' task-row-check--disabled'}" ${canComplete?`onclick="event.stopPropagation();ActivitiesPage.toggleComplete('${act.id}')"`:'onclick="event.stopPropagation()"'} title="${canComplete?(isDone?'Återöppna':'Markera klar'):'Du saknar behörighet för denna uppgift'}">
+            <input type="checkbox" ${isDone?'checked':''} readonly>
+          </span>
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span style="font-size:13px;font-weight:700;color:var(--navy);">${act.title || ActivitiesService.typeLabel(act.type)}</span>
-              <span style="font-size:11px;color:${dateColor};font-weight:600;">${dateLabel}</span>
+              <span class="task-row-title${isDone?' task-row-title--done':''}">${esc(act.title || ActivitiesService.typeLabel(act.type))}</span>
               ${isOverdue?`<span class="bdg bdg-red" style="font-size:9px;">Försenad</span>`:''}
               ${isToday?`<span class="bdg bdg-orange" style="font-size:9px;">Idag</span>`:''}
-              ${act.priority==='hög'?`<span class="bdg bdg-red" style="font-size:9px;">Hög prio</span>`:''}
+              ${(act.priority==='akut'||act.priority==='hög')&&!isDone?`<span class="bdg ${act.priority==='akut'?'bdg-red':'bdg-orange'}" style="font-size:9px;">${ActivitiesService.priorityLabel(act.priority)}</span>`:''}
             </div>
-            ${act.note?`<div style="font-size:12px;color:var(--tx);margin-top:2px;">${act.note}</div>`:''}
-            <div style="font-size:11px;color:var(--mt);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
-              ${relLink}
-              <span>${ic('user',9)} ${staffName}</span>
+            ${relHtml ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${relHtml}</div>` : ''}
+            <div style="font-size:11px;color:var(--mt);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap;">
+              <span>${ic(ActivitiesService.typeIcon(act.type),10)} ${esc(ActivitiesService.typeLabel(act.type))}</span>
+              <span>${ic('user',10)} ${esc(staffName)}</span>
+              <span style="color:${dateColor};font-weight:600;">${ic('calendar',10)} ${esc(dateLabel)}</span>
             </div>
           </div>
-          ${!isDone?`<div style="display:flex;gap:6px;flex-shrink:0;">
-            <button class="btn bsm bsu bxs" onclick="ActivitiesPage.complete('${act.id}')" title="Markera klar">${ic('check',13)}</button>
-            <button class="btn bsm bs bxs" onclick="ActivitiesPage.openReschedule('${act.id}')" title="Flytta">${ic('calendar',13)}</button>
-          </div>`:`<span class="bdg bdg-grey" style="font-size:9px;flex-shrink:0;">Klar</span>`}
         </div>
       </div>`;
     };
 
+    const emptyHtml = acts.length === 0
+      ? `<div class="empty">${ic('check-square',32)}<h3>Inga uppgifter ännu</h3><p>Skapa den första uppgiften — allt från "att göra" till uppföljningar och inköp.</p>
+           <button class="btn bp" style="margin-top:12px;" onclick="ActivitiesPage.openCreate()">${ic('plus',14)} Ny uppgift</button></div>`
+      : filter === 'klara' && filtered.length === 0
+        ? `<div class="empty">${ic('check-circle',32)}<h3>Inga klara uppgifter än</h3></div>`
+        : `<div class="empty">${ic('search',32)}<h3>Inga uppgifter matchar filtret</h3><p>Prova en annan flik eller rensa sökningen.</p></div>`;
+
     el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
-        <h2 style="font-size:16px;font-weight:800;color:var(--navy);margin:0;">Aktiviteter</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div>
+          <h2 style="font-size:16px;font-weight:800;color:var(--navy);margin:0;">Uppgifter</h2>
+          <div style="font-size:12px;color:var(--mt);margin-top:2px;">
+            ${openAll.length} öppna &nbsp;·&nbsp; <span style="color:${overdue.length?'var(--rd)':'var(--mt)'};font-weight:${overdue.length?'700':'400'};">${overdue.length} försenade</span> &nbsp;·&nbsp; ${dueToday.length} idag
+          </div>
+        </div>
+        <button class="btn bp bsm" onclick="ActivitiesPage.openCreate()">${ic('plus',14)} Ny uppgift</button>
       </div>
-      <div class="ft-bar" style="overflow-x:auto;white-space:nowrap;padding-bottom:2px;">
-        ${_tab('alla','Alla öppna', acts.filter(a=>a.status==='open').length)}
-        ${_tab('mina','Mina',minaCnt)}
-        ${_tab('idag','Idag',todayCnt)}
-        ${_tab('försenade','Försenade',overdueCnt)}
-        ${_tab('kommande','Kommande',upcomingCnt)}
-        ${_tab('klara','Klara',acts.filter(a=>a.status==='done').length)}
-        ${_tab('offerter','Offertuppföljningar',acts.filter(a=>a.relatedType==='offer').length)}
-        ${_tab('ao','AO-uppföljningar',acts.filter(a=>a.relatedType==='workOrder').length)}
+
+      <div class="fg" style="margin-bottom:8px;">
+        <input id="act-search" placeholder="Sök titel, notering, ansvarig, kund, fastighet, AO…" value="${esc(this._search)}" oninput="ActivitiesPage.setSearch(this.value)" autocomplete="off">
       </div>
+
+      <div class="filter-chips-row" style="margin-bottom:10px;">
+        ${_tab('alla','Alla öppna', openAll.length)}
+        ${_tab('mina','Mina', mine.length)}
+        ${_tab('försenade','Försenade', overdue.length)}
+        ${_tab('idag','Idag', dueToday.length)}
+        ${_tab('kommande','Kommande', upcoming.length)}
+        ${_tab('klara','Klart', done.length)}
+        ${_tab('offerter','Offerter', offerLinked.length)}
+        ${_tab('ao','Arbetsorder', aoLinked.length)}
+      </div>
+
       <div style="display:flex;flex-direction:column;gap:6px;">
-        ${filtered.length === 0
-          ? `<div class="empty">${ic('bell',32)}<h3>Inga aktiviteter</h3><p>Boka en uppföljning på en offert eller arbetsorder.</p></div>`
-          : filtered.map(_item).join('')}
+        ${filtered.length === 0 ? emptyHtml : filtered.map(_row).join('')}
       </div>`;
   },
 
-  complete(id) {
-    const act = ActivitiesService._get(id);
-    ActivitiesService.complete(id);
+  setFilter(key) {
+    this._filter = key;
+    this.render();
+  },
 
-    if (act) {
-      const ts   = new Date().toISOString();
-      const user = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
-      const note = act.note ? `: ${act.note}` : '';
-      if (act.relatedType === 'offer') {
-        const off = getOff(act.relatedId);
-        if (off) {
-          if (!Array.isArray(off.timeline)) off.timeline = [];
-          off.timeline.push({ ts, type: 'followup', text: `Uppföljning utförd${note}`, user });
-          off.updatedAt = ts;
-          persist();
+  setSearch(q) {
+    this._search = q || '';
+    // Behåll fokus/markörläge i sökfältet — bygg om bara listan, inte hela DOM:en, hade varit trevligt,
+    // men denna sidas render() är redan billig (ren in-memory-filtrering) så en enkel omrendering räcker.
+    this.render();
+    const input = document.getElementById('act-search');
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  },
+
+  toggleComplete(id) {
+    const act = ActivitiesService._get(id);
+    if (!act) return;
+    /* V53A R1 §1/§2 — metodnivå-spärr, inte bara UI-döljning (uppdragets
+       uttryckliga krav): ett direkt anrop (t.ex. via konsolen) nekas
+       precis lika säkert som ett klick på en dold/inaktiverad kryssruta. */
+    if (!this._canCompleteTask(act)) { showToast('Du saknar behörighet för den åtgärden'); return; }
+    if (act.status === 'open') {
+      ActivitiesService.complete(id);
+      this._logCompletion(act);
+      showToast('Uppgift markerad klar');
+    } else {
+      ActivitiesService.reopen(id);
+      showToast('Uppgift återöppnad');
+    }
+    Sidebar.updateBadges();
+    this.render();
+  },
+
+  /* Bevarar den befintliga sido-effekten: en slutförd offert-/AO-länkad
+     uppgift loggar en rad i offertens tidslinje respektive AO:ns
+     noteringar — oförändrat beteende sedan innan V53A. */
+  _logCompletion(act) {
+    const ts   = new Date().toISOString();
+    const user = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+    const note = act.note ? `: ${act.note}` : '';
+    if (act.relatedType === 'offer') {
+      const off = getOff(act.relatedId);
+      if (off) {
+        if (!Array.isArray(off.timeline)) off.timeline = [];
+        off.timeline.push({ ts, type: 'followup', text: `Uppföljning utförd${note}`, user });
+        off.updatedAt = ts;
+        persist();
+      }
+    } else if (act.relatedType === 'workOrder') {
+      const ao = getAO(act.relatedId);
+      if (ao) {
+        if (!Array.isArray(ao.notes)) ao.notes = [];
+        ao.notes.push({ ts, type: 'log', text: `Uppföljning utförd${note}`, user, createdBy: user });
+        ao.updatedAt = ts;
+        persist();
+      }
+    }
+  },
+
+  /* V53A R1/R2 (legacy-regression, oberoende bekräftad) — bevarar den
+     BEFINTLIGA "Flytta"-funktionens (openReschedule(), fanns innan V53A)
+     revisionslogg: en offert-/AO-länkad uppgifts förfallodatum- ELLER
+     -tidsändring loggas som en rad på den länkade postens tidslinje/
+     noteringar, med samma textformat som förut
+     ("Uppföljning flyttad från X till Y") — R2 lägger till tiden i den
+     texten (`kl HH:MM`) när en tid faktiskt finns, annars exakt oförändrat
+     datum-bara-format (bakåtkompatibelt). Anropas bara när datum ELLER
+     tid FAKTISKT ändrades (se _save()) — loggar aldrig dubbelt (en enda
+     logg täcker båda fälten om båda ändras samtidigt) eller vid en
+     oförändrad sparning. En uppgift utan relatedType (fristående, eller
+     bara kund-/fastighetslänkad) har ingen tidslinje att logga på — no-op. */
+  _logReschedule(existing, oldDate, newDate, oldTime, newTime) {
+    if (!existing || !existing.relatedType) return;
+    const ts      = new Date().toISOString();
+    const user    = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+    const _fmt = (d, t) => d ? new Date(d + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'}) + (t ? ' kl ' + t : '') : '—';
+    const fromStr = _fmt(oldDate, oldTime);
+    const toStr   = _fmt(newDate, newTime);
+    if (existing.relatedType === 'offer') {
+      const off = getOff(existing.relatedId);
+      if (off) {
+        if (!Array.isArray(off.timeline)) off.timeline = [];
+        off.timeline.push({ ts, type: 'reminder', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user });
+        off.updatedAt = ts;
+        persist();
+      }
+    } else if (existing.relatedType === 'workOrder') {
+      const ao = getAO(existing.relatedId);
+      if (ao) {
+        if (!Array.isArray(ao.notes)) ao.notes = [];
+        ao.notes.push({ ts, type: 'log', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user, createdBy: user });
+        ao.updatedAt = ts;
+        persist();
+      }
+    }
+  },
+
+  /* ── Skapa / redigera ─────────────────── */
+
+  /* V53B §2 — kanonisk kontextuell skapa-API. `context` (valfritt)
+     förhandsifyller ENDAST vid skapande — {customerId, propertyId,
+     relatedType, relatedId} — och muterar ALDRIG något förrän
+     användaren själv trycker "Skapa uppgift" (Avbryt = ingen mutation,
+     precis som det generiska nollparameter-flödet redan garanterar).
+     Det generiska "Ny uppgift"-anropet (Uppgifter-sidan, två befintliga
+     ställen) fortsätter fungera oförändrat med context===undefined. */
+  openCreate(context) {
+    this._openForm(null, context);
+  },
+
+  openEdit(id) {
+    const act = ActivitiesService._get(id);
+    if (!act) return;
+    /* V53A R1 §1/§2 — metodnivå-spärr: en obehörig kan inte öppna
+       redigera-formuläret ens genom att anropa detta direkt. */
+    if (!this._canEditTask(act)) { showToast('Du saknar behörighet att redigera denna uppgift'); return; }
+    this._openForm(id);
+  },
+
+  _staffOptionsHtml(selectedId) {
+    const activeStaff = (state.staff || []).filter(s => s.active);
+    let html = `<option value="">— Ej tilldelad —</option>`;
+    html += activeStaff.map(s => `<option value="${s.id}" ${selectedId===s.id?'selected':''}>${esc((s.firstName+' '+s.lastName).trim())}</option>`).join('');
+    return html;
+  },
+
+  _propertyOptionsHtml(customerId, selectedId) {
+    const props = customerId ? (state.properties||[]).filter(p => p.customerId === customerId) : [];
+    let html = `<option value="">— Ingen fastighet —</option>`;
+    html += props.map(p => `<option value="${p.id}" ${selectedId===p.id?'selected':''}>${esc(p.name||p.address||p.id)}</option>`).join('');
+    return html;
+  },
+
+  /* V53B R1 — AO-listan förblir MEDVETET bara kund-filtrerad (som innan),
+     inte fastighets-filtrerad — uppdraget kräver uttryckligen att man ska
+     kunna välja en AO som hör till en ANNAN fastighet hos SAMMA kund (det
+     är själva mekanismen som synkroniserar Fastighet TILL AO:n, se
+     _aoChangedInForm nedan). Motsägelsen löses istället genom att en
+     redan vald AO som inte längre matchar en NY vald Fastighet rensas
+     (se _propertyChangedInForm), plus ett oberoende defensivt lager i
+     _save() — inte genom att begränsa vilka AO:er som visas i listan. */
+  _aoOptionsHtml(customerId, selectedId) {
+    const aos = customerId ? (state.workOrders||[]).filter(a => a.customerId === customerId && !a.deleted) : [];
+    let html = `<option value="">— Ingen arbetsorder —</option>`;
+    html += aos.map(a => `<option value="${a.id}" ${selectedId===a.id?'selected':''}>${esc(a.id)} – ${esc(a.title||'')}</option>`).join('');
+    return html;
+  },
+
+  _openForm(id, context) {
+    const act = id ? ActivitiesService._get(id) : null;
+    const isEdit = !!act;
+    /* V53B §2/§14 — `ctx` gäller ENDAST vid skapande (aldrig vid
+       redigering av en befintlig uppgift, oavsett vad som råkar skickas
+       in) och är bara ett förhandsifyllnadsvärde `v()` faller tillbaka
+       på — exakt samma mekanik som den befintliga `def`-parametern,
+       bara med en extra, prioriterad källa emellan. */
+    const ctx = (!isEdit && context) || {};
+    const v = (field, def) => act ? (act[field] ?? def) : (ctx[field] ?? def ?? '');
+
+    /* En uppgift som redan är länkad till en OFFERT (skapad kontextuellt
+       från offertflödet, oförändrat sedan innan V53A) redigeras inte om
+       via det nya AO-fältet — det skulle tyst kunna radera den befintliga
+       offert-kopplingen. Visas istället som en fast, informativ rad. */
+    const isOfferLinked = isEdit && act.relatedType === 'offer';
+    /* V53B §5/§14 — kontextuell AO-skapande (t.ex. från WorkOrderDetail)
+       återanvänder EXAKT samma AO-väljare/relation-mekanism som
+       redigeringsläget redan har (ingen ny `workOrderId`-parallell) —
+       väljaren förhandsifylls med ctx.relatedId, och _save() läser den
+       precis som vanligt. */
+    const currentAoId = isEdit
+      ? (act.relatedType === 'workOrder' ? act.relatedId : '')
+      : (ctx.relatedType === 'workOrder' ? (ctx.relatedId || '') : '');
+
+    /* V53A R1 §6 (oberoende reproducerad blockerare) — Kund-fältet var
+       fritt redigerbart ÄVEN för en offert-länkad uppgift, vilket kunde
+       ge motsägelsefull metadata (uppgiften pekar på Offert X men har ett
+       eget customerId som hör till en HELT ANNAN kund). En offert-länkad
+       uppgifts kund är INTE en egen, fristående uppgift — den är samma
+       kund som offerten faktiskt tillhör, punkt. Fältet blir därför
+       skrivskyddat (samma mönster som AO-fältet ovan) och visar den
+       KANONISKT upplösta kunden — löser även en legacy-post som helt
+       saknar ett eget customerId. */
+    const offerLinkedCustomer = isOfferLinked ? ActivitiesService.resolveCustomer(act) : null;
+
+    /* Robusthet: en AO-länkad uppgift SKA i praktiken alltid ha sitt eget
+       customerId satt redan vid skapandet (se t.ex.
+       WorkOrderDetailPage.js:s kontextuella ActivitiesService.create()-
+       anrop, som alltid skickar `customerId: ao.customerId`) — men om en
+       genuint gammal post ändå saknar det helt får inte Fastighet/AO-
+       listorna (som filtreras på vald kund) tystna bort AO-kopplingen bara
+       för att formuläret öppnas och sparas om. Faller därför tillbaka till
+       den länkade AO:ns egen kund i det fallet — samma säkra mönster som
+       offert-grenen. */
+    const fallbackAoCustomerId = (isEdit && !isOfferLinked && act.relatedType === 'workOrder' && act.relatedId && !act.customerId)
+      ? ((getAO(act.relatedId) || {}).customerId || '')
+      : '';
+
+    this._tempCustomerId = isOfferLinked
+      ? (offerLinkedCustomer ? offerLinkedCustomer.id : '')
+      : (v('customerId', '') || fallbackAoCustomerId || '');
+    /* V53B R1 — fångas en gång, används för att filtrera BÅDE Fastighet-
+       väljarens initiala urval och AO-väljarens initiala lista (se
+       _aoOptionsHtml() ovan) så att formuläret aldrig öppnas med en redan
+       motsägelsefull Fastighet/AO-kombination. Samma "AO:n är auktoritativ"-
+       princip som _save() upprätthåller: en REDIGERAD AO-länkad uppgift
+       läser fastigheten från den FAKTISKA AO:n i state, inte från
+       uppgiftens ev. egna (potentiellt inaktuella legacy-)propertyId-fält
+       — så formuläret aldrig ens VISAR en redan motsägelsefull kombination
+       för en post som fanns innan denna invariant infördes. */
+    const linkedAoForForm = (isEdit && !isOfferLinked && act.relatedType === 'workOrder' && act.relatedId)
+      ? getAO(act.relatedId) : null;
+    const currentPropertyId = linkedAoForForm ? (linkedAoForForm.propertyId || '') : v('propertyId', '');
+    /* V54B — Projekt-kopplingen har INGET eget UI-fält i detta formulär
+       (samma "kontextuell metadata, inget synligt val" som customerId/
+       propertyId redan har för offert-länkade uppgifter) — den bärs bara
+       genom `context`/`existing` och skrivs oförändrad vid Spara, ELLER
+       ärvs auktoritativt från en länkad AO (samma princip som ovan). En
+       fristående (icke AO-länkad) uppgifts projectId kan alltså aldrig
+       ändras via detta formulär, bara sättas vid kontextuellt skapande —
+       se _save()s defensiva kund-konsistenskontroll längre ner. */
+    this._tempProjectId = linkedAoForForm ? (linkedAoForForm.projectId || '') : v('projectId', '');
+
+    Modal.open({
+      title: isEdit ? 'Redigera uppgift' : 'Ny uppgift',
+      body: `
+        <div class="fg"><label>Titel <span style="color:var(--rd)">*</span></label>
+          <input id="act-title" value="${esc(v('title',''))}" placeholder="T.ex. Ring kund om offert"></div>
+
+        <div class="g2">
+          <div class="fg"><label>Typ</label>
+            <select id="act-type">
+              ${ActivitiesService.TYPES.map(t=>`<option value="${t}" ${v('type','followup')===t?'selected':''}>${ActivitiesService.typeLabel(t)}</option>`).join('')}
+            </select></div>
+          <div class="fg"><label>Prioritet</label>
+            <select id="act-priority">
+              ${ActivitiesService.PRIORITIES.map(p=>`<option value="${p}" ${v('priority','normal')===p?'selected':''}>${ActivitiesService.priorityLabel(p)}</option>`).join('')}
+            </select></div>
+        </div>
+
+        <div class="g2">
+          <div class="fg"><label>Ansvarig</label>
+            <select id="act-assignee">${this._staffOptionsHtml(v('assignedTo',''))}</select></div>
+          <div class="fg"><label>Förfallodatum</label>
+            <input type="date" id="act-duedate" value="${esc(v('dueDate',''))}"></div>
+        </div>
+
+        <div class="g2">
+          <div class="fg"><label>Förfallotid (valfritt)</label>
+            <input type="time" id="act-duetime" value="${esc(v('dueTime',''))}"></div>
+          <div></div>
+        </div>
+
+        <div class="fg"><label>Notering</label>
+          <textarea id="act-note" rows="2" placeholder="Valfri detalj…">${esc(v('note',''))}</textarea></div>
+
+        <div class="g2">
+          <div class="fg"><label>Kund (valfritt)</label>
+            ${isOfferLinked
+              ? `<div class="ibox" style="font-size:12px;">${ic('user',12)} ${offerLinkedCustomer ? esc(CustomerService.displayName(offerLinkedCustomer)) : 'Okänd kund'} — följer Offert ${esc(act.relatedId)}, kan inte ändras här.</div>`
+              : `<select id="act-cu" onchange="ActivitiesPage._customerChangedInForm()">
+                   <option value="">— Ingen kund —</option>
+                   ${(state.customers||[]).map(c=>`<option value="${c.id}" ${this._tempCustomerId===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`).join('')}
+                 </select>`}
+          </div>
+          <div class="fg"><label>Fastighet (valfritt)</label>
+            <select id="act-prop" onchange="ActivitiesPage._propertyChangedInForm()">${this._propertyOptionsHtml(this._tempCustomerId, currentPropertyId)}</select></div>
+        </div>
+
+        ${isOfferLinked
+          ? `<div class="fg"><label>Arbetsorder</label><div class="ibox" style="font-size:12px;">${ic('file-text',12)} Länkad till Offert ${esc(act.relatedId)} — kan inte ändras här.</div></div>`
+          : `<div class="fg"><label>Arbetsorder (valfritt)</label>
+               <select id="act-ao" onchange="ActivitiesPage._aoChangedInForm()">${this._aoOptionsHtml(this._tempCustomerId, currentAoId)}</select></div>`}
+      `,
+      buttons: [
+        { label: isEdit ? 'Spara' : 'Skapa uppgift', cls: 'btn bp', onClick: () => this._save(id) },
+        ...(isEdit && this._canDeleteTask(act) ? [{ label: 'Ta bort', cls: 'btn bd', onClick: () => { Modal.close(); this.openDeleteModal(id); } }] : []),
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+
+    setTimeout(() => document.getElementById('act-title')?.focus(), 80);
+  },
+
+  /* Kundbyte i formuläret filtrerar om Fastighet/AO-listorna till den
+     valda kunden (§11: "må filtreras om enkelt och säkert" — envägs,
+     ingen komplex tvåvägs-cascading). Både Fastighet och AO nollställs —
+     en kvarhållen fastighet/AO som hörde till FÖRRA kunden vore precis
+     den typen av motsägelsefull relation V53B R1 stänger. */
+  _customerChangedInForm() {
+    const cuId = document.getElementById('act-cu')?.value || '';
+    this._tempCustomerId = cuId;
+    const propSel = document.getElementById('act-prop');
+    if (propSel) propSel.innerHTML = this._propertyOptionsHtml(cuId, '');
+    const aoSel = document.getElementById('act-ao');
+    if (aoSel) aoSel.innerHTML = this._aoOptionsHtml(cuId, '');
+  },
+
+  /* V53B R1 — kanonisk Fastighet-byte-hanterare. BLOCKERARE-FIX: Fastighet
+     och Arbetsorder var tidigare två OBEROENDE väljare — att byta Fastighet
+     lämnade en redan vald AO orörd i DOM:en även om den AO:n tillhörde en
+     HELT ANNAN fastighet hos SAMMA kund (kundbytet ovan fångar bara fallet
+     där kunden själv byts, inte två fastigheter hos samma kund).
+     AO-LISTANS INNEHÅLL förblir medvetet kund-filtrerat, inte fastighets-
+     filtrerat (se _aoOptionsHtml()s kommentar — man ska fortfarande kunna
+     välja en AO på en ANNAN fastighet, det är precis vad _aoChangedInForm()
+     nedan synkroniserar från). Det som fixas här är enbart att en redan
+     vald AO som INTE längre tillhör den nya fastigheten aldrig lämnas
+     kvar som vald — den nollställs tyst istället för att bli en
+     motsägelsefull kombination. */
+  _propertyChangedInForm() {
+    const propId = document.getElementById('act-prop')?.value || '';
+    const aoSel = document.getElementById('act-ao');
+    if (!aoSel) return;
+    const currentAoId = aoSel.value || '';
+    if (!currentAoId) return;
+    const ao = getAO(currentAoId);
+    const aoPropId = ao ? (ao.propertyId || '') : '';
+    if (aoPropId !== propId) {
+      aoSel.innerHTML = this._aoOptionsHtml(this._tempCustomerId, '');
+    }
+  },
+
+  /* V53B R1 — kanonisk AO-byte-hanterare. Den valda arbetsordern är
+     AUKTORITATIV för både Kund och Fastighet (samma invariant som
+     _save() upprätthåller defensivt igen längre ner — se kommentaren
+     där för varför BÅDA lagren behövs). AO-listan är redan kund-
+     filtrerad så ett faktiskt kundbyte här är i praktiken bara ett
+     extra säkerhetslager mot en stale DOM, inte den normala vägen.
+     Fastighet sätts alltid till AO:ns EGEN fastighet (tom om AO:n
+     saknar en) — en manuellt kvarhållen, avvikande fastighet får
+     aldrig stå kvar bredvid den nyvalda AO:n. Att RENSA AO-väljaren
+     (aoId === '') rör medvetet varken Kund eller Fastighet — uppgiften
+     blir då helt enkelt en vanlig kund-/fastighetsuppgift. */
+  _aoChangedInForm() {
+    const aoId = document.getElementById('act-ao')?.value || '';
+    if (!aoId) return;
+    const ao = getAO(aoId);
+    if (!ao) return;
+    const cuSel = document.getElementById('act-cu');
+    if (cuSel && cuSel.value !== (ao.customerId || '')) cuSel.value = ao.customerId || '';
+    this._tempCustomerId = ao.customerId || '';
+    const propSel = document.getElementById('act-prop');
+    if (propSel) propSel.innerHTML = this._propertyOptionsHtml(this._tempCustomerId, ao.propertyId || '');
+  },
+
+  _save(id) {
+    const title = document.getElementById('act-title')?.value.trim();
+    if (!title) { showToast('Titel krävs'); return; }
+
+    /* V53A R3 (oberoende reproducerad blockerare) — `dueTime` FÖRUTSÄTTER
+       `dueDate`. Utan denna spärr kunde ett datum rensas medan en gammal
+       tid blev kvar (eller en tid anges utan att ett datum någonsin
+       fanns) — resultatet blev en uppgift som listas som "Inget
+       förfallodatum", sorteras som datumlös, och vars tid blir osynlig/
+       meningslös. `_logReschedule()`s "—"-datumformatering kunde då även
+       producera en absurd logg som "flyttad från — till —". Den gamla,
+       förvunna "Flytta"-funktionen krävde alltid ett datum. Blockerar
+       HELT (ingen tyst dagens-datum-gissning, ingen tyst bortkastad
+       tid) — användaren måste själv välja datum eller rensa tiden. */
+    const dueDateVal = document.getElementById('act-duedate')?.value || '';
+    const dueTimeVal = document.getElementById('act-duetime')?.value || '';
+    if (dueTimeVal && !dueDateVal) { showToast('Välj ett förfallodatum för att ange förfallotid.'); return; }
+
+    const isEdit = !!id;
+    const existing = isEdit ? ActivitiesService._get(id) : null;
+    if (isEdit && !existing) return;
+    /* V53A R1 §1/§2 — metodnivå-spärr: Spara-knappen är redan dold/nekad
+       via openEdit(), men denna kontroll skyddar mot ett direkt anrop. */
+    if (isEdit && !this._canEditTask(existing)) { showToast('Du saknar behörighet att redigera denna uppgift'); return; }
+
+    const isOfferLinked = isEdit && existing && existing.relatedType === 'offer';
+    /* V53A R2 (legacy-regression, oberoende bekräftad) — fångar det GAMLA
+       förfallodatumet OCH -tiden INNAN någon mutation, eftersom `existing`
+       är samma objektreferens som ActivitiesService.update() skriver i
+       (Object.assign). Behövs för att avgöra om datum ELLER tid FAKTISKT
+       ändrades (se _logReschedule()). Den gamla, förvunna "Flytta"-
+       funktionen stödde BÅDA fälten — R1 återställde bara datum-delen. */
+    const oldDueDate = isEdit && existing ? existing.dueDate : null;
+    const oldDueTime = isEdit && existing ? (existing.dueTime || '') : null;
+
+    const data = {
+      title,
+      type:        document.getElementById('act-type')?.value || 'followup',
+      priority:    document.getElementById('act-priority')?.value || 'normal',
+      assignedTo:  document.getElementById('act-assignee')?.value || null,
+      dueDate:     dueDateVal,
+      /* V53A R2 — Förfallotid är valfri och rörs ALDRIG förutom av
+         användarens egen inmatning i detta fält: ett tomt fält sparas
+         som en avsiktlig tömning (''), aldrig ett tyst kvarlämnat gammalt
+         värde och aldrig ett krav att en tid måste anges bara för att ett
+         datum finns. (R3: men se valideringen ovan — tid UTAN datum är
+         nu blockerad, inte bara "tillåten men meningslös".) */
+      dueTime:     dueTimeVal,
+      note:        document.getElementById('act-note')?.value.trim() || '',
+      propertyId:  document.getElementById('act-prop')?.value || null
+    };
+
+    /* V53A R1 §6 — en offert-länkad uppgifts kund är ALDRIG fritt
+       redigerbar (se _openForm()s kommentar): den följer alltid offertens
+       egen kund, kanoniskt upplöst — läses INTE från ett #act-cu-fält som
+       inte ens finns i DOM:en för detta fall. */
+    if (isOfferLinked) {
+      const off = getOff(existing.relatedId);
+      data.customerId = off ? (off.customerId || null) : (existing.customerId || null);
+    } else {
+      data.customerId = document.getElementById('act-cu')?.value || null;
+    }
+
+    /* AO-relationen (relatedType/relatedId) rörs ALDRIG för en
+       offert-länkad uppgift — se _openForm()s kommentar. För övriga
+       uppgifter styrs den av AO-väljaren.
+
+       V53B R1 — KANONISK INVARIANT, DEFENSIVT LAGER (oberoende
+       reproducerad blockerare): den interaktiva synkroniseringen i
+       _propertyChangedInForm()/_aoChangedInForm() räcker INTE ensam —
+       den håller bara DOM:en konsekvent SÅ LÄNGE användaren faktiskt
+       triggar onchange-händelserna. _save() måste garantera invarianten
+       OBEROENDE av UI-tillstånd. Regeln: en vald arbetsorder är alltid
+       AUKTORITATIV. customerId/propertyId härleds HÄR, ALLTID, från den
+       faktiska AO:n i state — aldrig från vad Kund-/Fastighet-väljarna
+       råkar visa i DOM:en. Detta gör det omöjligt att spara en AO
+       tillsammans med en fastighet/kund den inte tillhör, även om DOM:en
+       på något sätt manipulerats eller synkroniseringen ovan av någon
+       anledning inte hann köra. */
+    /* V54B — Projekt-relationsinvariant (§15): en AO-länkad uppgifts
+       projectId är UNDERORDNAD AO:ns egen projectId — precis samma
+       "AO:n är auktoritativ"-princip som customerId/propertyId ovan.
+       Startvärde: det som redan bars av formuläret (kontext vid
+       skapande, eller den befintliga postens värde vid redigering) —
+       skrivs bara om nedan om en AO faktiskt är vald. */
+    data.projectId = this._tempProjectId || null;
+
+    if (!isOfferLinked) {
+      const aoId = document.getElementById('act-ao')?.value || '';
+      if (aoId) {
+        const ao = getAO(aoId);
+        if (!ao) { showToast('Vald arbetsorder kunde inte hittas — spara avbruten.'); return; }
+        data.customerId  = ao.customerId || null;
+        data.propertyId  = ao.propertyId || null;
+        data.relatedType = 'workOrder';
+        data.relatedId   = ao.id;
+        /* §15 — om AO:n har ett projekt är DET auktoritativt. Om AO:n
+           INTE har något projekt men uppgiften ändå bar ett projectId
+           (kontextuellt skapad från ett Projekt, sedan kopplad till en
+           AO som inte hör till samma projekt) blockeras sparningen
+           HELT istället för att tyst skapa en motsägelsefull relation
+           — användaren måste först länka AO:n till projektet. */
+        if (ao.projectId) {
+          data.projectId = ao.projectId;
+        } else if (data.projectId) {
+          showToast('Den valda arbetsordern är inte kopplad till projektet. Länka arbetsordern till projektet först.');
+          return;
         }
-      } else if (act.relatedType === 'workOrder') {
-        const ao = getAO(act.relatedId);
-        if (ao) {
-          if (!Array.isArray(ao.notes)) ao.notes = [];
-          ao.notes.push({ ts, type: 'log', text: `Uppföljning utförd${note}`, user, createdBy: user });
-          ao.updatedAt = ts;
-          persist();
-        }
+      } else {
+        data.relatedType = null;
+        data.relatedId   = null;
       }
     }
 
+    /* V53B R1 — samma invariant-princip för en FRISTÅENDE fastighets-
+       koppling (ingen AO ovan satte customerId/propertyId auktoritativt):
+       en stale/manipulerad DOM ska inte kunna spara en fastighet som
+       tillhör en ANNAN kund än den valda. Gäller även offert-länkade
+       uppgifter (Fastighet-fältet är inte skrivskyddat för dem — bara
+       Kund och AO är det, se _openForm()). */
+    if (data.relatedType !== 'workOrder' && data.propertyId) {
+      const prop = getObj(data.propertyId);
+      if (!prop || prop.customerId !== data.customerId) data.propertyId = null;
+    }
+
+    /* V54B R1 — blockerare 3: detta slutlager kontrollerade tidigare
+       ENDAST kund-konsistens (proj.customerId === data.customerId) för
+       en FRISTÅENDE (icke AO-auktoritativ) uppgifts Projekt-koppling —
+       vilket lämnade fastighets-invarianten helt okontrollerad. En
+       uppgift kunde alltså bära K1/P2/projectId=PRJ1 trots att PRJ1 är
+       ett P1-enfastighetsprojekt (P1 och P2 båda hos K1) — en genuint
+       ogiltig kombination som ändå kunde persistera. Kontrollen använder
+       nu den KANONISKA `ProjectService.isChildCompatible()` (samma
+       sanningskälla som AO/Offert redan använder) och BLOCKERAR
+       sparningen med ett tydligt meddelande vid en verklig konflikt,
+       istället för att tyst rensa kopplingen — en uppgift som
+       uttryckligen skapats i ett Projekt-sammanhang ska inte tyst tappa
+       den kopplingen bara för att formuläret sparas om. Gäller endast
+       icke AO-auktoritativa uppgifter (AO-länkade hanteras redan
+       ovan — AO:ns egen projectId vinner alltid där). */
+    if (data.relatedType !== 'workOrder' && data.projectId) {
+      const compatible = typeof ProjectService !== 'undefined' &&
+        ProjectService.isChildCompatible(data.projectId, data.customerId, data.propertyId || '');
+      if (!compatible) {
+        showToast('Uppgiften kan inte kopplas till projektet — kund eller fastighet stämmer inte överens.');
+        return;
+      }
+    }
+
+    if (isEdit) {
+      /* V53A R1/R2 (legacy-regression, oberoende bekräftad) — den gamla
+         "Flytta"-funktionen loggade en rad på den länkade offerten/AO:n
+         när förfallodatum ELLER -tid ändrades. Det generiska redigera-
+         formuläret tappade tyst den sido-effekten. Loggas nu HÄR, EXAKT
+         EN gång om NÅGONDERA fältet faktiskt ändrades (aldrig två loggar
+         om båda ändras samtidigt, aldrig någon logg vid en oförändrad
+         sparning — inklusive en avsiktlig tömning av tiden, vilket också
+         räknas som en ändring). */
+      if (data.dueDate !== oldDueDate || data.dueTime !== oldDueTime) {
+        this._logReschedule(existing, oldDueDate, data.dueDate, oldDueTime, data.dueTime);
+      }
+      ActivitiesService.update(id, data);
+      showToast('Uppgift uppdaterad');
+    } else {
+      ActivitiesService.create(data);
+      showToast('Uppgift skapad');
+    }
+    Modal.close();
     Sidebar.updateBadges();
     this.render();
-    showToast('Aktivitet markerad klar');
   },
 
-  openReschedule(id) {
+  /* ── Ta bort ──────────────────────────── */
+
+  openDeleteModal(id) {
     const act = ActivitiesService._get(id);
     if (!act) return;
-    const oldDate = act.dueDate;
+    /* V53A R1 §1/§2 — metodnivå-spärr: en obehörig kan inte öppna
+       bekräftelsedialogen ens genom att anropa detta direkt. Ren
+       ao_view_own räcker ALDRIG för permanent radering. */
+    if (!this._canDeleteTask(act)) { showToast('Du saknar behörighet att ta bort denna uppgift'); return; }
     Modal.open({
-      title: `${ic('calendar',14)} Flytta aktivitet`,
-      body: `<div style="display:flex;gap:8px;">
-        <div class="fg" style="flex:1;"><label>Nytt datum</label><input type="date" id="rs-date" value="${act.dueDate||tdy()}"></div>
-        <div class="fg" style="width:90px;"><label>Tid</label><input type="time" id="rs-time" value="${act.dueTime||'09:00'}"></div>
-      </div>`,
+      title: `${ic('trash',14)} Ta bort uppgift`,
+      body: `<p style="font-size:13px;color:var(--mt);">"${esc(act.title || ActivitiesService.typeLabel(act.type))}" tas bort permanent. Detta går inte att ångra.</p>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
-          const d = document.getElementById('rs-date')?.value;
-          const t = document.getElementById('rs-time')?.value;
-          if (!d) { showToast('Välj ett datum'); return; }
-          ActivitiesService.reschedule(id, d, t);
-
-          const ts      = new Date().toISOString();
-          const user    = state.currentUser ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
-          const fromStr = oldDate ? new Date(oldDate + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'}) : '—';
-          const toStr   = new Date(d + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
-          if (act.relatedType === 'offer') {
-            const off = getOff(act.relatedId);
-            if (off) {
-              if (!Array.isArray(off.timeline)) off.timeline = [];
-              off.timeline.push({ ts, type: 'reminder', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user });
-              off.updatedAt = ts;
-              persist();
-            }
-          } else if (act.relatedType === 'workOrder') {
-            const ao = getAO(act.relatedId);
-            if (ao) {
-              if (!Array.isArray(ao.notes)) ao.notes = [];
-              ao.notes.push({ ts, type: 'log', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user, createdBy: user });
-              ao.updatedAt = ts;
-              persist();
-            }
-          }
-
+        { label: `${ic('trash',12)} Ta bort`, cls: 'btn bd', onClick: () => {
+          /* Andra, sista spärren precis innan den faktiska muteringen —
+             skyddar mot att bekräftelseknappen anropas direkt (t.ex.
+             konsolen) utan att gå via öppningskontrollen ovan. */
+          if (!ActivitiesPage._canDeleteTask(act)) { Modal.close(); showToast('Du saknar behörighet att ta bort denna uppgift'); return; }
+          ActivitiesService.delete(id);
           Modal.close();
           Sidebar.updateBadges();
           this.render();
-          showToast('Aktivitet flyttad');
+          showToast('Uppgift borttagen');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]

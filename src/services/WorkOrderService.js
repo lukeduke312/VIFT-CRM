@@ -3,7 +3,28 @@
  */
 const WorkOrderService = {
 
+  /* V54B R1 — blockerare 4: create() tog tidigare emot ett `projectId` i
+     `data` helt okontrollerat — en anropare (formulär idag, ett framtida
+     AI-agent-skrivverktyg imorgon) kunde skicka in en kund-/fastighets-
+     inkompatibel Projekt-koppling och få en AO skapad med den ändå. En
+     icke-tom `projectId` valideras nu ALLTID mot den kanoniska
+     `ProjectService.isChildCompatible()` INNAN AO:n skapas — om
+     kombinationen är ogiltig skapas INGEN AO alls (varken kopplad eller
+     tyst okopplad), utan `{ok:false, error}` returneras. Detta lämnar
+     kontraktet för alla BEFINTLIGA anrop utan `projectId` helt orört
+     (de returnerar fortfarande AO-objektet direkt) — bara de två
+     ställen i kodbasen som faktiskt skickar `projectId`
+     (WorkOrdersPage._wizSave, offert→AO-konverteringen i PageShells.js)
+     behöver hantera det nya felfallet. */
   create(data) {
+    data = data || {};
+    if (data.projectId) {
+      const compatible = typeof ProjectService !== 'undefined' &&
+        ProjectService.isChildCompatible(data.projectId, data.customerId, data.propertyId || '');
+      if (!compatible) {
+        return { ok: false, error: 'Arbetsordern kunde inte kopplas till det valda projektet (kund/fastighet stämmer inte).' };
+      }
+    }
     const ao = Object.assign(Schema.workOrder(), data, {
       id:        newId(state.workOrders, 'AO'),
       createdAt: new Date().toISOString(),
@@ -44,7 +65,66 @@ const WorkOrderService = {
     return ao;
   },
 
+  /* V54B §9 — kanonisk koppla/flytta/koppla-loss AO↔Projekt, ETT
+     ställe för hela flödet (inte en tyst bieffekt av ett generiskt
+     update()-anrop) så att UI:t (ProjectDetailPage "Koppla befintlig
+     arbetsorder"/"Flytta"/"Koppla loss", WorkOrderDetailPage:s
+     Projekt-väljare) alltid loggar och validerar likadant.
+     `projectId` = '' eller null kopplar loss. Validerar ALLTID kund-/
+     fastighetsinvarianten defensivt här, oavsett vad anroparen redan
+     kontrollerat interaktivt — samma tvålagersdisciplin som V53B R1. */
+  setProject(id, projectId, opts) {
+    const ao = getAO(id);
+    if (!ao) return { ok: false, error: 'Arbetsordern hittades inte' };
+    opts = opts || {};
+    const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Admin';
+    const oldProjectId = ao.projectId || '';
+    const newProjectId = projectId || '';
+
+    if (newProjectId) {
+      if (typeof ProjectService === 'undefined' || !ProjectService.isChildCompatible(newProjectId, ao.customerId, ao.propertyId)) {
+        return { ok: false, error: 'Arbetsordern är inte förenlig med det valda projektet (kund/fastighet stämmer inte).' };
+      }
+      /* Om AO:n redan hör till ett ANNAT projekt krävs en uttrycklig
+         flytt-bekräftelse från anroparen (opts.confirmedMove) — en AO
+         får aldrig tyst "stjälas" från sitt nuvarande projekt. */
+      if (oldProjectId && oldProjectId !== newProjectId && !opts.confirmedMove) {
+        return { ok: false, error: 'ALREADY_LINKED', currentProjectId: oldProjectId };
+      }
+    }
+    if (newProjectId === oldProjectId) return { ok: true, workOrder: ao, noop: true };
+
+    const newProj = newProjectId ? ProjectService.getById(newProjectId) : null;
+    const oldProj = oldProjectId ? ProjectService.getById(oldProjectId) : null;
+    let text;
+    if (newProjectId && oldProjectId) text = `${by} flyttade arbetsordern från projekt ${oldProj ? oldProj.name : oldProjectId} till ${newProj ? newProj.name : newProjectId}`;
+    else if (newProjectId) text = `${by} kopplade arbetsordern till projekt ${newProj ? newProj.name : newProjectId}`;
+    else text = `${by} kopplade loss arbetsordern från projekt ${oldProj ? oldProj.name : oldProjectId}`;
+
+    const log = (ao.log || []).slice();
+    log.push({ id: 'L' + Date.now(), type: 'project_relation_changed', text, userName: by, timestamp: new Date().toISOString() });
+    this._update_internal(id, { projectId: newProjectId, log });
+    return { ok: true, workOrder: getAO(id) };
+  },
+
+  /* V54B R1 — blockerare 4: den publika update() fick tidigare ändra
+     `projectId` som VILKEN ANNAN fält som helst — vilket helt kringgick
+     setProject()s kompatibilitetsvalidering, flytt-bekräftelse
+     (ALREADY_LINKED) och revisionslogg. `projectId` skyddas nu i
+     update() på samma sätt som id/createdAt redan är oföränderliga på
+     andra ställen i kodbasen — ENDAST setProject() (via den interna
+     _update_internal()) får sätta det. En anropare som råkar skicka med
+     `projectId` i en vanlig update()-patch får den tyst ignorerad HÄR
+     (fältet tas bort ur patchen), inte en förvirrande delvis-mutation —
+     Projekt-relationen ändras uteslutande via den explicita, loggade
+     setProject()-vägen. */
   update(id, data) {
+    const safeData = Object.assign({}, data);
+    delete safeData.projectId;
+    return this._update_internal(id, safeData);
+  },
+
+  _update_internal(id, data) {
     const ao = getAO(id);
     if (!ao) return null;
     Object.assign(ao, data, { updatedAt: new Date().toISOString() });

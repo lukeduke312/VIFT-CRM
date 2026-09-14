@@ -8,7 +8,7 @@ const Sidebar = {
   NAV_ITEMS: [
     { section: 'Dashboard' },
     { id: 'pg-dash',        icon: 'dashboard',       label: 'Dashboard' },
-    { id: 'pg-activities',  icon: 'bell',            label: 'Att göra',     badgeKey: 'activitiesOverdue' },
+    { id: 'pg-activities',  icon: 'check-square',    label: 'Uppgifter',    badgeKey: 'activitiesOverdue' },
     { section: 'Arbete' },
     { id: 'pg-myjobs',      icon: 'briefcase',       label: 'Mina jobb',    badgeKey: 'myJobsToday' },
     { id: 'pg-ao',          icon: 'clipboard-list',  label: 'Arbetsorder',  badgeKey: 'aoNew' },
@@ -22,6 +22,7 @@ const Sidebar = {
     { id: 'pg-offer',       icon: 'file-text',       label: 'Offerter' },
     { id: 'pg-sales',       icon: 'target',          label: 'Säljchanser',  badgeKey: 'salesNew' },
     { id: 'pg-contracts',   icon: 'file-check',      label: 'Kontrakt' },
+    { id: 'pg-projects',    icon: 'folder',          label: 'Projekt' },
     { section: 'Ekonomi' },
     { id: 'pg-invoices',    icon: 'receipt',         label: 'Fakturering' },
     { id: 'pg-tid',         icon: 'clock',           label: 'Tid & stämpla' },
