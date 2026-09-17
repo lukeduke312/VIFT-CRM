@@ -74,12 +74,15 @@ const WorkOrderDetailPage = {
     const staff  = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; });
     const respS  = ao.responsibleStaffId ? getStaff(ao.responsibleStaffId) : null;
     const respName = respS ? `${respS.firstName} ${respS.lastName}` : '';
+    const chkTotal = (ao.checklist||[]).length;
+    /* AO-CHECKLIST-PROGRESS-HOTFIX R1 — chkOk/chkAvv behålls här (använda
+       av `hasChk`/andra villkor längre ner i denna funktion), men själva
+       BADGE-HTML:et hämtas nu från EN delad källa (_checklistBadgeHtml())
+       — se den funktionen för den fullständiga motiveringen till varför
+       detta var buggen. */
     const chkOk   = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
     const chkAvv  = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
-    const chkTotal = (ao.checklist||[]).length;
-    const chkBadge = chkTotal > 0
-      ? `<span class="bdg bdg-${chkOk===chkTotal&&!chkAvv?'green':chkAvv>0?'orange':'blue'}">${chkOk}/${chkTotal} OK${chkAvv>0?' · '+chkAvv+' avv.':''}</span>`
-      : '';
+    const chkBadge = this._checklistBadgeHtml(ao);
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
     const isStampedOnThis = state.stampActive && state.stampAoId === ao.id;
@@ -211,7 +214,7 @@ const WorkOrderDetailPage = {
           </div>`:''}
           ${chkTotal>0?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('clipboard-check',11)} Lista</span>
-            <span class="ao-info-val">${chkBadge}</span>
+            <span class="ao-info-val" id="ao-chk-badge-meta">${chkBadge}</span>
           </div>`:''}
           ${ao.internalNote?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('eye-off',11)} Internt</span>
@@ -220,7 +223,10 @@ const WorkOrderDetailPage = {
           <!-- 5. Pris — BARA för admin/ledning (invoice/reports-behörighet) -->
           ${canSeePrice?`<div class="ao-info-row">
             <span class="ao-info-lbl">${ic('tag',11)} Pris</span>
-            <span class="ao-info-val">${this._priceLabel(ao)}</span>
+            <span class="ao-info-val">
+              ${this._priceLabel(ao)}
+              ${this._canEditPricing()?` · <a style="color:var(--sky);font-weight:600;cursor:pointer;" onclick="WorkOrderDetailPage.openPricingModal()">Ändra</a>`:''}
+            </span>
           </div>`:''}
         </div>
       </div>
@@ -492,6 +498,7 @@ const WorkOrderDetailPage = {
   _secondaryActions(ao) {
     const canEdit    = Auth.can('ao_edit');
     const canInvoice = Auth.can('invoice_create');
+    const canPricing = this._canEditPricing();
     const items = [];
     /* V53B §5 — kontextuell "Ny uppgift": gated på sidåtkomst till
        Uppgifter (samma spärr som knappen på Kund-/Fastighetskortet),
@@ -524,6 +531,20 @@ const WorkOrderDetailPage = {
     if (canEdit) {
       items.push({ label:'Redigera',  icon:'pencil',      fn:`WorkOrderDetailPage.openEdit()`,           divider: items.length > 0 });
       items.push({ label:'Personal',  icon:'users',       fn:`WorkOrderDetailPage.manageStaff('${ao.id}')` });
+    }
+    /* AO-PRICING-RECOVERY — "Ändra prissättning" nåbar OAVSETT status
+       (nytt/pågående/klar). Detta var själva bristen: en "Klar"-AO utan
+       satt prismodell hade INGEN väg tillbaka till prissättning i UI:t —
+       "Redigera" (ovan) rör aldrig prisfälten, och "Byt status" är redan
+       explicit avstängd för 'klar'. Egen, tydlig åtgärd istället för att
+       lasta prisfält på "Redigera order" (som uppdraget bad om), gated på
+       samma behörighet som faktiskt kan RÖRA dessa fält (se
+       _canEditPricing()) — inte bara ao_edit, eftersom en ren
+       faktureringsanvändare (invoice_create utan ao_edit) annars inte
+       kunnat reparera exakt den situation hen själv upptäcker i
+       Att fakturera-kön. */
+    if (canPricing) {
+      items.push({ label:'Ändra prissättning', icon:'tag', fn:`WorkOrderDetailPage.openPricingModal()`, divider: items.length > 0 });
     }
     // Archive / delete (separator before)
     if (canEdit && !ao.archived && !ao.deleted) {
@@ -897,6 +918,286 @@ const WorkOrderDetailPage = {
       return 'Löpande timpris';
     }
     return 'Ej satt';
+  },
+
+  /* ═══════════════════════════════════════════════════════════════
+     AO-PRICING-RECOVERY — prissättning måste kunna repareras EFTER
+     att en AO satts till "Klar", annars blir en AO utan prismodell
+     ett fakturerings-dödläge (bekräftat LIVE: AO-041, AO-038 —
+     "Saknar prissättning", ingen väg framåt). Återanvänder BEFINTLIGA
+     fält (Schema.workOrder(): priceType/fixedPrice/priceGroupId) och
+     BEFINTLIG TimeEntry-självläkning (TimeService.update(), AO-050
+     R0+R1) — ingen ny prismodell, ingen parallell arkitektur.
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* Behörighet: samma modell som redan gäller — ao_edit ELLER
+     invoice_create. Motivering: den som upptäcker "Saknar
+     prissättning" gör det oftast i Att fakturera-kön (invoice_create),
+     inte nödvändigtvis via ao_edit. "Användare som redan har
+     behörighet att redigera/fakturera arbetsordrar" (uppdragets egen
+     formulering) — ingen ny, egen pris-behörighet uppfinns. */
+  _canEditPricing() {
+    return Auth.canAny(['ao_edit', 'invoice_create']);
+  },
+
+  /* AO-PRICING-RECOVERY R2.1 — Blocker D: kandidatlistan MÅSTE följa
+     samma fakturerings-sanning som Blocker 1 (BillingQueueService),
+     INTE ett eget rått fältscan över `state.timeEntries`. R2:s
+     `!priceGroupId || !priceGroupName || !(hourRate>0)`-scan över ALLA
+     tidposter för en AO plockade upp poster som ALDRIG blockerade
+     fakturering — t.ex. billable:false-poster (aldrig en fakturerings-
+     källa) — vilket kunde visa "N tidposter saknar prissättning" och
+     erbjuda en reparation för poster som inte hade något med det
+     verkliga problemet att göra.
+     Nu: hämta de FAKTISKA obeclaimade fakturerings-källorna för denna
+     AO och filtrera på `sourceType==='time' && issues har 'Saknar
+     timpris'` — detta utesluter AUTOMATISKT billable:false (blir
+     aldrig en källa alls), fastprisAO:ers tid (mode!=='hourly' → tid
+     blir aldrig en egen källa där) och REDAN CLAIMADE källor (en
+     aktiv fakturas sourceRefs). Detta är BARA för UI-visning/-urval —
+     TimeService.repairMissingPricingSnapshot() omvaliderar HELT
+     OBEROENDE och på nytt vid själva reparationstillfället (Blocker 3,
+     oförändrad). */
+  _brokenTimeEntries(aoId) {
+    if (typeof BillingQueueService === 'undefined') return [];
+    const brokenIds = new Set(
+      BillingQueueService.getUnclaimedSourcesForAO(aoId)
+        .filter(s => s.sourceType === 'time' && (s.issues || []).includes('Saknar timpris'))
+        .map(s => s.sourceId)
+    );
+    return TimeService.getByAO(aoId).filter(t => brokenIds.has(t.id));
+  },
+
+  openPricingModal() {
+    if (!this._canEditPricing()) { showToast('Du saknar behörighet att ändra prissättning.'); return; }
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    /* Redan fakturerad → samma låsning som resten av appen redan
+       uttrycker via `!ao.invoiceId` (se _actionBtns/_secondaryActions/
+       "Redo fakturering"-villkoren ovan) — ingen ny låsmekanism. */
+    if (ao.invoiceId) {
+      showToast(`Denna arbetsorder har redan ett fakturaunderlag (${ao.invoiceId}) och kan inte omprissättas härifrån.`);
+      return;
+    }
+    const priceType = ao.priceType && ao.priceType !== 'ej_satt'
+      ? (ao.priceType === 'prisgrupp' ? 'timpris' : (ao.priceType === 'fast' ? 'fastpris' : ao.priceType))
+      : 'ej_satt';
+    /* AO-PRICING-RECOVERY R2.1 — Blocker C: dropdown visar bara
+       prisgrupper som `TimeService.isValidBillingPriceGroup()` godkänner
+       — INTE bara `p.active`. En 0-kr-grupp kan fortsätta existera för
+       andra (legacy/interna) syften, men ska aldrig ens vara VALBAR i
+       denna kundfaktureringsåterhämtnings-vy. */
+    const pgOptions = (state.priceGroups || []).filter(p => TimeService.isValidBillingPriceGroup(p)).map(p =>
+      `<option value="${p.id}" ${p.id === ao.priceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+    ).join('');
+    const brokenCount = this._brokenTimeEntries(ao.id).length;
+    Modal.open({
+      title: 'Ändra prissättning',
+      body: `
+        <div class="fg"><label>Prismodell</label>
+          <select id="pr-type" onchange="WorkOrderDetailPage._pricingTypeChanged()">
+            <option value="ej_satt" ${priceType==='ej_satt'?'selected':''}>— Ej satt —</option>
+            <option value="fastpris" ${priceType==='fastpris'?'selected':''}>Fastpris</option>
+            <option value="timpris" ${priceType==='timpris'?'selected':''}>Löpande timpris</option>
+          </select></div>
+        <div class="fg" id="pr-fixed-wrap" style="display:${priceType==='fastpris'?'block':'none'};">
+          <label>Fastpris (kr, ex moms)</label>
+          <input type="number" id="pr-fixed" min="0" step="1" value="${ao.fixedPrice || ''}"></div>
+        <div class="fg" id="pr-pg-wrap" style="display:${priceType==='timpris'?'block':'none'};">
+          <label>Prisgrupp</label>
+          <select id="pr-pg"><option value="">— Välj prisgrupp —</option>${pgOptions}</select></div>
+        ${brokenCount>0?`<div class="ibox" style="margin-top:10px;">${ic('alert-circle',14)} ${brokenCount} tidpost${brokenCount===1?'':'er'} på denna arbetsorder saknar prissättning. Efter att du sparat får du möjlighet att åtgärda ${brokenCount===1?'den':'dem'}.</div>`:''}
+      `,
+      buttons: [
+        { label: 'Spara', cls: 'btn bp', onClick: () => WorkOrderDetailPage._savePricing() },
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+  },
+
+  _pricingTypeChanged() {
+    const t = document.getElementById('pr-type')?.value;
+    const fixedWrap = document.getElementById('pr-fixed-wrap');
+    const pgWrap = document.getElementById('pr-pg-wrap');
+    if (fixedWrap) fixedWrap.style.display = t === 'fastpris' ? 'block' : 'none';
+    if (pgWrap) pgWrap.style.display = t === 'timpris' ? 'block' : 'none';
+  },
+
+  _savePricing() {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    if (!this._canEditPricing()) { showToast('Du saknar behörighet att ändra prissättning.'); return; }
+    if (ao.invoiceId) { showToast('Denna arbetsorder är redan fakturerad.'); Modal.close(); return; }
+
+    const priceType = document.getElementById('pr-type')?.value || 'ej_satt';
+    let fixedPrice = ao.fixedPrice || 0;
+    let priceGroupId = '';
+
+    if (priceType === 'fastpris') {
+      fixedPrice = Number(document.getElementById('pr-fixed')?.value || 0);
+      if (!(fixedPrice > 0)) { showToast('Ange ett fastpris större än 0 kr.'); return; }
+    } else if (priceType === 'timpris') {
+      priceGroupId = document.getElementById('pr-pg')?.value || '';
+      if (!priceGroupId) { showToast('Välj en prisgrupp.'); return; }
+      /* AO-PRICING-RECOVERY R2.1 — Blocker C: samma delade
+         `isValidBillingPriceGroup()`-regel som mutations-spärren i
+         TimeService.js. Utan detta kunde en aktiv men 0-kr/onämnd
+         prisgrupp sparas som AO:ns timprissättning — "Prissättning
+         uppdaterad" visades, men fakturering hade ändå aldrig kunnat
+         bli giltig. Detta gäller BARA valet i denna kundfakturerings-
+         återhämtningsvy — PriceGroupsPage och andra 0-kr-användningar
+         (interna/legacy) rörs inte. */
+      const chosenPg = (state.priceGroups || []).find(p => p.id === priceGroupId);
+      if (!TimeService.isValidBillingPriceGroup(chosenPg)) {
+        showToast('Vald prisgrupp saknar ett giltigt timpris (> 0 kr) och kan inte användas för kundfakturering.');
+        return;
+      }
+      fixedPrice = 0;
+    } else {
+      fixedPrice = 0;
+    }
+
+    /* Ekonomiskt relevant ändring → samma logg-/revisionsmekanism som
+       redan används för uppskattad tid (_saveEstimatedTime) och
+       uppföljning (_saveFollowUp): ao.log[] + WorkOrderService.update().
+       Ingen ny revisionsdatabas. */
+    const before = { priceType: ao.priceType, fixedPrice: ao.fixedPrice, priceGroupId: ao.priceGroupId };
+    const after  = { priceType, fixedPrice, priceGroupId };
+    const beforeLabel = this._priceLabel(before);
+    const afterLabel  = this._priceLabel(after);
+    const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Okänd';
+    ao.log = ao.log || [];
+    ao.log.push({
+      id: 'LOG-' + Date.now(),
+      type: 'pricing_corrected',
+      text: `${by} ändrade prissättning: "${beforeLabel}" → "${afterLabel}"`,
+      userName: by,
+      timestamp: new Date().toISOString(),
+      visibility: 'intern'
+    });
+    const updated = WorkOrderService.update(this.aoId, { priceType, fixedPrice, priceGroupId, log: ao.log });
+    if (!updated) { showToast('Kunde inte spara prissättningen.'); return; }
+    Modal.close();
+    showToast('Prissättning uppdaterad');
+
+    if (priceType === 'timpris') {
+      const broken = this._brokenTimeEntries(this.aoId);
+      if (broken.length > 0) {
+        this.openPricingRepairModal(priceGroupId, broken);
+        return;
+      }
+    }
+    this.render({ aoId: this.aoId });
+  },
+
+  /* Steg 2 (valfritt, bara om trasiga tidposter faktiskt finns) —
+     "Applicera på poster som saknar prissättning". Den lista med
+     entryIds som byggs HÄR (vid modalens öppning) är bara en
+     UI-BEKVÄMLIGHET för att visa vad som TROLIGEN kommer repareras —
+     den är INTE den slutgiltiga sanningen. _applyPricingRepair()
+     skickar varje id till TimeService.repairMissingPricingSnapshot(),
+     som omvaliderar ALLT på nytt (AO-koppling, attest-/faktura-lås,
+     FORTFARANDE-trasig) vid själva anropstillfället — se den metoden
+     för den fullständiga motiveringen (AO-PRICING-RECOVERY R2,
+     Blocker 2/3). */
+  openPricingRepairModal(defaultPriceGroupId, brokenEntries) {
+    const broken = brokenEntries || this._brokenTimeEntries(this.aoId);
+    if (broken.length === 0) { this.render({ aoId: this.aoId }); return; }
+    /* Blocker C, samma regel som huvudprissättningsmodalen ovan. */
+    const pgOptions = (state.priceGroups || []).filter(p => TimeService.isValidBillingPriceGroup(p)).map(p =>
+      `<option value="${p.id}" ${p.id === defaultPriceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+    ).join('');
+    const rowsHtml = broken.map(t => {
+      const dateStr = t.date || (t.startTs ? fmtDate(t.startTs) : '');
+      return `<div class="list-item" style="padding:8px 10px;">
+        <div style="font-size:12px;font-weight:600;">${esc(t.staffName || 'Okänd')}</div>
+        <div style="font-size:11px;color:var(--mt);">${esc(dateStr)} · ${TimeService.fmtDuration(t.minutes||0)}</div>
+      </div>`;
+    }).join('');
+    Modal.open({
+      title: `${broken.length} tidpost${broken.length===1?'':'er'} saknar prissättning`,
+      body: `
+        <p style="font-size:13px;color:var(--mt);margin-bottom:10px;">Dessa tidposter saknar en giltig prisgrupp/timpris och skulle annars blockera fakturering. Redan giltiga tidposter rörs INTE av denna åtgärd.</p>
+        <div class="fg"><label>Prisgrupp att applicera</label>
+          <select id="pr-repair-pg"><option value="">— Välj prisgrupp —</option>${pgOptions}</select></div>
+        <div style="max-height:180px;overflow-y:auto;border:1px solid var(--br);border-radius:8px;margin-top:8px;">${rowsHtml}</div>
+      `,
+      buttons: [
+        { label: 'Applicera på poster som saknar prissättning', cls: 'btn bp', onClick: () => WorkOrderDetailPage._applyPricingRepair(broken.map(t => t.id)) },
+        { label: 'Hoppa över', cls: 'btn bs', onClick: () => { Modal.close(); WorkOrderDetailPage.render({ aoId: WorkOrderDetailPage.aoId }); } }
+      ]
+    });
+  },
+
+  /* AO-PRICING-RECOVERY R2 — Blocker 2/3/4:
+     §2: anropar TimeService.repairMissingPricingSnapshot() — EGEN,
+     snävare behörighetsdörr (ao_edit/invoice_create), INTE
+     TimeService.update() (som hade krävt payroll_manage för en annan
+     anställds post och skapat exakt det fakturerings-dödläge denna
+     omgång ska lösa).
+     §3: litar ALDRIG på entryIds-listan som "redan sant" — varje post
+     omvalideras HELT INUTI repairMissingPricingSnapshot() vid just
+     detta anrop (AO-koppling, attest-lås, fakturerad-lås, FORTFARANDE
+     trasig) — en post som blivit giltig (eller alltid var det) sedan
+     modalen öppnades avvisas där, rörs aldrig här.
+     §4: bygger EN sammanslagen ao.log-post för HELA batchen, men
+     ENDAST med de poster som FAKTISKT reparerades (before/after) —
+     hoppade-över/redan-giltiga/misslyckade poster nämns aldrig som om
+     de ändrats. */
+  _applyPricingRepair(entryIds) {
+    const priceGroupId = document.getElementById('pr-repair-pg')?.value || '';
+    if (!priceGroupId) { showToast('Välj en prisgrupp.'); return; }
+    /* Tidig, tydlig UX-kontroll — TimeService.repairMissingPricingSnapshot()
+       validerar OBEROENDE och FÄRSKT per post ändå (den faktiska spärren),
+       men utan detta skulle ett ogiltigt gruppval visas som "N poster
+       kunde inte uppdateras" istället för ett tydligt, entydigt fel. */
+    const chosenPg = (state.priceGroups || []).find(p => p.id === priceGroupId);
+    if (!TimeService.isValidBillingPriceGroup(chosenPg)) {
+      showToast('Vald prisgrupp saknar ett giltigt timpris (> 0 kr) och kan inte användas för kundfakturering.');
+      return;
+    }
+    const ao = getAO(this.aoId);
+    if (!ao) { Modal.close(); return; }
+
+    const changes = [];
+    let skipped = 0;
+    entryIds.forEach(id => {
+      const result = TimeService.repairMissingPricingSnapshot(this.aoId, id, priceGroupId);
+      if (result && result.ok) {
+        changes.push({ entryId: result.entryId, before: result.before, after: result.after });
+      } else {
+        skipped++;
+      }
+    });
+    Modal.close();
+
+    if (changes.length > 0) {
+      const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Okänd';
+      const freshAo = getAO(this.aoId);
+      if (freshAo) {
+        freshAo.log = freshAo.log || [];
+        const summary = changes.map(c =>
+          `${c.entryId} (${c.before.priceGroupName || 'Ej satt'}/${fmt(c.before.hourRate||0)} kr → ${c.after.priceGroupName}/${fmt(c.after.hourRate)} kr)`
+        ).join(', ');
+        freshAo.log.push({
+          id: 'LOG-' + Date.now(),
+          type: 'pricing_timeentry_repair',
+          text: `${by} reparerade prissättning på ${changes.length} tidpost${changes.length===1?'':'er'}: ${summary}`,
+          userName: by,
+          timestamp: new Date().toISOString(),
+          visibility: 'intern',
+          entries: changes
+        });
+        WorkOrderService.update(this.aoId, { log: freshAo.log });
+      }
+    }
+
+    if (skipped > 0) {
+      showToast(`${changes.length} tidpost${changes.length===1?'':'er'} uppdaterade. ${skipped} kunde inte uppdateras (redan giltiga, låsta/attesterade, fakturerade eller saknar behörighet).`);
+    } else {
+      showToast(`${changes.length} tidpost${changes.length===1?'':'er'} uppdaterade.`);
+    }
+    this.render({ aoId: this.aoId });
   },
 
   _stampSection(ao, isActive) {
@@ -1818,15 +2119,46 @@ const WorkOrderDetailPage = {
     });
   },
 
-  _updateChecklistCounter(ao) {
-    const el = document.getElementById('ao-chk-counter');
-    if (!el) return;
-    const items  = ao.checklist || [];
-    const total  = items.length;
+  /* AO-CHECKLIST-PROGRESS-HOTFIX R1 — ROTORSAK (spårad, inte antagen):
+     "Lista"-raden i AO-metadatan (ao-info-list) och Checklista-sektionens
+     egen rubrik-badge (#ao-chk-counter) beräknade TIDIGARE samma sak
+     ("X/Y OK", identisk villkorslogik: `c.done||c.avvikelse==='ok'` för
+     OK, `c.avvikelse==='avvikelse'` för avvikelser, samma bdg-färglogik)
+     på TVÅ HELT SEPARATA STÄLLEN i koden — en gång i `_renderFull()`
+     (chkOk/chkAvv/chkBadge, ovan) och en gång rakt inne i denna funktion.
+     Vid en FULL sidladdning/render var de därför alltid synkroniserade.
+     Men efter en checklista-mutation (t.ex. `toggleChecklistItem()`,
+     `setChecklistAvvikelse()`) anropades ENDAST denna funktion, och den
+     skrev ENDAST till `#ao-chk-counter` (Checklista-sektionens egen
+     badge). "Lista"-radens `<span>` i metadata-kortet hade INGET id
+     alls — det fanns alltså ingen DOM-hake för någon partiell
+     uppdatering att träffa, och den förblev frusen vid vad den råkade
+     visa vid senaste FULLA render (`render()`/sidbyte/omladdning) tills
+     nästa sådan inträffade. Detta var alltså BÅDE "duplicerad
+     beräkningslogik" OCH "reagerar inte på mutation" samtidigt — inte
+     två separata fel.
+     FIXEN: EN delad `_checklistBadgeHtml(ao)` (nedan) är nu den ENDA
+     platsen som beräknar och genererar detta badge-HTML — `_renderFull()`
+     anropar den vid FULL render, och denna funktion anropar SAMMA
+     funktion och skriver resultatet till BÅDA DOM-noderna
+     (`#ao-chk-counter` OCH det nu tillagda `#ao-chk-badge-meta`) vid
+     VARJE mutation. Ingen ny räknare, ingen egen delstat — en enda
+     källa, två DOM-speglingar av den, båda uppdaterade tillsammans. */
+  _checklistBadgeHtml(ao) {
+    const items = ao.checklist || [];
+    const total = items.length;
+    if (!total) return '';
     const okCnt  = items.filter(c => c.done || c.avvikelse === 'ok').length;
     const avvCnt = items.filter(c => c.avvikelse === 'avvikelse').length;
-    if (!total) { el.innerHTML = ''; return; }
-    el.innerHTML = `<span class="bdg bdg-${okCnt===total&&!avvCnt?'green':avvCnt>0?'orange':'blue'}">${okCnt}/${total} OK${avvCnt>0?' · '+avvCnt+' avv.':''}</span>`;
+    return `<span class="bdg bdg-${okCnt===total&&!avvCnt?'green':avvCnt>0?'orange':'blue'}">${okCnt}/${total} OK${avvCnt>0?' · '+avvCnt+' avv.':''}</span>`;
+  },
+
+  _updateChecklistCounter(ao) {
+    const html = this._checklistBadgeHtml(ao);
+    const sectionEl = document.getElementById('ao-chk-counter');
+    if (sectionEl) sectionEl.innerHTML = html;
+    const metaEl = document.getElementById('ao-chk-badge-meta');
+    if (metaEl) metaEl.innerHTML = html;
   },
 
   /* ── Checklista ────────────────────────── */

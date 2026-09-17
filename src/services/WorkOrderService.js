@@ -325,19 +325,34 @@ const WorkOrderService = {
   /* Ordrar redo för fakturering — kräver faktiskt fakturerbart innehåll */
   readyForInvoice() {
     return (state.workOrders || []).filter(a =>
-      a.status === 'klar' && !a.invoiceId && this._hasBillableContent(a)
+      a.status === 'klar' && !a.invoiceId && this.getBillingStatus(a).eligible
     );
   },
 
-  /* Returnerar true om AO har minst en fakturerbar rad */
-  _hasBillableContent(ao) {
-    if ((ao.priceType === 'fastpris' || ao.priceType === 'fast') && (ao.fixedPrice || 0) > 0) return true;
-    if (['timpris', 'prisgrupp'].includes(ao.priceType)) {
-      const entries = TimeService.getByAO(ao.id);
-      if (entries.some(t => t.billable)) return true;
+  /* AO-PRICING-RECOVERY R2 — Blocker 1: DELEGERAR HELT till
+     BillingQueueService.getPricingStatusForAO(), som i sin tur bygger
+     på EXAKT samma getUnclaimedSourcesForAO()-lista som
+     InvoiceService.createFromAO() själv kräver att ALLA poster i är
+     `selectable` för. R1:s egen omimplementation (`entries.some(t =>
+     t.billable && t.hourRate>0)`) kollade bara OM NÅGON post var
+     giltig — en AO med EN giltig historisk tidpost + två trasiga
+     visade då "Redo fakturering" fast `InvoiceService` fortfarande
+     vägrade (kräver ALLA, inte NÅGON). Genom att aldrig omimplementera
+     samma regel på två ställen kan de per konstruktion inte glida isär
+     igen. Returnerar { hasContent, eligible, pricingBlocked,
+     otherBlocked, issues } — se BillingQueueService.js för definitionen. */
+  getBillingStatus(ao) {
+    if (!ao || typeof BillingQueueService === 'undefined') {
+      return { hasContent: false, eligible: false, pricingBlocked: false, otherBlocked: false, issues: [] };
     }
-    if ((ao.materials || []).some(m => (m.sellPrice || 0) > 0)) return true;
-    return false;
+    return BillingQueueService.getPricingStatusForAO(ao.id);
+  },
+
+  /* Bakåtkompatibel tunn wrapper — bara `eligible`, för ev. befintliga
+     anropare som förväntar sig ett booleskt svar. Ingen egen
+     villkorslogik kvar här längre. */
+  _hasBillableContent(ao) {
+    return this.getBillingStatus(ao).eligible;
   },
 
   /* ── Arkiv & Papperskorg ────────────── */

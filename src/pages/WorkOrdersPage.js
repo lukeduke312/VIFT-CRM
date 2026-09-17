@@ -602,8 +602,17 @@ const WorkOrdersPage = {
         const cuName = cu ? CustomerService.displayName(cu) : '—';
         const chkText = this._chkProgressHtml(ao);
         const needsInvoice = ao.status==='klar' && !ao.invoiceId;
-        const isBillable   = needsInvoice && WorkOrderService._hasBillableContent(ao);
-        const noPricing    = needsInvoice && !isBillable;
+        /* AO-PRICING-RECOVERY R2 — Blocker 1: läser den DELADE
+           fakturerbarhets-sanningen (WorkOrderService.getBillingStatus(),
+           i sin tur BillingQueueService.getPricingStatusForAO()) istället
+           för en egen omimplementation. `noPricing` visar sig nu ENDAST
+           när blockeraren FAKTISKT är pris-relaterad (saknad prismodell/
+           timpris/fastpris/försäljningspris) — inte för ANDRA legitima
+           blockerare (t.ex. saknad kund), som denna badge aldrig var
+           avsedd att representera. */
+        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao) : null;
+        const isBillable   = needsInvoice && billingStatus.eligible;
+        const noPricing    = needsInvoice && billingStatus.pricingBlocked;
         return `
           <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
@@ -630,8 +639,12 @@ const WorkOrdersPage = {
         const cu     = getCu(ao.customerId);
         const cuName = cu ? CustomerService.displayName(cu) : '—';
         const needsInvoice = ao.status==='klar' && !ao.invoiceId;
-        const isBillable   = needsInvoice && WorkOrderService._hasBillableContent(ao);
-        const noPricing    = needsInvoice && !isBillable;
+        /* Se motsvarande kommentar i rutnäts-vyn ovan — samma delade
+           sanningskälla, "Saknar prissättning" ENDAST vid en faktisk
+           pris-blockerare. */
+        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao) : null;
+        const isBillable   = needsInvoice && billingStatus.eligible;
+        const noPricing    = needsInvoice && billingStatus.pricingBlocked;
         const metaParts = [];
         if (cuName !== '—') metaParts.push(cuName);
         if (ao.scheduledDate) metaParts.push(ao.scheduledDate+(ao.scheduledStart?' '+ao.scheduledStart:''));

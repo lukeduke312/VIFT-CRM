@@ -244,6 +244,12 @@ const Router = {
         document.getElementById('topbar-title').textContent = meta.title;
         document.getElementById('topbar-sub').textContent   = meta.sub;
         Sidebar.setActive('pg-dash');
+        /* R1 §5: mobilskalets bottennavigering synkades tidigare INTE i
+           denna nekad-gren — bottennavigeringen kunde visuellt fortsätta
+           peka på den nekade/tidigare sidan (eller "Mer") trots att
+           Dashboard faktiskt visas. Endast synkronisering tillagd här —
+           ingen ändring av den redan befintliga behörighetslogiken. */
+        if (typeof MobileShell !== 'undefined') { MobileShell.closeMore(); MobileShell.onNavigate('pg-dash'); }
         // Rendera dash med access-denied-banner om vi försökte gå till annan sida
         if (pageId !== 'pg-dash') {
           const pageMeta = this.PAGE_TITLES[pageId] || { title: pageId };
@@ -276,6 +282,8 @@ const Router = {
 
     // Stäng sidebar på mobil
     if (window.innerWidth < 1024) Sidebar.close();
+    /* V55A-A: stäng "Mer"-sheeten vid navigation, precis som sidebaren. */
+    if (typeof MobileShell !== 'undefined') MobileShell.closeMore();
 
     // Deaktivera gamla sidan
     document.querySelectorAll('.page.active').forEach(p => p.classList.remove('active'));
@@ -295,6 +303,9 @@ const Router = {
 
     // Uppdatera sidebar aktiv-markering
     Sidebar.setActive(pageId);
+    /* V55A-A: uppdatera mobilskalets bottennavigering (aktiv-markering),
+       ingen omrendering av dess innehåll — se MobileShell.js. */
+    if (typeof MobileShell !== 'undefined') MobileShell.onNavigate(pageId);
 
     // Uppdatera state
     this.currentPage   = pageId;

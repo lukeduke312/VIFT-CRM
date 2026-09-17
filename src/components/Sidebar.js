@@ -25,7 +25,13 @@ const Sidebar = {
     { id: 'pg-projects',    icon: 'folder',          label: 'Projekt' },
     { section: 'Ekonomi' },
     { id: 'pg-invoices',    icon: 'receipt',         label: 'Fakturering' },
-    { id: 'pg-tid',         icon: 'clock',           label: 'Tid & stämpla' },
+    /* R1 §6: `mobileLabel` är ETT rent presentations-fält som ENDAST
+       MobileShell.renderBottomNav() läser (för att undvika "Tid &
+       stäm..."-avklippning i den smala bottennavigeringen på mobil) —
+       Sidebar.render() (desktop) läser fortsatt bara `label` nedan,
+       oförändrat, och visar alltså fortsatt "Tid & stämpla". Ingen ny
+       navigations- eller behörighetslista. */
+    { id: 'pg-tid',         icon: 'clock',           label: 'Tid & stämpla', mobileLabel: 'Tid' },
     { id: 'pg-payroll',     icon: 'wallet',          label: 'Löneunderlag' },
     { id: 'pg-reports',     icon: 'bar-chart-2',     label: 'Rapporter' },
     { section: 'System' },
@@ -214,6 +220,10 @@ const Sidebar = {
             <input type="checkbox" ${p.sidebarCollapsed?'checked':''} onchange="Sidebar._setPref('sidebarCollapsed',this.checked)">
             Fäll ihop vid inloggning
           </label>
+        </div>
+        <div class="fg" style="margin-top:14px;">
+          <label style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;">Mobil bottennavigering</label>
+          <button class="btn bs bfull" style="margin-top:6px;" onclick="Modal.close();MobileShell.openShortcutEditor()">${ic('layout-dashboard',14)} Anpassa mobila genvägar</button>
         </div>
       `,
       buttons: [

@@ -457,3 +457,291 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   V55A-A — Mobil skal-grund (bottennavigering, "Mer"-sheet, klock-status)
+   Endast under 1024px — SAMMA brytpunkt som #bottom-nav/Sidebar redan
+   använder (Router.js: `window.innerWidth < 1024`). Desktop (≥1024px)
+   ska förbli HELT opåverkad — se §13 i uppdraget.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Dolda på desktop som standard (element finns alltid i DOM, se index.html) */
+#mobile-bottom-nav,
+#mobile-clock-status,
+#mobile-more-sheet {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+
+  /* V55A-B1 §4 — DUBBEL RESERVERING AV BOTTENUTRYMME, ROTORSAK OCH FIX.
+     Kedjan (samma teknik som #off-wizard ovan, verifierad via en
+     dedikerad bakgrundsgranskning innan denna ändring):
+     #app (height:100dvh) → #page-area (flex:1;min-height:0) →
+     #content-scroll (flex:1;min-height:0;overflow-y:auto) →
+     .page.active (min-height:100%, layout.css) → .con (flex:1, egen
+     klassregel). Eftersom .page redan STRÄCKS till #content-scrolls
+     FULLA tillgängliga höjd (min-height:100%) och .con SEDAN växer för
+     att fylla .page (flex:1), la den GAMLA regeln ANDRA gången ovanpå
+     detta: en padding-bottom på .con inuti en redan höjd-stretchad box.
+     På en KORT sida (t.ex. Dashboard med ett enda widget) blev
+     nettoeffekten att .con stod och fyllde HELA den synliga ytan OCH
+     dessutom reserverade ~78-130px extra INUTI den ytan — dvs sidan blev
+     skrollbar med tomt utrymme längst ner trots att inget innehåll fanns
+     att skrolla till.
+     FIXEN: flytta reservationen till #content-scroll (den faktiska
+     skroll-behållaren, INTE den innehållsstretchade .page/.con) — då
+     räknar .page:s min-height:100% ut mot #content-scrolls REDAN
+     minskade content-box (padding exkluderas per spec), så .con fyller
+     exakt (synlig yta − navigering) EN gång, inte två. .con:s egen
+     padding-bottom återgår därför till sitt normala värde. */
+  .con {
+    padding-bottom: 16px;
+  }
+  #content-scroll {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+  /* R1 §4 — när inklockad upptar den ihållande klock-statusraden EGEN
+     fast plats OVANFÖR bottennavigeringen (se #mobile-clock-status.show
+     nedan: bar-höjd + marginaler ≈ 52px, positionerad vid
+     `bottom: calc(56px + safe-area)`). Utan detta kunde sidans SISTA
+     innehåll/kontroll hamna delvis bakom klockstatusraden trots att den
+     redan var korrekt reserverad för bottennavigeringen ENSAM.
+     `body.mobile-clock-active` sätts/tas bort av
+     MobileShell.renderClockStatus() — ren presentationssynk, ingen egen
+     tillståndskälla. Samma flyttning till #content-scroll som ovan. */
+  body.mobile-clock-active #content-scroll {
+    padding-bottom: calc(78px + 52px + env(safe-area-inset-bottom));
+  }
+
+  /* ── Fast bottennavigering ────────────────────────────────────── */
+  #mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 250;             /* under sidebar-overlay(299)/bottom-nav(300)/modal, över sidinnehåll */
+    background: var(--wh);
+    border-top: 1px solid var(--br);
+    box-shadow: 0 -2px 16px rgba(15,23,42,.08);
+    padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
+  }
+  .mnav-item {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    min-height: 48px;         /* enhandsanvändbar tryckyta */
+    background: none;
+    border: none;
+    color: var(--mt);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mnav-item.on { color: var(--navy); }
+  .mnav-ico { position: relative; display: inline-flex; }
+  .mnav-lbl {
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .mnav-dot {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gr, #16a34a);
+    border: 1.5px solid var(--wh);
+  }
+
+  /* ── Ihållande "Incheckad"-status — flyter direkt ovanför bottennav ── */
+  #mobile-clock-status.show {
+    display: block;
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(56px + env(safe-area-inset-bottom));
+    z-index: 260;
+  }
+  /* R1 §1 — .mclock-bar är nu en ren flex-CONTAINER (inte längre själv
+     en knapp) med TVÅ separata knappar: huvudytan (navigerar till Tid)
+     och en fristående "Klocka ut"-knapp (öppnar TimePage.openClockOut()
+     direkt) — undviker en ogiltig <button> inuti <button>, och gör de
+     två åtgärderna otvetydigt separata tryckytor. */
+  .mclock-bar {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    background: var(--gr, #16a34a);
+    color: #fff;
+    border-radius: 100px;
+    padding: 4px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  .mclock-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    color: inherit;
+    padding: 4px 6px 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .mclock-out-btn {
+    flex-shrink: 0;
+    background: rgba(255,255,255,.18);
+    border: none;
+    color: #fff;
+    border-radius: 100px;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .mclock-out-btn:active { background: rgba(255,255,255,.3); }
+  .mclock-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    flex-shrink: 0;
+    animation: mclockPulse 2s ease-in-out infinite;
+  }
+  @keyframes mclockPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .4; }
+  }
+  .mclock-txt { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── "Mer"-sheet ──────────────────────────────────────────────── */
+  #mobile-more-sheet.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 400;             /* över allt annat i mobilskalet, inkl. bottom-nav */
+  }
+  .mmore-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15,23,42,.5);
+  }
+  .mmore-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 72vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--wh);
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: mmoreUp .2s ease;
+  }
+  @keyframes mmoreUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .mmore-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 100px;
+    background: var(--br);
+    margin: 10px auto 4px;
+    flex-shrink: 0;
+  }
+  .mmore-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 16px 8px;
+    flex-shrink: 0;
+  }
+  .mmore-header h3 { font-size: 15px; font-weight: 800; margin: 0; }
+  .mmore-close {
+    background: none;
+    border: none;
+    color: var(--mt);
+    cursor: pointer;
+    padding: 6px;
+  }
+  .mmore-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px 8px;
+  }
+  .mmore-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--mt);
+    padding: 10px 10px 4px;
+  }
+  .mmore-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 10px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--tx);
+    cursor: pointer;
+    text-align: left;
+  }
+  .mmore-item.on { background: var(--bg); color: var(--navy); font-weight: 800; }
+  .mmore-item.on svg:last-child { margin-left: auto; }
+  .mmore-ico { display: inline-flex; flex-shrink: 0; color: var(--mt); }
+  .mmore-item.on .mmore-ico { color: inherit; }
+  .mmore-lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* V55A-B1 §5 — genvägskonfiguration nåbar direkt från "Mer", inte bara
+     via Sidebar.showSettings() (som inte har någon tydlig mobil ingång).
+     Samma befintliga MobileShell.openShortcutEditor() — ingen ny editor. */
+  .mmore-footer {
+    border-top: 1px solid var(--br);
+    padding: 8px;
+  }
+  .mmore-customize {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 10px;
+    background: var(--bg);
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy);
+    cursor: pointer;
+  }
+
+  /* ── Dölj mobilskalet bakom en öppen fullskärms-modal ─────────── */
+  body.modal-open #mobile-bottom-nav,
+  body.modal-open #mobile-clock-status.show {
+    display: none;
+  }
+}

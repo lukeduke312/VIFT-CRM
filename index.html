@@ -22,17 +22,17 @@
      som AddressService.js redan geokodar adresser mot — ingen ny
      kartleverantör, bara en annan laddningstidpunkt. -->
 
-<!-- DEPLOY: SW=v13 (CACHE_NAME=vift-crm-v13) responsive=v27 WorkOrdersPage=v60 WorkOrderDetailPage=v66 components=v89 CustomerPicker=v4 PageShells=v144 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v23 ServiceIntervalService=v3 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v27 schema=v28 state=v49 Dashboard=v51 DashboardConfig=v11 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v29 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v6 TimePage=v10 TimeService=v9 InvoicesPage=v31 BillingQueueService=v5 InvoiceService=v12 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 RecurringPage=v12 RecurringOrderService=v4 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v11 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v9 public-offer=v11 send-push=v6 project-document-upload=v3(pending-deploy) project-document-url=v2(pending-deploy) PushService=v8 WorkOrderService=v14 AddressService=v12 PayrollPage=v2 ContractsPage=v2 AuthService=v16 send-offer-email=v6 BrandingService=v7 Sidebar=v29 Icons=v12 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v5 storage=v11 layout=v29 MyJobsPage=v12 ProjectDocumentService=v2 ProjectService=v6 ProjectsPage=v4 ProjectDetailPage=v7 (INTEGRATION: Router/Sidebar bumped past both V53/V54A branch versions to resolve version collision) -->
+<!-- DEPLOY: SW=v13 (CACHE_NAME=vift-crm-v13) responsive=v31 WorkOrdersPage=v61 WorkOrderDetailPage=v70 components=v91 CustomerPicker=v4 PageShells=v144 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v23 ServiceIntervalService=v3 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v29 schema=v28 state=v49 Dashboard=v51 DashboardConfig=v11 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v29 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v6 TimePage=v10 TimeService=v12 InvoicesPage=v31 BillingQueueService=v6 InvoiceService=v12 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 RecurringPage=v12 RecurringOrderService=v4 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v11 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v9 public-offer=v11 send-push=v6 project-document-upload=v3(pending-deploy) project-document-url=v2(pending-deploy) PushService=v8 WorkOrderService=v16 AddressService=v12 PayrollPage=v2 ContractsPage=v2 AuthService=v16 send-offer-email=v6 BrandingService=v7 Sidebar=v31 MobileShell=v3 Icons=v12 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v5 storage=v11 layout=v29 MyJobsPage=v12 ProjectDocumentService=v2 ProjectService=v6 ProjectsPage=v4 ProjectDetailPage=v7 (INTEGRATION: Router/Sidebar bumped past both V53/V54A branch versions to resolve version collision) -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
 <link rel="stylesheet" href="src/styles/layout.css?v=29">
-<link rel="stylesheet" href="src/styles/components.css?v=89">
+<link rel="stylesheet" href="src/styles/components.css?v=91">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=29">
-<link rel="stylesheet" href="src/styles/responsive.css?v=27">
+<link rel="stylesheet" href="src/styles/responsive.css?v=31">
 </head>
 <body>
 
@@ -127,6 +127,13 @@
 
   <!-- Sidebar / #bottom-nav (enda nav-systemet) -->
   <nav id="bottom-nav"></nav>
+
+  <!-- V55A-A: Mobil skal-grund — renderas EN gång här, aldrig per sida.
+       Se src/components/MobileShell.js. Osynliga/tomma på desktop
+       (≥1024px, se responsive.css). -->
+  <div id="mobile-clock-status"></div>
+  <div id="mobile-bottom-nav"></div>
+  <div id="mobile-more-sheet"></div>
 
   <!-- Page area -->
   <div id="page-area">
@@ -381,10 +388,10 @@
 <script src="src/services/SalesService.js?v=4"></script>
 <script src="src/services/AuthService.js?v=16"></script>
 <script src="src/services/CustomerService.js?v=5"></script>
-<script src="src/services/WorkOrderService.js?v=14"></script>
-<script src="src/services/TimeService.js?v=9"></script>
+<script src="src/services/WorkOrderService.js?v=16"></script>
+<script src="src/services/TimeService.js?v=12"></script>
 <script src="src/services/InvoiceService.js?v=12"></script>
-<script src="src/services/BillingQueueService.js?v=5"></script>
+<script src="src/services/BillingQueueService.js?v=6"></script>
 <script src="src/services/ProfitabilityService.js?v=1"></script>
 <script src="src/services/RecurringOrderService.js?v=4"></script>
 <script src="src/services/RonderingService.js?v=6"></script>
@@ -413,15 +420,16 @@
 <script src="src/components/CustomSelect.js?v=1"></script>
 <script src="src/components/CustomerPicker.js?v=4"></script>
 <script src="src/components/Modal.js?v=7"></script>
-<script src="src/components/Sidebar.js?v=29"></script>
+<script src="src/components/Sidebar.js?v=31"></script>
+<script src="src/components/MobileShell.js?v=3"></script>
 <script src="src/components/GlobalSearch.js?v=4"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=27"></script>
+<script src="src/pages/Router.js?v=29"></script>
 <script src="src/pages/Dashboard.js?v=51"></script>
 <script src="src/pages/CustomersPage.js?v=29"></script>
-<script src="src/pages/WorkOrdersPage.js?v=60"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=66"></script>
+<script src="src/pages/WorkOrdersPage.js?v=61"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=70"></script>
 <script src="src/pages/TimePage.js?v=10"></script>
 <script src="src/pages/PayrollPage.js?v=2"></script>
 <script src="src/pages/ContractsPage.js?v=2"></script>
@@ -620,6 +628,7 @@ const App = {
     const _u = Auth.getUser();
     if (_u) UserPrefsService.apply(_u.id);
     Sidebar.render();
+    if (typeof MobileShell !== 'undefined') MobileShell.init();
     BrandingService.applyToLogin();
     if (typeof GlobalSearch !== 'undefined') GlobalSearch.initGlobalShortcut();
     if (typeof DataSync !== 'undefined') DataSync.start();

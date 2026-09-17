@@ -317,6 +317,51 @@ const BillingQueueService = (function () {
     return getCandidates().filter(function (c) { return c.workOrderId === aoId; });
   }
 
+  /* AO-PRICING-RECOVERY R2 — Blocker 1: EN delad sanningskälla för
+     "är denna AO redo att faktureras", härledd DIREKT från
+     getUnclaimedSourcesForAO() — exakt samma lista InvoiceService.
+     createFromAO() själv filtrerar mot (allSources/issueSources,
+     InvoiceService.js). Detta ERSÄTTER separata, ofullständiga
+     omimplementationer (t.ex. WorkOrderService._hasBillableContent(),
+     som tidigare bara kollade OM NÅGON post var giltig — en AO med EN
+     giltig historisk tidpost + två trasiga visade då "Redo fakturering"
+     trots att fakturaunderlag fortfarande vägrades, eftersom
+     InvoiceService kräver att ALLA obeclaimade källor är selectable).
+
+     `issues`-strängarna delas upp i "prissättnings-relaterade" (saknad
+     prismodell/timpris/fastpris/försäljningspris — sådant en
+     prissättnings-reparation faktiskt kan åtgärda) och "övrigt"
+     (saknad kund, ogiltig momssats, ogiltigt belopp — sådant
+     prissättnings-flödet INTE är avsett att lösa). "Saknar
+     prissättning" i UI ska ALDRIG visas/döljas oberoende av denna
+     uppdelning — se WorkOrderService.getBillingStatus() nedan, som är
+     den enda konsumenten av detta. */
+  var PRICING_ISSUES = {
+    'AO saknar prismodell': true,
+    'Saknar timpris': true,
+    'Saknar fastpris': true,
+    'Saknar försäljningspris': true
+  };
+
+  function getPricingStatusForAO(aoId) {
+    var sources = getUnclaimedSourcesForAO(aoId);
+    if (sources.length === 0) {
+      /* Inget obeclaimat kvar — antingen inget registrerat alls, eller
+         allt redan fakturerat. Skiljs uttryckligen från "blockerad". */
+      return { hasContent: false, eligible: false, pricingBlocked: false, otherBlocked: false, issues: [] };
+    }
+    var blocked = sources.filter(function (c) { return !c.selectable; });
+    if (blocked.length === 0) {
+      return { hasContent: true, eligible: true, pricingBlocked: false, otherBlocked: false, issues: [] };
+    }
+    var allIssues = [];
+    blocked.forEach(function (c) { allIssues = allIssues.concat(c.issues); });
+    var uniqueIssues = allIssues.filter(function (v, i) { return allIssues.indexOf(v) === i; });
+    var pricingBlocked = uniqueIssues.some(function (i) { return !!PRICING_ISSUES[i]; });
+    var otherBlocked = uniqueIssues.some(function (i) { return !PRICING_ISSUES[i]; });
+    return { hasContent: true, eligible: false, pricingBlocked: pricingBlocked, otherBlocked: otherBlocked, issues: uniqueIssues };
+  }
+
   /* ── Reconciliation (V32 §28, V33 §2/§3 — bidirektionell) ────────────────
      En AO markeras 'fakturerad' (med ao.invoiceId satt) ENDAST om INGA
      obeclaimade faktureringsbara källor (selectable ELLER issue) finns kvar
@@ -479,6 +524,7 @@ const BillingQueueService = (function () {
   return {
     getCandidates: getCandidates,
     getUnclaimedSourcesForAO: getUnclaimedSourcesForAO,
+    getPricingStatusForAO: getPricingStatusForAO,
     getSummary: getSummary,
     reconcileWorkOrderBilling: reconcileWorkOrderBilling,
     createInvoicesFromSourceKeys: createInvoicesFromSourceKeys,

@@ -21,6 +21,33 @@
 }
 .btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+/* V55A-B1 §6 — DELAT fokus-läge för ALLA knappbaserade kontroller,
+   inklusive flikar/chips som återanvänder .btn (`.admin-tab`, `.ft`,
+   `.filter-panel-chip`, m.fl.). Roten till "två flikar ser samtidigt
+   valda ut": ingen .btn-baserad kontroll hade NÅGONSIN en egen
+   `:focus`/`:focus-visible`-regel — webbläsarens EGNA standardfokusring
+   (som kan dröja kvar efter en touch/tryckning på mobil) visuellt
+   liknade den riktiga "vald"-stilen (`.on`/`.bp`, en fylld navy-
+   bakgrund). Denna regel ger ett tydligt, AVSIKTLIGT fokusutseende
+   (tunn, NEUTRAL grå/blå ring) som ALDRIG kan förväxlas med den fyllda
+   "vald"-färgen — appliceras EN gång, delat, ingen specialkod för
+   Admin eller någon annan enskild flikvy. */
+.btn:focus-visible,
+.ft:focus-visible,
+.filter-panel-chip:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 2px;
+}
+/* En redan "vald" flik (.on/.bp) behöver INTE en extra fokusring ovanpå
+   sin egen, redan tydliga fyllda stil — annars kan en riktigt vald
+   flik som RÅKAR ha tangentbordsfokus se ut som "två distinkta
+   tillstånd samtidigt". */
+.btn.on:focus-visible,
+.btn.bp:focus-visible,
+.ft.on:focus-visible,
+.filter-panel-chip.on:focus-visible {
+  outline-color: rgba(255,255,255,.7);
+}
 
 .bp  { background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); color: var(--brand-primary-text); box-shadow: 0 1px 4px rgba(0,0,0,.10); }
 .bp:hover { box-shadow: 0 3px 10px rgba(0,0,0,.15); transform: translateY(-1px); }
@@ -678,6 +705,14 @@
 
 /* ── Modal open — blockera bakgrundscroll ─ */
 body.modal-open { overflow: hidden; touch-action: none; }
+
+/* V55A-B1 §3/§6 — MobileShell.openMore()/closeMore() (MobileShell.js)
+   sätter/tar bort body.mmore-lock-scroll när "Mer"-bottensheeten öppnas,
+   men INGEN CSS-regel för denna klass fanns någonstans i trädet — sidan
+   BAKOM sheeten kunde alltså fortsätta skrolla under fingret. Samma
+   spärr som body.modal-open, egen klass eftersom "Mer" inte går via
+   Modal.js (ingen Modal-stack att synka mot). */
+body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
 
 /* ── AO-detalj hero (Runda 3) ─────────────── */
 .ao-hero { overflow: hidden; }

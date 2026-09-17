@@ -22,6 +22,10 @@ const TimeService = {
     Storage.set('stampActive', true);
     Storage.set('stampTs',     state.stampTimestamp);
     Storage.set('stampAoId',   aoId);
+    /* V55A-A: uppdatera mobilskalets ihållande "Incheckad"-status direkt
+       — läser samma state.stampActive/stampTimestamp som sätts ovan,
+       ingen egen kopia av klock-in-tillståndet. Se MobileShell.js. */
+    if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
     return true;
   },
 
@@ -78,6 +82,8 @@ const TimeService = {
     Storage.set('stampActive', false);
     Storage.set('stampTs',     null);
     Storage.set('stampAoId',   null);
+    /* V55A-A: se motsvarande kommentar i clockIn() ovan. */
+    if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
 
     ActivityService.log('time_entry_created',
       `Tid registrerad: ${minutes} min${aoId ? ' på ' + aoId : ''}`,
@@ -347,6 +353,157 @@ const TimeService = {
 
   getByAO(aoId) {
     return (state.timeEntries || []).filter(t => t.aoId === aoId);
+  },
+
+  /* AO-PRICING-RECOVERY R2.1 — Blocker B/C: EN delad definition av
+     "en prisgrupp som faktiskt duger för kundfakturering". Använd
+     BÅDE här (mutations-spärr) och i WorkOrderDetailPage.js (AO-nivå-
+     sparning + dropdown-filtrering) så UI och skrivspärr aldrig kan
+     glida isär. VIFT tillåter en AKTIV prisgrupp med hourRate=0 (t.ex.
+     historiska/interna skäl) — det förblir tillåtet ATT FINNAS, men
+     kan aldrig VÄLJAS som mål för en kundfaktureringsreparation. */
+  isValidBillingPriceGroup(pg) {
+    if (!pg) return false;
+    if (!pg.active) return false;
+    if (!pg.name || String(pg.name).trim() === '') return false;
+    const rate = Number(pg.hourRate);
+    return Number.isFinite(rate) && rate > 0;
+  },
+
+  /* ═══════════════════════════════════════════════════════════════
+     AO-PRICING-RECOVERY R2/R2.1 — Blocker 2/3 (R2) + A/B (R2.1): en
+     SMAL, självständig reparationsväg för en KÄNT TRASIG prissnapshot,
+     ATT SKILJA FRÅN update(). update()s ägarskaps-/lönespärr
+     (_guardMutation — annans tidpost kräver payroll_manage) är en
+     LÖNE-/tidsredigeringsspärr; en prissnapshot-reparation (bara
+     priceGroupId/priceGroupName/hourRate) är en SEPARAT, finansiell
+     korrigering som en ren faktureringsanvändare (invoice_create, utan
+     payroll_manage) måste kunna slutföra själv — annars uppstår EXAKT
+     samma faktureringsdödläge som denna omgång finns till för att
+     lösa, fast på tidpost-nivå istället för AO-nivå.
+
+     DÄRFÖR har denna metod sin EGEN, snävare behörighetsdörr
+     (ao_edit ELLER invoice_create) istället för att återanvända/
+     försvaga _guardMutation() eller update() globalt — update()s
+     spärrar för andras tid och attestfält är HELT OFÖRÄNDRADE och
+     gäller precis som förut för ALLA andra anrop.
+
+     R2.1 — DENNA VÄG ÄR EN PRIVILEGIERAD UNDANTAGSMEKANISM (kringgår
+     payroll_manage), INTE ett generellt omprissättnings-API. Oberoende
+     granskning visade att R2:s version felaktigt tillät reparation av:
+       (1) billable:false-poster (aldrig kundfakturerbara över huvud
+           taget — self._guardMutation-kringgåendet var då omotiverat),
+       (2) poster på en fastprisAO (tid blir ALDRIG en egen fakturerings-
+           källa där — BillingQueueService.js, _billingModeForAo==='fixed'),
+       (3) poster vars fakturerings-source REDAN är claimad av en aktiv
+           faktura (även om ao.invoiceId råkar stå tomt eftersom ANNAT
+           AO-innehåll fortfarande är oclaimat — partiell fakturering).
+     Samtliga tre stängs nu genom att kräva att posten FAKTISKT är en
+     OCLAIMAD faktureringskälla, blockerad SPECIFIKT av "Saknar timpris"
+     — härlett DIREKT från BillingQueueService.getUnclaimedSourcesForAO(),
+     INTE en egen omimplementation av claim-/fakturerbarhetssemantik
+     (samma delade-sanningskälla-princip som Blocker 1 i R2). Om
+     BillingQueueService inte är tillgänglig: FAIL CLOSED (vägra),
+     aldrig anta att posten är reparerbar.
+
+     REVALIDERAR ALLT vid VARJE anrop (Blocker 3) — litar ALDRIG på
+     ett tidigare öppnat modal-snapshot: AO:n och posten hämtas FÄRSKT,
+     `aoId`-tillhörighet, `billable`, `attested`, `invoiceId`, AO:ns
+     FAKTISKA `priceType`, och den obeclaimade käll-statusen kontrolleras
+     ALLA på nytt vid just detta anrop.
+
+     Skriver ENDAST priceGroupId/priceGroupName/hourRate — rör ALDRIG
+     minutes/date/staffId/billable/attest-fält. Kanoniska namn/kurs
+     hämtas alltid från den AKTUELLA, validerade PriceGroup-posten
+     (Blocker B: `isValidBillingPriceGroup()` — en aktiv men 0-kr-grupp
+     kan aldrig användas här, oavsett vad anroparen skickar in). */
+  repairMissingPricingSnapshot(aoId, entryId, priceGroupId) {
+    const authorized = typeof Auth !== 'undefined' && Auth.canAny(['ao_edit', 'invoice_create']);
+    if (!authorized) return { ok: false, error: 'Du saknar behörighet att reparera prissättning.' };
+
+    if (!aoId || !entryId) return { ok: false, error: 'Ogiltigt anrop.' };
+    const ao = getAO(aoId);
+    if (!ao) return { ok: false, error: 'Arbetsordern hittades inte.' };
+    if (ao.invoiceId) return { ok: false, error: 'Arbetsordern är redan fakturerad och kan inte omprissättas härifrån.' };
+
+    /* Blocker A(1): AO:ns FAKTISKA, aktuella prismodell måste vara
+       löpande timpris — denna väg får aldrig användas på en fastpris-
+       eller ej_satt-AO, oavsett vad anroparen påstår. */
+    if (ao.priceType !== 'timpris' && ao.priceType !== 'prisgrupp') {
+      return { ok: false, error: 'Arbetsordern är inte satt till löpande timpris — prissnapshot-reparation gäller inte här.' };
+    }
+
+    const entry = (state.timeEntries || []).find(t => t.id === entryId);
+    if (!entry) return { ok: false, error: 'Tidposten hittades inte.' };
+    if (entry.aoId !== aoId) return { ok: false, error: 'Tidposten tillhör inte denna arbetsorder.' };
+
+    /* Blocker A(2): en icke-kundfakturerbar post ska aldrig kunna
+       repareras via denna privilegierade väg — det finns inget
+       faktureringsdödläge att lösa för en post som aldrig var
+       kundfakturerbar. */
+    if (entry.billable === false) {
+      return { ok: false, error: 'Tidposten är inte kundfakturerbar och kan inte repareras via denna väg.' };
+    }
+
+    /* Genuin lönespärr — kontrolleras oavsett behörighet, precis som i
+       _guardMutation(). Ingen `Auth.can('all')`-genväg här: en
+       prissnapshot-reparation är inte samma sak som löneattestering,
+       och attesterad tid ska förbli låst tills löneansvarig uttryckligen
+       låser upp den, oavsett vem som försöker reparera priset. */
+    if (entry.attested) {
+      return { ok: false, error: 'Attesterad tid är låst och kan inte ändras. Kontakta löneansvarig för att låsa upp posten.' };
+    }
+
+    const isBroken = !entry.priceGroupId || !entry.priceGroupName || !(entry.hourRate > 0);
+    if (!isBroken) {
+      return { ok: false, error: 'Posten har redan en giltig prissättning och rördes inte.', skipped: true };
+    }
+
+    /* Blocker A(3) — den avgörande spärren: posten måste FAKTISKT vara
+       en obeclaimad faktureringskälla, blockerad specifikt av "Saknar
+       timpris", enligt BillingQueueService — den ENDA auktoritativa
+       källan (samma som Blocker 1). Detta utesluter AUTOMATISKT
+       billable:false (redan stoppat ovan, men bekräftas här också),
+       fastpris-tid (mode!=='hourly' skulle redan ha stoppats av
+       priceType-kontrollen ovan) och REDAN CLAIMADE källor (en aktiv
+       faktura vars sourceRefs redan pekar på denna post — även om
+       ao.invoiceId råkar stå tomt för att ANNAT AO-innehåll
+       fortfarande är oclaimat, dvs. partiell fakturering). */
+    if (typeof BillingQueueService === 'undefined') {
+      return { ok: false, error: 'Faktureringsmotorn är inte tillgänglig — reparation avbruten.' };
+    }
+    const unclaimedSources = BillingQueueService.getUnclaimedSourcesForAO(aoId);
+    const source = unclaimedSources.find(function (s) {
+      return s.sourceType === 'time' && s.sourceKey === 'time:' + entryId;
+    });
+    if (!source) {
+      return { ok: false, error: 'Tidposten är inte en obeclaimad faktureringskälla (kan redan ingå i en faktura, eller inte vara fakturerbar).' };
+    }
+    if (!(source.issues || []).includes('Saknar timpris')) {
+      return { ok: false, error: 'Tidposten blockeras inte av saknad timprissättning — inget att reparera via denna väg.' };
+    }
+
+    if (!priceGroupId) return { ok: false, error: 'Ingen prisgrupp vald.' };
+    const pg = (state.priceGroups || []).find(p => p.id === priceGroupId);
+    /* Blocker B: en aktiv men 0-kr/ej-namngiven prisgrupp får ALDRIG
+       användas som reparationsmål — den skulle ge ok:true men lämna
+       posten fortsatt fakturerings-ogiltig. */
+    if (!this.isValidBillingPriceGroup(pg)) {
+      return { ok: false, error: 'Vald prisgrupp är inte giltig för kundfakturering (kräver aktiv, namngiven prisgrupp med timpris > 0).' };
+    }
+    const rate = Number(pg.hourRate);
+
+    const before = { priceGroupId: entry.priceGroupId, priceGroupName: entry.priceGroupName, hourRate: entry.hourRate };
+    entry.priceGroupId = pg.id;
+    entry.priceGroupName = pg.name;
+    entry.hourRate = rate;
+    persist();
+    return {
+      ok: true,
+      entryId: entry.id,
+      before,
+      after: { priceGroupId: pg.id, priceGroupName: pg.name, hourRate: rate }
+    };
   },
 
   getAll() {
