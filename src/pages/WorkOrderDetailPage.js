@@ -2199,7 +2199,29 @@ const WorkOrderDetailPage = {
     showToast('Checkpunkt tillagd');
   },
 
-  setAvvikelse(idx, status) {
+  /* AO-CHECKLIST-AUTOSTART R1.2 — ATOMISK CHECKLISTMUTATION (se RAPPORT
+     §1-3 för fullständig spårning av rotorsaken). R1.1 skrev checklistan
+     genom att mutera klientens EGEN, potentiellt inaktuella kopia av
+     HELA AO-objektet och sedan skriva HELA `workOrders`-arrayen tillbaka
+     (WorkOrderService.update()). Två klienter som löste OLIKA
+     checklistpunkter på SAMMA, fortfarande "Nytt"-AO nästan samtidigt
+     (utan en mellanliggande DataSync-poll) kunde därför tyst radera
+     varandras ändring — "sista skrivaren vinner" på en HEL array.
+     FIXEN: denna metod anropar nu den atomiska, radlåsta servervägen
+     (WorkOrderService.resolveChecklistItemAtomic() ->
+     work-order-checklist-resolve Edge Function ->
+     work_order_checklist_resolve() RPC, SECURITY DEFINER,
+     `SELECT ... FOR UPDATE`) — mutationen sker mot den LÅSTA, FÄRSKASTE
+     serverraden, identifierad via checklistpunktens STABILA id (inte
+     array-index), aldrig genom att skriva över hela arrayen med
+     klientens egen kopia. Lokal state uppdateras ENDAST från det
+     bekräftade serversvaret — vid fel lämnas UI:t helt oförändrat,
+     ALDRIG en "låtsad framgång". Auto-start-beslutet (samma semantik
+     som R1/R1.1: endast från ett legitimt ostartat läge, aldrig bakåt,
+     aldrig en avslutad order återöppnad) fattas nu ATOMISKT INUTI
+     samma serverfunktion, mot den låsta statusen — inte längre via ett
+     separat klientanrop till autoStartFromChecklist(). */
+  async setAvvikelse(idx, status) {
     const ao = getAO(this.aoId);
     if (!ao || !ao.checklist || !ao.checklist[idx]) return;
     const c = ao.checklist[idx];
@@ -2209,14 +2231,18 @@ const WorkOrderDetailPage = {
     }
     // Toggle: clicking same status clears it
     const newStatus = c.avvikelse === status ? null : status;
-    c.avvikelse = newStatus;
-    c.done = (newStatus === 'ok');
-    if (newStatus !== 'avvikelse') { c.avvikelseComment = ''; c.avvikelseAt = ''; c.avvikelseBy = ''; }
-    WorkOrderService.update(this.aoId, { checklist: ao.checklist });
+    const statusBefore = ao.status;
+    const result = await WorkOrderService.resolveChecklistItemAtomic(this.aoId, c.id, newStatus, '');
+    if (!result.ok) { showToast(result.error || 'Kunde inte spara checklistan'); return; }
     const aoUp = getAO(this.aoId);
     if (aoUp) {
-      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
-      this._updateChecklistCounter(aoUp);
+      if (aoUp.status !== statusBefore) {
+        this.render({ aoId: this.aoId });
+        Sidebar.updateBadges();
+      } else {
+        document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+        this._updateChecklistCounter(aoUp);
+      }
     }
   },
 
@@ -2245,22 +2271,30 @@ const WorkOrderDetailPage = {
           if (!comment) { showToast('Kommentar krävs vid avvikelse'); return; }
           const imgInput = document.getElementById('avv-img');
           const file = imgInput && imgInput.files && imgInput.files[0];
-          const saveAvv = (imageData) => {
-            const aoF = getAO(this.aoId);
-            if (!aoF || !aoF.checklist || !aoF.checklist[idx]) return;
-            aoF.checklist[idx].avvikelse        = 'avvikelse';
-            aoF.checklist[idx].done             = false;
-            aoF.checklist[idx].avvikelseComment = comment;
-            aoF.checklist[idx].avvikelseAt      = new Date().toISOString();
-            aoF.checklist[idx].avvikelseBy      = state.currentUser
-              ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
-            if (imageData) aoF.checklist[idx].avvikelseImage = imageData;
-            WorkOrderService.update(this.aoId, { checklist: aoF.checklist });
+          /* AO-CHECKLIST-AUTOSTART R1.2 (se RAPPORT §1-3): samma atomiska,
+             race-säkra väg som setAvvikelse() ovan — mutationen sker
+             server-sidigt mot den låsta, färskaste raden via checklist-
+             punktens STABILA id (c.id, ur den redan hämtade `c` ovan),
+             inte lokal mutation + generisk persist(). Auto-start beslutas
+             ATOMISKT inuti samma serverfunktion. Vid fel: ingen lokal
+             mutation, ingen "låtsad framgång" — modalen stängs bara vid
+             bekräftad serverframgång. */
+          const statusBefore = ao.status;
+          const saveAvv = async (imageData) => {
+            const result = await WorkOrderService.resolveChecklistItemAtomic(
+              this.aoId, c.id, 'avvikelse', comment, imageData || ''
+            );
+            if (!result.ok) { showToast(result.error || 'Kunde inte spara avvikelsen'); return; }
             Modal.close();
             const aoUp = getAO(this.aoId);
             if (aoUp) {
-              document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
-              this._updateChecklistCounter(aoUp);
+              if (aoUp.status !== statusBefore) {
+                this.render({ aoId: this.aoId });
+                Sidebar.updateBadges();
+              } else {
+                document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
+                this._updateChecklistCounter(aoUp);
+              }
             }
             showToast('Avvikelse sparad');
           };

@@ -233,6 +233,132 @@ const WorkOrderService = {
     return this.setStatus(id, 'klar');
   },
 
+  /* AO-CHECKLIST-AUTOSTART R1 (se RAPPORT-AO-CHECKLIST-AUTOSTART-R1.md
+     för fullständig spårning). Ren återanvändning av setStatus() ovan —
+     SAMMA kanoniska övergång och logghändelse ('work_order_status') som
+     manuell "Starta arbete" (WorkOrderDetailPage._primaryActionBtns /
+     setStatus). Ingen parallell statusarkitektur.
+     Behörighet [RÄTTAD I R1.1 — var felaktigt dokumenterad här som
+     "MUST already have verified ao_edit", vilket INTE stämmer sedan
+     R1.1:s behörighetsfix]: precis som setStatus() själv bär INGEN egen
+     behörighetskontroll, upprätthålls detta fortfarande av ANROPAREN —
+     men den korrekta, godkända regeln (R1.1) är ao_checklist ELLER
+     ao_edit, inte enbart ao_edit. Se WorkOrderDetailPage.setAvvikelse()/
+     _openAvvikelseModal() (klientsidan) och work-order-checklist-
+     resolve/index.ts (R1.2, serversidan) för var den regeln faktiskt
+     upprätthålls idag.
+     Idempotens/status-säkerhet: vakten nedan är SAMMA "ostartad"-lista
+     som redan styr "Starta arbete"-knappens synlighet
+     (['nytt','pool','planerad']). Så snart status blivit 'pågående'
+     (eller redan var 'klar'/'fakturerad'/'avbruten') kortsluts alla
+     efterföljande anrop utan ny statushändelse — aldrig bakåt, aldrig
+     en låst/avslutad order återöppnad.
+     R1.2 — ANVÄNDNING: denna metod (lokal mutation + generisk persist())
+     anropas INTE LÄNGRE av WorkOrderDetailPage.setAvvikelse()/
+     _openAvvikelseModal() — de går numera via den atomiska
+     work-order-checklist-resolve-vägen (se RAPPORT-...-R1.2.md §1) för
+     att eliminera det verifierade samtidighetsraceet mellan klienter.
+     Metoden lämnas OFÖRÄNDRAD och kvar (samma etablerade mönster som
+     redan gäller för toggleChecklist()/removeChecklist(), vilka sedan
+     R1 också saknar egna UI-anropsplatser) — ingen befintlig
+     testyta/beteende tas bort, bara den nya, race-säkra vägen föredras
+     av de två live UI-anropsplatserna. */
+  autoStartFromChecklist(id) {
+    const ao = getAO(id);
+    if (!ao) return;
+    if (!['nytt','pool','planerad'].includes(ao.status)) return;
+    this.setStatus(id, 'pågående');
+  },
+
+  /* AO-CHECKLIST-AUTOSTART R1.2/R1.3 — atomisk, race-säker checklist-
+     mutation via work-order-checklist-resolve (se
+     supabase/migrations/20260917000001_work_order_checklist_atomic_rpc.sql
+     och RAPPORT-AO-CHECKLIST-AUTOSTART-R1.2/R1.3.md för fullständig
+     spårning). Ersätter, för EXAKT denna operation, den tidigare vägen
+     "mutera lokal kopia + generisk persist()" — den generiska
+     persist()-vägen kvarstår oförändrad för ALLA ANDRA AO-mutationer
+     (titel, personal, prissättning, tid, m.fl.), detta är INTE en
+     ersättning av den generiska arkitekturen.
+     Kontrakt: {ok, error} vid fel, {ok:true, workOrder} vid framgång —
+     samma mönster som ProjectDocumentService/ProjectService redan
+     etablerat. Uppdaterar ALDRIG lokal state förrän servern bekräftat
+     — vid fel lämnas state helt orörd (ingen "låtsad framgång").
+
+     R1.3 BLOCKERARE 1: denna metod deltar nu i EXAKT samma DataSync-
+     skrivspärr som persist() själv (state.js) — annars kunde en redan
+     pågående DataSync._poll() (som hunnit påbörja sin GET INNAN detta
+     anrop startade) applicera en INAKTUELL fjärr-snapshot ovanpå just
+     denna bekräftade, färskare lokala mutation, och synligt rulla
+     tillbaka checklistan/statusen tills nästa poll. `_pendingWrites`/
+     `_localWriteGeneration` höjs SYNKRONT här, INNAN någon await —
+     precis som persist() kräver — och `_pendingWrites` sänks alltid i
+     `finally`, oavsett framgång/fel (Math.max(0, ...) skyddar mot att
+     någonsin gå under noll, samma som persist()).
+     R1.3 BLOCKERARE 2: `body.activityLog` (den FAKTISKA kanoniska
+     loggen som RPC:n alltid returnerar, se migrationen) skriver nu
+     ÖVER `state.activityLog` i sin helhet — inte bara AO:n — så att en
+     redan skapad starthändelse (av DENNA eller en SAMTIDIG andra
+     klients anrop) omedelbart finns lokalt och aldrig kan raderas av
+     en efterföljande, ovetande generisk persist().
+     VIKTIGT (uttryckligt krav): `DataSync._lastSig` sätts ALDRIG från
+     `body.serverSignature` — detta är ett smalt, partiellt svar, inte
+     en fullständig generisk snapshot av all CRM-data. Nästa ordinarie
+     DataSync-poll måste fortfarande själv upptäcka den nya server-
+     signaturen och hämta en fullständig, självkonsekvent snapshot. */
+  async resolveChecklistItemAtomic(aoId, itemId, avvikelse, avvikelseComment, avvikelseImage) {
+    if (typeof DataSync !== 'undefined') {
+      DataSync._pendingWrites = (DataSync._pendingWrites || 0) + 1;
+      DataSync._localWriteGeneration = (DataSync._localWriteGeneration || 0) + 1;
+    }
+    try {
+      const res = await fetch(this._edgeBase() + '/functions/v1/work-order-checklist-resolve', {
+        method: 'POST',
+        headers: this._authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          aoId, itemId,
+          avvikelse: avvikelse === undefined ? null : avvikelse,
+          avvikelseComment: avvikelseComment || '',
+          avvikelseImage: avvikelseImage || ''
+        })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: body.error || ('HTTP ' + res.status) };
+      const ao = getAO(aoId);
+      if (ao && body.workOrder) {
+        Object.assign(ao, body.workOrder);
+        if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+          Storage.setLocal('workOrders', state.workOrders);
+        }
+      }
+      if (Array.isArray(body.activityLog)) {
+        state.activityLog = body.activityLog;
+        if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+          Storage.setLocal('activityLog', state.activityLog);
+        }
+      }
+      /* R1.3 — se filhuvudkommentaren: serverSignature medvetet ALDRIG
+         tilldelat DataSync._lastSig här. */
+      return { ok: true, workOrder: body.workOrder };
+    } catch (e) {
+      return { ok: false, error: 'Kunde inte spara checklistan: ' + (e.message || e) };
+    } finally {
+      if (typeof DataSync !== 'undefined') {
+        DataSync._pendingWrites = Math.max(0, (DataSync._pendingWrites || 0) - 1);
+      }
+    }
+  },
+
+  _edgeBase() {
+    return (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+  },
+
+  _authHeaders(extra) {
+    return Object.assign({
+      'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+      'Authorization': 'Bearer ' + (typeof Auth !== 'undefined' ? (Auth.getAccessToken() || '') : '')
+    }, extra || {});
+  },
+
   /* Checklista */
   addChecklist(aoId, text) {
     const ao = getAO(aoId);
