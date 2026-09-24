@@ -20,10 +20,44 @@
  *  • fixed    → 1 * unitPrice  (ingen qty-fältet)
  *  • äldre rader utan type-fält → qty * unitPrice (fallback till l.total om qty/price saknas)
  *
- * Används ÖVERALLT: offertlista, detaljvy, sammanfattning, PDF, utskrift, e-post, AO-skapande.
+ * OFFER CORE R1 — l.billingType (NYTT, valfritt fält, se
+ * RAPPORT-VIFT-CRM-OFFER-CORE-R1.md §Prismodell för fullständig
+ * spårning/motivering):
+ *   • 'rate'  → returnerar ALLTID 0 här. Detta är den ENDA
+ *     platsen som avgör detta, vilket automatiskt gör att VARJE
+ *     anropare av denna funktion (kanonisk OCH de fåtal icke-kanoniska
+ *     "l.total"-summerare i CustomersPage.js/ReportsPage.js/PDF-EF:erna,
+ *     eftersom sparfunktionen nedan nu SKRIVER l.total = _lineExVat(l))
+ *     automatiskt exkluderar rörliga à-priser från VARJE total
+ *     — utan att de filerna behöver kännas till det nya fältet alls.
+ *   • 'recurring' (återkommande månadsbelopp) → beräknas HÄR precis som
+ *     'onetime' (qty*unitPrice, default qty=1) — SJÄLVA beloppet är
+ *     alltså inte annorlunda. Det är _offRawExVat() nedan (den
+ *     "klassiska" totalsumman) som medvetet EXKLUDERAR 'recurring'-rader
+ *     ur sin summa (se där) — annars skulle ett återkommande månadsbelopp
+ *     och ett engångsbelopp adderas till en meningslös blandad summa
+ *     (kr/mån + kr blandat till ett tal), exakt det uppdraget varnar för.
+ *   • Frånvarande billingType (ALL befintlig/legacy-data) = implicit
+ *     'onetime' — INGEN ändrad beräkning, INGEN ändrad total, för någon
+ *     befintlig offert. Bakåtkompatibilitet är alltså exakt, per
+ *     konstruktion, inte en särskild migrering.
+ *
+ * OFFER CORE R1.1 — BLOCKER 1 (motbevis-granskad): R1 lade till ett
+ * FJÄRDE billingType-värde, 'option', som en generisk "tillval"-radtyp
+ * på RADNIVÅ. Men VIFT hade REDAN en kanonisk "Tillval / valfria
+ * extratjänster"-modell: off.extras[] (se _offRawExVat/_offRawVat
+ * nedan). Att ha två parallella, obesläktade "tillval"-koncept
+ * (line.billingType='option' OCH off.extras) är exakt den dubblering
+ * uppdraget varnar för — TA BORT 'option' som line-nivå-koncept. Det
+ * kanoniska tillvalskonceptet är, och förblir, off.extras[] (se
+ * e.includedInTotal nedan). 'option' tas bort ur wizardens val-lista
+ * (_billingTypeOptionsHtml) så INGA NYA rader kan skapas med det —
+ * eftersom denna release aldrig gått live finns ingen sparad
+ * produktionsdata med billingType='option' att migrera.
  */
 function _lineExVat(l) {
   if (!l || l.type === 'text') return 0;
+  if (l.billingType === 'rate') return 0;
   if (l.type === 'service')    return (l.exVat != null ? +l.exVat : 0);
   const qty  = (l.qty != null && l.qty !== '') ? +l.qty : 1;
   const up   = +(l.unitPrice || l.price || 0);
@@ -33,13 +67,170 @@ function _lineExVat(l) {
   return comp;
 }
 
-/** Summa ex. moms för ett helt offert-objekt (rader + extras) */
+/**
+ * OFFER CORE R1 — rena hjälpfunktioner för den återkommande
+ * (månadsvisa) delen av en offert. Helt ADDITIVA: de läggs INTE ihop
+ * med _offRawExVat() (se dess uteslutning av 'recurring' nedan) utan
+ * redovisas som en EGEN, tydligt märkt summa (månad + härledd år) i
+ * UI/PDF/public-offer — aldrig blandat till en enda vilseledande siffra.
+ */
+function _offRecurringLines(off) {
+  return (off.lines || []).filter(l => l.billingType === 'recurring');
+}
+function _offRecurringMonthlyExVat(off) {
+  return Math.round(_offRecurringLines(off).reduce((s, l) => s + _lineExVat(l), 0));
+}
+function _offRecurringMonthlyVat(off) {
+  return Math.round(_offRecurringLines(off).reduce((s, l) => s + Math.round(_lineExVat(l) * _normVat(l.vatRate) / 100), 0));
+}
+function _offRecurringMonthlyInclVat(off) {
+  return _offRecurringMonthlyExVat(off) + _offRecurringMonthlyVat(off);
+}
+function _offRecurringAnnualExVat(off) {
+  return _offRecurringMonthlyExVat(off) * 12;
+}
+function _offRecurringAnnualInclVat(off) {
+  return _offRecurringMonthlyInclVat(off) * 12;
+}
+
+/** Rader med en explicit rörlig à-pris-semantik (visas men ingår aldrig i någon total). */
+function _offRateAndOptionLines(off) {
+  return (off.lines || []).filter(l => l.billingType === 'rate');
+}
+
+/**
+ * OFFER CORE R1.1 — BLOCKER 1: kanonisk gate för om en off.extras[]-rad
+ * ska räknas in i den committade totalsumman. Detta är den ENDA platsen
+ * som avgör detta.
+ *
+ *   • e.includedInTotal === false  → EXPLICIT markerad som "Tillval, ej
+ *     i totalsumman" (den etikett print/PDF-vyerna ALLTID visat —
+ *     "Tillval (ej inkluderat i totalpriset)" — som R1.1:s oberoende
+ *     granskning bevisade var FALSK för alla extras skapade före denna
+ *     release, eftersom _offRawExVat/_offRawVat alltid räknat in DEM
+ *     ändå). Denna rad exkluderas nu genuint.
+ *   • Frånvarande fält (ALL data skapad FÖRE R1.1, dvs. VARJE historisk
+ *     extra) = implicit "included" → EXAKT samma beteende/totalsumma
+ *     som innan denna release. Ingen historisk offerts kundvisade total
+ *     ändras tyst av denna release.
+ *   • e.includedInTotal === true (nya extras som användaren INTE
+ *     markerar som tillval) → samma "included"-beteende, explicit satt.
+ */
+function _extraIncludedInTotal(e) {
+  return e.includedInTotal !== false;
+}
+
+/**
+ * Summa ex. moms för ett helt offert-objekt (rader + extras) — DEN
+ * "KLASSISKA" totalsumman (v75, oförändrad formel/beteende för ALL
+ * befintlig data). OFFER CORE R1: exkluderar nu explicit
+ * 'recurring'-rader (redovisas separat ovan) — 'rate'-rader
+ * exkluderas redan implicit via _lineExVat()===0 men filtreras även
+ * bort här för tydlighetens skull. OFFER CORE R1.1: extras filtreras nu
+ * genom _extraIncludedInTotal (se ovan) — en offert UTAN några
+ * explicit e.includedInTotal===false-extras (dvs. VARJE befintlig
+ * offert, eftersom fältet är nytt) får exakt samma summa som innan
+ * denna leverans.
+ */
 function _offRawExVat(off) {
-  const prLines = (off.lines  || []).filter(l => l.type !== 'text');
-  const extras  = off.extras  || [];
+  const prLines = (off.lines  || []).filter(l => l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate');
+  const extras  = (off.extras  || []).filter(_extraIncludedInTotal);
   const lineSum = prLines.reduce((s, l) => s + _lineExVat(l), 0);
   const extrSum = extras.reduce((s, e) => s + Math.round((+(e.qty||1)) * (+(e.unitPrice||0))), 0);
   return Math.round(lineSum + extrSum);
+}
+
+/** Tillval-extras som EJ ingår i totalsumman (visas separat, precis som rate-rader). */
+function _offOptionalExtras(off) {
+  return (off.extras || []).filter(e => !_extraIncludedInTotal(e));
+}
+
+/**
+ * OFFER CORE R1.2 — BLOCKER 3: kanonisk, LIVE property-display-etikett
+ * för CRM-ytor som HAR tillgång till state.properties (till skillnad
+ * från public-offer.html/offer-pdf/offer-public-pdf, som är helt
+ * fristående och bara kan läsa offertens egna sparade/snapshottade
+ * fält — de fortsätter läsa off.address/s('address') rakt av, vilket
+ * nu är korrekt eftersom _save() (se OffersPage._save()) redan
+ * härleder off.address från propertyId vid varje sparning).
+ *
+ * Denna funktion används av CRM-vyer (offertdetalj) för att alltid visa
+ * den AKTUELLA fastigheten direkt, utan att behöva vänta på en sparning
+ * — t.ex. omedelbart efter att en offert redigerats och fastigheten
+ * bytts, innan _save() körts. propertyId är den kanoniska relationen;
+ * off.address är ENDAST en bakåtkompatibel fallback för offerter som
+ * saknar ett giltigt/upplösningsbart propertyId (historisk data, eller
+ * en sedan dess borttagen fastighet).
+ */
+/**
+ * OFFER CORE R1.2 — RUT/ROT rendering hardening (defense in depth,
+ * additional to the canonical _offerCalcTotals() fail-safe which already
+ * excludes non-onetime lines from rutRotAmount). Several per-line ROW
+ * RENDERERS (wizard editor cards, offer detail line list) read
+ * `l.rutAmount` directly for their OWN local display (a RUT/ROT badge,
+ * a "kundpris efter avdrag" line) — these must not show a reduction
+ * badge/discounted price on a recurring/rate line just because
+ * malformed or stale imported data happens to carry a leftover
+ * rutAmount value. _setLineBillingType() already clears the field the
+ * moment a user changes billingType in the UI, but this is the
+ * second, independent line of defense at DISPLAY time, so a badge can
+ * never appear even for data that reached this state some other way
+ * (import, direct API write, an older session's in-memory state).
+ */
+function _effectiveRutAmount(l) {
+  return (l.billingType || 'onetime') === 'onetime' ? (l.rutAmount || 0) : 0;
+}
+
+function _offPropertyDisplayText(off) {
+  if (off.propertyId && typeof state !== 'undefined' && Array.isArray(state.properties)) {
+    const p = state.properties.find(pr => pr.id === off.propertyId);
+    if (p) return [p.name, p.address].filter(Boolean).join(' — ') || p.address || p.name || '';
+  }
+  return off.address || '';
+}
+
+/**
+ * OFFER CORE R1.3 — BLOCKER 3 (motbevis-granskad): SAVE-TIME-specifik
+ * härledning av off.address, MEDVETET separerad från
+ * _offPropertyDisplayText() ovan (som är en ren READ/RENDER-hjälpare
+ * utan kunskap om "vad användaren just gjorde i formuläret" — att
+ * blanda in redigeringsavsikt där hade gjort den hjälparen tvetydig
+ * för alla dess andra, rena läs-anrop).
+ *
+ * R1.2:s _save() föll ALLTID tillbaka på den REDAN SPARADE offertens
+ * off.address när wizardData.propertyId var tomt — vilket inte kunde
+ * skilja på två helt olika fall:
+ *   (A) en genuint gammal offert som ALDRIG haft en fastighet (legacy
+ *       fritext-adress ska bevaras), och
+ *   (B) en offert som HADE en fastighet, där användaren just NU
+ *       explicit valt "— Ingen specifik fastighet —" (adressen måste
+ *       rensas, annars visar publika offerten/PDF:erna fortfarande en
+ *       fastighet kunden uttryckligen tog bort).
+ *
+ * Skillnaden avgörs av OM DEN SPARADE OFFERTEN (innan denna sparning)
+ * hade ett propertyId eller inte — inte av vad wizardData råkar
+ * innehålla just nu:
+ *   • wizardData.propertyId satt OCH upplösningsbart → dess
+ *     fastighets-display VINNER (oförändrat från R1.2).
+ *   • wizardData.propertyId tomt, OCH den tidigare sparade offerten
+ *     HADE ett propertyId → adressen NOLLSTÄLLS (NYTT i R1.3 — detta
+ *     är den explicita rensningen).
+ *   • wizardData.propertyId tomt, OCH den tidigare sparade offerten
+ *     ALDRIG hade ett propertyId (eller är en helt ny offert) →
+ *     den befintliga fritext-adressen bevaras OFÖRÄNDRAD (legacy-fallet,
+ *     identiskt med R1.2:s beteende för denna situation).
+ */
+function _deriveOfferAddressForSave(wizardData, existingOff) {
+  if (wizardData.propertyId) {
+    const resolved = _offPropertyDisplayText({ propertyId: wizardData.propertyId, address: '' });
+    /* propertyId set but unresolvable (e.g. the property was deleted by
+       someone else mid-session) — fall back to the existing address
+       rather than blanking a genuinely-selected relation on a fluke. */
+    return resolved || (existingOff && existingOff.address) || '';
+  }
+  const hadPropertyBefore = !!(existingOff && existingOff.propertyId);
+  if (hadPropertyBefore) return '';
+  return (existingOff && existingOff.address) || '';
 }
 
 /**
@@ -156,10 +347,15 @@ function _strictVat(value) {
  * rad/tillägg använder sin EGEN vatRate (0-safe via _normVat), inte ett
  * hårdkodat 25 %. Textblock ger ingen moms (_lineExVat returnerar redan 0
  * för dem).
+ * OFFER CORE R1: 'recurring'/'rate'-rader exkluderas HÄR av
+ * samma skäl som i _offRawExVat() ovan — momsen på den klassiska
+ * totalsumman ska inte inkludera ett rörligt à-pris (som inte är ett
+ * köpt fast belopp) eller ett återkommande månadsbelopp (som redovisas
+ * med sin EGEN moms i _offRecurringMonthlyVat()).
  */
 function _offRawVat(off) {
-  const prLines = (off.lines || []).filter(l => l.type !== 'text');
-  const extras  = off.extras || [];
+  const prLines = (off.lines || []).filter(l => l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate');
+  const extras  = (off.extras || []).filter(_extraIncludedInTotal);
   const lineVat  = prLines.reduce((s, l) => s + Math.round(_lineExVat(l) * _normVat(l.vatRate) / 100), 0);
   const extraVat = extras.reduce((s, e) => {
     const exVat = Math.round((+(e.qty||1)) * (+(e.unitPrice||0)));
@@ -206,9 +402,322 @@ function _offerCalcTotals(off) {
   const ratio = rawExVat > 0 ? (exVatAfterDiscount / rawExVat) : 1;
   const vatAmount = Math.round(rawVat * ratio);
   const totalInclVat = exVatAfterDiscount + vatAmount;
-  const rutRotAmount = Math.round((off.lines||[]).filter(l => l.type !== 'text').reduce((s,l) => s + (l.rutAmount||0), 0));
+  /* OFFER CORE R1.1 — BLOCKER 5 (motbevis-granskad): RUT/ROT hör
+     ENDAST till committad engångsprissättning. totalInclVat ovan
+     innehåller redan ENDAST 'onetime'-rader (recurring/rate exkluderas
+     i _offRawExVat/_offRawVat) — men rutRotAmount summerade tidigare
+     l.rutAmount FRÅN ALLA icke-textrader, oavsett billingType. Om en
+     rad bytte billingType till 'recurring'/'rate' med ett kvarvarande
+     (nu inaktuellt) rutAmount-fält, blev customerPays = totalInclVat
+     (som INTE innehöll radens belopp) MINUS rutRotAmount (som
+     FELAKTIGT ÄNDÅ innehöll radens avdrag) — ett garanterat negativt,
+     finansiellt absurt kundpris. Filtret nedan är ett "fail-safe" i
+     SJÄLVA beräkningen (inte bara i UI:t som rensar fälten vid byte,
+     se _setLineBillingType) — en kvarvarande/inaktuell rutAmount på en
+     icke-onetime-rad kan ALDRIG längre påverka customerPays. */
+  const rutRotAmount = Math.round((off.lines||[]).filter(l => l.type !== 'text' && (l.billingType||'onetime') === 'onetime').reduce((s,l) => s + (l.rutAmount||0), 0));
   const customerPays = totalInclVat - rutRotAmount;
-  return { rawExVat, discountAmount, exVatAfterDiscount, vatAmount, totalInclVat, rutRotAmount, customerPays };
+  /* OFFER CORE R1 — additiva fält, aldrig blandade in i ovanstående
+     klassiska totalsumma (se _offRawExVat). recurringMonthly*=0 för
+     VARJE befintlig offert (inga 'recurring'-rader kan finnas i redan
+     sparad data), så dessa fält är helt ofarliga att alltid inkludera
+     i returvärdet — konsumenter som inte känner till dem ignorerar dem
+     bara. */
+  const recurringMonthlyExVat   = _offRecurringMonthlyExVat(off);
+  const recurringMonthlyVat     = _offRecurringMonthlyVat(off);
+  const recurringMonthlyInclVat = _offRecurringMonthlyInclVat(off);
+  const recurringAnnualExVat    = recurringMonthlyExVat * 12;
+  const recurringAnnualInclVat  = recurringMonthlyInclVat * 12;
+  return {
+    rawExVat, discountAmount, exVatAfterDiscount, vatAmount, totalInclVat, rutRotAmount, customerPays,
+    recurringMonthlyExVat, recurringMonthlyVat, recurringMonthlyInclVat, recurringAnnualExVat, recurringAnnualInclVat
+  };
+}
+
+/**
+ * OFFER CORE R1.1 — BLOCKER 2 (motbevis-granskad): kanonisk, KONCIS
+ * primär-prisetikett för en offert, använd av VARJE kompakt/sammanfattande
+ * yta (offertlistans kort, wizardens mobila sticky-totalrad, detaljvyns
+ * hero/mobil-snabbinfo). R1 uppdaterade bara wizardens desktop-totalkort
+ * (_totalsBarHtml) med den återkommande summeringen — en offert som
+ * ENDAST har 'recurring'-rader (t.ex. Södra Heden) visade därför
+ * fortfarande "0 kr" på alla andra ytor, eftersom de bara läste
+ * _tot.totalInclVat (=0 för en sådan offert). Denna funktion är den ENDA
+ * platsen som avgör vilket belopp som visas som "offertens primära
+ * pris" — ingen yta ska längre läsa totalInclVat/customerPays direkt
+ * för sitt huvudbelopp.
+ *
+ *   • Endast återkommande (klassisk bucket = 0): "8 000 kr/mån ex moms"
+ *     — ALDRIG "0 kr". Kontraktsvärdet visas EX MOMS som primärt (se
+ *     BLOCKER 6) — en momsberäknad "10 000 kr/mån" ersätter ALDRIG detta.
+ *   • Blandad (både recurring och engångsbelopp): båda hinkarna syns
+ *     tydligt separerade, ALDRIG summerade ihop till ett tal.
+ *   • Endast engångsbelopp (VARJE befintlig offert idag): EXAKT samma
+ *     beteende/text som innan R1.1 — inkl.-moms-belopp, med RUT/ROT-
+ *     kundpris när tillämpligt.
+ */
+function _offPrimaryDisplay(off) {
+  const t = _offerCalcTotals(off);
+  const hasRecurring = t.recurringMonthlyExVat > 0;
+  const hasOneTime   = t.rawExVat > 0;
+  if (hasRecurring && hasOneTime) {
+    /* OFFER CORE R1.2 — BLOCKER 2 (motbevis-granskad): den återgivna
+       engångshinken måste vara den KANONISKA, RABATTERADE summan
+       (t.exVatAfterDiscount), inte t.rawExVat (före rabatt). R1.1
+       läste rawExVat direkt här, vilket för en offert med t.ex. 10 %
+       rabatt på engångsbeloppet visade "12 000 kr engångs" trots att
+       det verkliga, committade ex-moms-beloppet (efter rabatt) var
+       10 800 kr — en tyst, missvisande siffra. Den befintliga
+       rabatt-regeln (endast på engångshinken, ingen ny "återkommande
+       rabatt"-motor) är oförändrad — bara VILKET tal som visas här
+       är fixat. */
+    const oneTimeLabel = t.discountAmount > 0 ? 'kr engångs ex moms efter rabatt' : 'kr engångs';
+    return {
+      compact: `${fmt(t.recurringMonthlyExVat)} kr/mån + ${fmt(t.exVatAfterDiscount)} ${oneTimeLabel}`,
+      primary: `${fmt(t.recurringMonthlyExVat)} kr/mån`,
+      secondary: `+ ${fmt(t.exVatAfterDiscount)} ${oneTimeLabel}`,
+      isRecurring: true
+    };
+  }
+  if (hasRecurring) {
+    return {
+      compact: `${fmt(t.recurringMonthlyExVat)} kr/mån ex moms`,
+      primary: `${fmt(t.recurringMonthlyExVat)} kr/mån`,
+      secondary: `${fmt(t.recurringAnnualExVat)} kr/år ex moms (härledd)`,
+      isRecurring: true
+    };
+  }
+  const val = t.rutRotAmount ? t.customerPays : t.totalInclVat;
+  const lbl = t.rutRotAmount ? 'kund inkl. moms' : 'inkl. moms';
+  /* OFFER CORE R1.3 — BLOCKER 2 (motbevis-granskad): a rate-only or
+     optional-only offer has NO recurring component (hasRecurring=false)
+     AND NO committed one-time amount (hasOneTime=false, since
+     rawExVat===0 — rate lines are always 0-valued and an
+     includedInTotal:false extra never enters rawExVat). The branch
+     below previously fell straight through to totalInclVat (=0),
+     showing the exact same misleading "0 kr" a recurring-only offer
+     showed before R1.1 — there IS visible commercial pricing (a rate
+     card, an optional extra), it's just none of it is a COMMITTED
+     total. Never fabricate a fake total here — show a non-monetary
+     commercial-representation label instead. */
+  if (!hasRecurring && !hasOneTime) {
+    const rateLines = _offRateAndOptionLines(off);
+    const optExtras = _offOptionalExtras(off);
+    const commercialCount = rateLines.length + optExtras.length;
+    if (commercialCount > 0) {
+      let secondary;
+      if (commercialCount === 1) {
+        const item = rateLines[0] || optExtras[0];
+        const unit = (item.unit || '').trim();
+        secondary = `${fmt(item.unitPrice || 0)} kr${unit ? '/' + unit : ''} ex moms`;
+      } else {
+        secondary = `${commercialCount} rörliga priser / tillval`;
+      }
+      return { compact: 'Rörliga priser', primary: 'Rörliga priser', secondary, isRecurring: false, hasNoCommittedTotal: true };
+    }
+  }
+  return { compact: `${fmt(val)} kr ${lbl}`, primary: `${fmt(val)} kr`, secondary: lbl, isRecurring: false };
+}
+
+/**
+ * OFFER CORE R1.3 — BLOCKER 2 (motbevis-granskad): kanonisk
+ * konverterings-beslutshjälpare, ETT ställe som avgör OM en offert får
+ * konverteras till en fastprisarbetsorder OCH VARFÖR inte (för korrekt
+ * felmeddelande) — undviker att duplicera skälslogik i flera knappar/
+ * modaler. R1.2 blockerade ENDAST recurring>0, vilket missade en
+ * likvärdig finansiell bugg: en offert med ENDAST rate-rader (t.ex.
+ * "440 kr/h", inget annat) eller ENDAST en exkluderad (includedInTotal:
+ * false) tillval-extra har _offRawExVat===0 OCH
+ * _offRecurringMonthlyExVat===0 — R1.2:s guard (`recurring > 0`)
+ * släppte igenom en fixedPrice=0-arbetsorder ändå, exakt samma
+ * finansiella bugg-klass som recurring-fallet.
+ *   • recurring-komponent (ren eller blandad) → blockerad (R1.2,
+ *     oförändrat skäl/beteende).
+ *   • INGEN recurring OCH inget committat engångsbelopp (rawExVat<=0)
+ *     → blockerad (NY R1.3-regel) — täcker rate-only, optional-only,
+ *     och en helt tom offert. En offert med ett riktigt engångsbelopp
+ *     (t.ex. 5000 kr + en extra rate-rad på 440/h) förblir OFÖRÄNDRAT
+ *     tillåten — rawExVat är redan korrekt 5000 (rate-raden bidrar 0),
+ *     så den blockeras INTE av denna nya regel. */
+/**
+ * OFFER CORE R1.5 — FINAL BLOCKER (motbevis-granskad, traced first): en
+ * SEPARAT, ren LIVSCYKEL-beslutshjälpare för offert->AO-konvertering —
+ * medvetet HÅLLEN ISÄR från den finansiella _offAOConversionDecision()
+ * ovan/nedan, så att den funktionens semantik ("har offerten ett giltigt
+ * committat pris att konvertera?") inte grumlas av frågan "FÅR den här
+ * offerten överhuvudtaget konverteras just nu, oavsett pris?". De två
+ * frågorna är ortogonala och båda måste svara ja.
+ *
+ * TRACE PERFORMED: `createAO()` körde tidigare ALDRIG någon egen kontroll
+ * av `status`/`archived`/`deleted` alls — bara den finansiella
+ * _offAOConversionDecision() och (efter att ha byggt hela AO-payloaden!)
+ * ett dubbelkonverteringsskydd för `workOrderId`. Det gjorde att en
+ * offert med status='godkänd' MEN archived=true (en fullt normal,
+ * nåbar datakombination — arkivering ändrar aldrig status) fortfarande
+ * kunde konverteras via ett direkt anrop, trots att den sekundära
+ * knappraden REDAN korrekt villkorade sig på `!off.archived&&!off.deleted`
+ * — en bevisad, redan existerande inkonsekvens mellan ytorna (se
+ * motbevis). Denna funktion är nu den ENDA platsen som avgör
+ * livscykel-behörigheten, använd av VARJE yta (hero-CTA, sekundär knapp,
+ * säljassistent-tipset) OCH som en load-bearing kontroll INUTI
+ * createAO() självt, INNAN den finansiella kontrollen körs (fail fast)
+ * och INNAN någon AO-payload byggs.
+ */
+function _offAOCreateLifecycleDecision(off) {
+  if (!off) return { allowed: false, reason: 'not-found' };
+  if (off.archived) return { allowed: false, reason: 'archived' };
+  if (off.deleted) return { allowed: false, reason: 'deleted' };
+  if (off.status !== 'godkänd') return { allowed: false, reason: 'not-approved' };
+  if (off.workOrderId) return { allowed: false, reason: 'already-converted' };
+  return { allowed: true, reason: null };
+}
+
+function _offAOConversionDecision(off) {
+  if (_offRecurringMonthlyExVat(off) > 0) return { allowed: false, reason: 'recurring' };
+  /* OFFER CORE R1.4 — BLOCKER 1 (motbevis-granskad, traced first): the
+     committed one-time amount that matters for AO eligibility/fixedPrice
+     is the CANONICAL POST-DISCOUNT figure (_offerCalcTotals(off).
+     exVatAfterDiscount), not the pre-discount _offRawExVat(off). R1.3's
+     check here used rawExVat<=0, which correctly caught the rate-only/
+     optional-only case (rawExVat IS 0 there) but would have WRONGLY
+     allowed a 100%-discounted one-time offer through (rawExVat>0, but
+     the actual committed amount is 0) — which would have produced a
+     fixedPrice=0 fixed-price AO. TRACE PERFORMED: WorkOrderDetailPage's
+     own manual price-editing UI (`if (!(fixedPrice > 0)) { showToast(
+     'Ange ett fastpris större än 0 kr.'); return; }`) proves VIFT does
+     NOT support a zero-price fixed-price AO anywhere in the existing
+     product — so per the brief, this fails closed rather than
+     inventing new zero-price semantics. A distinct reason
+     ('discounted-to-zero') is returned when the offer DID have a raw
+     one-time amount that a 100% (or otherwise total) discount reduced
+     to zero, vs. 'no-committed-onetime' when there was never any
+     one-time pricing at all (rate-only/optional-only) — so createAO()'s
+     modal can explain the ACTUAL reason instead of a generic message. */
+  const committedOneTime = _offerCalcTotals(off).exVatAfterDiscount;
+  if (committedOneTime <= 0) {
+    return { allowed: false, reason: _offRawExVat(off) > 0 ? 'discounted-to-zero' : 'no-committed-onetime' };
+  }
+  return { allowed: true, reason: null };
+}
+
+/* OFFER CORE R1.4 — BLOCKER 2: service-checklistmallar, flyttade hit
+   (oförändrat innehåll) från OfferDetailPage.createAO() så den rena
+   payload-byggaren nedan inte behöver DOM/service-koppling för att
+   återanvända dem — samma konstant används av båda. */
+const AO_SERVICE_CHECKLISTS = {
+  'svc_altan': ['Kontrollera altanens skick före start', 'Flytta lösa föremål vid behov', 'Tvätta ytan enligt metod', 'Kontrollera resultat efter tvätt'],
+  'svc_sten':  ['Kontrollera stenyta före start', 'Rensa smuts och ogräs', 'Tvätta stenläggning', 'Kontrollera fogar och efterbehandling'],
+  'svc_hack':  ['Kontrollera höjd och sidor enligt offert', 'Klipp enligt specifikation', 'Samla upp och bortforsla avklipp', 'Slutkontrollera ytan'],
+  'svc_fasad': ['Skydda fönster och detaljer', 'Tvätta fasad uppifrån och ner', 'Kontrollera att smuts är borta', 'Ta bort skydd och städa av'],
+  'svc_fs':    ['Kontrollera objektets skick vid ankomst', 'Utför service enligt uppdrag', 'Dokumentera utfört arbete', 'Meddela kund vid avvikelse'],
+  'svc_tf':    ['Kontrollera tekniska installationer', 'Utför förvaltningsuppgifter', 'Dokumentera status', 'Rapportera till kund'],
+  'svc_ovr':   ['Kontrollera arbetsplats vid ankomst', 'Utför beskrivet arbete', 'Städa upp efter arbete', 'Rapportera utfört arbete']
+};
+
+/**
+ * OFFER CORE R1.4 — BLOCKER 1/2 (motbevis-granskad): kanonisk, REN
+ * offert->AO-konverteringspayload-byggare. Tar EMOT ENDAST `off` — ingen
+ * DOM, inget WorkOrderService-anrop, inget `state.currentUser`/
+ * `Date.now()`-beroende — så den kan testas direkt, och
+ * `OfferDetailPage.createAO()` nedan använder DENNA SAMMA funktion
+ * (ingen parallell, duplicerad algoritm) för de ekonomi-/innehålls-
+ * beroende fälten.
+ *
+ *   • fixedPrice = _offerCalcTotals(off).exVatAfterDiscount — den
+ *     KANONISKA, RABATTERADE engångssumman (BLOCKER 1). Innehåller
+ *     redan committade extras (via _offRawExVat/_extraIncludedInTotal)
+ *     men ALDRIG recurring/rate-rader eller RUT/ROT (RUT/ROT är en
+ *     betalnings-/subventionsuppdelning, inte en sänkning av det
+ *     underliggande tjänstevärdet — subtraheras medvetet INTE här).
+ *   • title/description/checklist/estimatedHours byggs ENDAST från
+ *     "committedLines" — icke-textrader vars billingType är 'onetime'
+ *     (frånvarande fält = implicit onetime, oförändrat) — OCH
+ *     committade extras (BLOCKER 2). En 'rate'/'recurring'-rad beskriver
+ *     ett FRAMTIDA pris OM mer arbete beställs — den är inte köpt arbete
+ *     bara för att offerten godkändes, och får därför ALDRIG bidra till
+ *     AO:ns titel/beskrivning/checklista/estimerade timmar. En explicit
+ *     EJ-committad (includedInTotal:false) tillval-extra behandlas
+ *     likadant — den är synlig på offerten men inte köpt arbete.
+ */
+function _buildAOConversionPayload(off) {
+  const allLines = off.lines || [];
+  const prLines = allLines.filter(l => l.type !== 'text');
+  const committedLines = prLines.filter(l => (l.billingType || 'onetime') === 'onetime');
+  const svcLines = committedLines.filter(l => l.type === 'service');
+  const svcNames = svcLines.map(l => l.templateName).filter(Boolean);
+  const committedExtras = (off.extras || []).filter(_extraIncludedInTotal);
+
+  const title = off.title
+    || (svcNames.length ? svcNames.join(', ') : 'Arbete enligt offert ' + off.id);
+
+  const descParts = [];
+  if (off.scope)                                descParts.push(off.scope);
+  if (off.summary && off.summary !== off.scope) descParts.push(off.summary);
+  if (off.includes)                             descParts.push('Ingår: ' + off.includes);
+  if (off.excludes)                             descParts.push('Ingår ej: ' + off.excludes);
+  if (!descParts.length && committedLines.length) descParts.push(committedLines.map(l => l.templateName||l.description).filter(Boolean).join(', '));
+  const description = descParts.join('\n\n');
+
+  const checklist = [];
+  let cIdx = 0;
+  svcLines.forEach(l => {
+    const tmplChecklist = AO_SERVICE_CHECKLISTS[l.templateId || l.priceRuleRef];
+    const items = tmplChecklist || (l.templateName || l.description ? [l.templateName || l.description] : []);
+    items.forEach(text => { checklist.push({ id: 'c' + (cIdx++), text, done: false }); });
+  });
+  /* Icke-service, icke-text COMMITTADE rader ger en enskild checklista-post. */
+  committedLines.filter(l => l.type !== 'service').forEach(l => {
+    if (l.description) checklist.push({ id: 'c' + (cIdx++), text: l.description, done: false });
+  });
+  /* BLOCKER 2 (committad Tillval): en committad extra representerar
+     köpt arbete precis lika mycket som en committad manuell rad — den
+     får inte tyst försvinna ur AO:ns arbetsomfattning bara för att den
+     bor i off.extras[] istället för off.lines[]. En EJ-committad
+     (includedInTotal:false) extra är redan filtrerad bort ovan. */
+  committedExtras.forEach(e => {
+    if (e.description) checklist.push({ id: 'c' + (cIdx++), text: e.description, done: false });
+  });
+
+  /* estimatedHours — ENDAST från committade rader/extras med enhet
+     tim/h. En rate-rads timpris ("440 kr/h") beskriver vad YTTERLIGARE
+     arbete skulle kosta OM det beställs — dess qty är inte förbrukad
+     tid bara för att offerten godkändes. */
+  let estimatedHours = 0;
+  committedLines.forEach(l => {
+    if ((l.unit === 'tim' || l.unit === 'h') && l.qty) estimatedHours += parseFloat(l.qty) || 0;
+    (l.subLines||[]).forEach(sl => {
+      if ((sl.unit === 'tim' || sl.unit === 'h') && sl.qty) estimatedHours += parseFloat(sl.qty) || 0;
+    });
+  });
+  committedExtras.forEach(e => {
+    if ((e.unit === 'tim' || e.unit === 'h') && e.qty) estimatedHours += parseFloat(e.qty) || 0;
+  });
+
+  const fixedPrice = _offerCalcTotals(off).exVatAfterDiscount;
+
+  return { title, description, checklist, estimatedHours, fixedPrice };
+}
+
+/**
+ * OFFER CORE R1.4 — BLOCKER 4 (motbevis-granskad): kanonisk CTA-text för
+ * ett blockerat AO-konverteringsläge, härledd från SAMMA
+ * _offAOConversionDecision(off).reason som modalen i createAO() redan
+ * använder — INGEN egen skäls-logik duplicerad i knapplagret. R1.3
+ * hårdkodade "Återkommande — kan ej konvertera" för VARJE blockerat
+ * skäl, vilket blev sakligt fel så fort R1.4:s nya
+ * 'no-committed-onetime'/'discounted-to-zero'-skäl kunde inträffa (en
+ * ren rate-only- eller optional-only-offert har ALDRIG varit
+ * "återkommande"). Används av båda de blockerade AO-knapparna (hero-CTA
+ * och den sekundära "Skapa AO"-knappen) så de alltid är i synk.
+ */
+function _offAOBlockedCtaText(reason) {
+  if (reason === 'recurring') {
+    return { label: 'Återkommande — kan ej konvertera', title: 'Återkommande offerter kan inte konverteras till en fastprisarbetsorder ännu' };
+  }
+  if (reason === 'discounted-to-zero') {
+    return { label: 'Rabatterad till 0 kr — kan ej konvertera', title: 'Rabatten reducerar det committade engångsbeloppet till 0 kr' };
+  }
+  return { label: 'Kan ej konvertera till AO', title: 'Offerten saknar ett committat engångsbelopp att konvertera' };
 }
 
 /* ── PART 1: OfferPriceRules — alla priser EXKLUSIVE MOMS ─── */
@@ -757,10 +1266,7 @@ const OffersPage = {
       const prLines = (o.lines||[]).filter(l=>l.type!=='text');
       const extras  = o.extras||[];
       const _tot    = _offerCalcTotals(o);
-      const rawExVat= _tot.rawExVat;
-      const incVat  = _tot.totalInclVat;
-      const rutAmt  = _tot.rutRotAmount;
-      const cust    = _tot.customerPays;
+      const priceDisp = _offPrimaryDisplay(o);
       const insight = OffersPage._offerInsight(o);
       /* V48B1 §5: ingen egen JS-statusfärgkarta — kortets accent härleds
          från samma kanoniska statusClass()/sbdg() som statusbadgen ovan i
@@ -790,8 +1296,8 @@ const OffersPage = {
       ${sbdg(o.status)}
     </div>
     <div style="display:flex;align-items:baseline;gap:5px;flex-shrink:0;margin-left:8px;">
-      <strong style="font-size:13px;color:var(--navy);">${fmt(rutAmt ? cust : incVat)} kr</strong>
-      <span style="font-size:11px;color:var(--mt);">${rutAmt?'kund inkl. moms':'inkl. moms'}</span>
+      <strong style="font-size:13px;color:var(--navy);">${priceDisp.primary}</strong>
+      <span style="font-size:11px;color:var(--mt);">${priceDisp.secondary}</span>
     </div>
   </div>
   <div class="off-offer-card-title">${disp}</div>
@@ -814,8 +1320,48 @@ const OffersPage = {
     }).join('');
   },
 
-  _offerExVat(o) {
-    return _offRawExVat(o);
+  /* OFFER CORE R1.4 — BLOCKER 1: the old `_offerExVat(o)` (= pre-discount
+     _offRawExVat(o)) is REMOVED — it is no longer called anywhere
+     (createAO() now uses the canonical _buildAOConversionPayload(off),
+     which derives fixedPrice from _offerCalcTotals(off).exVatAfterDiscount)
+     and leaving it in place would be a live, financially-wrong footgun for
+     any future caller. */
+
+  /* OFFER CORE R1.2 — BLOCKER 4 (motbevis-granskad, traced first): the
+     offer -> AO conversion flow (`createAO()` below) has always created
+     a single `priceType:'fast'` AO with `fixedPrice: _offerExVat(off)`
+     (= `_offRawExVat(off)`). Since R1, `_offRawExVat` intentionally
+     EXCLUDES 'recurring' lines (by design — see its own header comment).
+     A real Södra Heden-style offer (8000/mån, no one-time component)
+     could therefore be approved and converted into a "fixed-price" AO
+     worth 0 kr — a genuine, silent financial loss, not a display bug.
+     TRACE PERFORMED: VIFT already has a genuine recurring-work
+     destination, `RecurringOrderService`/`RecurringPage` ("Återkommande
+     ärenden") — but it requires an explicit interval/schedule
+     (dagligen/veckovis/månadsvis/eget + start/next date) that an Offer
+     simply does not capture anywhere. Auto-deriving a schedule from an
+     offer would be guessing, explicitly forbidden by this round's
+     instructions, and building a proper offer->contract scheduling UI
+     is a genuine new subsystem, explicitly out of scope for this
+     release ("DO NOT BUILD A LARGE contract subsystem"). There is
+     therefore no existing, small-to-reuse conversion target for a
+     recurring commitment. Per the brief: FAIL CLOSED. This is the ONLY
+     place that decides whether "Skapa arbetsorder"/"Skapa AO" may run —
+     used both to gate the buttons (so the UI never even offers a
+     doomed action) and inside createAO() itself as a second, load-
+     bearing guard (never trust only the UI to have hidden a button). A
+     PURE one-time offer (rate-card lines are already correctly
+     excluded from _offRawExVat, so they never inflate/deflate this) is
+     completely unaffected — see test 1/5. */
+  /* OFFER CORE R1.3 — thin wrapper around the canonical
+     _offAOConversionDecision(off) (see its own header comment for the
+     full trace/decision, including the NEW rate-only/optional-only
+     rule). Kept as a boolean-returning method since all 4 existing call
+     sites (createAO() itself, the two "Skapa..." buttons, the sales-
+     assistant tip) only ever needed a boolean — no behavior change to
+     those call sites, just routed through the richer decision helper. */
+  _offBlocksAOConversion(off) {
+    return !_offAOConversionDecision(off).allowed;
   },
 
   _offerInsight(o) {
@@ -831,7 +1377,16 @@ const OffersPage = {
     const tokenDaysL   = o.tokenExpiresAt ? Math.round((new Date(o.tokenExpiresAt).getTime() - now) / 86400000) : null;
 
     if (o.status === 'godkänd' && o.workOrderId)  return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Arbetsorder ' + o.workOrderId + ' skapad'};
-    if (o.status === 'godkänd' && !o.workOrderId) return {cls:'ins-godkand', txt: ic('check-circle',10) + ' Godkänd — skapa arbetsorder'};
+    /* NOTE (R1.6 — ITEM 2): only tell the user to create an AO when it is
+       actually possible right now — both the lifecycle guard (not
+       archived/deleted/already-converted) and the financial guard (a
+       real committed one-time amount) must agree. Otherwise show a
+       neutral "Godkänd" — the specific reason belongs in the offer
+       detail UI, not the list card. */
+    if (o.status === 'godkänd' && !o.workOrderId) {
+      const canCreateAO = _offAOCreateLifecycleDecision(o).allowed && _offAOConversionDecision(o).allowed;
+      return {cls:'ins-godkand', txt: ic('check-circle',10) + (canCreateAO ? ' Godkänd — skapa arbetsorder' : ' Godkänd')};
+    }
     if (o.status === 'nekad')           return {cls:'ins-nekad',   txt: ic('x-circle',10) + ' Nekad — följ upp orsak'};
     if (o.status === 'ändring-begärd')  return {cls:'ins-followup',txt: ic('edit-3',10) + ' Ändring begärd av kund — åtgärda'};
     if (o.status === 'utgången')        return {cls:'ins-nekad',   txt: ic('clock',10) + ' Utgången — förnya offerten'};
@@ -908,7 +1463,7 @@ const OffersPage = {
     this._expandedLineIds = new Set();
     this._mobileTotalsExpanded = false;
     this._wizardData   = {
-      customerId: preCustomerId || '', title: '', date: today, validUntil: validDef,
+      customerId: preCustomerId || '', propertyId: '', title: '', date: today, validUntil: validDef,
       summary: '', scope: '', includes: '', excludes: '',
       paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: '',
       /* V54B — samma "kontextuellt förhandsifyllnadsvärde"-mönster som
@@ -943,6 +1498,7 @@ const OffersPage = {
     this._mobileTotalsExpanded = false;
     this._wizardData  = {
       customerId:   off.customerId   || '',
+      propertyId:   off.propertyId   || '',
       title:        off.title        || '',
       date:         (off.createdAt||'').split('T')[0] || today,
       validUntil:   off.validUntil   || validDef,
@@ -1257,12 +1813,72 @@ const OffersPage = {
     const con = document.getElementById('pg-offer-content');
     if (!con) return;
     con.dataset.wiz = '1';
-    // Override .con padding/gap so wizard fills the area cleanly
-    con.style.cssText = 'padding:0;gap:0;display:block;box-sizing:border-box;max-width:none;width:100%;margin-left:0;margin-right:0;';
+    // Override .con padding/gap so wizard fills the area cleanly. Bottom
+    // padding is intentionally left OUT of this inline override (R1.6.8) —
+    // it is owned by the #pg-offer-content[data-wiz="1"] CSS rule in
+    // components.css instead, so the mobile bottom-nav reservation can
+    // never be shadowed by an inline style. See that rule's comment for
+    // the full scroll-ownership trace.
+    con.style.cssText = 'padding-top:0;padding-left:0;padding-right:0;gap:0;display:block;box-sizing:border-box;max-width:none;width:100%;margin-left:0;margin-right:0;';
     con.innerHTML = '<div id="off-wizard"></div>';
     document.getElementById('off-wizard').innerHTML = this._wizardHtml();
     const scroll = document.getElementById('content-scroll');
     if (scroll) scroll.scrollTop = 0;
+    this._syncWizardFloor();
+    if (!this._wizardResizeBound) {
+      this._wizardResizeBound = true;
+      window.addEventListener('resize', () => this._syncWizardFloor());
+    }
+  },
+
+  /* OFFER CORE R1.6.9 — FINAL SHORT-CONTENT FOOTER ALIGNMENT (hardened in
+     R1.6.10, both fixes below): reads #content-scroll's real, already-
+     rendered clientHeight (an ELEMENT measurement — the same element the
+     existing #content-scroll/.page CSS chain already depends on, NOT
+     window.innerHeight and NOT a hardcoded viewport pixel value) and
+     writes #off-wizard's own min-height directly, so the footer's
+     `margin-top:auto` (components.css) has a real target to settle
+     against on short steps. #pg-offer-content itself is never touched
+     here — see components.css's own comment for why giving IT an
+     explicit height would silently break the R1.6.8 long-content fix.
+
+     R1.6.10 — BLOCKER 1 FIX: the real #mobile-bottom-nav element's OWN
+     rendered height is read directly (getBoundingClientRect().height)
+     instead of a hardcoded `57`. The nav's real height already includes
+     `env(safe-area-inset-bottom)` (responsive.css, untouched) — reading
+     it live makes the floor automatically safe-area-correct on an actual
+     notched/home-indicator device without this file ever needing to know
+     what a safe-area inset is, let alone hardcode one. `57` remains only
+     as a last-resort fallback for the (non-production) case where the
+     real nav element cannot be measured at all (e.g. not yet in the DOM).
+     `12` is the one deliberate, fixed design-gap constant — the only
+     number this method still hardcodes on purpose.
+
+     R1.6.10 — BLOCKER 2 FIX: `wiz` is now resolved BEFORE the desktop
+     breakpoint check, and the >=1024px branch explicitly clears any
+     stale mobile-set inline min-height (`wiz.style.minHeight = ''`)
+     before returning — previously an early `return` at >=1024px left a
+     mobile-set inline min-height in place after a resize from mobile to
+     desktop width, which is now fixed: desktop always ends up with zero
+     inline min-height, restoring desktop's ordinary (untouched) CSS
+     sizing.
+
+     Guarded to <1024px, the same breakpoint Router.js already uses
+     elsewhere. */
+  _syncWizardFloor() {
+    const wiz = document.getElementById('off-wizard');
+    if (!wiz) return;
+    if (window.innerWidth >= 1024) {
+      wiz.style.minHeight = '';
+      return;
+    }
+    const scroll = document.getElementById('content-scroll');
+    if (!scroll) return;
+    const nav = document.getElementById('mobile-bottom-nav');
+    const navRectHeight = nav ? nav.getBoundingClientRect().height : 0;
+    const navHeight = navRectHeight > 0 ? navRectHeight : 57;
+    const target = scroll.clientHeight - navHeight - 12;
+    wiz.style.minHeight = target > 0 ? target + 'px' : '';
   },
 
   /* V48B5 Gate A: SMAL seam för användarinitierad stängning (mobil-
@@ -1318,6 +1934,7 @@ const OffersPage = {
     if (wiz) wiz.innerHTML = this._wizardHtml();
     const scroll = document.getElementById('content-scroll');
     if (scroll) scroll.scrollTop = 0;
+    this._syncWizardFloor();
   },
 
   _wizardHtml() {
@@ -1368,12 +1985,14 @@ const OffersPage = {
         <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">${ic('arrow-right',12)} Nästa: Tjänster</button>
       </div>`;
     } else if (step === 2) {
-      ftr = `<div class="off-wiz-ftr off-wiz-ftr--step2">
-        <div class="off-wiz-mobile-totals" id="off-mobile-totals">${this._mobileTotalsHtml()}</div>
-        <div class="off-wiz-ftr-row">
-          <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
-          <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',12)}</button>
-        </div>
+      /* OFFER CORE R1.6.6 — ITEM 2: the totals toggle moved out of the
+         footer into normal document flow (see mobileTotalsFlowHtml
+         below, rendered as the last thing inside the step-2 content) —
+         the footer here is now just the plain single-row button bar,
+         identical in shape to steps 1/3. */
+      ftr = `<div class="off-wiz-ftr">
+        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
+        <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',12)}</button>
       </div>`;
     } else {
       ftr = `<div class="off-wiz-ftr">
@@ -1382,33 +2001,63 @@ const OffersPage = {
       </div>`;
     }
 
+    /* OFFER CORE R1.6.6 — ITEM 1+2: the wizard action bar is now in
+       NORMAL DOCUMENT FLOW on every step — no position:sticky/fixed
+       (see components.css .off-wiz-ftr) — so the R1.6.5 dynamic
+       footer-height spacer (_syncWizFooterSpacer/--off-wiz-ftr-h) is no
+       longer needed and has been removed entirely (not left as dead
+       code): nothing overlays content anymore, so nothing needs
+       reserved clearance. The step-2 cost summary is placed as the
+       last element of the scrollable content, immediately before the
+       (now in-flow) footer — same _mobileTotalsHtml()/_toggleMobileTotals()
+       markup and canonical _offerCalcTotals() chain as before, just
+       relocated; still collapsible. */
+    const mobileTotalsFlowHtml = step === 2
+      ? `<div class="off-wiz-mobile-totals off-wiz-mobile-totals--flow" id="off-mobile-totals">${this._mobileTotalsHtml()}</div>`
+      : '';
+
     const innerCls = this._wizardStep === 3 ? 'off-wiz-inner' : 'off-wiz-inner-wide';
-    return hdr + `<div class="${innerCls}">${this._stepHtml()}</div>` + ftr;
+    return hdr + `<div class="${innerCls}">${this._stepHtml()}${mobileTotalsFlowHtml}</div>` + ftr;
   },
 
   /* V48B3A: kompakt sticky totalsrad för mobil/tablet i steg 2 — bygger på
      EXAKT samma kanoniska _offerCalcTotals()-kedja som _totalsBarHtml(),
      ingen ny ekonomilogik. Uppdateras av _refreshTotals() precis som
      desktop-sidopanelens totalsbar. */
+  /* OFFER CORE R1.6.6 — ITEM 2 (found via this round's own evidence
+     screenshot, same pattern R1.6.1 fixed in _totalsBarHtml() and R1.6.5
+     fixed in OfferDetailPage's off-detail-sum — this mobile-only totals
+     toggle had NEVER been updated and still showed a dominant, unconditional
+     "Engångsbelopp exkl./inkl. moms: 0 kr" block for a pure-recurring
+     offer, visible the moment the summary is expanded on mobile. Same
+     hasOneTimeLines = rawExVat > 0 predicate as the other two fixes,
+     applied here too — no calculation changed. */
   _mobileTotalsHtml() {
-    const _tot   = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
+    const off    = { lines: this._editLines, extras: this._editExtras, discount: this._discount };
+    const _tot   = _offerCalcTotals(off);
+    const rawExVat = _tot.rawExVat;
     const exVat  = _tot.exVatAfterDiscount;
     const vat    = _tot.vatAmount;
     const incVat = _tot.totalInclVat;
     const rutAmt = _tot.rutRotAmount;
     const cust   = _tot.customerPays;
+    const priceDisp = _offPrimaryDisplay(off);
     const expanded = !!this._mobileTotalsExpanded;
+    const hasOneTimeLinesMobile = rawExVat > 0;
+    const hasRecurringMobile = !!_tot.recurringMonthlyExVat;
     return `<button type="button" class="off-wiz-mobile-totals-toggle" onclick="OffersPage._toggleMobileTotals()">
-        <span class="off-wiz-mobile-totals-lbl">${rutAmt?'Kund betalar':'Totalt inkl. moms'}</span>
-        <span class="off-wiz-mobile-totals-val">${fmt(rutAmt?cust:incVat)} kr</span>
+        <span class="off-wiz-mobile-totals-lbl">${priceDisp.isRecurring ? 'Fast kostnad' : (rutAmt?'Kund betalar':'Totalt inkl. moms')}</span>
+        <span class="off-wiz-mobile-totals-val">${priceDisp.compact}</span>
         <span class="off-wiz-mobile-totals-chevron">${ic(expanded?'chevron-down':'chevron-up',13)}</span>
       </button>
       ${expanded ? `<div class="off-wiz-mobile-totals-detail">
-        <div class="off-wiz-mobile-totals-row"><span>Exkl. moms</span><span>${fmt(exVat)} kr</span></div>
+        ${hasRecurringMobile ? `<div class="off-wiz-mobile-totals-row"><span>Fast kostnad per månad</span><span>${fmt(_tot.recurringMonthlyExVat)} kr</span></div>
+        <div class="off-wiz-mobile-totals-row"><span>Fast kostnad per år (härledd)</span><span>${fmt(_tot.recurringAnnualExVat)} kr</span></div>` : ''}
+        ${hasOneTimeLinesMobile ? `<div class="off-wiz-mobile-totals-row"><span>${hasRecurringMobile?'Engångsbelopp exkl. moms':'Exkl. moms'}</span><span>${fmt(exVat)} kr</span></div>
         <div class="off-wiz-mobile-totals-row"><span>Moms</span><span>${fmt(vat)} kr</span></div>
-        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
+        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>${hasRecurringMobile?'Engångsbelopp inkl. moms':'Totalt inkl. moms'}</span><span>${fmt(incVat)} kr</span></div>
         ${rutAmt ? `<div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--rut"><span>RUT/ROT-avdrag</span><span>−${fmt(rutAmt)} kr</span></div>
-        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>Kund betalar</span><span>${fmt(cust)} kr</span></div>` : ''}
+        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>Kund betalar</span><span>${fmt(cust)} kr</span></div>` : ''}` : ''}
       </div>` : ''}`;
   },
 
@@ -1483,7 +2132,6 @@ const OffersPage = {
   _step1Html() {
     const d   = this._wizardData;
     const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const cuOpts = [{v:'',l:'— Välj kund —'}, ...(state.customers||[]).map(c=>({v:c.id,l:CustomerService.displayName(c)}))];
     return `
       <div class="off-s1-grid">
         <div class="off-s1-col">
@@ -1494,8 +2142,9 @@ const OffersPage = {
                 ${ic('user-plus',11)} Ny kund
               </button>
             </div>
-            ${CustomSelect.render('off-cu',{options:cuOpts,value:d.customerId,placeholder:'— Välj kund —',searchable:true,onchange:"OffersPage._wizardData.customerId=this.value"})}
+            ${CustomerPicker.render('off-cu',{value:d.customerId||'',placeholder:'— Välj kund —',onchange:"OffersPage._customerChanged(this.value)",searchProperties:true})}
           </div>
+          <div class="fg" id="off-property-wrap">${this._propertyFieldHtml()}</div>
           <div class="fg">
             <label>Rubrik / titel</label>
             <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"
@@ -1554,6 +2203,63 @@ const OffersPage = {
       </div>`;
   },
 
+  /* OFFER CORE R1 — PART B: återanvänder den REDAN etablerade
+     CustomerPicker (src/components/CustomerPicker.js), exakt samma
+     komponent/mönster som WorkOrdersPage._wizCustomerChanged() redan
+     använder — ingen ny sök-implementation byggd för Offer. CustomerPicker
+     söker redan på kundens eget namn/adress/postnr/ort/kontaktperson/
+     org-nr/telefon (se dess egen _matches()), vilket räcker för att t.ex.
+     "Södra Vägen 6" ska hitta kunden "Brf Södra Heden" så länge kundens
+     EGEN adress är satt till den adressen — precis så en bostadsrätts-
+     förening normalt registreras i VIFT (föreningens egen adress ÄR
+     fastighetens adress). Se RAPPORT §Sökbar kund/fastighetsväljare.
+     Fastighetsväljaren nedan är en EGEN, liten tillägg (INTE en ny
+     sökkomponent): en vanlig, redan befintlig CustomSelect (samma
+     generiska dropdown-komponent som användes för kundfältet INNAN denna
+     leverans) begränsad till EXAKT den valda kundens egna fastigheter
+     (property.customerId === customerId) — proportionerligt för en
+     vanligtvis kort lista, och det finns ingen befintlig fastighets-
+     sökkomponent i kodbasen att återanvända istället (spårat, se
+     RAPPORT). Stabila ID:n hela vägen — ingen kundduplicering. */
+  /* OFFER CORE R1.1 — BLOCKER 4: CustomerPicker anropas nu med
+     searchProperties:true för Offer (och ENDAST för Offer — alla andra
+     konsumenter av CustomerPicker fortsätter oförändrat, se
+     CustomerPicker.js §sökutökning). När en träff kom via en fastighet
+     (t.ex. sökning på "Södra Vägen 6") lägger CustomerPicker._pick()
+     dess id i den dolda select-elementets dataset.matchedPropertyId
+     INNAN change-eventet skickas — läses här och prioriteras FÖRE den
+     redan existerande "endast en fastighet"-auto-selektionen, så att
+     rätt customerId/propertyId-relation bevaras via stabila ID:n, utan
+     att duplicera kunden eller gissa. */
+  _customerChanged(customerId) {
+    this._wizardData.customerId = customerId;
+    const props = (state.properties||[]).filter(p => p.customerId === customerId);
+    const cuSel = document.getElementById('off-cu');
+    const matchedPropertyId = (cuSel && cuSel.dataset) ? cuSel.dataset.matchedPropertyId : '';
+    if (matchedPropertyId && props.some(p => p.id === matchedPropertyId)) {
+      this._wizardData.propertyId = matchedPropertyId;
+    } else {
+      const stillValid = props.some(p => p.id === this._wizardData.propertyId);
+      if (!stillValid) this._wizardData.propertyId = props.length === 1 ? props[0].id : '';
+    }
+    const wrap = document.getElementById('off-property-wrap');
+    if (wrap) wrap.innerHTML = this._propertyFieldHtml();
+    this._flushDraftNow();
+  },
+
+  _propertyFieldHtml() {
+    const d = this._wizardData;
+    if (!d.customerId) return '';
+    const props = (state.properties||[]).filter(p => p.customerId === d.customerId);
+    if (!props.length) return '';
+    const opts = [{v:'',l:'— Ingen specifik fastighet —'}, ...props.map(p => ({
+      v: p.id,
+      l: [p.name, p.address].filter(Boolean).join(' — ') || p.address || p.id
+    }))];
+    return `<label>Fastighet</label>
+      ${CustomSelect.render('off-property',{options:opts,value:d.propertyId||'',placeholder:'— Ingen specifik fastighet —',searchable:props.length>5,onchange:"OffersPage._wizardData.propertyId=this.value"})}`;
+  },
+
   /* ── Snabbskapa ny kund ─── */
   _quickNewCustomer() {
     const body = `
@@ -1608,6 +2314,22 @@ const OffersPage = {
   _step2Html() {
     const discType = this._discount?.type || 'percent';
     const discVal  = this._discount?.value || 0;
+    /* OFFER CORE R1.1 — BLOCKER 7 (motbevis-granskad): rabatten är, och
+       förblir i denna release, ENDAST en rabatt på det klassiska
+       engångsbeloppet (_offDiscountAmount räknar alltid mot rawExVat,
+       som exkluderar recurring/rate — se _offRawExVat). Innan denna
+       fix presenterades kontrollen som en generisk "Rabatt" oavsett om
+       offerten var helt/delvis återkommande, vilket riskerade att ge
+       intrycket av en rabatt på HELA offerten (inkl. månadsbeloppet)
+       trots att den matematiskt ALDRIG påverkar det. Minimal, entydig
+       regel: relabel:a explicit när recurring finns, och DÖLJ
+       kontrollen helt när det inte finns någon engångskomponent att
+       rabattera på (annars en rabatt-kontroll utan effekt). Ingen ny
+       "återkommande rabatt"-motor i denna release — se
+       RAPPORT §Blocker 7 för dokumentation av begränsningen. */
+    const _discTot = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
+    const hasOneTimeForDiscount = _discTot.rawExVat > 0 || discVal > 0;
+    const discountLabel = _discTot.recurringMonthlyExVat ? 'Rabatt på engångsbelopp' : 'Rabatt';
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
@@ -1643,8 +2365,9 @@ const OffersPage = {
         </div>
         <div class="off-wiz-s2-summ">
           <div id="off-totals-bar">${this._totalsBarHtml()}</div>
+          ${hasOneTimeForDiscount ? `
           <div class="off-discount-ctrl">
-            <label>Rabatt</label>
+            <label>${discountLabel}</label>
             <div class="off-discount-ctrl-row">
               <select id="off-disc-type" class="off-discount-ctrl-type"
                 onchange="OffersPage._discount.type=this.value;OffersPage._refreshTotals()">
@@ -1655,7 +2378,7 @@ const OffersPage = {
                 class="off-discount-ctrl-value"
                 oninput="OffersPage._discount.value=parseFloat(this.value)||0;OffersPage._refreshTotals()">
             </div>
-          </div>
+          </div>` : `<div class="off-discount-ctrl-hint" style="font-size:11px;color:var(--mt);margin-top:8px;">Ingen rabatt-kontroll visas — offerten har inget engångsbelopp att rabattera på (rabatt gäller endast engångsbelopp, ej återkommande/rörliga priser).</div>`}
         </div>
       </div>`;
   },
@@ -1714,21 +2437,78 @@ const OffersPage = {
     const incVat   = _tot.totalInclVat;
     const rutAmt   = _tot.rutRotAmount;
     const cust     = _tot.customerPays;
-    return `<div class="off-totals-card">
-      <div class="off-totals-card-hd">Sammanfattning</div>
-      <div class="off-totals-card-body">
-        <div class="off-totals-row"><span>Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
-        ${discAmt ? `<div class="off-totals-rut off-totals-rut--discount"><span>Rabatt</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
+    /* OFFER CORE R1 — ADDITIV återkommande-summering (aldrig blandad med
+       ovanstående engångsbelopp, se _offRawExVat/_offerCalcTotals). Visas
+       bara om offerten faktiskt har återkommande rader — en offert utan
+       sådana (dvs. VARJE befintlig offert) ser exakt samma kort som
+       innan denna leverans. */
+    const rateOptLines = _offRateAndOptionLines({ lines: this._editLines });
+    /* OFFER CORE R1.1 — BLOCKER 1: valfria (ej committade) extras visas
+       tillsammans med rate-raderna i samma "ingår ej ovan"-sektion —
+       ETT ställe som listar allt som INTE räknas in i totalsumman,
+       oavsett om det är en rate-rad eller en explicit valfri extra. */
+    const optionalExtras = _offOptionalExtras({ extras: this._editExtras });
+
+    /* OFFER CORE R1.6.1 — ITEM 1 + 4 (LIVE hotfix): LIVE-verifiering
+       visade en dominant "Kundpris inkl. moms: 0 kr" för en RENT
+       återkommande offert (Södra Heden: 8000/mån, 0 engångsbelopp) —
+       0 avsåg bara engångshinken men lästes som "hela offerten kostar
+       0 kr". Samma missvisande 0-kr-block uppstår för en ren rate-
+       offert (inga rader alls i engångshinken). Ingen ändring av
+       SJÄLVA beräkningarna (_offerCalcTotals oförändrad) — bara vilket
+       block som visas primärt/döljs, styrt av om det FAKTISKT finns
+       några engångsrader (rawExVat > 0, samma predikat _offerCalcTotals
+       redan använder internt — INTE detsamma som "belopp efter rabatt
+       > 0", som en 100%-rabatterad offert medvetet redan hanterar
+       oförändrat, se R1.4). */
+    const hasOneTimeLines = rawExVat > 0;
+    const hasRecurring     = !!_tot.recurringMonthlyExVat;
+    const hasRateOrOptional = rateOptLines.length > 0 || optionalExtras.length > 0;
+
+    /* OFFER CORE R1.6.2 — ITEM 5 (UI polish, LIVE-verified narrow sidebar
+       caused "8 000 kr/mån ex moms" to wrap badly as one long row-label
+       string): replaced the verbose per-row-label layout with a
+       typographic eyebrow/figure hierarchy — same two numbers
+       (recurringMonthlyExVat/recurringAnnualExVat), just no longer
+       concatenated into one long string per row. Presentation only —
+       _offerCalcTotals/_offRecurringMonthlyExVat etc. untouched. */
+    const recurringBlockHtml = hasRecurring ? `
+        <div class="off-totals-recurring${hasOneTimeLines ? '' : ' off-totals-recurring--primary'}">
+          <div class="off-totals-eyebrow">Fast kostnad</div>
+          <div class="off-totals-figure-primary">${fmt(_tot.recurringMonthlyExVat)} kr/mån</div>
+          <div class="off-totals-figure-secondary">${fmt(_tot.recurringAnnualExVat)} kr/år</div>
+          <div class="off-totals-figure-vatnote">exkl. moms</div>
+          ${!hasOneTimeLines ? `<div class="off-totals-row off-totals-row--sub off-totals-row--muted"><span>Varav moms per månad</span><span>${fmt(_tot.recurringMonthlyVat)} kr</span></div>
+          <div class="off-totals-row off-totals-row--sub off-totals-row--muted"><span>Inkl. moms per månad</span><span>${fmt(_tot.recurringMonthlyInclVat)} kr</span></div>` : ''}
+        </div>
+        <div class="off-totals-divider"></div>` : '';
+
+    const oneTimeBlockHtml = hasOneTimeLines ? `
+        <div class="off-totals-row"><span>${hasRecurring ? 'Engångsbelopp ex. moms' : 'Summa ex. moms'}</span><strong>${fmt(rawExVat)} kr</strong></div>
+        ${discAmt ? `<div class="off-totals-rut off-totals-rut--discount"><span>${hasRecurring?'Rabatt på engångsbelopp':'Rabatt'}</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
         <div class="off-totals-row"><span>Moms</span><strong>${fmt(vat)} kr</strong></div>
         <div class="off-totals-divider"></div>
-        <div class="off-totals-total"><span>Totalt inkl. moms</span><span>${fmt(incVat)} kr</span></div>
+        <div class="off-totals-total"><span>${hasRecurring ? 'Engångsbelopp inkl. moms' : 'Totalt inkl. moms'}</span><span>${fmt(incVat)} kr</span></div>
         ${rutAmt ? `
         <div class="off-totals-divider"></div>
         <div class="off-totals-rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>` : ''}
         <div class="off-totals-cust">
           <span class="off-totals-cust-lbl">Kundpris inkl. moms</span>
           <span class="off-totals-cust-val">${fmt(cust)} kr</span>
-        </div>
+        </div>` : (!hasRecurring && hasRateOrOptional ? `
+        <div class="off-totals-row off-totals-row--primary"><span>Prismodell</span><strong>Rörliga priser</strong></div>` : (!hasRecurring && !hasRateOrOptional ? `
+        <div class="off-totals-row off-totals-row--sub"><span>Inga prisrader tillagda ännu</span><span></span></div>` : ''));
+
+    return `<div class="off-totals-card">
+      <div class="off-totals-card-hd">Sammanfattning</div>
+      <div class="off-totals-card-body">
+        ${recurringBlockHtml}
+        ${oneTimeBlockHtml}
+        ${(rateOptLines.length || optionalExtras.length) ? `
+        <div class="off-totals-divider"></div>
+        <div class="off-totals-rateopt-hd" title="Ingår ej i offertens totalsumma">Rörliga priser</div>
+        ${rateOptLines.map(l => `<div class="off-totals-row off-totals-row--sub"><span>${esc(l.description)||'Rörligt pris'}</span><span>${this._billingPriceLabelHtml(l, 0)}</span></div>`).join('')}
+        ${optionalExtras.map(e => `<div class="off-totals-row off-totals-row--sub"><span>${esc(e.description)||'Tillval'}</span><span>${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr${e.unit?'/'+esc(e.unit):''}</span></div>`).join('')}` : ''}
       </div>
     </div>`;
   },
@@ -1873,21 +2653,38 @@ const OffersPage = {
 
   _renderManualCard(l, i) {
     const units = ['st','tim','m','m²','m³','lm','kg','l','paket','mån'];
-    const total  = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
+    const bt     = l.billingType || 'onetime';
+    const total  = _lineExVat(l);   /* OFFER CORE R1: 0 för rate/option — se _lineExVat() */
     const incVat = total + Math.round(total * _normVat(l.vatRate) / 100);
-    const rutAmt = l.rutAmount || 0;
+    const rutAmt = _effectiveRutAmount(l);
     const cust   = incVat - rutAmt;
     const curRed = l.reductionType || 'ingen';
     const base   = Math.max(0, Math.min(+l.reductionBaseExVat || 0, total));
     const eligibleInclVat = base + Math.round(base * _normVat(l.vatRate) / 100);
     const expanded = this._expandedLineIds.has(l.id);
+    const qtyMeta = (bt==='rate') ? '' : `${l.qty!=null?l.qty:1} ${esc(l.unit||'st')} × ${fmt(l.unitPrice||0)} kr`;
+    /* OFFER CORE R1.6.6 — ITEM 4: the badge only moves into the secondary
+       meta line when the title is a REAL description — if there's no
+       description, the title itself already IS the billing-type label
+       (see _billingTypeRowLabel above), so showing the badge too would
+       just duplicate the same word again (the exact issue R1.6.5 already
+       avoided by suppressing the badge in that case — preserved here,
+       just relocated out of the title so a long real description can
+       wrap to two lines without a badge competing inline with it). */
+    const hasRealDesc = !!esc(l.description);
+    /* bt==='rate' leaves qtyMeta empty (no committed qty×price makes
+       sense for a rate line) — show "Moms X%" there instead, same
+       secondary-meta pattern the fixed-price card already uses, so a
+       rate row reads "Rörligt à-pris · Moms 25 %" instead of a bare
+       badge with nothing after it. */
+    const metaText = qtyMeta || `Moms ${_normVat(l.vatRate)}%`;
     const summary = `<div class="off-wiz-line-summary">
         <div class="off-wiz-line-summary-icon">${ic('minus',14)}</div>
         <div class="off-wiz-line-summary-body">
-          <div class="off-wiz-line-summary-title">${esc(l.description)||'Löpande rad'}</div>
-          <div class="off-wiz-line-summary-meta">${l.qty!=null?l.qty:1} ${esc(l.unit||'st')} × ${fmt(l.unitPrice||0)} kr${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
+          <div class="off-wiz-line-summary-title">${hasRealDesc ? esc(l.description) : this._billingTypeRowLabel(l, 'Löpande rad')}</div>
+          <div class="off-wiz-line-summary-meta">${hasRealDesc ? this._billingTypeBadgeHtml(l) + ' · ' : ''}${metaText}${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
         </div>
-        <div class="off-wiz-line-summary-price">${fmt(total)} kr</div>
+        <div class="off-wiz-line-summary-price">${this._billingPriceLabelHtml(l, total)}</div>
       </div>
       <div class="off-wiz-line-summary-actions">
         <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
@@ -1900,9 +2697,9 @@ const OffersPage = {
     ];
     const editor = `<div class="off-wiz-line-editor">
       <div class="off-wiz-line-card-hd">
-        <span class="off-wiz-line-card-type">${ic('minus',9)} Manuell rad</span>
+        <span class="off-wiz-line-card-type">${ic('minus',9)} ${this._billingTypeRowLabel(l, 'Manuell rad')}</span>
         <div class="off-wiz-line-card-spacer"></div>
-        <strong class="off-wiz-line-card-total" id="off-lt-${i}">${fmt(total)} kr</strong>
+        <strong class="off-wiz-line-card-total" id="off-lt-${i}">${this._billingPriceLabelHtml(l, total)}</strong>
         <button type="button" class="btn bs bxs off-wiz-line-editor-done" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('check',10)} Klar</button>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('x',10)}</button>
       </div>
@@ -1913,7 +2710,7 @@ const OffersPage = {
           <input type="number" value="${l.qty!=null?l.qty:1}" min="0" step="0.5"
             oninput="OffersPage._editLines[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()"></div>
         <div><label class="off-wiz-line-field-label">Enhet</label>
-          <select onchange="OffersPage._editLines[${i}].unit=this.value">
+          <select onchange="OffersPage._editLines[${i}].unit=this.value;OffersPage._refreshTotals();document.getElementById('off-lines').innerHTML=OffersPage._linesHtml();">
             ${units.map(u=>`<option${(l.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
           </select></div>
         <div><label class="off-wiz-line-field-label">À-pris ex. moms (kr)</label>
@@ -1925,7 +2722,16 @@ const OffersPage = {
             ${this._vatOptionsHtml(_normVat(l.vatRate))}
           </select></div>
       </div>
-      <div class="off-svc-reduction off-svc-reduction--line">
+      <div class="off-wiz-line-manual-grid off-wiz-line-billing-grid">
+        <div><label class="off-wiz-line-field-label">Prissemantik</label>
+          <select onchange="OffersPage._setLineBillingType(${i}, this.value);"
+            title="Styr om priset ingår i offertens totalsumma">
+            ${this._billingTypeOptionsHtml(bt)}
+          </select></div>
+      </div>
+      ${bt==='recurring' ? `<div class="off-wiz-line-field-hint off-wiz-line-field-hint--neutral">Ingår i offertens återkommande månads-/årssumma, INTE i den vanliga totalsumman.</div>` : ''}
+      ${(bt==='rate') ? `<div class="off-wiz-line-field-hint off-wiz-line-field-hint--neutral">Visas på offerten (t.ex. "${fmt(l.unitPrice||0)} kr/${esc(l.unit||'enhet')}") men ingår aldrig i någon totalsumma.</div>` : ''}
+      ${bt==='onetime' ? `<div class="off-svc-reduction off-svc-reduction--line">
         <label class="off-svc-field-label--sub">Skattereduktion</label>
         <div class="off-svc-reduction-row">
           ${redOpts.map(o=>`<button type="button" class="off-svc-reduction-btn${curRed===o.v?' is-selected':''}"
@@ -1945,7 +2751,7 @@ const OffersPage = {
         <div class="off-line-reduction-calc-row"><span>Avdragsgrundande arbetskostnad inkl. moms</span><span id="off-leligincl-${i}">${fmt(eligibleInclVat)} kr</span></div>
         <div class="off-line-reduction-calc-row"><span>Preliminärt ${curRed==='rot'?'ROT':'RUT'}-avdrag</span><span id="off-lrutamt-${i}">−${fmt(rutAmt)} kr</span></div>
         <div class="off-line-reduction-calc-row off-line-reduction-calc-row--total"><span>Kund betalar</span><span id="off-lcustpay-${i}">${fmt(cust)} kr</span></div>
-      </div>
+      </div>` : ''}
     </div>`;
     return `<div class="off-wiz-line-card" data-expanded="${expanded?'1':'0'}">${summary}${editor}</div>`;
   },
@@ -1983,7 +2789,13 @@ const OffersPage = {
   _extrasInnerHtml() {
     const units = ['st','tim','m','m²','kg','paket'];
     if (!this._editExtras.length) return `<p style="font-size:12px;color:var(--mt);margin:0 0 4px;">Inga tillval ännu.</p>`;
-    return this._editExtras.map((e, i) => `
+    return this._editExtras.map((e, i) => {
+      /* OFFER CORE R1.1 — BLOCKER 1: e.includedInTotal===false betyder
+         "Tillval, ej i totalsumman" — frånvarande fält (all extras-data
+         från FÖRE R1.1) betyder oförändrat "ingår" (se
+         _extraIncludedInTotal i PageShells-toppen). */
+      const included = e.includedInTotal !== false;
+      return `
       <div class="off-extra-row">
         <input class="off-extra-desc" value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="Tillval"
           oninput="OffersPage._editExtras[${i}].description=this.value">
@@ -1997,8 +2809,14 @@ const OffersPage = {
         <select class="off-extra-vat" title="Moms" onchange="OffersPage._editExtras[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
           ${this._vatOptionsHtml(_normVat(e.vatRate))}
         </select>
+        <label class="off-extra-included" title="Avmarkerad = visas men ingår ej i totalsumman">
+          <input type="checkbox" ${included?'checked':''}
+            onchange="OffersPage._editExtras[${i}].includedInTotal=this.checked;OffersPage._refreshTotals();document.getElementById('off-extras').innerHTML=OffersPage._extrasInnerHtml();OffersPage._flushDraftNow();">
+          <span>I totalsumman</span>
+        </label>
         <button type="button" class="off-extra-remove btn bd bxs" onclick="OffersPage._removeExtra(${i})">${ic('x',10)}</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   },
 
   /* V41 §1: liten delad markup-helper för momsväljaren — INGEN ny
@@ -2008,8 +2826,95 @@ const OffersPage = {
     return [0,6,12,25].map(r=>`<option value="${r}" ${r===selectedVat?'selected':''}>${r}%</option>`).join('');
   },
 
+  /* OFFER CORE R1 — l.billingType-väljare, delad mellan Fastpris- och
+     Manuell-radkorten (de två radtyper där en fri prissemantik är
+     meningsfull). "onetime" (frånvarande/default) bevarar EXAKT
+     befintligt beteende — se _lineExVat()/_offRawExVat() för den fulla
+     motiveringen. Ingen ändring av vad "type" (fixed/manual/service/
+     text) betyder — detta är ett HELT SEPARAT, ortogonalt fält. */
+  _billingTypeOptionsHtml(selected) {
+    /* OFFER CORE R1.1 — BLOCKER 1: 'option' borttaget härifrån. VIFT:s
+       kanoniska "Tillval"-koncept är off.extras[] (se _addExtra/
+       _extrasInnerHtml, med e.includedInTotal för att markera en extra
+       som ej committad) — inte en andra, parallell radnivå-modell. */
+    const opts = [
+      {v:'onetime',   l:'Engångsbelopp'},
+      {v:'recurring', l:'Återkommande (per månad)'},
+      {v:'rate',      l:'Rörligt à-pris'} /* OFFER CORE R1.6.3 — TEXT SIMPLIFICATION: förklaringen ("ingår ej i totalsumman") finns redan som en egen hjälptext direkt under selecten (off-wiz-line-field-hint) — själva SELECT-etiketten behöver den inte upprepa, den fick bara texten att klippas i en native <select>. Värdet 'rate' är oförändrat. */
+    ];
+    const cur = selected || 'onetime';
+    return opts.map(o=>`<option value="${o.v}"${cur===o.v?' selected':''}>${o.l}</option>`).join('');
+  },
+
+  /* Liten, tydlig etikett i sammanfattningsraden — samma tre "icke-
+     engångsbelopp"-lägen som _billingTypeOptionsHtml, plus prisets
+     enhetssuffix (t.ex. "/mån", "/h") när ett sådant är satt. */
+  _billingTypeBadgeHtml(l) {
+    const bt = l.billingType || 'onetime';
+    if (bt === 'recurring') return `<span class="bdg bdg-blue off-billing-badge">Återkommande/mån</span>`;
+    if (bt === 'rate')      return `<span class="bdg bdg-orange off-billing-badge">Rörligt à-pris</span>`;
+    return '';
+  },
+
+  /* OFFER CORE R1.6.1 — ITEM 3: radkortets typ-rubrik ("FASTPRIS" i
+     off-svc-card-meta / "Manuell rad" i off-wiz-line-card-type) fick
+     tidigare ALLTID stå kvar oavsett billingType — vilseledande för en
+     recurring- eller rate-rad. Härleds nu ALLTID från l.billingType
+     (aldrig från enhetstext), med baseLabel som fallback för onetime
+     (bevarar exakt "Fastpris"/"Manuell rad" för all befintlig onetime-
+     data, byte-kompatibelt). */
+  _billingTypeRowLabel(l, baseLabel) {
+    const bt = l.billingType || 'onetime';
+    if (bt === 'recurring') return 'Återkommande';
+    if (bt === 'rate')      return 'Rörligt pris';
+    return baseLabel;
+  },
+
+  /* Prisetiketten i sammanfattningsraden — "5 750 kr/mån" för
+     återkommande rader (unit visas som suffix), annars oförändrat
+     "X kr". Rate/option visar radens eget belopp + valfri enhet
+     (t.ex. "440 kr/h") men detta belopp räknas ALDRIG in i någon
+     totalsumma (se _lineExVat()). */
+  _billingPriceLabelHtml(l, amountExVat) {
+    const bt = l.billingType || 'onetime';
+    const unit = (l.unit || '').trim();
+    if (bt === 'recurring') return `${fmt(amountExVat)} kr${unit ? '/' + esc(unit) : '/mån'}`;
+    if (bt === 'rate') return `${fmt(l.unitPrice||0)} kr${unit ? '/' + esc(unit) : ''}`;
+    return `${fmt(amountExVat)} kr`;
+  },
+
+  /* OFFER CORE R1.6.3 — BLOCKER 2: DISPLAY-ONLY ex-moms amount for the
+     editor's informational "ex. moms · X kr inkl." sub-line — NEVER used
+     for committed totals, which continue to go exclusively through the
+     canonical _lineExVat()/_offerCalcTotals() chain (untouched). For
+     billingType='rate', _lineExVat() correctly, intentionally returns 0
+     (a rate line must never enter the committed offer total) — but that
+     same 0 was then also being used as the base for the VAT-inclusive
+     INFORMATIONAL price shown to the user, making a real "440 kr/h"
+     rate look like "0 kr inkl." moms. This helper is the single place
+     that reconciles "0 for totals" with "real money for display": for
+     'rate' it uses the line's actual unitPrice (the same number
+     _billingPriceLabelHtml already shows as the primary price); for
+     every other billingType it is byte-identical to _lineExVat(l), so
+     recurring/one-time display is completely unchanged. */
+  _lineDisplayExVat(l) {
+    if ((l.billingType || 'onetime') === 'rate') return +(l.unitPrice || 0);
+    return _lineExVat(l);
+  },
+
+  /* OFFER CORE R1.2 — BLOCKER 1 (motbevis-granskad): en NY tillval-rad
+     måste vara ej-committad by default. "Tillval" har alltid, historiskt,
+     kommunicerats till kund som en valfri extratjänst — ett osäkert
+     default (includedInTotal:true, R1.1) gjorde att en användare som
+     klickade "Lägg till tillval" utan att märka kryssrutan tyst ökade
+     kundens committade totalsumma. Historisk data (fältet helt frånvarande,
+     ALL data skapad före R1.1/R1.2) påverkas INTE av detta — den vägen
+     går via _extraIncludedInTotal()'s "frånvarande fält = included"-regel,
+     inte via denna konstruktor. Endast NYA rader skapade FRÅN OCH MED
+     R1.2 får detta säkra default; användaren kan uttryckligen kryssa i
+     "I totalsumman" för att committa den. */
   _addExtra() {
-    this._editExtras.push({id:'E'+Date.now(), description:'', qty:1, unit:'st', unitPrice:0, vatRate:25});
+    this._editExtras.push({id:'E'+Date.now(), description:'', qty:1, unit:'st', unitPrice:0, vatRate:25, includedInTotal:false});
     const el = document.getElementById('off-extras');
     if (el) el.innerHTML = this._extrasInnerHtml();
     this._flushDraftNow();
@@ -2114,6 +3019,32 @@ const OffersPage = {
     this._flushDraftNow();
   },
 
+  /* OFFER CORE R1.1 — BLOCKER 5 (motbevis-granskad): en rad som byter
+     billingType BORT FRÅN 'onetime' måste omedelbart förlora sin
+     RUT/ROT-reduktion — annars kan en tidigare ifylld reduktion bli
+     "kvarvarande" på en recurring/rate-rad och (innan detta fixades)
+     driva customerPays negativt via _offerCalcTotals. Detta är en andra,
+     UI-nivå-linje av försvar utöver fail-safe-filtret i
+     _offerCalcTotals självt (rutRotAmount-beräkningen där ignorerar
+     numera ändå icke-onetime-rader oavsett vad som händer här) — men
+     att rensa fälten direkt gör att UI:t aldrig ens VISAR en
+     missvisande kvarvarande reduktion för en rad som inte längre kan ha
+     en. */
+  _setLineBillingType(idx, val) {
+    const l = this._editLines[idx];
+    if (!l) return;
+    l.billingType = val;
+    if (val !== 'onetime') {
+      l.reductionType = 'ingen';
+      l.reductionBaseExVat = 0;
+      l.rutAmount = 0;
+    }
+    this._refreshTotals();
+    const el = document.getElementById('off-lines');
+    if (el) el.innerHTML = this._linesHtml();
+    this._flushDraftNow();
+  },
+
   _setLineReduction(idx, val) {
     const l = this._editLines[idx];
     if (!l) return;
@@ -2146,7 +3077,7 @@ const OffersPage = {
 
   _addFixedLine() {
     const newId = 'F'+Date.now();
-    this._editLines.push({id:newId, type:'fixed', description:'', unitPrice:0, vatRate:25, reductionType:'ingen', reductionBaseExVat:0, rutAmount:0});
+    this._editLines.push({id:newId, type:'fixed', description:'', unitPrice:0, vatRate:25, reductionType:'ingen', reductionBaseExVat:0, rutAmount:0, billingType:'onetime', unit:''});
     this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
@@ -2159,9 +3090,17 @@ const OffersPage = {
   },
 
   _renderFixedCard(l, i) {
-    const tot    = Math.round(l.unitPrice || 0);
-    const incVat = tot + Math.round(tot * _normVat(l.vatRate) / 100);
-    const rutAmt = l.rutAmount || 0;
+    const bt     = l.billingType || 'onetime';
+    const tot    = _lineExVat(l);   /* OFFER CORE R1: 0 för rate/option — se _lineExVat() */
+    /* OFFER CORE R1.6.3 — BLOCKER 2: den informativa "ex. moms · X kr
+       inkl."-raden ska visa vad RADENS PRIS blir inkl. moms (även för
+       rate, där tot medvetet är 0 för totalsumman) — se
+       _lineDisplayExVat(). committedExVat behåller namnet "tot" och
+       används OFÖRÄNDRAT för allt som rör den committade summan
+       (rutAmt/cust nedan, precis som innan). */
+    const displayExVat = this._lineDisplayExVat(l);
+    const incVat = displayExVat + Math.round(displayExVat * _normVat(l.vatRate) / 100);
+    const rutAmt = _effectiveRutAmount(l);
     const cust   = incVat - rutAmt;
     const curRed = l.reductionType || 'ingen';
     const base   = Math.max(0, Math.min(+l.reductionBaseExVat || 0, tot));
@@ -2170,10 +3109,10 @@ const OffersPage = {
     const summary = `<div class="off-wiz-line-summary">
         <div class="off-wiz-line-summary-icon">${ic('tag',14)}</div>
         <div class="off-wiz-line-summary-body">
-          <div class="off-wiz-line-summary-title">${esc(l.description)||'Fastpris'}</div>
-          <div class="off-wiz-line-summary-meta">Moms ${_normVat(l.vatRate)}%${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
+          <div class="off-wiz-line-summary-title">${esc(l.description) ? esc(l.description) : this._billingTypeRowLabel(l, 'Fastpris')}</div>
+          <div class="off-wiz-line-summary-meta">${esc(l.description) ? this._billingTypeBadgeHtml(l) + ' · ' : ''}Moms ${_normVat(l.vatRate)}%${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
         </div>
-        <div class="off-wiz-line-summary-price">${fmt(tot)} kr</div>
+        <div class="off-wiz-line-summary-price">${this._billingPriceLabelHtml(l, tot)}</div>
       </div>
       <div class="off-wiz-line-summary-actions">
         <button type="button" class="off-wiz-line-summary-edit" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('pencil',11)} Redigera</button>
@@ -2187,16 +3126,16 @@ const OffersPage = {
     const editor = `<div class="off-wiz-line-editor">
       <div class="off-svc-card-hd">
         <div class="off-svc-card-hd-main">
-          <div class="off-svc-card-meta">${ic('tag',9)} Fastpris</div>
+          <div class="off-svc-card-meta">${ic('tag',9)} ${this._billingTypeRowLabel(l, 'Fastpris')}</div>
           <input class="off-fixed-name" value="${(l.description||'').replace(/"/g,'&quot;')}" placeholder="Benämning…"
             oninput="OffersPage._editLines[${i}].description=this.value">
         </div>
         <div class="off-svc-card-hd-price">
-          <div class="off-svc-card-price" id="off-lt-${i}">${fmt(tot)} kr</div>
+          <div class="off-svc-card-price" id="off-lt-${i}">${this._billingPriceLabelHtml(l, tot)}</div>
           <div class="off-svc-card-price-sub" id="off-lsub-${i}">ex. moms · ${fmt(incVat)} kr inkl.</div>
         </div>
       </div>
-      <div class="off-wiz-line-fixed-grid">
+      <div class="off-wiz-line-controls-grid">
         <div><label class="off-wiz-line-field-label">Pris ex moms (kr)</label>
           <input type="text" inputmode="decimal" class="off-money-input" value="${_formatMoneyInput(l.unitPrice||0)}"
             oninput="OffersPage._editLines[${i}].unitPrice=_parseMoneyInput(this.value);OffersPage._refreshTotals()"
@@ -2205,11 +3144,22 @@ const OffersPage = {
           <select onchange="OffersPage._editLines[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
             ${this._vatOptionsHtml(_normVat(l.vatRate))}
           </select></div>
-        <div><label class="off-wiz-line-field-label">Intern anteckning</label>
-          <input value="${(l.note||'').replace(/"/g,'&quot;')}" placeholder="Syns ej för kund"
-            oninput="OffersPage._editLines[${i}].note=this.value" class="off-wiz-line-field-note"></div>
+        <div><label class="off-wiz-line-field-label">Prissemantik</label>
+          <select onchange="OffersPage._setLineBillingType(${i}, this.value);"
+            title="Styr om priset ingår i offertens totalsumma">
+            ${this._billingTypeOptionsHtml(bt)}
+          </select></div>
+        <div><label class="off-wiz-line-field-label" title="Visas efter priset, t.ex. mån/h/m²">Enhet</label>
+          <input value="${(l.unit||'').replace(/"/g,'&quot;')}" placeholder="t.ex. mån"
+            oninput="OffersPage._editLines[${i}].unit=this.value;OffersPage._refreshTotals()"></div>
       </div>
-      <div class="off-svc-reduction off-svc-reduction--line">
+      <div class="off-wiz-line-note-row">
+        <label class="off-wiz-line-note-label">${ic('lock',9)} Intern anteckning</label>
+        <input value="${(l.note||'').replace(/"/g,'&quot;')}" placeholder="Syns ej för kund"
+          oninput="OffersPage._editLines[${i}].note=this.value" class="off-wiz-line-field-note off-wiz-line-note-input"></div>
+      ${bt==='recurring' ? `<div class="off-wiz-line-field-hint off-wiz-line-field-hint--neutral">Ingår i offertens återkommande månads-/årssumma, INTE i den vanliga totalsumman.</div>` : ''}
+      ${(bt==='rate') ? `<div class="off-wiz-line-field-hint off-wiz-line-field-hint--neutral">Visas på offerten men ingår aldrig i någon totalsumma.</div>` : ''}
+      ${bt==='onetime' ? `<div class="off-svc-reduction off-svc-reduction--line">
         <label class="off-svc-field-label--sub">Skattereduktion</label>
         <div class="off-svc-reduction-row">
           ${redOpts.map(o=>`<button type="button" class="off-svc-reduction-btn${curRed===o.v?' is-selected':''}"
@@ -2229,7 +3179,7 @@ const OffersPage = {
         <div class="off-line-reduction-calc-row"><span>Avdragsgrundande arbetskostnad inkl. moms</span><span id="off-leligincl-${i}">${fmt(eligibleInclVat)} kr</span></div>
         <div class="off-line-reduction-calc-row"><span>Preliminärt ${curRed==='rot'?'ROT':'RUT'}-avdrag</span><span id="off-lrutamt-${i}">−${fmt(rutAmt)} kr</span></div>
         <div class="off-line-reduction-calc-row off-line-reduction-calc-row--total"><span>Kund betalar</span><span id="off-lcustpay-${i}">${fmt(cust)} kr</span></div>
-      </div>
+      </div>` : ''}
       <div class="off-wiz-line-card-actions">
         <button type="button" class="btn bs bxs off-wiz-line-editor-done" onclick="OffersPage._toggleLineExpanded('${l.id}')">${ic('check',10)} Klar</button>
         <button type="button" class="btn bd bxs" onclick="OffersPage._removeLine(${i})">${ic('trash-2',10)} Ta bort</button>
@@ -2570,7 +3520,13 @@ const OffersPage = {
   _refreshTotals() {
     this._editLines.forEach((l, i) => {
       if (l.type === 'manual' || l.type === 'fixed') {
-        const total = Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0));
+        /* OFFER CORE R1.6.3 — BLOCKER 2 (consistency): now derived from
+           the canonical _lineExVat(l) (0 för rate/option, byte-identical
+           to the old local Math.round(qty*unitPrice) formula for every
+           other billingType) instead of a duplicated ad-hoc calc, so a
+           LIVE edit's committed-amount handling can never drift from the
+           render-time value used by _renderFixedCard()/_renderManualCard(). */
+        const total = _lineExVat(l);
         /* V48B5 R1 §5: om pris/antal sänks så att radens exVat blir lägre
            än det sparade arbetskostnadsunderlaget, klampas underlaget ner
            till radens nya exVat INNAN rutAmount räknas om — annars skulle
@@ -2584,12 +3540,17 @@ const OffersPage = {
           l.rutAmount = 0;
         }
         const el = document.getElementById('off-lt-' + i);
-        if (el) el.textContent = fmt(total) + ' kr';
+        if (el) el.textContent = this._billingPriceLabelHtml(l, total);
         /* V41 §3: fastprisradens "ex. moms · X kr inkl."-subtext hade
            tidigare INGET id och uppdaterades aldrig här — en momsändring
            (eller prisändring) uppdaterade bara ex-momsbeloppet, inte det
-           inkl-moms-belopp som redan stod skrivet på kortet. */
-        const incVat = total + Math.round(total * _normVat(l.vatRate) / 100);
+           inkl-moms-belopp som redan stod skrivet på kortet.
+           R1.6.3 — BLOCKER 2: subtexten är INFORMATIV, inte den
+           committade summan — måste därför byggas på _lineDisplayExVat
+           (verklig à-pris för rate), annars återkommer "0 kr inkl."-
+           felet så fort användaren rör pris/moms-fältet efter render. */
+        const displayExVat = this._lineDisplayExVat(l);
+        const incVat = displayExVat + Math.round(displayExVat * _normVat(l.vatRate) / 100);
         if (l.type === 'fixed') {
           const subEl = document.getElementById('off-lsub-' + i);
           if (subEl) subEl.textContent = 'ex. moms · ' + fmt(incVat) + ' kr inkl.';
@@ -2635,7 +3596,7 @@ const OffersPage = {
   /* ── Line management ─── */
   _addManualLine() {
     const newId = 'M'+Date.now();
-    this._editLines.push({id:newId,type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0,reductionType:'ingen',reductionBaseExVat:0,rutAmount:0});
+    this._editLines.push({id:newId,type:'manual',description:'',qty:1,unit:'st',unitPrice:0,vatRate:25,total:0,reductionType:'ingen',reductionBaseExVat:0,rutAmount:0,billingType:'onetime'});
     this._expandedLineIds.add(newId);
     const el = document.getElementById('off-lines');
     if (el) el.innerHTML = this._linesHtml();
@@ -3186,9 +4147,55 @@ const OffersPage = {
         excludes:     d.excludes     || '',
         lines:        cleanLines.map(l=>{
           if(l.type==='service'||l.type==='text') return {...l};
-          return {...l, total: Math.round((l.qty!=null?l.qty:1)*(l.unitPrice||0))};
+          /* OFFER CORE R1: återanvänder den KANONISKA _lineExVat() istället
+             för en egen, naiv qty*unitPrice-omräkning — annars skulle
+             en 'rate'/'option'-rad kunna spara ett felaktigt, icke-noll
+             `total` som (via de befintliga icke-kanoniska summerarna i
+             CustomersPage.js/ReportsPage.js) tyst räknas in i andra
+             ställens offertsummor trots att den aldrig ska ingå i någon
+             totalsumma. Se RAPPORT §Prismodell. */
+          return {...l, total: _lineExVat(l)};
         }),
         extras:       cleanExtras,
+        /* OFFER CORE R1 — PART B: offerten bär nu sin egen, explicit
+           användarvalda `propertyId` (via CustomerPicker+fastighets-
+           dropdownen i steg 1) när en sådan finns — tidigare sattes
+           detta fält ALDRIG av formuläret alls (se kommentaren om
+           `effectivePropertyId` nedan för det tidigare, endast-vid-
+           redigering-genom-kontext-beteendet). */
+        propertyId:   d.propertyId   || '',
+        /* OFFER CORE R1.2 — BLOCKER 3 (traced first, see RAPPORT
+           §Property/address-trace): propertyId is the CANONICAL
+           relation; off.address is the field EVERY customer-facing
+           surface (public-offer.html's facts, printPdf(), the digital
+           link snapshot, offer-pdf, offer-public-pdf) already reads for
+           "Fastighet: ..." — none of those surfaces have access to
+           state.properties (public-offer.html/both PDFs are fully
+           standalone/offline, reading only the offer's own stored/
+           snapshotted fields). The wizard has NEVER had a manual
+           address input bound to off.address (grep-verified — this
+           field has been silently unpopulated since it was added to
+           Schema.offer(), for every offer that has ever been saved).
+           Deriving it HERE, automatically, at save time — the ONE
+           place a resolved property is known — means every existing
+           consumer of off.address gets the correct value with ZERO
+           changes to their own rendering code, and the user never has
+           to duplicate the address as free text.
+           OFFER CORE R1.3 — BLOCKER 3 (motbevis-granskad): R1.2's
+           inline fallback here ALWAYS reused the previously-saved
+           off.address whenever d.propertyId was empty — indistinguishable
+           from "genuinely never had a property" (legacy, preserve) vs.
+           "the user just explicitly cleared a previously-set property"
+           (must blank the now-stale address, or the public offer/PDFs
+           would keep showing a property the user removed). Routed
+           through the new _deriveOfferAddressForSave() (see its own
+           header for the full A/B/C/D case breakdown), which is the
+           ONLY place that combines the wizard's CURRENT propertyId with
+           the offer's PREVIOUSLY-SAVED propertyId to distinguish those
+           two cases — deliberately NOT folded into the render-only
+           _offPropertyDisplayText(), which has no notion of "what the
+           user just did". */
+        address: _deriveOfferAddressForSave(d, this._editOfferId ? getOff(this._editOfferId) : null),
         validUntil:   d.validUntil   || '',
         paymentTerms: d.paymentTerms || '',
         validityText: d.validityText || '',
@@ -3212,8 +4219,31 @@ const OffersPage = {
          en annan fastighet hos samma kund). Vid inkompatibilitet
          BLOCKERAS sparningen istället för att tyst rensa kopplingen —
          samma disciplin som §15/blockerare 3 för Uppgifter. */
-      const existingOffForSave = this._editOfferId ? getOff(this._editOfferId) : null;
-      const effectivePropertyId = existingOffForSave ? (existingOffForSave.propertyId || '') : '';
+      /* OFFER CORE R1.4 — BLOCKER 3 (motbevis-granskad): the comment
+         above (and the code it originally justified) predates the
+         property picker's ability to explicitly clear a previously-set
+         property — at that time the offer form genuinely had "no
+         editable property field", so falling back to the EXISTING
+         offer's propertyId when d.propertyId was empty was the only
+         sane behavior. That assumption is no longer true: R1 added a
+         real, explicit property field (`CustomerPicker`+the fastighets-
+         dropdown), and `_wizardData.propertyId` is ALREADY correctly
+         seeded from the existing offer when editing begins
+         (`openEdit()`) and ALREADY correctly updated the instant the
+         user changes or clears it (`_customerChanged()`/the property
+         dropdown's onchange). Falling back to the existing offer's
+         propertyId` here therefore does exactly one thing: it silently
+         UNDOES an explicit clear/change for THIS validation step only
+         — R1.3 already fixed the SAVED `address`/`propertyId` fields
+         to correctly reflect a clear, but this separate compatibility
+         check could still validate (and therefore allow) the OLD,
+         no-longer-selected property. `effectivePropertyId` is now
+         simply `d.propertyId || ''` — the same value that gets saved,
+         with NO historical fallback. A legacy offer opened and re-saved
+         without ever touching the property field is unaffected (its
+         `_wizardData.propertyId` was already seeded to the same value
+         this fallback would have produced). */
+      const effectivePropertyId = d.propertyId || '';
       if (d.projectId) {
         const compatible = typeof ProjectService !== 'undefined' &&
           ProjectService.isChildCompatible(d.projectId, d.customerId, effectivePropertyId);
@@ -3333,6 +4363,25 @@ const OfferDetailPage = {
     const incVat   = _tot.totalInclVat;
     const rutAmt   = _tot.rutRotAmount;
     const cust     = _tot.customerPays;
+    /* OFFER CORE R1.1 — BLOCKER 2: kanonisk koncis prisetikett, se
+       _offPrimaryDisplay(). Används av hero-prisområdet och den mobila
+       snabbinfo-raden nedan så en ren återkommande offert (t.ex. Södra
+       Heden) aldrig visar "0 kr" som sitt huvudbelopp. */
+    const priceDisp = _offPrimaryDisplay(off);
+    /* OFFER CORE R1.6.5 — ITEM 2: Offer Detail's "off-detail-sum" block
+       had the SAME bug the wizard's own summary already had fixed in
+       R1.6.1 (_totalsBarHtml) — a pure-recurring or rate-only offer
+       still rendered a dominant, misleading "Engångsbelopp inkl. moms:
+       0 kr" block, because the one-time bucket was shown unconditionally
+       regardless of whether any one-time lines actually exist. Same
+       predicate as the wizard (rawExVat > 0, the pre-discount one-time
+       sum) — NOT exVatAfterDiscount>0, so a legitimately 100%-discounted
+       one-time offer (R1.4, unchanged) still shows its own summary as
+       before. No change to any calculation — presentation only. */
+    const hasOneTimeLinesDetail = rawExVat > 0;
+    const hasRecurringDetail = !!_tot.recurringMonthlyExVat;
+    const rateOptLinesDetail = _offRateAndOptionLines(off);
+    const hasRateOrOptionalDetail = rateOptLinesDetail.length > 0 || _offOptionalExtras(off).length > 0;
 
     const cuName = cu ? CustomerService.displayName(cu) : '—';
     const now2 = Date.now();
@@ -3347,8 +4396,33 @@ const OfferDetailPage = {
         return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.showSendModal('${off.id}')">${ic('send',14)} Skicka offert till kund</button>`;
       if (st === 'skickad' || st === 'påmind' || st === 'väntar')
         return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--or" onclick="OfferDetailPage._quickAction('${off.id}','followup')">${ic('bell',14)} Logga uppföljning</button>`;
-      if (st === 'godkänd' && !off.workOrderId)
+      if (st === 'godkänd' && !off.workOrderId && !off.archived && !off.deleted) {
+        /* OFFER CORE R1.5 — FINAL BLOCKER (motbevis-granskad): added
+           `&& !off.archived && !off.deleted` — this branch previously
+           had NO lifecycle check at all, so an approved-but-archived/
+           deleted offer (a perfectly normal, reachable data state —
+           archiving never changes `status`) could still render an
+           active "Skapa arbetsorder" primary CTA, while the SECONDARY
+           button row already correctly excluded archived/deleted (a
+           proven, pre-existing UI inconsistency, see motbevis). For
+           such an offer this whole branch is now skipped — no primary
+           CTA is shown at all, exactly like any other status this
+           function doesn't have a CTA for (falls through to the final
+           `return ''`). The existing restore-offer UI remains the only
+           way back to an active, convertible state — no new UI is
+           introduced here. */
+        /* OFFER CORE R1.4 — BLOCKER 4: CTA text/title now derived from
+           _offAOBlockedCtaText(_offAOConversionDecision(off).reason) —
+           no duplicated reason-logic here, and the text is no longer
+           wrong for the rate-only/optional-only/discounted-to-zero
+           cases (which are NOT "återkommande"). */
+        const aoDecisionCta = _offAOConversionDecision(off);
+        if (!aoDecisionCta.allowed) {
+          const ctaText = _offAOBlockedCtaText(aoDecisionCta.reason);
+          return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(ctaText.title)}">${ic('alert-triangle',14)} ${esc(ctaText.label)}</button>`;
+        }
         return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--gr" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',14)} Skapa arbetsorder</button>`;
+      }
       if (st === 'nekad')
         return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',14)} Ny version</button>`;
       if (st === 'utgången')
@@ -3415,19 +4489,29 @@ const OfferDetailPage = {
               `</div>` +
             `</div>`;
           }
-          const tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
+          /* OFFER CORE R1: kanonisk _lineExVat(l) istället för den
+             tidigare `l.total || qty*unitPrice`-fallbacken — den
+             fallbacken tolkade felaktigt en sparad `total:0` (t.ex. en
+             'rate'/'option'-rad, som MEDVETET sparas med total=0) som
+             "inget värde satt" och räknade då fram ett FELAKTIGT,
+             ickenoll belopp igen via qty*unitPrice. */
+          const bt2    = l.billingType || 'onetime';
+          const tot    = _lineExVat(l);
           const totInc = tot + Math.round(tot * _normVat(l.vatRate) / 100);
-          const lRut2  = l.rutAmount || 0;
+          const lRut2  = _effectiveRutAmount(l);
           const lCust2 = totInc - lRut2;
+          const priceCellHtml = (bt2==='rate')
+            ? `<span class="off-line-kundpris">${OffersPage._billingPriceLabelHtml(l, 0)}</span>`
+            : `<span class="off-line-kundpris">${fmt(lRut2 ? lCust2 : totInc)} kr${bt2==='recurring'?('/' + esc(l.unit||'mån')):''}</span><span style="font-size:10px;opacity:.6;margin-left:3px;">inkl. moms</span>`;
           return `<div class="off-line-row">` +
             `<div class="off-line-row-header">` +
-              `<div class="off-line-row-name">${l.description||'—'}</div>` +
+              `<div class="off-line-row-name">${l.description||'—'} ${OffersPage._billingTypeBadgeHtml(l)}</div>` +
               `<div class="off-line-row-price">` +
                 (lRut2 ? `<span class="off-line-rut-badge">${l.reductionType==='rot'?'ROT':'RUT'}</span>` : '') +
-                `<span class="off-line-kundpris">${fmt(lRut2 ? lCust2 : totInc)} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">inkl. moms</span>` +
+                priceCellHtml +
               `</div>` +
             `</div>` +
-            `<div class="off-line-desc">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||0)} kr ex. moms</div>` +
+            ((bt2==='rate') ? '' : `<div class="off-line-desc">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||0)} kr ex. moms</div>`) +
             (lRut2 > 0 ? `<div class="off-line-rut-row">${ic('info',10)} Kundpris efter ${l.reductionType==='rot'?'ROT':'RUT'}-avdrag — totalt inkl. moms ${fmt(totInc)} kr, avdrag −${fmt(lRut2)} kr</div>` : '') +
           `</div>`;
         }).join('');
@@ -3456,19 +4540,34 @@ const OfferDetailPage = {
             : `<span style="font-size:15px;font-weight:800;color:#fff;">${cuName}</span>`}
           ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
         </div>
+        ${_offPropertyDisplayText(off) ? `<div class="off-detail-property-row" style="font-size:12px;color:rgba(255,255,255,.75);margin-top:2px;">${ic('map-pin',11)} Fastighet: ${esc(_offPropertyDisplayText(off))}</div>` : ''}
 
+        ${_tot.recurringMonthlyExVat ? `
+        <div class="off-hero-price-grid off-hero-price-grid--recurring">
+          <div>
+            <div class="off-hero-pg-lbl">Fast kostnad per månad</div>
+            <div class="off-hero-pg-val off-hero-pg-val--big">${fmt(_tot.recurringMonthlyExVat)} kr</div>
+            <div class="off-hero-pg-sub">ex. moms</div>
+          </div>
+          <div>
+            <div class="off-hero-pg-lbl">Per år (härledd)</div>
+            <div class="off-hero-pg-val">${fmt(_tot.recurringAnnualExVat)} kr</div>
+            <div class="off-hero-pg-sub">ex. moms</div>
+          </div>
+        </div>` : ''}
+        ${rawExVat > 0 ? `
         <div class="off-hero-price-grid">
           <div>
-            <div class="off-hero-pg-lbl">Ex. moms</div>
+            <div class="off-hero-pg-lbl">${_tot.recurringMonthlyExVat?'Engångsbelopp ex. moms':'Ex. moms'}</div>
             <div class="off-hero-pg-val">${fmt(exVat)} kr</div>
             ${discAmt?`<div class="off-hero-pg-sub" style="color:#fbbf24;">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
           </div>
           <div>
-            <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</div>
-            <div class="off-hero-pg-val off-hero-pg-val--big">${fmt(cust)} kr</div>
+            <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':(_tot.recurringMonthlyExVat?'Engångsbelopp inkl. moms':'Totalt inkl. moms')}</div>
+            <div class="off-hero-pg-val${_tot.recurringMonthlyExVat?'':' off-hero-pg-val--big'}">${fmt(cust)} kr</div>
             ${rutAmt?`<div class="off-hero-pg-sub" style="color:#86efac;">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. moms</div>`}
           </div>
-        </div>
+        </div>` : ''}
 
         ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
 
@@ -3479,7 +4578,9 @@ const OfferDetailPage = {
                kommunikationsåtgärd, inte en statusåtgärd — flyttad tillbaka hit,
                samma villkor/funktion som innan V48A. -->
           ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>`:''}
-          ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`:''}
+          ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?(OffersPage._offBlocksAOConversion(off)
+            ? `<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason).title)}">${ic('alert-triangle',12)} ${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason).label)}</button>`
+            : `<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`):''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
           ${(off.archived||off.deleted)?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
           <!-- Fler åtgärder (Redigera, PDF, Ny version, Duplicera, Arkivera, Ta bort) -->
@@ -3491,7 +4592,7 @@ const OfferDetailPage = {
       <div class="off-mobile-quick">
         <span class="off-mobile-quick-name">${cuName}</span>
         ${sbdg(off.status)}
-        <span style="font-size:11px;font-weight:700;color:var(--navy);margin-left:auto;">Kund: ${fmt(cust)} kr</span>
+        <span style="font-size:11px;font-weight:700;color:var(--navy);margin-left:auto;">${priceDisp.isRecurring ? priceDisp.compact : 'Kund: ' + fmt(cust) + ' kr'}</span>
       </div>
 
       ${off.status === 'godkänd' && off.manualApproval ? `
@@ -3551,16 +4652,21 @@ const OfferDetailPage = {
           </div>
           ${linesHtml}
           <div class="off-detail-sum" style="margin:0;border-radius:0 0 var(--rs) var(--rs);border-left:none;border-right:none;border-bottom:none;">
-            <div class="off-detail-sum-row"><span class="dk">Summa ex. moms</span><strong>${fmt(rawExVat)} kr</strong></div>
-            ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">Rabatt (${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
+            ${hasRecurringDetail ? `
+            <div class="off-detail-sum-row"><span class="dk">Fast kostnad per månad</span><strong>${fmt(_tot.recurringMonthlyExVat)} kr</strong></div>
+            <div class="off-detail-sum-row"><span class="dk">Fast kostnad per år (härledd)</span><span>${fmt(_tot.recurringAnnualExVat)} kr</span></div>` : ''}
+            ${hasOneTimeLinesDetail ? `
+            <div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp ex. moms':'Summa ex. moms'}</span><strong>${fmt(rawExVat)} kr</strong></div>
+            ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">${hasRecurringDetail?"Rabatt på engångsbelopp (":"Rabatt ("}${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
             <div class="off-detail-sum-row"><span class="dk">Moms</span><span>${fmt(vat)} kr</span></div>
-            <div class="off-detail-sum-row"><span class="dk">Totalt inkl. moms</span><strong>${fmt(incVat)} kr</strong></div>
+            <div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms'}</span><strong>${fmt(incVat)} kr</strong></div>
             ${rutAmt?`<div class="off-detail-sum-row rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>`:''}
             <div class="off-detail-sum-final">
-              <span class="off-detail-sum-final-lbl">${rutAmt?'Kundpris inkl. moms':'Totalt inkl. moms'}</span>
+              <span class="off-detail-sum-final-lbl">${rutAmt?'Kundpris inkl. moms':(hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms')}</span>
               <span class="off-detail-sum-final-val">${fmt(cust)} kr</span>
             </div>
-            ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:6px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}
+            ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:6px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}` : (!hasRecurringDetail && hasRateOrOptionalDetail ? `
+            <div class="off-detail-sum-row"><span class="dk">Prismodell</span><strong>Rörliga priser</strong></div>` : '')}
             ${prLines.some(l=>(l.description||'').includes('minimidebitering'))?`<div style="font-size:10px;color:var(--mt);margin-top:6px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;border-radius:0 4px 4px 0;">${ic('info',10)} <strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
           </div>
         </div>`;
@@ -3570,15 +4676,23 @@ const OfferDetailPage = {
            som egna kort samlade efter Tillval. Tillval ligger kvar som
            ett eget kort, EFTER hela den interfolierade offertrads-listan
            (extras interfolieras inte i denna release, per kontraktet). */
+        /* OFFER CORE R1.1 — BLOCKER 1: en extra med e.includedInTotal===false
+           är EXPLICIT ej committad — visas med en tydlig "ingår ej i
+           totalsumman"-badge, till skillnad från en committad extra (all
+           historisk data, och nya extras som inte markerats som tillval)
+           som räknas in i Summa ex. moms ovan precis som innan R1.1. */
         const extrasCardHtml = extras.length?`<div class="card">
           <div class="card-header"><h3>${ic('plus',13)} Tillval</h3></div>
-          ${extras.map(e=>`<div class="off-line-row">
+          ${extras.map(e=>{
+            const included = _extraIncludedInTotal(e);
+            return `<div class="off-line-row">
             <div class="off-line-row-header">
-              <div class="off-line-row-name">${e.description||'—'}</div>
+              <div class="off-line-row-name">${e.description||'—'}${!included?` <span class="bdg bdg-purple off-billing-badge">Ingår ej i totalsumman</span>`:''}</div>
               <div class="off-line-row-price"><span class="off-line-kundpris">${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">ex. moms</span></div>
             </div>
             <div class="off-line-desc">${e.qty||1} ${e.unit||'st'} × ${fmt(e.unitPrice||0)} kr</div>
-          </div>`).join('')}
+          </div>`;
+          }).join('')}
         </div>`:'';
 
         const pricingHtml = linesCardHtml + extrasCardHtml;
@@ -4134,55 +5248,66 @@ const OfferDetailPage = {
     const off = getOff(this.offerId);
     if (!off) return;
 
-    const prLines  = (off.lines||[]).filter(l => l.type !== 'text');
-    const svcLines = prLines.filter(l => l.type === 'service');
-    const svcNames = svcLines.map(l => l.templateName).filter(Boolean);
+    /* OFFER CORE R1.5 — FINAL BLOCKER (motbevis-granskad): load-bearing
+       LIFECYCLE guard, checked FIRST — before the financial guard and
+       BEFORE any AO payload is built — never trust only the UI to have
+       hidden/disabled the button. See _offAOCreateLifecycleDecision()
+       for the full trace/decision. This subsumes the old, separately-
+       placed "Dubbelkonverteringsskydd" (workOrderId) check, which
+       previously ran AFTER the financial guard and AFTER building the
+       entire AO payload — wasted work for a request that was always
+       going to be rejected, and NOT a fail-fast guard. */
+    const lifecycle = _offAOCreateLifecycleDecision(off);
+    if (!lifecycle.allowed) {
+      if (lifecycle.reason === 'already-converted') {
+        showToast('Offerten är redan konverterad till ' + off.workOrderId);
+      } else if (lifecycle.reason === 'archived') {
+        showToast('Arkiverade offerter kan inte konverteras till en arbetsorder — återställ offerten först.');
+      } else if (lifecycle.reason === 'deleted') {
+        showToast('Borttagna offerter kan inte konverteras till en arbetsorder — återställ offerten först.');
+      } else {
+        showToast('Offerten måste vara godkänd innan den kan konverteras till en arbetsorder.');
+      }
+      return;
+    }
 
-    // Title
-    const aoTitle = off.title
-      || (svcNames.length ? svcNames.join(', ') : 'Arbete enligt offert ' + off.id);
-
-    // Rich description
-    const descParts = [];
-    if (off.scope)                           descParts.push(off.scope);
-    if (off.summary && off.summary !== off.scope) descParts.push(off.summary);
-    if (off.includes)                        descParts.push('Ingår: ' + off.includes);
-    if (off.excludes)                        descParts.push('Ingår ej: ' + off.excludes);
-    if (!descParts.length && prLines.length) descParts.push(prLines.map(l => l.templateName||l.description).filter(Boolean).join(', '));
-    const desc = descParts.join('\n\n');
-
-    // Checklist from service lines
-    const CHKLST = {
-      'svc_altan': ['Kontrollera altanens skick före start', 'Flytta lösa föremål vid behov', 'Tvätta ytan enligt metod', 'Kontrollera resultat efter tvätt'],
-      'svc_sten':  ['Kontrollera stenyta före start', 'Rensa smuts och ogräs', 'Tvätta stenläggning', 'Kontrollera fogar och efterbehandling'],
-      'svc_hack':  ['Kontrollera höjd och sidor enligt offert', 'Klipp enligt specifikation', 'Samla upp och bortforsla avklipp', 'Slutkontrollera ytan'],
-      'svc_fasad': ['Skydda fönster och detaljer', 'Tvätta fasad uppifrån och ner', 'Kontrollera att smuts är borta', 'Ta bort skydd och städa av'],
-      'svc_fs':    ['Kontrollera objektets skick vid ankomst', 'Utför service enligt uppdrag', 'Dokumentera utfört arbete', 'Meddela kund vid avvikelse'],
-      'svc_tf':    ['Kontrollera tekniska installationer', 'Utför förvaltningsuppgifter', 'Dokumentera status', 'Rapportera till kund'],
-      'svc_ovr':   ['Kontrollera arbetsplats vid ankomst', 'Utför beskrivet arbete', 'Städa upp efter arbete', 'Rapportera utfört arbete']
-    };
-    const checklist = [];
-    let cIdx = 0;
-    svcLines.forEach(l => {
-      const tmplChecklist = CHKLST[l.templateId || l.priceRuleRef];
-      const items = tmplChecklist || (l.templateName || l.description ? [l.templateName || l.description] : []);
-      items.forEach(text => {
-        checklist.push({ id: 'c' + (Date.now() + cIdx++), text, done: false });
+    /* OFFER CORE R1.2/R1.3/R1.4 — BLOCKER 4: load-bearing guard, never
+       trust only the UI to have hidden the button — see
+       _offAOConversionDecision() for the full trace/decision. A
+       recurring offer (pure or mixed), an offer with no committed
+       one-time amount at all (pure rate-card, an optional-only
+       Tillval, or a one-time offer discounted to zero) must NEVER
+       silently become a 0-kr fixed-price AO. The modal message is
+       reason-specific — R1.4 adds the 'discounted-to-zero' case (a
+       100%-discounted one-time offer is NOT the same situation as a
+       rate-only offer, and deserves its own accurate explanation). */
+    const aoDecision = _offAOConversionDecision(off);
+    if (!aoDecision.allowed) {
+      const bodyByReason = {
+        recurring: `<p style="font-size:13px;line-height:1.6;">Den här offerten har en återkommande prisdel (${fmt(_offRecurringMonthlyExVat(off))} kr/mån) och kan inte konverteras till en vanlig fastprisarbetsorder — det skulle tyst tappa den återkommande delen av affären.</p>
+             <p style="font-size:13px;line-height:1.6;">Stöd för att konvertera en återkommande offert till ett återkommande ärende/avtal finns inte ännu i denna version. Kontakta systemansvarig om detta behövs, eller hantera uppdraget manuellt via "Återkommande ärenden".</p>`,
+        'discounted-to-zero': `<p style="font-size:13px;line-height:1.6;">Rabatten på den här offerten reducerar det committade engångsbeloppet till 0 kr. En fastprisarbetsorder på 0 kr stöds inte i VIFT.</p>
+             <p style="font-size:13px;line-height:1.6;">Justera rabatten, eller hantera uppdraget manuellt, om arbetet ändå ska bli en arbetsorder.</p>`,
+        'no-committed-onetime': `<p style="font-size:13px;line-height:1.6;">Den här offerten har inget committat engångsbelopp — bara rörliga à-priser och/eller icke-committade tillval — och kan därför inte konverteras till en fastprisarbetsorder. En fastprisarbetsorder på 0 kr skulle vara felaktig.</p>
+             <p style="font-size:13px;line-height:1.6;">Lägg till en fast engångsrad i offerten, eller hantera uppdraget manuellt, om arbetet ändå ska bli en arbetsorder.</p>`
+      };
+      Modal.open({
+        title: ic('alert-triangle', 14) + ' Kan inte skapa arbetsorder',
+        body: bodyByReason[aoDecision.reason] || bodyByReason['no-committed-onetime'],
+        buttons: [{ label: 'Stäng', cls: 'btn bp', onClick: () => Modal.close() }]
       });
-    });
-    // Non-service, non-text lines add a single checklist entry
-    prLines.filter(l => l.type !== 'service').forEach(l => {
-      if (l.description) checklist.push({ id: 'c' + (Date.now() + cIdx++), text: l.description, done: false });
-    });
+      return;
+    }
 
-    // estimatedHours from lines with unit='tim'
-    let estimatedHours = 0;
-    prLines.forEach(l => {
-      if ((l.unit === 'tim' || l.unit === 'h') && l.qty) estimatedHours += parseFloat(l.qty) || 0;
-      (l.subLines||[]).forEach(sl => {
-        if ((sl.unit === 'tim' || sl.unit === 'h') && sl.qty) estimatedHours += parseFloat(sl.qty) || 0;
-      });
-    });
+    /* OFFER CORE R1.4 — BLOCKER 1/2 (motbevis-granskad): ALL economics-
+       and content-dependent fields (title/description/checklist/
+       estimatedHours/fixedPrice) now come from the SAME pure
+       _buildAOConversionPayload(off) that the test suite exercises
+       directly — no parallel/duplicated algorithm. See that function's
+       own header for the full rationale (canonical post-discount
+       fixedPrice; committed-one-time-only work scope; committed
+       extras represented, optional/rate/recurring never are). */
+    const aoPayload = _buildAOConversionPayload(off);
 
     // Initial AO log entry
     const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Admin';
@@ -4192,23 +5317,17 @@ const OfferDetailPage = {
       userName: by, timestamp: new Date().toISOString()
     }];
 
-    /* Dubbelkonverteringsskydd (punkt 123) */
-    if (off.workOrderId) {
-      showToast('Offerten är redan konverterad till ' + off.workOrderId);
-      return;
-    }
-
     const ao = WorkOrderService.create({
-      title:               aoTitle,
-      description:         desc,
+      title:               aoPayload.title,
+      description:         aoPayload.description,
       customerId:          off.customerId,
       propertyId:          off.propertyId || '',
-      address:             off.address    || '',
+      address:             _offPropertyDisplayText(off),
       internalNote:        off.internalNote || '',
       status:              'nytt',
       priority:            'normal',
       priceType:           'fast',
-      fixedPrice:          OffersPage._offerExVat(off),
+      fixedPrice:          aoPayload.fixedPrice,
       offerId:             off.id,
       /* V54B §12/J — en AO skapad från en projekt-kopplad offert ÄRVER
          projectId automatiskt (samma kund-/fastighetsinvariant gäller
@@ -4218,8 +5337,8 @@ const OfferDetailPage = {
       sourceOfferId:       off.parentOfferId || off.id,
       sourceOfferVersionId:off.id,
       sourceOfferNumber:   off.id,
-      estimatedHours:      estimatedHours || 0,
-      checklist,
+      estimatedHours:      aoPayload.estimatedHours || 0,
+      checklist:           aoPayload.checklist,
       log:                 aoLog,
       staff: [], materials: [], notes: [], timeEntries: []
     });
@@ -4603,7 +5722,13 @@ const OfferDetailPage = {
       tips.push({icon:'git-branch', color:'var(--blue)', title:'Föreslå nytt erbjudande', body:'Skapa en ny version och justera — antingen priset, villkoren eller tjänsternas omfattning. Många affärer återvinns med rätt anpassning.', cta:'Ny version', ctaFn:`OfferDetailPage.createNewVersion('${off.id}')`});
     }
 
-    if (off.status === 'godkänd' && !off.workOrderId) {
+    /* OFFER CORE R1.5 — FINAL BLOCKER (motbevis-granskad): added
+       `&& !off.archived && !off.deleted` — this recommendation had NO
+       lifecycle check at all, so an approved-but-archived/deleted offer
+       could still be recommended for AO creation here even though the
+       secondary button row already correctly hid its own "Skapa AO"
+       button for that same offer. */
+    if (off.status === 'godkänd' && !off.workOrderId && !off.archived && !off.deleted && !OffersPage._offBlocksAOConversion(off)) {
       tips.push({icon:'clipboard-list', color:'var(--gr)', title:'Skapa arbetsorder nu', body:'Offerten är godkänd — starta jobbet genom att skapa en arbetsorder direkt från offerten.', cta:'Skapa AO', ctaFn:`OfferDetailPage.createAO()`});
     }
     if (off.status === 'godkänd' && off.workOrderId) {
@@ -4692,21 +5817,39 @@ const OfferDetailPage = {
           <td class="r fw">${fmt2(lExVat+lVat)} kr</td>
         </tr>`;
       }
-      const tot=Math.round((l.qty||1)*(l.unitPrice||0));
+      /* OFFER CORE R1.1 — BLOCKER 3: samma naiva `qty*unitPrice`-bugg som
+         redan hittats/fixats i OfferDetailPage.render() och
+         public-offer.html finns HÄR också — en rate-rad (billingType=
+         'rate') fick sitt à-pris felaktigt räknat som en committad
+         engångssumma. _lineExVat(l) är den kanoniska dispatchen (0 för
+         rate, det verkliga beloppet annars) — samma fix, tredje stället. */
+      const bt3 = l.billingType || 'onetime';
+      const tot = _lineExVat(l);
       const lRate=_normVat(l.vatRate);
+      if (bt3 === 'rate') {
+        const rateInc = Math.round((l.unitPrice||0) * (1 + lRate/100));
+        return `<tr class="xtra">
+          <td>${esc2(l.description||'—')} <span class="ld" style="font-weight:700;">(rörligt à-pris, ingår ej i totalsumman)</span><br><span class="ld">à ${fmt2(l.unitPrice||0)} kr${l.unit?'/'+esc2(l.unit):''} ex. moms</span></td>
+          <td class="r">${fmt2(l.unitPrice||0)} kr</td>
+          <td class="r">${lRate}%</td>
+          <td class="r fw">${fmt2(rateInc)} kr</td>
+        </tr>`;
+      }
+      const recSuffix = bt3 === 'recurring' ? (l.unit ? '/'+esc2(l.unit) : '/mån') : '';
       return `<tr>
-        <td>${esc2(l.description||'—')}<br><span class="ld">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr ex. moms</span></td>
-        <td class="r">${fmt2(tot)} kr</td>
+        <td>${esc2(l.description||'—')}${bt3==='recurring'?' <span class="ld" style="font-weight:700;">(återkommande)</span>':''}<br><span class="ld">${l.qty||1} ${l.unit||'st'} × ${fmt2(l.unitPrice||0)} kr ex. moms</span></td>
+        <td class="r">${fmt2(tot)} kr${recSuffix}</td>
         <td class="r">${lRate}%</td>
-        <td class="r fw">${fmt2(tot+Math.round(tot*lRate/100))} kr</td>
+        <td class="r fw">${fmt2(tot+Math.round(tot*lRate/100))} kr${recSuffix}</td>
       </tr>`;
     }).join('');
 
     const extrasRows = extras.length ? extras.map(e => {
       const tot=Math.round((e.qty||1)*(e.unitPrice||0));
       const eRate=_normVat(e.vatRate);
+      const included = _extraIncludedInTotal(e);
       return `<tr class="xtra">
-        <td>${esc2(e.description||'Tillval')}<br><span class="ld">${e.qty||1} ${e.unit||'st'} × ${fmt2(e.unitPrice||0)} kr</span></td>
+        <td>${esc2(e.description||'Tillval')}${!included?' <span class="ld" style="font-weight:700;">(ingår ej i totalsumman)</span>':''}<br><span class="ld">${e.qty||1} ${e.unit||'st'} × ${fmt2(e.unitPrice||0)} kr</span></td>
         <td class="r">${fmt2(tot)} kr</td>
         <td class="r">${eRate}%</td>
         <td class="r">${fmt2(tot+Math.round(tot*eRate/100))} kr</td>
@@ -4841,6 +5984,15 @@ td.fw{font-weight:600;color:#0d2b4e;}
     <div class="p-lbl">Offereras till</div>
     <div class="p-name">${esc2(cuName)}</div>
     <div class="p-det">${[cuContact?esc2(cuContact):'', cuPhone?'Tel: '+esc2(cuPhone):'', cuEmail?esc2(cuEmail):'', cuAddr?esc2(cuAddr):''].filter(Boolean).join('<br>')}</div>
+    ${(function(){
+      /* OFFER CORE R1.2 — BLOCKER 3: printPdf() visade tidigare ALDRIG
+         offertens fastighet alls (bara kundens EGEN adress ovan, som
+         kan skilja sig helt från den offererade fastigheten — se
+         Fastighetsbolaget AB/Box 123-fallet). Härlett via samma
+         kanoniska _offPropertyDisplayText() som CRM-detaljvyn. */
+      const propTxt = _offPropertyDisplayText(off);
+      return propTxt ? `<div class="p-det" style="margin-top:4px;"><strong>Fastighet:</strong> ${esc2(propTxt)}</div>` : '';
+    })()}
   </div>
   <div class="party">
     <div class="p-lbl">Utfärdare</div>
@@ -4878,16 +6030,36 @@ ${(() => {
   /* V48B5 R4: textblocken ritas nu INLINE i lineRows (ovan), på sin
      exakta position i off.lines — inte längre samlade separat efter
      Tillval. */
-  const extrasBlock = extras.length?`<table style="margin-top:8px;"><thead><tr><th colspan="4" style="background:#475569;font-size:10px;">Tillval (ej inkluderat i totalpriset)</th></tr></thead><tbody>${extrasRows}</tbody></table>`:'';
+  /* OFFER CORE R1.1 — BLOCKER 1: rubriken sa TIDIGARE ALLTID "ej
+     inkluderat i totalpriset" trots att _offRawExVat/_offRawVat i
+     verkligheten ALLTID räknade in extras i totalsumman — en bevisad
+     motsägelse mellan text och siffra. Rubriken är nu sanningsenlig:
+     "Tillval" om NÅGON extra faktiskt är committad (ingår i summan),
+     annars den ursprungliga texten (endast om ALLA extras är explicit
+     markerade som ej committade). Varje enskild rad har dessutom sin
+     egen "(ingår ej i totalsumman)"-etikett ovan när tillämpligt. */
+  const extrasBlock = extras.length?`<table style="margin-top:8px;"><thead><tr><th colspan="4" style="background:#475569;font-size:10px;">${extras.some(_extraIncludedInTotal)?'Tillval':'Tillval (ej inkluderat i totalpriset)'}</th></tr></thead><tbody>${extrasRows}</tbody></table>`:'';
 
+  /* OFFER CORE R1.1 — BLOCKER 2/6: samma additiva återkommande-block +
+     ex.-moms-primärvärde som wizardens totalkort/public-offer.html —
+     en ren Södra Heden-offert (bara 'recurring'-rader) visade tidigare
+     "0 kr" här (rawExVat/incVat är 0 när det inte finns någon
+     engångskomponent), eftersom detta PDF-block bara läste den
+     klassiska hinken. Kontraktsvärdet (ex. moms) är PRIMÄRT, en
+     eventuell inkl.-moms-siffra är sekundär/informativ. */
   const totalsBlock = `<div class="tot-wrap">
   <div class="tot-box">
-    <div class="tot-r"><span>Summa ex. moms</span><span>${fmt2(rawExVat)} kr</span></div>
-    ${discAmt?`<div class="tot-r disc"><span>Rabatt</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
+    ${_tot.recurringMonthlyExVat ? `
+    <div class="tot-fin"><span>Fast kostnad per månad</span><span>${fmt2(_tot.recurringMonthlyExVat)} kr exkl. moms</span></div>
+    <div class="tot-r"><span>Fast kostnad per år (härledd)</span><span>${fmt2(_tot.recurringAnnualExVat)} kr exkl. moms</span></div>
+    <hr class="tot-div">` : ''}
+    <div class="tot-r"><span>${_tot.recurringMonthlyExVat?'Engångsbelopp ex. moms':'Summa ex. moms'}</span><span>${fmt2(rawExVat)} kr</span></div>
+    ${discAmt?`<div class="tot-r disc"><span>${_tot.recurringMonthlyExVat?'Rabatt på engångsbelopp':'Rabatt'}</span><span>−${fmt2(discAmt)} kr</span></div>`:''}
     <div class="tot-r"><span>Moms</span><span>${fmt2(vat)} kr</span></div>
+    ${rawExVat > 0 ? `
     <hr class="tot-div">
-    <div class="tot-fin"><span>${hasRut?'Totalt inkl. moms':'Totalt att betala'}</span><span>${fmt2(incVat)} kr</span></div>
-    ${hasRut?`<div class="tot-r rut-deduct" style="margin-top:4px;"><span>${rutLabel}</span><span>−${fmt2(rutAmt)} kr</span></div>`:''}
+    <div class="tot-fin"><span>${hasRut?'Totalt inkl. moms':(_tot.recurringMonthlyExVat?'Engångsbelopp inkl. moms':'Totalt att betala')}</span><span>${fmt2(incVat)} kr</span></div>
+    ${hasRut?`<div class="tot-r rut-deduct" style="margin-top:4px;"><span>${rutLabel}</span><span>−${fmt2(rutAmt)} kr</span></div>`:''}` : ''}
   </div>
 </div>
 ${(off.lines||[]).some(l=>(l.description||'').includes('minimidebitering'))?`<div style="margin-bottom:12px;padding:7px 10px;background:#fffbeb;border-left:3px solid #d97706;font-size:10px;color:#555;line-height:1.5;border-radius:0 4px 4px 0;"><strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
@@ -5904,21 +7076,37 @@ ${hasRut?`<div class="rut">
       const snapshot = {
         id: off.id, title: off.title, versionNumber: Number(off.versionNumber) || 1,
         lines: (off.lines||[]).map(function(l) {
-          const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+          /* OFFER CORE R1: 'billingType' tillagt — utan detta skulle den
+             publika länkens låsta snapshot tyst tappa fältet som avgör
+             om raden är återkommande/rörlig/tillval/engångsbelopp, och
+             public-offer.html skulle då rendera EXAKT samma rad som ett
+             vanligt engångsbelopp (fel pris-semantik för kunden). */
+          const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle','billingType'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
         }),
         /* V39 §3: vatRate måste bevaras för extras precis som för lines —
            annars tappar snapshotet en tilläggsrads faktiska momssats och
            public-offer/offer-public-pdf tvingas gissa (fallback 25 %)
-           istället för att räkna med den verkliga satsen. */
+           istället för att räkna med den verkliga satsen.
+           OFFER CORE R1.1 — BLOCKER 1: 'includedInTotal' tillagt — utan
+           detta skulle den publika länken tyst tappa vilka extras som
+           är committade vs valfria, och public-offer.html/
+           offer-public-pdf skulle räkna in ALLA extras i totalsumman
+           (fel för en explicit markerad valfri extra). */
         extras: (off.extras||[]).map(function(l) {
-          const p = {}; ['id','description','qty','unit','unitPrice','vatRate'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+          const p = {}; ['id','description','qty','unit','unitPrice','vatRate','includedInTotal'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
         }),
         discount: off.discount, taxType: off.taxType, rotRutAmount: off.rotRutAmount,
         date: off.date || off.createdAt?.slice(0,10) || now.slice(0,10),
         validUntil: off.validUntil, paymentTerms: off.paymentTerms,
         validityText: off.validityText, terms: off.terms, includes: off.includes,
         excludes: off.excludes, scope: off.scope, summary: off.summary,
-        generalTerms: off.generalTerms, address: off.address,
+        /* BLOCKER 3: härlett via propertyId (med off.address som
+           bakåtkompatibel fallback) i stället för att läsa off.address
+           rakt av — skyddar mot en digital länk som genereras för en
+           offert sparad FÖRE denna omgångs _save()-fix (t.ex. om
+           länken genereras direkt efter ett API-anrop utan mellanliggande
+           spara-klick). */
+        generalTerms: off.generalTerms, address: _offPropertyDisplayText(off),
         sectionOrder: _resolveSectionOrder(off.sectionOrder),
         customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })(),
         publicAttachmentIds: (state.offerAttachments||[])

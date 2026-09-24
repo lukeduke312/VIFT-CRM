@@ -93,8 +93,28 @@ const ProfitabilityService = {
     const off = (state.offers || []).find(o => o.id === ao.offerId);
     if (!off) return null;
 
+    /* OFFER CORE R1.3 — BLOCKER 1 (motbevis-granskad): R1.2 routed this
+       through _offRawExVat(off) (PRE-discount) — for a discounted
+       one-time offer this compared the AO's actual outcome against the
+       offer's undiscounted rawExVat, not the customer's actual
+       committed price. Fixed to use the canonical
+       _offerCalcTotals(off).exVatAfterDiscount — the real, post-
+       discount one-time commitment. New AOs can no longer be created
+       from any offer with a recurring component at all (see
+       OffersPage._offAOConversionDecision/_offBlocksAOConversion) — so
+       "offererat pris" here is, going forward, always a genuine
+       one-time comparison. For any PRE-EXISTING AO already linked to a
+       recurring/mixed offer (created before that guard existed), this
+       deliberately compares ONLY the offer's one-time component
+       (exVatAfterDiscount, which is 0 for a pure-recurring offer) —
+       it does NOT fabricate a one-time value out of one month of
+       recurring pricing. A 0-vs-actual comparison for such a legacy AO
+       is honest (no one-time commitment existed to compare against),
+       not silently wrong, which is the smallest behavior consistent
+       with this service's existing revDiff/UI contract without adding
+       a new "non-comparable" state this round. */
     const prLines    = (off.lines || []).filter(l => l.type !== 'text');
-    const offerExVat = prLines.reduce((s, l) => {
+    const offerExVat = typeof _offerCalcTotals === 'function' ? _offerCalcTotals(off).exVatAfterDiscount : prLines.reduce((s, l) => {
       return s + (l.exVat || l.total || Math.round((l.qty || 1) * (l.unitPrice || 0)));
     }, 0);
 

@@ -160,9 +160,19 @@ serve(async (req: Request) => {
 
     /* Filtrera bort interna fält (inköpspris, marginal, TB, internalNote exponeras aldrig).
        Bevara alla fält som krävs för korrekt visning och beräkning. */
+    /* OFFER CORE R1.1 — BLOCKER 3 (motbevis-granskad): 'billingType' och
+       'includedInTotal' tillagda — utan detta skulle DENNA funktions
+       EGNA (redundanta, försvars-i-djup) omfiltrering av det redan
+       fält-vitlistade snapshotet tyst STRIPPA bort fälten igen även om
+       PageShells.js:s snapshot-generering (se dess egen whitelist)
+       redan inkluderar dem korrekt — två oberoende whitelists måste
+       båda uppdateras. Samma set används för både lines och extras
+       (extras har aldrig haft 'type', men har alla andra relevanta
+       fält, plus nu 'includedInTotal'). */
     const ALLOWED_LINE_FIELDS = new Set([
       'id','type','description','templateName','qty','unit','unitPrice',
-      'discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle'
+      'discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle',
+      'billingType','includedInTotal'
     ])
     function filterLines(linesRaw: unknown): Record<string, unknown>[] {
       if (!Array.isArray(linesRaw)) return []
@@ -185,7 +195,19 @@ serve(async (req: Request) => {
      * vatRate:  25 = 25 % (heltal, INTE 0.25)
      * rutAmount: på service-rader
      */
-    const prLines  = lines.filter((l: Record<string, unknown>) => l.type !== 'text')
+    /* OFFER CORE R1.1 — BLOCKER 2/3: 'recurring'/'rate'-rader exkluderas
+       nu ur den klassiska engångs-bucketen — exakt samma uteslutning
+       som _offRawExVat()/_offRawVat() i PageShells.js / renderOffer()
+       i public-offer.html. Utan detta skulle en Södra Heden-offert
+       (bara 'recurring'-rader) räkna in 8000 kr/mån som ett
+       engångsbelopp i DEN NEDLADDADE PDF:en, medan CRM/public-offer
+       korrekt exkluderar det — exakt den ekonomiska kanal-avvikelse
+       uppdraget varnar för. */
+    const prLines  = lines.filter((l: Record<string, unknown>) => l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate')
+    const recurringLines = lines.filter((l: Record<string, unknown>) => l.billingType === 'recurring')
+    const rateLines       = lines.filter((l: Record<string, unknown>) => l.billingType === 'rate')
+    const extraIncludedInTotal = (e: Record<string, unknown>): boolean => e.includedInTotal !== false
+    const optionalExtras = extras.filter((e: Record<string, unknown>) => e.type !== 'text' && !extraIncludedInTotal(e))
 
     /* V38 §7: kanonisk 0-safe momsnormalisering — samma semantik som
        InvoiceService.normalizeVatRate/PageShells._normVat/public-offer.html
@@ -201,21 +223,48 @@ serve(async (req: Request) => {
       return n
     }
 
+    /* BLOCKER 3 (motbevis-granskad): `Number(l.total) || Math.round(...)`
+       har samma "riktigt sparat total:0 misstolkas som ej satt"-bugg som
+       redan hittades/fixades i PageShells.js/public-offer.html/
+       offer-pdf — en rate-rads legitima total:0 räknades här om till ett
+       felaktigt icke-noll belopp. lineExVat() nedan är samma dispatch
+       (rate→0 alltid, oavsett qty/unitPrice) som _lineExVat()/_poLineExVat(). */
+    function lineExVat(l: Record<string, unknown>): number {
+      if (l.type === 'text') return 0
+      if (l.billingType === 'rate') return 0
+      if (l.type === 'service') return Number(l.exVat) || 0
+      const qty = (l.qty !== null && l.qty !== undefined && l.qty !== '') ? Number(l.qty) : 1
+      const comp = Math.round(qty * (Number(l.unitPrice) || 0))
+      if (comp === 0 && l.total) return Number(l.total)
+      return comp
+    }
     let rawEx = 0
     let rawVat = 0
     for (const l of prLines) {
-      const lEx = l.type === 'service'
-        ? (Number(l.exVat) || 0)
-        : (Number(l.total) || Math.round((Number(l.qty) || 1) * (Number(l.unitPrice) || 0)))
+      const lEx = lineExVat(l)
       rawEx  += lEx
       rawVat += Math.round(lEx * normVat(l.vatRate) / 100)
     }
+    /* BLOCKER 1: extras med includedInTotal===false är EXPLICIT ej
+       committade — exkluderade från rawEx/rawVat, precis som
+       _offRawExVat()/_offRawVat() i PageShells.js. Frånvarande fält
+       (all historisk data) = "included", oförändrad summa. */
     for (const e of extras) {
       if (e.type === 'text') continue
+      if (!extraIncludedInTotal(e)) continue
       const eEx = Math.round((Number(e.qty) || 1) * (Number(e.unitPrice) || 0))
       rawEx  += eEx
       rawVat += Math.round(eEx * normVat(e.vatRate) / 100)
     }
+
+    /* BLOCKER 2: additiv återkommande-summering, ALDRIG blandad in i
+       rawEx/rawVat ovan. =0 för varje offert utan 'recurring'-rader
+       (all historisk data), harmless att alltid beräkna. */
+    const recurringMonthlyEx = Math.round(recurringLines.reduce((s: number, l: Record<string, unknown>) => s + lineExVat(l), 0))
+    const recurringMonthlyVat = Math.round(recurringLines.reduce((s: number, l: Record<string, unknown>) => s + Math.round(lineExVat(l) * normVat(l.vatRate) / 100), 0))
+    const recurringMonthlyInc = recurringMonthlyEx + recurringMonthlyVat
+    const recurringAnnualEx  = recurringMonthlyEx * 12
+    const recurringAnnualInc = recurringMonthlyInc * 12
 
     const discRaw   = s('discount') as Record<string, unknown> | null | undefined
     const disc: Record<string, unknown> =
@@ -434,13 +483,22 @@ serve(async (req: Request) => {
           continue
         }
         hasLines = true
+        const bt       = String(l.billingType || 'onetime')
+        const notIncluded = l.includedInTotal === false
         const desc     = String(l.description || l.templateName || '')
+          + (bt === 'recurring' ? ' (återkommande)' : bt === 'rate' ? ' (rörligt à-pris, ingår ej i totalsumman)' : '')
+          + (notIncluded ? ' (ingår ej i totalsumman)' : '')
         const qty      = l.qty != null ? String(l.qty) + (l.unit ? ' ' + l.unit : '') : ''
         const unitP    = l.unitPrice != null ? fmtNum(l.unitPrice) : ''
         const discNum  = (typeof l.discount === 'number' && l.discount > 0) ? l.discount : 0
         const discTxt  = discNum > 0 ? fmtNum(discNum) + ' %' : ''
-        const exVatVal = Number(l.exVat) || (Number(l.total) || 0)
-        const tot      = fmtNum(exVatVal) + ' kr'
+        /* BLOCKER 3/6 (motbevis-granskad): en rate-rad visar sitt rena
+           ex-moms-à-pris (l.unitPrice), ALDRIG l.exVat/l.total — dessa
+           är, korrekt, 0 för en rate-rad (se _lineExVat i PageShells.js/
+           denna funktions egen lineExVat ovan). En recurring-rad visar
+           sitt verkliga ex-moms-månadsbelopp + "/mån"-suffix. */
+        const exVatVal = bt === 'rate' ? (Number(l.unitPrice) || 0) : (Number(l.exVat) || (Number(l.total) || 0))
+        const tot      = fmtNum(exVatVal) + ' kr' + (bt === 'recurring' ? '/mån' : '')
 
         checkY(16)
         drawTableRow(desc, qty, unitP, discTxt, tot)
@@ -523,6 +581,19 @@ serve(async (req: Request) => {
         drawText('(Inga rader)', ML, y, { size: 9, color: muted })
         y -= 14
       }
+      /* BLOCKER 2/6 (motbevis-granskad): additiv återkommande-summering
+         FÖRE den klassiska engångshinken, ex-moms primärt (det citerade
+         kontraktsvärdet), inkl.-moms som tydligt märkt sekundär rad. En
+         ren Södra Heden-offert (bara 'recurring'-rader) visar alltså
+         ALDRIG "0 kr" som sin första/enda totalrad i den nedladdade
+         PDF:en. */
+      if (recurringMonthlyEx > 0) {
+        totalRow('Fast kostnad per månad (exkl. moms):', fmtNum(recurringMonthlyEx) + ' kr', true)
+        totalRow('  (inkl. moms):', fmtNum(recurringMonthlyInc) + ' kr')
+        totalRow('Fast kostnad per år, härledd (exkl. moms):', fmtNum(recurringAnnualEx) + ' kr', true)
+        totalRow('  (inkl. moms):', fmtNum(recurringAnnualInc) + ' kr')
+        y -= 4
+      }
       if (discAmt > 0) {
         totalRow('Delsumma:', fmtNum(rawEx) + ' kr')
         const discLabel = disc.type === 'percent'
@@ -530,15 +601,28 @@ serve(async (req: Request) => {
           : 'Rabatt (fast)'
         totalRow(discLabel, '-' + fmtNum(discAmt) + ' kr')
       }
-      totalRow('Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
-      totalRow(vatLabel, fmtNum(vatAmt) + ' kr')
+      totalRow(recurringMonthlyEx > 0 ? 'Engångsbelopp exkl. moms:' : 'Totalt exkl. moms:', fmtNum(exVatTotal) + ' kr')
+      if (rawEx > 0) {
+        totalRow(vatLabel, fmtNum(vatAmt) + ' kr')
+      }
+      if (rateLines.length > 0 || optionalExtras.length > 0) {
+        totalRow('Rörliga à-priser / tillval (ingår ej ovan):', '')
+        for (const rl of rateLines) {
+          totalRow('  ' + String(rl.description || 'Rörligt pris'), fmtNum(Number(rl.unitPrice) || 0) + ' kr' + (rl.unit ? '/' + String(rl.unit) : '') + ' exkl. moms')
+        }
+        for (const oe of optionalExtras) {
+          totalRow('  ' + String(oe.description || 'Tillval'), fmtNum(Math.round((Number(oe.qty)||1)*(Number(oe.unitPrice)||0))) + ' kr exkl. moms')
+        }
+      }
       if (rutTotal > 0) {
         totalRow('RUT/ROT-avdrag:', '-' + fmtNum(rutTotal) + ' kr')
       }
-      y -= 2
-      hline(y + 2)
-      y -= 8
-      totalRow('Totalt att betala:', fmtNum(customerPrice) + ' kr', true)
+      if (rawEx > 0) {
+        y -= 2
+        hline(y + 2)
+        y -= 8
+        totalRow(recurringMonthlyEx > 0 ? 'Engångsbelopp att betala:' : 'Totalt att betala:', fmtNum(customerPrice) + ' kr', true)
+      }
       y -= 14
     }
 

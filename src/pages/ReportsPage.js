@@ -917,14 +917,37 @@ const ReportsPage = (function () {
       ? (responseTimes.reduce(function (a, b) { return a + b; }, 0) / responseTimes.length)
       : null;
 
-    /* ── Totalvärde ── */
-    function _offerTotal(o) {
+    /* ── Ekonomiska summeringar ── */
+    /* OFFER CORE R1.3 — BLOCKER 1 (motbevis-granskad): R1.2 routed this
+       report's value KPIs through _offRawExVat(off), which fixed the
+       "recurring line wrongly blended into a one-time sum" bug but
+       introduced a DIFFERENT material error — _offRawExVat()
+       intentionally EXCLUDES recurring lines (by design), so this
+       report's single "Offertvärde"/"Godkänt värde" figures silently
+       excluded EVERY recurring contract's value entirely, and used the
+       PRE-discount rawExVat rather than the customer's actual committed
+       exVatAfterDiscount for the one-time component. A recurring
+       commitment and a one-time sale are genuinely different financial
+       buckets (kr/mån vs. kr) — pretending they're one "Offertvärde"
+       number is itself the bug (see the brief's explicit "do not blend
+       18800" requirement). Two separate, canonical helpers replace the
+       single _offerTotal(): one for the committed one-time bucket
+       (post-discount), one for the recurring monthly bucket — NEVER
+       summed together. */
+    function _offerOneTimeExVat(o) {
+      if (typeof _offerCalcTotals === 'function') return _offerCalcTotals(o).exVatAfterDiscount;
       var lines = (o.lines || []).concat(o.extras || []);
       return lines.reduce(function (s, l) { return s + (Number(l.total) || 0); }, 0);
     }
-    var totalValue    = offers.reduce(function (s, o) { return s + _offerTotal(o); }, 0);
-    var approvedValue = offers.filter(function (o) { return o.status === 'godkänd'; })
-      .reduce(function (s, o) { return s + _offerTotal(o); }, 0);
+    function _offerRecurringMonthlyExVat2(o) {
+      return typeof _offRecurringMonthlyExVat === 'function' ? _offRecurringMonthlyExVat(o) : 0;
+    }
+    var oneTimeValue          = offers.reduce(function (s, o) { return s + _offerOneTimeExVat(o); }, 0);
+    var approvedOneTimeValue  = offers.filter(function (o) { return o.status === 'godkänd'; })
+      .reduce(function (s, o) { return s + _offerOneTimeExVat(o); }, 0);
+    var recurringValue         = offers.reduce(function (s, o) { return s + _offerRecurringMonthlyExVat2(o); }, 0);
+    var approvedRecurringValue = offers.filter(function (o) { return o.status === 'godkänd'; })
+      .reduce(function (s, o) { return s + _offerRecurringMonthlyExVat2(o); }, 0);
 
     /* ── Statusfördelning (stapeldiagram) ── */
     var statusGroups = [
@@ -958,9 +981,16 @@ const ReportsPage = (function () {
     var byCustomer = {};
     offers.forEach(function (o) {
       var k = o.customerName || 'Okänd';
-      if (!byCustomer[k]) byCustomer[k] = { total: 0, approved: 0, value: 0 };
+      if (!byCustomer[k]) byCustomer[k] = { total: 0, approved: 0, value: 0, recurringValue: 0 };
       byCustomer[k].total++;
-      if (o.status === 'godkänd') { byCustomer[k].approved++; byCustomer[k].value += _offerTotal(o); }
+      /* OFFER CORE R1.3 — same fix as the top-level KPIs: one-time
+         (post-discount) and recurring monthly are tracked as separate
+         fields, never summed into one "value". */
+      if (o.status === 'godkänd') {
+        byCustomer[k].approved++;
+        byCustomer[k].value += _offerOneTimeExVat(o);
+        byCustomer[k].recurringValue += _offerRecurringMonthlyExVat2(o);
+      }
     });
     var topCustomers = Object.keys(byCustomer).map(function (k) {
       return Object.assign({ name: k }, byCustomer[k]);
@@ -985,8 +1015,10 @@ const ReportsPage = (function () {
     '</div>';
 
     var valueRow = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('dollar-sign',     'Offertvärde',      fmt(totalValue),          'totalt offertvärde i perioden') +
-      _kpi('check-square',    'Godkänt värde',    fmt(approvedValue),       'godkända offerter') +
+      _kpi('dollar-sign',     'Engångsvärde ex moms',            fmt(oneTimeValue),           'totalt engångsvärde i perioden (efter rabatt)') +
+      _kpi('check-square',    'Godkänt engångsvärde ex moms',    fmt(approvedOneTimeValue),   'godkända offerters engångsdel (efter rabatt)') +
+      _kpi('repeat',          'Återkommande värde / mån ex moms',fmt(recurringValue),         'summa av alla offerters kr/mån (aldrig blandat med engångsvärdet)') +
+      _kpi('repeat',          'Godkänt återkommande / mån ex moms', fmt(approvedRecurringValue), 'godkända offerters kr/mån') +
       _kpi('clock',           'Inväntar svar',    pending + ' st',          'skickade utan slutgiltigt svar') +
       _kpi('alert-circle',    'Ändring begärd',   changeReq + ' st',        'kund begärt ändring') +
     '</div>';
@@ -1019,7 +1051,8 @@ const ReportsPage = (function () {
               '<th style="text-align:left;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Kund</th>' +
               '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Offerter</th>' +
               '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkända</th>' +
-              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkänt värde</th>' +
+              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkänt engångsvärde</th>' +
+              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkänt återkommande/mån</th>' +
             '</tr></thead><tbody>' +
             topCustomers.map(function (c) {
               return '<tr>' +
@@ -1027,6 +1060,7 @@ const ReportsPage = (function () {
                 '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;">' + c.total + '</td>' +
                 '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;">' + c.approved + '</td>' +
                 '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;font-variant-numeric:tabular-nums;">' + fmt(c.value) + '</td>' +
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;font-variant-numeric:tabular-nums;">' + (c.recurringValue ? fmt(c.recurringValue) + ' kr/mån' : '–') + '</td>' +
               '</tr>';
             }).join('') +
           '</tbody></table>'

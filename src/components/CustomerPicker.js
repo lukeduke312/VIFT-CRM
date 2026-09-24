@@ -97,37 +97,116 @@ const CustomerPicker = {
     return (typeof state !== 'undefined' && state.customers) ? state.customers : [];
   },
 
-  _rowHtml(id, cu) {
+  /* `viaProperty` (optional, only ever set on the searchProperties path
+     below): en fastighet vars namn/adress/id matchade queryn, medan
+     KUNDENS egna fält inte gjorde det. Subraden byts då ut till
+     fastighetens namn/adress — "varför den här kunden matchade" (t.ex.
+     "Fastighetsbolaget AB" / "Södra Vägen 6, Göteborg") — istället för
+     kundens egen (ev. helt orelaterade) adress. Namnraden är ALLTID
+     kundens namn: CustomerPicker väljer/returnerar alltid en kund,
+     aldrig en fastighet i sig. */
+  _rowHtml(id, cu, viaProperty) {
     const name = (typeof CustomerService !== 'undefined') ? CustomerService.displayName(cu) : (cu.name || '—');
-    const sub  = this._subLine(cu);
+    const sub  = viaProperty
+      ? ([viaProperty.name, viaProperty.address].filter(Boolean).join(', ') || viaProperty.id || '')
+      : this._subLine(cu);
+    const propId = viaProperty ? viaProperty.id : '';
     /* Ingen match-highlight (V49A2A §6): highlight skulle kräva att dela
        upp den redan escapade strängen kring en osäker index-träff, vilket
        riskerar XSS om det görs fel. Säkerhet före polish — all kunddata
        går genom esc() rakt av. */
-    return `<div class="cso cpo" data-id="${esc(cu.id)}" onclick="CustomerPicker._pick('${id}','${esc(cu.id)}')">
+    return `<div class="cso cpo" data-id="${esc(cu.id)}" data-property-id="${esc(propId)}" onclick="CustomerPicker._pick('${id}','${esc(cu.id)}','${esc(propId)}')">
       <div class="cpo-name">${esc(name)}</div>
       ${sub ? `<div class="cpo-sub">${esc(sub)}</div>` : ''}
     </div>`;
   },
 
-  _rowsHtml(id, query) {
+  /* OFFER CORE R1.1 — BLOCKER 4: fastighets-medveten sökutökning, OPT-IN
+     via render(id,{searchProperties:true}) — ENDAST Offer sätter denna
+     flagga. Alla andra konsumenter (WorkOrdersPage/ProjectsPage/
+     PropertyDetailPage/ContractsPage/InvoicesPage) fortsätter anropa
+     render() utan flaggan och tar därmed exakt samma kodväg som innan
+     denna release (this._matches / this._subLine / gamla _rowHtml-
+     signaturen med viaProperty=undefined → identiskt beteende).
+     Returnerar {matched, viaProperty} istället för bara boolean, så
+     anroparen vet OM och VILKEN fastighet som gav träffen (för
+     sub-radens "varför"-etikett och för att kunna förvälja rätt
+     propertyId, se _pick()).
+     OFFER CORE R1.2 — edge-case-fix (motbevis-granskad): R1.1
+     kortslöt HÄR — om kundens EGNA fält redan matchade returnerades
+     omedelbart viaProperty:null, UTAN att någonsin kolla fastigheterna
+     alls. Det tappade relationen i exakt det fall där kundens egen
+     adress OCH en specifik fastighet råkar matcha samma sökterm (t.ex.
+     en kund vars registrerade adress ÄR fastighetens adress) — trots
+     att den korrekta, entydiga fastigheten (PROP-1) fanns att hitta.
+     Nu: fastigheterna kollas ALLTID när det finns en textquery.
+       • Exakt EN fastighet matchar → den fastigheten föredras och
+         returneras (oavsett om kundens egna fält också matchade) —
+         relationen bevaras, ingen gissning behövs eftersom det bara
+         finns ett entydigt svar.
+       • Flera fastigheter matchar samma breda sökning → INGEN
+         gissning: kunden returneras som träff (om dess egna fält
+         matchade) men utan en auto-vald viaProperty — användaren
+         disambiguerar explicit via den befintliga fastighets-
+         dropdownen (_propertyFieldHtml), precis som instruerat.
+       • Noll fastigheter matchar → faller tillbaka på kundens egna
+         fält (oförändrat R1.1-beteende). */
+  _matchesWithProperty(cu, qText, qDigits) {
+    const ownMatch = this._matches(cu, qText, qDigits);
+    if (!qText) return ownMatch ? { matched: true, viaProperty: null } : { matched: false, viaProperty: null };
+    const props = (typeof state !== 'undefined' && Array.isArray(state.properties))
+      ? state.properties.filter(p => p.customerId === cu.id) : [];
+    const propHits = props.filter(p => {
+      const fields = [p.name, p.address, p.id];
+      return fields.some(f => this._normText(f).includes(qText));
+    });
+    if (propHits.length === 1) return { matched: true, viaProperty: propHits[0] };
+    if (ownMatch) return { matched: true, viaProperty: null };
+    if (propHits.length > 1) return { matched: true, viaProperty: null };
+    return { matched: false, viaProperty: null };
+  },
+
+  _rowsHtml(id, query, opts) {
+    opts = opts || {};
     const list = this._customers();
     const qText = this._normText(query);
     const qDigits = this._isNumericQuery(query) ? this._normDigits(query) : '';
     const hasQuery = !!(qText || qDigits);
     const nameOf = cu => (typeof CustomerService !== 'undefined') ? CustomerService.displayName(cu) : (cu.name || '');
-    let filtered = list.filter(cu => this._matches(cu, qText, qDigits));
-    filtered = filtered.slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'sv'));
-    filtered = filtered.slice(0, hasQuery ? this._QUERY_LIMIT : this._NO_QUERY_LIMIT);
-    if (!filtered.length) {
+    let rows;
+    if (opts.searchProperties) {
+      rows = list
+        .map(cu => ({ cu, m: this._matchesWithProperty(cu, qText, qDigits) }))
+        .filter(x => x.m.matched);
+    } else {
+      /* Exakt samma filter/rad-generering som innan denna release —
+         BYTE-kompatibelt beteende för varje befintlig konsument. */
+      rows = list.filter(cu => this._matches(cu, qText, qDigits)).map(cu => ({ cu, m: { viaProperty: null } }));
+    }
+    rows = rows.slice().sort((a, b) => nameOf(a.cu).localeCompare(nameOf(b.cu), 'sv'));
+    rows = rows.slice(0, hasQuery ? this._QUERY_LIMIT : this._NO_QUERY_LIMIT);
+    if (!rows.length) {
       return `<div class="cpo-empty">Ingen kund hittades</div>`;
     }
-    return filtered.map(cu => this._rowHtml(id, cu)).join('');
+    return rows.map(x => this._rowHtml(id, x.cu, x.m.viaProperty)).join('');
+  },
+
+  /* Läser searchProperties-flaggan (satt av render() på ytterhöljet) så
+     _tog()/_srch() kan skicka rätt opts vidare utan att själva behöva
+     ta emot dem som parameter (de anropas bara med id/term från
+     inline-onclick/oninput-attribut). */
+  _optsFor(id) {
+    const outer = document.getElementById('cpouter-' + id);
+    return { searchProperties: !!(outer && outer.dataset && outer.dataset.searchProperties === '1') };
   },
 
   /* ── Publikt API ──────────────────────────────────────────────── */
 
-  render(id, { value = '', placeholder = 'Välj kund...', onchange = '' } = {}) {
+  /* `searchProperties` (valfri, default false): OPT-IN-utökning för
+     Offer (se BLOCKER 4-kommentaren vid _matchesWithProperty ovan) —
+     inkluderar även kundens fastigheters namn/adress/id i sökningen.
+     Alla andra anrop (utan denna flagga) är HELT oförändrade. */
+  render(id, { value = '', placeholder = 'Välj kund...', onchange = '', searchProperties = false } = {}) {
     const list = this._customers();
     const nameOf = cu => (typeof CustomerService !== 'undefined') ? CustomerService.displayName(cu) : (cu.name || '');
     const selOpts = list.map(c =>
@@ -135,9 +214,10 @@ const CustomerPicker = {
     ).join('');
     const selectedCu = value ? list.find(c => c.id === value) : null;
     const selectedLabel = selectedCu ? nameOf(selectedCu) : '';
-    const initialRows = this._rowsHtml(id, '');
+    const initialRows = this._rowsHtml(id, '', { searchProperties });
+    const searchPlaceholder = searchProperties ? 'Sök kund, fastighet, adress, kontaktperson…' : 'Sök kund, adress, kontaktperson…';
 
-    return `<div id="cpouter-${id}">
+    return `<div id="cpouter-${id}" data-search-properties="${searchProperties ? '1' : ''}">
       <select id="${id}" style="display:none;"${onchange ? ` onchange="${onchange}"` : ''}>
         <option value="">${esc(placeholder)}</option>${selOpts}
       </select>
@@ -148,7 +228,7 @@ const CustomerPicker = {
           ${this._trigInnerHtml(id, selectedLabel, placeholder)}
         </div>
         <div class="csdd" id="cpdd-${id}" style="display:none;">
-          <input type="text" class="css-srch" placeholder="Sök kund, adress, kontaktperson…"
+          <input type="text" class="css-srch" placeholder="${esc(searchPlaceholder)}"
                  oninput="CustomerPicker._srch('${id}', this.value)"
                  onkeydown="CustomerPicker._keydd(event,'${id}')"
                  onclick="event.stopPropagation()">
@@ -207,7 +287,7 @@ const CustomerPicker = {
       if (wrap) wrap.classList.add('csopen');
       const list = document.getElementById('cplist-' + id);
       const srch = dd.querySelector('.css-srch');
-      if (list) list.innerHTML = this._rowsHtml(id, '');
+      if (list) list.innerHTML = this._rowsHtml(id, '', this._optsFor(id));
       if (srch) setTimeout(() => { srch.value = ''; srch.focus(); }, 0);
     }
   },
@@ -215,7 +295,7 @@ const CustomerPicker = {
   _srch(id, term) {
     const list = document.getElementById('cplist-' + id);
     if (!list) return;
-    list.innerHTML = this._rowsHtml(id, term);
+    list.innerHTML = this._rowsHtml(id, term, this._optsFor(id));
   },
 
   /* customerId === '' rensar valet (samma kontrakt som ett vanligt val,
@@ -225,10 +305,24 @@ const CustomerPicker = {
      label/rensa-knapp till tomt-läge. CustomerPicker rensar INGEN
      AO-specifik data själv — det är helt och hållet callerns ansvar,
      precis som vid ett vanligt kundbyte. */
-  _pick(id, customerId) {
+  /* `propertyId` (optional, third arg): satt ENDAST när raden som
+     klickades matchade via en fastighet (searchProperties-läge, se
+     _rowHtml/_matchesWithProperty ovan). Sparas i den dolda select-
+     elementets dataset INNAN change-eventet skickas, så en caller vars
+     onchange-handler känner till mekanismen (t.ex.
+     OffersPage._customerChanged) kan läsa av den och förvälja rätt
+     fastighet via dess stabila id — utan att CustomerPicker själv
+     behöver känna till Offer-specifik wizard-state. Anrop utan tredje
+     argumentet (samtliga befintliga konsumenter) rensar bara fältet,
+     oförändrat beteende. */
+  _pick(id, customerId, propertyId) {
     const sel = document.getElementById(id);
     if (sel) {
       sel.value = customerId;
+      if (sel.dataset) {
+        if (propertyId) sel.dataset.matchedPropertyId = propertyId;
+        else delete sel.dataset.matchedPropertyId;
+      }
       sel.dispatchEvent(new Event('change', { bubbles: true }));
     }
     const trig = document.getElementById('cptrig-' + id);

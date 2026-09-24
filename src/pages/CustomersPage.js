@@ -928,11 +928,25 @@ const CustomerDetailPage = {
     const offers = CustomerService.getOffers(cu.id);
     if (!offers.length) return `<div class="empty"><p>Inga offerter</p></div>`;
     return offers.map(o => {
-      const total = (o.lines||[]).reduce((s,l)=>s+(l.total||0),0);
+      /* OFFER CORE R1.3 — BLOCKER 1 (motbevis-granskad): R1.2 routed
+         this through _offRawExVat(), which fixed the "recurring line
+         wrongly summed as a one-time total" bug but introduced a
+         DIFFERENT one — _offRawExVat() intentionally EXCLUDES recurring
+         lines, so a pure-recurring offer (e.g. Södra Heden, 8000/mån)
+         now showed "0 kr" here, exactly the misleading-zero bug this
+         whole engagement keeps finding on every surface that doesn't
+         use the canonical display helper. This is a DISPLAY surface —
+         it must use _offPrimaryDisplay(off), which already handles
+         every case correctly (recurring-only, mixed, discounted
+         one-time, rate/optional-only) in one place. Defensive legacy
+         fallback (naive per-line sum) kept only for the case where the
+         canonical helper isn't loaded at all. */
+      const priceDisp = typeof _offPrimaryDisplay === 'function' ? _offPrimaryDisplay(o) : null;
+      const total = priceDisp ? priceDisp.compact : fmt((o.lines||[]).reduce((s,l)=>s+(l.total||0),0)) + ' kr';
       return `<div class="list-item" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
         <div class="item-row">
           <div><div class="item-title">${o.id}</div>
-            <div class="item-sub">${fmt(total)} kr · ${fmtDate(o.createdAt)}</div></div>
+            <div class="item-sub">${total} · ${fmtDate(o.createdAt)}</div></div>
           ${sbdg(o.status)}
         </div></div>`;
     }).join('');

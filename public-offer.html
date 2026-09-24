@@ -132,10 +132,33 @@ a { color: var(--blue); text-decoration: none; }
   border-bottom: 1px solid var(--br);
   white-space: nowrap;
 }
-.po-line-table th:last-child { text-align: right; }
+/* OFFER CORE R1 — Part C (alignment regression): th:last-child/
+   td:last-child ersatta med EXPLICITA semantiska klasser. Roten till
+   buggen: en `type:'text'`-rad (ren beskrivning/anteckning, t.ex.
+   "Elmaterial debiteras löpande.") renderas som EN ENDA <td colspan="2">
+   — den blir därmed "sista/enda td:n" i sin egen <tr> och matchade
+   OAVSIKTLIGT samma :last-child-regel som prisets kolumn, vilket gjorde
+   att en ren vänsterjusterad textrad blev högerjusterad, fet och med
+   tabellsiffer-varianten på. Klasserna nedan är EXPLICITA om VAD cellen
+   ÄR (beskrivning/anteckning vs. pris) — aldrig POSITION i raden — så en
+   full-bredd anteckningsrad kan aldrig råka ärva prisets styling bara
+   för att den råkar vara sista/enda cellen. */
+.po-line-table th.po-th-price { text-align: right; }
 .po-line-table td { padding: 9px 10px; border-bottom: 1px solid var(--br); vertical-align: top; }
-.po-line-table td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.po-line-table td.po-desc  { text-align: left; }
+.po-line-table td.po-price { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .po-line-table tr:last-child td { border-bottom: none; }
+.po-billing-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .3px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle;
+}
+.po-billing-badge--recurring { background: #dbeafe; color: #1d4ed8; }
+.po-billing-badge--rate      { background: #ffedd5; color: #c2410c; }
+.po-billing-badge--option    { background: #ede9fe; color: #6d28d9; }
+.po-recurring-summary { margin: 10px 0 4px; padding: 10px 12px; background: var(--bg2, #f8fafc); border-radius: 8px; }
+.po-recurring-summary-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+.po-recurring-summary-row strong { font-variant-numeric: tabular-nums; }
+.po-rateopt-note { font-size: 10px; color: var(--mt); margin-top: 6px; }
 .po-line-desc { font-size: 11px; color: var(--mt); margin-top: 2px; }
 .po-rut-badge {
   display: inline-block;
@@ -464,6 +487,80 @@ function _poResolveSectionOrder(order) {
   return out;
 }
 
+/* OFFER CORE R1 — samma kanoniska dispatch som _lineExVat() i
+   PageShells.js (kan inte dela JS-kod med detta fristående dokument,
+   se filhuvudkommentaren för _poNormVat, men implementerar SAMMA
+   formel/semantik). 'rate'/'option' returnerar alltid 0 — se
+   RAPPORT §Prismodell. */
+function _poLineExVat(l) {
+  if (!l || l.type === 'text') return 0;
+  if (l.billingType === 'rate') return 0;
+  if (l.type === 'service') return (l.exVat != null ? +l.exVat : 0);
+  var qty = (l.qty != null && l.qty !== '') ? +l.qty : 1;
+  var up  = +(l.unitPrice || 0);
+  var comp = Math.round(qty * up);
+  if (comp === 0 && l.total) return +l.total;
+  return comp;
+}
+
+/* OFFER CORE R1 — badge/prisetikett för billingType, mirror av
+   OffersPage._billingTypeBadgeHtml/_billingPriceLabelHtml i
+   PageShells.js. Denna fil kan inte dela JS-moduler med appen (fristående
+   statisk sida), så samma formler återimplementeras medvetet här.
+   OFFER CORE R1.1 — BLOCKER 1: 'option' borttaget (se PageShells.js —
+   VIFT:s kanoniska tillvalsmodell är off.extras[], inte en andra
+   radnivå-modell). */
+function _poBillingBadgeHtml(l) {
+  var bt = l.billingType || 'onetime';
+  if (bt === 'recurring') return '<span class="po-billing-badge po-billing-badge--recurring">Återkommande/mån</span>';
+  if (bt === 'rate')      return '<span class="po-billing-badge po-billing-badge--rate">Rörligt à-pris</span>';
+  return '';
+}
+
+/* OFFER CORE R1.1 — BLOCKER 6 (motbevis-granskad): R1 visade rate/
+   recurring-priser med det momsberäknade beloppet SOM PRIMÄRT (t.ex.
+   "440 kr/h" blev "550 kr/h", "8 000 kr/mån" blev "10 000 kr/mån") —
+   men det verkliga, av VIFT OFFERERADE och kontrakterade priset för
+   dessa rader är ALLTID exkl. moms (Södra Heden-referensen anger
+   uttryckligen "440 kr/timme exkl. moms" osv). Det momsberäknade
+   beloppet är korrekt SEKUNDÄR/kompletterande information, men får
+   ALDRIG tyst ersätta det citerade ex-moms-priset som primärt värde.
+   `amountExVat`/`amountIncVat`: radens/räntans båda belopp — inkl.-
+   moms visas nu ALLTID som en tydligt märkt sekundärrad, aldrig som
+   ersättning för ex-moms-talet. */
+function _poBillingPriceLabelHtml(l, amountExVat, amountIncVat) {
+  var bt = l.billingType || 'onetime';
+  var unit = (l.unit || '').trim();
+  if (bt === 'recurring') {
+    var sufR = unit ? '/' + esc(unit) : '/mån';
+    return fmt(amountExVat) + ' kr' + sufR + ' exkl. moms<div class="po-line-desc">' + fmt(amountIncVat) + ' kr' + sufR + ' inkl. moms</div>';
+  }
+  if (bt === 'rate') {
+    var rateEx = +(l.unitPrice || 0);
+    var rateInc = Math.round(rateEx * (1 + _poNormVat(l.vatRate) / 100));
+    var sufH = unit ? '/' + esc(unit) : '';
+    return fmt(rateEx) + ' kr' + sufH + ' exkl. moms<div class="po-line-desc">' + fmt(rateInc) + ' kr' + sufH + ' inkl. moms</div>';
+  }
+  return fmt(amountIncVat) + ' kr';
+}
+
+/* OFFER CORE R1.1 — BLOCKER 1: mirror av _extraIncludedInTotal() i
+   PageShells.js. e.includedInTotal===false = explicit ej committad
+   tillval-extra; frånvarande fält (all historisk data) = "included",
+   exakt samma summa som innan R1.1. */
+function _poExtraIncludedInTotal(e) {
+  return e.includedInTotal !== false;
+}
+
+/* OFFER CORE R1.2 — RUT/ROT rendering hardening (defense in depth,
+   mirror of _effectiveRutAmount() in PageShells.js). A recurring/rate
+   row must never show a RUT/ROT badge or a discounted "kundpris efter
+   avdrag" merely because malformed/stale data carries a leftover
+   rutAmount. */
+function _poEffectiveRutAmount(l) {
+  return (l.billingType || 'onetime') === 'onetime' ? (l.rutAmount || 0) : 0;
+}
+
 /* ── Render offert ──────────────────────────────────────── */
 function renderOffer(off) {
   var root = document.getElementById('po-root');
@@ -475,22 +572,31 @@ function renderOffer(off) {
   /* Beräkna summor */
   var lines    = Array.isArray(off.lines)  ? off.lines  : [];
   var extras   = Array.isArray(off.extras) ? off.extras : [];
-  var prLines  = lines.filter(function(l) { return l.type !== 'text'; });
+  /* OFFER CORE R1: 'recurring'/'rate'/'option'-rader exkluderade ur den
+     klassiska engångs-totalsumman — se _offRawExVat() i PageShells.js
+     för fullständig motivering (aldrig blanda kr/mån med ett
+     engångsbelopp, aldrig räkna ett rörligt à-pris som ett köpt fast
+     belopp). */
+  var prLines  = lines.filter(function(l) { return l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate'; });
+  var recurringLines = lines.filter(function(l) { return l.billingType === 'recurring'; });
+  var rateOptLines   = lines.filter(function(l) { return l.billingType === 'rate'; });
 
-  var rawEx = prLines.reduce(function(s,l) {
-    if (l.type === 'service') return s + (l.exVat || 0);
-    return s + (l.total || Math.round((l.qty||1)*(l.unitPrice||0)));
-  }, 0);
-  extras.forEach(function(e) { rawEx += Math.round((e.qty||1)*(e.unitPrice||0)); });
+  var rawEx = prLines.reduce(function(s,l) { return s + _poLineExVat(l); }, 0);
+  extras.filter(_poExtraIncludedInTotal).forEach(function(e) { rawEx += Math.round((e.qty||1)*(e.unitPrice||0)); });
+
+  var recurringMonthlyEx = Math.round(recurringLines.reduce(function(s,l){ return s + _poLineExVat(l); }, 0));
+  var recurringMonthlyVat = Math.round(recurringLines.reduce(function(s,l){ return s + Math.round(_poLineExVat(l) * _poNormVat(l.vatRate) / 100); }, 0));
+  var recurringMonthlyInc = recurringMonthlyEx + recurringMonthlyVat;
+  var recurringAnnualEx  = recurringMonthlyEx * 12;
+  var recurringAnnualInc = recurringMonthlyInc * 12;
 
   /* V38 §5: momsen räknas per rad/tillägg (dess egna vatRate, 0-safe),
      inte ett generellt * 0.25 på summan — samma metod/formel som CRM:s
      kanoniska _offerCalcTotals() (PageShells.js). */
   var rawVat = prLines.reduce(function(s,l) {
-    var lEx = (l.type === 'service') ? (l.exVat || 0) : (l.total || Math.round((l.qty||1)*(l.unitPrice||0)));
-    return s + Math.round(lEx * _poNormVat(l.vatRate) / 100);
+    return s + Math.round(_poLineExVat(l) * _poNormVat(l.vatRate) / 100);
   }, 0);
-  extras.forEach(function(e) {
+  extras.filter(_poExtraIncludedInTotal).forEach(function(e) {
     var eEx = Math.round((e.qty||1)*(e.unitPrice||0));
     rawVat += Math.round(eEx * _poNormVat(e.vatRate) / 100);
   });
@@ -554,7 +660,7 @@ function renderOffer(off) {
         if (!l.blockTitle && !l.text) return '';
         var titleHtml = l.blockTitle ? '<strong>' + esc(l.blockTitle) + '</strong>' : '';
         var textHtml  = l.text ? (l.blockTitle ? '<br>' : '') + '<span style="white-space:pre-wrap;">' + esc(l.text) + '</span>' : '';
-        return '<tr><td colspan="2" style="padding:10px 0;border-bottom:1px solid var(--br);font-size:13px;line-height:1.6;">' + titleHtml + textHtml + '</td></tr>';
+        return '<tr><td colspan="2" class="po-desc" style="padding:10px 0;border-bottom:1px solid var(--br);font-size:13px;line-height:1.6;">' + titleHtml + textHtml + '</td></tr>';
       }
       if (l.type === 'service') {
         var lEx  = l.exVat || 0;
@@ -562,28 +668,56 @@ function renderOffer(off) {
         var lInc = lEx + lVat;
         var lRut = l.rutAmount || 0;
         var lCust2 = lInc - lRut;
-        return '<tr><td>' + esc(l.templateName||'Tjänst') +
+        return '<tr><td class="po-desc">' + esc(l.templateName||'Tjänst') +
           (lRut ? '<span class="po-rut-badge">RUT/ROT</span>' : '') +
           (l.description ? '<div class="po-line-desc">' + esc(l.description) + '</div>' : '') +
-          '</td><td>' + (lRut ? fmt(lCust2) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : fmt(lInc) + ' kr') + '</td></tr>';
+          '</td><td class="po-price">' + (lRut ? fmt(lCust2) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : fmt(lInc) + ' kr') + '</td></tr>';
       }
-      var tot    = l.total || Math.round((l.qty||1)*(l.unitPrice||0));
+      /* Manuell/fastprisrad — V49 OFFER-CORE-R1: `_poLineExVat(l)` ersätter
+         den tidigare `l.total || Math.round(...)`-formeln, som felaktigt
+         läste om ett äkta, sparat `total:0` (rate-rader) som "ej satt"
+         och räknade fram ett nytt, felaktigt belopp. billingType styr nu
+         även prisetiketten: rate visar radens rena à-pris (aldrig
+         inräknat i någon totalsumma), recurring visar "/mån"-suffix
+         (eller egen enhet), onetime är oförändrat.
+         OFFER CORE R1.1 — BLOCKER 1: 'option' borttaget. BLOCKER 6:
+         _poBillingPriceLabelHtml tar nu BÅDA ex./inkl.-moms-beloppen —
+         ex. moms visas primärt för rate/recurring (se funktionen). */
+      var bt3 = l.billingType || 'onetime';
+      var tot    = _poLineExVat(l);
       var totInc = tot + Math.round(tot * _poNormVat(l.vatRate) / 100);
-      var lRut2   = l.rutAmount || 0;
+      var lRut2   = _poEffectiveRutAmount(l);
       var lCust3  = totInc - lRut2;
-      return '<tr><td>' + esc(l.description||l.templateName||'Rad') +
+      var priceHtml3 = (bt3 === 'rate')
+        ? _poBillingPriceLabelHtml(l, 0, 0)
+        : (lRut2 ? fmt(lCust3) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : _poBillingPriceLabelHtml(l, tot, totInc));
+      var qtyDescHtml3 = (bt3 === 'rate') ? '' :
+        (l.qty && l.unit ? '<div class="po-line-desc">' + l.qty + ' ' + esc(l.unit) + ' × ' + fmt(l.unitPrice||0) + ' kr</div>' : '');
+      return '<tr><td class="po-desc">' + esc(l.description||l.templateName||'Rad') + ' ' + _poBillingBadgeHtml(l) +
         (lRut2 ? '<span class="po-rut-badge">' + (l.reductionType==='rot'?'ROT':'RUT') + '</span>' : '') +
-        (l.qty && l.unit ? '<div class="po-line-desc">' + l.qty + ' ' + esc(l.unit) + ' × ' + fmt(l.unitPrice||0) + ' kr</div>' : '') +
-        '</td><td>' + (lRut2 ? fmt(lCust3) + ' kr<div class="po-line-desc">inkl. moms efter avdrag</div>' : fmt(totInc) + ' kr') + '</td></tr>';
+        qtyDescHtml3 +
+        '</td><td class="po-price">' + priceHtml3 + '</td></tr>';
     }).join('');
-    linesHtml = '<div style="overflow-x:auto;"><table class="po-line-table"><thead><tr><th>Beskrivning</th><th>Pris inkl. moms</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    /* OFFER CORE R1.1 — BLOCKER 6: kolumnrubriken generaliserad från
+       "Pris inkl. moms" till "Pris" eftersom rate/recurring-rader nu
+       visar sitt ex-moms-pris PRIMÄRT (se _poBillingPriceLabelHtml) —
+       en rubrik som påstod "inkl. moms" för HELA kolumnen skulle
+       motsäga dessa rader. Onetime/service-raderna visar fortfarande
+       sitt inkl.-moms-belopp som förut, oförändrat. */
+    linesHtml = '<div style="overflow-x:auto;"><table class="po-line-table"><thead><tr><th>Beskrivning</th><th class="po-th-price">Pris</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 
-  /* Tilläggsrader */
+  /* Tilläggsrader — OFFER CORE R1.1 — BLOCKER 1: en extra med
+     e.includedInTotal===false är EXPLICIT ej committad (visas separat
+     nedan i rateOptSummaryHtml tillsammans med rate-raderna, inte här).
+     Frånvarande fält (all historisk data) = "included", oförändrat
+     beteende/utseende jämfört med innan R1.1. */
+  var committedExtras = extras.filter(_poExtraIncludedInTotal);
+  var optionalExtras   = extras.filter(function(e) { return !_poExtraIncludedInTotal(e); });
   var extrasHtml = '';
-  if (extras.length) {
+  if (committedExtras.length) {
     extrasHtml = '<div style="margin-top:8px;"><div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Tillägg</div>' +
-      extras.map(function(e) {
+      committedExtras.map(function(e) {
         var tot = Math.round((e.qty||1)*(e.unitPrice||0));
         var eRate = _poNormVat(e.vatRate);
         return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--br);">' +
@@ -592,14 +726,59 @@ function renderOffer(off) {
       }).join('') + '</div>';
   }
 
-  /* Summering */
+  /* OFFER CORE R1 — additiv, tydligt separerad återkommande-summering.
+     Visas ENDAST när offerten faktiskt har återkommande rader (annars
+     helt tom sträng — inga befintliga, äldre offerter påverkas eftersom
+     recurringLines då alltid är []). Renderas ALDRIG ihop med den
+     klassiska engångstotalsumman (samma additiva princip som
+     OffersPage._totalsBarHtml() i PageShells.js).
+     OFFER CORE R1.1 — BLOCKER 6: ex.-moms-beloppet är PRIMÄRT (det
+     citerade kontraktsvärdet, t.ex. "8 000 kr/mån exkl. moms" för Södra
+     Heden) — inkl.-moms visas som tydligt märkt sekundär information,
+     ALDRIG som ersättning för det primära ex-moms-talet. */
+  var recurringSummaryHtml = recurringLines.length ? (
+    '<div class="po-recurring-summary">' +
+      '<div class="po-recurring-summary-row"><span>Fast kostnad per månad</span><strong>' + fmt(recurringMonthlyEx) + ' kr exkl. moms</strong></div>' +
+      '<div class="po-recurring-summary-row" style="opacity:.7;font-size:11px;"><span></span><span>' + fmt(recurringMonthlyInc) + ' kr/mån inkl. moms</span></div>' +
+      '<div class="po-recurring-summary-row"><span>Fast kostnad per år (härledd)</span><strong>' + fmt(recurringAnnualEx) + ' kr exkl. moms</strong></div>' +
+      '<div class="po-recurring-summary-row" style="opacity:.7;font-size:11px;"><span></span><span>' + fmt(recurringAnnualInc) + ' kr/år inkl. moms</span></div>' +
+    '</div>'
+  ) : '';
+
+  /* Rörliga à-priser + explicit ej committade tillval-extras — visas
+     tydligt tillsammans, men ingår ALDRIG i någon totalsumma ovan (se
+     _poLineExVat för rate-rader, _poExtraIncludedInTotal för extras). */
+  var rateOptSummaryHtml = (rateOptLines.length || optionalExtras.length) ? (
+    '<div class="po-rateopt-note">' +
+      '<div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Rörliga à-priser / tillval (ingår ej i summan ovan)</div>' +
+      rateOptLines.map(function(l) {
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;">' +
+          '<span>' + esc(l.description||'Rörligt pris') + ' ' + _poBillingBadgeHtml(l) + '</span>' +
+          '<span style="font-weight:600;font-variant-numeric:tabular-nums;">' + _poBillingPriceLabelHtml(l, 0, 0) + '</span></div>';
+      }).join('') +
+      optionalExtras.map(function(e) {
+        var eTot = Math.round((e.qty||1)*(e.unitPrice||0));
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;">' +
+          '<span>' + esc(e.description||'Tillval') + '</span>' +
+          '<span style="font-weight:600;font-variant-numeric:tabular-nums;">' + fmt(eTot) + ' kr' + (e.unit?'/'+esc(e.unit):'') + ' exkl. moms</span></div>';
+      }).join('') +
+    '</div>'
+  ) : '';
+
+  /* Summering — V49 OFFER-CORE-R1: när offerten har en återkommande
+     (kr/mån) del, förtydligas etiketterna till "Engångsbelopp" så att
+     kunden aldrig kan tro att detta ensamt är "allt" — den återkommande
+     delen visas separat i recurringSummaryHtml ovan/nedan, aldrig
+     hopslagen med denna klassiska engångstotalsumma (samma princip som
+     OffersPage._totalsBarHtml() i PageShells.js). */
+  var totalLabelPrefix = recurringLines.length ? 'Engångsbelopp' : 'Totalt';
   var totalsHtml = '<div class="po-totals">' +
     (discAmt ? '<div class="po-total-row"><span>Delsumma</span><span>' + fmt(rawEx) + ' kr</span></div>' : '') +
     (discAmt ? '<div class="po-total-row"><span>Rabatt</span><span>−' + fmt(discAmt) + ' kr</span></div>' : '') +
-    '<div class="po-total-row"><span>Totalt exkl. moms</span><span>' + fmt(exVat) + ' kr</span></div>' +
+    '<div class="po-total-row"><span>' + totalLabelPrefix + ' exkl. moms</span><span>' + fmt(exVat) + ' kr</span></div>' +
     '<div class="po-total-row"><span>Moms</span><span>' + fmt(vat) + ' kr</span></div>' +
     (rutAmt ? '<div class="po-total-row"><span>RUT/ROT-avdrag</span><span>−' + fmt(rutAmt) + ' kr</span></div>' : '') +
-    '<div class="po-total-row main"><span>Totalt att betala</span><span>' + fmt(rutAmt ? cust : incVat) + ' kr</span></div>' +
+    '<div class="po-total-row main"><span>' + (recurringLines.length ? 'Engångsbelopp att betala' : 'Totalt att betala') + '</span><span>' + fmt(rutAmt ? cust : incVat) + ' kr</span></div>' +
     (rutAmt ? '<div style="font-size:10px;color:var(--mt);margin-top:6px;">Totalt inkl. moms: ' + fmt(incVat) + ' kr — RUT/ROT-avdrag: −' + fmt(rutAmt) + ' kr = Kundpris: ' + fmt(cust) + ' kr</div>' : '') +
     '</div>';
 
@@ -674,6 +853,7 @@ function renderOffer(off) {
      prisraderna. */
   var pricingHtml = (linesHtml||extrasHtml||totalsHtml) ? '<div class="po-card">' +
       (linesHtml||extrasHtml ? '<div class="po-card-body" style="padding:0;">' + linesHtml + (extrasHtml?'<div style="padding:12px 18px;">'+extrasHtml+'</div>':'') + '</div>' : '') +
+      (recurringSummaryHtml || rateOptSummaryHtml ? '<div style="padding:12px 18px;">' + recurringSummaryHtml + rateOptSummaryHtml + '</div>' : '') +
       totalsHtml +
     '</div>' : '';
 

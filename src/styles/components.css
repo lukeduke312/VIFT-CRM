@@ -1251,32 +1251,21 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
   .off-wiz-inner, .off-wiz-inner-wide { padding: 20px 28px; max-width: 1280px; }
 }
 
-/* V48B3A R4 DEL 7: skärmdump visade stort tomt vitt utrymme UNDER
-   Tillbaka/Nästa-footern på mobil när steg 2 har lite innehåll — footern
-   låg i normalt dokumentflöde direkt efter det korta innehållet istället
-   för att hamna vid sidans nederkant.
-   Verifierad kedja innan implementation: #app (height:100dvh) →
-   #page-area (flex:1;min-height:0) → #content-scroll (flex:1;min-height:0;
-   overflow-y:auto) → .page.active (min-height:100%, redan etablerat
-   mönster i layout.css) → .con/#pg-offer-content (flex:1 från sin
-   klassregel — _showWizard() skriver bara över display/padding/gap/
-   max-width/margin inline, INTE flex, så flex:1 gäller fortfarande och
-   ger .con en verklig, beräknad höjd via flexbox, inte "auto"). Det gör
-   min-height:100% på #off-wizard giltigt (samma teknik som .page redan
-   använder mot #content-scroll).
-   #off-wizard blir en egen flex-kolumn som fyller minst den tillgängliga
-   höjden; endast innehålls-diven (.off-wiz-inner/-wide) får flex:1 så den
-   växer och trycker footern mot nederkanten när innehållet är kort — utan
-   flex-grow på footern själv förblir den sin naturliga höjd. Ingen extra
-   scroll-container skapas (samma enda #content-scroll som innan), och
-   långt innehåll överskrider bara min-height och skrollar normalt.
-   >=1024px helt opåverkat (egen media-regel, ingen ändring av
-   #off-wizard/.off-wiz-inner-wide-regler där). */
-@media (max-width: 1023px) {
-  #off-wizard { min-height: 100%; display: flex; flex-direction: column; }
-  #off-wizard > .off-wiz-inner,
-  #off-wizard > .off-wiz-inner-wide { flex: 1; }
-}
+/* OFFER CORE R1.6.7 — ITEM 1: the V48B3A-era rule that used to live here
+   (#off-wizard{min-height:100%;flex-column} + .off-wiz-inner{flex:1})
+   deliberately stretched the wizard to fill #content-scroll's full
+   available height and pushed the footer down to the bottom of a SHORT
+   step — because at the time the footer was meant to sit at the visual
+   bottom of the viewport. R1.6.6 moved the footer into normal document
+   flow (no longer sticky/fixed), which made that flex-fill obsolete: it
+   now just inserts a large, purely decorative white gap between a short
+   step's action buttons and the real MobileShell bottom navigation —
+   exactly the regression this round's brief reported. Removed entirely,
+   not just disabled — a short step is now allowed to end above the
+   visible bottom of the screen, exactly like any other in-flow content.
+   >=1024px was never affected by this rule (own separate media query)
+   and remains untouched.
+
 .off-wiz-s2 {
   display: flex;
   flex-direction: column;
@@ -1293,7 +1282,11 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
 @media (min-width: 1024px) {
   .off-wiz-s2 { flex-direction: row; }
   .off-wiz-s2-lines { flex: 1; }
-  .off-wiz-s2-summ  { width: 256px; flex-shrink: 0; position: sticky; top: 52px; }
+  /* OFFER CORE R1.6.2 — ITEM 5 (UI polish, LIVE-verified): 256px var för
+     smalt för "8 000 kr/mån ex moms" utan illa radbrytning. Bredd
+     ökad; mobilen (<1024px, .off-wiz-s2-summ { width: 100% } ovan)
+     är helt oförändrad. */
+  .off-wiz-s2-summ  { width: 300px; flex-shrink: 0; position: sticky; top: 52px; }
 }
 
 /* V48B3A R4 DEL 6: skärmdump visade DUBBLERAD summering på mobil/tablet —
@@ -1339,14 +1332,20 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
   .off-wiz-hdr-steps-desktop  { display: flex; align-items: flex-end; }
 }
 
-/* ── V48B3A: WIZARD FOOTER — sticky primär-CTA + kompakt totalsrad (steg 2) ── */
+/* ── V48B3A: WIZARD FOOTER — primär-CTA + kompakt totalsrad (steg 2) ──
+   OFFER CORE R1.6.6 — ITEM 1: real iPhone evidence showed the R1.6.5
+   sticky-with-reserved-space approach was still poor UX — the action
+   bar visibly floated over the active form while scrolling, even
+   though it no longer clipped content. Per the brief, the footer is
+   now IN NORMAL DOCUMENT FLOW on mobile (no position:sticky, no fixed
+   overlay) — the user reaches "Tillbaka / Nästa" naturally after the
+   step's content, exactly like any other in-flow element. The R1.6.5
+   footer-height CSS reservation was removed together with this.
+   Desktop (>=1024px) is untouched — it was never sticky. */
 .off-wiz-ftr {
   background: #fff; border-top: 1px solid var(--br);
   padding: 8px 14px; display: flex; gap: 7px; justify-content: space-between;
   padding-bottom: calc(8px + env(safe-area-inset-bottom));
-}
-@media (max-width: 1023px) {
-  .off-wiz-ftr { position: sticky; bottom: 0; z-index: 9; box-shadow: 0 -2px 10px rgba(0,0,0,.06); }
 }
 .off-wiz-ftr-secondary { flex-shrink: 0; }
 .off-wiz-ftr-primary   { flex-shrink: 0; }
@@ -1354,6 +1353,29 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
 @media (max-width: 1023px) {
   .off-wiz-ftr-secondary,
   .off-wiz-ftr-primary { min-height: 44px; }
+  /* OFFER CORE R1.6.7 — ITEM 2: traced the real shell ownership before
+     touching this (responsive.css): #content-scroll — the wizard's own
+     scroll container, per _showWizard()'s comment — ALREADY reserves
+     `padding-bottom: calc(78px + env(safe-area-inset-bottom))` for
+     #mobile-bottom-nav, and the nav bar itself already applies the same
+     env(safe-area-inset-bottom) to its OWN internal padding. The
+     .off-wiz-ftr base rule's `+ env(safe-area-inset-bottom)` above was
+     written for when the footer sat at the PHYSICAL bottom edge
+     (sticky/fixed, pre-R1.6.6) and needed to clear the home-indicator
+     itself directly. Now that the footer is a normal in-flow element
+     followed by the shell's own already-safe-area-aware reserved gap,
+     adding the inset AGAIN here double-counts it — exactly the
+     "additional iPhone safe-area-sized blank band" the brief describes.
+     Restored to a normal small component gap; the safe area remains
+     fully honored, just by the correct single owner (the shell). */
+  .off-wiz-ftr { padding-bottom: 12px; }
+  /* OFFER CORE R1.6.8 — the R1.6.7 footer reinforcement margin (a small
+     margin-bottom the footer itself carried) is REMOVED here (not
+     modified — removed), replaced by the real structural fix below on
+     #pg-offer-content[data-wiz="1"]. See that rule's comment for the
+     full scroll-ownership trace. A margin here would once again be a
+     compensating patch layered on top of the real owner — exactly what
+     this round's brief forbids. */
   /* Upptäckt via det riktiga webbläsartestet vid 390px: två knappar med
      lång text ("Tillbaka" + "Nästa: Villkor") i en justify-content:
      space-between-rad överskred annars viewportens bredd eftersom
@@ -1364,13 +1386,183 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
   .off-wiz-ftr-secondary,
   .off-wiz-ftr-primary { flex: 1; min-width: 0; white-space: normal; }
 }
-.off-wiz-ftr--step2 { flex-direction: column; gap: 6px; }
-.off-wiz-ftr-row { display: flex; gap: 7px; justify-content: space-between; }
 
-/* Sticky mobile/tablet running-total (DEL 7) — dold på desktop, sidopanelens
-   egen sticky-till-topp totalskort räcker där. */
+/* OFFER CORE R1.6.8 — FINAL FLOW FOOTER / SCROLL INTEGRITY — real
+   structural fix, replacing R1.6.7's partial margin-bottom patch.
+
+   TRACED SCROLL OWNERSHIP (real hierarchy, layout.css/responsive.css —
+   neither modified):
+     #app (height:100dvh) → #page-area (flex:1;min-height:0;overflow:hidden)
+     → #content-scroll — the ONE actual scroll owner (flex:1;min-height:0;
+       overflow-y:auto; itself display:flex;flex-direction:column, and
+       carries its own shared, safe-area-aware bottom-nav reservation:
+       padding-bottom: calc(78px + env(safe-area-inset-bottom)) — this
+       reservation is correct and untouched for every OTHER mobile page.
+     → .page.active (layout.css: display:flex;flex-direction:column;
+       min-height:100%, flex-grow:0 as a flex item of #content-scroll —
+       it does NOT itself grow past that min-height floor for taller
+       content; a taller child is left to visually overflow it).
+     → #pg-offer-content (.con override, _showWizard(), PageShells.js) —
+       this is the ACTUAL element whose rendered box determines whether
+       #content-scroll needs to scroll: verified via CDP
+       (getBoundingClientRect) that its own bottom edge, not
+       #content-scroll's or .page's, is what tracks 1:1 with
+       #content-scroll's scrollHeight once the wizard's content is
+       tall enough to exceed .page's floor.
+     → #off-wizard / .off-wiz-inner / .off-wiz-inner-wide / .off-wiz-ftr
+       (plain block flow inside #pg-offer-content).
+     → #mobile-bottom-nav — a fixed-positioned sibling of #page-area,
+       own height traced from responsive.css: border-top(1px) +
+       padding(4px + calc(4px+env(safe-area-inset-bottom))) +
+       .mnav-item min-height(48px) = 57px + env(safe-area-inset-bottom).
+
+   ROOT CAUSE OF THE R1.6.7 LONG-CONTENT OVERLAP (confirmed via CDP,
+   not guessed): #content-scroll's own padding-bottom is declared on
+   #content-scroll ITSELF, an ancestor TWO boxes removed from the box
+   that actually overflows (#pg-offer-content). Measured directly: when
+   wizard content is short, #pg-offer-content's rendered bottom stays at
+   or under .page's min-height floor, .page never exceeds
+   #content-scroll's own visible height, and #content-scroll's trailing
+   padding is correctly included in scrollHeight (no bug in that case —
+   this is why R1.6.7's realistic step2/step3 fixtures measured a clean,
+   non-overlapping gap). But once #pg-offer-content's content genuinely
+   exceeds .page's floor, #pg-offer-content's own rendered bottom edge
+   becomes exactly what determines #content-scroll's scrollHeight (CDP-
+   verified: scrollHeight === #pg-offer-content's getBoundingClientRect
+   .bottom, in document coordinates) — and #content-scroll's OWN
+   trailing padding contributes ZERO to that figure once this happens.
+   It is not "reduced" or "partially honored" — it is fully excluded.
+   That is the real bug, and it is a property of applying end-padding on
+   an ancestor that a descendant can overflow past — not something a
+   bigger margin on the footer can ever robustly fix (R1.6.7 tried a
+   small compensating margin, which only ever shifts the same swallowed
+   amount by a few px — it cannot close a bug in the ancestor's own
+   padding-inclusion by adding to the descendant).
+
+   THE FIX: give #pg-offer-content itself — the one box whose own
+   rendered extent IS what #content-scroll measures once overflow
+   happens — its own bottom-nav reservation, sized independently of
+   (not copied from) #content-scroll's shared 78px value, because a
+   padding declared directly on the actual overflowing box is, by
+   construction, always part of that box's own bottom edge and can
+   never be "swallowed" by an ancestor overflow calculation — CDP-
+   verified across both the short and long fixtures below (no double
+   gap in the short case: this padding sits AFTER the wizard's own
+   content, so — as long as it does not push total content past the
+   viewport's visible height — it never moves the footer's own on-
+   screen position at all; it only matters, and only takes effect,
+   once real scrolling is actually needed, which is exactly the case
+   it exists to fix).
+
+   Value derivation (not guessed, not copied from #content-scroll's
+   78px, which is calibrated for regular pages and was never meant to
+   be the wizard's own number): #mobile-bottom-nav's own real height,
+   traced above, is exactly `57px + env(safe-area-inset-bottom)`. To
+   reserve exactly nav-height + a fixed, small, deliberate 12px gap
+   (middle of the brief's 8–16px target) regardless of device safe-area
+   (the env() term cancels algebraically between the nav's own height
+   and this reservation — verified by CDP measurement below to hold at
+   both 390×844 and 430×932), the wizard's own reservation is:
+   `calc(69px + env(safe-area-inset-bottom))` (57 + 12 = 69).
+
+   This does not touch #content-scroll, .page, or .con's shared rules
+   in responsive.css/layout.css at all — #content-scroll's own
+   reservation is left completely alone (still correct and needed for
+   every other mobile page) and simply becomes irrelevant to the wizard
+   once this rule exists, since #pg-offer-content's own bottom edge now
+   determines the outcome either way. One clear owner for the wizard's
+   own bottom-nav reservation: #pg-offer-content itself, mobile-only,
+   scoped by the same data-wiz="1" attribute _showWizard() already sets. */
+#pg-offer-content[data-wiz="1"] { padding-bottom: 0; }
+@media (max-width: 1023px) {
+  #pg-offer-content[data-wiz="1"] { padding-bottom: calc(69px + env(safe-area-inset-bottom)); }
+}
+
+/* OFFER CORE R1.6.9 — FINAL SHORT-CONTENT FOOTER ALIGNMENT.
+
+   R1.6.8's structural reservation above (padding-bottom: calc(69px+env())
+   on #pg-offer-content) is KEPT UNCHANGED, byte-for-byte — it genuinely
+   solves the long-content overlap and nothing about it is touched by
+   this round. The remaining issue is purely a SHORT-content one: when
+   wizard content is shorter than the available wizard area, the footer
+   simply ends wherever the content happens to end, leaving a gap that is
+   a function of content length vs. device height (33px at 390×844,
+   135px at 430×932 for the same Step 2 content).
+
+   TWO CSS-ONLY APPROACHES WERE TRIED AND REJECTED (recorded honestly,
+   not silently discarded — full detail in RAPPORT-...-R1.6.9.md):
+   (1) `#off-wizard{min-height:100%}` directly against #pg-offer-content
+   correctly resolves only when #pg-offer-content's own box is NOT itself
+   dependent on this same child's content — for THIS fixture at
+   390×844, #pg-offer-content's 69px reservation already eats into the
+   available floor space, so there is no slack left for that specific
+   case (CDP-confirmed: no change, 33px). (2) Extending
+   #pg-offer-content's OWN min-height by a fixed constant to decouple the
+   reservation from the fill target seemed promising on paper, but CDP
+   testing proved it breaks something more fundamental: giving a flex
+   item (#pg-offer-content, which inherits flex-shrink:1/flex-basis:0%
+   from the shared, untouched .con class) ANY explicit min-height
+   disables the flexbox "automatic minimum size" mechanism that
+   otherwise keeps a flex item from rendering SMALLER than its own
+   content — once disabled, #pg-offer-content stopped growing to
+   accommodate long content entirely (confirmed via getComputedStyle/
+   offsetHeight: it clamped to exactly its own min-height, e.g. 900px,
+   even with content needing 1617px) — this silently reintroduces the
+   exact R1.6.7 long-content overlap bug R1.6.8 fixed. Rejected outright
+   once this was found, regardless of the exact constant chosen.
+
+   THE ACTUAL FIX: since #pg-offer-content itself can never safely carry
+   an explicit height (that invariant is what makes R1.6.8's own fix
+   work at all), the short-content fill target for #off-wizard is
+   computed with a small, targeted JS measurement instead — reading an
+   ELEMENT's actual rendered size (#content-scroll's real clientHeight,
+   PageShells.js's new `_syncWizardFloor()`), never `window.innerHeight`
+   and never a hardcoded viewport pixel value: it naturally reflects
+   whatever real device/topbar/layout combination is in effect, exactly
+   like `.page{min-height:100%}` already does — this is not a "viewport
+   height hack", it is reading the size of the SAME element
+   (#content-scroll) the existing CSS chain already depends on.
+   `target = contentScroll.clientHeight − 69px` (the same 57px real nav
+   height + 12px gap constant traced for the R1.6.8 fix, reused here —
+   ONE constant, ONE model, exactly as the brief asks) is written as
+   `#off-wizard`'s own inline `min-height` (mobile only). Because this
+   sets #off-wizard's OWN height directly — never #pg-offer-content's —
+   #pg-offer-content's CSS is completely unaffected and keeps its full,
+   untouched R1.6.8 auto/content-driven sizing behavior.
+     - SHORT content: #off-wizard's natural height is less than `target`
+       → the flex column (below) has positive free space → the footer's
+       `margin-top:auto` consumes it, settling the footer at `target`,
+       exactly `navTop − 12px` above the real nav bar, by construction —
+       CDP-verified below at BOTH required viewports, converging on the
+       SAME 12px gap the long-content fix already produces (one unified
+       model, not two different numbers for two branches).
+     - LONG content: #off-wizard's natural height already exceeds
+       `target` → min-height has no effect (it is a floor, not a cap) →
+       #off-wizard renders at its natural size, #pg-offer-content grows
+       to match it via its OWN untouched CSS exactly as R1.6.8 already
+       does, and the auto margin resolves to 0 — CDP-verified below: D/E
+       stay at exactly 12px, 0 overlap, byte-for-behavior identical to
+       R1.6.8.
+   Scoped to <1024px only (both the CSS below and the JS's own
+   `window.innerWidth<1024` guard — the SAME breakpoint Router.js already
+   uses elsewhere in this codebase, checked only to decide whether to
+   apply an inline style, never used to compute a size) — desktop's
+   #off-wizard carries no inline style and no display rule at all,
+   matching its pre-R1.6.9 behavior exactly. */
+@media (max-width: 1023px) {
+  #off-wizard { display: flex; flex-direction: column; }
+  #off-wizard > .off-wiz-ftr { margin-top: auto; }
+}
+
+/* Mobil/tablet running-total (DEL 7) — dold på desktop, sidopanelens
+   egen sticky-till-topp totalskort räcker där.
+   OFFER CORE R1.6.6 — ITEM 2: flyttad från footern till slutet av
+   steg 2:s vanliga innehållsflöde (se .off-wiz-mobile-totals--flow) —
+   samma markup/samma canoniska _offerCalcTotals()-kedja, bara inte
+   längre en del av en overlay-footer. */
 .off-wiz-mobile-totals { display: block; }
 @media (min-width: 1024px) { .off-wiz-mobile-totals { display: none; } }
+.off-wiz-mobile-totals--flow { margin-top: 12px; }
 .off-wiz-mobile-totals-toggle {
   width: 100%; display: flex; align-items: center; gap: 8px;
   background: var(--bg); border: 1px solid var(--br); border-radius: var(--rs);
@@ -1443,7 +1635,15 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
    (DEL 6). Se _toggleLineExpanded()/data-expanded. ── */
 .off-wiz-line-summary,
 .off-wiz-line-summary-actions { display: none; }
-.off-wiz-line-editor { display: block; }
+/* OFFER CORE R1.6.4 — MOBILE HEADER HARDENING: general overflow safety
+   net for the expanded editor and its helper/note text — min-width:0 +
+   max-width:100% so no descendant can ever force the card (and
+   therefore the page) wider than its own allotted width; overflow-wrap
+   so a long unbroken word/URL in helper text wraps instead of
+   overflowing. Purely a safety net — no visual change to anything that
+   already fit. */
+.off-wiz-line-editor { display: block; min-width: 0; max-width: 100%; overflow-wrap: break-word; }
+.off-wiz-line-field-hint, .off-wiz-line-note-row, .off-svc-card-sub { min-width: 0; max-width: 100%; overflow-wrap: break-word; }
 @media (max-width: 1023px) {
   .off-wiz-line-card[data-expanded="0"] .off-wiz-line-summary { display: flex; }
   .off-wiz-line-card[data-expanded="0"] .off-wiz-line-summary-actions { display: flex; }
@@ -1455,6 +1655,21 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
 .off-wiz-line-summary-icon { flex-shrink: 0; color: var(--navy); background: var(--bg); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
 .off-wiz-line-summary-body { flex: 1; min-width: 0; }
 .off-wiz-line-summary-title { font-size: 13px; font-weight: 700; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* OFFER CORE R1.6.6 — ITEM 4: on mobile, long real offer-row names were
+   being aggressively single-line-truncated ("Fastighetsskötsel &
+   utemiljö..."). Allowing up to TWO lines (line-clamp, not unlimited
+   height) reads the actual name while still bounding the card's
+   height. Desktop (above) keeps the existing single-line ellipsis —
+   untouched. */
+@media (max-width: 1023px) {
+  .off-wiz-line-summary-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+  }
+}
 .off-wiz-line-summary-meta  { font-size: 11px; color: var(--mt); margin-top: 1px; }
 .off-wiz-line-summary-price { font-size: 14px; font-weight: 800; color: var(--navy); flex-shrink: 0; }
 .off-wiz-line-summary-actions { gap: 8px; border-top: 1px solid var(--bg); padding-top: 8px; }
@@ -1500,8 +1715,8 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
   background: #fff;
   border: 1px solid var(--br);
   border-radius: var(--rs);
-  padding: 10px 12px;
-  margin-bottom: 7px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
   border-left: 3px solid var(--navy);
 }
 .off-svc-card-hd {
@@ -1509,15 +1724,21 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
+/* OFFER CORE R1.6.2 — ITEM 3/9 (UI polish): samma tysta badge-behandling
+   som .off-wiz-line-card-type — inline-flex+gap för konsekvent
+   ikon/text-avstånd, mindre marginal under. */
 .off-svc-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: .5px;
+  letter-spacing: .4px;
   color: var(--navy);
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 .off-svc-card-sub {
   font-size: 10px;
@@ -1546,6 +1767,24 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
    were previously inline style="..." attributes. Same computed values. */
 .off-svc-card-hd-main  { flex: 1; min-width: 0; }
 .off-svc-card-hd-price { flex-shrink: 0; text-align: right; }
+/* OFFER CORE R1.6.4 — MOBILE HEADER HARDENING: at <640px the price block
+   (.off-svc-card-hd-price) was flex-shrink:0 with its own natural
+   content width (e.g. "ex. moms · 7 188 kr inkl.") — on a narrow phone
+   this forced .off-svc-card-hd-main's flex:1 share down toward 0 while
+   the price block itself still overflowed the row, clipping BOTH the
+   description and the price/VAT text at the right edge (confirmed in
+   the real full-wrapper 390/430px evidence). Fix: at mobile widths only,
+   the price block drops onto its own full-width row BELOW the
+   description instead of competing for horizontal space with it —
+   desktop (>=640px, untouched below) keeps the exact approved
+   side-by-side layout. */
+@media (max-width: 639px) {
+  .off-svc-card-hd { flex-wrap: wrap; }
+  .off-svc-card-hd-main { width: 100%; }
+  .off-svc-card-hd-price { width: 100%; flex-shrink: 1; min-width: 0; text-align: left; margin-top: 2px; }
+  .off-svc-card-price { text-align: left; }
+  .off-svc-card-price-sub { text-align: left; }
+}
 .off-svc-card-sub--tight { margin-bottom: 2px; }
 .off-svc-card-desc-input { font-size: 11px; margin-bottom: 6px; }
 .off-svc-card-actions { display: flex; gap: 5px; }
@@ -1668,6 +1907,33 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
 }
 .off-totals-cust-lbl { font-size: 11px; font-weight: 600; opacity: .8; }
 .off-totals-cust-val { font-size: 16px; font-weight: 600; }
+/* OFFER CORE R1.6.1 — ITEM 4 (LIVE hotfix): visuell prioritering. En
+   ren återkommande (eller rate-only) offert saknar ett committat
+   engångsbelopp — den återkommande/rörliga summan är då den ENDA
+   verkliga kommersiella siffran och ska synas som det, inte som en
+   sekundär rad under en dominant "0 kr"-kundpris-platta (som togs bort
+   för detta fall i _totalsBarHtml()). Ingen ändring av existerande
+   .off-totals-row/.off-totals-cust för det vanliga (engångs-/mixade)
+   fallet. */
+.off-totals-row--primary { font-size: 14px; font-weight: 700; color: var(--navy); }
+.off-totals-row--primary strong { font-size: 14px; color: var(--navy); }
+.off-totals-row--muted { opacity: .65; font-size: 10px; }
+/* OFFER CORE R1.6.2 — ITEM 5 (UI polish): eyebrow/figure-hierarki för
+   den återkommande summeringen — en liten tyst rubrik, EN stark siffra
+   (månad), en tydligt sekundär siffra (år), och en enda liten
+   "exkl. moms"-etikett istället för att upprepa den i varje rad. Ingen
+   ändring av de underliggande värdena (samma fmt(...)-anrop som förut). */
+.off-totals-eyebrow {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--mt); margin-bottom: 2px;
+}
+.off-totals-figure-primary { font-size: 20px; font-weight: 800; color: var(--navy); line-height: 1.15; }
+.off-totals-figure-secondary { font-size: 13px; font-weight: 600; color: var(--tx); opacity: .8; margin-top: 1px; }
+.off-totals-figure-vatnote { font-size: 9px; color: var(--mt); margin-top: 2px; }
+.off-totals-rateopt-hd {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--mt); margin-bottom: 2px;
+}
 /* V48B2: steg 3 återanvänder totalsbaren "bar" (utan kort-chrome) via en
    modifier-klass istället för en inline style="..."-sträng i .replace(). */
 .off-totals-card--bare { border: none; border-radius: 0; margin: 0; }
@@ -1711,14 +1977,40 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
 .off-line-reorder-controls { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; padding-top: 4px; }
 .off-line-reorder-handle { cursor: grab; color: var(--mt); font-size: 12px; letter-spacing: -1px; line-height: 1; user-select: none; padding: 4px 2px; }
 .off-line-reorder-handle:active { cursor: grabbing; }
+/* OFFER CORE R1.6.2 — ITEM 4/9 (UI polish): drag/reorder är redan
+   fullt fungerande (draggable-handtaget + _moveLine) — bara den VISUELLA
+   tyngden minskas på desktop (ingen bård/bakgrund förrän hover/fokus),
+   så den inte konkurrerar med pris-innehållet. Ingen ändring av
+   funktionalitet, bara opacity/bård tas bort i vila. */
 .off-line-reorder-btn {
   width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
-  border: 1px solid var(--br); border-radius: 6px; background: #fff; color: var(--tx); cursor: pointer; padding: 0;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--mt);
+  cursor: pointer; padding: 0; opacity: .55; transition: opacity .15s, background .15s, border-color .15s;
 }
-.off-line-reorder-btn:disabled { opacity: .35; cursor: not-allowed; }
+.off-line-reorder-btn:hover, .off-line-reorder-btn:focus-visible {
+  opacity: 1; background: #fff; border-color: var(--br); color: var(--tx);
+}
+.off-line-reorder-btn:disabled { opacity: .2; cursor: not-allowed; }
 .off-line-reorder-content { flex: 1; min-width: 0; }
+/* OFFER CORE R1.6.6 — ITEM 3: real iPhone evidence showed the mobile
+   reorder column (was 40x40 buttons, always-visible border+white
+   background, 6px row gap) consuming a disproportionate amount of both
+   vertical and horizontal space next to the offer card. Target size is
+   now the standard ~44x44px touch target (WCAG-sized, not smaller than
+   before — this is about visual weight, not shrinking the tap area),
+   with a tighter inter-button gap and the row's own gap trimmed. The
+   buttons are visually QUIET at rest (transparent, low opacity — same
+   "secondary, not competing with the card" treatment already used on
+   desktop) and only gain their border/background on :active (the
+   touch equivalent of desktop's :hover/:focus-visible reveal) — the
+   disabled state remains clearly, unambiguously dimmer than either.
+   Reorder logic/markup/handlers are completely unchanged. */
 @media (max-width: 1023px) {
-  .off-line-reorder-btn { width: 40px; height: 40px; }
+  .off-line-reorder-row { gap: 4px; }
+  .off-line-reorder-controls { gap: 3px; padding-top: 2px; }
+  .off-line-reorder-btn { width: 44px; height: 44px; opacity: .45; border-color: transparent; background: transparent; }
+  .off-line-reorder-btn:active { opacity: 1; background: #fff; border-color: var(--br); }
+  .off-line-reorder-btn:disabled { opacity: .18; }
   .off-line-reorder-handle { display: none; }
 }
 
@@ -2174,30 +2466,40 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
    flyttad från inline style="..." till klasser. Namngivet off-wiz-line-*
    (inte off-line-*) för att inte kollidera med OfferDetailPage:s
    off-line-row-familj som redan finns och betyder något annat (läsvy). */
+/* OFFER CORE R1.6.2 — ITEM 1/8 (UI polish): kortet fick materiellt
+   mindre padding/marginal — ingen ändring av innehåll, bara av det
+   "luft" som gjorde varje pris-rad onödigt hög på desktop. */
 .off-wiz-line-card {
   background: #fff;
   border: 1px solid var(--br);
   border-radius: var(--rs);
-  padding: 10px 12px;
-  margin-bottom: 7px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
 }
 .off-wiz-line-card--text { border-left: 3px solid #cbd5e1; }
 .off-wiz-line-card-hd {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 7px;
+  margin-bottom: 5px;
 }
+/* ITEM 3/8: typrubriken (FASTPRIS/ÅTERKOMMANDE/RÖRLIGT PRIS) ska läsas
+   som en liten, tyst badge — inte tävla med beskrivning/pris om
+   uppmärksamheten. inline-flex+gap ger konsekvent ikon/text-avstånd
+   (ITEM 9) oavsett vad ic() själv renderar. */
 .off-wiz-line-card-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .5px;
+  letter-spacing: .4px;
   color: var(--mt);
 }
 .off-wiz-line-card-spacer { flex: 1; }
 .off-wiz-line-card-total { font-size: 12px; color: var(--navy); }
-.off-wiz-line-card-actions { margin-top: 6px; }
+.off-wiz-line-card-actions { margin-top: 5px; }
 .off-wiz-line-field-label {
   font-size: 9px;
   color: var(--mt);
@@ -2207,6 +2509,66 @@ body.off-addwork-open { overflow: hidden; touch-action: none; }
 }
 .off-wiz-line-manual-grid { display: grid; grid-template-columns: 72px 72px 1fr 68px; gap: 5px; }
 .off-wiz-line-fixed-grid  { display: grid; grid-template-columns: 110px 68px 1fr; gap: 6px; margin-top: 6px; }
+/* OFFER CORE R1.6.1 — ITEM 2 (LIVE hotfix): denna klass läggs alltid på
+   TILLSAMMANS med .off-wiz-line-manual-grid (1 barn: Prissemantik) eller
+   .off-wiz-line-fixed-grid (2 barn: Prissemantik + Enhet) — utan en egen
+   grid-template-columns "ärvde" raden fel spaltbredder från grannklassen
+   (72px resp. 110px/68px), vilket klippte "Återkommande" och lämnade
+   oanvänt utrymme i resten av raden på desktopbredd. Måste stå EFTER
+   ovanstående två regler i denna fil för att vinna kaskaden (samma
+   specificitet, en klassväljare vardera). */
+.off-wiz-line-billing-grid { grid-template-columns: minmax(150px, 1fr) minmax(84px, 150px); gap: 6px; margin-top: 4px; }
+@media (min-width: 900px) {
+  .off-wiz-line-billing-grid { grid-template-columns: minmax(220px, 1fr) minmax(110px, 190px); }
+}
+/* OFFER CORE R1.6.2 — ITEM 1/3/6 (UI polish): fastpris-kortets Pris/
+   Moms/Prissemantik/Enhet slås ihop till EN rad (tidigare två separata
+   rader/grids) för materiellt lägre kort-höjd. Samma relativa
+   bredd-prioritering som brief:en föreslår (pris ~110–140px, moms
+   ~80px, prissemantik ~180–220px så "Återkommande (per månad)" får
+   plats, enhet en praktisk minimibredd) — mobilen (<640px) behåller en
+   smalare, staplingsvänlig breddfördelning, ingen tvingad
+   desktop-bredd. */
+/* OFFER CORE R1.6.3 — BLOCKER 1: the R1.6.2 base rule used a 4-track
+   minmax() grid (90+60+150+80 = 380px of MINIMUMS alone, before gaps/
+   card padding/reorder column) — minmax() floors can never shrink below
+   their minimum, so this could genuinely overflow a 390/430px phone.
+   The mobile-safe base rule below is a real 2-column grid (1fr 1fr):
+   with the DOM order Price, Moms, Prissemantik, Enhet unchanged, the
+   browser's own grid auto-flow naturally wraps it into exactly
+   Row 1: Price | VAT, Row 2: Prissemantik | Enhet — no grid-template-
+   areas or markup reordering needed. `min-width: 0` on each grid item
+   is required so a long select's own content can never force its
+   track (and therefore the whole grid) wider than the 1fr share
+   allotted to it — THIS, not the old minmax floor, is what guarantees
+   zero horizontal overflow at any mobile width. The >=640px desktop
+   rule is BYTE-UNCHANGED from the approved R1.6.2 design. */
+.off-wiz-line-controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.off-wiz-line-controls-grid > div { min-width: 0; }
+@media (min-width: 640px) {
+  .off-wiz-line-controls-grid { grid-template-columns: minmax(110px, 140px) 80px minmax(200px, 1fr) minmax(100px, 130px); }
+}
+/* ITEM 2 (UI polish): intern anteckning flyttas till en egen, tyst
+   sekundär rad UNDER de kommersiella kontrollerna — samma fält/samma
+   funktionalitet, bara lägre visuell prioritet och inte längre en av
+   tre likvärdiga kolumner bredvid Pris/Moms. */
+.off-wiz-line-note-row {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--br);
+}
+.off-wiz-line-note-label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9px; color: var(--mt); font-weight: 500;
+  margin-bottom: 2px;
+}
+.off-wiz-line-note-input { font-size: 11px; opacity: .85; }
+.off-wiz-line-note-input:focus { opacity: 1; }
 .off-wiz-line-field-desc  { margin-bottom: 6px; font-size: 12px; }
 .off-wiz-line-field-title { margin-bottom: 6px; font-weight: 600; font-size: 12px; }
 .off-wiz-line-field-note  { font-size: 11px; }
