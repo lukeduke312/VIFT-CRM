@@ -1906,6 +1906,27 @@ const OffersPage = {
                _requestWizardClose(), så ingen rekursiv guard uppstår. */
             this._flushDraftNow();
             this._wizardClose();
+          }},
+          /* OFFER FINAL RC — "Stäng och ta bort utkast" saknades helt (denna
+             knapp fanns aldrig, det var root cause: inte en trasig handler,
+             utan en obefintlig). Använder EXAKT samma, redan etablerade
+             mönster som _save()s bekräftade success-gren (rad ~4297):
+             _draftRemove() FÖRST (medan _draftUserId fortfarande är satt —
+             _wizardClose() nollställer den via _stopDraftAutosave()), sedan
+             _wizardClose({skipDraftFlush:true}) — utan skipDraftFlush skulle
+             _wizardClose()s vanliga flush (_stopDraftAutosave() defaultar
+             till flush:true) omedelbart återuppliva den precis borttagna
+             draften i localStorage. Denna guard (_draftEnabled === true)
+             är ALDRIG sann i redigeringsläge (befintlig, sparad offert) —
+             se _startDraftAutosave()/openEdit(), som aldrig anropar den —
+             så denna gren, och därmed denna knapp, visas ALDRIG vid
+             redigering av en sparad offert: att stänga en redigeringssession
+             lämnar alltid den sparade offert-posten helt orörd, eftersom
+             inget någonsin skrivits till en beständig draft för den. */
+          { label: 'Stäng och ta bort utkast', cls: 'btn bd', onClick: () => {
+            Modal.close();
+            this._draftRemove();
+            this._wizardClose({ skipDraftFlush: true });
           }}
         ]
       });

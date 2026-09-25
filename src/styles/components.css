@@ -1264,7 +1264,7 @@ body.mmore-lock-scroll { overflow: hidden; touch-action: none; }
    not just disabled — a short step is now allowed to end above the
    visible bottom of the screen, exactly like any other in-flow content.
    >=1024px was never affected by this rule (own separate media query)
-   and remains untouched.
+   and remains untouched. */
 
 .off-wiz-s2 {
   display: flex;
