@@ -383,15 +383,30 @@ const Router = {
        från kunddetalj, se CustomersPage.js) och signalera det genom att
        returnera `true` — då hoppar Router ÖVER sin egen scroll-till-topp.
        Detta MÅSTE ske HÄR, efter renderer(), eftersom det annars vore just
-       DENNA rad som skulle radera en redan utförd återställning. Ingen
-       annan sidmodul definierar denna hook idag — de får därför exakt
-       samma "alltid scrolla till toppen"-beteende som innan, oförändrat.
-       Inget nytt globalt scroll-arkitektur-system — bara en enda,
-       opt-in-kontrollerad avvikelse för pg-crm↔pg-crm-detail. */
+       DENNA rad som skulle radera en redan utförd återställning.
+
+       R2.4 — MOBILE SHELL + AO RETURN FIX: utökad från en hårdkodad
+       CustomersPage-koll till en liten, explicit pageId→modul-tabell, så
+       att WorkOrdersPage (pg-ao, se dess egen _consumeScrollRestore()) kan
+       återanvända EXAKT samma, redan beprövade mönster utan att uppfinna
+       en andra navigationsarkitektur eller bygga en kedja av särfall.
+       CustomersPage:s befintliga beteende är byte-för-beteende oförändrat
+       — den slår upp precis samma modul och metod som innan, bara via
+       tabellen istället för ett hårdkodat namn. Ingen annan sidmodul
+       definierar denna hook idag — de får därför exakt samma "alltid
+       scrolla till toppen"-beteende som innan, oförändrat. Inget nytt
+       globalt scroll-arkitektur-system — bara samma enda,
+       opt-in-kontrollerade avvikelse, nu tillgänglig för två sidor
+       istället för en. */
     const scroll = document.getElementById('content-scroll');
     if (scroll) {
-      var handledByPage = typeof CustomersPage !== 'undefined' && typeof CustomersPage._consumeScrollRestore === 'function'
-        ? CustomersPage._consumeScrollRestore(scroll)
+      var SCROLL_RESTORE_OWNERS = {
+        'pg-crm': typeof CustomersPage !== 'undefined' ? CustomersPage : null,
+        'pg-ao':  typeof WorkOrdersPage !== 'undefined' ? WorkOrdersPage : null
+      };
+      var restoreOwner = SCROLL_RESTORE_OWNERS[pageId];
+      var handledByPage = restoreOwner && typeof restoreOwner._consumeScrollRestore === 'function'
+        ? restoreOwner._consumeScrollRestore(scroll)
         : false;
       if (!handledByPage) scroll.scrollTop = 0;
     }

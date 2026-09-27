@@ -495,23 +495,51 @@
      minskade content-box (padding exkluderas per spec), så .con fyller
      exakt (synlig yta − navigering) EN gång, inte två. .con:s egen
      padding-bottom återgår därför till sitt normala värde. */
+  /* R2.4 — MOBILE SHELL + AO RETURN FIX — ITEM 1 (long-list clipping):
+     the reservation above (moving bottom-nav clearance from .con onto
+     #content-scroll) fixed the SHORT-page double-reservation bug it
+     documents — but it reintroduces, for the SHARED shell, the exact
+     ancestor-padding-swallow defect already root-caused and fixed for
+     the Offer wizard in R1.6.7/R1.6.8 (see components.css's own
+     "#pg-offer-content[data-wiz=\"1\"]" comment for the full CDP-verified
+     trace, not repeated here): #content-scroll's own padding-bottom is
+     declared on #content-scroll ITSELF, an ancestor of the box that
+     actually overflows (.con). For SHORT content this is harmless (no
+     real scrolling is ever triggered, so the reservation applies
+     cleanly — this is why Dashboard etc. have always looked correct).
+     For a GENUINELY LONG page (e.g. a long AO list), once .con's content
+     forces real scrolling past .page's min-height floor, #content-
+     scroll's own trailing padding contributes ZERO to scrollHeight —
+     verified via CDP (see the R2.4 report) exactly as for the wizard —
+     leaving the final content clipped behind the fixed bottom nav, with
+     no way to scroll further to reveal it.
+
+     FIX: move the reservation onto .con itself — the box that actually
+     overflows — using a value MobileShell.js measures LIVE from the
+     REAL rendered #mobile-bottom-nav (and #mobile-clock-status, when
+     clocked in) height via getBoundingClientRect(), written into the
+     --mobile-bottom-reserve custom property (see MobileShell.js's
+     _syncMobileBottomReserve()). A padding declared directly on the
+     actual overflowing box is, by construction, always part of that
+     box's own bottom edge and can never be swallowed by an ancestor
+     overflow calculation — the same principle already proven for the
+     Offer wizard, applied here to the shared .con every other mobile
+     page uses. The measured height already includes
+     env(safe-area-inset-bottom) (the nav's own CSS applies it, see
+     below) and, when clocked in, the clock bar's own real height too —
+     so safe-area is counted EXACTLY ONCE, never re-added here. The
+     `calc(78px + env(safe-area-inset-bottom))` fallback is used only
+     for the brief instant before MobileShell's first measurement runs
+     (or if JS fails for any reason) — same order of magnitude as the
+     value this replaces, never a new/arbitrary number.
+
+     #pg-offer-content[data-wiz="1"] (components.css) is MORE specific
+     than the plain .con selector below (ID+attribute beats class) and
+     already sets its own padding-bottom unconditionally — so the Offer
+     wizard's own R1.6.8-R1.6.10 mechanism is completely unaffected by
+     this change; it continues to win exactly as before. */
   .con {
-    padding-bottom: 16px;
-  }
-  #content-scroll {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom));
-  }
-  /* R1 §4 — när inklockad upptar den ihållande klock-statusraden EGEN
-     fast plats OVANFÖR bottennavigeringen (se #mobile-clock-status.show
-     nedan: bar-höjd + marginaler ≈ 52px, positionerad vid
-     `bottom: calc(56px + safe-area)`). Utan detta kunde sidans SISTA
-     innehåll/kontroll hamna delvis bakom klockstatusraden trots att den
-     redan var korrekt reserverad för bottennavigeringen ENSAM.
-     `body.mobile-clock-active` sätts/tas bort av
-     MobileShell.renderClockStatus() — ren presentationssynk, ingen egen
-     tillståndskälla. Samma flyttning till #content-scroll som ovan. */
-  body.mobile-clock-active #content-scroll {
-    padding-bottom: calc(78px + 52px + env(safe-area-inset-bottom));
+    padding-bottom: var(--mobile-bottom-reserve, calc(78px + env(safe-area-inset-bottom)));
   }
 
   /* ── Fast bottennavigering ────────────────────────────────────── */

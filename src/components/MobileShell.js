@@ -74,6 +74,7 @@ const MobileShell = {
     if (clean.length !== 4) return { ok: false, error: 'Välj exakt fyra olika genvägar' };
     UserPrefsService.save(uid, { bottomNavShortcuts: clean });
     this.renderBottomNav();
+    this._syncMobileBottomReserve();
     return { ok: true };
   },
 
@@ -82,6 +83,59 @@ const MobileShell = {
     this.renderBottomNav();
     this.renderClockStatus();
     this._startTick();
+    this._syncMobileBottomReserve();
+    if (!this._bottomReserveResizeBound) {
+      this._bottomReserveResizeBound = true;
+      window.addEventListener('resize', () => this._syncMobileBottomReserve());
+      window.addEventListener('orientationchange', () => setTimeout(() => this._syncMobileBottomReserve(), 300));
+    }
+  },
+
+  /* R2.4 — MOBILE SHELL + AO RETURN FIX: the canonical mobile bottom
+     reserve. Measures the REAL rendered height of #mobile-bottom-nav
+     (which already includes env(safe-area-inset-bottom) via its own CSS
+     padding, see responsive.css) and, when clocked in, the REAL rendered
+     height of #mobile-clock-status too, and writes their sum into the
+     --mobile-bottom-reserve custom property that .con's mobile
+     padding-bottom (responsive.css) consumes — see that rule's own
+     comment for the full root-cause trace and why this replaces the old
+     #content-scroll-based reservation instead of adding to it. Safe area
+     is counted EXACTLY ONCE: it comes from #mobile-bottom-nav's own
+     already-safe-area-aware height, never added again here. A no-op
+     (property cleared) at >=1024px, the same breakpoint Router.js
+     already uses elsewhere — desktop's .con keeps its own, completely
+     separate, untouched desktop padding-bottom rule (responsive.css,
+     min-width:1024px). Called from init(), immediately after shortcut
+     or clock-state re-renders, and on resize/orientationchange, so the
+     measured reserve cannot become stale while the app is running. */
+  _syncMobileBottomReserve() {
+    if (window.innerWidth >= 1024) {
+      document.documentElement.style.removeProperty('--mobile-bottom-reserve');
+      return;
+    }
+    const nav = document.getElementById('mobile-bottom-nav');
+    const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+    const clock = document.getElementById('mobile-clock-status');
+    const clockHeight = (clock && clock.classList.contains('show')) ? clock.getBoundingClientRect().height : 0;
+    /* The clock bar's own `bottom: calc(56px + env(safe-area-inset-bottom))`
+       (responsive.css) is calibrated to sit immediately adjacent to the
+       nav's own top edge (56px approximates the nav's own safe-area-
+       independent height, 57px) — the two bars are meant to touch, not
+       float apart with a deliberate gap. Reserving exactly navHeight +
+       clockHeight (CDP-verified: produces a genuine 0px flush boundary,
+       zero overlap) already satisfies the hard requirement
+       (lastItem.bottom <= bottomNav.top) — the small +8px on top is a
+       deliberate, minimal design touch (matching this app's existing
+       ~8-16px spacing convention elsewhere, e.g. the Offer wizard's own
+       bottom-nav reservation gap) so the last card doesn't visually
+       touch the nav's top border, not a correction for any measurement
+       gap. */
+    const reserve = navHeight > 0 ? navHeight + clockHeight + 8 : 0;
+    if (reserve > 0) {
+      document.documentElement.style.setProperty('--mobile-bottom-reserve', reserve + 'px');
+    } else {
+      document.documentElement.style.removeProperty('--mobile-bottom-reserve');
+    }
   },
 
   /* ── Bottennavigering ──────────────────────────────────────────── */
@@ -282,6 +336,7 @@ const MobileShell = {
   onClockChange() {
     this.renderClockStatus();
     this.renderBottomNav();
+    this._syncMobileBottomReserve();
     this._startTick();
     if (!state.stampActive) this._clear8hReminderFlag();
   },

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <meta name="theme-color" content="#0A1628">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="VIFT CRM">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/assets/favicon.ico?v=2">
@@ -22,7 +22,7 @@
      som AddressService.js redan geokodar adresser mot — ingen ny
      kartleverantör, bara en annan laddningstidpunkt. -->
 
-<!-- DEPLOY: SW=v13 (CACHE_NAME=vift-crm-v13) responsive=v31 WorkOrdersPage=v61 WorkOrderDetailPage=v73 components=v101 CustomerPicker=v6 PageShells=v160 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v23 ServiceIntervalService=v3 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v29 schema=v28 state=v49 Dashboard=v53 DashboardConfig=v11 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v31 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v8 TimePage=v10 TimeService=v12 InvoicesPage=v31 BillingQueueService=v6 InvoiceService=v12 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 RecurringPage=v12 RecurringOrderService=v4 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v13 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v11 public-offer=v14 send-push=v6 project-document-upload=v3(pending-deploy) project-document-url=v2(pending-deploy) PushService=v8 WorkOrderService=v19 AddressService=v12 PayrollPage=v2 ContractsPage=v2 AuthService=v16 send-offer-email=v6 BrandingService=v7 Sidebar=v31 MobileShell=v3 Icons=v12 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v5 storage=v11 layout=v29 MyJobsPage=v12 ProjectDocumentService=v2 ProjectService=v6 ProjectsPage=v4 ProjectDetailPage=v7 (INTEGRATION: Router/Sidebar bumped past both V53/V54A branch versions to resolve version collision) -->
+<!-- DEPLOY: SW=v13 (CACHE_NAME=vift-crm-v13) responsive=v32 WorkOrdersPage=v62 WorkOrderDetailPage=v73 components=v101 CustomerPicker=v6 PageShells=v160 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v23 ServiceIntervalService=v3 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v30 schema=v28 state=v49 Dashboard=v53 DashboardConfig=v11 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v31 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v8 TimePage=v10 TimeService=v12 InvoicesPage=v31 BillingQueueService=v6 InvoiceService=v12 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 RecurringPage=v12 RecurringOrderService=v4 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v13 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v11 public-offer=v14 send-push=v6 project-document-upload=v3(pending-deploy) project-document-url=v2(pending-deploy) PushService=v8 WorkOrderService=v19 AddressService=v12 PayrollPage=v2 ContractsPage=v2 AuthService=v16 send-offer-email=v6 BrandingService=v7 Sidebar=v31 MobileShell=v5 Icons=v12 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v5 storage=v11 layout=v29 MyJobsPage=v12 ProjectDocumentService=v2 ProjectService=v6 ProjectsPage=v4 ProjectDetailPage=v7 (INTEGRATION: Router/Sidebar bumped past both V53/V54A branch versions to resolve version collision) -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
@@ -32,7 +32,7 @@
 <link rel="stylesheet" href="src/styles/components.css?v=101">
 <link rel="stylesheet" href="src/styles/forms.css?v=12">
 <link rel="stylesheet" href="src/styles/dashboard.css?v=29">
-<link rel="stylesheet" href="src/styles/responsive.css?v=31">
+<link rel="stylesheet" href="src/styles/responsive.css?v=32">
 </head>
 <body>
 
@@ -421,14 +421,14 @@
 <script src="src/components/CustomerPicker.js?v=6"></script>
 <script src="src/components/Modal.js?v=7"></script>
 <script src="src/components/Sidebar.js?v=31"></script>
-<script src="src/components/MobileShell.js?v=3"></script>
+<script src="src/components/MobileShell.js?v=5"></script>
 <script src="src/components/GlobalSearch.js?v=4"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=29"></script>
+<script src="src/pages/Router.js?v=30"></script>
 <script src="src/pages/Dashboard.js?v=53"></script>
 <script src="src/pages/CustomersPage.js?v=31"></script>
-<script src="src/pages/WorkOrdersPage.js?v=61"></script>
+<script src="src/pages/WorkOrdersPage.js?v=62"></script>
 <script src="src/pages/WorkOrderDetailPage.js?v=73"></script>
 <script src="src/pages/TimePage.js?v=10"></script>
 <script src="src/pages/PayrollPage.js?v=2"></script>

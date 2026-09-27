@@ -13,6 +13,71 @@ const WorkOrdersPage = {
   q: '',
   viewMode: localStorage.getItem('view-ao') || 'list',
 
+  /* R2.4 — MOBILE SHELL + AO RETURN FIX: transient (module memory only,
+     never persisted) return-state for list scroll position, following
+     EXACTLY the already-proven CustomersPage pattern (see
+     CustomersPage.js's own _pendingReturn/openDetail()/
+     _consumeScrollRestore() and their comments for the full rationale —
+     not duplicated here). `null` = no pending return. Set by
+     openDetail() immediately before navigating away from the list,
+     consumed (cleared) UNCONDITIONALLY by _consumeScrollRestore() the
+     next time pg-ao renders, regardless of whether the restore was
+     actually applied. */
+  _pendingReturn: null,
+
+  /* Opens an AO's detail view FROM the list. The only purpose of this
+     indirection (instead of letting each entry point call
+     Router.showPage directly) is to capture the current scroll position
+     IMMEDIATELY before navigation — mirrors CustomersPage.openDetail()
+     exactly. No other side effect, no new navigation behavior: calls
+     Router.showPage exactly as every entry point already did. Filter/
+     search/sort/view-mode state (this.filter, this.q, this._f, etc.) is
+     plain module state that Router.showPage() never touches — it is
+     naturally preserved across this round trip without any extra code
+     here. */
+  openDetail(aoId) {
+    const scrollEl = document.getElementById('content-scroll');
+    this._pendingReturn = { scrollTop: scrollEl ? scrollEl.scrollTop : 0 };
+    Router.showPage('pg-ao-detail', { aoId: aoId });
+  },
+
+  /* Called by Router.showPage() (see Router.js's small, generic,
+     opt-in scroll-restore-owner lookup) every time pg-ao has just
+     rendered — regardless of WHY (return navigation, a fresh explicit
+     navigation, etc). This function, not Router, decides whether a
+     restore actually happens. Rule: restore ONLY if (a) a pending
+     return record exists, AND (b) THIS SPECIFIC navigation to pg-ao
+     happened via Router.back()/the browser's Back
+     (Router._lastNavigationWasBack === true) — NOT via a fresh, explicit
+     navigation (e.g. tapping "Arbetsorder" in the sidebar/bottom nav,
+     which calls Router.showPage('pg-ao') without going through
+     Router.back()). `_pendingReturn` is always cleared as soon as we
+     know this is a pg-ao render, whether or not the restore is actually
+     applied — otherwise a stale return record could resurface on a
+     LATER, unrelated back-navigation. A one-shot value can only be
+     consumed once. */
+  _consumeScrollRestore(scrollEl) {
+    if (Router.currentPage !== 'pg-ao') return false;
+    const pending = this._pendingReturn;
+    this._pendingReturn = null;
+    if (!pending) return false;
+    if (!Router._lastNavigationWasBack) return false;
+
+    /* Defensive clamping: a saved value could in theory be NaN/negative/
+       infinite (never in practice via this code path, but no exception
+       should ever be possible), or larger than what the list can
+       currently actually scroll to (e.g. if the list became shorter
+       while the detail view was open) — the nearest valid position is
+       used instead of writing an invalid scrollTop. */
+    let target = pending.scrollTop;
+    if (typeof target !== 'number' || !isFinite(target) || target < 0) target = 0;
+    const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+    if (target > maxScroll) target = maxScroll;
+
+    scrollEl.scrollTop = target;
+    return true;
+  },
+
   /* ── Wizard-state ──────────────────────── */
   _wiz: { step: 1, data: {}, modalId: null },
 
@@ -614,7 +679,7 @@ const WorkOrdersPage = {
         const isBillable   = needsInvoice && billingStatus.eligible;
         const noPricing    = needsInvoice && billingStatus.pricingBlocked;
         return `
-          <div class="ao-card ${priorityClass(ao.priority)}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+          <div class="ao-card ${priorityClass(ao.priority)}" onclick="WorkOrdersPage.openDetail('${ao.id}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
               <div style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;" onclick="event.stopPropagation()">
@@ -664,7 +729,7 @@ const WorkOrdersPage = {
         const selected = SelectionModel.isSelected(ao.id);
         return `
           <div style="display:flex;align-items:flex-start;gap:6px;"
-            onclick="SelectionModel.rowClick('${ao.id}', function(){ Router.showPage('pg-ao-detail',{aoId:'${ao.id}'}); })">
+            onclick="SelectionModel.rowClick('${ao.id}', function(){ WorkOrdersPage.openDetail('${ao.id}'); })">
             <div style="padding:12px 0 0;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id, ao.title)}</div>
             <div class="ao-list-item ${priorityClass(ao.priority)}${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${ao.id}" style="flex:1;min-width:0;">
               <div class="ao-item-top">
@@ -689,7 +754,7 @@ const WorkOrdersPage = {
               </div>` : ''}
               ${archiveActions}${trashActions}
             </div>
-            <button type="button" class="row-open-btn" style="margin-top:8px;" title="Öppna" aria-label="Öppna arbetsorder" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('chevron-right',16)}</button>
+            <button type="button" class="row-open-btn" style="margin-top:8px;" title="Öppna" aria-label="Öppna arbetsorder" onclick="event.stopPropagation();WorkOrdersPage.openDetail('${ao.id}')">${ic('chevron-right',16)}</button>
           </div>`;
       }).join('');
     }
