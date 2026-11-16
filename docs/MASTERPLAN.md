@@ -527,6 +527,20 @@ ImportWizard och kolumnmatchning stöder bara entityType='customer' idag. Fastig
 - `docs/RC1_STAGING_CHECKLISTA.md` — 16-punkts staging-checklista med deploy-instruktioner
 - `supabase/migrations/` — tre SQL-migreringar (RLS, Storage, pg_cron)
 
+---
+
+## Framtida modul — Teknisk underhållsplanering (EJ PÅBÖRJAD)
+
+| Roadmap-ID | Status | Prioritet | Dokument |
+|---|---|---|---|
+| `ROADMAP-UNDERHALL-2026-10-23` | 🔴 EJ PÅBÖRJAD / PLANERAD FRAMTIDA MODUL | Efter aktuell R6/R9B-stabilisering, centrala flödestester, RLS Fas 2 och godkänd LIVE-release | `docs/MASTERPLAN-UNDERHALLSPLAN.md` |
+
+Fullvärdig modul för långsiktig (10–50 år) teknisk underhållsplanering för fastighetsägare, förvaltare och bostadsrättsföreningar — objekthierarki fastighetsbestånd → fastighet → byggnad → byggnadsdel/komponent → underhållsåtgärd, inventering/skickbedömning, ekonomi/budget/prognos, prioritering/riskbedömning, statusflöde, årsprocess med låsta planversioner, underhållsskuld/scenarier, dashboard/rapporter (PDF/Excel) och import/export. Ska återanvända VIFT CRM:s befintliga fastighetsregister, organisationsgränser, användare/roller och arbetsorder — **inget** parallellt register, ingen separat applikation, utan ett nytt uttryckligt produktbeslut.
+
+Fullständig kravspecifikation, kärnkrav/avgränsningar, data- och integrationsprinciper samt genomförandeordning (etapp 1–5) finns bevarade i sin helhet i `docs/MASTERPLAN-UNDERHALLSPLAN.md`. Denna punkt lägger **inte** till några nya numrerade poster i tabellerna ovan och ändrar ingen befintlig status — modulen är helt oimplementerad och påverkar inte pågående R6/R9B-STAGING-arbete.
+
+---
+
 ## Säkerhetsprinciper (gäller alltid)
 
 - Service role key får **aldrig** ligga i frontend
