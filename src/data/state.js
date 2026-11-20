@@ -261,6 +261,18 @@ async function initState() {
  */
 var _persistQueue = Promise.resolve();
 
+/* VIFT CRM 13 (riktad prestandarättning, FÖRSLAG — EJ INSTALLERAT):
+ * { [key]: JSON.stringify(value) senast BEKRÄFTAT skrivet till Supabase för
+ * just denna nyckel } — eller, för en nyckel som precis hämtats via en
+ * DataSync-poll, senast bekräftat MOTTAGET (se arr() i DataSync._poll()
+ * nedan), vilket är lika giltigt eftersom det då per definition redan
+ * matchar serverns aktuella värde. Används ENDAST av _doPersist() för att
+ * avgöra vilka av de ~34 nycklarna som FAKTISKT behöver skickas i en given
+ * persist()-omgång — se _doPersist() för den fullständiga motiveringen.
+ * Ren in-memory-cache för DENNA flik/session; påverkar aldrig vad som
+ * faktiskt lagras någonstans, bara vad som AKTIVT skickas över nätet. */
+var _lastWrittenJSON = {};
+
 function persist() {
   /* Måste ske SYNKRONT, före all await — annars hinner en poll som redan
      startat aldrig se att en lokal write är på väg. Se DataSync._poll(). */
@@ -310,7 +322,7 @@ async function _doPersist() {
        state.X-arrayerna då garanterat även eventuella mutationer som skett
        under tiden, eftersom mutation alltid sker synkront FÖRE persist()
        anropas (etablerat mönster i hela kodbasen). Se RAPPORT §4. */
-    const ok = await Storage.setAll([
+    const _allPairs = [
       ['lastChanged',      _now],
       ['customers',        state.customers],
       ['workOrders',       state.workOrders],
@@ -361,11 +373,66 @@ async function _doPersist() {
          — endast den generiska SKRIVvägen är borttagen. Lokal cache
          uppdateras istället av ProjectDocumentService via
          Storage.setLocal() efter varje bekräftad server-mutation. */
-    ]);
+    ];
+
+    /* VIFT CRM 13 (riktad prestandarättning): den verkliga, djupaste orsaken
+       till den uppmätta WAL-volymen är INTE bara att `vift_workOrders` (en
+       ensam ~13.5 MB JSONB-rad, uppblåst av inbäddade bilder — se
+       WorkOrderService/WorkOrderDetailPage-rättningen) skrivs om vid VARJE
+       AO-ändring. Det är att _doPersist() ovan ALLTID skickat SAMTLIGA ~34
+       nycklar — inklusive `workOrders` — i EN enda Storage.setAll()-anrop,
+       FÖR VARJE enskild persist()-anrop NÅGONSTANS i hela applikationen
+       (t.ex. att byta namn på en kund gör idag en fullständig omskrivning
+       av HELA `vift_workOrders`-raden, trots att den aldrig rördes). Detta
+       är verifierat direkt mot denna fil, inte ett antagande.
+       RÄTTNING (enbart detta: VILKA nycklar som ingår i anropet till
+       Storage.setAll — inget annat ändrat, Storage.setAll()s egen signatur/
+       beteende är orörd, och samtliga ~200 anropsställen till persist() i
+       kodbasen är ORÖRDA): endast nycklar vars JSON-serialiserade värde
+       FAKTISKT skiljer sig från det senast bekräftat skrivna (eller senast
+       bekräftat MOTTAGNA via DataSync, se arr() i _poll() ovan) tas med.
+       `lastChanged` skickas ALLTID, oavsett — det ÄR själva ändringssignalen
+       DataSync pollar på; att hoppa över den skulle göra hela synk-
+       mekanismen blind för andra klienters ändringar.
+       Medveten avvägning: detta kräver en JSON.stringify() av varje
+       kandidatvärde (inkl. den stora `workOrders`-arrayen) på klienten, på
+       VARJE persist()-anrop, för själva jämförelsen — en ren CPU-kostnad i
+       användarens egen webbläsare. Alternativet (en "dirty flag" per nyckel,
+       satt vid varje enskild muteringsplats i hela kodbasen) hade krävt att
+       ändra samtliga ~200 anropsställen — exakt den generella ombyggnad
+       uppdraget uttryckligen bad om att UNDVIKA. Den uppmätta flaskhalsen
+       (Supabase Disk IO/RAM/WAL, bekräftat av Supabase Support) är
+       server-sidig, inte klient-CPU — avvägningen görs därför medvetet åt
+       det hållet. Se PERFORMANCE_FIX-rapporten för uppmätta siffror. */
+    const _jsonByKey = {};
+    const pairsToSend = _allPairs.filter(function(pair) {
+      const key = pair[0];
+      if (key === 'lastChanged') return true;
+      const json = JSON.stringify(pair[1]);
+      _jsonByKey[key] = json;
+      return _lastWrittenJSON[key] !== json;
+    });
+    const _skippedCount = _allPairs.length - pairsToSend.length;
+    if (_skippedCount > 0) {
+      console.log('[persist] Hoppar över ' + _skippedCount + ' oförändrade nycklar av ' + _allPairs.length + ' (ingen faktisk ändring sedan senaste bekräftade skrivning)');
+    }
+
+    const ok = await Storage.setAll(pairsToSend);
     if (ok) {
       /* R1: lastSig sätts ENDAST efter bekräftad write — se filhuvud-
-         kommentaren ovan för varför detta är kärnan i fixen. */
+         kommentaren ovan för varför detta är kärnan i fixen.
+         VIFT CRM 13: _lastWrittenJSON uppdateras ENDAST för de nycklar som
+         FAKTISKT ingick i denna BEKRÄFTAT lyckade skrivning — en nyckel som
+         hoppades över (redan matchade) behöver ingen ny cache-post (dess
+         befintliga post är redan korrekt), och en nyckel vars skrivning
+         misslyckas (se else-grenen) får ALDRIG sin cache uppdaterad, så att
+         nästa persist()-försök garanterat försöker igen — exakt samma
+         "uppdatera bara efter bekräftad framgång"-disciplin som redan
+         gäller för DataSync._lastSig på raden nedan. */
       if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
+      pairsToSend.forEach(function(pair) {
+        if (pair[0] !== 'lastChanged') _lastWrittenJSON[pair[0]] = _jsonByKey[pair[0]];
+      });
     } else {
       console.error('[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).');
       /* R1.1: Storage.setAll() ovan hann redan (synkront, före nätverkssvaret
@@ -702,7 +769,21 @@ const DataSync = {
 
       /* Uppdatera state-arrayer från remote */
       const g = function(key) { return (remote[key] !== undefined && remote[key] !== null) ? remote[key] : null; };
-      const arr = function(stateKey, remoteKey) { var v = g(remoteKey); if (Array.isArray(v)) state[stateKey] = v; };
+      const arr = function(stateKey, remoteKey) {
+        var v = g(remoteKey);
+        if (!Array.isArray(v)) return;
+        state[stateKey] = v;
+        /* VIFT CRM 13: primar _lastWrittenJSON med detta precis mottagna,
+           per definition redan server-matchande värde, så att en SENARE,
+           obesläktad persist() (se _doPersist() ovan i denna fil) inte i
+           onödan skickar tillbaka exakt samma data en gång till. (Ingen
+           Storage.setLocal() behövs här -- längre ner i denna funktion
+           finns redan en ovillkorlig, generisk "uppdatera localStorage-
+           cache"-synkning av HELA `remote`-objektet, oförändrad av denna
+           rättning -- se den kodens egen, separat flaggade begränsning
+           för timeEntries i slutrapporten.) */
+        _lastWrittenJSON[remoteKey] = JSON.stringify(v);
+      };
 
       arr('customers',          'customers');
       arr('workOrders',         'workOrders');
@@ -713,7 +794,27 @@ const DataSync = {
       arr('priceProfiles',      'priceProfiles');
       arr('salesOpportunities', 'salesOpps');
       arr('activityLog',        'activityLog');
-      arr('timeEntries',        'timeEntries');
+      /* VIFT CRM 13 — VIKTIGT: timeEntries får INTE gå via den vanliga
+         arr() ovan, trots att den inte längre själv skriver localStorage.
+         Skälet: arr() primar _lastWrittenJSON omedelbart med sitt FULLA,
+         ofiltrerade värde, men payroll-filtret direkt nedan kan ännu
+         behöva ERSÄTTA state.timeEntries med en SMALARE delmängd (bara
+         egna poster) för en användare utan payroll_view. Om arr() körts
+         här hade _lastWrittenJSON['timeEntries'] primats med det FULLA
+         värdet, trots att state.timeEntries (det som persist() FAKTISKT
+         skulle jämföra/skicka) strax därefter blir den filtrerade
+         delmängden — en felaktig cache-post. Grundläsningen (`g()`)
+         används därför direkt här, utan att cachas ännu — cachningen görs
+         EXPLICIT nedan, EFTER filtret, mot det då korrekta slutvärdet.
+         (OBS, separat, redan befintlig begränsning, inte ändrad av denna
+         rättning: den ovillkorliga "uppdatera localStorage-cache"-
+         synkningen längre ner i denna funktion skriver ändå `remote.
+         timeEntries` [RÅTT, ofiltrerat] till localStorage oavsett — se
+         slutrapporten.) */
+      (function() {
+        var v = g('timeEntries');
+        if (Array.isArray(v)) state.timeEntries = v;
+      })();
       /* Payroll-skydd: filtrera timeEntries till egna poster om payroll_view saknas.
          Notera: rådata flödar fortfarande i HTTP-svaret — detta är klient-side mitigation.
          Fullständigt skydd kräver ett normaliserat timeEntries-schema med per-rad RLS (v1.1). */
@@ -722,6 +823,16 @@ const DataSync = {
         if (_myStaffId && Array.isArray(state.timeEntries)) {
           state.timeEntries = state.timeEntries.filter(function(e) { return e.staffId === _myStaffId; });
         }
+      }
+      /* VIFT CRM 13: primar _lastWrittenJSON för timeEntries NU, EFTER ett
+         eventuellt filter ovan — mot state.timeEntries SOM DET NU FAKTISKT
+         ÄR (den fulla remote-arrayen för en payroll_view-användare, annars
+         den redan filtrerade, egna delmängden). Se kommentaren vid
+         (function(){...})() ovan för varför detta inte kan gå via den
+         generiska arr(). (Ingen Storage.setLocal() här av samma skäl som
+         i arr() ovan -- se den kommentaren.) */
+      if (Array.isArray(state.timeEntries)) {
+        _lastWrittenJSON['timeEntries'] = JSON.stringify(state.timeEntries);
       }
       arr('contracts',          'contracts');
       arr('articles',           'articles');
