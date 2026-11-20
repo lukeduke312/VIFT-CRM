@@ -24,6 +24,7 @@ const Router = {
       case 'pg-crm':              return '/kunder';
       case 'pg-crm-detail':       return p.customerId ? '/kunder/' + p.customerId : '/kunder';
       case 'pg-objects':          return '/fastigheter';
+      case 'pg-service-intervals':return '/serviceintervall';
       case 'pg-obj-detail':       return p.propId ? '/fastigheter/' + p.propId : '/fastigheter';
       case 'pg-propobj-detail':   return p.objId ? '/objekt/' + p.objId : '/fastigheter';
       case 'pg-import-wizard':    return '/importera/' + (p.type || 'kunder');
@@ -131,6 +132,7 @@ const Router = {
       case 'minajobb':      this.showPage('pg-myjobs',           {}, { replace: true }); return;
       case 'drift':         this.showPage('pg-operations',       {}, { replace: true }); return;
       case 'exportera':     this.showPage('pg-export-center',    {}, { replace: true }); return;
+      case 'serviceintervall': this.showPage('pg-service-intervals', {}, { replace: true }); return;
       case 'importera':
         if (s1 === 'logg') { this.showPage('pg-import-log', {}, { replace: true }); return; }
         this.showPage('pg-import-wizard', { type: s1 || 'customer' }, { replace: true }); return;
@@ -148,6 +150,7 @@ const Router = {
     'pg-crm-detail':  { title: 'Kundkort',              sub: '' },
     'pg-objects':     { title: 'Fastigheter',           sub: 'Fastighetsregister' },
     'pg-obj-detail':  { title: 'Fastighetskort',        sub: '' },
+    'pg-service-intervals': { title: 'Serviceintervall', sub: 'Alla fastigheter' },
     'pg-propobj-detail': { title: 'Objekt',             sub: 'Lägenhet / lokal' },
     'pg-offer':       { title: 'Offerter',              sub: 'Offerthantering' },
     'pg-offer-detail':{ title: 'Offert',                sub: 'Detalj' },
@@ -334,6 +337,7 @@ const Router = {
       'pg-crm-detail':  () => CustomerDetailPage.render(params),
       'pg-objects':     () => PropertiesPage.render(),
       'pg-obj-detail':  () => PropertyDetailPage.render(params),
+      'pg-service-intervals': () => ServiceIntervalsPage.render(),
       'pg-offer':       () => OffersPage.render(),
       'pg-offer-detail':() => OfferDetailPage.render(params),
       'pg-invoices':    () => InvoicesPage.render(),

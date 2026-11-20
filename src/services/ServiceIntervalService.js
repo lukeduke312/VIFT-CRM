@@ -206,6 +206,25 @@ const ServiceIntervalService = {
     return result.sort((a, b) => (this.daysUntil(a.interval.nextDue) || 999) - (this.daysUntil(b.interval.nextDue) || 999));
   },
 
+  /* ── Hämta ALLA serviceintervall över alla fastigheter ────── */
+  /*
+   * Samma form/sortering som getAllNeedingAttention() ovan, men UTAN
+   * status-filtret — returnerar varje intervall oavsett status (inkl.
+   * 'ok', 'paused', 'not_set'), för den fastighetsöverskridande
+   * översiktssidan (ServiceIntervalsPage), som själv behöver kunna
+   * filtrera på "Alla"/"OK"/"Pausade" också, inte bara de som redan
+   * kräver uppmärksamhet.
+   */
+  getAllAcrossProperties() {
+    const result = [];
+    for (const p of (state.properties || [])) {
+      for (const si of (p.serviceIntervals || [])) {
+        result.push({ propertyId: p.id, propertyName: p.name, address: p.address, interval: si, status: this.getStatus(si) });
+      }
+    }
+    return result.sort((a, b) => (this.daysUntil(a.interval.nextDue) ?? 999999) - (this.daysUntil(b.interval.nextDue) ?? 999999));
+  },
+
   /* ── Global alert-räknare för sidebar ────────────────────── */
   countGlobalAlert() {
     let n = 0;
