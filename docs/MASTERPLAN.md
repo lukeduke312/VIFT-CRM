@@ -12,7 +12,9 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 - `UPPSKJUTEN TILL V2` — medvetet utskjutet till nästa version
 - `KLAR` (äldre poster) — commit finns + UI fungerar, ännu ej omklassificerad
 
-**Totalt antal punkter: 130** (punkt 92 förekommer i Fas 4 = den enda definitionen)
+**Totalt antal punkter: 134** (punkt 92 förekommer i Fas 4 = den enda definitionen)
+
+**OBS — avstämning mot `docs/PROJECT_STATUS.md` (2026-11-20):** `PROJECT_STATUS.md`:s EGEN "Modulstatus"-tabell (dess översta sektion, punkt 1–92) är en ENGÅNGS-ögonblicksbild som aldrig uppdaterats sedan filen skapades — den säger t.ex. "EJ BYGGD" för punkt 12/13/40–42/62–64/67/72, trots att denna masterplan (uppdaterad iterativt över flera senare commits) och en direkt läsning av den faktiska källkoden DENNA session (`WorkOrdersPage.js`, `supabase/functions/service-monitor/index.ts`) bekräftar att dessa punkter FAKTISKT är byggda. **Denna masterplans tabeller nedan är auktoritativa för modulstatus — inte `PROJECT_STATUS.md`:s översta tabell.** `PROJECT_STATUS.md`:s EGET värde ligger i dess SENARE, additiva sektioner (R9B-fakturaarkitektur, BLOCKER-1/BLOCKER-2-säkerhetsfynd, cross-tab-auth-rättelser rond 1–4, LIVE/STAGING-paritetsfynd) — innehåll som INTE finns någonstans i denna fil. Se ny punkt `R9B-POINTER` nedan.
 
 ---
 
@@ -451,6 +453,38 @@ Behöver testas med: Bokio, Microsoft Excel, Apple Numbers, flerblad, svenska te
 5. **E5** — Notiser + tidslinje (pushnotiser vid kundsvar, strukturerade events, visningsstatistik)
 6. **E6** — Konvertering till AO (ärvning av alla fält, bi-direktionell länk, dubbelskydd)
 7. **E7** — Påminnelser, analys, ReportsPage-offertflik, säkerhetsverifiering
+
+---
+
+## Leverans G — Driftsstabilitet, prestandaoptimering och R9B-pekare (2026-11-20)
+
+**OBS om namngivning:** "CRM 12"/"CRM 13" m.fl. är ENDAST namn på externa ChatGPT-konversationer där delar av detta arbete togs fram — INGET projekt-, versions- eller leveransnamn i detta system. VIFT CRM är ett enda sammanhängande system; denna sektion fortsätter samma numrerade punktserie som resten av filen.
+
+### R9B-pekare — fakturaarkitektur och säkerhetsfynd (full detalj i `docs/PROJECT_STATUS.md`)
+
+`PROJECT_STATUS.md` innehåller en omfattande, löpande logg (punkt 1–20) som INTE finns här: en ny, atomisk fakturerings-RPC-arkitektur (R9B, installerad och godkänd i STAGING, EJ i LIVE), två kritiska säkerhetsfynd (**BLOCKER-1**: `timeEntries`/lönedata läsbart av alla inloggade — serverläsvägen nu blockerad i STAGING via en riktad RLS-policy, se fynd nedan om en relaterad, KVARSTÅENDE lucka; **BLOCKER-2**: `store`-tabellens skrivpolicy saknar per-nyckel-kontroll — KVARSTÅR, oåtgärdad), samt fyra rondor av cross-tab-sessionsrättelser. Denna fil lägger INTE till några nya numrerade punkter för det arbetet — det vore att duplicera, inte komplettera. `docs/PROJECT_STATUS.md` är den auktoritativa källan för den delen; denna fil är auktoritativ för modulstatus (se avstämningsnotisen högst upp i detta dokument).
+
+### Driftsstabilitet och prestandaoptimering — verifierat orsaksfynd och åtgärder
+
+**Bakgrund:** Supabase LIVE har haft bekräftade problem med Disk IO, RAM och swap (bekräftat av Supabase Support), samt en mätt ~16 GB WAL-volym från en specifik frågegrupp om 2 928 skrivningar till `public.store`. En egen, riktad undersökning denna session verifierade grundorsaken direkt mot källkoden (inte antagande): `persist()`/`_doPersist()` i `src/data/state.js` skickade **samtliga ~34 store-nycklar** till Supabase vid VARJE anrop, oavsett vilken nyckel som faktiskt ändrats — en kundredigering skrev alltså om hela den ~13,5 MB stora `vift_workOrders`-raden i onödan. Tre bilder inbäddade som okomprimerad base64 i en enda arbetsorders loggpost dominerade den radens storlek. En äkta WAL-mätning mot lokal PostgreSQL 16 (före/efter, extrapolerad till 2 928 skrivningar) gav ~16,24 GB för "före"-beteendet — inom ~1,5 % av det rapporterade, verkliga talet.
+
+| # | Funktion | Status | Commit | Filer |
+|---|----------|--------|--------|-------|
+| 130 | `persist()` skickar nu endast de store-nycklar vars värde faktiskt ändrats sedan senaste bekräftade skrivning (diff mot `_lastWrittenJSON`, uppdateras endast efter bekräftad framgång — ingen tyst dataförlust vid misslyckad skrivning) | KLAR — verifierat lokalt (5/5 sandlådetest mot den faktiska filen), EJ TESTAT i STAGING | b8a95d0 | state.js v50 |
+| 131 | Nya arbetsorder-loggfoton laddas upp till Supabase Storage (`workorder-images`, privat bucket, samma åtkomstmodell som befintlig `PropertyImageService`) istället för att bäddas in som base64 i `vift_workOrders`. Befintliga, historiska bilder orörda (bakåtkompatibel rendering). Avvikelse-/checklistefoto komprimeras (900px/JPEG 0.75) men flyttas INTE till Storage denna omgång (EF-kontraktet oförändrat) | KLAR — verifierat lokalt (4/4 isolerade logiktest), EJ TESTAT i STAGING. Bucket/RLS-policy EJ installerad (kräver separat GO) | faa43e6 | WorkOrderImageService.js (ny), WorkOrderDetailPage.js v74 |
+
+**Nytt fynd, ej åtgärdat (upptäckt vid denna undersökning, flaggat för prioritering):** `ServiceIntervalService.runDailyCheck()` (klientsidans dagliga bevakning — skapar Att göra-poster + in-app-notiser) anropas ALDRIG någonstans i kodbasen idag (bekräftat via sökning) — dess avsedda "körs vid app-start"-koppling (se dess egen kodkommentar) saknas. Om den kopplas in i framtiden: den delar SAMMA idempotensnyckel (`lastNotificationSentForDueDate`) som `service-monitor`-Edge-Functionens server-sidiga web-push-logik (punkt 42) — vilken av de två som råkar köra FÖRST för en given förfalloperiod skulle tysta den ANDRA för just den perioden. Måste lösas (skilda nycklar, eller en enda auktoritativ körväg) INNAN `runDailyCheck()` kopplas in, inte efteråt.
+
+**Nytt fynd, ej åtgärdat (lägre allvarlighet, ej brådskande):** `service-monitor`/index.ts:s egen skrivning tillbaka till `vift_properties`/`vift_workOrders` (rad ~303–319) är ett olåst läs-ändra-skriv av hela blobben, samma mönster som punkt 130 ovan rättar för klientvägen — men körs bara en gång dagligen via cron och är ännu inte deployad, så prioriteras lägre. Bör ges samma atomiska-RPC-behandling före produktionsdeploy om det är praktiskt genomförbart.
+
+### Platshållare — väntar på specifikation (ingen spår hittad i detta repo)
+
+Följande två områden efterfrågades uttryckligen som "tidigare beslutade utvecklingsområden" som ska finnas kvar i masterplanen. En grundlig sökning i hela detta repo (kod + samtliga `docs/*.md`) denna session hittade INGEN tidigare specifikation, kod eller dokumentation för dem — de finns sannolikt bara i en extern ChatGPT-konversation som aldrig synkroniserats hit. Registrerade här som uttryckliga platshållare, INTE uppfunna/gissade specifikationer:
+
+| # | Funktion | Status | Prioritet |
+|---|----------|--------|-----------|
+| 132 | AI-arbetsorderinkorg — ingen specifikation hittad i detta repo. Kräver en konkret kravbeskrivning (vad ska AI:n göra: triagera inkommande ärenden? Föreslå arbetsorder-fält? Från vilken källa — e-post, formulär, chatt?) innan den kan planeras eller byggas. | EJ PÅBÖRJAD — väntar på specifikation | Okänd — ange vid nästa tillfälle |
+| 133 | Integrationer (externa system) — ingen specifikation hittad i detta repo (vilka system — bokföring, kalender, e-post, annat? Vilken riktning — import, export, realtid?). | EJ PÅBÖRJAD — väntar på specifikation | Okänd — ange vid nästa tillfälle |
 
 ---
 
