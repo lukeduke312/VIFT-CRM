@@ -65,6 +65,7 @@ const WorkOrderDetailPage = {
       }
     }
     this._renderFull(el, ao);
+    this._resolveTimelineImages(document.getElementById('ao-timeline'));
     if (state.stampActive && state.stampAoId === ao.id) this._startStampTimer();
   },
 
@@ -351,6 +352,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     if (!el || !ao) return;
     el.innerHTML = this._renderTimeline(ao, true);
+    this._resolveTimelineImages(el);
   },
 
   _openSectionOf(elementId) {
@@ -1370,7 +1372,7 @@ const WorkOrderDetailPage = {
   _renderTimeline(ao, showAll = false) {
     const events = [];
     (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
-    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', followUpDate:l.followUpDate||'', id:l.id }));
+    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', imagePath:l.imagePath||'', followUpDate:l.followUpDate||'', id:l.id }));
     TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
     (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
@@ -1425,7 +1427,7 @@ const WorkOrderDetailPage = {
             ${!isLast?'<div style="width:2px;flex:1;min-height:8px;background:var(--br);border-radius:1px;"></div>':''}
           </div>
           <div style="flex:1;min-width:0;padding:2px 0 ${isLast?'4':'16'}px 10px;">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:${ev.text||ev.imageData?'3':'0'}px;">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:${ev.text||ev.imageData||ev.imagePath?'3':'0'}px;">
               <span style="font-size:10px;font-weight:800;color:${ti.col};text-transform:uppercase;letter-spacing:.4px;">${ti.lbl}</span>
               ${ts?`<span style="font-size:10px;color:var(--mt);">${ts}</span>`:''}
               ${ev.who?`<span style="font-size:10px;color:var(--mt);display:inline-flex;align-items:center;gap:3px;">${ic('user',9)} ${esc(ev.who)}</span>`:''}
@@ -1433,6 +1435,7 @@ const WorkOrderDetailPage = {
             ${ev.text?`<div style="font-size:13px;line-height:1.5;word-break:break-word;color:var(--tx);">${ev.text}</div>`:''}
             ${ev.followUpDate?`<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid #ddd6fe;">${ic('calendar',9)} Uppföljning: ${ev.followUpDate}</div>`:''}
             ${ev.imageData?`<img src="${ev.imageData}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);" loading="lazy">`:''}
+            ${!ev.imageData&&ev.imagePath?`<img data-imgpath="${esc(ev.imagePath)}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);background:var(--bg2,#f3f4f6);min-height:60px;" loading="lazy" alt="Bild läses in…">`:''}
           </div>
           ${canDel?`<button class="btn bxs bd" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>`:''}
         </div>`;
@@ -1447,6 +1450,32 @@ const WorkOrderDetailPage = {
     }
     html += '</div>';
     return html;
+  },
+
+  /* VIFT CRM 13: löser upp signerade URL:er för alla nya, Storage-baserade
+     loggbilder (data-imgpath, se _renderTimeline()) INOM en given container.
+     Rör ALDRIG <img>-taggar som redan har en imageData-src (legacy,
+     oförändrat). Anropas EFTER varje ställe som skriver _renderTimeline()s
+     resultat till DOM:en — synkront direkt efter innerHTML-tilldelningen,
+     eftersom elementen måste finnas i DOM:en innan querySelectorAll hittar
+     dem. Ett fel/saknad signerad URL lämnar bilden som en tom platshållare
+     (samma "osynlig, ofarlig"-hantering som redan används av
+     PropertyImageService.list() för orphaned metadata) — kraschar aldrig
+     renderingen av resten av tidslinjen. */
+  async _resolveTimelineImages(containerEl) {
+    if (!containerEl || typeof WorkOrderImageService === 'undefined') return;
+    const imgs = Array.from(containerEl.querySelectorAll('img[data-imgpath]'));
+    if (!imgs.length) return;
+    const paths = Array.from(new Set(imgs.map(el => el.getAttribute('data-imgpath')).filter(Boolean)));
+    try {
+      const urlMap = await WorkOrderImageService.getSignedUrls(paths);
+      imgs.forEach(el => {
+        const p = el.getAttribute('data-imgpath');
+        if (p && urlMap[p]) el.src = urlMap[p];
+      });
+    } catch (e) {
+      console.warn('[WorkOrderDetailPage] _resolveTimelineImages fel:', e);
+    }
   },
 
   openAddLog() {
@@ -1479,50 +1508,77 @@ const WorkOrderDetailPage = {
     reader.readAsDataURL(file);
   },
 
-  _saveLog() {
+  async _saveLog() {
     const text = document.getElementById('log-text')?.value.trim();
     const imgInput = document.getElementById('log-img');
     const file = imgInput && imgInput.files && imgInput.files[0];
     if (!text && !file) { showToast('Lägg till text eller bild'); return; }
 
-    const finalize = (imageData) => {
-      const ao = getAO(this.aoId);
-      if (!ao) return;
-      if (!ao.log) ao.log = [];
-      const entry = {
-        id: 'LOG-' + Date.now(),
-        type: (file && imageData) ? (text ? 'photo' : 'photo') : 'log',
-        text: text || '',
-        imageData: imageData || '',
-        visibility: 'intern',
-        userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
-        timestamp: new Date().toISOString()
-      };
-      ao.log.push(entry);
-      WorkOrderService.update(this.aoId, { log: ao.log });
-      Modal.close();
-      const aoUp = getAO(this.aoId);
-      if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
-      showToast('Loggpost tillagd');
-    };
-
+    /* VIFT CRM 13: en ny bild laddas nu upp till Supabase Storage
+       (WorkOrderImageService) istället för att bäddas in som en
+       flera-MB base64-dataURL i loggposten — det var just DEN vägen som
+       blåste upp den delade vift_workOrders-raden. Entry:n får en kort
+       `imagePath`-referens istället; `imageData` lämnas tom för NYA
+       poster (befintliga, äldre poster med imageData rörs aldrig, se
+       _renderTimeline()s bakåtkompatibla gren). Misslyckas uppladdningen
+       sparas INGEN loggpost — samma "ingen låtsad framgång"-princip som
+       redan används av resolveChecklistItemAtomic() i denna fil. */
+    let imagePath = '';
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => finalize(e.target.result);
-      reader.readAsDataURL(file);
-    } else {
-      finalize('');
+      try {
+        const result = await WorkOrderImageService.upload(this.aoId, file);
+        imagePath = result.path;
+      } catch (e) {
+        showToast('Kunde inte ladda upp bilden: ' + (e.message || e));
+        return;
+      }
     }
+
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    if (!ao.log) ao.log = [];
+    const entry = {
+      id: 'LOG-' + Date.now(),
+      type: (file && imagePath) ? 'photo' : 'log',
+      text: text || '',
+      imageData: '',
+      imagePath: imagePath || '',
+      visibility: 'intern',
+      userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
+      timestamp: new Date().toISOString()
+    };
+    ao.log.push(entry);
+    WorkOrderService.update(this.aoId, { log: ao.log });
+    Modal.close();
+    const aoUp = getAO(this.aoId);
+    if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+    this._resolveTimelineImages(document.getElementById('ao-timeline'));
+    showToast('Loggpost tillagd');
   },
 
   deleteLogEntry(logId) {
     Modal.confirm('Ta bort loggpost?', () => {
       const ao = getAO(this.aoId);
       if (!ao) return;
+      /* VIFT CRM 13: best-effort städning av Storage-filen för en NY,
+         imagePath-baserad post (ingen effekt på äldre imageData-poster,
+         de har ingen Storage-fil). Ett misslyckat Storage-anrop hindrar
+         INTE borttagningen av loggposten själv — samma "det viktiga är
+         att användarens avsedda handling lyckas"-prioritering som redan
+         gäller i resten av denna fil; en kvarglömd, oreferererad fil i
+         Storage är ofarlig (samma typ av "orphaned file"-scenario som
+         redan dokumenterat och accepterat för PropertyImageService). */
+      const removed = (ao.log||[]).find(l => l.id === logId);
+      if (removed && removed.imagePath && typeof WorkOrderImageService !== 'undefined') {
+        WorkOrderImageService.remove(removed.imagePath).catch(function(e) {
+          console.warn('[WorkOrderDetailPage] Kunde inte radera bildfil i Storage:', e);
+        });
+      }
       ao.log = (ao.log||[]).filter(l => l.id !== logId);
       WorkOrderService.update(this.aoId, { log: ao.log });
       const aoUp = getAO(this.aoId);
       if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+      this._resolveTimelineImages(document.getElementById('ao-timeline'));
       showToast('Borttagen');
     });
   },
@@ -1603,6 +1659,7 @@ const WorkOrderDetailPage = {
     Modal.close();
     const aoUp = getAO(this.aoId);
     if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+    this._resolveTimelineImages(document.getElementById('ao-timeline'));
     showToast(`Uppföljning skapad: ${date}`);
   },
 
@@ -1856,6 +1913,7 @@ const WorkOrderDetailPage = {
 
     const timelineEl = document.getElementById('ao-timeline');
     if (timelineEl)  timelineEl.innerHTML = this._renderTimeline(ao);
+    this._resolveTimelineImages(timelineEl);
 
     const lonEl   = document.getElementById('ao-lonsam');
     if (lonEl)   lonEl.innerHTML   = this._renderLonsamhet(ao);
@@ -2299,9 +2357,15 @@ const WorkOrderDetailPage = {
             showToast('Avvikelse sparad');
           };
           if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => saveAvv(e.target.result);
-            reader.readAsDataURL(file);
+            /* VIFT CRM 13: komprimera FÖRE sändning (samma etablerade
+               900px/JPEG 0.75-mönster som WorkOrderImageService/
+               RonderingUtforandePage) -- krymper nyttolasten avsevärt
+               utan att ändra avvikelseImage-kontraktet mot work-order-
+               checklist-resolve-funktionen (fortfarande en sträng, bara
+               mindre). Flyttas INTE till Supabase Storage i denna omgång
+               -- den riktiga Edge Function-källkoden kunde inte
+               granskas här, se slutrapporten. */
+            WorkOrderImageService._resizeImage(file).then((dataUrl) => saveAvv(dataUrl || null));
           } else {
             saveAvv(null);
           }
