@@ -80,8 +80,21 @@ const ServiceIntervalService = {
       aoPriority:                    'normal',
       aoStaff:                       [],
 
-      /* Idempotensnycklar — sätts av bevakningskörningen */
-      lastNotificationSentForDueDate:'',       // nextDue för senast skickad notis
+      /* Idempotensnycklar — sätts av bevakningskörningen.
+         RÄTTAT (masterplanens identifierade idempotenskonflikt): fanns
+         TIDIGARE bara `lastNotificationSentForDueDate`, delad mellan
+         TVÅ olika mekanismer — denna klientfils runDailyCheck() (skapar
+         en Att göra-post + in-app-notis) OCH den server-sidiga
+         service-monitor-Edge-Functionens riktiga Web Push. Vilken av de
+         två som råkade köra FÖRST för en given förfalloperiod satte
+         nyckeln och TYSTADE därmed den ANDRA för just den perioden.
+         `lastNotificationSentForDueDate` är nu RESERVERAD ENBART för
+         service-monitor (server-sidig push) — se dess egen kod, orörd.
+         `lastActivityNotifiedForDueDate` är en NY, egen nyckel enbart
+         för runDailyCheck()s Att göra-post/in-app-notis. De två
+         mekanismerna kan nu aldrig tysta varandra. */
+      lastNotificationSentForDueDate:'',       // nextDue för senast skickade RIKTIGA push (service-monitor, server)
+      lastActivityNotifiedForDueDate:'',       // nextDue för senast skapade Att göra-post/in-app-notis (runDailyCheck, klient)
       lastAOGeneratedForDueDate:     '',       // nextDue för senast skapad AO
       lastGeneratedAOId:             '',       // id på senast skapade AO
 
@@ -342,8 +355,9 @@ const ServiceIntervalService = {
     si.updatedAt = new Date().toISOString();
 
     /* Nollställ idempotensnycklar — ny period börjar */
-    si.lastNotificationSentForDueDate = '';
-    si.lastAOGeneratedForDueDate      = '';
+    si.lastNotificationSentForDueDate  = '';
+    si.lastActivityNotifiedForDueDate  = '';
+    si.lastAOGeneratedForDueDate       = '';
 
     /* Stäng kopplade Att göra-poster för den avslutade perioden */
     this._completeLinkedActivities(si, previousNextDue, { staffId, comment });
@@ -382,9 +396,13 @@ const ServiceIntervalService = {
         const st = this.getStatus(si);
         if (st !== 'overdue' && st !== 'due_soon' && st !== 'approaching') continue;
 
-        /* Idempotent — en unik nyckel per (interval, förfalloperiod) */
+        /* Idempotent — en unik nyckel per (interval, förfalloperiod).
+           RÄTTAT: använder nu sin EGEN nyckel (lastActivityNotifiedForDueDate)
+           — INTE lastNotificationSentForDueDate, som är reserverad för
+           service-monitor-EF:ens riktiga push. Se newInterval()s
+           kommentar för den fullständiga motiveringen. */
         const periodKey = si.id + '::' + si.nextDue;
-        if (si.lastNotificationSentForDueDate === periodKey) continue;
+        if (si.lastActivityNotifiedForDueDate === periodKey) continue;
 
         /* Skapa uppgift i Att göra */
         const assignTo = si.responsibleStaffId || userId || null;
@@ -427,8 +445,8 @@ const ServiceIntervalService = {
           NotificationsService.push(userId, nType, msg, { propId: p.id, siId: si.id });
         }
 
-        /* Markera period som notifierad */
-        si.lastNotificationSentForDueDate = periodKey;
+        /* Markera period som notifierad (egen nyckel, se ovan) */
+        si.lastActivityNotifiedForDueDate = periodKey;
         changed = true;
       }
     }

@@ -259,6 +259,33 @@ async function initState() {
  * OffersPage._save()) kan göra `const ok = await persist();` och agera på
  * resultatet.
  */
+/* VIFT CRM — integritetsgranskningsfynd (2026-11-20): delad, enda
+ * sanningskälla för payroll-filtret på state.timeEntries. Tidigare fanns
+ * detta filter ENDAST inuti DataSync._poll() — vilket betydde att
+ * state.timeEntries var HELT OFILTRERAT (alla anställdas poster, inte
+ * bara egna) under HELA fönstret mellan appstart (initState(), som körs
+ * FÖRE Auth._resolveUser() och alltså FÖRE identiteten/behörigheten
+ * någonsin är känd) och den FÖRSTA poll-cykeln som råkar upptäcka en
+ * fjärrändring (var 15:e sekund, OCH bara om något faktiskt ändrats
+ * sedan senast — kan alltså dröja långt över 15 sekunder, eller aldrig
+ * inträffa under en kort session). Under det fönstret kunde ALL kod som
+ * läser state.timeEntries direkt (inte bara UI som händelsevis renderas
+ * EFTER en poll) se andra anställdas tidsregistreringar.
+ * Anropas nu från TVÅ ställen: Auth._resolveUser() (varje gång
+ * identiteten (om)upptäcks — appstart, re-login, rollbyte; se
+ * AuthService.js) OCH DataSync._poll() (varje gång en fjärr-snapshot
+ * tillämpas, eftersom en roll-/behörighetsändring under en pågående
+ * session annars inte skulle upptäckas förrän nästa omladdning).
+ * Fail-closed: en okänd/saknad identitet (`myStaffId` null/"unknown")
+ * matchar inget verkligt `staffId` i filtret, så resultatet blir en tom
+ * lista — aldrig ett oavsiktligt fullt dataset. */
+function _applyTimeEntriesPayrollFilter() {
+  if (typeof Auth === 'undefined' || !Array.isArray(state.timeEntries)) return;
+  if (Auth.can('payroll_view')) return;
+  var myStaffId = state.currentUser ? state.currentUser.id : null;
+  state.timeEntries = state.timeEntries.filter(function(e) { return e.staffId === myStaffId; });
+}
+
 var _persistQueue = Promise.resolve();
 
 /* VIFT CRM 13 (riktad prestandarättning, FÖRSLAG — EJ INSTALLERAT):
@@ -815,15 +842,13 @@ const DataSync = {
         var v = g('timeEntries');
         if (Array.isArray(v)) state.timeEntries = v;
       })();
-      /* Payroll-skydd: filtrera timeEntries till egna poster om payroll_view saknas.
-         Notera: rådata flödar fortfarande i HTTP-svaret — detta är klient-side mitigation.
-         Fullständigt skydd kräver ett normaliserat timeEntries-schema med per-rad RLS (v1.1). */
-      if (typeof Auth !== 'undefined' && !Auth.can('payroll_view')) {
-        var _myStaffId = state.currentUser ? state.currentUser.id : null;
-        if (_myStaffId && Array.isArray(state.timeEntries)) {
-          state.timeEntries = state.timeEntries.filter(function(e) { return e.staffId === _myStaffId; });
-        }
-      }
+      /* Payroll-skydd: filtrera timeEntries till egna poster om payroll_view
+         saknas. Nu via den delade _applyTimeEntriesPayrollFilter() (se dess
+         egen kommentar högst upp i filen för varför den delas med
+         Auth._resolveUser()). Notera: rådata flödar fortfarande i HTTP-
+         svaret — detta är klient-side mitigation. Fullständigt skydd kräver
+         ett normaliserat timeEntries-schema med per-rad RLS (v1.1). */
+      _applyTimeEntriesPayrollFilter();
       /* VIFT CRM 13: primar _lastWrittenJSON för timeEntries NU, EFTER ett
          eventuellt filter ovan — mot state.timeEntries SOM DET NU FAKTISKT
          ÄR (den fulla remote-arrayen för en payroll_view-användare, annars
@@ -875,9 +900,27 @@ const DataSync = {
         state.settings = remote['settings'];
       }
 
-      /* Uppdatera localStorage-cache */
+      /* Uppdatera localStorage-cache. RÄTTAT (integritetsgranskningsfynd,
+         2026-11-20): skrev tidigare `remote[key]` RAKT AV för VARJE
+         nyckel — inklusive `timeEntries` (det RÅA, ofiltrerade svaret,
+         trots att state.timeEntries redan filtrerats till egna poster
+         för en användare utan payroll_view NÅGRA RADER OVAN) och
+         `staff` (likaså det råa svaret, trots att lösenordsfält redan
+         strippats ur state.staff NÅGRA RADER OVAN). En payroll_view-
+         saknande användares egen localStorage fick därmed andra
+         anställdas tidsregistreringar — en verklig läcka till
+         webbläsarens disk, läsbar via DevTools, OBEROENDE av att UI:t
+         (som läser state.X, redan korrekt filtrerat) aldrig visade
+         detta. Skriver nu state.X för just dessa två nycklar (redan
+         sanerade ovan) — alla övriga ~30 nycklar har state.X exakt lika
+         med remote[nyckel] (arr() ovan kopierar dem oförändrat), så
+         deras beteende är identiskt med tidigare, byte för byte. */
       Object.entries(remote).forEach(function(entry) {
-        try { localStorage.setItem('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
+        const key = entry[0];
+        let value = entry[1];
+        if (key === 'timeEntries') value = state.timeEntries;
+        else if (key === 'staff')  value = state.staff;
+        try { localStorage.setItem('vift_' + key, JSON.stringify(value)); } catch(e) {}
       });
 
       /* Uppdatera badge-räknare */

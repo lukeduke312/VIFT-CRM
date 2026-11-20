@@ -1557,25 +1557,51 @@ const WorkOrderDetailPage = {
   },
 
   deleteLogEntry(logId) {
-    Modal.confirm('Ta bort loggpost?', () => {
+    Modal.confirm('Ta bort loggpost?', async () => {
       const ao = getAO(this.aoId);
       if (!ao) return;
-      /* VIFT CRM 13: best-effort städning av Storage-filen för en NY,
-         imagePath-baserad post (ingen effekt på äldre imageData-poster,
-         de har ingen Storage-fil). Ett misslyckat Storage-anrop hindrar
-         INTE borttagningen av loggposten själv — samma "det viktiga är
-         att användarens avsedda handling lyckas"-prioritering som redan
-         gäller i resten av denna fil; en kvarglömd, oreferererad fil i
-         Storage är ofarlig (samma typ av "orphaned file"-scenario som
+      const removed    = (ao.log||[]).find(l => l.id === logId);
+      const removedIdx = (ao.log||[]).findIndex(l => l.id === logId);
+      if (removedIdx < 0) return;
+
+      /* RÄTTAT (säker bildradering, granskningsfynd): Storage-filen fick
+         TIDIGARE tas bort omedelbart, INNAN databasen bekräftat att
+         loggposten själv raderats — ett misslyckat/osäkert nätverksanrop
+         kunde då lämna en loggpost kvar vars bild redan var borta.
+         Ordningen är nu: 1) mutera lokalt, 2) `persist()` (via
+         WorkOrderService.update(), som redan köade sitt eget anrop, PLUS
+         ett eget, explicit `await persist()` här -- seriekopplas EFTER
+         det förra i samma kö, se _persistQueue i state.js -- och ger ett
+         ÄRLIGT, väntat svar om huruvida raderingen faktiskt persisterats,
+         3) ENDAST vid bekräftad framgång rörs Storage-filen. Vid
+         misslyckande rullas den lokala mutationen tillbaka — ingen
+         låtsad framgång, och bilden finns kvar både i databasen och i
+         Storage. */
+      ao.log.splice(removedIdx, 1);
+      WorkOrderService.update(this.aoId, { log: ao.log });
+      const ok = await persist();
+
+      if (!ok) {
+        ao.log.splice(removedIdx, 0, removed);
+        const aoRolledBack = getAO(this.aoId);
+        if (aoRolledBack) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoRolledBack);
+        this._resolveTimelineImages(document.getElementById('ao-timeline'));
+        showToast('Kunde inte spara borttagningen — försök igen');
+        return;
+      }
+
+      /* Best-effort städning av Storage-filen för en NY, imagePath-
+         baserad post (ingen effekt på äldre imageData-poster, de har
+         ingen Storage-fil) — görs NU, EFTER bekräftad databasframgång.
+         Ett misslyckat Storage-anrop hindrar INTE att loggposten förblir
+         borttagen (redan bekräftat sparat) — en kvarglömd, oreferererad
+         fil i Storage är ofarlig (samma "orphaned file"-scenario som
          redan dokumenterat och accepterat för PropertyImageService). */
-      const removed = (ao.log||[]).find(l => l.id === logId);
       if (removed && removed.imagePath && typeof WorkOrderImageService !== 'undefined') {
         WorkOrderImageService.remove(removed.imagePath).catch(function(e) {
           console.warn('[WorkOrderDetailPage] Kunde inte radera bildfil i Storage:', e);
         });
       }
-      ao.log = (ao.log||[]).filter(l => l.id !== logId);
-      WorkOrderService.update(this.aoId, { log: ao.log });
       const aoUp = getAO(this.aoId);
       if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
       this._resolveTimelineImages(document.getElementById('ao-timeline'));

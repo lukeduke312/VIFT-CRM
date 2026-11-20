@@ -294,7 +294,14 @@ const Auth = {
    */
   _resolveUser() {
     const email = this._session ? this._session.user_email : null;
-    if (!email) { state.currentUser = null; return; }
+    if (!email) {
+      state.currentUser = null;
+      /* RÄTTAT (integritetsgranskningsfynd): tillämpa payroll-filtret även
+         här (fail-closed mot en nu okänd/utloggad identitet) — se
+         _applyTimeEntriesPayrollFilter()s egen kommentar i state.js. */
+      if (typeof _applyTimeEntriesPayrollFilter === 'function') _applyTimeEntriesPayrollFilter();
+      return;
+    }
 
     const staff = (state.staff || []).find(s =>
       s.active && s.email && s.email.toLowerCase() === email.toLowerCase()
@@ -306,6 +313,7 @@ const Auth = {
         id: 'unknown', firstName: email.split('@')[0], lastName: '',
         role: 'personal', username: email, title: ''
       };
+      if (typeof _applyTimeEntriesPayrollFilter === 'function') _applyTimeEntriesPayrollFilter();
       return;
     }
 
@@ -317,6 +325,19 @@ const Auth = {
       username:  staff.username || staff.email,
       title:     staff.title   || ''
     };
+    /* RÄTTAT (integritetsgranskningsfynd, 2026-11-20): state.timeEntries
+       laddas av initState() (körs FÖRE _resolveUser(), alltså FÖRE
+       identiteten/behörigheten är känd) utan något payroll-filter —
+       tidigare tillämpades filtret ENDAST inuti DataSync._poll(), vilket
+       lämnade ett verkligt fönster (hela tiden mellan appstart och den
+       FÖRSTA poll-cykel som råkar upptäcka en fjärrändring) där
+       state.timeEntries innehöll ALLA anställdas tidsregistreringar för
+       en användare utan payroll_view. _resolveUser() är den EXAKTA
+       punkten där identiteten/behörigheten blir känd (eller ändras, t.ex.
+       vid rollbyte) — filtret tillämpas därför HÄR också, omedelbart. Se
+       _applyTimeEntriesPayrollFilter() i state.js för den delade logiken
+       (samma funktion, samma beteende, som DataSync._poll() redan använde). */
+    if (typeof _applyTimeEntriesPayrollFilter === 'function') _applyTimeEntriesPayrollFilter();
   },
 
   /* ── Getters ──────────────────────────────────────────── */
