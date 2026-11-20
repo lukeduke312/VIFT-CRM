@@ -1,0 +1,93 @@
+-- ============================================================
+-- Migration (FÖRSLAG, EJ INSTALLERAD): Blockera direkt läsning av
+-- vift_timeEntries för authenticated — server-sidig hälft av
+-- BLOCKER-1 (docs/PROJECT_STATUS.md).
+-- Datum:  2026-11-20
+--
+-- BAKGRUND (citerat från migration 20260720000005s egen, redan
+-- dokumenterade "Kvarvarande kända risker", punkt 2):
+--   "vift_timeEntries laddas för alla aktiva användare oavsett
+--    payroll_view. Partiell klient-side mitigation i DataSync —
+--    se migration 00007."
+-- Klientsidan har nu (samma session, separat commit a0d02e3) fått en
+-- striktare, mer fullständig mitigation (_applyTimeEntriesPayrollFilter(),
+-- anropad från både Auth._resolveUser() OCH DataSync._poll() — stänger
+-- även det tidigare okända "state.timeEntries är helt ofiltrerat från
+-- appstart till första poll"-fönstret). Men det är fortfarande BARA en
+-- klientfiltrering av data SERVERN redan skickat i sin helhet — en
+-- authenticated användare kan fortfarande läsa HELA vift_timeEntries
+-- direkt via REST (`GET .../rest/v1/store?key=eq.vift_timeEntries`),
+-- förbi klientkoden helt. Denna migration stänger just den vägen.
+--
+-- LÖSNING: en RESTRICTIVE policy, ENBART för FOR SELECT TO authenticated,
+-- som nekar läsning av precis denna ENA nyckel. RESTRICTIVE policyer
+-- AND-kombineras med de befintliga PERMISSIVE policyerna (migration
+-- 20260720000005) för SAMMA kommando+roll — nettoeffekten: en aktiv
+-- användare läser alla ANDRA nycklar exakt som idag (den permissiva
+-- store_active_read-policyn är oförändrad), men FÅR INTE läsa
+-- vift_timeEntries alls via REST/PostgREST, oavsett roll/behörighet.
+-- service_role påverkas INTE (denna policy skapas TO authenticated,
+-- inte TO service_role — service_role har redan sin egen, separata
+-- `store_service_role_all FOR ALL USING (true)`-policy från migration
+-- 20260720000001, som denna nya restriktiva policy inte berör).
+--
+-- VIKTIGT, MEDVETET AVGRÄNSAT: denna migration rör ENDAST SELECT.
+-- Skrivpolicyerna (`store_active_write_safe`) för vift_timeEntries är
+-- HELT OFÖRÄNDRADE — persist() kan fortsätta skriva timeEntries precis
+-- som idag. Att även begränsa SKRIVNING är ett annat, ej begärt problem
+-- och ingår inte här.
+--
+-- EFTER denna migration MÅSTE klienten sluta förlita sig på att
+-- Storage.getAll()/DataSync._poll() returnerar vift_timeEntries — de
+-- kommer tysta att få `null`/ingen rad för just den nyckeln. Den nya
+-- Edge Function-vägen (supabase/functions/time-entries-list/index.ts,
+-- samma commit) är den ENDA vägen kvar att faktiskt läsa tidposter,
+-- och gör sin EGEN, server-sidiga permission-filtrering innan den
+-- returnerar något. Klient-sidig koppling (ny TimeEntriesReadService.js
+-- + state.js/AuthService.js-integration) byggs i en SEPARAT, egen
+-- leverans — se slutrapporten för installationsordning (denna
+-- migration FÅR INTE installeras i STAGING förrän klientsidan som
+-- läser via den nya EF:en istället för Storage.getAll() också är
+-- redo, annars slutar aktiva användare få NÅGON tiddata alls).
+--
+-- ROLLBACK:
+--   DROP POLICY IF EXISTS "store_timeentries_read_lockdown" ON public.store;
+-- ============================================================
+
+DROP POLICY IF EXISTS "store_timeentries_read_lockdown" ON public.store;
+
+CREATE POLICY "store_timeentries_read_lockdown"
+  ON public.store
+  AS RESTRICTIVE
+  FOR SELECT
+  TO authenticated
+  USING (key <> 'vift_timeEntries');
+
+-- ── Verifiera (kör i SQL Editor efter migration) ──────────────────
+--
+-- 1. Policyn finns och är RESTRICTIVE:
+--      SELECT policyname, cmd, permissive, roles
+--        FROM pg_policies
+--       WHERE tablename = 'store' AND policyname = 'store_timeentries_read_lockdown';
+--      → permissive = 'RESTRICTIVE', cmd = 'SELECT', roles = '{authenticated}'
+--
+-- 2. En aktiv, icke-service_role-användare kan INTE längre läsa
+--    vift_timeEntries direkt:
+--      SET ROLE authenticated;
+--      SET LOCAL request.jwt.claims = '{"sub":"<uid-av-aktiv-anvandare>"}';
+--      SELECT key, value FROM store WHERE key = 'vift_timeEntries';
+--      → 0 rader (RESTRICTIVE-policyn blockerar, oavsett payroll_view)
+--      RESET ROLE;
+--
+-- 3. SAMMA användare kan fortfarande läsa alla ANDRA nycklar oförändrat:
+--      SET ROLE authenticated;
+--      SET LOCAL request.jwt.claims = '{"sub":"<uid-av-aktiv-anvandare>"}';
+--      SELECT key, value FROM store WHERE key = 'vift_customers';
+--      → 1 rad, exakt som före denna migration
+--      RESET ROLE;
+--
+-- 4. service_role är opåverkad (time-entries-list-EF:en måste fungera):
+--      SET ROLE service_role;
+--      SELECT key, value FROM store WHERE key = 'vift_timeEntries';
+--      → 1 rad (eller 0 om nyckeln aldrig skapats — men INTE blockerad av RLS)
+--      RESET ROLE;

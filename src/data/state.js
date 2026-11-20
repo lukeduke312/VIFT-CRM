@@ -226,6 +226,24 @@ async function initState() {
     });
     state.ronderingspass.push(pass);
   });
+
+  /* BLOCKER-1, server-sidig hälft (companion: supabase/functions/
+     time-entries-list/index.ts + migration 20261120000002_PROPOSAL_
+     timeentries_read_lockdown.sql, EJ installerad ännu). state.timeEntries
+     ovan (rad ~94, `g('timeEntries') || []`) kommer från den generiska
+     bulk-läsningen och är OFILTRERAD tills _applyTimeEntriesPayrollFilter()
+     körs vid Auth._resolveUser() (som körs EFTER initState(), se
+     index.html) -- ett verkligt, om än nu klient-sidigt täckt, fönster.
+     Detta anrop ger den AUKTORITATIVA, server-filtrerade listan direkt,
+     redan HÄR, om EF:en är nåbar och klienten redan har en giltig JWT
+     (bekräftat: App.init()s session-restore-väg kör alltid
+     Auth.refreshIfNeeded() FÖRE initState(), se index.html). Misslyckas
+     anropet (EF ej deployad ännu, nätverksfel) lämnas state.timeEntries
+     helt orört -- fortfarande skyddat av det befintliga klientfiltret,
+     inte en krasch eller en låtsad framgång. */
+  if (typeof TimeEntriesReadService !== 'undefined') {
+    await TimeEntriesReadService.fetchAndApply();
+  }
 }
 
 /**
@@ -858,6 +876,17 @@ const DataSync = {
          i arr() ovan -- se den kommentaren.) */
       if (Array.isArray(state.timeEntries)) {
         _lastWrittenJSON['timeEntries'] = JSON.stringify(state.timeEntries);
+      }
+      /* BLOCKER-1, server-sidig hälft (se initState()s motsvarande
+         kommentar). Hämtar den AUKTORITATIVA, server-filtrerade listan
+         och skriver över resultatet ovan om anropet lyckas -- misslyckas
+         det (EF ej deployad ännu, nätverksfel) lämnas det klientfiltrerade
+         resultatet ovan orört, oförändrat beteende. Körs ENDAST när en
+         poll faktiskt redan bestämt att hämta en full snapshot (denna
+         kodväg), inte på VARJE poll-tick -- ingen ny, extra nätverkslast
+         jämfört med vad denna funktion redan gör. */
+      if (typeof TimeEntriesReadService !== 'undefined') {
+        await TimeEntriesReadService.fetchAndApply();
       }
       arr('contracts',          'contracts');
       arr('articles',           'articles');
