@@ -106,3 +106,38 @@ export async function checkViftAuth(
 export function hasPerm(perms: string[], perm: string): boolean {
   return perms.includes('all') || perms.includes(perm)
 }
+
+/**
+ * Kanonisk AO-synlighetsregel, delad mellan work-order-image-url och
+ * work-order-image-upload (och källverifierad mot SAMMA regel som redan
+ * används av WorkOrdersPage/Dashboard.js på klienten och av
+ * work_order_checklist_resolve()-RPC:n på servern):
+ *   ao_view_all ELLER 'all' -> ser allt.
+ *   annars: ao_view_own OCH (anroparens staff-id finns i ao.staff[]
+ *           ELLER ao.status === 'pool').
+ * Fail-closed: en okänd/tom callerStaffId ger aldrig åtkomst via
+ * ao_view_own-grenen.
+ */
+export function canViewWorkOrder(
+  ao: { staff?: unknown; status?: unknown } | undefined | null,
+  perms: string[],
+  callerStaffId: string
+): boolean {
+  if (!ao) return false
+  if (hasPerm(perms, 'ao_view_all') || hasPerm(perms, 'all')) return true
+  if (!hasPerm(perms, 'ao_view_own') || !callerStaffId) return false
+  const assignedStaff = Array.isArray(ao.staff) ? (ao.staff as unknown[]).map(String) : []
+  return assignedStaff.includes(callerStaffId) || ao.status === 'pool'
+}
+
+/**
+ * Säkerställer att en Storage-path verkligen ligger under den angivna
+ * arbetsorderns eget "<aoId>/"-prefix — förhindrar att en anropare som är
+ * behörig för EN arbetsorder skickar in en ANNAN arbetsorders path under
+ * täckmantel av den förstnämndas aoId.
+ */
+export function isPathUnderAo(path: string, aoId: string): boolean {
+  if (!path || typeof path !== 'string') return false
+  if (path.includes('..') || path.includes('//') || path.startsWith('/')) return false
+  return path.startsWith(aoId + '/')
+}

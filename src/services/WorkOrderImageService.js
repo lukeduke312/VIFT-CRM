@@ -27,14 +27,37 @@
  * databastabell för exakt samma information hade varit en onödig,
  * ej begärd generell ombyggnad.
  *
+ * RÄTTAT (acceptansgranskning, 2026-11-20 — åtkomstkontroll): tidigare
+ * version av detta förslag föreslog en bucket-bred `TO authenticated`-
+ * policy för SELECT/INSERT, som gav VARJE inloggad användare signerade
+ * URL:er och uppladdningsrätt för VILKEN arbetsorders bilder som helst,
+ * oavsett ao_view_own/ao_view_all — ett genuint fynd, inte en gissning:
+ * en behörighetskontroll ENBART i frontend kan alltid kringgås av en
+ * anropare som skickar sitt eget, giltiga JWT direkt mot Storage-API:et.
+ * Läsning och uppladdning går nu via TVÅ nya, dedikerade Edge Functions
+ * (`work-order-image-url`/`work-order-image-upload`) som FÖRST verifierar
+ * att anroparen verkligen får se/redigera just DEN arbetsordern — samma
+ * mönster som redan etablerat av offer-attachment-url/-upload i denna
+ * kodbas, tillämpat på AO:ns redan existerande, källverifierade
+ * ao_view_all/ao_view_own-regel (se `canViewWorkOrder()` i
+ * `_shared/vift-auth.ts`).
+ *
  * Bucket-typ:  private — bilder kräver signerade URL:er, inga publika URL:er.
- * Läsning:     authenticated users → signerade URL:er (1 timme, cachas 50 min).
- * Uppladdning: authenticated users → POST till Storage API.
- * Radering:    authenticated users (Storage-nivå) — åtkomstkontrollen för
- *              VILKEN loggpost som får raderas hanteras redan idag av
- *              WorkOrderDetailPage.deleteLogEntry()/ao_edit-behörigheten,
- *              precis som för alla andra loggposter — denna service
- *              lägger inte till ett NYTT, separat skyddslager för det.
+ * Läsning:     work-order-image-url (service_role) → signerade URL:er (1h).
+ * Uppladdning: work-order-image-upload (service_role) → Storage.
+ * Radering:    authenticated users (Storage-nivå, DELETE-ENDAST policy) —
+ *              KVARSTÅENDE, MEDVETET AVGRÄNSAT RESTRISK: vilken loggpost
+ *              som får raderas kontrolleras idag ENDAST av frontend
+ *              (WorkOrderDetailPage.deleteLogEntry()/ao_edit-gated UI),
+ *              precis som för alla andra loggposter i denna kodbas — INTE
+ *              av en EF. En DELETE-only policy har lägre allvarlighet än
+ *              den ursprungliga READ/WRITE-luckan (en obehörig anropare
+ *              kan i värsta fall RADERA en bild de inte borde kunna se,
+ *              men kan fortfarande inte LÄSA eller SKRIVA en annan AO:s
+ *              bilder) — men är fortsatt klient-kontrollerad, inte
+ *              server-verifierad. Flaggas här explicit, inte dolt; en
+ *              framtida `work-order-image-delete`-EF (samma mönster som
+ *              de två nya ovan) skulle stänga även denna lucka helt.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * SUPABASE SETUP — FÖRSLAG, EJ KÖRT. Kör i Supabase SQL-editorn (idempotent)
@@ -49,7 +72,7 @@
  *   'workorder-images',
  *   false,                  -- PRIVAT: ingen publik åtkomst
  *   10485760,               -- max 10 MB per fil (samma gräns som property-images)
- *   ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif','image/heic','image/heif']
+ *   ARRAY['image/jpeg','image/jpg','image/png','image/webp']
  * ) ON CONFLICT (id) DO NOTHING;
  *
  * ── Steg 2: Storage policies (idempotent) ───────────────────────────────
@@ -58,22 +81,21 @@
  * DROP POLICY IF EXISTS "wo_images_storage_insert" ON storage.objects;
  * DROP POLICY IF EXISTS "wo_images_storage_delete" ON storage.objects;
  *
- * -- SELECT: authenticated users kan generera signed URLs och läsa filer
- * -- (samma öppenhetsgrad som arbetsordrar redan har för inloggad personal
- * -- med ao_view_all/ao_view_own — denna policy lägger inte till någon NY
- * -- begränsning eller lättnad jämfört med det).
+ * -- SELECT/INSERT: ENBART service_role (de två nya Edge Functions är nu
+ * -- de ENDA legitima anroparna — de har redan verifierat ao_view_all/
+ * -- ao_view_own/ao_edit/ao_checklist server-sidigt INNAN de når hit).
+ * -- INGEN `TO authenticated`-variant för SELECT/INSERT längre.
  * CREATE POLICY "wo_images_storage_select"
- *   ON storage.objects FOR SELECT TO authenticated
+ *   ON storage.objects FOR SELECT TO service_role
  *   USING (bucket_id = 'workorder-images');
  *
- * -- INSERT: authenticated users kan ladda upp
  * CREATE POLICY "wo_images_storage_insert"
- *   ON storage.objects FOR INSERT TO authenticated
+ *   ON storage.objects FOR INSERT TO service_role
  *   WITH CHECK (bucket_id = 'workorder-images');
  *
- * -- DELETE: authenticated users kan radera (Storage-nivå) — se
- * -- motiveringen i filhuvudet ovan för varför ingen ytterligare
- * -- metadata-tabell/RLS-lager läggs till här.
+ * -- DELETE: kvar som `TO authenticated` — se filhuvudets explicita,
+ * -- avgränsade restrisk-notis ovan för varför detta INTE är lika allvarligt
+ * -- som den ursprungliga READ/WRITE-luckan, och vad som skulle stänga den helt.
  * CREATE POLICY "wo_images_storage_delete"
  *   ON storage.objects FOR DELETE TO authenticated
  *   USING (bucket_id = 'workorder-images');
@@ -82,13 +104,14 @@
  * Felscenarier
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Uppladdning misslyckas: upload() kastar ett fel. Anroparen (WorkOrder-
- * DetailPage._saveLog()) visar felet och sparar INTE loggposten — exakt
- * samma "ingen låtsad framgång"-princip som redan används av
- * resolveChecklistItemAtomic() i denna kodbas. Ingen loggpost utan sin
- * avsedda bild sparas av misstag.
+ * Uppladdning misslyckas (nätverksfel ELLER 403 från EF:en, t.ex. om
+ * anroparen saknar behörighet för just denna AO): upload() kastar ett
+ * fel. Anroparen (WorkOrderDetailPage._saveLog()) visar felet och sparar
+ * INTE loggposten — exakt samma "ingen låtsad framgång"-princip som redan
+ * används av resolveChecklistItemAtomic() i denna kodbas. Ingen loggpost
+ * utan sin avsedda bild sparas av misstag.
  *
- * Signerad URL kan inte genereras (t.ex. filen raderad manuellt i Storage):
+ * Signerad URL kan inte genereras eller nekas (403/404 från EF:en):
  * getSignedUrls() filtrerar bort den posten — WorkOrderDetailPage visar då
  * ingen bild för den loggposten (samma "osynlig, ofarlig"-hantering som
  * PropertyImageService.list() redan gör för orphaned metadata).
@@ -158,13 +181,14 @@ const WorkOrderImageService = {
     return new Blob([bytes], { type: mime });
   },
 
-  /* ── Signed URL (batch, med cache) ───────────────────────────
-   * MEDVETEN kopia av PropertyImageService._getSignedUrls()s exakta
-   * batchnings-/cache-mönster, mot denna tjänsts egen bucket. Ingen
-   * delad hjälpfunktion att bryta ut finns idag i kodbasen för detta --
-   * två oberoende, identiska implementationer mot var sin bucket är
-   * redan hur PropertyImageService självt är byggt, inte en ny
-   * abstraktion som införs här. */
+  /* ── Signed URL (batch, med cache, server-verifierad behörighet) ──
+   * RÄTTAT (åtkomstkontroll): anropar INTE längre Storage:s sign-API
+   * direkt (det skulle kräva en bucket-bred policy igen). Grupperar
+   * istället begärda paths per arbetsorder (varje path har formatet
+   * "<aoId>/<filnamn>", satt av upload() nedan) och POSTar VARJE
+   * arbetsorders paths till den nya work-order-image-url-Edge-Function,
+   * som FÖRST kontrollerar att DENNA inloggade användare verkligen får
+   * se just DEN arbetsordern innan den signerar något. */
   async getSignedUrls(paths) {
     if (!paths || !paths.length) return {};
 
@@ -183,31 +207,40 @@ const WorkOrderImageService = {
 
     if (!missing.length) return result;
 
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/storage/v1/object/sign/${this.BUCKET}`,
-        {
-          method:  'POST',
-          headers: this._h('application/json'),
-          body:    JSON.stringify({ paths: missing, expiresIn: 3600 })
+    /* Gruppera per aoId (path-prefixet FÖRE första "/") */
+    const byAo = {};
+    missing.forEach(p => {
+      const aoId = String(p).split('/')[0] || '';
+      if (!aoId) return;
+      (byAo[aoId] = byAo[aoId] || []).push(p);
+    });
+
+    const expiry = now + 50 * 60 * 1000; /* 50 min cache */
+    await Promise.all(Object.keys(byAo).map(async (aoId) => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/functions/v1/work-order-image-url`,
+          {
+            method:  'POST',
+            headers: this._h('application/json'),
+            body:    JSON.stringify({ aoId, paths: byAo[aoId] })
+          }
+        );
+        if (!res.ok) {
+          console.warn('[WorkOrderImageService] work-order-image-url misslyckades för', aoId, ':', res.status);
+          return;
         }
-      );
-      if (!res.ok) {
-        console.warn('[WorkOrderImageService] Batch signed URL misslyckades:', res.status);
-        return result;
+        const body = await res.json(); /* { urls: { [path]: signedUrl } } */
+        const urls = (body && body.urls) || {};
+        Object.keys(urls).forEach((path) => {
+          this._urlCache[path] = { url: urls[path], expiresAt: expiry };
+          result[path] = urls[path];
+        });
+      } catch (e) {
+        console.warn('[WorkOrderImageService] getSignedUrls() error för', aoId, ':', e);
       }
-      const items = await res.json(); /* [{ path, signedURL, error }] */
-      const expiry = now + 50 * 60 * 1000; /* 50 min cache */
-      (items || []).forEach(item => {
-        if (!item.error && item.signedURL) {
-          const url = SUPABASE_URL + item.signedURL;
-          this._urlCache[item.path] = { url, expiresAt: expiry };
-          result[item.path] = url;
-        }
-      });
-    } catch (e) {
-      console.warn('[WorkOrderImageService] getSignedUrls() error:', e);
-    }
+    }));
+
     return result;
   },
 
@@ -215,9 +248,16 @@ const WorkOrderImageService = {
 
   /**
    * Komprimerar (900px/JPEG 0.75, samma etablerade mönster som
-   * RonderingUtforandePage) och laddar upp en bild till Storage.
+   * RonderingUtforandePage) och laddar upp en bild. RÄTTAT
+   * (åtkomstkontroll): skickas INTE längre direkt till Storage (det
+   * skulle kräva en bucket-bred policy) — POSTas istället till den nya
+   * work-order-image-upload-Edge-Function, som FÖRST kontrollerar
+   * server-sidigt att DENNA inloggade användare verkligen får
+   * redigera/logga på just DEN arbetsordern (ao_checklist/ao_edit +
+   * ao_view_all/ao_view_own) innan den laddar upp något. Bucketens eget
+   * mapp-prefix (`<aoId>/...`) sätts nu av EF:en själv, inte klienten.
    * Ingen separat metadata-rad skapas — se filhuvudets motivering.
-   * @param {string} aoId  — arbetsorder-id, används som mapp-prefix i bucketen
+   * @param {string} aoId  — arbetsorder-id
    * @param {File}   file
    * @returns {Promise<{ path: string }>}  — kastar ett Error vid misslyckande
    *          (INGEN tyst, "låtsad" framgång — anroparen MÅSTE hantera felet
@@ -227,17 +267,21 @@ const WorkOrderImageService = {
     const dataUrl = await this._resizeImage(file);
     if (!dataUrl) throw new Error('Kunde inte läsa/komprimera bilden');
     const blob = this._dataUrlToBlob(dataUrl);
-    const path = `${aoId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
 
-    const storRes = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/${this.BUCKET}/${path}`,
-      { method: 'POST', headers: this._h('image/jpeg'), body: blob }
+    const form = new FormData();
+    form.append('aoId', aoId);
+    form.append('file', blob, 'image.jpg');
+
+    const res = await fetch(
+      `${SUPABASE_URL}/functions/v1/work-order-image-upload`,
+      { method: 'POST', headers: this._h(false), body: form }
     );
-    if (!storRes.ok) {
-      const err = await storRes.json().catch(() => ({}));
-      throw new Error(err.message || err.error || `Uppladdning misslyckades (HTTP ${storRes.status})`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || err.message || `Uppladdning misslyckades (HTTP ${res.status})`);
     }
-    return { path };
+    const body = await res.json();
+    return { path: body.path };
   },
 
   /* ── Remove ───────────────────────────────────────────────── */
