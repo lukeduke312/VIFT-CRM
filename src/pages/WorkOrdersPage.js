@@ -143,7 +143,7 @@ const WorkOrdersPage = {
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="ao-search"
             placeholder="Sök order, kund, adress, personal, beskrivning…"
-            value="${this.q}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()"
+            value="${esc(this.q)}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()"
             style="padding-right:${this.q?'28px':'10px'}">
           ${this.q ? `<button class="swrap-clear" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()" title="Rensa sökning">${ic('x',12)}</button>` : ''}
         </div>
@@ -206,10 +206,13 @@ const WorkOrdersPage = {
     if (!ao || ao.status === newStatus) return;
     ao.status = newStatus;
     ao.updatedAt = new Date().toISOString();
+    if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+      WorkOrderService._syncAO(ao, { status: ao.status, updatedAt: ao.updatedAt });
+    }
     persist();
     Sidebar.updateBadges();
     WorkOrdersPage.renderList();
-    showToast(ao.id + ': ' + statusLabel(newStatus));
+    showToast(WorkOrderService.displayNumberOrPending(ao) + ': ' + statusLabel(newStatus));
   },
 
   /* Flytande statuspopover — öppnas vid klick på status-badge i listan */
@@ -401,7 +404,7 @@ const WorkOrdersPage = {
     // Snabbfilter
     const quickOpts = [
       { key:'akut',            icon:'zap',      label:'Akuta',            cnt: base.filter(a=>a.priority==='akut').length },
-      { key:'readyForInvoice', icon:'receipt',  label:'Redo fakturering', cnt: base.filter(a=>a.status==='klar'&&!a.invoiceId&&WorkOrderService._hasBillableContent(a)).length },
+      { key:'readyForInvoice', icon:'receipt',  label:'Redo fakturering', cnt: (() => { let _r = null; return base.filter(a=>a.status==='klar'&&!a.invoiceId&&WorkOrderService._hasBillableContent(a, (_r = _r || WorkOrderService.billingStatusResolver()))).length; })() }, // L1: one candidate pass
       { key:'idag',            icon:'calendar', label:'Idag',             cnt: base.filter(a=>a.scheduledDate===today).length },
       { key:'forsenad',        icon:'clock',    label:'Försenade',        cnt: base.filter(a=>a.scheduledDate&&a.scheduledDate<today).length }
     ];
@@ -574,7 +577,7 @@ const WorkOrdersPage = {
       }
       // Snabbfilter
       if (this._f.quick === 'akut')            list = list.filter(a => a.priority==='akut');
-      if (this._f.quick === 'readyForInvoice') list = list.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a));
+      if (this._f.quick === 'readyForInvoice') { let _r = null; list = list.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a, (_r = _r || WorkOrderService.billingStatusResolver()))); } // L1: one candidate pass
       if (this._f.quick === 'idag')            list = list.filter(a => a.scheduledDate===today);
       if (this._f.quick === 'forsenad')        list = list.filter(a => a.scheduledDate && a.scheduledDate<today);
       // Personal
@@ -661,6 +664,13 @@ const WorkOrdersPage = {
       </div>`;
       return;
     }
+    /* QA FIX-ROUND 2026-11-12 (L1, confirmed): getBillingStatus() used to
+       run a full BillingQueueService.getCandidates() pass (every candidate
+       of every AO) for EACH completed-unbilled row — O(n²): 750 ms per
+       render at 333 orders, 634 ms per search keystroke. Now one pass per
+       render, created lazily on the first row that needs it, shared by all
+       rows. Same per-row result (see getPricingStatusResolver()). */
+    let _billRes = null;
     if (this.viewMode === 'grid') {
       el.innerHTML = `<div class="ao-grid">${list.map(ao => {
         const cu     = getCu(ao.customerId);
@@ -675,13 +685,13 @@ const WorkOrdersPage = {
            timpris/fastpris/försäljningspris) — inte för ANDRA legitima
            blockerare (t.ex. saknad kund), som denna badge aldrig var
            avsedd att representera. */
-        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao) : null;
+        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao, (_billRes = _billRes || WorkOrderService.billingStatusResolver())) : null; // L1
         const isBillable   = needsInvoice && billingStatus.eligible;
         const noPricing    = needsInvoice && billingStatus.pricingBlocked;
         return `
           <div class="ao-card ${priorityClass(ao.priority)}" onclick="WorkOrdersPage.openDetail('${ao.id}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
-              <div style="font-size:10px;font-weight:800;color:var(--mt);">${ao.id}</div>
+              <div style="font-size:10px;font-weight:800;color:var(--mt);">${WorkOrderService.displayNumberOrPending(ao)}</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;" onclick="event.stopPropagation()">
                 ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
                   ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
@@ -707,7 +717,7 @@ const WorkOrdersPage = {
         /* Se motsvarande kommentar i rutnäts-vyn ovan — samma delade
            sanningskälla, "Saknar prissättning" ENDAST vid en faktisk
            pris-blockerare. */
-        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao) : null;
+        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao, (_billRes = _billRes || WorkOrderService.billingStatusResolver())) : null; // L1
         const isBillable   = needsInvoice && billingStatus.eligible;
         const noPricing    = needsInvoice && billingStatus.pricingBlocked;
         const metaParts = [];
@@ -734,7 +744,7 @@ const WorkOrdersPage = {
             <div class="ao-list-item ${priorityClass(ao.priority)}${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${ao.id}" style="flex:1;min-width:0;">
               <div class="ao-item-top">
                 <div style="flex:1;min-width:0;">
-                  <div class="ao-item-id">${ao.id}</div>
+                  <div class="ao-item-id">${WorkOrderService.displayNumberOrPending(ao)}</div>
                   <div class="ao-item-title">${ao.title}</div>
                   ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
                 </div>
@@ -928,7 +938,7 @@ const WorkOrdersPage = {
 
     return `
       <div class="fg"><label>Rubrik / Vad ska göras <span style="color:var(--rd)">*</span></label>
-        <input id="wiz-title" value="${d.title||''}" placeholder="T.ex. Läckage badrum, Fasadtvätt…"></div>
+        <input id="wiz-title" value="${esc(d.title||'')}" placeholder="T.ex. Läckage badrum, Fasadtvätt…"></div>
       <div class="g2">
         <div class="fg"><label>Kategori</label>
           <select id="wiz-category">
@@ -941,7 +951,7 @@ const WorkOrdersPage = {
         </div>
       </div>
       <div class="fg"><label>Beskrivning</label>
-        <textarea id="wiz-desc" rows="2" placeholder="Mer detaljer om jobbet…">${d.description||''}</textarea></div>
+        <textarea id="wiz-desc" rows="2" placeholder="Mer detaljer om jobbet…">${esc(d.description||'')}</textarea></div>
       <div class="fg"><label>Kund <span style="color:var(--rd)">*</span></label>
         ${CustomerPicker.render('wiz-customer', { value: d.customerId || '', placeholder: '— Välj kund —', onchange: 'WorkOrdersPage._wizCustomerChanged()' })}
         <button class="btn bs bxs" style="margin-top:4px;" onclick="WorkOrdersPage.openNewCustomerFromWizard()">
@@ -954,15 +964,15 @@ const WorkOrdersPage = {
       <div id="wiz-addr-wrap">${this._wizAddressBlockHtml(d)}</div>
       <div class="g2">
         <div class="fg"><label>Kontaktperson</label>
-          <input id="wiz-contact" value="${d.contactPerson||cu&&cu.contactPerson||''}" placeholder="Namn"></div>
+          <input id="wiz-contact" value="${esc(d.contactPerson||cu&&cu.contactPerson||'')}" placeholder="Namn"></div>
         <div class="fg"><label>Telefon</label>
-          <input id="wiz-phone" type="tel" value="${d.phone||cu&&cu.phone||''}" placeholder="070-xxx xx xx"></div>
+          <input id="wiz-phone" type="tel" value="${esc(d.phone||cu&&cu.phone||'')}" placeholder="070-xxx xx xx"></div>
       </div>
       <div class="g2">
         <div class="fg"><label>Åtkomst / portkod</label>
-          <input id="wiz-access" value="${d.accessCode||''}" placeholder="T.ex. 1234#"></div>
+          <input id="wiz-access" value="${esc(d.accessCode||'')}" placeholder="T.ex. 1234#"></div>
         <div class="fg"><label>Intern notering</label>
-          <input id="wiz-intnote" value="${d.internalNote||''}" placeholder="Visas ej för kund"></div>
+          <input id="wiz-intnote" value="${esc(d.internalNote||'')}" placeholder="Visas ej för kund"></div>
       </div>`;
   },
 
@@ -1770,7 +1780,7 @@ const WorkOrdersPage = {
     el.innerHTML = items.map((c, i) => `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bg);">
         <span style="color:var(--mt);">${ic('check',14)}</span>
-        <span style="flex:1;font-size:13px;">${c.text}</span>
+        <span style="flex:1;font-size:13px;">${esc(c.text)}</span>
         <button class="btn bxs bd" onclick="WorkOrdersPage._wizRemoveCL(${i})">${ic('x',12)}</button>
       </div>`).join('');
   },
@@ -1993,7 +2003,7 @@ const WorkOrdersPage = {
     }
     Modal.close();
     Sidebar.updateBadges();
-    showToast(`${ao.id} skapad`);
+    showToast(`${WorkOrderService.displayNumberOrPending(ao)} skapad`);
     Router.showPage('pg-ao-detail', { aoId: ao.id });
   },
 
@@ -2149,6 +2159,7 @@ const WorkOrdersPage = {
     if (WorkOrdersPage._BULK_ALLOWED_STATUSES.indexOf(status) === -1) return { ok: false, error: 'Den statusen kan inte sättas i bulk.', updated: 0, skipped: 0, unchanged: 0 };
     const now = new Date().toISOString();
     let updated = 0, skipped = 0, unchanged = 0;
+    const _syncOps = [];
     (state.workOrders || []).forEach(ao => {
       if (ids.indexOf(ao.id) === -1) return;
       if (!WorkOrdersPage._canAccessAo(ao) || WorkOrdersPage._isAoLockedForBulk(ao)) { skipped++; return; }
@@ -2160,8 +2171,14 @@ const WorkOrdersPage = {
         `Arbetsorder ${ao.id} ändrad: ${statusLabel(prev)} → ${statusLabel(status)}`,
         { customerId: ao.customerId, workOrderId: ao.id });
       updated++;
+      _syncOps.push({ id: ao.id, patch: { status: ao.status, updatedAt: ao.updatedAt } });
     });
-    if (updated > 0) { persist(); Sidebar.updateBadges(); this.render(); }
+    if (updated > 0) {
+      if (typeof AOTimeSyncService !== 'undefined' && _syncOps.length > 0) {
+        AOTimeSyncService.bulkPatch('ao', _syncOps).catch(e => console.warn('[WorkOrdersPage] _bulkSetStatus sync-fel:', e));
+      }
+      persist(); Sidebar.updateBadges(); this.render();
+    }
     return { ok: true, updated, skipped, unchanged };
   },
 
@@ -2286,6 +2303,7 @@ const WorkOrdersPage = {
        EFTER den enda batch-persist() nedan, utan att skapa en mutation/
        persist per AO. */
     const assignments = [];
+    const _syncOps = [];
     (state.workOrders || []).forEach(ao => {
       if (ids.indexOf(ao.id) === -1) return;
       if (!WorkOrdersPage._canAccessAo(ao) || WorkOrdersPage._isAoLockedForBulk(ao)) { skipped++; return; }
@@ -2300,8 +2318,12 @@ const WorkOrdersPage = {
       ao.updatedAt = now;
       updated++;
       assignments.push({ ao, added });
+      _syncOps.push({ id: ao.id, patch: { staff: ao.staff, status: ao.status, log: ao.log, updatedAt: ao.updatedAt } });
     });
     if (updated > 0) {
+      if (typeof AOTimeSyncService !== 'undefined' && _syncOps.length > 0) {
+        AOTimeSyncService.bulkPatch('ao', _syncOps).catch(e => console.warn('[WorkOrdersPage] _bulkAddStaff sync-fel:', e));
+      }
       persist(); Sidebar.updateBadges(); this.render();
       /* V45: in-app-notis + riktig Web Push, bara för AO som faktiskt fick
          ny personal (assignments) — aldrig för skipped/unchanged eller

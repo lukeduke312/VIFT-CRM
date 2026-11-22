@@ -7,6 +7,22 @@
  * v95: v4-patch; serverpatchar vid fel; attachment-validering; snapshot-kontroll; email_sent i tidslinje
  * v96: v5-patch; persist endast vid verkliga serverpatchar; korrekt misslyckad e-posthändelse
  * v102: ta bort auto-Att-göra från createAO; status-kontroll hel yta 44px; inga persistActivities-anrop
+ * v161 (R2, V94): tog bort legacy mailto-baserad sendReminder()/dess knapp i
+ *   _digitalLinkPanel — showReminderModal/_doSendReminder är nu enda
+ *   påminnelsevägen; tog bort duplicerad intern "Påminnelse skickad"-post
+ *   (serverns emailEvent är auktoritativ); commType skickas till
+ *   send-offer-email för att skilja utskick/påminnelse i tidslinjen
+ * v162 (R2.1, V95): _doSendEmail/_doSendReminder säkerställer nu tyst en
+ *   giltig digital länk (_ensureActiveDigitalLink) innan utskick — ett
+ *   färskt utkast utan publicToken kan nu faktiskt skickas; generera-länk
+ *   sätter inte längre status=skickad/sentAt (det gjorde tidigare
+ *   generateDigitalLink() felaktigt); påminnelse blockeras fail-closed på
+ *   återkallad länk och förnyar tyst en förfallen länk innan utskick
+ * v163 (R2.2, V96): persist()s bekräftade boolean-retur kontrolleras nu
+ *   efter en ny/förnyad digital länk i BÅDE _doSendEmail och
+ *   _doSendReminder — om skrivningen misslyckas görs ALDRIG ett
+ *   send-offer-email-anrop (ingen chans att servern läser en stale/
+ *   ännu-inte-sparad token)
  */
 
 /* ── Offerter (v2 – tjänstemallar + kalkylator) ─────── */
@@ -56,6 +72,8 @@
  * produktionsdata med billingType='option' att migrera.
  */
 function _lineExVat(l) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.lineExVat(l);
   if (!l || l.type === 'text') return 0;
   if (l.billingType === 'rate') return 0;
   if (l.type === 'service')    return (l.exVat != null ? +l.exVat : 0);
@@ -78,9 +96,13 @@ function _offRecurringLines(off) {
   return (off.lines || []).filter(l => l.billingType === 'recurring');
 }
 function _offRecurringMonthlyExVat(off) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.recurringMonthlyExVat(off);
   return Math.round(_offRecurringLines(off).reduce((s, l) => s + _lineExVat(l), 0));
 }
 function _offRecurringMonthlyVat(off) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.recurringMonthlyVat(off);
   return Math.round(_offRecurringLines(off).reduce((s, l) => s + Math.round(_lineExVat(l) * _normVat(l.vatRate) / 100), 0));
 }
 function _offRecurringMonthlyInclVat(off) {
@@ -117,6 +139,8 @@ function _offRateAndOptionLines(off) {
  *     markerar som tillval) → samma "included"-beteende, explicit satt.
  */
 function _extraIncludedInTotal(e) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.extraIncludedInTotal(e);
   return e.includedInTotal !== false;
 }
 
@@ -133,6 +157,8 @@ function _extraIncludedInTotal(e) {
  * denna leverans.
  */
 function _offRawExVat(off) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.rawExVat(off);
   const prLines = (off.lines  || []).filter(l => l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate');
   const extras  = (off.extras  || []).filter(_extraIncludedInTotal);
   const lineSum = prLines.reduce((s, l) => s + _lineExVat(l), 0);
@@ -294,6 +320,8 @@ function _resolveSectionOrder(order) {
  * smala VAT-hardening-omgång.
  */
 function _normVat(value, fallback) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.normVat(value, fallback);
   if (fallback === undefined) fallback = 25;
   if (value === null || value === undefined) return fallback;
   if (typeof value === 'string' && value.trim() === '') return fallback;
@@ -354,6 +382,8 @@ function _strictVat(value) {
  * med sin EGEN moms i _offRecurringMonthlyVat()).
  */
 function _offRawVat(off) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.rawVat(off);
   const prLines = (off.lines || []).filter(l => l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate');
   const extras  = (off.extras || []).filter(_extraIncludedInTotal);
   const lineVat  = prLines.reduce((s, l) => s + Math.round(_lineExVat(l) * _normVat(l.vatRate) / 100), 0);
@@ -370,6 +400,8 @@ function _offRawVat(off) {
  * ändring av rabattens affärsregler, bara EN plats för formeln.
  */
 function _offDiscountAmount(off, rawExVat) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.discountAmount(off, rawExVat);
   const d = off.discount || { type: 'none', value: 0 };
   if (!d.value) return 0;
   if (d.type === 'percent') return Math.round(rawExVat * Math.min(d.value, 100) / 100);
@@ -395,6 +427,8 @@ function _offDiscountAmount(off, rawExVat) {
  * service-rader som redan användes) — bara momsdelen är fixad.
  */
 function _offerCalcTotals(off) {
+  /* I2 (2026-11-12): ONE authoritative implementation, shared with public-offer.html — src/shared/OfferCalc.js (verbatim move, parity-tested). The body below is only a fallback if that file failed to load. */
+  if (typeof OfferCalc !== 'undefined') return OfferCalc.totals(off);
   const rawExVat = _offRawExVat(off);
   const rawVat   = _offRawVat(off);
   const discountAmount = _offDiscountAmount(off, rawExVat);
@@ -597,6 +631,34 @@ function _offAOConversionDecision(off) {
   if (committedOneTime <= 0) {
     return { allowed: false, reason: _offRawExVat(off) > 0 ? 'discounted-to-zero' : 'no-committed-onetime' };
   }
+  /* I2 (blocker round 2026-11-12, Lucas: fail closed): a fixed-price AO
+     carries ONE ex-VAT amount that billing later charges at a single
+     invoice-line VAT rate. An offer whose committed one-time lines/extras
+     have MORE THAN ONE VAT rate cannot be represented that way (live:
+     offer 6 040 kr incl. VAT -> invoice 6 375 kr). Until a per-line-VAT
+     conversion exists, that one case is refused here — before any AO
+     payload is built — and by every button that reads this decision. A
+     uniform 25 % offer converts exactly as before (a uniform non-25 %
+     offer is now refused too, see I2 VAT-FIX below). Not a status gate,
+     not a price-change rule: only the automatic VAT-incorrect conversion. */
+  /* I2 VAT-FIX (2026-11-12, independent review): the fixed-price billing
+     candidate built from the AO (BillingQueueService, sourceType 'fixed')
+     is ALWAYS a single line at vatRate 25. So the automatic conversion is
+     only correct when the offer's committed one-time total is uniformly
+     25 %. Everything else fails closed here: mixed rates ('mixed-vat',
+     message unchanged), a single non-25 rate such as 12 % / 6 % / 0 %
+     ('non-25-vat', message names the actual rate), and an undeterminable
+     rate set ('vat-unknown'). Reverse charge does not exist in the offer
+     data model today (no field anywhere), so there is nothing further to
+     detect. This gates ONLY the automatic offer->AO conversion: manual AO
+     creation, invoicing of ongoing AOs and price changes are untouched. */
+  if (typeof OfferCalc === 'undefined') return { allowed: false, reason: 'vat-unknown' };
+  const vatRates = OfferCalc.vatRatesInTotal(off);
+  if (vatRates.length > 1) {
+    return { allowed: false, reason: 'mixed-vat' };
+  }
+  if (vatRates.length !== 1) return { allowed: false, reason: 'vat-unknown' };
+  if (vatRates[0] !== 25) return { allowed: false, reason: 'non-25-vat', vatRate: vatRates[0] };
   return { allowed: true, reason: null };
 }
 
@@ -710,12 +772,22 @@ function _buildAOConversionPayload(off) {
  * "återkommande"). Används av båda de blockerade AO-knapparna (hero-CTA
  * och den sekundära "Skapa AO"-knappen) så de alltid är i synk.
  */
-function _offAOBlockedCtaText(reason) {
+function _offAOBlockedCtaText(reason, vatRate) {
   if (reason === 'recurring') {
     return { label: 'Återkommande — kan ej konvertera', title: 'Återkommande offerter kan inte konverteras till en fastprisarbetsorder ännu' };
   }
   if (reason === 'discounted-to-zero') {
     return { label: 'Rabatterad till 0 kr — kan ej konvertera', title: 'Rabatten reducerar det committade engångsbeloppet till 0 kr' };
+  }
+  if (reason === 'mixed-vat') {
+    return { label: 'Blandad moms — kan ej konvertera', title: 'Offerten har blandade momssatser som inte kan representeras korrekt som ett fastprisarbete' };
+  }
+  if (reason === 'non-25-vat') {
+    const r = (vatRate === undefined || vatRate === null) ? '' : vatRate + ' %';
+    return { label: 'Moms ' + r + ' — kan ej konvertera', title: 'Offertens moms (' + r + ') kan inte föras över korrekt till arbetsordern, som endast stödjer 25 %' };
+  }
+  if (reason === 'vat-unknown') {
+    return { label: 'Moms okänd — kan ej konvertera', title: 'Offertens momssats kunde inte fastställas' };
   }
   return { label: 'Kan ej konvertera till AO', title: 'Offerten saknar ett committat engångsbelopp att konvertera' };
 }
@@ -3906,8 +3978,8 @@ const OffersPage = {
     // ── Text inputs ──
     txtF.forEach(f => {
       html += `<div class="off-svc-field">
-        <label class="off-svc-field-label">${f.label}${reqMark(f)}</label>
-        <input type="text" id="svc-f-${f.id}" class="off-svc-field-text" value="${this._svcFields[f.id]||''}" placeholder="${f.label}"
+        <label class="off-svc-field-label">${esc(f.label)}${reqMark(f)}</label>
+        <input type="text" id="svc-f-${f.id}" class="off-svc-field-text" value="${esc(this._svcFields[f.id]||'')}" placeholder="${esc(f.label)}"
           oninput="OffersPage._svcFields['${f.id}']=this.value;OffersPage._updateSvcPreview()">
       </div>`;
     });
@@ -4284,7 +4356,25 @@ const OffersPage = {
         });
         OfferDetailPage._logEvt(newOff, 'create', 'Offert skapad');
         state.offers.push(newOff);
-        const ok = await persist();
+        /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+        let ok = await persist({ keys: ['offers'] });
+        /* N1 (2026-11-12): classify the failure before rolling back — see
+           settlePersistFailure() in state.js. landed -> it WAS created
+           (success path; a retry would have made a duplicate); diverged ->
+           another session's offer now holds this number (conflict dialog,
+           wizard stays open, nothing spliced out of the server's view);
+           rejected -> rollback + journal forgotten (never re-created on
+           the next load); not-landed/unknown -> rollback, kept as an
+           "osparad ändring" (Återuppta/Kasta). */
+        let _n1 = { fate: 'none' };
+        if (!ok && typeof settlePersistFailure === 'function') {
+          _n1 = await settlePersistFailure('offers', newOff.id);
+          if (_n1.fate === 'landed') ok = true;
+        }
+        if (!ok && _n1.fate === 'diverged') {
+          showToast('Offertnumret ' + newOff.id + ' användes samtidigt av en annan session — välj i konfliktdialogen. Offerten är inte sparad.', 7000);
+          return;
+        }
         if (!ok) {
           /* Rollback (strategi A, se RAPPORT DEL 12): ta bort den nyss
              pushade offerten ur lokal state igen så den inte visas som
@@ -4302,7 +4392,11 @@ const OffersPage = {
              återuppliva OFF-xxx trots att den aldrig sparades server-sidigt
              — se RAPPORT-V48B3B0-R1.1.md. */
           Storage.setLocal('offers', state.offers);
-          showToast('Kunde inte spara offerten — kontrollera anslutningen och försök igen');
+          if (_n1.fate === 'not-landed' || _n1.fate === 'unknown') {
+            showToast('Offerten kunde inte sparas. Den ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst.', 8000);
+          } else {
+            showToast('Kunde inte spara offerten — kontrollera anslutningen och försök igen');
+          }
           return;
         }
         /* V47: callback körs EFTER lyckad, BEKRÄFTAD persist, aldrig innan — se openCreate(). */
@@ -4324,16 +4418,47 @@ const OffersPage = {
         if (idx < 0) return;
         const prevOffer = state.offers[idx];
         const updated = Object.assign({}, state.offers[idx], data);
+        /* N1 (2026-11-12): the shallow copy above SHARED `timeline` with
+           prevOffer, so _logEvt() pushed "Offert redigerad" into the copy
+           the rollback below restores. After a failed save the restored
+           offer therefore still differed from the server, and the next
+           persist() of the key silently saved that event (and, via M4, it
+           was replayed after reload). Own array for the edited copy. */
+        updated.timeline = Array.isArray(prevOffer.timeline) ? prevOffer.timeline.slice() : [];
         OfferDetailPage._logEvt(updated, 'edit', 'Offert redigerad');
         state.offers[idx] = updated;
-        const ok = await persist();
+        /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+        let ok = await persist({ keys: ['offers'] });
+        let _n1 = { fate: 'none' };
+        if (!ok && typeof settlePersistFailure === 'function') {
+          _n1 = await settlePersistFailure('offers', offerId); // N1, see create above
+          if (_n1.fate === 'landed') ok = true;
+        }
+        if (!ok && (_n1.fate === 'conflict' || _n1.fate === 'diverged')) {
+          /* N1/conflict: state.offers already holds the SERVER's current
+             offer (merge-write `current`, or adopted by the re-check).
+             The old rollback below put `prevOffer` (this session's stale
+             pre-edit copy) back over it, so the next persist() of the key
+             sent it with the server's value as `previous` and silently
+             reverted the other session's confirmed change. The edit is in
+             the conflict dialog; the wizard stays open. */
+          Storage.setLocal('offers', state.offers);
+          showToast('Offerten ändrades samtidigt av en annan session — välj i konfliktdialogen.', 6000);
+          return;
+        }
         if (!ok) {
           /* Samma rollback-princip som ovan — återställ till exakt det
-             offer-objekt som fanns innan detta redigeringsförsök. */
-          state.offers[idx] = prevOffer;
+             offer-objekt som fanns innan detta redigeringsförsök.
+             N1: by id after the await (the array may have been replaced). */
+          const _ri = (state.offers || []).findIndex(o => o.id === offerId);
+          if (_ri >= 0) state.offers[_ri] = prevOffer;
           /* V48B3B0 R1.1: samma lokala cache-synk som vid failed create. */
           Storage.setLocal('offers', state.offers);
-          showToast('Kunde inte spara ändringarna — kontrollera anslutningen och försök igen');
+          if (_n1.fate === 'not-landed' || _n1.fate === 'unknown') {
+            showToast('Ändringarna kunde inte sparas. De ligger kvar som osparade — välj Återuppta eller Kasta i meddelandet överst.', 8000);
+          } else {
+            showToast('Kunde inte spara ändringarna — kontrollera anslutningen och försök igen');
+          }
           return;
         }
         this._wizardClose();
@@ -4439,7 +4564,7 @@ const OfferDetailPage = {
            cases (which are NOT "återkommande"). */
         const aoDecisionCta = _offAOConversionDecision(off);
         if (!aoDecisionCta.allowed) {
-          const ctaText = _offAOBlockedCtaText(aoDecisionCta.reason);
+          const ctaText = _offAOBlockedCtaText(aoDecisionCta.reason, aoDecisionCta.vatRate);
           return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(ctaText.title)}">${ic('alert-triangle',14)} ${esc(ctaText.label)}</button>`;
         }
         return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--gr" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',14)} Skapa arbetsorder</button>`;
@@ -4482,8 +4607,8 @@ const OfferDetailPage = {
           if (l.type === 'text') {
             if (!l.blockTitle && !l.text) return '';
             return `<div class="off-line-row off-line-row--text">` +
-              (l.blockTitle ? `<div class="off-line-row-header"><div class="off-line-row-name">${ic('align-left',11)} ${l.blockTitle}</div></div>` : '') +
-              (l.text ? `<div class="off-line-desc" style="white-space:pre-wrap;">${l.text}</div>` : '') +
+              (l.blockTitle ? `<div class="off-line-row-header"><div class="off-line-row-name">${ic('align-left',11)} ${esc(l.blockTitle)}</div></div>` : '') +
+              (l.text ? `<div class="off-line-desc" style="white-space:pre-wrap;">${esc(l.text)}</div>` : '') +
             `</div>`;
           }
           if (l.type === 'service') {
@@ -4495,17 +4620,17 @@ const OfferDetailPage = {
             const kId     = `kalk-${off.id}-${idx}`;
             return `<div class="off-line-row off-line-row--svc">` +
               `<div class="off-line-row-header">` +
-                `<div class="off-line-row-name">${ic('zap',11)} ${l.templateName||'Tjänst'}</div>` +
+                `<div class="off-line-row-name">${ic('zap',11)} ${esc(l.templateName||'Tjänst')}</div>` +
                 `<div class="off-line-row-price">` +
                   (lRut ? `<span class="off-line-rut-badge">RUT/ROT</span>` : '') +
                   `<span class="off-line-kundpris">${fmt(lRut ? lCust : lIncVat)} kr</span>` +
                 `</div>` +
               `</div>` +
-              (l.description ? `<div class="off-line-desc">${l.description}</div>` : '') +
+              (l.description ? `<div class="off-line-desc">${esc(l.description)}</div>` : '') +
               (lRut > 0 ? `<div class="off-line-rut-row">${ic('info',10)} Kundpris efter RUT/ROT-avdrag — totalt inkl. moms ${fmt(lIncVat)} kr, avdrag −${fmt(lRut)} kr</div>` : '') +
               `<button class="off-line-kalk-btn" onclick="OfferDetailPage._toggleKalk('${kId}')">Visa beräkning</button>` +
               `<div id="${kId}" style="display:none;" class="off-line-kalk">` +
-                (l.calculationNote ? `<div style="font-size:11px;color:var(--mt);margin-bottom:4px;">${l.calculationNote}</div>` : '') +
+                (l.calculationNote ? `<div style="font-size:11px;color:var(--mt);margin-bottom:4px;">${esc(l.calculationNote)}</div>` : '') +
                 `<div style="font-size:11px;color:var(--mt);">Ex. moms: ${fmt(lExVat)} kr · Moms ${_normVat(l.vatRate)}%: ${fmt(lVat)} kr · Inkl. moms: ${fmt(lIncVat)} kr</div>` +
               `</div>` +
             `</div>`;
@@ -4600,7 +4725,7 @@ const OfferDetailPage = {
                samma villkor/funktion som innan V48A. -->
           ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>`:''}
           ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?(OffersPage._offBlocksAOConversion(off)
-            ? `<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason).title)}">${ic('alert-triangle',12)} ${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason).label)}</button>`
+            ? `<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason, _offAOConversionDecision(off).vatRate).title)}">${ic('alert-triangle',12)} ${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason, _offAOConversionDecision(off).vatRate).label)}</button>`
             : `<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`):''}
           ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
           ${(off.archived||off.deleted)?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
@@ -5310,7 +5435,16 @@ const OfferDetailPage = {
         'discounted-to-zero': `<p style="font-size:13px;line-height:1.6;">Rabatten på den här offerten reducerar det committade engångsbeloppet till 0 kr. En fastprisarbetsorder på 0 kr stöds inte i VIFT.</p>
              <p style="font-size:13px;line-height:1.6;">Justera rabatten, eller hantera uppdraget manuellt, om arbetet ändå ska bli en arbetsorder.</p>`,
         'no-committed-onetime': `<p style="font-size:13px;line-height:1.6;">Den här offerten har inget committat engångsbelopp — bara rörliga à-priser och/eller icke-committade tillval — och kan därför inte konverteras till en fastprisarbetsorder. En fastprisarbetsorder på 0 kr skulle vara felaktig.</p>
-             <p style="font-size:13px;line-height:1.6;">Lägg till en fast engångsrad i offerten, eller hantera uppdraget manuellt, om arbetet ändå ska bli en arbetsorder.</p>`
+             <p style="font-size:13px;line-height:1.6;">Lägg till en fast engångsrad i offerten, eller hantera uppdraget manuellt, om arbetet ändå ska bli en arbetsorder.</p>`,
+        'mixed-vat': `<p style="font-size:13px;line-height:1.6;"><strong>Denna offert har blandade momssatser (${(typeof OfferCalc !== 'undefined' ? OfferCalc.vatRatesInTotal(off) : []).map(r => r + ' %').join(' / ')}) som inte kan representeras korrekt som ett fastprisarbete — konvertera inte automatiskt.</strong></p>
+             <p style="font-size:13px;line-height:1.6;">En fastprisarbetsorder har ett enda belopp exkl. moms som faktureras med en momssats. Offertens moms (${fmt(_offerCalcTotals(off).vatAmount)} kr, totalt ${fmt(_offerCalcTotals(off).totalInclVat)} kr inkl. moms) skulle då inte stämma på fakturan. Ingen arbetsorder har skapats.</p>
+             <p style="font-size:13px;line-height:1.6;"><strong>Obs:</strong> att skapa arbetsordern manuellt löser INTE detta automatiskt — faktureringskön sätter fortfarande 25 % moms på fastpris- och tidrader oavsett hur AO:n skapades. Om du skapar AO:n manuellt måste du själv, för hand, ändra både beloppet (exkl. moms) och momssatsen på den resulterande fakturaunderlagsraden innan fakturan skickas. Ett alternativ: dela upp offerten så att varje offert har en enda momssats.</p>`,
+        /* I2 VAT-FIX: a single, uniform rate other than 25 % — NOT "blandad". */
+        'non-25-vat': `<p style="font-size:13px;line-height:1.6;"><strong>Offertens moms (${esc(String(aoDecision.vatRate))} %) kan inte föras över korrekt till arbetsordern (som endast stödjer 25 %) — konvertera inte automatiskt.</strong></p>
+             <p style="font-size:13px;line-height:1.6;">En fastprisarbetsorder faktureras i dag alltid med 25 % moms. Offertens moms (${fmt(_offerCalcTotals(off).vatAmount)} kr, totalt ${fmt(_offerCalcTotals(off).totalInclVat)} kr inkl. moms) skulle då inte stämma på fakturan. Ingen arbetsorder har skapats.</p>
+             <p style="font-size:13px;line-height:1.6;"><strong>Obs:</strong> att skapa arbetsordern manuellt löser INTE momsproblemet automatiskt — faktureringskön sätter fortfarande 25 % moms på fastpris- och tidrader oavsett hur AO:n skapades. Om du skapar AO:n manuellt måste du själv, för hand, ändra både beloppet (exkl. moms) och momssatsen (till ${esc(String(aoDecision.vatRate))} %) på den resulterande fakturaunderlagsraden innan fakturan skickas — systemet gör inte detta åt dig.</p>`,
+        'vat-unknown': `<p style="font-size:13px;line-height:1.6;"><strong>Offertens momssats kunde inte fastställas — konvertera inte automatiskt.</strong></p>
+             <p style="font-size:13px;line-height:1.6;">Ingen arbetsorder har skapats. Ladda om sidan och försök igen. Om du skapar arbetsordern manuellt: tänk på att faktureringskön sätter 25 % moms på fastpris- och tidrader oavsett AO:ns ursprung — kontrollera och rätta momsen för hand på fakturaunderlaget innan fakturan skickas.</p>`
       };
       Modal.open({
         title: ic('alert-triangle', 14) + ' Kan inte skapa arbetsorder',
@@ -5337,6 +5471,63 @@ const OfferDetailPage = {
       text: `${by} skapade AO från offert ${off.id}`,
       userName: by, timestamp: new Date().toISOString()
     }];
+    /* QA FIX-ROUND 2026-11-12 (I2, AO-conversion part — NOT changed, only
+       made visible): the AO carries ONE fixed price ex VAT
+       (aoPayload.fixedPrice = exVatAfterDiscount) that billing later
+       charges at the invoice line's VAT rate. For an offer whose one-time
+       lines have MIXED VAT rates (e.g. a 0 % line) that cannot reproduce
+       the offer's VAT. Changing the AO/billing price model is a separate,
+       tracked design item (round report §I2); until then the difference
+       is recorded on the AO's own log and shown to the user, never silent.
+       I2 VAT-FIX: _offAOConversionDecision() now refuses every rate set
+       other than exactly [25] before this point, so this note is a
+       defensive no-op kept unchanged. */
+    if (typeof OfferCalc !== 'undefined') {
+      const _vr = OfferCalc.vatRatesInTotal(off);
+      if (_vr.length > 1 || (_vr.length === 1 && _vr[0] !== 25)) {
+        const _ot = OfferCalc.totals(off);
+        const _txt = `Obs: offert ${off.id} har momssats ${_vr.map(r => r + ' %').join(' / ')} — moms enligt offerten ${fmt(_ot.vatAmount)} kr (totalt ${fmt(_ot.totalInclVat)} kr inkl. moms). Arbetsorderns fasta pris (${fmt(_ot.exVatAfterDiscount)} kr exkl. moms) faktureras med fakturaradens momssats — kontrollera momsen på fakturaunderlaget.`;
+        aoLog.push({ id: 'L' + Date.now() + 'v', type: 'note', text: _txt, userName: by, timestamp: new Date().toISOString() });
+        if (typeof showToast === 'function') showToast(_txt, 9000);
+      }
+    }
+
+    /* R3-A FIX (independent-reviewer finding, round 4): the OLD code
+       below this comment used to stamp `off.workOrderId`/`convertedAt`
+       SYNCHRONOUSLY right after `WorkOrderService.create()` returned —
+       but that return is only the OPTIMISTIC local object
+       (`ao._pendingSync === true`); the real server ACK for the AO
+       create is still in flight at that point. A later server
+       rejection (e.g. a project-compatibility race) left the offer
+       PERMANENTLY marked "converted" to an AO that was never actually
+       created — a worse, silent variant of the exact bug V54B R2 (see
+       the preserved comment that used to sit here) already fixed for
+       the SYNCHRONOUS `{ok:false}` case; this is the same bug for the
+       ASYNC rejection case.
+
+       Fix: the AO list still shows the new row instantly (unchanged —
+       that is `create()`'s existing, correct optimistic behavior). The
+       offer's OWN permanent cross-reference (`workOrderId`,
+       `convertedAt`, the timeline log entry, persist(), and navigation)
+       now happens ONLY inside `onSettled`, once the real server ACK
+       arrives — never before. A simple `_aoConversionPending` guard
+       (cleared on both success and definite rejection) stops a second
+       click from enqueuing a SECOND AO create while the first is still
+       in flight — the per-entry idempotency key inside
+       AOTimeSyncService already makes a genuine network-level retry of
+       the SAME attempt safe, but a fresh button click is a NEW enqueue
+       with a NEW id/key, which idempotency alone cannot prevent. */
+    /* B1 FIX (independent-reviewer finding, round 5): the guard used to
+       be the in-memory `off._aoConversionPending` flag alone — gone
+       after a reload, even while the AO create is genuinely still in
+       flight (or has ACKed but the commit hasn't run yet) server-side.
+       Now checks AOTimeSyncService's DURABLE intent registry instead,
+       which survives a reload — see that file's header. */
+    if (typeof AOTimeSyncService !== 'undefined' && AOTimeSyncService.hasPendingIntent('offer_ao_conversion', off.id)) {
+      showToast('Arbetsorder skapas redan för denna offert — vänta på bekräftelse innan du försöker igen.');
+      return;
+    }
+    off._aoConversionPending = true;
 
     const ao = WorkOrderService.create({
       title:               aoPayload.title,
@@ -5362,35 +5553,56 @@ const OfferDetailPage = {
       checklist:           aoPayload.checklist,
       log:                 aoLog,
       staff: [], materials: [], notes: [], timeEntries: []
+    }, {
+      /* B1 FIX (independent-reviewer finding, round 5): the ACTUAL
+         commit (off.workOrderId/convertedAt, the timeline log, closing
+         follow-up activities, persist()) moved OUT of this in-memory
+         callback and into the DURABLE 'offer_ao_conversion' intent
+         handler (registered once below, at file load, via
+         `_registerOfferAOConversionIntentHandler()`). AOTimeSyncService
+         calls that handler itself — synchronously, right now, in the
+         common case — but it ALSO durably remembers to call it again on
+         the very next app load if the tab closes/crashes before it got
+         the chance here. This `onSettled` is now only responsible for
+         same-session UI niceties (clearing the in-memory pending flag,
+         a toast, navigation, a re-render) — never the actual mutation,
+         which is why none of that is lost on a reload anymore. */
+      onSettledIntent: { kind: 'offer_ao_conversion', refId: off.id, versionNumber: off.versionNumber || 1 },
+      onSettled: (r) => {
+        off._aoConversionPending = false;
+        if (r.ok) {
+          if (this.offerId === off.id) this.render({ offerId: this.offerId });
+          showToast('AO ' + WorkOrderService.displayNumberOrPending(r.ao) + ' skapad');
+          setTimeout(() => Router.showPage('pg-ao-detail', { aoId: r.ao.id }), 800);
+        } else if (r.final) {
+          console.error('[PageShells] AO-skapande avvisades av servern för offert', off.id, ':', r.error);
+          showToast('Arbetsordern kunde inte skapas (servern avvisade anropet: ' + (r.error || 'okänt fel') + '). Offerten är INTE markerad som konverterad — försök igen.');
+          if (this.offerId === off.id) this.render({ offerId: this.offerId });
+        }
+        // else: transient — stays pending; the automatic outbox retry
+        // (resumePending()) or this same tab's eventual AOTimeSyncService
+        // retry will fire this same onSettled again once it actually
+        // resolves — and, independently, will durably settle the intent
+        // above regardless of whether this tab is even still open to see it.
+      }
     });
 
-    /* V54B R2 — blockerare 5: WorkOrderService.create() kan sedan R1
-       returnera `{ok:false, error}` om offertens (potentiellt
-       inaktuella/legacy) `projectId` inte längre är förenlig med
-       kund/fastighet — koden antog tidigare ALLTID success och
-       muterade offerten (`off.workOrderId`/`convertedAt`, händelselogg,
-       persist, navigering) OVILLKORLIGT direkt efter. Ett create()-fel
-       gav då en KORRUPT offert: markerad konverterad utan att någon AO
-       faktiskt existerar. Offerten muteras nu ALDRIG förrän create()
-       bekräftat success — vid fel visas ett tydligt felmeddelande,
-       inget muteras, ingen navigering sker, dubbelkonverteringsskyddet
-       ovan förblir intakt (offerten kan försökas konverteras igen efter
-       att projektkopplingen korrigerats). */
+    /* V54B R2 — blockerare 5: WorkOrderService.create() can return
+       `{ok:false, error}` SYNCHRONOUSLY (a cheap, local, pre-network
+       validation failure — e.g. a stale project/customer/property
+       combination the client can already tell is invalid) — this is a
+       DIFFERENT case from the async server ACK handled above, and is
+       still safe to check immediately since create() never enqueued
+       anything to the server in this branch at all. */
     if (!ao || ao.ok === false) {
+      off._aoConversionPending = false;
       showToast((ao && ao.error) || 'Offerten kan inte konverteras till arbetsorder eftersom dess projektkoppling inte längre är giltig. Kontrollera projekt, kund och fastighet.');
       return;
     }
-
-    const now3 = new Date().toISOString();
-    off.workOrderId    = ao.id;
-    off.convertedAt    = now3;
-    off.updatedAt      = now3;
-    this._logEvt(off, 'ao', 'Arbetsorder ' + ao.id + ' skapad från offert v' + (off.versionNumber||1));
-
-    persist();
-    this.render({offerId: this.offerId});
-    showToast('AO ' + ao.id + ' skapad');
-    setTimeout(() => Router.showPage('pg-ao-detail', {aoId: ao.id}), 800);
+    // Optimistic-only feedback — NOT a conversion commit. The AO already
+    // shows up in the AO list (create() pushed it into state.workOrders),
+    // but the offer itself is untouched until onSettled fires above.
+    this.render({ offerId: this.offerId });
   },
 
   /* ── Händelselogg ─── */
@@ -5398,12 +5610,31 @@ const OfferDetailPage = {
     if (!off) return;
     if (!Array.isArray(off.timeline)) off.timeline = [];
     const user = (typeof state !== 'undefined' && state.currentUser) ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+    /* Lagras verbatim (rått), avsiktligt — samma princip som state.offerEvents
+       nedan: historiken ska spara exakt vad som skrevs. Säkerheten ligger i
+       att _timelineHtml() ALLTID escapar vid rendering (se nedan), inte här
+       vid skrivning. Att escapa vid skrivning (en tidigare version av denna
+       fix, 2026-11-16) skyddade bara NYA poster — redan sparade, äldre
+       off.timeline-poster (skrivna innan den fixen fanns) hade förblivit
+       oskyddade för alltid, eftersom ingenting läser om gammal lagrad data.
+       Escapning vid rendering täcker gammal OCH ny data lika, utan att
+       någon migrering av befintlig data behövs. */
     off.timeline.push({ ts: new Date().toISOString(), type, text, user });
   },
 
   _timelineHtml(off) {
-    /* Kombinera interna händelser (off.timeline) med externa kundhändelser (state.offerEvents) */
-    const tl = (off.timeline || []).slice().map(function(e) { return Object.assign({}, e, {_src:'internal'}); });
+    /* Kombinera interna händelser (off.timeline) med externa kundhändelser
+       (state.offerEvents). Säkerhetsfix 2026-11-16 (XSS-granskning, andra
+       omgången): interna poster escapas HÄR, vid varje rendering — täcker
+       alltså även poster som redan låg sparade innan säkerhetsfixen fanns,
+       inte bara nya. off.timeline lagrar fri text verbatim (se _logEvt
+       ovan); extEvents nedan escapas redan vid sin egen push (V48B3B0,
+       oförändrad) eftersom den koden bygger en NY, tillfällig post per
+       rendering snarare än att läsa en redan lagrad — escapa den INTE här
+       också, annars dubbel-escapas den (&amp; blir &amp;amp; osv). */
+    const tl = (off.timeline || []).slice().map(function(e) {
+      return Object.assign({}, e, { text: esc(e.text || ''), user: esc(e.user || ''), _src: 'internal' });
+    });
 
     const extEvents = (state.offerEvents || []).filter(function(e) { return e.offerId === off.id; });
     const _extLabel = { opened:'Kund öppnade länk', approved:'Kund godkände offert', change_requested:'Kund begärde ändring', declined:'Kund nekade offert', revoked:'Länk återkallad', renewed:'Länk förnyad', email_sent:'Offert skickad via e-post' };
@@ -5418,6 +5649,8 @@ const OfferDetailPage = {
     extEvents.forEach(function(e) {
       var baseLabel = e.type === 'email_sent' && e.status === 'failed'
         ? 'E-postutskick misslyckades'
+        : e.type === 'email_sent' && e.commType === 'offer_reminder'
+        ? 'Påminnelse skickad via e-post'
         : (_extLabel[e.type] || e.type);
       var recipientText = e.type === 'email_sent' && Array.isArray(e.recipients) && e.recipients.length
         ? ' — ' + e.recipients.join(', ')
@@ -5470,7 +5703,7 @@ const OfferDetailPage = {
               <span style="color:${isOverdue?'var(--rd)':priColor};flex-shrink:0;margin-top:1px;">${ic(ActivitiesService.typeIcon(a.type),13)}</span>
               <div style="flex:1;min-width:0;">
                 <div style="font-size:12px;font-weight:700;color:${isOverdue?'var(--rd)':'var(--navy)'};">${dateStr}${isOverdue?' <span class="bdg bdg-red" style="font-size:9px;margin-left:4px;">Försenad</span>':''}</div>
-                ${a.note?`<div style="font-size:11px;color:var(--tx);margin-top:1px;">${a.note}</div>`:''}
+                ${a.note?`<div style="font-size:11px;color:var(--tx);margin-top:1px;">${esc(a.note)}</div>`:''}
                 <div style="font-size:10px;color:var(--mt);margin-top:1px;">${ic('user',9)} ${staffName}${a.priority&&a.priority!=='normal'?' · '+a.priority:''}</div>
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -5767,7 +6000,7 @@ const OfferDetailPage = {
           <span style="color:${t.color};flex-shrink:0;margin-top:1px;">${ic(t.icon,14)}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px;">${t.title}</div>
-            <div style="font-size:11px;color:var(--mt);line-height:1.4;">${t.body}</div>
+            <div style="font-size:11px;color:var(--mt);line-height:1.4;">${esc(t.body)}</div>
             ${t.cta?`<button type="button" class="btn bs bxs" style="margin-top:6px;font-size:10px;" onclick="${t.ctaFn}">${t.cta}</button>`:''}
           </div>
         </div>`).join('')}
@@ -6335,13 +6568,45 @@ ${hasRut?`<div class="rut">
     const sendBtn = document.querySelector('.modal-footer .btn.bp');
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Skickar…'; }
 
+    // R2.1 (Blocker 1): en helt ny offert har publicToken='' — utan detta
+    // steg skulle "Skicka offert" på ett färskt utkast alltid misslyckas
+    // med token_missing server-side. Att generera länken är INTE ett bevis
+    // på att mejlet skickats (se _generateDigitalLinkMutation) — endast en
+    // förutsättning för att länken i mejlet ska fungera. persist() awaitas
+    // HÄR så Edge Function garanterat läser den nygenererade token/
+    // snapshoten och inte en kapplöpning mot en ännu osynkad store-rad.
+    //
+    // R2.2 (Blocker 3): persist()s returvärde (samma bekräftade boolean-API
+    // som redan används på andra håll i offert-koden, t.ex. rad 4298) MÅSTE
+    // kontrolleras — en ny/förnyad token är en obligatorisk förutsättning
+    // för att Edge Function ska kunna läsa den. Om skrivningen misslyckas
+    // får vi ALDRIG anropa send-offer-email med en token servern inte kan
+    // se: det skulle antingen 409:a med token_missing (om det var en helt
+    // ny token) eller, värre, tyst skicka med en STALE token servern redan
+    // känner till (om detta var en förnyelse av en utgången länk) — i
+    // båda fallen ett förvirrande fel som döljer den verkliga orsaken
+    // (misslyckad spara-operation). Regenererar INTE en till token i
+    // samma försök — användaren får ett tydligt fel och kan trycka Skicka
+    // igen (vilket gör ett nytt, eget ensure+persist-försök).
+    if (this._ensureActiveDigitalLink(off)) {
+      /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+      const persisted = await persist({ keys: ['offers'] });
+      if (!persisted) {
+        this._showInlineError('send-error', 'Kunde inte spara den nygenererade offertlänken. Kontrollera anslutningen och försök igen.');
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.innerHTML = ic('send',13) + ' Skicka'; }
+        return;
+      }
+    }
+
     let messageId  = '';
     let sendOk     = false;
     let sendErr    = '';
     let serverJson = {};
     let patchesApplied = false;
 
-    // Skicka via Edge Function — offerToken och sentBy hanteras server-side
+    // Skicka via Edge Function — offerToken och sentBy accepteras inte
+    // längre från klienten alls: servern slår upp offertens token och
+    // härleder avsändaren från den autentiserade JWT-identiteten (R2).
     try {
       const jwt = typeof Auth !== 'undefined' ? Auth.getAccessToken() : null;
       if (!jwt) throw new Error('Inte inloggad');
@@ -6357,6 +6622,7 @@ ${hasRut?`<div class="rut">
         },
         body: JSON.stringify({
           offerId:      off.id,
+          commType:     'offer_sent',
           recipients,
           cc,
           bcc,
@@ -6422,7 +6688,16 @@ ${hasRut?`<div class="rut">
     persist();
     Modal.close();
     this.render({ offerId: off.id });
-    showToast('Offert skickad till ' + recipients.join(', '));
+    // R2.1 (Blocker 4): mejlet skickades verkligen (Resend accepterade det)
+    // — off.status='skickad' ovan är korrekt oavsett. Om servern signalerar
+    // att historikposten trots interna omförsök inte kunde sparas ska
+    // användaren ändå INTE se detta som ett vanligt "skicka igen"-fel
+    // (det skulle kunna orsaka ett dubblettmejl) — bara en tydlig varning.
+    if (serverJson.warning === 'history_not_persisted') {
+      showToast('Offert skickad till ' + recipients.join(', ') + ' — men händelsen kunde inte sparas i historiken. Kontakta support om detta upprepas.', 'warning');
+    } else {
+      showToast('Offert skickad till ' + recipients.join(', '));
+    }
   },
 
   _applySendTemplate(offerId, tmplId) {
@@ -6504,6 +6779,33 @@ ${hasRut?`<div class="rut">
     const bodyHtml = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1e293b;">' +
       bodyTxt.replace(/\n/g,'<br>') + '</div>';
 
+    // R2.1 (Blocker 1): en påminnelse får ALDRIG tyst återuppliva en
+    // återkallad länk — det vore att skicka kunden en länk som ägaren
+    // uttryckligen ogiltigförklarat. Fail closed, ingen serverbegäran görs.
+    if (off.tokenRevokedAt) {
+      this._showInlineError('remind-error', 'Länken är återkallad. Skapa en ny digital länk (eller skicka offerten på nytt) innan en påminnelse kan skickas.');
+      return;
+    }
+    // R2.1 (Blocker 1): en saknad ELLER förfallen länk får inte resultera i
+    // en påminnelse som pekar på en död URL. Till skillnad från "återkallad"
+    // (en avsiktlig affärsbeslut som aldrig återupplivas tyst) är "förfallen"
+    // bara tidens gång — här förnyas länken tyst med samma kanoniska
+    // mutation som ett vanligt utskick använder, så påminnelsen alltid
+    // pekar på en fungerande länk. Dokumenterat val, se rapporten.
+    //
+    // R2.2 (Blocker 3): precis som i _doSendEmail() måste persist()s
+    // bekräftade boolean-retur kontrolleras — se den motsvarande kommentaren
+    // där för fullständig motivering. Ingen serverbegäran görs om den
+    // förnyade länken inte faktiskt gick att spara.
+    if (this._ensureActiveDigitalLink(off)) {
+      /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+      const persisted = await persist({ keys: ['offers'] });
+      if (!persisted) {
+        this._showInlineError('remind-error', 'Kunde inte spara den förnyade offertlänken. Kontrollera anslutningen och försök igen.');
+        return;
+      }
+    }
+
     const sendBtn = document.querySelector('.modal-footer .btn.bp');
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Skickar…'; }
 
@@ -6524,6 +6826,7 @@ ${hasRut?`<div class="rut">
         },
         body: JSON.stringify({
           offerId: off.id,
+          commType: 'offer_reminder',
           recipients, cc: [], bcc: [], subject, bodyHtml,
           attachmentIds: [],
         })
@@ -6552,11 +6855,23 @@ ${hasRut?`<div class="rut">
     off.status         = 'påmind';
     off.reminderSentAt = new Date().toISOString();
     off.updatedAt      = new Date().toISOString();
-    this._logEvt(off, 'reminder', 'Påminnelse skickad till ' + recipients.join(', '));
+
+    // LOGGA INTE ett eget "sänt"-inlägg internt — serverns emailEvent
+    // (commType: 'offer_reminder') täcker det redan i den externa
+    // tidslinjen (state.offerEvents), precis som vid ett vanligt utskick.
+    // En egen intern post här skulle vara en duplicerad, ej server-
+    // verifierad "skickad"-post.
+
     persist();
     Modal.close();
     this.render({ offerId: off.id });
-    showToast('Påminnelse skickad');
+    // R2.1 (Blocker 4): se motsvarande kommentar i _doSendEmail() — samma
+    // degraderade-men-verkligen-skickat-läge kan uppstå för en påminnelse.
+    if (remindJson.warning === 'history_not_persisted') {
+      showToast('Påminnelse skickad — men händelsen kunde inte sparas i historiken. Kontakta support om detta upprepas.', 'warning');
+    } else {
+      showToast('Påminnelse skickad');
+    }
   },
 
   createNewVersion(offerId) {
@@ -6688,7 +7003,6 @@ ${hasRut?`<div class="rut">
         </div>
         ${revoked ? `<div style="background:var(--rd-bg,#fef2f2);border:1px solid var(--rd,#dc2626);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--rd,#dc2626);">${ic('alert-circle',10)} Länken är återkallad — kunden kan inte längre öppna den.</div>` : ''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${!revoked && !['godkänd','nekad'].includes(off.status) ? `<button type="button" class="btn bp" style="font-size:11px;" onclick="OfferDetailPage.sendReminder('${esc(off.id)}')">${ic('send',11)} Skicka påminnelse</button>` : ''}
           ${!revoked ? `<button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.revokeDigitalLink('${esc(off.id)}')">${ic('x-circle',11)} Återkalla länk</button>` : ''}
           <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.extendDigitalLink('${esc(off.id)}')">${ic('clock',11)} Förläng giltighetstid</button>
           <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.generateDigitalLink('${esc(off.id)}')">${ic('refresh-cw',11)} Ny länk (ogiltigförklarar gammal)</button>
@@ -6818,6 +7132,17 @@ ${hasRut?`<div class="rut">
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || res.status);
+        /* P0-3 FIX (independent-reviewer regression): `json.attachment`
+           is already the SERVER-CANONICAL object — the EF's RPC
+           (offer_attachment_append, row-locked) already committed it
+           atomically. Apply it locally by id only; do NOT call the
+           generic persist() — that used to re-send the WHOLE
+           state.offerAttachments array, a live unsafe write path for
+           the exact same key the RPC protects server-side (see
+           state.js's `_doPersist()` comment — `offerAttachments` is no
+           longer in that list at all). Cache via Storage.setLocal()
+           instead, same pattern as every other *SyncService in this
+           engagement. */
         const att = Object.assign(Schema.offerAttachment(), json.attachment || {});
         if (!state.offerAttachments) state.offerAttachments = [];
         state.offerAttachments.push(att);
@@ -6827,7 +7152,9 @@ ${hasRut?`<div class="rut">
         console.error('[uploadFiles]', file.name, e);
       }
     }
-    persist();
+    if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+      Storage.setLocal('offerAttachments', state.offerAttachments);
+    }
     if (progressEl) progressEl.textContent = uploaded + ' fil(er) uppladdade' + (errors ? ', ' + errors + ' fel' : '') + '.';
     setTimeout(() => { if (progressEl) progressEl.textContent = ''; }, 4000);
     this.render({offerId});
@@ -6981,8 +7308,16 @@ ${hasRut?`<div class="rut">
       showToast('Fel vid borttagning: ' + e.message, 'error');
       return;
     }
+    /* P0-3 FIX: the server (offer_attachment_soft_delete RPC) already
+       committed `active:false`/`deletedAt` atomically — mirror it
+       locally for immediate UI feedback only, and do NOT call the
+       generic persist() (see _uploadFiles()'s comment above for the
+       full reasoning; same fix, same key). */
     att.active = false;
-    persist();
+    att.deletedAt = new Date().toISOString();
+    if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+      Storage.setLocal('offerAttachments', state.offerAttachments);
+    }
     this.render({offerId});
     showToast('Bilaga borttagen');
   },
@@ -7077,6 +7412,108 @@ ${hasRut?`<div class="rut">
   },
 
   /* ── Digital offertlänk — generera token ───────────────── */
+  /* R2.1 (Blocker 1): kanoniska snapshot/token-mutationen extraherad ur den
+     tidigare generateDigitalLink()-stängningen, oförändrad i sak — samma
+     fält, samma låsning av bilagor, samma _logEvt. ENDA skillnaden mot
+     föregångaren: den sätter INTE längre off.status='skickad'/off.sentAt.
+     Att generera/förnya en publik länk är INTE ett bevis på att ett mejl
+     skickats — den mutationen tillhör uteslutande ett bekräftat
+     e-postutskick (_doSendEmail). Återanvänds av BÅDE den explicita
+     "Generera länk"-knappen och (nytt) den kanoniska Skicka-flödet, som
+     tyst säkerställer en giltig länk innan utskick i stället för att kräva
+     att användaren manuellt utför ett dolt försteg. */
+  _generateDigitalLinkMutation(off, days) {
+    const offerId = off.id;
+    const arr    = new Uint8Array(32);
+    crypto.getRandomValues(arr);
+    const token  = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+    const now    = new Date().toISOString();
+    const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
+
+    /* Lås snapshot av publika fält */
+    const snapshot = {
+      id: off.id, title: off.title, versionNumber: Number(off.versionNumber) || 1,
+      lines: (off.lines||[]).map(function(l) {
+        /* OFFER CORE R1: 'billingType' tillagt — utan detta skulle den
+           publika länkens låsta snapshot tyst tappa fältet som avgör
+           om raden är återkommande/rörlig/tillval/engångsbelopp, och
+           public-offer.html skulle då rendera EXAKT samma rad som ett
+           vanligt engångsbelopp (fel pris-semantik för kunden). */
+        const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle','billingType'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+      }),
+      /* V39 §3: vatRate måste bevaras för extras precis som för lines —
+         annars tappar snapshotet en tilläggsrads faktiska momssats och
+         public-offer/offer-public-pdf tvingas gissa (fallback 25 %)
+         istället för att räkna med den verkliga satsen.
+         OFFER CORE R1.1 — BLOCKER 1: 'includedInTotal' tillagt — utan
+         detta skulle den publika länken tyst tappa vilka extras som
+         är committade vs valfria, och public-offer.html/
+         offer-public-pdf skulle räkna in ALLA extras i totalsumman
+         (fel för en explicit markerad valfri extra). */
+      extras: (off.extras||[]).map(function(l) {
+        const p = {}; ['id','description','qty','unit','unitPrice','vatRate','includedInTotal'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
+      }),
+      discount: off.discount, taxType: off.taxType, rotRutAmount: off.rotRutAmount,
+      date: off.date || off.createdAt?.slice(0,10) || now.slice(0,10),
+      validUntil: off.validUntil, paymentTerms: off.paymentTerms,
+      validityText: off.validityText, terms: off.terms, includes: off.includes,
+      excludes: off.excludes, scope: off.scope, summary: off.summary,
+      /* BLOCKER 3: härlett via propertyId (med off.address som
+         bakåtkompatibel fallback) i stället för att läsa off.address
+         rakt av — skyddar mot en digital länk som genereras för en
+         offert sparad FÖRE denna omgångs _save()-fix (t.ex. om
+         länken genereras direkt efter ett API-anrop utan mellanliggande
+         spara-klick). */
+      generalTerms: off.generalTerms, address: _offPropertyDisplayText(off),
+      sectionOrder: _resolveSectionOrder(off.sectionOrder),
+      customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })(),
+      publicAttachmentIds: (state.offerAttachments||[])
+        .filter(function(a){ return a.offerId===offerId && a.active!==false && a.includeInPublicView===true; })
+        .map(function(a){ return a.id; })
+    };
+    off.publicToken        = token;
+    off.tokenCreatedAt     = now;
+    off.tokenExpiresAt     = expiry + 'T23:59:59.000Z';
+    off.tokenRevokedAt     = '';
+    off.openCount          = 0;
+    off.openedAt           = '';
+    off.lockedSnapshotJSON = JSON.stringify(snapshot);
+    off.updatedAt          = now;
+    /* R2.1 Blocker 1: status/sentAt mutation BORTTAGEN härifrån — att
+       generera en länk är inte ett bevis på att ett mejl skickats. Se
+       _doSendEmail() för den enda platsen där off.status='skickad' sätts. */
+    /* Versionslås aktiva bilagor som ännu inte är låsta */
+    (state.offerAttachments || []).forEach(function(a) {
+      if (a.offerId === offerId && a.active !== false && !a.lockedInVersion) {
+        a.lockedInVersion = offerId + '-' + token.slice(0, 8);
+      }
+    });
+    this._logEvt(off, 'send', 'Digital offertlänk genererad — giltig till ' + expiry + ' (' + days + ' dagar)');
+    return { token, expiry };
+  },
+
+  /* R2.1 (Blocker 1): "aktiv giltig länk" = finns, inte återkallad, inte
+     förfallen. Delas mellan send/reminder-flödet och (implicit) samma
+     definition som offer-token-validate/index.ts redan använder server-side
+     (tokenRevokedAt / tokenExpiresAt). */
+  _hasActiveDigitalLink(off) {
+    if (!off.publicToken || off.tokenRevokedAt) return false;
+    if (off.tokenExpiresAt && new Date(off.tokenExpiresAt).getTime() < Date.now()) return false;
+    return true;
+  },
+
+  /* R2.1 (Blocker 1): säkerställer tyst en giltig publik länk innan ett
+     utskick, i stället för att kräva att användaren manuellt klickar
+     "Generera länk" som ett dolt försteg först. Muterar off in-place men
+     persisterar INTE själv — anroparen (_doSendEmail/_doSendReminder)
+     awaitar persist() innan den faktiska server-begäran skickas, så att
+     Edge Function garanterat läser den nygenererade token/snapshoten. */
+  _ensureActiveDigitalLink(off) {
+    if (this._hasActiveDigitalLink(off)) return false;
+    this._generateDigitalLinkMutation(off, 30);
+    return true;
+  },
+
   generateDigitalLink(offerId) {
     const off = getOff(offerId);
     if (!off) return;
@@ -7087,69 +7524,7 @@ ${hasRut?`<div class="rut">
       : 'Generera digital offertlänk?';
 
     const _doGenerate = (days) => {
-      const arr    = new Uint8Array(32);
-      crypto.getRandomValues(arr);
-      const token  = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
-      const now    = new Date().toISOString();
-      const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
-
-      /* Lås snapshot av publika fält */
-      const snapshot = {
-        id: off.id, title: off.title, versionNumber: Number(off.versionNumber) || 1,
-        lines: (off.lines||[]).map(function(l) {
-          /* OFFER CORE R1: 'billingType' tillagt — utan detta skulle den
-             publika länkens låsta snapshot tyst tappa fältet som avgör
-             om raden är återkommande/rörlig/tillval/engångsbelopp, och
-             public-offer.html skulle då rendera EXAKT samma rad som ett
-             vanligt engångsbelopp (fel pris-semantik för kunden). */
-          const p = {}; ['id','type','description','templateName','qty','unit','unitPrice','discount','total','vatRate','exVat','rutAmount','reductionType','reductionBaseExVat','subLines','text','blockTitle','billingType'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
-        }),
-        /* V39 §3: vatRate måste bevaras för extras precis som för lines —
-           annars tappar snapshotet en tilläggsrads faktiska momssats och
-           public-offer/offer-public-pdf tvingas gissa (fallback 25 %)
-           istället för att räkna med den verkliga satsen.
-           OFFER CORE R1.1 — BLOCKER 1: 'includedInTotal' tillagt — utan
-           detta skulle den publika länken tyst tappa vilka extras som
-           är committade vs valfria, och public-offer.html/
-           offer-public-pdf skulle räkna in ALLA extras i totalsumman
-           (fel för en explicit markerad valfri extra). */
-        extras: (off.extras||[]).map(function(l) {
-          const p = {}; ['id','description','qty','unit','unitPrice','vatRate','includedInTotal'].forEach(function(k){ if (k in l) p[k] = l[k]; }); return p;
-        }),
-        discount: off.discount, taxType: off.taxType, rotRutAmount: off.rotRutAmount,
-        date: off.date || off.createdAt?.slice(0,10) || now.slice(0,10),
-        validUntil: off.validUntil, paymentTerms: off.paymentTerms,
-        validityText: off.validityText, terms: off.terms, includes: off.includes,
-        excludes: off.excludes, scope: off.scope, summary: off.summary,
-        /* BLOCKER 3: härlett via propertyId (med off.address som
-           bakåtkompatibel fallback) i stället för att läsa off.address
-           rakt av — skyddar mot en digital länk som genereras för en
-           offert sparad FÖRE denna omgångs _save()-fix (t.ex. om
-           länken genereras direkt efter ett API-anrop utan mellanliggande
-           spara-klick). */
-        generalTerms: off.generalTerms, address: _offPropertyDisplayText(off),
-        sectionOrder: _resolveSectionOrder(off.sectionOrder),
-        customerName: (() => { const cu = getCu(off.customerId); return cu ? (typeof CustomerService!=='undefined'?CustomerService.displayName(cu):cu.name||'') : ''; })(),
-        publicAttachmentIds: (state.offerAttachments||[])
-          .filter(function(a){ return a.offerId===offerId && a.active!==false && a.includeInPublicView===true; })
-          .map(function(a){ return a.id; })
-      };
-      off.publicToken        = token;
-      off.tokenCreatedAt     = now;
-      off.tokenExpiresAt     = expiry + 'T23:59:59.000Z';
-      off.tokenRevokedAt     = '';
-      off.openCount          = 0;
-      off.openedAt           = '';
-      off.lockedSnapshotJSON = JSON.stringify(snapshot);
-      off.updatedAt          = now;
-      if (off.status === 'utkast') { off.status = 'skickad'; off.sentAt = now; }
-      /* Versionslås aktiva bilagor som ännu inte är låsta */
-      (state.offerAttachments || []).forEach(function(a) {
-        if (a.offerId === offerId && a.active !== false && !a.lockedInVersion) {
-          a.lockedInVersion = offerId + '-' + token.slice(0, 8);
-        }
-      });
-      this._logEvt(off, 'send', 'Digital offertlänk genererad — giltig till ' + expiry + ' (' + days + ' dagar)');
+      this._generateDigitalLinkMutation(off, days);
       persist();
       this.render({offerId});
       showToast('Länk genererad — giltig i ' + days + ' dagar');
@@ -7223,72 +7598,12 @@ ${hasRut?`<div class="rut">
     });
   },
 
-  /* ── Manuell påminnelse (punkt 125) ────────────────────────
-     Öppnar modal: valfritt förläng giltighetstid + mailto-länk.
-     Blockeras om offerten är godkänd, nekad eller återkallad.
-  ──────────────────────────────────────────────────────────── */
-  sendReminder(offerId) {
-    const off = getOff(offerId);
-    if (!off) return;
-
-    /* Säkerhetsspärr — ingen påminnelse om slutgiltigt svar */
-    if (['godkänd','nekad'].includes(off.status) || off.tokenRevokedAt) {
-      showToast('Påminnelse kan inte skickas – offerten är ' + (off.tokenRevokedAt ? 'återkallad' : off.status) + '.', 'warning');
-      return;
-    }
-
-    const host    = window.location.origin;
-    const linkUrl = `${host}/public-offer.html?t=${off.publicToken}`;
-    const cuName  = off.customerName || '';
-    const email   = off.contactEmail || '';
-    const title   = off.title        || off.id;
-
-    const subject = encodeURIComponent(`Påminnelse: Offert "${title}"`);
-    const body    = encodeURIComponent(
-      `Hej${cuName ? ' ' + cuName : ''},\n\nVi vill påminna om att vi väntar på svar på offerten "${title}".\n\nDu kan öppna och svara på offerten via länken nedan:\n${linkUrl}\n\nHör gärna av dig om du har frågor.\n\nMed vänliga hälsningar`
-    );
-    const mailto = `mailto:${email}?subject=${subject}&body=${body}`;
-
-    Modal.open({
-      title: ic('send',14) + ' Skicka påminnelse',
-      body: `<div style="display:flex;flex-direction:column;gap:12px;">
-        <p style="font-size:13px;margin:0;">Kund: <strong>${esc(cuName || '–')}</strong><br>E-post: <strong>${esc(email || '–')}</strong></p>
-        <div class="fg">
-          <label>Förläng giltighetstid (valfritt)</label>
-          <select id="remind-extend">
-            <option value="">Behåll nuvarande utgångsdatum</option>
-            <option value="7">Förläng 7 dagar från idag</option>
-            <option value="14">Förläng 14 dagar från idag</option>
-            <option value="30">Förläng 30 dagar från idag</option>
-          </select>
-        </div>
-        <div style="font-size:12px;color:var(--mt);">
-          ${ic('info',11)} Klicka "Skicka påminnelse" för att öppna din e-postklient med förifylt meddelande.
-          Länken till offerten inkluderas automatiskt.
-        </div>
-        <div style="background:var(--bg2,var(--bg));border:1px solid var(--br);border-radius:6px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">${esc(linkUrl)}</div>
-      </div>`,
-      buttons: [
-        { label: ic('send',12) + ' Skicka påminnelse', cls: 'btn bp', onClick: () => {
-          const days = parseInt(document.getElementById('remind-extend')?.value || '0', 10);
-          if (days > 0) {
-            const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
-            off.tokenExpiresAt = expiry + 'T23:59:59.000Z';
-            off.updatedAt      = new Date().toISOString();
-            this._logEvt(off, 'send', 'Giltighetstid förlängd vid påminnelse — ny utgång: ' + expiry);
-          }
-          this._logEvt(off, 'send', 'Manuell påminnelse skickad till ' + (email || cuName || 'kund'));
-          off.updatedAt = new Date().toISOString();
-          persist();
-          Modal.close();
-          window.open(mailto, '_blank');
-          this.render({offerId});
-          showToast('Påminnelse öppnad i e-postklient');
-        }},
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
-      ]
-    });
-  },
+  /* R2 (V94): den tidigare mailto-baserade "Skicka påminnelse" (öppnade
+     lokal e-postklient, loggade "skickad" oavsett faktiskt utfall) är
+     BORTTAGEN. Den enda kanoniska påminnelsevägen är nu:
+     showReminderModal() -> _doSendReminder() -> send-offer-email
+     (backend-bekräftat, se _digitalLinkPanel — dess knapprad innehåller
+     inte längre en egen, oberoende påminnelseavsändare). */
 
   _completeActivity(actId, offerId) {
     const act = ActivitiesService._get(actId);
@@ -7342,6 +7657,103 @@ ${hasRut?`<div class="rut">
     });
   }
 };
+
+/* B1 FIX (independent-reviewer finding, round 5): registers the DURABLE
+   handler for the 'offer_ao_conversion' settled intent — see
+   AOTimeSyncService.js's header for the whole mechanism. Runs once, at
+   script-load time (this file always loads before `initState()` can
+   possibly run — see index.html's load order), so the handler is
+   already registered by the time `initState()` calls
+   `AOTimeSyncService.reconcileSettledIntents()`.
+
+   Looks EVERYTHING up fresh via `intent.refId`/`intent.aoId` — never
+   closes over the original `off`/`ao` objects from the call site, since
+   on a reload those don't exist; this is the exact same function
+   whether it runs synchronously in the original tab or on a future
+   load after a crash. Idempotent by construction (AOTimeSyncService
+   only ever calls an intent's handler once, tracked via `applied` —
+   see that file), but the `off.workOrderId === intent.aoId` check below
+   is a second, defensive layer in case this handler is ever invoked
+   more than once for the same settled intent for any reason. */
+if (typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.registerIntentHandler === 'function') {
+  /* B1 FOLLOW-UP FIX (independent-reviewer finding, round 6): this
+     handler used to call `persist()` fire-and-forget (no `await`, no
+     return, no check of its result) and then let `_tryApplyIntent()`
+     treat "the handler's promise resolved without throwing" as
+     success — but `persist()` is genuinely async and can resolve to
+     `false` (the underlying `Storage.setAll()` write failed). The
+     reviewer's real, runnable repro (two vm sandboxes sharing
+     localStorage, `persist` stubbed to always resolve `false`) proved
+     this durably PRUNED the intent anyway: the in-memory
+     `off.workOrderId` was set (synchronous, before the failed write),
+     but nothing was ever actually saved server-side, and the next
+     "reload" (fresh offer object re-fetched from the server) had
+     NOTHING left to retry from — the link was gone for good.
+
+     Fix: this handler is now genuinely `async`, `await`s `persist()`,
+     and returns an explicit `{ok, error}` contract — ONLY `{ok:true}`
+     tells `_tryApplyIntent()` (see AOTimeSyncService.js) that it is
+     safe to prune the durable intent; anything else (including a plain
+     `undefined`/thrown error) leaves it in place for the next retry.
+
+     Idempotency on a RETRY (same session, persist failed last time, or
+     a later reconcile pass): the in-memory field mutation + timeline
+     entry are only applied ONCE (`alreadyLinked` guard below) — a
+     retry only re-attempts the actual `persist()` call, never
+     re-pushes a second timeline entry for the same conversion. */
+  AOTimeSyncService.registerIntentHandler('offer_ao_conversion', async function (intent, settleResult) {
+    const off = getOff(intent.refId);
+    if (!off) return { ok: true }; // offer no longer exists (e.g. deleted) -- nothing left to commit, not a failure to retry
+    if (settleResult.ok) {
+      const alreadyLinked = off.workOrderId === intent.aoId;
+      if (!alreadyLinked) {
+        const ao = getAO(intent.aoId);
+        const disp = (typeof WorkOrderService !== 'undefined') ? WorkOrderService.displayNumberOrPending(ao || { id: intent.aoId }) : intent.aoId;
+        const now = new Date().toISOString();
+        off.workOrderId = intent.aoId;
+        off.convertedAt = now;
+        off.updatedAt   = now;
+        if (!Array.isArray(off.timeline)) off.timeline = [];
+        const user = (typeof state !== 'undefined' && state.currentUser) ? (state.currentUser.name || state.currentUser.username || 'Admin') : 'Admin';
+        off.timeline.push({ ts: now, type: 'ao', text: 'Arbetsorder ' + disp + ' skapad från offert v' + (intent.versionNumber || off.versionNumber || 1), user });
+      }
+      /* NOTE: this canonical/production copy deliberately does NOT
+         close open follow-up activities here — that is a genuine
+         STAGING-only addition (found via the round-4 real merge
+         against the actual staging clone), folded in ONLY on top of
+         `STAGING-READY/PageShells.js`'s copy of this same handler, not
+         here. See STAGING-READY/README.md. Do not copy it into this
+         file — that would silently introduce a STAGING-only behavior
+         into production. */
+      let persisted;
+      try {
+        /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+        persisted = await persist({ keys: ['offers'] });
+      } catch (e) {
+        console.error('[PageShells] persist() threw while committing offer->AO conversion for', intent.refId, ':', e);
+        return { ok: false, error: 'persist_threw' };
+      }
+      if (!persisted) {
+        console.error('[PageShells] persist() reported failure while committing offer->AO conversion for', intent.refId, '-- the durable intent is kept for retry, not pruned.');
+        return { ok: false, error: 'persist_failed' };
+      }
+      if (typeof OfferDetailPage !== 'undefined' && OfferDetailPage.offerId === off.id && typeof OfferDetailPage.render === 'function') {
+        OfferDetailPage.render({ offerId: off.id });
+      }
+      return { ok: true };
+    } else if (settleResult.final) {
+      console.error('[PageShells] AO-skapande avvisades slutgiltigt av servern för offert', intent.refId, '(reconciled):', settleResult.error);
+      if (typeof OfferDetailPage !== 'undefined' && OfferDetailPage.offerId === off.id && typeof OfferDetailPage.render === 'function') {
+        OfferDetailPage.render({ offerId: off.id });
+      }
+      return { ok: true }; // the REJECTION itself was fully "handled" (shown) -- nothing left to retry for this intent
+    }
+    // transient results never reach here (_tryApplyIntent only calls
+    // the handler once `settled` is true, which only happens for ok or
+    // final results — see AOTimeSyncService.js).
+    return { ok: true };
+  });
+}
 
 /* ── Fastigheter ──────────────────────── */
 const PropertiesPage = {
@@ -7397,6 +7809,7 @@ const PropertiesPage = {
       const q = this._q.toLowerCase();
       props = props.filter(p =>
         p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.city||'').toLowerCase().includes(q)
+        || displayNumberOf(p).toLowerCase().includes(q) // display number (2026-11-12)
       );
     }
     const propActions = [
@@ -7476,7 +7889,7 @@ const PropertiesPage = {
   },
 
   _formHtml(p) {
-    const v = (k, d='') => p ? (p[k]!=null?p[k]:d) : d;
+    const v = (k, d='') => { const val = p ? (p[k]!=null?p[k]:d) : d; return typeof val === 'string' ? esc(val) : val; };
     return `
       <div class="fg"><label>Namn / beteckning <span style="color:var(--rd)">*</span></label>
         <input id="prop-name" value="${v('name')}" placeholder="T.ex. Solvägen 1, Fastighet A…"></div>
@@ -7556,7 +7969,8 @@ const PropertiesPage = {
     };
     if (!propId) {
       state.properties = state.properties || [];
-      state.properties.push({ ...data, id: newId(state.properties,'OBJ'), createdAt: new Date().toISOString() });
+      const _newPropId = newSafeId('OBJ', state.properties); // K3 (2026-11-12): collision-safe
+      state.properties.push({ ...data, id: _newPropId, shortNumber: newShortNumber(_newPropId, state.properties), createdAt: new Date().toISOString() }); // display number (2026-11-12)
       showToast(`${name} skapad`);
     } else {
       const idx = (state.properties||[]).findIndex(x=>x.id===propId);
@@ -7830,8 +8244,8 @@ const PriceGroupsPage = {
           <div class="list-item" onclick="PriceGroupsPage.openEdit('${pg.id}')">
             <div class="item-row">
               <div style="flex:1;min-width:0;">
-                <div class="item-title">${pg.name}</div>
-                ${pg.description ? `<div class="item-sub">${pg.description}</div>` : ''}
+                <div class="item-title">${esc(pg.name)}</div>
+                ${pg.description ? `<div class="item-sub">${esc(pg.description)}</div>` : ''}
               </div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
                 <span style="font-size:14px;font-weight:800;color:var(--navy);">${fmt(pg.hourRate)} <span style="font-size:10px;font-weight:500;color:var(--mt);">kr/tim</span></span>
@@ -8109,8 +8523,8 @@ const StaffPage = {
               style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid ${isSel?'var(--sky)':'var(--br)'};border-radius:var(--rs);cursor:pointer;transition:border-color .1s;">
               <div id="sf-role-dot-${r.id}" style="width:16px;height:16px;border-radius:50%;border:2px solid ${isSel?'var(--navy)':'var(--br)'};background:${isSel?'var(--navy)':'transparent'};flex-shrink:0;transition:all .1s;"></div>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:700;">${r.label}</div>
-                ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
+                <div style="font-size:13px;font-weight:700;">${esc(r.label)}</div>
+                ${r.description?`<div style="font-size:11px;color:var(--mt);">${esc(r.description)}</div>`:''}
               </div>
             </div>`;
           }).join('')}
@@ -8153,8 +8567,8 @@ const StaffPage = {
       return `<div class="crow" onclick="StaffPage._selectTitleFromPicker('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"
         style="${isSel?'background:var(--navy10,#eef2ff);':''};cursor:pointer;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;">${t.name}</div>
-          ${t.description ? `<div style="font-size:11px;color:var(--mt);">${t.description}</div>` : ''}
+          <div style="font-size:13px;font-weight:600;">${esc(t.name)}</div>
+          ${t.description ? `<div style="font-size:11px;color:var(--mt);">${esc(t.description)}</div>` : ''}
           ${usageCount > 0 ? `<div style="font-size:10px;color:var(--sky);">${usageCount} person${usageCount===1?'':'er'}</div>` : ''}
         </div>
         ${isSel ? `<span style="color:var(--grn);">${ic('check-circle',16)}</span>` : ''}
@@ -8433,9 +8847,9 @@ const ServiceTemplatesPage = {
         <div class="fg" style="margin-bottom:8px;"><label>Standardbeskrivning</label>
           <textarea id="svc-ed-desc" rows="2" style="resize:vertical;">${esc(svc.defaultDescription||'')}</textarea></div>
         <div class="fg" style="margin-bottom:8px;"><label>Vad ingår (en per rad)</label>
-          <textarea id="svc-ed-includes" rows="3" style="resize:vertical;">${(svc.includes||[]).join('\n')}</textarea></div>
+          <textarea id="svc-ed-includes" rows="3" style="resize:vertical;">${esc((svc.includes||[]).join('\n'))}</textarea></div>
         <div class="fg" style="margin-bottom:8px;"><label>Vad ingår ej (en per rad)</label>
-          <textarea id="svc-ed-excludes" rows="3" style="resize:vertical;">${(svc.excludes||[]).join('\n')}</textarea></div>
+          <textarea id="svc-ed-excludes" rows="3" style="resize:vertical;">${esc((svc.excludes||[]).join('\n'))}</textarea></div>
         <div class="fg"><label>Intern kalkylnotis</label>
           <input id="svc-ed-note" value="${esc(svc.internalNote||'')}"></div>
       </div>
@@ -8745,6 +9159,7 @@ const AdminPage = {
   render() {
     const el = document.getElementById('pg-admin-content');
     if (!el) return;
+    const previousTabScroll = el.querySelector('.admin-tabs')?.scrollLeft || 0;
     if (!Auth.require('admin_manage')) {
       el.innerHTML = `<div class="empty">${ic('lock',32)}<h3>Behörighet saknas</h3><p>Du har inte tillgång till systeminställningar.</p></div>`;
       return;
@@ -8937,10 +9352,10 @@ const AdminPage = {
                     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
                       <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;gap:6px;">
-                          <span style="font-size:13px;font-weight:600;">${t.name}</span>
+                          <span style="font-size:13px;font-weight:600;">${esc(t.name)}</span>
                           <span class="bdg ${t.active?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active?'Aktiv':'Inaktiv'}</span>
                         </div>
-                        ${t.description ? `<div style="font-size:11px;color:var(--mt);">${t.description}</div>` : ''}
+                        ${t.description ? `<div style="font-size:11px;color:var(--mt);">${esc(t.description)}</div>` : ''}
                         ${usageCount > 0
                           ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
                               ${usageCount} person${usageCount===1?'':'er'} – Visa ${ic('arrow-right',9)}
@@ -8974,12 +9389,12 @@ const AdminPage = {
                   return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;${isActive?'':'opacity:.65'}">
                     <div style="flex:1;min-width:0;">
                       <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
-                        <span style="font-size:13px;font-weight:700;">${r.label}</span>
+                        <span style="font-size:13px;font-weight:700;">${esc(r.label)}</span>
                         <span class="bdg ${isActive?'bdg-green':'bdg-grey'}" style="font-size:9px;">${isActive?'Aktiv':'Inaktiv'}</span>
                         ${r.isBuiltin?`<span class="bdg bdg-grey" style="font-size:9px;">Inbyggd</span>`:''}
                         ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;cursor:pointer;" onclick="AdminPage.showRoleStaff('${r.id}')">${staffCount} pers.</span>`:''}
                       </div>
-                      ${r.description?`<div style="font-size:11px;color:var(--mt);">${r.description}</div>`:''}
+                      ${r.description?`<div style="font-size:11px;color:var(--mt);">${esc(r.description)}</div>`:''}
                       <div style="font-size:10px;color:var(--sky);margin-top:2px;">${permCount===0?'Inga behörigheter':permCount+' behörighet'+(permCount===1?'':'er')+(r.permissions&&r.permissions.includes('all')?' (superadmin)':'')}</div>
                     </div>
                     <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -9344,6 +9759,9 @@ const AdminPage = {
       </div>`;
 
     el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
+
+    const adminTabs = el.querySelector('.admin-tabs');
+    if (adminTabs) adminTabs.scrollLeft = previousTabScroll;
 
     /* V42 §5: statusBadge() ovan speglar bara browser-permission (synkront,
        tillgängligt vid render-tid). Serverregistreringen kan bara kollas
@@ -10259,10 +10677,10 @@ const AdminPage = {
       title: 'Redigera titel',
       body: `
         <div class="fg"><label>Titel / yrkesroll <span style="color:var(--rd)">*</span></label>
-          <input id="adm-edit-title" value="${t.name}"
+          <input id="adm-edit-title" value="${esc(t.name)}"
             onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('adm-edit-desc')?.focus();}"></div>
         <div class="fg"><label>Beskrivning</label>
-          <input id="adm-edit-desc" value="${t.description||''}" placeholder="Kort beskrivning…"
+          <input id="adm-edit-desc" value="${esc(t.description||'')}" placeholder="Kort beskrivning…"
             onkeydown="if(event.key==='Enter'){event.preventDefault();AdminPage._saveEditTitle(${idx});}"></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditTitle(idx) },
@@ -10432,13 +10850,13 @@ const AdminPage = {
     }).join('');
 
     Modal.open({
-      title: `Redigera roll: ${r.label}`,
+      title: `Redigera roll: ${esc(r.label)}`,
       wide: true,
       body: `
         <div class="fg"><label>Visningsnamn</label>
-          <input id="role-edit-label" value="${r.label}" ${r.isBuiltin?'readonly style="background:var(--bg);"':''}></div>
+          <input id="role-edit-label" value="${esc(r.label)}" ${r.isBuiltin?'readonly style="background:var(--bg);"':''}></div>
         <div class="fg"><label>Beskrivning</label>
-          <input id="role-edit-desc" value="${r.description||''}" placeholder="Kort beskrivning…"></div>
+          <input id="role-edit-desc" value="${esc(r.description||'')}" placeholder="Kort beskrivning…"></div>
         <div style="margin-top:4px;">
           <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Behörigheter</div>
           ${groupsHtml}
@@ -10766,6 +11184,9 @@ const ActivitiesPage = {
         if (!Array.isArray(ao.notes)) ao.notes = [];
         ao.notes.push({ ts, type: 'log', text: `Uppföljning utförd${note}`, user, createdBy: user });
         ao.updatedAt = ts;
+        if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+          WorkOrderService._syncAO(ao, { notes: ao.notes, updatedAt: ao.updatedAt });
+        }
         persist();
       }
     }
@@ -10804,6 +11225,9 @@ const ActivitiesPage = {
         if (!Array.isArray(ao.notes)) ao.notes = [];
         ao.notes.push({ ts, type: 'log', text: `Uppföljning flyttad från ${fromStr} till ${toStr}`, user, createdBy: user });
         ao.updatedAt = ts;
+        if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+          WorkOrderService._syncAO(ao, { notes: ao.notes, updatedAt: ao.updatedAt });
+        }
         persist();
       }
     }

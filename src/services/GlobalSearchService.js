@@ -85,9 +85,12 @@ const GlobalSearchService = {
         meta: c.type || '',
         isInactive,
         inactiveLabel: isInactive ? 'Inaktiv' : null,
-        idText: c.id,
+        /* 2026-11-12: the visible customer number (K-007 unchanged; new
+           customers their short derived number). The raw id stays
+           searchable as secondary text; nav below still uses c.id. */
+        idText: (typeof displayNumberOf === 'function') ? displayNumberOf(c) : c.id,
         titleText: title,
-        secondaryTexts: [c.orgNr, c.personnr, c.phone, c.email, c.address, c.zip, c.city, c.contactPerson, c.invoiceAddress, c.invoiceCity].concat(contactTexts).filter(Boolean),
+        secondaryTexts: [c.orgNr, c.personnr, c.phone, c.email, c.address, c.zip, c.city, c.contactPerson, c.invoiceAddress, c.invoiceCity, c.id].concat(contactTexts).filter(Boolean),
         digitsFields: [c.orgNr, c.personnr, c.phone].concat((c.contacts || []).map(ct => ct.phone)).filter(Boolean),
         nav: { pageId: 'pg-crm-detail', params: { customerId: c.id } }
       };
@@ -182,9 +185,10 @@ const GlobalSearchService = {
         meta: p.type || '',
         isInactive,
         inactiveLabel: isInactive ? 'Inaktiv' : null,
-        idText: p.objectNumber || p.id,
+        idText: p.objectNumber || ((typeof displayNumberOf === 'function') ? displayNumberOf(p) : p.id),
         titleText: title,
-        secondaryTexts: [p.address, p.zip, p.city, p.propertyDesignation, (owner || {}).name].concat(contactTexts).filter(Boolean),
+        /* 2026-11-12: display number searchable even when objectNumber is the idText. */
+        secondaryTexts: [p.address, p.zip, p.city, p.propertyDesignation, (owner || {}).name, (typeof displayNumberOf === 'function') ? displayNumberOf(p) : '', p.id].concat(contactTexts).filter(Boolean),
         digitsFields: (p.contacts || []).map(ct => ct.phone).filter(Boolean),
         nav: { pageId: 'pg-obj-detail', params: { propId: p.id } }
       };

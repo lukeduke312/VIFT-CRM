@@ -237,22 +237,17 @@ const RonderingService = {
       ron.updatedAt = new Date().toISOString();
     }
 
-    // Link to PASS point if passId provided
-    if (data.passId) {
-      const pass = getPass(data.passId);
-      if (pass) {
-        const cat = (pass.categories||[]).find(c => c.id === data.categoryId);
-        if (cat) {
-          const pt = (cat.points||[]).find(p => p.id === data.pointId);
-          if (pt) {
-            pt.deviationId = avv.id;
-            pt.status = pt.status || 'anmärkning';
-            pt.checkedAt = pt.checkedAt || new Date().toISOString();
-          }
-        }
-        pass.updatedAt = new Date().toISOString();
-      }
-    }
+    /* P0 PART B (RONDERINGSPASS R1): den tidigare lokala mutationen av
+       pass.categories[].points[].deviationId/status/checkedAt HÄR (följt
+       av generisk persist()) är borttagen — vift_ronderingspass skrivs
+       inte längre via den generiska vägen (se state.js _doPersist()).
+       Länkningen mellan avvikelsen och checklistpunkten görs nu ALLTID
+       av anroparen via RonderingSyncService.pointPatch(...,
+       deviationId=avv.id) omedelbart efter detta anrop — se
+       RonderingUtforandePage._saveAvv(), som är den ENDA anroparen av
+       createAvvikelse() med passId satt (grep-verifierat). Om en framtida
+       ny anropare behöver passId-länkning MÅSTE den själv anropa
+       RonderingSyncService.pointPatch — annars tappas länken tyst. */
 
     persist();
     ActivityService.log('deviation_created', 'Avvikelse skapad: ' + avv.title, {
@@ -270,7 +265,62 @@ const RonderingService = {
     return avv;
   },
 
-  createAOFromAvvikelse(avvikelseId, passId) {
+  /* QA FIX-ROUND 2026-11-12 (K2, confirmed): no code path ever set a
+     deviation to 'åtgärdad' — not even when its follow-up work order was
+     completed — so AVV-001 stayed 'öppen' forever and kept counting as an
+     open deviation on the dashboard, in reports and on the property card.
+     Called by WorkOrderService once a status change of the linked AO is
+     CONFIRMED by the server (never on the optimistic local change, which
+     can still be rolled back):
+       - AO confirmed 'klar'/'fakturerad' -> every 'öppen' deviation with
+         workOrderId === aoId becomes 'åtgärdad' (resolvedAt/resolvedBy/
+         resolvedByWorkOrderId recorded);
+       - AO confirmed back to an active status -> a deviation that THIS
+         mechanism resolved for that AO goes back to 'öppen'.
+     A deviation resolved/written off by hand ('avskriven', or 'åtgärdad'
+     without resolvedByWorkOrderId) is never touched. */
+  syncAvvikelserWithWorkOrderStatus(aoId, status) {
+    if (!aoId || !Array.isArray(state.avvikelser)) return 0;
+    const done = status === 'klar' || status === 'fakturerad';
+    const active = ['nytt', 'pool', 'planerad', 'pågående'].indexOf(status) !== -1;
+    if (!done && !active) return 0;
+    const now = new Date().toISOString();
+    const by = state.currentUser ? `${state.currentUser.firstName || ''} ${state.currentUser.lastName || ''}`.trim() : '';
+    let changed = 0;
+    state.avvikelser.forEach(function(avv) {
+      if (!avv || avv.workOrderId !== aoId) return;
+      if (done && avv.status === 'öppen') {
+        avv.status = 'åtgärdad';
+        avv.resolvedAt = now;
+        avv.resolvedBy = by;
+        avv.resolvedByWorkOrderId = aoId;
+        avv.updatedAt = now;
+        changed++;
+      } else if (active && avv.status === 'åtgärdad' && avv.resolvedByWorkOrderId === aoId) {
+        avv.status = 'öppen';
+        avv.resolvedAt = '';
+        avv.resolvedBy = '';
+        avv.resolvedByWorkOrderId = '';
+        avv.updatedAt = now;
+        changed++;
+      }
+    });
+    if (changed > 0) {
+      if (typeof ActivityService !== 'undefined') {
+        try {
+          ActivityService.log('deviation_status', (done ? changed + ' avvikelse(r) markerade åtgärdade' : changed + ' avvikelse(r) återöppnade') + ' via arbetsorder ' + aoId, { workOrderId: aoId });
+        } catch (e) {}
+      }
+      persist();
+    }
+    return changed;
+  },
+
+  // P0 PART B (RONDERINGSPASS R1): async nu — se nedan, pt.workOrderId-
+  // länkningen går via den atomiska rondering_point_patch-RPC:n istället
+  // för en direkt lokal mutation + generisk persist() (som inte längre
+  // skriver vift_ronderingspass alls — se state.js _doPersist()).
+  async createAOFromAvvikelse(avvikelseId, passId) {
     const avv = getAvv(avvikelseId);
     if (!avv) return null;
     if (avv.workOrderId) return getAO(avv.workOrderId);
@@ -300,37 +350,73 @@ const RonderingService = {
         timestamp: avv.createdAt
       };
     });
-    const ao = WorkOrderService.create({
-      title, description,
-      customerId: avv.customerId,
-      propertyId: avv.propertyId,
-      address,
-      priority: avv.priority,
-      notes,
-      status: 'nytt',
-      ronderingId: avv.ronderingId,
-      passId: resolvedPassId,
-      deviationId: avvikelseId,
-      category: 'felanmalan'
-    });
-    // Link AO back to avvikelse
-    avv.workOrderId = ao.id;
-    avv.updatedAt = new Date().toISOString();
-    // Link AO to PASS point
-    if (pass) {
-      const cat = (pass.categories||[]).find(c => c.id === avv.categoryId);
-      if (cat) {
-        const pt = (cat.points||[]).find(p => p.id === avv.pointId);
-        if (pt) {
-          pt.workOrderId = ao.id;
+    /* R3-A FIX (independent-reviewer finding, round 4): `avv.workOrderId`
+       (and the checklist-point link below it) used to be set
+       SYNCHRONOUSLY right after `WorkOrderService.create()` returned
+       its optimistic, not-yet-ACKed object — a dangling reference risk
+       if the server later rejected the create (the deviation would
+       permanently point at an AO id that never actually existed
+       server-side), with an additional partial-success-chain risk if
+       the point-linking RPC itself then also failed on top of that.
+       Fix: wrap the ACK wait in a Promise so this already-`async`
+       function can still simply `await` it (every caller already
+       awaits `createAOFromAvvikelse()`, so this changes no call site's
+       shape) — `avv.workOrderId`, the point link, `persist()`, and the
+       ActivityService log entry all move inside the `onSettled`
+       success branch; a definite rejection rejects the returned
+       promise with a clear error instead of silently leaving a
+       half-linked deviation. */
+    /* B1 FIX (independent-reviewer finding, round 5): the actual link
+       commit (avv.workOrderId, the checklist-point link, persist(), the
+       ActivityService log) moved OUT of this in-memory `onSettled` and
+       into the DURABLE 'rondering_ao_from_deviation' intent handler
+       (registered once below, at file load) — same pattern as
+       `PageShells.js`/`RecurringOrderService.js`'s matching fixes. The
+       `avv.workOrderId` check at the top of this function already
+       doubles as this handler's own idempotency guard (both check the
+       same field). */
+    const ao = await new Promise((resolve, reject) => {
+      const created = WorkOrderService.create({
+        title, description,
+        customerId: avv.customerId,
+        propertyId: avv.propertyId,
+        address,
+        priority: avv.priority,
+        notes,
+        status: 'nytt',
+        ronderingId: avv.ronderingId,
+        passId: resolvedPassId,
+        deviationId: avvikelseId,
+        category: 'felanmalan'
+      }, {
+        onSettledIntent: {
+          kind: 'rondering_ao_from_deviation', refId: avvikelseId,
+          passId: resolvedPassId, categoryId: avv.categoryId, pointId: avv.pointId
+        },
+        onSettled: (r) => {
+          if (r.ok) {
+            resolve(r.ao);
+          } else if (r.final) {
+            console.error('[RonderingService.createAOFromAvvikelse] AO-skapande avvisades av servern för anmärkning', avvikelseId, ':', r.error);
+            reject(new Error(r.error || 'AO-skapande avvisades av servern'));
+          }
+          // else: transient — leaves this promise unsettled; the retry
+          // (see AOTimeSyncService's _fireSettled fix) fires this same
+          // callback again on real success or final rejection. A caller
+          // awaiting this promise through a long transient stretch is
+          // an accepted, pre-existing characteristic of every other
+          // await-based caller in this codebase's outbox pattern, not a
+          // new risk introduced here. The actual DURABLE commit (see
+          // above) happens independently of whether this particular
+          // promise is still being awaited by anyone.
         }
+      });
+      if (!created || created.ok === false) {
+        // Synchronous, pre-network validation failure — nothing was
+        // enqueued, so reject immediately instead of waiting for an
+        // onSettled that will never fire.
+        reject(new Error((created && created.error) || 'Arbetsordern kunde inte skapas'));
       }
-      pass.updatedAt = new Date().toISOString();
-    }
-    persist();
-    ActivityService.log('ao_from_deviation', 'AO skapad från anmärkning: ' + avv.title, {
-      customerId: avv.customerId, propertyId: avv.propertyId,
-      ronderingId: avv.ronderingId, deviationId: avvikelseId, workOrderId: ao.id
     });
     return ao;
   },
@@ -363,7 +449,12 @@ const RonderingService = {
   },
 
   // Creates a new PASS from a rondering's categories (deep copy, all points empty)
-  createPassFromRondering(ronderingId, options) {
+  // P0 PART B (RONDERINGSPASS R1): skapandet går nu via RonderingSyncService
+  // (atomisk server-RPC, server-genererat id — se migrationens filhuvud för
+  // varför den tidigare newId()-racen eliminerades). Funktionen är nu async;
+  // ALLA tre callers (RonderingPage.js, RonderingUtforandePage.js) är
+  // uppdaterade till att invänta den — se 02_diffs/.
+  async createPassFromRondering(ronderingId, options) {
     const ron = getRon(ronderingId);
     if (!ron) return null;
     const opts = options || {};
@@ -388,30 +479,25 @@ const RonderingService = {
         })
       };
     });
-    let total = 0;
-    cats.forEach(function(cat) { total += (cat.points || []).length; });
-    const pass = Object.assign(Schema.ronderingspass(), {
-      id: newId(state.ronderingspass, 'PASS'),
+    const passTemplate = {
       ronderingId: ron.id,
       mallId: ron.templateId || '',
       propertyId: opts.propertyId || ron.propertyId || '',
       customerId: opts.customerId || ron.customerId || '',
-      sequenceNumber: this.getPassesByRondering(ronderingId).length + 1,
       scheduledDate: opts.scheduledDate || '',
       scheduledTime: opts.scheduledTime || '',
       staffIds: opts.staffIds || (ron.performedBy ? [ron.performedBy] : []),
       estimatedDurationMins: opts.estimatedDurationMins || 90,
-      status: 'planerat',
       categories: cats,
-      summary: { total: total, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
       internalNote: opts.internalNote || '',
-      migratedFromLegacy: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-    state.ronderingspass.push(pass);
-    persist();
-    return pass;
+      migratedFromLegacy: false
+    };
+    const r = await RonderingSyncService.create(passTemplate);
+    if (!r.ok) {
+      if (typeof showToast === 'function') showToast('Kunde inte skapa ronderingspass: ' + r.error);
+      return null;
+    }
+    return r.data.pass;
   },
 
   getPassStats(passId) {
@@ -431,16 +517,40 @@ const RonderingService = {
     return { total, ok, anmärkningar, ejKontrollerad, ejAktuell, checked, unchecked: total - checked };
   },
 
-  updatePass(id, data) {
+  // P0 PART B (RONDERINGSPASS R1): generisk patch av passfält utöver
+  // checklistpunkter/anteckning/slutförande (som nu har egna, narrow RPC:er
+  // via RonderingSyncService — se _setPointStatus/_saveNote/complete i
+  // RonderingUtforandePage.js). Denna funktion har f.n. INGA anropare i
+  // kodbasen (grep-verifierat, se README §3) men behålls som ett
+  // offentligt service-API — rutas därför ÄVEN den via den smala
+  // rondering_pass_save_note-RPC:n om patchen bara rör internalNote
+  // (det vanligaste tänkbara framtida användningsfallet), annars avvisas
+  // anropet EXPLICIT hellre än att tyst falla tillbaka till en osäker
+  // whole-array-skrivning — en framtida ny anropare måste medvetet lägga
+  // till stöd i RonderingSyncService/Edge Function:en för sitt fält,
+  // inte råka återintroducera bugklassen.
+  async updatePass(id, data) {
     const pass = getPass(id);
     if (!pass) return null;
-    Object.assign(pass, data, { updatedAt: new Date().toISOString() });
-    persist();
-    return pass;
+    const keys = Object.keys(data || {});
+    if (keys.length === 1 && keys[0] === 'internalNote') {
+      const r = await RonderingSyncService.saveNote(id, data.internalNote);
+      if (!r.ok) { if (typeof showToast === 'function') showToast('Kunde inte spara: ' + r.error); return null; }
+      return r.data.pass;
+    }
+    console.error('[RonderingService.updatePass] Avvisat: fält ' + JSON.stringify(keys) + ' har ingen atomisk RPC-väg ännu. Lägg till stöd i RonderingSyncService/rondering-pass-write istället för att återinföra whole-array persist().');
+    return null;
   },
 
   // Generate PASS objects from RON's occasions and recurringSetups (idempotent)
-  generatePassesFromRecurring(ronId) {
+  // P0 PART B (RONDERINGSPASS R1): skapandet går nu via
+  // RonderingSyncService.bulkCreate(), som i sin tur anropar
+  // rondering_passes_bulk_create() — SERVER-SIDIG dedupe mot
+  // (ronderingId, scheduledDate, !migratedFromLegacy) under samma
+  // radlås, så även en nätverksretry av HELA detta anrop (eller två
+  // administratörer som samtidigt trycker "generera tillfällen") kan
+  // aldrig skapa dubbletter. Funktionen är nu async.
+  async generatePassesFromRecurring(ronId) {
     const ron = getRon(ronId);
     if (!ron) return 0;
     const today = tdy();
@@ -455,36 +565,29 @@ const RonderingService = {
         })
       };
     });
-    const total = cats.reduce(function(s, c) { return s + (c.points || []).length; }, 0);
-    let seqBase = this.getPassesByRondering(ronId).length;
-    let created = 0;
     const self = this;
+    const candidates = [];
 
-    function addPass(date, time, staffIds, dur) {
-      const p = Object.assign(Schema.ronderingspass(), {
-        id: newId(state.ronderingspass, 'PASS'),
-        ronderingId: ron.id, mallId: ron.templateId || '',
+    function addCandidate(date, time, staffIds, dur) {
+      candidates.push({
+        mallId: ron.templateId || '',
         propertyId: ron.propertyId || '', customerId: ron.customerId || '',
-        sequenceNumber: ++seqBase,
         scheduledDate: date, scheduledTime: time || '',
         staffIds: staffIds || [], estimatedDurationMins: dur || 90,
-        status: 'planerat',
         categories: JSON.parse(JSON.stringify(cats)),
-        summary: { total: total, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 },
-        internalNote: '', migratedFromLegacy: false,
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        internalNote: '', migratedFromLegacy: false
       });
-      state.ronderingspass.push(p);
-      created++;
     }
 
-    // Enstaka tillfällen
+    // Enstaka tillfällen — klient-sidig förfiltrering (UX: undvik att
+    // skicka uppenbart redan existerande datum), men den FAKTISKA,
+    // dataförlust-kritiska dedupen sker server-sidigt i RPC:n oavsett.
     (ron.occasions || []).forEach(function(occ) {
       if (!occ.date) return;
       const exists = state.ronderingspass.find(function(p) {
         return p.ronderingId === ronId && p.scheduledDate === occ.date && !p.migratedFromLegacy;
       });
-      if (!exists) addPass(occ.date, occ.time, occ.staffId ? [occ.staffId] : [], occ.estimatedDuration);
+      if (!exists) addCandidate(occ.date, occ.time, occ.staffId ? [occ.staffId] : [], occ.estimatedDuration);
     });
 
     // Återkommande
@@ -498,12 +601,17 @@ const RonderingService = {
         const exists = state.ronderingspass.find(function(p) {
           return p.ronderingId === ronId && p.scheduledDate === dateStr && !p.migratedFromLegacy;
         });
-        if (!exists) addPass(dateStr, rec.time, rec.staffId ? [rec.staffId] : [], rec.estimatedDuration);
+        if (!exists) addCandidate(dateStr, rec.time, rec.staffId ? [rec.staffId] : [], rec.estimatedDuration);
       });
     });
 
-    if (created > 0) persist();
-    return created;
+    if (candidates.length === 0) return 0;
+    const r = await RonderingSyncService.bulkCreate(ronId, candidates);
+    if (!r.ok) {
+      if (typeof showToast === 'function') showToast('Kunde inte generera tillfällen: ' + r.error);
+      return 0;
+    }
+    return r.data.createdCount || 0;
   },
 
   _computeRecurringDates(rec, startDate, endDate) {
@@ -540,3 +648,91 @@ const RonderingService = {
     return dates;
   }
 };
+
+/* B1 FIX (independent-reviewer finding, round 5): registers the DURABLE
+   handler for the 'rondering_ao_from_deviation' settled intent — see
+   AOTimeSyncService.js's header for the whole mechanism, and
+   PageShells.js/RecurringOrderService.js for the matching fixes on the
+   other two AO-creation flows. Idempotency: `avv.workOrderId` already
+   being set to this exact `intent.aoId` is the guard (same field
+   `createAOFromAvvikelse()`'s own top-of-function check reads). */
+if (typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.registerIntentHandler === 'function') {
+  /* B1 FOLLOW-UP FIX (independent-reviewer finding, round 6): this
+     handler used to (a) swallow a failed/thrown `pointPatch()` (just
+     `console.error` and carry on) and (b) call `persist()` fire-and-
+     forget, never checking its result — either failure used to still
+     let `_tryApplyIntent()` treat the handler as "succeeded" (it threw
+     nothing), durably pruning the intent even though nothing was
+     actually saved. Both failures now PROPAGATE as an explicit
+     `{ok:false}`, keeping the durable intent for retry.
+
+     Idempotent on a retry: `avv.workOrderId === intent.aoId` guards
+     against re-mutating/re-logging the deviation link a second time;
+     `pt.workOrderId === intent.aoId` guards the point-link step
+     SEPARATELY, since it is possible for the deviation link to have
+     persisted successfully while the point-link step (or the
+     persist() after it) failed, or vice versa — each half retries
+     independently until BOTH are confirmed done, never re-doing a half
+     that's already done. `pointPatch()` itself is also naturally
+     idempotent (a PATCH setting the same field to the same value), so
+     re-sending it even if it partially succeeded server-side last time
+     is always safe. */
+  AOTimeSyncService.registerIntentHandler('rondering_ao_from_deviation', async function (intent, settleResult) {
+    const avv = getAvv(intent.refId);
+    if (!avv) return { ok: true }; // deviation no longer exists -- nothing left to commit, not a failure to retry
+    if (settleResult.ok) {
+      const alreadyLinkedDeviation = avv.workOrderId === intent.aoId;
+      if (!alreadyLinkedDeviation) {
+        avv.workOrderId = intent.aoId;
+        avv.updatedAt = new Date().toISOString();
+      }
+      if (intent.passId) {
+        const pass = getPass(intent.passId);
+        const cat  = pass && (pass.categories || []).find(c => c.id === intent.categoryId);
+        const pt   = cat && (cat.points || []).find(p => p.id === intent.pointId);
+        if (pt && pt.workOrderId !== intent.aoId) {
+          let linkR;
+          try {
+            linkR = await RonderingSyncService.pointPatch(
+              pass.id, intent.categoryId, intent.pointId, pt.status || 'anmärkning', pt.comment || '', pt.deviationId || null, intent.aoId
+            );
+          } catch (e) {
+            console.error('[RonderingService] (reconciled) point-link kastade fel -- behåller intent för retry:', e);
+            return { ok: false, error: 'point_link_threw' };
+          }
+          if (!linkR.ok) {
+            console.error('[RonderingService] (reconciled) Kunde inte länka AO till checklistpunkt -- behåller intent för retry:', linkR.error);
+            return { ok: false, error: 'point_link_failed' };
+          }
+        }
+      }
+      if (!alreadyLinkedDeviation) {
+        ActivityService.log('ao_from_deviation', 'AO skapad från anmärkning: ' + avv.title, {
+          customerId: avv.customerId, propertyId: avv.propertyId,
+          ronderingId: avv.ronderingId, deviationId: intent.refId, workOrderId: intent.aoId,
+          workOrderDisplayNumber: (typeof WorkOrderService !== 'undefined' ? WorkOrderService.displayNumberOrPending(getAO(intent.aoId) || { id: intent.aoId }) : intent.aoId)
+        });
+      }
+      let persisted;
+      try {
+        /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+        persisted = await persist({ keys: ['avvikelser'] });
+      } catch (e) {
+        console.error('[RonderingService] persist() threw while linking AO to deviation', intent.refId, ':', e);
+        return { ok: false, error: 'persist_threw' };
+      }
+      if (!persisted) {
+        console.error('[RonderingService] persist() reported failure while linking AO to deviation', intent.refId, '-- the durable intent is kept for retry, not pruned.');
+        return { ok: false, error: 'persist_failed' };
+      }
+      if (typeof RonderingUtforandePage !== 'undefined' && typeof RonderingUtforandePage._refresh === 'function') {
+        try { RonderingUtforandePage._refresh(); } catch (e) {}
+      }
+      return { ok: true };
+    } else if (settleResult.final) {
+      console.error('[RonderingService] AO-skapande avvisades slutgiltigt av servern för anmärkning', intent.refId, '(reconciled):', settleResult.error);
+      return { ok: true };
+    }
+    return { ok: true };
+  });
+}

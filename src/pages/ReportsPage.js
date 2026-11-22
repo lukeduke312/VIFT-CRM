@@ -12,6 +12,19 @@
  *
  * Status: Byggd – behöver dataverifiering och webbläsartest
  */
+/* QA FIX-ROUND 2026-11-12 (K8, confirmed): the report summed `e.duration`,
+   a field time entries do not have — they store `minutes` (Schema.timeEntry,
+   TimeService, payroll). The hours report therefore always showed 0 h
+   (live: 0 h where payroll showed 12,98 h for the same period). Hours now
+   come from `minutes / 60`; a legacy/imported entry that only carries a
+   numeric `duration` (hours) still counts, exactly as before. */
+function _entryHours(e) {
+  if (!e) return 0;
+  var m = Number(e.minutes);
+  if (e.minutes !== undefined && e.minutes !== null && e.minutes !== '' && isFinite(m)) return m / 60;
+  return parseFloat(e.duration) || 0;
+}
+
 const ReportsPage = (function () {
 
   var _tab    = 'oversikt';
@@ -267,7 +280,7 @@ const ReportsPage = (function () {
     /* Timmar i period */
     var timmar = (state.timeEntries || [])
       .filter(function (e) { return _inPeriod(e.date || e.startDate, range); })
-      .reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
+      .reduce(function (s, e) { return s + _entryHours(e); }, 0);
 
     /* Status-fördelning */
     var statusGroups = _groupBy(active.filter(function (a) { return a.status !== 'fakturerad'; }), function (a) { return a.status; });
@@ -400,13 +413,13 @@ const ReportsPage = (function () {
     /* Per personal */
     var byStaff   = _groupBy(inPeriod, function (e) { return e.staffId; });
     var topStaff  = _topN(byStaff, 15, function (items) {
-      return items.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
+      return items.reduce(function (s, e) { return s + _entryHours(e); }, 0);
     }).map(function (r) { r.val = Math.round(r.val * 10) / 10; return r; });
 
     /* Beläggning per person (estimat 160 h/mån) */
-    var totalHours = inPeriod.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
+    var totalHours = inPeriod.reduce(function (s, e) { return s + _entryHours(e); }, 0);
     var belaggning = Object.keys(byStaff).map(function (sid) {
-      var h = byStaff[sid].reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
+      var h = byStaff[sid].reduce(function (s, e) { return s + _entryHours(e); }, 0);
       return { staffId: sid, hours: Math.round(h * 10) / 10 };
     }).sort(function (a, b) { return b.hours - a.hours; });
     var maxBel = belaggning.length ? belaggning[0].hours : 1;
@@ -414,7 +427,7 @@ const ReportsPage = (function () {
     /* Per AO */
     var byAO  = _groupBy(entries.filter(function (e) { return e.workOrderId; }), function (e) { return e.workOrderId; });
     var topAO = _topN(byAO, 8, function (items) {
-      return items.reduce(function (s, e) { return s + (parseFloat(e.duration) || 0); }, 0);
+      return items.reduce(function (s, e) { return s + _entryHours(e); }, 0);
     }).map(function (r) { r.val = Math.round(r.val * 10) / 10; return r; });
 
     /* Per fastighet via AO-koppling (alla tider, inte bara period, för total bild) */
@@ -422,7 +435,7 @@ const ReportsPage = (function () {
     inPeriod.forEach(function (e) {
       var ao = e.workOrderId ? (state.workOrders || []).find(function (a) { return a.id === e.workOrderId; }) : null;
       if (!ao || !ao.propertyId) return;
-      byPropH[ao.propertyId] = (byPropH[ao.propertyId] || 0) + (parseFloat(e.duration) || 0);
+      byPropH[ao.propertyId] = (byPropH[ao.propertyId] || 0) + _entryHours(e);
     });
     var topPropH  = Object.keys(byPropH).map(function (k) { return { key: k, val: Math.round(byPropH[k] * 10) / 10 }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 8);

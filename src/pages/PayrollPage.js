@@ -191,33 +191,60 @@ const PayrollPage = (function() {
   }
 
   /* ── Attestering ──────────────────────────────────────────── */
-  function _toggleAttest(entryId, checked) {
+  /* SÄKERHETSBLOCKER-FIX (2026-10-28): detta muterade tidigare
+     `state.timeEntries` direkt och anropade den generiska `persist()`
+     — en skrivväg som (a) redan uteslutit `timeEntries` ur
+     `persist()`s nyckel-bundel (se state.js) och (b) ändå blockeras av
+     RLS-låsningen på `vift_timeEntries` för en vanlig autentiserad
+     användare. Attesteringen nådde alltså ALDRIG servern — bara
+     UI:ts egen, lokala kopia. Går nu via `ao-time-write`s dedikerade
+     `attest_time`-åtgärd (`time_entry_set_attested()`, se
+     20261028000001_time_entry_ownership_and_attest_fix.sql) — en
+     riktig, atomisk, behörighetskontrollerad serverskrivning. Ett
+     misslyckande visas direkt (ingen tyst, osynkroniserad kö) — en
+     löneansvarigs attestering ska synas fungera eller synligt
+     misslyckas, aldrig "lyckas" bara lokalt. */
+  async function _toggleAttest(entryId, checked) {
     if (!Auth.can('payroll_manage')) { showToast('Du saknar behörighet'); return; }
     const e = (state.timeEntries || []).find(x => x.id === entryId);
     if (!e) return;
-    const now = new Date().toISOString();
-    e.attested    = checked;
-    e.attestedAt  = checked ? now : '';
-    e.attestedBy  = checked ? ((state.currentUser && state.currentUser.id) || '') : '';
-    persist();
+    if (typeof AOTimeSyncService === 'undefined') { showToast('Attestering kräver en uppdaterad app-version — ladda om sidan.'); render(); return; }
+    const r = await AOTimeSyncService.setAttested(entryId, checked);
+    if (!r.ok) {
+      showToast('Kunde inte uppdatera attestering: ' + (r.error || 'okänt fel'));
+      render();
+      return;
+    }
+    if (r.data && r.data.timeEntry) Object.assign(e, r.data.timeEntry);
     render();
   }
 
-  function _attestAll(staffId) {
+  async function _attestAll(staffId) {
     if (!Auth.can('payroll_manage')) { showToast('Du saknar behörighet'); return; }
+    if (typeof AOTimeSyncService === 'undefined') { showToast('Attestering kräver en uppdaterad app-version — ladda om sidan.'); return; }
     const p = _currentPeriod();
-    const now = new Date().toISOString();
-    const byId = (state.currentUser && state.currentUser.id) || '';
-    (state.timeEntries || []).forEach(function(e) {
-      if (e.staffId === staffId && _inPeriod(e, p) && !e.attested) {
-        e.attested   = true;
-        e.attestedAt = now;
-        e.attestedBy = byId;
-      }
+    const targets = (state.timeEntries || []).filter(function(e) {
+      return e.staffId === staffId && _inPeriod(e, p) && !e.attested;
     });
-    persist();
+    let failed = 0;
+    /* Sekventiellt, samma motivering som AOTimeSyncService.bulkPatch() —
+       undviker dussintals samtidiga anrop mot den radlåsta RPC:n och
+       bevarar en förutsägbar, en-i-taget-ordning. */
+    for (let i = 0; i < targets.length; i++) {
+      const e = targets[i];
+      const r = await AOTimeSyncService.setAttested(e.id, true);
+      if (r.ok && r.data && r.data.timeEntry) {
+        Object.assign(e, r.data.timeEntry);
+      } else {
+        failed++;
+      }
+    }
     render();
-    showToast('Alla poster attesterade');
+    if (failed > 0) {
+      showToast((targets.length - failed) + ' poster attesterade, ' + failed + ' misslyckades — se konsolen.');
+    } else {
+      showToast('Alla poster attesterade');
+    }
   }
 
   /* ── Navigation ───────────────────────────────────────────── */

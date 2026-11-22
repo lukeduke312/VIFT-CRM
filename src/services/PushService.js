@@ -429,11 +429,70 @@ const PushService = {
    * Prioritet i Edge Function: primär kontakt → alla aktiva → broadcast-fallback.
    * Fire-and-forget — felet loggas men stoppar aldrig AO-skapandet.
    */
+  /* R8-1 FIX (round 9, independent-reviewer finding): this used to
+     swallow every outcome — HTTP 4xx/5xx, a network error, the no-JWT
+     case — into a bare `undefined` return, with NO distinction
+     between "actually delivered", "intentionally blocked" (e.g. this
+     engagement's own STAGING guard returning `blocked_in_staging`),
+     and "transient failure, should retry". A caller (WorkOrderService's
+     durable push intent handler) that `await`ed this and reported
+     `{ok:true}` regardless was therefore PRUNING the durable intent
+     even when the push was never actually delivered — indistinguishable
+     from a real success in the stored data, and never retried.
+
+     Fix: `notifyNewAO()` now returns an explicit, three-way result:
+       `{ delivered: true }`                      — real HTTP success.
+       `{ delivered: false, reason: 'blocked' }`   — the server
+         REFUSED the send on purpose (any non-5xx/429 HTTP error
+         response, e.g. this engagement's own `blocked_in_staging`
+         403, or a real 400/401/404-style rejection) — retrying the
+         SAME request would fail the same way every time, so this is
+         treated as a FINAL state (no further retry), but explicitly
+         distinct from `delivered:true` for anyone inspecting the
+         result, never silently indistinguishable from a real send.
+       `{ delivered: false, reason: 'transient' }` — a network error,
+         an HTTP 5xx, or an HTTP 429 (rate-limited) — these SHOULD be
+         retried; a later attempt may succeed.
+     DECISION, documented explicitly (not left ambiguous): the no-JWT
+     case is classified as `transient` — a logged-out caller moments
+     after an action that required being logged in is almost always a
+     timing/race artifact, not a permanent fact, so a LATER retry
+     (e.g. after the next reload, once the session is confirmed again)
+     is worth attempting rather than giving up forever.
+
+     R9-1 FIX (second independent review, after round 9): an HTTP 401
+     was being lumped into the same `blocked` bucket as an intentional
+     STAGING policy block (403) — but a 401 almost always means the
+     JWT merely expired, which is RECOVERABLE by a token refresh, not
+     a permanent fact like a 403 policy block. Treating it as `blocked`
+     caused the caller's intent handler to prune the notification for
+     good, even though a retry after re-auth would likely succeed.
+     Fix: on a 401, this method now reuses the SAME re-auth mechanism
+     already used elsewhere in this codebase for exactly this
+     situation (`Storage._authFetch()`'s own 401-retry, `storage.js`) —
+     `Auth.forceRefresh()` — once, then retries the send once with the
+     freshly-refreshed token. If that retry succeeds, classification
+     proceeds normally (delivered, or blocked per the body-level check
+     below). If the retry still comes back 401 (or the refresh itself
+     failed), this method returns a result with its OWN distinct
+     reason, `auth_retry` — NOT `blocked` (it must not share fate with
+     a real policy block) and NOT `transient` (the caller needs to
+     cap how many times it keeps retrying this specific case, which a
+     plain `transient` does not signal) — see WorkOrderService.js's
+     handler for the persisted attempt cap this reason exists for.
+
+     R9-2 FIX (same review): an HTTP 2xx no longer, by itself, means
+     `delivered:true`. The response BODY is now also checked for a
+     semantic failure (an `error` field) even on a 2xx status — e.g.
+     an inconsistent backend contract that returns
+     `200 {"error":"blocked_in_staging", sent:0}` instead of a real
+     non-ok status. Such a body is classified as `blocked`, exactly
+     like a real 403 — status code alone is never blindly trusted. */
   async notifyNewAO(ao) {
     const token = Auth.getAccessToken();
     if (!token) {
       console.warn('[PushService] notifyNewAO: ej inloggad, hoppar över push');
-      return;
+      return { delivered: false, reason: 'transient' };
     }
 
     const cuName    = (typeof getCu === 'function' && ao.customerId) ? (() => { const c = getCu(ao.customerId); return c ? (c.name || (c.firstName + ' ' + c.lastName).trim()) : ''; })() : '';
@@ -451,22 +510,67 @@ const PushService = {
       pushBody.broadcast = true;
     }
 
-    try {
+    /* Sends one attempt with a given bearer token, reads the body
+       ONCE (text(), then best-effort JSON.parse) so it can be
+       inspected both for the 401-retry check AND the body-level
+       semantic-failure check below, without ever reading a real
+       fetch Response body twice. */
+    const attemptSend = async (bearerToken) => {
       const res = await fetch(SUPABASE_URL + '/functions/v1/send-push', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + bearerToken },
         body: JSON.stringify(pushBody)
       });
+      const txt = await res.text().catch(() => '');
+      let parsed = null;
+      try { parsed = txt ? JSON.parse(txt) : {}; } catch (e) { parsed = null; }
+      return { res, txt, parsed };
+    };
+
+    try {
+      let { res, txt, parsed } = await attemptSend(token);
+
+      if (res.status === 401) {
+        console.warn('[PushService] notifyNewAO: HTTP 401 — förmodat utgånget JWT, försöker förnya sessionen och skicka om en gång (samma mekanism som Storage._authFetch() redan använder för andra autentiserade anrop)');
+        const refreshOk = (typeof Auth !== 'undefined' && typeof Auth.forceRefresh === 'function')
+          ? await Auth.forceRefresh().catch(() => false)
+          : false;
+        if (refreshOk) {
+          const freshToken = Auth.getAccessToken();
+          if (freshToken) {
+            const retry = await attemptSend(freshToken);
+            res = retry.res; txt = retry.txt; parsed = retry.parsed;
+          }
+        }
+        if (res.status === 401) {
+          console.warn('[PushService] notifyNewAO: fortfarande HTTP 401 efter förnyelseförsök — klassificerar som "auth_retry" (varken slutgiltigt blockerad eller en vanlig transient — se WorkOrderService.js för den begränsade återförsöksräknaren som denna orsak finns till för)');
+          return { delivered: false, reason: 'auth_retry', httpStatus: 401, detail: txt };
+        }
+      }
 
       if (!res.ok) {
-        const txt = await res.text().catch(() => '');
         console.warn('[PushService] notifyNewAO svar', res.status, ':', txt);
-      } else {
-        const result = await res.json().catch(() => ({}));
-        console.log('[PushService] notifyNewAO skickad — enheter:', result.sent || 0, '/ revokade:', result.revoked || 0);
+        /* 5xx and 429 (rate-limited) are TRANSIENT -- worth retrying.
+           Everything else (403/400/404-style; 401 is handled above)
+           is treated as an intentional/definite BLOCK -- retrying the
+           exact same request would fail the same way every time. */
+        const transient = res.status >= 500 || res.status === 429;
+        return { delivered: false, reason: transient ? 'transient' : 'blocked', httpStatus: res.status, detail: txt };
       }
+
+      /* R9-2 FIX: an HTTP 2xx does not, by itself, guarantee a real
+         delivery -- check the parsed body for a semantic failure
+         (an `error` field) even though the status was ok. */
+      if (parsed && typeof parsed === 'object' && parsed.error) {
+        console.warn('[PushService] notifyNewAO: HTTP', res.status, 'men svarskroppen signalerar ett fel ("' + parsed.error + '") — klassificerar som blockerad, INTE levererad (status-kod ensam litas aldrig blint på)');
+        return { delivered: false, reason: 'blocked', httpStatus: res.status, detail: txt };
+      }
+
+      console.log('[PushService] notifyNewAO skickad — enheter:', (parsed && parsed.sent) || 0, '/ revokade:', (parsed && parsed.revoked) || 0);
+      return { delivered: true, sent: (parsed && parsed.sent) || 0, revoked: (parsed && parsed.revoked) || 0 };
     } catch(e) {
       console.warn('[PushService] notifyNewAO nätverksfel:', e);
+      return { delivered: false, reason: 'transient', detail: String(e && e.message || e) };
     }
   },
 

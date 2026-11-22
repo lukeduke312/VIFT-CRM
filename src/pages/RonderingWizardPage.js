@@ -819,7 +819,7 @@ const RonderingWizardPage = {
     }
   },
 
-  _save() {
+  async _save() {
     this._readCurrentStep();
     const d    = this._d;
     const cats = this._cleanCats();
@@ -853,11 +853,11 @@ const RonderingWizardPage = {
           results: this._buildResults(cats, existing),
           status: saveData.isDraft ? 'utkast' : (existing && existing.status !== 'utkast' ? existing.status : 'planerad')
         }));
-        RonderingService.generatePassesFromRecurring(this._editId);
+        await RonderingService.generatePassesFromRecurring(this._editId);
         showToast('Rondering sparad');
       } else {
         const ron = RonderingService.createRondering(saveData);
-        const nPasses = RonderingService.generatePassesFromRecurring(ron.id);
+        const nPasses = await RonderingService.generatePassesFromRecurring(ron.id);
         showToast('Rondering skapad' + (nPasses > 0 ? ' · ' + nPasses + ' tillfällen schemalagda' : ''));
       }
       Router.showPage('pg-rondering');

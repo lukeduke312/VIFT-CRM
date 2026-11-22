@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="VIFT CRM">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="/manifest.json?v=3">
 <link rel="icon" href="/assets/favicon.ico?v=2">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png?v=2">
 <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png?v=2">
@@ -22,17 +22,17 @@
      som AddressService.js redan geokodar adresser mot — ingen ny
      kartleverantör, bara en annan laddningstidpunkt. -->
 
-<!-- DEPLOY: SW=v13 (CACHE_NAME=vift-crm-v13) responsive=v32 WorkOrdersPage=v62 WorkOrderDetailPage=v75 components=v101 CustomerPicker=v6 PageShells=v160 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v23 ServiceIntervalService=v4 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v30 schema=v28 state=v52 Dashboard=v53 DashboardConfig=v11 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v11 ImportExportService=v3 ImportWizardPage=v8 ImportLogPage=v2 CustomersPage=v31 ImportExportConfigs=v11 CustomerService=v5 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v8 TimePage=v10 TimeService=v12 InvoicesPage=v31 BillingQueueService=v6 InvoiceService=v12 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v9 RecurringPage=v12 RecurringOrderService=v4 service-monitor=v1 offer-token-validate=v11 offer-respond=v11 offer-public-pdf=v13 offer-attachment-upload=v1 offer-attachment-url=v3 offer-pdf=v11 public-offer=v14 send-push=v6 project-document-upload=v3(pending-deploy) project-document-url=v2(pending-deploy) PushService=v8 WorkOrderService=v19 AddressService=v12 PayrollPage=v2 ContractsPage=v2 AuthService=v17 send-offer-email=v6 BrandingService=v7 Sidebar=v31 MobileShell=v5 Icons=v12 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v5 storage=v11 layout=v29 MyJobsPage=v12 ProjectDocumentService=v2 ProjectService=v6 ProjectsPage=v4 ProjectDetailPage=v7 (INTEGRATION: Router/Sidebar bumped past both V53/V54A branch versions to resolve version collision) -->
+<!-- DEPLOY: SW=v13 (CACHE_NAME=vift-crm-v13) responsive=v32 WorkOrdersPage=v63 WorkOrderDetailPage=v74 components=v101 CustomerPicker=v6 PageShells=v165 GlobalSearchService=v4 GlobalSearch=v4 SelectionModel=v7 PropertyDetailPage=v24 ServiceIntervalService=v3 OperationsPage=v11 PropertyObjectService=v2 PropertyObjectPage=v3 Router=v30 schema=v28 state=v54 Dashboard=v53 DashboardConfig=v11 dashboard.css=v29 SalesPage=v6 SalesService=v4 RonderingUtforandePage=v12 ImportExportService=v3 ImportWizardPage=v9 ImportLogPage=v2 CustomersPage=v32 ImportExportConfigs=v11 CustomerService=v6 ActivityService=v4 ExportCenterPage=v5 ReportsPage=v8 TimePage=v10 TimeService=v13 InvoicesPage=v33 BillingQueueService=v7 InvoiceService=v14 RonderingRapportPage=v1(unloaded-V19) CalendarPage=v2 RonderingPage=v10 RecurringPage=v13 RecurringOrderService=v5 service-monitor=v1 offer-token-validate=v12 offer-respond=v12 offer-public-pdf=v13 offer-attachment-upload=v2 offer-attachment-url=v3 offer-pdf=v11 public-offer=v14 send-push=v6 project-document-upload=v3(pending-deploy) project-document-url=v2(pending-deploy) PushService=v8 WorkOrderService=v20 AddressService=v12 PayrollPage=v3 ContractsPage=v2 AuthService=v19 send-offer-email=v11 BrandingService=v7 Sidebar=v31 MobileShell=v5 Icons=v12 UserPrefsService=v7 NotificationsService=v6 ActivitiesService=v5 storage=v13 layout=v29 MyJobsPage=v13 ProjectDocumentService=v2 ProjectService=v6 ProjectsPage=v4 ProjectDetailPage=v7 (INTEGRATION: Router/Sidebar bumped past both V53/V54A branch versions to resolve version collision) -->
 <!-- Leverans A v3: status-badge som span, adress klickbar (ta bort Navigera), datumvy med svensk text -->
 
 <!-- CSS — ett system, inga konflikter -->
 <link rel="stylesheet" href="src/styles/tokens.css">
 <link rel="stylesheet" href="src/styles/reset.css">
-<link rel="stylesheet" href="src/styles/layout.css?v=29">
-<link rel="stylesheet" href="src/styles/components.css?v=101">
-<link rel="stylesheet" href="src/styles/forms.css?v=12">
-<link rel="stylesheet" href="src/styles/dashboard.css?v=29">
-<link rel="stylesheet" href="src/styles/responsive.css?v=32">
+<link rel="stylesheet" href="src/styles/layout.css?v=30">
+<link rel="stylesheet" href="src/styles/components.css?v=103">
+<link rel="stylesheet" href="src/styles/forms.css?v=13">
+<link rel="stylesheet" href="src/styles/dashboard.css?v=30">
+<link rel="stylesheet" href="src/styles/responsive.css?v=33">
 </head>
 <body>
 
@@ -206,11 +206,6 @@
         <div class="con" id="pg-obj-detail-content"></div>
       </div>
 
-      <!-- Serviceintervall (alla fastigheter) -->
-      <div class="page" id="pg-service-intervals">
-        <div class="con" id="pg-service-intervals-content"></div>
-      </div>
-
       <!-- Offerter -->
       <div class="page" id="pg-offer">
         <div class="con" id="pg-offer-content"></div>
@@ -378,84 +373,87 @@
 <!-- ── JavaScript — laddningsordning ──────── -->
 
 <!-- 0. App-konfiguration (token, feature flags) -->
-<script src="config.js?v=3"></script>
+<script src="config.js?v=4"></script>
 
 <!-- 1. Data-lager -->
-<script src="src/data/storage.js?v=12"></script>
+<script src="src/data/storage.js?v=20"></script>
 <script src="src/data/schema.js?v=28"></script>
 <script src="src/data/seedData.js?v=25"></script>
-<script src="src/data/state.js?v=52"></script>
+<script src="src/data/state.js?v=63"></script>
 <script src="src/data/DashboardConfig.js?v=11"></script>
+<!-- QA FIX-ROUND 2026-11-12 (I2): the one offer calculation, shared with public-offer.html -->
+<script src="src/shared/OfferCalc.js?v=1"></script>
 
 <!-- 2. Services -->
-<script src="src/services/BrandingService.js?v=7"></script>
-<script src="src/services/ActivityService.js?v=4"></script>
+<script src="src/services/BrandingService.js?v=8"></script>
+<script src="src/services/ActivityService.js?v=5"></script>
 <script src="src/services/SalesService.js?v=4"></script>
-<script src="src/services/AuthService.js?v=17"></script>
-<script src="src/services/TimeEntriesReadService.js?v=1"></script>
-<script src="src/services/CustomerService.js?v=5"></script>
-<script src="src/services/WorkOrderService.js?v=19"></script>
-<script src="src/services/WorkOrderImageService.js?v=3"></script>
-<script src="src/services/TimeService.js?v=12"></script>
-<script src="src/services/InvoiceService.js?v=12"></script>
-<script src="src/services/BillingQueueService.js?v=6"></script>
+<script src="src/services/AuthService.js?v=22"></script>
+<script src="src/services/CustomerService.js?v=8"></script>
+<script src="src/services/WorkOrderService.js?v=24"></script>
+<script src="src/services/TimeService.js?v=20"></script>
+<script src="src/services/AOTimeSyncService.js?v=3"></script>
+<script src="src/services/TimeEntriesReadService.js?v=2"></script>
+<script src="src/services/WorkOrdersReadService.js?v=2"></script>
+<script src="src/services/InvoiceService.js?v=17"></script>
+<script src="src/services/BillingQueueService.js?v=9"></script>
 <script src="src/services/ProfitabilityService.js?v=3"></script>
-<script src="src/services/RecurringOrderService.js?v=4"></script>
-<script src="src/services/RonderingService.js?v=6"></script>
+<script src="src/services/RecurringOrderService.js?v=6"></script>
+<script src="src/services/RonderingService.js?v=8"></script>
+<script src="src/services/RonderingSyncService.js?v=1"></script>
 <script src="src/services/ActivitiesService.js?v=5"></script>
 <script src="src/services/ServiceTemplateService.js?v=5"></script>
 <script src="src/services/UserPrefsService.js?v=7"></script>
-<script src="src/services/NotificationsService.js?v=6"></script>
-<script src="src/services/ServiceIntervalService.js?v=5"></script>
-<script src="src/services/PropertyObjectService.js?v=2"></script>
+<script src="src/services/NotificationsService.js?v=7"></script>
+<script src="src/services/ServiceIntervalService.js?v=3"></script>
+<script src="src/services/PropertyObjectService.js?v=4"></script>
 <script src="src/services/PropertyContactService.js?v=1"></script>
 <script src="src/services/ImportExportService.js?v=3"></script>
 <script src="src/services/ImportExportConfigs.js?v=11"></script>
 <script src="src/services/SelectionModel.js?v=7"></script>
-<script src="src/pages/ImportWizardPage.js?v=8"></script>
+<script src="src/pages/ImportWizardPage.js?v=10"></script>
 <script src="src/pages/ImportLogPage.js?v=2"></script>
 <script src="src/pages/ExportCenterPage.js?v=5"></script>
 <script src="src/services/PropertyImageService.js?v=2"></script>
 <script src="src/services/AddressService.js?v=12"></script>
-<script src="src/services/PushService.js?v=8"></script>
-<script src="src/services/GlobalSearchService.js?v=4"></script>
+<script src="src/services/PushService.js?v=9"></script>
+<script src="src/services/GlobalSearchService.js?v=5"></script>
 <script src="src/services/ProjectDocumentService.js?v=2"></script>
 <script src="src/services/ProjectService.js?v=6"></script>
 
 <!-- 3. Components -->
 <script src="src/components/Icons.js?v=12"></script>
 <script src="src/components/CustomSelect.js?v=1"></script>
-<script src="src/components/CustomerPicker.js?v=6"></script>
-<script src="src/components/Modal.js?v=7"></script>
+<script src="src/components/CustomerPicker.js?v=7"></script>
+<script src="src/components/Modal.js?v=8"></script>
 <script src="src/components/Sidebar.js?v=31"></script>
-<script src="src/components/MobileShell.js?v=5"></script>
+<script src="src/components/MobileShell.js?v=6"></script>
 <script src="src/components/GlobalSearch.js?v=4"></script>
 
 <!-- 4. Pages -->
 <script src="src/pages/Router.js?v=30"></script>
-<script src="src/pages/Dashboard.js?v=53"></script>
-<script src="src/pages/CustomersPage.js?v=31"></script>
-<script src="src/pages/WorkOrdersPage.js?v=62"></script>
-<script src="src/pages/WorkOrderDetailPage.js?v=76"></script>
-<script src="src/pages/TimePage.js?v=10"></script>
-<script src="src/pages/PayrollPage.js?v=2"></script>
+<script src="src/pages/Dashboard.js?v=54"></script>
+<script src="src/pages/CustomersPage.js?v=36"></script>
+<script src="src/pages/WorkOrdersPage.js?v=66"></script>
+<script src="src/pages/WorkOrderDetailPage.js?v=81"></script>
+<script src="src/pages/TimePage.js?v=13"></script>
+<script src="src/pages/PayrollPage.js?v=3"></script>
 <script src="src/pages/ContractsPage.js?v=2"></script>
 <script src="src/pages/ProjectsPage.js?v=4"></script>
 <script src="src/pages/ProjectDetailPage.js?v=7"></script>
-<script src="src/pages/InvoicesPage.js?v=31"></script>
-<script src="src/pages/RecurringPage.js?v=12"></script>
-<script src="src/pages/SalesPage.js?v=6"></script>
-<script src="src/pages/PropertyDetailPage.js?v=24"></script>
-<script src="src/pages/ServiceIntervalsPage.js?v=1"></script>
-<script src="src/pages/PropertyObjectPage.js?v=3"></script>
-<script src="src/pages/PageShells.js?v=160"></script>
-<script src="src/pages/RonderingPage.js?v=9"></script>
+<script src="src/pages/InvoicesPage.js?v=34"></script>
+<script src="src/pages/RecurringPage.js?v=15"></script>
+<script src="src/pages/SalesPage.js?v=8"></script>
+<script src="src/pages/PropertyDetailPage.js?v=30"></script>
+<script src="src/pages/PropertyObjectPage.js?v=4"></script>
+<script src="src/pages/PageShells.js?v=173"></script>
+<script src="src/pages/RonderingPage.js?v=10"></script>
 <script src="src/pages/OperationsPage.js?v=11"></script>
-<script src="src/pages/ReportsPage.js?v=8"></script>
+<script src="src/pages/ReportsPage.js?v=9"></script>
 <script src="src/pages/CalendarPage.js?v=2"></script>
-<script src="src/pages/MyJobsPage.js?v=12"></script>
-<script src="src/pages/RonderingUtforandePage.js?v=11"></script>
-<script src="src/pages/RonderingWizardPage.js?v=8"></script>
+<script src="src/pages/MyJobsPage.js?v=15"></script>
+<script src="src/pages/RonderingUtforandePage.js?v=12"></script>
+<script src="src/pages/RonderingWizardPage.js?v=9"></script>
 <!-- V19: src/pages/RonderingRapportPage.js borttagen från laddningskedjan — filen
      deklarerar samma globala const som RonderingUtforandePage.js (rad 556), vilket
      orsakade "Identifier 'RonderingRapportPage' has already been declared" i klassisk
@@ -464,7 +462,86 @@
 
 <!-- 5. App bootstrap -->
 <script>
+/* PR #2 CONSOLIDATED REVIEW FIX (2026-11-09, finding F): element ids are
+   DATA (user-entered or bug-influenced strings), never trusted markup.
+   Modal.js renders `title`/`body`/each button's `label` via `innerHTML`
+   (see src/components/Modal.js) — any of these built from an id/label
+   string via plain concatenation is a real HTML/script injection risk if
+   that id/label ever contains HTML-special characters. Escape before
+   interpolating into any such string. */
+function _vfEscapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const App = {
+
+  /* ISSUE #1 FIX (2026-11-08, blocker d) — en verklig, klickbar
+     konfliktdialog, inte en tyst sparlås. Återanvänder det befintliga
+     Modal-systemet (samma Modal.confirm() som redan används för
+     bekräftelsedialoger i resten av appen) istället för att uppfinna en
+     egen UI-komponent.
+     - Utan `elementIds`: hela nyckeln (objekt-formad, t.ex. `settings`)
+       är låst — "behåll min ändring" anropar resolveKeyConflict(key,true)
+       och försöker spara igen; "använd serverns version" anropar
+       resolveKeyConflict(key,false) utan att försöka spara om.
+     - Med `elementIds`: endast dessa specifika poster (kund/offert/etc.)
+       kolliderade — övriga ändringar i samma register sparades redan.
+       Varje post kan lösas individuellt. */
+  showPersistConflictWarning(shortKey, elementIds) {
+    const label = shortKey;
+    if (Array.isArray(elementIds) && elementIds.length > 0) {
+      const idList = elementIds.map(_vfEscapeHtml).join(', ');
+      showToast('Konflikt: ' + elementIds.length + ' post(er) i ' + label + ' ändrades samtidigt av en annan session.', 6000);
+      Modal.open({
+        title: 'Sparningskonflikt',
+        body: '<p style="font-size:14px;line-height:1.5;color:var(--tx);">' +
+          'Följande poster i <b>' + _vfEscapeHtml(label) + '</b> ändrades av en annan session innan din ändring hann sparas: ' +
+          '<code>' + idList + '</code>.<br><br>' +
+          'Resten av dina ändringar i detta register sparades som vanligt. Välj hur varje kolliderande post ska hanteras.</p>',
+        buttons: elementIds.map(function(id) {
+          return {
+            label: 'Behåll min ändring (' + _vfEscapeHtml(id) + ')', cls: 'btn bp', onClick: function() {
+              resolveElementConflict(shortKey, id, true);
+              Modal.close();
+              try { persist(); } catch(e) {}
+            }
+          };
+        }).concat([{
+          label: 'Använd serverns version (alla)', cls: 'btn bs', onClick: function() {
+            elementIds.forEach(function(id) { resolveElementConflict(shortKey, id, false); });
+            Modal.close();
+          }
+        }])
+      });
+      return;
+    }
+    showToast('Sparningskonflikt i ' + label + ' — en annan session hann ändra samtidigt.', 6000);
+    Modal.open({
+      title: 'Sparningskonflikt',
+      body: '<p style="font-size:14px;line-height:1.5;color:var(--tx);">' +
+        '<b>' + _vfEscapeHtml(label) + '</b> ändrades av en annan session innan din ändring hann sparas. Din ändring har INTE sparats ännu.</p>',
+      buttons: [
+        {
+          label: 'Behåll min ändring', cls: 'btn bp', onClick: function() {
+            resolveKeyConflict(shortKey, true);
+            Modal.close();
+            try { persist(); } catch(e) {}
+          }
+        },
+        {
+          label: 'Använd serverns version', cls: 'btn bs', onClick: function() {
+            resolveKeyConflict(shortKey, false);
+            Modal.close();
+          }
+        }
+      ]
+    });
+  },
 
   /*
    * Startflöde (Fas 1 — Supabase Auth):
@@ -646,6 +723,61 @@ const App = {
     }, 2000);
     /* Hash-baserad routing: läser nuvarande #hash och navigerar till rätt sida */
     Router.initFromHash();
+
+    /* Installerad app: erbjud push-onboarding efter att app/session/routing är redo. */
+    setTimeout(() => this._maybeOfferPushOnboarding(), 1200);
+  },
+
+  async _maybeOfferPushOnboarding() {
+    if (typeof PushService === 'undefined' || typeof Modal === 'undefined') return;
+    if (!PushService.isSupported() || !PushService.isStandalone()) return;
+    if (PushService.permissionState() === 'denied') return;
+
+    const user = Auth.getUser();
+    const userKey = user && user.id ? String(user.id) : 'current';
+    const dismissKey = 'vift_push_onboarding_dismissed_' + userKey;
+
+    const dismissedAt = Number(localStorage.getItem(dismissKey) || 0);
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    if (dismissedAt && (Date.now() - dismissedAt) < sevenDays) return;
+
+    const status = await PushService.getSubscriptionStatus();
+    if (status.browserSubscribed && status.serverRegistered) return;
+
+    Modal.open({
+      title: `${ic('bell',18)} Aktivera notiser`,
+      body: `
+        <div style="font-size:14px;line-height:1.55;color:var(--tx);">
+          Få notiser om bland annat nya arbetsorder, offertsvar och andra viktiga händelser i VIFT.
+        </div>
+      `,
+      buttons: [
+        {
+          label: `${ic('bell',14)} Aktivera notiser`,
+          cls: 'btn bp bfull',
+          onClick: async () => {
+            try {
+              await PushService.subscribe();
+              localStorage.removeItem(dismissKey);
+              Modal.close();
+              showToast('Notiser är aktiverade.');
+            } catch (e) {
+              Modal.close();
+              const msg = e && e.message ? e.message : 'Kunde inte aktivera notiser.';
+              showToast(msg, 5000);
+            }
+          }
+        },
+        {
+          label: 'Inte nu',
+          cls: 'btn bs',
+          onClick: () => {
+            localStorage.setItem(dismissKey, String(Date.now()));
+            Modal.close();
+          }
+        }
+      ]
+    });
   },
 
   async login() {
@@ -683,11 +815,15 @@ const App = {
     await initState();
     Auth._resolveUser();
 
-    /* Skriv tillbaka lösenordsfri staff-data till Supabase (engångsmigration) */
-    if (!localStorage.getItem('vift_pw_cleaned')) {
-      persist();
-      localStorage.setItem('vift_pw_cleaned', '1');
-    }
+    /* P0-INCIDENT-FIX (2026-11): borttaget. Den engångsmigrering som detta
+       villkor skyddade (lösenordsstrippning ur store-blobben) är redan körd
+       server-sidigt (migration 20260720000007 per CLAUDE.md) — detta
+       klientanrop var därför redan dödkod MED en verklig, kvarstående risk:
+       ett ovillkorligt persist() vid inloggning kan skriva tillbaka ett
+       degraderat/tomt klienttillstånd (se state.js _doPersist()-spärren)
+       som auktoritativt, om Supabase-läsningen vid just DETTA inloggnings-
+       tillfälle föll tillbaka på localStorage/SeedData. Se P0-INCIDENT-
+       RAPPORTEN (2026-11-04) för den fullständiga mekanismen. */
 
     if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
     this.showApp();

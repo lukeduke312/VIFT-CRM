@@ -359,11 +359,11 @@ const InvoicesPage = {
     });
   },
 
-  _confirmCreate() {
+  async _confirmCreate() {
     if (InvoicesPage._createBusy) return; /* dubbelklicksskydd */
     InvoicesPage._createBusy = true;
     const ids = SelectionModel.getSelected();
-    const result = BillingQueueService.createInvoicesFromSourceKeys(ids);
+    const result = await BillingQueueService.createInvoicesFromSourceKeys(ids);
     InvoicesPage._createBusy = false;
     Modal.close();
 
@@ -517,9 +517,9 @@ const InvoicesPage = {
      (BillingQueueService exkluderar dem helt), och source-aware AO:er med
      nya, ännu inte claimade sources fungerar automatiskt utan någon
      specialhantering här. Ingen risk att kringgå legacy-exkluderingen. */
-  createFromAO(aoId) {
+  async createFromAO(aoId) {
     if (!Auth.require('invoice_create')) return;
-    const result = InvoiceService.createFromAO(aoId);
+    const result = await InvoiceService.createFromAO(aoId);
     if (!result.ok) { showToast(result.error); return; }
     showToast(`${result.invoice.id} skapat`);
     Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });
@@ -539,13 +539,14 @@ const InvoicesPage = {
         <div class="fg"><label>Förfallodatum</label>
           <input type="date" id="blank-due" value="${new Date(Date.now()+30*86400000).toISOString().split('T')[0]}"></div>`,
       buttons: [
-        { label: 'Skapa', cls: 'btn bp', onClick: () => {
+        { label: 'Skapa', cls: 'btn bp', onClick: async () => {
           const cuId  = document.getElementById('blank-cu')?.value || '';
           const title = document.getElementById('blank-title')?.value.trim() || '';
           const note  = document.getElementById('blank-note')?.value.trim() || '';
           const due   = document.getElementById('blank-due')?.value || '';
-          const result = InvoiceService.createBlank(cuId, { title, note, dueDate: due });
+          const result = await InvoiceService.createBlank(cuId, { title, note, dueDate: due });
           Modal.close();
+          if (!result.ok) { showToast(result.error); return; }
           Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -614,7 +615,7 @@ const InvoiceDetailPage = {
               ${sbdg(inv.status)}
               ${Auth.can('invoice_create') ? `
               <select class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);font-weight:600;font-size:11px;" onchange="InvoiceDetailPage.setStatus(this.value)">
-                ${statusOpts.map(s=>`<option value="${s}" ${inv.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
+                ${statusOpts.map(s=>`<option style="color:#17324d;background:#fff;" value="${s}" ${inv.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
               </select>` : ''}
             </div>
           </div>
@@ -648,6 +649,7 @@ const InvoiceDetailPage = {
               <h3>Fakturarader</h3>
               ${(Auth.can('invoice_create') && InvoiceService.canEditLines(inv)) ? `<button class="btn bs bxs" onclick="InvoiceDetailPage.openAddLine()">${ic('plus',13)}</button>` : ''}
             </div>
+            ${this._renderStaleLinesWarning(inv)}
             <div id="inv-lines">
               ${this._renderLines(inv)}
             </div>
@@ -675,7 +677,9 @@ const InvoiceDetailPage = {
           </div>
 
           <div class="inv-actions-card">
-            ${(inv.status === 'utkast'  && Auth.can('invoice_create')) ? `<button class="btn bp bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>` : ''}
+            ${(inv.status === 'utkast'  && Auth.can('invoice_create')) ? (InvoiceService.isSendBlockedByStalePrice(inv)
+              ? `<button class="btn bs bsm inv-action-btn" style="opacity:.7;" title="Spärrad: prisavvikelse mot arbetsordern" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('lock',14)} Markera skickad (spärrad)</button>`
+              : `<button class="btn bp bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('skickad')">${ic('send',14)} Markera skickad</button>`) : ''}
             ${(inv.status === 'skickad' && Auth.can('invoice_create')) ? `<button class="btn bsu bsm inv-action-btn" onclick="InvoiceDetailPage.setStatus('betald')">${ic('check-circle',14)} Markera betald</button>` : ''}
             <button class="btn bs bsm inv-action-btn" onclick="InvoiceDetailPage.showPrintView()">${ic('printer',14)} PDF / Skriv ut</button>
             ${(inv.status === 'utkast' && Auth.can('invoice_create')) ? `<button class="btn bd bsm inv-action-btn" onclick="InvoiceDetailPage.deleteDraft()">${ic('trash-2',14)} Radera utkast</button>` : ''}
@@ -687,6 +691,97 @@ const InvoiceDetailPage = {
           </details>` : ''}
         </div>
       </div>`;
+  },
+
+  /* STAGING-granskning 2026-11-11 (F-002/AO-002-fyndet): varnar om en
+     fastprisrad inte längre matchar arbetsorderns nuvarande fixedPrice
+     (t.ex. om priset rättades EFTER att fakturaunderlaget skapades). Ändrar
+     aldrig beloppet — visar bara avvikelsen så den upptäcks innan fakturan
+     skickas. Se InvoiceService.staleFixedPriceLines(). */
+  /* F-002 HÅRD SPÄRR (2026-11-12): utökad från ren varning. Visar ALLTID
+     själva avvikelsen (rad, fakturapris, AO:ns nuvarande pris) — även
+     efter ett godkännande, så att det aldrig döljs att avvikelsen fanns.
+       - stale + ej godkänd + kan skickas: tydligt att "Markera skickad"
+         är SPÄRRAD, plus knapp för godkännande (endast behörig användare).
+       - stale + godkänd: vem/när/varför bredvid avvikelsen.
+       - stale + tidigare godkännande som inte längre matchar: säger det.
+       - stale + redan skickad/låst: oförändrad text (kreditering m.m.). */
+  _renderStaleLinesWarning(inv) {
+    const st = InvoiceService.staleOverrideStatus(inv);
+    if (!st.stale.length) return '';
+    const sendable = InvoiceService.getAllowedStatusTransitions(inv).indexOf('skickad') !== -1;
+    const lineRows = st.stale.map(x => {
+      const l = (inv.lines || []).find(y => String(y.id) === x.lineId) || {};
+      return `<li>${esc(l.description || x.lineId)} (${esc(x.workOrderId)}): fakturarad ${fmt(x.lineUnitPrice)} kr — arbetsorderns pris nu ${fmt(x.aoFixedPrice)} kr</li>`;
+    }).join('');
+    const ov = st.override;
+    const ovInfo = ov ? `${esc(ov.approvedByName || 'okänd användare')}, ${esc(fmtDateTime(ov.approvedAt))}. Motivering: "${esc(ov.justification || '')}"` : '';
+    let statusHtml;
+    if (!sendable && inv.status !== 'utkast') {
+      statusHtml = 'Denna faktura är redan skickad/låst — kontrollera manuellt om en kreditering eller ny faktura behövs.' +
+        (ov ? `<div style="margin-top:6px;">Avvikelsen godkändes innan sändning av ${ovInfo}</div>` : '');
+    } else if (st.covered) {
+      statusHtml = `<div style="margin-top:6px;color:#92400e;"><strong>${ic('check-circle',12)} Avvikelsen är uttryckligen godkänd</strong> av ${ovInfo}<br>Fakturan kan markeras skickad med nuvarande belopp. Om arbetsorderns pris ändras igen krävs ett nytt godkännande.</div>`;
+    } else {
+      statusHtml = (st.supersededOverride
+          ? `<div style="margin-top:6px;">Ett tidigare godkännande (${ovInfo}) gäller inte längre — avvikelsen har ändrats sedan dess.</div>`
+          : '') +
+        `<div style="margin-top:6px;"><strong>"Markera skickad" är spärrad</strong> tills beloppet rättats eller avvikelsen godkänts med motivering av en behörig användare. Inga belopp ändras automatiskt.</div>` +
+        (InvoiceService.canApproveStaleOverride()
+          ? `<button class="btn bs bxs" style="margin-top:8px;" onclick="InvoiceDetailPage.openStaleOverride()">${ic('shield-check',11)} Godkänn avvikelsen med motivering…</button>`
+          : `<div style="margin-top:6px;font-size:11px;">Endast en användare med fakturerings- och administratörsbehörighet kan godkänna avvikelsen.</div>`);
+    }
+    const covered = st.covered;
+    return `
+      <div id="inv-stale-warning" style="margin:0 14px 10px;padding:10px 12px;border-radius:8px;background:${covered ? '#fffbeb' : '#fef2f2'};border:1px solid ${covered ? '#fcd34d' : '#fca5a5'};">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="color:${covered ? '#b45309' : 'var(--rd)'};flex-shrink:0;margin-top:1px;">${ic('alert-triangle',15)}</span>
+          <div style="font-size:12px;color:${covered ? '#78350f' : 'var(--rd)'};line-height:1.4;">
+            <strong>${st.stale.length === 1 ? 'En fakturarad' : st.stale.length + ' fakturarader'} matchar inte arbetsorderns nuvarande pris.</strong>
+            <ul style="margin:4px 0 0 16px;padding:0;">${lineRows}</ul>
+            ${statusHtml}
+          </div>
+        </div>
+      </div>`;
+  },
+
+  openStaleOverride() {
+    const inv = getInv(this.invoiceId);
+    if (!inv) return;
+    if (!InvoiceService.canApproveStaleOverride()) { showToast('Du saknar behörighet att godkänna en prisavvikelse.'); return; }
+    const st = InvoiceService.staleOverrideStatus(inv);
+    if (!st.stale.length) { showToast('Det finns ingen prisavvikelse att godkänna.'); return; }
+    const rows = st.stale.map(x => `<li>${esc(x.lineId)} (${esc(x.workOrderId)}): ${fmt(x.lineUnitPrice)} kr på fakturan, ${fmt(x.aoFixedPrice)} kr på arbetsordern</li>`).join('');
+    Modal.open({
+      title: 'Godkänn prisavvikelse',
+      body: `
+        <p style="font-size:13px;margin-bottom:8px;">Du godkänner att fakturan får markeras skickad <strong>med nuvarande belopp</strong> trots att följande rader avviker från arbetsorderns pris. Inga belopp ändras.</p>
+        <ul style="font-size:12px;margin:0 0 10px 16px;">${rows}</ul>
+        <div class="fg"><label>Motivering (obligatorisk, minst ${InvoiceService.STALE_OVERRIDE_MIN_JUSTIFICATION} tecken) <span style="color:var(--rd)">*</span></label>
+          <textarea id="stale-ov-just" rows="3" maxlength="${InvoiceService.STALE_OVERRIDE_MAX_JUSTIFICATION}" placeholder="Varför ska det avvikande beloppet faktureras?"></textarea></div>
+        <p style="font-size:11px;color:var(--mt);">Godkännandet loggas med ditt namn och tidpunkt och gäller bara exakt denna avvikelse.</p>`,
+      buttons: [
+        { label: 'Godkänn avvikelse', cls: 'btn bp', onClick: async (ev) => {
+          const text = (document.getElementById('stale-ov-just')?.value || '').trim();
+          if (text.length < InvoiceService.STALE_OVERRIDE_MIN_JUSTIFICATION) {
+            showToast(`Motiveringen måste vara minst ${InvoiceService.STALE_OVERRIDE_MIN_JUSTIFICATION} tecken.`); return;
+          }
+          const btnEl = ev && ev.currentTarget;
+          const orig = btnEl ? btnEl.innerHTML : '';
+          if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
+          const result = await InvoiceService.approveStaleLineOverride(this.invoiceId, text);
+          if (!result.ok) {
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = orig; }
+            showToast(result.error);
+            return;
+          }
+          Modal.close();
+          showToast('Avvikelsen godkänd — fakturan kan nu markeras skickad.');
+          this._refresh();
+        }},
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
   },
 
   _renderLines(inv) {
@@ -1046,10 +1141,10 @@ const InvoiceDetailPage = {
       title: 'Lägg till rad',
       body: this._lineFormHtml(null),
       buttons: [
-        { label: 'Lägg till', cls: 'btn bp', onClick: () => {
+        { label: 'Lägg till', cls: 'btn bp', onClick: async () => {
           const data = InvoiceDetailPage._getLineData();
           if (!data) return;
-          const result = InvoiceService.addLine(this.invoiceId, data);
+          const result = await InvoiceService.addLine(this.invoiceId, data);
           if (!result.ok) { showToast(result.error); return; }
           Modal.close();
           this._refresh();
@@ -1088,10 +1183,10 @@ const InvoiceDetailPage = {
       title: 'Redigera rad',
       body: this._lineFormHtml(line),
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
+        { label: 'Spara', cls: 'btn bp', onClick: async () => {
           const data = InvoiceDetailPage._getLineData();
           if (!data) return;
-          const result = InvoiceService.updateLine(this.invoiceId, lineId, data);
+          const result = await InvoiceService.updateLine(this.invoiceId, lineId, data);
           if (!result.ok) { showToast(result.error); return; }
           Modal.close();
           this._refresh();
@@ -1115,8 +1210,8 @@ const InvoiceDetailPage = {
     }
     const line = (inv.lines || []).find(l => l.id === lineId);
     const desc = line ? `"${line.description}"` : 'raden';
-    Modal.confirm(`Ta bort ${desc}?`, () => {
-      const result = InvoiceService.deleteLine(this.invoiceId, lineId);
+    Modal.confirm(`Ta bort ${desc}?`, async () => {
+      const result = await InvoiceService.deleteLine(this.invoiceId, lineId);
       if (!result.ok) { showToast(result.error); return; }
       this._refresh();
     });
@@ -1131,8 +1226,8 @@ const InvoiceDetailPage = {
     const inv = getInv(this.invoiceId);
     if (!inv) return;
     if (inv.status !== 'utkast') { showToast('Endast utkast kan raderas.'); return; }
-    Modal.confirm(`Radera utkast ${inv.id}? Detta går inte att ångra.`, () => {
-      const result = InvoiceService.deleteDraft(this.invoiceId);
+    Modal.confirm(`Radera utkast ${inv.id}? Detta går inte att ångra.`, async () => {
+      const result = await InvoiceService.deleteDraft(this.invoiceId);
       if (!result.ok) { showToast(result.error); return; }
       showToast(`${inv.id} raderat.`);
       InvoicesPage._view = 'list';
@@ -1147,6 +1242,21 @@ const InvoiceDetailPage = {
     const prev = inv.status;
     if (newStatus === prev) return;
 
+    /* F-002 HÅRD SPÄRR: förklara spärren direkt i stället för att visa en
+       "Bekräfta"-dialog som ändå skulle nekas av InvoiceService. */
+    if (newStatus === 'skickad' && InvoiceService.isSendBlockedByStalePrice(inv)) {
+      this._refresh(); // återställ ev. status-dropdown
+      const canApprove = InvoiceService.canApproveStaleOverride();
+      Modal.open({
+        title: 'Fakturan kan inte markeras skickad',
+        body: `<p style="font-size:13px;">En eller flera fastprisrader matchar inte arbetsorderns nuvarande pris. Rätta beloppet på fakturaraden, eller låt en behörig användare godkänna avvikelsen med en motivering.</p>`,
+        buttons: (canApprove
+          ? [{ label: 'Godkänn avvikelse…', cls: 'btn bp', onClick: () => { Modal.close(); setTimeout(() => this.openStaleOverride(), 50); } }]
+          : []).concat([{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }])
+      });
+      return;
+    }
+
     const confirmStatuses = {
       skickad:   { label: 'Markera som skickad?', detail: 'Skickat datum sätts till idag.' },
       betald:    { label: 'Markera som betald?',  detail: 'Betaldatum sätts till idag.' },
@@ -1159,9 +1269,9 @@ const InvoiceDetailPage = {
         title: c.label,
         body: `<p style="color:var(--mt);font-size:13px;">${c.detail}</p>`,
         buttons: [
-          { label: 'Bekräfta', cls: 'btn bp', onClick: () => {
+          { label: 'Bekräfta', cls: 'btn bp', onClick: async () => {
             Modal.close();
-            const result = InvoiceService.setStatus(this.invoiceId, newStatus);
+            const result = await InvoiceService.setStatus(this.invoiceId, newStatus);
             if (!result.ok) { showToast(result.error); this._refresh(); return; }
             showToast(`Status: ${statusLabel(newStatus)}`);
             this._refresh();
@@ -1170,10 +1280,12 @@ const InvoiceDetailPage = {
         ]
       });
     } else {
-      const result = InvoiceService.setStatus(this.invoiceId, newStatus);
-      if (!result.ok) { showToast(result.error); this._refresh(); return; }
-      showToast(`Status: ${statusLabel(newStatus)}`);
-      this._refresh();
+      (async () => {
+        const result = await InvoiceService.setStatus(this.invoiceId, newStatus);
+        if (!result.ok) { showToast(result.error); this._refresh(); return; }
+        showToast(`Status: ${statusLabel(newStatus)}`);
+        this._refresh();
+      })();
     }
   },
 
@@ -1236,13 +1348,13 @@ const InvoiceDetailPage = {
         <div class="fg"><label>Intern kommentar (visas ej på faktura)</label>
           <textarea id="em-note" rows="2">${esc(inv.note||'')}</textarea></div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
+        { label: 'Spara', cls: 'btn bp', onClick: async () => {
           const data = {
             customerReference: document.getElementById('em-ref')?.value.trim() || '',
             ocr:               document.getElementById('em-ocr')?.value.trim() || '',
             note:              document.getElementById('em-note')?.value.trim() || ''
           };
-          const result = InvoiceService.updateMeta(this.invoiceId, data);
+          const result = await InvoiceService.updateMeta(this.invoiceId, data);
           if (!result.ok) { showToast(result.error); return; }
           Modal.close(); this._refresh();
         }},
@@ -1271,10 +1383,10 @@ const InvoiceDetailPage = {
             <input type="number" id="disc-value" value="${disc.type==='none'?0:disc.value}" min="0" step="${disc.type==='percent'?'1':'100'}"></div>
         </div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
+        { label: 'Spara', cls: 'btn bp', onClick: async () => {
           const type  = document.getElementById('disc-type')?.value  || 'none';
           const value = parseFloat(document.getElementById('disc-value')?.value) || 0;
-          const result = InvoiceService.setDiscount(this.invoiceId, type, value);
+          const result = await InvoiceService.setDiscount(this.invoiceId, type, value);
           if (!result.ok) { showToast(result.error); return; }
           Modal.close(); this._refresh();
         }},
@@ -1316,12 +1428,12 @@ const InvoiceDetailPage = {
             <input id="tr-note" value="${esc(tr.note||'')}" placeholder="T.ex. ROT 30% av arbete 5 560 kr"></div>
         </div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
+        { label: 'Spara', cls: 'btn bp', onClick: async () => {
           const type   = document.getElementById('tr-type')?.value || 'none';
           const basis  = parseFloat(document.getElementById('tr-basis')?.value)  || 0;
           const amount = parseFloat(document.getElementById('tr-amount')?.value) || 0;
           const note   = document.getElementById('tr-note')?.value.trim() || '';
-          const result = InvoiceService.setTaxReduction(this.invoiceId, type, amount, basis, note);
+          const result = await InvoiceService.setTaxReduction(this.invoiceId, type, amount, basis, note);
           if (!result.ok) { showToast(result.error); return; }
           Modal.close(); this._refresh();
         }},

@@ -63,20 +63,776 @@ let state = {
   stampAoId: null
 };
 
+/* STAGING-GRANSKNING 2026-11-06 (fynd 2) — generisk business-key-arkitektur,
+   PORTAD från det redan byggda, testade P0_FINAL_2026-11-04-paketet (LIVE-
+   spåret), anpassad till STAGING:s REDAN BEFINTLIGA _doPersist()-nyckellista
+   nedan (27 nycklar — STAGING har SEDAN TIDIGARE, oberoende av detta P0-
+   arbete, redan tagit bort workOrders/timeEntries/invoices/ronderingspass/
+   offerAttachments/projectDocuments/offerEvents ur den generiska vägen, se
+   AOTimeSyncService.js/kommentarerna i _doPersist() nedan — INGEN av dessa
+   fem rörs eller läggs till här, de har redan sina egna, mogna, atomiska
+   RPC-vägar i STAGING och ska förbli OBERÖRDA av detta arbete). Löser
+   STAGING-granskningens fynd 2 (orelaterade register skickas vid varje
+   sparning, inklusive en potentiellt inaktuell kopia av en ANNAN session
+   redan ändrat register). */
+const VIFT_BUSINESS_KEYS = [
+  'customers','offers','staff','properties',
+  'priceGroups','priceProfiles','salesOpps','activityLog','settings',
+  'contracts','articles','titles','roles',
+  'recurringOrders','ronderingsmallar','ronderingar','avvikelser',
+  'activities','serviceTemplates','emailTemplates','propertyCategories',
+  'propertyObjects','importLogs','propertyRoles',
+  'propertyContacts','deviationCategories','inspections','projects'
+];
+function _vfBusinessStateKey(shortKey) {
+  return shortKey === 'salesOpps' ? 'salesOpportunities' : shortKey;
+}
+
+/* PR #2 CONSOLIDATED FIX (2026-11-09, finding C) — these five registers
+   (plus projectDocuments, same bug class, not separately named by the
+   reviewer but identical cause) have their OWN, already-correct, dedicated
+   write paths elsewhere (invoice-write EF, offer event/attachment logic,
+   RonderingSyncService, project-document-upload EF) and are therefore
+   deliberately NOT in VIFT_BUSINESS_KEYS above — but `initState()`/`_poll()`
+   still need to READ their current value for the UI, and after this round's
+   switch to the atomic `getAllWithHashes()` call (instead of the old,
+   unguarded `Storage.getAll()`), a key that's in neither list simply never
+   arrives at all. This is a READ-ONLY allowlist: adding a key here can
+   never let the client write it through the generic business-key path
+   (see store-key-write/index.ts's separate ALLOWED_KEYS, used for
+   write/writeMerge — this array is never consulted there). None of these
+   six keys carry the per-row ownership sensitivity workOrders/timeEntries
+   have (confirmed: no dedicated read-service/RLS-lockdown exists for any
+   of them in this repo, and they were already broadly readable via the
+   old, now-replaced `Storage.getAll()` under `store_active_read`). */
+const VIFT_READONLY_EXTRA_KEYS = [
+  'invoices', 'offerEvents', 'offerAttachments', 'notifications',
+  'ronderingspass', 'projectDocuments'
+];
+state._keyHash = {};
+state._keySnapshot = {};
+/* Per-nyckel konflikt-lås + bevarat lokalt utkast — identisk semantik och
+   motivering som i P0_FINAL_2026-11-04/client_patch/patched_source/state.js
+   (se där för den fullständiga, redan dokumenterade bakgrunden till VARFÖR
+   en baslinje-omsynk ALDRIG får rensa låset av sig själv). */
+state._keyConflict = {};
+state._keyConflictDraft = {};
+function resolveKeyConflict(shortKey, keepLocalDraft) {
+  if (!state._keyConflict[shortKey]) return false;
+  if (keepLocalDraft && Object.prototype.hasOwnProperty.call(state._keyConflictDraft, shortKey)) {
+    state[_vfBusinessStateKey(shortKey)] = state._keyConflictDraft[shortKey];
+  }
+  delete state._keyConflictDraft[shortKey];
+  delete state._keyConflict[shortKey];
+  return true;
+}
+
+/* ISSUE #1 FIX (2026-11-08, blocker e) — per-ELEMENT conflict drafts for
+   the array-shaped generic keys' merge-write path (see _doPersist()).
+   Unlike resolveKeyConflict() above, a reverted element does NOT block
+   the rest of the key from saving on later cycles — only this one
+   element's own edit is held here until the user decides. */
+state._keyElementConflictDraft = {};
+function resolveElementConflict(shortKey, elementId, reapplyLocalDraft) {
+  const draftsForKey = state._keyElementConflictDraft[shortKey];
+  if (!draftsForKey || !Object.prototype.hasOwnProperty.call(draftsForKey, elementId)) return false;
+  if (reapplyLocalDraft) {
+    const stateKey = _vfBusinessStateKey(shortKey);
+    const arr = (state[stateKey] || []).slice();
+    const idx = arr.findIndex(function(el) { return el && String(el.id) === String(elementId); });
+    const draft = draftsForKey[elementId];
+    /* PR #2 RE-REVIEW FIX (2026-11-09, blocker A): the draft's real
+       operation type decides what "keep my change" means. A DELETE
+       conflict has no `.data` to resurrect — "keep mine" here means "I
+       still want to delete this," so we remove it from the LIVE array
+       (which, at this point, already holds the server's latest confirmed
+       value for it — see _doPersist()'s merge of `current` above), never
+       write a stale old value back on top of whatever another session has
+       since written. The next _doPersist() cycle then diffs the now-
+       missing element against the (equally server-confirmed) snapshot and
+       sends a FRESH, version-checked removal with the CURRENT server
+       value as `previous` — if someone changes it again before this retry
+       lands, the usual conflict check catches that too, exactly like any
+       other removal. An UPSERT conflict keeps the original behavior:
+       re-apply the user's actual new value. */
+    if (draft && draft.op === 'delete') {
+      if (idx >= 0) arr.splice(idx, 1);
+      // idx < 0: already absent (someone else deleted it too) — nothing to do.
+    } else if (draft && draft.op === 'upsert') {
+      /* QA FIX-ROUND 2026-11-12 (M2): "keep my change" re-applies ONLY the
+         fields this session actually changed (draft.value vs draft.base,
+         the element as this session last confirmed it) on top of the
+         server's CURRENT element — never the whole stale local element.
+         The old whole-element replace resubmitted every field the user
+         never touched (e.g. a phone number another session had already
+         saved), silently reverting that other session's confirmed write.
+         A field changed by BOTH sessions takes this session's value (the
+         user explicitly chose "keep mine"). Without a base (a brand-new
+         element, or a draft recorded before this fix) or without a
+         current server element, the draft value is used as-is (unchanged
+         prior behavior). Always a fresh clone: the live array never
+         shares an object with the stored draft. */
+      const _cur = idx >= 0 ? arr[idx] : null;
+      const _resolved = (_cur && draft.base && typeof draft.base === 'object')
+        ? _vfApplyFieldDelta(_cur, draft.base, draft.value)
+        : _vfDeepClone(draft.value);
+      if (idx >= 0) arr[idx] = _resolved; else arr.push(_resolved);
+    }
+    /* The journal entry (M4) is deliberately KEPT here: the next
+       _doPersist() cycle re-records it with the current `previous`. If
+       the page is reloaded before that, replay sees the conflict again
+       and asks again — the user's choice is never silently lost. */
+    state[stateKey] = arr;
+    // Leave snapshot untouched so the next _doPersist() cycle sees this as
+    // a fresh, real change and re-attempts the write with the CURRENT
+    // server value as `previous` — never replays the stale one blindly.
+  }
+  else {
+    /* "Använd serverns version": the user discarded this edit — it must
+       not be replayed from the durable journal after a reload (M4). */
+    _vfJournalForget(shortKey, elementId);
+  }
+  delete draftsForKey[elementId];
+  if (Object.keys(draftsForKey).length === 0) delete state._keyElementConflictDraft[shortKey];
+  return true;
+}
+
+/* ── QA FIX-ROUND 2026-11-12 helpers (M2/M4) ─────────────────────────── */
+
+/* Plain JSON deep clone — every value in the generic store keys is JSON
+   (it round-trips through the server's JSONB column), so this is exact. */
+function _vfDeepClone(v) {
+  if (v === undefined) return undefined;
+  return JSON.parse(JSON.stringify(v));
+}
+
+/* Key-order-independent JSON for equality checks against values that
+   came back from Postgres JSONB (which re-orders object keys). Used only
+   where a client-built value is compared with a server-returned one. */
+function _vfStableStringify(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(function(x) { return x === undefined ? 'null' : _vfStableStringify(x); }).join(',') + ']';
+  return '{' + Object.keys(v).filter(function(k) { return v[k] !== undefined; }).sort()
+    .map(function(k) { return JSON.stringify(k) + ':' + _vfStableStringify(v[k]); }).join(',') + '}';
+}
+
+/* M2: result = clone(current) + every top-level field where `mine`
+   differs from `base` (removed in `mine` => removed in result). */
+function _vfApplyFieldDelta(current, base, mine) {
+  const out = _vfDeepClone(current) || {};
+  const m = mine || {}, b = base || {};
+  const fields = {};
+  Object.keys(m).forEach(function(k) { fields[k] = true; });
+  Object.keys(b).forEach(function(k) { fields[k] = true; });
+  /* N1 round (live finding, 2026-11-12): a form that normalizes an ABSENT
+     field to "" (the offer wizard does: `summary: d.summary || ''`) is not
+     a change the user made. Treating absent -> "" as a change made "keep
+     mine" blank another session's saved value (live: OFF-018 summary).
+     Absent, null and "" are therefore the same "empty" here; every real
+     change (incl. clearing a non-empty field) is still applied. */
+  const _empty = function(v) { return v === undefined || v === null || v === ''; };
+  Object.keys(fields).forEach(function(k) {
+    const inMine = Object.prototype.hasOwnProperty.call(m, k);
+    const _mv = inMine ? m[k] : undefined, _bv = Object.prototype.hasOwnProperty.call(b, k) ? b[k] : undefined;
+    if (_empty(_mv) && _empty(_bv)) return;
+    if (_vfStableStringify(inMine ? m[k] : undefined) === _vfStableStringify(Object.prototype.hasOwnProperty.call(b, k) ? b[k] : undefined)) return;
+    if (inMine) out[k] = _vfDeepClone(m[k]); else delete out[k];
+  });
+  return out;
+}
+
+/* ── M4: durable journal for the generic merge-write path ───────────────
+   QA FIX-ROUND 2026-11-12. Unlike the AO/time path (AOTimeSyncService's
+   outbox), a customer/offer/etc. edit that was still in flight when the
+   page was reloaded or closed was simply gone: nothing outside the
+   in-memory request remembered it. _doPersist() now writes each element
+   operation it is ABOUT to send (id, op, new value, and the `previous`
+   value the server is asked to check against) to localStorage BEFORE the
+   network call, and removes it only once the server has applied it. On
+   the next load, initState() replays what is left with the SAME
+   three-way rule the server uses: server value == `previous` -> re-apply
+   and send again; server value == new value -> it had landed, drop it;
+   anything else -> another session changed it since, so it becomes a
+   normal element conflict (dialog), never a blind overwrite.
+   Bound to the logged-in user (a different account on the same browser
+   never replays someone else's edits). `activityLog` is NOT journaled:
+   it is an append-only audit trail, and while its stored duplicate id
+   (backlog C1) keeps rejecting its writes, journaling it would replay an
+   ever-growing backlog on every load. `settings` (object-shaped,
+   whole-value path with its own key-level conflict lock) is not
+   journaled either. Nothing here changes what is sent, when, or how the
+   response is merged — it only records and clears. */
+var _VF_JOURNAL_KEY = 'vift_persistJournal';
+var _VF_JOURNAL_EXCLUDED = { activityLog: true, settings: true };
+function _vfJournalUser() {
+  try { return (typeof Auth !== 'undefined' && Auth._session && Auth._session.user_email) || ''; } catch (e) { return ''; }
+}
+function _vfJournalRead() {
+  try {
+    const raw = localStorage.getItem(_VF_JOURNAL_KEY);
+    const j = raw ? JSON.parse(raw) : null;
+    if (j && typeof j === 'object' && j.keys && typeof j.keys === 'object') return j;
+  } catch (e) {}
+  return { v: 1, user: _vfJournalUser(), keys: {} };
+}
+function _vfJournalWrite(j) {
+  try {
+    const empty = !j.keys || Object.keys(j.keys).every(function(k) { return !j.keys[k] || Object.keys(j.keys[k]).length === 0; });
+    if (empty) localStorage.removeItem(_VF_JOURNAL_KEY);
+    else localStorage.setItem(_VF_JOURNAL_KEY, JSON.stringify(j));
+  } catch (e) {}
+}
+function _vfJournalRecord(shortKey, upserts, removals) {
+  if (_VF_JOURNAL_EXCLUDED[shortKey]) return;
+  const j = _vfJournalRead();
+  j.user = j.user || _vfJournalUser();
+  const forKey = j.keys[shortKey] = j.keys[shortKey] || {};
+  const at = new Date().toISOString();
+  upserts.forEach(function(u) { forKey[u.id] = { op: 'upsert', data: u.data, previous: u.previous, at: at }; });
+  removals.forEach(function(r) { forKey[r.id] = { op: 'delete', previous: r.previous, at: at }; });
+  _vfJournalWrite(j);
+}
+function _vfJournalForget(shortKey, id) {
+  if (_VF_JOURNAL_EXCLUDED[shortKey]) return;
+  const j = _vfJournalRead();
+  if (!j.keys[shortKey] || !Object.prototype.hasOwnProperty.call(j.keys[shortKey], id)) return;
+  delete j.keys[shortKey][id];
+  if (Object.keys(j.keys[shortKey]).length === 0) delete j.keys[shortKey];
+  _vfJournalWrite(j);
+}
+function _vfJournalPendingCount() {
+  const j = _vfJournalRead();
+  let n = 0;
+  Object.keys(j.keys).forEach(function(k) { n += Object.keys(j.keys[k] || {}).length; });
+  return n;
+}
+
+/* ── N1 (blocker round 2026-11-12): what happens to a journaled edit
+   after a save the CALLER reported as failed ─────────────────────────
+   Bug: CustomersPage._doSave()/OffersPage._save() roll the visible form
+   back and say "Kunde inte spara" when persist() fails, but the M4
+   journal entry for that element stayed. The next page load replayed it
+   (server value == `previous` -> resend) and saved an edit the user had
+   been told never happened, without a word.
+
+   The rule now, for a caller that rolls back (it calls
+   settlePersistFailure() first and acts on the fate):
+   (A) 'rejected'  a definite server answer that the write was NOT
+       applied (HTTP 4xx other than a conflict; the store-key-write RPC
+       is transactional, so a 4xx means nothing committed). The journal
+       entry is forgotten at that moment; the caller rolls back.
+   (B) uncertain   network error / timeout / 5xx / auth lost / 200
+       without `current`: the write may or may not have committed. A
+       targeted re-read of THIS key (Storage.readBusinessKeyWithHash, the
+       existing read action of store-key-write — no new protocol, no
+       write) is compared with what was sent:
+         server == sent      -> (C) 'landed': adopted as saved, journal
+                                forgotten, nothing resent, the caller
+                                reports success.
+         server == previous  -> 'not-landed': the entry is kept but
+                                marked `held` (never auto-replayed again)
+                                and a persistent banner offers
+                                "Återuppta" (resend, conflict-checked) or
+                                "Kasta" (forget). The caller rolls back.
+         anything else       -> 'diverged': another session changed it
+                                since. The server value is shown and the
+                                edit goes through the normal element
+                                conflict dialog (draft value + base) —
+                                never a blind resend. The caller must NOT
+                                roll back over the server value.
+         re-read failed      -> 'unknown': held + banner, as not-landed;
+                                "Återuppta" re-checks before sending.
+   (D) "Kasta" in the banner and "Använd serverns version" in the
+       conflict dialog (resolveElementConflict(..., false)) both forget
+       the entry. Nothing a user explicitly discarded can come back.
+   M4's original case is unchanged: an entry whose request was simply
+   cut off by a reload (no failure ever shown) is still replayed
+   automatically by initState(). Only entries a caller reported as
+   failed are held. persist()/_doPersist() return values (M1/M2/C1
+   contract) are unchanged; this only adds a record of WHY a key failed. */
+var _vfLastPersistFailure = {};
+
+function _vfClassifyWriteFailure(r) {
+  if (!r) return 'uncertain';
+  if (r.error === 'network_error' || r.error === 'auth_expired') return 'uncertain';
+  if (typeof r.status === 'number') {
+    return (r.status >= 500 || r.status === 408 || r.status === 429) ? 'uncertain' : 'rejected';
+  }
+  if (typeof r.error === 'string' && /^http_(5\d\d|408|429)$/.test(r.error)) return 'uncertain';
+  return 'rejected';
+}
+
+function _vfJournalEntry(shortKey, id) {
+  const j = _vfJournalRead();
+  const forKey = j.keys[shortKey];
+  return (forKey && Object.prototype.hasOwnProperty.call(forKey, String(id))) ? forKey[String(id)] : null;
+}
+function _vfJournalSetHeld(shortKey, id, held) {
+  const j = _vfJournalRead();
+  const forKey = j.keys[shortKey];
+  if (!forKey || !forKey[String(id)]) return;
+  if (held) forKey[String(id)].held = true; else delete forKey[String(id)].held;
+  _vfJournalWrite(j);
+}
+
+/* Puts the server's element (or its absence) into BOTH the visible state
+   and the diff baseline for one id, so the next persist() sees no change
+   for it (nothing resent) and later writes carry the right `previous`. */
+function _vfAdoptServerElement(shortKey, id, serverEl) {
+  const stateKey = _vfBusinessStateKey(shortKey);
+  const put = function(arr) {
+    const out = Array.isArray(arr) ? arr.slice() : [];
+    const i = out.findIndex(function(el) { return el && String(el.id) === String(id); });
+    if (serverEl === undefined || serverEl === null) { if (i >= 0) out.splice(i, 1); }
+    else if (i >= 0) out[i] = _vfDeepClone(serverEl);
+    else out.push(_vfDeepClone(serverEl));
+    return out;
+  };
+  if (Array.isArray(state[stateKey])) state[stateKey] = put(state[stateKey]);
+  let snap = null;
+  try { snap = JSON.parse(state._keySnapshot[shortKey] || 'null'); } catch (e) { snap = null; }
+  if (Array.isArray(snap)) state._keySnapshot[shortKey] = JSON.stringify(put(snap));
+  try { if (typeof Storage !== 'undefined' && Storage.setLocal) Storage.setLocal(shortKey, state[stateKey]); } catch (e) {}
+}
+
+/* Targeted, read-only check of one journaled element against the server
+   (case B). Never writes. Returns {fate, element?}. */
+async function _vfVerifyJournaledElement(shortKey, id) {
+  const e = _vfJournalEntry(shortKey, id);
+  if (!e) return { fate: 'none' };
+  let r = null;
+  try { r = await Storage.readBusinessKeyWithHash('vift_' + shortKey); } catch (err) { r = null; }
+  if (!r || !r.ok || !Array.isArray(r.value)) {
+    _vfJournalSetHeld(shortKey, id, true);
+    _vfRefreshHeldBanner();
+    return { fate: 'unknown' };
+  }
+  const cur = r.value.find(function(el) { return el && String(el.id) === String(id); });
+  const curS = _vfStableStringify(cur === undefined ? null : cur);
+  const landed = e.op === 'delete' ? cur === undefined : (cur !== undefined && curS === _vfStableStringify(e.data));
+  if (landed) {
+    _vfAdoptServerElement(shortKey, id, cur);
+    _vfJournalForget(shortKey, id);
+    _vfRefreshHeldBanner();
+    return { fate: 'landed', element: cur };
+  }
+  if (curS === _vfStableStringify(e.previous === undefined ? null : e.previous)) {
+    _vfJournalSetHeld(shortKey, id, true);
+    _vfRefreshHeldBanner();
+    return { fate: 'not-landed' };
+  }
+  /* Diverged: a third value. Show the server's, and hand the edit to the
+     existing element-conflict mechanism (same draft shape as _doPersist()
+     and the M4 replay). The entry stays journaled, not held: the
+     conflict dialog now owns it (keep -> resent with the server value as
+     `previous`; use server -> forgotten). */
+  _vfAdoptServerElement(shortKey, id, cur);
+  _vfJournalSetHeld(shortKey, id, false);
+  state._keyElementConflictDraft[shortKey] = state._keyElementConflictDraft[shortKey] || {};
+  state._keyElementConflictDraft[shortKey][String(id)] = e.op === 'delete'
+    ? { op: 'delete' }
+    : { op: 'upsert', value: _vfDeepClone(e.data), base: _vfDeepClone(e.previous) };
+  _vfRefreshHeldBanner();
+  if (typeof App !== 'undefined' && App.showPersistConflictWarning) {
+    try { App.showPersistConflictWarning(shortKey, [String(id)]); } catch (e2) {}
+  }
+  return { fate: 'diverged', element: cur };
+}
+
+/* Called by a caller right after its own `await persist({keys:[k]})`
+   returned false and BEFORE it rolls anything back. See the block
+   comment above for the fates and what the caller must do with each. */
+async function settlePersistFailure(shortKey, elementId) {
+  const id = String(elementId);
+  const drafts = state._keyElementConflictDraft[shortKey];
+  if (drafts && Object.prototype.hasOwnProperty.call(drafts, id)) return { fate: 'conflict' };
+  const f = _vfLastPersistFailure[shortKey];
+  if (!f || !f.ids || !f.ids[id]) return { fate: 'none' };
+  delete f.ids[id]; // settled once
+  if (f.kind === 'rejected') {
+    _vfJournalForget(shortKey, id); // (A)
+    _vfRefreshHeldBanner();
+    return { fate: 'rejected', error: f.error };
+  }
+  return _vfVerifyJournaledElement(shortKey, id); // (B) -> landed | not-landed | diverged | unknown
+}
+
+/* "Återuppta" in the banner. Re-checks the server first (three-way),
+   then resends only if the server still has `previous`. */
+async function resumeHeldPersist(shortKey, elementId) {
+  const id = String(elementId);
+  const e = _vfJournalEntry(shortKey, id);
+  if (!e) { _vfRefreshHeldBanner(); return { fate: 'none' }; }
+  let r = null;
+  try { r = await Storage.readBusinessKeyWithHash('vift_' + shortKey); } catch (err) { r = null; }
+  if (!r || !r.ok || !Array.isArray(r.value)) {
+    if (typeof showToast === 'function') showToast('Ingen kontakt med servern just nu — ändringen ligger kvar osparad. Försök igen om en stund.', 6000);
+    return { fate: 'unknown' };
+  }
+  const cur = r.value.find(function(el) { return el && String(el.id) === id; });
+  const curS = _vfStableStringify(cur === undefined ? null : cur);
+  const landed = e.op === 'delete' ? cur === undefined : (cur !== undefined && curS === _vfStableStringify(e.data));
+  if (landed) {
+    _vfAdoptServerElement(shortKey, id, cur);
+    _vfJournalForget(shortKey, id);
+    _vfRefreshHeldBanner();
+    _vfRefreshCurrentView();
+    if (typeof showToast === 'function') showToast('Ändringen var redan sparad på servern.');
+    return { fate: 'landed' };
+  }
+  if (curS !== _vfStableStringify(e.previous === undefined ? null : e.previous)) {
+    _vfJournalSetHeld(shortKey, id, true); // so _vfVerify... sees the same entry
+    return _vfVerifyJournaledElement(shortKey, id); // -> diverged: conflict dialog
+  }
+  /* Server still has `previous`: baseline = server, state = my edit, send. */
+  _vfAdoptServerElement(shortKey, id, cur);
+  const stateKey = _vfBusinessStateKey(shortKey);
+  const arr = (state[stateKey] || []).slice();
+  const i = arr.findIndex(function(el) { return el && String(el.id) === id; });
+  if (e.op === 'delete') { if (i >= 0) arr.splice(i, 1); }
+  else if (i >= 0) arr[i] = _vfDeepClone(e.data); else arr.push(_vfDeepClone(e.data));
+  state[stateKey] = arr;
+  _vfJournalSetHeld(shortKey, id, false);
+  const ok = await persist({ keys: [shortKey] });
+  if (ok) {
+    _vfRefreshHeldBanner();
+    _vfRefreshCurrentView();
+    if (typeof showToast === 'function') showToast('Ändringen är sparad.');
+    return { fate: 'resumed' };
+  }
+  const s = await settlePersistFailure(shortKey, id);
+  if (s.fate === 'rejected' || s.fate === 'not-landed' || s.fate === 'unknown' || s.fate === 'none') {
+    _vfAdoptServerElement(shortKey, id, cur); // never leave an unconfirmed edit looking saved
+  }
+  _vfRefreshHeldBanner();
+  _vfRefreshCurrentView();
+  if (typeof showToast === 'function') {
+    if (s.fate === 'landed') showToast('Ändringen är sparad.');
+    else if (s.fate === 'rejected') showToast('Servern avvisade ändringen' + (s.error ? ' (' + s.error + ')' : '') + ' — den har INTE sparats.', 6000);
+    else if (s.fate === 'not-landed' || s.fate === 'unknown') showToast('Ändringen kunde fortfarande inte sparas — den ligger kvar osparad.', 6000);
+  }
+  return s;
+}
+
+/* "Kasta" in the banner (D). */
+function discardHeldPersist(shortKey, elementId) {
+  _vfJournalForget(shortKey, String(elementId));
+  _vfRefreshHeldBanner();
+  if (typeof showToast === 'function') showToast('Den osparade ändringen är kastad.');
+  return true;
+}
+
+function _vfRefreshCurrentView() {
+  try { if (typeof Router !== 'undefined' && Router.refreshCurrent) Router.refreshCurrent(); } catch (e) {}
+}
+
+var _VF_HELD_LABELS = { customers: 'Kund', offers: 'Offert', properties: 'Fastighet', propertyObjects: 'Objekt' };
+function _vfHeldItems() {
+  const j = _vfJournalRead();
+  const items = [];
+  Object.keys(j.keys || {}).forEach(function(k) {
+    Object.keys(j.keys[k] || {}).forEach(function(id) {
+      const e = j.keys[k][id];
+      if (!e || !e.held) return;
+      const d = e.data || e.previous || {};
+      let num = id;
+      try { if (typeof displayNumberOf === 'function') num = displayNumberOf(d && d.id ? d : { id: id }) || id; } catch (err) {}
+      const name = (d && (d.title || d.name || ((d.firstName || '') + ' ' + (d.lastName || '')).trim())) || '';
+      items.push({
+        key: k, id: id, op: e.op, at: e.at || '', isCreate: e.op === 'upsert' && (e.previous === null || e.previous === undefined),
+        label: (_VF_HELD_LABELS[k] || k) + ' ' + num + (name ? ' — ' + name : '')
+      });
+    });
+  });
+  return items;
+}
+function _vfRefreshHeldBanner() {
+  const items = _vfHeldItems();
+  state._vfHeldUnsaved = items;
+  try { if (typeof PersistRecoveryBanner !== 'undefined') PersistRecoveryBanner.render(items); } catch (e) {}
+  return items;
+}
+
+/* Called once from initState() after a NON-degraded load (data and diff
+   baselines are authoritative). Returns {reapplied, landed, conflicts}. */
+function _vfReplayPersistJournal() {
+  const res = { reapplied: 0, landed: 0, conflicts: {}, held: 0 };
+  const j = _vfJournalRead();
+  const keys = Object.keys(j.keys || {});
+  if (!keys.length) return res;
+  const me = _vfJournalUser();
+  if (j.user && me && j.user !== me) {
+    console.warn('[persist-journal] Osparade ändringar tillhör en annan inloggning — spelas INTE upp, kasseras.');
+    try { localStorage.removeItem(_VF_JOURNAL_KEY); } catch (e) {}
+    return res;
+  }
+  keys.forEach(function(shortKey) {
+    if (VIFT_BUSINESS_KEYS.indexOf(shortKey) === -1 || _VF_JOURNAL_EXCLUDED[shortKey]) { delete j.keys[shortKey]; return; }
+    if (state._keyConflict[shortKey]) return; // key-level lock: leave for later, never touch
+    const stateKey = _vfBusinessStateKey(shortKey);
+    if (!Array.isArray(state[stateKey])) return;
+    const arr = state[stateKey].slice();
+    const entries = j.keys[shortKey] || {};
+    Object.keys(entries).forEach(function(id) {
+      const e = entries[id];
+      const idx = arr.findIndex(function(el) { return el && String(el.id) === String(id); });
+      const cur = idx >= 0 ? arr[idx] : undefined;
+      const curS = _vfStableStringify(cur === undefined ? null : cur);
+      const prevS = _vfStableStringify(e.previous === undefined ? null : e.previous);
+      /* N1: an entry the user was told had FAILED (held) is never resent
+         on its own. Landed -> dropped (C); still `previous` -> stays held
+         and the banner asks again; diverged -> conflict dialog below. */
+      if (e.held && curS === prevS && !(e.op === 'delete' && cur === undefined)) { res.held++; return; }
+      if (e.op === 'upsert') {
+        if (cur !== undefined && curS === _vfStableStringify(e.data)) { delete entries[id]; res.landed++; return; }
+        if (curS === prevS) {
+          if (idx >= 0) arr[idx] = _vfDeepClone(e.data); else arr.push(_vfDeepClone(e.data));
+          res.reapplied++; return;
+        }
+        state._keyElementConflictDraft[shortKey] = state._keyElementConflictDraft[shortKey] || {};
+        state._keyElementConflictDraft[shortKey][id] = { op: 'upsert', value: _vfDeepClone(e.data), base: _vfDeepClone(e.previous) };
+        (res.conflicts[shortKey] = res.conflicts[shortKey] || []).push(id);
+      } else if (e.op === 'delete') {
+        if (cur === undefined) { delete entries[id]; res.landed++; return; }
+        if (curS === prevS) { arr.splice(idx, 1); res.reapplied++; return; }
+        state._keyElementConflictDraft[shortKey] = state._keyElementConflictDraft[shortKey] || {};
+        state._keyElementConflictDraft[shortKey][id] = { op: 'delete' };
+        (res.conflicts[shortKey] = res.conflicts[shortKey] || []).push(id);
+      } else {
+        delete entries[id];
+      }
+    });
+    if (Object.keys(entries).length === 0) delete j.keys[shortKey];
+    state[stateKey] = arr; // snapshot untouched: re-applied entries diff as real changes
+  });
+  _vfJournalWrite(j);
+  return res;
+}
+
+/* M4 fallback/belt-and-braces: anything not yet confirmed by the server
+   (a generic write in flight or queued, a journaled edit not yet
+   applied, an unresolved conflict) makes the browser ask before the page
+   is left — the user is never silently unaware. The journal above is
+   what actually preserves the edit; this only makes the risk visible. */
+function _vfHasUnconfirmedGenericWrites() {
+  if (typeof DataSync !== 'undefined' && (DataSync._pendingWrites || 0) > 0) return true;
+  if (Object.keys(state._keyConflict || {}).some(function(k) { return state._keyConflict[k]; })) return true;
+  if (Object.keys(state._keyElementConflictDraft || {}).some(function(k) { return Object.keys(state._keyElementConflictDraft[k] || {}).length > 0; })) return true;
+  return _vfJournalPendingCount() > 0;
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('beforeunload', function(e) {
+    try {
+      if (!_vfHasUnconfirmedGenericWrites()) return;
+      e.preventDefault();
+      e.returnValue = 'Det finns ändringar som ännu inte bekräftats sparade på servern.';
+      return e.returnValue;
+    } catch (err) {}
+  });
+}
+
+/* PR #2 REVIEW FIX (2026-11-09, blocker B): the server's authoritative
+   `current` (from a merge-write response) only reflects what the server
+   knew about AT WRITE TIME — it cannot know about a local edit the user
+   made to a DIFFERENT element in the same array WHILE this call was in
+   flight (between the pre-write snapshot and this response arriving).
+   Blindly replacing state[_stateKey] with `current` would silently
+   discard that unsent edit with zero error. This performs a real
+   three-way merge: an id this call actually SENT this cycle (`sentIds`)
+   always takes the server's answer (identical to the old behavior for
+   those ids — applied/conflicted, already correctly resolved above). For
+   every OTHER id: if the live, in-memory value differs from what it was
+   right before this call started (an edit made during the await, never
+   sent), keep that live edit; otherwise trust the server's answer (which
+   already reflects any OTHER session's changes to elements this call
+   never touched). An element removed locally during the await (present
+   before, absent now, never sent) stays removed rather than being
+   resurrected from `current`. */
+function _vfMergeAuthoritativeWithInFlightEdits(authoritativeArr, preAwaitArr, liveNowArr, sentIds, conflictedIds) {
+  conflictedIds = conflictedIds || {};
+  const authArr = authoritativeArr || [];
+
+  /* PR #2 RE-REVIEW FIX (2026-11-09, finding E): a PRE-EXISTING duplicate
+     id in the authoritative array (confirmed in real STAGING for
+     vift_activityLog — 44 elements, one duplicated id) must never be
+     silently collapsed to a single value by this function's id-keyed
+     logic below. This call's own upserts/removals can never legitimately
+     target an id that's duplicated server-side (the SQL layer refuses
+     that outright with `duplicate_id_in_store`), so any duplicate seen
+     here is always pre-existing data this call never touched — the only
+     safe behavior is to pass every occurrence straight through, exactly
+     as the server has it, untouched by the per-id merge entirely. */
+  const _authCountById = {};
+  authArr.forEach(function(el) { if (el && el.id != null) _authCountById[el.id] = (_authCountById[el.id] || 0) + 1; });
+  const _duplicateIds = {};
+  Object.keys(_authCountById).forEach(function(id) { if (_authCountById[id] > 1) _duplicateIds[id] = true; });
+
+  const authById = {}, preById = {}, liveById = {};
+  authArr.forEach(function(el) { if (el && el.id != null && !_duplicateIds[el.id]) authById[el.id] = el; });
+  (preAwaitArr || []).forEach(function(el) { if (el && el.id != null && !_duplicateIds[el.id]) preById[el.id] = el; });
+  (liveNowArr || []).forEach(function(el) { if (el && el.id != null && !_duplicateIds[el.id]) liveById[el.id] = el; });
+
+  const allIds = {};
+  Object.keys(authById).forEach(function(id) { allIds[id] = true; });
+  Object.keys(preById).forEach(function(id) { allIds[id] = true; });
+  Object.keys(liveById).forEach(function(id) { allIds[id] = true; });
+
+  const result = [];
+  // Every occurrence of a duplicated id, verbatim, untouched.
+  authArr.forEach(function(el) { if (el && el.id != null && _duplicateIds[el.id]) result.push(el); });
+
+  Object.keys(allIds).forEach(function(id) {
+    if (sentIds[id]) {
+      /* PR #2 RE-REVIEW FIX (2026-11-09, finding A): a same-id in-flight
+         race. `preById[id]` for an id this call actually SENT is exactly
+         the value that was transmitted (it's a clone of the array taken
+         at the very moment the request was built — see _doPersist()'s
+         `_preAwaitArr`). If the LIVE value now differs from that, the
+         user edited this SAME element again locally while the HTTP call
+         was still pending — a second, never-sent edit that must not be
+         silently discarded by blindly trusting the server's answer to
+         the OLDER edit. */
+      if (conflictedIds[id]) {
+        // The send for this id was REJECTED as a conflict. Never blend a
+        // further local edit in here — the existing conflict-draft
+        // mechanism (see _doPersist()) already owns what happens next
+        // for this id; show the server's real current value, nothing
+        // else, so the conflict dialog reflects reality.
+        if (Object.prototype.hasOwnProperty.call(authById, id)) result.push(authById[id]);
+        return;
+      }
+      const _sentValue = Object.prototype.hasOwnProperty.call(preById, id) ? preById[id] : undefined;
+      const _liveValue  = Object.prototype.hasOwnProperty.call(liveById, id) ? liveById[id] : undefined;
+      if (JSON.stringify(_liveValue) !== JSON.stringify(_sentValue)) {
+        // A further, not-yet-sent edit (or removal) happened during the
+        // await — keep it visible. The diff baseline is set separately
+        // by the caller from `current` ALONE (never this merged value),
+        // so the NEXT persist() cycle correctly sees this as a fresh
+        // change against the server's confirmed value and sends it as a
+        // real, version-checked write — never re-treated as "already
+        // clean" and never silently dropped.
+        if (_liveValue !== undefined) result.push(_liveValue);
+        return;
+      }
+      if (Object.prototype.hasOwnProperty.call(authById, id)) result.push(authById[id]);
+      return; // this call's own send is authoritative for ids it touched
+    }
+    const inLive = Object.prototype.hasOwnProperty.call(liveById, id);
+    const inPre  = Object.prototype.hasOwnProperty.call(preById, id);
+    if (inLive && inPre) {
+      if (JSON.stringify(liveById[id]) !== JSON.stringify(preById[id])) {
+        result.push(liveById[id]); // edited locally DURING the await, never sent — keep it
+      } else if (Object.prototype.hasOwnProperty.call(authById, id)) {
+        result.push(authById[id]); // unchanged locally — trust the server
+      }
+      // else: unchanged locally, but server no longer has it (another
+      // session removed it) — correctly omitted.
+    } else if (inLive && !inPre) {
+      result.push(liveById[id]); // brand-new local element added during the await, never sent
+    } else if (!inLive && inPre) {
+      // locally removed DURING the await, never sent — respect the
+      // removal; the NEXT persist() cycle sends it as a real,
+      // version-checked removal against the now-updated snapshot.
+    } else if (Object.prototype.hasOwnProperty.call(authById, id)) {
+      result.push(authById[id]);
+    }
+  });
+  return result;
+}
+
+/* Etablerar/uppdaterar baslinje-hash+snapshot för ALLA generiska business-
+   nycklar. Tar emot `precomputedHashes` från SAMMA atomiska
+   Storage.getAllWithHashes()-anrop som också hämtade själva datan (se
+   initState() nedan) — inget separat, senare nätverksanrop (det var root
+   cause till P0-rättelsens egen, tidigare reproducerade lost-update-bugg;
+   samma princip återanvänds här förebyggande). */
+async function _vfSyncBusinessKeyBaselines(precomputedHashes) {
+  if (!precomputedHashes) return;
+  VIFT_BUSINESS_KEYS.forEach(function(shortKey) {
+    const fullKey = 'vift_' + shortKey;
+    state._keyHash[shortKey] = (precomputedHashes && Object.prototype.hasOwnProperty.call(precomputedHashes, fullKey))
+      ? precomputedHashes[fullKey] : null;
+    state._keySnapshot[shortKey] = JSON.stringify(state[_vfBusinessStateKey(shortKey)]);
+  });
+}
+
 /**
  * Initiera state från Supabase (ett bulk-anrop), fall back på localStorage → seed-data.
  * Kräver att Auth.getAccessToken() returnerar ett giltigt JWT (RLS blockerar anon).
  */
 async function initState() {
   let d = {};
+  let _combinedHashes = null;
+  state._degradedLoad = false;
   try {
     /* 8-sekunders timeout — om Supabase är långsam/offline faller vi tillbaka
-     * på localStorage direkt utan att hänga på "Laddar data" */
+     * på localStorage direkt utan att hänga på "Laddar data".
+     * STAGING-GRANSKNING 2026-11-06 (fynd 2): hämtar nu data OCH baslinje-
+     * hashar för de generiska nycklarna i ETT ATOMISKT anrop
+     * (Storage.getAllWithHashes), istället för en separat, senare
+     * hash-hämtning — samma motivering som P0_FINAL_2026-11-04:s
+     * motsvarande rättelse (två separata round-trips kan en annan sessions
+     * skrivning hinna ske mellan). */
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000));
-    d = await Promise.race([Storage.getAll(), timeout]);
+    /* PR #2 CONSOLIDATED FIX (finding C): request the write-allowlisted
+       generic keys AND the read-only extra keys in the SAME atomic call —
+       only the former get a write baseline (see _vfSyncBusinessKeyBaselines
+       below, unchanged, still VIFT_BUSINESS_KEYS-only), but both need their
+       current value in `d` for the state assignments further down. */
+    const fullBusinessKeys = VIFT_BUSINESS_KEYS.concat(VIFT_READONLY_EXTRA_KEYS).map(function(k) { return 'vift_' + k; });
+    const _combined = await Promise.race([Storage.getAllWithHashes(fullBusinessKeys), timeout]);
+    if (!_combined.ok) throw new Error(_combined.error || 'getAllWithHashes_failed');
+    d = _combined.data;
+    _combinedHashes = _combined.hashes;
   } catch(e) {
     console.warn('[initState] Supabase ej tillgänglig, använder localStorage:', e.message);
     d = Storage._localAll();
+    /* P0-INCIDENT-FIX (2026-11): en degraderad läsning (timeout/nätverksfel/
+       401/403 → localStorage-fallback) får ALDRIG tillåta en efterföljande
+       persist() att skriva tillbaka det ofullständiga/seedade resultatet som
+       om det vore auktoritativt. Flaggan konsumeras av _doPersist() nedan. */
+    state._degradedLoad = true;
+  }
+
+  /* STAGING-GRANSKNING 2026-11-06 (fynd 1) — "lyckad men ofullständig"-
+     luckan: ett getAll()-svar som INTE kastar fel/timeout kan ändå vara
+     otillförlitligt — saknade nycklar helt, eller ett mönster som är
+     praktiskt omöjligt för en äkta, i drift varande installation. Portat
+     ordagrant från P0_FINAL_2026-11-04:s motsvarande, redan testade
+     korrigering (samma motivering, samma gräns mellan "nyckel finns, är
+     tom array" [kan vara en äkta, ny/tömd installation] och "nyckel finns
+     inte alls i svaret" [ett ofullständigt/trunkerat svar som ALDRIG ska
+     tolkas som auktoritativt]). En genuint ny, tom STAGING-installation
+     (inte dagens verkliga läge — STAGING har redan riktig data) måste gå
+     via samma separata, server-verifierade bootstrap-väg som LIVE-arbetet
+     redan byggde (Storage.bootstrapEmptyInstance(), kräver admin_manage +
+     en server-sidig bekräftelse att nycklarna verkligen är tomma) — INTE
+     den generiska persist()-vägen. Se STAGING-CANDIDATE-REPORT-2026-11-06.md
+     §1 för den fullständiga, ärligt redovisade avgränsningen av denna
+     heuristik (klienten kan INTE perfekt skilja "äkta ny installation" från
+     "ett degraderat svar som råkar se likt ut" utan ett server-sidigt
+     facit — vi väljer därför det SÄKRARE felläget). */
+  if (!state._degradedLoad) {
+    var _expectedTopKeys = ['customers', 'offers', 'staff', 'properties', 'activityLog', 'settings'];
+    var _missingKeys = _expectedTopKeys.filter(function(k) { return d[k] === undefined; });
+    if (_missingKeys.length > 0) {
+      console.warn('[initState] Svaret saknar förväntade nycklar helt (' + _missingKeys.join(', ') + ') — räknas som degraderad/ofullständig läsning.');
+      state._degradedLoad = true;
+    } else {
+      var _criticalKeys = ['customers', 'offers'];
+      var _allCriticalEmpty = _criticalKeys.every(function(k) {
+        return Array.isArray(d[k]) && d[k].length === 0;
+      });
+      if (_allCriticalEmpty) {
+        var _respStaffIds = (Array.isArray(d['staff']) ? d['staff'] : []).map(function(s) { return s && s.id; }).filter(Boolean).slice().sort();
+        var _seedStaffIds = (typeof SeedData !== 'undefined' && Array.isArray(SeedData.staff) ? SeedData.staff : []).map(function(s) { return s && s.id; }).filter(Boolean).slice().sort();
+        var _staffLooksLikeSeed = _respStaffIds.length > 0 && JSON.stringify(_respStaffIds) === JSON.stringify(_seedStaffIds);
+        if (_staffLooksLikeSeed) {
+          console.warn('[initState] Kunder och offerter tomma SAMTIDIGT som personal matchar exakt SeedData.staff — räknas som misstänkt/degraderad läsning, inte ett äkta nyinstallerat system.');
+          state._degradedLoad = true;
+        }
+      }
+    }
   }
 
   const g = key => (d[key] !== undefined && d[key] !== null) ? d[key] : null;
@@ -85,13 +841,30 @@ async function initState() {
    * Faller INTE tillbaka på SeedData — annars visas demo-siffror i badges
    * och filterpanelen för en installation som saknar riktig data.          */
   state.customers          = g('customers')        || [];
-  state.workOrders         = g('workOrders')       || [];
+  /* SÄKERHETSFYND V7 (vift_workOrders-läsningslucka): `vift_workOrders`
+     är nu blockerad från direkt autentiserad SELECT (RLS, se
+     20261030000001_workorders_read_lockdown.sql) — `g('workOrders')`
+     ovan kommer ALLTID vara null/saknas i bulk-snapshoten nu, oavsett
+     behörighet (precis som för `vift_timeEntries` sedan BLOCKER-1).
+     Hämtas istället via WorkOrdersReadService (work-orders-list EF,
+     server-sidig ao_view_own/ao_view_all-filtrering) — se nedan, efter
+     att AOTimeSyncService m.fl. redan är definierade. */
+  state.workOrders         = [];
   state.offers             = g('offers')           || [];
   state.invoices           = g('invoices')         || [];
   state.properties         = g('properties')       || [];
   state.salesOpportunities = g('salesOpps')        || [];
   state.activityLog        = g('activityLog')      || [];
-  state.timeEntries        = g('timeEntries')      || [];
+  /* P0 FINAL INTEGRATION (STAFF/PAYROLL R1 — BLOCKER-1): `vift_timeEntries`
+     är nu blockerad från direkt autentiserad SELECT (RLS, se
+     20261018000007_timeentries_payroll_read_lockdown.sql) — `g('timeEntries')`
+     ovan kommer ALLTID vara null/saknas i bulk-snapshoten nu, oavsett
+     behörighet. Hämtas istället via TimeEntriesReadService (time-entries-list
+     EF, server-sidig payroll_view-filtrering) — se nedan, efter att
+     RonderingSyncService m.fl. redan är definierade (anropas async, väntas
+     INTE in här för att inte blockera initState() på ett extra nätverksanrop;
+     sätts asynkront strax efter, se nedan). */
+  state.timeEntries        = [];
   state.contracts          = g('contracts')        || [];
   state.recurringOrders    = g('recurringOrders')  || [];
   state.ronderingar        = g('ronderingar')      || [];
@@ -160,15 +933,216 @@ async function initState() {
   var _aoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a) { return !a.deleted && !a.archived; }).length : 0;
   console.log('[initState] Laddat ' + _aoCount + ' aktiva AO — lastChanged: ' + (_loadedSig || 'saknas'));
 
-  // Stämplingsstate (per-enhet, läs från localStorage direkt — inte via Supabase blob)
-  try { state.stampActive    = !!JSON.parse(localStorage.getItem('vift_stampActive')); } catch(e) { state.stampActive = false; }
-  try { state.stampTimestamp = JSON.parse(localStorage.getItem('vift_stampTs'))    || null; } catch(e) { state.stampTimestamp = null; }
-  try { state.stampAoId      = JSON.parse(localStorage.getItem('vift_stampAoId')) || null; } catch(e) { state.stampAoId = null; }
+  /* STAGING-GRANSKNING 2026-11-06 (fynd 2): etablera baslinje-hash+snapshot
+     för ALLA generiska business-nycklar NU, direkt efter att de just
+     laddats — detta är den enda gång _doPersist() därefter kommer behöva
+     lita på en LAGRAD (inte nyhämtad) hash. Körs INTE om degraderad-läsning
+     redan är satt (en baslinje mot en degraderad kopia skulle vara
+     meningslös/farlig). */
+  if (!state._degradedLoad) {
+    try { await _vfSyncBusinessKeyBaselines(_combinedHashes); }
+    catch(e) { console.warn('[initState] kunde inte etablera baslinje-hashar:', e); }
 
-  // Migrera gamla RON.results[] → ronderingspass (idempotent, kör varje laddning tills persist skett)
-  state.ronderingar.forEach(function(ron) {
-    if (!ron.results || ron.results.length === 0) return;
-    if (state.ronderingspass.some(function(p) { return p.ronderingId === ron.id && p.migratedFromLegacy; })) return;
+    /* QA FIX-ROUND 2026-11-12 (M4): replay generic edits that were still
+       unconfirmed when the previous page load ended (see
+       _vfReplayPersistJournal()). Only after a non-degraded load, so the
+       three-way check runs against the server's real current value. */
+    try {
+      const _rp = _vfReplayPersistJournal();
+      const _conflictKeys = Object.keys(_rp.conflicts);
+      if (_rp.reapplied > 0) {
+        console.warn('[initState] ' + _rp.reapplied + ' osparad(e) ändring(ar) från förra sessionen återupptas och skickas igen.');
+        persist();
+        if (typeof showToast === 'function') {
+          setTimeout(function() { showToast(_rp.reapplied + ' osparad(e) ändring(ar) från förra sessionen skickas nu till servern.', 6000); }, 500);
+        }
+      }
+      if (_conflictKeys.length > 0 && typeof App !== 'undefined' && App.showPersistConflictWarning) {
+        setTimeout(function() {
+          _conflictKeys.forEach(function(k) { try { App.showPersistConflictWarning(k, _rp.conflicts[k]); } catch (e2) {} });
+        }, 800);
+      }
+      /* N1: edits the user was told had failed are not resent; they are
+         offered again (Återuppta / Kasta) until the user decides. */
+      if (_rp.held > 0) {
+        console.warn('[initState] ' + _rp.held + ' osparad(e) ändring(ar) väntar på ditt beslut (Återuppta/Kasta).');
+        _vfRefreshHeldBanner();
+        setTimeout(function() { try { _vfRefreshHeldBanner(); } catch (e3) {} }, 800);
+      }
+    } catch (e) { console.warn('[initState] uppspelning av osparade ändringar misslyckades:', e); }
+  }
+
+  /* Stämplingsstate — P2-2 (fix round 2026-11-16, KORRIGERAD i en andra
+     omgång efter oberoende granskning): servern är den kanoniska källan
+     vid inloggning/omladdning, inte bara enhetens egen localStorage (det
+     var rotorsaken till att mobil och dator kunde visa olika status för
+     samma person).
+     KORRIGERING: den FÖRSTA versionen av denna fix läste ett påstått
+     "redan hämtat" värde ur `d`/`g()` — men `d` kommer uteslutande från
+     `Storage.getAllWithHashes(fullBusinessKeys)` ovan, och
+     `fullBusinessKeys` är ALLTID exakt VIFT_BUSINESS_KEYS +
+     VIFT_READONLY_EXTRA_KEYS (dessutom filtrerat server-sidigt mot
+     store-key-write:s egen READABLE_KEYS-allowlist) — en per-användare-
+     nyckel ingår aldrig i det svaret, oavsett vad den heter. Den
+     ursprungliga reconciliation-koden föll därför ALLTID tillbaka på
+     local-grenen; buggen den skulle lösa kvarstod opåverkad. Fixat genom
+     ett EGET, dedikerat anrop (Storage.getStampStatus()) mot en ny,
+     identitetsskopad EF-väg där servern själv avgör "vilken användare"
+     utifrån JWT:en — se STAMP_STATUS_patch_2026-11-16.ts/
+     20261116000002_stamp_status_identity_scoped.sql. En stabil
+     server-verifierad identitet (auth.user.id), inte en klientvald
+     e-postsuffix, är den faktiska behörighetsgränsen nu — epost-
+     suffixningen från den första omgången är helt borttagen (både här
+     och i TimeService.js/Storage.setStampStatus()). */
+  // Lokal cache-nyckel, namnge med inloggad användares e-post — ENBART en
+  // lokal bekvämlighetsåtgärd (två personalmedlemmar som delar en
+  // surfplatta ska inte läsa varandras cachade status); INTE en
+  // behörighetsgräns, det är nu stamp_status-tabellens egen RLS. Samma
+  // konvention som Storage._stampLocalKey() i storage.js.
+  const _stampEmail = (typeof Auth !== 'undefined' && Auth.getUserEmail) ? Auth.getUserEmail() : null;
+  const _stampSfx = _stampEmail ? '_' + _stampEmail : '';
+  let localActive = false, localTs = null, localAoId = null;
+  const _stampHasSuffixedKey = _stampSfx && localStorage.getItem('vift_stampActive' + _stampSfx) !== null;
+  if (_stampHasSuffixedKey) {
+    try { localActive = !!JSON.parse(localStorage.getItem('vift_stampActive' + _stampSfx)); } catch(e) {}
+    try { localTs      = JSON.parse(localStorage.getItem('vift_stampTs' + _stampSfx))    || null; } catch(e) {}
+    try { localAoId    = JSON.parse(localStorage.getItem('vift_stampAoId' + _stampSfx)) || null; } catch(e) {}
+  } else if (localStorage.getItem('vift_stampActive') !== null) {
+    /* P2-2 migrationssäkerhet (fix round 4): denna enhet körde tidigare
+       round-2-kod, som cachade stämplingsstatus under den OSUFFIXADE
+       nyckeln (ingen kontokoppling fanns då alls). Round 3/4 läser och
+       skriver bara den KONTOSUFFIXADE nyckeln — utan denna gren hade den
+       gamla cachen blivit osynlig för den nya koden och en pågående
+       instämpling hade tyst försvunnit vid första omladdningen efter
+       uppgraderingen. Läses EN gång, som en provisorisk startpunkt
+       (exakt samma garantinivå den redan hade under round 2 — ingen
+       kontoverifiering fanns då heller), och TAS BORT omedelbart efteråt
+       så den aldrig kan läsas igen av ett SENARE, ANNAT konto på samma
+       enhet ("tilldela aldrig en global gammal stämpling till fel
+       användare"). Den nya, korrekt namngivna nyckeln skriven av
+       reconciliation-steget nedan (serverbekräftad, eller denna
+       provisoriska migrering om servern saknar rad) blir permanent. */
+    try { localActive = !!JSON.parse(localStorage.getItem('vift_stampActive')); } catch(e) {}
+    try { localTs      = JSON.parse(localStorage.getItem('vift_stampTs'))    || null; } catch(e) {}
+    try { localAoId    = JSON.parse(localStorage.getItem('vift_stampAoId')) || null; } catch(e) {}
+    try {
+      localStorage.removeItem('vift_stampActive');
+      localStorage.removeItem('vift_stampTs');
+      localStorage.removeItem('vift_stampAoId');
+    } catch(e) {}
+    console.warn('[initState] migrerade engångs- och tog bort den osuffixade round-2-stämplingscachen (konto: ' + (_stampEmail || 'okänt') + ')');
+  }
+
+  let _stampServerOk = false;
+  if (!state._degradedLoad && typeof Storage !== 'undefined' && typeof Storage.getStampStatus === 'function') {
+    try {
+      const _stampTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('stamp_timeout')), 5000));
+      const stampResult = await Promise.race([Storage.getStampStatus(), _stampTimeout]);
+      if (stampResult && stampResult.ok) {
+        _stampServerOk = true;
+        if (typeof Storage.setStampRevision === 'function') Storage.setStampRevision(stampResult.revision || 0);
+        if (stampResult.hasRow) {
+          // Servern har en bekräftad rad för DEN HÄR användaren — kanonisk.
+          state.stampActive    = !!stampResult.active;
+          state.stampTimestamp = state.stampActive ? (stampResult.ts || null) : null;
+          state.stampAoId      = state.stampActive ? (stampResult.aoId || null) : null;
+          try {
+            localStorage.setItem('vift_stampActive' + _stampSfx, JSON.stringify(state.stampActive));
+            localStorage.setItem('vift_stampTs' + _stampSfx,     JSON.stringify(state.stampTimestamp));
+            localStorage.setItem('vift_stampAoId' + _stampSfx,   JSON.stringify(state.stampAoId));
+          } catch(e) {}
+        } else {
+          /* P2-2 migrationssäkerhet (fix round 3): hasRow:false betyder
+             "den här användaren har aldrig skrivit en rad i den nya
+             tabellen" — INTE "bekräftat utstämplad". Utan denna gren
+             hade den allra första inloggningen efter att denna fix
+             installerats tyst kunnat radera en redan pågående stämpling
+             ur klientens tillstånd. Faller istället tillbaka på
+             enhetens egen lokala kopia som en PROVISORISK sanning, och
+             laddar — om den visar aktiv — upp den till den nya tabellen
+             (självläkning) så att framtida inloggningar (denna och andra
+             enheter) blir serverbekräftade från och med nu. */
+          state.stampActive    = localActive;
+          state.stampTimestamp = localTs;
+          state.stampAoId      = localAoId;
+          if (localActive && typeof Storage.setStampStatus === 'function') {
+            // hasRow:false -> the correct expectedRevision for this
+            // user's FIRST write is 0 (matches store_read_stamp_status's
+            // own "no row" response), not a client-invented counter.
+            try { Storage.setStampStatus(true, localTs, localAoId, 0); }
+            catch(e) { console.warn('[initState] kunde inte självläka stämplingsstatus till den nya tabellen:', e.message); }
+          }
+        }
+      } else {
+        console.warn('[initState] kunde inte läsa stämplingsstatus från servern, faller tillbaka på lokal cache:', stampResult && stampResult.error);
+      }
+    } catch(e) {
+      console.warn('[initState] stämplingsstatus-anrop misslyckades, faller tillbaka på lokal cache:', e.message);
+    }
+  }
+  if (!_stampServerOk) {
+    // Ingen bekräftad serversvar (degraderad laddning, nätverksfel,
+    // timeout, eller EF:en/RPC:erna ännu inte installerade) — fall
+    // tillbaka på enhetens egen lokala kopia, exakt som innan denna fix.
+    // ALDRIG en falsk "serverbekräftad"-status här.
+    state.stampActive    = localActive;
+    state.stampTimestamp = localTs;
+    state.stampAoId      = localAoId;
+  }
+
+  /* Time-clock DURABLE RECOVERY (2026-11-17): clockOut() writes a
+     pending-clear marker (Storage.setPendingStampClear()) the instant its
+     time entry is server-confirmed, BEFORE attempting the stamp-clear
+     itself, and only removes it once that clear gets a real, definitive
+     server response. If the browser closed/crashed in between, the
+     marker survives and the SAME dangling "still active" row is still
+     exactly what the server just reported above — safe to retry the
+     clear here. If the marker's ts/aoId do NOT match the server's
+     current row (the user legitimately clocked in again on a different
+     AO since), the marker is stale and is discarded WITHOUT touching the
+     new, unrelated, genuinely active session — never blindly clear
+     "whatever is currently active" just because a marker exists. */
+  if (_stampServerOk && typeof Storage !== 'undefined' && typeof Storage.getPendingStampClear === 'function') {
+    try {
+      const pending = Storage.getPendingStampClear();
+      if (pending && state.stampActive === true
+          && state.stampTimestamp === pending.ts
+          && (state.stampAoId || null) === (pending.aoId || null)) {
+        console.warn('[initState] återupptar en avbruten stämplingsutloggning (tidpost ' + pending.timeEntryId + ' redan bekräftad, servern visade fortfarande instämplad) — försöker rensa statusen igen.');
+        Storage.setStampStatus(false, null, null, Storage.getStampRevision()).then(function (r) {
+          if (r && r.ok) {
+            Storage.clearPendingStampClear();
+            if (!r.stale) {
+              state.stampActive = false; state.stampTimestamp = null; state.stampAoId = null;
+              if (typeof MobileShell !== 'undefined' && MobileShell.onClockChange) MobileShell.onClockChange();
+            }
+          }
+        });
+      } else if (pending && !(state.stampActive === true && state.stampTimestamp === pending.ts && (state.stampAoId || null) === (pending.aoId || null))) {
+        // Marker no longer matches the server's current row (a new,
+        // legitimate session has since started, or the clear already
+        // landed through some other path) — discard it, do not act on it.
+        Storage.clearPendingStampClear();
+      }
+    } catch (e) { console.warn('[initState] kunde inte kontrollera väntande stämplingsutloggning:', e.message); }
+  }
+
+  // Migrera gamla RON.results[] → ronderingspass (idempotent, kör varje laddning tills migrerat)
+  //
+  // P0 PART B (RONDERINGSPASS R1): skriver nu via
+  // RonderingSyncService.migrateLegacy() (rondering_pass_migrate_legacy-
+  // RPC:n, deterministiskt id, server-sidigt idempotent) istället för att
+  // bara pusha in i state.ronderingspass och förlita sig på att en
+  // SENARE, obesläktad persist()-anrop råkar skicka med den — det
+  // skrivvägen finns inte längre (vift_ronderingspass är exkluderad ur
+  // den generiska _doPersist()-listan, se nedan). Utan denna omskrivning
+  // hade legacy-migreringen tystnat helt: den hade fortsatt köras om vid
+  // VARJE sidladdning (eftersom ingenting längre bekräftade den som
+  // sparad server-sidigt) utan att någonsin faktiskt synas för andra
+  // enheter.
+  for (const ron of state.ronderingar) {
+    if (!ron.results || ron.results.length === 0) continue;
+    if (state.ronderingspass.some(function(p) { return p.ronderingId === ron.id && p.migratedFromLegacy; })) continue;
     var passStatus = (ron.status === 'slutförd' || ron.status === 'har_avvikelser') ? ron.status
                    : (ron.status === 'pågående' ? 'pågående' : 'planerat');
     var passCats = (ron.results || []).map(function(res) {
@@ -224,25 +1198,92 @@ async function initState() {
       createdAt: ron.createdAt || new Date().toISOString(),
       updatedAt: ron.updatedAt || new Date().toISOString()
     });
-    state.ronderingspass.push(pass);
-  });
+    try {
+      const r = await RonderingSyncService.migrateLegacy(pass);
+      if (!r.ok) console.warn('[initState] Legacy-migrering av ronderingspass misslyckades för ' + ron.id + ':', r.error);
+      // RonderingSyncService._applyLocally() har redan satt in den
+      // servercanoniska (eller redan existerande) kopian i
+      // state.ronderingspass — ingen ytterligare lokal push här.
+    } catch (e) {
+      console.warn('[initState] Legacy-migrering av ronderingspass kastade fel för ' + ron.id + ':', e);
+    }
+  }
 
-  /* BLOCKER-1, server-sidig hälft (companion: supabase/functions/
-     time-entries-list/index.ts + migration 20261120000002_PROPOSAL_
-     timeentries_read_lockdown.sql, EJ installerad ännu). state.timeEntries
-     ovan (rad ~94, `g('timeEntries') || []`) kommer från den generiska
-     bulk-läsningen och är OFILTRERAD tills _applyTimeEntriesPayrollFilter()
-     körs vid Auth._resolveUser() (som körs EFTER initState(), se
-     index.html) -- ett verkligt, om än nu klient-sidigt täckt, fönster.
-     Detta anrop ger den AUKTORITATIVA, server-filtrerade listan direkt,
-     redan HÄR, om EF:en är nåbar och klienten redan har en giltig JWT
-     (bekräftat: App.init()s session-restore-väg kör alltid
-     Auth.refreshIfNeeded() FÖRE initState(), se index.html). Misslyckas
-     anropet (EF ej deployad ännu, nätverksfel) lämnas state.timeEntries
-     helt orört -- fortfarande skyddat av det befintliga klientfiltret,
-     inte en krasch eller en låtsad framgång. */
+  /* P0 AO/TID-FIX: återuppta eventuella AO-/tidskrivningar som stod kvar
+     i AOTimeSyncService:s durabla outbox (localStorage) från en tidigare,
+     avbruten session (flik stängd/kraschad mitt i en serverskrivning,
+     nätverksfel som aldrig löstes ut) — se AOTimeSyncService.js för hela
+     mönstret. Körs fire-and-forget (väntas INTE in här) — initState() ska
+     aldrig hänga på en nätverksretry; outboxen är redan själv-serialiserad
+     och trygg att köra i bakgrunden medan resten av appen laddar. */
+  if (typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.resumePending === 'function') {
+    AOTimeSyncService.resumePending().catch(function(e) {
+      console.warn('[initState] AOTimeSyncService.resumePending() fel:', e);
+    });
+  }
+
+  /* B1 FIX (independent-reviewer finding, round 5): self-healing pass
+     for the durable "ACK-then-commit" intents (offer->AO conversion,
+     recurring-order next-AO, rondering deviation->AO — see
+     AOTimeSyncService.js's header for the whole mechanism). Covers
+     exactly the gap the reviewer reproduced: an outbox entry that
+     settled successfully (even in a PRIOR session, e.g. the tab closed
+     right after the server ACK but before the commit handler ran) but
+     whose cross-reference commit never actually ran. Safe to call on
+     EVERY load, unconditionally — each intent either applies exactly
+     once (idempotent, see each handler's own guard) or is already
+     gone. Runs here, NOT earlier, because every page/service script
+     (which register their handlers at file-load time) has already run
+     by the time `initState()` is ever called — see index.html's load
+     order (bootstrap script, after every other `<script>` tag). */
+  if (typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.reconcileSettledIntents === 'function') {
+    try { AOTimeSyncService.reconcileSettledIntents(); } catch (e) { console.warn('[initState] AOTimeSyncService.reconcileSettledIntents() fel:', e); }
+  }
+
+  /* P0 FINAL INTEGRATION (STAFF/PAYROLL R1 — BLOCKER-1): hämta
+     state.timeEntries via time-entries-list EF:en (server-sidig
+     payroll_view-filtrering) — AWAIT:ad (till skillnad från
+     resumePending ovan), eftersom flera sidor (TimePage, löneunderlag,
+     fakturering) förutsätter att state.timeEntries redan är populerad
+     direkt efter att initState() returnerat, precis som tidigare när
+     den kom från bulk-snapshoten. Ett nätverksfel lämnar
+     state.timeEntries som en tom array (redan satt ovan) — fail-safe,
+     aldrig ett kastat fel som skulle avbryta hela initState(). */
   if (typeof TimeEntriesReadService !== 'undefined') {
-    await TimeEntriesReadService.fetchAndApply();
+    try {
+      const _teOk = await TimeEntriesReadService.fetchAndApply();
+      /* STAGING-GRANSKNING 2026-11-11 (ChatGPT): ett console.error/warn
+         räcker inte — ingen riktig användare ser konsolen. fetchAndApply()
+         returnerar `false` (inget kastat fel) på en 404/nätverksfel vid
+         den FÖRSTA laddningen efter inloggning, och state.timeEntries
+         förblir då den redan förifyllda tomma arrayen — exakt samma utseende
+         som en genuint tom, legitim lista. Återanvänder den befintliga
+         showToast()-mekanismen (samma som showPersistConflictWarning redan
+         använder) så inloggningen visar en SYNLIG varning istället för att
+         tyst se ut som "inga tidposter finns". */
+      if (_teOk === false && typeof showToast === 'function') {
+        showToast('Kunde inte hämta tidposter just nu — listan kan vara ofullständig. Ladda om sidan för att försöka igen.', 8000);
+      }
+    }
+    catch (e) { console.warn('[initState] TimeEntriesReadService.fetchAndApply() fel:', e); }
+  }
+
+  /* SÄKERHETSFYND V7: hämta state.workOrders via work-orders-list EF:en
+     (server-sidig ao_view_own/ao_view_all-filtrering) — AWAIT:ad, av
+     samma skäl som TimeEntriesReadService ovan (MyJobsPage/
+     WorkOrdersPage/WorkOrderDetailPage förutsätter att state.workOrders
+     redan är populerad direkt efter att initState() returnerat). Ett
+     nätverksfel lämnar state.workOrders som en tom array (redan satt
+     ovan) — fail-safe, aldrig ett kastat fel som avbryter initState(). */
+  if (typeof WorkOrdersReadService !== 'undefined') {
+    try {
+      const _woOk = await WorkOrdersReadService.fetchAndApply();
+      /* Samma motivering som TimeEntriesReadService ovan. */
+      if (_woOk === false && typeof showToast === 'function') {
+        showToast('Kunde inte hämta arbetsordrar just nu — listan kan vara ofullständig. Ladda om sidan för att försöka igen.', 8000);
+      }
+    }
+    catch (e) { console.warn('[initState] WorkOrdersReadService.fetchAndApply() fel:', e); }
   }
 }
 
@@ -277,55 +1318,49 @@ async function initState() {
  * OffersPage._save()) kan göra `const ok = await persist();` och agera på
  * resultatet.
  */
-/* VIFT CRM — integritetsgranskningsfynd (2026-11-20): delad, enda
- * sanningskälla för payroll-filtret på state.timeEntries. Tidigare fanns
- * detta filter ENDAST inuti DataSync._poll() — vilket betydde att
- * state.timeEntries var HELT OFILTRERAT (alla anställdas poster, inte
- * bara egna) under HELA fönstret mellan appstart (initState(), som körs
- * FÖRE Auth._resolveUser() och alltså FÖRE identiteten/behörigheten
- * någonsin är känd) och den FÖRSTA poll-cykeln som råkar upptäcka en
- * fjärrändring (var 15:e sekund, OCH bara om något faktiskt ändrats
- * sedan senast — kan alltså dröja långt över 15 sekunder, eller aldrig
- * inträffa under en kort session). Under det fönstret kunde ALL kod som
- * läser state.timeEntries direkt (inte bara UI som händelsevis renderas
- * EFTER en poll) se andra anställdas tidsregistreringar.
- * Anropas nu från TVÅ ställen: Auth._resolveUser() (varje gång
- * identiteten (om)upptäcks — appstart, re-login, rollbyte; se
- * AuthService.js) OCH DataSync._poll() (varje gång en fjärr-snapshot
- * tillämpas, eftersom en roll-/behörighetsändring under en pågående
- * session annars inte skulle upptäckas förrän nästa omladdning).
- * Fail-closed: en okänd/saknad identitet (`myStaffId` null/"unknown")
- * matchar inget verkligt `staffId` i filtret, så resultatet blir en tom
- * lista — aldrig ett oavsiktligt fullt dataset. */
-function _applyTimeEntriesPayrollFilter() {
-  if (typeof Auth === 'undefined' || !Array.isArray(state.timeEntries)) return;
-  if (Auth.can('payroll_view')) return;
-  var myStaffId = state.currentUser ? state.currentUser.id : null;
-  state.timeEntries = state.timeEntries.filter(function(e) { return e.staffId === myStaffId; });
-}
-
 var _persistQueue = Promise.resolve();
 
-/* VIFT CRM 13 (riktad prestandarättning, FÖRSLAG — EJ INSTALLERAT):
- * { [key]: JSON.stringify(value) senast BEKRÄFTAT skrivet till Supabase för
- * just denna nyckel } — eller, för en nyckel som precis hämtats via en
- * DataSync-poll, senast bekräftat MOTTAGET (se arr() i DataSync._poll()
- * nedan), vilket är lika giltigt eftersom det då per definition redan
- * matchar serverns aktuella värde. Används ENDAST av _doPersist() för att
- * avgöra vilka av de ~34 nycklarna som FAKTISKT behöver skickas i en given
- * persist()-omgång — se _doPersist() för den fullständiga motiveringen.
- * Ren in-memory-cache för DENNA flik/session; påverkar aldrig vad som
- * faktiskt lagras någonstans, bara vad som AKTIVT skickas över nätet. */
-var _lastWrittenJSON = {};
+/* QA FIX-ROUND 2026-11-12 (C1) — per-key result, backward compatible.
+   `persist()` (no argument — ~300 existing call sites) is UNCHANGED: it
+   resolves to the same flat boolean as before (every changed key in the
+   batch saved, nothing conflict-locked).
+   `persist({keys: ['customers']})` resolves to a boolean about THOSE keys
+   only: true unless one of them was rejected, conflicted, unverified, or
+   is conflict-locked with an unsent change in this cycle. A rejection of
+   an UNRELATED key in the same batch (e.g. `activityLog`, rejected on
+   every write by its stored duplicate id — backlog C1, the cause of the
+   false "Kunde inte spara kunden" and of the duplicate offer OFF-011) no
+   longer reports the caller's own, genuinely saved, data as failed.
+   `persist({detailed: true})` resolves to {ok, results, failedKeys,
+   degraded?} for callers that want the whole picture.
+   The flat result is deliberately NOT replaced by an object for plain
+   `persist()`: an object is always truthy, so every existing
+   `if (!ok)` check would silently stop detecting failures. */
+function _vfPersistResultFor(detail, opts) {
+  if (!detail || typeof detail !== 'object') detail = { ok: false, results: {}, failedKeys: [], error: true };
+  if (opts && opts.detailed) return detail;
+  if (opts && Array.isArray(opts.keys) && opts.keys.length) {
+    if (detail.degraded || detail.error) return false;
+    const r = detail.results || {};
+    return opts.keys.every(function(k) { return !Object.prototype.hasOwnProperty.call(r, k) || r[k] === 'ok'; });
+  }
+  return !!detail.ok;
+}
 
-function persist() {
+function persist(opts) {
   /* Måste ske SYNKRONT, före all await — annars hinner en poll som redan
      startat aldrig se att en lokal write är på väg. Se DataSync._poll(). */
   if (typeof DataSync !== 'undefined') {
     DataSync._pendingWrites = (DataSync._pendingWrites || 0) + 1;
     DataSync._localWriteGeneration = (DataSync._localWriteGeneration || 0) + 1;
   }
-  const task = _persistQueue.then(function() { return _doPersist(); });
+  /* The opts->boolean mapping happens INSIDE the chain, so `safeTask`
+     below is still ONE promise shared by the caller and the queue (the
+     R1.2 ordering invariant): a derived `.then()` here would let the
+     next queued _doPersist() start before the caller's own continuation
+     (e.g. a rollback) — exactly the bug R1.2 fixed. */
+  const task = _persistQueue.then(function() { return _doPersistDetailed(); })
+    .then(function(detail) { return _vfPersistResultFor(detail, opts); });
   /* V48B3B0 R1.2 (kritisk fix): EN och SAMMA promise (`safeTask`) används
      nu för både _persistQueue OCH returvärdet till callern — tidigare
      skapade `_persistQueue = task.catch(A)` och `return task.catch(B)` två
@@ -347,7 +1382,7 @@ function persist() {
      fortsättning (och ev. rollback) FÖRE nästa köade writes start. */
   const safeTask = task.catch(function(e) {
     console.error('[persist] Ohanterat fel i persist-kön:', e);
-    return false;
+    return (opts && opts.detailed) ? { ok: false, results: {}, failedKeys: [], error: true } : false;
   });
   /* Kön måste leva vidare även om detta specifika anrop misslyckas —
      annars fastnar alla senare persist()-anrop bakom ett permanent
@@ -357,127 +1392,293 @@ function persist() {
   return safeTask;
 }
 
+/* QA FIX-ROUND 2026-11-12 (C1): `_doPersist()` keeps its exact old
+   contract (Promise<boolean>, the flat batch result) for any direct
+   caller; the per-key detail lives in `_doPersistDetailed()`, which is
+   what persist() now runs. One implementation, two views of its result. */
 async function _doPersist() {
+  const d = await _doPersistDetailed();
+  return !!(d && d.ok);
+}
+
+async function _doPersistDetailed() {
+  /* P0-INCIDENT-FIX (2026-11): blockera varje bred/generisk skrivning om
+     senaste läsningen var degraderad (timeout/nätverksfel/fallback till
+     localStorage). En tom/ofullständig lokal kopia får aldrig skrivas
+     tillbaka som auktoritativ. Narrow, redan atomiska skrivvägar (AOTimeSyncService,
+     work_order- och time_entry-RPC:erna m.fl.) berörs INTE av denna spärr
+     — de beror inte på en föregående bulk-läsning. */
+  if (state._degradedLoad) {
+    console.error('[persist] BLOCKERAD: senaste läsningen var degraderad (fallback), ingen bulk-skrivning tillåten.');
+    return { ok: false, degraded: true, results: {}, failedKeys: [] };
+  }
   try {
     const _now = new Date().toISOString();
     const _persistAoCount = Array.isArray(state.workOrders) ? state.workOrders.filter(function(a) { return !a.deleted && !a.archived; }).length : 0;
     console.log('[persist] Sparar state — aktiva AO: ' + _persistAoCount + ' — ts: ' + _now);
-    /* Byggs HÄR (vid faktisk exekvering i kön), inte vid persist()-anropet —
-       om detta anrop stod i kö bakom ett tidigare pågående anrop innehåller
-       state.X-arrayerna då garanterat även eventuella mutationer som skett
-       under tiden, eftersom mutation alltid sker synkront FÖRE persist()
-       anropas (etablerat mönster i hela kodbasen). Se RAPPORT §4. */
-    const _allPairs = [
-      ['lastChanged',      _now],
-      ['customers',        state.customers],
-      ['workOrders',       state.workOrders],
-      ['offers',           state.offers],
-      ['invoices',         state.invoices],
-      ['staff',            state.staff],
-      ['properties',       state.properties],
-      ['priceGroups',      state.priceGroups],
-      ['priceProfiles',    state.priceProfiles],
-      ['salesOpps',        state.salesOpportunities],
-      ['activityLog',      state.activityLog],
-      ['settings',         state.settings],
-      ['timeEntries',      state.timeEntries],
-      ['contracts',        state.contracts],
-      ['articles',         state.articles],
-      ['titles',           state.titles],
-      ['roles',            state.roles],
-      ['recurringOrders',  state.recurringOrders],
-      ['ronderingsmallar', state.ronderingsmallar],
-      ['ronderingar',      state.ronderingar],
-      ['avvikelser',       state.avvikelser],
-      ['activities',       state.activities],
-      ['serviceTemplates', state.serviceTemplates],
-      ['emailTemplates',   state.emailTemplates],
-      ['propertyCategories', state.propertyCategories],
-      ['ronderingspass',   state.ronderingspass],
-      ['propertyObjects',  state.propertyObjects],
-      ['importLogs',       state.importLogs],
-      ['propertyRoles',         state.propertyRoles],
-      ['propertyContacts',      state.propertyContacts],
-      ['deviationCategories',   state.deviationCategories],
-      ['inspections',           state.inspections],
-      ['offerEvents',           state.offerEvents],
-      ['offerAttachments',      state.offerAttachments],
-      ['projects',              state.projects]
-      /* V54C1 R1 — Blockerare 4: `projectDocuments` skrivs MEDVETET INTE
-         här längre. Detta är den generiska "spara allt"-vägen som varje
-         obesläktad CRM-ändring (t.ex. att byta namn på en kund) rullar
-         genom — om den skickade med `state.projectDocuments` skulle en
-         parallell Edge Function-uppladdning/borttagning (som skriver
-         samma serverpost atomiskt, se backend/) kunna skrivas över av en
-         ANNAN klients gamla, i minnet cachade kopia av samma array
-         ("sista skrivaren vinner" på en hel array = förlorad rad). Enda
-         skrivvägen för `vift_projectDocuments` är nu Edge Functionernas
-         radlåsta RPC:er (project_documents_append/update_one/
-         finalize_delete, se backend/supabase/migrations/). DataSync
-         fortsätter LÄSA denna nyckel som vanligt (se arr()-listan nedan)
-         — endast den generiska SKRIVvägen är borttagen. Lokal cache
-         uppdateras istället av ProjectDocumentService via
-         Storage.setLocal() efter varje bekräftad server-mutation. */
-    ];
+    /* STAGING-GRANSKNING 2026-11-06 (fynd 2) — ERSÄTTER den tidigare
+       helregister-`Storage.setAll([...])`-anropet (alla 27 generiska
+       nycklar skickades VARJE gång, oavsett vad som faktiskt ändrats) med
+       en diff-baserad, hash-skyddad, per-nyckel-skrivning — portad från det
+       redan byggda/testade P0_FINAL_2026-11-04-mönstret (se dess egen,
+       fullständiga motivering: att skicka en oförändrad, potentiellt
+       inaktuell kopia av t.ex. `offers` bara eftersom en obesläktad
+       `customers`-ändring triggade samma persist()-anrop kunde tyst skriva
+       över en ANNAN sessions redan bekräftade, nyare ändring, eftersom
+       ingenting om OFFERS data "sågs" ha ändrats ur DEN sparande sessionens
+       (stale) synvinkel). En nyckel i konflikt-läge (`state._keyConflict`)
+       försöks ALDRIG skrivas automatiskt igen — se loopen nedan. */
+    let ok = true;
+    const _failedKeys = [];
+    const _staleKeys = [];
+    const _conflictBlockedKeys = [];
+    /* QA FIX-ROUND 2026-11-12 (C1): per-key outcome of THIS cycle, next to
+       (never instead of) the flat `ok` above, which keeps its exact old
+       meaning for DataSync._lastSig and for every caller of plain
+       `persist()`. Values: 'ok' | 'failed' | 'conflict' | 'blocked' |
+       'unverified'. A key absent from the map was unchanged this cycle
+       (nothing to send) — see persist()'s `opts.keys` for how callers
+       ask "did MY key save" without being failed by an unrelated key
+       (in practice `activityLog`, rejected on every write by its stored
+       duplicate id, backlog C1). */
+    const _keyResults = {};
+    for (const _shortKey of VIFT_BUSINESS_KEYS) {
+      if (state._keyConflict[_shortKey]) {
+        _conflictBlockedKeys.push(_shortKey);
+        /* Reported only if this key has a real unsent local change; an
+           untouched locked key is not "this caller's key failed". */
+        if (JSON.stringify(state[_vfBusinessStateKey(_shortKey)]) !== state._keySnapshot[_shortKey]) _keyResults[_shortKey] = 'blocked';
+        continue;
+      }
+      const _stateKey = _vfBusinessStateKey(_shortKey);
+      const _value = state[_stateKey];
+      const _snapshot = JSON.stringify(_value);
+      if (_snapshot === state._keySnapshot[_shortKey]) continue; // oförändrad — skicka inte
+      const _fullKey = 'vift_' + _shortKey;
+      try { localStorage.setItem(Storage.prefix + _shortKey, _snapshot); } catch(e) {}
 
-    /* VIFT CRM 13 (riktad prestandarättning): den verkliga, djupaste orsaken
-       till den uppmätta WAL-volymen är INTE bara att `vift_workOrders` (en
-       ensam ~13.5 MB JSONB-rad, uppblåst av inbäddade bilder — se
-       WorkOrderService/WorkOrderDetailPage-rättningen) skrivs om vid VARJE
-       AO-ändring. Det är att _doPersist() ovan ALLTID skickat SAMTLIGA ~34
-       nycklar — inklusive `workOrders` — i EN enda Storage.setAll()-anrop,
-       FÖR VARJE enskild persist()-anrop NÅGONSTANS i hela applikationen
-       (t.ex. att byta namn på en kund gör idag en fullständig omskrivning
-       av HELA `vift_workOrders`-raden, trots att den aldrig rördes). Detta
-       är verifierat direkt mot denna fil, inte ett antagande.
-       RÄTTNING (enbart detta: VILKA nycklar som ingår i anropet till
-       Storage.setAll — inget annat ändrat, Storage.setAll()s egen signatur/
-       beteende är orörd, och samtliga ~200 anropsställen till persist() i
-       kodbasen är ORÖRDA): endast nycklar vars JSON-serialiserade värde
-       FAKTISKT skiljer sig från det senast bekräftat skrivna (eller senast
-       bekräftat MOTTAGNA via DataSync, se arr() i _poll() ovan) tas med.
-       `lastChanged` skickas ALLTID, oavsett — det ÄR själva ändringssignalen
-       DataSync pollar på; att hoppa över den skulle göra hela synk-
-       mekanismen blind för andra klienters ändringar.
-       Medveten avvägning: detta kräver en JSON.stringify() av varje
-       kandidatvärde (inkl. den stora `workOrders`-arrayen) på klienten, på
-       VARJE persist()-anrop, för själva jämförelsen — en ren CPU-kostnad i
-       användarens egen webbläsare. Alternativet (en "dirty flag" per nyckel,
-       satt vid varje enskild muteringsplats i hela kodbasen) hade krävt att
-       ändra samtliga ~200 anropsställen — exakt den generella ombyggnad
-       uppdraget uttryckligen bad om att UNDVIKA. Den uppmätta flaskhalsen
-       (Supabase Disk IO/RAM/WAL, bekräftat av Supabase Support) är
-       server-sidig, inte klient-CPU — avvägningen görs därför medvetet åt
-       det hållet. Se PERFORMANCE_FIX-rapporten för uppmätta siffror. */
-    const _jsonByKey = {};
-    const pairsToSend = _allPairs.filter(function(pair) {
-      const key = pair[0];
-      if (key === 'lastChanged') return true;
-      const json = JSON.stringify(pair[1]);
-      _jsonByKey[key] = json;
-      return _lastWrittenJSON[key] !== json;
-    });
-    const _skippedCount = _allPairs.length - pairsToSend.length;
-    if (_skippedCount > 0) {
-      console.log('[persist] Hoppar över ' + _skippedCount + ' oförändrade nycklar av ' + _allPairs.length + ' (ingen faktisk ändring sedan senaste bekräftade skrivning)');
+      /* ISSUE #1 FIX (2026-11-08, blocker e): array-shaped keys (every
+         generic key except the single-object `settings`) go through an
+         element-level three-way merge instead of a whole-array,
+         whole-key hash-gated replace. This means an unrelated concurrent
+         edit to a DIFFERENT customer/offer/etc. in the SAME array can
+         never be discarded by this session's save, and is never even
+         reported as a conflict — only a genuine same-element collision
+         is. Object-shaped keys keep the original whole-value path below. */
+      if (Array.isArray(_value)) {
+        let _oldArr = [];
+        try { _oldArr = JSON.parse(state._keySnapshot[_shortKey] || '[]') || []; } catch(e) { _oldArr = []; }
+        if (!Array.isArray(_oldArr)) _oldArr = [];
+        const _oldById = {};
+        _oldArr.forEach(function(el) { if (el && el.id != null) _oldById[el.id] = el; });
+        const _newIds = {};
+        const _upserts = [];
+        _value.forEach(function(el) {
+          if (!el || el.id == null) return;
+          _newIds[el.id] = true;
+          const _old = Object.prototype.hasOwnProperty.call(_oldById, el.id) ? _oldById[el.id] : null;
+          if (JSON.stringify(_old) !== JSON.stringify(el)) {
+            _upserts.push({ id: String(el.id), data: el, previous: _old });
+          }
+        });
+        // PR #2 REVIEW FIX (2026-11-08, blocker 1): a removal now carries
+        // the element's own last-known value (`previous`), not just its
+        // id — the server rejects (as a conflict, not a silent delete) a
+        // removal whose current server value no longer matches what this
+        // session last read, exactly like an update would be rejected.
+        const _removals = Object.keys(_oldById)
+          .filter(function(id) { return !_newIds[id]; })
+          .map(function(id) { return { id: String(id), previous: _oldById[id] }; });
+
+        if (_upserts.length === 0 && _removals.length === 0) {
+          // Snapshot differed (e.g. array reorder) but no real element
+          // change/removal — nothing meaningful to send.
+          state._keySnapshot[_shortKey] = _snapshot;
+          continue;
+        }
+
+        // PR #2 REVIEW FIX (2026-11-09, blocker B): capture what we're
+        // about to send AND a true snapshot of the array as it stood right
+        // before the network call starts (`_snapshot`, already computed
+        // above as `state[_stateKey]`'s JSON at the moment we decided to
+        // persist) — a fresh JSON.parse() clone, immune to any in-place
+        // mutation the live `state[_stateKey]` might undergo while this
+        // await is pending (see _vfMergeAuthoritativeWithInFlightEdits()
+        // above). This is NOT `_oldArr` (that's the OLDER, prior-confirmed
+        // baseline used only to compute what changed THIS cycle).
+        let _preAwaitArr = [];
+        try { _preAwaitArr = JSON.parse(_snapshot) || []; } catch(e) { _preAwaitArr = []; }
+        if (!Array.isArray(_preAwaitArr)) _preAwaitArr = [];
+        const _sentIds = {};
+        _upserts.forEach(function(u) { _sentIds[u.id] = true; });
+        _removals.forEach(function(r) { _sentIds[r.id] = true; });
+
+        /* M4: durable record BEFORE the request leaves (see
+           _vfJournalRecord()). Recording only; the request is unchanged. */
+        _vfJournalRecord(_shortKey, _upserts, _removals);
+
+        const _mergeWrite = await Storage.writeBusinessKeyMerge(_fullKey, _upserts, _removals);
+        if (!_mergeWrite.ok) {
+          console.error('[persist] merge-skrivning avvisad för ' + _fullKey + ':', _mergeWrite.error);
+          ok = false; _failedKeys.push(_shortKey); _keyResults[_shortKey] = 'failed';
+          /* N1: remember WHY, per key, for settlePersistFailure(). Read by
+             the awaiting caller before the next queued cycle starts (R1.2
+             ordering invariant). Does not change any return value. */
+          _vfLastPersistFailure[_shortKey] = {
+            kind: _vfClassifyWriteFailure(_mergeWrite), error: _mergeWrite.error || null,
+            status: (typeof _mergeWrite.status === 'number') ? _mergeWrite.status : null,
+            ids: Object.assign({}, _sentIds)
+          };
+          continue; // whole call failed (auth/forbidden/etc.) — leave local state as-is, retry next cycle
+        }
+        delete _vfLastPersistFailure[_shortKey];
+
+        const _conflicts = (_mergeWrite.data && _mergeWrite.data.conflicts) || [];
+        // PR #2 RE-REVIEW FIX (2026-11-09, finding A): tells the merge
+        // function below which sent ids were REJECTED, so it never
+        // blends a further in-flight edit onto a rejected id — see
+        // _vfMergeAuthoritativeWithInFlightEdits() for why that distinct
+        // case must never silently "win" over the conflict mechanism.
+        const _conflictedIds = {};
+        _conflicts.forEach(function(c) { _conflictedIds[c.id] = true; });
+        // PR #2 REVIEW FIX (2026-11-08, blocker 2): the server's `current`
+        // is now the ONLY source for state/snapshot after a merge-write —
+        // never a client-side re-serialization of `state[_stateKey]`.
+        // A re-serialization would miss elements another session added
+        // or changed that THIS call never touched (e.g. B's concurrent
+        // insert of a brand-new element while A was only updating one of
+        // its own) — the next persist()'s diff would then run against a
+        // baseline the server never actually confirmed, exactly the bug
+        // the reviewer reproduced. If the server ever fails to return
+        // `current` (should not happen after this fix — fail closed, not
+        // closed-but-wrong): leave the snapshot untouched so the next
+        // persist() re-diffs against the last known-good baseline instead
+        // of silently adopting an unverified one.
+        const _authoritative = _mergeWrite.data && Array.isArray(_mergeWrite.data.current)
+          ? _mergeWrite.data.current : null;
+        if (_conflicts.length > 0) {
+          ok = false; // a partial conflict is never a silent full success
+          state._keyElementConflictDraft[_shortKey] = state._keyElementConflictDraft[_shortKey] || {};
+          _conflicts.forEach(function(c) {
+            const _localUpsert = _upserts.find(function(u) { return u.id === c.id; });
+            const _localRemoval = !_localUpsert && _removals.find(function(r) { return r.id === c.id; });
+            /* PR #2 RE-REVIEW FIX (2026-11-09, blocker A): record the REAL
+               intent (upsert vs delete), never a bare value. A delete
+               conflict has no `.data` — the old code fell back to
+               `.previous` (the stale pre-delete value) with no record that
+               the actual intent was deletion, which let "keep my change"
+               in resolveElementConflict() silently resurrect that stale
+               value on top of another session's newer write. See
+               resolveElementConflict() above for the other half of this
+               fix. */
+            /* QA FIX-ROUND 2026-11-12 (M2, confirmed): `_localUpsert.data`
+               IS the live element object of state[_stateKey] (see the
+               `_value.forEach` above — `data: el`). Stored as-is, the
+               draft aliased the live object, so a caller's own rollback
+               after the failed save (CustomersPage._doSave():
+               Object.assign(result.customer, result.before)) rewrote the
+               stored draft too, and "Behåll min ändring" then resubmitted
+               the PRE-edit element: the user's edit was lost AND another
+               session's already-saved field on the same element was
+               reverted. The draft is now an independent deep clone taken
+               at the moment the conflict is recorded, and carries `base`
+               (the element as this session last confirmed it, i.e. the
+               `previous` the server rejected) so resolveElementConflict()
+               can re-apply only the fields this session changed. */
+            if (_localUpsert) {
+              state._keyElementConflictDraft[_shortKey][c.id] = {
+                op: 'upsert', value: _vfDeepClone(_localUpsert.data), base: _vfDeepClone(_localUpsert.previous)
+              };
+            } else if (_localRemoval) {
+              state._keyElementConflictDraft[_shortKey][c.id] = { op: 'delete' };
+            }
+          });
+          if (typeof App !== 'undefined' && App.showPersistConflictWarning) {
+            try { App.showPersistConflictWarning(_shortKey, _conflicts.map(function(c) { return c.id; })); } catch(e2) {}
+          }
+        }
+        if (_authoritative !== null) {
+          /* PR #2 RE-REVIEW FIX (2026-11-09, blocker B): merge, don't
+             blindly replace — see _vfMergeAuthoritativeWithInFlightEdits()
+             above for the full rationale. Protects any local edit the user
+             made to a DIFFERENT element in this same array while this
+             write was in flight.
+
+             Critical: the DISPLAYED state and the DIFF BASELINE must stay
+             separate here. `state[_stateKey]` gets the merged array (so an
+             in-flight edit never visually vanishes), but
+             `state._keySnapshot[_shortKey]` is set from `_authoritative`
+             ALONE — never the merged value. If the snapshot absorbed the
+             still-unsent in-flight edit too, the NEXT persist() cycle would
+             see zero diff for that element and silently never send it to
+             the server at all — the exact failure this fix exists to
+             prevent, just deferred by one cycle instead of happening
+             immediately. */
+          const _liveNow = state[_stateKey];
+          const _merged = _vfMergeAuthoritativeWithInFlightEdits(_authoritative, _preAwaitArr, _liveNow, _sentIds, _conflictedIds);
+          state[_stateKey] = _merged;
+          state._keySnapshot[_shortKey] = JSON.stringify(_authoritative);
+          /* M4: the server applied every sent, non-conflicted id — those
+             journal entries are done. Conflicted ids stay journaled until
+             the user resolves the conflict (resolveElementConflict()). */
+          Object.keys(_sentIds).forEach(function(id) { if (!_conflictedIds[id]) _vfJournalForget(_shortKey, id); });
+          _keyResults[_shortKey] = _conflicts.length > 0 ? 'conflict' : 'ok';
+        } else {
+          console.error('[persist] merge-skrivning för ' + _fullKey + ' svarade utan auktoritativ \'current\' — baslinjen uppdateras INTE denna cykel');
+          ok = false;
+          _keyResults[_shortKey] = 'unverified';
+          // N1: a 200 without `current` proves nothing either way -> re-check.
+          _vfLastPersistFailure[_shortKey] = { kind: 'uncertain', error: 'unverified', status: null, ids: Object.assign({}, _sentIds) };
+        }
+        if (_conflicts.length > 0) _keyResults[_shortKey] = 'conflict';
+        continue;
+      }
+
+      /* Object-shaped key (settings): unchanged whole-value, hash-gated
+         replace — a single object has no finer-grained element to merge. */
+      let _expectedHash = state._keyHash[_shortKey];
+      if (_expectedHash === undefined) {
+        const _fallbackRead = await Storage.readBusinessKeyWithHash(_fullKey);
+        _expectedHash = _fallbackRead.ok ? _fallbackRead.hash : null;
+      }
+      const _write = await Storage.writeBusinessKey(_fullKey, _value, _expectedHash);
+      if (!_write.ok) {
+        console.error('[persist] skrivning avvisad för ' + _fullKey + ':', _write.error);
+        ok = false; _failedKeys.push(_shortKey);
+        _keyResults[_shortKey] = _write.error === 'stale_write' ? 'conflict' : 'failed';
+        if (_write.error === 'stale_write') {
+          _staleKeys.push(_shortKey);
+          state._keyConflictDraft[_shortKey] = _vfDeepClone(_value); // M2: never alias the live value
+          state._keyConflict[_shortKey] = true;
+          try {
+            const _resync = await Storage.readBusinessKeyWithHash(_fullKey);
+            if (_resync.ok) {
+              state._keyHash[_shortKey] = _resync.hash;
+              const _authoritative = (_resync.value !== undefined && _resync.value !== null)
+                ? _resync.value : (Array.isArray(_value) ? [] : {});
+              state[_stateKey] = _authoritative;
+              state._keySnapshot[_shortKey] = JSON.stringify(_authoritative);
+            }
+          } catch(e) { console.warn('[persist] kunde inte omsynka baslinje efter stale_write för ' + _fullKey + ':', e); }
+          if (typeof App !== 'undefined' && App.showPersistConflictWarning) {
+            try { App.showPersistConflictWarning(_shortKey); } catch(e2) {}
+          }
+        }
+        continue;
+      }
+      state._keyHash[_shortKey] = (_write.data && _write.data.newHash) || null;
+      state._keySnapshot[_shortKey] = _snapshot;
+      _keyResults[_shortKey] = 'ok';
     }
-
-    const ok = await Storage.setAll(pairsToSend);
+    /* En nyckel som fortfarande sitter konflikt-låst (ovan, `continue`:ad
+       utan försök) FÅR ALDRIG döljas bakom ett övergripande `ok:true` —
+       exakt den falska sparbekräftelsen P0-arbetet redan en gång rättade
+       för AO-vägen, samma princip gäller den generiska vägen. */
+    if (_conflictBlockedKeys.length > 0) ok = false;
     if (ok) {
       /* R1: lastSig sätts ENDAST efter bekräftad write — se filhuvud-
-         kommentaren ovan för varför detta är kärnan i fixen.
-         VIFT CRM 13: _lastWrittenJSON uppdateras ENDAST för de nycklar som
-         FAKTISKT ingick i denna BEKRÄFTAT lyckade skrivning — en nyckel som
-         hoppades över (redan matchade) behöver ingen ny cache-post (dess
-         befintliga post är redan korrekt), och en nyckel vars skrivning
-         misslyckas (se else-grenen) får ALDRIG sin cache uppdaterad, så att
-         nästa persist()-försök garanterat försöker igen — exakt samma
-         "uppdatera bara efter bekräftad framgång"-disciplin som redan
-         gäller för DataSync._lastSig på raden nedan. */
+         kommentaren ovan för varför detta är kärnan i fixen. */
       if (typeof DataSync !== 'undefined') DataSync._lastSig = _now;
-      pairsToSend.forEach(function(pair) {
-        if (pair[0] !== 'lastChanged') _lastWrittenJSON[pair[0]] = _jsonByKey[pair[0]];
-      });
     } else {
       console.error('[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).');
       /* R1.1: Storage.setAll() ovan hann redan (synkront, före nätverkssvaret
@@ -492,11 +1693,18 @@ async function _doPersist() {
          lyckats denna session — korrekt, då finns ingen bekräftad signatur). */
       if (typeof DataSync !== 'undefined') Storage.setLocal('lastChanged', DataSync._lastSig);
     }
-    return ok;
+    return {
+      ok: ok,
+      results: _keyResults,
+      failedKeys: Object.keys(_keyResults).filter(function(k) { return _keyResults[k] !== 'ok'; })
+    };
   } finally {
     if (typeof DataSync !== 'undefined') {
       DataSync._pendingWrites = Math.max(0, (DataSync._pendingWrites || 0) - 1);
     }
+    _vfScheduleShortNumberReconcile(); // display-number clash repair, see newShortNumber()
+    // N1: a held entry superseded by a newer confirmed save leaves the banner.
+    if (state._vfHeldUnsaved && state._vfHeldUnsaved.length) { try { _vfRefreshHeldBanner(); } catch (e) {} }
   }
 }
 
@@ -547,6 +1755,140 @@ async function _doNotifPersist() {
   }
 }
 
+/* ── P0-1 FIX (2026-10-18, independent-reviewer regression) ──────────
+ * reconcilePendingAoTime(canonicalArr, previousArr, entityType)
+ *
+ * `DataSync._poll()` (and, before this fix, the initial `initState()`
+ * load too) wholesale-replaced `state.workOrders`/`state.timeEntries`
+ * with whatever the server snapshot said — EXACTLY the same bug class
+ * already found and fixed for `ronderingspass` (`LiveSync` doing a
+ * wholesale array replace instead of a merge), just missed for the
+ * AO/time poll path. Reproduced by an independent reviewer: an
+ * optimistic `{id:'AO-TEST-NEW', _pendingSync:true}` AO, still in
+ * `AOTimeSyncService`'s durable outbox (not yet ACKed), was silently
+ * DROPPED the moment a poll's server snapshot — which doesn't have it
+ * yet — replaced the array.
+ *
+ * Fix: for every id still in the outbox for this entityType
+ * (`AOTimeSyncService.listUnsynced()`) that the FRESH canonical array
+ * does NOT (yet) contain, keep it:
+ *   1. If `previousArr` (the array in `state` right before this
+ *      replacement) already has an object with that id, carry forward
+ *      THE SAME OBJECT REFERENCE (not a clone) — `WorkOrderService.
+ *      create()`/`TimeService.clockOut()`'s own `onSettled` closures
+ *      close over that exact object and mutate `_pendingSync`/
+ *      `_syncFailed` on it directly; losing identity here would leave
+ *      a permanently-stuck-looking pending badge on an orphaned clone
+ *      that is no longer the object actually rendered.
+ *   2. Otherwise (e.g. a fresh `initState()` after a reload — the
+ *      in-memory object from before the reload no longer exists at
+ *      all) reconstruct a minimal stand-in from the outbox entry's own
+ *      payload via `AOTimeSyncService.getPendingCreateObject()` — the
+ *      only other place that data still exists, since pending AO/time
+ *      objects are deliberately never written into the generic
+ *      `state.js` persist()-bundle (see `_doPersist()`'s own comment).
+ * BLOCKER-1 FIX (independent-reviewer regression, round 3): the
+ * original version of this function took an early return the instant
+ * the canonical snapshot already contained a record for this id —
+ * correct for a pending CREATE (the server now has it, nothing more to
+ * do), but WRONG for a pending EDIT (patch_ao/patch_time) to an
+ * EXISTING record: the canonical snapshot can legitimately be STALE
+ * relative to an edit still sitting unflushed in the outbox (network
+ * slow/offline since the edit was made), and blindly taking the
+ * canonical record in that case visually REVERTS the user's own
+ * not-yet-ACKed edit the instant a poll runs — a real UI-trust
+ * violation (the patch itself was never lost — see
+ * AOTimeSyncService's own outbox — only the VISIBLE state briefly lied
+ * about it). Fixed: for an id with ANY pending outbox entry (create OR
+ * patch, via `AOTimeSyncService.hasPendingEntry()`), ALWAYS prefer
+ * showing "what the user last saw" over the fresh canonical record,
+ * for as long as that outbox entry exists — exactly the same
+ * create-vs-canonical-arrival swap this function already did, just no
+ * longer gated behind "id not yet in canonical array":
+ *   1. If `previousArr` already has the (already-patched, by the
+ *      calling page) in-memory object for this id, keep that SAME
+ *      object reference (identity-preserving, see the note above on
+ *      `onSettled` closures).
+ *   2. Otherwise (fresh reload, no in-memory copy survives) reconstruct
+ *      by merging the outbox's pending PATCH fields
+ *      (`getPendingPatchFields()`) on top of whatever canonical record
+ *      exists (or the pending CREATE payload if the id isn't canonical
+ *      yet either) — "best known state", never a blank/reverted stand-in.
+ * The moment the outbox entry actually clears (ACKed and removed, by
+ * `_sendOne()`), `hasPendingEntry()`/`listUnsynced()` stop reporting it
+ * and the canonical snapshot is used outright on the very next
+ * reconciliation call — no double-apply, no stale flag left behind.
+ *
+ * Deliberately NOT extended to pending DELETE (`delete_ao`/`delete_time`)
+ * — out of this fix's scope; a pending delete still shows the canonical
+ * (not-yet-deleted) record until the delete ACKs, unchanged prior
+ * behavior, not reported as a problem.
+ *
+ * Covers both failure modes an independent reviewer was asked to
+ * reproduce: "response lost before commit" (server never got it — stays
+ * pending, outbox keeps retrying, this function keeps it visible) and
+ * "response lost after commit" (server committed it, but the client's
+ * own HTTP response never arrived — the NEXT poll's snapshot will
+ * contain the canonical record, outbox's own idempotent retry will get
+ * a 200 and self-clear) — see tests/js/ao_time_poll_reconciliation_tests.js
+ * for both (creates) and the SAME two failure modes for EDITS, plus the
+ * reload/restart scenario, for both. */
+function reconcilePendingAoTime(canonicalArr, previousArr, entityType) {
+  if (!Array.isArray(canonicalArr)) canonicalArr = [];
+  if (typeof AOTimeSyncService === 'undefined' || typeof AOTimeSyncService.listUnsynced !== 'function') {
+    return canonicalArr;
+  }
+  var pendingIds = AOTimeSyncService.listUnsynced(entityType) || [];
+  if (!pendingIds.length) return canonicalArr;
+
+  var byId = {};
+  canonicalArr.forEach(function(x) { if (x && x.id) byId[x.id] = x; });
+
+  var prevById = {};
+  (previousArr || []).forEach(function(x) { if (x && x.id) prevById[x.id] = x; });
+
+  var merged = canonicalArr.slice();
+  var indexById = {};
+  merged.forEach(function(x, i) { if (x && x.id) indexById[x.id] = i; });
+
+  pendingIds.forEach(function(id) {
+    var hasCanonical = Object.prototype.hasOwnProperty.call(byId, id);
+    var keep;
+
+    if (hasCanonical) {
+      // The id already exists server-side. This is EITHER (a) a pending
+      // CREATE that has now landed — canonical wins outright, nothing to
+      // override, the outbox entry will self-clear on its own retry — OR
+      // (b) a genuinely pending EDIT (patch_ao/patch_time) whose fields
+      // the canonical snapshot may not reflect yet (Blocker-1 fix).
+      // Distinguish by checking for pending PATCH fields SPECIFICALLY —
+      // NOT just "does a previous in-memory object exist", because a
+      // landed CREATE also has a previous in-memory object (the
+      // optimistic one from create()), and that stale copy must NOT win
+      // over the richer, server-confirmed canonical record once the
+      // create has actually landed.
+      var patchFields = (typeof AOTimeSyncService.getPendingPatchFields === 'function')
+        ? AOTimeSyncService.getPendingPatchFields(entityType, id) : null;
+      if (!patchFields) return; // no pending EDIT for this id — canonical stands, nothing to do
+      if (prevById[id]) {
+        keep = prevById[id]; // identity-preserving — same object the caller's onSettled closure mutates
+      } else {
+        keep = Object.assign({}, byId[id], patchFields, { _pendingSync: true });
+      }
+      merged[indexById[id]] = keep; // replace in place — same array position
+    } else {
+      // Pending CREATE not yet in canonical — original logic, unchanged.
+      keep = prevById[id];
+      if (!keep) {
+        var obj = AOTimeSyncService.getPendingCreateObject(entityType, id);
+        if (obj) keep = Object.assign({}, obj, { _pendingSync: true });
+      }
+      if (keep) merged.push(keep);
+    }
+  });
+  return merged;
+}
+
 /* ── Hjälpfunktioner ──────────────────── */
 
 function newId(arr, prefix) {
@@ -556,6 +1898,162 @@ function newId(arr, prefix) {
     .filter(n => !isNaN(n));
   const max = nums.length > 0 ? Math.max(...nums) : 0;
   return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+}
+
+/* QA FIX-ROUND 2026-11-12 (K3, live-reproduced: two sessions created the
+   same `K-007` at the same moment). newId() above is "highest existing +
+   1" computed from THIS session's possibly stale copy, so two sessions
+   creating concurrently get the same id. Same fix as work orders
+   (WorkOrderService._newAoId()): a collision-safe random id, assigned
+   once, never renumbered. Trade-off (same as already accepted for AOs and
+   time entries): the id is long. `existing` is an optional array checked
+   for the (astronomically unlikely) clash. newId() itself is kept for the
+   entities not switched in this round. */
+function newSafeId(prefix, existing) {
+  for (let i = 0; i < 5; i++) {
+    const id = prefix + '-' + ((typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12));
+    if (!Array.isArray(existing) || !existing.some(function(x) { return x && x.id === id; })) return id;
+  }
+  return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
+/* DISPLAY NUMBER (2026-11-12, follow-up to K3). newSafeId() made new
+   customer/property/property-object ids collision-safe but long
+   ("K-3f2a1b4c-9e21-..."), and those ids were shown as visible labels.
+   The id stays exactly as it is (internal key: routing, customerId/
+   propertyId/objectId references). Visible labels use displayNumberOf():
+     - rec.shortNumber, set once at creation by newShortNumber();
+     - else, for a long collision-safe id without one (created after K3 but
+       before this fix), a short number derived from that id at read time
+       (salt 0, nothing written);
+     - else rec.id, i.e. every existing short-id record ("K-007",
+       "OBJ-012") shows exactly what it showed before. No migration.
+   The short number is DERIVED FROM THE ID (FNV-1a hash -> 5 digits,
+   10000-99999), never "highest existing + 1": two sessions creating at
+   the same moment derive from two different UUIDs. A clash with a number
+   already in this session's view is resolved by re-hashing with the next
+   salt (deterministic). A clash only visible after a sync (two sessions,
+   each with a momentarily stale view) is repaired by
+   _vfReconcileShortNumbers(): only `shortNumber` of one record changes,
+   never an id. */
+const _VF_SHORTNUM_MIN = 10000;
+const _VF_SHORTNUM_SPAN = 90000;
+const _vfShortNumberOwned = new Set();     // ids created by THIS session (in memory only)
+const _vfShortNumberFixTries = {};         // id -> repair attempts this session (bounded)
+let _vfShortNumberReconcileTimer = null;
+
+function _vfFnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/* True for ids made by newSafeId() (UUID or its time+random fallback);
+   false for legacy short ids such as "K-007", "KU-012", "OBJ-001". */
+function _vfIsSafeId(id) {
+  const m = /^[A-Za-z]+-([0-9A-Za-z-]+)$/.exec(String(id == null ? '' : id));
+  return !!m && m[1].length >= 12 && !/^[0-9]+$/.test(m[1]);
+}
+
+/* existingShortNumbers: Set or array of display numbers already in use
+   (compared case-insensitively). Same id + same set -> same result. */
+function _vfShortNumberFromUuid(uuid, existingShortNumbers) {
+  const id = String(uuid == null ? '' : uuid);
+  const pm = /^([A-Za-z]+)-/.exec(id);
+  const prefix = pm ? pm[1] + '-' : '';
+  const used = new Set();
+  if (existingShortNumbers) Array.from(existingShortNumbers).forEach(function(n) { if (n != null) used.add(String(n).toUpperCase()); });
+  for (let salt = 0; salt < 1000; salt++) {
+    const cand = prefix + (_VF_SHORTNUM_MIN + (_vfFnv1a(salt + '|' + id) % _VF_SHORTNUM_SPAN));
+    if (!used.has(cand.toUpperCase())) return cand;
+  }
+  /* Unreachable in practice (1000 consecutive taken candidates): a longer,
+     still id-derived, code rather than a duplicate. */
+  return prefix + _vfFnv1a(id).toString(36).toUpperCase() + _vfFnv1a('x|' + id).toString(36).toUpperCase();
+}
+
+function displayNumberOf(rec) {
+  if (!rec) return '';
+  if (rec.shortNumber) return String(rec.shortNumber);
+  const id = rec.id == null ? '' : String(rec.id);
+  if (_vfIsSafeId(id)) return _vfShortNumberFromUuid(id, null);
+  return id;
+}
+
+function _vfDisplayNumbersIn(arr, exceptId) {
+  const s = new Set();
+  (Array.isArray(arr) ? arr : []).forEach(function(r) {
+    if (r && r.id !== exceptId) s.add(displayNumberOf(r).toUpperCase());
+  });
+  return s;
+}
+
+/* Called once, at creation, right after newSafeId(). Registers the id as
+   created by this session (the repair path below only touches those). */
+function newShortNumber(id, existingArr) {
+  _vfShortNumberOwned.add(id);
+  return _vfShortNumberFromUuid(id, _vfDisplayNumbersIn(existingArr, id));
+}
+
+/* Post-sync repair of a cross-session clash. Deterministic winner: a
+   record without its own shortNumber (legacy id / read-time number) first,
+   then earliest createdAt, then id. Each losing record is renumbered only
+   by the session that created it, so exactly one session writes and only
+   that record's `shortNumber` changes. Returns [{key,id,from,to}]. */
+const _VF_SHORTNUM_KEYS = ['customers', 'properties', 'propertyObjects'];
+function _vfReconcileShortNumbers() {
+  const changes = [];
+  if (_vfShortNumberOwned.size === 0) return changes;
+  _VF_SHORTNUM_KEYS.forEach(function(key) {
+    const arr = state[key];
+    if (!Array.isArray(arr) || (state._keyConflict && state._keyConflict[key])) return;
+    const groups = {};
+    arr.forEach(function(r) {
+      if (!r || r.deleted) return;
+      const n = displayNumberOf(r).toUpperCase();
+      (groups[n] = groups[n] || []).push(r);
+    });
+    Object.keys(groups).forEach(function(n) {
+      const g = groups[n];
+      if (g.length < 2) return;
+      g.sort(function(a, b) {
+        const ao = a.shortNumber ? 1 : 0, bo = b.shortNumber ? 1 : 0;
+        if (ao !== bo) return ao - bo;
+        const ac = String(a.createdAt || ''), bc = String(b.createdAt || '');
+        if (ac !== bc) return ac < bc ? -1 : 1;
+        return String(a.id) < String(b.id) ? -1 : 1;
+      });
+      g.slice(1).forEach(function(r) {
+        if (!r.shortNumber || !_vfShortNumberOwned.has(r.id)) return;
+        _vfShortNumberFixTries[r.id] = (_vfShortNumberFixTries[r.id] || 0) + 1;
+        if (_vfShortNumberFixTries[r.id] > 3) return;
+        const from = r.shortNumber;
+        r.shortNumber = _vfShortNumberFromUuid(r.id, _vfDisplayNumbersIn(arr, r.id));
+        changes.push({ key: key, id: r.id, from: from, to: r.shortNumber });
+      });
+    });
+  });
+  if (changes.length) {
+    const keys = Array.from(new Set(changes.map(function(c) { return c.key; })));
+    console.warn('[shortNumber] cross-session clash repaired:', changes);
+    persist({ keys: keys });
+  }
+  return changes;
+}
+
+/* Runs the repair after a confirmed write / applied poll, outside the
+   persist chain. No-op unless this session created something. */
+function _vfScheduleShortNumberReconcile() {
+  if (_vfShortNumberOwned.size === 0 || _vfShortNumberReconcileTimer) return;
+  _vfShortNumberReconcileTimer = setTimeout(function() {
+    _vfShortNumberReconcileTimer = null;
+    try { _vfReconcileShortNumbers(); } catch (e) { console.warn('[shortNumber] reconcile failed:', e); }
+  }, 0);
 }
 
 function getCu(id)   { return state.customers.find(c => c.id === id) || null; }
@@ -788,8 +2286,29 @@ const DataSync = {
       }
 
       console.log('[DataSync] Fjärruppdatering detekterad (' + sig + ') — hämtar data…');
-      const remote = await Storage.getAll();
-      if (!remote) return;
+      /* PR #2 CONSOLIDATED FIX (2026-11-09, finding B): the old
+         `Storage.getAll()` here was a plain, baseline-blind bulk read —
+         it updated `state[...]` for every generic key but NEVER touched
+         `state._keyHash`/`state._keySnapshot`, so a poll that picked up
+         ANOTHER session's concurrent change left the DISPLAYED value and
+         the DIFF BASELINE permanently out of sync for that key. The next,
+         completely unrelated `persist()` would then see a spurious "local
+         change" for a key this session never touched, and send a stale
+         `previous`, producing a false `changed_by_other_session` conflict
+         for data the user never edited. Fixed by using the SAME atomic
+         data+hash call `initState()` already uses (`getAllWithHashes()`),
+         for the SAME combined key set (write-allowlisted + read-only
+         extras — see VIFT_READONLY_EXTRA_KEYS), and updating data+hash+
+         snapshot together, per key, exactly like
+         _vfSyncBusinessKeyBaselines() does at init time. */
+      const _pollKeys = VIFT_BUSINESS_KEYS.concat(VIFT_READONLY_EXTRA_KEYS).map(function(k) { return 'vift_' + k; });
+      const _pollCombined = await Storage.getAllWithHashes(_pollKeys);
+      if (!_pollCombined.ok) {
+        console.warn('[DataSync] poll: getAllWithHashes misslyckades:', _pollCombined.error);
+        return;
+      }
+      const remote = _pollCombined.data || {};
+      const pollHashes = _pollCombined.hashes || {};
 
       /* R1 (DEL 6, absolut krav): kontrollera IGEN efter den andra
          await-gränsen — detta är exakt det fönster som orsakade den
@@ -812,145 +2331,83 @@ const DataSync = {
 
       DataSync._lastSig = sig;
 
-      /* Uppdatera state-arrayer från remote */
-      const g = function(key) { return (remote[key] !== undefined && remote[key] !== null) ? remote[key] : null; };
-      const arr = function(stateKey, remoteKey) {
-        var v = g(remoteKey);
-        if (!Array.isArray(v)) return;
-        state[stateKey] = v;
-        /* VIFT CRM 13: primar _lastWrittenJSON med detta precis mottagna,
-           per definition redan server-matchande värde, så att en SENARE,
-           obesläktad persist() (se _doPersist() ovan i denna fil) inte i
-           onödan skickar tillbaka exakt samma data en gång till. (Ingen
-           Storage.setLocal() behövs här -- längre ner i denna funktion
-           finns redan en ovillkorlig, generisk "uppdatera localStorage-
-           cache"-synkning av HELA `remote`-objektet, oförändrad av denna
-           rättning -- se den kodens egen, separat flaggade begränsning
-           för timeEntries i slutrapporten.) */
-        _lastWrittenJSON[remoteKey] = JSON.stringify(v);
-      };
-
-      arr('customers',          'customers');
-      arr('workOrders',         'workOrders');
-      arr('offers',             'offers');
-      arr('invoices',           'invoices');
-      arr('properties',         'properties');
-      arr('priceGroups',        'priceGroups');
-      arr('priceProfiles',      'priceProfiles');
-      arr('salesOpportunities', 'salesOpps');
-      arr('activityLog',        'activityLog');
-      /* VIFT CRM 13 — VIKTIGT: timeEntries får INTE gå via den vanliga
-         arr() ovan, trots att den inte längre själv skriver localStorage.
-         Skälet: arr() primar _lastWrittenJSON omedelbart med sitt FULLA,
-         ofiltrerade värde, men payroll-filtret direkt nedan kan ännu
-         behöva ERSÄTTA state.timeEntries med en SMALARE delmängd (bara
-         egna poster) för en användare utan payroll_view. Om arr() körts
-         här hade _lastWrittenJSON['timeEntries'] primats med det FULLA
-         värdet, trots att state.timeEntries (det som persist() FAKTISKT
-         skulle jämföra/skicka) strax därefter blir den filtrerade
-         delmängden — en felaktig cache-post. Grundläsningen (`g()`)
-         används därför direkt här, utan att cachas ännu — cachningen görs
-         EXPLICIT nedan, EFTER filtret, mot det då korrekta slutvärdet.
-         (OBS, separat, redan befintlig begränsning, inte ändrad av denna
-         rättning: den ovillkorliga "uppdatera localStorage-cache"-
-         synkningen längre ner i denna funktion skriver ändå `remote.
-         timeEntries` [RÅTT, ofiltrerat] till localStorage oavsett — se
-         slutrapporten.) */
-      (function() {
-        var v = g('timeEntries');
-        if (Array.isArray(v)) state.timeEntries = v;
-      })();
-      /* Payroll-skydd: filtrera timeEntries till egna poster om payroll_view
-         saknas. Nu via den delade _applyTimeEntriesPayrollFilter() (se dess
-         egen kommentar högst upp i filen för varför den delas med
-         Auth._resolveUser()). Notera: rådata flödar fortfarande i HTTP-
-         svaret — detta är klient-side mitigation. Fullständigt skydd kräver
-         ett normaliserat timeEntries-schema med per-rad RLS (v1.1). */
-      _applyTimeEntriesPayrollFilter();
-      /* VIFT CRM 13: primar _lastWrittenJSON för timeEntries NU, EFTER ett
-         eventuellt filter ovan — mot state.timeEntries SOM DET NU FAKTISKT
-         ÄR (den fulla remote-arrayen för en payroll_view-användare, annars
-         den redan filtrerade, egna delmängden). Se kommentaren vid
-         (function(){...})() ovan för varför detta inte kan gå via den
-         generiska arr(). (Ingen Storage.setLocal() här av samma skäl som
-         i arr() ovan -- se den kommentaren.) */
-      if (Array.isArray(state.timeEntries)) {
-        _lastWrittenJSON['timeEntries'] = JSON.stringify(state.timeEntries);
+      /* SÄKERHETSFYND V7 / BLOCKER-1: workOrders/timeEntries är INTE i
+         _pollKeys (de ingår inte i VIFT_BUSINESS_KEYS eller
+         VIFT_READONLY_EXTRA_KEYS — se state.js filhuvud) — hämtas
+         fortsatt om via sina egna, server-sidigt filtrerande
+         ReadServices, fire-and-forget, oförändrat av denna rättning. */
+      if (typeof WorkOrdersReadService !== 'undefined') {
+        WorkOrdersReadService.fetchAndApply().catch(function(e) {
+          console.warn('[DataSync] WorkOrdersReadService.fetchAndApply() fel:', e);
+        });
       }
-      /* BLOCKER-1, server-sidig hälft (se initState()s motsvarande
-         kommentar). Hämtar den AUKTORITATIVA, server-filtrerade listan
-         och skriver över resultatet ovan om anropet lyckas -- misslyckas
-         det (EF ej deployad ännu, nätverksfel) lämnas det klientfiltrerade
-         resultatet ovan orört, oförändrat beteende. Körs ENDAST när en
-         poll faktiskt redan bestämt att hämta en full snapshot (denna
-         kodväg), inte på VARJE poll-tick -- ingen ny, extra nätverkslast
-         jämfört med vad denna funktion redan gör. */
       if (typeof TimeEntriesReadService !== 'undefined') {
-        await TimeEntriesReadService.fetchAndApply();
-      }
-      arr('contracts',          'contracts');
-      arr('articles',           'articles');
-      arr('titles',             'titles');
-      arr('roles',              'roles');
-      arr('recurringOrders',    'recurringOrders');
-      arr('ronderingsmallar',   'ronderingsmallar');
-      arr('ronderingar',        'ronderingar');
-      arr('avvikelser',         'avvikelser');
-      arr('activities',         'activities');
-      arr('serviceTemplates',   'serviceTemplates');
-      arr('emailTemplates',     'emailTemplates');
-      arr('notifications',      'notifications');
-      arr('propertyCategories', 'propertyCategories');
-      arr('ronderingspass',     'ronderingspass');
-      arr('propertyObjects',    'propertyObjects');
-      arr('importLogs',         'importLogs');
-      arr('propertyRoles',         'propertyRoles');
-      arr('propertyContacts',      'propertyContacts');
-      arr('deviationCategories',   'deviationCategories');
-      arr('inspections',           'inspections');
-      arr('offerEvents',           'offerEvents');
-      arr('offerAttachments',      'offerAttachments');
-      arr('projects',              'projects');
-      arr('projectDocuments',      'projectDocuments');
-
-      /* Staff: strippa lösenordsfält */
-      var rawStaff = g('staff');
-      if (Array.isArray(rawStaff)) {
-        state.staff = rawStaff.map(function(s) {
-          var clean = Object.assign({}, s);
-          delete clean.password;
-          delete clean.passwordHash;
-          return clean;
+        TimeEntriesReadService.fetchAndApply().catch(function(e) {
+          console.warn('[DataSync] TimeEntriesReadService.fetchAndApply() fel:', e);
         });
       }
 
-      /* Settings är ett objekt */
-      if (remote['settings'] && typeof remote['settings'] === 'object' && !Array.isArray(remote['settings'])) {
-        state.settings = remote['settings'];
+      /* Generiska, write-allowlistade nycklar: data+hash+snapshot
+         uppdateras ATOMISKT, tillsammans, för var och en — en nyckel som
+         sitter i ett olöst konflikt-läge (`state._keyConflict`) hoppas
+         över helt (dess visade/osparade utkastvärde och baslinje rörs
+         inte av en poll — det är användarens egen, ännu olösta konflikt
+         att hantera, inte något en bakgrundssynk ska kunna skriva över). */
+      VIFT_BUSINESS_KEYS.forEach(function(shortKey) {
+        if (shortKey === 'staff' || shortKey === 'settings') return; // specialfall nedan
+        if (state._keyConflict[shortKey]) return;
+        var fullKey = 'vift_' + shortKey;
+        var v = remote[shortKey];
+        if (v === undefined || v === null) return;
+        var stateKey = _vfBusinessStateKey(shortKey);
+        state[stateKey] = v;
+        state._keyHash[shortKey] = Object.prototype.hasOwnProperty.call(pollHashes, fullKey) ? pollHashes[fullKey] : null;
+        state._keySnapshot[shortKey] = JSON.stringify(v);
+      });
+
+      /* Staff: strippa lösenordsfält — snapshot tas av den STRIPPADE
+         kopian (samma princip som _vfSyncBusinessKeyBaselines()/
+         initState(): baslinjen måste representera vad state.staff
+         FAKTISKT innehåller, aldrig den råa server-kopian som fortfarande
+         kan ha lösenordsfält, annars ser varje efterföljande persist()
+         av staff ut som en lokal ändring den aldrig var). */
+      if (!state._keyConflict['staff']) {
+        var rawStaff = remote['staff'];
+        if (Array.isArray(rawStaff)) {
+          state.staff = rawStaff.map(function(s) {
+            var clean = Object.assign({}, s);
+            delete clean.password;
+            delete clean.passwordHash;
+            return clean;
+          });
+          state._keyHash['staff'] = Object.prototype.hasOwnProperty.call(pollHashes, 'vift_staff') ? pollHashes['vift_staff'] : null;
+          state._keySnapshot['staff'] = JSON.stringify(state.staff);
+        }
       }
 
-      /* Uppdatera localStorage-cache. RÄTTAT (integritetsgranskningsfynd,
-         2026-11-20): skrev tidigare `remote[key]` RAKT AV för VARJE
-         nyckel — inklusive `timeEntries` (det RÅA, ofiltrerade svaret,
-         trots att state.timeEntries redan filtrerats till egna poster
-         för en användare utan payroll_view NÅGRA RADER OVAN) och
-         `staff` (likaså det råa svaret, trots att lösenordsfält redan
-         strippats ur state.staff NÅGRA RADER OVAN). En payroll_view-
-         saknande användares egen localStorage fick därmed andra
-         anställdas tidsregistreringar — en verklig läcka till
-         webbläsarens disk, läsbar via DevTools, OBEROENDE av att UI:t
-         (som läser state.X, redan korrekt filtrerat) aldrig visade
-         detta. Skriver nu state.X för just dessa två nycklar (redan
-         sanerade ovan) — alla övriga ~30 nycklar har state.X exakt lika
-         med remote[nyckel] (arr() ovan kopierar dem oförändrat), så
-         deras beteende är identiskt med tidigare, byte för byte. */
-      Object.entries(remote).forEach(function(entry) {
-        const key = entry[0];
-        let value = entry[1];
-        if (key === 'timeEntries') value = state.timeEntries;
-        else if (key === 'staff')  value = state.staff;
-        try { localStorage.setItem('vift_' + key, JSON.stringify(value)); } catch(e) {}
+      /* Settings är ett objekt — samma atomiska data+hash+snapshot-princip. */
+      if (!state._keyConflict['settings'] && remote['settings'] && typeof remote['settings'] === 'object' && !Array.isArray(remote['settings'])) {
+        state.settings = remote['settings'];
+        state._keyHash['settings'] = Object.prototype.hasOwnProperty.call(pollHashes, 'vift_settings') ? pollHashes['vift_settings'] : null;
+        state._keySnapshot['settings'] = JSON.stringify(remote['settings']);
+      }
+
+      /* Read-only extra-nycklar (finding C) — ingen baslinje att sätta,
+         de går aldrig via den generiska skrivvägen; bara visningsvärdet
+         uppdateras. */
+      VIFT_READONLY_EXTRA_KEYS.forEach(function(shortKey) {
+        var v = remote[shortKey];
+        if (v !== undefined && v !== null) state[_vfBusinessStateKey(shortKey)] = v;
       });
+
+      /* Uppdatera localStorage-cache */
+      Object.entries(remote).forEach(function(entry) {
+        try { localStorage.setItem('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
+      });
+
+      /* Display-number clash repair (see newShortNumber()); before the
+         re-render below so the repaired number is what gets shown. */
+      try { _vfReconcileShortNumbers(); } catch (e) { console.warn('[shortNumber] reconcile failed:', e); }
 
       /* Uppdatera badge-räknare */
       if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();

@@ -65,7 +65,6 @@ const WorkOrderDetailPage = {
       }
     }
     this._renderFull(el, ao);
-    this._resolveTimelineImages(document.getElementById('ao-timeline'));
     if (state.stampActive && state.stampAoId === ao.id) this._startStampTimer();
   },
 
@@ -106,7 +105,7 @@ const WorkOrderDetailPage = {
         <button class="btn bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">
           ${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span>
         </button>
-        <span style="font-size:11px;font-weight:700;color:var(--mt);letter-spacing:.3px;white-space:nowrap;">${ao.id}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--mt);letter-spacing:.3px;white-space:nowrap;">${WorkOrderService.displayNumberOrPending(ao)}</span>
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-left:auto;">
           ${sbdg(ao.status)}
           ${isAkut?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:ao.priority!=='normal'?pbdg(ao.priority):''}
@@ -352,7 +351,6 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     if (!el || !ao) return;
     el.innerHTML = this._renderTimeline(ao, true);
-    this._resolveTimelineImages(el);
   },
 
   _openSectionOf(elementId) {
@@ -900,6 +898,14 @@ const WorkOrderDetailPage = {
             text: `${by} satte uppskattad tid: ${TimeService.fmtDuration(h * 60 + m)}${comment ? ' — ' + comment : ''}`,
             userName: by, timestamp: new Date().toISOString()
           });
+          /* P0 AO/TID-FIX: detta ställe muterar ao direkt (kringgår
+             WorkOrderService) — syncar via samma delade _syncAO()-helper
+             så att skrivningen blir atomisk/race-säker precis som alla
+             andra AO-mutationer, istället för att lämnas på den gamla
+             generiska vägen. */
+          if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+            WorkOrderService._syncAO(ao, { estimatedHours: ao.estimatedHours, log: ao.log, updatedAt: ao.updatedAt });
+          }
           persist();
           Modal.close();
           WorkOrderDetailPage.render({ aoId });
@@ -1236,13 +1242,13 @@ const WorkOrderDetailPage = {
               ${isOk?ic('check',10):isAvv?ic('alert-triangle',9):''}
             </div>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:${isOk?'500':'700'};color:${isOk?'var(--mt)':'var(--tx)'};${isOk?'text-decoration:line-through;':''}">${c.text}</div>
-              ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${c.description}</div>` : ''}
+              <div style="font-size:13px;font-weight:${isOk?'500':'700'};color:${isOk?'var(--mt)':'var(--tx)'};${isOk?'text-decoration:line-through;':''}">${esc(c.text)}</div>
+              ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${esc(c.description)}</div>` : ''}
               ${isAvv && (c.avvikelseComment || c.avvikelseImage) ? `<div style="margin-top:5px;background:#fff1f2;border-left:3px solid var(--rd);padding:5px 10px;border-radius:0 6px 6px 0;">
                 <div style="font-size:9px;font-weight:800;color:var(--rd);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${ic('alert-triangle',9)} Avvikelse</div>
-                ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.45;">${c.avvikelseComment}</div>`:''}
+                ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.45;">${esc(c.avvikelseComment)}</div>`:''}
                 ${c.avvikelseImage?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:90px;object-fit:cover;">`:''}
-                ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:2px;">${c.avvikelseBy||''}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
+                ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:2px;">${esc(c.avvikelseBy||'')}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
               </div>` : ''}
             </div>
             <div style="display:flex;gap:4px;flex-shrink:0;align-self:center;">
@@ -1372,7 +1378,7 @@ const WorkOrderDetailPage = {
   _renderTimeline(ao, showAll = false) {
     const events = [];
     (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
-    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', imagePath:l.imagePath||'', followUpDate:l.followUpDate||'', id:l.id }));
+    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', followUpDate:l.followUpDate||'', id:l.id }));
     TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
     (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
@@ -1427,15 +1433,14 @@ const WorkOrderDetailPage = {
             ${!isLast?'<div style="width:2px;flex:1;min-height:8px;background:var(--br);border-radius:1px;"></div>':''}
           </div>
           <div style="flex:1;min-width:0;padding:2px 0 ${isLast?'4':'16'}px 10px;">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:${ev.text||ev.imageData||ev.imagePath?'3':'0'}px;">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:${ev.text||ev.imageData?'3':'0'}px;">
               <span style="font-size:10px;font-weight:800;color:${ti.col};text-transform:uppercase;letter-spacing:.4px;">${ti.lbl}</span>
               ${ts?`<span style="font-size:10px;color:var(--mt);">${ts}</span>`:''}
               ${ev.who?`<span style="font-size:10px;color:var(--mt);display:inline-flex;align-items:center;gap:3px;">${ic('user',9)} ${esc(ev.who)}</span>`:''}
             </div>
-            ${ev.text?`<div style="font-size:13px;line-height:1.5;word-break:break-word;color:var(--tx);">${ev.text}</div>`:''}
-            ${ev.followUpDate?`<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid #ddd6fe;">${ic('calendar',9)} Uppföljning: ${ev.followUpDate}</div>`:''}
+            ${ev.text?`<div style="font-size:13px;line-height:1.5;word-break:break-word;color:var(--tx);">${esc(ev.text)}</div>`:''}
+            ${ev.followUpDate?`<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid #ddd6fe;">${ic('calendar',9)} Uppföljning: ${esc(ev.followUpDate)}</div>`:''}
             ${ev.imageData?`<img src="${ev.imageData}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);" loading="lazy">`:''}
-            ${!ev.imageData&&ev.imagePath?`<img data-imgpath="${esc(ev.imagePath)}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);background:var(--bg2,#f3f4f6);min-height:60px;" loading="lazy" alt="Bild läses in…">`:''}
           </div>
           ${canDel?`<button class="btn bxs bd" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>`:''}
         </div>`;
@@ -1450,32 +1455,6 @@ const WorkOrderDetailPage = {
     }
     html += '</div>';
     return html;
-  },
-
-  /* VIFT CRM 13: löser upp signerade URL:er för alla nya, Storage-baserade
-     loggbilder (data-imgpath, se _renderTimeline()) INOM en given container.
-     Rör ALDRIG <img>-taggar som redan har en imageData-src (legacy,
-     oförändrat). Anropas EFTER varje ställe som skriver _renderTimeline()s
-     resultat till DOM:en — synkront direkt efter innerHTML-tilldelningen,
-     eftersom elementen måste finnas i DOM:en innan querySelectorAll hittar
-     dem. Ett fel/saknad signerad URL lämnar bilden som en tom platshållare
-     (samma "osynlig, ofarlig"-hantering som redan används av
-     PropertyImageService.list() för orphaned metadata) — kraschar aldrig
-     renderingen av resten av tidslinjen. */
-  async _resolveTimelineImages(containerEl) {
-    if (!containerEl || typeof WorkOrderImageService === 'undefined') return;
-    const imgs = Array.from(containerEl.querySelectorAll('img[data-imgpath]'));
-    if (!imgs.length) return;
-    const paths = Array.from(new Set(imgs.map(el => el.getAttribute('data-imgpath')).filter(Boolean)));
-    try {
-      const urlMap = await WorkOrderImageService.getSignedUrls(paths);
-      imgs.forEach(el => {
-        const p = el.getAttribute('data-imgpath');
-        if (p && urlMap[p]) el.src = urlMap[p];
-      });
-    } catch (e) {
-      console.warn('[WorkOrderDetailPage] _resolveTimelineImages fel:', e);
-    }
   },
 
   openAddLog() {
@@ -1508,103 +1487,50 @@ const WorkOrderDetailPage = {
     reader.readAsDataURL(file);
   },
 
-  async _saveLog() {
+  _saveLog() {
     const text = document.getElementById('log-text')?.value.trim();
     const imgInput = document.getElementById('log-img');
     const file = imgInput && imgInput.files && imgInput.files[0];
     if (!text && !file) { showToast('Lägg till text eller bild'); return; }
 
-    /* VIFT CRM 13: en ny bild laddas nu upp till Supabase Storage
-       (WorkOrderImageService) istället för att bäddas in som en
-       flera-MB base64-dataURL i loggposten — det var just DEN vägen som
-       blåste upp den delade vift_workOrders-raden. Entry:n får en kort
-       `imagePath`-referens istället; `imageData` lämnas tom för NYA
-       poster (befintliga, äldre poster med imageData rörs aldrig, se
-       _renderTimeline()s bakåtkompatibla gren). Misslyckas uppladdningen
-       sparas INGEN loggpost — samma "ingen låtsad framgång"-princip som
-       redan används av resolveChecklistItemAtomic() i denna fil. */
-    let imagePath = '';
-    if (file) {
-      try {
-        const result = await WorkOrderImageService.upload(this.aoId, file);
-        imagePath = result.path;
-      } catch (e) {
-        showToast('Kunde inte ladda upp bilden: ' + (e.message || e));
-        return;
-      }
-    }
-
-    const ao = getAO(this.aoId);
-    if (!ao) return;
-    if (!ao.log) ao.log = [];
-    const entry = {
-      id: 'LOG-' + Date.now(),
-      type: (file && imagePath) ? 'photo' : 'log',
-      text: text || '',
-      imageData: '',
-      imagePath: imagePath || '',
-      visibility: 'intern',
-      userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
-      timestamp: new Date().toISOString()
+    const finalize = (imageData) => {
+      const ao = getAO(this.aoId);
+      if (!ao) return;
+      if (!ao.log) ao.log = [];
+      const entry = {
+        id: 'LOG-' + Date.now(),
+        type: (file && imageData) ? (text ? 'photo' : 'photo') : 'log',
+        text: text || '',
+        imageData: imageData || '',
+        visibility: 'intern',
+        userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
+        timestamp: new Date().toISOString()
+      };
+      ao.log.push(entry);
+      WorkOrderService.update(this.aoId, { log: ao.log });
+      Modal.close();
+      const aoUp = getAO(this.aoId);
+      if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
+      showToast('Loggpost tillagd');
     };
-    ao.log.push(entry);
-    WorkOrderService.update(this.aoId, { log: ao.log });
-    Modal.close();
-    const aoUp = getAO(this.aoId);
-    if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
-    this._resolveTimelineImages(document.getElementById('ao-timeline'));
-    showToast('Loggpost tillagd');
+
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => finalize(e.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      finalize('');
+    }
   },
 
   deleteLogEntry(logId) {
-    Modal.confirm('Ta bort loggpost?', async () => {
+    Modal.confirm('Ta bort loggpost?', () => {
       const ao = getAO(this.aoId);
       if (!ao) return;
-      const removed    = (ao.log||[]).find(l => l.id === logId);
-      const removedIdx = (ao.log||[]).findIndex(l => l.id === logId);
-      if (removedIdx < 0) return;
-
-      /* RÄTTAT (säker bildradering, granskningsfynd): Storage-filen fick
-         TIDIGARE tas bort omedelbart, INNAN databasen bekräftat att
-         loggposten själv raderats — ett misslyckat/osäkert nätverksanrop
-         kunde då lämna en loggpost kvar vars bild redan var borta.
-         Ordningen är nu: 1) mutera lokalt, 2) `persist()` (via
-         WorkOrderService.update(), som redan köade sitt eget anrop, PLUS
-         ett eget, explicit `await persist()` här -- seriekopplas EFTER
-         det förra i samma kö, se _persistQueue i state.js -- och ger ett
-         ÄRLIGT, väntat svar om huruvida raderingen faktiskt persisterats,
-         3) ENDAST vid bekräftad framgång rörs Storage-filen. Vid
-         misslyckande rullas den lokala mutationen tillbaka — ingen
-         låtsad framgång, och bilden finns kvar både i databasen och i
-         Storage. */
-      ao.log.splice(removedIdx, 1);
+      ao.log = (ao.log||[]).filter(l => l.id !== logId);
       WorkOrderService.update(this.aoId, { log: ao.log });
-      const ok = await persist();
-
-      if (!ok) {
-        ao.log.splice(removedIdx, 0, removed);
-        const aoRolledBack = getAO(this.aoId);
-        if (aoRolledBack) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoRolledBack);
-        this._resolveTimelineImages(document.getElementById('ao-timeline'));
-        showToast('Kunde inte spara borttagningen — försök igen');
-        return;
-      }
-
-      /* Best-effort städning av Storage-filen för en NY, imagePath-
-         baserad post (ingen effekt på äldre imageData-poster, de har
-         ingen Storage-fil) — görs NU, EFTER bekräftad databasframgång.
-         Ett misslyckat Storage-anrop hindrar INTE att loggposten förblir
-         borttagen (redan bekräftat sparat) — en kvarglömd, oreferererad
-         fil i Storage är ofarlig (samma "orphaned file"-scenario som
-         redan dokumenterat och accepterat för PropertyImageService). */
-      if (removed && removed.imagePath && typeof WorkOrderImageService !== 'undefined') {
-        WorkOrderImageService.remove(this.aoId, removed.imagePath).catch(function(e) {
-          console.warn('[WorkOrderDetailPage] Kunde inte radera bildfil i Storage:', e);
-        });
-      }
       const aoUp = getAO(this.aoId);
       if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
-      this._resolveTimelineImages(document.getElementById('ao-timeline'));
       showToast('Borttagen');
     });
   },
@@ -1685,7 +1611,6 @@ const WorkOrderDetailPage = {
     Modal.close();
     const aoUp = getAO(this.aoId);
     if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
-    this._resolveTimelineImages(document.getElementById('ao-timeline'));
     showToast(`Uppföljning skapad: ${date}`);
   },
 
@@ -1853,7 +1778,7 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: 'Redigera material',
       body: `
-        <div class="fg"><label>Benämning</label><input id="mat-name" value="${m.name}"></div>
+        <div class="fg"><label>Benämning</label><input id="mat-name" value="${esc(m.name)}"></div>
         <div class="g3">
           <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${m.qty}" min="${unitStep(m.unit||'st')}" step="${unitStep(m.unit||'st')}" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Enhet</label>
@@ -1939,7 +1864,6 @@ const WorkOrderDetailPage = {
 
     const timelineEl = document.getElementById('ao-timeline');
     if (timelineEl)  timelineEl.innerHTML = this._renderTimeline(ao);
-    this._resolveTimelineImages(timelineEl);
 
     const lonEl   = document.getElementById('ao-lonsam');
     if (lonEl)   lonEl.innerHTML   = this._renderLonsamhet(ao);
@@ -1982,15 +1906,49 @@ const WorkOrderDetailPage = {
   },
 
   /* ── Åtgärder ──────────────────────────── */
+  /* STATUS-ACK FIX (2026-11-12, scoped audit of fire-and-forget toasts —
+     verified against the code before fixing): setStatus() ("Starta
+     arbete", "Planera", "Till pool", "Pausa", status-modal) called
+     WorkOrderService.setStatus() — a synchronous local mutation whose
+     real server write goes through the fire-and-forget _syncAO() — and
+     then IMMEDIATELY showed "Status: X". AO status gates billing
+     (readyForInvoice() requires 'klar'), so a false success here is not
+     cosmetic. Same opts.onSettled pattern as doSave() (commit 4078994):
+     the local status change + re-render still happen immediately
+     (optimistic UI), but the success toast waits for the server.
+     STATUS-ROLLBACK FIX (2026-11-12): on a FINAL server rejection,
+     WorkOrderService.setStatus()/markComplete() now themselves restore
+     the pre-attempt status/completedAt/completedBy and refresh this view
+     via Router.refreshCurrent() (see WorkOrderService.
+     _rollbackStatusAttempt()) — no extra code needed here; this page only
+     shows its own failure toast. When the status is not 'pågående' a SECOND write clears the
+     substatus; the success toast waits for BOTH, and a final rejection
+     of either shows a clear warning. Transient (non-final) callbacks are
+     ignored, same rule as doSave(). */
+  _statusAckTracker(expected, okMsg, failMsg) {
+    let remaining = expected, failed = false, done = false;
+    return function (r) {
+      if (done || !r) return;
+      if (r.ok) { remaining--; }
+      else if (r.final) { failed = true; }
+      else return; // transient
+      if (failed) { done = true; showToast(failMsg); return; }
+      if (remaining <= 0) { done = true; showToast(okMsg); }
+    };
+  },
+
   setStatus(status) {
     if (!Auth.require('ao_edit')) return;
     const ao = getAO(this.aoId);
     if (!ao) return;
-    WorkOrderService.setStatus(this.aoId, status);
-    if (status !== 'pågående') WorkOrderService.update(this.aoId, {substatus: ''});
+    const clearSub = status !== 'pågående';
+    const track = this._statusAckTracker(clearSub ? 2 : 1,
+      `Status: ${statusLabel(status)}`,
+      'Statusändringen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.');
+    WorkOrderService.setStatus(this.aoId, status, { onSettled: track });
+    if (clearSub) WorkOrderService.update(this.aoId, {substatus: ''}, { onSettled: track });
     this.render({ aoId: this.aoId });
     Sidebar.updateBadges();
-    showToast(`Status: ${statusLabel(status)}`);
   },
 
   setSubstatus(val) {
@@ -2016,10 +1974,16 @@ const WorkOrderDetailPage = {
       const completedBy = state.currentUser
         ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim()
         : '';
-      WorkOrderService.markComplete(this.aoId, completedBy);
+      /* STATUS-ACK FIX (2026-11-12): "Order markerad klar" visades
+         tidigare synkront. Nu först efter serverbekräftelse av
+         statusskrivningen (se setStatus() ovan för fullständig
+         motivering — 'klar' styr faktureringsbarheten). */
+      WorkOrderService.markComplete(this.aoId, completedBy, {
+        onSettled: this._statusAckTracker(1, 'Order markerad klar',
+          'Klarmarkeringen kunde inte bekräftas av servern — ordern är INTE säkert klarmarkerad. Kontrollera din anslutning och försök igen.')
+      });
       this.render({ aoId: this.aoId });
       Sidebar.updateBadges();
-      showToast('Order markerad klar');
     };
 
     if (incomplete) {
@@ -2076,11 +2040,14 @@ const WorkOrderDetailPage = {
 
   _doReactivate() {
     const newStatus = document.getElementById('reactivate-status')?.value || 'nytt';
-    WorkOrderService.setStatus(this.aoId, newStatus);
+    // STATUS-ACK FIX (2026-11-12): samma mönster som setStatus() ovan.
+    WorkOrderService.setStatus(this.aoId, newStatus, {
+      onSettled: this._statusAckTracker(1, `Arbetsorder återaktiverad – ${statusLabel(newStatus)}`,
+        'Återaktiveringen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.')
+    });
     Modal.close();
     this.render({ aoId: this.aoId });
     Sidebar.updateBadges();
-    showToast(`Arbetsorder återaktiverad – ${statusLabel(newStatus)}`);
   },
 
   openArchiveModal() {
@@ -2149,6 +2116,16 @@ const WorkOrderDetailPage = {
     });
   },
 
+  /* CLOCK-ACK AUDIT (2026-11-12, verified against the code): this is a
+     SEPARATE clock-in/out UI from MyJobsPage. Clock-IN here does NOT
+     write anything to the server — TimeService.clockIn() only sets
+     state.stampActive/stampTs/stampAoId (read back exclusively from
+     localStorage in state.js; there is no server-side stamp record), and
+     unlike MyJobsPage.clockIn() this path writes NO AO log note via
+     _syncAO(). There is therefore no server write to wait for: "Inklockat"
+     truthfully describes the (purely local) state change and is kept
+     as-is. The real server write happens at clock-OUT (the time entry) —
+     see _openClockOutModal() below, which IS now ACK-gated. */
   toggleStamp() {
     if (!Auth.require('ao_time')) return;
     if (state.stampActive && state.stampAoId !== this.aoId) {
@@ -2185,18 +2162,57 @@ const WorkOrderDetailPage = {
           <label><input type="checkbox" id="co-billable" checked style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label>
         </div>`,
       buttons: [
-        { label: 'Klocka ut', cls: 'btn bsu', onClick: () => {
+        /* CLOCK-OUT-ACK FIX (2026-11-12, independent-reviewer finding,
+           verified against the code before fixing): "Klocka ut" called
+           TimeService.clockOut() and IMMEDIATELY closed the modal and
+           showed "Utloggad", with no connection to whether the time entry
+           (created inside clockOut() via AOTimeSyncService.createTime())
+           was accepted by the server. This path writes NO AO log note
+           (no _syncAO() call), so there is exactly ONE server write to
+           confirm: the time entry, via clockOut()'s new opts.onSettled.
+           UX decision (differs slightly from doSave() on purpose): the
+           local clock-out has ALREADY happened synchronously inside
+           clockOut() (stampActive=false) and cannot be retried from this
+           dialog, so keeping the modal open after a final rejection would
+           offer nothing actionable. The button shows "Sparar…" while the
+           first server attempt is in flight; the modal then closes on ANY
+           settled outcome, with an honest message: success only on a real
+           ACK, "köad, ej bekräftad" on a transient first attempt (entry
+           stays in the durable outbox and is retried), and a clear error
+           on a final rejection. The local clock-out is not rolled back —
+           same documented convention as MyJobsPage (commit 4078994). */
+        { label: 'Klocka ut', cls: 'btn bsu', onClick: (ev) => {
           const comment = document.getElementById('co-comment')?.value.trim();
           if (!comment) { showToast('Beskriv vad som gjordes'); return; }
+          const btnEl = ev && ev.currentTarget;
+          let closed = false;
+          const closeOnce = () => {
+            if (closed) return false;
+            closed = true;
+            Modal.close();
+            this.render({ aoId: this.aoId });
+            return true;
+          };
           const entry = TimeService.clockOut({
             priceGroupId: document.getElementById('co-pg')?.value || '',
             comment,
-            billable: document.getElementById('co-billable')?.checked !== false
+            billable: document.getElementById('co-billable')?.checked !== false,
+            onSettled: (r) => {
+              if (!r) return;
+              if (r.ok) {
+                if (!closeOnce()) { showToast('Tidposten är nu bekräftad av servern'); return; }
+                showToast('Utloggad — tid sparad');
+              } else if (r.final) {
+                closeOnce();
+                showToast('Utloggad, men tidposten kunde INTE sparas av servern' + (r.error ? ' (' + r.error + ')' : '') + ' — registrera tiden manuellt.');
+              } else if (r.queued) {
+                closeOnce();
+                showToast('Utloggad — sparar tiden… (ej bekräftad av servern ännu, skickas automatiskt när anslutningen fungerar)');
+              }
+            }
           });
           if (!entry) { showToast('Kunde inte klocka ut — kontrollera din behörighet.'); return; }
-          Modal.close();
-          showToast('Utloggad');
-          this.render({ aoId: this.aoId });
+          if (!closed && btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -2337,10 +2353,10 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: `${ic('alert-triangle',14)} Markera avvikelse`,
       body: `
-        <div class="nbox" style="margin-bottom:12px;">${ic('clipboard-check',13)} ${c.text}</div>
+        <div class="nbox" style="margin-bottom:12px;">${ic('clipboard-check',13)} ${esc(c.text)}</div>
         <div class="fg">
           <label>Kommentar <span style="color:var(--rd)">*</span></label>
-          <textarea id="avv-comment" rows="3" placeholder="Beskriv avvikelsen – vad som är skadat, var och hur…">${c.avvikelseComment||''}</textarea>
+          <textarea id="avv-comment" rows="3" placeholder="Beskriv avvikelsen – vad som är skadat, var och hur…">${esc(c.avvikelseComment||'')}</textarea>
         </div>
         <div class="fg">
           <label>Bild (valfri)</label>
@@ -2383,15 +2399,9 @@ const WorkOrderDetailPage = {
             showToast('Avvikelse sparad');
           };
           if (file) {
-            /* VIFT CRM 13: komprimera FÖRE sändning (samma etablerade
-               900px/JPEG 0.75-mönster som WorkOrderImageService/
-               RonderingUtforandePage) -- krymper nyttolasten avsevärt
-               utan att ändra avvikelseImage-kontraktet mot work-order-
-               checklist-resolve-funktionen (fortfarande en sträng, bara
-               mindre). Flyttas INTE till Supabase Storage i denna omgång
-               -- den riktiga Edge Function-källkoden kunde inte
-               granskas här, se slutrapporten. */
-            WorkOrderImageService._resizeImage(file).then((dataUrl) => saveAvv(dataUrl || null));
+            const reader = new FileReader();
+            reader.onload = (e) => saveAvv(e.target.result);
+            reader.readAsDataURL(file);
           } else {
             saveAvv(null);
           }
@@ -2492,16 +2502,16 @@ const WorkOrderDetailPage = {
           <div class="fg"><label>Starttid</label><input type="time" id="t-start" value="${t.startStr}"></div>
           <div class="fg"><label>Sluttid</label><input type="time" id="t-end" value="${t.endStr}"></div>
         </div>
-        <div class="fg"><label>Kommentar</label><textarea id="t-comment" rows="2">${t.comment||''}</textarea></div>
+        <div class="fg"><label>Kommentar</label><textarea id="t-comment" rows="2">${esc(t.comment||'')}</textarea></div>
         <div class="fg"><label><input type="checkbox" id="t-billable" ${t.billable?'checked':''} style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label></div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => this._saveTimeEntry(entryId) },
+        { label: 'Spara', cls: 'btn bp', onClick: (ev) => this._saveTimeEntry(entryId, ev) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
   },
 
-  _saveTimeEntry(existingId) {
+  _saveTimeEntry(existingId, ev) {
     const date  = document.getElementById('t-date')?.value;
     const start = document.getElementById('t-start')?.value;
     const end   = document.getElementById('t-end')?.value;
@@ -2521,9 +2531,40 @@ const WorkOrderDetailPage = {
     const [overrideStaffId, overrideStaffName] = staffSel ? staffSel.split(':') : ['', ''];
     if (existingId) {
       if (overrideStaffId) { data.staffId = overrideStaffId; data.staffName = overrideStaffName; }
-      const result = TimeService.update(existingId, data);
+      /* I4 (2026-11-12): same discipline as M1's doSave() and clock-out —
+         "Tid uppdaterad" only after the server's ACK; a final rejection
+         rolls the entry back (TimeService.update), keeps the dialog open
+         with the typed values and shows the real error; a transient first
+         attempt says "köad, ej bekräftad". */
+      const btnEl = ev && ev.currentTarget;
+      const origLabel = btnEl ? btnEl.innerHTML : '';
+      let settled = false, closed = false;
+      const resetBtn = () => { if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = origLabel; } };
+      const result = TimeService.update(existingId, data, {
+        onSettled: (r) => {
+          settled = true;
+          this._refreshTimeSection();
+          if (r.ok) {
+            if (closed) { showToast('Tidsändringen är nu bekräftad av servern'); return; }
+            closed = true;
+            Modal.close();
+            showToast('Tid uppdaterad');
+          } else {
+            if (!closed) resetBtn();
+            showToast('Tiden kunde INTE sparas' + (r.error ? ' (' + r.error + ')' : '') + ' — ändringen är ångrad.' + (closed ? '' : ' Dina uppgifter finns kvar i formuläret, försök igen.'), 7000);
+          }
+        },
+        onFirstAttempt: (first) => {
+          if (settled || !first || first.ok || first.final) return;
+          closed = true;
+          Modal.close();
+          this._refreshTimeSection();
+          showToast('Sparar tiden… ej bekräftad av servern ännu — skickas automatiskt när anslutningen fungerar.', 6000);
+        }
+      });
       if (!result.ok) { showToast(result.error); return; }
-      showToast('Tid uppdaterad');
+      if (!settled && !closed && btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
+      return;
     } else {
       const result = TimeService.saveManual({ ...data, aoId: this.aoId, staffId: overrideStaffId || undefined, staffName: overrideStaffName || undefined });
       if (!result.ok) { showToast(result.error); return; }
@@ -2722,8 +2763,8 @@ const WorkOrderDetailPage = {
       title: 'Redigera order',
       wide: true,
       body: `
-        <div class="fg"><label>Rubrik</label><input id="edit-title" value="${ao.title}"></div>
-        <div class="fg"><label>Beskrivning</label><textarea id="edit-desc" rows="2">${ao.description||''}</textarea></div>
+        <div class="fg"><label>Rubrik</label><input id="edit-title" value="${esc(ao.title)}"></div>
+        <div class="fg"><label>Beskrivning</label><textarea id="edit-desc" rows="2">${esc(ao.description||'')}</textarea></div>
         <div class="fg"><label>Kund</label>
           <select id="edit-cu" onchange="WorkOrderDetailPage._editCustomerChanged('${this.aoId}')">
             ${cuOptions}
@@ -2747,7 +2788,7 @@ const WorkOrderDetailPage = {
             ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${ao.category===c.slug?'selected':''}>${c.label}</option>`).join('')}
           </select></div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
+        { label: 'Spara', cls: 'btn bp', onClick: (mainEv) => {
           const title = document.getElementById('edit-title')?.value.trim();
           if (!title) { showToast('Rubrik krävs'); return; }
           const addrPatch = this._editCollectAddress(getAO(this.aoId));
@@ -2773,14 +2814,18 @@ const WorkOrderDetailPage = {
             return;
           }
           const finalProjectId = selectedProjectId;
-          const fieldPatch = Object.assign({
-            title,
-            description:   document.getElementById('edit-desc')?.value.trim() || '',
-            customerId:    newCustomerId,
-            scheduledDate: document.getElementById('edit-date')?.value || '',
-            priority:      document.getElementById('edit-prio')?.value || 'normal',
-            category:      document.getElementById('edit-category')?.value || ''
-          }, addrPatch);
+          /* QA FIX-ROUND 2026-11-12 (M1, confirmed in code + live): this
+             used to be Object.assign({title, description, customerId,
+             scheduledDate, priority, category}, addrPatch) — the FULL
+             form, every time. Two sessions on the same AO: A changes only
+             the title and saves; B (dialog opened before A's save)
+             changes only the priority and saves later — B's patch still
+             carried B's stale title and silently reverted A's confirmed
+             title, and both saw "Order uppdaterad". The patch is now a
+             true delta against what this dialog showed when it opened
+             (this._editOpening, see openEdit()), so work_order_patch only
+             touches the fields this user actually changed. */
+          const fieldPatch = this._editDeltaPatch(this._editCollectFields(), addrPatch, this._editOpening);
 
           /* V54B R1 — blockerare 5: en byte av Projekt fick tidigare köras
              genom med `{confirmedMove:true}` OVILLKORLIGT, så fort värdet
@@ -2800,18 +2845,72 @@ const WorkOrderDetailPage = {
              `projectId` (se WorkOrderService R1) och dess svar är
              därför den auktoritativa sanningen, inte ett antagande. Ett
              `!ok`-svar rapporteras ALDRIG som framgång. */
-          const doSave = () => {
-            WorkOrderService.update(this.aoId, fieldPatch);
-            if (oldProjectId !== finalProjectId) {
-              const relResult = WorkOrderService.setProject(this.aoId, finalProjectId, { confirmedMove: true });
-              if (!relResult.ok) {
-                showToast(relResult.error || 'Projektkopplingen kunde inte uppdateras.');
-                return;
+          /* FLOW-A FIX (confirmed bug, this round): doSave() previously
+             called WorkOrderService.update() (a SYNCHRONOUS local mutation
+             — the real server write happens via _syncAO(), fire-and-
+             forget) and then IMMEDIATELY closed the modal and showed
+             "Order uppdaterad", with zero connection to whether the
+             server write actually succeeded. Confirmed live (network
+             fully blocked): the toast and modal-close fired identically
+             to the success case, and the edit was never persisted.
+             Fix: wait for update()'s new opts.onSettled (see
+             WorkOrderService.update()/_syncAO()'s own comments — same
+             pattern already used correctly by create()) before closing
+             the modal/showing success. A disabled "Sparar…" button state
+             replaces the old instant close so the user gets feedback
+             while the real write is in flight; on a FINAL rejection the
+             button resets and a real error is shown with the modal (and
+             the user's entered values) still open — never silently
+             discarded. A non-final (transient) callback is ignored here,
+             same "only `final:true` is a real rejection" rule create()'s
+             pattern already documents, since AOTimeSyncService may retry.
+             setProject()'s own confirmation-dialog flow is untouched — it
+             already returns a synchronous validation result and is a
+             SEPARATE existing call site, not part of this round's bug. */
+          const doSave = (ev) => {
+            const btnEl = ev && ev.currentTarget;
+            const origLabel = btnEl ? btnEl.innerHTML : '';
+            if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
+            const resetBtn = () => { if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = origLabel; } };
+
+            /* M1: nothing but (possibly) the project changed — no AO field
+               write at all; go straight to the confirmed-success path. */
+            if (Object.keys(fieldPatch).length === 0) {
+              if (oldProjectId !== finalProjectId) {
+                const relResult = WorkOrderService.setProject(this.aoId, finalProjectId, { confirmedMove: true });
+                if (!relResult.ok) { resetBtn(); showToast(relResult.error || 'Projektkopplingen kunde inte uppdateras.'); return; }
+                Modal.close();
+                this.render({ aoId: this.aoId });
+                showToast('Order uppdaterad');
+              } else {
+                Modal.close();
+                showToast('Inga ändringar att spara');
               }
+              return;
             }
-            Modal.close();
-            this.render({ aoId: this.aoId });
-            showToast('Order uppdaterad');
+
+            WorkOrderService.update(this.aoId, fieldPatch, {
+              onSettled: (r) => {
+                if (r && r.ok) {
+                  if (oldProjectId !== finalProjectId) {
+                    const relResult = WorkOrderService.setProject(this.aoId, finalProjectId, { confirmedMove: true });
+                    if (!relResult.ok) {
+                      resetBtn();
+                      showToast(relResult.error || 'Projektkopplingen kunde inte uppdateras.');
+                      return;
+                    }
+                  }
+                  Modal.close();
+                  this.render({ aoId: this.aoId });
+                  showToast('Order uppdaterad');
+                } else if (r && r.final) {
+                  resetBtn();
+                  showToast('Kunde inte spara ändringen. Försök igen.');
+                }
+                // else: transient (ingen slutgiltig server-dom än) — stanna i
+                // "Sparar…"-läget och vänta på ett senare, slutgiltigt svar.
+              }
+            });
           };
 
           if (oldProjectId && finalProjectId && oldProjectId !== finalProjectId) {
@@ -2836,12 +2935,50 @@ const WorkOrderDetailPage = {
               ]
             });
           } else {
-            doSave();
+            doSave(mainEv);
           }
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
+    /* QA FIX-ROUND 2026-11-12 (M1): snapshot of exactly what the form
+       shows the moment it opens, read back through the SAME collectors
+       Spara uses (Modal.open() renders synchronously). Spara sends only
+       fields whose value differs from this snapshot — see the Spara
+       handler above. */
+    this._editOpening = {
+      fields: this._editCollectFields(),
+      addr: this._editCollectAddress(ao)
+    };
+  },
+
+  /* QA FIX-ROUND 2026-11-12 (M1): the plain (non-address) edit fields,
+     read from the open edit dialog. Used both for the opening snapshot
+     and at save time, so "unchanged" is decided on identical terms. */
+  _editCollectFields() {
+    return {
+      title:         (document.getElementById('edit-title')?.value || '').trim(),
+      description:   document.getElementById('edit-desc')?.value.trim() || '',
+      customerId:    document.getElementById('edit-cu')?.value || '',
+      scheduledDate: document.getElementById('edit-date')?.value || '',
+      priority:      document.getElementById('edit-prio')?.value || 'normal',
+      category:      document.getElementById('edit-category')?.value || ''
+    };
+  },
+
+  /* QA FIX-ROUND 2026-11-12 (M1): true delta against the opening
+     snapshot. The address fields are one unit (override flag + address +
+     zip + city + country + source belong together): if any of them
+     changed, all are sent, otherwise none. Without a snapshot (should not
+     happen) everything is sent — the old behavior, never less. */
+  _editDeltaPatch(current, addrPatch, opening) {
+    const patch = {};
+    const of = opening && opening.fields;
+    Object.keys(current).forEach(k => { if (!of || current[k] !== of[k]) patch[k] = current[k]; });
+    const oa = opening && opening.addr;
+    const addrChanged = !oa || Object.keys(addrPatch).some(k => addrPatch[k] !== oa[k]);
+    if (addrChanged) Object.assign(patch, addrPatch);
+    return patch;
   },
 
   /* Ärvd adress för redigera-modalen — samma precedens (fastighet före kund)
@@ -3104,10 +3241,10 @@ const WorkOrderDetailPage = {
   },
 
   /* ── Skapa fakturaunderlag ─────────────── */
-  createInvoice() {
+  async createInvoice() {
     const ao = getAO(this.aoId);
     if (!ao) return;
-    const result = InvoiceService.createFromAO(this.aoId);
+    const result = await InvoiceService.createFromAO(this.aoId);
     if (!result.ok) { showToast(result.error); return; }
     showToast(`${result.invoice.id} skapat`);
     Router.showPage('pg-inv-detail', { invoiceId: result.invoice.id });

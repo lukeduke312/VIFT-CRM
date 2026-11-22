@@ -116,7 +116,7 @@ const RecurringPage = {
       ? `<div class="fg"><label>Checklistemall (${ro.checklist.length})</label><div style="margin-top:4px;">${
           ro.checklist.map(c => `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--bg);">
             <span style="color:var(--gr);flex-shrink:0;margin-top:2px;">${ic('check-circle',13)}</span>
-            <div><div style="font-size:13px;font-weight:600;">${c.text}</div>${c.description?`<div style="font-size:11px;color:var(--mt);">${c.description}</div>`:''}</div>
+            <div><div style="font-size:13px;font-weight:600;">${esc(c.text)}</div>${c.description?`<div style="font-size:11px;color:var(--mt);">${esc(c.description)}</div>`:''}</div>
           </div>`).join('')
         }</div></div>` : '';
 
@@ -132,7 +132,7 @@ const RecurringPage = {
            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Skapade arbetsorder (${aoHistory.length})</div>
            ${aoHistory.slice(0,8).map(ao => {
              return `<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-               <div><div style="font-size:13px;font-weight:700;">${ao.id} – ${ao.title}</div>
+               <div><div style="font-size:13px;font-weight:700;">${WorkOrderService.displayNumberOrPending(ao)} – ${ao.title}</div>
                <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt||'')}</div></div>
                ${sbdg(ao.status)}</div>`;
            }).join('')}
@@ -140,7 +140,7 @@ const RecurringPage = {
          </div>` : '';
 
     Modal.open({
-      title: ro.title,
+      title: esc(ro.title),
       wide: true,
       body: `
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
@@ -150,13 +150,13 @@ const RecurringPage = {
         </div>
         <div class="dr"><span class="dk">Kund</span><span class="dv">${cu ? CustomerService.displayName(cu) : '—'}</span></div>
         ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${esc(AddressService.formatQuery(ro.address, ro.zip, ro.city, ''))}</span></div>` : ''}
-        ${ro.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${ro.accessCode}</span></div>` : ''}
+        ${ro.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${esc(ro.accessCode)}</span></div>` : ''}
         ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
         <div class="dr"><span class="dk">Nästa datum</span><span class="dv">${ro.nextDate ? fmtDate(ro.nextDate) : '—'}${days !== null && days <= 0 ? ` <span class="bdg bdg-red" style="font-size:10px;">Förfallen</span>` : ''}</span></div>
         ${ro.lastCreatedDate ? `<div class="dr"><span class="dk">Senast skapad</span><span class="dv">${fmtDate(ro.lastCreatedDate)}</span></div>` : ''}
         <div class="dr"><span class="dk">Intervall</span><span class="dv">${RecurringOrderService.intervalLabel(ro.interval)}${ro.interval==='eget'?' ('+ro.intervalDays+' dagar)':''}</span></div>
         <div class="dr"><span class="dk">Slutdatum</span><span class="dv">${ro.tillsvidare ? 'Tillsvidare' : (fmtDate(ro.endDate) || '—')}</span></div>
-        ${ro.description ? `<div class="nbox" style="margin-top:8px;">${ro.description}</div>` : ''}
+        ${ro.description ? `<div class="nbox" style="margin-top:8px;">${esc(ro.description)}</div>` : ''}
         <div class="nbox" style="margin-top:8px;border-left:3px solid var(--sky);">
           <strong style="font-size:11px;color:var(--navy);">Nästa arbetsorder</strong>
           <p style="font-size:12px;color:var(--mt);margin-top:3px;">
@@ -192,7 +192,7 @@ const RecurringPage = {
     if (!result.ok) { showToast(result.error); return; }
     RecurringPage.render();
     Sidebar.updateBadges();
-    showToast(`${result.ao.id} skapad`);
+    showToast(`${WorkOrderService.displayNumberOrPending(result.ao)} skapad`);
     Router.showPage('pg-ao-detail', { aoId: result.ao.id });
   },
 
@@ -260,7 +260,7 @@ const RecurringPage = {
       wide: true,
       body: `
         <div class="fg"><label>Titel <span style="color:var(--rd)">*</span></label>
-          <input id="ro-title" value="${src.title || ''}" placeholder="T.ex. Månadsservice VVS, Kvartalskontroll"></div>
+          <input id="ro-title" value="${esc(src.title || '')}" placeholder="T.ex. Månadsservice VVS, Kvartalskontroll"></div>
 
         <div class="g2">
           <div class="fg"><label>Kund</label>
@@ -304,25 +304,25 @@ const RecurringPage = {
           <div id="ro-addr-custom-wrap" style="${addrMode==='custom'?'':'display:none'}">
             <div class="fg" style="margin-bottom:6px;">
               <label>Gatuadress</label>
-              <input id="ro-street" value="${parsedStreet}" placeholder="Storgatan 1"
+              <input id="ro-street" value="${esc(parsedStreet)}" placeholder="Storgatan 1"
                 autocomplete="off"
                 oninput="AddressService.handleInput(this)"
                 onblur="setTimeout(()=>AddressService.hideSuggestions(),150)"
                 data-addr-zip="ro-zip" data-addr-city="ro-city"></div>
             <div class="g2" style="margin-bottom:6px;">
               <div class="fg"><label>Postnummer</label>
-                <input id="ro-zip" value="${parsedZip}" placeholder="123 45"></div>
+                <input id="ro-zip" value="${esc(parsedZip)}" placeholder="123 45"></div>
               <div class="fg"><label>Ort</label>
-                <input id="ro-city" value="${parsedCity}" placeholder="Stockholm"></div>
+                <input id="ro-city" value="${esc(parsedCity)}" placeholder="Stockholm"></div>
             </div>
             <div class="fg">
               <label>Portkod / åtkomst</label>
-              <input id="ro-access" value="${src.accessCode||''}" placeholder="T.ex. 1234#"></div>
+              <input id="ro-access" value="${esc(src.accessCode||'')}" placeholder="T.ex. 1234#"></div>
           </div>
         </div>
 
         <div class="fg"><label>Beskrivning</label>
-          <textarea id="ro-desc" rows="2" placeholder="Vad ska utföras vid varje tillfälle?">${src.description || ''}</textarea></div>
+          <textarea id="ro-desc" rows="2" placeholder="Vad ska utföras vid varje tillfälle?">${esc(src.description || '')}</textarea></div>
 
         <div class="g2">
           <div class="fg"><label>Intervall</label>
@@ -379,7 +379,7 @@ const RecurringPage = {
         </div>
 
         <div class="fg"><label>Internanteckning</label>
-          <textarea id="ro-note" rows="2" placeholder="Syns ej för kund">${ro ? ro.internalNote||'' : ''}</textarea></div>`,
+          <textarea id="ro-note" rows="2" placeholder="Syns ej för kund">${esc(ro ? ro.internalNote||'' : '')}</textarea></div>`,
       buttons: [
         { label: isEdit ? 'Spara ändringar' : 'Skapa ärende', cls: 'btn bp', onClick: () => RecurringPage._save(roId) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }

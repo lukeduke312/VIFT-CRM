@@ -117,3 +117,66 @@ function showToast(msg, duration) {
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), duration);
 }
+
+/* N1 (blocker round 2026-11-12): persistent "osparad ändring" banner.
+   Shown for every journaled edit the user was told had failed and that
+   did not reach the server (state.js settlePersistFailure() ->
+   'not-landed'/'unknown'). It stays until the user picks, per item,
+   "Återuppta" (resumeHeldPersist: re-checks the server three-way, then
+   resends; a third value goes to the conflict dialog) or "Kasta"
+   (discardHeldPersist). Not a toast and not an overlay modal: it does
+   not close on its own, by clicking beside it, or on navigation, and it
+   does not cover an open form. Text is set with textContent only. */
+const PersistRecoveryBanner = {
+  _busy: {},
+  render(items) {
+    if (typeof document === 'undefined' || !document.body || typeof document.createElement !== 'function') return;
+    let el = document.getElementById('vf-unsaved-banner');
+    if (!items || !items.length) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'vf-unsaved-banner';
+      el.setAttribute('role', 'alert');
+      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:36px;z-index:2000;max-width:min(680px,calc(100vw - 16px));width:100%;box-sizing:border-box;background:#fff7ed;color:#7c2d12;border:1px solid #fdba74;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:10px 12px;font-size:13px;line-height:1.4;';
+      document.body.appendChild(el);
+    }
+    el.innerHTML = '';
+    const head = document.createElement('div');
+    head.style.cssText = 'font-weight:600;margin-bottom:6px;';
+    head.textContent = items.length === 1
+      ? 'En ändring kunde inte sparas och ligger kvar osparad.'
+      : items.length + ' ändringar kunde inte sparas och ligger kvar osparade.';
+    el.appendChild(head);
+    const sub = document.createElement('div');
+    sub.style.cssText = 'margin-bottom:6px;';
+    sub.textContent = 'Servern har inte fått dem. Välj för varje: Återuppta (skicka igen) eller Kasta (glöm ändringen).';
+    el.appendChild(sub);
+    items.forEach(it => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 0;border-top:1px solid #fed7aa;';
+      const txt = document.createElement('span');
+      txt.style.cssText = 'flex:1 1 220px;min-width:0;overflow-wrap:anywhere;';
+      txt.textContent = (it.isCreate ? 'Ny: ' : it.op === 'delete' ? 'Borttagning: ' : 'Ändring: ') + it.label;
+      row.appendChild(txt);
+      const k = it.key + '|' + it.id;
+      const mk = (label, cls, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = cls; b.textContent = label;
+        b.disabled = !!this._busy[k];
+        b.addEventListener('click', async () => {
+          if (this._busy[k]) return;
+          this._busy[k] = true; b.disabled = true;
+          try { await fn(); } finally { delete this._busy[k]; }
+          try { if (typeof _vfRefreshHeldBanner === 'function') _vfRefreshHeldBanner(); } catch (e) {}
+        });
+        return b;
+      };
+      row.appendChild(mk('Återuppta', 'btn bxs bp', () => resumeHeldPersist(it.key, it.id)));
+      row.appendChild(mk('Kasta', 'btn bxs bs', () => {
+        if (typeof confirm === 'function' && !confirm('Kasta den osparade ändringen (' + it.label + ')? Den kan inte återställas.')) return;
+        discardHeldPersist(it.key, it.id);
+      }));
+      el.appendChild(row);
+    });
+  }
+};

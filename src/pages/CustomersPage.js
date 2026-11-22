@@ -112,7 +112,7 @@ const CustomersPage = {
         <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="crm-search" placeholder="Sök kund, telefon, e-post…"
-            value="${this.q}"
+            value="${esc(this.q)}"
             oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
         </div>
         <div class="ao-toolbar-right">
@@ -125,7 +125,7 @@ const CustomersPage = {
               <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('customer',this)">${ic('download',13)} Exportera</button>
             </div>
           </div>
-          <button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>
+          ${Auth.can('customer_manage') ? `<button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>` : ''}
         </div>
       </div>
       <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -189,7 +189,7 @@ const CustomersPage = {
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
-              <span class="bdg bdg-grey">${cu.id}</span>
+              <span class="bdg bdg-grey">${esc(CustomerService.displayNumber(cu))}</span>
             </div>
             <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna kund" onclick="event.stopPropagation();CustomersPage.openDetail('${cu.id}')">${ic('chevron-right',16)}</button>
           </div>
@@ -232,6 +232,17 @@ const CustomersPage = {
   },
 
   _openForm(id) {
+    /* 2026-11: customer_view ger läsåtkomst till pg-crm/pg-crm-detail men
+       aldrig skrivning — denna gemensamma implementation för både
+       openCreate() och openEdit() är den enda platsen som behöver skyddas
+       för att stänga formuläret helt, men _doSave() nedan skyddas också
+       separat (försvar i djupet, om formuläret ändå öppnats på ett annat
+       sätt). Samma fail-closed-mönster som redan används i _bulkArchive-
+       Reactivate (se ovan, rad ~206). */
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     const cu = id ? getCu(id) : null;
 
     Modal.open({
@@ -258,7 +269,7 @@ const CustomersPage = {
   },
 
   _formHtml(cu) {
-    const v = (key, def='') => cu ? (cu[key] || def) : def;
+    const v = (key, def='') => { const val = cu ? (cu[key] || def) : def; return typeof val === 'string' ? esc(val) : val; };
     const diffInv = cu && (cu.invoiceAddress || cu.invoiceZip || cu.invoiceCity);
     /* V49A1: en BEFINTLIG kunds lagrade cu.type kan vara ett känt legacy-/
        import-värde (t.ex. "company") eller — mer allvarligt — ett HELT
@@ -494,6 +505,15 @@ const CustomersPage = {
   },
 
   async _doSave(id, type) {
+    /* 2026-11: försvar i djupet — _openForm() ovan blockerar redan att
+       formuläret öppnas utan customer_manage, men _doSave() skyddas
+       separat så ett direkt anrop (t.ex. kvarvarande UI-state, konsol)
+       aldrig kan spara. Ingen falsk "sparat"-bekräftelse: avbryter tyst
+       innan något muteras eller skickas till servern. */
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     const data = { type };
     const cu = id ? getCu(id) : null;
     const originalGroup = cu ? this._typeGroup(CustomerService.normalizeType(cu.type)) : null;
@@ -624,12 +644,36 @@ const CustomersPage = {
          trimmat bort en äldre post vid MAX_ENTRIES — den trimningen måste
          också ogöras. */
       if (!result.ok) {
-        Object.assign(result.customer, result.before);
-        if (result.beforeActivityLog) state.activityLog = result.beforeActivityLog;
-        Storage.setLocal('customers', state.customers);
-        Storage.setLocal('activityLog', state.activityLog);
-        showToast('Kunde inte spara kunden. Försök igen.');
-        return;
+        /* N1 (2026-11-12): decide what the failure really was BEFORE
+           rolling back (see settlePersistFailure() in state.js):
+           rejected -> rollback, journal entry forgotten (never replayed);
+           landed   -> it WAS saved: success path below, no rollback;
+           diverged -> another session changed it: the server value is
+                       shown and the conflict dialog asks; the customer
+                       must not be rolled back over it;
+           not-landed/unknown -> rollback; the edit is kept as an
+                       "osparad ändring" with Återuppta/Kasta. */
+        const n1 = (typeof settlePersistFailure === 'function')
+          ? await settlePersistFailure('customers', id) : { fate: 'none' };
+        if (n1.fate === 'diverged') {
+          if (result.beforeActivityLog) state.activityLog = result.beforeActivityLog;
+          Storage.setLocal('activityLog', state.activityLog);
+          showToast('Kunden ändrades samtidigt av en annan session — välj i konfliktdialogen.', 6000);
+          return;
+        }
+        if (n1.fate !== 'landed') {
+          Object.assign(result.customer, result.before);
+          if (result.beforeActivityLog) state.activityLog = result.beforeActivityLog;
+          Storage.setLocal('customers', state.customers);
+          Storage.setLocal('activityLog', state.activityLog);
+          if (n1.fate === 'not-landed' || n1.fate === 'unknown') {
+            showToast('Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst.', 7000);
+          } else {
+            showToast('Kunde inte spara kunden. Försök igen.');
+          }
+          return;
+        }
+        // landed: the server has exactly what was sent — fall through to success.
       }
 
       showToast('Kund uppdaterad');
@@ -801,12 +845,12 @@ const CustomerDetailPage = {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
         <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
         <h2 style="font-size:17px;font-weight:800;flex:1;">${name}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
-        <button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>
-        <button class="btn bp bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>
+        ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>` : ''}
+        ${Auth.can('customer_manage') ? `<button class="btn bp bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>` : ''}
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-        <span class="bdg bdg-grey">${cu.id}</span>
+        <span class="bdg bdg-grey">${esc(CustomerService.displayNumber(cu))}</span>
         <span class="bdg bdg-grey">${CustomerService.typeLabel(cu.type)}</span>
         ${cu.orgNr ? `<span class="bdg bdg-grey">${cu.orgNr}</span>` : ''}
       </div>
@@ -885,13 +929,13 @@ const CustomerDetailPage = {
         <div class="card-body">
           ${rows.map(([k,v]) => `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`).join('')}
           ${diffInv ? `<div class="dr"><span class="dk">Fakturaadress</span><span class="dv">${[cu.invoiceAddress, cu.invoiceZip, cu.invoiceCity].filter(Boolean).join(', ')}</span></div>` : ''}
-          ${cu.note ? `<div style="margin-top:10px;" class="ibox">${cu.note}</div>` : ''}
+          ${cu.note ? `<div style="margin-top:10px;" class="ibox">${esc(cu.note)}</div>` : ''}
         </div>
       </div>
       <div class="card" style="margin-top:8px;">
         <div class="card-header">
           <h3>Kontaktpersoner</h3>
-          <button class="btn bs bxs" onclick="CustomerDetailPage.openAddContact()">${ic('plus',13)}</button>
+          ${Auth.can('customer_manage') ? `<button class="btn bs bxs" onclick="CustomerDetailPage.openAddContact()">${ic('plus',13)}</button>` : ''}
         </div>
         <div class="card-body" style="padding:6px 14px;">
           ${contacts.length === 0 ? '<p style="font-size:13px;color:var(--mt);padding:4px 0;">Inga kontaktpersoner</p>' :
@@ -902,8 +946,8 @@ const CustomerDetailPage = {
                   <div style="font-size:11px;color:var(--mt);">${c.role||''}${c.phone?' · '+c.phone:''}${c.email?' · '+c.email:''}</div>
                 </div>
                 <div style="display:flex;gap:4px;">
-                  <button class="btn bxs bs" onclick="CustomerDetailPage.openAddContact(${i})">${ic('pencil',12)}</button>
-                  <button class="btn bxs bd" onclick="CustomerDetailPage.removeContact(${i})">${ic('trash',12)}</button>
+                  ${Auth.can('customer_manage') ? `<button class="btn bxs bs" onclick="CustomerDetailPage.openAddContact(${i})">${ic('pencil',12)}</button>` : ''}
+                  ${Auth.can('customer_manage') ? `<button class="btn bxs bd" onclick="CustomerDetailPage.removeContact(${i})">${ic('trash',12)}</button>` : ''}
                 </div>
               </div>`).join('')}
         </div>
@@ -1023,10 +1067,16 @@ const CustomerDetailPage = {
   },
 
   openAddContact(existingIdx) {
+    /* 2026-11: försvar i djupet, se CustomersPage._openForm() för motivering
+       av samma mönster. */
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     const cu = getCu(this.customerId);
     if (!cu) return;
     const c = existingIdx !== undefined ? (cu.contacts||[])[existingIdx] : null;
-    const v = (key) => c ? (c[key] || '') : '';
+    const v = (key) => { const val = c ? (c[key] || '') : ''; return typeof val === 'string' ? esc(val) : val; };
     Modal.open({
       title: c ? 'Redigera kontaktperson' : 'Lägg till kontaktperson',
       body: `
@@ -1047,6 +1097,10 @@ const CustomerDetailPage = {
   },
 
   _saveContact(existingIdx) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     const cu = getCu(this.customerId);
     if (!cu) return;
     const name = (document.getElementById('cc-name')?.value || '').trim();
@@ -1072,6 +1126,10 @@ const CustomerDetailPage = {
   },
 
   removeContact(idx) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     Modal.confirm('Ta bort kontaktperson?', () => {
       const cu = getCu(this.customerId);
       if (!cu) return;
@@ -1095,6 +1153,10 @@ const CustomerDetailPage = {
   },
 
   toggleInactive(id) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     const cu = getCu(id);
     if (!cu) return;
     const activate = !!cu.inactive;

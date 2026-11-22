@@ -1598,7 +1598,7 @@ const Dashboard = {
             return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg);border-radius:var(--rx);cursor:pointer;border-left:3px solid ${isOverdue?'var(--rd)':'var(--or)'};" onclick="Router.showPage('pg-activities')">
               <span style="color:${isOverdue?'var(--rd)':'var(--or)'};">${ic(ActivitiesService.typeIcon(a.type),13)}</span>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.note || ActivitiesService.typeLabel(a.type)}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.note || ActivitiesService.typeLabel(a.type))}</div>
                 <div style="font-size:10px;color:${isOverdue?'var(--rd)':'var(--mt)'};">${isOverdue?'Försenad — ':''} ${fmtDate(a.dueDate)}</div>
               </div>
               <button class="btn bxs bsu" style="font-size:9px;padding:3px 8px;" onclick="event.stopPropagation();ActivitiesService.complete('${a.id}');Dashboard.render();">${ic('check',10)} Klar</button>

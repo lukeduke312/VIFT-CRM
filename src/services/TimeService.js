@@ -4,6 +4,76 @@
  */
 const TimeService = {
 
+  /* P0-2 FIX (2026-10-18, independent-reviewer regression): sedan
+     BLOCKER-1-fixen (time-entries-list) gör att en användare UTAN
+     `payroll_view` bara ser SINA EGNA tidposter, räcker `newId(
+     state.timeEntries, 'TID')` inte längre som ett kollisionssäkert
+     id — två olika personalmedlemmar med OLIKA, partiella synliga
+     delmängder kan oberoende räkna fram SAMMA nästa TID-NNN, och
+     servern (som jämför mot HELA den riktiga arrayen) avvisar då en av
+     dem med `id_collision`. Samma risk finns redan vid den FÖRSTA
+     tidposten direkt efter inloggning, innan TimeEntriesReadService:s
+     asynkrona läsning hunnit slutföras (state.timeEntries fortfarande
+     tom). Fix: ett genuint kollisionssäkert, UUID-baserat id (samma
+     entropikälla som redan används för idempotensnycklar överallt i
+     detta uppdrag) istället för en sekventiell gissning baserad på en
+     eventuellt partiell lokal vy — ingen server-rundtur, inget
+     klient-id→server-id-utbyte behövs, eftersom kollisionsrisken för
+     en UUID är försumbar, inte bara "mindre sannolik". */
+  _newTimeEntryId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return 'TID-' + crypto.randomUUID();
+    return 'TID-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+  },
+
+  /* ═══════════════════════════════════════════════════════════════════
+     P0 AO/TID-FIX (2026-10-18) — _syncTime(): samma mönster/motivering
+     som WorkOrderService._syncAO() (se den filens filhuvud för den fulla
+     förklaringen) — patcht ENDAST de ändrade fälten mot den atomiska
+     time_entry_patch-RPC:n, OVANPÅ (inte istället för) den oförändrade
+     persist()-anropet som fortfarande behövs för activityLog m.fl. */
+  /* I4 (blocker round 2026-11-12): optional `opts.onSettled(r)` /
+     `opts.onFirstAttempt(r)`, same contract as WorkOrderService._syncAO()
+     and clockOut(): onSettled runs AFTER the internal bookkeeping, once,
+     with the FINAL answer (ok:true or final:true); onFirstAttempt gets the
+     first attempt's result so a caller can say "köad" on a transient
+     failure. Callers without opts (every other caller) are unchanged.
+     The defensive no-AOTimeSyncService path reports an honest
+     {ok:false, final:true, error:'sync_unavailable'} — never a false ok. */
+  _syncTime(entry, patch, opts) {
+    opts = opts || {};
+    const notify = function (fn, r) {
+      if (typeof fn !== 'function') return;
+      try { fn(r); } catch (e) { console.error('[TimeService] caller callback threw (_syncTime):', e); }
+    };
+    if (!entry) return;
+    if (typeof AOTimeSyncService === 'undefined') {
+      notify(opts.onSettled, { ok: false, final: true, error: 'sync_unavailable' });
+      return;
+    }
+    entry._pendingSync = true;
+    const p = AOTimeSyncService.patchTime(entry.id, patch, null, {
+      onSettled: function (r) {
+        if (r.ok) {
+          entry._pendingSync = false;
+          if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+            Storage.setLocal('timeEntries', state.timeEntries);
+          }
+        } else if (r.final) {
+          entry._pendingSync = false;
+          entry._syncFailed = r.error;
+          console.error('[TimeService] Serverskrivning avvisad för', entry.id, ':', r.error);
+        }
+        if (r.ok || r.final) notify(opts.onSettled, r);
+        if (typeof TimePage !== 'undefined' && typeof TimePage.onSyncStatusChanged === 'function') {
+          TimePage.onSyncStatusChanged(entry.id);
+        }
+      }
+    });
+    if (typeof opts.onFirstAttempt === 'function' && p && typeof p.then === 'function') {
+      p.then(function (first) { notify(opts.onFirstAttempt, first || {}); }, function () {});
+    }
+  },
+
   /* V22: klocka in/ut kräver ao_time specifikt — payroll_manage ensamt räcker
      INTE (det är löneadministration, inte operativ tidsstämpling). Ingen
      state-/Storage-mutation får ske innan detta passerat.
@@ -13,15 +83,48 @@ const TimeService = {
      objekt eller null, precis som innan (där null tidigare bara betydde
      "inte inklockad" — nu även "saknar behörighet"). Anroparen avgör alltså
      nekad operation på exakt samma sätt som redan gällde för clockOut. */
-  clockIn(aoId = null) {
+  /* P2-2 CORRECTION (2026-11-16, round 4): public.store has no per-row
+     user dimension — stamp status lives in the dedicated, RLS-protected
+     `public.stamp_status` table instead (round 3), with a SERVER-owned
+     revision counter for concurrency (round 4 — see storage.js's own
+     header on why round 3's client-generated `seq` was rejected). Stamp
+     status goes through Storage.getStampStatus()/setStampStatus() — the
+     server derives "which user" from the verified JWT alone; no identity
+     is ever sent from here.
+
+     opts.onStampSettled(result) (round 4, NEW, optional, additive — no
+     existing caller is affected): reports the server's REAL answer for
+     the stamp write specifically, independent of (for clockOut) the time
+     entry's own onSettled. `result.stale === true` means a different,
+     real write already won server-side and local state has been
+     reconciled to the true value — never assume the original intent
+     succeeded. Addresses "clockIn() inväntar fortfarande inte resultatet"
+     and "kräv serverbekräftelse före definitivt lyckat besked" without
+     changing clockIn()'s/clockOut()'s synchronous return contract. */
+
+  clockIn(aoId = null, opts = {}) {
     if (!(typeof Auth !== 'undefined' && Auth.can('ao_time'))) return false;
     if (state.stampActive) return false;
     state.stampActive    = true;
     state.stampTimestamp = Date.now();
     state.stampAoId      = aoId;
-    Storage.set('stampActive', true);
-    Storage.set('stampTs',     state.stampTimestamp);
-    Storage.set('stampAoId',   aoId);
+    const expectedRevision = Storage.getStampRevision();
+    const ts = state.stampTimestamp;
+    Storage.setStampStatus(true, ts, aoId, expectedRevision).then((r) => {
+      if (r && r.ok && r.stale) {
+        // A different write already won (e.g. another device's clockOut
+        // landed first with the same expected revision) — reconcile local
+        // state to the real server truth rather than leaving this device
+        // believing its own clock-in succeeded.
+        state.stampActive    = !!r.active;
+        state.stampTimestamp = state.stampActive ? r.ts : null;
+        state.stampAoId      = state.stampActive ? r.aoId : null;
+        if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
+      }
+      if (typeof opts.onStampSettled === 'function') {
+        try { opts.onStampSettled(r); } catch (e) { console.error('[TimeService] onStampSettled threw (clockIn):', e); }
+      }
+    });
     /* V55A-A: uppdatera mobilskalets ihållande "Incheckad"-status direkt
        — läser samma state.stampActive/stampTimestamp som sätts ovan,
        ingen egen kopia av klock-in-tillståndet. Se MobileShell.js. */
@@ -30,7 +133,34 @@ const TimeService = {
   },
 
   /* Klocka ut — returnerar skapad post, eller null (ej inklockad ELLER saknar ao_time) */
+  /* TIME-ENTRY-ACK FIX (2026-11-12): clockOut() skapade redan tidposten
+     via AOTimeSyncService.createTime() med egen ACK-spårning
+     (entry._pendingSync/_syncFailed) — men INGEN anropare kunde få veta
+     utfallet, så alla tre klock-ut-UI:n (MyJobsPage, WorkOrderDetailPage,
+     TimePage) visade "tid sparad"/"Utloggad" utan att tidpostens egen
+     serverskrivning bekräftats. Nytt, rent additivt: valfritt
+     `opts.onSettled(result)`, `result = {ok, final, error, entry}`:
+       - anropas EFTER den interna bokföringen nedan (samma ordning som
+         WorkOrderService._syncAO()/create()),
+       - med det SLUTGILTIGA svaret (ok:true eller final:true) när
+         AOTimeSyncService avgör det (även vid en senare automatisk retry),
+       - och dessutom EN gång med `{ok:false, final:false, queued:true}`
+         om det FÖRSTA försöket blev transient (nätverk/5xx) — posten
+         ligger då kvar i den durabla outboxen och skickas om; anroparen
+         kan visa ett ärligt "köad, ej bekräftad" istället för att vänta
+         tyst för evigt.
+     Saknas AOTimeSyncService (endast isolerade testskript) får en
+     anropare MED onSettled ett ärligt `{ok:false, final:true,
+     error:'sync_unavailable'}` — aldrig ett falskt ok. Returvärdet
+     (entry eller null) och allt övrigt beteende är oförändrat; en
+     anropare utan opts.onSettled påverkas inte alls. */
   clockOut(opts = {}) {
+    opts = opts || {};
+    const callerOnSettled = typeof opts.onSettled === 'function' ? opts.onSettled : null;
+    const notifyCaller = function (r) {
+      if (!callerOnSettled) return;
+      try { callerOnSettled(r); } catch (e) { console.error('[TimeService] caller onSettled threw (clockOut):', e); }
+    };
     if (!(typeof Auth !== 'undefined' && Auth.can('ao_time'))) return null;
     if (!state.stampActive) return null;
 
@@ -48,7 +178,7 @@ const TimeService = {
     const ao        = aoId ? getAO(aoId) : null;
 
     const entry = {
-      id:           newId(state.timeEntries, 'TID'),
+      id:           this._newTimeEntryId(),
       aoId:         aoId || '',
       customerId:   opts.customerId || (ao ? ao.customerId : ''),
       staffId:      state.currentUser ? state.currentUser.id : '',
@@ -76,18 +206,121 @@ const TimeService = {
       ao.timeEntries.push(entry.id);
     }
 
+    /* P2-2 round 3/4: the server-side stamp-clear is deferred until the
+       time entry's OWN creation is actually confirmed by the server (see
+       onSettled below) — not fired immediately here. Reasoning: these are
+       two independent writes (different tables/EFs), so firing both at
+       once with no ordering risks a real inconsistency the review called
+       out explicitly — if entry creation fails but the stamp clear still
+       succeeds, the user is left "stämplad ut" with NO time entry to show
+       for it (the work is lost from a payroll point of view) and no
+       obvious way to notice, since the UI already shows them as clocked
+       out. Deferring the clear until creation is CONFIRMED means: on
+       success, both land together (the server clear below); on a
+       definitive rejection, the optimistic local "clocked out" state is
+       rolled back to "still clocked in" (matching what the server still
+       has, since it was never told otherwise) so the user can see the
+       failure and retry clocking out properly instead of silently losing
+       the clock session.
+       Round 4: expectedRevision replaces round 3's client-generated
+       `seq`; opts.onStampSettled (optional, additive) reports the stamp
+       clear's OWN real result once it actually runs, independent of
+       opts.onSettled (the time entry's own confirmation) — "Detta kan ge
+       en sparad tidpost samtidigt som servern fortfarande visar
+       användaren som instämplad" is exactly what onStampSettled makes
+       observable instead of silently assumed fine. */
+    const expectedRevision = Storage.getStampRevision();
     state.stampActive    = false;
     state.stampTimestamp = null;
     state.stampAoId      = null;
-    Storage.set('stampActive', false);
-    Storage.set('stampTs',     null);
-    Storage.set('stampAoId',   null);
     /* V55A-A: se motsvarande kommentar i clockIn() ovan. */
     if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
 
     ActivityService.log('time_entry_created',
       `Tid registrerad: ${minutes} min${aoId ? ' på ' + aoId : ''}`,
       { workOrderId: aoId || '', customerId: entry.customerId });
+    /* P0 AO/TID-FIX: atomisk serverskapelse via time_entry_create (samma
+       p_client_id-mönster som WorkOrderService.create(), se den filens
+       kommentar) — oförändrat synkront kontrakt (entry returneras direkt,
+       MyJobsPage.js läser detta returvärde). */
+    if (typeof AOTimeSyncService !== 'undefined') {
+      entry._pendingSync = true;
+      let finalDelivered = false;
+      const p = AOTimeSyncService.createTime(entry, {
+        onSettled: function (r) {
+          if (r.ok) {
+            entry._pendingSync = false;
+            if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+              Storage.setLocal('timeEntries', state.timeEntries);
+              Storage.setLocal('workOrders', state.workOrders);
+            }
+            /* P2-2 round 3/4: the time entry is NOW confirmed by the
+               server — only now is it safe to tell the server to clear
+               the stamp status too, so the two never disagree about
+               whether this clock-out "really happened". setStampStatus()
+               itself retries on network/5xx (idempotent by construction);
+               onStampSettled reports its real outcome once that settles.
+               Time-clock DURABLE RECOVERY (2026-11-17): write the pending-
+               clear marker BEFORE attempting the clear — if the browser
+               closes/crashes before the clear's response ever arrives (or
+               after it fails and gives up), the marker survives and the
+               NEXT initState() retries just the clear, never a new entry. */
+            if (typeof Storage.setPendingStampClear === 'function') {
+              Storage.setPendingStampClear({ aoId: aoId || null, ts: startTs, timeEntryId: entry.id });
+            }
+            Storage.setStampStatus(false, null, null, expectedRevision).then((r) => {
+              if (r && r.ok && typeof Storage.clearPendingStampClear === 'function') {
+                Storage.clearPendingStampClear();
+              }
+              if (typeof opts.onStampSettled === 'function') {
+                try { opts.onStampSettled(r); } catch (e2) { console.error('[TimeService] onStampSettled threw (clockOut):', e2); }
+              }
+            });
+          } else if (r.final) {
+            entry._pendingSync = false;
+            entry._syncFailed = r.error;
+            console.error('[TimeService] Klocka ut-skapande avvisades av servern för', entry.id, ':', r.error);
+            /* P2-2 round 3: definitive rejection — the time entry does NOT
+               exist server-side, so this clock-out did not really happen.
+               Roll the optimistic local "clocked out" state back to
+               "still clocked in" (the server's stamp_status row was never
+               told otherwise, since the clear above never fired) so the
+               user can see the failure and retry properly, instead of
+               silently losing the clock session with no time entry to
+               show for it. Mirrors the established optimistic-update-
+               rollback pattern already used elsewhere in this codebase
+               (e.g. WorkOrderService) for the same class of problem. */
+            state.stampActive    = true;
+            state.stampTimestamp = startTs;
+            state.stampAoId      = aoId || null;
+            if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
+          }
+          if (r.ok || r.final) {
+            finalDelivered = true;
+            notifyCaller({ ok: !!r.ok, final: true, error: r.error || null, entry: entry });
+          }
+        }
+      });
+      /* Första försöket transient → säg det till anroparen EN gång
+         (AOTimeSyncService anropar själv bara onSettled på slutgiltiga
+         svar). */
+      if (callerOnSettled && p && typeof p.then === 'function') {
+        p.then(function (first) {
+          if (!finalDelivered && first && !first.ok && !first.final) {
+            notifyCaller({ ok: false, final: false, queued: true, error: first.error || null, entry: entry });
+          }
+        }, function () {});
+      }
+    } else {
+      // No sync service at all (test-only per the comment above) — same
+      // "this clock-out did not really happen" rollback as a definitive
+      // rejection; never attempt the server-side stamp clear.
+      state.stampActive    = true;
+      state.stampTimestamp = startTs;
+      state.stampAoId      = aoId || null;
+      if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
+      notifyCaller({ ok: false, final: true, error: 'sync_unavailable', entry: entry });
+    }
     persist();
     return entry;
   },
@@ -141,7 +374,7 @@ const TimeService = {
     const resolvedCustomer = customerId || (ao ? ao.customerId : '');
 
     const entry = {
-      id:            newId(state.timeEntries, 'TID'),
+      id:            this._newTimeEntryId(),
       aoId:          aoId || '',
       customerId:    resolvedCustomer,
       staffId:          targetStaffId,
@@ -172,6 +405,24 @@ const TimeService = {
     ActivityService.log('time_entry_created',
       `Manuell tid: ${minutes} min${aoId ? ' på ' + aoId : ''}`,
       { workOrderId: aoId || '', customerId: resolvedCustomer });
+    if (typeof AOTimeSyncService !== 'undefined') {
+      entry._pendingSync = true;
+      AOTimeSyncService.createTime(entry, {
+        onSettled: function (r) {
+          if (r.ok) {
+            entry._pendingSync = false;
+            if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+              Storage.setLocal('timeEntries', state.timeEntries);
+              Storage.setLocal('workOrders', state.workOrders);
+            }
+          } else if (r.final) {
+            entry._pendingSync = false;
+            entry._syncFailed = r.error;
+            console.error('[TimeService] Manuellt tidsskapande avvisades av servern för', entry.id, ':', r.error);
+          }
+        }
+      });
+    }
     persist();
     return { ok: true, entry };
   },
@@ -220,7 +471,7 @@ const TimeService = {
      inte ett ok:true som tyst ignorerar ändringen. Ett payload som råkar
      innehålla samma (oförändrade) värde som redan finns på posten räknas
      inte som ett ändringsförsök och blockeras inte. */
-  update(id, data) {
+  update(id, data, opts) {
     const entry = (state.timeEntries || []).find(t => t.id === id);
     if (!entry) return { ok: false, error: 'Posten hittades inte' };
     const guard = this._guardMutation(entry);
@@ -327,16 +578,52 @@ const TimeService = {
       delete safeData.hourRate;
     }
 
+    /* I4: what this edit overwrites, so a FINAL server rejection can put
+       it back (same rule as A2's status rollback): the entry must never
+       keep showing a value the server refused. */
+    const before = {};
+    Object.keys(safeData).concat(['minutes']).forEach(function (f) {
+      before[f] = Object.prototype.hasOwnProperty.call(entry, f) ? entry[f] : undefined;
+    });
     Object.assign(entry, safeData);
     if (safeData.startStr && safeData.endStr) {
       const [sh, sm] = safeData.startStr.split(':').map(Number);
       const [eh, em] = safeData.endStr.split(':').map(Number);
       entry.minutes = (eh * 60 + em) - (sh * 60 + sm);
+      safeData.minutes = entry.minutes;
     }
+    const applied = Object.assign({}, safeData);
+    const callerOnSettled = opts && typeof opts.onSettled === 'function' ? opts.onSettled : null;
+    const callerOnFirst = opts && typeof opts.onFirstAttempt === 'function' ? opts.onFirstAttempt : null;
+    this._syncTime(entry, safeData, (callerOnSettled || callerOnFirst) ? {
+      onSettled: function (r) {
+        let rolledBack = false;
+        if (!r.ok && r.final) {
+          /* Restore only fields that still hold what THIS edit wrote (a
+             newer local edit to the same field is not clobbered). */
+          Object.keys(applied).forEach(function (f) {
+            if (entry[f] !== applied[f]) return;
+            if (before[f] === undefined) delete entry[f]; else entry[f] = before[f];
+            rolledBack = true;
+          });
+          if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
+            Storage.setLocal('timeEntries', state.timeEntries);
+          }
+        }
+        if (callerOnSettled) callerOnSettled({ ok: !!r.ok, final: true, error: r.error || null, entry: entry, rolledBack: rolledBack });
+      },
+      onFirstAttempt: function (first) {
+        if (callerOnFirst) callerOnFirst(first);
+      }
+    } : undefined);
     persist();
     return { ok: true, entry };
   },
 
+  /* P0 AO/TID-FIX: äkta borttagning (inte en flagga) via time_entry_soft_delete
+     (atomisk, idempotent, och fail-closed mot attesterad tid ÄVEN om
+     klientens _guardMutation()-kontroll ovan av någon anledning kringgåtts
+     — se migrationens attested_locked-skydd). */
   delete(id) {
     const entry = (state.timeEntries || []).find(t => t.id === id);
     if (!entry) return { ok: false, error: 'Posten hittades inte' };
@@ -347,6 +634,15 @@ const TimeService = {
       if (ao) ao.timeEntries = (ao.timeEntries || []).filter(tid => tid !== id);
     }
     state.timeEntries = (state.timeEntries || []).filter(t => t.id !== id);
+    if (typeof AOTimeSyncService !== 'undefined') {
+      AOTimeSyncService.deleteTime(id, {
+        onSettled: function (r) {
+          if (!r.ok && r.final) {
+            console.error('[TimeService] Radering avvisad av servern för', id, ':', r.error);
+          }
+        }
+      });
+    }
     persist();
     return { ok: true };
   },
@@ -497,6 +793,7 @@ const TimeService = {
     entry.priceGroupId = pg.id;
     entry.priceGroupName = pg.name;
     entry.hourRate = rate;
+    this._syncTime(entry, { priceGroupId: pg.id, priceGroupName: pg.name, hourRate: rate });
     persist();
     return {
       ok: true,

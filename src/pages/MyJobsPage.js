@@ -274,6 +274,26 @@ const MyJobsPage = {
   /* V23: fail-closed handler-guard (UI-only räckte inte — knappen var redan
      ao_time-gated, men själva metoden hade ingen egen spärr och kollade
      aldrig TimeService.clockIn()s returvärde innan AO-logg/success-toast). */
+  /* FLOW-B FIX (confirmed bug, this round): clockIn() previously called
+     WorkOrderService._syncAO() (fire-and-forget, by design — see that
+     function's own comment) for the AO's clock-in log note and then
+     IMMEDIATELY showed "Instämplad" and re-rendered, with zero connection
+     to whether that write actually reached the server. Confirmed live
+     (network fully blocked): the toast fired identically to the success
+     case and the log note was never persisted, with no error ever shown.
+     Fix: the clock-in itself (state.stampActive etc, set synchronously by
+     TimeService.clockIn() — a purely local, non-networked concept until
+     clockOut() actually creates a time entry) still applies and renders
+     immediately, same as before — but the SUCCESS TOAST now waits for
+     _syncAO()'s new opts.onSettled confirmation, and a final rejection
+     shows a clear warning instead of a false "Instämplad". No rollback of
+     TimeService's local clock-in state is attempted here: every other
+     _syncAO() call site in this codebase (WorkOrderService.js, see its
+     file header) already follows the same convention on a final
+     rejection — mark `ao._syncFailed`, surface it via
+     onSyncStatusChanged(), never silently undo the optimistic local
+     mutation — and introducing a one-off rollback only here would be
+     inconsistent and riskier than the bug it fixes. */
   clockIn(aoId) {
     if (!Auth.require('ao_time')) return;
     if (state.stampActive) { showToast('Stämpla ut från nuvarande jobb först'); return; }
@@ -281,6 +301,7 @@ const MyJobsPage = {
     const user = Auth.getUser();
     const ok = TimeService.clockIn(aoId);
     if (!ok) { showToast('Kunde inte klocka in — kontrollera din behörighet.'); return; }
+    let syncPending = false;
     if (ao && user) {
       ao.log = ao.log || [];
       ao.log.push({
@@ -290,20 +311,90 @@ const MyJobsPage = {
         userName:  `${user.firstName} ${user.lastName}`.trim(),
         timestamp: new Date().toISOString()
       });
+      if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+        syncPending = true;
+        WorkOrderService._syncAO(ao, { log: ao.log }, {
+          onSettled: function (r) {
+            if (r && r.ok) {
+              showToast('Instämplad');
+            } else if (r && r.final) {
+              showToast('Stämplingen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.');
+            }
+            // else: transient, väntar på ett senare slutgiltigt svar.
+          }
+        });
+      }
       persist();
     }
-    showToast('Instämplad');
+    if (!syncPending) showToast('Instämplad');
     this.render();
   },
 
   /* V23: samma princip — kontrollera TimeService.clockOut()s returvärde
      (post-objekt eller null) INNAN entry.staffName/entry.minutes används
      eller någon success-toast visas. */
+  /* FLOW-B FIX (confirmed bug, this round) — same principle as clockIn()
+     above. Note: the time ENTRY itself (`entry`, created inside
+     TimeService.clockOut() via AOTimeSyncService.createTime()) already
+     has its own independent server-ACK tracking
+     (entry._pendingSync/entry._syncFailed, see TimeService.js) — that
+     part was already correct and is untouched here. The bug fixed in
+     THIS function is specifically the AO's clock-out log note, written
+     via the separate, fire-and-forget WorkOrderService._syncAO() call,
+     whose outcome the old code never waited for before showing
+     "Utstämplad — tid sparad". Same no-rollback rationale as clockIn(). */
+  /* DUAL-ACK FIX (2026-11-12, independent-reviewer finding, verified
+     against the code before fixing): the FLOW-B fix above gated
+     "Utstämplad — tid sparad" ONLY on the AO log-note _syncAO() write —
+     the comment claimed the time entry's own ACK "was already correct",
+     but nothing in this function ever looked at it: TimeService.clockOut()
+     gave callers no way to learn the entry's server outcome at all. So
+     "tid sparad" could be shown while the actual time entry (the record
+     payroll/invoicing reads) had been rejected by the server.
+     Now there are TWO logically separate server writes and BOTH are
+     tracked:
+       1. the time entry itself (TimeService.clockOut()'s new
+          opts.onSettled — the HIGH-stakes one),
+       2. the AO log note (_syncAO(), lower stakes — only an audit note).
+     "Utstämplad — tid sparad" is shown ONLY when (1) is confirmed AND (2)
+     is confirmed (or there is no AO log note to write). A final rejection
+     of (1) shows a clear error regardless of (2). A final rejection of
+     (2) alone, with (1) confirmed, says the time WAS saved but the log
+     note was not. A first transient attempt on (1) says honestly that the
+     entry is queued, not confirmed. Local clock-out state (banner gone)
+     still applies immediately — same documented no-rollback rationale as
+     clockIn() above (and the entry stays in AOTimeSyncService's durable
+     outbox, so nothing is silently dropped). */
   clockOut() {
     if (!Auth.require('ao_time')) return;
     if (!state.stampActive) return;
     const prevAoId = state.stampAoId;
-    const entry    = TimeService.clockOut();
+    const st = { ready: false, done: false, queuedShown: false, entry: null, log: null, logRequired: false };
+    const evaluate = function () {
+      if (!st.ready || st.done) return;
+      const e = st.entry, l = st.log;
+      if (e && e.final && !e.ok) {
+        st.done = true;
+        showToast('Utstämplad, men tidposten kunde INTE sparas av servern' + (e.error ? ' (' + e.error + ')' : '') + ' — registrera tiden manuellt.');
+        return;
+      }
+      if (e && e.ok) {
+        if (!st.logRequired || (l && l.ok)) { st.done = true; showToast('Utstämplad — tid sparad'); return; }
+        if (l && l.final && !l.ok) {
+          st.done = true;
+          showToast('Utstämplad — tid sparad. Obs: stämplingsnoteringen i arbetsorderns logg kunde inte bekräftas av servern.');
+          return;
+        }
+        return; // tidposten bekräftad, loggnoteringen väntar fortfarande
+      }
+      if (e && e.queued && !st.queuedShown) {
+        st.queuedShown = true;
+        showToast('Utstämplad — sparar tiden… (ej bekräftad av servern ännu, skickas automatiskt när anslutningen fungerar)');
+      }
+    };
+    const entry    = TimeService.clockOut({
+      onSettled: function (r) { st.entry = r; evaluate(); }
+    });
     if (!entry) { showToast('Kunde inte klocka ut — kontrollera din behörighet.'); return; }
     if (prevAoId) {
       const ao = getAO(prevAoId);
@@ -316,16 +407,35 @@ const MyJobsPage = {
           userName:  entry.staffName,
           timestamp: new Date().toISOString()
         });
+        if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+          st.logRequired = true;
+          WorkOrderService._syncAO(ao, { log: ao.log }, {
+            onSettled: function (r) {
+              // Endast slutgiltiga svar räknas; transient = väntar vidare.
+              if (r && (r.ok || r.final)) { st.log = r; evaluate(); }
+            }
+          });
+        }
         persist();
       }
     }
-    showToast('Utstämplad — tid sparad');
+    st.ready = true;
+    evaluate(); // ett redan synkront levererat svar (t.ex. fail-closed fallback) hanteras här
     this.render();
   },
 
+  /* STATUS-ACK FIX (2026-11-12): "Starta" visade tidigare "Status:
+     Pågående" synkront, utan koppling till om statusskrivningen nådde
+     servern. Nu via WorkOrderService.setStatus()s nya opts.onSettled —
+     samma mönster som clockIn() ovan. Lokal status/rendering sker direkt
+     (oförändrad optimistisk UI), toasten väntar på serverbekräftelse. */
   startJob(aoId) {
-    WorkOrderService.setStatus(aoId, 'pågående');
-    showToast('Status: Pågående');
+    WorkOrderService.setStatus(aoId, 'pågående', {
+      onSettled: function (r) {
+        if (r && r.ok) showToast('Status: Pågående');
+        else if (r && r.final) showToast('Statusändringen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.');
+      }
+    });
     this.render();
   },
 

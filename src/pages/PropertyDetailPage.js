@@ -102,7 +102,7 @@ const PropertyDetailPage = {
             </div>` : ''}
             <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;">
               <span style="color:var(--mt);">Status</span>
-              ${p.status==='aktiv'?`<span class="bdg bdg-green">Aktiv</span>`:`<span class="bdg bdg-grey">Inaktiv</span>`}
+              ${p.status!=='inaktiv'?`<span class="bdg bdg-green">Aktiv</span>`:`<span class="bdg bdg-grey">Inaktiv</span>`}
             </div>
             ${addrLine ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${addrLine}${cityLine?', '+cityLine:''}</div>` : ''}
           </div>
@@ -142,10 +142,10 @@ const PropertyDetailPage = {
       <div class="ao-action-panel">
         <div class="ao-action-panel-left">
           <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${p.id}${p.objectNumber?' · '+p.objectNumber:''}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(displayNumberOf(p))}${p.objectNumber?' · '+p.objectNumber:''}</span>
         </div>
         <div class="ao-action-panel-badges">
-          ${p.status==='aktiv'
+          ${p.status!=='inaktiv'
             ? `<span class="bdg bdg-green">Aktiv</span>`
             : `<span class="bdg bdg-grey">Inaktiv</span>`}
           ${p.type ? `<span class="bdg bdg-blue" style="font-size:10px;">${p.type}</span>` : ''}
@@ -176,7 +176,7 @@ const PropertyDetailPage = {
       <div class="prop-mobile-quick">
         <span class="prop-mobile-quick-name">${p.name}</span>
         <span class="prop-mobile-quick-ao${openAos>0?' prop-mobile-quick-ao--active':''}">${openAos} AO</span>
-        ${p.status==='aktiv'?`<span class="bdg bdg-green" style="font-size:10px;">Aktiv</span>`:`<span class="bdg bdg-grey" style="font-size:10px;">Inaktiv</span>`}
+        ${p.status!=='inaktiv'?`<span class="bdg bdg-green" style="font-size:10px;">Aktiv</span>`:`<span class="bdg bdg-grey" style="font-size:10px;">Inaktiv</span>`}
       </div>
 
       <!-- Fastighetshuvud (inline — visas på mobil, döljs på desktop) -->
@@ -331,7 +331,7 @@ const PropertyDetailPage = {
         </div>
       </div>
 
-      ${p.note ? `<div class="nbox">${ic('eye',12)} ${p.note}</div>` : ''}
+      ${p.note ? `<div class="nbox">${ic('eye',12)} ${esc(p.note)}</div>` : ''}
     `;
   },
 
@@ -437,8 +437,14 @@ const PropertyDetailPage = {
       .map(t => `<option value="${t.key}">${t.label}</option>`).join('');
     const statusOptions = (typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])
       .map(s => `<option value="${s.key}">${s.label}</option>`).join('');
-    openModal(`
-      <h3 style="margin-bottom:16px;">${ic('plus',14)} Nytt objekt — ${esc(p.name)}</h3>
+    /* QA FIX-ROUND 2026-11-12 (I1, confirmed): `openModal()`/`closeModal()`
+       are not defined anywhere in the codebase — "Lägg till objekt" threw a
+       ReferenceError and no property object could ever be created. Now uses
+       the app's one modal system, Modal.open({title, body, buttons}); the
+       form fields, their ids and the save handler are unchanged. */
+    Modal.open({
+      title: `${ic('plus',14)} Nytt objekt — ${esc(p.name)}`,
+      body: `
       <div style="display:flex;flex-direction:column;gap:10px;">
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
@@ -487,14 +493,15 @@ const PropertyDetailPage = {
           <input type="text" id="new-obj-access" class="fi" style="width:100%;">
         </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
-        <button class="btn bs" onclick="closeModal()">Avbryt</button>
-        <button class="btn bp" onclick="PropertyDetailPage._saveAddObject('${propId}')">Spara objekt</button>
-      </div>
-    `);
+    `,
+      buttons: [
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: 'Spara objekt', cls: 'btn bp', onClick: () => PropertyDetailPage._saveAddObject(propId) }
+      ]
+    });
   },
 
-  _saveAddObject(propId) {
+  async _saveAddObject(propId) {
     const type        = document.getElementById('new-obj-type')?.value || 'lagenhet';
     const objectNumber= (document.getElementById('new-obj-num')?.value || '').trim();
     const name        = (document.getElementById('new-obj-name')?.value || '').trim();
@@ -507,27 +514,98 @@ const PropertyDetailPage = {
     const accessInformation = (document.getElementById('new-obj-access')?.value || '').trim();
     try {
       const newObj = PropertyObjectService.create({ propertyId: propId, type, objectNumber, name, entrance, stairwell, floor, area, status, description });
+      const refresh = () => {
+        const p = getObj(propId);
+        const el = p && document.getElementById('prop-tab-objects');
+        if (el) el.innerHTML = this._renderObjectsTab(p);
+      };
+      Modal.close(); // I1: closeModal() does not exist
+      refresh();
       // Routa känsliga fält via EF om angivet
       if (accessInformation && newObj && newObj.id) {
-        const jwt = Auth.getAccessToken();
-        if (jwt) {
-          fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ objectId: newObj.id, propertyId: propId, accessInformation })
-          }).catch(function() {});
+        /* I5 (client, 2026-11-12): success only after a real 2xx {ok:true}.
+           The object itself is already created, so on failure the add
+           form is NOT reopened (a second "Spara objekt" would create a
+           duplicate object); instead a retry dialog holds what was typed. */
+        const body = { objectId: newObj.id, propertyId: propId, accessInformation };
+        const r = await this._saveSensitiveFields(body);
+        if (!r.ok) {
+          this._openSensitiveRetry('Objektet sparades — tillträdesinformationen gjorde det INTE', r, body,
+            [{ key: 'accessInformation', label: 'Tillträdesinformation / portkod' }]);
+          return;
         }
       }
-      closeModal();
       showToast('Objekt sparat');
-      const p = getObj(propId);
-      if (p) {
-        const el = document.getElementById('prop-tab-objects');
-        if (el) el.innerHTML = this._renderObjectsTab(p);
-      }
     } catch(e) {
       showToast(e.message || 'Kunde inte spara objekt', 'error');
     }
+  },
+
+  /* ── I5 (client half, blocker round 2026-11-12) ────────────────────────
+     set-sensitive-fields was called fire-and-forget (`.catch(()=>{})`)
+     and the UI said "sparat" whatever came back — live it answers 500 and
+     the door code / key info was silently lost. Now: success only after
+     HTTP 2xx with {ok:true}; anything else returns {ok:false} with the
+     real status, and the caller keeps what the user typed in a retry
+     dialog. The request itself (URL, headers, body) is unchanged — the
+     server-side 500 is NOT fixed here (EF work, see the server package). */
+  async _saveSensitiveFields(body) {
+    const jwt = (typeof Auth !== 'undefined' && Auth.getAccessToken) ? Auth.getAccessToken() : null;
+    if (!jwt) return { ok: false, status: 0, error: 'inte inloggad' };
+    let res;
+    try {
+      res = await fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      return { ok: false, status: 0, error: 'nätverksfel' };
+    }
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (res.ok && data && data.ok === true) return { ok: true, status: res.status };
+    return { ok: false, status: res.status, error: (data && data.error) || ('HTTP ' + res.status) };
+  },
+
+  _sensitiveFailText(r) {
+    const why = (r.status ? 'HTTP ' + r.status : r.error || 'okänt fel') +
+      (r.status && r.error && r.error !== 'HTTP ' + r.status ? ': ' + r.error : '');
+    /* A 4xx is a definite "not saved". A 5xx/network error is not proof
+       either way (the EF may fail after its write, e.g. in its audit
+       insert), so it is reported as NOT CONFIRMED; a retry is safe (the
+       EF does a partial update with the same values). */
+    if (r.status >= 400 && r.status < 500) return 'Uppgifterna sparades INTE på servern (' + why + ').';
+    return 'Servern bekräftade INTE att uppgifterna sparades (' + why + ') — räkna med att de inte är sparade och försök igen.';
+  },
+
+  /* Retry dialog: the typed values stay editable; "Försök igen" resends,
+     "Stäng utan att spara" is an explicit choice. Values are put into the
+     inputs via .value (never HTML) and are never logged. */
+  _openSensitiveRetry(title, r, body, fields) {
+    showToast(title + ' — ' + this._sensitiveFailText(r), 8000);
+    const inputs = fields.map(f => `<div class="fg"><label>${esc(f.label)}</label><input type="text" id="sens-retry-${f.key}" class="fi" style="width:100%;" autocomplete="off"></div>`).join('');
+    Modal.open({
+      title: `${ic('alert-triangle',14)} ${esc(title)}`,
+      body: `<p style="font-size:13px;line-height:1.5;color:var(--rd);" id="sens-retry-msg">${esc(this._sensitiveFailText(r))}</p>
+        <p style="font-size:13px;line-height:1.5;">Det du skrev finns kvar nedan. Försök igen, eller stäng (då sparas det inte).</p>${inputs}`,
+      buttons: [
+        { label: 'Försök igen', cls: 'btn bp', onClick: async (ev) => {
+          const btn = ev && ev.currentTarget;
+          if (btn) { btn.disabled = true; btn.textContent = 'Sparar…'; }
+          const again = Object.assign({}, body);
+          fields.forEach(f => { const el = document.getElementById('sens-retry-' + f.key); if (el) again[f.key] = (el.value || '').trim(); });
+          const r2 = await this._saveSensitiveFields(again);
+          if (r2.ok) { Modal.close(); showToast('Tillträdesuppgifterna sparade'); return; }
+          if (btn) { btn.disabled = false; btn.textContent = 'Försök igen'; }
+          const m = document.getElementById('sens-retry-msg');
+          if (m) m.textContent = this._sensitiveFailText(r2);
+          showToast('Sparades fortfarande inte — ' + this._sensitiveFailText(r2), 7000);
+        }},
+        { label: 'Stäng utan att spara', cls: 'btn bs', onClick: () => Modal.close() }
+      ]
+    });
+    fields.forEach(f => { const el = document.getElementById('sens-retry-' + f.key); if (el) el.value = body[f.key] || ''; });
   },
 
   openEditObject(objId) {
@@ -537,8 +615,10 @@ const PropertyDetailPage = {
       .map(t => `<option value="${t.key}" ${obj.type===t.key?'selected':''}>${t.label}</option>`).join('');
     const statusOptions = (typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])
       .map(s => `<option value="${s.key}" ${obj.status===s.key?'selected':''}>${s.label}</option>`).join('');
-    openModal(`
-      <h3 style="margin-bottom:16px;">${ic('pencil',14)} Redigera objekt — ${esc(obj.name || obj.objectNumber)}</h3>
+    /* I1 (2026-11-12): same fix as openAddObject() — Modal.open(). */
+    Modal.open({
+      title: `${ic('pencil',14)} Redigera objekt — ${esc(obj.name || obj.objectNumber)}`,
+      body: `
       <div style="display:flex;flex-direction:column;gap:10px;">
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
@@ -587,14 +667,15 @@ const PropertyDetailPage = {
           <input type="text" id="edit-obj-access" class="fi" style="width:100%;" value="${esc(obj.accessInformation||'')}">
         </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
-        <button class="btn bs" onclick="closeModal()">Avbryt</button>
-        <button class="btn bp" onclick="PropertyDetailPage._saveEditObject('${objId}')">Spara ändringar</button>
-      </div>
-    `);
+    `,
+      buttons: [
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: 'Spara ändringar', cls: 'btn bp', onClick: (ev) => PropertyDetailPage._saveEditObject(objId, ev) }
+      ]
+    });
   },
 
-  _saveEditObject(objId) {
+  async _saveEditObject(objId, ev) {
     const obj = getPropObj(objId);
     if (!obj) return;
     const accessInformation = (document.getElementById('edit-obj-access')?.value || '').trim();
@@ -612,15 +693,31 @@ const PropertyDetailPage = {
     try {
       PropertyObjectService.update(objId, fields);
       // Routa känsliga fält via EF (lagras ej i state/store)
-      const jwt = Auth.getAccessToken();
-      if (jwt) {
-        fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ objectId: objId, propertyId: obj.propertyId, accessInformation })
-        }).catch(function() {});
+      /* I5 (client, 2026-11-12): awaited, success only on a real 2xx
+         {ok:true}; on failure the edit dialog STAYS OPEN with what the
+         user typed (pressing Spara again is safe: the object update is a
+         no-op diff, only the sensitive save is retried).
+         Also: sent only when the field differs from what the form was
+         opened with. The value lives in property_sensitive_access, not in
+         the store, so the form normally opens with "" — the old code sent
+         accessInformation:"" on EVERY object edit, which (once the EF
+         works) would null an existing door code just by renaming the
+         object. */
+      const prefilled = (obj.accessInformation || '').trim();
+      if (accessInformation !== prefilled) {
+        const btn = (ev && ev.currentTarget) || null;
+        if (btn) { btn.disabled = true; btn.textContent = 'Sparar…'; }
+        const r = await this._saveSensitiveFields({ objectId: objId, propertyId: obj.propertyId, accessInformation });
+        if (btn) { btn.disabled = false; btn.textContent = 'Spara ändringar'; }
+        if (!r.ok) {
+          const p0 = getObj(obj.propertyId);
+          const el0 = p0 && document.getElementById('prop-tab-objects');
+          if (el0) el0.innerHTML = this._renderObjectsTab(p0);
+          showToast('Objektets övriga fält sparades, men tillträdesinformationen/portkoden gjorde det INTE — ' + this._sensitiveFailText(r) + ' Det du skrev finns kvar i formuläret; försök igen.', 9000);
+          return;
+        }
       }
-      closeModal();
+      Modal.close(); // I1: closeModal() does not exist
       showToast('Objekt uppdaterat');
       const p = getObj(obj.propertyId);
       if (p) {
@@ -956,8 +1053,8 @@ const PropertyDetailPage = {
       wide:  true,
       body:  this._siIntervalFormHtml(null),
       buttons: [
-        { label: 'Avbryt', cls: 'bs', onClick: () => Modal.close() },
-        { label: 'Spara', cls: 'bp', onClick: () => PropertyDetailPage._saveAddInterval(propId) }
+        { label: 'Avbryt', cls: 'bs', fn: 'Modal.close()' },
+        { label: 'Spara', cls: 'bp', fn: `PropertyDetailPage._saveAddInterval('${propId}')` }
       ]
     });
   },
@@ -972,7 +1069,6 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
-      if (typeof ServiceIntervalsPage !== "undefined" && document.getElementById("si-overview-list")) ServiceIntervalsPage.render();
     }
   },
 
@@ -986,8 +1082,8 @@ const PropertyDetailPage = {
       wide:  true,
       body:  this._siIntervalFormHtml(si),
       buttons: [
-        { label: 'Avbryt', cls: 'bs', onClick: () => Modal.close() },
-        { label: 'Spara',  cls: 'bp', onClick: () => PropertyDetailPage._saveEditInterval(propId, siId) }
+        { label: 'Avbryt', cls: 'bs', fn: 'Modal.close()' },
+        { label: 'Spara',  cls: 'bp', fn: `PropertyDetailPage._saveEditInterval('${propId}','${siId}')` }
       ]
     });
   },
@@ -1002,7 +1098,6 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
-      if (typeof ServiceIntervalsPage !== "undefined" && document.getElementById("si-overview-list")) ServiceIntervalsPage.render();
     }
   },
 
@@ -1015,7 +1110,6 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
-      if (typeof ServiceIntervalsPage !== "undefined" && document.getElementById("si-overview-list")) ServiceIntervalsPage.render();
     }
   },
 
@@ -1061,8 +1155,8 @@ const PropertyDetailPage = {
           ${si.nextDue ? `Nuvarande: <strong>${fmtDate(si.nextDue)}</strong>.` : ''}
         </div>`,
       buttons: [
-        { label: 'Avbryt',         cls: 'bs', onClick: () => Modal.close() },
-        { label: 'Markera utförd', cls: 'bp', onClick: () => PropertyDetailPage._saveMarkDone(propId, siId) }
+        { label: 'Avbryt',         cls: 'bs', fn: 'Modal.close()' },
+        { label: 'Markera utförd', cls: 'bp', fn: `PropertyDetailPage._saveMarkDone('${propId}','${siId}')` }
       ]
     });
   },
@@ -1079,7 +1173,6 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
-      if (typeof ServiceIntervalsPage !== "undefined" && document.getElementById("si-overview-list")) ServiceIntervalsPage.render();
       const ovEl = document.getElementById('prop-tab-overview');
       if (ovEl) ovEl.innerHTML = this._renderOverview(p, p.inspections || {}, p.serviceIntervals || []);
     }
@@ -1096,7 +1189,6 @@ const PropertyDetailPage = {
     if (freshP) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(freshP);
-      if (typeof ServiceIntervalsPage !== "undefined" && document.getElementById("si-overview-list")) ServiceIntervalsPage.render();
     }
   },
 
@@ -1124,7 +1216,7 @@ const PropertyDetailPage = {
       body:  hist.length === 0
         ? '<p style="color:var(--mt);">Ingen historik ännu.</p>'
         : `<div class="si-hist-list">${rows.join('')}</div>`,
-      buttons: [{ label: 'Stäng', cls: 'bs', onClick: () => Modal.close() }]
+      buttons: [{ label: 'Stäng', cls: 'bs', fn: 'Modal.close()' }]
     });
   },
 
@@ -1920,7 +2012,7 @@ const PropertyDetailPage = {
     if (!notes.length) return `<p style="font-size:12px;color:var(--mt);padding:4px 0;">Inga anteckningar</p>`;
     return [...notes].reverse().map(n => `
       <div style="padding:8px 0;border-bottom:1px solid var(--bg);">
-        <div style="font-size:12px;line-height:1.5;color:var(--tx);white-space:pre-wrap;">${n.text}</div>
+        <div style="font-size:12px;line-height:1.5;color:var(--tx);white-space:pre-wrap;">${esc(n.text)}</div>
         <div style="font-size:10px;color:var(--mt);margin-top:4px;">${n.createdBy||'Okänd'} · ${relDate(n.createdAt)}</div>
       </div>`).join('');
   },
@@ -1937,8 +2029,17 @@ const PropertyDetailPage = {
 
   _openEditModal(p, prefill) {
     const data = prefill || p;
+    /* P1-2 (fix round 2026-11-16): accessCode/keyInformation live only in
+       property_sensitive_access (via the EF), never on `p`/`prefill` — the
+       inputs below are rendered disabled/empty and only unlocked once
+       _loadSensitiveForEdit() has actually fetched the real current values.
+       This replaces the old bug where the form silently "pre-filled" from
+       fields that never existed on the property object, so editing just
+       one of the two sensitive fields sent the OTHER as an empty string
+       and the server correctly-but-destructively nulled it. */
+    this._sensState = null;
     Modal.open({
-      title: p ? `Redigera: ${p.name}` : 'Redigera fastighet',
+      title: p ? `Redigera: ${esc(p.name)}` : 'Redigera fastighet',
       wide: true,
       body: this._formHtml(data),
       buttons: [
@@ -1947,10 +2048,80 @@ const PropertyDetailPage = {
       ]
     });
     setTimeout(() => document.getElementById('prop-name')?.focus(), 80);
+    if (p && p.id) this._loadSensitiveForEdit(p.id);
+  },
+
+  /* P1-2: fetch the real current accessCode/keyInformation for the edit
+     form. Unlocks the two inputs with their true current values only on a
+     definite 2xx — on ANY other outcome (network error, non-2xx, missing
+     jwt) the inputs stay disabled and empty, so a failed read can never be
+     followed by a save that wipes a field the user never actually saw.
+
+     P1-2 CORRECTION (2026-11-16, round 2): an independent review found a
+     genuine race — this only checked that the DOM elements still exist,
+     not that they still belong to the SAME request/property. If property
+     A's modal is closed and property B's edit modal is opened (REUSING
+     the same #prop-access/#prop-keyinfo ids — Modal always renders the
+     same ids), A's fetch resolving late could write A's accessCode into
+     B's now-open form. Guarded now with a monotonic request token
+     (bumped on every call, so any earlier in-flight call becomes stale
+     the moment a new one starts) AND an explicit propertyId check against
+     the page's current property — BOTH must still match before touching
+     the DOM or `_sensState`. */
+  async _loadSensitiveForEdit(propertyId) {
+    const myToken = (this._sensReqToken = (this._sensReqToken || 0) + 1);
+    const stillCurrent = () => this._sensReqToken === myToken && this.propId === propertyId;
+    const statusEl = () => document.getElementById('prop-sens-status');
+    const accessEl = () => document.getElementById('prop-access');
+    const keyEl    = () => document.getElementById('prop-keyinfo');
+    const jwt = (typeof Auth !== 'undefined' && Auth.getAccessToken) ? Auth.getAccessToken() : null;
+    if (!jwt) {
+      if (stillCurrent() && statusEl()) statusEl().innerHTML = `<span style="color:var(--rd);">${ic('alert-triangle',11)} Inte inloggad — portkod/nyckelinformation kan inte redigeras i denna omgång.</span>`;
+      return;
+    }
+    try {
+      const res = await fetch(SUPABASE_URL + '/functions/v1/get-sensitive-fields', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      // A newer request for the same or a different property has already
+      // started (or the user navigated away) while this one was in
+      // flight — this answer is stale and must NEVER be applied, even
+      // though the DOM elements themselves may still exist (reused ids).
+      if (!stillCurrent()) return;
+      if (!accessEl() || !keyEl()) return;
+      const accessCode     = d.accessCode || '';
+      const keyInformation = d.keyInformation || '';
+      this._sensState = { status: 'ok', accessCode, keyInformation };
+      accessEl().value = accessCode; accessEl().disabled = false; accessEl().placeholder = 'T.ex. 1234#';
+      keyEl().value    = keyInformation; keyEl().disabled = false; keyEl().placeholder = 'T.ex. Nyckelskåp 9876, Aptus-tagg...';
+      if (statusEl()) statusEl().remove();
+    } catch (e) {
+      if (!stillCurrent()) return;
+      this._sensState = { status: 'error' };
+      if (statusEl()) statusEl().innerHTML = `<span style="color:var(--rd);">${ic('alert-triangle',11)} Kunde inte läsa in aktuell portkod/nyckelinformation — fälten är låsta denna omgång för att inte skriva över okänt innehåll.</span> <button type="button" class="btn bxs bs" onclick="PropertyDetailPage._loadSensitiveForEdit('${propertyId}')">Försök igen</button>`;
+    }
   },
 
   _formHtml(p) {
-    const v = (k, d='') => p ? (p[k] != null ? p[k] : d) : d;
+    /* P0-1 (fix round 2026-11-16, round 3): every value="${v(...)}" below
+       is an HTML ATTRIBUTE interpolation, a different, equally real
+       injection vector from the text-node XSS already fixed elsewhere —
+       a stored value containing a `"` could close the attribute early
+       and inject arbitrary markup/event handlers. Escaping once, here,
+       inside v() itself, protects every call site below without having
+       to touch each of the ~20 individual inputs. Safe for the
+       comparison call sites too (e.g. v('type')===t): `t` is always one
+       of this function's own hardcoded constants (never containing `<`,
+       `>`, `&`, `"`), so escaping the stored value never changes the
+       comparison's outcome. */
+    const v = (k, d='') => {
+      const val = p ? (p[k] != null ? p[k] : d) : d;
+      return typeof val === 'string' ? esc(val) : val;
+    };
     const types = ['Flerbostadshus','Kontorsfastighet','Industrifastighet','BRF','Villa','Butiksfastighet','Lager','Övrigt'];
     const mgmtTypes = ['Teknisk förvaltning','Ekonomisk förvaltning','Full förvaltning','Egen förvaltning','Tillsynsavtal'];
     const activeStaff = (state.staff||[]).filter(s => s.active!==false);
@@ -2049,9 +2220,10 @@ const PropertyDetailPage = {
         <input id="prop-oparea" value="${v('operationalArea')}" placeholder="T.ex. Södermalm, Norra..."></div>
 
       <div style="font-size:11px;font-weight:800;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px;">Åtkomst & status</div>
+      <div id="prop-sens-status" style="font-size:12px;color:var(--mt);margin-bottom:6px;">${ic('loader',11)} Läser in aktuella portkod/nyckeluppgifter…</div>
       <div class="g2">
         <div class="fg"><label>Portkod</label>
-          <input id="prop-access" value="${v('accessCode')}" placeholder="T.ex. 1234#"></div>
+          <input id="prop-access" value="" placeholder="Läser in…" disabled></div>
         <div class="fg"><label>Status</label>
           <select id="prop-status">
             <option value="aktiv"   ${v('status','aktiv')==='aktiv'   ?'selected':''}>Aktiv</option>
@@ -2059,7 +2231,7 @@ const PropertyDetailPage = {
           </select></div>
       </div>
       <div class="fg"><label>Nyckelinformation / passagesystem</label>
-        <input id="prop-keyinfo" value="${v('keyInfo')}" placeholder="T.ex. Nyckelskåp 9876, Aptus-tagg..."></div>
+        <input id="prop-keyinfo" value="" placeholder="Läser in…" disabled></div>
       <div class="fg"><label>Intern anteckning</label>
         <textarea id="prop-note" rows="2" placeholder="Visas internt…">${v('note')}</textarea></div>
     `;
@@ -2106,27 +2278,45 @@ const PropertyDetailPage = {
     });
   },
 
-  _saveBasic() {
+  async _saveBasic() {
     const data = this._captureFormState();
     if (!data.name) { showToast('Namn krävs'); return; }
     const idx = (state.properties||[]).findIndex(x => x.id === this.propId);
     if (idx < 0) return;
-    // Känsliga fält sparas via EF, ej i state
-    const accessCode = (document.getElementById('prop-access')?.value || '').trim();
-    const keyInfo    = (document.getElementById('prop-keyinfo')?.value || '').trim();
+    // Känsliga fält sparas via EF, ej i state. P1-2 (2026-11-16): skicka
+    // ENDAST de fält användaren faktiskt ändrat jämfört med vad som
+    // verkligen lästes in (this._sensState) — ett orört fält utelämnas helt
+    // ur body, ett avsiktligt tömt fält skickas som tom sträng (servern
+    // tolkar det som en medveten radering, se sensitive_fields_write), och
+    // om inläsningen misslyckades (status !== 'ok') skickas INGET av dem,
+    // eftersom inputen då var låst och inte kan ha ändrats av användaren.
+    const sens = this._sensState;
+    const sensBody = { propertyId: this.propId };
+    let sensDirty = false;
+    if (sens && sens.status === 'ok') {
+      const accessNow = (document.getElementById('prop-access')?.value || '').trim();
+      const keyNow     = (document.getElementById('prop-keyinfo')?.value || '').trim();
+      if (accessNow !== (sens.accessCode || '')) { sensBody.accessCode = accessNow; sensDirty = true; }
+      if (keyNow !== (sens.keyInformation || '')) { sensBody.keyInformation = keyNow; sensDirty = true; }
+    }
     state.properties[idx] = Object.assign({}, state.properties[idx], data, { updatedAt: new Date().toISOString() });
     persist();
-    const jwt = Auth.getAccessToken();
-    if (jwt && (accessCode || keyInfo)) {
-      fetch(SUPABASE_URL + '/functions/v1/set-sensitive-fields', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyId: this.propId, accessCode, keyInformation: keyInfo })
-      }).catch(function() {});
-    }
+    const propId = this.propId;
     Modal.close();
+    this.render({ propId: propId });
+    if (sensDirty) {
+      /* I5 (client, 2026-11-12): awaited; success only on a real 2xx
+         {ok:true}; on failure a retry dialog keeps what was typed. */
+      const r = await this._saveSensitiveFields(sensBody);
+      if (!r.ok) {
+        const fields = [];
+        if ('accessCode' in sensBody) fields.push({ key: 'accessCode', label: 'Portkod' });
+        if ('keyInformation' in sensBody) fields.push({ key: 'keyInformation', label: 'Nyckelinformation' });
+        this._openSensitiveRetry('Fastigheten sparades — portkod/nyckelinformation gjorde det INTE', r, sensBody, fields);
+        return;
+      }
+    }
     showToast('Fastighet uppdaterad');
-    this.render({ propId: this.propId });
   },
 
   /* ── Ny AO från fastighetskort ─────────────────────────── */
@@ -2498,12 +2688,12 @@ const PropertyDetailPage = {
     const img = this._cachedImages[idx];
     if (!img) return;
     Modal.open({
-      title: img.title || 'Bild',
+      title: esc(img.title || 'Bild'),
       body: `
         <div style="text-align:center;">
-          <img src="${img.signedUrl}" alt="${img.title||''}"
+          <img src="${img.signedUrl}" alt="${esc(img.title||'')}"
             style="max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain;">
-          ${img.description  ? `<p style="font-size:13px;margin-top:10px;">${img.description}</p>` : ''}
+          ${img.description  ? `<p style="font-size:13px;margin-top:10px;">${esc(img.description)}</p>` : ''}
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
             ${img.category    ? `<span style="font-size:11px;color:var(--mt);">${ic('tag',10)} ${img.category}</span>` : ''}
             ${img.tech_section? `<span style="font-size:11px;color:var(--mt);">${ic('settings',10)} ${img.tech_section}</span>` : ''}
@@ -2675,7 +2865,7 @@ const PropertyDetailPage = {
 
     const copy = {
       /* Basic data — always copied */
-      id:                   newId(state.properties, 'OBJ'),
+      id:                   newSafeId('OBJ', state.properties), // K3 (2026-11-12): collision-safe
       name:                 'Kopia av ' + p.name,
       customerId:           src.customerId           || '',
       address:              src.address              || '',
@@ -2717,6 +2907,7 @@ const PropertyDetailPage = {
     };
 
     state.properties = state.properties || [];
+    copy.shortNumber = newShortNumber(copy.id, state.properties); // display number (2026-11-12), never copied from the source
     state.properties.push(copy);
     persist();
     Modal.close();

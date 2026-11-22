@@ -565,7 +565,8 @@ const ImportWizardPage = (function () {
               '<option value="">— Välj —</option>' +
               log.candidates.map(function (c) {
                 var n = (c.item.name || ((c.item.firstName||'') + ' ' + (c.item.lastName||'')).trim() || c.id);
-                return '<option value="' + c.id + '"' + (chosen === c.id ? ' selected' : '') + '>' + esc(n) + ' (' + c.id + ')</option>';
+                var shown = (typeof displayNumberOf === 'function') ? displayNumberOf(c.item) || c.id : c.id; // label only (2026-11-12)
+                return '<option value="' + c.id + '"' + (chosen === c.id ? ' selected' : '') + '>' + esc(n) + ' (' + esc(shown) + ')</option>';
               }).join('') +
             '</select>' +
             (log.required
@@ -707,6 +708,36 @@ const ImportWizardPage = (function () {
     if (btn) { btn.disabled = true; btn.textContent = 'Importerar…'; }
 
     var cfg              = ImportExportService.getConfig(_entityType);
+
+    /* P0 FINAL INTEGRATION (2026-10-18) — FAIL CLOSED, inte tyst trasigt:
+       `vift_invoices` och `vift_ronderingspass` skrivs numera ENDAST via
+       smala, radlåsta atomiska RPC:er (invoice_-funktionerna och
+       rondering_-funktionerna, se
+       state.js _doPersist()-kommentaren) — de finns inte längre med i
+       den generiska persist()-bundeln. Denna generiska importmotor
+       (samma kodväg som kunder/fastigheter/artiklar/personal) skulle
+       annars pusha importerade rader lokalt och sedan tyst förlita sig
+       på ett persist()-anrop som INTE LÄNGRE skickar dessa två nycklar
+       alls — importen skulle se ut att lyckas i UI:t men ALDRIG nå
+       servern. Detta upptäcktes under en grep-sweep av ALLA generiska
+       skrivvägar till dessa nycklar (inte bara InvoiceService.js/
+       RonderingService.js) — en reell regression denna release annars
+       hade introducerat tyst. Att faktiskt rutta CSV-bulkimport genom de
+       smala per-operation-RPC:erna (som inte är designade för godtyckliga
+       fält-patchar på BEFINTLIGA rader) är inte säkert att göra med den
+       rigör detta uppdrag kräver inom denna rundas tidsram — blockeras
+       därför explicit, synligt, istället för att tystas. Samma mönster
+       som AO/tid (`_isAoTimeImport` ovan) kan återanvändas för en framtida
+       egen leverans om bulkimport av fakturor/ronderingspass efterfrågas.
+       workOrders/timeEntries är INTE blockerade — de har redan sin egna
+       AOTimeSyncService-brygga (se _isAoTimeImport nedan). */
+    if (cfg.stateKey === 'invoices' || cfg.stateKey === 'ronderingspass') {
+      if (btn) { btn.disabled = false; btn.textContent = 'Importera'; }
+      showToast('Import av ' + (cfg.stateKey === 'invoices' ? 'fakturaunderlag' : 'ronderingspass') +
+        ' är tillfälligt avstängd (kräver en egen atomisk import-väg, planerad separat — se masterloggen).');
+      return;
+    }
+
     var arr              = (typeof state !== 'undefined') ? state[cfg.stateKey] : null;
     if (!arr) { if (btn) { btn.disabled = false; btn.textContent = 'Importera'; } return; }
 
@@ -716,6 +747,24 @@ const ImportWizardPage = (function () {
     var createdCount     = 0;
     var updatedCount     = 0;
     var skippedCount     = 0;
+
+    /* P0 AO/TID-FIX: `vift_workOrders`/`vift_timeEntries` har flyttats
+       bort ur den generiska persist()-bundeln (se state.js _doPersist()),
+       exakt som redan gällde för vift_projectDocuments — denna generiska
+       importmotor hanterar MÅNGA andra entitetstyper (kunder, fastigheter,
+       artiklar, personal) som INTE rörs av det, men för just dessa två
+       stateKeys måste varje rads create/update nu speglas via den
+       atomiska RPC-vägen (AOTimeSyncService), annars skulle importerade
+       AO:er/tidposter bara finnas lokalt tills nästa DataSync-poll
+       skriver över dem. `_isAoTimeImport` avgör om denna körning alls
+       behöver det extra steget — noll beteendeförändring för alla andra
+       importtyper. Varje rads enqueue() hamnar i AOTimeSyncService:s
+       EGEN, redan krasch-säkra outbox (localStorage, se dess tester) —
+       om fliken stängs/kraschar mitt i importen återupptas just DEN raden
+       automatiskt av nästa AOTimeSyncService.resumePending() (anropas vid
+       initState()), oberoende av om denna guide-sida själv finns kvar. */
+    var _isAoTimeImport = (cfg.stateKey === 'workOrders' || cfg.stateKey === 'timeEntries');
+    var _aoTimeSyncOps  = []; // { id, kind: 'create'|'patch', obj?, patch? }
 
     _validated.forEach(function (v) {
       var ri = v.rowIndex - 2;
@@ -738,6 +787,16 @@ const ImportWizardPage = (function () {
       function _createNew(baseObj) {
         var now  = new Date().toISOString();
         var extras = { id: newId(arr, cfg.idPrefix), createdAt: now, updatedAt: now };
+        /* 2026-11-12 (display-number round): newId() reads the digits of
+           every id as one number, so once a K3 UUID id exists in
+           customers/properties/propertyObjects it returns the SAME
+           "KU-3214...e+23"-style id for every imported row. Those three
+           collections use the K3 pattern instead: newSafeId() + a derived
+           display number. Other collections are unchanged. */
+        if (cfg.stateKey === 'customers' || cfg.stateKey === 'properties' || cfg.stateKey === 'propertyObjects') {
+          extras.id = newSafeId(cfg.idPrefix, arr);
+          extras.shortNumber = newShortNumber(extras.id, arr);
+        }
         /* Märk historiska importer så att automation kan ignorera dem */
         if (cfg.historicalImport) extras.historicalImport = true;
         var newObj = Object.assign(cfg.schemaFn(), baseObj || {}, extras);
@@ -745,6 +804,7 @@ const ImportWizardPage = (function () {
         arr.push(newObj);
         createdIds.push(newObj.id);
         createdCount++;
+        if (_isAoTimeImport) _aoTimeSyncOps.push({ id: newObj.id, kind: 'create', obj: newObj });
       }
 
       if (v.status === 'new') {
@@ -772,11 +832,13 @@ const ImportWizardPage = (function () {
         var beforeSnap = Object.assign({}, existing);
         var beforeAt   = existing.updatedAt || '';
 
+        var _appliedPatch = {};
         Object.keys(v.resolved).forEach(function (k) {
-          if (v.resolved[k] !== '' && v.resolved[k] != null) existing[k] = v.resolved[k];
+          if (v.resolved[k] !== '' && v.resolved[k] != null) { existing[k] = v.resolved[k]; _appliedPatch[k] = v.resolved[k]; }
         });
         var afterAt = new Date().toISOString();
         existing.updatedAt = afterAt;
+        _appliedPatch.updatedAt = afterAt;
         if (cfg.coerce) cfg.coerce(existing);
 
         updatedSnapshots.push({
@@ -786,10 +848,29 @@ const ImportWizardPage = (function () {
           updatedAtAfter:  afterAt
         });
         updatedCount++;
+        if (_isAoTimeImport) _aoTimeSyncOps.push({ id: existing.id, kind: 'patch', patch: _appliedPatch });
       }
     });
 
     persist();
+
+    /* P0 AO/TID-FIX: speglar varje AO-/tidpost-rad till den atomiska
+       RPC-vägen. Körs EFTER den synkrona lokala commit:en ovan (precis
+       som varje annan WorkOrderService/TimeService-metod i denna release
+       — lokal mutation är redan klar och synlig i UI:t; serverskrivningen
+       sker i bakgrunden via den delade, redan testade outboxen). Väntar
+       INTE på nätverket innan importloggen sparas/UI:t uppdateras — en
+       misslyckad enskild rads serverskrivning hamnar i outboxen (synlig
+       via AOTimeSyncService.pendingCount()) och rapporteras inte som ett
+       importfel här (den kan fortfarande lyckas senare, se resumePending()). */
+    if (_isAoTimeImport && _aoTimeSyncOps.length > 0 && typeof AOTimeSyncService !== 'undefined') {
+      var _aoTimeEntityType = (cfg.stateKey === 'workOrders') ? 'ao' : 'time';
+      AOTimeSyncService.bulkSync(_aoTimeEntityType, _aoTimeSyncOps, 'import-pending').then(function (r) {
+        if (r.failed && r.failed.length > 0) {
+          console.warn('[ImportWizardPage] ' + r.failed.length + ' rad(er) kunde inte synkas till servern omedelbart (ligger i outboxen för automatisk återförsök):', r.failed);
+        }
+      });
+    }
 
     var log = ImportExportService.saveImportLog(Object.assign(Schema.importLog(), {
       type:             _entityType,

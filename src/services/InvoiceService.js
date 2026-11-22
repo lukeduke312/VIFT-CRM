@@ -23,6 +23,104 @@ const InvoiceService = {
     return this.STATUS_TRANSITIONS[inv.status].slice();
   },
 
+  /* P0 FINAL INTEGRATION (INVOICE CORRECTION): gemensam väg till den nya
+     invoice-write Edge Function:en (se
+     supabase/migrations/20261018000003_invoice_set_status_atomic_rpc.sql
+     + 20261018000004_invoice_lines_and_create_atomic_rpc.sql). ALLA
+     mutationer i denna fil som förut gjorde lokal mutation + generisk
+     persist() går nu via denna — vift_invoices är därför borttagen ur
+     state.js _doPersist()-listan (se dess kommentar). */
+  /* P0-6 FIX: UUID-based idempotency key generator, same entropy source
+     already used throughout this engagement (AOTimeSyncService._uuid(),
+     RonderingSyncService, etc.) — used for invoice_append_checked()'s
+     new idempotency-key parameter so a network retry on invoice
+     creation can never double-create. */
+  _uuid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'idem-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+  },
+
+  _edgeBase() {
+    return (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+  },
+
+  async _call(action, body) {
+    // Serverns revision är kanonisk. Ingen blind omskrivning vid konflikt.
+    const revisionActions = ['setStatus', 'lineAdd', 'lineUpdate', 'lineDelete',
+      'draftDelete', 'discountSet', 'taxReductionSet', 'metaUpdate', 'approveStaleOverride'];
+    let requestBody = Object.assign({ action }, body);
+    if (revisionActions.includes(action)) {
+      const inv = typeof getInv === 'function' ? getInv(body.invoiceId) : null;
+      if (!inv) return { ok: false, error: 'Fakturan hittades inte lokalt. Ladda om sidan.' };
+      // Äldre fakturor saknar revision och behandlas som revision 0 av SQL.
+      const rawRevision = inv.revision == null ? 0 : inv.revision;
+      if (typeof rawRevision !== 'number' || !Number.isSafeInteger(rawRevision) || rawRevision < 0) {
+        return { ok: false, error: 'Ogiltig fakturarevision. Ladda om sidan.' };
+      }
+      requestBody.expectedRevision = rawRevision;
+    }
+    try {
+      const res = await fetch(this._edgeBase() + '/functions/v1/invoice-write', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''),
+          'Authorization': 'Bearer ' + (typeof Auth !== 'undefined' ? (Auth.getAccessToken() || '') : '')
+        },
+        body: JSON.stringify(requestBody)
+      });
+      const data = await res.json().catch(function() { return {}; });
+      if (!res.ok) {
+        const map = {
+          not_draft: 'Fakturan kan inte ändras i sin nuvarande status.',
+          stale_write: 'Fakturan har ändrats i en annan session. Ladda om innan du försöker igen.',
+          invalid_revision: 'Fakturans revisionsnummer saknas eller är ogiltigt. Ladda om sidan.',
+          line_not_found: 'Raden hittades inte.',
+          not_found: 'Fakturan hittades inte.',
+          forbidden: 'Du saknar behörighet för denna åtgärd.',
+          source_collision: 'En eller flera rader har hunnit fakturerats på en annan aktiv faktura.',
+          /* F-002 server codes (spec §0.1/§8 F2, added 2026-11-12) — shown
+             instead of the raw code once invoice-write enforces F-002. */
+          stale_price_unapproved: 'Fakturan har en ej godkänd prisavvikelse mot arbetsorderns fasta pris och kan inte skickas. Rätta beloppet eller godkänn avvikelsen med motivering.',
+          stale_snapshot_mismatch: 'Prisavvikelsen har ändrats sedan du öppnade dialogen. Ladda om fakturan och godkänn den aktuella avvikelsen.',
+          no_stale_discrepancy: 'Det finns ingen prisavvikelse att godkänna längre.',
+          invalid_justification: 'Motiveringen måste vara 10–2000 tecken.',
+          stale_check_unavailable: 'Prisavvikelsekontrollen kunde inte genomföras just nu. Fakturan skickas inte — försök igen.'
+        };
+        /* J1 (2026-11-12): + httpStatus/code (additive) so a caller can tell a
+           definite server answer from a lost response (network error below). */
+        return { ok: false, error: map[data.error] || data.error || ('http_' + res.status), httpStatus: res.status, code: data.error || null };
+      }
+      return { ok: true, data };
+    } catch (e) {
+      return { ok: false, error: 'Nätverksfel — kunde inte spara ändringen.', network: true };
+    }
+  },
+
+  /* Applicerar en servercanonisk faktura LOKALT, by id — rör aldrig
+     andra fakturor i state.invoices (samma invariant som
+     RonderingSyncService._applyLocally()). */
+  _applyLocally(inv) {
+    if (!inv || !inv.id) return;
+    state.invoices = state.invoices || [];
+    const idx = state.invoices.findIndex(i => i.id === inv.id);
+    if (idx >= 0) state.invoices[idx] = inv;
+    else state.invoices.unshift(inv);
+    try { localStorage.setItem('vift_invoices', JSON.stringify(state.invoices)); } catch (e) {}
+  },
+
+  _removeLocally(invId) {
+    state.invoices = (state.invoices || []).filter(i => i.id !== invId);
+    try { localStorage.setItem('vift_invoices', JSON.stringify(state.invoices)); } catch (e) {}
+  },
+
+  _applyActivityLog(log) {
+    if (Array.isArray(log)) {
+      state.activityLog = log;
+      try { localStorage.setItem('vift_activityLog', JSON.stringify(state.activityLog)); } catch (e) {}
+    }
+  },
+
   /* Skapa fakturaunderlag från avslutad AO.
      V32 §29 / V33 §6/§7 / V34 §7: går genom SAMMA source-aware motor som
      "Att fakturera"-kön (BillingQueueService) — ingen egen parallell
@@ -39,7 +137,7 @@ const InvoiceService = {
      till "Att fakturera" där hen kan se och medvetet välja. Partial
      billing är fortsatt fullt möjligt därifrån — bara inte via denna
      implicita AO-genväg. */
-  createFromAO(aoId) {
+  async createFromAO(aoId) {
     const ao = getAO(aoId);
     if (!ao) return null;
 
@@ -84,9 +182,10 @@ const InvoiceService = {
       };
     }
 
-    /* V33 §7: EN persist totalt — offerId sätts INNAN motorns enda
-       persist()-anrop via onInvoiceBuilt-hooken, inget andra skrivpass. */
-    const result = BillingQueueService.createInvoicesFromSourceKeys(
+    /* P0 FINAL INTEGRATION: BillingQueueService.createInvoicesFromSourceKeys
+       är nu async (atomisk append per skapad faktura, se dess egen
+       kommentar) — väntas in här istället för ett synkront anrop. */
+    const result = await BillingQueueService.createInvoicesFromSourceKeys(
       allSources.map(c => c.sourceKey),
       { onInvoiceBuilt: inv => { inv.offerId = ao.offerId || ''; } }
     );
@@ -97,21 +196,25 @@ const InvoiceService = {
     return { ok: true, invoice: result.created[0] };
   },
 
-  /* Tomt fakturaunderlag — fail closed (V33 §9). */
-  createBlank(customerId = '', opts = {}) {
+  /* Tomt fakturaunderlag — fail closed (V33 §9).
+     P0 FINAL INTEGRATION: atomisk append via invoice_append_checked
+     (server tilldelar id — ingen newId()-race) istället för lokal
+     mutation + generisk persist(). */
+  async createBlank(customerId = '', opts = {}) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
     const inv = this._buildInvoice([], customerId, '', '');
+    delete inv.id; // serversidigt tilldelat
     if (opts.title) inv.title = opts.title;
     if (opts.note)  inv.note  = opts.note;
     if (opts.dueDate) inv.dueDate = opts.dueDate;
-    state.invoices = state.invoices || [];
-    state.invoices.unshift(inv);
-    ActivityService.log('invoice_created', `Fakturaunderlag ${inv.id} skapat manuellt`,
-      { customerId, invoiceId: inv.id });
-    persist();
-    return { ok: true, invoice: inv };
+    const r = await this._call('appendChecked', { invoice: inv, idempotencyKey: 'vift-v2:' + this._uuid() });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
+    ActivityService.log('invoice_created', `Fakturaunderlag ${r.data.invoice.id} skapat manuellt`,
+      { customerId, invoiceId: r.data.invoice.id });
+    return { ok: true, invoice: r.data.invoice };
   },
 
   _buildInvoice(lines, customerId, propertyId, workOrderId) {
@@ -148,6 +251,167 @@ const InvoiceService = {
      divergera av misstag. */
   canEditDraft(inv) {
     return this.canEditLines(inv);
+  },
+
+  /* STAGING-granskning 2026-11-11 (F-002/AO-002-fyndet): en fakturarad med
+     sourceType 'fixed' snapshotar arbetsorderns fixedPrice vid skapandet.
+     Det är korrekt — en redan SKICKAD faktura ska inte tyst ändra belopp
+     bara därför att någon redigerar arbetsordern senare. Men om AO:ns
+     fixedPrice rättas EFTER att ett utkast redan skapats syns det annars
+     ingenstans — raden visar tyst det gamla, fel beloppet. Denna funktion
+     upptäcker avvikelsen så UI:t kan visa den (se InvoicesPage.js
+     InvoiceDetailPage._renderLines) — den ändrar ALDRIG beloppet själv,
+     exakt samma princip som validateFinancialState(): avvikelsen ska
+     synas, inte maskeras eller tystas rättas. */
+  staleFixedPriceLines(inv) {
+    if (!inv || !Array.isArray(inv.lines)) return [];
+    return inv.lines.filter(l => {
+      const ref = (l.sourceRefs || []).find(r => r.sourceType === 'fixed' && r.workOrderId);
+      if (!ref) return false;
+      const ao = (state.workOrders || []).find(a => a.id === ref.workOrderId);
+      if (!ao) return false;
+      const aoPrice = Number(ao.fixedPrice);
+      if (!Number.isFinite(aoPrice) || aoPrice <= 0) return false;
+      return Number(l.unitPrice) !== aoPrice;
+    });
+  },
+
+  /* ═══════════════════════════════════════════════════════════════════
+     F-002 HÅRD SPÄRR (2026-11-12, Lucas beslut ordagrant): "En känd
+     prisavvikelse ska hindra att fakturan markeras skickad tills den
+     korrigerats eller en behörig användare uttryckligen godkänt
+     avvikelsen med dokumenterad motivering. Inga automatiska
+     prisändringar."
+
+     Modell:
+       - staleDiscrepancySnapshot(inv): EXAKT vilken avvikelse som finns
+         just nu — per stale rad {lineId, workOrderId, lineUnitPrice,
+         aoFixedPrice}, sorterad på lineId.
+       - inv.staleOverrides[]: append-only historik av godkännanden
+         {id, approvedById, approvedByName, approvedAt, justification,
+         lines:[snapshot]}. ENDAST den SENASTE posten kan täcka en
+         avvikelse, och bara om VARJE nuvarande stale rad har en exakt
+         matchande post (samma lineId + workOrderId + fakturaradens pris +
+         AO:ns pris) i dess `lines`. Ändras AO-priset igen efter
+         godkännandet (eller blir en ANNAN rad stale) matchar snapshoten
+         inte längre → spärren gäller igen och ett NYTT godkännande krävs.
+         Ett godkännande för en avvikelse kan alltså aldrig tyst täcka en
+         senare, annan avvikelse.
+       - Ingenting här ändrar unitPrice eller något annat belopp.
+     Klientsidig spärr — servern MÅSTE upprätthålla samma regel (se
+     publiceringspaketets server-spec; invoice-write-källan finns inte i
+     detta repo). */
+  staleDiscrepancySnapshot(inv) {
+    return this.staleFixedPriceLines(inv).map(l => {
+      const ref = (l.sourceRefs || []).find(r => r.sourceType === 'fixed' && r.workOrderId);
+      const ao = (state.workOrders || []).find(a => a.id === ref.workOrderId);
+      return {
+        lineId:        String(l.id),
+        workOrderId:   String(ref.workOrderId),
+        lineUnitPrice: Number(l.unitPrice),
+        aoFixedPrice:  Number(ao.fixedPrice)
+      };
+    }).sort((a, b) => a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0);
+  },
+
+  latestStaleOverride(inv) {
+    const arr = inv && Array.isArray(inv.staleOverrides) ? inv.staleOverrides : [];
+    return arr.length ? arr[arr.length - 1] : null;
+  },
+
+  /* { stale:[snapshot...], override, covered, uncovered:[snapshot...],
+       supersededOverride } — `covered` är true ENDAST om det finns minst
+     en avvikelse OCH den senaste override-posten täcker varje rad exakt. */
+  staleOverrideStatus(inv) {
+    const stale = this.staleDiscrepancySnapshot(inv);
+    const override = this.latestStaleOverride(inv);
+    const covers = (item) => !!override && Array.isArray(override.lines) && override.lines.some(o =>
+      String(o.lineId) === item.lineId &&
+      String(o.workOrderId) === item.workOrderId &&
+      Number(o.lineUnitPrice) === item.lineUnitPrice &&
+      Number(o.aoFixedPrice) === item.aoFixedPrice);
+    const uncovered = stale.filter(it => !covers(it));
+    const covered = stale.length > 0 && uncovered.length === 0;
+    return {
+      stale, override, covered, uncovered,
+      supersededOverride: !!override && stale.length > 0 && !covered
+    };
+  },
+
+  /* Sant om 'skickad' just nu skulle nekas p.g.a. en ogodkänd avvikelse. */
+  isSendBlockedByStalePrice(inv) {
+    const st = this.staleOverrideStatus(inv);
+    return st.stale.length > 0 && !st.covered;
+  },
+
+  /* Behörighet för att godkänna en avvikelse: invoice_create OCH
+     admin_manage. Motivering: godkännandet innebär att ett KÄNT felaktigt
+     belopp medvetet skickas till kund — ett starkare beslut än vanlig
+     fakturaredigering. Den som bara har invoice_create kan fortfarande
+     RÄTTA beloppet (vanlig radredigering), men inte godkänna avvikelsen.
+     ('all'/superadmin uppfyller båda via Auth.can().) */
+  canApproveStaleOverride() {
+    return typeof Auth !== 'undefined' && Auth.can('invoice_create') && Auth.can('admin_manage');
+  },
+
+  STALE_OVERRIDE_MIN_JUSTIFICATION: 10,
+  STALE_OVERRIDE_MAX_JUSTIFICATION: 2000,
+
+  async approveStaleLineOverride(invId, justificationText) {
+    if (!this.canApproveStaleOverride()) {
+      return { ok: false, error: 'Du saknar behörighet att godkänna en prisavvikelse (kräver fakturering + administratörsbehörighet).' };
+    }
+    const inv = getInv(invId);
+    if (!inv) return { ok: false, error: 'Fakturan hittades inte.' };
+    if (this.getAllowedStatusTransitions(inv).indexOf('skickad') === -1) {
+      return { ok: false, error: `Fakturan är ${statusLabel(inv.status)} — ett godkännande av prisavvikelse är bara relevant innan den markeras skickad.` };
+    }
+    const justification = typeof justificationText === 'string' ? justificationText.trim() : '';
+    if (justification.length < this.STALE_OVERRIDE_MIN_JUSTIFICATION) {
+      return { ok: false, error: `En motivering på minst ${this.STALE_OVERRIDE_MIN_JUSTIFICATION} tecken krävs.` };
+    }
+    if (justification.length > this.STALE_OVERRIDE_MAX_JUSTIFICATION) {
+      return { ok: false, error: `Motiveringen får vara högst ${this.STALE_OVERRIDE_MAX_JUSTIFICATION} tecken.` };
+    }
+    const st = this.staleOverrideStatus(inv);
+    if (!st.stale.length) return { ok: false, error: 'Det finns ingen prisavvikelse att godkänna.' };
+    if (st.covered) return { ok: true, alreadyCovered: true };
+
+    const u = state.currentUser || {};
+    const override = {
+      id:             this._uuid(),
+      approvedById:   u.id || '',
+      approvedByName: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+      approvedAt:     new Date().toISOString(),
+      justification:  justification,
+      lines:          st.stale.map(x => Object.assign({}, x))
+    };
+    // Samma etablerade skrivväg som alla andra fakturamutationer
+    // (invoice-write EF, expectedRevision skickas via revisionActions).
+    // Payloaden innehåller ENDAST godkännandet — inga rader/belopp.
+    const r = await this._call('approveStaleOverride', { invoiceId: invId, override, idempotencyKey: this._uuid() });
+    if (!r.ok) {
+      if (/unknown_action|invalid_action|unsupported|http_404/i.test(String(r.error || ''))) {
+        return { ok: false, error: 'Servern stöder ännu inte godkännande av prisavvikelser (invoice-write saknar åtgärden approveStaleOverride). Fakturan förblir spärrad — rätta beloppet istället.' };
+      }
+      return r;
+    }
+    // Fail closed: lita bara på serverns kanoniska faktura, och bara om
+    // den faktiskt bär EXAKT detta godkännande som senaste post.
+    const canon = r.data && r.data.invoice;
+    const canonLatest = canon ? this.latestStaleOverride(canon) : null;
+    if (!canonLatest || canonLatest.id !== override.id) {
+      return { ok: false, error: 'Servern bekräftade inte att godkännandet sparades — fakturan förblir spärrad.' };
+    }
+    this._applyLocally(canon);
+    if (Array.isArray(r.data.activityLog)) {
+      this._applyActivityLog(r.data.activityLog);
+    } else if (typeof ActivityService !== 'undefined') {
+      ActivityService.log('invoice_stale_override_approved',
+        `Prisavvikelse på ${invId} godkänd av ${override.approvedByName || 'okänd'}: ${justification}`,
+        { invoiceId: invId, customerId: inv.customerId || '' });
+    }
+    return { ok: true, override: canonLatest };
   },
 
   /* V35 §5/§13: central finansiell invariant. Beräknas via calcSummary()
@@ -257,7 +521,7 @@ const InvoiceService = {
      sourceId. Radens type/source-LABEL (Tid/Material/Fastpris/Övrigt/
      Fritext) får dock fortsatt sättas av UI:t — det är bara identitet/
      claim-fälten som är skyddade. */
-  addLine(invId, lineData) {
+  async addLine(invId, lineData) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -277,9 +541,11 @@ const InvoiceService = {
       id: 'L' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       sourceId: ''
     });
-    inv.lines.push(line);
-    inv.updatedAt = new Date().toISOString();
-    persist();
+    // P0 FINAL INTEGRATION: atomisk append av EN redan validerad rad,
+    // istället för lokal mutation + generisk persist().
+    const r = await this._call('lineAdd', { invoiceId: invId, line });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
     return { ok: true, line };
   },
 
@@ -297,7 +563,7 @@ const InvoiceService = {
      avdrag byggs en kopia av fakturan med ändringen applicerad, valideras,
      och HELA anropet nekas om ogiltigt — originalraden ligger kvar
      oförändrad, ingen persist. */
-  updateLine(invId, lineId, data) {
+  async updateLine(invId, lineId, data) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -325,9 +591,11 @@ const InvoiceService = {
       return { ok: false, error: 'ROT/RUT-avdraget är större än fakturans nya totalsumma. Justera avdraget innan raden ändras.' };
     }
 
-    Object.assign(line, merged);
-    inv.updatedAt = new Date().toISOString();
-    persist();
+    // P0 FINAL INTEGRATION: atomisk patch av EN rad (redan validerad),
+    // istället för lokal mutation + generisk persist().
+    const r = await this._call('lineUpdate', { invoiceId: invId, lineId, patch: merged });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
     return { ok: true };
   },
 
@@ -342,7 +610,7 @@ const InvoiceService = {
      ROT/RUT-avdrag nekas HELA anropet. Raden ligger kvar (sourceRefs
      oförändrade, ingen reconciliation, ingen persist) tills avdraget
      justerats. */
-  deleteLine(invId, lineId) {
+  async deleteLine(invId, lineId) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -361,13 +629,17 @@ const InvoiceService = {
     const affectedAoIds = new Set();
     if (line) (line.sourceRefs || []).forEach(r => { if (r.workOrderId) affectedAoIds.add(r.workOrderId); });
 
-    inv.lines = inv.lines.filter(l => l.id !== lineId);
-    inv.updatedAt = new Date().toISOString();
+    // P0 FINAL INTEGRATION: atomisk borttagning av EN rad istället för
+    // lokal mutation + generisk persist(). reconcileWorkOrderBilling()
+    // (vift_workOrders, annan nyckel) körs fortfarande client-side EFTER
+    // ett lyckat svar, oförändrat.
+    const r = await this._call('lineDelete', { invoiceId: invId, lineId });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
 
     if (typeof BillingQueueService !== 'undefined') {
       affectedAoIds.forEach(aoId => BillingQueueService.reconcileWorkOrderBilling(aoId));
     }
-    persist();
     return { ok: true };
   },
 
@@ -376,7 +648,7 @@ const InvoiceService = {
      raderas (samma spärr som line-editing). Samlar sourceRefs → reconcilerar
      berörda AO → EN persist. Skickade/betalda/förfallna kan aldrig raderas
      härifrån; makulering hanteras via status, inte hard delete (§8). */
-  deleteDraft(invId) {
+  async deleteDraft(invId) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -388,15 +660,17 @@ const InvoiceService = {
     const affectedAoIds = new Set();
     (inv.lines || []).forEach(l => (l.sourceRefs || []).forEach(r => { if (r.workOrderId) affectedAoIds.add(r.workOrderId); }));
 
-    state.invoices = (state.invoices || []).filter(i => i.id !== invId);
+    // P0 FINAL INTEGRATION: atomisk borttagning (RPC:n skriver även en
+    // kanonisk activityLog-post i samma transaktion) istället för lokal
+    // mutation + generisk persist().
+    const r = await this._call('draftDelete', { invoiceId: invId });
+    if (!r.ok) return r;
+    this._removeLocally(invId);
+    this._applyActivityLog(r.data.activityLog);
 
     if (typeof BillingQueueService !== 'undefined') {
       affectedAoIds.forEach(aoId => BillingQueueService.reconcileWorkOrderBilling(aoId));
     }
-    if (typeof ActivityService !== 'undefined') {
-      ActivityService.log('invoice_deleted', `Fakturautkast ${invId} raderat`, { invoiceId: invId, customerId: inv.customerId });
-    }
-    persist();
     return { ok: true };
   },
 
@@ -419,7 +693,22 @@ const InvoiceService = {
      — fakturan är återigen ett obehandlat utkast och ska inte bära kvar
      tidsstämplar från ett tidigare, nu ogiltigförklarat, skede. Historiken
      finns kvar i ActivityService-loggen. */
-  setStatus(invId, status) {
+  /* P0 PART B (INVOICE PAYMENT-STATUS R1): går nu via den atomiska
+     invoice_set_status-RPC:n (radlåst, server-sidig övergångs- och
+     kollisionskontroll, kanonisk activityLog-post i samma transaktion)
+     istället för lokal mutation + generisk whole-array persist() — se
+     migrationens filhuvud för varför (två skrivare som samtidigt ändrar
+     status på OLIKA fakturor kunde tidigare tyst radera varandras
+     ändring). Funktionen är nu async; de två anropsställena i
+     InvoicesPage.js är uppdaterade till att invänta den — se 02_diffs/.
+
+     SCOPE (oförändrat beteende, se migrationens filhuvud/README §2):
+     endast SJÄLVA statusövergången + dess kollisionskontroll är
+     flyttad server-sidigt. reconcileWorkOrderBilling() (rör
+     vift_workOrders, en annan nyckel) körs fortfarande client-side
+     EFTER ett lyckat serversvar, oförändrad — den kör bara vid
+     makulering/återaktivering, inte vid vanliga statusändringar. */
+  async setStatus(invId, status) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -431,41 +720,66 @@ const InvoiceService = {
     const prevStatus = inv.status;
     if (status === prevStatus) return { ok: true };
 
-    const allowed = this.STATUS_TRANSITIONS[prevStatus] || [];
-    if (allowed.indexOf(status) === -1) {
-      return { ok: false, error: `Status kan inte ändras från ${statusLabel(prevStatus)} till ${statusLabel(status)}.` };
-    }
-
-    const reactivating = prevStatus === 'makulerad' && status === 'utkast';
-    if (reactivating && inv.sourceAware && typeof BillingQueueService !== 'undefined') {
-      const otherClaims = BillingQueueService.claimedByOtherActiveInvoices(inv.id);
-      const collision = (inv.lines || []).some(l => (l.sourceRefs || []).some(r => otherClaims.has(r.sourceKey)));
-      if (collision) {
-        return { ok: false, error: 'En eller flera rader i denna faktura har hunnit fakturerats på en annan aktiv faktura. Kan inte återaktivera.' };
+    /* F-002 HÅRD SPÄRR (se staleDiscrepancySnapshot()): ingen övergång
+       till 'skickad' så länge en känd prisavvikelse saknar ett giltigt,
+       matchande godkännande. Noll mutation, inget serveranrop. */
+    if (status === 'skickad') {
+      const st = this.staleOverrideStatus(inv);
+      if (st.stale.length && !st.covered) {
+        return {
+          ok: false,
+          code: 'stale_price_unapproved',
+          staleLineIds: st.uncovered.map(x => x.lineId),
+          error: (st.supersededOverride
+            ? 'Prisavvikelsen har ändrats sedan den senast godkändes — det tidigare godkännandet gäller inte längre. '
+            : '') +
+            `Fakturan kan inte markeras skickad: ${st.uncovered.length === 1 ? 'en fastprisrad' : st.uncovered.length + ' fastprisrader'} matchar inte arbetsorderns nuvarande pris. ` +
+            'Rätta beloppet på fakturaraden, eller låt en behörig användare godkänna avvikelsen med en motivering.'
+        };
       }
     }
 
-    inv.status    = status;
-    inv.updatedAt = new Date().toISOString();
-    if (status === 'betald') inv.paidAt = new Date().toISOString();
-    if (status === 'skickad') inv.sentAt = new Date().toISOString();
-    if (reactivating) { inv.sentAt = ''; inv.paidAt = ''; }
-    ActivityService.log('invoice_status',
-      `Faktura ${inv.id} ändrad till ${statusLabel(status)}`,
-      { customerId: inv.customerId, invoiceId: inv.id });
+    const r = await this._callSetStatus(invId, status);
+    if (!r.ok) return r;
 
-    if (inv.sourceAware && typeof BillingQueueService !== 'undefined') {
+    if (!r.changed) return { ok: true };
+
+    // Applicera den server-canoniska fakturan OCH activityLog lokalt
+    // (by id — rör inga andra fakturor/aktiviteter i arrayerna).
+    const idx = state.invoices.findIndex(i => i.id === invId);
+    if (idx >= 0) state.invoices[idx] = r.invoice;
+    if (Array.isArray(r.activityLog)) state.activityLog = r.activityLog;
+    try {
+      localStorage.setItem('vift_invoices', JSON.stringify(state.invoices));
+      localStorage.setItem('vift_activityLog', JSON.stringify(state.activityLog));
+    } catch (e) {}
+
+    const reactivating = prevStatus === 'makulerad' && status === 'utkast';
+    if (r.invoice.sourceAware && typeof BillingQueueService !== 'undefined') {
       const becameInactive = status === 'makulerad' && prevStatus !== 'makulerad';
       const becameActive   = reactivating;
       if (becameInactive || becameActive) {
         const affectedAoIds = new Set();
-        (inv.lines || []).forEach(l => (l.sourceRefs || []).forEach(r => { if (r.workOrderId) affectedAoIds.add(r.workOrderId); }));
+        (r.invoice.lines || []).forEach(l => (l.sourceRefs || []).forEach(x => { if (x.workOrderId) affectedAoIds.add(x.workOrderId); }));
         affectedAoIds.forEach(aoId => BillingQueueService.reconcileWorkOrderBilling(aoId));
       }
     }
 
-    persist();
     return { ok: true };
+  },
+
+  /* P0 FINAL INTEGRATION: konsoliderad till den gemensamma invoice-write
+     EF:en (se _call() ovan) istället för en egen invoice-set-status EF
+     — samma dispatcher-stil som rondering-pass-write. */
+  async _callSetStatus(invId, status) {
+    const r = await this._call('setStatus', { invoiceId: invId, status });
+    if (!r.ok) {
+      const map = {
+        'invalid_transition': `Status kan inte ändras från ${statusLabel((getInv(invId)||{}).status)} till ${statusLabel(status)}.`,
+      };
+      return { ok: false, error: map[r.error] || r.error };
+    }
+    return { ok: true, invoice: r.data.invoice, activityLog: r.data.activityLog, changed: r.data.changed };
   },
 
   /* V35 §1/§2 / V36 §1: kanonisk 0-safe momsnormalisering. `vatRate || 25`
@@ -544,7 +858,7 @@ const InvoiceService = {
      skulle sänka fakturans nya totalsumma under ett redan satt ROT/RUT-
      avdrag nekas helt — avdraget måste minskas/tas bort (setTaxReduction)
      innan rabatten kan sparas. */
-  setDiscount(invId, type, value) {
+  async setDiscount(invId, type, value) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -575,9 +889,9 @@ const InvoiceService = {
       return { ok: false, error: 'Rabatten skulle göra ROT/RUT-avdraget större än fakturans nya totalsumma. Minska eller ta bort avdraget innan du sparar rabatten.' };
     }
 
-    inv.discount = { type: t, value: finalValue };
-    inv.updatedAt = new Date().toISOString();
-    persist();
+    const r = await this._call('discountSet', { invoiceId: invId, discount: { type: t, value: finalValue } });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
     return { ok: true };
   },
 
@@ -591,7 +905,7 @@ const InvoiceService = {
      deleteLine använder (validateFinancialState via _prospectiveCheck) —
      inte längre en egen, lokal jämförelse mot `calcSummary(inv)` innan
      ändringen. Samma regler, en enda kodväg. */
-  setTaxReduction(invId, type, amount, basis, note) {
+  async setTaxReduction(invId, type, amount, basis, note) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -621,9 +935,11 @@ const InvoiceService = {
       return { ok: false, error: 'Avdragsbeloppet kan inte vara större än fakturans totalsumma.' };
     }
 
-    inv.taxReduction = { type: t, amount: finalAmount, basis: finalBasis, note: note || '' };
-    inv.updatedAt = new Date().toISOString();
-    persist();
+    const r = await this._call('taxReductionSet', {
+      invoiceId: invId, taxReduction: { type: t, amount: finalAmount, basis: finalBasis, note: note || '' }
+    });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
     return { ok: true };
   },
 
@@ -631,7 +947,7 @@ const InvoiceService = {
      InvoicesPage.openEditMeta() som tidigare muterade fakturan direkt och
      körde persist() i sidan (ingen behörighetskontroll, inget draft-lock).
      Endast definierade fält tillåts; allt annat i `data` ignoreras. */
-  updateMeta(invId, data) {
+  async updateMeta(invId, data) {
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
     }
@@ -641,11 +957,13 @@ const InvoiceService = {
       return { ok: false, error: `Fakturan är ${statusLabel(inv.status)} och kan inte ändras.` };
     }
     const safeData = data || {};
-    if (typeof safeData.customerReference === 'string') inv.customerReference = safeData.customerReference.trim();
-    if (typeof safeData.ocr === 'string') inv.ocr = safeData.ocr.trim();
-    if (typeof safeData.note === 'string') inv.note = safeData.note.trim();
-    inv.updatedAt = new Date().toISOString();
-    persist();
+    const patch = {};
+    if (typeof safeData.customerReference === 'string') patch.customerReference = safeData.customerReference.trim();
+    if (typeof safeData.ocr === 'string') patch.ocr = safeData.ocr.trim();
+    if (typeof safeData.note === 'string') patch.note = safeData.note.trim();
+    const r = await this._call('metaUpdate', { invoiceId: invId, patch });
+    if (!r.ok) return r;
+    this._applyLocally(r.data.invoice);
     return { ok: true };
   },
 

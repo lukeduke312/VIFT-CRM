@@ -286,14 +286,15 @@ const RonderingPage = {
           <input type="number" id="np-dur" value="90" min="15" step="15">
         </div>`,
       buttons: [
-        { label: 'Skapa tillfälle', cls: 'btn bp bfull', onClick: () => {
+        { label: 'Skapa tillfälle', cls: 'btn bp bfull', onClick: async () => {
           const date = (document.getElementById('np-date')||{}).value||'';
           if (!date) { showToast('Välj datum'); return; }
           const time = (document.getElementById('np-time')||{}).value||'';
           const staffEl = document.getElementById('np-staff');
           const staffIds = staffEl ? Array.from(staffEl.selectedOptions).map(o=>o.value) : [];
           const dur = parseInt((document.getElementById('np-dur')||{}).value||'90',10)||90;
-          RonderingService.createPassFromRondering(ronId, { scheduledDate: date, scheduledTime: time, staffIds, estimatedDurationMins: dur });
+          const pass = await RonderingService.createPassFromRondering(ronId, { scheduledDate: date, scheduledTime: time, staffIds, estimatedDurationMins: dur });
+          if (!pass) return; // felet är redan visat av RonderingService
           showToast('Tillfälle skapat');
           Modal.close();
           this._renderDetail(document.getElementById('ron-tab-content'));

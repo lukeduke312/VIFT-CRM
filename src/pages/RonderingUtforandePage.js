@@ -62,7 +62,7 @@ const RonderingUtforandePage = {
     this._renderAvvImgList();
   },
 
-  render(params) {
+  async render(params) {
     const el = document.getElementById('pg-rondering-utfor-content');
     if (!el) return;
 
@@ -85,7 +85,7 @@ const RonderingUtforandePage = {
       if (!pass) {
         const ron = getRon(ronId);
         if (ron && (ron.categories||[]).length > 0) {
-          pass = RonderingService.createPassFromRondering(ronId, {
+          pass = await RonderingService.createPassFromRondering(ronId, {
             scheduledDate: tdy(),
             scheduledTime: '',
             staffIds: ron.performedBy ? [ron.performedBy] : []
@@ -104,12 +104,18 @@ const RonderingUtforandePage = {
     this.ronderingId = pass.ronderingId;
     if (typeof LiveSync !== 'undefined') LiveSync.start(pass.id);
 
-    // Auto-start if planerat
+    /* P0 PART B (RONDERINGSPASS R1): auto-start går nu via den atomiska
+       rondering_pass_auto_start-RPC:n (idempotent no-op om redan startat)
+       istället för lokal mutation + generisk persist(). Avvaktas INTE
+       (fire-and-forget) — en misslyckad auto-start är inte kritisk
+       (passet förblir 'planerat' lokalt och nästa punktändring
+       auto-startar det ändå via rondering_point_patch), men vi
+       re-renderar med den uppdaterade lokala kopian om den hinner före
+       första paint. */
     if (pass.status === 'planerat') {
-      pass.status = 'pågående';
-      pass.startedAt = new Date().toISOString();
-      pass.updatedAt = new Date().toISOString();
-      persist();
+      RonderingSyncService.autoStart(pass.id).then(r => {
+        if (r.ok && this.passId === pass.id) this._refresh();
+      });
     }
 
     this._renderAll(el, pass);
@@ -269,8 +275,8 @@ const RonderingUtforandePage = {
 
   /* ── Actions ─────────────────────────── */
 
-  markOk(passId, catId, ptId) {
-    this._setPointStatus(passId, catId, ptId, 'ok', '');
+  async markOk(passId, catId, ptId) {
+    await this._setPointStatus(passId, catId, ptId, 'ok', '');
   },
 
   openAvvModal(passId, catId, ptId) {
@@ -385,7 +391,7 @@ const RonderingUtforandePage = {
     });
   },
 
-  _saveAvv(passId, catId, ptId, canAO) {
+  async _saveAvv(passId, catId, ptId, canAO) {
     const title    = ((document.getElementById('avv-title')||{}).value||'').trim();
     if (!title) { showToast('Ange rubrik'); return; }
     const comment           = (document.getElementById('avv-comment')||{}).value||'';
@@ -422,11 +428,18 @@ const RonderingUtforandePage = {
     });
 
     // Update PASS point status
-    this._setPointStatus(passId, catId, ptId, 'anmärkning', comment, avv.id);
+    await this._setPointStatus(passId, catId, ptId, 'anmärkning', comment, avv.id);
 
     if (createAO) {
-      const ao = RonderingService.createAOFromAvvikelse(avv.id, passId);
-      if (ao) showToast('AO skapad: ' + ao.id);
+      // R3-A FIX: createAOFromAvvikelse() can now reject (the ACK-then-
+      // commit fix) if the server definitely rejects the AO create —
+      // surface it instead of letting it become an unhandled rejection.
+      try {
+        const ao = await RonderingService.createAOFromAvvikelse(avv.id, passId);
+        if (ao) showToast('AO skapad: ' + WorkOrderService.displayNumberOrPending(ao));
+      } catch (e) {
+        showToast('Arbetsordern kunde inte skapas: ' + (e && e.message || 'okänt fel'));
+      }
     }
 
     Modal.close();
@@ -440,9 +453,9 @@ const RonderingUtforandePage = {
       body: `<div class="fg"><label>Kommentar (valfri)</label>
         <input type="text" id="ej-comment" placeholder="Varför ej aktuell..."></div>`,
       buttons: [
-        { label: 'Bekräfta', cls: 'btn bp bfull', onClick: () => {
+        { label: 'Bekräfta', cls: 'btn bp bfull', onClick: async () => {
           const comment = (document.getElementById('ej-comment')||{}).value||'';
-          this._setPointStatus(passId, catId, ptId, 'ej_aktuell', comment);
+          await this._setPointStatus(passId, catId, ptId, 'ej_aktuell', comment);
           Modal.close();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -450,7 +463,7 @@ const RonderingUtforandePage = {
     });
   },
 
-  undoPt(passId, catId, ptId) {
+  async undoPt(passId, catId, ptId) {
     const pass = getPass(passId);
     if (!pass) return;
     const cat = (pass.categories||[]).find(c=>c.id===catId);
@@ -460,43 +473,40 @@ const RonderingUtforandePage = {
     if (pt.deviationId) {
       RonderingService.updateAvvikelse(pt.deviationId, { status: 'avskriven' });
       // Remove from RON deviationIds too
+      // (vift_ronderingar — separat nyckel, UTANFÖR denna leverans'
+      // scope; se README §6 "Kvarvarande risker" för motivering.)
       const ron = getRon(pass.ronderingId);
       if (ron) {
         ron.deviationIds = (ron.deviationIds||[]).filter(id=>id!==pt.deviationId);
         ron.updatedAt = new Date().toISOString();
+        persist();
       }
     }
-    pt.status = ''; pt.comment = ''; pt.deviationId = null;
-    pt.workOrderId = null; pt.checkedAt = null; pt.checkedBy = null;
-    this._updateSummary(pass);
-    persist();
+    // P0 PART B (RONDERINGSPASS R1): punkt-reset går nu via den atomiska
+    // rondering_point_patch-RPC:n (p_is_reset=true) istället för lokal
+    // mutation + generisk persist().
+    const r = await RonderingSyncService.pointReset(passId, catId, ptId);
+    if (!r.ok) { showToast('Kunde inte ångra: ' + r.error); return; }
     this._refresh();
   },
 
-  createAO(avvId) {
-    const ao = RonderingService.createAOFromAvvikelse(avvId, this.passId);
-    if (ao) { showToast('AO ' + ao.id + ' skapad'); this._refresh(); }
+  async createAO(avvId) {
+    try {
+      const ao = await RonderingService.createAOFromAvvikelse(avvId, this.passId);
+      if (ao) { showToast('AO ' + WorkOrderService.displayNumberOrPending(ao) + ' skapad'); this._refresh(); }
+    } catch (e) {
+      showToast('Arbetsordern kunde inte skapas: ' + (e && e.message || 'okänt fel'));
+    }
   },
 
-  _setPointStatus(passId, catId, ptId, status, comment, deviationId) {
-    const pass = getPass(passId);
-    if (!pass) return;
-    const cat = (pass.categories||[]).find(c=>c.id===catId);
-    if (!cat) return;
-    const pt = (cat.points||[]).find(p=>p.id===ptId);
-    if (!pt) return;
-    pt.status    = status;
-    pt.comment   = comment || '';
-    pt.checkedAt = new Date().toISOString();
-    pt.checkedBy = state.currentUser ? state.currentUser.id : null;
-    if (deviationId) pt.deviationId = deviationId;
-    this._updateSummary(pass);
-    if (pass.status === 'planerat') {
-      pass.status    = 'pågående';
-      pass.startedAt = pass.startedAt || new Date().toISOString();
-    }
-    pass.updatedAt = new Date().toISOString();
-    persist();
+  // P0 PART B (RONDERINGSPASS R1): kärnmutationen går nu via den atomiska
+  // rondering_point_patch-RPC:n — radlåst, server-sidig summary-
+  // omräkning och auto-start, se migrationens filhuvud. Detta ÄR
+  // fixen för det diagnostiserade dataförlust-racet (två inspektörer
+  // som kryssar OLIKA punkter på SAMMA pass samtidigt).
+  async _setPointStatus(passId, catId, ptId, status, comment, deviationId) {
+    const r = await RonderingSyncService.pointPatch(passId, catId, ptId, status, comment || '', deviationId || null, null);
+    if (!r.ok) { showToast('Kunde inte spara: ' + r.error); return; }
     this._refresh();
   },
 
@@ -514,31 +524,34 @@ const RonderingUtforandePage = {
     pass.summary = { total, ok, anmärkningar, ejKontrollerad, ejAktuell };
   },
 
-  _saveNote() {
+  // P0 PART B (RONDERINGSPASS R1): går nu via rondering_pass_save_note-RPC:n.
+  async _saveNote() {
     const pass = getPass(this.passId);
     if (!pass) return;
     const note = (document.getElementById('pass-exec-note')||{}).value||'';
-    pass.internalNote = note;
-    pass.updatedAt = new Date().toISOString();
-    persist();
+    const r = await RonderingSyncService.saveNote(this.passId, note);
+    if (!r.ok) { showToast('Kunde inte spara anteckning: ' + r.error); return; }
     showToast('Anteckning sparad');
   },
 
-  complete() {
+  // P0 PART B (RONDERINGSPASS R1): status (slutfört/har_avvikelser) och
+  // completedBy beslutas nu SERVER-SIDIGT av rondering_pass_complete
+  // (server räknar om summary från den låsta, faktiska raden — klienten
+  // kan inte längre självrapportera en falsk slutstatus). Osparad
+  // anteckning i textrutan sparas EXPLICIT först (samma UX som tidigare,
+  // där complete() även tog med textarea-värdet).
+  async complete() {
     const pass = getPass(this.passId);
     if (!pass) return;
     const noteEl = document.getElementById('pass-exec-note');
-    if (noteEl) { pass.internalNote = noteEl.value; }
-    const stats = RonderingService.getPassStats(pass.id);
-    const hasAnm = stats && stats.anmärkningar > 0;
-    pass.status      = hasAnm ? 'har_avvikelser' : 'slutfört';
-    pass.completedAt = new Date().toISOString();
-    pass.completedBy = state.currentUser ? state.currentUser.id : null;
-    pass.updatedAt   = new Date().toISOString();
-    this._updateSummary(pass);
-    persist();
+    if (noteEl && noteEl.value !== (pass.internalNote || '')) {
+      const noteResult = await RonderingSyncService.saveNote(this.passId, noteEl.value);
+      if (!noteResult.ok) { showToast('Kunde inte spara anteckning: ' + noteResult.error); return; }
+    }
+    const r = await RonderingSyncService.complete(this.passId);
+    if (!r.ok) { showToast('Kunde inte slutföra: ' + r.error); return; }
     showToast('Rondering slutförd!');
-    Router.showPage('pg-rondering-rapport', { passId: pass.id });
+    Router.showPage('pg-rondering-rapport', { passId: this.passId });
   },
 
   _refresh() {
@@ -828,13 +841,17 @@ const RonderingRapportPage = {
       </div>`;
   },
 
-  createAO(avvId, passId) {
-    const ao = RonderingService.createAOFromAvvikelse(avvId, passId);
-    if (ao) {
-      showToast('AO ' + ao.id + ' skapad');
-      const params = { ronderingId: (getAvv(avvId)||{}).ronderingId };
-      if (passId) params.passId = passId;
-      this.render(params);
+  async createAO(avvId, passId) {
+    try {
+      const ao = await RonderingService.createAOFromAvvikelse(avvId, passId);
+      if (ao) {
+        showToast('AO ' + WorkOrderService.displayNumberOrPending(ao) + ' skapad');
+        const params = { ronderingId: (getAvv(avvId)||{}).ronderingId };
+        if (passId) params.passId = passId;
+        this.render(params);
+      }
+    } catch (e) {
+      showToast('Arbetsordern kunde inte skapas: ' + (e && e.message || 'okänt fel'));
     }
   }
 };

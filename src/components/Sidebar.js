@@ -19,7 +19,6 @@ const Sidebar = {
     { section: 'Kund & Sälj' },
     { id: 'pg-crm',         icon: 'users',           label: 'Kunder' },
     { id: 'pg-objects',     icon: 'building-2',      label: 'Fastigheter',  badgeKey: 'serviceOverdue' },
-    { id: 'pg-service-intervals', icon: 'tool',      label: 'Serviceintervall', badgeKey: 'serviceOverdue' },
     { id: 'pg-offer',       icon: 'file-text',       label: 'Offerter' },
     { id: 'pg-sales',       icon: 'target',          label: 'Säljchanser',  badgeKey: 'salesNew' },
     { id: 'pg-contracts',   icon: 'file-check',      label: 'Kontrakt' },
@@ -263,8 +262,7 @@ const Sidebar = {
       { key: 'salesNew',           navId: 'nav-pg-sales' },
       { key: 'activitiesOverdue',  navId: 'nav-pg-activities' },
       { key: 'operationsAlert',    navId: 'nav-pg-operations' },
-      { key: 'serviceOverdue',     navId: 'nav-pg-objects' },
-      { key: 'serviceOverdue',     navId: 'nav-pg-service-intervals' }
+      { key: 'serviceOverdue',     navId: 'nav-pg-objects' }
     ].forEach(({ key, navId }) => {
       const badge  = this._getBadge(key);
       const navBtn = document.getElementById(navId);

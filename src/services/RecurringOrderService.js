@@ -117,28 +117,47 @@ const RecurringOrderService = {
       recurringOrderId: ro.id
     };
 
-    const ao = WorkOrderService.create(aoData);
+    /* R3-A FIX (independent-reviewer finding, round 4): `lastCreatedDate`/
+       `nextDate` (and a status flip to "avslutad" if this was the last
+       occurrence) used to advance SYNCHRONOUSLY, right after
+       `WorkOrderService.create()` returned its optimistic, not-yet-
+       ACKed object. If the server later rejected the create, the
+       schedule had ALREADY moved past this occurrence — the recurring
+       order would silently never actually get this AO, with no error
+       surfaced anywhere (the caller, `RecurringPage._createAO()`, only
+       sees the synchronous `{ok:true, ao}` return and shows "AO
+       skapad" immediately). Fix: the schedule advancement, the
+       ActivityService log entry, and the create() rejection path all
+       move into `onSettled`, firing only once the server has actually
+       confirmed the AO — mirroring the same fix applied to the offer→AO
+       conversion flow in `PageShells.js`. The synchronous return value
+       is kept (same shape, `{ok:true, ao}`) so `RecurringPage._createAO()`
+       keeps working for the OPTIMISTIC navigation/toast, but the
+       definitive schedule state only exists after a real ACK. */
+    /* B1 FIX (independent-reviewer finding, round 5): the actual
+       schedule-advancement/log-entry logic moved OUT of this in-memory
+       `onSettled` and into the DURABLE 'recurring_ao_created' intent
+       handler (registered once below, at file load) — see
+       AOTimeSyncService.js's header and PageShells.js's matching fix
+       for the offer->AO flow. `fromDate` is captured HERE, now, into
+       the durable intent descriptor — never recomputed from `ro.
+       nextDate` inside the handler, which could already have been
+       advanced by the time the handler actually runs (same-session
+       immediately, or on a future reload). */
+    const ao = WorkOrderService.create(aoData, {
+      onSettledIntent: { kind: 'recurring_ao_created', refId: ro.id, fromDate: ro.nextDate || tdy() },
+      onSettled: (r) => {
+        if (r.final && !r.ok) {
+          if (typeof showToast === 'function') {
+            showToast(`Arbetsordern för "${ro.title}" kunde inte skapas (${r.error || 'okänt fel'}) — schemat har INTE flyttats fram, försök igen.`);
+          }
+        }
+        // ok:true's actual effect (schedule advance, log) happens in the
+        // durable handler, not here — this callback is just same-session
+        // UI feedback for the rejection case above.
+      }
+    });
 
-    // Beräkna nästa datum
-    const days = this.getDaysForInterval(ro);
-    const nextTs  = new Date(ro.nextDate || tdy());
-    nextTs.setDate(nextTs.getDate() + days);
-    const nextDate = nextTs.toISOString().split('T')[0];
-
-    const updates = {
-      lastCreatedDate: tdy(),
-      nextDate
-    };
-
-    // Kontrollera endDate / tillsvidare
-    if (!ro.tillsvidare && ro.endDate && nextDate > ro.endDate) {
-      updates.status = 'avslutad';
-    }
-
-    this.update(roId, updates);
-    ActivityService.log('work_order_created',
-      `AO ${ao.id} skapad från återkommande ärende ${ro.id}`,
-      { workOrderId: ao.id, customerId: ro.customerId });
     return { ok: true, ao };
   },
 
@@ -149,3 +168,73 @@ const RecurringOrderService = {
     return diff;
   }
 };
+
+/* B1 FIX (independent-reviewer finding, round 5): registers the DURABLE
+   handler for the 'recurring_ao_created' settled intent — see
+   AOTimeSyncService.js's header for the whole mechanism. Idempotency
+   is NOT "has nextDate already moved" (that can legitimately be true
+   for an unrelated, later occurrence too) — it is tracked explicitly
+   via `ro.appliedAoCreateIds`, a small array of AO ids whose schedule-
+   advancement has already been applied, checked/updated atomically
+   with the rest of this update so re-running this handler for the SAME
+   settled intent (which `AOTimeSyncService` already guards against via
+   its own `applied` flag, but this is a deliberate second, defensive
+   layer, same as `PageShells.js`'s matching check) is always a no-op. */
+if (typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.registerIntentHandler === 'function') {
+  /* B1 FOLLOW-UP FIX (independent-reviewer finding, round 6): this
+     handler used to call `RecurringOrderService.update()` (which
+     itself calls `persist()` fire-and-forget, never checking its
+     result) and then treat "didn't throw" as success — the same class
+     of gap just fixed in PageShells.js's matching handler. Now
+     `async`, mutates `ro` directly (bypassing `update()`'s own
+     unchecked `persist()` to get a single, awaited, checked write) and
+     only reports `{ok:true}` once that write is CONFIRMED. Idempotent
+     on a retry: `ro.appliedAoCreateIds` already contains `intent.aoId`
+     skips re-advancing the schedule/re-logging the activity, same
+     dedup marker as before — only the `persist()` itself is re-tried. */
+  AOTimeSyncService.registerIntentHandler('recurring_ao_created', async function (intent, settleResult) {
+    const ro = RecurringOrderService.getById(intent.refId);
+    if (!ro) return { ok: true }; // recurring order no longer exists -- nothing left to commit, not a failure to retry
+    if (settleResult.ok) {
+      const alreadyApplied = Array.isArray(ro.appliedAoCreateIds) && ro.appliedAoCreateIds.indexOf(intent.aoId) !== -1;
+      if (!alreadyApplied) {
+        const days = RecurringOrderService.getDaysForInterval(ro);
+        const nextTs = new Date(intent.fromDate);
+        nextTs.setDate(nextTs.getDate() + days);
+        const nextDate = nextTs.toISOString().split('T')[0];
+        ro.lastCreatedDate = tdy();
+        ro.nextDate = nextDate;
+        ro.appliedAoCreateIds = (ro.appliedAoCreateIds || []).concat([intent.aoId]);
+        if (!ro.tillsvidare && ro.endDate && nextDate > ro.endDate) ro.status = 'avslutad';
+        ro.updatedAt = new Date().toISOString();
+        const ao = (typeof getAO === 'function') ? getAO(intent.aoId) : null;
+        const disp = (typeof WorkOrderService !== 'undefined') ? WorkOrderService.displayNumberOrPending(ao || { id: intent.aoId }) : intent.aoId;
+        ActivityService.log('work_order_created',
+          `AO ${disp} skapad från återkommande ärende ${ro.id}`,
+          { workOrderId: intent.aoId, customerId: ro.customerId });
+      }
+      let persisted;
+      try {
+        /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+        persisted = await persist({ keys: ['recurringOrders'] });
+      } catch (e) {
+        console.error('[RecurringOrderService] persist() threw while advancing schedule for', intent.refId, ':', e);
+        return { ok: false, error: 'persist_threw' };
+      }
+      if (!persisted) {
+        console.error('[RecurringOrderService] persist() reported failure while advancing schedule for', intent.refId, '-- the durable intent is kept for retry, not pruned.');
+        return { ok: false, error: 'persist_failed' };
+      }
+      if (typeof RecurringPage !== 'undefined' && typeof RecurringPage.render === 'function') RecurringPage.render();
+      return { ok: true };
+    } else if (settleResult.final) {
+      console.error('[RecurringOrderService] AO-skapande avvisades slutgiltigt av servern för återkommande ärende', intent.refId, '(reconciled):', settleResult.error);
+      if (typeof showToast === 'function') {
+        showToast(`Arbetsordern för "${ro.title}" kunde inte skapas (${settleResult.error || 'okänt fel'}) — schemat har INTE flyttats fram.`);
+      }
+      if (typeof RecurringPage !== 'undefined' && typeof RecurringPage.render === 'function') RecurringPage.render();
+      return { ok: true };
+    }
+    return { ok: true };
+  });
+}

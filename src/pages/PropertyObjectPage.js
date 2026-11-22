@@ -54,7 +54,7 @@ const PropertyObjectPage = {
       <div class="ao-action-panel">
         <div class="ao-action-panel-left">
           <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(obj.id)}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(PropertyObjectService.displayNumber(obj))}</span>
         </div>
         <div class="ao-action-panel-badges">
           <span class="bdg ${badgeCls}" style="font-size:10px;">${statLbl}</span>

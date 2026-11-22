@@ -80,21 +80,8 @@ const ServiceIntervalService = {
       aoPriority:                    'normal',
       aoStaff:                       [],
 
-      /* Idempotensnycklar — sätts av bevakningskörningen.
-         RÄTTAT (masterplanens identifierade idempotenskonflikt): fanns
-         TIDIGARE bara `lastNotificationSentForDueDate`, delad mellan
-         TVÅ olika mekanismer — denna klientfils runDailyCheck() (skapar
-         en Att göra-post + in-app-notis) OCH den server-sidiga
-         service-monitor-Edge-Functionens riktiga Web Push. Vilken av de
-         två som råkade köra FÖRST för en given förfalloperiod satte
-         nyckeln och TYSTADE därmed den ANDRA för just den perioden.
-         `lastNotificationSentForDueDate` är nu RESERVERAD ENBART för
-         service-monitor (server-sidig push) — se dess egen kod, orörd.
-         `lastActivityNotifiedForDueDate` är en NY, egen nyckel enbart
-         för runDailyCheck()s Att göra-post/in-app-notis. De två
-         mekanismerna kan nu aldrig tysta varandra. */
-      lastNotificationSentForDueDate:'',       // nextDue för senast skickade RIKTIGA push (service-monitor, server)
-      lastActivityNotifiedForDueDate:'',       // nextDue för senast skapade Att göra-post/in-app-notis (runDailyCheck, klient)
+      /* Idempotensnycklar — sätts av bevakningskörningen */
+      lastNotificationSentForDueDate:'',       // nextDue för senast skickad notis
       lastAOGeneratedForDueDate:     '',       // nextDue för senast skapad AO
       lastGeneratedAOId:             '',       // id på senast skapade AO
 
@@ -204,25 +191,6 @@ const ServiceIntervalService = {
       }
     }
     return result.sort((a, b) => (this.daysUntil(a.interval.nextDue) || 999) - (this.daysUntil(b.interval.nextDue) || 999));
-  },
-
-  /* ── Hämta ALLA serviceintervall över alla fastigheter ────── */
-  /*
-   * Samma form/sortering som getAllNeedingAttention() ovan, men UTAN
-   * status-filtret — returnerar varje intervall oavsett status (inkl.
-   * 'ok', 'paused', 'not_set'), för den fastighetsöverskridande
-   * översiktssidan (ServiceIntervalsPage), som själv behöver kunna
-   * filtrera på "Alla"/"OK"/"Pausade" också, inte bara de som redan
-   * kräver uppmärksamhet.
-   */
-  getAllAcrossProperties() {
-    const result = [];
-    for (const p of (state.properties || [])) {
-      for (const si of (p.serviceIntervals || [])) {
-        result.push({ propertyId: p.id, propertyName: p.name, address: p.address, interval: si, status: this.getStatus(si) });
-      }
-    }
-    return result.sort((a, b) => (this.daysUntil(a.interval.nextDue) ?? 999999) - (this.daysUntil(b.interval.nextDue) ?? 999999));
   },
 
   /* ── Global alert-räknare för sidebar ────────────────────── */
@@ -374,9 +342,8 @@ const ServiceIntervalService = {
     si.updatedAt = new Date().toISOString();
 
     /* Nollställ idempotensnycklar — ny period börjar */
-    si.lastNotificationSentForDueDate  = '';
-    si.lastActivityNotifiedForDueDate  = '';
-    si.lastAOGeneratedForDueDate       = '';
+    si.lastNotificationSentForDueDate = '';
+    si.lastAOGeneratedForDueDate      = '';
 
     /* Stäng kopplade Att göra-poster för den avslutade perioden */
     this._completeLinkedActivities(si, previousNextDue, { staffId, comment });
@@ -415,13 +382,9 @@ const ServiceIntervalService = {
         const st = this.getStatus(si);
         if (st !== 'overdue' && st !== 'due_soon' && st !== 'approaching') continue;
 
-        /* Idempotent — en unik nyckel per (interval, förfalloperiod).
-           RÄTTAT: använder nu sin EGEN nyckel (lastActivityNotifiedForDueDate)
-           — INTE lastNotificationSentForDueDate, som är reserverad för
-           service-monitor-EF:ens riktiga push. Se newInterval()s
-           kommentar för den fullständiga motiveringen. */
+        /* Idempotent — en unik nyckel per (interval, förfalloperiod) */
         const periodKey = si.id + '::' + si.nextDue;
-        if (si.lastActivityNotifiedForDueDate === periodKey) continue;
+        if (si.lastNotificationSentForDueDate === periodKey) continue;
 
         /* Skapa uppgift i Att göra */
         const assignTo = si.responsibleStaffId || userId || null;
@@ -464,8 +427,8 @@ const ServiceIntervalService = {
           NotificationsService.push(userId, nType, msg, { propId: p.id, siId: si.id });
         }
 
-        /* Markera period som notifierad (egen nyckel, se ovan) */
-        si.lastActivityNotifiedForDueDate = periodKey;
+        /* Markera period som notifierad */
+        si.lastNotificationSentForDueDate = periodKey;
         changed = true;
       }
     }

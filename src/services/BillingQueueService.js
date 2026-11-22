@@ -21,6 +21,12 @@
 const BillingQueueService = (function () {
 
   var _busy = false;
+  /* J1 (2026-11-12): selection signature -> idempotency key, held ONLY while
+     the outcome of an appendChecked attempt is unknown (see
+     createInvoicesFromSourceKeys()). In-memory on purpose: a reload is a
+     new attempt series; the server's sourceKey claims still prevent a
+     double invoice. */
+  var _pendingCreateKeys = {};
 
   /* ── Material-ID-stabilisering (V32 §4) ──────────────────────────────
      Materialrader FÅR redan stabila ID:n av WorkOrderService.addMaterial()
@@ -31,14 +37,28 @@ const BillingQueueService = (function () {
      ALDRIG id (villkoret är strikt "om inte finns", inte "skriv om"). */
   function _ensureMaterialIds() {
     var changed = false;
+    var touchedAOs = [];
     (state.workOrders || []).forEach(function (ao, aoIdx) {
+      var aoChanged = false;
       (ao.materials || []).forEach(function (m, idx) {
         if (!m.id) {
           m.id = 'M' + Date.now() + '_bf' + aoIdx + '_' + idx + '_' + Math.random().toString(36).slice(2, 6);
           changed = true;
+          aoChanged = true;
         }
       });
+      if (aoChanged) touchedAOs.push(ao);
     });
+    /* P0 AO/TID-FIX: denna idempotenta backfill rörde tidigare BARA
+       `ao.materials` i minnet och förlitade sig på den generiska
+       persist()-vägen (nu borttagen för vift_workOrders, se state.js) för
+       att faktiskt spara det server-sidigt. Speglar nu varje faktiskt
+       ÄNDRAD AO:s materials-array via den atomiska patch-RPC:n. */
+    if (touchedAOs.length > 0 && typeof AOTimeSyncService !== 'undefined') {
+      AOTimeSyncService.bulkPatch('ao', touchedAOs.map(function (ao) {
+        return { id: ao.id, patch: { materials: ao.materials } };
+      })).catch(function (e) { console.warn('[BillingQueueService] _ensureMaterialIds sync-fel:', e); });
+    }
     if (changed && typeof persist === 'function') persist();
     return changed;
   }
@@ -141,6 +161,23 @@ const BillingQueueService = (function () {
     return desc;
   }
 
+  /* P0 AO/TID-FIX (2026-10-18): en AO/tidpost kan existera i lokal
+     state (optimistiskt, direkt efter en create()/update()-anrop) UTAN
+     att serverskrivningen ännu bekräftats — se AOTimeSyncService.js:s
+     outbox. §"no pending data becomes invoiceable as confirmed" i
+     uppdraget: en sådan post FÅR SYNAS (annars kan den verka ha
+     försvunnit för en kassörska som precis skapade den), men FÅR ALDRIG
+     bli `selectable:true` förrän servern bekräftat skrivningen — annars
+     kunde en faktura skapas mot en post som sedan (om serverskrivningen
+     slutligen DEFINITIVT avvisas, t.ex. 'forbidden') aldrig fanns
+     server-sidigt alls. Fail-closed: om AOTimeSyncService inte är
+     laddat alls antas INGET vara pending (oförändrat beteende i en
+     miljö utan denna release). */
+  function _pendingSyncIssue(entityType, id) {
+    if (typeof AOTimeSyncService === 'undefined' || !id) return null;
+    return AOTimeSyncService.isUnsynced(entityType, id) ? 'Väntar på serverbekräftelse' : null;
+  }
+
   function getCandidates() {
     _ensureMaterialIds();
     var claimed = _claimedSourceKeys();
@@ -165,6 +202,10 @@ const BillingQueueService = (function () {
       if (mode === 'fixed') return; /* tid ingår i fastprisraden, ej egen source */
 
       var issues = [];
+      var _pendingTime = _pendingSyncIssue('time', t.id);
+      if (_pendingTime) issues.push(_pendingTime);
+      var _pendingAoForTime = ao ? _pendingSyncIssue('ao', ao.id) : null;
+      if (_pendingAoForTime) issues.push(_pendingAoForTime);
       if (!t.aoId) issues.push('Saknar arbetsorder');
       else if (!ao) issues.push('Arbetsorder hittades inte');
       else if (mode === 'unknown') issues.push('AO saknar prismodell');
@@ -202,6 +243,8 @@ const BillingQueueService = (function () {
         var sourceKey = 'material:' + ao.id + ':' + m.id;
         if (claimed.has(sourceKey)) return;
         var issues = [];
+        var _pendingAoForMat = _pendingSyncIssue('ao', ao.id);
+        if (_pendingAoForMat) issues.push(_pendingAoForMat);
         if (!ao.customerId) issues.push('AO saknar kund');
         var price = m.sellPrice || 0;
         if (!(price > 0)) issues.push('Saknar försäljningspris');
@@ -260,6 +303,8 @@ const BillingQueueService = (function () {
       var sourceKey = 'fixed:' + ao.id;
       if (claimed.has(sourceKey)) return;
       var issues = [];
+      var _pendingAoForFixed = _pendingSyncIssue('ao', ao.id);
+      if (_pendingAoForFixed) issues.push(_pendingAoForFixed);
       if (!ao.customerId) issues.push('AO saknar kund');
       var fixedPriceNum = Number(ao.fixedPrice);
       var validFixedPrice = ao.fixedPrice != null && !isNaN(fixedPriceNum) && fixedPriceNum > 0;
@@ -343,8 +388,15 @@ const BillingQueueService = (function () {
     'Saknar försäljningspris': true
   };
 
-  function getPricingStatusForAO(aoId) {
-    var sources = getUnclaimedSourcesForAO(aoId);
+  /* QA FIX-ROUND 2026-11-12 (L1): `sourcesOverride` lets a caller that
+     needs the status of MANY work orders compute getCandidates() ONCE
+     (see getPricingStatusResolver()) instead of once per AO — the work
+     order list called this per row, each call rebuilding every candidate
+     of every AO (measured 750 ms per render at 333 orders). Same result
+     per AO by construction: getUnclaimedSourcesForAO() is exactly
+     getCandidates() filtered by workOrderId. */
+  function getPricingStatusForAO(aoId, sourcesOverride) {
+    var sources = Array.isArray(sourcesOverride) ? sourcesOverride : getUnclaimedSourcesForAO(aoId);
     if (sources.length === 0) {
       /* Inget obeclaimat kvar — antingen inget registrerat alls, eller
          allt redan fakturerat. Skiljs uttryckligen från "blockerad". */
@@ -376,10 +428,51 @@ const BillingQueueService = (function () {
      status sattes manuellt eller av den gamla, icke-source-medvetna motorn
      (då finns ingen ao.billingPreviousStatus att återställa från — legacy-
      AO:er lämnas orörda, exakt som uppdraget kräver). */
+  /* QA FIX-ROUND 2026-11-12 (J2, confirmed): both transitions below were
+     LOCAL-ONLY mutations of the AO object — vift_workOrders left the
+     generic persist() long ago (see state.js) and nothing here called
+     WorkOrderService._syncAO(). After a reload the AO came back from the
+     server as 'klar' with no invoiceId: "Skapa fakturaunderlag" reappeared
+     and the existing re-pricing block (openPricingModal(), which reads
+     ao.invoiceId) silently vanished. Both transitions now go to the
+     server through the same _syncAO()/patch_ao path as every other AO
+     field change, with an onSettled that rolls the local change back
+     (only if nothing else has changed those fields since) and says so on
+     a FINAL rejection — never a silent claim that it was saved.
+     `billingPreviousStatus` is cleared on the server as null (a JSON merge
+     cannot delete a key), so every check here treats null like "absent". */
+  function _syncBillingFields(ao, before) {
+    if (typeof WorkOrderService === 'undefined' || typeof WorkOrderService._syncAO !== 'function') return;
+    var after = { status: ao.status, invoiceId: ao.invoiceId || '', billingPreviousStatus: ao.billingPreviousStatus == null ? null : ao.billingPreviousStatus };
+    var patch = { status: after.status, invoiceId: after.invoiceId, billingPreviousStatus: after.billingPreviousStatus, updatedAt: ao.updatedAt };
+    WorkOrderService._syncAO(ao, patch, {
+      onSettled: function (r) {
+        if (!r || r.ok || !r.final) return;
+        var cur = getAO(ao.id);
+        if (cur !== ao) return; // replaced by a fresh server read: already server truth
+        var untouched = ao.status === after.status && (ao.invoiceId || '') === after.invoiceId &&
+          (ao.billingPreviousStatus == null ? null : ao.billingPreviousStatus) === after.billingPreviousStatus;
+        if (!untouched) return; // someone changed these since — never clobber
+        ao.status = before.status;
+        ao.invoiceId = before.invoiceId;
+        if (before.billingPreviousStatus == null) delete ao.billingPreviousStatus; else ao.billingPreviousStatus = before.billingPreviousStatus;
+        if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
+        if (typeof showToast === 'function') {
+          showToast('Arbetsorder ' + ao.id + ': faktureringsstatusen kunde inte sparas på servern (' + (r.error || 'okänt fel') + ') — visar åter ' + before.status + '. Fakturaunderlaget i sig påverkas inte.', 8000);
+        }
+        try {
+          if (typeof WorkOrderDetailPage !== 'undefined' && typeof WorkOrderDetailPage.onSyncStatusChanged === 'function') WorkOrderDetailPage.onSyncStatusChanged(ao.id);
+          if (typeof WorkOrdersPage !== 'undefined' && typeof WorkOrdersPage.onSyncStatusChanged === 'function') WorkOrdersPage.onSyncStatusChanged(ao.id);
+        } catch (e) {}
+      }
+    });
+  }
+
   function reconcileWorkOrderBilling(aoId) {
     var ao = getAO(aoId);
     if (!ao) return;
     var unclaimed = getUnclaimedSourcesForAO(aoId);
+    var before = { status: ao.status, invoiceId: ao.invoiceId || '', billingPreviousStatus: ao.billingPreviousStatus };
 
     if (unclaimed.length === 0) {
       if (!ao.invoiceId) {
@@ -387,17 +480,19 @@ const BillingQueueService = (function () {
           return (i.workOrderIds && i.workOrderIds.indexOf(aoId) !== -1) || i.workOrderId === aoId;
         });
         if (lastInv) {
-          if (ao.billingPreviousStatus === undefined) ao.billingPreviousStatus = ao.status;
+          if (ao.billingPreviousStatus == null) ao.billingPreviousStatus = ao.status;
           ao.invoiceId = lastInv.id;
           ao.status = 'fakturerad';
           ao.updatedAt = new Date().toISOString();
+          _syncBillingFields(ao, before);
         }
       }
-    } else if (ao.status === 'fakturerad' && ao.billingPreviousStatus !== undefined) {
+    } else if (ao.status === 'fakturerad' && ao.billingPreviousStatus != null) {
       ao.status = ao.billingPreviousStatus;
       delete ao.billingPreviousStatus;
       ao.invoiceId = '';
       ao.updatedAt = new Date().toISOString();
+      _syncBillingFields(ao, before);
     }
     /* Övriga fall (källor kvarstår, men status/invoiceId inte motorsatt):
        gör INGET — rör aldrig manuellt eller legacy-satt AO-status. */
@@ -421,7 +516,16 @@ const BillingQueueService = (function () {
      faktura INNAN den enda persist()-anropet — används av
      InvoiceService.createFromAO() för att sätta t.ex. offerId utan att
      behöva ett eget, andra persist-anrop efteråt (V33 §7). */
-  function createInvoicesFromSourceKeys(sourceKeys, opts) {
+  /* P0 FINAL INTEGRATION (INVOICE CORRECTION): async nu — varje skapad
+     fakturas APPEND går via InvoiceService._call('appendChecked', ...)
+     (invoice_append_checked-RPC:n: radlåst, server-tilldelat id, cross-
+     invoice sourceKey-kollisionskontroll) istället för
+     `state.invoices.unshift(inv)` + en enda generisk persist() i slutet.
+     En faktura vars sourceRefs kolliderar med en ANNAN, redan aktiv
+     faktura (en genuin race — två kassörskor som bearbetar kön
+     samtidigt) läggs i `collided` och räknas som otillgänglig i
+     returvärdet, istället för att tyst skapas dubbelt. */
+  async function createInvoicesFromSourceKeys(sourceKeys, opts) {
     opts = opts || {};
     if (typeof Auth === 'undefined' || !Auth.can('invoice_create')) {
       return { ok: false, error: 'Du saknar behörighet för denna åtgärd.' };
@@ -466,7 +570,9 @@ const BillingQueueService = (function () {
       });
 
       var created = [];
-      Object.keys(byCustomer).forEach(function (custId) {
+      var collided = [];
+      for (var custIdx = 0; custIdx < Object.keys(byCustomer).length; custIdx++) {
+        var custId = Object.keys(byCustomer)[custIdx];
         var group = byCustomer[custId];
         var lines = group.map(function (c, i) {
           var srcTypeMap = { time: 'Tid', material: 'Material', fixed: 'Fastpris' };
@@ -498,30 +604,93 @@ const BillingQueueService = (function () {
         }
         if (typeof opts.onInvoiceBuilt === 'function') opts.onInvoiceBuilt(inv, group);
 
-        state.invoices = state.invoices || [];
-        state.invoices.unshift(inv);
-        created.push(inv);
+        delete inv.id; // serversidigt tilldelat av invoice_append_checked
+        /* P0-6 FIX (independent-reviewer finding): DETERMINISTISK
+           idempotensnyckel (inte en slumpad UUID) — samma princip som
+           AOTimeSyncService.bulkSync()'s import-nycklar. Om samma
+           kassörska trycker "Skapa fakturautkast" en andra gång efter
+           en nätverksavbrott-utan-svar (eller dubbelklickar trots
+           _createBusy-skyddet i InvoicesPage.js) ska EXAKT samma
+           sourceKey-grupp för samma kund ge tillbaka DEN REDAN SKAPADE
+           fakturan, inte en andra. */
+        /* QA FIX-ROUND 2026-11-12 (J1, confirmed): the key above used to
+           be the ONLY key ever used for a given selection, for all time:
+           'invcreate-' + custId + sorted sourceKeys. After that draft was
+           deleted (draftDelete), re-creating the SAME selection sent the
+           SAME key, and invoice-write replayed its cached result for it —
+           a "F-015 skapat" that no longer existed server-side (every later
+           action 404), with the fixed-price source permanently
+           un-invoiceable through that selection (live, reproduced twice).
+           Now: a fresh random key per creation ATTEMPT-SERIES. The key is
+           remembered for this selection ONLY while the outcome is unknown
+           (network error / no HTTP response — exactly the lost-response
+           case P0-6 protects), so an immediate retry still dedupes
+           server-side; it is forgotten as soon as ANY definite answer
+           arrives (success or HTTP error). Double billing stays blocked
+           regardless of the key by the server's sourceKey claims
+           (source_collision / duplicate_source_key). The server-side half
+           (its replay cache never re-checks that the cached invoice still
+           exists, and draftDelete never invalidates it) is specified in
+           _staging_integration/server/functions/invoice-write/
+           SPEC_j1_idempotency_ghost_2026-11-12.md. */
+        var _selSig = custId + '|' + group.map(function (c) { return c.sourceKey; }).slice().sort().join('|');
+        var _idemKey = _pendingCreateKeys[_selSig] || ('vift-v2:' + InvoiceService._uuid());
+        _pendingCreateKeys[_selSig] = _idemKey;
+        var appendResult = await InvoiceService._call('appendChecked', { invoice: inv, idempotencyKey: _idemKey });
+        if (appendResult.ok || appendResult.httpStatus) delete _pendingCreateKeys[_selSig];
+        if (!appendResult.ok) {
+          // Genuin race: en ANNAN klient claimade samma sourceKey(s)
+          // mellan getCandidates() och detta anrop. Fakturan skapas
+          // INTE — markeras kollisions-otillgänglig, inte dubbelskapad.
+          collided.push({ customerId: custId, sourceKeys: group.map(function (c) { return c.sourceKey; }), error: appendResult.error });
+          continue;
+        }
+        var savedInv = appendResult.data.invoice;
+        InvoiceService._applyLocally(savedInv);
+        created.push(savedInv);
 
         if (typeof ActivityService !== 'undefined') {
           ActivityService.log('invoice_created',
-            'Fakturaunderlag ' + inv.id + ' skapat från faktureringskön (' + group.length + ' underlag)',
-            { customerId: custId, invoiceId: inv.id });
+            'Fakturaunderlag ' + savedInv.id + ' skapat från faktureringskön (' + group.length + ' underlag)',
+            { customerId: custId, invoiceId: savedInv.id });
         }
-      });
+      }
 
-      /* Reconciliation innan persist — allt i samma batch, EN persist totalt. */
-      var affectedAoIds = new Set(valid.map(function (c) { return c.workOrderId; }).filter(Boolean));
+      /* Reconciliation EFTER samtliga atomiska appends — rör
+         vift_workOrders (annan nyckel), oförändrad logik/ordning. */
+      var affectedAoIds = new Set(valid
+        .filter(function (c) { return !collided.some(function (x) { return x.sourceKeys.indexOf(c.sourceKey) !== -1; }); })
+        .map(function (c) { return c.workOrderId; }).filter(Boolean));
       affectedAoIds.forEach(function (aoId) { reconcileWorkOrderBilling(aoId); });
 
-      persist();
+      if (created.length === 0 && collided.length > 0) {
+        return { ok: false, error: 'Alla valda underlag hanns fakturerats av en annan session. Uppdatera kön och försök igen.', unavailable: sourceKeys, collided: collided };
+      }
 
-      return { ok: true, created: created, customers: Object.keys(byCustomer).length, sources: valid.length, unavailable: [] };
+      return { ok: true, created: created, customers: Object.keys(byCustomer).length, sources: valid.length, unavailable: [], collided: collided };
     } finally {
       _busy = false;
     }
   }
 
+  /* L1: one getCandidates() pass, grouped by AO; returns aoId -> status.
+     Call it once per render/list pass — it is a snapshot of the current
+     state, never cached across data changes. */
+  function getPricingStatusResolver() {
+    var byAo = {};
+    getCandidates().forEach(function (c) {
+      if (!c.workOrderId) return;
+      (byAo[c.workOrderId] = byAo[c.workOrderId] || []).push(c);
+    });
+    var memo = {};
+    return function (aoId) {
+      if (!Object.prototype.hasOwnProperty.call(memo, aoId)) memo[aoId] = getPricingStatusForAO(aoId, byAo[aoId] || []);
+      return memo[aoId];
+    };
+  }
+
   return {
+    getPricingStatusResolver: getPricingStatusResolver,
     getCandidates: getCandidates,
     getUnclaimedSourcesForAO: getUnclaimedSourcesForAO,
     getPricingStatusForAO: getPricingStatusForAO,

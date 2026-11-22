@@ -74,13 +74,26 @@ const CustomerService = {
   },
 
   create(data) {
+    /* 2026-11: försvar i djupet — den riktiga service-nivån. customer_view
+       ger läsning av pg-crm men aldrig skrivning; detta stänger vägen
+       oavsett vilken UI-väg (eller direktanrop) som försökte nå hit. Ingen
+       falsk framgång: avbryter innan state muteras eller persist() körs. */
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      if (typeof showToast === 'function') showToast('Du saknar behörighet för den åtgärden');
+      return null;
+    }
     const safeData = this._normalizeTypeForWrite(data);
     if (safeData === null) return null;
     const cu = Object.assign(Schema.customer(), safeData, {
-      id:        newId(state.customers, 'K'),
+      id:        newSafeId('K', state.customers), // K3 (2026-11-12): collision-safe, see state.js newSafeId()
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+    /* Display number (2026-11-12): short, derived from the id, shown
+       instead of the long id; the id itself is unchanged. state.js
+       newShortNumber(). The guard keeps harnesses without state.js working. */
+    if (typeof newShortNumber === 'function') cu.shortNumber = newShortNumber(cu.id, state.customers);
+    else delete cu.shortNumber;
     state.customers.push(cu);
     ActivityService.log('customer_created', `Ny kund skapad: ${this.displayName(cu)}`,
       { customerId: cu.id });
@@ -130,6 +143,10 @@ const CustomerService = {
   },
 
   update(id, data) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      if (typeof showToast === 'function') showToast('Du saknar behörighet för den åtgärden');
+      return null;
+    }
     const result = this._applyUpdate(id, data);
     if (!result) return null;
     persist();
@@ -157,13 +174,22 @@ const CustomerService = {
            misslyckades (server/nätverk) — callern MÅSTE rulla tillbaka
            BÅDA via `before`/`beforeActivityLog`. */
   async updateConfirmed(id, data) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      if (typeof showToast === 'function') showToast('Du saknar behörighet för den åtgärden');
+      return { ok: false, customer: null, before: null, beforeActivityLog: null };
+    }
     const result = this._applyUpdate(id, data, { activityPersist: false });
     if (!result) return { ok: false, customer: null, before: null, beforeActivityLog: null };
-    const ok = await persist();
+    /* C1 (2026-11-12): scoped to the key this code path mutated — an unrelated key's rejection (activityLog) is not this save's failure. */
+    const ok = await persist({ keys: ['customers'] });
     return { ok, customer: result.cu, before: result.before, beforeActivityLog: result.beforeActivityLog };
   },
 
   delete(id) {
+    if (typeof Auth === 'undefined' || !Auth.can('customer_manage')) {
+      if (typeof showToast === 'function') showToast('Du saknar behörighet för den åtgärden');
+      return;
+    }
     const cu = getCu(id);
     if (!cu) return;
     const name = this.displayName(cu);
@@ -195,11 +221,20 @@ const CustomerService = {
     return s ? `Okänd kundtyp (${s})` : '—';
   },
 
+  /* Visible customer number (2026-11-12): shortNumber for new customers,
+     the unchanged id for every existing short-id customer (K-007 stays
+     K-007). Labels only — links/references keep using cu.id. */
+  displayNumber(cu) {
+    if (!cu) return '';
+    return (typeof displayNumberOf === 'function') ? displayNumberOf(cu) : String(cu.id || '');
+  },
+
   search(q) {
     const ql = (q || '').toLowerCase();
     return (state.customers || []).filter(cu => {
       const name = this.displayName(cu).toLowerCase();
       return name.includes(ql)
+        || this.displayNumber(cu).toLowerCase().includes(ql)
         || (cu.orgNr || '').includes(ql)
         || (cu.phone || '').includes(ql)
         || (cu.email || '').toLowerCase().includes(ql)

@@ -33,11 +33,14 @@ const PropertyObjectService = (() => {
     if (!prop) throw new Error('Fastighet saknas: ' + fields.propertyId);
 
     const obj = Object.assign(Schema.propertyObject(), fields, {
-      id:         newId(state.propertyObjects, 'OBJ'),
+      id:         newSafeId('OBJ', state.propertyObjects), // K3 (2026-11-12): collision-safe
       customerId: prop.customerId || fields.customerId || '',
       createdAt:  new Date().toISOString(),
       updatedAt:  new Date().toISOString()
     });
+    /* Display number (2026-11-12): see state.js newShortNumber(). */
+    if (typeof newShortNumber === 'function') obj.shortNumber = newShortNumber(obj.id, state.propertyObjects);
+    else delete obj.shortNumber;
 
     if (!state.propertyObjects) state.propertyObjects = [];
     state.propertyObjects.push(obj);
@@ -169,11 +172,19 @@ const PropertyObjectService = (() => {
         (o.name         || '').toLowerCase().includes(q) ||
         (o.objectNumber || '').toLowerCase().includes(q) ||
         (o.description  || '').toLowerCase().includes(q) ||
-        (o.entrance     || '').toLowerCase().includes(q)
+        (o.entrance     || '').toLowerCase().includes(q) ||
+        displayNumber(o).toLowerCase().includes(q) // display number (2026-11-12)
       );
     }
 
     return list.sort((a, b) => (a.objectNumber || '').localeCompare(b.objectNumber || '', 'sv'));
+  }
+
+  /* Visible object number (2026-11-12): shortNumber for new objects, the
+     unchanged id for existing ones. Labels/search only; refs use obj.id. */
+  function displayNumber(obj) {
+    if (!obj) return '';
+    return (typeof displayNumberOf === 'function') ? displayNumberOf(obj) : String(obj.id || '');
   }
 
   /* ── Etiketter ────────────────────────────────────────────── */
@@ -217,6 +228,7 @@ const PropertyObjectService = (() => {
     addEquipment,
     removeEquipment,
     search,
+    displayNumber,
     typeLabel,
     statusLabel,
     statusBadgeClass

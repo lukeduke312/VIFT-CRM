@@ -54,7 +54,7 @@ const SalesPage = {
         <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="sales-search" placeholder="Sök kund eller titel…"
-            value="${this.q}" oninput="SalesPage.q=this.value;SalesPage.render()">
+            value="${esc(this.q)}" oninput="SalesPage.q=this.value;SalesPage.render()">
         </div>
         <div class="ao-toolbar-right">
           <button class="btn bp bsm" onclick="SalesPage.openCreate()">${ic('plus',14)} Ny chans</button>
@@ -163,7 +163,7 @@ const SalesPage = {
           </div>
           ${contactName ? `<div class="dr"><span class="dk">Kontaktperson</span><span class="dv">${ActivityService._escHtml(contactName)}</span></div>` : ''}
           <div class="dr"><span class="dk">Ansvarig</span><span class="dv">${ActivityService._escHtml(staffName)}</span></div>
-          ${op.reason ? `<div class="dr"><span class="dk">Varför</span><span class="dv">${op.reason}</span></div>` : ''}
+          ${op.reason ? `<div class="dr"><span class="dk">Varför</span><span class="dv">${esc(op.reason)}</span></div>` : ''}
           ${op.estimatedValue > 0 ? `<div class="dr"><span class="dk">Est. värde</span><span class="dv">${fmt(op.estimatedValue)} kr</span></div>` : ''}
           ${op.status === 'snoozed' && op.snoozedUntil ? `<div class="dr"><span class="dk">Återkom</span><span class="dv">${fmtDate(op.snoozedUntil)}</span></div>` : ''}
           ${op.suggestedAction || op.dueDate ? `
@@ -231,7 +231,7 @@ const SalesPage = {
   },
 
   _formHtml(op) {
-    const v = (k, d='') => op ? (op[k] != null ? op[k] : d) : d;
+    const v = (k, d='') => { const val = op ? (op[k] != null ? op[k] : d) : d; return typeof val === 'string' ? esc(val) : val; };
     const typeOpts = [
       {v:'service_agreement',l:'Serviceavtal'},
       {v:'seasonal_job',l:'Säsongsarbete'},

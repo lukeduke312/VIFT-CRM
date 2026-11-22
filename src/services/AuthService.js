@@ -16,7 +16,11 @@
  *   ao_time           – Registrera tid
  *   ao_material       – Registrera material
  *   ao_checklist      – Hantera checklista
- *   customer_manage   – Hantera kunder & fastigheter
+ *   customer_manage   – Hantera kunder & fastigheter (läsning + skrivning)
+ *   customer_view     – Visa kunder & kundkort (ENDAST läsning, ingen skrivning —
+ *                       tillagd 2026-11 så att en roll kan se Kunder utan att få
+ *                       customer_manage; customer_manage fortsätter ge både läsning
+ *                       och skrivning oförändrat)
  *   offer_manage      – Hantera offerter
  *   invoice_view      – Visa fakturaunderlag
  *   invoice_create    – Skapa/redigera fakturaunderlag
@@ -65,8 +69,13 @@ const Auth = {
     'pg-dash':         [],
     'pg-ao':           ['ao_view_all','ao_view_own','ao_create','ao_edit','ao_complete','ao_time','ao_material','ao_checklist'],
     'pg-ao-detail':    ['ao_view_all','ao_view_own','ao_edit','ao_time','ao_material','ao_checklist'],
-    'pg-crm':          ['customer_manage'],
-    'pg-crm-detail':   ['customer_manage'],
+    /* 2026-11: customer_view läggs till som läsbehörighet vid sidan av
+       customer_manage (canAny/.some() nedan ger OR-semantik mellan dessa
+       två — exakt samma mönster som redan används för t.ex. pg-invoices).
+       Skrivknappar/mutationsmetoder förblir strikt customer_manage-gated,
+       se CustomersPage.js/CustomerService.js. */
+    'pg-crm':          ['customer_manage','customer_view'],
+    'pg-crm-detail':   ['customer_manage','customer_view'],
     'pg-objects':      ['customer_manage'],
     'pg-obj-detail':   ['customer_manage'],
     'pg-offer':        ['offer_manage'],
@@ -118,18 +127,52 @@ const Auth = {
     return this._session ? this._session.access_token : null;
   },
 
+  /* P2-2 (fix round 2026-11-16, round 3): re-added for LOCAL CACHE
+     namespacing ONLY — NOT a security boundary (that is now the new
+     stamp_status table's own RLS, scoped by the server-verified
+     auth.user.id, see 20261116000002_stamp_status_identity_scoped.sql).
+     Used solely so two different staff members sharing one physical
+     device/browser (common on a shared field-service tablet) don't read
+     each other's cached localStorage stamp status — a purely local-device
+     correctness concern, independent of server-side access control. */
+  getUserEmail() {
+    return this._session ? (this._session.user_email || null) : null;
+  },
+
   /* ── Session restore (sync) ───────────────────────────── */
 
-  /* Återställ session från localStorage. Returnerar true om token finns. */
+  /* Återställ session från localStorage. Returnerar true om token finns.
+
+     BLOCKER-1 SLUTFÖRANDE (verkligt reproducerad kvarstående läcka,
+     krav 3, samt fel 3 i den oberoende granskningen — en TRASIG/
+     okorrupt sparad session lämnade cachen orörd eftersom `catch`-
+     grenen inte rensade): om app-starten INTE hittar en giltig session
+     — t.ex. efter en riktig utloggning, en utgången/raderad session,
+     ELLER en korrupt/oläsbar sparad session (JSON.parse kastar) —
+     rensas `vift_timeEntries` HÄR, defensivt, i SAMTLIGA tre grenar
+     (saknad, ogiltig form, kastat fel). En fortsatt INLOGGAD användare
+     som bara laddar om sidan (giltig session hittas) påverkas INTE. */
   init() {
     try {
       const saved = localStorage.getItem(this.SESSION_KEY);
-      if (!saved) return false;
+      if (!saved) {
+        if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+        if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+        return false;
+      }
       const s = JSON.parse(saved);
-      if (!s || !s.access_token || !s.refresh_token) return false;
+      if (!s || !s.access_token || !s.refresh_token) {
+        if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+        if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+        return false;
+      }
       this._session = s;
       return true;
-    } catch(e) { return false; }
+    } catch(e) {
+      if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+      if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+      return false;
+    }
   },
 
   /* ── Token refresh (async, single-flight) ─────────────── */
@@ -184,51 +227,67 @@ const Auth = {
     return promise;
   },
 
+  /* R4 REVIEW: a refresh response is valid only if the shared session still
+     contains the refresh token that started it. A different tab may already
+     have rotated the token or logged out while its storage event is queued. */
+  _checkSharedSessionForRefresh(refreshToken) {
+    let shared = null;
+    try {
+      const raw = localStorage.getItem(this.SESSION_KEY);
+      shared = raw ? JSON.parse(raw) : null;
+    } catch (e) {}
+    if (shared && shared.refresh_token === refreshToken) return { current: true };
+
+    const local = this._session;
+    if (shared && shared.refresh_token && shared.access_token && local &&
+        shared.user_email && shared.user_email === local.user_email) {
+      /* Another tab refreshed this same account first. Do not delete it. */
+      this._session = shared;
+      return { current: false, loggedIn: true };
+    }
+
+    /* Logout/account replacement happened elsewhere: invalidate only THIS
+       tab. Never write back to the shared key from this branch. */
+    this._session = null;
+    if (typeof state !== 'undefined') state.currentUser = null;
+    if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+    if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+    if (typeof App !== 'undefined' && App.showLogin) App.showLogin();
+    return { current: false, loggedIn: false };
+  },
+
   async _performRefresh() {
-    /* Snapshotta vilken session (via dess refresh_token) denna förnyelse
-       startar för. Anropet är async — inloggningsstatus kan hinna ändras
-       (utloggning, eller en helt ny inloggning) innan svaret kommer tillbaka.
-       Ett svar får ENDAST tillämpas om _session fortfarande är exakt den
-       session förnyelsen startade för, annars är resultatet inaktuellt:
-       det får varken skriva över en nyare session eller återuppliva en
-       utloggad session. */
-    if (!this._session || !this._session.refresh_token) { this._clearSession(); return false; }
+    if (!this._session || !this._session.refresh_token) return false;
     const refreshToken = this._session.refresh_token;
     try {
       const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'apikey': SUPABASE_AKEY, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ refresh_token: refreshToken })
+        body: JSON.stringify({ refresh_token: refreshToken })
       });
-
-      /* V25: är detta svaret fortfarande för den aktuella sessionen? */
-      const stillCurrent = !!(this._session && this._session.refresh_token === refreshToken);
-
+      /* The token in localStorage is shared across tabs. Check it BEFORE
+         handling a failure (which might clear it), or a success (which
+         might resurrect a session after another tab logged out). */
+      let shared = this._checkSharedSessionForRefresh(refreshToken);
+      if (!shared.current) return shared.loggedIn;
+      if (!this._session || this._session.refresh_token !== refreshToken) return !!this._session;
       if (!res.ok) {
-        /* Rensa BARA om den förnyelsen faktiskt gällde är den som fortfarande
-           är aktuell. En session som redan ersatts (ny inloggning) eller
-           redan är utloggad (_session===null) ska aldrig röras härifrån. */
-        if (stillCurrent) this._clearSession();
-        return !!(this._session && this._session.access_token);
+        this._clearSession();
+        return false;
       }
-
       const d = await res.json();
-      if (!stillCurrent) {
-        /* Inaktuellt svar — kasta bort de nya tokens, skriv ingenting,
-           anropa inte _saveSession(). Rapportera bara sanningen om vad som
-           faktiskt gäller just nu. */
-        return !!(this._session && this._session.access_token);
-      }
-
-      this._session.access_token  = d.access_token;
+      /* res.json() also yields: logout or a newer refresh may have happened. */
+      shared = this._checkSharedSessionForRefresh(refreshToken);
+      if (!shared.current) return shared.loggedIn;
+      if (!this._session || this._session.refresh_token !== refreshToken) return !!this._session;
+      this._session.access_token = d.access_token;
       this._session.refresh_token = d.refresh_token;
-      this._session.expires_at    = Date.now() + (d.expires_in * 1000);
-      this._session.user_email    = d.user?.email || this._session.user_email;
+      this._session.expires_at = Date.now() + (d.expires_in * 1000);
+      this._session.user_email = d.user?.email || this._session.user_email;
       this._saveSession();
       console.log('[Auth] Access token refreshed');
       return true;
     } catch(e) {
-      /* Nätverksfel — ingen mutation skedde, rapportera bara aktuellt läge */
       return !!(this._session && this._session.access_token);
     }
   },
@@ -257,6 +316,18 @@ const Auth = {
          kan inte radera referensen till en nyare promise tack vare identitets-
          kontrollen där. Ett explicit reset här skulle bara duplicera det
          skyddet utan att fylla någon egen funktion. */
+      /* BLOCKER-1 SLUTFÖRANDE (krav 2 — en ny användare får aldrig ärva
+         föregående användares cachade tidposter): körs INNAN den nya
+         sessionen sätts, så att (a) ett ev. kvarvarande
+         `vift_timeEntries`-värde från FÖREGÅENDE konto på samma enhet
+         rensas, och (b) ett fortfarande-i-flykt fetchAndApply()-anrop
+         som startades FÖRE denna inloggning epok-ogiltigförklaras — oavsett
+         om ett explicit logout() hann köras innan detta login()-anrop eller
+         inte (t.ex. ett utgånget-token-scenario, eller en session som
+         ersätts via lösenordsåterställning, som går direkt till ny
+         inloggning). */
+      if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+      if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
       this._session = {
         access_token:  data.access_token,
         refresh_token: data.refresh_token,
@@ -294,14 +365,7 @@ const Auth = {
    */
   _resolveUser() {
     const email = this._session ? this._session.user_email : null;
-    if (!email) {
-      state.currentUser = null;
-      /* RÄTTAT (integritetsgranskningsfynd): tillämpa payroll-filtret även
-         här (fail-closed mot en nu okänd/utloggad identitet) — se
-         _applyTimeEntriesPayrollFilter()s egen kommentar i state.js. */
-      if (typeof _applyTimeEntriesPayrollFilter === 'function') _applyTimeEntriesPayrollFilter();
-      return;
-    }
+    if (!email) { state.currentUser = null; return; }
 
     const staff = (state.staff || []).find(s =>
       s.active && s.email && s.email.toLowerCase() === email.toLowerCase()
@@ -313,7 +377,6 @@ const Auth = {
         id: 'unknown', firstName: email.split('@')[0], lastName: '',
         role: 'personal', username: email, title: ''
       };
-      if (typeof _applyTimeEntriesPayrollFilter === 'function') _applyTimeEntriesPayrollFilter();
       return;
     }
 
@@ -325,19 +388,6 @@ const Auth = {
       username:  staff.username || staff.email,
       title:     staff.title   || ''
     };
-    /* RÄTTAT (integritetsgranskningsfynd, 2026-11-20): state.timeEntries
-       laddas av initState() (körs FÖRE _resolveUser(), alltså FÖRE
-       identiteten/behörigheten är känd) utan något payroll-filter —
-       tidigare tillämpades filtret ENDAST inuti DataSync._poll(), vilket
-       lämnade ett verkligt fönster (hela tiden mellan appstart och den
-       FÖRSTA poll-cykel som råkar upptäcka en fjärrändring) där
-       state.timeEntries innehöll ALLA anställdas tidsregistreringar för
-       en användare utan payroll_view. _resolveUser() är den EXAKTA
-       punkten där identiteten/behörigheten blir känd (eller ändras, t.ex.
-       vid rollbyte) — filtret tillämpas därför HÄR också, omedelbart. Se
-       _applyTimeEntriesPayrollFilter() i state.js för den delade logiken
-       (samma funktion, samma beteende, som DataSync._poll() redan använde). */
-    if (typeof _applyTimeEntriesPayrollFilter === 'function') _applyTimeEntriesPayrollFilter();
   },
 
   /* ── Getters ──────────────────────────────────────────── */
@@ -484,8 +534,38 @@ const Auth = {
    * OBS: PKCE skickas INTE i recover-anropet eftersom det kan göra att
    *      Supabase avvisar anropet eller att vi inte kan verifiera koden.
    */
+  /* ITEM A FIX (round 8, independent-reviewer finding): `redirectTo`
+     used to be LIVE's URL, hardcoded, used UNCONDITIONALLY — including
+     when this code runs on STAGING. A password-reset email sent from
+     STAGING would then link the recipient to the PRODUCTION site's
+     reset page, which cannot complete the reset (different Supabase
+     project, different users).
+
+     Fix: derive the redirect from the SAME signal `storage.js`/
+     `config.js` already use to distinguish STAGING from LIVE — this
+     deployment's own `SUPABASE_URL` (baked into storage.js per
+     environment; no new mechanism invented). FAIL-CLOSED: if
+     `SUPABASE_URL` matches neither known project ref, this refuses to
+     send (logs clearly, returns `{ok:false}`) rather than silently
+     falling through to the LIVE URL — the exact bug being fixed. */
+  /* Produktionsrepots miljööverlägg: endast LIVE-posten. STAGING-
+     deployen lägger till sin egen post vid synk till staging-repot
+     (CLAUDE.md: stagingens ref/domän får aldrig finnas i produktionsfrontend). */
+  _ENV_REDIRECT_BY_PROJECT_REF: {
+    'hjplzjsbbowiyoyhdghc': 'https://crm.viftfast.se/#/reset-password'
+  },
+  _resolveEnvRedirect() {
+    const url = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : '';
+    const ref = Object.keys(this._ENV_REDIRECT_BY_PROJECT_REF).find(function (r) { return url.indexOf(r) !== -1; });
+    return ref ? this._ENV_REDIRECT_BY_PROJECT_REF[ref] : null;
+  },
+
   async sendPasswordReset(email) {
-    const redirectTo = 'https://crm.viftfast.se/#/reset-password';
+    const redirectTo = this._resolveEnvRedirect();
+    if (!redirectTo) {
+      console.error('[Auth.sendPasswordReset] Kunde inte avgöra miljö från SUPABASE_URL — avbryter FAIL-CLOSED (skickar INTE till produktionens URL som gissning).');
+      return { ok: false, error: 'Kunde inte avgöra vilken miljö detta är (STAGING/LIVE) — återställningslänk skickades INTE. Kontakta systemansvarig.' };
+    }
     const body       = { email: email.toLowerCase().trim(), redirect_to: redirectTo };
     console.log('[Auth.sendPasswordReset] Skickar till Supabase:', JSON.stringify(body));
     try {
@@ -552,5 +632,114 @@ const Auth = {
        upp sig själv när den landar; ingen ny refresh kan starta för att
        refreshIfNeeded()/forceRefresh() redan kräver en icke-null _session. */
     try { localStorage.removeItem(this.SESSION_KEY); } catch(e) {}
+    /* BLOCKER-1 SLUTFÖRANDE (krav 1 — känsliga tidposter får inte ligga
+       kvar efter utloggning): körs vid VARJE väg som når _clearSession()
+       — explicit logout() OCH en misslyckad token-refresh — rensar
+       `vift_timeEntries` ur localStorage/state OCH epok-ogiltigförklarar
+       ett ev. fortfarande pågående fetchAndApply()-anrop I DENNA FLIK
+       (krav 4). ANDRA, samtidigt öppna flikar nollställs via
+       `_installCrossTabSessionListener()` nedan — se dess kommentar
+       för varför det MÅSTE ogiltigförklara `_session` där, inte bara
+       cachen (oberoende granskning, fel 2, ANDRA rapporterade
+       bristen). Rör ALDRIG `vift_outbox`/`vift_settleIntents`
+       (krav 5) — se TimeEntriesReadService.js. */
+    if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+    if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+  },
+
+  /* BLOCKER-1 SLUTFÖRANDE (oberoende granskning, fel 2, ANDRA
+     rapporterade bristen — verkligt reproducerad): den FÖRSTA
+     rättelsens cross-tab-lyssnare (då i TimeEntriesReadService.js)
+     rensade bara cachen/epoken i andra flikar, men lämnade DEN flikens
+     `Auth._session` orörd — fliken "trodde" sig alltså fortfarande
+     inloggad, och ett HELT NYTT `fetchAndApply()`-anrop (inte bara ett
+     redan i-flykt) kunde då fortfarande lyckas och återskapa
+     `vift_timeEntries` efter att en ANNAN flik loggat ut, ELLER
+     återanvända FÖREGÅENDE användares data efter att en annan flik
+     loggat in som en NY användare. Flyttad hit (AuthService.js äger
+     redan hela sessionslivscykeln) och korrigerad:
+
+     - `newEmail === oldEmail` (SAMMA användare) betyder en NORMAL
+       token-refresh i en annan flik (`_doRefresh()`s `_saveSession()`
+       skriver om exakt samma nyckel) — INGEN invalidering görs, annars
+       hade en helt vanlig, bakgrunds-refresh i en flik tvingat ALLA
+       andra flikar att logga ut i onödan.
+
+       RONDA 4-KORRIGERING (fel 1, verkligt reproducerad): att bara
+       IGNORERA en samma-användare-refresh räckte INTE — DENNA fliks
+       `_session` behöll då sin GAMLA, redan roterade `refresh_token`
+       (Supabase roterar `refresh_token` vid varje förnyelse). Nästa
+       gång DENNA flik själv försökte förnya sin (nu ogiltiga) token
+       och fick ett 401, anropade den `_clearSession()` — vilket tog
+       bort den ANDRA flikens NYARE, fullt giltiga session från den
+       DELADE `localStorage`, och den händelsen loggade i sin tur ut
+       ÄVEN den andra, egentligen helt oskyldiga fliken. Fixat genom
+       att ANTA (kopiera in) den nya sessionen i DENNA flik också vid
+       en samma-användare-händelse — ingen flik använder då längre en
+       redan inaktuell `refresh_token`.
+     - Annars (riktig utloggning, `newValue===null`, ELLER ett genuint
+       kontobyte, annan `user_email`): DENNA flikens `_session`
+       nollställs OCH `App.showLogin()` visas — matchar exakt vad
+       `logout()` redan gör för den flik som själv initierar
+       utloggningen.
+     - Skriver ALDRIG till `localStorage` själv härifrån (anropar
+       INTE `_clearSession()`/`removeItem` rakt av) — vid ett
+       kontobyte innehåller `vift_auth_v2` redan den ANDRA flikens
+       NYA, giltiga session; om DENNA flik då tog bort den nyckeln
+       hade den fliken själv blivit utloggad direkt efter sin egen,
+       just lyckade inloggning (en förstörande återkopplingsloop).
+     - RONDA 4-KORRIGERING (fel 2, verkligt reproducerad): nollställer
+       nu även `state.currentUser` vid en riktig utloggning/kontobyte
+       — tidigare lämnades den gamla användaridentiteten kvar i minnet
+       trots att `_session` redan var nollställd. Rör ALDRIG
+       `vift_outbox`/`vift_settleIntents` (osynkroniserad AO-/
+       tiddata) — `state.currentUser` är bara en referens till VEM som
+       är inloggad, ingen arbetsdata. */
+  _installCrossTabSessionListener() {
+    if (this._crossTabListenerInstalled) return;
+    this._crossTabListenerInstalled = true;
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    const self = this;
+    window.addEventListener('storage', function (ev) {
+      if (!ev || ev.key !== self.SESSION_KEY) return;
+      /* RONDA 4-KORRIGERING (fel 1, uppföljning — verkligt reproducerad
+         mot egna tester): jämförelsen användes tidigare mot
+         `ev.oldValue` — den DELADE localStorage-nyckelns FÖREGÅENDE
+         värde, som inte nödvändigtvis har något att göra med DENNA
+         flikens EGEN kännedom. Om denna flik redan var utloggad
+         (`self._session === null`, t.ex. har aldrig loggat in än) men
+         en ANNAN flik loggade in för FÖRSTA gången (`ev.oldValue` då
+         `null`), tolkades det felaktigt som ett kontobyte och
+         `App.showLogin()` anropades i onödan i denna, redan utloggade
+         flik. Jämför nu istället mot DENNA flikens egen, aktuella
+         `self._session`s e-post — den enda relevanta referenspunkten
+         för om NÅGOT behöver ogiltigförklaras HÄR. Har denna flik
+         redan ingen session, finns inget att invalidera eller anta —
+         ingen åtgärd. */
+      const selfEmail = self._session ? self._session.user_email : null;
+      if (selfEmail === null) return;
+      let newSession = null, newEmail = null;
+      try {
+        // Events can be queued behind a newer login/logout. Use the CURRENT
+        // shared session rather than the potentially stale event payload.
+        const currentRaw = localStorage.getItem(self.SESSION_KEY);
+        newSession = currentRaw ? JSON.parse(currentRaw) : null;
+        newEmail = newSession ? newSession.user_email : null;
+      } catch (e) {}
+      if (newEmail !== null && newEmail === selfEmail) {
+        /* RONDA 4-KORRIGERING (fel 1): samma användare — anta
+           (kopiera in) den NYA sessionen i denna flik också, se
+           motiveringen ovan. */
+        self._session = newSession;
+        return;
+      }
+      self._session = null;
+      if (typeof state !== 'undefined') state.currentUser = null; // RONDA 4-KORRIGERING (fel 2)
+      if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+      if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+      if (typeof App !== 'undefined' && App.showLogin) App.showLogin();
+    });
   }
 };
+
+Auth._installCrossTabSessionListener();

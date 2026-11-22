@@ -20,7 +20,18 @@ const ActivityService = {
    * väntade skrivning callern redan gör. Se RAPPORT-GLOBAL-LIVE-UI-R1A-1.md. */
   log(type, description, meta = {}, opts = {}) {
     const entry = {
-      id: 'ACT-' + Date.now(),
+      /* QA FIX-ROUND 2026-11-12 (C1 root cause, verified on live STAGING):
+         `'ACT-' + Date.now()` gave two entries logged in the same
+         millisecond the SAME id — the stored duplicate in vift_activityLog
+         is exactly that: ACT-1793611007122, a 'staff_assigned' and a
+         'work_order_updated' entry written by one updateStaff() call at
+         2026-11-02T09:16:47.122Z. That duplicate makes every later
+         activityLog write fail (backlog C1). Same prefix and millisecond
+         ordering as before, plus a random suffix, so a new duplicate can
+         no longer be produced. (The existing stored duplicate needs the
+         separate DB cleanup in _staging_integration/
+         PLAN_activitylog_dedup_2026-11-12.md.) */
+      id: 'ACT-' + Date.now() + '-' + ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10)),
       type,
       description,
       timestamp: new Date().toISOString(),

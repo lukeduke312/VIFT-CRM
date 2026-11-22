@@ -1,5 +1,5 @@
 /**
- * VIFT CRM — Service Worker v13
+ * VIFT CRM — Service Worker v14
  *
  * v10: bugfixar — behörigheter, snabb status, mobil iOS-zoom
  *      Rensar v7/v8/v9 cacher.
@@ -42,6 +42,9 @@
  *      uppdateringskontrollen — annars hade en ny SW-version i värsta
  *      fall kunnat missas helt, inte bara försenas.
  *
+ * v14: uppdaterar app-shell-cache inför R9B STAGING (ändrade klientfiler
+ *      och queryversioner i index.html); ingen ändring av fetch-/pushlogik.
+ *
  * Cache-strategi:
  *   config.js           → Aldrig cachad (network only, no-store)
  *   Supabase/Mapbox     → Aldrig cachad (passeras direkt)
@@ -52,7 +55,7 @@
  * Ny version: bump CACHE_NAME → gamla cacher raderas vid activate.
  */
 
-const CACHE_NAME = 'vift-crm-v13';
+const CACHE_NAME = 'vift-crm-v14';
 
 /* Filer att förcacha vid install (app shell) */
 const PRECACHE_URLS = [

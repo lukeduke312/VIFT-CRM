@@ -105,7 +105,12 @@ const TimePage = {
       buttons: [
         { label: 'Klocka in', cls: 'btn bsu', onClick: () => {
           const aoId = document.getElementById('ci-ao')?.value || null;
-          TimeService.clockIn(aoId || null);
+          /* CLOCK-ACK AUDIT (2026-11-12): clockIn() är rent lokal (ingen
+             serverskrivning finns att invänta — se WorkOrderDetailPage.
+             toggleStamp()s kommentar), men dess returvärde kontrolleras nu
+             så "Inklockat" aldrig visas för en nekad inklockning. */
+          const ok = TimeService.clockIn(aoId || null);
+          if (!ok) { showToast('Kunde inte klocka in — kontrollera din behörighet.'); return; }
           Modal.close();
           showToast('Inklockat');
           TimePage.render();
@@ -137,15 +142,42 @@ const TimePage = {
           <label><input type="checkbox" id="co-billable" checked style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label>
         </div>`,
       buttons: [
-        { label: 'Klocka ut', cls: 'btn bsu', onClick: () => {
-          TimeService.clockOut({
+        /* CLOCK-OUT-ACK FIX (2026-11-12): tredje klock-ut-UI:t (även det
+           MobileShell:s "Klocka ut"-knapp öppnar). Hade exakt samma lucka
+           som WorkOrderDetailPage._openClockOutModal(): "Utloggad" visades
+           direkt utan att tidpostens serverskrivning bekräftats (och
+           clockOut()s returvärde kontrollerades inte ens). Samma lösning
+           och samma UX-beslut som där — se den kommentaren. */
+        { label: 'Klocka ut', cls: 'btn bsu', onClick: (ev) => {
+          const btnEl = ev && ev.currentTarget;
+          let closed = false;
+          const closeOnce = () => {
+            if (closed) return false;
+            closed = true;
+            Modal.close();
+            TimePage.render();
+            return true;
+          };
+          const entry = TimeService.clockOut({
             priceGroupId: document.getElementById('co-pg')?.value || '',
             comment:      document.getElementById('co-comment')?.value.trim() || '',
-            billable:     document.getElementById('co-billable')?.checked !== false
+            billable:     document.getElementById('co-billable')?.checked !== false,
+            onSettled: (r) => {
+              if (!r) return;
+              if (r.ok) {
+                if (!closeOnce()) { showToast('Tidposten är nu bekräftad av servern'); return; }
+                showToast('Utloggad — tid sparad');
+              } else if (r.final) {
+                closeOnce();
+                showToast('Utloggad, men tidposten kunde INTE sparas av servern' + (r.error ? ' (' + r.error + ')' : '') + ' — registrera tiden manuellt.');
+              } else if (r.queued) {
+                closeOnce();
+                showToast('Utloggad — sparar tiden… (ej bekräftad av servern ännu, skickas automatiskt när anslutningen fungerar)');
+              }
+            }
           });
-          Modal.close();
-          showToast('Utloggad');
-          TimePage.render();
+          if (!entry) { showToast('Kunde inte klocka ut — kontrollera din behörighet.'); return; }
+          if (!closed && btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -378,10 +410,19 @@ const TimePage = {
           <select id="et-customer"><option value="">— Ingen kund —</option>${cuOptions}</select></div>
         <div class="fg"><label>Arbetsorder</label>
           <select id="et-ao"><option value="">— Ingen AO —</option>${aoOptions}</select></div>
-        <div class="fg"><label>Kommentar</label><textarea id="et-comment" rows="2">${t.comment||''}</textarea></div>
+        <div class="fg"><label>Kommentar</label><textarea id="et-comment" rows="2">${esc(t.comment||'')}</textarea></div>
         <div class="fg"><label><input type="checkbox" id="et-billable" ${t.billable?'checked':''} style="width:16px;height:16px;margin-right:6px;">Debiterbar tid</label></div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => {
+        { label: 'Spara', cls: 'btn bp', onClick: (ev) => {
+          /* I4 (2026-11-12): "Tid uppdaterad" only after the server's ACK.
+             Final rejection: the entry is rolled back (TimeService.update),
+             the dialog stays open with what the user typed, a real error
+             is shown. Transient first attempt: honest "köad" message. */
+          const btnEl = ev && ev.currentTarget;
+          const origLabel = btnEl ? btnEl.innerHTML : '';
+          let settled = false, closed = false;
+          const resetBtn = () => { if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = origLabel; } };
+          const refreshList = () => { const l = document.getElementById('time-list'); if (l) l.innerHTML = this._renderList(); };
           const result = TimeService.update(id, {
             date:         document.getElementById('et-date')?.value || t.date,
             startStr:     document.getElementById('et-start')?.value || t.startStr,
@@ -391,11 +432,30 @@ const TimePage = {
             aoId:         document.getElementById('et-ao')?.value || '',
             comment:      document.getElementById('et-comment')?.value.trim() || '',
             billable:     document.getElementById('et-billable')?.checked !== false
+          }, {
+            onSettled: (r) => {
+              settled = true;
+              refreshList();
+              if (r.ok) {
+                if (closed) { showToast('Tidsändringen är nu bekräftad av servern'); return; }
+                closed = true;
+                Modal.close();
+                showToast('Tid uppdaterad');
+              } else {
+                if (!closed) resetBtn();
+                showToast('Tiden kunde INTE sparas' + (r.error ? ' (' + r.error + ')' : '') + ' — ändringen är ångrad.' + (closed ? '' : ' Dina uppgifter finns kvar i formuläret, försök igen.'), 7000);
+              }
+            },
+            onFirstAttempt: (first) => {
+              if (settled || !first || first.ok || first.final) return;
+              closed = true;
+              Modal.close();
+              refreshList();
+              showToast('Sparar tiden… ej bekräftad av servern ännu — skickas automatiskt när anslutningen fungerar.', 6000);
+            }
           });
           if (!result.ok) { showToast(result.error); return; }
-          Modal.close();
-          document.getElementById('time-list').innerHTML = this._renderList();
-          showToast('Tid uppdaterad');
+          if (!settled && !closed && btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]

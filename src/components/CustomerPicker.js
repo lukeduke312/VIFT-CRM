@@ -63,6 +63,7 @@ const CustomerPicker = {
     if (qText) {
       const textFields = [
         (typeof CustomerService !== 'undefined' ? CustomerService.displayName(cu) : ''),
+        (typeof CustomerService !== 'undefined' && CustomerService.displayNumber ? CustomerService.displayNumber(cu) : ''), // 2026-11-12
         cu.name, cu.firstName, cu.lastName, cu.contactPerson,
         cu.address, cu.zip, cu.city, cu.email
       ];
@@ -157,7 +158,7 @@ const CustomerPicker = {
     const props = (typeof state !== 'undefined' && Array.isArray(state.properties))
       ? state.properties.filter(p => p.customerId === cu.id) : [];
     const propHits = props.filter(p => {
-      const fields = [p.name, p.address, p.id];
+      const fields = [p.name, p.address, p.id, (typeof displayNumberOf === 'function' ? displayNumberOf(p) : '')]; // display number (2026-11-12)
       return fields.some(f => this._normText(f).includes(qText));
     });
     if (propHits.length === 1) return { matched: true, viaProperty: propHits[0] };
