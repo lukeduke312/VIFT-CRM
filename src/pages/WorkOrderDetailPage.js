@@ -1083,10 +1083,19 @@ const WorkOrderDetailPage = {
       timestamp: new Date().toISOString(),
       visibility: 'intern'
     });
-    const updated = WorkOrderService.update(this.aoId, { priceType, fixedPrice, priceGroupId, log: ao.log });
+    const aoIdForToast = this.aoId;
+    const updated = WorkOrderService.update(this.aoId, { priceType, fixedPrice, priceGroupId, log: ao.log }, {
+      onSettled: (r) => {
+        if (r.ok) { showToast('Prissättning sparad'); return; }
+        showToast('Prissättningen nekades av servern' + (r.error ? ' (' + r.error + ')' : '') + ' — hämtar serverns läge.', 7000);
+        if (typeof WorkOrdersReadService !== 'undefined') {
+          WorkOrdersReadService.fetchAndApply().then(() => { if (this.aoId === aoIdForToast) this.render({ aoId: aoIdForToast }); });
+        }
+      }
+    });
     if (!updated) { showToast('Kunde inte spara prissättningen.'); return; }
     Modal.close();
-    showToast('Prissättning uppdaterad');
+    showToast('Sparar prissättning…');
 
     if (priceType === 'timpris') {
       const broken = this._brokenTimeEntries(this.aoId);
