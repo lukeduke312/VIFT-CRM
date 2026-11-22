@@ -1,4 +1,18 @@
 -- ============================================================
+-- ÖVERSPELAD (installationsavstämning, 2026-11-22) — INSTALLERA INTE.
+-- Den faktiska, direktverifierade STAGING-databasen (yyzljlqyzzcbxmcdbual)
+-- har REDAN en policy som gör exakt detta: "store_timeentries_no_direct_select"
+-- (RESTRICTIVE, FOR SELECT TO authenticated, USING (key <> 'vift_timeEntries')
+-- — se docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md). Att installera DENNA
+-- migration också skulle skapa en andra, DUPLICERAD RESTRICTIVE-policy med
+-- samma effekt men ett annat namn — ingen funktionell skada (RESTRICTIVE-
+-- policyer AND-kombineras, så två identiska är fortfarande bara "blockerad"),
+-- men onödig och förväxlande redundans. Explicit instruktion: "Återanvänd
+-- befintliga skydd. Skapa inte dubbla RLS-policyer."
+-- Filen behålls (inte raderad) som historisk dokumentation av analysen som
+-- ledde fram till samma slutsats som den redan installerade policyn.
+-- ============================================================
+--
 -- Migration (FÖRSLAG, EJ INSTALLERAD): Blockera direkt läsning av
 -- vift_timeEntries för authenticated — server-sidig hälft av
 -- BLOCKER-1 (docs/PROJECT_STATUS.md).
