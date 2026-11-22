@@ -24,7 +24,7 @@
  *   - `staffMember` -> supplies the caller's OWN id for the "own
  *                      entries" filter — never read from the request.
  *
- * GET /functions/v1/time-entries-list
+ * GET/POST /functions/v1/time-entries-list
  * Headers: Authorization: Bearer <supabase-jwt>
  * No query params, no body — a plain authenticated read.
  *
@@ -46,7 +46,7 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Cache-Control':                'no-store, no-cache',
   'Referrer-Policy':              'no-referrer',
   'X-Content-Type-Options':       'nosniff',
@@ -78,7 +78,7 @@ function checkRateLimit(key: string): boolean {
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-  if (req.method !== 'GET') return json({ error: 'method_not_allowed' }, 405)
+  if (req.method !== 'GET' && req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const authHeader = req.headers.get('authorization') || ''
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
