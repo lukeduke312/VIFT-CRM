@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; frame-ancestors 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; frame-ancestors 'none';">
 <title>Offert — VIFT Fastighetsservice</title>
 <style>
 /* ── Reset & tokens ─────────────────────────────────────── */
@@ -376,6 +376,7 @@ a { color: var(--blue); text-decoration: none; }
   </div>
 </div>
 
+<script src="src/shared/OfferCalc.js?v=1"></script>
 <script>
 /* ── Konfig ─────────────────────────────────────────────── */
 /* SUPABASE_URL injiceras från window.VIFT_CONFIG om tillgängligt,
@@ -456,14 +457,7 @@ async function loadOffer(token) {
    null/undefined/tomsträng (inkl. whitespace-only) = inget värde satt ->
    fallback 25; explicit 0/'0' = 0 % (behålls exakt); giltigt 0-100
    behålls exakt; NaN/Infinity/negativt/>100 -> fallback. */
-function _poNormVat(value, fallback) {
-  if (fallback === undefined) fallback = 25;
-  if (value === null || value === undefined) return fallback;
-  if (typeof value === 'string' && value.trim() === '') return fallback;
-  var n = Number(value);
-  if (!isFinite(n) || n < 0 || n > 100) return fallback;
-  return n;
-}
+function _poNormVat(value, fallback) { return OfferCalc.normVat(value, fallback); }
 
 /* V48B5 R1 (blocker-korrigering): kanoniska sektions-ID:n — EXAKT samma
    fyra block som PageShells.OFFER_SECTION_IDS (duplicerad här av samma
@@ -492,16 +486,7 @@ function _poResolveSectionOrder(order) {
    se filhuvudkommentaren för _poNormVat, men implementerar SAMMA
    formel/semantik). 'rate'/'option' returnerar alltid 0 — se
    RAPPORT §Prismodell. */
-function _poLineExVat(l) {
-  if (!l || l.type === 'text') return 0;
-  if (l.billingType === 'rate') return 0;
-  if (l.type === 'service') return (l.exVat != null ? +l.exVat : 0);
-  var qty = (l.qty != null && l.qty !== '') ? +l.qty : 1;
-  var up  = +(l.unitPrice || 0);
-  var comp = Math.round(qty * up);
-  if (comp === 0 && l.total) return +l.total;
-  return comp;
-}
+function _poLineExVat(l) { return OfferCalc.lineExVat(l); }
 
 /* OFFER CORE R1 — badge/prisetikett för billingType, mirror av
    OffersPage._billingTypeBadgeHtml/_billingPriceLabelHtml i
@@ -548,9 +533,7 @@ function _poBillingPriceLabelHtml(l, amountExVat, amountIncVat) {
    PageShells.js. e.includedInTotal===false = explicit ej committad
    tillval-extra; frånvarande fält (all historisk data) = "included",
    exakt samma summa som innan R1.1. */
-function _poExtraIncludedInTotal(e) {
-  return e.includedInTotal !== false;
-}
+function _poExtraIncludedInTotal(e) { return OfferCalc.extraIncludedInTotal(e); }
 
 /* OFFER CORE R1.2 — RUT/ROT rendering hardening (defense in depth,
    mirror of _effectiveRutAmount() in PageShells.js). A recurring/rate
@@ -581,36 +564,23 @@ function renderOffer(off) {
   var recurringLines = lines.filter(function(l) { return l.billingType === 'recurring'; });
   var rateOptLines   = lines.filter(function(l) { return l.billingType === 'rate'; });
 
-  var rawEx = prLines.reduce(function(s,l) { return s + _poLineExVat(l); }, 0);
-  extras.filter(_poExtraIncludedInTotal).forEach(function(e) { rawEx += Math.round((e.qty||1)*(e.unitPrice||0)); });
-
-  var recurringMonthlyEx = Math.round(recurringLines.reduce(function(s,l){ return s + _poLineExVat(l); }, 0));
-  var recurringMonthlyVat = Math.round(recurringLines.reduce(function(s,l){ return s + Math.round(_poLineExVat(l) * _poNormVat(l.vatRate) / 100); }, 0));
-  var recurringMonthlyInc = recurringMonthlyEx + recurringMonthlyVat;
-  var recurringAnnualEx  = recurringMonthlyEx * 12;
-  var recurringAnnualInc = recurringMonthlyInc * 12;
-
-  /* V38 §5: momsen räknas per rad/tillägg (dess egna vatRate, 0-safe),
-     inte ett generellt * 0.25 på summan — samma metod/formel som CRM:s
-     kanoniska _offerCalcTotals() (PageShells.js). */
-  var rawVat = prLines.reduce(function(s,l) {
-    return s + Math.round(_poLineExVat(l) * _poNormVat(l.vatRate) / 100);
-  }, 0);
-  extras.filter(_poExtraIncludedInTotal).forEach(function(e) {
-    var eEx = Math.round((e.qty||1)*(e.unitPrice||0));
-    rawVat += Math.round(eEx * _poNormVat(e.vatRate) / 100);
-  });
-
-  var disc  = off.discount || {type:'none', value:0};
-  var discAmt = disc.value
-    ? (disc.type==='percent' ? Math.round(rawEx * Math.min(disc.value,100)/100) : Math.min(Math.round(disc.value), rawEx))
-    : 0;
-  var exVat  = rawEx - discAmt;
-  var vatRatio = rawEx > 0 ? (exVat / rawEx) : 1;
-  var vat    = Math.round(rawVat * vatRatio);
-  var incVat = exVat + vat;
-  var rutAmt = prLines.reduce(function(s,l){return s+(l.rutAmount||0);},0);
-  var cust   = incVat - rutAmt;
+  /* Summor från samma OfferCalc som CRM:et (src/shared/OfferCalc.js) —
+     kunden ska aldrig se en annan totalsumma än den som sparats/fakturerats.
+     Tidigare egen kopia gav avvikelser, bl.a. för äldre rader med `price`
+     i stället för `unitPrice` (se tests/browser/offer_total_parity.js). */
+  var _t = OfferCalc.totals(off);
+  var rawEx   = _t.rawExVat;
+  var discAmt = _t.discountAmount;
+  var exVat   = _t.exVatAfterDiscount;
+  var vat     = _t.vatAmount;
+  var incVat  = _t.totalInclVat;
+  var rutAmt  = _t.rutRotAmount;
+  var cust    = _t.customerPays;
+  var recurringMonthlyEx  = _t.recurringMonthlyExVat;
+  var recurringMonthlyVat = _t.recurringMonthlyVat;
+  var recurringMonthlyInc = _t.recurringMonthlyInclVat;
+  var recurringAnnualEx   = _t.recurringAnnualExVat;
+  var recurringAnnualInc  = _t.recurringAnnualInclVat;
 
   /* Statusbanner */
   var answered = off.status === 'godkänd' || off.status === 'nekad' || off.status === 'ändring-begärd';

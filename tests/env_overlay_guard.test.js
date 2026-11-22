@@ -18,7 +18,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const html = read('index.html');
 const scripts = [...html.matchAll(/<script[^>]+src="([^"?]+)/g)].map((m) => m[1]);
 const styles = [...html.matchAll(/<link[^>]+href="([^"?]+\.css)/g)].map((m) => m[1]);
-const files = ['index.html', 'service-worker.js', 'manifest.json', 'config.js', ...scripts, ...styles]
+const files = ['index.html', 'public-offer.html', 'service-worker.js', 'manifest.json', 'config.js', ...scripts, ...styles]
   .map((p) => p.replace(/^\//, ''))
   .filter((p) => fs.existsSync(path.join(ROOT, p)));
 
