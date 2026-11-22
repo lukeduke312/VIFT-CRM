@@ -2140,9 +2140,9 @@ const WorkOrderDetailPage = {
       body: `<p style="font-size:13px;color:var(--mt);">Ordern arkiveras och syns inte i ordinarie lista. Du kan återställa den när som helst från Arkiverade-vyn.</p>`,
       buttons: [
         { label: `${ic('archive',12)} Arkivera`, cls: 'btn bp', onClick: () => {
-          WorkOrderService.archive(this.aoId);
+          WorkOrderService.archive(this.aoId, { onSettled: this._flagToast('Arbetsorder arkiverad', 'Arkiveringen') });
           Modal.close();
-          showToast('Arbetsorder arkiverad');
+          showToast('Arkiverar…');
           Sidebar.updateBadges();
           Router.showPage('pg-ao');
         }},
@@ -2157,9 +2157,9 @@ const WorkOrderDetailPage = {
       body: `<p style="font-size:13px;color:var(--mt);">Ordern hamnar i papperskorgen och raderas automatiskt efter 14 dagar. Du kan återställa den dessförinnan.</p>`,
       buttons: [
         { label: `${ic('trash',12)} Ta bort`, cls: 'btn bd', onClick: () => {
-          WorkOrderService.softDelete(this.aoId);
+          WorkOrderService.softDelete(this.aoId, { onSettled: this._flagToast('Arbetsorder flyttad till papperskorgen', 'Borttagningen') });
           Modal.close();
-          showToast('Arbetsorder borttagen (papperskorg)');
+          showToast('Tar bort…');
           Sidebar.updateBadges();
           Router.showPage('pg-ao');
         }},
@@ -2168,16 +2168,27 @@ const WorkOrderDetailPage = {
     });
   },
 
+  /* Bekräftelse först efter serverns svar; vid avslag har tjänsten redan
+     återställt AO:n lokalt, så vyn ritas om och felet visas. */
+  _flagToast(okMsg, what) {
+    return (r) => {
+      if (r.ok) { showToast(okMsg); return; }
+      showToast(what + ' nekades av servern' + (r.error ? ' (' + r.error + ')' : '') + ' — ingen ändring sparades.', 7000);
+      if (typeof Router !== 'undefined' && Router.currentPage === 'pg-ao-detail' && this.aoId) this.render({ aoId: this.aoId });
+      else if (typeof Router !== 'undefined' && Router.currentPage === 'pg-ao' && typeof WorkOrdersPage !== 'undefined') WorkOrdersPage.render();
+    };
+  },
+
   _restoreFromArchive(id) {
-    WorkOrderService.restoreFromArchive(id || this.aoId);
-    showToast('Återställd från arkiv');
+    WorkOrderService.restoreFromArchive(id || this.aoId, { onSettled: this._flagToast('Återställd från arkiv', 'Återställningen') });
+    showToast('Återställer…');
     if (id && id !== this.aoId) return;
     this.render({ aoId: this.aoId });
   },
 
   _restoreFromTrash(id) {
-    WorkOrderService.restoreFromTrash(id || this.aoId);
-    showToast('Återställd från papperskorg');
+    WorkOrderService.restoreFromTrash(id || this.aoId, { onSettled: this._flagToast('Återställd från papperskorg', 'Återställningen') });
+    showToast('Återställer…');
     if (id && id !== this.aoId) return;
     this.render({ aoId: this.aoId });
   },
@@ -2189,9 +2200,9 @@ const WorkOrderDetailPage = {
       body: `<p style="font-size:13px;color:var(--mt);">Arbetsorder <strong>${targetId}</strong> raderas permanent och kan inte återställas.</p>`,
       buttons: [
         { label: `${ic('trash-2',12)} Radera permanent`, cls: 'btn bd', onClick: () => {
-          WorkOrderService.permanentDelete(targetId);
+          WorkOrderService.permanentDelete(targetId, { onSettled: this._flagToast('Arbetsorder raderad permanent', 'Den permanenta raderingen') });
           Modal.close();
-          showToast('Arbetsorder raderad permanent');
+          showToast('Raderar…');
           Sidebar.updateBadges();
           Router.showPage('pg-ao');
         }},
@@ -2658,9 +2669,18 @@ const WorkOrderDetailPage = {
       if (!settled && !closed && btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Sparar…'; }
       return;
     } else {
-      const result = TimeService.saveManual({ ...data, aoId: this.aoId, staffId: overrideStaffId || undefined, staffName: overrideStaffName || undefined });
+      const result = TimeService.saveManual({ ...data, aoId: this.aoId, staffId: overrideStaffId || undefined, staffName: overrideStaffName || undefined }, {
+        onSettled: (r) => {
+          this._refreshTimeSection();
+          if (r.ok) showToast('Tid registrerad');
+          else showToast('Tiden kunde INTE sparas' + (r.error ? ' (' + r.error + ')' : '') + ' — posten är borttagen, registrera den igen.', 7000);
+        },
+        onFirstAttempt: (first) => {
+          if (first && !first.ok && !first.final) showToast('Sparar tiden… ej bekräftad av servern ännu — skickas automatiskt när anslutningen fungerar.', 6000);
+        }
+      });
       if (!result.ok) { showToast(result.error); return; }
-      showToast('Tid registrerad');
+      showToast('Sparar tiden…');
     }
     Modal.close();
     this._refreshTimeSection();
@@ -2668,10 +2688,19 @@ const WorkOrderDetailPage = {
 
   deleteTime(entryId) {
     Modal.confirm('Ta bort tidspost?', () => {
-      const result = TimeService.delete(entryId);
+      const result = TimeService.delete(entryId, {
+        onSettled: (r) => {
+          this._refreshTimeSection();
+          if (r.ok) showToast('Tidspost borttagen');
+          else showToast('Borttagningen nekades' + (r.error ? ' (' + r.error + ')' : '') + ' — posten finns kvar.', 7000);
+        },
+        onFirstAttempt: (first) => {
+          if (first && !first.ok && !first.final) showToast('Borttagningen väntar på anslutning — skickas automatiskt.', 6000);
+        }
+      });
       if (!result.ok) { showToast(result.error); return; }
       this._refreshTimeSection();
-      showToast('Tidspost borttagen');
+      showToast('Tar bort…');
     });
   },
 

@@ -9,6 +9,16 @@ function akutBadge() {
 }
 
 const WorkOrdersPage = {
+  /* Massändringar: definitiva serveravslag (transienta ligger kvar i
+     outboxen och skickas om) rapporteras som för enskilda ändringar. */
+  _reportBulkRejections(res) {
+    if (!res || !Array.isArray(res.failed) || typeof AOTimeSyncService.reportUnhandledRejection !== 'function') return;
+    res.failed.filter(f => f.final).forEach(f => {
+      const ao = getAO(f.id);
+      AOTimeSyncService.reportUnhandledRejection('ao', ao ? WorkOrderService.displayNumberOrPending(ao) : f.id, f.error);
+    });
+  },
+
   filter: 'alla',
   q: '',
   viewMode: localStorage.getItem('view-ao') || 'list',
@@ -2175,7 +2185,7 @@ const WorkOrdersPage = {
     });
     if (updated > 0) {
       if (typeof AOTimeSyncService !== 'undefined' && _syncOps.length > 0) {
-        AOTimeSyncService.bulkPatch('ao', _syncOps).catch(e => console.warn('[WorkOrdersPage] _bulkSetStatus sync-fel:', e));
+        AOTimeSyncService.bulkPatch('ao', _syncOps).then(res => this._reportBulkRejections(res)).catch(e => console.warn('[WorkOrdersPage] _bulkSetStatus sync-fel:', e));
       }
       persist(); Sidebar.updateBadges(); this.render();
     }
@@ -2322,7 +2332,7 @@ const WorkOrdersPage = {
     });
     if (updated > 0) {
       if (typeof AOTimeSyncService !== 'undefined' && _syncOps.length > 0) {
-        AOTimeSyncService.bulkPatch('ao', _syncOps).catch(e => console.warn('[WorkOrdersPage] _bulkAddStaff sync-fel:', e));
+        AOTimeSyncService.bulkPatch('ao', _syncOps).then(res => this._reportBulkRejections(res)).catch(e => console.warn('[WorkOrdersPage] _bulkAddStaff sync-fel:', e));
       }
       persist(); Sidebar.updateBadges(); this.render();
       /* V45: in-app-notis + riktig Web Push, bara för AO som faktiskt fick

@@ -142,6 +142,9 @@ const WorkOrderService = {
           ao._pendingSync = false;
           ao._syncFailed = r.error;
           console.error('[WorkOrderService] Serverskrivning avvisad för', ao.id, ':', r.error);
+          if (typeof opts.onSettled !== 'function' && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
+            AOTimeSyncService.reportUnhandledRejection('ao', WorkOrderService.displayNumberOrPending(ao), r.error);
+          }
         }
         // else: transient, stannar i outboxen (ao._pendingSync kvarstår true)
         if (typeof WorkOrdersPage !== 'undefined' && typeof WorkOrdersPage.onSyncStatusChanged === 'function') {
@@ -279,6 +282,9 @@ const WorkOrderService = {
             ao._pendingSync = false;
             ao._syncFailed = r.error;
             console.error('[WorkOrderService] AO-skapande avvisades av servern för', ao.id, ':', r.error);
+            if (typeof opts.onSettled !== 'function' && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
+              AOTimeSyncService.reportUnhandledRejection('ao', 'ny arbetsorder' + (ao.title ? ' "' + ao.title + '"' : ''), r.error);
+            }
           }
           if (typeof WorkOrdersPage !== 'undefined' && typeof WorkOrdersPage.onSyncStatusChanged === 'function') {
             WorkOrdersPage.onSyncStatusChanged(ao.id);
@@ -992,86 +998,110 @@ const WorkOrderService = {
 
   /* ── Arkiv & Papperskorg ────────────── */
 
-  archive(id) {
+  /* Statusflaggor (arkiv/papperskorg) via ao-time-write. opts.onSettled(r)
+     anropas med serverns slutliga svar (ok eller definitivt avslag). Vid
+     definitivt avslag återställs de fält denna ändring skrev (om de inte
+     ändrats igen sedan) — samma I4-regel som TimeService.update(): en AO
+     ska aldrig fortsätta visa ett läge servern vägrat. */
+  _applyFlagPatch(ao, patch, opts) {
+    const before = {};
+    Object.keys(patch).forEach(function (f) {
+      before[f] = Object.prototype.hasOwnProperty.call(ao, f) ? ao[f] : undefined;
+    });
+    Object.assign(ao, patch);
+    this._syncAO(ao, patch, {
+      onSettled: function (r) {
+        let rolledBack = false;
+        if (!r.ok && r.final) {
+          Object.keys(patch).forEach(function (f) {
+            if (ao[f] !== patch[f]) return;
+            if (before[f] === undefined) delete ao[f]; else ao[f] = before[f];
+            rolledBack = true;
+          });
+          if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+        }
+        if (opts && typeof opts.onSettled === 'function') {
+          try { opts.onSettled(Object.assign({}, r, { ao: ao, rolledBack: rolledBack })); } catch (e) { console.error('[WorkOrderService] caller onSettled threw (_applyFlagPatch):', e); }
+        }
+      }
+    });
+  },
+
+  archive(id, opts) {
     const ao = getAO(id);
     if (!ao) return;
     const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
-    ao.archived   = true;
-    ao.archivedAt = new Date().toISOString();
-    ao.archivedBy = by;
-    ao.updatedAt  = new Date().toISOString();
+    const now = new Date().toISOString();
     ActivityService.log('work_order_archived', `Arbetsorder ${ao.id} arkiverad`, { workOrderId: id, customerId: ao.customerId });
-    this._syncAO(ao, { archived: true, archivedAt: ao.archivedAt, archivedBy: by, updatedAt: ao.updatedAt });
+    this._applyFlagPatch(ao, { archived: true, archivedAt: now, archivedBy: by, updatedAt: now }, opts);
     persist();
     Sidebar.updateBadges();
   },
 
-  restoreFromArchive(id) {
+  restoreFromArchive(id, opts) {
     const ao = getAO(id);
     if (!ao) return;
-    ao.archived   = false;
-    ao.archivedAt = '';
-    ao.archivedBy = '';
-    ao.updatedAt  = new Date().toISOString();
     ActivityService.log('work_order_restored', `Arbetsorder ${ao.id} återställd från arkiv`, { workOrderId: id, customerId: ao.customerId });
-    this._syncAO(ao, { archived: false, archivedAt: '', archivedBy: '', updatedAt: ao.updatedAt });
+    this._applyFlagPatch(ao, { archived: false, archivedAt: '', archivedBy: '', updatedAt: new Date().toISOString() }, opts);
     persist();
     Sidebar.updateBadges();
   },
 
-  softDelete(id) {
+  softDelete(id, opts) {
     const ao = getAO(id);
     if (!ao) return;
     const by  = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
     const now = new Date();
-    ao.deleted     = true;
-    ao.deletedAt   = now.toISOString();
-    ao.deletedBy   = by;
-    ao.deleteAfter = new Date(now.getTime() + 14 * 86400000).toISOString();
-    ao.updatedAt   = now.toISOString();
     ActivityService.log('work_order_deleted', `Arbetsorder ${ao.id} borttagen (papperskorg)`, { workOrderId: id, customerId: ao.customerId });
-    this._syncAO(ao, { deleted: true, deletedAt: ao.deletedAt, deletedBy: by, deleteAfter: ao.deleteAfter, updatedAt: ao.updatedAt });
+    this._applyFlagPatch(ao, {
+      deleted: true, deletedAt: now.toISOString(), deletedBy: by,
+      deleteAfter: new Date(now.getTime() + 14 * 86400000).toISOString(), updatedAt: now.toISOString()
+    }, opts);
     persist();
     Sidebar.updateBadges();
   },
 
-  restoreFromTrash(id) {
+  restoreFromTrash(id, opts) {
     const ao = getAO(id);
     if (!ao) return;
-    ao.deleted     = false;
-    ao.deletedAt   = '';
-    ao.deletedBy   = '';
-    ao.deleteAfter = '';
-    ao.updatedAt   = new Date().toISOString();
     ActivityService.log('work_order_restored', `Arbetsorder ${ao.id} återställd från papperskorg`, { workOrderId: id, customerId: ao.customerId });
-    this._syncAO(ao, { deleted: false, deletedAt: '', deletedBy: '', deleteAfter: '', updatedAt: ao.updatedAt });
+    this._applyFlagPatch(ao, { deleted: false, deletedAt: '', deletedBy: '', deleteAfter: '', updatedAt: new Date().toISOString() }, opts);
     persist();
     Sidebar.updateBadges();
   },
 
-  /* P0 AO/TID-FIX: äkta array-borttagning (inte en flagga) går nu via
-     work_order_permanent_delete (atomisk, idempotent — se migrationen).
-     Lokal mutation sker ändå OMEDELBART (oförändrat synkront kontrakt,
-     ingen anropare väntar på servern) — serverradering sker i bakgrunden;
-     om den definitivt avvisas (t.ex. behörighet ändrad under tiden) loggas
-     felet men den lokala listan förblir ändrad tills nästa DataSync-poll
-     ev. återställer den (samma redan existerande, ofrånkomliga egenskap
-     som ALLA optimistiska lokala mutationer i denna fil haft sedan innan
-     denna insats). */
-  permanentDelete(id) {
+  /* P0 AO/TID-FIX: äkta array-borttagning via work_order_permanent_delete
+     (atomisk, idempotent). Lokal borttagning sker direkt; vid definitivt
+     avslag (t.ex. ändrad behörighet) läggs AO:n tillbaka på samma plats —
+     den finns kvar på servern. opts.onSettled som _applyFlagPatch(). */
+  permanentDelete(id, opts) {
     const idx = state.workOrders.findIndex(a => a.id === id);
     if (idx === -1) return;
     const ao = state.workOrders[idx];
     ActivityService.log('work_order_permanent_delete', `Arbetsorder ${id} raderad permanent`, { workOrderId: id, customerId: ao ? ao.customerId : '' });
     state.workOrders.splice(idx, 1);
+    const notify = function (r) {
+      if (opts && typeof opts.onSettled === 'function') {
+        try { opts.onSettled(r); } catch (e) { console.error('[WorkOrderService] caller onSettled threw (permanentDelete):', e); }
+      }
+    };
     if (typeof AOTimeSyncService !== 'undefined') {
       AOTimeSyncService.deleteAOPermanent(id, {
         onSettled: function (r) {
+          let rolledBack = false;
           if (!r.ok && r.final) {
             console.error('[WorkOrderService] Permanent radering avvisad av servern för', id, ':', r.error);
+            if (!state.workOrders.some(a => a.id === id)) {
+              state.workOrders.splice(Math.min(idx, state.workOrders.length), 0, ao);
+              rolledBack = true;
+              if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+            }
           }
+          notify(Object.assign({}, r, { ao: ao, rolledBack: rolledBack }));
         }
       });
+    } else {
+      notify({ ok: false, final: true, error: 'sync_unavailable', ao: ao, rolledBack: false });
     }
     persist();
     Sidebar.updateBadges();

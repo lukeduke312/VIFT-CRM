@@ -334,12 +334,24 @@ const TimePage = {
       billable:     document.getElementById('mt-billable')?.checked !== false,
       staffId:      overrideStaffId || undefined,
       staffName:    overrideStaffName || undefined
+    }, {
+      /* "Tid sparad" först efter serverns ACK; avslag → posten tas bort och
+         användaren uppmanas registrera igen; transient → ärligt "köad". */
+      onSettled: (r) => {
+        const l = document.getElementById('time-list'); if (l) l.innerHTML = this._renderList();
+        if (r.ok) { showToast('Tid sparad'); return; }
+        if (typeof opts.onSaved === 'function') opts.onSaved();
+        showToast('Tiden kunde INTE sparas' + (r.error ? ' (' + r.error + ')' : '') + ' — posten är borttagen, registrera den igen.', 7000);
+      },
+      onFirstAttempt: (first) => {
+        if (first && !first.ok && !first.final) showToast('Sparar tiden… ej bekräftad av servern ännu — skickas automatiskt när anslutningen fungerar.', 6000);
+      }
     });
     if (!result.ok) { showToast(result.error); return; }
+    showToast('Sparar tiden…');
     if (typeof opts.onSuccess === 'function') {
       opts.onSuccess();
     } else {
-      showToast('Tid sparad');
       const c = document.getElementById('mt-comment'); if (c) c.value = '';
       const l = document.getElementById('time-list'); if (l) l.innerHTML = this._renderList();
     }
@@ -464,10 +476,20 @@ const TimePage = {
 
   deleteEntry(id) {
     Modal.confirm('Ta bort tidspost?', () => {
-      const result = TimeService.delete(id);
+      const refresh = () => { const l = document.getElementById('time-list'); if (l) l.innerHTML = this._renderList(); };
+      const result = TimeService.delete(id, {
+        onSettled: (r) => {
+          refresh();
+          if (r.ok) showToast('Tidspost borttagen');
+          else showToast('Borttagningen nekades' + (r.error ? ' (' + r.error + ')' : '') + ' — posten finns kvar.', 7000);
+        },
+        onFirstAttempt: (first) => {
+          if (first && !first.ok && !first.final) showToast('Borttagningen väntar på anslutning — skickas automatiskt.', 6000);
+        }
+      });
       if (!result.ok) { showToast(result.error); return; }
-      document.getElementById('time-list').innerHTML = this._renderList();
-      showToast('Borttagen');
+      refresh();
+      showToast('Tar bort…');
     });
   }
 };

@@ -62,6 +62,9 @@ const TimeService = {
           entry._pendingSync = false;
           entry._syncFailed = r.error;
           console.error('[TimeService] Serverskrivning avvisad för', entry.id, ':', r.error);
+          if (typeof opts.onSettled !== 'function' && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
+            AOTimeSyncService.reportUnhandledRejection('time', 'tidpost ' + (entry.date || ''), r.error);
+          }
         }
         if (r.ok || r.final) notify(opts.onSettled, r);
         if (typeof TimePage !== 'undefined' && typeof TimePage.onSyncStatusChanged === 'function') {
@@ -328,7 +331,11 @@ const TimeService = {
   /* Manuell tidsregistrering.
      V22: overrideStaffName tas emot men litas ALDRIG på — staffName härleds
      alltid från den faktiska state.staff-posten när ett staffId anges. */
-  saveManual(data) {
+  /* opts.onSettled(r) / opts.onFirstAttempt(r): samma kontrakt som update().
+     Vid definitivt serveravslag tas posten bort lokalt igen (även AO:ns
+     timeEntries-referens) — en tidpost servern vägrat får aldrig visas som
+     registrerad. Anropare utan opts påverkas inte. */
+  saveManual(data, opts) {
     const { date, startStr, endStr, aoId, customerId, priceGroupId,
             comment, billable, internal,
             staffId: overrideStaffId } = data;
@@ -405,10 +412,17 @@ const TimeService = {
     ActivityService.log('time_entry_created',
       `Manuell tid: ${minutes} min${aoId ? ' på ' + aoId : ''}`,
       { workOrderId: aoId || '', customerId: resolvedCustomer });
+    const callerOnSettled = opts && typeof opts.onSettled === 'function' ? opts.onSettled : null;
+    const callerOnFirst = opts && typeof opts.onFirstAttempt === 'function' ? opts.onFirstAttempt : null;
+    const notify = function (fn, r) {
+      if (!fn) return;
+      try { fn(r); } catch (e) { console.error('[TimeService] caller callback threw (saveManual):', e); }
+    };
     if (typeof AOTimeSyncService !== 'undefined') {
       entry._pendingSync = true;
-      AOTimeSyncService.createTime(entry, {
+      const p = AOTimeSyncService.createTime(entry, {
         onSettled: function (r) {
+          let rolledBack = false;
           if (r.ok) {
             entry._pendingSync = false;
             if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
@@ -419,9 +433,24 @@ const TimeService = {
             entry._pendingSync = false;
             entry._syncFailed = r.error;
             console.error('[TimeService] Manuellt tidsskapande avvisades av servern för', entry.id, ':', r.error);
+            state.timeEntries = (state.timeEntries || []).filter(function (t) { return t.id !== entry.id; });
+            const aoNow = entry.aoId ? getAO(entry.aoId) : null;
+            if (aoNow && Array.isArray(aoNow.timeEntries)) aoNow.timeEntries = aoNow.timeEntries.filter(function (tid) { return tid !== entry.id; });
+            if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('timeEntries', state.timeEntries);
+            rolledBack = true;
           }
+          if (r.ok || r.final) notify(callerOnSettled, { ok: !!r.ok, final: true, error: r.error || null, entry: entry, rolledBack: rolledBack });
+          if (!r.ok && r.final && !callerOnSettled && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
+            AOTimeSyncService.reportUnhandledRejection('time', 'tidpost ' + (entry.date || ''), r.error);
+          }
+          if (typeof TimePage !== 'undefined' && typeof TimePage.onSyncStatusChanged === 'function') TimePage.onSyncStatusChanged(entry.id);
         }
       });
+      if (callerOnFirst && p && typeof p.then === 'function') {
+        p.then(function (first) { notify(callerOnFirst, first || {}); }, function () {});
+      }
+    } else {
+      notify(callerOnSettled, { ok: false, final: true, error: 'sync_unavailable', entry: entry, rolledBack: false });
     }
     persist();
     return { ok: true, entry };
@@ -624,24 +653,53 @@ const TimeService = {
      (atomisk, idempotent, och fail-closed mot attesterad tid ÄVEN om
      klientens _guardMutation()-kontroll ovan av någon anledning kringgåtts
      — se migrationens attested_locked-skydd). */
-  delete(id) {
+  /* opts.onSettled / opts.onFirstAttempt som update(). Vid definitivt avslag
+     (t.ex. attested_locked på servern) läggs posten tillbaka — den finns
+     kvar på servern och ska då synas kvar, inte se raderad ut. */
+  delete(id, opts) {
     const entry = (state.timeEntries || []).find(t => t.id === id);
     if (!entry) return { ok: false, error: 'Posten hittades inte' };
     const guard = this._guardMutation(entry);
     if (!guard.ok) return guard;
+    const callerOnSettled = opts && typeof opts.onSettled === 'function' ? opts.onSettled : null;
+    const callerOnFirst = opts && typeof opts.onFirstAttempt === 'function' ? opts.onFirstAttempt : null;
+    const notify = function (fn, r) {
+      if (!fn) return;
+      try { fn(r); } catch (e) { console.error('[TimeService] caller callback threw (delete):', e); }
+    };
+    const idx = (state.timeEntries || []).findIndex(t => t.id === id);
     if (entry.aoId) {
       const ao = getAO(entry.aoId);
       if (ao) ao.timeEntries = (ao.timeEntries || []).filter(tid => tid !== id);
     }
     state.timeEntries = (state.timeEntries || []).filter(t => t.id !== id);
     if (typeof AOTimeSyncService !== 'undefined') {
-      AOTimeSyncService.deleteTime(id, {
+      const p = AOTimeSyncService.deleteTime(id, {
         onSettled: function (r) {
+          let rolledBack = false;
           if (!r.ok && r.final) {
             console.error('[TimeService] Radering avvisad av servern för', id, ':', r.error);
+            if (!(state.timeEntries || []).some(t => t.id === id)) {
+              state.timeEntries = (state.timeEntries || []).slice();
+              state.timeEntries.splice(Math.max(0, Math.min(idx, state.timeEntries.length)), 0, entry);
+              const aoNow = entry.aoId ? getAO(entry.aoId) : null;
+              if (aoNow && !(aoNow.timeEntries || []).includes(id)) aoNow.timeEntries = (aoNow.timeEntries || []).concat([id]);
+              if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('timeEntries', state.timeEntries);
+              rolledBack = true;
+            }
           }
+          if (r.ok || r.final) notify(callerOnSettled, { ok: !!r.ok, final: true, error: r.error || null, entry: entry, rolledBack: rolledBack });
+          if (!r.ok && r.final && !callerOnSettled && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
+            AOTimeSyncService.reportUnhandledRejection('time', 'tidpost ' + (entry.date || ''), r.error);
+          }
+          if (typeof TimePage !== 'undefined' && typeof TimePage.onSyncStatusChanged === 'function') TimePage.onSyncStatusChanged(id);
         }
       });
+      if (callerOnFirst && p && typeof p.then === 'function') {
+        p.then(function (first) { notify(callerOnFirst, first || {}); }, function () {});
+      }
+    } else {
+      notify(callerOnSettled, { ok: false, final: true, error: 'sync_unavailable', entry: entry, rolledBack: false });
     }
     persist();
     return { ok: true };

@@ -596,6 +596,42 @@ const AOTimeSyncService = {
     return this._sendInOrder(entry);
   },
 
+  /* ── Definitivt avslag utan egen hanterare hos anroparen ───────────
+     De flesta AO/tid-mutationer är fire-and-forget (ingen onSettled). Om
+     servern då vägrar (forbidden, attested_locked, stale_write …) fick
+     användaren tidigare inget besked och det vägrade värdet stod kvar
+     lokalt. Här: ett (debouncat) meddelande + omläsning av serverns läge
+     via de befintliga läsvägarna, så det vägrade värdet ersätts. Vyn ritas
+     bara om när ingen modal är öppen och användaren inte skriver. */
+  _rejections: [],
+  _rejectTimer: null,
+  reportUnhandledRejection(entityType, label, error) {
+    this._rejections.push({ entityType: entityType, label: label, error: error });
+    if (this._rejectTimer) return;
+    const self = this;
+    this._rejectTimer = setTimeout(async function () {
+      const list = self._rejections;
+      self._rejections = [];
+      self._rejectTimer = null;
+      const first = list[0];
+      const why = first.error || 'nekad av servern';
+      const msg = list.length === 1
+        ? 'Ändringen på ' + first.label + ' sparades inte (' + why + ') — visar serverns aktuella läge.'
+        : list.length + ' ändringar sparades inte av servern (t.ex. ' + first.label + ': ' + why + ') — visar serverns aktuella läge.';
+      if (typeof showToast === 'function') showToast(msg, 8000);
+      const kinds = {};
+      list.forEach(function (r) { kinds[r.entityType] = true; });
+      try {
+        if (kinds.ao && typeof WorkOrdersReadService !== 'undefined') await WorkOrdersReadService.fetchAndApply();
+        if (kinds.time && typeof TimeEntriesReadService !== 'undefined' && TimeEntriesReadService.fetchAndApply) await TimeEntriesReadService.fetchAndApply();
+      } catch (e) { console.warn('[AOTimeSyncService] omläsning efter avslag misslyckades:', e); }
+      const doc = (typeof document !== 'undefined') ? document : null;
+      const ae = doc && doc.activeElement;
+      const busy = !!doc && ((doc.body && doc.body.classList.contains('modal-open')) || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)));
+      if (!busy && typeof Router !== 'undefined' && typeof Router.refreshCurrent === 'function') Router.refreshCurrent();
+    }, 300);
+  },
+
   /* ── High-level convenience wrappers (one per RPC action) ─────────── */
   createAO(ao, opts) {
     return this.enqueue('ao', ao.id || ('pending-' + this._uuid()), { action: 'create_ao', ao: ao }, opts);
@@ -649,7 +685,7 @@ const AOTimeSyncService = {
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       const r = entityType === 'ao' ? await this.patchAO(it.id, it.patch) : await this.patchTime(it.id, it.patch);
-      if (r.ok) results.succeeded.push(it.id); else results.failed.push({ id: it.id, error: r.error });
+      if (r.ok) results.succeeded.push(it.id); else results.failed.push({ id: it.id, error: r.error, final: !!r.final });
     }
     return results;
   },
