@@ -105,6 +105,114 @@ const TimeService = {
      and "kräv serverbekräftelse före definitivt lyckat besked" without
      changing clockIn()'s/clockOut()'s synchronous return contract. */
 
+  /* ── Molnsynkad stämpling ──────────────────────────────────────────
+     Serverns stamp_status-rad (per inloggad användare, revisionsskyddad)
+     är sanningskällan. Lokal lagring är bara cache. */
+  _stampWritesInFlight: 0,
+  _stampRefreshing: false,
+  _stampWatchStarted: false,
+  _clearsInProgress: {},
+  STAMP_REFRESH_MS: 90000,
+
+  _stampSessionEntryId(staffId, startTs) {
+    return 'TID-' + String(staffId || 'x').replace(/[^A-Za-z0-9_-]/g, '') + '-' + String(startTs);
+  },
+
+  /* En utstämpling vars tidpost ännu inte bekräftats (även efter omladdning,
+     via den varaktiga intent-posten) — passet ska då visas som utstämplat
+     lokalt, inte som pågående, trots att servern ännu visar det aktivt. */
+  _pendingClockOutFor(ts) {
+    if (typeof AOTimeSyncService === 'undefined' || typeof AOTimeSyncService.findPendingIntent !== 'function') return null;
+    const rec = AOTimeSyncService.findPendingIntent('clockout_stamp_clear', function (it) { return it.ts === ts; });
+    if (!rec) return null;
+    if (rec.settled && rec.settleResult && !rec.settleResult.ok) return null; // tidposten nekades → passet pågår fortfarande
+    return rec;
+  },
+
+  _applyStampState(active, ts, aoId) {
+    state.stampActive    = !!active;
+    state.stampTimestamp = active ? (ts || null) : null;
+    state.stampAoId      = active ? (aoId || null) : null;
+    if (typeof Storage !== 'undefined' && typeof Storage._stampLocalKey === 'function') {
+      try {
+        localStorage.setItem(Storage._stampLocalKey('stampActive'), JSON.stringify(state.stampActive));
+        localStorage.setItem(Storage._stampLocalKey('stampTs'), JSON.stringify(state.stampTimestamp));
+        localStorage.setItem(Storage._stampLocalKey('stampAoId'), JSON.stringify(state.stampAoId));
+      } catch (e) {}
+    }
+    if (typeof MobileShell !== 'undefined' && MobileShell.onClockChange) MobileShell.onClockChange();
+  },
+
+  /* Läser serverns stämpling och uppdaterar denna enhet om den skiljer sig
+     (instämplad på mobilen → syns på datorn). Hoppar över medan denna
+     enhets egen stämplingsskrivning pågår, så ett optimistiskt läge inte
+     skrivs över av ett svar som ännu inte innehåller den. */
+  async refreshStampFromServer() {
+    if (this._stampRefreshing || this._stampWritesInFlight > 0) return false;
+    if (typeof Storage === 'undefined' || typeof Storage.getStampStatus !== 'function') return false;
+    if (typeof Auth === 'undefined' || !Auth.getAccessToken || !Auth.getAccessToken()) return false;
+    if (state._degradedLoad) return false;
+    this._stampRefreshing = true;
+    try {
+      const r = await Storage.getStampStatus();
+      if (!r || !r.ok || !r.hasRow || this._stampWritesInFlight > 0) return false;
+      let active = !!r.active;
+      if (active && this._pendingClockOutFor(r.ts)) active = false;
+      const same = active === !!state.stampActive &&
+        (!active || (r.ts === state.stampTimestamp && (r.aoId || null) === (state.stampAoId || null)));
+      if (same) return false;
+      this._applyStampState(active, r.ts, r.aoId);
+      const doc = (typeof document !== 'undefined') ? document : null;
+      const ae = doc && doc.activeElement;
+      const busy = !!doc && ((doc.body && doc.body.classList.contains('modal-open')) || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)));
+      if (!busy && typeof Router !== 'undefined' && typeof Router.refreshCurrent === 'function' &&
+          ['pg-time', 'pg-myjobs', 'pg-ao-detail', 'pg-dashboard'].indexOf(Router.currentPage) !== -1) {
+        Router.refreshCurrent();
+      }
+      return true;
+    } catch (e) {
+      return false;
+    } finally {
+      this._stampRefreshing = false;
+    }
+  },
+
+  /* Kostnadsmedveten bevakning: vid flik-fokus/synlighet och var 90:e
+     sekund medan fliken syns (inte vid varje DataSync-poll — varje läsning
+     är ett Edge Function-anrop). Idempotent. */
+  startStampWatch() {
+    if (this._stampWatchStarted || typeof document === 'undefined' || !document.addEventListener) return;
+    this._stampWatchStarted = true;
+    const self = this;
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) self.refreshStampFromServer(); });
+    if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('focus', function () { self.refreshStampFromServer(); });
+    setInterval(function () { if (!document.hidden) self.refreshStampFromServer(); }, this.STAMP_REFRESH_MS);
+  },
+
+  /* Fortsättning för utstämpling (se clockOut): när tidposten bekräftats
+     rensas serverns stämpling — men bara om servern fortfarande visar
+     SAMMA pass (ett nytt pass som startats sedan rörs aldrig). Idempotent. */
+  registerStampIntentHandler() {
+    if (this._stampIntentRegistered || typeof AOTimeSyncService === 'undefined' || !AOTimeSyncService.registerIntentHandler) return;
+    this._stampIntentRegistered = true;
+    AOTimeSyncService.registerIntentHandler('clockout_stamp_clear', async function (intent, settleResult) {
+      if (!settleResult || !settleResult.ok) return { ok: true }; // ingen tidpost skapades → inget att rensa
+      if (TimeService._clearsInProgress[intent.ts]) return { ok: true }; // rensas redan av clockOut() i denna flik
+      if (typeof Storage === 'undefined' || typeof Storage.getStampStatus !== 'function') return { ok: false, error: 'storage_unavailable' };
+      const cur = await Storage.getStampStatus();
+      if (!cur || !cur.ok) return { ok: false, error: (cur && cur.error) || 'read_failed' };
+      if (!cur.hasRow || !cur.active || cur.ts !== intent.ts) return { ok: true };
+      const w = await Storage.setStampStatus(false, null, null, cur.revision);
+      if (!w || !w.ok) return { ok: false, error: (w && w.error) || 'write_failed' };
+      if (typeof Storage.getPendingStampClear === 'function') {
+        const pend = Storage.getPendingStampClear();
+        if (pend && pend.ts === intent.ts) Storage.clearPendingStampClear();
+      }
+      if (state.stampActive && state.stampTimestamp === intent.ts) TimeService._applyStampState(false);
+      return { ok: true };
+    });
+  },
+
   clockIn(aoId = null, opts = {}) {
     if (!(typeof Auth !== 'undefined' && Auth.can('ao_time'))) return false;
     if (state.stampActive) return false;
@@ -113,7 +221,9 @@ const TimeService = {
     state.stampAoId      = aoId;
     const expectedRevision = Storage.getStampRevision();
     const ts = state.stampTimestamp;
+    this._stampWritesInFlight++;
     Storage.setStampStatus(true, ts, aoId, expectedRevision).then((r) => {
+      this._stampWritesInFlight = Math.max(0, this._stampWritesInFlight - 1);
       if (r && r.ok && r.stale) {
         // A different write already won (e.g. another device's clockOut
         // landed first with the same expected revision) — reconcile local
@@ -180,8 +290,24 @@ const TimeService = {
     const pg        = opts.priceGroupId ? (state.priceGroups || []).find(p => p.id === opts.priceGroupId) : null;
     const ao        = aoId ? getAO(aoId) : null;
 
+    /* Molnstämpling: tidpostens id och idempotensnyckel härleds ur själva
+       passet (personal + starttid). Stämplas samma pass ut från två enheter
+       blir det samma nyckel → servern skapar EN tidpost. Finns posten redan
+       lokalt (t.ex. hämtad efter utstämpling på en annan enhet) skapas
+       ingen ny. */
+    const staffIdNow = state.currentUser ? state.currentUser.id : '';
+    const entryId    = this._stampSessionEntryId(staffIdNow, startTs);
+    const already    = (state.timeEntries || []).find(t => t.id === entryId);
+    if (already) {
+      state.stampActive = false; state.stampTimestamp = null; state.stampAoId = null;
+      if (typeof MobileShell !== 'undefined') MobileShell.onClockChange();
+      this.refreshStampFromServer();
+      notifyCaller({ ok: true, final: true, alreadyRecorded: true, entry: already });
+      return already;
+    }
+
     const entry = {
-      id:           this._newTimeEntryId(),
+      id:           entryId,
       aoId:         aoId || '',
       customerId:   opts.customerId || (ao ? ao.customerId : ''),
       staffId:      state.currentUser ? state.currentUser.id : '',
@@ -249,9 +375,35 @@ const TimeService = {
     if (typeof AOTimeSyncService !== 'undefined') {
       entry._pendingSync = true;
       let finalDelivered = false;
+      const self = this;
+      this.registerStampIntentHandler();
+      this._stampWritesInFlight++;
+      let released = false;
+      const releaseInFlight = function () { if (released) return; released = true; self._stampWritesInFlight = Math.max(0, self._stampWritesInFlight - 1); };
       const p = AOTimeSyncService.createTime(entry, {
+        idempotencyKey: 'clockout-' + entryId,
+        /* Varaktig fortsättning: om fliken stängs innan svaret kommit körs
+           stämplingsrensningen ändå när tidposten bekräftats (nästa
+           initState() → reconcileSettledIntents()). */
+        onSettledIntent: { kind: 'clockout_stamp_clear', refId: entryId, ts: startTs, aoId: aoId || null },
         onSettled: function (r) {
+          releaseInFlight();
+          if (!r.ok && r.final && r.error === 'id_collision') {
+            /* Samma pass har redan en tidpost på servern (utstämplat på en
+               annan enhet). Inte ett fel för användaren och INTE "fortfarande
+               instämplad" — ta bort den lokala dubbletten och läs serverns läge. */
+            entry._pendingSync = false;
+            state.timeEntries = (state.timeEntries || []).filter(function (t) { return t !== entry; });
+            if (ao && Array.isArray(ao.timeEntries)) ao.timeEntries = ao.timeEntries.filter(function (tid, i, arr) { return tid !== entryId || arr.indexOf(tid) === i; });
+            if (typeof TimeEntriesReadService !== 'undefined' && TimeEntriesReadService.fetchAndApply) TimeEntriesReadService.fetchAndApply();
+            self.refreshStampFromServer();
+            finalDelivered = true;
+            notifyCaller({ ok: true, final: true, alreadyRecorded: true, entry: entry });
+            return;
+          }
           if (r.ok) {
+            const srv = r.data && (r.data.entry || r.data.timeEntry);
+            if (srv && srv.id === entry.id) Object.assign(entry, srv);
             entry._pendingSync = false;
             if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
               Storage.setLocal('timeEntries', state.timeEntries);
@@ -271,6 +423,7 @@ const TimeService = {
             if (typeof Storage.setPendingStampClear === 'function') {
               Storage.setPendingStampClear({ aoId: aoId || null, ts: startTs, timeEntryId: entry.id });
             }
+            TimeService._clearsInProgress[startTs] = true; // denna flik rensar själv — intent-hanteraren behöver inte
             Storage.setStampStatus(false, null, null, expectedRevision).then((r) => {
               if (r && r.ok && typeof Storage.clearPendingStampClear === 'function') {
                 Storage.clearPendingStampClear();
@@ -304,6 +457,9 @@ const TimeService = {
           }
         }
       });
+      if (p && typeof p.then === 'function') {
+        p.then(function (first) { if (first && !first.ok && !first.final) releaseInFlight(); }, function () {});
+      }
       /* Första försöket transient → säg det till anroparen EN gång
          (AOTimeSyncService anropar själv bara onSettled på slutgiltiga
          svar). */

@@ -1127,6 +1127,16 @@ async function initState() {
     } catch (e) { console.warn('[initState] kunde inte kontrollera väntande stämplingsutloggning:', e.message); }
   }
 
+  /* Molnstämpling: en utstämpling vars tidpost fortfarande väntar i outboxen
+     (fliken stängdes före svaret) ska visas som utstämplad — servern visar
+     passet aktivt tills tidposten bekräftats och fortsättningen
+     (clockout_stamp_clear-intent) rensat det. */
+  if (state.stampActive && typeof TimeService !== 'undefined' && typeof TimeService._pendingClockOutFor === 'function'
+      && TimeService._pendingClockOutFor(state.stampTimestamp)) {
+    state.stampActive = false; state.stampTimestamp = null; state.stampAoId = null;
+  }
+  if (typeof TimeService !== 'undefined' && typeof TimeService.startStampWatch === 'function') TimeService.startStampWatch();
+
   // Migrera gamla RON.results[] → ronderingspass (idempotent, kör varje laddning tills migrerat)
   //
   // P0 PART B (RONDERINGSPASS R1): skriver nu via
@@ -1236,6 +1246,7 @@ async function initState() {
      (which register their handlers at file-load time) has already run
      by the time `initState()` is ever called — see index.html's load
      order (bootstrap script, after every other `<script>` tag). */
+  if (typeof TimeService !== 'undefined' && typeof TimeService.registerStampIntentHandler === 'function') TimeService.registerStampIntentHandler();
   if (typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.reconcileSettledIntents === 'function') {
     try { AOTimeSyncService.reconcileSettledIntents(); } catch (e) { console.warn('[initState] AOTimeSyncService.reconcileSettledIntents() fel:', e); }
   }

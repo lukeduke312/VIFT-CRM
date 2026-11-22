@@ -292,6 +292,15 @@ const AOTimeSyncService = {
      Both are real "already in flight, don't start a second one"
      states — this is what survives a reload for the per-caller
      double-submit guards (replacing an in-memory-only flag). */
+  /* Första ej applicerade intent av en viss typ som uppfyller pred(intent),
+     inklusive dess settled/settleResult — t.ex. en utstämpling vars
+     tidpost fortfarande väntar i outboxen efter en omladdning. */
+  findPendingIntent(kind, pred) {
+    return this._readIntents().find(function (it) {
+      return it.intent && it.intent.kind === kind && !it.applied && (!pred || pred(it.intent));
+    }) || null;
+  },
+
   hasPendingIntent(kind, refId) {
     return this._readIntents().some(function(it) {
       return it.intent && it.intent.kind === kind && it.intent.refId === refId && !it.applied;
@@ -645,8 +654,13 @@ const AOTimeSyncService = {
   deleteAOPermanent(aoId, opts) {
     return this.enqueue('ao', aoId, { action: 'permanent_delete_ao', aoId: aoId }, opts);
   },
+  /* opts.idempotencyKey (valfri): en stabil nyckel från anroparen, t.ex.
+     utstämpling som härleder den ur stämplingspasset så att samma pass som
+     stämplas ut från två enheter ger EN tidpost (serverns op_idempotency). */
   createTime(entry, opts) {
-    return this.enqueue('time', entry.id || ('pending-' + this._uuid()), { action: 'create_time', entry: entry }, opts);
+    const payload = { action: 'create_time', entry: entry };
+    if (opts && opts.idempotencyKey) payload.idempotencyKey = opts.idempotencyKey;
+    return this.enqueue('time', entry.id || ('pending-' + this._uuid()), payload, opts);
   },
   patchTime(entryId, patch, expectedUpdatedAt, opts) {
     return this.enqueue('time', entryId, { action: 'patch_time', entryId: entryId, patch: patch, expectedUpdatedAt: expectedUpdatedAt || null }, opts);
