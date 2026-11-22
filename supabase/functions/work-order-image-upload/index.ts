@@ -113,11 +113,20 @@ serve(async (req: Request) => {
   const arrayBuffer = await file.arrayBuffer()
   const uint8 = new Uint8Array(arrayBuffer)
   const sniffed = sniffMime(uint8)
-  const claimed = (file.type || '').toLowerCase().split(';')[0].trim()
-  const effectiveMime = sniffed ?? claimed
-  if (!ALLOWED_MIME.has(effectiveMime)) {
-    return json({ error: 'invalid_file_type', type: effectiveMime }, 400)
+  /* RÄTTAT (acceptansgranskning, 2026-11-22): tidigare föll koden tillbaka
+     på den klient-DEKLARERADE Content-Type:n (`file.type`, trivialt
+     förfalskningsbar i en FormData-request) när sniffMime() inte kände
+     igen filens faktiska magic bytes — det gjorde hela sniffningen
+     verkningslös, eftersom en anropare bara behövde sätta
+     Content-Type: image/jpeg på en GODTYCKLIG fil för att passera
+     kontrollen. `sniffed` är nu ENSAM auktoritativ: filens innehåll
+     MÅSTE matcha en känd bildsignatur, annars avvisas uppladdningen —
+     den deklarerade typen används bara i felsvaret, för felsökning. */
+  if (!sniffed || !ALLOWED_MIME.has(sniffed)) {
+    const claimed = (file.type || '').toLowerCase().split(';')[0].trim()
+    return json({ error: 'invalid_file_type', type: claimed || 'unknown' }, 400)
   }
+  const effectiveMime = sniffed
 
   const path = `${aoId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`
 

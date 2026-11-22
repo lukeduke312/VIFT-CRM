@@ -45,19 +45,21 @@
  * Bucket-typ:  private — bilder kräver signerade URL:er, inga publika URL:er.
  * Läsning:     work-order-image-url (service_role) → signerade URL:er (1h).
  * Uppladdning: work-order-image-upload (service_role) → Storage.
- * Radering:    authenticated users (Storage-nivå, DELETE-ENDAST policy) —
- *              KVARSTÅENDE, MEDVETET AVGRÄNSAT RESTRISK: vilken loggpost
- *              som får raderas kontrolleras idag ENDAST av frontend
- *              (WorkOrderDetailPage.deleteLogEntry()/ao_edit-gated UI),
- *              precis som för alla andra loggposter i denna kodbas — INTE
- *              av en EF. En DELETE-only policy har lägre allvarlighet än
- *              den ursprungliga READ/WRITE-luckan (en obehörig anropare
- *              kan i värsta fall RADERA en bild de inte borde kunna se,
- *              men kan fortfarande inte LÄSA eller SKRIVA en annan AO:s
- *              bilder) — men är fortsatt klient-kontrollerad, inte
- *              server-verifierad. Flaggas här explicit, inte dolt; en
- *              framtida `work-order-image-delete`-EF (samma mönster som
- *              de två nya ovan) skulle stänga även denna lucka helt.
+ * Radering:    work-order-image-delete (service_role) → Storage.
+ *
+ * RÄTTAT (installationsavstämning, 2026-11-22 — den tidigare kvarstående
+ * DELETE-luckan): den tidigare föreslagna `wo_images_storage_delete`-
+ * policyn (`TO authenticated`, hela bucketen) gav VARJE inloggad
+ * användare rätt att radera VILKEN arbetsorders bild som helst, oavsett
+ * ao_view_own/ao_view_all/ao_edit — exakt samma klass av lucka som
+ * ursprungligen fanns för SELECT/INSERT, flaggad men medvetet INTE
+ * stängd i föregående omgång. Nu stängd på samma sätt: en tredje EF,
+ * `work-order-image-delete`, kräver FÖRST samma skrivbehörighet som
+ * upload() (ao_checklist ELLER ao_edit) OCH canViewWorkOrder() för just
+ * den arbetsordern bilden tillhör, INNAN den raderar något via
+ * service_role. Ingen Storage-policy ger längre `authenticated`-rollen
+ * NÅGON åtkomst (SELECT/INSERT/DELETE) till denna bucket — service_role
+ * (de tre EF:erna) är den enda vägen in, i båda riktningar.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * SUPABASE SETUP — FÖRSLAG, EJ KÖRT. Kör i Supabase SQL-editorn (idempotent)
@@ -93,11 +95,12 @@
  *   ON storage.objects FOR INSERT TO service_role
  *   WITH CHECK (bucket_id = 'workorder-images');
  *
- * -- DELETE: kvar som `TO authenticated` — se filhuvudets explicita,
- * -- avgränsade restrisk-notis ovan för varför detta INTE är lika allvarligt
- * -- som den ursprungliga READ/WRITE-luckan, och vad som skulle stänga den helt.
+ * -- DELETE: RÄTTAT (var tidigare `TO authenticated`, hela bucketen — se
+ * -- filhuvudets notis). Nu samma mönster som SELECT/INSERT: ENBART
+ * -- service_role (work-order-image-delete har redan verifierat
+ * -- ao_checklist/ao_edit + canViewWorkOrder server-sidigt innan den når hit).
  * CREATE POLICY "wo_images_storage_delete"
- *   ON storage.objects FOR DELETE TO authenticated
+ *   ON storage.objects FOR DELETE TO service_role
  *   USING (bucket_id = 'workorder-images');
  *
  * ═══════════════════════════════════════════════════════════════════════════
@@ -287,21 +290,31 @@ const WorkOrderImageService = {
   /* ── Remove ───────────────────────────────────────────────── */
 
   /**
-   * Radera en bildfil från Storage. Åtkomstkontroll för VILKEN loggpost
-   * som får raderas (och därmed om detta anrop ens görs) hanteras av
-   * anroparen (WorkOrderDetailPage.deleteLogEntry(), ao_edit) — se
-   * filhuvudets motivering.
+   * Radera en bildfil. RÄTTAT (installationsavstämning, 2026-11-22):
+   * anropar INTE längre Storage:s DELETE-API direkt (det skulle kräva en
+   * bucket-bred `authenticated`-policy igen, exakt samma luckklass som
+   * -url/-upload redan stängt). POSTas istället till den nya
+   * work-order-image-delete-Edge-Function, som FÖRST kontrollerar
+   * server-sidigt att DENNA inloggade användare har samma skrivbehörighet
+   * som upload() krävde (ao_checklist/ao_edit) OCH verkligen får se just
+   * DEN arbetsordern, innan den raderar något.
+   * @param {string} aoId         — arbetsorder-id (för behörighetskontroll)
    * @param {string} storagePath
    * @returns {Promise<boolean>} storageOk
    */
-  async remove(storagePath) {
+  async remove(aoId, storagePath) {
     if (!storagePath) return true;
     delete this._urlCache[storagePath];
-    const res = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/${this.BUCKET}/${storagePath}`,
-      { method: 'DELETE', headers: this._h(false) }
-    );
-    if (!res.ok) console.warn('[WorkOrderImageService] Storage-radering misslyckades:', res.status);
-    return res.ok;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/work-order-image-delete`,
+        { method: 'POST', headers: this._h('application/json'), body: JSON.stringify({ aoId, path: storagePath }) }
+      );
+      if (!res.ok) console.warn('[WorkOrderImageService] work-order-image-delete misslyckades:', res.status);
+      return res.ok;
+    } catch (e) {
+      console.warn('[WorkOrderImageService] remove() nätverksfel:', e);
+      return false;
+    }
   }
 };

@@ -1598,7 +1598,7 @@ const WorkOrderDetailPage = {
          fil i Storage är ofarlig (samma "orphaned file"-scenario som
          redan dokumenterat och accepterat för PropertyImageService). */
       if (removed && removed.imagePath && typeof WorkOrderImageService !== 'undefined') {
-        WorkOrderImageService.remove(removed.imagePath).catch(function(e) {
+        WorkOrderImageService.remove(this.aoId, removed.imagePath).catch(function(e) {
           console.warn('[WorkOrderDetailPage] Kunde inte radera bildfil i Storage:', e);
         });
       }

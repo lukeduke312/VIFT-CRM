@@ -54,6 +54,17 @@ const Storage = {
    */
   async _authFetch(url, opts) {
     opts = opts || {};
+    /* VIFT CRM (installationsavstämning, 2026-11-22): opts.timeoutMs är
+       OPT-IN och default oförändrat (ingen timeout) — påverkar ALDRIG
+       läsvägarna (get/getAll), som redan har sina egna, etablerade
+       mekanismer (t.ex. initState()s 8s Promise.race-fallback). Infördes
+       för setAll() (skrivvägen), där ett fetch()-anrop utan tidsgräns
+       annars kan hänga OBEGRÄNSAT länge vid en avstannad nätverksanslutning
+       — verifierat: inget AbortController/timeout fanns tidigare NÅGONSTANS
+       i denna fil. En `await persist()`-anropare (t.ex.
+       WorkOrderDetailPage.deleteLogEntry()) skulle då aldrig få tillbaka
+       true/false, utan hänga kvar utan feedback till användaren. */
+    const timeoutMs = opts.timeoutMs;
 
     /* Steg 1: Proaktiv token-refresh */
     if (typeof Auth !== 'undefined' && Auth.refreshIfNeeded) {
@@ -79,8 +90,32 @@ const Storage = {
       return o;
     };
 
+    /* timeoutMs satt → avbryt (AbortController) om fetch() inte svarat inom
+       tidsgränsen; kastar ett vanligt fel (isTimeout=true), fångas av
+       anroparens egen catch exakt som ett nätverksfel — ALDRIG ett tyst
+       "lyckades". Utan timeoutMs: identiskt beteende mot tidigare version. */
+    const doFetch = async () => {
+      if (!timeoutMs) return fetch(url, buildOpts());
+      const controller = new AbortController();
+      const timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+      try {
+        const o = buildOpts();
+        o.signal = controller.signal;
+        return await fetch(url, o);
+      } catch (e) {
+        if (e && e.name === 'AbortError') {
+          const err = new Error('TIMEOUT efter ' + timeoutMs + 'ms');
+          err.isTimeout = true;
+          throw err;
+        }
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
     /* Steg 2: Utför anrop */
-    let res = await fetch(url, buildOpts());
+    let res = await doFetch();
 
     /* Steg 3: Hantera 401 — EN riktig force refresh (inte bara "redan färsk?"-
        kontrollen i refreshIfNeeded) + en retry. Auth.forceRefresh() delar
@@ -97,7 +132,7 @@ const Storage = {
         err.isAuthExpired = true;
         throw err;
       }
-      res = await fetch(url, buildOpts()); /* retry med färsk token */
+      res = await doFetch(); /* retry med färsk token — samma timeoutMs gäller */
       if (res.status === 401) {
         this._signalAuthFailure();
         const err = new Error('AUTH_EXPIRED');
@@ -166,7 +201,14 @@ const Storage = {
      enda anropsplatsen i kodbasen är persist() (state.js), som nu `await`ar
      detta värde. localStorage-cachningen är oförändrad — sker fortfarande
      synkront, direkt, oavsett vad server-skrivningen senare ger för resultat
-     (offline-first-designen är avsiktligt bevarad). */
+     (offline-first-designen är avsiktligt bevarad).
+     VIFT CRM (installationsavstämning, 2026-11-22): skickar nu
+     timeoutMs till _authFetch() — se dess kommentar. 20s är satt generöst
+     (mobilnät, en historiskt stor vift_workOrders-rad) men begränsat; vid
+     timeout kastar _authFetch() ett fel som fångas av catch nedan precis
+     som ett nätverksfel → `false`, ALDRIG `true`. Detta är den enda
+     ändringen i detta avsnitt — catch-blocket nedan var redan korrekt
+     (returnerade redan `false` för VARJE typ av kastat fel) och är orört. */
   async setAll(pairs) {
     pairs.forEach(([key, value]) => {
       try { localStorage.setItem(this.prefix + key, JSON.stringify(value)); } catch(e) {}
@@ -178,7 +220,8 @@ const Storage = {
     try {
       const res = await this._authFetch(SUPABASE_URL + '/rest/v1/store', {
         body: JSON.stringify(body),
-        extraHeaders: { 'Prefer': 'resolution=merge-duplicates' }
+        extraHeaders: { 'Prefer': 'resolution=merge-duplicates' },
+        timeoutMs: 20000
       });
       if (res.ok) {
         console.log('[Storage.setAll] Supabase write OK — ' + pairs.length + ' nycklar (inkl. vift_workOrders)');
