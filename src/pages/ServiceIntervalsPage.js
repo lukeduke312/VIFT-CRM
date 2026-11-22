@@ -45,20 +45,9 @@
  * AuthService.PAGE_PERMISSIONS). En fastighetsöverskridande vy av EXAKT
  * samma data kräver ingen ny, separat behörighet.
  *
- * OBS, medveten avgränsning: behörigheten kontrolleras HÄR, inuti
- * render() nedan — INTE via den centrala AuthService.PAGE_PERMISSIONS-
- * registreringen som alla andra sidor i appen annars använder (se
- * Router.js showPage()/Auth.canViewPage()). AuthService.js ägs av ett
- * annat, samtidigt pågående arbetsspår denna session och ska INTE röras
- * av detta uppdrag. Konsekvens: Router.showPage('pg-service-intervals')
- * nekar INTE åtkomst centralt (Auth.canViewPage() returnerar true för en
- * oregistrerad sida) — sidan visar istället sitt eget "Ingen behörighet"-
- * meddelande nedan. Funktionellt likvärdigt för användaren, men mindre
- * centraliserat än resten av appens sidor. Rekommenderas att lägga till
- * 'pg-service-intervals': ['customer_manage'] i AuthService.
- * PAGE_PERMISSIONS i en framtida, samordnad ändring (ägaren av
- * AuthService.js beslutar), för full konsekvens med hur alla andra
- * sidor gates.
+ * Sidan är registrerad i AuthService.PAGE_PERMISSIONS ('pg-service-intervals':
+ * ['customer_manage']), så Router nekar centralt som för alla andra sidor;
+ * kontrollen i render() nedan är kvar som extra skydd vid direktanrop.
  */
 const ServiceIntervalsPage = {
 

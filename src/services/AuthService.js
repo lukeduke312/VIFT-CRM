@@ -78,6 +78,7 @@ const Auth = {
     'pg-crm-detail':   ['customer_manage','customer_view'],
     'pg-objects':      ['customer_manage'],
     'pg-obj-detail':   ['customer_manage'],
+    'pg-service-intervals': ['customer_manage'],
     'pg-offer':        ['offer_manage'],
     'pg-offer-detail': ['offer_manage'],
     'pg-invoices':     ['invoice_view','invoice_create'],

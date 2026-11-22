@@ -1053,10 +1053,16 @@ const PropertyDetailPage = {
       wide:  true,
       body:  this._siIntervalFormHtml(null),
       buttons: [
-        { label: 'Avbryt', cls: 'bs', fn: 'Modal.close()' },
-        { label: 'Spara', cls: 'bp', fn: `PropertyDetailPage._saveAddInterval('${propId}')` }
+        { label: 'Avbryt', cls: 'bs', onClick: () => Modal.close() },
+        { label: 'Spara', cls: 'bp', onClick: () => PropertyDetailPage._saveAddInterval(propId) }
       ]
     });
+  },
+
+  /* Håller den fastighetsöverskridande översikten (#/serviceintervall) i
+     synk när ett intervall sparas via samma modaler därifrån. */
+  _refreshSIOverview() {
+    if (typeof ServiceIntervalsPage !== 'undefined' && document.getElementById('si-overview-list')) ServiceIntervalsPage.render();
   },
 
   _saveAddInterval(propId) {
@@ -1069,6 +1075,7 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
+      this._refreshSIOverview();
     }
   },
 
@@ -1082,8 +1089,8 @@ const PropertyDetailPage = {
       wide:  true,
       body:  this._siIntervalFormHtml(si),
       buttons: [
-        { label: 'Avbryt', cls: 'bs', fn: 'Modal.close()' },
-        { label: 'Spara',  cls: 'bp', fn: `PropertyDetailPage._saveEditInterval('${propId}','${siId}')` }
+        { label: 'Avbryt', cls: 'bs', onClick: () => Modal.close() },
+        { label: 'Spara',  cls: 'bp', onClick: () => PropertyDetailPage._saveEditInterval(propId, siId) }
       ]
     });
   },
@@ -1098,6 +1105,7 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
+      this._refreshSIOverview();
     }
   },
 
@@ -1110,6 +1118,7 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
+      this._refreshSIOverview();
     }
   },
 
@@ -1155,8 +1164,8 @@ const PropertyDetailPage = {
           ${si.nextDue ? `Nuvarande: <strong>${fmtDate(si.nextDue)}</strong>.` : ''}
         </div>`,
       buttons: [
-        { label: 'Avbryt',         cls: 'bs', fn: 'Modal.close()' },
-        { label: 'Markera utförd', cls: 'bp', fn: `PropertyDetailPage._saveMarkDone('${propId}','${siId}')` }
+        { label: 'Avbryt',         cls: 'bs', onClick: () => Modal.close() },
+        { label: 'Markera utförd', cls: 'bp', onClick: () => PropertyDetailPage._saveMarkDone(propId, siId) }
       ]
     });
   },
@@ -1173,6 +1182,7 @@ const PropertyDetailPage = {
     if (p) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(p);
+      this._refreshSIOverview();
       const ovEl = document.getElementById('prop-tab-overview');
       if (ovEl) ovEl.innerHTML = this._renderOverview(p, p.inspections || {}, p.serviceIntervals || []);
     }
@@ -1189,6 +1199,7 @@ const PropertyDetailPage = {
     if (freshP) {
       const el = document.getElementById('prop-tab-service');
       if (el) el.innerHTML = this._renderServiceTab(freshP);
+      this._refreshSIOverview();
     }
   },
 
@@ -1216,7 +1227,7 @@ const PropertyDetailPage = {
       body:  hist.length === 0
         ? '<p style="color:var(--mt);">Ingen historik ännu.</p>'
         : `<div class="si-hist-list">${rows.join('')}</div>`,
-      buttons: [{ label: 'Stäng', cls: 'bs', fn: 'Modal.close()' }]
+      buttons: [{ label: 'Stäng', cls: 'bs', onClick: () => Modal.close() }]
     });
   },
 
