@@ -12,7 +12,7 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
 - `UPPSKJUTEN TILL V2` — medvetet utskjutet till nästa version
 - `KLAR` (äldre poster) — commit finns + UI fungerar, ännu ej omklassificerad
 
-**Totalt antal punkter: 139** (punkt 92 förekommer i Fas 4 = den enda definitionen; punkterna 132-133 är platshållare utan nummer-"gap" — se avsnittet om dem)
+**Totalt antal punkter: 153** (punkt 92 förekommer i Fas 4 = den enda definitionen; punkterna 132-133 är platshållare utan nummer-"gap" — se avsnittet om dem; 140–153 tillkom 2026-11-23, se Leverans H)
 
 **OBS — avstämning mot `docs/PROJECT_STATUS.md` (2026-11-20):** `PROJECT_STATUS.md`:s EGEN "Modulstatus"-tabell (dess översta sektion, punkt 1–92) är en ENGÅNGS-ögonblicksbild som aldrig uppdaterats sedan filen skapades — den säger t.ex. "EJ BYGGD" för punkt 12/13/40–42/62–64/67/72, trots att denna masterplan (uppdaterad iterativt över flera senare commits) och en direkt läsning av den faktiska källkoden DENNA session (`WorkOrdersPage.js`, `supabase/functions/service-monitor/index.ts`) bekräftar att dessa punkter FAKTISKT är byggda. **Denna masterplans tabeller nedan är auktoritativa för modulstatus — inte `PROJECT_STATUS.md`:s översta tabell.** `PROJECT_STATUS.md`:s EGET värde ligger i dess SENARE, additiva sektioner (R9B-fakturaarkitektur, BLOCKER-1/BLOCKER-2-säkerhetsfynd, cross-tab-auth-rättelser rond 1–4, LIVE/STAGING-paritetsfynd) — innehåll som INTE finns någonstans i denna fil. Se ny punkt `R9B-POINTER` nedan.
 
@@ -493,6 +493,34 @@ Följande två områden efterfrågades uttryckligen som "tidigare beslutade utve
 | 133 | Integrationer (externa system) — ingen specifikation hittad i detta repo (vilka system — bokföring, kalender, e-post, annat? Vilken riktning — import, export, realtid?). | EJ PÅBÖRJAD — väntar på specifikation | Okänd — ange vid nästa tillfälle |
 
 ---
+
+## Leverans H — En kodbas, säker skrivväg och molnstämpling (2026-11-23)
+
+Bakgrund: `docs/STAGING-AO-TID-SKRIVVAG-BLOCKERARE-2026-11-22.md`. Branchen visade sig vara en äldre kodlinje än den deployade STAGING-klienten; STAGING-klienten är nu baslinje (detaljer: `docs/KODBAS-STAGING-BASLINJE-2026-11-23.md`). Installationsläge per del: `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (uppdaterad 2026-11-23). "BYGGD" nedan = kodklart och lokalt testat, **inte** installerat eller verifierat i STAGING.
+
+| # | Funktion | Status | Commit |
+|---|----------|--------|--------|
+| 140 | En kodbas: deployad STAGING-klient som baslinje med LIVE-miljööverlägg; miljöskyddstest | KLAR i repo (inte en driftsättning) | 56a943d |
+| 141 | AO/tid: inget "sparat" före serverns ACK; nekad ändring återställs (manuell tid, radering, arkiv/papperskorg/permanent radering, prissättning); centralt besked + omläsning när fire-and-forget-ändringar nekas; massändringar rapporterar definitiva avslag | BYGGD — 34 lokala kontroller | f94f131, c4e8436 |
+| 142 | Molnbaserad instämpling på befintlig `stamp_status`: uppdatering mellan enheter (flikfokus + var 90:e s), en tidpost per pass vid utstämpling från två enheter, omladdningssäker utstämpling via varaktig intent | BYGGD — 28 lokala kontroller; VÄNTAR PÅ STAGING-test av serverns idempotens (G6) | 7868335 |
+| 143 | Skrivtimeout (20 s) på alla skrivvägar, även ao-time-write; timeout = osäkert utfall, aldrig "sparat" | BYGGD — 22 kontroller | 37fc1ca |
+| 144 | AO-loggbilder i Storage portade till baslinjen; ACK-styrd sparning/radering; föräldralösa filer städas bara när inget annat väntar | BYGGD — 22 kontroller; kräver bucket + 3 EF (separat GO) | 0eae23e |
+| 145 | Säker rendering av inbäddade bilder (stored XSS via `src=`) i AO-logg, checklista, rondering; avvikelsebilder komprimeras 900px/JPEG 0.75 | BYGGD | 0eae23e |
+| 146 | Serviceintervall: idempotensnycklar portade + skydd mot dubbel Att göra vid övergången; översiktssidan portad och registrerad i `PAGE_PERMISSIONS`; döda modalknappar lagade | BYGGD — 36 kontroller (datumgränser, skottår, pausning) | 30bd21c |
+| 147 | Kundsidans offerttotal räknas med CRM:ets `OfferCalc` (22 av 120 slumpade offerter skilde före, bl.a. negativt "att betala") | BYGGD — 120/120 i riktig webbläsare | 423f9f0 |
+| 148 | Faktureringskö: visat belopp för tid = fakturerat belopp | BYGGD — 23 kontroller | 14d62df |
+| 149 | Automatisk testsvit i repot (`tests/`, `bash tests/run-all.sh`) + lokal WAL-mätning (`tests/perf/`) | KLAR | flera |
+| 150 | Aktivitetslogg som egen tabell (en rad per händelse) i stället för en 500-posters JSONB-rad: uppmätt 40,3 → 0,4 kB WAL per åtgärd | PLANERAD — kräver migration + store-key-write-ändring (G4) | — |
+| 151 | `append_log`/`remove_log` i ao-time-write så samtidiga loggposter från två enheter inte skriver över varandra (G5) | BLOCKERAD — backendkälla saknas i repot (G4) | — |
+| 152 | Historisk bildmigrering ur `vift_workOrders` (G7): varje AO-ändring är ~46× dyrare i WAL så länge inbäddade bilder finns kvar | PLANERAD — egen plan + backup + GO | — |
+| 153 | Prisintegrationer Solar och Ahlsell (kundunika nettopriser, artikelnummer, prisdatum, uppdateringar). Alltid åtskilt: leverantörens inköpspris, vårt kundpris, påslag, moms, historiskt överenskomna villkor; kundspecifika påslag aldrig globalt. Första kostnadsfria steg att utreda: artikelprisimport via CSV/XLSX med befintlig importmotor | PLANERAD — inga API-anrop utan avtal/credentials | — |
+
+Statusändringar för äldre punkter (identifierare behålls):
+- **130** (diff-aware `persist()`): ÖVERSPELAD av STAGING-klientens per-nyckel-diff med per-element trevägsmerge (starkare). Branchens version är ersatt.
+- **131/134/137/138** (bilder i Storage, säker radering, server-verifierad åtkomst): kvar; klientdelen portad till baslinjen (punkt 144).
+- **135** (tidpostfilter i klienten): ersatt av STAGING:s `TimeEntriesReadService` v2 + RESTRICTIVE-policy.
+- **136** (idempotenskonflikt serviceintervall): fanns kvar i STAGING-klienten; portad (punkt 146).
+- **133** (Integrationer): Bokio och Momentum kvarstår som framtida integrationsområden; AI-arbetsorderinkorg (132) kvarstår. Ingen specifikation hittad — inget arbetsflöde uppfunnet.
 
 ## Kända begränsningar och planerade stabiliseringar
 

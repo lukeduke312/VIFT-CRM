@@ -1,157 +1,168 @@
-# VIFT CRM — Samordnad installationsplan för STAGING (2026-11-22)
+# VIFT CRM — Samordnad installationsplan för STAGING
 
-Detta är den enda, samlade installationsplanen för att föra över denna branchs färdiga klientarbete till den faktiska STAGING-miljön (`yyzljlqyzzcbxmcdbual`), byggd på den direktverifierade jämförelsen i `docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md` — inte på antaganden. Namngivning: **VIFT CRM**, ett sammanhängande system. Inga ChatGPT-konversationsnummer används som version/leverans.
+Senast uppdaterad 2026-11-23 (ersätter versionen från 2026-11-22; historik i git). En enda plan — ingen annan installationsplan gäller.
 
-**Status:** underlag för beslut. Ingen STAGING- eller LIVE-ändring är utförd av detta dokument. Alla steg i avsnitt 3–4 kräver separat, uttryckligt GO av Lucas Samuelsson innan de körs.
+**Status:** underlag för beslut. Ingenting i denna plan är utfört i STAGING eller LIVE. Varje rad i §6 kräver separat GO från Lucas Samuelsson.
 
 ---
 
-## 1. Vad som REDAN finns i STAGING — rör INTE, installera INTE om
+## 0. Vad som har ändrats sedan förra versionen
 
-Direktverifierat (läsande anslutning mot STAGING, se diff-dokumentet). Dessa ska **lämnas orörda**:
+`docs/STAGING-AO-TID-SKRIVVAG-BLOCKERARE-2026-11-22.md` gav NO-GO för en filsynk från denna branch. Orsaken visade sig vara att branchen var en **äldre kodlinje** än den deployade STAGING-klienten (se `docs/KODBAS-STAGING-BASLINJE-2026-11-23.md`). Åtgärd i branchen (commit `56a943d`): STAGING-klienten är nu baslinje, med LIVE-miljööverlägg, och branchens egna förbättringar är portade ovanpå i separata commits. Blockeraren är därmed löst i kod: alla AO-/tidskrivningar går via redan installerad `ao-time-write` v3; `workOrders`/`timeEntries` skrivs aldrig via generisk `persist()`.
 
-| Objekt | Status i STAGING | Konsekvens för denna plan |
+Den gamla §2a ("synka klientfiler från branchen") gäller inte längre i sin gamla form — se §2.
+
+---
+
+## 1. Redan i STAGING — rör inte
+
+Direktverifierat (läsande) i `docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md` och `docs/STAGING-AO-TID-SKRIVVAG-BLOCKERARE-2026-11-22.md`, samt genom läsning av den publika STAGING-deployen 2026-11-23:
+
+| Objekt | Läge |
+|---|---|
+| `ao-time-write` v3 + RPC:erna `work_order_create/patch`, `time_entry_create/patch` m.fl. | Installerade. Klienten i branchen använder dem (oförändrat kontrakt). |
+| RESTRICTIVE `store_ao_time_no_direct_{insert,update,delete}`, `store_timeentries_no_direct_select`, `store_workorders_no_direct_select`, `staging_generic_keys_no_direct_*` | Installerade. Ingen ny RLS behövs. `20261120000002_PROPOSAL_…` är markerad överspelad — installera inte. |
+| `time-entries-list` v3 (GET+POST), `work-orders-list`, `store-key-write`, `invoice-write`, `rondering-pass-write` | Installerade. Källkod för `ao-time-write`, `store-key-write`, `work-orders-list`, `invoice-write`, `rondering-pass-write` finns **inte** i detta repo (se §5, G4). |
+| `service-monitor` v15 (atomisk AO via `work_order_create`) | Installerad; repots källa matchar. |
+| pg_cron `vift-service-monitor-daily` (06:00 UTC) | Finns, `active=false`. Rör inte utan separat GO (§3). |
+| `stamp_status`-tabellen + `getStampStatus`/`setStampStatus` i `store-key-write` | Installerade. Klientens molnstämpling bygger på dessa — ingen ny tabell. |
+| Bucket `offer-attachments` | Orörd. |
+
+---
+
+## 2. Vad som ska installeras i STAGING
+
+### 2a. Klientfiler (kodsynk till staging-repot, inga Supabase-ändringar)
+
+Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid synk till staging-repot ska **STAGING-överlägget** läggas tillbaka i fyra punkter: `config.js` (STAGING-VAPID-nyckel), `src/data/storage.js` (STAGING `SUPABASE_URL`/anon-nyckel), `src/services/AuthService.js` (STAGING-posten i `_ENV_REDIRECT_BY_PROJECT_REF`), `index.html` (STAGING-miljöindikatorn).
+
+| Fil | Innehåll | Beror på |
 |---|---|---|
-| EF `time-entries-list` | v3, GET **och** POST, redan server-sidig payroll-filtrering | Branchens källa är nu återställd att matcha (commit `baeb9b4`) — ingen ny deploy av denna EF i sig, se §2a för varför klienten funkar direkt mot den redan idag |
-| RLS-policy `store_timeentries_no_direct_select` | RESTRICTIVE SELECT TO authenticated, `key <> 'vift_timeEntries'` — redan installerad | Vårt eget migrationsförslag `20261120000002_PROPOSAL_timeentries_read_lockdown.sql` är markerat ÖVERSPELAT i filen — **installera inte**, skapar bara en duplicerad policy |
-| RLS-policy `store_workorders_no_direct_select` | RESTRICTIVE SELECT TO authenticated, `key <> 'vift_workOrders'` — redan installerad | Bekräftar att arbetsorderdata redan har samma klass av serverskydd som tidposter — ingen åtgärd |
-| EF `service-monitor` | **v15**, deployad, kör AO-skapande via atomisk `work_order_create`-RPC (inte batch-upsert) | Branchens källa återställd att matcha exakt (commit `84cbafd`) — **ingen ny deploy** |
-| pg_cron-jobb `vift-service-monitor-daily` | Existerar, `schedule = '0 6 * * *'`, **`active = false`** | Redan skapat (manuellt steg, `supabase/manual/setup_service_monitor_cron.sql`, körts tidigare). Återstående beslut är enbart **aktivering** — se §3, egen GO |
-| RPC `work_order_create(p_ao jsonb, p_idempotency_key text, p_client_id text)` | Finns i STAGING-databasen (signatur bekräftad) | **Gap, inte en bugg:** denna funktions `CREATE FUNCTION`-SQL finns INTE som migration i detta repo (sökt igenom hela `supabase/migrations/` — inget resultat). Se §5, punkt G1 |
-| Storage-bucket `offer-attachments` | Finns, privat, 50 MB-gräns | Orört, obesläktat med denna leverans |
+| `src/data/storage.js` | skrivtimeout (20 s) på alla skrivvägar | — |
+| `src/services/AOTimeSyncService.js` | timeout; centralt besked + omläsning vid avslag; `createTime` med egen idempotensnyckel; `findPendingIntent` | `ao-time-write` (finns) |
+| `src/services/TimeService.js` | manuell tid/radering med ACK + återställning; molnstämpling (uppdatering mellan enheter, en tidpost per pass, omladdningssäker utstämpling) | `ao-time-write`, `store-key-write` stamp (finns) |
+| `src/services/WorkOrderService.js` | arkiv/papperskorg/permanent radering med ACK + återställning; centralt avslagsbesked | `ao-time-write` (finns) |
+| `src/services/BillingQueueService.js` | köns belopp = fakturerat belopp | — |
+| `src/services/ServiceIntervalService.js` | separata idempotensnycklar klient/server; `getAllAcrossProperties` | — |
+| `src/data/state.js` | `isSafeImageDataUrl`; molnstämpling vid start | — |
+| `src/pages/WorkOrderDetailPage.js` | loggbilder via Storage; ACK-styrda besked; säkra bilder; komprimerade avvikelsebilder | §2b för bilddelen |
+| `src/pages/TimePage.js`, `src/pages/WorkOrdersPage.js` | ACK-styrda besked / avslagsrapport vid massändring | — |
+| `src/pages/PropertyDetailPage.js` | döda modalknappar lagade; uppdatering av översikten | — |
+| `src/pages/ServiceIntervalsPage.js` (ny), `Router.js`, `Sidebar.js`, `AuthService.js` | serviceintervallöversikt `#/serviceintervall` (`customer_manage`) | — |
+| `src/services/WorkOrderImageService.js` (ny) | EF-klient för bilder | §2b |
+| `src/pages/RonderingUtforandePage.js` | säker bildrendering | — |
+| `public-offer.html` | kundsidan räknar med samma `OfferCalc` som CRM:et; CSP `script-src 'self' 'unsafe-inline'` | `src/shared/OfferCalc.js` (finns i STAGING) |
+| `index.html` | versionsnummer + nya script-taggar + sidcontainer | — |
+
+**Kan installeras oberoende av §2b.** Utan §2b fungerar allt utom nya bilduppladdningar i AO-loggen (uppladdningen misslyckas med ett tydligt felmeddelande och loggposten sparas inte — ingen tyst dataförlust). Äldre inbäddade bilder visas som förut.
+
+**`public-offer.html` — observera:** branchens version (PDF-nedladdning, sektionsordning, RUT-/faktureringsdetaljer) och STAGING:s version (OfferCalc) hade divergerat. Repot har nu branchens funktioner + OfferCalc. Verifiera i STAGING enligt testfall O1–O3 nedan innan den ersätter STAGING:s fil.
+
+### 2b. Nya Supabase-objekt för AO-loggbilder (separat GO, i denna ordning)
+
+1. Bucket `workorder-images` (privat, 10 MB, `image/jpeg|jpg|png|webp`) — SQL i `src/services/WorkOrderImageService.js` filhuvud.
+2. Storage-policies SELECT/INSERT/DELETE — alla `service_role`-only (samma filhuvud).
+3. `supabase functions deploy work-order-image-url`
+4. `supabase functions deploy work-order-image-upload`
+5. `supabase functions deploy work-order-image-delete`
+6. Därefter (eller samtidigt med) §2a.
+
+### 2c. Databasstädning `vift_activityLog` (separat GO)
+
+`vift_activityLog` i STAGING innehåller ett dubblett-id (`ACT-1793611007122`) som gör att **varje** skrivning av aktivitetsloggen avvisas av `store-key-write` (`duplicate_id_in_store`). Följd: aktivitetsloggen har inte sparats i STAGING sedan 2026-11-02 och varje användaråtgärd skickar ett anrop som alltid misslyckas. Orsaken i koden är redan rättad (id med slumpsuffix). Städningen kräver en riktad datafix enligt staging-repots `PLAN_activitylog_dedup_2026-11-12.md` (finns inte i detta repo).
+
+### 2d. Migrationer
+
+Ingen ny migration behövs för §2a–2b. `20261120000001_PROPOSAL_push_subscriptions_index.sql` är fortfarande overifierat mot STAGING:s indexlista — kontrollera `pg_indexes` först.
 
 ---
 
-## 2. Vad som SKA installeras/uppdateras
+## 3. service-monitor — endast aktiveringsbeslut
 
-### 2a. Klientkod (vanlig frontend-filsynk, INGA Supabase-ändringar)
+EF:en (v15) och cron-jobbet finns. Testa manuellt (anrop med `X-Monitor-Secret` ur Vault — aldrig i klartext) innan `SELECT cron.alter_job(<jobid>, active := true);`:
 
-Dessa filer kan gå till STAGING-repot (`VIFT-CRM-Staging`, branch `staging/gh-pages`) som en vanlig kodsynk — ingen DB/EF-åtgärd krävs för att de ska fungera, eftersom de bara pratar med EF:er/policyer som **redan finns**:
+- [ ] Inget förfallet intervall → `notified: 0`, `aoCreated: 0`.
+- [ ] Intervall inom `reminderDays` → push till ansvarig. Samma anrop igen → ingen dubbelpush.
+- [ ] `autoCreateAO` vid tröskel → en AO via `work_order_create`; omkörning → ingen andra AO.
+- [ ] Inloggning efter körning → klientens Att göra-post OCH serverns push båda kvar (separata nycklar, §2a).
+- [ ] Ansvarig utan konto → broadcast — bekräfta att det är avsett.
 
-| Fil | Version | Beror på (redan i STAGING) |
-|---|---|---|
-| `src/data/state.js` | v52 | — (diff-aware persist, ren klientlogik) |
-| `src/data/storage.js` | v12 | — (write-path timeout, ren klientlogik) |
-| `src/services/AuthService.js` | v17 | — |
-| `src/services/TimeEntriesReadService.js` | v1 (ny) | `time-entries-list` EF (redan v3, GET stöds) |
-| `src/services/ServiceIntervalService.js` | v5 | — |
-| `src/pages/ServiceIntervalsPage.js` | v1 (ny) | — (ren klientsida, återanvänder befintliga modaler) |
-| `src/pages/Router.js`, `src/components/Sidebar.js`, `src/pages/PropertyDetailPage.js` | — | — |
-| `index.html` | — | alla `?v=N` redan bumpade i denna branch |
-
-**Dessa kan testas i STAGING OMEDELBART efter filsynk**, utan att vänta på §2b, förutom bilddelen av §2c nedan (se testfall i §4).
-
-### 2b. Nya Supabase-objekt — kräver separat GO, körs i DENNA ordning
-
-STAGING-diffen bekräftar: bucketen `workorder-images` finns **inte** ännu. Detta är den enda delen av hela leveransen som kräver en faktisk ny installation i Supabase (inte bara en kodsynk):
-
-1. **Skapa privat bucket** `workorder-images` (10 MB-gräns, `image/jpeg|jpg|png|webp`) — SQL i `src/services/WorkOrderImageService.js`s filhuvud.
-2. **Storage-policies** — alla tre `service_role`-only (SELECT/INSERT/DELETE), samma filhuvud, senast uppdaterat 2026-11-22 (DELETE är nu också `service_role`-only, inte `TO authenticated`).
-3. **Deploy EF `work-order-image-url`** (`supabase functions deploy work-order-image-url`).
-4. **Deploy EF `work-order-image-upload`** (`supabase functions deploy work-order-image-upload`).
-5. **Deploy EF `work-order-image-delete`** (`supabase functions deploy work-order-image-delete`, ny denna omgång).
-6. **Synka klientkoden** `src/services/WorkOrderImageService.js` (v3) + `src/pages/WorkOrderDetailPage.js` (v76) — dessa MÅSTE gå ut samtidigt som/efter steg 1–5, annars pratar klienten mot EF:er som inte finns än.
-
-Ordningen 1→6 är vald så att ingen mellanliggande deploy lämnar klienten pratande mot ett halvfärdigt backend-läge.
-
-### 2c. Migrationer
-
-**Ingen ny migration behöver köras i STAGING för tidposter/arbetsordrar** — skyddet finns redan (§1). De två migrationsförslagen i detta repo:
-
-- `20261120000001_PROPOSAL_push_subscriptions_index.sql` — **status okänd mot STAGING**, inte del av den genomförda diffen (den täckte bara tidposter/service-monitor/_shared). Kräver en egen, separat kontroll (`SELECT indexname FROM pg_indexes WHERE tablename='push_subscriptions'`) innan GO — gissa inte.
-- `20261120000002_PROPOSAL_timeentries_read_lockdown.sql` — markerad ÖVERSPELAD i filen (se §1). **Installera inte.**
+Känd begränsning: `vift_properties` skrivs fortfarande som hel rad av service-monitor (läs-ändra-skriv). Låg risk (en körning/dag).
 
 ---
 
-## 3. service-monitor — aktiveringsberedskap (INGEN ny installation, bara ett aktiveringsbeslut)
+## 4. Testfall i STAGING (efter §2a; bilddelen efter §2b)
 
-EF:en och cron-jobbet finns redan. Det som krävs innan `active` sätts till `true` är ett kontrollerat test, inte en deploy:
+Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller + 120 offertjämförelser i riktig webbläsare) täcker klientlogiken mot simulerade servrar. De ersätter inte detta.
 
-### Förutsättningar (redan uppfyllda eller att bekräfta)
-- [x] Idempotenskonflikten med klientens `runDailyCheck()` är löst (denna branch, punkt 136 i MASTERPLAN.md) — tidigare hade en inloggning kunnat tysta service-monitors push samma dag.
-- [ ] Bekräfta i Supabase Dashboard att secrets `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL`, `SERVICE_MONITOR_SECRET` är satta för STAGING-projektet (inga värden i denna plan, bara en närvarokontroll).
+**AO/tid (blockerarens obligatoriska tester)**
+- [ ] A1 Skapa AO → syns på annan enhet efter omladdning; upprepat anrop ger ingen dubblett.
+- [ ] A2 Ändra AO inkl. loggpost → serverbekräftat; ingen annan användares ändring bortskriven (se G5).
+- [ ] A3 Nekad ändring (t.ex. användare utan `ao_edit` via direktanrop/rollbyte) → besked "sparades inte", värdet återgår.
+- [ ] A4 Arkivera/papperskorg/permanent radering → "…" sedan bekräftelse; nekad → AO:n återställs.
+- [ ] T1 Manuell tid → "Sparar tiden…" → "Tid sparad"; syns för behörig på annan enhet.
+- [ ] T2 Radera attesterad tid (som payroll_manage via direktanrop) → nekas, posten finns kvar.
+- [ ] T3 Nätverk av mitt i en sparning (devtools offline) → aldrig "sparad"; efter återanslutning skickas den en gång.
+- [ ] T4 Avstannad anslutning (throttling) → felbesked inom ~20 s, ingen evig väntan.
 
-### Manuellt, kontrollerat testanrop (INNAN aktivering, secret aldrig i klartext i denna plan)
-```
-POST /functions/v1/service-monitor
-Header: X-Monitor-Secret: <ur Vault, aldrig i kod/chatt>
-```
+**Molnstämpling**
+- [ ] S1 Stämpla in på mobil → datorn visar instämplad efter flikbyte (eller inom 90 s).
+- [ ] S2 Stämpla ut på datorn → en tidpost; mobilen visar utstämplad.
+- [ ] S3 Stämpla ut samtidigt på två enheter → **exakt en** tidpost. Kräver att `ao-time-write` deduplicerar `create_time` på idempotensnyckel över enheter (eller ger `id_collision`) — se G6.
+- [ ] S4 Stäng fliken direkt efter utstämpling (innan svar) → vid nästa inloggning: utstämplad, en tidpost, serverns stämpling rensad.
+- [ ] S5 Byt användare på samma enhet → ingen stämpling följer med.
 
-### Testchecklista (manuell, i STAGING, före aktivering av cron)
-- [ ] Anrop utan förfallet serviceintervall → `notified: 0`, `aoCreated: 0`, ingen push.
-- [ ] Ett intervall inom `reminderDays` → riktig push till `responsibleStaffId` (verifiera på enhet).
-- [ ] SAMMA anrop en gång till utan ändring → `notified: 0` för samma period (idempotens via `lastNotificationSentForDueDate`) — ingen dubblettpush.
-- [ ] Ett intervall med `autoCreateAO: true` och nådd tröskel → en AO skapas via `work_order_create`-RPC:n (atomiskt, bekräftat i källan) — kör igen, ingen andra AO för samma period.
-- [ ] En ansvarig utan matchande `auth.users`-konto → broadcast-fallback till alla aktiva prenumerationer — bekräfta att detta är avsett beteende för er.
-- [ ] `vift_serviceMonitorLog` fylls, trimmas vid 90 poster.
-- [ ] En riktig inloggning direkt efter en körning → klientens egen `runDailyCheck()`-notis OCH service-monitorens push samexisterar, ingen tystar den andra (verifierar punkt 136).
+**Bilder (efter §2b)**
+- [ ] B1 Ladda upp bild i AO-logg → visas; ingen base64 i `vift_workOrders`.
+- [ ] B2 Direktanrop till `work-order-image-upload/-url/-delete` för AO utan behörighet → 403.
+- [ ] B3 Fil med förfalskad `Content-Type: image/jpeg` → 400.
+- [ ] B4 Radera loggpost med bild → bildfilen tas bort först efter bekräftad radering; vid nekad radering finns bild och post kvar.
+- [ ] B5 Äldre inbäddade bilder visas som förut.
 
-### Känd, oförändrad, lägre-prioriterad begränsning
-`service-monitor`s skrivning av `vift_properties` (notismarkeringar) är fortfarande ett olåst läs-ändra-skriv-block (bara AO-skapandet självt gick via atomisk RPC i v15, inte denna del) — en samtidig redigering av SAMMA fastighet exakt under det dagliga cronfönstret kan i teorin tappas bort. Låg sannolikhet (en körning/dag). Föreslås som framtida, egen atomisk-RPC-uppgift — inte en blockerare för aktivering.
+**Offert och fakturering**
+- [ ] O1 Samma offert: totalsumma i CRM = kundsidan = PDF.
+- [ ] O2 Offert med äldre rader (`price` utan `unitPrice`) → samma summa på kundsidan som i CRM.
+- [ ] O3 Godkänn/neka/begär ändring på kundsidan fungerar som förut; PDF-nedladdning fungerar.
+- [ ] F1 Fakturaunderlag för tid (t.ex. 50 min) → köns belopp = fakturautkastets belopp.
 
-**Efter godkänd testchecklista:** aktivering är `SELECT cron.alter_job(<jobid>, active := true);` (toggle av det redan existerande jobbet — inte ett nytt `cron.schedule`-anrop). Kräver egen, separat GO, skild från filsynken i §2a/§2b.
-
----
-
-## 4. Testfall för STAGING-funktionstest (efter §2a + §2b)
-
-### Behörigheter
-- [ ] Fältarbetare utan `payroll_view`: `time-entries-list` returnerar bara egna poster (redan EF-sidigt, bekräfta klienten inte längre läser `vift_timeEntries` via `Storage.getAll()` direkt — ska ge `null`/saknas för den nyckeln, blockerat av den redan installerade RLS-policyn).
-- [ ] Samma användare loggar ut/in som en ANNAN roll (med `payroll_view`) → ser alla poster, ingen kvarbliven cache från förra användaren (`_lastWrittenJSON`/localStorage rensas korrekt vid `Auth._resolveUser()`).
-
-### Bildhantering (kräver §2b installerat)
-- [ ] Ladda upp en bild på en AO man har `ao_edit`/`ao_checklist` och synlighet för → lyckas, `imagePath` sparas.
-- [ ] Försök (via ett eget, direkt API-anrop med giltig JWT, inte via UI) ladda upp till en AO man INTE har synlighet för → 403 från `work-order-image-upload`.
-- [ ] Ladda upp en fil som INTE är en bild med förfalskad `Content-Type: image/jpeg` → 400 `invalid_file_type` (verifierar sniffMime-fixen).
-- [ ] Hämta signerad URL för en bild på en AO man inte ser → `work-order-image-url` utelämnar den (tyst, inte en krasch).
-- [ ] Radera en loggpost med bild → bilden försvinner i Storage ENDAST efter bekräftad DB-skrivning (verifiera ordningen genom att simulera ett nätverksfel mellan stegen, t.ex. koppla från nätet precis efter klick).
-- [ ] Försök (direkt API-anrop) radera en bild som hör till en AO man saknar `ao_edit`/`ao_checklist` för → 403 från `work-order-image-delete`.
-
-### Arbetsordrar
-- [ ] Vanlig AO-redigering (byt titel) → endast `workOrders`-nyckeln skickas i `Storage.setAll()` (diff-aware persist, kontrollera nätverksfliken/loggen — INTE alla ~34 nycklar).
-- [ ] Simulera en avstannad anslutning vid `deleteLogEntry()` (t.ex. nätverksthrottling i devtools) → UI visar felmeddelande inom ~20s, hänger inte längre obegränsat.
-
-### Tidregistrering
-- [ ] Stämpla tid som fältarbetare → syns korrekt i egen vy, syns INTE i en annan fältarbetares vy.
-- [ ] `payroll_view`-roll ser allas tid, inkl. nyss stämplad.
-
-### Serviceintervall
-- [ ] Ny sida `#/serviceintervall` listar intervall från ALLA fastigheter, filter/sök fungerar.
-- [ ] "Markera utförd"/"Redigera"/"Lägg till" från den nya sidan sparar korrekt (verifierar att den tidigare dolda `fn:`-knappbuggen i `PropertyDetailPage` är fixad) och synkar tillbaka till fastighetskortets egen flik.
+**Serviceintervall**
+- [ ] I1 `#/serviceintervall` listar intervall från alla fastigheter; filter fungerar; dold för roller utan `customer_manage`.
+- [ ] I2 "Markera utförd"/"Redigera"/"Lägg till" sparar (knapparna var tidigare döda) och uppdaterar historik och nästa datum.
 
 ---
 
 ## 5. Backup, kontrollpunkter, rollback, kvarstående gap
 
-### Backup (innan §2b)
-- [ ] Exportera `vift_workOrders`-raden (`SELECT value FROM store WHERE key='vift_workOrders'`) till en lokal fil — bilddata berörs inte av denna leverans (ingen befintlig bild flyttas/skrivs över), men en ordinarie backup-punkt innan nya Storage-policyer installeras är god praxis.
-- [ ] Notera bucket-listan (`SELECT * FROM storage.buckets`) och policy-listan (`SELECT * FROM pg_policies WHERE tablename='objects'`) FÖRE §2b, för en exakt rollback-referens.
+**Före §2b:** notera `select * from storage.buckets` och `select * from pg_policies where tablename='objects'`.
+**Kontrollpunkter:** efter varje steg — inloggning utan konsolfel; `OPTIONS` mot varje ny EF → 200; bucket `public = false`.
+**Rollback:**
+- §2a: återställ staging-repots föregående commit (inga serverobjekt).
+- §2b: ta bort de tre EF:erna och policies; radera bucketen endast om den är tom.
+- §2c: enligt dedup-planens egen återställning (görs inte utan GO).
+- §3: `cron.alter_job(<jobid>, active := false)`.
 
-### Kontrollpunkter (stoppa och eskalera till Lucas om något av detta inte stämmer)
-- Efter §2b steg 1–2: `SELECT * FROM storage.buckets WHERE id='workorder-images'` → `public = false`.
-- Efter varje EF-deploy: ett `OPTIONS`-anrop mot EF:en ska ge 200 (sanity, inte ett riktigt test).
-- Efter §2a+§2b: en fullständig inloggning + en vanlig AO-öppning ska INTE visa något JS-fel i konsolen.
-
-### Rollback
-- §2a (klientkod): återställ föregående commit på STAGING-repot — inga serverobjekt att rulla tillbaka.
-- §2b (Supabase-objekt): `DROP POLICY`/`DELETE FROM storage.buckets WHERE id='workorder-images'` (endast om bucketen är tom — kontrollera innan) + `supabase functions delete <namn>` för de tre nya EF:erna. Befintliga bilder (det finns inga ännu, bucketen är ny) påverkas inte.
-- §3 (aktivering): `SELECT cron.alter_job(<jobid>, active := false);` — omedelbar, ofarlig, återställer till dagens läge.
-
-### Kvarstående gap (flaggat, inte löst här — kräver separat beslut)
-- **G1 — `work_order_create`-RPC saknar committed migration.** Funktionen finns i STAGING (signatur bekräftad) men dess `CREATE FUNCTION`-SQL finns inte i `supabase/migrations/`. Behövs INTE för att denna leverans ska fungera i STAGING (RPC:n finns redan där), men är ett repo-fullständighetsgap: en framtida ny miljö (eller en eventuell LIVE-installation senare) kan INTE återskapas från detta repos migrationer ensamma. Åtgärd: hämta `SELECT pg_get_functiondef('work_order_create'::regproc)` från STAGING och committa som en egen migration — kräver STAGING-åtkomst ingen i denna session har.
-- **G2 — `push_subscriptions`-indexförslaget** är overifierat mot STAGINGs faktiska indexlista (se §2c).
-- **G3 — rondering/avvikelse-bilder** (samma inbäddade-bas64-mönster som arbetsorderbilder hade) är fortfarande oflyttade — flaggat tidigare, inte byggt, väntar på prioritering.
+**Kvarstående gap (kräver beslut/åtkomst):**
+- **G1** `work_order_create` saknar committad migration i detta repo.
+- **G4** Backend-källor (`ao-time-write`, `store-key-write`, `work-orders-list`, `invoice-write`, `rondering-pass-write`, deras migrationer och staging-repots `tests/`) finns bara i staging-repot. Repot är därför inte en komplett, återskapbar källa. Åtgärd: pusha staging-repots `supabase/` och `tests/` till denna branch.
+- **G5** En loggändring skickas som `patch_ao` med AO:ns **hela** `log`-array. Två enheter som lägger till loggposter i samma AO samtidigt kan tappa en. Kräver en `append_log`-åtgärd i `ao-time-write` (kan inte byggas utan G4).
+- **G6** Dubbel utstämpling (S3) bygger på att servern deduplicerar `create_time` per idempotensnyckel över enheter — dokumenterat i klientkoden men inte verifierat mot servern.
+- **G7** Historiska inbäddade bilder i `vift_workOrders` gör varje AO-ändring ~46× dyrare i WAL (uppmätt lokalt). Migrering kräver egen plan + GO.
+- **G8** Negativt "att betala" är möjligt i offert om radernas RUT/ROT-belopp överstiger totalen (OfferCalc har ingen spärr; fakturan har det). Kräver beslut om valideringsregel i offertredigeringen.
 
 ---
 
 ## 6. GO/NO-GO per del
 
-| Del | Status | GO krävs för |
-|---|---|---|
-| §2a Klientkod (persist-diff, tidposter, serviceintervall-sida, write-timeout) | **Klar, testad lokalt/isolerat (73/73 egna test), redo för STAGING-filsynk** | Filsynk till STAGING-repot |
-| §2b Nya Supabase-objekt (bucket + 3 policies + 3 EF-deploys) | **Kodklart (`tsc --strict` OK), EJ installerat** | Separat GO: bucket-skapande + policy-installation + EF-deploy, i den ordning som anges |
-| §3 service-monitor-aktivering | **Redan deployad (v15), redan korrekt i repo** — endast testchecklistan i §3 återstår | Separat GO: dels för testanropen, dels (efter godkänd checklista) för `cron.alter_job(active:=true)` |
-| §4 Funktionstest | Kan köras i STAGING så snart §2a (+ §2b för bilddelen) är installerat | Ingen ytterligare GO utöver ovanstående |
-| G1–G3 (gap) | Flaggade, ej åtgärdade | Kräver STAGING-åtkomst Lucas/ChatGPT redan har, inte denna session |
+| Del | Status |
+|---|---|
+| §2a Klientfiler | **GO för STAGING-granskning** — kodklart, 172 lokala kontroller + 120 offertjämförelser gröna, webbläsarsmoke utan JS-fel. Installation kräver separat GO. |
+| §2b Bildobjekt + 3 EF | **GO för STAGING-granskning** — `tsc --strict` OK. Kräver separat GO. |
+| §2c activityLog-städning | **VÄNTAR PÅ TEST** — plan finns i staging-repot, inte granskad här. |
+| §3 service-monitor-aktivering | **VÄNTAR PÅ TEST** — testlista ovan. |
+| Molnstämpling S3 (dubbel utstämpling) | **VÄNTAR PÅ TEST** — serverbeteende G6. |
+| G4/G5 append-log | **BLOCKERAD** — backendkälla saknas i repot. |
+| G7 historisk bildmigrering | **PLANERAD** |
 
-**Sammanfattning:** inget i denna plan kräver att vi gissar oss fram längre — allt i §1 är direktverifierat mot STAGING, allt i §2–3 är kodklart i denna branch. Nästa steg är Lucas' GO per rad i tabellen ovan, inte mer utvecklingsarbete för att nå hit.
+## 7. LIVE senare
+
+LIVE (`hjplzjsbbowiyoyhdghc`, Loopia) kör en äldre klient och saknar sannolikt allt i §1 (ao-time-write, RPC:er, RESTRICTIVE-policyer, stamp_status, store-key-write, work-orders-list m.fl.). Denna klient kan **inte** gå till LIVE förrän samma backend är installerad där, i samma ordning som STAGING fick den, med backup före varje migration. Det kräver G4 (källorna i repot) och en egen LIVE-plan.

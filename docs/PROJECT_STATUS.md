@@ -229,6 +229,13 @@ Fullständig rättelse: `BLOCKER1-RATTELSE-RONDA4.md` (levererad separat 2026-10
 
 ---
 
+## Läge 2026-11-23 (kort — detaljer i MASTERPLAN Leverans H och installationsplanen)
+
+- Repot innehåller nu den deployade STAGING-klienten som baslinje (en kodbas) plus denna omgångs rättningar; se `docs/KODBAS-STAGING-BASLINJE-2026-11-23.md`.
+- **BLOCKER-1 (tidposter):** i STAGING stängd av `store_timeentries_no_direct_select` + `time-entries-list` v3 (verifierat läsande 2026-11-22). Inte installerat i LIVE.
+- **BLOCKER-2 (skrivning per nyckel):** STAGING har RESTRICTIVE-spärrar för direkta skrivningar (`store_ao_time_no_direct_*`, `staging_generic_keys_no_direct_*`); generiska nycklar skrivs via `store-key-write`. Den EF:ens per-nyckel-behörighet är inte granskad här — källan finns inte i repot (gap G4). Inte installerat i LIVE.
+- Ny installationsblockerare i STAGING-data: dubblett-id i `vift_activityLog` gör att aktivitetsloggen inte sparas sedan 2026-11-02 (installationsplanen §2c).
+
 ## Kritiska produktionsblockerare
 
 ### BLOCKER-1: timeEntries läcker lönedata
