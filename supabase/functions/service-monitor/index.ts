@@ -206,7 +206,6 @@ serve(async (req: Request) => {
 
     /* ── Bearbeta serviceintervall ───────────────────────── */
     let propertiesChanged = false
-    let workOrdersChanged = false
 
     for (const prop of properties) {
       if (!Array.isArray(prop.serviceIntervals)) continue
@@ -286,27 +285,63 @@ serve(async (req: Request) => {
           const shouldCreate = daysLeft !== null && daysLeft <= threshold
 
           if (shouldCreate) {
-            const ao = buildWorkOrder(si, prop, workOrders)
-            workOrders.push(ao)
-            si.lastAOGeneratedForDueDate = periodKey
-            si.lastGeneratedAOId         = ao.id
-            si.updatedAt                 = new Date().toISOString()
-            propertiesChanged = true
-            workOrdersChanged = true
-            aoCreated++
-            aoIds.push(ao.id)
+            /* P0 AO/TID-FIX (2026-10-18): tidigare pushade denna gren en
+               ny AO direkt in i en lokal `workOrders`-array som LÄSTS EN
+               GÅNG i funktionens början, och skrev HELA den arrayen
+               tillbaka i EN batchad upsert i slutet av körningen (se
+               nedan) — exakt samma "läs hela, mutera, skriv hela"-race
+               som state.js _doPersist() hade för klienten. Denna
+               dagliga cron-körning kan iterera över MÅNGA fastigheter/
+               serviceintervall och därmed ta flera sekunder — om NÅGON
+               användare skapade/ändrade en AO (via den nya atomiska
+               vägen) mellan denna funktions LÄSNING och dess SKRIVNING,
+               skulle den batchade upserten TYST SKRIVA ÖVER den
+               användar-AO:n (en riktig, verifierad instans av exakt den
+               klass av bugg detta P0-uppdrag ska lösa — bara server-
+               sidig, inte klient-sidig).
+               Fix: varje ny AO skapas nu DIREKT via den atomiska,
+               radlåsta work_order_create-RPC:n (samma som klienten
+               använder) — ALDRIG via den batchade workOrders-upserten,
+               som denna fil inte längre gör alls (se workOrdersChanged
+               nedan, borttagen). Idempotensnyckeln är DETERMINISTISK
+               (si.id + periodKey) — en omkörning av SAMMA dags cron-
+               jobb (t.ex. manuell retriggning efter ett partiellt fel)
+               kan därför aldrig skapa en dubblett-AO för samma
+               serviceintervall/förfallodatum. */
+            const aoDraft = buildWorkOrder(si, prop)
+            const { data: createResult, error: createErr } = await supabase.rpc('work_order_create', {
+              p_ao: aoDraft,
+              p_idempotency_key: `service-monitor-${si.id}-${periodKey}`,
+              p_client_id: null
+            })
+            if (createErr) {
+              errors.push(`AO-skapande misslyckades för serviceintervall ${si.id}: ${createErr.message}`)
+            } else {
+              const createdAo = (createResult as { workOrder: WorkOrder }).workOrder
+              si.lastAOGeneratedForDueDate = periodKey
+              si.lastGeneratedAOId         = createdAo.id
+              si.updatedAt                 = new Date().toISOString()
+              propertiesChanged = true
+              aoCreated++
+              aoIds.push(createdAo.id)
+            }
           }
         }
       }
     }
 
     /* ── Skriv tillbaka ändrade blobs ────────────────────── */
+    /* P0 AO/TID-FIX: `vift_workOrders` ingår MEDVETET INTE här längre —
+       varje ny AO är redan atomiskt skapad via work_order_create ovan,
+       i egen transaktion, INNAN vi når hit. En batchad upsert av HELA
+       workOrders-arrayen här (ovanpå det som RPC-anropen redan skrivit)
+       vore exakt den typ av efterföljande, omedveten "skriv över med min
+       potentiellt inaktuella kopia"-skrivning detta P0-uppdrag finns för
+       att eliminera — även om DENNA funktions egen `workOrders`-variabel
+       bara lästes en gång och aldrig muterades i denna version. */
     const upserts: { key: string; value: unknown }[] = []
     if (propertiesChanged) {
       upserts.push({ key: STORE_PREFIX + 'properties', value: properties })
-    }
-    if (workOrdersChanged) {
-      upserts.push({ key: STORE_PREFIX + 'workOrders', value: workOrders })
     }
 
     if (upserts.length > 0) {
@@ -429,15 +464,20 @@ function buildNotifBody(si: ServiceInterval, prop: Property, daysLeft: number): 
 
 /*
  * Bygg ett AO-objekt som matchar WorkOrderService.create()-schemat.
- * Replikerar newId-logiken från state.js.
+ * P0 AO/TID-FIX (2026-10-18): `id` TAS INTE LÄNGRE FRAM HÄR — den
+ * atomiska work_order_create-RPC:n (anropad av serve()-handlern ovan)
+ * tilldelar nu det kanoniska, kollisionskontrollerade id:t server-sidigt
+ * (samma sequence-baserade mekanism som klientens egna nya AO:er utan
+ * ett eget synkront id-behov använder — se migrationens kommentar).
+ * `nextWorkOrderId()` nedan är DÄRFÖR DÖD KOD efter denna fix — kvar
+ * MEDVETET (inte borttagen) ifall en framtida återgång till den gamla
+ * vägen skulle behöva den, men anropas inte längre någonstans.
  */
-function buildWorkOrder(si: ServiceInterval, prop: Property, workOrders: WorkOrder[]): WorkOrder {
-  const id    = nextWorkOrderId(workOrders)
+function buildWorkOrder(si: ServiceInterval, prop: Property): Omit<WorkOrder, 'id'> {
   const now   = new Date().toISOString()
   const title = si.aoTitle || si.title
 
   return {
-    id,
     title,
     description:      si.aoDescription || si.description || '',
     status:           'pool',
