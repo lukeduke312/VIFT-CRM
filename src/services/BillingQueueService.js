@@ -215,7 +215,13 @@ const BillingQueueService = (function () {
       var rate = t.hourRate || 0;
       if (!(rate > 0)) issues.push('Saknar timpris');
       var hours = (t.minutes || 0) / 60;
-      var amount = Math.round(hours * rate * 100) / 100;
+      /* Fakturaraden byggs av quantity × unitPrice (se createFromSources),
+         med timmar avrundade till 2 decimaler. Beloppet i kön räknas på
+         SAMMA avrundade antal, så förhandsvisningen alltid är exakt det som
+         faktureras (tidigare: 50 min à 650 kr visades 541,67 men
+         fakturerades 539,50). */
+      var qtyHours = Math.round(hours * 100) / 100;
+      var amount = Math.round(qtyHours * rate * 100) / 100;
       if (issues.length === 0 && !(amount > 0)) issues.push('Ogiltigt belopp');
 
       var property = ao && ao.propertyId ? getObj(ao.propertyId) : null;
@@ -228,7 +234,7 @@ const BillingQueueService = (function () {
         propertyName: property ? property.name : (ao ? (ao.propertyName || '') : ''),
         workOrderNumber: ao ? ao.id : '', workOrderTitle: ao ? ao.title : '',
         date: t.date || '', description: _timeDescription(t),
-        quantity: Math.round(hours * 100) / 100, unit: 'tim', unitPrice: rate, vatRate: 25, amount: amount,
+        quantity: qtyHours, unit: 'tim', unitPrice: rate, vatRate: 25, amount: amount,
         staffId: t.staffId || '', staffName: t.staffName || '',
         attested: !!t.attested,
         selectable: issues.length === 0, issues: issues
