@@ -2,6 +2,14 @@
 
 **Datum:** 2026-11-22. **Miljö:** Supabase STAGING `yyzljlqyzzcbxmcdbual`. **Repo:** `lukeduke312/VIFT-CRM`, branch `claude/vift-system-restructure-8fUme`.
 
+## Korrigeringar i GitHub efter jämförelsen (ingen Supabase-deploy)
+
+- Commit `84cbafda8e4a2796a1c64cbdc19316a933aa3e40`: ersatte branchens föråldrade `service-monitor/index.ts` med **exakt installerad STAGING v15-källkod** (verifierad byte-/textlikhet efter commit). Detta **bevarar** atomisk `work_order_create`, idempotens och skydd mot att skriva över andra arbetsordrar. Detta är en **kodrepo-korrigering**, inte en ny EF-deploy.
+- Commit `baeb9b44e6669dd51ced2bfc4df7116fb45c09af`: återställde GET **och** POST i branchens nyare `time-entries-list`-implementation, inklusive CORS; behöll övriga avsedda förbättringar. Inte deployad.
+- **Diffarna längre ned refererar avsiktligt till de ursprungliga GitHub-blob-SHA:na FÖRE dessa två korrigeringar.** De fungerar som revisionsbevis för vad som upptäcktes. Använd nuvarande branch för fortsatta ändringar.
+- `_shared/vift-auth.ts` i GitHub har fler funktioner än den äldre deployade `time-entries-list`-bundlen, bland annat `canViewWorkOrder` och `isPathUnderAo` för de nya bild-EF:erna. Bevara dessa vid integration; att kopiera tillbaka den gamla shared-filen skulle vara fel.
+- STAGING/LIVE, cron, buckets och RLS har **inte** ändrats.
+
 **Detta är direktläst från installerade Supabase Edge Functions och databaskatalog, inte en sammanfattning ur en chatt.** Ingen STAGING- eller LIVE-ändring utförd. Ingen credential, API-nyckel eller cron-kommandosträng ingår. Koden nedan är en fullständig radbaserad diff av källfilerna (riktning **installerad STAGING → befintlig GitHub-branch**). GitHub-filen tillsammans med diffen möjliggör exakt källjämförelse; inga manuellt gissade rader.
 
 ## Blockerande upptäckt: service-monitor
