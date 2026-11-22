@@ -125,6 +125,8 @@
 const WorkOrderImageService = {
   BUCKET: 'workorder-images',
 
+  UPLOAD_TIMEOUT_MS: 60000,
+
   /* In-memory cache för signed URLs: { [storagePath]: { url, expiresAt } } */
   _urlCache: {},
 
@@ -221,14 +223,10 @@ const WorkOrderImageService = {
     const expiry = now + 50 * 60 * 1000; /* 50 min cache */
     await Promise.all(Object.keys(byAo).map(async (aoId) => {
       try {
-        const res = await fetch(
-          `${SUPABASE_URL}/functions/v1/work-order-image-url`,
-          {
-            method:  'POST',
-            headers: this._h('application/json'),
-            body:    JSON.stringify({ aoId, paths: byAo[aoId] })
-          }
-        );
+        const res = await Storage._authFetch(Storage._functionsBase() + '/work-order-image-url', {
+          body: JSON.stringify({ aoId, paths: byAo[aoId] }),
+          timeoutMs: Storage.WRITE_TIMEOUT_MS
+        });
         if (!res.ok) {
           console.warn('[WorkOrderImageService] work-order-image-url misslyckades för', aoId, ':', res.status);
           return;
@@ -275,10 +273,22 @@ const WorkOrderImageService = {
     form.append('aoId', aoId);
     form.append('file', blob, 'image.jpg');
 
-    const res = await fetch(
-      `${SUPABASE_URL}/functions/v1/work-order-image-upload`,
-      { method: 'POST', headers: this._h(false), body: form }
-    );
+    /* Multipart kan inte gå via Storage._authFetch() (den sätter JSON-
+       Content-Type). Samma token-förnyelse och en egen tidsgräns i stället. */
+    if (typeof Auth !== 'undefined' && Auth.refreshIfNeeded && !(await Auth.refreshIfNeeded())) {
+      throw new Error('Sessionen har gått ut — logga in igen');
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(function() { controller.abort(); }, this.UPLOAD_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(Storage._functionsBase() + '/work-order-image-upload',
+        { method: 'POST', headers: this._h(false), body: form, signal: controller.signal });
+    } catch (e) {
+      throw new Error(e && e.name === 'AbortError' ? 'Uppladdningen tog för lång tid — försök igen' : 'Nätverksfel vid uppladdning');
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || err.message || `Uppladdning misslyckades (HTTP ${res.status})`);
@@ -306,10 +316,10 @@ const WorkOrderImageService = {
     if (!storagePath) return true;
     delete this._urlCache[storagePath];
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/functions/v1/work-order-image-delete`,
-        { method: 'POST', headers: this._h('application/json'), body: JSON.stringify({ aoId, path: storagePath }) }
-      );
+      const res = await Storage._authFetch(Storage._functionsBase() + '/work-order-image-delete', {
+        body: JSON.stringify({ aoId, path: storagePath }),
+        timeoutMs: Storage.WRITE_TIMEOUT_MS
+      });
       if (!res.ok) console.warn('[WorkOrderImageService] work-order-image-delete misslyckades:', res.status);
       return res.ok;
     } catch (e) {

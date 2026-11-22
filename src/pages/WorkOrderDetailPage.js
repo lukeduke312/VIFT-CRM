@@ -1247,7 +1247,7 @@ const WorkOrderDetailPage = {
               ${isAvv && (c.avvikelseComment || c.avvikelseImage) ? `<div style="margin-top:5px;background:#fff1f2;border-left:3px solid var(--rd);padding:5px 10px;border-radius:0 6px 6px 0;">
                 <div style="font-size:9px;font-weight:800;color:var(--rd);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${ic('alert-triangle',9)} Avvikelse</div>
                 ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.45;">${esc(c.avvikelseComment)}</div>`:''}
-                ${c.avvikelseImage?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:90px;object-fit:cover;">`:''}
+                ${isSafeImageDataUrl(c.avvikelseImage)?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:90px;object-fit:cover;">`:''}
                 ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:2px;">${esc(c.avvikelseBy||'')}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
               </div>` : ''}
             </div>
@@ -1378,7 +1378,7 @@ const WorkOrderDetailPage = {
   _renderTimeline(ao, showAll = false) {
     const events = [];
     (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
-    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', followUpDate:l.followUpDate||'', id:l.id }));
+    (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', imagePath:l.imagePath||'', followUpDate:l.followUpDate||'', id:l.id }));
     TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
     (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
@@ -1440,7 +1440,8 @@ const WorkOrderDetailPage = {
             </div>
             ${ev.text?`<div style="font-size:13px;line-height:1.5;word-break:break-word;color:var(--tx);">${esc(ev.text)}</div>`:''}
             ${ev.followUpDate?`<div style="margin-top:5px;display:inline-flex;align-items:center;gap:4px;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid #ddd6fe;">${ic('calendar',9)} Uppföljning: ${esc(ev.followUpDate)}</div>`:''}
-            ${ev.imageData?`<img src="${ev.imageData}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);" loading="lazy">`:''}
+            ${isSafeImageDataUrl(ev.imageData)?`<img src="${ev.imageData}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);" loading="lazy">`:''}
+            ${!ev.imageData&&ev.imagePath?`<img data-imgpath="${esc(ev.imagePath)}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;min-height:60px;object-fit:cover;border:1px solid var(--br);background:var(--bg2,#f3f4f6);" loading="lazy" alt="Bild läses in…">`:''}
           </div>
           ${canDel?`<button class="btn bxs bd" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>`:''}
         </div>`;
@@ -1454,7 +1455,33 @@ const WorkOrderDetailPage = {
       </div>`;
     }
     html += '</div>';
+    /* Bilder lagrade i Storage (imagePath) får signerade URL:er efter att
+       anroparen satt in HTML:en — täcker alla renderingsställen utan att
+       varje anropsplats behöver komma ihåg det. */
+    if (html.indexOf('data-imgpath=') !== -1) {
+      setTimeout(() => this._resolveTimelineImages(document), 0);
+    }
     return html;
+  },
+
+  /* Hämtar signerade URL:er (server-behörighetskontrollerade, se
+     work-order-image-url) för img[data-imgpath] som saknar src. Fel ger
+     bara en tom ruta — resten av tidslinjen påverkas aldrig. */
+  async _resolveTimelineImages(rootEl) {
+    if (!rootEl || typeof WorkOrderImageService === 'undefined') return;
+    const imgs = Array.from(rootEl.querySelectorAll('img[data-imgpath]:not([src])'));
+    if (!imgs.length) return;
+    const paths = Array.from(new Set(imgs.map(el => el.getAttribute('data-imgpath')).filter(Boolean)));
+    try {
+      const urlMap = await WorkOrderImageService.getSignedUrls(paths);
+      imgs.forEach(el => {
+        const p = el.getAttribute('data-imgpath');
+        if (p && urlMap[p]) el.src = urlMap[p];
+        else el.alt = 'Bilden kunde inte visas';
+      });
+    } catch (e) {
+      console.warn('[WorkOrderDetailPage] _resolveTimelineImages fel:', e);
+    }
   },
 
   openAddLog() {
@@ -1487,51 +1514,108 @@ const WorkOrderDetailPage = {
     reader.readAsDataURL(file);
   },
 
-  _saveLog() {
+  _rerenderTimeline() {
+    const ao = getAO(this.aoId);
+    const el = document.getElementById('ao-timeline');
+    if (ao && el) el.innerHTML = this._renderTimeline(ao);
+  },
+
+  /* Ny loggpost. Bild laddas först upp till Storage (work-order-image-upload,
+     serverkontrollerad behörighet + innehållskontroll) — loggposten får bara
+     en `imagePath`-referens, inga bildbytes i vift_workOrders. Loggposten
+     sparas via WorkOrderService.update() → ao-time-write; "sparad" visas
+     först när servern bekräftat (onSettled ok). */
+  async _saveLog() {
+    if (this._logSaving) return;
     const text = document.getElementById('log-text')?.value.trim();
     const imgInput = document.getElementById('log-img');
     const file = imgInput && imgInput.files && imgInput.files[0];
     if (!text && !file) { showToast('Lägg till text eller bild'); return; }
-
-    const finalize = (imageData) => {
-      const ao = getAO(this.aoId);
-      if (!ao) return;
+    const aoId = this.aoId;
+    this._logSaving = true;
+    try {
+      let imagePath = '';
+      if (file) {
+        if (typeof WorkOrderImageService === 'undefined') { showToast('Bilduppladdning är inte tillgänglig'); return; }
+        showToast('Laddar upp bild…');
+        try {
+          imagePath = (await WorkOrderImageService.upload(aoId, file)).path;
+        } catch (e) {
+          showToast('Bilden kunde inte laddas upp (' + (e.message || e) + ') — loggposten sparades inte.', 5000);
+          return;
+        }
+      }
+      const ao = getAO(aoId);
+      if (!ao) {
+        if (imagePath) WorkOrderImageService.remove(aoId, imagePath).catch(function() {});
+        return;
+      }
       if (!ao.log) ao.log = [];
       const entry = {
         id: 'LOG-' + Date.now(),
-        type: (file && imageData) ? (text ? 'photo' : 'photo') : 'log',
+        type: imagePath ? 'photo' : 'log',
         text: text || '',
-        imageData: imageData || '',
+        imageData: '',
+        imagePath: imagePath,
         visibility: 'intern',
         userName: state.currentUser ? state.currentUser.firstName + ' ' + state.currentUser.lastName : 'Okänd',
         timestamp: new Date().toISOString()
       };
       ao.log.push(entry);
-      WorkOrderService.update(this.aoId, { log: ao.log });
       Modal.close();
-      const aoUp = getAO(this.aoId);
-      if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
-      showToast('Loggpost tillagd');
-    };
-
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => finalize(e.target.result);
-      reader.readAsDataURL(file);
-    } else {
-      finalize('');
+      this._rerenderTimeline();
+      showToast('Sparar loggpost…');
+      WorkOrderService.update(aoId, { log: ao.log }, { onSettled: (r) => {
+        if (r.ok) { showToast('Loggpost sparad'); return; }
+        /* Definitivt avslag: posten finns inte på servern. Ta bort den
+           lokalt. Bilden städas bara bort om inget annat väntar för samma
+           AO — en senare köad patch kan bära med samma post, och en
+           kvarglömd fil är ofarlig medan en raderad refererad fil inte är det. */
+        const cur = getAO(aoId);
+        if (cur && cur.log) cur.log = cur.log.filter(l => l.id !== entry.id);
+        const otherPending = typeof AOTimeSyncService !== 'undefined' && AOTimeSyncService.hasPendingEntry('ao', aoId);
+        if (imagePath && !otherPending) WorkOrderImageService.remove(aoId, imagePath).catch(function() {});
+        if (this.aoId === aoId) this._rerenderTimeline();
+        showToast('Loggposten kunde inte sparas (' + (r.error || 'okänt fel') + ').', 5000);
+      }});
+    } finally {
+      this._logSaving = false;
     }
   },
 
+  /* Borttagning: posten tas bort lokalt och skickas via ao-time-write.
+     Bildfilen raderas FÖRST när servern bekräftat borttagningen. Avslag →
+     posten läggs tillbaka. Väntar skrivningen på nätet (transient) ligger
+     den i outboxen; bilden rörs inte förrän bekräftelsen kommer. */
   deleteLogEntry(logId) {
     Modal.confirm('Ta bort loggpost?', () => {
-      const ao = getAO(this.aoId);
+      const aoId = this.aoId;
+      const ao = getAO(aoId);
       if (!ao) return;
-      ao.log = (ao.log||[]).filter(l => l.id !== logId);
-      WorkOrderService.update(this.aoId, { log: ao.log });
-      const aoUp = getAO(this.aoId);
-      if (aoUp) document.getElementById('ao-timeline').innerHTML = this._renderTimeline(aoUp);
-      showToast('Borttagen');
+      const idx = (ao.log || []).findIndex(l => l.id === logId);
+      if (idx < 0) return;
+      const removed = ao.log[idx];
+      ao.log = ao.log.filter(l => l.id !== logId);
+      this._rerenderTimeline();
+      showToast('Tar bort…');
+      WorkOrderService.update(aoId, { log: ao.log }, { onSettled: (r) => {
+        if (r.ok) {
+          if (removed.imagePath && typeof WorkOrderImageService !== 'undefined') {
+            WorkOrderImageService.remove(aoId, removed.imagePath).catch(function(e) {
+              console.warn('[WorkOrderDetailPage] Bildfilen kunde inte raderas (posten är borttagen):', e);
+            });
+          }
+          showToast('Loggpost borttagen');
+          return;
+        }
+        const cur = getAO(aoId);
+        if (cur && !(cur.log || []).some(l => l.id === logId)) {
+          cur.log = (cur.log || []).slice();
+          cur.log.splice(Math.min(idx, cur.log.length), 0, removed);
+        }
+        if (this.aoId === aoId) this._rerenderTimeline();
+        showToast('Borttagningen kunde inte sparas (' + (r.error || 'okänt fel') + ') — posten finns kvar.', 5000);
+      }});
     });
   },
 
@@ -2362,7 +2446,7 @@ const WorkOrderDetailPage = {
           <label>Bild (valfri)</label>
           <input type="file" id="avv-img" accept="image/*" onchange="WorkOrderDetailPage._previewAvvImg(this)">
           <div id="avv-img-preview" style="margin-top:6px;">
-            ${c.avvikelseImage ? `<img src="${c.avvikelseImage}" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:cover;">` : ''}
+            ${isSafeImageDataUrl(c.avvikelseImage) ? `<img src="${c.avvikelseImage}" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:cover;">` : ''}
           </div>
         </div>`,
       buttons: [
@@ -2399,9 +2483,17 @@ const WorkOrderDetailPage = {
             showToast('Avvikelse sparad');
           };
           if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => saveAvv(e.target.result);
-            reader.readAsDataURL(file);
+            /* Avvikelsebilden bäddas fortfarande in i checklistpunkten (EF-
+               kontraktet för work-order-checklist-resolve oförändrat), men
+               komprimeras först till 900px/JPEG 0.75 — en mobilbild på flera
+               MB blir då ~100–200 kB i vift_workOrders i stället. */
+            if (typeof WorkOrderImageService !== 'undefined') {
+              WorkOrderImageService._resizeImage(file).then((dataUrl) => saveAvv(dataUrl || null));
+            } else {
+              const reader = new FileReader();
+              reader.onload = (e) => saveAvv(e.target.result);
+              reader.readAsDataURL(file);
+            }
           } else {
             saveAvv(null);
           }

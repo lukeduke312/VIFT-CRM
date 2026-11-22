@@ -51,7 +51,7 @@ const RonderingUtforandePage = {
     if (!el) return;
     el.innerHTML = this._avvImages.map(function(img, i) {
       return '<div style="position:relative;display:inline-block;">' +
-        '<img src="' + img.url + '" class="ron-img-thumb">' +
+        (isSafeImageDataUrl(img.url) ? '<img src="' + img.url + '" class="ron-img-thumb">' : '') +
         '<button onclick="RonderingUtforandePage._removeAvvImg(' + i + ')" class="ron-img-rm">×</button>' +
         '</div>';
     }).join('');
@@ -253,7 +253,7 @@ const RonderingUtforandePage = {
             <div class="ron-anm">
               <div class="ron-anm-title">${esc(avv.title)}</div>
               ${avv.comment?`<div class="ron-anm-body">${esc(avv.comment)}</div>`:''}
-              ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
+              ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.filter(img=>isSafeImageDataUrl(img.url)).map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
               <div class="ron-anm-actions">
                 ${pbdg(avv.priority)}
                 ${avv.severity?`<span class="bdg bdg-orange" style="font-size:9px;">${avv.severity}</span>`:''}
@@ -713,7 +713,7 @@ const RonderingRapportPage = {
                         <div class="ron-anm">
                           <div class="ron-anm-title">${esc(avv.title)}</div>
                           ${avv.comment?`<div class="ron-anm-body">${esc(avv.comment)}</div>`:''}
-                          ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
+                          ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.filter(img=>isSafeImageDataUrl(img.url)).map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
                           <div class="ron-anm-actions">
                             ${pbdg(avv.priority)}
                             ${avv.workOrderId

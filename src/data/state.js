@@ -2111,6 +2111,13 @@ function esc(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+/* Inbäddade bilder (data-URL) i delad data som andra användare kan skriva:
+   rendera bara äkta base64-bilder, så ett manipulerat värde inte kan bryta
+   sig ur ett src-attribut. */
+function isSafeImageDataUrl(v) {
+  return typeof v === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=\s]+$/.test(v);
+}
+
 function fmtDate(isoStr) {
   if (!isoStr) return '—';
   return new Date(isoStr).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
