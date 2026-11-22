@@ -12,7 +12,7 @@ En "§2a-filsynk" från denna branch hade alltså regresserat STAGING. Lösninge
 
 ## Vad som importerades
 
-Alla filer som STAGING:s `index.html` laddar (72 skript, 7 stilmallar), `index.html`, `service-worker.js` (v14), `manifest.json` och refererade bildtillgångar (`assets/`). Hämtat 2026-11-23 från `https://staging-crm.viftfast.se` med vanlig GET. Taggen `pre-staging-baseline-import` pekar på branchens läge före importen.
+Alla filer som STAGING:s `index.html` laddar (72 skript, 7 stilmallar), `index.html`, `service-worker.js` (v14), `manifest.json` och refererade bildtillgångar (`assets/`). Hämtat 2026-11-23 från `https://staging-crm.viftfast.se` med vanlig GET. Branchens läge före importen är commit `1b08333`.
 
 ## Miljööverlägg (produktionsrepo)
 
