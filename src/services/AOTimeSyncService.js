@@ -160,7 +160,7 @@ const AOTimeSyncService = {
          plats var INTE nämnd i det ursprungliga felrapporten men drabbades
          av exakt samma rotorsak — ao-time-write (AO-/tid-/attestskrivningar)
          fick alltså också 404 innan denna rättelse. */
-      const res = await Storage._authFetch(base + '/' + this._FN_NAME, { body: JSON.stringify(payload) });
+      const res = await Storage._authFetch(base + '/' + this._FN_NAME, { body: JSON.stringify(payload), timeoutMs: Storage.WRITE_TIMEOUT_MS });
       let data = null;
       try { data = await res.json(); } catch (e) {}
       if (!res.ok) return { ok: false, error: (data && data.error) || ('http_' + res.status), httpStatus: res.status };

@@ -25,6 +25,9 @@ const SUPABASE_AKEY = 'sb_publishable_y0htroGxexlmICBDPAUn2Q_Qq7NWrSC';
 const Storage = {
   prefix: 'vift_',
 
+  /* Gräns för skrivanrop, se _authFetch(). Generös (mobilnät, stora register). */
+  WRITE_TIMEOUT_MS: 20000,
+
   /* P0 AO/TID-FIX: bas-URL för Supabase Edge Functions, härledd från
      SUPABASE_URL (samma projekt-URL som REST-anropen ovan). Används av
      AOTimeSyncService för att anropa ao-time-write. Lazy — läses vid
@@ -82,6 +85,13 @@ const Storage = {
    */
   async _authFetch(url, opts) {
     opts = opts || {};
+    /* opts.timeoutMs (opt-in, default ingen gräns = oförändrat beteende):
+       skrivvägar sätter en gräns så ett avstannat fetch() aldrig låter en
+       `await` (persist-kön, AOTimeSyncService:s kedja per post, stämpling)
+       hänga obegränsat. Timeout kastar som ett vanligt nätverksfel
+       (isTimeout=true) och hanteras av anroparnas befintliga "osäkert
+       utfall"-väg — aldrig som lyckad skrivning. */
+    const timeoutMs = opts.timeoutMs;
 
     /* Steg 1: Proaktiv token-refresh */
     if (typeof Auth !== 'undefined' && Auth.refreshIfNeeded) {
@@ -107,8 +117,28 @@ const Storage = {
       return o;
     };
 
+    const doFetch = async () => {
+      if (!timeoutMs) return fetch(url, buildOpts());
+      const controller = new AbortController();
+      const timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+      try {
+        const o = buildOpts();
+        o.signal = controller.signal;
+        return await fetch(url, o);
+      } catch (e) {
+        if (e && e.name === 'AbortError') {
+          const err = new Error('TIMEOUT efter ' + timeoutMs + 'ms');
+          err.isTimeout = true;
+          throw err;
+        }
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
     /* Steg 2: Utför anrop */
-    let res = await fetch(url, buildOpts());
+    let res = await doFetch();
 
     /* Steg 3: Hantera 401 — EN riktig force refresh (inte bara "redan färsk?"-
        kontrollen i refreshIfNeeded) + en retry. Auth.forceRefresh() delar
@@ -125,7 +155,7 @@ const Storage = {
         err.isAuthExpired = true;
         throw err;
       }
-      res = await fetch(url, buildOpts()); /* retry med färsk token */
+      res = await doFetch(); /* retry med färsk token, samma timeoutMs */
       if (res.status === 401) {
         this._signalAuthFailure();
         const err = new Error('AUTH_EXPIRED');
@@ -206,7 +236,8 @@ const Storage = {
     try {
       const res = await this._authFetch(SUPABASE_URL + '/rest/v1/store', {
         body: JSON.stringify(body),
-        extraHeaders: { 'Prefer': 'resolution=merge-duplicates' }
+        extraHeaders: { 'Prefer': 'resolution=merge-duplicates' },
+        timeoutMs: this.WRITE_TIMEOUT_MS
       });
       if (res.ok) {
         console.log('[Storage.setAll] Supabase write OK — ' + pairs.length + ' nycklar (inkl. vift_workOrders)');
@@ -268,7 +299,8 @@ const Storage = {
     const body = pairs.map(function([key, value]) { return { key: Storage.prefix + key, value: value }; });
     const res = await this._authFetch(SUPABASE_URL + '/rest/v1/store', {
       body: JSON.stringify(body),
-      extraHeaders: { 'Prefer': 'resolution=merge-duplicates' }
+      extraHeaders: { 'Prefer': 'resolution=merge-duplicates' },
+      timeoutMs: this.WRITE_TIMEOUT_MS
     });
     if (!res.ok) {
       const txt = await res.text().catch(function() { return ''; });
@@ -489,7 +521,8 @@ const Storage = {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
         body: JSON.stringify({ action: 'setStampStatus', active: !!active, ts: ts != null ? ts : undefined, aoId: aoId != null ? aoId : undefined, expectedRevision }),
-        extraHeaders: { 'apikey': SUPABASE_AKEY }
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        timeoutMs: this.WRITE_TIMEOUT_MS
       });
       const data = await res.json().catch(function() { return {}; });
       if (!res.ok) {
@@ -553,7 +586,8 @@ const Storage = {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
         body: JSON.stringify({ action: 'write', key: key, value: value, expectedHash: expectedHash }),
-        extraHeaders: { 'apikey': SUPABASE_AKEY }
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        timeoutMs: this.WRITE_TIMEOUT_MS
       });
       const data = await res.json().catch(function() { return {}; });
       if (!res.ok) {
@@ -586,7 +620,8 @@ const Storage = {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
         body: JSON.stringify({ action: 'writeMerge', key: key, upserts: upserts, removals: removals || [] }),
-        extraHeaders: { 'apikey': SUPABASE_AKEY }
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        timeoutMs: this.WRITE_TIMEOUT_MS
       });
       const data = await res.json().catch(function() { return {}; });
       if (!res.ok) {
