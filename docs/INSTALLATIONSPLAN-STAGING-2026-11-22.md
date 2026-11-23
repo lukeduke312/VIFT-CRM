@@ -213,14 +213,14 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 
 **Från Leverans J (releasekandidat)**
 - [ ] J1a Nivå 1: `node tests/staging/authz-read.js --jag-har-go --bekrafta-projekt=<ref>`.
-  - Kontrollerar att varje roll bara ser det den ska: AO-lista, tidposter, direkt REST-läsning, `readWithHash` på AO, plus en sondering av checklistans serverstöd.
+  - Kontrollerar att varje roll bara ser det den ska: AO-lista, tidposter, direkt REST-läsning, `readWithHash` på AO. Skickar inga åtgärder som kan mutera, inte heller sådana som normalt nekas. Checklistans sondering görs i nivå 2.
   - Inga affärsdata skrivs. Inloggningen skriver i auth-schemat.
   - Kräver GO + testkonton.
 - [ ] J1b Nivå 2: `node tests/staging/authz-mutation.js --jag-har-go --mutationstest --bekrafta-projekt=<ref>`, med `VIFT_MILJO=staging`. Kör först `--torrkorning`.
-  - Täcker G13 (testpost per register och roll), G9 (ekonomi försöker sätta testkörningens egen AO till "fakturerad"), G6 (dubbel `create_time` på samma test-AO) och, efter §2g, checklistans ägarkontroll.
+  - Täcker G13 **delvis** (ny testpost per array-register och roll; se §4a), G9 (ekonomi försöker sätta testkörningens egen AO till "fakturerad"), G6 (dubbel `create_time` på samma test-AO) sondering av checklistans serverstöd och, efter §2g, checklistans ägarkontroll.
   - Skriver bara egna märkta testposter och städar dem. Befintliga poster verifieras oförändrade.
   - Kräver uttryckligt GO för mutationstest.
-- [ ] J1c Om J1b slutar med kod 3: kör `--stada=<runId>` och bekräfta kod 0 innan något annat görs.
+- [ ] J1c Om J1b slutar med kod 3 eller 5: kör `--stada=<runId>` och bekräfta kod 0 innan något annat görs.
 - **Simulerade tester räknas inte som bevis.** Bara J1a och J1b avgör G13, G9 och G6.
 - [ ] J2 Sparbesked (G12): ändra kontaktperson, teknisk info, artikel, prisgrupp, säljchans, avtal, projekt och admininställning → "Sparar…" och sedan "Sparat" först efter svar. Med nätet avstängt (devtools) → "sparades inte" och värdet återgår eller hålls som osparad ändring.
 - [ ] J3 Avtal och e-postmall går att skapa (dialogknapparna var döda).
@@ -241,8 +241,8 @@ Ett anrop som **kan** uppdatera databasen kallas aldrig läsande.
 | Nivå | Verktyg | Skriver | Krav |
 |---|---|---|---|
 | 0 | `tests/e2e/staging-readonly.js` | Inget. Oinloggat; anropen nekas innan något läses eller skrivs. Källverifierat för EF:er i repot; ogiltig offerttoken ger 404 före skrivning. | Tillåtet (läsande) |
-| 1 | `tests/staging/authz-read.js` | Inga affärsdata. Inloggningen skriver i auth-schemat (session, refresh-token, `last_sign_in_at`). För `work-orders-list`/`store-key-write` (G4) bygger "läsande" på kontraktet, inte på granskad kod. En självkontroll avbryter med avvikelse om en skrivåtgärd skulle ha skickats. | GO + testkonton |
-| 2 | `tests/staging/authz-mutation.js` | Skapar och tar bort egna märkta testposter. `vift_lastChanged` och `store.updated_at` ändras. | Uttryckligt GO för mutationstest + testkonton |
+| 1 | `tests/staging/authz-read.js` | Inga affärsdata. Skickar bara läsåtgärder (`readWithHash`, `readHashes`, `readAllWithHashes`, GET); allt annat underkänner körningen. Inloggningen skriver i auth-schemat (session, refresh-token, `last_sign_in_at`). För `work-orders-list`/`store-key-write` (G4) bygger "läsande" på kontraktet, inte på granskad kod. En självkontroll avbryter med avvikelse om en skrivåtgärd skulle ha skickats. | GO + testkonton |
+| 2 | `tests/staging/authz-mutation.js` | Skapar och tar bort egna märkta testposter. Metadata ändras och återställs inte (se nedan). | Uttryckligt GO för mutationstest + testkonton |
 
 **Testkonton (nivå 1–2):**
 - Ett konto per roll: admin (ao_create + ao_edit + ao_view_all + tidadmin), fältarbetare, valfritt en andra fältarbetare, arbetsledare, ekonomi och begränsad.
@@ -253,6 +253,7 @@ Ett anrop som **kan** uppdatera databasen kallas aldrig läsande.
 **Miljöspärrar (före första anropet; utgångskod 2 och inga anrop):**
 - `--jag-har-go`
 - `--bekrafta-projekt=<ref>` måste vara exakt projektet i `VIFT_SUPABASE_URL`
+- **projektlås:** nivå 1 och 2 körs bara mot VIFT CRM:s godkända STAGING-projekt. Projektet kontrolleras mot en SHA-256-hash i `tests/staging/lib.js`, så projekt-id:t står inte i klartext i repot. Det räcker alltså inte att utesluta LIVE och bekräfta ett godtyckligt projekt-id. Byte av STAGING-projekt kräver ett beslut och en kodändring.
 - LIVE-projektet nekas alltid
 - testkontomönstret
 - nivå 2 kräver dessutom `--mutationstest` och `VIFT_MILJO=staging`
@@ -266,24 +267,53 @@ Ett anrop som **kan** uppdatera databasen kallas aldrig läsande.
    - Journalen skrivs **före** varje mutation.
    - Ingen befintlig AO patchas, alltså ingen no-op-patch på skarp AO.
    - Register som inte är arrayer prövas inte.
-3. **Efter:**
-   - Städning görs alltid, även om körningen avbryts.
-   - Verktyget kontrollerar att inga testposter finns kvar.
-   - Verktyget kontrollerar att alla befintliga element, AO (inklusive `updatedAt`) och tidposter är identiska med ögonblicksbilden.
+   - Journalen innehåller exakt vad som skrevs.
+3. **Efter (återhämtning):**
+   - Städningen utgår från **journalen** och fungerar även när ögonblicksbilden eller AO-listan inte går att läsa.
+   - Varje städåtgärd har högst 3 försök, med paus mellan försöken. Inga oändliga loopar.
+   - Därefter görs en **efterkontroll** med en ny ögonblicksbild. Om den hittar testposter kompletteras städningen genom sökning på runId, och kontrollen görs igen.
+   - "Återställt" påstås **bara** efter en lyckad efterkontroll. Om efterkontrollen inte kan göras rapporteras det som osäkert, med kod 3.
+   - `--stada=<runId>` läser journalen och gör om städning och efterkontroll. Den kan köras igen tills den ger kod 0.
+   - Rapporten sparas alltid.
 4. **Utgångskoder:**
    - 0 OK
    - 1 säkerhetsavvikelse (t.ex. en roll fick skriva ett register den inte ska)
    - 3 testposter kvar: kör `--stada=<runId>`, och felsök manuellt om det inte räcker
    - 4 osäkert: en befintlig post ändrades under körningen, troligen av annan användare. Granska listan i rapporten.
+   - 5 körningen avbröts: städningen är efterkontrollerad, men testerna är ofullständiga. Kör om.
+   - Kod 3 omfattar nu även fallet "efterkontrollen kunde inte göras".
 5. **Rapport:** `tests/staging/rapport/<verktyg>-<runId>.json` och journalen ligger lokalt och checkas inte in. De innehåller inga lösenord eller tokens.
 6. **Rekommendation:** kör nivå 2 när ingen annan arbetar i STAGING, så att kod 4 blir entydig.
 
-**Lokalt prövat:** `tests/staging_tools.test.js` (30/30) kör verktygen som riktiga processer mot den simulerade servern bakom en lokal HTTP-server. Det visar fem saker:
+**Återställda affärsposter är inte detsamma som full databasidentitet.** Rapporten skiljer på två rader:
+- **AFFÄRSPOSTER:** testposterna är borta, och befintliga register-element, AO (inklusive `updatedAt`) och tidposter är identiska med ögonblicksbilden.
+- **DATABASIDENTITET:** är **inte** fullständig, och det är förväntat. Följande ligger kvar och återställs inte:
+  - `vift_lastChanged` och `store.updated_at` för berörda nycklar. Det gäller även borttagningar och nekade försök, om servern stämplar dem.
+  - Serverns idempotensposter för ao-time-write-anropen (`create_ao`, `patch_ao`, `create_time`, `delete_time`, `delete_ao`, `permanent_delete_ao`).
+  - Eventuella aktivitetsloggposter om testkörningen. Servern kan skriva sådana (källa saknas, G4). Verktyget jämför loggen om den går att läsa och redovisar nya poster, men tar inte bort dem eftersom loggen är historik.
+  - Inloggningar i auth-schemat och Edge Function-loggar.
+  - WAL och backup-historik som innehåller testposterna.
+
+**G13-täckning — delvis, inte heltäckande:**
+- **Prövat:** om varje roll får lägga till en **ny** post i varje **array**-register.
+- **Inte prövat:**
+  - objektformade register, t.ex. inställningar (markeras "INTE prövat"; ingen skrivning görs)
+  - per-post-regler, t.ex. egna och andras uppgifter i `vift_activities`
+  - ändring eller borttagning av befintliga poster
+  - fältnivå
+  - hel-nyckel-skrivning (`write`)
+- Ett grönt G13 betyder därför inte att BLOCKER-2 är löst i sin helhet. Rapporten säger det uttryckligen.
+
+**Lokalt prövat:** `tests/staging_tools.test.js` (40/40) kör verktygen som riktiga processer mot den simulerade servern bakom en lokal HTTP-server. Det visar:
 - Varje spärr stoppar före första anropet.
 - Nivå 1 skickar inga skrivåtgärder och lämnar databasen bitidentisk.
 - Torrkörningen skriver inget.
 - Nivå 2 rör ingen befintlig AO, inte heller `updatedAt`, och städar så att registren blir bitidentiska. Den upptäcker också en server som tillåter otillåtna skrivningar.
 - Misslyckad städning ger kod 3 och en lista. En ny körning vägrar starta, och `--stada` städar upp.
+- Projektlåset stoppar ett godtyckligt projekt även när det är bekräftat.
+- Nivå 1 skickar ingen checklist-sondering.
+- Om nätet eller ögonblicksbilden fallerar efter mutationerna städas testposterna ändå bort via journalen. Verktyget påstår **inte** att allt är återställt och ger kod 3. `--stada` slutför sedan efterkontrollen med kod 0.
+- Rapporten redovisar metadata som ligger kvar och att G13 bara är delvis prövat.
 
 Detta bevisar verktyget, **inte** serverns verkliga behörigheter.
 
@@ -320,13 +350,31 @@ Detta bevisar verktyget, **inte** serverns verkliga behörigheter.
 
 ### 6.1 Förutsättningar (före första GO)
 
-| # | Förutsättning | Ansvar |
+**Testkonton (F1)** skapas av Lucas i STAGING. Varje konto ska ha "e2e" i e-postens lokaldel och en personalpost med samma e-post. Alla delar samma lösenord, som bara finns i `VIFT_PW` på den maskin som kör testerna.
+
+| Miljövariabel | Roll | Behörigheter som krävs |
 |---|---|---|
-| F1 | Testkonton i STAGING:<br>• ett per roll: admin, fältarbetare, en andra fältarbetare, arbetsledare, ekonomi och begränsad<br>• "e2e" i e-postens lokaldel<br>• personalpost med samma e-post<br>• gemensamt testlösenord som bara finns i miljövariabeln `VIFT_PW` | Lucas |
-| F2 | Backup av `vift_workOrders`, `vift_timeEntries` och berörda register, samt nuvarande definitioner av `work_order_checklist_resolve` och de deployade EF:erna (`work-order-checklist-resolve`, `offer-attachment-upload`). | Lucas / den som installerar |
-| F3 | Ingen annan arbetar i STAGING under J1b, så att efterkontrollen blir entydig. | Lucas |
-| F4 | STAGING-överlägget är klart för §2a (`config.js`, `storage.js`, `AuthService.js`, `index.html`). | Den som installerar |
-| F5 | Lokala tester gröna på den commit som installeras: `bash tests/run-all.sh` 12/12 och `node tests/e2e/run.js` utan misslyckade (se rapporten §C). | Klart i repot |
+| `VIFT_USER_ADMIN` | admin | `ao_create`, `ao_edit`, `ao_view_all`, tidadministration (`all` räcker) |
+| `VIFT_USER_FALT` | fältarbetare | `ao_view_own`, `ao_time`, `ao_checklist` |
+| `VIFT_USER_FALT2` | andra fältarbetare (för checklistans ägarkontroll) | som ovan |
+| `VIFT_USER_CHEF` | arbetsledare | enligt rollen i STAGING |
+| `VIFT_USER_EKONOMI` | ekonomi | enligt rollen i STAGING |
+| `VIFT_USER_BEGRANSAD` | begränsad | endast `dashboard_view`, `ao_view_own` |
+
+Dessutom krävs:
+- `VIFT_SUPABASE_URL`: det godkända STAGING-projektet. Projektlåset nekar alla andra.
+- `VIFT_SUPABASE_ANON`: den publika nyckeln.
+- `VIFT_MILJO=staging`, för nivå 2.
+
+**Backup (F2), före steg 4 och före steg 5–8.** Spara utanför databasen och notera tidpunkten:
+- `select key, value, updated_at from public.store where key in ('vift_workOrders','vift_timeEntries','vift_customers','vift_properties','vift_offers','vift_salesOpps','vift_roles','vift_staff','vift_settings','vift_articles','vift_priceGroups','vift_contracts','vift_activities','vift_activityLog')`
+- `select pg_get_functiondef('public.work_order_checklist_resolve'::regproc)`
+- Deployade källor för `work-order-checklist-resolve` och `offer-attachment-upload`.
+
+**Övrigt:**
+- **F3:** ingen annan arbetar i STAGING under steg 3–4 och steg 9.
+- **F4:** STAGING-överlägget är klart för §2a.
+- **F5:** lokala tester är gröna på den commit som installeras. Det gäller nu: `bash tests/run-all.sh` 12/12 (260 kontroller) och `node tests/e2e/run.js` med 105 godkända, 0 misslyckade, 1 blockerad och 1 känt fel.
 
 ### 6.2 Steg, beslut och stoppkriterier
 
@@ -334,8 +382,8 @@ Detta bevisar verktyget, **inte** serverns verkliga behörigheter.
 |---|---|---|---|---|---|---|
 | 1 | Nivå 0 `staging-readonly.js` | Inget | — | **GO** (tillåtet) | Någon kontroll avviker | — |
 | 2 | J1a nivå 1 `authz-read.js` | Inloggningsposter i auth-schemat | GO-1: testkonton får användas | **GO efter GO-1** | R1–R4 visar att en roll ser data den inte ska. Det är ett säkerhetsfynd: dokumentera, fortsätt bara efter beslut. | — |
-| 3 | J1b `--torrkorning` | Inloggningsposter | GO-2: mutationstest i STAGING | **GO efter GO-2** | En spärr slår till, eller ögonblicksbilden misslyckas | — |
-| 4 | J1b skarp körning (G13, G9, G6) mot **nuvarande** server | Egna märkta testposter skapas och tas bort; `store.updated_at` och `vift_lastChanged` ändras | GO-2 | **GO efter GO-2** | Kod 3: kör `--stada`, vidare först vid kod 0.<br>Kod 4: granska listan.<br>Kod 1 (G13): BLOCKER-2 bekräftad. Installationen av klienten kan fortsätta, eftersom den inte ändrar serverbehörigheter, men LIVE förblir NO-GO och serveråtgärd planeras. | `--stada=<runId>` |
+| 3 | J1b `--torrkorning` | Inloggningsposter | GO-2: mutationstest i STAGING | **GO efter GO-2** | En spärr slår till (t.ex. projektlåset), ögonblicksbilden misslyckas, eller ett testkonto saknar personalpost | — |
+| 4 | J1b skarp körning (G13, G9, G6) mot **nuvarande** server | Egna märkta testposter skapas och tas bort; `store.updated_at` och `vift_lastChanged` ändras | GO-2 | **GO efter GO-2** | Kod 3 eller 5: kör `--stada=<runId>` tills den ger kod 0; vidare först då.<br>Kod 4: granska listan.<br>Kod 1 (G13): BLOCKER-2 bekräftad. Installationen av klienten kan fortsätta, eftersom den inte ändrar serverbehörigheter, men LIVE förblir NO-GO och serveråtgärd planeras. | `--stada=<runId>` |
 | 5 | §2a klientfiler (+ överlägg) | Staging-repots filer | GO-3 | **GO efter GO-3** | Inloggning ger konsolfel, eller nivå 0 visar fel versioner | Återställ staging-repots föregående commit |
 | 6 | §2g checklistans migration och EF | DB-funktioner (`work_order_checklist_set_state`, ersatt `…_resolve`) och EF. Inga data, inga AO-statusar. | GO-4 | **GO efter GO-4** | Migrationen ger fel, eller EF-deploy misslyckas (fönstret mellan dem ska vara kort) | Enligt §2g |
 | 7 | §2e `offer-attachment-upload` PATCH | EF | GO-5 | **GO efter GO-5 och källjämförelse** | Den deployade källan avviker utöver PATCH-blocket | Föregående EF-version |

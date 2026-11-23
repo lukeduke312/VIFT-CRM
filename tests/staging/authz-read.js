@@ -16,7 +16,8 @@
  *   R2 time-entries-list per roll: utan payroll_view bara egna tidposter.
  *   R3 Direkt REST-läsning av vift_workOrders/vift_timeEntries nekas/tom.
  *   R4 store-key-write readWithHash på vift_workOrders nekas.
- *   R5 Sondering av checklistans serverstöd (tre statuslägen).
+ *   (Sondering av checklistans serverstöd görs i nivå 2 — den skickar en
+ *   åtgärd som skulle kunna mutera och hör därför inte hemma här.)
  */
 const L = require('./lib');
 
@@ -26,7 +27,9 @@ const { req, login, calls } = L.client(env);
 const runId = L.newRunId().replace('E2E-AUTHZ', 'E2E-READ');
 const rep = L.reporter('authz-read', runId);
 
-const READ_ACTIONS = new Set([undefined, 'readWithHash', 'readHashes', 'readAllWithHashes', 'start' /* R5-sondering, se nedan */]);
+/* Enda tillåtna åtgärderna i POST-anrop. Allt annat (även åtgärder som
+   "normalt nekas") räknas som en skrivåtgärd och underkänner körningen. */
+const READ_ACTIONS = new Set(['readWithHash', 'readHashes', 'readAllWithHashes']);
 
 (async () => {
   console.log('Nivå 1 — autentiserad läsning mot projekt ' + env.ref + '. Inloggning skriver i auth-schemat; inga affärsdata skrivs.\n');
@@ -75,18 +78,6 @@ const READ_ACTIONS = new Set([undefined, 'readWithHash', 'readHashes', 'readAllW
     rep.add('R4 ' + role, rh.status === 401 || rh.status === 403, 'readWithHash vift_workOrders: HTTP ' + rh.status, { kalla: 'ej i repo (G4) — läsåtgärd enligt kontrakt' });
   }
 
-  /* R5 — sondering av checklistans serverstöd. En punkt som inte finns:
-     ny server: RPC:n tar radlås och avbryts med item_not_found (rollback,
-     ingen skrivning — källa: migration 20261123000002); äldre server:
-     EF:en avvisar avvikelse:'v2:start' innan RPC:n anropas. */
-  const probeTok = tok.falt;
-  const wl = await req('/functions/v1/work-orders-list', { method: 'GET', token: probeTok });
-  const ao = ((wl.body && wl.body.workOrders) || [])[0];
-  if (ao) {
-    const p = await req('/functions/v1/work-order-checklist-resolve', { token: probeTok, body: { aoId: ao.id, itemId: '__vift_probe__', action: 'start', avvikelse: 'v2:start' } });
-    const sup = p.body.error === 'item_not_found' ? 'JA (migration 20261123000002 installerad)' : p.body.error === 'invalid_avvikelse' ? 'NEJ (äldre server)' : 'OKÄNT (HTTP ' + p.status + ' ' + (p.body.error || '') + ')';
-    rep.add('R5 checklista tre lägen', null, 'serverstöd: ' + sup, { kalla: 'repo — ingen skrivning (punkt saknas → avbryts)' });
-  } else rep.add('R5 checklista tre lägen', null, 'ingen AO synlig för fältkontot — sondering hoppas över');
   if (adminAoCount !== null) rep.add('R1 jämförelse', null, 'admin ser ' + adminAoCount + ' AO');
 
   // Självkontroll: inga skrivåtgärder skickade.

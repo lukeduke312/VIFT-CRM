@@ -33,7 +33,12 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const LIVE_REF = 'hjplzjsbbowiyoyhdghc';
-const EXIT = { OK: 0, AVVIKELSE: 1, SPARR: 2, STADNING_MISSLYCKADES: 3, OSAKER: 4 };
+/* Lås till VIFT CRM:s uttryckligen godkända STAGING-projekt. Endast en
+   SHA-256-hash lagras (projekt-id:t skrivs inte i klartext i repot).
+   Byte av STAGING-projekt kräver ett medvetet beslut och en ändring här. */
+const APPROVED_STAGING_REF_SHA256 = 'd110681c6650e44156f27451224675731facb7f37a805f0c2636acb9ef62cd43';
+const isApprovedStaging = (ref) => crypto.createHash('sha256').update(String(ref)).digest('hex') === APPROVED_STAGING_REF_SHA256;
+const EXIT = { OK: 0, AVVIKELSE: 1, SPARR: 2, STADNING_MISSLYCKADES: 3, OSAKER: 4, AVBRUTEN: 5 };
 
 function arg(name) {
   const a = process.argv.slice(2).find((x) => x === '--' + name || x.startsWith('--' + name + '='));
@@ -58,6 +63,10 @@ function guard(level) {
   else if (process.env.VIFT_LOKALT_TESTLAGE === '1' && /^http:\/\/127\.0\.0\.1:\d+$/.test(sb)) { ref = 'lokaltest'; local = true; }
   else refuse('VIFT_SUPABASE_URL måste vara https://<projekt-ref>.supabase.co.');
   if (ref === LIVE_REF || sb.includes(LIVE_REF)) refuse('adressen pekar på LIVE. Nekas alltid.');
+  /* Nivå 1 och 2 loggar in och (nivå 2) skriver: bara det godkända
+     STAGING-projektet duger — att utesluta LIVE räcker inte. Lokalt
+     testläge (127.0.0.1) är det enda undantaget och kan aldrig nå Supabase. */
+  if (!local && !isApprovedStaging(ref)) refuse('projektet i VIFT_SUPABASE_URL är inte VIFT CRM:s godkända STAGING-projekt.');
   const confirm = arg('bekrafta-projekt');
   if (confirm !== ref) refuse('--bekrafta-projekt=<ref> måste anges och vara exakt projektet i VIFT_SUPABASE_URL (' + (local ? 'lokaltest' : 'det du avser') + ').');
   if (level >= 2) {
@@ -144,4 +153,4 @@ function newRunId() {
 
 const stable = (v) => JSON.stringify(v === undefined ? null : v);
 
-module.exports = { LIVE_REF, EXIT, arg, refuse, guard, accounts, client, reporter, newRunId, stable };
+module.exports = { LIVE_REF, isApprovedStaging, EXIT, arg, refuse, guard, accounts, client, reporter, newRunId, stable };

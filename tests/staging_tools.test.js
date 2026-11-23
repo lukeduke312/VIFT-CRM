@@ -44,7 +44,7 @@ function run(script, args, envExtra) {
       VIFT_USER_ADMIN: 'admin@example.test', VIFT_USER_CHEF: 'arbetsledare@example.test',
       VIFT_USER_FALT: 'falt1@example.test', VIFT_USER_FALT2: 'falt2@example.test',
       VIFT_USER_EKONOMI: 'ekonomi@example.test', VIFT_USER_BEGRANSAD: 'begransad@example.test',
-      HTTPS_PROXY: '', https_proxy: '',
+      HTTPS_PROXY: '', https_proxy: '', VIFT_STADA_PAUS_MS: '10',
     }, envExtra || {});
     Object.keys(env).forEach((k) => { if (env[k] === null) delete env[k]; });
     const p = spawn(process.execPath, [path.join(ROOT, script)].concat(args), { env });
@@ -71,6 +71,8 @@ server.listen(0, '127.0.0.1', async () => {
       ['tests/staging/authz-mutation.js', MUT, { VIFT_MILJO: 'live' }, 'nivå 2 utan VIFT_MILJO=staging'],
       ['tests/staging/authz-mutation.js', MUT.concat(['--stada=nagot-annat']), {}, 'städning med ogiltigt runId'],
       ['tests/e2e/staging-authz.js', ['--jag-har-go'], {}, 'det ersatta verktyget'],
+      ['tests/staging/authz-read.js', ['--jag-har-go', '--bekrafta-projekt=abcdefghijklmnopqrst'], { VIFT_SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co' }, 'nivå 1 mot ett godtyckligt (bekräftat) projekt som inte är det godkända STAGING'],
+      ['tests/staging/authz-mutation.js', ['--jag-har-go', '--mutationstest', '--bekrafta-projekt=abcdefghijklmnopqrst'], { VIFT_SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co' }, 'nivå 2 mot ett godtyckligt (bekräftat) projekt som inte är det godkända STAGING'],
     ];
     for (const [s, a, e, label] of cases) {
       const n0 = reqCount;
@@ -85,6 +87,7 @@ server.listen(0, '127.0.0.1', async () => {
     ok(/SJÄLVKONTROLL — inga skrivåtgärder/.test(r.out), 'nivå 1: självkontrollen rapporterar inga skrivåtgärder');
     ok(mutCalls(c0).length === 0, 'nivå 1: servern fick inga skrivåtgärder (' + mutCalls(c0).map((c) => c.action).join(',') + ')');
     ok(dumpAll() === snap, 'nivå 1: hela databasen bitidentisk, även vift_lastChanged');
+    ok(!fake.calls.slice(c0).some((c) => /work-order-checklist-resolve/.test(c.path)), 'nivå 1: skickar ingen checklist-sondering (flyttad till nivå 2)');
 
     // ── Nivå 2 torrkörning ───────────────────────────────────────────
     snap = dumpAll(); c0 = fake.calls.length;
@@ -101,9 +104,12 @@ server.listen(0, '127.0.0.1', async () => {
     ok(!!rid, 'nivå 2: runId utskrivet');
     // Den simulerade servern låter alla inloggade skriva register (G13 okänd) —
     // verktyget ska då rapportera BLOCKER-2-avvikelser OCH ändå städa.
-    ok(r.code === 1 && /AVVIK +G13 vift_offers falt — servern TILLÄT skrivning/.test(r.out), 'nivå 2: upptäcker en server som tillåter otillåtna skrivningar (kod 1, G13-avvikelse redovisad)');
-        ok(/OK +STÄDNING — inga testposter kvar/.test(r.out), 'nivå 2: inga testposter kvar');
-    ok(/OK +BEFINTLIGA POSTER — alla befintliga/.test(r.out), 'nivå 2: befintliga poster identiska före/efter (verktygets egen kontroll)');
+    ok(r.code === 1 && /AVVIK +G13 vift_offers falt — servern TILLÄT ny testpost/.test(r.out), 'nivå 2: upptäcker en server som tillåter otillåtna skrivningar (kod 1, G13-avvikelse redovisad)');
+        ok(/OK +ÅTERSTÄLLNING — efterkontrollerat: inga testposter kvar/.test(r.out), 'nivå 2: inga testposter kvar (efterkontrollerat)');
+    ok(/INFO +DATABASIDENTITET — INTE fullständig/.test(r.out) && /idempotensposter/.test(r.out), 'nivå 2: redovisar att databasen inte är bitidentisk (metadata kvar)');
+    ok(/INFO +G13 TÄCKNING — DELVIS/.test(r.out) && /G13 vift_settings — objektformat register — INTE prövat/.test(r.out), 'nivå 2: G13 redovisas som delvis; objektformade register markerade som inte prövade');
+    ok(/INFO +CHK serverstöd — servern stöder tre lägen/.test(r.out), 'nivå 2: checklistans sondering görs här (på test-AO:n)');
+    ok(/OK +AFFÄRSPOSTER — befintliga register-element/.test(r.out), 'nivå 2: befintliga affärsposter identiska före/efter (verktygets egen kontroll)');
     ok(JSON.stringify(fake.get('workOrders')) === aosBefore, 'nivå 2: alla befintliga AO oförändrade, inklusive updatedAt (ingen no-op-patch på skarp AO)');
     ok(JSON.stringify(fake.get('timeEntries')) === tesBefore, 'nivå 2: tidposter oförändrade');
     ok(dump() === snap, 'nivå 2: alla register bitidentiska efter städning (bara vift_lastChanged ändrad)');
@@ -119,16 +125,32 @@ server.listen(0, '127.0.0.1', async () => {
     fake.addFault({ match: /ao-time-write:permanent_delete_ao/, mode: 'fail', status: 503, error: 'unavailable' });
     r = await run('tests/staging/authz-mutation.js', MUT);
     const rid2 = (r.out.match(/runId (E2E-AUTHZ-\d{14}-[0-9a-f]{6})/) || [])[1];
-    ok(r.code === 3 && /TESTPOSTER KVAR: AO /.test(r.out) && r.out.includes('--stada=' + rid2), 'städfel: kod 3, kvarvarande AO listad och städkommando angivet');
+    ok(r.code === 3 && /TESTPOSTER KVAR efter efterkontroll: AO /.test(r.out) && r.out.includes('--stada=' + rid2), 'städfel: kod 3, kvarvarande AO listad och städkommando angivet');
     // Nästa körning vägrar starta medan testposter ligger kvar.
     c0 = fake.calls.length;
     r = await run('tests/staging/authz-mutation.js', MUT);
     ok(r.code === 2 && /testposter från en tidigare körning/.test(r.out) && mutCalls(c0).length === 0, 'kvarvarande testposter: ny körning vägrar, inga skrivningar');
     fake.clearFaults();
     r = await run('tests/staging/authz-mutation.js', MUT.concat(['--stada=' + rid2]));
-    ok(r.code === 0 && /OK +STÄDNING — inga testposter kvar/.test(r.out), '--stada: tar bort kvarvarande testposter (kod ' + r.code + ')');
+    ok(r.code === 0 && /OK +ÅTERSTÄLLNING — efterkontrollerat: inga testposter kvar/.test(r.out) && /JOURNAL — \d+ poster lästa/.test(r.out), '--stada: läser journalen, tar bort kvarvarande testposter (kod ' + r.code + ')');
     ok(dump() === snap, '--stada: registren bitidentiska med före körningen');
     ok(!fake.get('workOrders').some((a) => String(a.id).startsWith('E2E-AUTHZ-')), '--stada: ingen test-AO kvar');
+
+    // ── Nätverk/ögonblicksbild fallerar EFTER mutationer ──────────────
+    // Alla AO-läsningar efter den första misslyckas: körningen avbryts mitt
+    // i, efterkontrollen kan inte göras. Städningen ska ändå ske utifrån
+    // journalen, och verktyget får INTE påstå att allt är återställt.
+    snap = dump();
+    let wlCount = 0;
+    fake.addFault({ match: (act) => /^work-orders-list/.test(act) && ++wlCount > 1, mode: 'fail', status: 503, error: 'unavailable' });
+    r = await run('tests/staging/authz-mutation.js', MUT);
+    const rid3 = (r.out.match(/runId (E2E-AUTHZ-\d{14}-[0-9a-f]{6})/) || [])[1];
+    ok(r.code === 3 && /EFTERKONTROLLEN KUNDE INTE GÖRAS/.test(r.out) && !/efterkontrollerat: inga testposter kvar/.test(r.out), 'nätfel efter mutation: kod 3, efterkontroll saknas, inget påstås återställt (kod ' + r.code + ')');
+    ok(/KÖRNING — avbröts/.test(r.out) && r.out.includes('--stada=' + rid3), 'nätfel: avbrottet redovisas och återupptagen städning erbjuds');
+    ok(!fake.get('workOrders').some((a) => String(a.id).startsWith(rid3)) && dump() === snap, 'nätfel: städningen från journalen tog ändå bort testposterna (registren bitidentiska)');
+    fake.clearFaults();
+    r = await run('tests/staging/authz-mutation.js', MUT.concat(['--stada=' + rid3]));
+    ok(r.code === 0 && /OK +ÅTERSTÄLLNING — efterkontrollerat/.test(r.out), 'återupptagen städning: efterkontroll nu möjlig, kod 0');
   } catch (e) {
     fail++; console.log('FAIL krasch:', e.stack);
   }
