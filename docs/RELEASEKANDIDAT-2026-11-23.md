@@ -12,6 +12,34 @@ Statusord i rapporten:
 
 ---
 
+## Frysning 2026-11-25
+
+Releasekandidaten är **frusen**. Två avgränsade punkter rättades före frysningen; ingen av dem rör klienten, så **paket v2 gäller oförändrat** (`MANIFEST-v2.txt`):
+
+1. **Aktivitetsflödet** är uttryckligen klientrapporterat.
+   - Servern verifierar bara vem och när.
+   - Posterna märks `source: 'klientrapport'` och `verifiedFields: ['userId','timestamp']`. `serverVerified` är borttaget.
+   - Referenser måste ha id-format, och varje användare får högst 60 poster per minut.
+   - En verifierad revisionslogg är ett dokumenterat gap (masterplan 200).
+2. **`e2e-real.js`** har nu samma återhämtning som `authz-mutation.js`, via den gemensamma modulen `tests/staging/recovery.js`:
+   - journalbaserad städning även vid nätfel och avbrott;
+   - efterkontroll;
+   - en spärrfil som blockerar alla nivå 2-körningar tills `--stada` har efterkontrollerat;
+   - ändrade befintliga affärsposter ger kod 4 och räknas aldrig som godkänt.
+
+   Felvägarna är provade lokalt.
+
+**Regression vid frysningen.** Ingen körning gjorde något anrop till något annat Supabase-projekt.
+
+| Svit | Resultat |
+|---|---|
+| Enhetstester | 15/15 testfiler gröna: policy 30/30, SQL mot PostgreSQL 17/17 och 32/32, nivå 2-verktygen 40/40, `e2e-real` lokalt 26/26 inklusive felvägar |
+| E2E, standardregler | 112 tester: 110 godkända, 0 misslyckade, 1 blockerad (PERM-03), 1 känt fel (AO-07) |
+| E2E, dagens STAGING-regler | 109 godkända. TASK-01 misslyckas, alltså felet som §2i rättar. |
+| E2E mot paket v2 med STAGING-reglerna efter installation | 111 godkända, 0 misslyckade, 1 blockerad (PERM-03), 0 kända fel |
+
+Instabilt test rättat: PROP-01 väntade på vilken toast som helst med texten "skapad". Det väntar nu på det exakta beskedet för fastigheten. Det var ett testfel; appen visar beskedet först efter serverns bekräftelse.
+
 ## Slutuppdrag 2026-11-24 — inför STAGING
 
 Gjort utan Lucas dator och utan att ändra någon driftsatt miljö. Allt är byggt och lokalt testat; **inget är installerat eller STAGING-verifierat**. Det samlade GO-underlaget finns i installationsplanen §6.

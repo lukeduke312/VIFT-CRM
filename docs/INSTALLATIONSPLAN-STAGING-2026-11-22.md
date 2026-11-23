@@ -200,12 +200,14 @@ Lösningen kräver inte längre källan till `ao-time-write` (G4). I stället fi
   - Allt annat nekas, och en enda otillåten post nekar hela anropet.
   - Regeln bedöms på `previous`. Den installerade RPC:n tillämpar en ändring bara när serverns aktuella post exakt motsvarar `previous` (kontrollerat i `20261108000001`), så ett förfalskat `previous` ger konflikt och ingen skrivning.
   - Ingen databasändring krävs för regeln.
-- **Aktivitetslogg** (`activity-log.ts` + migration `20261124000001_activity_log_append.sql`):
-  - Ny åtgärd `appendActivity`. Servern godtar bara kända händelsetyper.
-  - `userId` och tidpunkt sätts från den verifierade JWT:n; klientens värden ignoreras.
-  - Text och referensfält har längdgränser.
+- **Aktivitetsflöde (klientrapporterat, INTE en verifierad revisionslogg)** (`activity-log.ts` + migration `20261124000001_activity_log_append.sql`):
+  - Ny åtgärd `appendActivity`.
+  - **Det servern verifierar:** vem som rapporterar (`userId` från den verifierade JWT:n) och när (servertid). Klientens värden ignoreras.
+  - **Det servern INTE verifierar:** att händelsen faktiskt inträffat. Typ, beskrivning och objektreferenser är klientens rapport. Posterna märks `source: 'klientrapport'` och `verifiedFields: ['userId','timestamp']`; det tidigare `serverVerified` är borttaget, eftersom det antydde mer än det betydde.
+  - **Begränsningar:** typ-allowlist, referenser bara i id-format (annars `invalid_reference`), längdgränser och högst 60 poster per användare och minut (in-memory per EF-instans).
   - Posten läggs till atomiskt först under radlås, omsändning är idempotent och loggen kapas till 500 poster.
   - `write`/`writeMerge` av `vift_activityLog` nekas för alla (append-only).
+  - **Kvarstående gap (masterplan 200):** en verifierad revisionslogg kräver att de skrivande RPC:erna själva skriver händelsen i samma transaktion som affärsändringen. Det byggs inte i denna omgång. Flödet ska därför inte användas som bevis i tvister eller revision.
 - **Klienten (§2a):**
   - sonderar stödet och skickar en post i taget via en liten utkorg;
   - skickar aldrig hela listan;
@@ -351,7 +353,7 @@ Ett anrop som **kan** uppdatera databasen kallas aldrig läsande.
 | 0 | `tests/e2e/staging-readonly.js` | Inget. Oinloggat; anropen nekas innan något läses eller skrivs. Källverifierat för EF:er i repot; ogiltig offerttoken ger 404 före skrivning. | Tillåtet (läsande) |
 | 1 | `tests/staging/authz-read.js` | Inga affärsdata. Skickar bara läsåtgärder (`readWithHash`, `readHashes`, `readAllWithHashes`, GET); allt annat underkänner körningen. Inloggningen skriver i auth-schemat (session, refresh-token, `last_sign_in_at`). För `work-orders-list`/`store-key-write` (G4) bygger "läsande" på kontraktet, inte på granskad kod. En självkontroll avbryter med avvikelse om en skrivåtgärd skulle ha skickats. | GO + testkonton |
 | 2 | `tests/staging/authz-mutation.js` | Skapar och tar bort egna märkta testposter. Metadata ändras och återställs inte (se nedan). |
-| 2 | `tests/staging/e2e-real.js` | Webbläsartest mot den publicerade webbplatsen och riktig server:<br>• R0: sidor per roll<br>• F2: checklista<br>• F3: stämpling på två enheter, exakt en tidpost<br>• F4: samtidiga loggposter<br>• F5: nätavbrott<br>Skapar egna test-AO och tidposter, med journal, städning och redovisning av automatiska ändringar. Det kan förekomma även vid inloggning, eftersom serviceintervallens dagliga kontroll kan skapa uppgifter. Ekonomikedjan körs som manuella testfall (O1–O3, F1, J4, J5). Lokalt prövat 15/15 mot paketet och den simulerade servern (`tests/staging_e2e_real.test.js`). | Uttryckligt GO för mutationstest + testkonton |
+| 2 | `tests/staging/e2e-real.js` (återhämtning via `tests/staging/recovery.js`, samma modul som `authz-mutation`) | Webbläsartest mot den publicerade webbplatsen och riktig server:<br>• R0: sidor per roll<br>• F2: checklista<br>• F3: stämpling på två enheter, exakt en tidpost<br>• F4: samtidiga loggposter<br>• F5: nätavbrott<br>Skapar egna test-AO och tidposter, med journal, städning och redovisning av automatiska ändringar. Det kan förekomma även vid inloggning, eftersom serviceintervallens dagliga kontroll kan skapa uppgifter. Ekonomikedjan körs som manuella testfall (O1–O3, F1, J4, J5). Lokalt prövat 26/26 mot paketet och den simulerade servern (`tests/staging_e2e_real.test.js`), inklusive felvägarna:<br>• nätfel som gör efterkontrollen omöjlig: kod 3 och spärrfil, nästa körning blockeras med 0 anrop, och `--stada` ger kod 0;<br>• misslyckad borttagning: kod 3, därefter `--stada`;<br>• en ändrad befintlig post: kod 4, aldrig godkänt;<br>• avbrott: kod 5 med efterkontrollerad städning. | Uttryckligt GO för mutationstest + testkonton |
 
 **Testkonton (nivå 1–2):**
 - Ett konto per roll: admin (ao_create + ao_edit + ao_view_all + tidadmin), fältarbetare, valfritt en andra fältarbetare, arbetsledare, ekonomi och begränsad.
@@ -390,6 +392,8 @@ Ett anrop som **kan** uppdatera databasen kallas aldrig läsande.
    - 3 testposter kvar: kör `--stada=<runId>`, och felsök manuellt om det inte räcker
    - 4 osäkert: en befintlig post ändrades under körningen, troligen av annan användare. Granska listan i rapporten.
    - 5 körningen avbröts: städningen är efterkontrollerad, men testerna är ofullständiga. Kör om.
+   - **Spärrfil (2026-11-25):** vid kod 3 skrivs `tests/staging/rapport/OSTADAT-<runId>.lock`. Så länge den finns vägrar **alla** nivå 2-körningar (`authz-mutation`, `e2e-real`) att starta, med kod 2 och 0 anrop. Undantaget är `--stada=<det runId:t>`, som tar bort spärrfilen först när efterkontrollen visar att inga testposter finns kvar.
+   - **Ändrade befintliga affärsposter räknas aldrig som godkänt** (AFFÄRSPOSTER = AVVIK, kod 4), oavsett orsak: automatik vid inloggning, en annan användare eller testet.
    - Kod 3 omfattar nu även fallet "efterkontrollen kunde inte göras".
 5. **Rapport:** `tests/staging/rapport/<verktyg>-<runId>.json` och journalen ligger lokalt och checkas inte in. De innehåller inga lösenord eller tokens.
 6. **Rekommendation:** kör nivå 2 när ingen annan arbetar i STAGING, så att kod 4 blir entydig.
@@ -455,7 +459,7 @@ Detta bevisar verktyget, **inte** serverns verkliga behörigheter.
 
 ## 6. Samlat GO/NO-GO-underlag — STAGING-installation och integrationstester
 
-**Det här är det enda gällande GO/NO-GO-underlaget.** Det uppdaterades 2026-11-24 och ersätter versionen från 2026-11-23. **Inget av stegen är utfört.** Varje steg som ändrar något i STAGING kräver ett eget, uttryckligt GO från Lucas. Allt nedan rör bara STAGING (`yyzljlqyzzcbxmcdbual`); LIVE rörs aldrig.
+**Det här är det enda gällande GO/NO-GO-underlaget.** Det uppdaterades 2026-11-25. **Releasekandidaten är frusen** (klient: paket v2 från `09d1129`; server och testverktyg: commit enligt rapporten). Efter frysningen görs bara ändringar med dokumenterat skäl. **Inget av stegen är utfört.** Varje steg som ändrar något i STAGING kräver ett eget, uttryckligt GO från Lucas. Allt nedan rör bara STAGING (`yyzljlqyzzcbxmcdbual`); LIVE rörs aldrig.
 
 ### 6.1 Förutsättningar
 
@@ -529,6 +533,24 @@ Steg 5 kan göras före steg 4 om Lucas vill se klienten först. Klienten funger
 **STAGING-verifierat:** inget ännu.
 
 **Blockerat:** inget tekniskt. Det som återstår är beslut och åtkomst: testkonton, backup, uppladdning och deploy.
+
+### 6.5 Nästa konkreta GO (2026-11-25)
+
+**Går att göra utan dator, i webbläsaren (även på mobil eller surfplatta):**
+
+| GO | Vad Lucas gör | Vad Claude sedan gör | Ändrar i STAGING | Återställning |
+|---|---|---|---|---|
+| **GO-1 Testkonton** | 1. Supabase Dashboard för STAGING → Authentication → Add user (Auto confirm): sex konton enligt §6.1 F1.<br>2. I STAGING-appen som admin: personalposter med samma e-post och rätt roll, plus rollen "E2E begränsad".<br>3. I Claude-miljöns inställningar: `VIFT_PW`, `VIFT_USER_*`, `VIFT_SUPABASE_URL` och `VIFT_SUPABASE_ANON`. Aldrig i chatten. | Del A i backup-SQL:en kontrolleras via nivå 1 (`authz-read.js`): sex konton och rätt synlighet per roll. | Auth-användare, personalposter, en roll | Ta bort konton, personalposter och rollen |
+| **GO-2 Backup (databasdelen)** | SQL Editor: kör del A (bara läsning), sedan del B (`vift_staging_backup_20261124`) och del C (efterkontroll). Ladda ner resultatet av del C:s export om det går. | Inget. Claude har ingen databasåtkomst. | Ett nytt backupschema | `drop schema vift_staging_backup_20261124 cascade` |
+| **GO-3 Behörighetstest mot nuvarande server** | Ge GO i chatten. | `authz-mutation.js --torrkorning`, därefter den skarpa körningen (G13, G9, G6). Journal, städning, spärrfil och efterkontroll som i §4a. | Egna märkta testposter (tas bort) och metadata | `--stada=<runId>` |
+
+**Kräver dator (väntar):**
+- **GO-4 publicering** med WinSCP enligt `docs/WINSCP-STAGING-PUBLICERING.md`.
+- Nedladdning av de deployade Edge Functions (backupens EF-del, `supabase functions download`).
+- **GO-5–GO-8** migrationer och deploy med Supabase CLI.
+- **GO-9** webbläsartestet (`e2e-real.js`) mot den publicerade sidan, efter GO-4.
+
+**Rekommendation:** GO-1, GO-2 och GO-3 nu. Då är behörighetsfrågorna G13, G9 och G6 besvarade mot den riktiga servern innan Lucas är tillbaka vid datorn för publicering och installation.
 
 ## 7. LIVE senare
 

@@ -1,5 +1,20 @@
 /**
- * Serverstyrd aktivitetslogg — `appendActivity` (2026-11-24).
+ * Klientrapporterat AKTIVITETSFLÖDE — `appendActivity` (2026-11-24,
+ * avgränsat 2026-11-25).
+ *
+ * VIKTIGT — detta är INTE en verifierad revisionslogg. Servern verifierar
+ * bara VEM som rapporterar (userId ur JWT) och NÄR (servertid). Själva
+ * händelsen — typ, beskrivning och objektreferenser — är klientens egen
+ * rapport och har inte kontrollerats mot affärsdata. Posterna märks därför
+ * `source: 'klientrapport'` och `verifiedFields: ['userId', 'timestamp']`.
+ * En verifierad revisionslogg kräver att de skrivande RPC:erna själva
+ * (ao-time-write, invoice-write, …) skriver händelsen i samma transaktion
+ * som affärsändringen — dokumenterat som kvarstående gap (masterplan 200).
+ *
+ * Begränsningar som gör flödet svårare att missbruka: typ-allowlist,
+ * referenser bara i id-format, längdgränser, högst RATE_PER_MINUTE poster
+ * per användare och minut (per EF-instans), append-only (ingen kan ändra
+ * eller radera befintliga poster via klienten).
  *
  * Tidigare skrev klienten HELA vift_activityLog via writeMerge/write, vilket
  * (a) kräver admin_manage i STAGING (fältarbetares händelser gick förlorade)
@@ -29,6 +44,19 @@ export const TYPES = new Set([
 export const REF_FIELDS = ['customerId', 'propertyId', 'workOrderId', 'offerId', 'invoiceId',
   'salesOpportunityId', 'inspectionId', 'ronderingId', 'deviationId']
 export const MAX_ENTRIES = 500
+export const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/
+export const RATE_PER_MINUTE = 60
+
+/* Enkel gräns per användare och minut (in-memory per EF-instans, som
+   rate-limit i time-entries-list) — skydd mot översvämning, inte mot
+   en bestämd angripare över flera instanser. */
+const _rate = new Map<string, { n: number; t: number }>()
+export function rateLimited(staffId: string, nowMs: number): boolean {
+  const s = _rate.get(staffId)
+  if (!s || nowMs - s.t > 60000) { _rate.set(staffId, { n: 1, t: nowMs }); return false }
+  s.n++
+  return s.n > RATE_PER_MINUTE
+}
 
 type Obj = Record<string, unknown>
 
@@ -45,11 +73,14 @@ export function buildActivityEntry(input: unknown, callerStaffId: string, nowIso
     description: String(e.description ?? '').slice(0, 500),
     timestamp: nowIso,
     userId: callerStaffId,
-    serverVerified: true,
+    source: 'klientrapport',
+    verifiedFields: ['userId', 'timestamp'],
   }
   for (const f of REF_FIELDS) {
     const v = e[f]
-    entry[f] = typeof v === 'string' ? v.slice(0, 100) : ''
+    if (v === undefined || v === null || v === '') { entry[f] = ''; continue }
+    if (typeof v !== 'string' || !REF_PATTERN.test(v)) return { ok: false, error: 'invalid_reference' }
+    entry[f] = v
   }
   return { ok: true, entry }
 }

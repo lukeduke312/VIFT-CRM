@@ -60,7 +60,11 @@ ok(!allow(up(t, task({ status: 'done' })), [], FALT, '').ok, 'utan identitet: ne
 // activity-log.ts
 const now = '2026-11-24T10:00:00.000Z';
 let b = A.buildActivityEntry({ id: 'ACT-1795000000000-abcd1234', type: 'work_order_updated', description: 'x', userId: 'ST-1', timestamp: '1999-01-01', workOrderId: 'AO-1' }, 'ST-4', now);
-ok(b.ok && b.entry.userId === 'ST-4' && b.entry.timestamp === now && b.entry.serverVerified === true, 'servern sätter userId och tid (klientens värden ignoreras)');
+ok(b.ok && b.entry.userId === 'ST-4' && b.entry.timestamp === now, 'servern sätter userId och tid (klientens värden ignoreras)');
+ok(b.ok && b.entry.source === 'klientrapport' && JSON.stringify(b.entry.verifiedFields) === '["userId","timestamp"]' && !('serverVerified' in b.entry), 'posten märks som klientrapport; bara userId och tid anges som verifierade');
+ok(!A.buildActivityEntry({ id: 'ACT-1795000000000-abcd', type: 'note', workOrderId: '<script>' }, 'ST-4', now).ok, 'referens som inte är ett id nekas');
+ok(!A.buildActivityEntry({ id: 'ACT-1795000000000-abcd', type: 'note', customerId: 42 }, 'ST-4', now).ok, 'referens som inte är en sträng nekas');
+{ let limited = false; for (let i = 0; i < 61; i++) limited = A.rateLimited('ST-RATE', 1000); ok(limited && !A.rateLimited('ST-RATE', 1000 + 61000), 'högst 60 poster per användare och minut; nollställs efter en minut'); }
 ok(b.ok && b.entry.workOrderId === 'AO-1' && b.entry.customerId === '', 'referensfält behålls/normaliseras');
 ok(!A.buildActivityEntry({ id: 'ACT-1795000000000-abcd', type: 'godtycklig_typ' }, 'ST-4', now).ok, 'okänd händelsetyp nekas');
 ok(!A.buildActivityEntry({ id: 'x', type: 'note' }, 'ST-4', now).ok, 'ogiltigt id nekas');

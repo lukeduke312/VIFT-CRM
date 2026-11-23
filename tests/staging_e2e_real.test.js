@@ -45,7 +45,16 @@ const run = (args, extra) => new Promise((resolve) => {
   p.on('close', (code) => resolve({ code, out }));
 });
 
+const RAPPORT = path.join(__dirname, 'staging', 'rapport');
+const locks = () => { try { return fs.readdirSync(RAPPORT).filter((f) => /^OSTADAT-.*\.lock$/.test(f)); } catch (e) { return []; } };
+let reqCount = 0;
+const origHandle = fake.handle.bind(fake);
+fake.handle = (...a) => { reqCount++; return origHandle(...a); };
+const ridOf = (out) => (out.match(/runId (E2E-AUTHZ-\d{14}-[0-9a-f]{6})/) || [])[1];
+const testAOs = () => fake.get('workOrders').filter((a) => String(a.id).startsWith('E2E-AUTHZ-'));
+
 server.listen(0, '127.0.0.1', async () => {
+  try { fs.rmSync(RAPPORT, { recursive: true, force: true }); } catch (e) {}
   try {
     const base = ['--jag-har-go', '--mutationstest', '--bekrafta-projekt=lokaltest', '--paket=' + PAKET];
     let r = await run(base.slice(0, 3).concat(['--paket=' + PAKET]).filter((x) => x !== '--mutationstest'));
@@ -56,13 +65,52 @@ server.listen(0, '127.0.0.1', async () => {
     const tesBefore = JSON.stringify(fake.get('timeEntries'));
     r = await run(base);
     console.log(r.out.split('\n').filter((l) => /^(OK|AVVIK|INFO)/.test(l)).map((l) => '    ' + l).join('\n'));
-    for (const id of ['R0 admin', 'R0 falt', 'R0 begransad', 'F2 checklista', 'F3 stämpling två enheter', 'F4 samtidiga loggposter', 'F5 nätavbrott', 'MILJÖ', 'STÄDNING']) {
+    for (const id of ['R0 admin', 'R0 falt', 'R0 begransad', 'F2 checklista', 'F3 stämpling två enheter', 'F4 samtidiga loggposter', 'F5 nätavbrott', 'MILJÖ', 'ÅTERSTÄLLNING', 'AFFÄRSPOSTER']) {
       ok(new RegExp('^OK +' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' ', 'm').test(r.out), 'flöde godkänt: ' + id);
     }
     ok(r.code === 0, 'kod 0 (' + r.code + ')');
     ok(!fake.get('workOrders').some((a) => String(a.id).startsWith('E2E-AUTHZ-')) && JSON.stringify(fake.get('timeEntries')) === tesBefore, 'inga test-AO eller tidposter kvar');
     ok(JSON.parse(aosBefore).every((a) => JSON.stringify(a) === JSON.stringify(fake.get('workOrders').find((x) => x.id === a.id))), 'befintliga AO oförändrade');
     ok(!(fake.stamp.get('falt2@example.test') || {}).active, 'ingen kvarvarande instämpling');
+    ok(locks().length === 0, 'ingen spärrfil efter lyckad körning');
+
+    const F2 = base.concat(['--flode=F2']);
+    // ── A. Nätfel: AO-listan svarar inte efter första läsningen → efterkontroll omöjlig.
+    let wl = 0;
+    fake.addFault({ match: (act) => /^work-orders-list/.test(act) && ++wl > 1, mode: 'fail', status: 503, error: 'unavailable' });
+    r = await run(F2, { VIFT_STADA_PAUS_MS: '10' });
+    const ridA = ridOf(r.out);
+    ok(r.code === 3 && /EFTERKONTROLLEN KUNDE INTE GÖRAS/.test(r.out) && !/efterkontrollerat: inga testposter kvar/.test(r.out), 'A: nätfel → kod 3, inget påstås återställt (kod ' + r.code + ')');
+    ok(locks().some((f) => f.includes(ridA)), 'A: spärrfil skriven');
+    ok(testAOs().length === 0, 'A: journalen städade ändå bort test-AO:n');
+    const n0 = reqCount;
+    r = await run(F2);
+    ok(r.code === 2 && /ostädad tidigare körning/.test(r.out) && reqCount === n0, 'A: ny körning blockeras före första anropet (kod ' + r.code + ', anrop ' + (reqCount - n0) + ')');
+    fake.clearFaults();
+    r = await run(base.concat(['--stada=' + ridA]));
+    ok(r.code === 0 && /OK +ÅTERSTÄLLNING — efterkontrollerat/.test(r.out) && /JOURNAL — \d+ poster lästa/.test(r.out) && !locks().length, 'A: --stada efterkontrollerar, kod 0, spärrfilen borttagen');
+
+    // ── B. Borttagningen misslyckas → testposter kvar.
+    fake.addFault({ match: /ao-time-write:permanent_delete_ao/, mode: 'fail', status: 503, error: 'unavailable' });
+    r = await run(F2, { VIFT_STADA_PAUS_MS: '10' });
+    const ridB = ridOf(r.out);
+    ok(r.code === 3 && /TESTPOSTER KVAR efter efterkontroll: AO /.test(r.out) && r.out.includes('--stada=' + ridB) && locks().length === 1, 'B: misslyckad städning → kod 3, poster listade, spärrfil');
+    fake.clearFaults();
+    r = await run(base.concat(['--stada=' + ridB]));
+    ok(r.code === 0 && testAOs().length === 0 && !locks().length, 'B: --stada tar bort test-AO:n, kod 0');
+
+    // ── C. En befintlig post ändras under körningen (annan användare/automatik) → aldrig godkänt.
+    let changed = false;
+    fake.addFault({ match: (act) => { if (act === 'ao-time-write:create_ao' && !changed) { changed = true; const aos = fake.get('workOrders'); aos[0].title = aos[0].title + ' (ändrad av annan)'; fake.set('workOrders', aos); } return false; } });
+    r = await run(F2);
+    fake.clearFaults();
+    ok(r.code === 4 && /AVVIK +AFFÄRSPOSTER — EJ GODKÄNT/.test(r.out) && testAOs().length === 0 && !locks().length, 'C: ändrad befintlig post → kod 4 (inte godkänt), testposter ändå borta (kod ' + r.code + ')');
+
+    // ── D. Flödet avbryts (servern nekar att skapa test-AO).
+    fake.addFault({ match: /ao-time-write:create_ao/, mode: 'fail', status: 500, error: 'boom', times: 1 });
+    r = await run(F2);
+    fake.clearFaults();
+    ok([1, 5].includes(r.code) && /AVVIK +F2 — avbröts/.test(r.out) && /OK +ÅTERSTÄLLNING/.test(r.out) && !locks().length, 'D: avbrott → kod ' + r.code + ' (inte 0), städning efterkontrollerad');
   } catch (e) { fail++; console.log('FAIL krasch: ' + e.stack); }
   try { fs.rmSync(path.join(__dirname, 'staging', 'rapport'), { recursive: true, force: true }); } catch (e) {}
   console.log(`RESULT: ${pass} passed, ${fail} failed`);

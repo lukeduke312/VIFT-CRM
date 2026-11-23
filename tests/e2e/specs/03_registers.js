@@ -99,9 +99,12 @@ module.exports = [
       await s.page.fill('#prop-name', 'E2E Fastighet Chef');
       await s.page.fill('#prop-city', 'Borås');
       await s.clickModalButton(/Skapa/);
-      await s.waitToast(/skapad/i, 8000);
+      // Exakt besked för just denna fastighet (ett bredare /skapad/ kunde
+      // matcha ett annat besked och ge ett instabilt test).
+      await s.waitToast(/E2E Fastighet Chef skapad/, 10000);
       const p = t.fake.get('properties').find((x) => x.name === 'E2E Fastighet Chef');
-      t.assert(p, 'fastigheten finns på servern');
+      if (!p) t.note('besked: ' + JSON.stringify(await s.toasts()));
+      t.assert(p, 'fastigheten finns på servern när beskedet visas');
       t.assert(!('accessCode' in p), 'ingen accessCode i delade registret');
     },
   },

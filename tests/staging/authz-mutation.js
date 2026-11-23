@@ -53,6 +53,7 @@
 const fs = require('fs');
 const path = require('path');
 const L = require('./lib');
+const { createRecovery, assertNoOpenLocks } = require('./recovery');
 
 const env = L.guard(2);
 const { pw, emails } = L.accounts(['admin', 'falt', 'chef', 'ekonomi', 'begransad'], ['falt2']);
@@ -62,10 +63,7 @@ const CLEAN_ONLY = typeof L.arg('stada') === 'string' ? L.arg('stada') : null;
 if (CLEAN_ONLY && !/^E2E-AUTHZ-\d{14}-[0-9a-f]{6}$/.test(CLEAN_ONLY)) L.refuse('--stada=<runId> måste vara ett runId av formen E2E-AUTHZ-ååååmmddttmmss-xxxxxx.');
 const runId = CLEAN_ONLY || L.newRunId();
 const rep = L.reporter(CLEAN_ONLY ? 'authz-stadning' : 'authz-mutation', runId);
-const TEST_PREFIX = 'E2E-AUTHZ-';
-const isTest = (x, id) => !!x && (String(x.id || '').startsWith(id || TEST_PREFIX) || String(x.title || x.comment || x.name || '').includes(id || TEST_PREFIX));
-const PAUSE_MS = Number(process.env.VIFT_STADA_PAUS_MS || 1500);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+assertNoOpenLocks(L, rep.dir, CLEAN_ONLY); // ostädad tidigare körning blockerar (före första anropet)
 
 /* Förväntad skrivbehörighet per register (klientens regler). */
 const EXPECT = {
@@ -84,16 +82,18 @@ const EXPECT = {
 const KEYS = Object.keys(EXPECT);
 const G13_ROLES = ['falt', 'chef', 'ekonomi', 'begransad'];
 
-/* ── Journal ─────────────────────────────────────────────────────────── */
-const journalFile = path.join(rep.dir, runId + '.journal.json');
-let journal = [];
-function saveJournal() {
-  fs.mkdirSync(rep.dir, { recursive: true });
-  fs.writeFileSync(journalFile, JSON.stringify({ runId, projekt: env.ref, journal }, null, 2));
-}
-function note(entry) { journal.push(Object.assign({ t: new Date().toISOString(), status: 'avsedd' }, entry)); saveJournal(); return journal[journal.length - 1]; }
-function loadJournal() {
-  try { const j = JSON.parse(fs.readFileSync(journalFile, 'utf8')); if (j.runId === runId) journal = j.journal || []; } catch (e) {}
+/* ── Återhämtning (gemensam modul, se recovery.js) ───────────────────── */
+const tok = {};
+const ids = {};
+const R = createRecovery({ L, req, admin: () => tok.admin, runId, dir: rep.dir, ref: env.ref, keys: KEYS, loginFor: (k) => login(emails[k], pw) });
+const { note, saveJournal, loadJournal, snapshot, trySnapshot, cleanupByScan, leftovers, isTest } = R;
+const journalFile = R.journalFile;
+let exitCode = L.EXIT.OK;
+async function finish(before, aborted) {
+  const res = await R.finish(rep, before, aborted);
+  exitCode = res.exitCode;
+  const f = rep.save({ niva: 2, projekt: env.ref, journal: journalFile, kvar: res.left, efterkontroll: !!res.after });
+  console.log('\nRapport: ' + f + '\nJournal: ' + journalFile);
 }
 
 function testElement(id) {
@@ -101,155 +101,13 @@ function testElement(id) {
   return { id, e2eTest: runId, name: label, title: label, text: label, label, firstName: '[E2E-TEST]', lastName: runId, active: false, deleted: true, permissions: [] };
 }
 
-const tok = {};
-const ids = {};
-
-/* Ögonblicksbild. Kastar vid fel — anroparen avgör vad det betyder. */
-async function snapshot() {
-  const ra = await req('/functions/v1/store-key-write', { token: tok.admin, body: { action: 'readAllWithHashes', keys: KEYS.concat(['vift_activityLog']) } });
-  const wl = await req('/functions/v1/work-orders-list', { method: 'GET', token: tok.admin });
-  const tl = await req('/functions/v1/time-entries-list', { method: 'GET', token: tok.admin });
-  if (ra.status !== 200 || wl.status !== 200 || tl.status !== 200) throw new Error('ögonblicksbild misslyckades (HTTP ' + [ra.status, wl.status, tl.status].join('/') + ')');
-  const d = ra.body.data || {};
-  const pick = (k) => { const short = k.replace(/^vift_/, ''); return Object.prototype.hasOwnProperty.call(d, short) ? d[short] : d[k]; };
-  const data = {};
-  KEYS.forEach((k) => { data[k] = pick(k); });
-  return { data, hashes: ra.body.hashes || {}, activityLog: pick('vift_activityLog'), aos: wl.body.workOrders || [], tes: tl.body.timeEntries || [] };
-}
-async function trySnapshot() { try { return { snap: await snapshot() }; } catch (e) { return { err: e.message }; } }
-const byId = (arr) => new Map((arr || []).filter((x) => x && x.id != null).map((x) => [String(x.id), L.stable(x)]));
-
-/* Ett anrop med begränsade försök. ok(r) avgör om svaret är slutgiltigt bra. */
-async function attempt(fn, ok, tries) {
-  let last = null;
-  for (let i = 0; i < (tries || 3); i++) {
-    try { last = await fn(); if (ok(last)) return { ok: true, r: last }; } catch (e) { last = { status: 0, body: { error: 'nätverk: ' + e.message } }; }
-    if (i < (tries || 3) - 1) await sleep(PAUSE_MS * (i + 1));
-  }
-  return { ok: false, r: last };
-}
-
-/* Städning utifrån JOURNALEN (kräver ingen ögonblicksbild). */
-async function cleanupFromJournal() {
-  const failed = [];
-  const order = { tidpost: 0, element: 1, checkpunkt: 2, ao: 3 };
-  // 'nekad' = servern avvisade skapandet (403) — inget att ta bort; efterkontrollen fångar en post som ändå skulle finnas.
-  const entries = journal.filter((e) => e.status !== 'borttagen' && e.status !== 'nekad').sort((a, b) => order[a.typ] - order[b.typ]);
-  for (const e of entries) {
-    let res = { ok: true };
-    if (e.typ === 'element') {
-      res = await attempt(() => req('/functions/v1/store-key-write', { token: tok.admin, body: { action: 'writeMerge', key: e.key, upserts: [], removals: [{ id: e.id, previous: e.data }] } }),
-        (r) => r.status === 200 && !(r.body.conflicts || []).length);
-      // Konflikt = elementet finns men ser annorlunda ut. Ta bort det bara om det fortfarande är vår testpost.
-      const conf = !res.ok && res.r && res.r.status === 200 && (res.r.body.conflicts || [])[0];
-      if (conf && conf.current && conf.current.e2eTest === runId) {
-        res = await attempt(() => req('/functions/v1/store-key-write', { token: tok.admin, body: { action: 'writeMerge', key: e.key, upserts: [], removals: [{ id: e.id, previous: conf.current }] } }),
-          (r) => r.status === 200 && !(r.body.conflicts || []).length);
-      }
-    } else if (e.typ === 'tidpost') {
-      res = await attempt(() => req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'delete_time', entryId: e.id, idempotencyKey: runId + '-stada-t-' + e.id + '-' + Date.now() } }),
-        (r) => r.status === 200 || r.status === 404);
-    } else if (e.typ === 'ao') {
-      await attempt(() => req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'delete_ao', aoId: e.id, idempotencyKey: runId + '-stada-d-' + e.id + '-' + Date.now() } }), (r) => r.status === 200 || r.status === 404, 1);
-      res = await attempt(() => req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'permanent_delete_ao', aoId: e.id, idempotencyKey: runId + '-stada-p-' + e.id + '-' + Date.now() } }),
-        (r) => r.status === 200 || r.status === 404);
-    } else if (e.typ === 'checkpunkt') {
-      res = { ok: true }; // försvinner med test-AO:n
-    }
-    e.status = res.ok ? 'borttagen' : 'osäker';
-    if (!res.ok) failed.push(e.typ + ' ' + (e.key ? e.key + ':' : '') + e.id + ' (' + (res.r ? 'HTTP ' + res.r.status + ' ' + (res.r.body.error || '') : 'inget svar') + ')');
-    saveJournal();
-  }
-  return failed;
-}
-
-/* Kompletterande städning: allt med runId i en lyckad ögonblicksbild. */
-async function cleanupByScan(snap, prefix) {
-  const extra = [];
-  KEYS.forEach((k) => (Array.isArray(snap.data[k]) ? snap.data[k] : []).filter((x) => isTest(x, prefix)).forEach((x) => extra.push({ typ: 'element', key: k, id: x.id, data: x })));
-  snap.tes.filter((x) => isTest(x, prefix)).forEach((x) => extra.push({ typ: 'tidpost', id: x.id }));
-  snap.aos.filter((x) => isTest(x, prefix)).forEach((x) => extra.push({ typ: 'ao', id: x.id }));
-  const known = new Set(journal.map((e) => e.typ + '|' + e.id));
-  extra.filter((e) => !known.has(e.typ + '|' + e.id) || journal.find((j) => j.typ + '|' + j.id === e.typ + '|' + e.id && j.status !== 'borttagen'))
-    .forEach((e) => { journal = journal.filter((j) => j.typ + '|' + j.id !== e.typ + '|' + e.id); note(Object.assign(e, { anm: 'hittad vid sökning efter runId' })); });
-  return cleanupFromJournal();
-}
-
-function leftovers(snap, prefix) {
-  const out = [];
-  KEYS.forEach((k) => (Array.isArray(snap.data[k]) ? snap.data[k] : []).filter((x) => isTest(x, prefix)).forEach((x) => out.push(k + ':' + x.id)));
-  snap.aos.filter((x) => isTest(x, prefix)).forEach((x) => out.push('AO ' + x.id));
-  snap.tes.filter((x) => isTest(x, prefix)).forEach((x) => out.push('tidpost ' + x.id));
-  return out;
-}
-
-function compare(before, after) {
-  const changed = [];
-  const cmp = (label, a, b) => {
-    const A = byId((a || []).filter((x) => !isTest(x))), B = byId((b || []).filter((x) => !isTest(x)));
-    for (const [id, v] of A) if (B.get(id) !== v) changed.push(label + ' ' + id + (B.has(id) ? ' ändrad' : ' borta'));
-    for (const id of B.keys()) if (!A.has(id)) changed.push(label + ' ' + id + ' ny');
-  };
-  KEYS.forEach((k) => { if (Array.isArray(before.data[k])) cmp(k, before.data[k], after.data[k]); else if (L.stable(before.data[k]) !== L.stable(after.data[k])) changed.push(k + ' (objekt) ändrad'); });
-  cmp('AO', before.aos, after.aos);
-  cmp('tidpost', before.tes, after.tes);
-  return changed;
-}
-
-/* Metadata som INTE återställs. Aktivitetsloggen jämförs om den gick att läsa. */
-function metadataReport(before, after) {
-  const items = ['vift_lastChanged och store.updated_at för berörda nycklar (ändras vid varje skrivning, även borttagning)',
-    'idempotensposter på servern för ao-time-write-anropen (create_ao, patch_ao, create_time, delete_time, delete_ao, permanent_delete_ao)',
-    'inloggningsposter i auth-schemat (session, refresh-token, last_sign_in_at) och Edge Function-loggar',
-    'WAL/backup-historik som innehåller testposterna'];
-  if (before && after && Array.isArray(before.activityLog) && Array.isArray(after.activityLog)) {
-    const old = new Set(before.activityLog.map((a) => a && a.id));
-    const added = after.activityLog.filter((a) => a && !old.has(a.id));
-    const ours = added.filter((a) => JSON.stringify(a).includes(runId));
-    items.push('aktivitetslogg: ' + ours.length + ' nya poster som nämner testkörningen' + (added.length > ours.length ? ', ' + (added.length - ours.length) + ' andra nya poster (troligen andra användare)' : '') + ' — tas inte bort (loggen är historik)');
-  } else items.push('aktivitetslogg: kunde inte jämföras (ej läsbar för kontot eller efterkontroll saknas) — servern kan ha skrivit poster om testkörningen (källa saknas, G4)');
-  return items;
-}
-
-let exitCode = L.EXIT.OK;
-async function finish(before, aborted) {
-  // 1) Städning från journalen — fungerar även när ögonblicksbilden inte gör det.
-  const jFailed = await cleanupFromJournal();
-  // 2) Efterkontroll; vid behov kompletterande sökning och ny kontroll.
-  let post = await trySnapshot();
-  if (post.snap && leftovers(post.snap, runId).length) { await cleanupByScan(post.snap, runId); post = await trySnapshot(); }
-  const after = post.snap || null;
-  const left = after ? leftovers(after, runId) : null;
-  const uncertain = journal.filter((e) => e.status !== 'borttagen' && e.status !== 'nekad').map((e) => e.typ + ' ' + (e.key ? e.key + ':' : '') + e.id);
-
-  if (!after) {
-    rep.add('ÅTERSTÄLLNING', null, 'EFTERKONTROLLEN KUNDE INTE GÖRAS (' + post.err + '). Städning från journalen: ' + (jFailed.length ? 'osäker för ' + jFailed.join(', ') : 'alla journalposter fick bekräftande svar') + '. Inget påstås vara återställt. Kör: --stada=' + runId);
-    exitCode = L.EXIT.STADNING_MISSLYCKADES;
-  } else if (left.length) {
-    rep.add('ÅTERSTÄLLNING', false, 'TESTPOSTER KVAR efter efterkontroll: ' + left.join(', ') + '. Kör: --stada=' + runId);
-    exitCode = L.EXIT.STADNING_MISSLYCKADES;
-  } else {
-    rep.add('ÅTERSTÄLLNING', true, 'efterkontrollerat: inga testposter kvar' + (uncertain.length ? ' (journalposter utan bekräftande svar men frånvarande i efterkontrollen: ' + uncertain.join(', ') + ')' : ''));
-  }
-  if (after && before) {
-    const changed = compare(before, after);
-    rep.add('AFFÄRSPOSTER', changed.length === 0 ? true : null, changed.length ? 'befintliga poster ändrade under körningen (testet rör dem inte — troligen annan användare; granska): ' + changed.slice(0, 20).join(', ') : 'befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före');
-    if (changed.length && exitCode === L.EXIT.OK) exitCode = L.EXIT.OSAKER;
-  } else if (before) rep.add('AFFÄRSPOSTER', null, 'kunde inte jämföras — efterkontroll saknas');
-  rep.add('DATABASIDENTITET', null, 'INTE fullständig (förväntat). Kvar som metadata: ' + metadataReport(before, after).join(' · '));
-  if (aborted && exitCode === L.EXIT.OK) exitCode = L.EXIT.AVBRUTEN;
-  if (exitCode === L.EXIT.OK && rep.results.some((r) => r.ok === false)) exitCode = L.EXIT.AVVIKELSE;
-  const f = rep.save({ niva: 2, projekt: env.ref, journal: journalFile, kvar: left, efterkontroll: !!after });
-  console.log('\nRapport: ' + f + '\nJournal: ' + journalFile);
-}
-
 (async () => {
   console.log('Nivå 2 — MUTATIONSTEST mot det godkända STAGING-projektet' + (DRY ? ' (TORRKÖRNING: inga skrivningar)' : CLEAN_ONLY ? ' (STÄDNING av ' + CLEAN_ONLY + ')' : '') + '. runId ' + runId + '\n');
   for (const [r, e] of Object.entries(emails)) tok[r] = await login(e, pw);
 
   if (CLEAN_ONLY) {
-    loadJournal();
-    rep.add('JOURNAL', null, journal.length ? journal.length + ' poster lästa från ' + journalFile : 'ingen journal hittad — städar utifrån sökning efter runId');
+    const nj = loadJournal();
+    rep.add('JOURNAL', null, nj ? nj + ' poster lästa från ' + journalFile : 'ingen journal hittad — städar utifrån sökning efter runId');
     const pre = await trySnapshot();
     if (pre.snap) await cleanupByScan(pre.snap, runId);
     await finish(null, false);
@@ -364,6 +222,6 @@ async function finish(before, aborted) {
 })().catch(async (e) => {
   console.error('Fel: ' + e.message);
   // Sista skyddsnät: försök städa från journalen om något hann skrivas.
-  if (journal.length && tok.admin) { try { await finish(null, true); } catch (e2) {} }
+  if (R.journal.length && tok.admin) { try { await finish(null, true); } catch (e2) {} }
   process.exit(L.EXIT.STADNING_MISSLYCKADES);
 });

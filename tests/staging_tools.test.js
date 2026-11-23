@@ -128,8 +128,9 @@ server.listen(0, '127.0.0.1', async () => {
     ok(r.code === 3 && /TESTPOSTER KVAR efter efterkontroll: AO /.test(r.out) && r.out.includes('--stada=' + rid2), 'städfel: kod 3, kvarvarande AO listad och städkommando angivet');
     // Nästa körning vägrar starta medan testposter ligger kvar.
     c0 = fake.calls.length;
+    const n1 = reqCount;
     r = await run('tests/staging/authz-mutation.js', MUT);
-    ok(r.code === 2 && /testposter från en tidigare körning/.test(r.out) && mutCalls(c0).length === 0, 'kvarvarande testposter: ny körning vägrar, inga skrivningar');
+    ok(r.code === 2 && new RegExp('ostädad tidigare körning: .*' + rid2).test(r.out) && reqCount === n1, 'ostädad körning (spärrfil): ny körning vägrar FÖRE första anropet (anrop: ' + (reqCount - n1) + ')');
     fake.clearFaults();
     r = await run('tests/staging/authz-mutation.js', MUT.concat(['--stada=' + rid2]));
     ok(r.code === 0 && /OK +ÅTERSTÄLLNING — efterkontrollerat: inga testposter kvar/.test(r.out) && /JOURNAL — \d+ poster lästa/.test(r.out), '--stada: läser journalen, tar bort kvarvarande testposter (kod ' + r.code + ')');

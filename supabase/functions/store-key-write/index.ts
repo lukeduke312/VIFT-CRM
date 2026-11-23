@@ -49,7 +49,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleGetStampStatus, handleSetStampStatus } from './stamp-status.ts'
 import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 import { activitiesWriteAllowed } from './activities-policy.ts'
-import { buildActivityEntry, MAX_ENTRIES } from './activity-log.ts'
+import { buildActivityEntry, MAX_ENTRIES, rateLimited } from './activity-log.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -197,10 +197,10 @@ serve(async (req: Request) => {
     return json({ hashes: data || {} })
   }
 
-  /* 2026-11-24: serverstyrd aktivitetslogg (se activity-log.ts). Alla
-     aktiva, inloggade användare får logga sina egna händelser; servern sätter
-     tid och användare. */
+  /* 2026-11-24/25: klientrapporterat aktivitetsflöde (se activity-log.ts) —
+     INTE en verifierad revisionslogg. Servern verifierar bara vem och när. */
   if (action === 'appendActivity') {
+    if (rateLimited(callerStaffId, Date.now())) return json({ error: 'rate_limited' }, 429)
     const built = buildActivityEntry(body.entry, callerStaffId, new Date().toISOString())
     if (!built.ok) return json({ error: built.error }, 400)
     const { data, error } = await supabase.rpc('activity_log_append', { p_entry: built.entry, p_max: MAX_ENTRIES })

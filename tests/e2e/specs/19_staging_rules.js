@@ -66,7 +66,7 @@ module.exports = [
     },
   },
   {
-    id: 'ACT-01', world: { backend: { keyPerms: STAGING_KEY_PERMS, activityAppend: true } }, module: 'Aktivitetslogg', name: 'Serverstyrd aktivitetslogg: fältarbetarens händelser sparas en och en (appendActivity) med servern som källa för användare och tid; hela listan skickas aldrig; generisk skrivning av loggen nekas (append-only)',
+    id: 'ACT-01', world: { backend: { keyPerms: STAGING_KEY_PERMS, activityAppend: true } }, module: 'Aktivitetslogg', name: 'Klientrapporterat aktivitetsflöde: fältarbetarens händelser sparas en och en (appendActivity), servern verifierar bara användare och tid (source=klientrapport); hela listan skickas aldrig; generisk skrivning av loggen nekas (append-only)',
     async run(t) {
       const s = await t.world.session({ viewport: 'iphone' });
       await s.login('falt2');
@@ -76,8 +76,8 @@ module.exports = [
       await s.settle(2000);
       const log = t.fake.get('activityLog') || [];
       const mine = log.filter((e) => /E2E händelse/.test(e.description));
-      t.note('poster: ' + JSON.stringify(mine.map((e) => [e.type, e.userId, e.serverVerified])));
-      t.assert(mine.length === 2 && mine.every((e) => e.userId === 'ST-004' && e.serverVerified === true), 'båda händelserna sparade med serverns userId');
+      t.note('poster: ' + JSON.stringify(mine.map((e) => [e.type, e.userId, e.source])));
+      t.assert(mine.length === 2 && mine.every((e) => e.userId === 'ST-004' && e.source === 'klientrapport'), 'båda händelserna sparade med serverns userId');
       t.assert(!t.fake.calls.some((c) => c.key === 'vift_activityLog' && /writeMerge|write/.test(c.action || '')), 'hela aktivitetsloggen skickas aldrig');
       const forged = await s.eval(async () => (await fetch(SUPABASE_URL + '/functions/v1/store-key-write', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'appendActivity', entry: { id: 'ACT-1795000000000-forged01', type: 'påhittad_typ', description: 'x' } }) })).json());
       t.assert(forged.error === 'invalid_type', 'okänd händelsetyp nekas: ' + JSON.stringify(forged));

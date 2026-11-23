@@ -26,13 +26,23 @@
  *   (F6 behörighet: tests/staging/authz-mutation.js. Ekonomikedjan kund →
  *   offert → kundlänk → AO → faktura: manuella testfall i installationsplanen.)
  *
+ * Återhämtning (2026-11-25): samma modul som authz-mutation
+ * (tests/staging/recovery.js) — journal före varje mutation, städning från
+ * journalen även vid nätverksfel/avbrott, efterkontroll, spärrfil som
+ * blockerar alla nivå 2-körningar tills testposterna är verifierat
+ * borttagna, --stada=<runId>. Utgångskoder som authz-mutation: 0 OK,
+ * 1 avvikelse, 2 spärr, 3 testposter kvar/efterkontroll saknas, 4 befintliga
+ * poster ändrade (aldrig godkänt), 5 avbruten men efterkontrollerad.
+ *
  *   ... node tests/staging/e2e-real.js --jag-har-go --mutationstest --bekrafta-projekt=<ref> [--flode=R0,F2,...] [--torrkorning]
+ *   ... node tests/staging/e2e-real.js --jag-har-go --mutationstest --bekrafta-projekt=<ref> --stada=<runId>
  * Lokal provning (ingen nätverkstrafik ut): VIFT_LOKALT_TESTLAGE=1 med
  *   VIFT_SUPABASE_URL=http://127.0.0.1:<port> och --paket=<katalog>.
  */
 const fs = require('fs');
 const path = require('path');
 const L = require('./lib');
+const { createRecovery, assertNoOpenLocks } = require('./recovery');
 
 const env = L.guard(2);
 const { pw, emails } = L.accounts(['admin', 'falt', 'chef', 'ekonomi', 'begransad'], ['falt2']);
@@ -43,6 +53,8 @@ if (env.local && !paket) L.refuse('lokal provning kräver --paket=<katalog med p
 if (!env.local && paket) L.refuse('--paket används bara vid lokal provning.');
 const FLOWS = (typeof L.arg('flode') === 'string' ? L.arg('flode') : 'R0,F2,F3,F4,F5').split(',');
 const DRY = L.arg('torrkorning') === true;
+const CLEAN_ONLY = typeof L.arg('stada') === 'string' ? L.arg('stada') : null;
+if (CLEAN_ONLY && !/^E2E-AUTHZ-\d{14}-[0-9a-f]{6}$/.test(CLEAN_ONLY)) L.refuse('--stada=<runId> måste vara ett runId av formen E2E-AUTHZ-ååååmmddttmmss-xxxxxx.');
 
 process.env.VIFT_E2E_REAL = '1';
 process.env.VIFT_E2E_REAL_GUARD = 'godkand-av-e2e-real';
@@ -51,23 +63,17 @@ if (env.local) { process.env.VIFT_E2E_ROOT = paket; process.env.VIFT_E2E_FORWARD
 else process.env.VIFT_E2E_BASEURL = SITE;
 const E = require('../e2e/lib.js');
 const { req, login } = L.client(env);
-const runId = L.newRunId().replace('E2E-AUTHZ', 'E2E-AUTHZ');
-const rep = L.reporter('e2e-real', runId);
-const journalFile = path.join(rep.dir, runId + '.journal.json');
-const journal = [];
-const note = (e) => { journal.push(Object.assign({ t: new Date().toISOString() }, e)); fs.mkdirSync(rep.dir, { recursive: true }); fs.writeFileSync(journalFile, JSON.stringify({ runId, journal }, null, 2)); };
+const runId = CLEAN_ONLY || L.newRunId();
+const rep = L.reporter(CLEAN_ONLY ? 'e2e-real-stadning' : 'e2e-real', runId);
+assertNoOpenLocks(L, rep.dir, CLEAN_ONLY); // ostädad tidigare körning blockerar (före första anropet)
 const tok = {};
+const R = createRecovery({ L, req, admin: () => tok.admin, runId, dir: rep.dir, ref: env.ref,
+  keys: ['vift_customers', 'vift_offers', 'vift_activities', 'vift_properties', 'vift_contracts'], loginFor: (k) => login(emails[k], pw) });
+const note = R.note;
+const journalFile = R.journalFile;
 const ids = {};
 const today = () => new Date().toISOString().slice(0, 10);
 
-async function snapshot() {
-  const keys = ['vift_customers', 'vift_offers', 'vift_activities', 'vift_properties', 'vift_contracts'];
-  const ra = await req('/functions/v1/store-key-write', { token: tok.admin, body: { action: 'readAllWithHashes', keys } });
-  const wl = await req('/functions/v1/work-orders-list', { method: 'GET', token: tok.admin });
-  const tl = await req('/functions/v1/time-entries-list', { method: 'GET', token: tok.admin });
-  if (ra.status !== 200 || wl.status !== 200 || tl.status !== 200) throw new Error('ögonblicksbild misslyckades (' + [ra.status, wl.status, tl.status].join('/') + ')');
-  return { data: ra.body.data || {}, aos: wl.body.workOrders || [], tes: tl.body.timeEntries || [] };
-}
 const listAO = async () => ((await req('/functions/v1/work-orders-list', { method: 'GET', token: tok.admin })).body.workOrders || []);
 const listTE = async () => ((await req('/functions/v1/time-entries-list', { method: 'GET', token: tok.admin })).body.timeEntries || []);
 
@@ -122,10 +128,9 @@ const FLOW = {
     const m = await W.session({ viewport: 'iphone' }); await m.login('falt');
     const d = await W.session({ viewport: 'laptop' }); await d.login('falt');
     await m.go('pg-myjobs');
-    const card = m.page.locator('.page.active', { hasText: runId }).first();
+    note({ typ: 'stampling', konto: 'falt' }); // journal FÖRE mutationen
     await m.eval((id) => MyJobsPage.clockIn ? MyJobsPage.clockIn(id) : null, aoId);
     await m.waitToast(/Instämplad/, 15000);
-    note({ typ: 'stampling', konto: 'falt' });
     await d.page.bringToFront(); await d.eval(() => window.dispatchEvent(new Event('focus'))); await d.settle(4000);
     const seen = await d.eval(() => !!state.stampActive);
     await d.go('pg-myjobs');
@@ -135,7 +140,6 @@ const FLOW = {
     const tes = (await listTE()).filter((t) => t.aoId === aoId);
     tes.forEach((t) => note({ typ: 'tidpost', id: t.id }));
     rep.add('F3 stämpling två enheter', seen && tes.length === 1, 'datorn såg instämpling: ' + seen + '; tidposter för test-AO: ' + tes.length);
-    void card;
     await m.context.close(); await d.context.close();
   },
   async F4(W) {
@@ -173,56 +177,46 @@ const FLOW = {
   },
 };
 
-async function cleanup() {
-  const failed = [];
-  for (const e of journal.slice().reverse()) {
-    let ok = true;
-    if (e.typ === 'tidpost') { const r = await req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'delete_time', entryId: e.id, idempotencyKey: runId + '-dt-' + e.id } }); ok = r.status === 200 || r.status === 404; }
-    if (e.typ === 'ao') { await req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'delete_ao', aoId: e.id, idempotencyKey: runId + '-d-' + e.id } }); const r = await req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'permanent_delete_ao', aoId: e.id, idempotencyKey: runId + '-p-' + e.id } }); ok = r.status === 200 || r.status === 404; }
-    if (e.typ === 'stampling') {
-      const t = await login(emails[e.konto], pw);
-      const st = await req('/functions/v1/store-key-write', { token: t, body: { action: 'getStampStatus' } });
-      if (st.body && st.body.active) { const r = await req('/functions/v1/store-key-write', { token: t, body: { action: 'setStampStatus', active: false, expectedRevision: st.body.revision } }); ok = r.status === 200; }
-    }
-    if (!ok) failed.push(e.typ + ' ' + (e.id || e.konto));
-  }
-  // Tidposter på test-AO:er som inte hann journalföras.
-  for (const t of (await listTE()).filter((x) => String(x.aoId || '').startsWith(runId))) {
-    await req('/functions/v1/ao-time-write', { token: tok.admin, body: { action: 'delete_time', entryId: t.id, idempotencyKey: runId + '-dt2-' + t.id } });
-  }
-  return failed;
+async function finish(before, aborted) {
+  const res = await R.finish(rep, before, aborted);
+  const f = rep.save({ niva: 2, projekt: env.ref, journal: journalFile, kvar: res.left, efterkontroll: !!res.after });
+  console.log('\nRapport: ' + f + '\nJournal: ' + journalFile);
+  return res.exitCode;
 }
 
 (async () => {
-  console.log('Nivå 2 — WEBBLÄSARTEST mot ' + (env.local ? 'LOKAL provning (paket ' + paket + ')' : 'riktig STAGING ' + SITE) + '. runId ' + runId + '. Flöden: ' + FLOWS.join(', ') + '\n');
+  console.log('Nivå 2 — WEBBLÄSARTEST mot ' + (env.local ? 'LOKAL provning (paket ' + paket + ')' : 'riktig STAGING ' + SITE) + '. runId ' + runId + (CLEAN_ONLY ? ' (STÄDNING)' : '. Flöden: ' + FLOWS.join(', ')) + '\n');
   for (const [r, e] of Object.entries(emails)) tok[r] = await login(e, pw);
-  const before = await snapshot();
+  if (CLEAN_ONLY) {
+    const n = R.loadJournal();
+    rep.add('JOURNAL', null, n ? n + ' poster lästa från ' + journalFile : 'ingen journal hittad — städar utifrån sökning efter runId');
+    const pre = await R.trySnapshot();
+    if (pre.snap) await R.cleanupByScan(pre.snap, runId);
+    process.exit(await finish(null, false));
+  }
+  let before;
+  try { before = await R.snapshot(); } catch (e) { console.error('Ögonblicksbild före kunde inte tas: ' + e.message + ' — inga mutationer gjorda.'); process.exit(L.EXIT.AVVIKELSE); }
   const st = await req('/rest/v1/store?select=value&key=eq.vift_staff', { method: 'GET', token: tok.admin });
   const staff = (st.body && st.body[0] && st.body[0].value) || [];
   for (const [r, e] of Object.entries(emails)) { const s = staff.find((x) => String(x.email || '').toLowerCase() === e.toLowerCase()); if (!s) L.refuse('testkontot för ' + r + ' saknar personalpost.'); ids[r] = String(s.id); }
-  if (before.aos.some((a) => String(a.id).startsWith('E2E-AUTHZ-'))) L.refuse('test-AO från en tidigare körning finns kvar — kör authz-mutation.js --stada=<runId> först.');
-  if (DRY) { rep.add('TORRKÖRNING', null, 'spärrar, inloggning och ögonblicksbild OK'); rep.save({ niva: 2 }); process.exit(0); }
+  const old = R.leftovers(before);
+  if (old.length) L.refuse('testposter från en tidigare körning finns kvar (' + old.slice(0, 5).join(', ') + '). Kör --stada=<runId> först.');
+  if (DRY) { rep.add('TORRKÖRNING', null, 'spärrar, inloggning och ögonblicksbild OK — inga skrivningar'); rep.save({ niva: 2 }); process.exit(L.EXIT.OK); }
 
+  let aborted = false;
   await E.start();
   const W = new E.World();
   for (const f of FLOWS) {
     if (!FLOW[f]) { rep.add(f, null, 'okänt flöde'); continue; }
-    try { await FLOW[f](W); } catch (e) { rep.add(f, false, 'avbröts: ' + String(e.message).slice(0, 300)); }
+    try { await FLOW[f](W); } catch (e) { aborted = true; rep.add(f, false, 'avbröts: ' + String(e.message).slice(0, 300)); }
   }
-  const jsErr = W.sessions.flatMap((s) => s.pageErrors).filter((m) => /OTILLÅTEN SUPABASE/.test(m));
-  rep.add('MILJÖ', jsErr.length === 0, jsErr.length ? 'anrop till annat Supabase-projekt: ' + jsErr.join(', ') : 'inga anrop till andra Supabase-projekt');
-  await W.close(); await E.stop();
-
-  const failed = await cleanup();
-  const after = await snapshot();
-  const left = after.aos.filter((a) => String(a.id).startsWith(runId)).map((a) => a.id).concat(after.tes.filter((t) => String(t.aoId || '').startsWith(runId)).map((t) => t.id));
-  rep.add('STÄDNING', left.length === 0 && failed.length === 0, left.length || failed.length ? 'KVAR: ' + left.concat(failed).join(', ') : 'efterkontrollerat: inga testposter kvar');
-  const auto = [];
-  const cmp = (label, a, b) => { const A = new Map((a || []).map((x) => [String(x.id), JSON.stringify(x)])); for (const x of (b || [])) { if (String(x.id).startsWith(runId)) continue; const v = A.get(String(x.id)); if (v !== JSON.stringify(x)) auto.push(label + ' ' + x.id + (v ? ' ändrad' : ' ny')); } };
-  for (const k of Object.keys(after.data)) if (Array.isArray(after.data[k])) cmp(k, before.data[k], after.data[k]);
-  cmp('AO', before.aos, after.aos); cmp('tidpost', before.tes, after.tes);
-  rep.add('AUTOMATISKA ÄNDRINGAR', auto.length ? null : true, auto.length ? 'ändrade under körningen (automatik vid inloggning eller annan användare — granska): ' + auto.slice(0, 15).join(', ') : 'inga ändringar i befintliga poster');
-  const f = rep.save({ niva: 2, projekt: env.ref, journal: journalFile });
-  console.log('\nRapport: ' + f);
-  process.exit(left.length || failed.length ? L.EXIT.STADNING_MISSLYCKADES : rep.results.some((r) => r.ok === false) ? L.EXIT.AVVIKELSE : L.EXIT.OK);
-})().catch(async (e) => { console.error('Fel: ' + e.message); try { await cleanup(); } catch (e2) {} process.exit(L.EXIT.STADNING_MISSLYCKADES); });
+  const foreign = W.sessions.flatMap((s) => s.pageErrors).filter((m) => /OTILLÅTEN SUPABASE/.test(m));
+  rep.add('MILJÖ', foreign.length === 0, foreign.length ? 'anrop till annat Supabase-projekt: ' + foreign.join(', ') : 'inga anrop till andra Supabase-projekt');
+  try { await W.close(); await E.stop(); } catch (e) {}
+  process.exit(await finish(before, aborted));
+})().catch(async (e) => {
+  console.error('Fel: ' + e.message);
+  // Sista skyddsnät: städa från journalen; ostädat läge ger kod 3 och spärrfil.
+  if (R.journal.length && tok.admin) { try { process.exit(await finish(null, true)); } catch (e2) {} R.writeLock('oväntat fel: ' + e.message); }
+  process.exit(L.EXIT.STADNING_MISSLYCKADES);
+});
