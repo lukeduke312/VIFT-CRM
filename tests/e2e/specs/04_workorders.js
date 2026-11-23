@@ -18,7 +18,13 @@ async function createAO(s, title, opts) {
 async function openAO(s, id) {
   await s.go('pg-ao-detail', { aoId: id });
   await s.page.waitForFunction((x) => document.getElementById('ao-timeline') && WorkOrderDetailPage.aoId === x, id, { timeout: 8000 });
+  // Sonderingen av loggvägen görs innan testet lägger in sina felinjektioner.
+  await s.eval(() => AOTimeSyncService.supportsLogOps());
 }
+
+/* En loggposts skrivväg: gamla (patch_ao med hel logg) eller den atomiska
+   (work-order-log-write, när servern har den). Testerna gäller båda. */
+const LOG_WRITE = /^(ao-time-write:patch_ao|work-order-log-write:(append|remove)_log)$/;
 
 async function addLog(s, text, file) {
   await s.eval(() => WorkOrderDetailPage.openAddLog());
@@ -32,8 +38,8 @@ async function addLog(s, text, file) {
    efter felet, och posten ska finnas exakt en gång på servern. */
 async function assertSavedAfterAck(t, s, text) {
   const toastAt = await s.eval(() => (window.__toasts.find((x) => /Loggpost sparad/.test(x.m)) || {}).t);
-  const failIdx = t.fake.calls.findIndex((c) => c.action === 'ao-time-write:patch_ao' && c.status !== 200);
-  const ack = t.fake.calls.slice(failIdx + 1).find((c) => c.action === 'ao-time-write:patch_ao' && c.status === 200);
+  const failIdx = t.fake.calls.findIndex((c) => LOG_WRITE.test(c.action) && c.status !== 200);
+  const ack = t.fake.calls.slice(failIdx + 1).find((c) => LOG_WRITE.test(c.action) && c.status === 200);
   t.assert(ack && toastAt >= ack.t, '"sparad" (' + toastAt + ') efter första bekräftelse (' + (ack && ack.t) + ')');
   const n = (t.fake.get('workOrders').find((a) => a.id === 'AO-007').log || []).filter((l) => l.text === text).length;
   t.assert(n === 1, 'exakt en på servern (' + n + ')');
@@ -78,7 +84,7 @@ module.exports = [
       const s = await t.world.session();
       await s.login('falt2');
       await openAO(s, 'AO-007');
-      t.fake.addFault({ match: /ao-time-write:patch_ao/, mode: 'delay', ms: 1200, times: 1 });
+      t.fake.addFault({ match: LOG_WRITE, mode: 'delay', ms: 1200, times: 1 });
       await addLog(s, 'E2E kontrollerat ventil');
       await s.settle(300);
       const early = await s.toasts();
@@ -95,7 +101,7 @@ module.exports = [
       const s = await t.world.session();
       await s.login('falt2');
       await openAO(s, 'AO-007');
-      t.fake.addFault({ match: /ao-time-write:patch_ao/, mode: 'fail', status: 403, error: 'forbidden', times: 1 });
+      t.fake.addFault({ match: LOG_WRITE, mode: 'fail', status: 403, error: 'forbidden', times: 1 });
       await addLog(s, 'E2E ska nekas');
       await s.waitToast(/kunde inte sparas/i, 6000);
       const toasts = await s.toasts();
@@ -130,7 +136,7 @@ module.exports = [
       await s.login('falt2');
       await openAO(s, 'AO-007');
       await s.eval(() => { Storage.WRITE_TIMEOUT_MS = 1500; });
-      t.fake.addFault({ match: /ao-time-write:patch_ao/, mode: 'hang', times: 1 });
+      t.fake.addFault({ match: LOG_WRITE, mode: 'hang', times: 1 });
       await addLog(s, 'E2E timeout-post');
       await s.settle(2500);
       await s.eval(() => AOTimeSyncService.resumePending());
@@ -144,7 +150,7 @@ module.exports = [
       const s = await t.world.session();
       await s.login('falt2');
       await openAO(s, 'AO-007');
-      t.fake.addFault({ match: /ao-time-write:patch_ao/, mode: 'drop-response', times: 1 });
+      t.fake.addFault({ match: LOG_WRITE, mode: 'drop-response', times: 1 });
       await addLog(s, 'E2E tappat svar');
       await s.settle(1200);
       t.assert(t.fake.calls.some((c) => c.committedButDropped), 'servern hann spara men svaret tappades');
@@ -314,12 +320,12 @@ module.exports = [
       await addLog(s, 'E2E första');
       await s.waitToast(/Loggpost sparad/, 6000);
       await s.settle(500);
-      const before = t.fake.calls.filter((c) => c.action === 'ao-time-write:patch_ao').length;
+      const before = t.fake.calls.filter((c) => LOG_WRITE.test(c.action)).length;
       await s.clearToasts();
       await addLog(s, 'E2E andra');
       await s.waitToast(/Loggpost sparad/, 6000);
       await s.settle(800);
-      const n = t.fake.calls.filter((c) => c.action === 'ao-time-write:patch_ao').length - before;
+      const n = t.fake.calls.filter((c) => LOG_WRITE.test(c.action)).length - before;
       t.metric('patch_ao per loggpost', n);
       t.assert(n === 1, 'exakt en patch_ao för andra loggposten (fick ' + n + ')');
     },
@@ -362,7 +368,7 @@ module.exports = [
       await addLog(s, 'E2E radera foto', JPEG);
       await s.waitToast(/Loggpost sparad/, 10000);
       const entry = t.fake.get('workOrders').find((a) => a.id === 'AO-007').log.find((l) => l.text === 'E2E radera foto');
-      t.fake.addFault({ match: /ao-time-write:patch_ao/, mode: 'fail', status: 403, error: 'forbidden', times: 1 });
+      t.fake.addFault({ match: LOG_WRITE, mode: 'fail', status: 403, error: 'forbidden', times: 1 });
       await s.eval((id) => WorkOrderDetailPage.deleteLogEntry(id), entry.id);
       await s.clickModalButton(/Bekräfta/);
       await s.waitToast(/nekades|kunde inte/i, 6000);
