@@ -1659,6 +1659,10 @@ async function _doPersistDetailed() {
       const _value = state[_stateKey];
       const _snapshot = JSON.stringify(_value);
       if (_snapshot === state._keySnapshot[_shortKey]) continue; // oförändrad — skicka inte
+      /* 2026-11-24: när servern stöder appendActivity skickas aktiviteter
+         post för post (ActivityService) — aldrig hela listan härifrån
+         (servern nekar den: append-only). */
+      if (_shortKey === 'activityLog' && typeof ActivityService !== 'undefined' && ActivityService._append === true) { state._keySnapshot.activityLog = _snapshot; continue; }
       const _fullKey = 'vift_' + _shortKey;
       try { localStorage.setItem(Storage.prefix + _shortKey, _snapshot); } catch(e) {}
 

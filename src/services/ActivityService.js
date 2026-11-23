@@ -55,8 +55,72 @@ const ActivityService = {
       state.activityLog = state.activityLog.slice(0, this.MAX_ENTRIES);
     }
 
-    if (opts.persist !== false) persist();
+    /* 2026-11-24: serverstyrd aktivitetslogg. När servern stöder
+       appendActivity skickas EN post (servern sätter användare och tid);
+       hela listan skrivs aldrig mer via persist() (vift_activityLog är då
+       append-only). Annars, mot äldre server: som förut. */
+    this._send(entry, opts.persist !== false);
     return entry;
+  },
+
+  _append: null,          // null = okänt, true = servern stöder appendActivity, false = äldre server
+  _outbox: [],
+  _flushing: false,
+  _outboxKey() {
+    const u = (typeof state !== 'undefined' && state.currentUser && state.currentUser.email) || '';
+    return u ? 'vift_activityOutbox:' + u : null;
+  },
+  _saveOutbox() {
+    const k = this._outboxKey(); if (!k) return;
+    try { localStorage.setItem(k, JSON.stringify(this._outbox.slice(-200))); } catch (e) {}
+  },
+  _loadOutbox() {
+    const k = this._outboxKey(); if (!k) return;
+    try { const v = JSON.parse(localStorage.getItem(k) || '[]'); if (Array.isArray(v)) v.forEach((e) => { if (e && e.id && !this._outbox.some((x) => x.id === e.id)) this._outbox.push(e); }); } catch (e) {}
+  },
+  async _call(body) {
+    if (typeof Storage === 'undefined' || !Storage._authFetch || typeof Storage._functionsBase !== 'function') return { status: 0 };
+    try {
+      const res = await Storage._authFetch(Storage._functionsBase() + '/store-key-write', { body: JSON.stringify(body), timeoutMs: Storage.WRITE_TIMEOUT_MS });
+      let data = {}; try { data = await res.json(); } catch (e) {}
+      return { status: res.status, data };
+    } catch (e) { return { status: 0 }; }
+  },
+  /* Sondering: ofullständig post → ny server svarar invalid_* (400),
+     äldre server unknown_action. Osäkert svar cachas inte. */
+  async supportsAppend() {
+    if (this._append !== null) return this._append;
+    const r = await this._call({ action: 'appendActivity', entry: null });
+    if (r.status === 400 && r.data && r.data.error === 'unknown_action') this._append = false;
+    else if (r.status === 400) this._append = true;
+    return this._append === true;
+  },
+  _markSynced() {
+    // Hela listan ska inte skickas via persist(): baslinjen följer lokalt läge.
+    try { if (state._keySnapshot) state._keySnapshot.activityLog = JSON.stringify(state.activityLog); } catch (e) {}
+  },
+  async _send(entry, legacyPersist) {
+    const sup = await this.supportsAppend();
+    if (!sup) { if (this._append === false && legacyPersist) persist(); else if (this._append === null && legacyPersist) persist(); return; }
+    this._outbox.push(entry); this._saveOutbox(); this._markSynced();
+    return this.flush();
+  },
+  /* Skickar väntande poster i ordning; nätfel lämnar dem kvar till nästa
+     försök (nästa loggning eller när nätet kommer tillbaka). Ett definitivt
+     avslag (4xx) tas bort — det blir inte bättre av omsändning. */
+  async flush() {
+    if (this._flushing || this._append !== true) return;
+    this._flushing = true;
+    try {
+      this._loadOutbox();
+      while (this._outbox.length) {
+        const e = this._outbox[0];
+        const r = await this._call({ action: 'appendActivity', entry: e });
+        if (r.status === 0 || r.status >= 500) break;
+        this._outbox.shift(); this._saveOutbox();
+        if (r.status >= 400) console.warn('[ActivityService] aktivitet avvisad av servern:', r.data && r.data.error, e.type);
+      }
+    } finally { this._flushing = false; }
   },
 
   /**
@@ -166,3 +230,6 @@ const ActivityService = {
       .replace(/"/g, '&quot;');
   }
 };
+
+/* Väntande aktivitetsposter skickas när nätet kommer tillbaka. */
+if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('online', function () { try { ActivityService.flush(); } catch (e) {} });

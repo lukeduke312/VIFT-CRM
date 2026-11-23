@@ -176,7 +176,11 @@ const AOTimeSyncService = {
          plats var INTE nämnd i det ursprungliga felrapporten men drabbades
          av exakt samma rotorsak — ao-time-write (AO-/tid-/attestskrivningar)
          fick alltså också 404 innan denna rättelse. */
-      const res = await Storage._authFetch(base + '/' + this._FN_NAME, { body: JSON.stringify(payload), timeoutMs: Storage.WRITE_TIMEOUT_MS });
+      /* G5 (2026-11-24): loggåtgärder går till work-order-log-write (egen
+         EF + radlåst RPC); allt annat oförändrat till ao-time-write. Även
+         utkorgens omsändningar följer samma regel. */
+      const fn = (payload && (payload.action === 'append_log' || payload.action === 'remove_log')) ? this._LOG_FN_NAME : this._FN_NAME;
+      const res = await Storage._authFetch(base + '/' + fn, { body: JSON.stringify(payload), timeoutMs: Storage.WRITE_TIMEOUT_MS });
       let data = null;
       try { data = await res.json(); } catch (e) {}
       if (!res.ok) return { ok: false, error: (data && data.error) || ('http_' + res.status), httpStatus: res.status };
@@ -215,12 +219,17 @@ const AOTimeSyncService = {
      svar (t.ex. missing_fields/not_found) = stöds. Nätverksfel = okänt,
      gamla vägen används för just det anropet och sonderingen görs om. */
   _logOps: null,
+  _LOG_FN_NAME: 'work-order-log-write',
+  /* Sondering (2026-11-24): work-order-log-write med ofullständigt anrop.
+     400 missing_fields = funktionen finns → atomisk väg. 404 = funktionen
+     finns inte i miljön → gamla vägen (cachas). unknown_action = äldre
+     server. Nät/5xx/401/403 = osäkert, cachas inte. */
   async supportsLogOps() {
     if (this._logOps !== null) return this._logOps;
     const r = await this._call({ action: 'append_log', aoId: '', entry: null, idempotencyKey: this._uuid() });
-    if (r.error === 'unknown_action') { this._logOps = false; return false; }
-    if (typeof r.httpStatus === 'number' && r.httpStatus >= 400 && r.httpStatus < 500 && r.httpStatus !== 401) { this._logOps = true; return true; }
-    return false; // osäkert (nät/5xx/401) — cachas inte
+    if (r.error === 'unknown_action' || r.httpStatus === 404) { this._logOps = false; return false; }
+    if (r.httpStatus === 400) { this._logOps = true; return true; }
+    return false;
   },
   appendLog(aoId, entry, opts) {
     return this.enqueue('ao', aoId, { action: 'append_log', aoId: aoId, entry: entry }, opts);

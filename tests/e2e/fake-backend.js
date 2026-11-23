@@ -47,6 +47,20 @@ const PASSWORD = 'e2e-test-password';
 
 const DEFINITE = (status, error, extra) => ({ status, body: Object.assign({ error }, extra || {}) });
 
+/* Serverns egna TypeScript-moduler (store-key-write) transpileras en gång
+   per process och används här — samma regel i E2E som i enhetstesterna. */
+let _edgeMods = null;
+function edgeModules() {
+  if (_edgeMods) return _edgeMods;
+  const os = require('os');
+  const { execFileSync } = require('child_process');
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'vift-fake-edge-'));
+  const src = path.join(ROOT, 'supabase', 'functions', 'store-key-write');
+  execFileSync('tsc', ['--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', path.join(src, 'activities-policy.ts'), path.join(src, 'activity-log.ts')], { stdio: 'pipe' });
+  _edgeMods = { policy: require(path.join(out, 'activities-policy.js')), activityLog: require(path.join(out, 'activity-log.js')) };
+  return _edgeMods;
+}
+
 class FakeSupabase {
   constructor(opts) {
     opts = opts || {};
@@ -225,6 +239,7 @@ class FakeSupabase {
         case 'invoice-write': return this.invoiceWrite(body, perms, me);
         case 'rondering-pass-write': return this.ronderingWrite(body, perms, me);
         case 'work-order-checklist-resolve': return this.checklistResolve(body, perms, me);
+        case 'work-order-log-write': return this.logWrite(body, perms, me);
         case 'work-order-image-upload': return this.imageUpload(body, perms, me, headers);
         case 'work-order-image-url': return this.imageUrl(body, perms, me);
         case 'work-order-image-delete': return this.imageDelete(body, perms, me);
@@ -322,15 +337,27 @@ class FakeSupabase {
       }
       case 'write': {
         if (!this.isBusinessKey(body.key)) return DEFINITE(403, 'key_not_allowed');
+        if (this.opts.activityAppend && body.key === 'vift_activityLog') return DEFINITE(403, 'append_only');
         if (!this.canWriteKey(body.key, perms)) return DEFINITE(403, 'forbidden');
         const cur = this.store.get(body.key);
         if (body.expectedHash != null && body.expectedHash !== sha(cur)) return { status: 409, body: { error: 'conflict', current: clone(cur), hash: sha(cur) } };
         this.store.set(body.key, clone(body.value)); this.touch();
         return { status: 200, body: { ok: true, hash: sha(body.value), current: clone(body.value) } };
       }
+      case 'appendActivity': {
+        if (!this.opts.activityAppend) return DEFINITE(400, 'unknown_action');
+        const built = edgeModules().activityLog.buildActivityEntry(body.entry, me.id, new Date().toISOString());
+        if (!built.ok) return DEFINITE(400, built.error);
+        const log = this.get('activityLog') || [];
+        if (!log.some((e) => e && e.id === built.entry.id)) { log.unshift(built.entry); this.set('activityLog', log.slice(0, 500)); this.touch(); }
+        return { status: 200, body: { ok: true, id: built.entry.id } };
+      }
       case 'writeMerge': {
         if (!this.isBusinessKey(body.key)) return DEFINITE(403, 'key_not_allowed');
-        if (!this.canWriteKey(body.key, perms)) return DEFINITE(403, 'forbidden');
+        if (this.opts.activityAppend && body.key === 'vift_activityLog') return DEFINITE(403, 'append_only');
+        const policyOk = this.opts.activitiesPolicy && body.key === 'vift_activities'
+          && edgeModules().policy.activitiesWriteAllowed(body.upserts || [], body.removals || [], perms.includes('all') ? ['all'] : perms, me.id).ok;
+        if (!policyOk && !this.canWriteKey(body.key, perms)) return DEFINITE(403, 'forbidden');
         const arr = clone(this.store.get(body.key)) || [];
         const ids = arr.map((e) => e && e.id).filter((x) => x != null);
         if (new Set(ids).size !== ids.length) return DEFINITE(409, 'duplicate_id_in_store');
@@ -403,7 +430,8 @@ class FakeSupabase {
          med { backend: { logOps: true } } — STAGING saknar åtgärden i dag,
          och då svarar servern unknown_action som för alla okända åtgärder. */
       case 'append_log': case 'remove_log': {
-        if (!this.opts.logOps) return DEFINITE(400, 'unknown_action');
+        /* Riktiga ao-time-write har inte åtgärden (G5 löses i work-order-log-write). */
+        return DEFINITE(400, 'unknown_action');
         if (!b.aoId || (b.action === 'append_log' ? !(b.entry && b.entry.id) : !b.entryId)) return DEFINITE(400, 'missing_fields');
         const i = aos.findIndex((a) => a.id === b.aoId);
         if (i < 0) return DEFINITE(404, 'not_found');
@@ -614,6 +642,36 @@ class FakeSupabase {
     }
     item.history = (item.history || []).concat([entry]).slice(-20);
     return reply(false);
+  }
+
+  /* ── work-order-log-write (efter repots EF + migration 20261124000002) ──
+     Finns bara när världen skapas med { backend: { logOps: true } }; annars
+     svarar "servern" 404 som när funktionen inte är deployad. */
+  logWrite(b, perms, me) {
+    if (!this.opts.logOps) return DEFINITE(404, 'NOT_FOUND');
+    const AO_WRITE = ['ao_edit', 'ao_checklist', 'ao_time', 'ao_material', 'ao_complete', 'ao_create'];
+    if (!AO_WRITE.some((p) => this.has(perms, p))) return DEFINITE(403, 'forbidden');
+    if (!['append_log', 'remove_log'].includes(b.action)) return DEFINITE(400, 'unknown_action');
+    if (!b.aoId || (b.action === 'append_log' ? !(b.entry && b.entry.id) : !b.entryId)) return DEFINITE(400, 'missing_fields');
+    const aos = this.get('workOrders') || [];
+    const i = aos.findIndex((a) => a.id === b.aoId);
+    if (i < 0) return DEFINITE(404, 'not_found');
+    if (!this.canViewAO(aos[i], perms, me.id)) return DEFINITE(403, 'forbidden');
+    const log = Array.isArray(aos[i].log) ? aos[i].log : [];
+    if (b.action === 'append_log') {
+      const entry = Object.assign({}, clone(b.entry), { staffId: me.id });
+      const ex = log.find((l) => l.id === entry.id);
+      if (ex) { if (JSON.stringify(ex) === JSON.stringify(entry)) return { status: 200, body: { workOrder: aos[i], noop: true } }; return DEFINITE(409, 'id_collision'); }
+      log.push(entry);
+    } else {
+      const k = log.findIndex((l) => l.id === b.entryId);
+      if (k < 0) return { status: 200, body: { workOrder: aos[i], noop: true } };
+      if (!this.has(perms, 'ao_edit') && log[k].staffId !== me.id) return DEFINITE(403, 'forbidden_other');
+      log.splice(k, 1);
+    }
+    aos[i].log = log; aos[i].updatedAt = new Date().toISOString();
+    this.set('workOrders', aos); this.touch();
+    return { status: 200, body: { workOrder: aos[i], noop: false } };
   }
 
   /* ── Bild-EF:er (efter repots EF:er) ─────────────────────── */
