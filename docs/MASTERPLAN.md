@@ -522,6 +522,35 @@ Statusändringar för äldre punkter (identifierare behålls):
 - **136** (idempotenskonflikt serviceintervall): fanns kvar i STAGING-klienten; portad (punkt 146).
 - **133** (Integrationer): Bokio och Momentum kvarstår som framtida integrationsområden; AI-arbetsorderinkorg (132) kvarstår. Ingen specifikation hittad — inget arbetsflöde uppfunnet.
 
+## Leverans I — Fullständigt webbläsartest av hela systemet (2026-11-23)
+
+Rapport: `docs/E2E-RAPPORT-2026-11-23.md`. Svit: `node tests/e2e/run.js` (Chromium mot simulerad backend; se `tests/e2e/README.md`). "BYGGD" = kodklart och testat i webbläsare mot simulerad backend, **inte** installerat eller verifierat i STAGING. Varje rättning har ett regressionstest som underkänns mot föregående kod.
+
+| # | Funktion / rättning | Status | Test | Commit |
+|---|---|---|---|---|
+| 154 | E2E-svit: 32 moduler, 8 kritiska arbetsflöden, 5 skärmstorlekar, felinjektion, två enheter/användare, rapport + skärmbilder | KLAR | alla | 0a664b3 m.fl. |
+| 155 | Verktygsrader klipptes av på mobil; osanerade sökvärden | BYGGD | RESP-*, PAGES-01 | 0a664b3 |
+| 156 | Portkod läckte via fastighetslistans formulär och återkommande ärenden | BYGGD | PROP-01/02 | 07810e9 |
+| 157 | Dubbel AO-skrivning vid geokodning | BYGGD | AO-09 | 07810e9 |
+| 158 | Osynkad tid tappades / skickades i fel namn vid användarbyte (utkorg per användare) | BYGGD | TIME-05 | 76d36df |
+| 159 | Rabattfältet i offertguiden visades aldrig för nya offerter | BYGGD | OFF-03 | 2d6cd32 |
+| 160 | Serviceintervall: "utförd/tillagd" före serverns svar; dubbelklick; Att göra stängdes före sparning | BYGGD | SVC-01..03 | 2fd247c |
+| 161 | Offertlänk "återkallad" medan länken fungerade; roller/personal "Sparat" vid serverfel; globalt skyddsnät för äldre sparvägar; toast-timer | BYGGD | OFF-04, ROLE-02, STAFF-02, ADMIN-01 | 6bf1343 |
+| 162 | Rondering: pass skapades för rondering som servern saknade | BYGGD | RON-01..03 | 2c8fe3b |
+| 163 | Återkommande: två AO för samma tillfälle vid dubbelklick | BYGGD | REC-01 | 9f00c34 |
+| 164 | Exportcentret obrukbart (operatorprioritet); importen sa "slutförd" vid serverfel | BYGGD | EXP-01, IMP-02 | b59afa5 |
+| 165 | Rapporter: "Fakturerat" alltid tomt (fält som inte finns); tid kopplades inte till AO | BYGGD | REP-01 | 866d912 |
+| 166 | Kön skickades inte vid återanslutning; verifieringsläsning utan tidsgräns; osparade ändringar kastades vid användarbyte | BYGGD | RES-01..04 | 4113390 |
+| 167 | Snabbare id-uppslag (AO-lista 2,0 → 0,87 s med 3 000 AO) | BYGGD | PERF-01 | 6d849ac |
+| 168 | Faktura-ROT räknades på arbete exkl. moms (offerten inkl. moms) | BYGGD | ECO-01 | 80671b7 |
+| 169 | Cachebuster saknades på två stilmallar; statisk kontroll mot STAGING-baslinjen; Service Worker-test | BYGGD | SW-01, static_checks | 3c663f8 |
+| 170 | Fördröjd autofokus flyttade lösenordet till e-postfältet (sporadiskt "inloggning fastnade") | BYGGD | AUTH-06 | 80847a8 |
+| 171 | Läsande STAGING-kontroll (`tests/e2e/staging-readonly.js`) — 11/11 OK | KLAR | — | 80847a8 |
+| 172 | ROT/RUT från offert följer inte med till fakturan (G10); ekonomirollens AO-statusändring (G9); DataSync pausar vid fokus i sökfält (G11); ~35 äldre sparvägar med tidig "Sparat" (G12) | PLANERAD — kräver beslut | — | — |
+| 173 | Upprepa E2E-kontrollerna mot STAGING med isolerade testkonton (lista i rapporten §6) | VÄNTAR PÅ GO | — | — |
+
+Rättelse: uppgiften om ett dubblett-id i STAGING:s `vift_activityLog` (tidigare §2c) var felaktig — verifierat 0 dubbletter. Punkten utgår.
+
 ## Kända begränsningar och planerade stabiliseringar
 
 ### AO-snapshot-fält (punkt 12 — KLAR)

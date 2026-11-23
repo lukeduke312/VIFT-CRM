@@ -21,7 +21,7 @@ const F2 = 'falt2@example.test';
 
 module.exports = [
   {
-    id: 'TIME-01', module: 'Tidregistrering och instämpling', name: 'Flöde: fältarbetare stämplar in/ut på AO → serverbekräftad tidpost → löneadmin ser och attesterar → posten låst',
+    id: 'TIME-01', kind: 'workflow', module: 'Tidregistrering och instämpling', name: 'Flöde: fältarbetare stämplar in/ut på AO → serverbekräftad tidpost → löneadmin ser och attesterar → posten låst',
     async run(t) {
       const s = await t.world.session({ viewport: 'iphone' });
       await s.login('falt2');

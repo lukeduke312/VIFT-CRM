@@ -24,6 +24,18 @@ const BENIGN_CONSOLE = [/Failed to load resource/i, /ERR_BLOCKED_BY_CLIENT/i, /f
 process.on('unhandledRejection', (e) => { console.warn('      (ohanterat löfte efter testfel: ' + String(e && e.message || e).split('\n')[0] + ')'); });
 
 async function main() {
+  /* --render: bygg om REPORT.md från sparad results.json (t.ex. efter att
+     testernas metadata uppdaterats) utan att köra om sviten. */
+  if (process.argv.includes('--render')) {
+    const saved = JSON.parse(fs.readFileSync(path.join(REPORT, 'results.json'), 'utf8'));
+    const meta = {};
+    fs.readdirSync(path.join(__dirname, 'specs')).filter((f) => f.endsWith('.js')).forEach((f) => require(path.join(__dirname, 'specs', f)).forEach((t) => { meta[t.id] = t; }));
+    saved.results.forEach((r) => { if (meta[r.id]) { r.kind = meta[r.id].kind || 'ui'; r.module = meta[r.id].module; } });
+    fs.writeFileSync(path.join(REPORT, 'results.json'), JSON.stringify(saved, null, 2));
+    fs.writeFileSync(path.join(REPORT, 'REPORT.md'), renderMd(saved.summary, saved.results));
+    console.log('REPORT.md omgenererad från results.json');
+    return;
+  }
   fs.mkdirSync(SHOTS, { recursive: true });
   fs.readdirSync(SHOTS).forEach((f) => fs.unlinkSync(path.join(SHOTS, f)));
   const specs = fs.readdirSync(path.join(__dirname, 'specs')).filter((f) => f.endsWith('.js')).sort();
@@ -129,6 +141,9 @@ function renderMd(s, results) {
     const note = (r.status === 'failed' || r.status === 'known') ? r.error : r.status === 'blocked' ? r.reason : (r.notes || []).join('; ');
     md += '| ' + r.id + ' | ' + r.module + ' | ' + r.name + ' | ' + ({ passed: 'Godkänd', failed: 'Misslyckad', blocked: 'Blockerad', known: 'Känt fel' }[r.status]) + ' | ' + (r.ms != null ? r.ms + ' ms' : '') + ' | ' + String(note || '').replace(/\|/g, '/').slice(0, 220) + ' |\n';
   });
+  const shots = results.filter((r) => r.screenshots && r.screenshots.length);
+  md += '\n## Skärmbilder av misslyckade tester\n\n' + (shots.length ? shots.map((r) => '- ' + r.id + ': ' + r.screenshots.map((p) => '[' + p + '](' + p + ')').join(', ')).join('\n') + '\n' : 'Inga — inget test misslyckades i denna körning.\n');
+  md += '\n## Simulerat eller verifierat mot STAGING?\n\nAlla tester ovan körs mot den simulerade backenden (`fake-backend.js`). Tester av typen *serverkontrakt* prövar en modell av EF:ernas behörighetsregler — de riktiga källorna finns inte i repot (G4). Inget här är verifierat mot riktig Supabase STAGING; den läsande kontrollen av befintlig STAGING körs separat (`staging-readonly.js`).\n';
   const withMetrics = results.filter((r) => r.metrics && Object.keys(r.metrics).length);
   if (withMetrics.length) {
     md += '\n## Mätvärden (lokal maskin, simulerad backend utan nätverkslatens)\n\n| Test | Mätvärde | Värde |\n|---|---|---|\n';

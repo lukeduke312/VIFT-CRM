@@ -20,6 +20,10 @@ Direktkontroll mot Supabase STAGING `yyzljlqyzzcbxmcdbual` efter Claudes slutrap
 
 ## 0. Vad som har ändrats sedan förra versionen
 
+**2026-11-23 (eftermiddag) — fullständigt webbläsartest.** Hela klienten är testad i Chromium mot en simulerad backend (88 tester, alla 32 moduler, 7 kritiska arbetsflöden: 86 godkända, 0 misslyckade, 1 blockerad, 1 känt fel). 20 verifierade fel är rättade i branchen, vart och ett med ett regressionstest som underkänns mot föregående kod. Resultat, kvarstående fel och exakt vad som måste upprepas mot STAGING: `docs/E2E-RAPPORT-2026-11-23.md`. Filomfånget i §2a är uppdaterat utifrån en läsande jämförelse mot den driftsatta STAGING-klienten (`tests/e2e/staging-readonly.js`, inga ändringar i STAGING).
+
+**Rättelse — aktivitetsloggen (§2c):** min tidigare uppgift att `vift_activityLog` i STAGING innehöll ett dubblett-id som blockerade varje skrivning byggde på en kommentar i koden, inte på verifierad data. Lucas läsande kontroll (ovan) visar 0 dubbletter. Uppgiften var fel; §2c utgår.
+
 `docs/STAGING-AO-TID-SKRIVVAG-BLOCKERARE-2026-11-22.md` gav NO-GO för en filsynk från denna branch. Orsaken visade sig vara att branchen var en **äldre kodlinje** än den deployade STAGING-klienten (se `docs/KODBAS-STAGING-BASLINJE-2026-11-23.md`). Åtgärd i branchen (commit `56a943d`): STAGING-klienten är nu baslinje, med LIVE-miljööverlägg, och branchens egna förbättringar är portade ovanpå i separata commits. Blockeraren är därmed löst i kod: alla AO-/tidskrivningar går via redan installerad `ao-time-write` v3; `workOrders`/`timeEntries` skrivs aldrig via generisk `persist()`.
 
 Den gamla §2a ("synka klientfiler från branchen") gäller inte längre i sin gamla form — se §2.
@@ -45,6 +49,8 @@ Direktverifierat (läsande) i `docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md` och 
 ## 2. Vad som ska installeras i STAGING
 
 ### 2a. Klientfiler (kodsynk till staging-repot, inga Supabase-ändringar)
+
+**Exakt omfång (läsande jämförelse mot driftsatt STAGING 2026-11-23):** 27 versionsatta filer är nyare i repot och 4 finns bara i repot; ingen fil är äldre i repot än i STAGING. Nyare: `components.css`, `storage.js`, `state.js`, `AuthService.js`, `WorkOrderService.js`, `TimeService.js`, `AOTimeSyncService.js`, `BillingQueueService.js`, `RecurringOrderService.js`, `ServiceIntervalService.js`, `ImportExportConfigs.js`, `ImportWizardPage.js`, `ExportCenterPage.js`, `Modal.js`, `Sidebar.js`, `Router.js`, `CustomersPage.js`, `WorkOrdersPage.js`, `WorkOrderDetailPage.js`, `TimePage.js`, `InvoicesPage.js`, `RecurringPage.js`, `PropertyDetailPage.js`, `PageShells.js`, `ReportsPage.js`, `RonderingUtforandePage.js`, `RonderingWizardPage.js`. Bara i repot: `tokens.css`, `reset.css` (fick `?v=1`), `WorkOrderImageService.js`, `ServiceIntervalsPage.js`. Dessutom `index.html` och `public-offer.html`. Webbläsartestets rättningar i dessa filer listas i `docs/E2E-RAPPORT-2026-11-23.md` §3.
 
 Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid synk till staging-repot ska **STAGING-överlägget** läggas tillbaka i fyra punkter: `config.js` (STAGING-VAPID-nyckel), `src/data/storage.js` (STAGING `SUPABASE_URL`/anon-nyckel), `src/services/AuthService.js` (STAGING-posten i `_ENV_REDIRECT_BY_PROJECT_REF`), `index.html` (STAGING-miljöindikatorn).
 
@@ -79,9 +85,9 @@ Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid sy
 5. `supabase functions deploy work-order-image-delete`
 6. Därefter (eller samtidigt med) §2a.
 
-### 2c. Databasstädning `vift_activityLog` (separat GO)
+### 2c. ~~Databasstädning `vift_activityLog`~~ — UTGÅR
 
-`vift_activityLog` i STAGING innehåller ett dubblett-id (`ACT-1793611007122`) som gör att **varje** skrivning av aktivitetsloggen avvisas av `store-key-write` (`duplicate_id_in_store`). Följd: aktivitetsloggen har inte sparats i STAGING sedan 2026-11-02 och varje användaråtgärd skickar ett anrop som alltid misslyckas. Orsaken i koden är redan rättad (id med slumpsuffix). Städningen kräver en riktad datafix enligt staging-repots `PLAN_activitylog_dedup_2026-11-12.md` (finns inte i detta repo).
+~~`vift_activityLog` i STAGING innehåller ett dubblett-id …~~ Felaktig uppgift (byggde på en kodkommentar, inte på data). Verifierat 2026-11-23: 150 poster, 0 dubbletter. Ingen datafix ska göras. Om aktivitetsloggen inte sparas i STAGING ska det först reproduceras med ett autentiserat skrivtest (E2E-rapporten §6, punkt S-AKT).
 
 ### 2d. Migrationer
 
@@ -141,6 +147,18 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 - [ ] I1 `#/serviceintervall` listar intervall från alla fastigheter; filter fungerar; dold för roller utan `customer_manage`.
 - [ ] I2 "Markera utförd"/"Redigera"/"Lägg till" sparar (knapparna var tidigare döda) och uppdaterar historik och nästa datum.
 
+**Från webbläsartestet 2026-11-23 (upprepas mot STAGING med testkonton — fullständig lista i `docs/E2E-RAPPORT-2026-11-23.md` §6)**
+- [ ] E1 Behörighet vid direktanrop (PERM-01/02): fältarbetare mot annans AO, fakturarad, rolländring, portkod, attestering → 403; arbetsledare får bara egna tidposter.
+- [ ] E2 `store-key-write` per nyckel (PERM-03, BLOCKER-2): fältarbetare försöker `writeMerge` på `vift_offers`, `vift_customers`, `vift_activities` → ska nekas.
+- [ ] E3 Ekonomirollen skapar fakturautkast → AO blir "fakturerad" (i simuleringen nekades statusändringen; klienten säger det och rullar tillbaka).
+- [ ] E4 Serverfel/timeout vid sparning (serviceintervall, offertlänk, roller, rondering, import) → aldrig "sparat"; tydligt fel.
+- [ ] E5 ROT/RUT: samma arbete ger samma avdrag i offert och faktura (30 %/50 % av arbetskostnad inkl. moms).
+- [ ] E6 Rapporter → "Fakturerat" = summan av utställda fakturor exkl. moms.
+- [ ] E7 Exportcentret: register, format, kolumner och Exportera-knapp visas; fastighets-/objektexport utan portkoder.
+- [ ] E8 Tappa nätet på mobilen mitt i loggpost → skickas automatiskt när nätet kommer tillbaka.
+- [ ] E9 Rondering: guide → tillfälle → utförande på mobil → anmärkning med AO → slutför → server sätter "har_avvikelser" → AO klar → avvikelse åtgärdad.
+- [ ] E10 Samtidiga loggposter från två enheter (G5) — förväntas fortfarande tappa en post.
+
 ---
 
 ## 5. Backup, kontrollpunkter, rollback, kvarstående gap
@@ -160,6 +178,11 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 - **G6** Dubbel utstämpling (S3) bygger på att servern deduplicerar `create_time` per idempotensnyckel över enheter — dokumenterat i klientkoden men inte verifierat mot servern.
 - **G7** Historiska inbäddade bilder i `vift_workOrders` gör varje AO-ändring ~46× dyrare i WAL (uppmätt lokalt). Migrering kräver egen plan + GO.
 - **G8** Negativt "att betala" är möjligt i offert om radernas RUT/ROT-belopp överstiger totalen (OfferCalc har ingen spärr; fakturan har det). Kräver beslut om valideringsregel i offertredigeringen.
+- **G9** Ekonomirollen (`invoice_create` utan AO-behörighet): att sätta AO-status "fakturerad" nekades av den simulerade `ao-time-write`. Verkligt serverbeteende okänt (G4) — testfall E3.
+- **G10** ROT/RUT från en godkänd offert följer inte med till fakturautkastet; ekonomi måste lägga till avdraget manuellt och inget varnar. Kräver beslut (automatisk överföring eller varning).
+- **G11** DataSync pausar medan fokus står i ett inmatningsfält — även sökfält. Uppdateringar från andra enheter syns först när fokus lämnas.
+- **G12** ~35 äldre sparvägar (persist() utan argument: t.ex. kontaktpersoner, teknisk info, artikelkategorier, säljchansstatus) visar fortfarande "Sparat" innan servern svarat. Ett globalt skyddsnät visar nu en tydlig varning om servern nekar, men framgångsbeskedet hinner synas först. Kritiska vägar (serviceintervall, offertlänk, roller, personal, rondering, import) är rättade.
+- **G13** `store-key-write`:s behörighet per generisk nyckel är okänd (BLOCKER-2) — PERM-03 är blockerad tills den prövats mot STAGING (E2).
 
 ---
 
@@ -167,9 +190,9 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 
 | Del | Status |
 |---|---|
-| §2a Klientfiler | **GO för STAGING-granskning** — kodklart, 172 lokala kontroller + 120 offertjämförelser gröna, webbläsarsmoke utan JS-fel. Installation kräver separat GO. |
+| §2a Klientfiler | **GO för STAGING-installation (efter separat GO)** — 88 webbläsartester i Chromium (alla 32 moduler; 86 godkända, 0 misslyckade, 1 blockerad i väntan på STAGING, 1 känt serverberoende gap G5), 20 verifierade fel rättade, enhetstester gröna, läsande STAGING-kontroll 11/11. Klientsidan är redo att prövas mot riktig backend; den är **inte** verifierad mot riktiga serversvar. |
 | §2b Bildobjekt + 3 EF | **GO för STAGING-granskning** — `tsc --strict` OK. Kräver separat GO. |
-| §2c activityLog-städning | **VÄNTAR PÅ TEST** — plan finns i staging-repot, inte granskad här. |
+| §2c activityLog-städning | **UTGÅR** — uppgiften om dubblett var felaktig (verifierat 0 dubbletter). |
 | §3 service-monitor-aktivering | **VÄNTAR PÅ TEST** — testlista ovan. |
 | Molnstämpling S3 (dubbel utstämpling) | **VÄNTAR PÅ TEST** — serverbeteende G6. |
 | G4/G5 append-log | **BLOCKERAD** — backendkälla saknas i repot. |

@@ -41,13 +41,15 @@ Uppmätt lokalt (PostgreSQL 16, syntetiska men varierade data, `tests/perf/wal_p
 
 Slutsatser: (1) nya loggfoton i Storage stoppar tillväxten, men **historiska inbäddade bilder gör varje AO-ändring ~46× dyrare** tills de migreras (punkt 152); (2) aktivitetsloggen kostar en extra helradsskrivning per användaråtgärd (punkt 150); (3) STAGING:s per-element-merge undviker redan att oförändrade nycklar skickas. Anrop per åtgärd (härlett ur koden, ej uppmätt): AO-ändring = 1 ao-time-write + 1 aktivitetslogg-merge; kundändring = 1 kund-merge + 1 aktivitetslogg-merge; tidregistrering = 1 ao-time-write + 1 aktivitetslogg-merge. Stämplingsbevakningen lägger till ≤ 40 EF-läsningar per aktiv användare och timme.
 
-Kostnadsrisker: historiska bilder (WAL/disk), aktivitetsloggen, och att aktivitetsloggen i STAGING just nu avvisas på varje skrivning (dubblett-id, §2c) — ett meningslöst anrop per åtgärd tills datan städas.
+Kostnadsrisker: historiska bilder (WAL/disk) och aktivitetsloggen. ~~…och att aktivitetsloggen i STAGING just nu avvisas på varje skrivning (dubblett-id, §2c)…~~ **Rättelse 2026-11-23:** uppgiften om ett dubblett-id byggde på en kodkommentar, inte på verifierad data. Lucas läsande kontroll av STAGING visar 150 poster och 0 dubbletter; §2c utgår.
 
 ## D. Kvalitet
 
 `bash tests/run-all.sh`: 8 testfiler, **172 kontroller + 120 offertjämförelser i Chromium, alla gröna**; webbläsarsmoke av hela appen utan JS-fel; `node --check` på alla laddade skript. Alla tester körs mot riktiga källfiler med simulerade servrar — de visar klientlogiken, inte att `ao-time-write`/`store-key-write` beter sig likadant. Ej testat: riktig iPhone/Safari, riktiga Supabase-svar, push-notiser, PDF-generering.
 
-Kvarstående blockerare/gap: G4 (backendkällor bara i staging-repot), G5 (samtidiga loggposter kan skriva över varandra, kräver append_log), G6 (serverns idempotens för dubbel utstämpling), G7 (historiska bilder), G8 (offert kan visa negativt "att betala" om RUT/ROT > total), activityLog-dubbletten i STAGING.
+Kvarstående blockerare/gap: G4 (backendkällor bara i staging-repot), G5 (samtidiga loggposter kan skriva över varandra, kräver append_log), G6 (serverns idempotens för dubbel utstämpling), G7 (historiska bilder), G8 (offert kan visa negativt "att betala" om RUT/ROT > total). ~~activityLog-dubbletten i STAGING~~ (felaktig uppgift, se rättelsen ovan).
+
+**Uppföljning:** fullständigt webbläsartest av hela systemet samma dag — se `docs/E2E-RAPPORT-2026-11-23.md` (20 verifierade fel rättade, kvarstående gap G9–G13).
 
 ## E. Installation
 
@@ -59,7 +61,7 @@ Se `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (uppdaterad): vad som redan fi
 |---|---|
 | Klientfiler (§2a) | GO för STAGING-granskning |
 | Bildobjekt + 3 EF (§2b) | GO för STAGING-granskning |
-| activityLog-städning (§2c) | VÄNTAR PÅ TEST |
+| activityLog-städning (§2c) | UTGÅR (felaktig uppgift, rättad 2026-11-23) |
 | service-monitor-aktivering (§3) | VÄNTAR PÅ TEST |
 | Dubbel utstämpling (S3) | VÄNTAR PÅ TEST |
 | append_log (151) | BLOCKERAD |
