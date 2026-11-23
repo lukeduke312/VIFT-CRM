@@ -35,7 +35,13 @@ function setup(opts) {
         return null;
       },
     },
-    WorkOrderService: { update: (id, data, o) => { updates.push({ id, log: JSON.parse(JSON.stringify(data.log)), onSettled: o && o.onSettled }); return ao; } },
+    /* G5: sidan anropar appendLogEntry/removeLogEntry; utan serverstöd går
+       de till update() med hela loggen — stubben speglar den vägen. */
+    WorkOrderService: {
+      update: (id, data, o) => { updates.push({ id, log: JSON.parse(JSON.stringify(data.log)), onSettled: o && o.onSettled }); return ao; },
+      appendLogEntry(id, entry, o) { return this.update(id, { log: ao.log }, o); },
+      removeLogEntry(id, entryId, o) { return this.update(id, { log: ao.log }, o); },
+    },
     WorkOrderImageService: {
       upload: async (aoId, f) => { uploads.push(aoId); if (opts.uploadFails) throw new Error('forbidden'); return { path: aoId + '/123-abc.jpg' }; },
       remove: async (aoId, p) => { removes.push({ aoId, p }); return true; },
