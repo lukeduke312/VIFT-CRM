@@ -2,7 +2,7 @@
 
 Branch: `claude/vift-system-restructure-8fUme`. Allt nedan är byggt och testat **lokalt**: Chromium mot en simulerad backend, enhetstester och en läsande kontroll av den publika STAGING-deployen. **Inget är installerat, deployat eller verifierat i STAGING eller LIVE.** Ingen databas, RLS, schemalagt jobb eller e-post har rörts.
 
-Utvecklingsomgången avslutas här. Efter att Etapp B/C frystes gjordes bara tre rättningar, alla med dokumenterat skäl. Slutkontrollens visuella regression visade tre fel som mina egna UI-ändringar hade orsakat (se A1, UI-*). Inga nya funktioner har lagts till.
+Efter att Etapp B/C frystes gjordes bara tre rättningar, alla med dokumenterat skäl: slutkontrollens visuella regression visade tre fel som mina egna UI-ändringar hade orsakat (se A1, UI-*). **Tillägg på uppdrag av Lucas (samma kväll):** checklistpunkter med tre statuslägen (A1b). Den byggdes enligt hans beslut om autostart och behörighet. Under arbetet hittades och rättades ett synkfel mellan enheter (SYNC-AO-01).
 
 Statusord i rapporten:
 - **BYGGD** — kod finns i branchen.
@@ -32,6 +32,26 @@ Varje rättning nedan reproducerades först. Varje rättning har ett regressions
 | UI-KV-01 | Funnet i slutkontrollen: `kv` staplade etikett och värde på mobil, så säljkorten blev ~20 % högre. | `kv` gäller bara från 768 px. | UI-KV-01 | LOKALT TESTAD |
 | UI-PROP-01 | Funnet i slutkontrollen: rubriken i fastighetskortets åtgärdsrad kapades på mobil. | På mobil visas bara numret; namnet visas på dator. | UI-PROP-01 | LOKALT TESTAD |
 | UI-BDG-01 | Funnet i slutkontrollen: "Redo fakturering" var fortfarande ett fyllt chip, trots att granskningsloggen sa att det var rättat. | Ljust statusmärke. | UI-BDG-01 | LOKALT TESTAD |
+
+### A1b. Tillägg: checklista med tre statuslägen (masterplan punkt 186–187)
+
+**Beslut (Lucas, 2026-11-23):**
+- Checklistan startar, stoppar eller avslutar aldrig arbetsordern. R1-autostarten tas bort.
+- Den som själv påbörjat eller utfört en punkt får återställa den med `ao_checklist`.
+- Någon annans åtgärd, eller en äldre punkt utan uppgift om vem, kräver `ao_edit`.
+
+| Del | Vad | Test | Status |
+|---|---|---|---|
+| Modell | Ej påbörjad / Pågående / Utförd (+ befintlig Avvikelse). Nya fält per punkt: `startedAt/By/ById`, `doneAt/By/ById`, `avvikelseById`, `history` (de 20 senaste: åtgärd, vem, när, från-läge). Befintliga fält och punkter är oförändrade. Äldre utförda punkter visas som "äldre punkt — uppgift om vem saknas". | — | BYGGD |
+| Server | Ny RPC `work_order_checklist_set_state`: start, done, avvikelse, reset, add och remove. Atomisk per punkt-id under radlås, med ägarkontroll på servern och utan statusändring på AO:n. Den äldre `work_order_checklist_resolve` delegerar dit; ingen parallell väg. Edge Function:en `work-order-checklist-resolve` har fått `action` och behåller det äldre kontraktet. | SQL mot riktig PostgreSQL 16: 32/32 (samtidighet, behörighet, historik, idempotens, grants); EF `tsc --strict` | BYGGD, LOKALT TESTAD. **Migration och EF ej installerade.** |
+| Klient | Påbörja/Utförd/Avvikelse/Återställ/Ta bort per punkt. Raden visar "Sparar…" tills servern svarat, och vid fel ett tydligt besked med raden kvar som förut. Klienten sonderar serverstödet; mot dagens server visas checklistan som förut (ingen Påbörja), och en ny åtgärd kan aldrig tolkas som "återställ". Lägg till/ta bort går atomiskt när servern stöder det. | CHK-02..07 | LOKALT TESTAD |
+| Indikator | AO-detalj: "2/6 utförda · 2 pågår · 1 avv." med tre färger. AO-listans stapel har ett eget segment för pågående. Mina jobb visar "N pågår". Klarmarkeringsdialogen nämner pågående punkter. | CHK-02, CHK-03 | LOKALT TESTAD |
+| Mobil | Knapparna ligger under texten, tryckyta minst 36 px, ingen horisontell scroll. Visuellt granskad i fullstorlek, mobil och dator (`docs/ui-fore-efter/checklista-*.png`). | CHK-07 | LOKALT TESTAD |
+| Synkfel (SYNC-AO-01) | Reproducerat: en annan enhets AO-ändring kom in i minnet men syntes inte förrän nästa omritning. DataSync hämtar arbetsordrarna asynkront och ritade om sidan innan svaret kommit. Nu ritas sidan om när hämtningen tillämpats. Det gäller alla AO-ändringar, inte bara checklistan. | SYNC-AO-01 (underkänns mot gammal kod) | LOKALT TESTAD |
+
+**Kvar och kända begränsningar:**
+- En äldre, cachad klient visar pågående punkter som ej påbörjade tills den laddats om. Inget skrivs över.
+- Tills migrationen är installerad startar servern fortfarande AO:n vid OK/avvikelse (dagens beteende).
 
 Tidigare samma dag (Leverans I, se `docs/E2E-RAPPORT-2026-11-23.md`) rättades 20 verifierade fel, bland annat portkodsläckor, dubbla AO-skrivningar, kö vid återanslutning, exportcentret, rapporternas "Fakturerat" och inloggningens autofokus. De ingår i releasekandidaten.
 
@@ -131,15 +151,15 @@ Sista körningen gjordes efter att all kod frysts:
 
 | Svit | Antal | Godkända | Misslyckade | Blockerade | Kända fel |
 |---|---|---|---|---|---|
-| E2E, Chromium mot simulerad backend (`node tests/e2e/run.js`) | 100 | 98 | 0 | 1 (PERM-03) | 1 (AO-07) |
-| Enhetstester (`bash tests/run-all.sh`) | 10 filer, 188 kontroller | 188 | 0 | — | — |
+| E2E, Chromium mot simulerad backend (`node tests/e2e/run.js`) | 107 | 105 | 0 | 1 (PERM-03) | 1 (AO-07) |
+| Enhetstester (`bash tests/run-all.sh`) | 11 filer, 220 kontroller (varav 32 SQL mot riktig PostgreSQL 16) | 220 | 0 | — | — |
 | Offertparitet i webbläsare | 120 offerter | 120 (10 ogiltiga visar varning) | 0 | — | — |
 | Läsande STAGING-kontroll (`staging-readonly.js`) | 11 | 11 | 0 | — | 1 info (proxyfel för extern resurs) |
 
 - **Blockerad:** PERM-03, serverns behörighet per nyckel (G13). Den kan bara avgöras mot STAGING.
 - **Känt fel:** AO-07, samtidiga loggposter med den gamla vägen (G5, serverberoende).
 - **Instabilt test, rättat:** TIME-01 misslyckades i 1 av 6 körningar under last. Testet kontrollerade serverns stämpling direkt efter beskedet "Utstämplad — tid sparad". Stämplingen rensas i ett eget anrop strax efter tidpostens ACK, vilket är avsiktlig ordning; den varaktiga intentionen täcker en flik som stängs däremellan. Testet väntar nu i högst 5 s. Det var inget appfel. Isolerat godkändes testet 5 av 5 gånger.
-- **Antal tester:** 100 i sista körningen mot 97 i förra. De tre nya är regressionstesten UI-KV-01, UI-PROP-01 och UI-BDG-01 från slutkontrollen.
+- **Antal tester:** 107 i sista körningen. De nya är UI-KV-01, UI-PROP-01 och UI-BDG-01 (slutkontrollen), CHK-02..07 (checklista) och SYNC-AO-01 (synkfel).
 
 **Visuella regressioner:** Alla 60 bilder (30 vyer × laptop/mobil) i slutläget jämfördes pixel för pixel mot före-bilden och mellan varje rättningsomgång. Tre regressioner, alla orsakade av mina egna UI-ändringar, hittades och rättades (se A1, UI-*). Mellan de två sista uppsättningarna ändrades bara AO-listan, av den avsiktliga märkesrättningen. Tomma lägen fångades separat och granskades i översikt.
 
@@ -173,7 +193,7 @@ Sista körningen gjordes efter att all kod frysts:
 
 ## E. Masterplan
 
-`docs/MASTERPLAN.md`, Leverans J, punkt 174–184:
+`docs/MASTERPLAN.md`, Leverans J, punkt 174–187 (186–187: checklistans tre lägen och synkfelet). Det tidigare beslutet AO-CHECKLIST-AUTOSTART R1 är markerat som ändrat genom Lucas beslut 2026-11-23, med historiken bevarad:
 - Statuskategorierna BYGGD / LOKALT TESTAD / STAGING-VERIFIERAD / LIVE används från och med nu.
 - Äldre punkter har fått statusändringar med behållna identifierare (151, 172, 173).
 - Tidigare beslut och historik är orörda.
@@ -188,7 +208,7 @@ Ingen konkurrerande masterplan har skapats.
 Den enda gällande planen är `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (uppdaterad i kväll). Sammanfattning:
 
 **Exakta filer (§2a):**
-- 40 versionsatta filer som är nyare i repot än i STAGING (`components.css` 106, `PropertyDetailPage.js` 35 och `WorkOrdersPage.js` 68 efter slutkontrollen). Listan finns med versionsnummer i planen.
+- 40 versionsatta filer som är nyare i repot än i STAGING. Listan finns med aktuella versionsnummer i planen, efter slutkontrollen och checklistan.
 - 5 nya filer: `tokens.css`, `reset.css`, `WorkOrderImageService.js`, `MapGrouping.js` och `ServiceIntervalsPage.js`.
 - `index.html` och `public-offer.html`.
 - STAGING-överlägget läggs tillbaka i `config.js`, `storage.js`, `AuthService.js` och `index.html`.
@@ -196,17 +216,19 @@ Den enda gällande planen är `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (up
 **Edge Functions:**
 - `offer-attachment-upload` med PATCH (§2e). Jämför först med den deployade källan.
 - Tre bild-EF:er (§2b), om bilddelen ska med.
+- `work-order-checklist-resolve` (§2g) deployas direkt efter checklistans migration.
 - `ao-time-write`-ändringen för G5 är **inte** installerbar (§2f).
 
-**Migrationer:** inga för §2a/§2e. `20261123000001_PROPOSAL_work_order_log_ops.sql` är ett förslag och ska **inte** köras.
+**Migrationer:** `20261123000002_work_order_checklist_progress.sql` (§2g, kräver GO). Inga för §2a/§2e. `20261123000001_PROPOSAL_work_order_log_ops.sql` är ett förslag och ska **inte** köras.
 
 **Ordning:**
 1. J1 G13/G9 (ändrar inga data) mot nuvarande STAGING.
 2. §2a klientfiler.
-3. §2e.
-4. (§2b.)
-5. Testfallen i §4.
-6. J1 G6 med testdata, om det godkänts.
+3. §2g: checklistans migration och sedan EF:en, i samma arbetspass.
+4. §2e.
+5. (§2b.)
+6. Testfallen i §4, inklusive J9–J12 för checklistan.
+7. J1 G6 med testdata, om det godkänts.
 
 **Efter installationen:**
 - Hårdladda sidan och kontrollera de nya versionsnumren.
@@ -218,12 +240,14 @@ Den enda gällande planen är `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (up
 - §2a: återställ staging-repots föregående commit. Inga serverobjekt påverkas.
 - §2e: deploya föregående EF-version.
 - §2b: enligt planen.
+- §2g: kör om den äldre migrationen `20260917000001`, ta bort `work_order_checklist_set_state` och deploya föregående EF-version. De nya fälten i punkterna kan ligga kvar.
 
 ### GO/NO-GO
 
 | Del | Beslut |
 |---|---|
 | Klientfiler §2a (releasekandidat) | **GO för kontrollerad STAGING-installation — kräver ditt separata GO.** Inga kända klientfel kvar som blockerar test. Klienten är inte verifierad mot riktiga serversvar. |
+| Checklista §2g (migration + EF) | **GO för STAGING efter separat GO**, efter §2a. Ändrar inga befintliga data eller AO-statusar. |
 | `offer-attachment-upload` PATCH §2e | **GO efter källjämförelse och separat GO.** |
 | J1 G13/G9 mot STAGING | **Rekommenderas först**, med separat GO och testkonton. |
 | G5 serverdel, G7, aktivitetslogg som tabell | **NO-GO nu** (förslag/planerat; kräver G4). |

@@ -1238,49 +1238,87 @@ const WorkOrderDetailPage = {
       </div>`;
   },
 
+  /* Checklista — tre statuslägen (2026-11-23): Ej påbörjad / Pågående /
+     Utförd (+ Avvikelse). Varje rad visar vem och när; knapparna följer
+     samma behörighetsregel som servern (WorkOrderService.canChecklistAction).
+     En rad som väntar på serverns svar visas som "Sparar…" — inget läge
+     visas som sparat före ACK. */
+  _chkBusy: {},
+  _chkWho(name, at) {
+    if (!name && !at) return '';
+    return esc(name || '') + (at ? ' · ' + esc(this._chkWhen(at)) : '');
+  },
+  /* Kompakt tid: "idag 13:34", "igår 09:10", "21 nov 13:34"; år bara om annat år. */
+  _chkWhen(at) {
+    const d = new Date(at);
+    if (isNaN(d)) return '';
+    const tz = 'Europe/Stockholm';
+    const day = (x) => x.toLocaleDateString('sv-SE', { timeZone: tz });
+    const time = d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    const now = new Date();
+    if (day(d) === day(now)) return 'idag ' + time;
+    if (day(d) === day(new Date(now.getTime() - 86400000))) return 'igår ' + time;
+    const sameYear = d.toLocaleDateString('sv-SE', { year: 'numeric', timeZone: tz }) === now.toLocaleDateString('sv-SE', { year: 'numeric', timeZone: tz });
+    return d.toLocaleDateString('sv-SE', Object.assign({ day: 'numeric', month: 'short', timeZone: tz }, sameYear ? {} : { year: 'numeric' })).replace('.', '') + ' ' + time;
+  },
   _renderChecklist(ao) {
     const items = ao.checklist || [];
     if (!items.length) return `<div class="empty" style="padding:16px 0;gap:4px;">${ic('clipboard-check',24)}<p style="font-size:12px;color:var(--mt);text-align:center;">Ingen checklista.<br>Tryck + för att lägga till checkpunkter.</p></div>`;
-    return `${items.map((c, i) => {
-        const isOk  = c.avvikelse === 'ok' || (c.done && !c.avvikelse);
-        const isAvv = c.avvikelse === 'avvikelse';
-        const statusBg = isOk ? 'var(--lgr)' : isAvv ? 'var(--lrd)' : 'var(--bg)';
-        const statusBd = isOk ? 'var(--gr)' : isAvv ? 'var(--rd)' : 'var(--br)';
-        return `
-        <div style="border-bottom:1px solid var(--bg);padding:9px 0;background:${isAvv?'rgba(185,28,28,.02)':'#fff'};">
-          <div style="display:flex;align-items:flex-start;gap:8px;">
-            <div style="flex-shrink:0;margin-top:1px;width:20px;height:20px;border-radius:50%;
-              border:2px solid ${statusBd};background:${isOk?'var(--gr)':isAvv?'var(--rd)':'#fff'};
-              display:flex;align-items:center;justify-content:center;color:#fff;transition:all .15s;">
-              ${isOk?ic('check',10):isAvv?ic('alert-triangle',9):''}
-            </div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:${isOk?'500':'700'};color:${isOk?'var(--mt)':'var(--tx)'};${isOk?'text-decoration:line-through;':''}">${esc(c.text)}</div>
-              ${c.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;line-height:1.4;">${esc(c.description)}</div>` : ''}
-              ${isAvv && (c.avvikelseComment || c.avvikelseImage) ? `<div style="margin-top:5px;background:#fff1f2;border-left:3px solid var(--rd);padding:5px 10px;border-radius:0 6px 6px 0;">
-                <div style="font-size:9px;font-weight:800;color:var(--rd);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${ic('alert-triangle',9)} Avvikelse</div>
-                ${c.avvikelseComment?`<div style="font-size:12px;color:#374151;line-height:1.45;">${esc(c.avvikelseComment)}</div>`:''}
-                ${isSafeImageDataUrl(c.avvikelseImage)?`<img src="${c.avvikelseImage}" style="margin-top:4px;max-width:100%;border-radius:6px;max-height:90px;object-fit:cover;">`:''}
-                ${c.avvikelseBy||c.avvikelseAt?`<div style="font-size:10px;color:var(--mt);margin-top:2px;">${esc(c.avvikelseBy||'')}${c.avvikelseAt?' · '+relDate(c.avvikelseAt):''}</div>`:''}
-              </div>` : ''}
-            </div>
-            <div style="display:flex;gap:4px;flex-shrink:0;align-self:center;">
-              <button class="btn bxs ${isOk?'bsu':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'ok')"
-                style="font-size:9px;padding:3px 7px;" title="${isOk?'OK markerat':'Markera OK'}">
-                ${ic('check',9)} ${isOk ? 'OK' : 'OK'}
-              </button>
-              <button class="btn bxs ${isAvv?'bd':'bs'}" onclick="WorkOrderDetailPage.setAvvikelse(${i},'avvikelse')"
-                style="font-size:9px;padding:3px 7px;" title="${isAvv?'Avvikelse markerad':'Markera avvikelse'}">
-                ${ic('alert-triangle',9)}
-              </button>
-              <button class="btn bxs bd" onclick="WorkOrderDetailPage.removeCheck(${i})"
-                style="font-size:9px;padding:3px 6px;" title="Ta bort">
-                ${ic('trash',9)}
-              </button>
-            </div>
+    const v2 = WorkOrderService._chkV2 === true;
+    if (WorkOrderService._chkV2 === null && !this._chkProbing) {
+      this._chkProbing = true;
+      WorkOrderService.checklistV2Supported(ao.id).then((sup) => {
+        this._chkProbing = false;
+        const el = document.getElementById('ao-checklist');
+        const cur = getAO(this.aoId);
+        if (sup && el && cur) el.innerHTML = this._renderChecklist(cur);
+      });
+    }
+    const canAny = Auth.can('ao_checklist') || Auth.can('ao_edit');
+    return items.map((c) => {
+      const st   = WorkOrderService.checklistStatus(c);
+      const busy = !!this._chkBusy[c.id];
+      const id   = esc(c.id);
+      const can  = (a) => canAny && !busy && WorkOrderService.canChecklistAction(c, a);
+      const btn  = (action, cls, icon, label, title) =>
+        `<button class="btn bxs ${cls} chk-btn" data-id="${id}" onclick="WorkOrderDetailPage.chkAction(this.dataset.id,'${action}')" title="${title}" aria-label="${title}">${ic(icon,12)}${label ? ' ' + label : ''}</button>`;
+      let meta = '';
+      if (busy) meta = `<span class="chk-meta-saving">${ic('refresh-cw',10)} Sparar…</span>`;
+      else if (st === 'pagaende') meta = `<span class="chk-st chk-st-prog">Pågår</span> ${this._chkWho(c.startedBy, c.startedAt)}`;
+      else if (st === 'utford') meta = (c.doneBy || c.doneAt)
+        ? `<span class="chk-st chk-st-done">Utförd</span> ${this._chkWho(c.doneBy, c.doneAt)}${c.startedBy && c.startedById !== c.doneById ? ` · påbörjad av ${esc(c.startedBy)}` : ''}`
+        : `<span class="chk-st chk-st-done">Utförd</span> <span class="chk-meta-old">äldre punkt — uppgift om vem saknas</span>`;
+      else if (st === 'avvikelse') meta = `<span class="chk-st chk-st-avv">Avvikelse</span> ${this._chkWho(c.avvikelseBy, c.avvikelseAt)}`;
+      const acts = [];
+      if (canAny) {
+        if (st === 'ej_paborjad') {
+          if (v2 && can('start')) acts.push(btn('start', 'bs chk-btn-start', 'play', 'Påbörja', 'Påbörja punkten'));
+          if (can('done')) acts.push(btn('done', 'bs', 'check', '', 'Markera utförd'));
+          if (can('avvikelse')) acts.push(btn('avvikelse', 'bs', 'alert-triangle', '', 'Markera avvikelse'));
+        } else if (st === 'pagaende') {
+          if (can('done')) acts.push(btn('done', 'bsu', 'check', 'Utförd', 'Markera utförd'));
+          if (can('avvikelse')) acts.push(btn('avvikelse', 'bs', 'alert-triangle', '', 'Markera avvikelse'));
+          if (can('reset')) acts.push(btn('reset', 'bghost', 'rotate-ccw', '', 'Återställ till ej påbörjad'));
+        } else {
+          if (can('reset')) acts.push(btn('reset', 'bghost', 'rotate-ccw', '', 'Återställ till ej påbörjad'));
+        }
+        if (can('remove')) acts.push(btn('remove', 'bghost chk-btn-del', 'trash', '', 'Ta bort punkten'));
+      }
+      return `
+        <div class="chk-row chk-${st}${busy ? ' chk-busy' : ''}" data-id="${id}" data-status="${st}">
+          <span class="chk-ic" aria-hidden="true">${st === 'utford' ? ic('check',11) : st === 'avvikelse' ? ic('alert-triangle',10) : st === 'pagaende' ? ic('clock',11) : ''}</span>
+          <div class="chk-main">
+            <div class="chk-text">${esc(c.text)}</div>
+            ${c.description ? `<div class="chk-desc">${esc(c.description)}</div>` : ''}
+            ${meta ? `<div class="chk-meta">${meta}</div>` : ''}
+            ${st === 'avvikelse' && (c.avvikelseComment || c.avvikelseImage) ? `<div class="chk-avv-box">
+              ${c.avvikelseComment ? `<div>${esc(c.avvikelseComment)}</div>` : ''}
+              ${isSafeImageDataUrl(c.avvikelseImage) ? `<img src="${c.avvikelseImage}" alt="Avvikelsebild">` : ''}
+            </div>` : ''}
           </div>
+          ${acts.length ? `<div class="chk-acts">${acts.join('')}</div>` : ''}
         </div>`;
-      }).join('')}`;
+    }).join('');
   },
 
   /* ── Material ─────────────────────────────── */
@@ -2081,6 +2119,7 @@ const WorkOrderDetailPage = {
     const chkTotal = (ao.checklist||[]).length;
     const chkOkCnt = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
     const chkAvvCnt= (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
+    const chkProgCnt = WorkOrderService.checklistCounts(ao.checklist || []).prog;
     const incomplete = chkTotal > 0 && (chkOkCnt + chkAvvCnt) < chkTotal;
 
     const doComplete = () => {
@@ -2103,7 +2142,7 @@ const WorkOrderDetailPage = {
       Modal.open({
         title: 'Ofullständig checklista',
         body: `
-          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade</div>
+          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade${chkProgCnt ? ` · ${chkProgCnt} pågår fortfarande` : ''}</div>
           <p style="font-size:13px;color:var(--mt);">Vill du ändå klarmarkera ordern?</p>`,
         buttons: [
           { label: 'Klarmarkera ändå', cls: 'btn bsu', onClick: () => { Modal.close(); doComplete(); } },
@@ -2369,12 +2408,13 @@ const WorkOrderDetailPage = {
      VARJE mutation. Ingen ny räknare, ingen egen delstat — en enda
      källa, två DOM-speglingar av den, båda uppdaterade tillsammans. */
   _checklistBadgeHtml(ao) {
-    const items = ao.checklist || [];
-    const total = items.length;
-    if (!total) return '';
-    const okCnt  = items.filter(c => c.done || c.avvikelse === 'ok').length;
-    const avvCnt = items.filter(c => c.avvikelse === 'avvikelse').length;
-    return `<span class="bdg bdg-${okCnt===total&&!avvCnt?'green':avvCnt>0?'orange':'blue'}">${okCnt}/${total} OK${avvCnt>0?' · '+avvCnt+' avv.':''}</span>`;
+    const k = WorkOrderService.checklistCounts(ao.checklist || []);
+    if (!k.total) return '';
+    const color = k.done === k.total ? 'green' : k.avv > 0 ? 'orange' : 'blue';
+    const pct = (n) => Math.round((n / k.total) * 100);
+    const label = `${k.done}/${k.total} utförda${k.prog ? ' · ' + k.prog + ' pågår' : ''}${k.avv ? ' · ' + k.avv + ' avv.' : ''}`;
+    return `<span class="bdg bdg-${color} chk-badge" title="Utförda: ${k.done} · Pågående: ${k.prog} · Avvikelse: ${k.avv} · Ej påbörjade: ${k.rest}">`
+      + `<span class="chk-mini-bar" aria-hidden="true"><span class="chk-mini-done" style="width:${pct(k.done)}%"></span><span class="chk-mini-avv" style="width:${pct(k.avv)}%"></span><span class="chk-mini-prog" style="width:${pct(k.prog)}%"></span></span>${label}</span>`;
   },
 
   _updateChecklistCounter(ao) {
@@ -2410,6 +2450,24 @@ const WorkOrderDetailPage = {
     const desc = document.getElementById('cl-desc')?.value.trim() || '';
     const ao = getAO(this.aoId);
     if (!ao) return;
+    if (WorkOrderService._chkV2 === true) {
+      /* Atomiskt per punkt (samma RPC som statusändringarna) — skriver inte
+         över en samtidig ändring från någon annan. Punkten visas först när
+         servern bekräftat. */
+      const itemId = 'c' + Date.now();
+      const btn = document.querySelector('.modal-overlay.open .btn.bp');
+      if (btn) btn.disabled = true;
+      showToast('Sparar…');
+      WorkOrderService.checklistAction(this.aoId, itemId, 'add', { text, description: desc }).then((r) => {
+        if (btn) btn.disabled = false;
+        if (!r.ok) { showToast(r.error); return; }
+        Modal.close();
+        this._afterChk(this.aoId, null);
+        this._openSectionOf('ao-checklist');
+        showToast('Checkpunkt tillagd');
+      });
+      return;
+    }
     if (!ao.checklist) ao.checklist = [];
     ao.checklist.push({ id: 'c' + Date.now(), text, description: desc, avvikelse: null, done: false });
     WorkOrderService.update(this.aoId, { checklist: ao.checklist }, this._ackOpts('Checkpunkt tillagd', 'Checkpunkten kunde inte sparas'));
@@ -2446,28 +2504,65 @@ const WorkOrderDetailPage = {
      samma serverfunktion, mot den låsta statusen — inte längre via ett
      separat klientanrop till autoStartFromChecklist(). */
   async setAvvikelse(idx, status) {
+    /* Äldre anrop (index + 'ok'|'avvikelse'): samma beteende som förut —
+       klick på redan valt läge återställer. Går nu via chkAction(). */
     const ao = getAO(this.aoId);
     if (!ao || !ao.checklist || !ao.checklist[idx]) return;
     const c = ao.checklist[idx];
-    if (status === 'avvikelse' && c.avvikelse !== 'avvikelse') {
-      this._openAvvikelseModal(idx);
+    const st = WorkOrderService.checklistStatus(c);
+    if (status === 'avvikelse') return this.chkAction(c.id, st === 'avvikelse' ? 'reset' : 'avvikelse');
+    return this.chkAction(c.id, st === 'utford' ? 'reset' : 'done');
+  },
+
+  /* En checklisthandling på punkten med stabilt id. Lokal state ändras
+     först när servern bekräftat; under tiden visas raden som "Sparar…".
+     Dubbelklick ignoreras (busy per punkt). AO:ns status rörs inte
+     (beslut 2026-11-23) — men om en äldre server ändå ändrat den ritas
+     hela sidan om så att det syns. */
+  async chkAction(itemId, action) {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const c = (ao.checklist || []).find((x) => x.id === itemId);
+    if (!c && action !== 'add') return;
+    if (this._chkBusy[itemId]) return;
+    if (!WorkOrderService.canChecklistAction(c, action)) {
+      showToast(WorkOrderService.checklistErrorText(Auth.can('ao_checklist') || Auth.can('ao_edit') ? 'forbidden_other' : 'forbidden'));
       return;
     }
-    // Toggle: clicking same status clears it
-    const newStatus = c.avvikelse === status ? null : status;
-    const statusBefore = ao.status;
-    const result = await WorkOrderService.resolveChecklistItemAtomic(this.aoId, c.id, newStatus, '');
-    if (!result.ok) { showToast(result.error || 'Kunde inte spara checklistan'); return; }
-    const aoUp = getAO(this.aoId);
-    if (aoUp) {
-      if (aoUp.status !== statusBefore) {
-        this.render({ aoId: this.aoId });
-        Sidebar.updateBadges();
-      } else {
-        document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
-        this._updateChecklistCounter(aoUp);
-      }
+    if (action === 'avvikelse') { this._openAvvikelseModal(ao.checklist.indexOf(c)); return; }
+    if (action === 'remove') {
+      const yes = await Modal.confirm(`Ta bort checkpunkten "${esc(c.text)}" från checklistan?`);
+      if (!yes) return;
+      if (WorkOrderService._chkV2 !== true) { this._removeCheckLegacy(itemId); return; }
     }
+    const aoId = this.aoId;
+    const statusBefore = ao.status;
+    this._chkBusy[itemId] = true;
+    this._afterChk(aoId, null);
+    const r = await WorkOrderService.checklistAction(aoId, itemId, action);
+    delete this._chkBusy[itemId];
+    if (!r.ok) {
+      showToast(r.error);
+      if (r.code === 'item_not_found' && typeof DataSync !== 'undefined' && DataSync._poll) { try { DataSync._poll(); } catch (e) {} }
+    } else {
+      const msg = { start: 'Påbörjad', done: 'Utförd', reset: 'Återställd', remove: 'Checkpunkt borttagen' }[action];
+      if (msg) showToast(msg);
+    }
+    this._afterChk(aoId, statusBefore);
+  },
+
+  _afterChk(aoId, statusBefore) {
+    if (this.aoId !== aoId) return;
+    const aoUp = getAO(aoId);
+    if (!aoUp) return;
+    if (statusBefore !== null && aoUp.status !== statusBefore) {
+      this.render({ aoId });
+      Sidebar.updateBadges();
+      return;
+    }
+    const el = document.getElementById('ao-checklist');
+    if (el) el.innerHTML = this._renderChecklist(aoUp);
+    this._updateChecklistCounter(aoUp);
   },
 
   _openAvvikelseModal(idx) {
@@ -2505,21 +2600,14 @@ const WorkOrderDetailPage = {
              bekräftad serverframgång. */
           const statusBefore = ao.status;
           const saveAvv = async (imageData) => {
-            const result = await WorkOrderService.resolveChecklistItemAtomic(
-              this.aoId, c.id, 'avvikelse', comment, imageData || ''
-            );
+            const okBtn = document.querySelector('.modal-overlay.open .btn.bd');
+            if (okBtn) okBtn.disabled = true;
+            showToast('Sparar…');
+            const result = await WorkOrderService.checklistAction(this.aoId, c.id, 'avvikelse', { comment, image: imageData || '' });
+            if (okBtn) okBtn.disabled = false;
             if (!result.ok) { showToast(result.error || 'Kunde inte spara avvikelsen'); return; }
             Modal.close();
-            const aoUp = getAO(this.aoId);
-            if (aoUp) {
-              if (aoUp.status !== statusBefore) {
-                this.render({ aoId: this.aoId });
-                Sidebar.updateBadges();
-              } else {
-                document.getElementById('ao-checklist').innerHTML = this._renderChecklist(aoUp);
-                this._updateChecklistCounter(aoUp);
-              }
-            }
+            this._afterChk(this.aoId, statusBefore);
             showToast('Avvikelse sparad');
           };
           if (file) {
@@ -2556,21 +2644,33 @@ const WorkOrderDetailPage = {
   },
 
   toggleCheck(idx) {
-    WorkOrderService.toggleChecklist(this.aoId, idx);
+    /* Äldre anrop med index: utförd ↔ återställd via samma atomiska väg
+       (tidigare lokal mutation + generisk persist() utan ACK). */
     const ao = getAO(this.aoId);
-    if (ao) {
-      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
-      this._updateChecklistCounter(ao);
-    }
+    const c = ao && ao.checklist && ao.checklist[idx];
+    if (!c) return;
+    return this.chkAction(c.id, WorkOrderService.checklistStatus(c) === 'utford' ? 'reset' : 'done');
   },
 
   removeCheck(idx) {
-    WorkOrderService.removeChecklist(this.aoId, idx);
     const ao = getAO(this.aoId);
-    if (ao) {
-      document.getElementById('ao-checklist').innerHTML = this._renderChecklist(ao);
-      this._updateChecklistCounter(ao);
-    }
+    const c = ao && ao.checklist && ao.checklist[idx];
+    if (!c) return;
+    return this.chkAction(c.id, 'remove');
+  },
+
+  /* Borttagning mot äldre server (utan atomisk remove): hela checklistan
+     via AO-skrivvägen, med besked först efter serverns ACK och
+     återställning vid avslag (G12-mönstret) — tidigare generisk persist()
+     utan bekräftelse. */
+  _removeCheckLegacy(itemId) {
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const next = (ao.checklist || []).filter((x) => x.id !== itemId);
+    ao.checklist = next;
+    WorkOrderService.update(this.aoId, { checklist: next }, this._ackOpts('Checkpunkt borttagen', 'Checkpunkten kunde inte tas bort'));
+    this._afterChk(this.aoId, null);
+    showToast('Sparar…');
   },
 
   /* ── Tid ───────────────────────────────── */

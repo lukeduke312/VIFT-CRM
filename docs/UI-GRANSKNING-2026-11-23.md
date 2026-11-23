@@ -69,6 +69,15 @@ Hela uppsättningen (60 bilder) jämfördes pixel för pixel mellan första för
 
 Övriga skillnader mot före-bilden är avsiktliga och granskade: etikett/värde, knapphierarki, flikar med ikon på samma rad (rapporter, fastighetskort), formulärrytm, fakturakön och kalendern. Ett fynd är inte ett fel i ändringarna: AO-listans ordning mellan poster med lika sorteringsnyckel kan skifta mellan laddningar (instabil sortering). Det förs till masterplanen.
 
+## Tillägg: checklista med tre statuslägen
+
+Granskad i detalj, i fullstorlek, på iPhone 13 och laptop med alla fyra lägena och flera användare (`docs/ui-fore-efter/checklista-laptop-fore-efter.png`, `checklista-mobil-efter.png`).
+
+- Före: alla punkter som inte var utförda såg likadana ut. "OK" sa inte vem eller när, och knapparna var 9 px.
+- Efter: ikon och etikett per läge (Pågår orange, Utförd grön, Avvikelse röd) samt vem och kompakt tid ("idag 13:35"). Det finns en huvudknapp per läge (Påbörja, eller Utförd när punkten pågår), och återställ och ta bort visas bara för den som får använda dem. På mobil ligger knapparna under texten med minst 36 px tryckyta. Indikatorn visar "2/6 utförda · 2 pågår · 1 avv." med tre färger.
+- Ett fynd som rättades före commit: tidsstämpeln "23 nov. 2026 13:34" var för lång för varje rad och visas nu kompakt.
+- Visuell regression efter ändringen: bara AO-detaljen ändrades, som avsett. En skillnad på 0,02 % i Offerter är en tidsberoende text som inte har med ändringen att göra.
+
 ## Återstår (förs till masterplanen)
 
 - Dashboard: rubriken "Kräver åtgärd" upprepas; olika widgethöjder i samma rad.

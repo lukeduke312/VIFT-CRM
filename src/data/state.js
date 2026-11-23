@@ -2493,6 +2493,17 @@ const DataSync = {
   _pendingWrites: 0,
   _localWriteGeneration: 0,
 
+  _rerenderAfterAsyncApply() {
+    try {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+      if (document.body.classList.contains('modal-open')) return;
+      if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+      const page = typeof Router !== 'undefined' ? Router.currentPage : null;
+      if (page) Router.showPage(page, Router.currentParams || {});
+    } catch (e) { console.warn('[DataSync] omritning efter AO-hämtning misslyckades:', e); }
+  },
+
   async _poll() {
     if (document.hidden) return;
     /* Avbryt om användaren skriver eller en modal är öppen */
@@ -2566,7 +2577,15 @@ const DataSync = {
          fortsatt om via sina egna, server-sidigt filtrerande
          ReadServices, fire-and-forget, oförändrat av denna rättning. */
       if (typeof WorkOrdersReadService !== 'undefined') {
-        WorkOrdersReadService.fetchAndApply().catch(function(e) {
+        /* 2026-11-23 (synkfel, reproducerat i E2E CHK-05/SYNC-AO-01): den
+           asynkrona hämtningen blev ofta klar EFTER att sidan ritats om
+           nedan — en annan enhets AO-ändring (t.ex. checklistpunkt) låg då
+           i state men syntes inte förrän nästa omritning. Rita om när
+           hämtningen faktiskt tillämpats (samma villkor som pollen själv:
+           inte mitt i inmatning eller med öppen dialog). */
+        WorkOrdersReadService.fetchAndApply().then(function(applied) {
+          if (applied) DataSync._rerenderAfterAsyncApply();
+        }).catch(function(e) {
           console.warn('[DataSync] WorkOrdersReadService.fetchAndApply() fel:', e);
         });
       }

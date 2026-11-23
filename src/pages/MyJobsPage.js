@@ -182,6 +182,7 @@ const MyJobsPage = {
        på det RESOLVERADE resultatet istället. */
     const workAddr = AddressService.displayAddress(ao);
     const chkOk    = (ao.checklist||[]).filter(c => c.done).length;
+    const chkProg  = WorkOrderService.checklistCounts(ao.checklist || []).prog;
     const chkAvv   = (ao.checklist||[]).filter(c => c.avvikelse==='avvikelse').length;
     const chkTotal = (ao.checklist||[]).length;
     const active   = isStamped && stampAoId === ao.id;
@@ -195,7 +196,7 @@ const MyJobsPage = {
     const timeOver    = timePct !== null && timePct > 115;
 
     const chkHtml = chkTotal > 0
-      ? `<span class="ao-item-progress ${chkOk===chkTotal&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${chkTotal} ${ic('check',10)}</span>`
+      ? `<span class="ao-item-progress ${chkOk===chkTotal&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${chkTotal} ${ic('check',10)}</span>${chkProg ? ` <span class="chk-st chk-st-prog">${chkProg} pågår</span>` : ''}`
       : '';
 
     const subLbls = {inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'};

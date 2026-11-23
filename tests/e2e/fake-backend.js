@@ -538,20 +538,78 @@ class FakeSupabase {
     save(); return { status: 200, body: { pass } };
   }
 
-  /* ── work-order-checklist-resolve (efter repots EF) ──────── */
+  /* ── work-order-checklist-resolve ──────────────────────────
+     Standard: efter repots EF + migration 20261123000002 (action-kontrakt,
+     tre statuslägen, ingen autostart, ägarkontroll, historik).
+     opts.checklistLegacy: som den i dag deployade versionen
+     (20260917000001: bara avvikelse ok/avvikelse/null, autostart). */
   checklistResolve(b, perms, me) {
     if (!this.has(perms, 'ao_checklist') && !this.has(perms, 'ao_edit')) return DEFINITE(403, 'forbidden');
     const aos = this.get('workOrders') || [];
-    const ao = aos.find((a) => a.id === b.aoId); if (!ao) return DEFINITE(404, 'not_found');
+    const ao = aos.find((a) => a.id === b.aoId);
+    const legacy = !!this.opts.checklistLegacy;
+    let action;
+    if (!legacy && typeof b.action === 'string' && b.action) {
+      if (!['start', 'done', 'avvikelse', 'reset', 'add', 'remove'].includes(b.action)) return DEFINITE(400, 'invalid_action');
+      action = b.action;
+    } else {
+      if (b.avvikelse === 'ok') action = 'done';
+      else if (b.avvikelse === 'avvikelse') action = 'avvikelse';
+      else if (b.avvikelse === null || b.avvikelse === undefined || b.avvikelse === '') action = 'reset';
+      else return DEFINITE(400, 'invalid_avvikelse');
+    }
+    if (!b.aoId || !b.itemId) return DEFINITE(400, 'missing_fields');
+    const comment = String(b.avvikelseComment || '').trim();
+    if (action === 'avvikelse' && !comment) return DEFINITE(400, 'comment_required');
+    if (!ao) return DEFINITE(404, 'not_found');
     if (!this.canViewAO(ao, perms, me.id)) return DEFINITE(403, 'forbidden');
-    if (b.avvikelse === true && !String(b.avvikelseComment || '').trim()) return DEFINITE(400, 'comment_required');
-    const item = (ao.checklist || []).find((c) => c.id === b.itemId); if (!item) return DEFINITE(404, 'not_found');
-    item.done = true; item.avvikelse = b.avvikelse; item.avvikelseComment = b.avvikelseComment || ''; item.avvikelseImage = b.avvikelseImage || '';
-    item.doneAt = new Date().toISOString(); item.doneBy = me.id;
-    if (ao.status === 'planerad' || ao.status === 'pool') ao.status = 'pågående';
-    ao.updatedAt = new Date().toISOString();
-    this.set('workOrders', aos); this.touch();
-    return { status: 200, body: { workOrder: ao, activityLog: this.get('activityLog') } };
+    ao.checklist = ao.checklist || [];
+    const now = new Date().toISOString();
+    const name = [me.firstName, me.lastName].filter(Boolean).join(' ') || 'Okänd användare';
+    const canEdit = this.has(perms, 'ao_edit');
+    const idx = ao.checklist.findIndex((c) => c.id === b.itemId);
+    const item = ao.checklist[idx];
+    const reply = (noop) => { if (!noop) { ao.updatedAt = now; this.set('workOrders', aos); this.touch(); } return { status: 200, body: Object.assign({ workOrder: ao, noop: !!noop, serverSignature: now }, legacy ? { activityLog: this.get('activityLog') } : { protocol: 2 }) }; };
+
+    if (legacy) {
+      if (!item) return DEFINITE(404, 'item_not_found');
+      if (action === 'done') Object.assign(item, { avvikelse: 'ok', done: true, avvikelseComment: '', avvikelseAt: '', avvikelseBy: '' });
+      else if (action === 'avvikelse') Object.assign(item, { avvikelse: 'avvikelse', done: false, avvikelseComment: comment, avvikelseAt: now, avvikelseBy: name }, b.avvikelseImage ? { avvikelseImage: b.avvikelseImage } : {});
+      else Object.assign(item, { avvikelse: null, done: false, avvikelseComment: '', avvikelseAt: '', avvikelseBy: '' });
+      if (action !== 'reset' && ['nytt', 'pool', 'planerad'].includes(ao.status)) ao.status = 'pågående';
+      return reply(false);
+    }
+
+    const entry = { a: action, by: name, byId: me.id, at: now };
+    if (action === 'add') {
+      const text = String(b.text || '').trim();
+      if (!text) return DEFINITE(400, 'text_required');
+      if (item) { if (item.text === text) return reply(true); return DEFINITE(409, 'id_collision'); }
+      ao.checklist.push({ id: b.itemId, text: text.slice(0, 300), description: String(b.description || '').trim(), done: false, avvikelse: null, history: [entry] });
+      return reply(false);
+    }
+    if (!item) return action === 'remove' ? reply(true) : DEFINITE(404, 'item_not_found');
+    const st = item.avvikelse === 'avvikelse' ? 'avvikelse' : (item.done === true || item.avvikelse === 'ok') ? 'utford' : item.startedAt ? 'pagaende' : 'ej_paborjad';
+    const owner = st === 'avvikelse' ? item.avvikelseById : st === 'utford' ? item.doneById : st === 'pagaende' ? item.startedById : '';
+    const own = !!owner && owner === me.id;
+    if (!canEdit && !own && ((['reset', 'remove'].includes(action) && st !== 'ej_paborjad') || (['done', 'avvikelse'].includes(action) && ['utford', 'avvikelse'].includes(st)))) return DEFINITE(403, 'forbidden_other');
+    if (action === 'remove') { ao.checklist.splice(idx, 1); return reply(false); }
+    entry.from = st;
+    if (action === 'start') {
+      if (st === 'utford' || st === 'avvikelse') return DEFINITE(409, 'already_resolved');
+      if (st === 'pagaende') return reply(true);
+      Object.assign(item, { startedAt: now, startedBy: name, startedById: me.id });
+    } else if (action === 'done') {
+      if (st === 'utford') return reply(true);
+      Object.assign(item, { avvikelse: 'ok', done: true, avvikelseComment: '', avvikelseAt: '', avvikelseBy: '', avvikelseById: '', doneAt: now, doneBy: name, doneById: me.id });
+    } else if (action === 'avvikelse') {
+      Object.assign(item, { avvikelse: 'avvikelse', done: false, avvikelseComment: comment, avvikelseAt: now, avvikelseBy: name, avvikelseById: me.id, doneAt: '', doneBy: '', doneById: '' }, b.avvikelseImage ? { avvikelseImage: b.avvikelseImage } : {});
+    } else if (action === 'reset') {
+      if (st === 'ej_paborjad') return reply(true);
+      Object.assign(item, { done: false, avvikelse: null, avvikelseComment: '', avvikelseAt: '', avvikelseBy: '', avvikelseById: '', startedAt: '', startedBy: '', startedById: '', doneAt: '', doneBy: '', doneById: '' });
+    }
+    item.history = (item.history || []).concat([entry]).slice(-20);
+    return reply(false);
   }
 
   /* ── Bild-EF:er (efter repots EF:er) ─────────────────────── */

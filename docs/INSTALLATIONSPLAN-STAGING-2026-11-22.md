@@ -55,12 +55,12 @@ Direktverifierat (läsande) i `docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md` och 
 **Exakt omfång (läsande jämförelse mot driftsatt STAGING, körd igen 2026-11-23 kväll: 77 versionsatta filer driftsatta, 40 nyare i repot, 0 äldre, 5 bara i repot):**
 
 *Nyare i repot (STAGING-version → repo-version):*
-- Stilar: `src/styles/components.css` 103→106, `forms.css` 13→14, `dashboard.css` 30→31
-- Data: `src/data/storage.js` 20→22, `state.js` 63→71, `DashboardConfig.js` 11→12
+- Stilar: `src/styles/components.css` 103→107, `forms.css` 13→14, `dashboard.css` 30→31
+- Data: `src/data/storage.js` 20→22, `state.js` 63→72, `DashboardConfig.js` 11→12
 - Delat: `src/shared/OfferCalc.js` 1→2
-- Tjänster: `AuthService.js` 22→23, `WorkOrderService.js` 24→28, `TimeService.js` 20→22, `AOTimeSyncService.js` 3→9, `InvoiceService.js` 17→18, `BillingQueueService.js` 9→10, `RecurringOrderService.js` 6→7, `ServiceIntervalService.js` 3→5, `ImportExportConfigs.js` 11→12
+- Tjänster: `AuthService.js` 22→23, `WorkOrderService.js` 24→29, `TimeService.js` 20→22, `AOTimeSyncService.js` 3→9, `InvoiceService.js` 17→18, `BillingQueueService.js` 9→10, `RecurringOrderService.js` 6→7, `ServiceIntervalService.js` 3→5, `ImportExportConfigs.js` 11→12
 - Komponenter: `Modal.js` 8→11, `Sidebar.js` 31→32, `MobileShell.js` 6→7
-- Sidor: `ImportWizardPage.js` 10→11, `ExportCenterPage.js` 5→6, `Router.js` 30→31, `Dashboard.js` 54→55, `CustomersPage.js` 36→39, `WorkOrdersPage.js` 66→68, `WorkOrderDetailPage.js` 81→87, `TimePage.js` 13→15, `ContractsPage.js` 2→3, `ProjectsPage.js` 4→6, `InvoicesPage.js` 34→37, `RecurringPage.js` 15→17, `SalesPage.js` 8→10, `PropertyDetailPage.js` 30→35, `PageShells.js` 173→182, `RonderingPage.js` 10→11, `ReportsPage.js` 9→10, `CalendarPage.js` 2→3, `MyJobsPage.js` 15→16, `RonderingUtforandePage.js` 12→13, `RonderingWizardPage.js` 9→11
+- Sidor: `ImportWizardPage.js` 10→11, `ExportCenterPage.js` 5→6, `Router.js` 30→31, `Dashboard.js` 54→55, `CustomersPage.js` 36→39, `WorkOrdersPage.js` 66→69, `WorkOrderDetailPage.js` 81→88, `TimePage.js` 13→15, `ContractsPage.js` 2→3, `ProjectsPage.js` 4→6, `InvoicesPage.js` 34→37, `RecurringPage.js` 15→17, `SalesPage.js` 8→10, `PropertyDetailPage.js` 30→35, `PageShells.js` 173→182, `RonderingPage.js` 10→11, `ReportsPage.js` 9→10, `CalendarPage.js` 2→3, `MyJobsPage.js` 15→17, `RonderingUtforandePage.js` 12→13, `RonderingWizardPage.js` 9→11
 
 *Bara i repot (nya filer):* `src/styles/tokens.css`, `src/styles/reset.css` (fick `?v=1`), `src/services/WorkOrderImageService.js`, `src/services/MapGrouping.js`, `src/pages/ServiceIntervalsPage.js`
 
@@ -107,7 +107,7 @@ Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid sy
 
 ### 2d. Migrationer
 
-Ingen ny migration behövs för §2a–2b eller §2e. `20261120000001_PROPOSAL_push_subscriptions_index.sql` är fortfarande overifierat mot STAGING:s indexlista — kontrollera `pg_indexes` först. `20261123000001_PROPOSAL_work_order_log_ops.sql` hör till §2f och ska **inte** köras nu.
+Ingen ny migration behövs för §2a–2b eller §2e. §2g har en egen migration (`20261123000002_work_order_checklist_progress.sql`). `20261120000001_PROPOSAL_push_subscriptions_index.sql` är fortfarande overifierat mot STAGING:s indexlista — kontrollera `pg_indexes` först. `20261123000001_PROPOSAL_work_order_log_ops.sql` hör till §2f och ska **inte** köras nu.
 
 ### 2e. `offer-attachment-upload` — PATCH för bilagornas metadata (separat GO)
 
@@ -118,6 +118,20 @@ Källan i repot (`supabase/functions/offer-attachment-upload/index.ts`) har en n
 3. Test: ändra namn och synlighet på en bilaga → "Sparat" först efter svar; omladdning visar ändringen; som roll utan `offer_manage` → 403.
 
 Rollback: deploya föregående version.
+
+### 2g. Checklista med tre statuslägen (separat GO, i denna ordning)
+
+Beslut Lucas 2026-11-23: ingen autostart av AO från checklistan; egen åtgärd återställs med ao_checklist, annans/äldre punkt kräver ao_edit (kontroll i RPC:n). Detaljer: masterplan punkt 186.
+
+1. Backup: `select value from store where key='vift_workOrders'` (spara utanför databasen) och notera `pg_get_functiondef('public.work_order_checklist_resolve'::regproc)`.
+2. Kontrollera att deployad `work-order-checklist-resolve` i STAGING motsvarar repots äldre version (före denna ändring). Avvikelse → stoppa och stäm av.
+3. Migration `supabase/migrations/20261123000002_work_order_checklist_progress.sql` (skapar `work_order_checklist_set_state`, ersätter `work_order_checklist_resolve` med en delegerande version utan autostart). Ändrar **inga** befintliga data eller AO-statusar.
+4. Direkt därefter: `supabase functions deploy work-order-checklist-resolve` (verify_jwt som idag). Mellan steg 3 och 4 nekas återställning av annans åtgärd (fail-closed) — håll fönstret kort.
+5. §2a-klienten (WorkOrderService/WorkOrderDetailPage m.fl.) sonderar själv stödet; före steg 3–4 visas checklistan som förut utan "Påbörja".
+
+**Äldre klienter:** en webbläsare som fortfarande kör den gamla klienten visar pågående punkter som ej påbörjade (de nya fälten ignoreras, inget skrivs över — den gamla klienten skickar bara OK/avvikelse/återställ via samma RPC). Hårdladdning efter §2a löser det.
+
+**Test (J9–J12 i §4).** **Rollback:** kör om `20260917000001_work_order_checklist_atomic_rpc.sql` (återställer den äldre RPC:n med autostart), `drop function public.work_order_checklist_set_state(text,text,text,text,text,text,text,text,text,boolean,boolean);` och deploya föregående EF-version. De nya fälten i punkterna kan ligga kvar (ignoreras); ingen datafix.
 
 ### 2f. G5 serverdel — append_log/remove_log (FÖRSLAG, ej installerbart nu)
 
@@ -198,6 +212,10 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 - [ ] J6 Karta: två AO på samma adress → en markör med "2" och lista; två olika adresser nära varandra → två markörer.
 - [ ] J7 Mobil (riktig iPhone/Safari och Android): AO-detaljens åtgärder i två kolumner, Tid & stämpla, Mina jobb, fakturakön — inget klipps, inga knappar utanför skärmen.
 - [ ] J8 Hårdladda efter installation → nya versionsnummer laddas (Service Worker).
+- [ ] J9 Checklista (efter §2g): fältarbetare A trycker "Påbörja" på punkt 1 och B på punkt 2 på samma AO från två enheter → båda "Pågår" med rätt namn/tid på båda enheterna (inom en synkcykel); AO:ns status oförändrad.
+- [ ] J10 "Utförd" på en pågående punkt → vem/när visas; progressindikatorn skiljer utförda och pågående (AO-detalj, AO-lista, Mina jobb).
+- [ ] J11 Återställ: egen punkt med ao_checklist → tillåtet; annans och äldre punkt → nekas med tydligt besked; direktanrop till EF:en med fältarbetarens JWT → 403 `forbidden_other`; arbetsledare (ao_edit) → tillåtet. `history` på punkten visar kedjan.
+- [ ] J12 Nätet av mitt i "Påbörja" → raden visar "Sparar…" och sedan fel; aldrig "Pågår" utan serverns svar. Befintliga AO med äldre utförda punkter visas oförändrade ("äldre punkt — uppgift om vem saknas").
 
 ---
 
@@ -228,12 +246,13 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 
 ## 6. GO/NO-GO per del
 
-**Installationsordning:** (1) J1 `staging-authz.js` utan `--med-testdata` mot nuvarande STAGING — den kräver inga nya filer och ger svaret på G13/G9 före allt annat. (2) §2a klientfiler. (3) §2e `offer-attachment-upload`. (4) §2b bildobjekt (om de ska med i samma omgång). (5) Testfallen i §4. (6) J1 med `--med-testdata` (G6), om testdata godkänts. §2f och §3 ingår inte.
+**Installationsordning:** (1) J1 `staging-authz.js` utan `--med-testdata` mot nuvarande STAGING — den kräver inga nya filer och ger svaret på G13/G9 före allt annat. (2) §2a klientfiler. (3) §2g checklistans migration + EF (i samma arbetspass, migrationen först). (4) §2e `offer-attachment-upload`. (5) §2b bildobjekt (om de ska med i samma omgång). (6) Testfallen i §4. (7) J1 med `--med-testdata` (G6), om testdata godkänts. §2f och §3 ingår inte.
 
 | Del | Status |
 |---|---|
 | §2a Klientfiler (releasekandidat, Leverans J) | **GO för kontrollerad STAGING-installation — efter separat GO från Lucas.** Lokalt: se slutrapporten §C för exakta siffror från sista körningen. Klientsidan är **inte** verifierad mot riktiga serversvar. |
 | §2e offer-attachment-upload PATCH | **GO för STAGING-granskning + deploy efter separat GO** — jämför först med deployad källa. |
+| §2g Checklista tre lägen (migration + EF) | **GO för STAGING efter separat GO** — SQL prövad mot riktig PostgreSQL 16 (32/32), EF `tsc --strict` OK, E2E CHK-02..07. Installeras först efter §2a. |
 | §2f G5 serverdel | **NO-GO** — förslag; kräver G4. |
 | J1 staging-authz (G13/G9) | **Redo att köras efter GO** — ändrar inga data utan `--med-testdata`. |
 | LIVE | **NO-GO** — se §7. |

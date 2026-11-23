@@ -843,24 +843,41 @@ const WorkOrderService = {
      DataSync-poll måste fortfarande själv upptäcka den nya server-
      signaturen och hämta en fullständig, självkonsekvent snapshot. */
   async resolveChecklistItemAtomic(aoId, itemId, avvikelse, avvikelseComment, avvikelseImage) {
+    /* Äldre kontrakt (avvikelse: 'ok'|'avvikelse'|null) — oförändrat för
+       befintliga anropare; delar sändvägen med checklistAction() nedan. */
+    return this._checklistPost({
+      aoId, itemId,
+      avvikelse: avvikelse === undefined ? null : avvikelse,
+      avvikelseComment: avvikelseComment || '',
+      avvikelseImage: avvikelseImage || ''
+    });
+  },
+
+  /* Gemensam sändväg för work-order-checklist-resolve. Lokal state ändras
+     BARA från serverns bekräftade svar (ingen "låtsad framgång"); deltar i
+     DataSync-skrivspärren (R1.3 blockerare 1) så en samtidig poll inte
+     rullar tillbaka den bekräftade ändringen. serverSignature används
+     ALDRIG som DataSync._lastSig (R1.3). */
+  async _checklistPost(payload) {
     if (typeof DataSync !== 'undefined') {
       DataSync._pendingWrites = (DataSync._pendingWrites || 0) + 1;
       DataSync._localWriteGeneration = (DataSync._localWriteGeneration || 0) + 1;
     }
     try {
-      const res = await fetch(this._edgeBase() + '/functions/v1/work-order-checklist-resolve', {
-        method: 'POST',
-        headers: this._authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          aoId, itemId,
-          avvikelse: avvikelse === undefined ? null : avvikelse,
-          avvikelseComment: avvikelseComment || '',
-          avvikelseImage: avvikelseImage || ''
-        })
-      });
+      const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), 20000) : null;
+      let res;
+      try {
+        res = await fetch(this._edgeBase() + '/functions/v1/work-order-checklist-resolve', {
+          method: 'POST',
+          headers: this._authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+          signal: ctl ? ctl.signal : undefined
+        });
+      } finally { if (timer) clearTimeout(timer); }
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) return { ok: false, error: body.error || ('HTTP ' + res.status) };
-      const ao = getAO(aoId);
+      if (!res.ok) return { ok: false, status: res.status, code: body.error || ('HTTP ' + res.status), error: this.checklistErrorText(body.error || ('HTTP ' + res.status)) };
+      const ao = getAO(payload.aoId);
       if (ao && body.workOrder) {
         Object.assign(ao, body.workOrder);
         if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') {
@@ -873,16 +890,113 @@ const WorkOrderService = {
           Storage.setLocal('activityLog', state.activityLog);
         }
       }
-      /* R1.3 — se filhuvudkommentaren: serverSignature medvetet ALDRIG
-         tilldelat DataSync._lastSig här. */
-      return { ok: true, workOrder: body.workOrder };
+      return { ok: true, workOrder: body.workOrder, noop: body.noop === true };
     } catch (e) {
-      return { ok: false, error: 'Kunde inte spara checklistan: ' + (e.message || e) };
+      return { ok: false, code: 'network', error: this.checklistErrorText('network') };
     } finally {
       if (typeof DataSync !== 'undefined') {
         DataSync._pendingWrites = Math.max(0, (DataSync._pendingWrites || 0) - 1);
       }
     }
+  },
+
+  /* ── Checklista: tre statuslägen (2026-11-23) ─────────────────────────
+     Beslut (Lucas Samuelsson 2026-11-23): Ej påbörjad / Pågående / Utförd
+     (+ befintlig Avvikelse). Checklistan startar/stoppar ALDRIG AO:n.
+     Egen åtgärd återställs med ao_checklist, någon annans (eller äldre
+     punkt utan uppgift om vem) kräver ao_edit — kontrollen görs på
+     servern (migration 20261123000002); klientens regel nedan styr bara
+     vilka knappar som visas. Härledningen är densamma som i RPC:n. */
+  checklistStatus(c) {
+    if (!c) return 'ej_paborjad';
+    if (c.avvikelse === 'avvikelse') return 'avvikelse';
+    if (c.done === true || c.avvikelse === 'ok') return 'utford';
+    if (c.startedAt) return 'pagaende';
+    return 'ej_paborjad';
+  },
+  checklistCounts(items) {
+    const r = { total: 0, done: 0, prog: 0, avv: 0, rest: 0 };
+    (items || []).forEach((c) => {
+      r.total++;
+      const st = this.checklistStatus(c);
+      if (st === 'utford') r.done++; else if (st === 'avvikelse') r.avv++; else if (st === 'pagaende') r.prog++; else r.rest++;
+    });
+    return r;
+  },
+  checklistOwnerId(c) {
+    const st = this.checklistStatus(c);
+    return st === 'avvikelse' ? (c.avvikelseById || '') : st === 'utford' ? (c.doneById || '') : st === 'pagaende' ? (c.startedById || '') : '';
+  },
+  /* Får inloggad användare utföra `action` på punkten? (Spegel av RPC:n.) */
+  canChecklistAction(c, action) {
+    if (typeof Auth === 'undefined') return false;
+    if (!Auth.can('ao_checklist') && !Auth.can('ao_edit')) return false;
+    if (Auth.can('ao_edit')) return true;
+    const st = this.checklistStatus(c);
+    const me = state.currentUser && state.currentUser.id;
+    const own = !!me && this.checklistOwnerId(c) === me;
+    if ((action === 'reset' || action === 'remove') && st !== 'ej_paborjad') return own;
+    if ((action === 'done' || action === 'avvikelse') && (st === 'utford' || st === 'avvikelse')) return own;
+    return true;
+  },
+  checklistErrorText(code) {
+    const m = {
+      forbidden_other: 'Bara den som gjorde åtgärden, eller en arbetsledare (behörighet ao_edit), kan ändra eller återställa den.',
+      forbidden: 'Du har inte behörighet att ändra checklistan för den här arbetsordern.',
+      already_resolved: 'Punkten är redan utförd eller har avvikelse — återställ den först.',
+      item_not_found: 'Punkten finns inte längre (borttagen av någon annan?). Inget sparades.',
+      not_found: 'Arbetsordern hittades inte på servern. Inget sparades.',
+      comment_required: 'Kommentar krävs vid avvikelse.',
+      text_required: 'Rubrik krävs.',
+      id_collision: 'Punkten kunde inte läggas till (id-krock). Försök igen.',
+      invalid_avvikelse: 'Funktionen kräver en serveruppdatering som inte är installerad än. Inget sparades.',
+      network: 'Kunde inte nå servern — inget sparades. Kontrollera anslutningen och försök igen.'
+    };
+    return m[code] || ('Kunde inte spara checklistan (' + code + '). Inget sparades.');
+  },
+
+  /* Stöder servern det nya kontraktet (action)? Sonderas en gång per
+     session utan att något ändras: en punkt som inte finns + avvikelse
+     'v2:start' → ny server svarar item_not_found, äldre invalid_avvikelse.
+     Osäkert svar (nät, 401/403/5xx) cachas inte. */
+  _chkV2: null,
+  async checklistV2Supported(aoId) {
+    if (this._chkV2 !== null) return this._chkV2;
+    try {
+      const res = await fetch(this._edgeBase() + '/functions/v1/work-order-checklist-resolve', {
+        method: 'POST',
+        headers: this._authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ aoId, itemId: '__vift_probe__', action: 'start', avvikelse: 'v2:start' })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (body.error === 'invalid_avvikelse') { this._chkV2 = false; return false; }
+      if (body.error === 'item_not_found' || body.error === 'not_found') { this._chkV2 = true; return true; }
+      return false;
+    } catch (e) { return false; }
+  },
+
+  /* action: start | done | avvikelse | reset | add | remove.
+     Nya åtgärder skickas med avvikelse:'v2:<action>' så att en äldre
+     deployad EF avvisar dem i stället för att tolka dem som "återställ".
+     done/avvikelse/reset fungerar även mot äldre server (äldre semantik)
+     via det befintliga kontraktet. */
+  async checklistAction(aoId, itemId, action, extra) {
+    extra = extra || {};
+    const legacy = { done: 'ok', avvikelse: 'avvikelse', reset: null };
+    const v2 = this._chkV2 === true;
+    if (!v2 && Object.prototype.hasOwnProperty.call(legacy, action)) {
+      return this.resolveChecklistItemAtomic(aoId, itemId, legacy[action], extra.comment, extra.image);
+    }
+    const r = await this._checklistPost({
+      aoId, itemId, action,
+      avvikelse: 'v2:' + action,
+      avvikelseComment: extra.comment || '',
+      avvikelseImage: extra.image || '',
+      text: extra.text || '',
+      description: extra.description || ''
+    });
+    if (!r.ok && r.code === 'invalid_avvikelse') this._chkV2 = false;
+    return r;
   },
 
   _edgeBase() {

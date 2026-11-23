@@ -4958,3 +4958,41 @@ body.gsearch-open { overflow: hidden; touch-action: none; }
 .filter-panel-chip .qf-cnt:empty, .filter-panel-chip .qf-cnt[data-zero] { opacity: .5; }
 /* 12. Filterväljare i samma höjd oavsett komponent (select / CustomSelect / CustomerPicker). */
 .filter-panel-row select, .filter-panel-row .cstrig, .filter-panel-row .cp-trigger { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--fs-sm); }
+
+/* 13. Checklista med tre statuslägen (2026-11-23): Ej påbörjad /
+       Pågående / Utförd (+ Avvikelse). Kompakt rad; på mobil hamnar
+       knapparna under texten med tryckvänlig höjd. */
+.chk-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: start; padding: 9px 0; border-bottom: 1px solid var(--bg); }
+.chk-row:last-child { border-bottom: 0; }
+.chk-ic { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--br); background: #fff; display: flex; align-items: center; justify-content: center; color: #fff; margin-top: 1px; }
+.chk-pagaende .chk-ic { border-color: var(--or); background: var(--lor); color: var(--or); }
+.chk-utford .chk-ic { border-color: var(--gr); background: var(--gr); }
+.chk-avvikelse .chk-ic { border-color: var(--rd); background: var(--rd); }
+.chk-text { font-size: var(--fs-md); font-weight: 700; color: var(--tx); line-height: 1.35; }
+.chk-utford .chk-text { font-weight: 500; color: var(--mt); text-decoration: line-through; }
+.chk-desc { font-size: var(--fs-xs); color: var(--mt); margin-top: 2px; line-height: 1.4; }
+.chk-meta { font-size: var(--fs-xs); color: var(--mt); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.chk-st { font-size: var(--fs-2xs); font-weight: 700; padding: 1px 6px; border-radius: 100px; }
+.chk-st-prog { background: var(--lor); color: var(--or); }
+.chk-st-done { background: var(--lgr); color: var(--gr); }
+.chk-st-avv  { background: var(--lrd); color: var(--rd); }
+.chk-meta-old { font-style: italic; }
+.chk-meta-saving { color: var(--sky); font-weight: 600; display: inline-flex; gap: 4px; align-items: center; }
+.chk-busy { opacity: .75; }
+.chk-avv-box { margin-top: 5px; background: #fff1f2; border-left: 3px solid var(--rd); padding: 5px 10px; border-radius: 0 6px 6px 0; font-size: var(--fs-sm); color: #374151; line-height: 1.45; }
+.chk-avv-box img { margin-top: 4px; max-width: 100%; border-radius: 6px; max-height: 90px; object-fit: cover; display: block; }
+.chk-acts { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.chk-btn { font-size: var(--fs-xs); padding: 4px 8px; min-height: 28px; display: inline-flex; align-items: center; gap: 4px; }
+.chk-btn-del { color: var(--mt); }
+@media (max-width: 767px) {
+  .chk-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .chk-acts { grid-column: 2; justify-content: flex-start; }
+  .chk-btn { min-height: 36px; padding: 6px 12px; font-size: var(--fs-sm); }
+}
+/* Framstegsindikator: utförda, avvikelser och pågående skiljs åt. */
+.chk-badge { display: inline-flex; align-items: center; gap: 6px; }
+.chk-mini-bar { display: inline-flex; width: 36px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.08); overflow: hidden; }
+.chk-mini-done { background: var(--gr); }
+.chk-mini-avv  { background: var(--rd); }
+.chk-mini-prog { background: var(--or); }
+.ao-chk-seg-prog { background: var(--or); opacity: .55; }

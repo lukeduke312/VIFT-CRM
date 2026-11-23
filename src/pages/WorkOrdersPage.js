@@ -538,24 +538,26 @@ const WorkOrdersPage = {
     const items = ao.checklist || [];
     const total = items.length;
     if (!total) return null;
-    const done = items.filter(c => c.done || c.avvikelse === 'ok').length;
-    const avv  = items.filter(c => c.avvikelse === 'avvikelse').length;
-    const rest = Math.max(0, total - done - avv);
-    return { total, done, avv, rest };
+    /* 2026-11-23: tre statuslägen — "Pågående" finns nu i modellen
+       (startedAt), se WorkOrderService.checklistStatus(). Kvarstående =
+       varken utförd, avvikelse eller pågående. */
+    const k = WorkOrderService.checklistCounts(items);
+    return { total, done: k.done, avv: k.avv, prog: k.prog, rest: k.rest };
   },
 
   _chkProgressHtml(ao) {
     const p = this._chkProgress(ao);
     if (!p) return '';
     const pct = (n) => Math.round((n / p.total) * 100);
-    const label = `Klara: ${p.done} · Avvikelse: ${p.avv} · Kvarstående: ${p.rest} · Totalt: ${p.total}`;
+    const label = `Klara: ${p.done} · Avvikelse: ${p.avv} · Pågående: ${p.prog} · Kvarstående: ${p.rest} · Totalt: ${p.total}`;
     return `<span class="ao-chk-progress" tabindex="0" role="img" aria-label="Checklista — ${esc(label)}">
       <span class="ao-chk-bar">
         ${p.done > 0 ? `<span class="ao-chk-seg ao-chk-seg-done" style="width:${pct(p.done)}%"></span>` : ''}
         ${p.avv  > 0 ? `<span class="ao-chk-seg ao-chk-seg-avv"  style="width:${pct(p.avv)}%"></span>`  : ''}
+        ${p.prog > 0 ? `<span class="ao-chk-seg ao-chk-seg-prog" style="width:${pct(p.prog)}%"></span>` : ''}
       </span>
       <span class="ao-chk-count">${p.done + p.avv}/${p.total}</span>
-      <span class="ao-chk-tip" role="tooltip">Klara: ${p.done}<br>Avvikelse: ${p.avv}<br>Kvarstående: ${p.rest}</span>
+      <span class="ao-chk-tip" role="tooltip">Klara: ${p.done}<br>Avvikelse: ${p.avv}<br>Pågående: ${p.prog}<br>Kvarstående: ${p.rest}</span>
     </span>`;
   },
 

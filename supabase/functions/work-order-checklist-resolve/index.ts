@@ -26,8 +26,11 @@
  * the permission level, and forwards a narrow, validated payload.
  *
  * POST /functions/v1/work-order-checklist-resolve
- * body: { aoId: string, itemId: string, avvikelse: 'ok'|'avvikelse'|null,
- *         avvikelseComment?: string, avvikelseImage?: string (data-URL) }
+ * body (2026-11-23): { aoId, itemId, action: 'start'|'done'|'avvikelse'|'reset'|'add'|'remove',
+ *         avvikelse: 'v2:<action>' (spärr mot äldre EF), avvikelseComment?, avvikelseImage?,
+ *         text?, description? (add) }
+ * body (äldre, oförändrat): { aoId, itemId, avvikelse: 'ok'|'avvikelse'|null, ... }
+ * AO:ns status ändras ALDRIG (beslut 2026-11-23: ingen autostart).
  * 200: { workOrder: <updated AO>, activityLog: <canonical activityLog>,
  *        serverSignature: string (metadata only — never use to advance
  *        DataSync._lastSig; the client has not received a full snapshot) }
@@ -84,69 +87,84 @@ serve(async (req: Request) => {
 
   const aoId      = String(body.aoId ?? '').trim()
   const itemId    = String(body.itemId ?? '').trim()
+
+  /* 2026-11-23 — tre statuslägen (se migrationen
+     20261123000002_work_order_checklist_progress.sql). Nytt fält `action`:
+     start | done | avvikelse | reset | add | remove. Utan `action` gäller
+     det äldre kontraktet (avvikelse: 'ok'|'avvikelse'|null) och mappas
+     till samma RPC. Klienten skickar alltid avvikelse:'v2:<action>' för
+     åtgärder som bara finns i det nya kontraktet — en ÄLDRE deployad EF
+     avvisar då med invalid_avvikelse utan att något ändras. */
+  const ACTIONS = ['start', 'done', 'avvikelse', 'reset', 'add', 'remove']
   const avvikelseRaw = body.avvikelse
-  const avvikelse: string | null =
-    avvikelseRaw === 'ok' || avvikelseRaw === 'avvikelse' ? avvikelseRaw
-    : (avvikelseRaw === null || avvikelseRaw === undefined || avvikelseRaw === '') ? null
-    : undefined as unknown as string | null
-
-  if (!aoId || !itemId) return json({ error: 'missing_fields' }, 400)
-  if (avvikelse === undefined) return json({ error: 'invalid_avvikelse' }, 400)
-
-  const avvikelseComment = typeof body.avvikelseComment === 'string' ? body.avvikelseComment.trim().slice(0, 2000) : ''
-  if (avvikelse === 'avvikelse' && !avvikelseComment) {
-    return json({ error: 'comment_required' }, 400)
+  let action: string
+  if (typeof body.action === 'string' && body.action !== '') {
+    if (!ACTIONS.includes(body.action)) return json({ error: 'invalid_action' }, 400)
+    action = body.action
+  } else {
+    if (avvikelseRaw === 'ok') action = 'done'
+    else if (avvikelseRaw === 'avvikelse') action = 'avvikelse'
+    else if (avvikelseRaw === null || avvikelseRaw === undefined || avvikelseRaw === '') action = 'reset'
+    else return json({ error: 'invalid_avvikelse' }, 400)
   }
 
-  /* Valfri avvikelsebild (data-URL) — samma optionella fält som R1/R1.1
-     redan skickade via den generiska vägen. En grov storleksgräns
-     (~12 MB base64) skyddar mot uppenbart felaktiga/överdimensionerade
-     payloads; ingen ny bildbehandling/lagring införs — bilden lagras,
-     precis som tidigare, direkt i checklistpunktens JSON-fält. */
+  if (!aoId || !itemId) return json({ error: 'missing_fields' }, 400)
+
+  const comment = typeof body.avvikelseComment === 'string' ? body.avvikelseComment.trim().slice(0, 2000) : ''
+  if (action === 'avvikelse' && !comment) return json({ error: 'comment_required' }, 400)
+
+  const text = typeof body.text === 'string' ? body.text.trim().slice(0, 300) : ''
+  const description = typeof body.description === 'string' ? body.description.trim().slice(0, 2000) : ''
+  if (action === 'add' && !text) return json({ error: 'text_required' }, 400)
+
+  /* Valfri avvikelsebild (data-URL) — oförändrad storleksgräns. */
   const avvikelseImageRaw = typeof body.avvikelseImage === 'string' ? body.avvikelseImage : ''
   if (avvikelseImageRaw.length > 12 * 1024 * 1024) {
     return json({ error: 'image_too_large' }, 400)
   }
-  const avvikelseImage = avvikelse === 'avvikelse' ? avvikelseImageRaw : ''
+  const avvikelseImage = action === 'avvikelse' ? avvikelseImageRaw : ''
 
-  /* Aldrig från klienten: aktörens namn (för avvikelseBy/aktivitetstexten)
-     härleds UTESLUTANDE från den redan verifierade JWT-identiteten —
-     samma princip som project-document-upload redan etablerat för
-     `uploadedBy` (§Blockerare 7 där). */
+  /* Aldrig från klienten: aktörens namn/id och behörigheter härleds
+     UTESLUTANDE ur den verifierade JWT-identiteten. ao_edit avgör om
+     anroparen får ändra/återställa NÅGON ANNANS åtgärd — själva
+     kontrollen görs i RPC:n mot den låsta raden (beslut 2026-11-23). */
   const sm = staffMember as Record<string, unknown>
   const actorName = [sm?.firstName, sm?.lastName].filter(Boolean).join(' ').trim() || 'Okänd användare'
   const callerStaffId = String(sm?.id ?? '')
   const callerCanViewAll = hasPerm(perms, 'ao_view_all') || hasPerm(perms, 'all')
+  const callerCanEdit = hasPerm(perms, 'ao_edit') || hasPerm(perms, 'all')
 
-  const { data: rpcResult, error: rpcErr } = await supabase.rpc('work_order_checklist_resolve', {
+  const { data: rpcResult, error: rpcErr } = await supabase.rpc('work_order_checklist_set_state', {
     p_ao_id: aoId,
     p_item_id: itemId,
-    p_avvikelse: avvikelse,
-    p_avvikelse_comment: avvikelseComment,
+    p_action: action,
+    p_text: text || null,
+    p_description: description || null,
+    p_comment: comment || null,
+    p_image: avvikelseImage || null,
     p_actor_name: actorName,
-    p_caller_can_view_all: callerCanViewAll,
     p_caller_staff_id: callerStaffId,
-    p_avvikelse_image: avvikelseImage || null
+    p_caller_can_view_all: callerCanViewAll,
+    p_caller_can_edit: callerCanEdit
   })
 
   if (rpcErr) {
     const msg = String(rpcErr.message || '')
-    if (msg.includes('forbidden'))       return json({ error: 'forbidden' }, 403)
-    if (msg.includes('not_found'))       return json({ error: 'not_found' }, 404)
-    if (msg.includes('item_not_found'))  return json({ error: 'item_not_found' }, 404)
-    if (msg.includes('comment_required'))return json({ error: 'comment_required' }, 400)
-    if (msg.includes('invalid_avvikelse')) return json({ error: 'invalid_avvikelse' }, 400)
+    // Ordning: specifika koder före de generella delsträngarna.
+    if (msg.includes('forbidden_other'))  return json({ error: 'forbidden_other' }, 403)
+    if (msg.includes('forbidden'))        return json({ error: 'forbidden' }, 403)
+    if (msg.includes('item_not_found'))   return json({ error: 'item_not_found' }, 404)
+    if (msg.includes('not_found'))        return json({ error: 'not_found' }, 404)
+    if (msg.includes('already_resolved')) return json({ error: 'already_resolved' }, 409)
+    if (msg.includes('id_collision'))     return json({ error: 'id_collision' }, 409)
+    if (msg.includes('comment_required')) return json({ error: 'comment_required' }, 400)
+    if (msg.includes('text_required'))    return json({ error: 'text_required' }, 400)
+    if (msg.includes('invalid_action'))   return json({ error: 'invalid_action' }, 400)
+    if (msg.includes('missing_fields'))   return json({ error: 'missing_fields' }, 400)
     console.error('[work-order-checklist-resolve] RPC fel:', msg)
     return json({ error: 'update_failed' }, 500)
   }
 
-  /* R1.3 BLOCKERARE 2: RPC:n returnerar nu {workOrder, activityLog,
-     serverSignature} istället för bara AO:n (se migrationen) — så att
-     anroparen (WorkOrderService.resolveChecklistItemAtomic()) kan
-     synkronisera BÅDE AO:n och den faktiska kanoniska aktivitetsloggen
-     lokalt, utan att vänta på nästa DataSync-poll. `serverSignature`
-     är ren metadata — klienten instrueras (se frontend) att ALDRIG
-     använda den för att avancera DataSync._lastSig. */
   const r = (rpcResult || {}) as Record<string, unknown>
-  return json({ workOrder: r.workOrder, activityLog: r.activityLog, serverSignature: r.serverSignature })
+  return json({ workOrder: r.workOrder, noop: r.noop === true, serverSignature: r.serverSignature, protocol: 2 })
 })
