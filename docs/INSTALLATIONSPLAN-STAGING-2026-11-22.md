@@ -6,6 +6,18 @@ Senast uppdaterad 2026-11-23 (ersätter versionen från 2026-11-22; historik i g
 
 ---
 
+## Oberoende kontroll 2026-11-23 – korrigerar beslutsunderlaget (endast läsning)
+
+Direktkontroll mot Supabase STAGING `yyzljlqyzzcbxmcdbual` efter Claudes slutrapport (inga data eller inställningar ändrade):
+
+- **AKTIVITETSLOGG: den tidigare dubblettuppgiften är INTE aktuell i databasen.** `vift_activityLog` har **150 poster**, **0 grupper med duplicerade `id`**, och det specifika `ACT-1793611007122` förekommer **en gång**. Senaste `timestamp` i registret är `2026-11-17T11:58:49.927Z`. Därmed motsägs påståendet att varje skrivning har blockerats av just detta dubblett-ID sedan 2 november. Det kan fortfarande finnas andra skrivfel – endast ett autentiserat skrivtest kan bekräfta hälsan. **NO-GO för §2c:s föreslagna dedup/städning baserat på den gamla diagnosen.** Kör inte en datamutation innan ny, reproducerad verifiering och separat GO.
+- **STAGING backend:** `ao-time-write` v3 och `store-key-write` v3 finns. Deras faktiskt deployade källfiler är direkt tillgängliga via Supabase-projektets Edge Function-hämtning, inklusive `stamp-status.ts`; källmaterial kan därför hämtas och jämföras utan manuellt filutbyte. G4 är ett **repo-fullständighetsgap**, inte brist på åtkomst till de deployade två funktionerna. Pusha inte oavgranskade bundles eller hemligheter; avstäm filvägar/importer och migrationskedjan före källkodsimport.
+- **AO-bilder:** `workorder-images`-bucket finns inte ännu. Nya bild-EF:er är inte deployade; §2b kräver fortsatt separat GO.
+- **Push-index:** `public.push_subscriptions` har idag bara `push_subscriptions_endpoint_key` och `push_subscriptions_pkey`; ett eventuellt föreslaget extra index är **inte installerat**. Bedöm nytta och migration innan beslut.
+- **STAGING skrivskydd:** `stamp_status` finns och `store_ao_time_no_direct_update` finns; detta överensstämmer med klientens avsedda serverbaserade AO/tid-väg.
+
+**Ingen av dessa läskontroller verifierar Claudes klienttester mot riktiga autentiserade STAGING-anrop.** Rekommendationen är fortsatt separat GO för kontrollerad STAGING-testning, inte LIVE. Övriga textavsnitt nedan återger den ursprungliga planen; eventuella motstridiga formuleringar om aktivitetsloggens dubblett och dess §2c ska läsas som **ersatta av denna kontroll**.
+
 ## 0. Vad som har ändrats sedan förra versionen
 
 `docs/STAGING-AO-TID-SKRIVVAG-BLOCKERARE-2026-11-22.md` gav NO-GO för en filsynk från denna branch. Orsaken visade sig vara att branchen var en **äldre kodlinje** än den deployade STAGING-klienten (se `docs/KODBAS-STAGING-BASLINJE-2026-11-23.md`). Åtgärd i branchen (commit `56a943d`): STAGING-klienten är nu baslinje, med LIVE-miljööverlägg, och branchens egna förbättringar är portade ovanpå i separata commits. Blockeraren är därmed löst i kod: alla AO-/tidskrivningar går via redan installerad `ao-time-write` v3; `workOrders`/`timeEntries` skrivs aldrig via generisk `persist()`.
