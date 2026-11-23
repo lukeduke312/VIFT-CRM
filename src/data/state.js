@@ -2300,12 +2300,20 @@ function getPass(id)    { return state.ronderingspass.find(p => p.id === id) || 
 function getPropObj(id) { return state.propertyObjects.find(o => o.id === id) || null; }
 function getProject(id)  { return (state.projects||[]).find(p => p.id === id) || null; }
 
+/* V3: lokalt datum (Europe/Stockholm på användarens enhet), inte UTC.
+   Tidigare gav toISOString() gårdagens datum mellan midnatt och 01:00
+   (02:00 sommartid) — "Idag", "försenad" och förvalda datum blev fel. */
+function _localYmd(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function tdy() {
-  return new Date().toISOString().split('T')[0];
+  return _localYmd(new Date());
 }
 
 function _ds(days) {
-  return new Date(Date.now() + days * 86400000).toISOString().split('T')[0];
+  const d = new Date();
+  return _localYmd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days));
 }
 
 function fmt(n) {

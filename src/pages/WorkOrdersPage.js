@@ -134,6 +134,7 @@ const WorkOrdersPage = {
       { id: 'assign', label: 'Lägg till personal', icon: 'user-plus', permission: 'ao_edit', type: 'custom', open: (ids) => WorkOrdersPage._openBulkAssign(ids) }
     ];
     SelectionModel.init('workOrder', { stateKey: 'workOrders', actions: aoActions });
+    this._limit = this.PAGE;
     const advCount = this._f.staffIds.length + (this._f.customer?1:0) + (this._f.property?1:0) + (this._f.categories||[]).length;
 
     /* V3: antal per status och per snabbfilter, beräknat EN gång per render
@@ -240,6 +241,15 @@ const WorkOrdersPage = {
     else if (key === 'unassigned') { f.unassigned = !f.unassigned; if (f.unassigned) { f.mine = false; f.staffIds = []; } }
     else f.quick = f.quick === key ? null : key;
     this.render();
+  },
+
+  /* V3: stegvis visning — stora listor (tusentals AO) ritas i omgångar.
+     Sök, filter, antal och "Välj alla" gäller alltid hela urvalet. */
+  PAGE: 150,
+  _limit: 150,
+  showMore() {
+    this._limit = (this._limit || this.PAGE) + 300;
+    this.renderList();
   },
 
   setSort(v) {
@@ -777,6 +787,11 @@ const WorkOrdersPage = {
       return { cu, cuName, where, when, status, billing, prio, flags, rowActions, chk: this._chkProgressHtml(ao), overdue };
     };
 
+    const total = list.length;
+    const lim = Math.max(this._limit || this.PAGE, this.PAGE);
+    const more = total > lim ? `<button type="button" class="btn bs aol-more" onclick="WorkOrdersPage.showMore()">Visa fler (${Math.min(300, total - lim)} av ${total - lim} till)</button>` : '';
+    list = list.slice(0, lim);
+
     if (this.viewMode === 'grid') {
       el.innerHTML = `<div class="ao-grid aol-cards">${list.map(ao => {
         const r = row(ao);
@@ -796,7 +811,7 @@ const WorkOrdersPage = {
             ${r.billing.includes('bdg') ? `<div class="aol-card-bill">${r.billing}</div>` : ''}
             ${r.rowActions ? `<div class="aol-card-actions" onclick="event.stopPropagation()">${r.rowActions}</div>` : ''}
           </div>`;
-      }).join('')}</div>`;
+      }).join('')}</div>${more}`;
       return;
     }
 
@@ -804,7 +819,7 @@ const WorkOrdersPage = {
        samma markup, inga dubbla renderingar. */
     el.innerHTML = `
       <div class="dt-wrap aol-table-wrap">
-        <div class="aol-count">${list.length} ${list.length === 1 ? 'order' : 'ordrar'}</div>
+        <div class="aol-count">${total} ${total === 1 ? 'order' : 'ordrar'}${total > list.length ? ` · visar ${list.length}` : ''}</div>
         <div class="dt-scroll"><table class="dt aol-table${selMode ? ' sel-mode' : ''}">
           <thead><tr>
             <th class="c-shrink aol-c-sel"><span class="sr-only">Markera</span></th>
@@ -840,7 +855,7 @@ const WorkOrdersPage = {
           }).join('')}
           </tbody>
         </table></div>
-      </div>`;
+      </div>${more}`;
   },
 
   /* ── Skapa AO – wizard ─────────────────── */
@@ -1200,7 +1215,7 @@ const WorkOrdersPage = {
       return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
     }).join('');
 
-    const td = new Date(); const todayStr = td.toISOString().slice(0,10);
+    const td = new Date(); const todayStr = tdy();
     const tm = new Date(td); tm.setDate(tm.getDate()+1); const tmStr = tm.toISOString().slice(0,10);
     const nw = new Date(td); nw.setDate(nw.getDate()+1); while(nw.getDay()===0||nw.getDay()===6)nw.setDate(nw.getDate()+1); const nwStr = nw.toISOString().slice(0,10);
     const wk = new Date(td); wk.setDate(wk.getDate()+7); const wkStr = wk.toISOString().slice(0,10);

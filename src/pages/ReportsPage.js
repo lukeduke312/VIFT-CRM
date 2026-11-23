@@ -126,7 +126,7 @@ const ReportsPage = (function () {
   }
 
   function _today() {
-    return new Date().toISOString().slice(0, 10);
+    return tdy();
   }
 
   function _monthLabel(ym) {

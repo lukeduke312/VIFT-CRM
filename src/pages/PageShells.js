@@ -1517,7 +1517,7 @@ const OffersPage = {
 
   _initFreshOffer(preCustomerId, opts) {
     const T = this._TERMS;
-    const today    = new Date().toISOString().split('T')[0];
+    const today    = tdy();
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     this._editLines    = [];
     this._editExtras   = [];
@@ -1551,7 +1551,7 @@ const OffersPage = {
     const off = getOff(offerId);
     if (!off) return;
     const T = this._TERMS;
-    const today    = new Date().toISOString().split('T')[0];
+    const today    = tdy();
     const validDef = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     this._editLines    = (off.lines  || []).map(l => ({...l}));
     this._editExtras   = (off.extras || []).map(e => ({...e}));
@@ -1824,7 +1824,7 @@ const OffersPage = {
     const stamp = draft.updatedAt || draft.createdAt;
     const dt = stamp ? new Date(stamp) : null;
     const timeStr = dt ? dt.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '';
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = tdy();
     const isToday = dt && dt.toISOString().split('T')[0] === todayStr;
     const whenText = dt
       ? (isToday ? ('idag ' + timeStr) : (dt.toLocaleDateString('sv-SE') + ' ' + timeStr))
@@ -1858,7 +1858,7 @@ const OffersPage = {
     this._expandedLineIds = new Set();
     this._mobileTotalsExpanded = false;
     this._wizardData   = Object.assign({
-      customerId: '', title: '', date: new Date().toISOString().split('T')[0], validUntil: '',
+      customerId: '', title: '', date: tdy(), validUntil: '',
       summary: '', scope: '', includes: '', excludes: '',
       paymentTerms: T.payment, validityText: T.validity, generalTerms: T.general, internalNote: ''
     }, d.wizardData || {});

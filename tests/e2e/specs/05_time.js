@@ -115,7 +115,7 @@ module.exports = [
     },
   },
   {
-    id: 'TIME-06', module: 'Tidregistrering och instämpling', name: 'Manuell tid med arbetsorder men utan vald kund: kunden fylls i från AO:n och tidposten får kunden på servern (tidigare tom kund → föll bort ur kundrapporter)',
+    id: 'TIME-07', module: 'Tidregistrering och instämpling', name: 'Manuell tid med arbetsorder men utan vald kund: kunden fylls i från AO:n och tidposten får kunden på servern (tidigare tom kund → föll bort ur kundrapporter)',
     async run(t) {
       const s = await t.world.session();
       await s.login('falt2');

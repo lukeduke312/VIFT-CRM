@@ -1,4 +1,8 @@
 'use strict';
+/* Testprocessen (simulerad server, demodata) går i samma tidszon som
+   webbläsarkontexterna nedan (Europe/Stockholm) — annars skiljer "idag"
+   mellan server och klient en timme varje natt. */
+process.env.TZ = 'Europe/Stockholm';
 /*
  * E2E-harness: statisk server för repots klient, Chromium-kontexter per
  * användare/enhet, Supabase-anrop dirigerade till FakeSupabase, insamling av

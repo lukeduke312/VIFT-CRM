@@ -1122,7 +1122,7 @@ IMPORT_EXPORT_CONFIGS.report = {
 
     /* Filnamn: VIFT_rapport_{flik}_{from}_{to}.xlsx */
     var tabSlug  = activeTab.replace(/[^a-zåäö0-9]+/gi, '-');
-    var fromSlug = range.from || new Date().toISOString().slice(0, 10);
+    var fromSlug = range.from || tdy();
     var toSlug   = range.to   || fromSlug;
     var filename = 'VIFT_rapport_' + tabSlug + '_' + fromSlug + '_' + toSlug + '.xlsx';
 
@@ -1447,7 +1447,7 @@ Object.assign(ImportExportService, {
     var cfg = IMPORT_EXPORT_CONFIGS[entityType];
     if (!cfg) return;
 
-    var ts    = new Date().toISOString().slice(0, 10);
+    var ts    = tdy();
     var base  = cfg.label.toLowerCase().replace(/[^a-zåäö0-9]+/gi, '-');
     var tag   = label ? '-' + label : '';
     /* För nästlade register (exportFn): records=null, data byggs av exportFn */

@@ -4,7 +4,8 @@
 
 // Hjälp: relativa datum
 function _d(days) { return new Date(Date.now() + days * 86400000).toISOString(); }
-function _ds(days) { return _d(days).split('T')[0]; }
+/* V3: lokalt datum (som tdy() i state.js) — inte UTC-datumet. */
+function _ds(days) { const n = new Date(); const x = new Date(n.getFullYear(), n.getMonth(), n.getDate() + days); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
 
 const SeedData = {
 

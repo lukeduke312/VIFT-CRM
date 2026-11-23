@@ -320,7 +320,7 @@ const ExportCenterPage = (function () {
     var cfg = ImportExportService.getConfig(_entityType);
     if (!cfg) return;
 
-    var ts   = new Date().toISOString().slice(0, 10);
+    var ts   = tdy();
     var base = cfg.label.toLowerCase().replace(/[^a-zåäö0-9]+/gi, '-');
     var canSensitive = typeof Auth !== 'undefined' && Auth.can('objects_sensitive');
 
