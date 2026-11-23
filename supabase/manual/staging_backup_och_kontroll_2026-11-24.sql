@@ -53,7 +53,24 @@ select id, email, email_confirmed_at is not null as bekraftad from auth.users wh
 -- select s.key from public.store s join vift_staging_backup_20261124.store b using (key)
 --  where s.value is distinct from b.value;   -- ska vara tom direkt efter backupen
 
--- ── Kopia utanför databasen (rekommenderas) ──────────────────────────
+-- C3. Fingeravtryck per nyckel — SPARA RESULTATET (t.ex. skärmbild/CSV).
+--     Används för att verifiera kopian utanför databasen och en eventuell
+--     återställning: samma md5 = samma innehåll.
+-- select key, md5(value::text) as md5, length(value::text) as tecken, updated_at
+--   from vift_staging_backup_20261124.store order by key;
+-- C4. Edge Function-versioner före installation (läsning i Dashboard →
+--     Edge Functions): notera version för store-key-write,
+--     work-order-checklist-resolve, offer-attachment-upload.
+
+-- ── Kopia utanför databasen ───────────────────────────────────────────
+-- Med dator (rekommenderas, fullständig och verifierbar):
+--   supabase db dump --data-only --schema vift_staging_backup_20261124 \
+--     --project-ref yyzljlqyzzcbxmcdbual -f vift_staging_backup_20261124.sql
+--   (alternativt --schema public -t store). Jämför md5 enligt C3.
+-- Utan dator: Dashboard → Database → Backups (om planen har nedladdning),
+--   eller SQL Editor-export per nyckel (stora värden kan kapas — verifiera
+--   med md5 enligt C3; en kapad export räknas INTE som kopia).
+-- ──────────────────────────────────────────────────────────────────────
 -- Kör: select key, value::text, updated_at from vift_staging_backup_20261124.store;
 -- och ladda ner resultatet (CSV/JSON) i SQL Editor. Spara utanför Supabase.
 -- Edge Functions som ändras (spara deployade versioner före deploy):

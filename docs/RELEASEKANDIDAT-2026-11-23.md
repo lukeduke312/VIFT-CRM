@@ -12,6 +12,16 @@ Statusord i rapporten:
 
 ---
 
+## STAGING KLIENT – GO (2026-11-25)
+
+Paket v2 är publicerat på `staging-crm.viftfast.se` och verifierat (installationsplan §6.4b):
+- 47/47 SHA-256 mot det Loopia faktiskt levererar.
+- Nivå 0 11/11, utan versionsskillnader mot repot.
+- Rätt miljö (STAGING, inte LIVE) och inloggningssidan utan fel.
+- Nya klientversioner och klientfunktioner laddas.
+
+Funktionerna bakom inloggningen och serverändringarna är ännu **inte** STAGING-verifierade.
+
 ## Frysning 2026-11-25
 
 Releasekandidaten är **frusen**. Två avgränsade punkter rättades före frysningen; ingen av dem rör klienten, så **paket v2 gäller oförändrat** (`MANIFEST-v2.txt`):

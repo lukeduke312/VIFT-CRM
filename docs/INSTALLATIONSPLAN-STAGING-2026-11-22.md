@@ -534,6 +534,20 @@ Steg 5 kan göras före steg 4 om Lucas vill se klienten först. Klienten funger
 
 **Blockerat:** inget tekniskt. Det som återstår är beslut och åtkomst: testkonton, backup, uppladdning och deploy.
 
+### 6.4b STAGING KLIENT – GO (verifierad 2026-11-25)
+
+Steg 5 (GO-4) är **genomfört och verifierat**. Den första uppladdningen innehöll av misstag det ersatta paketet v1 (46/46 enligt v1-manifestet). De fyra filer som skiljer togs fram och laddades upp i en komplettering. Efterkontrollen gav:
+- `verify-staging-deploy.sh MANIFEST-v2.txt`: **47/47 identiska** (SHA-256 för det Loopia faktiskt levererar).
+- Nivå 0: 11/11 OK. Versionsjämförelsen visar 82 versionsatta filer, 0 nyare i repot och 0 äldre, alltså exakt repots versioner.
+- Webbläsarkontroll på laptop och iPhone:
+  - STAGING-projektet laddas, inte LIVE, och etiketten "STAGING · TESTMILJÖ" visas.
+  - Inloggningssidan fungerar och alla 85 resurser från webbplatsen svarar utan fel.
+  - Nya versioner laddas (`state.js?v=74`, `components.css?v=107`) och nya klientfunktioner finns, bland annat `newEntryId`, `MapGrouping`, checklistans statuslägen och den atomiska loggvägen.
+  - Service Workern är aktiv. Enda misslyckade anropet är Google Fonts, som testmiljöns proxy blockerar.
+- Visuellt granskat på den publicerade sidan: inloggningen på laptop och iPhone. Vyerna bakom inloggningen granskas på den publicerade sidan först med testkonton (GO-1, sedan GO-9). Filerna är byte för byte identiska med paketet, vars vyer granskades före frysningen.
+
+Den nya klienten använder sina reserver mot dagens server tills §2g, §2i och §2j installeras. Ingen serverfunktion är ändrad.
+
 ### 6.5 Nästa konkreta GO (2026-11-25)
 
 **Går att göra utan dator, i webbläsaren (även på mobil eller surfplatta):**
@@ -541,7 +555,7 @@ Steg 5 kan göras före steg 4 om Lucas vill se klienten först. Klienten funger
 | GO | Vad Lucas gör | Vad Claude sedan gör | Ändrar i STAGING | Återställning |
 |---|---|---|---|---|
 | **GO-1 Testkonton** | 1. Supabase Dashboard för STAGING → Authentication → Add user (Auto confirm): sex konton enligt §6.1 F1.<br>2. I STAGING-appen som admin: personalposter med samma e-post och rätt roll, plus rollen "E2E begränsad".<br>3. I Claude-miljöns inställningar: `VIFT_PW`, `VIFT_USER_*`, `VIFT_SUPABASE_URL` och `VIFT_SUPABASE_ANON`. Aldrig i chatten. | Del A i backup-SQL:en kontrolleras via nivå 1 (`authz-read.js`): sex konton och rätt synlighet per roll. | Auth-användare, personalposter, en roll | Ta bort konton, personalposter och rollen |
-| **GO-2 Backup (databasdelen)** | SQL Editor: kör del A (bara läsning), sedan del B (`vift_staging_backup_20261124`) och del C (efterkontroll). Ladda ner resultatet av del C:s export om det går. | Inget. Claude har ingen databasåtkomst. | Ett nytt backupschema | `drop schema vift_staging_backup_20261124 cascade` |
+| **GO-2 Backup** | SQL Editor: kör del A (bara läsning), del B (`vift_staging_backup_20261124`) och del C med C1–C4 (efterkontroll, md5-fingeravtryck per nyckel, Edge Function-versioner). **Kopia utanför databasen:** med dator `supabase db dump` av backupschemat, verifierad mot md5 i C3. Utan dator: Dashboard → Database → Backups om planen har nedladdning. En kapad SQL-export räknas inte som kopia. **Edge Function-källor:** `supabase functions download` med dator, senast före GO-5–GO-8. | Inget. Claude har ingen databasåtkomst. | Ett nytt backupschema | `drop schema vift_staging_backup_20261124 cascade` |
 | **GO-3 Behörighetstest mot nuvarande server** | Ge GO i chatten. | `authz-mutation.js --torrkorning`, därefter den skarpa körningen (G13, G9, G6). Journal, städning, spärrfil och efterkontroll som i §4a. | Egna märkta testposter (tas bort) och metadata | `--stada=<runId>` |
 
 **Kräver dator (väntar):**
