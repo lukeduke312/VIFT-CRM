@@ -115,7 +115,11 @@ function showToast(msg, duration) {
   }
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), duration);
+  /* E2E 2026-11-23: en tidigare toasts timer dolde nästa toast i förtid
+     (t.ex. en 8 s-varning efter ett 2,5 s-meddelande försvann efter
+     1,5 s). Bara den senaste toastens timer får dölja elementet. */
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => el.classList.remove('show'), duration);
 }
 
 /* N1 (blocker round 2026-11-12): persistent "osparad ändring" banner.

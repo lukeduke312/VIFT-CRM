@@ -514,6 +514,104 @@ async function resumeHeldPersist(shortKey, elementId) {
   return s;
 }
 
+/* ── E2E 2026-11-23: commitElementChange() ─────────────────────────
+   One place for the "visa framgång först efter serverns bekräftelse"
+   rule for a single element of a generic business key. The browser
+   suite reproduced several screens (serviceintervall, offertlänk,
+   roller) that showed success while persist() was still running and
+   kept showing it after the server refused. Usage:
+     await commitElementChange('roles', roleId, () => { ...mutate...; },
+       { ok: 'Roll uppdaterad', fail: 'Rollen kunde inte sparas',
+         onChange: () => rerender(), onSaved: () => sideEffects() });
+   mutate() returning false aborts without saving. On failure the N1
+   rule decides (settlePersistFailure): landed -> success; diverged ->
+   conflict dialog, no rollback; otherwise the element is restored to
+   its pre-change value and `fail` is shown. Returns {ok, fate}. */
+var _vfCommitBusy = {};
+async function commitElementChange(shortKey, elementId, mutate, msgs) {
+  msgs = msgs || {};
+  const id = String(elementId);
+  const busyKey = shortKey + '|' + id;
+  if (_vfCommitBusy[busyKey]) return { ok: false, fate: 'busy' };
+  const stateKey = _vfBusinessStateKey(shortKey);
+  const find = function(a) { return (a || []).findIndex(function(el) { return el && String(el.id) === id; }); };
+  const i0 = find(state[stateKey]);
+  const before = i0 >= 0 ? _vfDeepClone(state[stateKey][i0]) : undefined;
+  _vfCommitBusy[busyKey] = true;
+  const say = function(m, ms) { if (m && typeof showToast === 'function') showToast(m, ms); };
+  const changed = function() { if (typeof msgs.onChange === 'function') { try { msgs.onChange(); } catch (e) { console.warn('[commit] onChange:', e); } } };
+  try {
+    if (mutate() === false) return { ok: false, fate: 'aborted' };
+    changed();
+    say(msgs.saving || 'Sparar…');
+    let fate = 'ok';
+    const ok = await persist({ keys: [shortKey] });
+    if (!ok) {
+      const n1 = (typeof settlePersistFailure === 'function') ? await settlePersistFailure(shortKey, id) : { fate: 'none' };
+      fate = n1.fate;
+      if (fate === 'diverged' || fate === 'conflict') {
+        changed();
+        say('Ändringen krockade med en ändring från en annan session — välj i konfliktdialogen.', 6000);
+        return { ok: false, fate: fate };
+      }
+      if (fate !== 'landed') {
+        const a = (state[stateKey] || []).slice();
+        const i = find(a);
+        if (before === undefined) { if (i >= 0) a.splice(i, 1); }
+        else if (i >= 0) a[i] = before; else a.push(before);
+        state[stateKey] = a;
+        try { if (typeof Storage !== 'undefined' && Storage.setLocal) Storage.setLocal(shortKey, a); } catch (e) {}
+        changed();
+        say((msgs.fail || 'Ändringen kunde inte sparas') + (fate === 'not-landed' || fate === 'unknown'
+          ? ' — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst.'
+          : '. Servern avvisade ändringen — försök igen.'), 8000);
+        return { ok: false, fate: fate };
+      }
+    }
+    if (typeof msgs.onSaved === 'function') { try { msgs.onSaved(); } catch (e) { console.warn('[commit] onSaved:', e); } }
+    changed();
+    say(msgs.ok);
+    return { ok: true, fate: fate };
+  } finally {
+    delete _vfCommitBusy[busyKey];
+  }
+}
+
+/* Global skyddsnät för de äldre anropsställen som anropar persist()
+   utan argument och visar framgång direkt (≈40 ställen, se docs/E2E).
+   Misslyckas skrivningen för en ändrad nyckel (inte konflikt — den har
+   egen dialog) visas en tydlig varning EFTER anroparens egna meddelanden
+   (setTimeout 0), så ett tidigare "Sparat" inte står kvar som sista
+   besked. Anropare som skickar {keys}/{detailed} hanterar felet själva
+   och berörs inte. Max en varning per 5 s. */
+var _VF_KEY_LABELS = { customers: 'kunder', offers: 'offerter', staff: 'personal', properties: 'fastigheter', priceGroups: 'prisgrupper',
+  priceProfiles: 'prisprofiler', salesOpps: 'säljchanser', activityLog: 'aktivitetslogg', settings: 'inställningar', contracts: 'kontrakt',
+  articles: 'artiklar', titles: 'titlar', roles: 'roller', recurringOrders: 'återkommande ärenden', ronderingsmallar: 'ronderingsmallar',
+  ronderingar: 'ronderingar', avvikelser: 'avvikelser', activities: 'att göra', serviceTemplates: 'servicemallar', emailTemplates: 'e-postmallar',
+  propertyCategories: 'fastighetskategorier', propertyObjects: 'objekt', importLogs: 'importloggar', propertyRoles: 'fastighetsroller',
+  propertyContacts: 'kontaktpersoner', deviationCategories: 'avvikelsekategorier', inspections: 'besiktningar', projects: 'projekt' };
+var _vfLastUnconfirmedWarnAt = 0;
+function _vfWarnUnconfirmed(detail, opts) {
+  if (opts && (opts.detailed || (Array.isArray(opts.keys) && opts.keys.length))) return;
+  if (!detail || typeof detail !== 'object' || detail.ok) return;
+  const r = detail.results || {};
+  const bad = Object.keys(r).filter(function(k) { return r[k] === 'failed' || r[k] === 'unverified' || r[k] === 'blocked'; });
+  if (!bad.length && !detail.degraded && !detail.error) return;
+  if (Date.now() - _vfLastUnconfirmedWarnAt < 5000) return;
+  _vfLastUnconfirmedWarnAt = Date.now();
+  const what = bad.map(function(k) { return _VF_KEY_LABELS[k] || k; }).join(', ');
+  const msg = detail.degraded
+    ? 'Ändringen sparades INTE: senaste inläsningen från servern var ofullständig. Ladda om sidan och gör om ändringen.'
+    : 'Varning: servern bekräftade inte den senaste ändringen' + (what ? ' (' + what + ')' : '') + '. Den kan vara osparad — kontrollera och försök igen.';
+  setTimeout(function() {
+    try {
+      const t = typeof document !== 'undefined' && document.getElementById('toast');
+      if (t && /kunde inte|INTE|misslyck|avvisade/i.test(t.textContent || '') && t.classList.contains('show')) return;
+    } catch (e) {}
+    if (typeof showToast === 'function') showToast(msg, 8000);
+  }, 0);
+}
+
 /* "Kasta" in the banner (D). */
 function discardHeldPersist(shortKey, elementId) {
   _vfJournalForget(shortKey, String(elementId));
@@ -537,10 +635,11 @@ function _vfHeldItems() {
       const d = e.data || e.previous || {};
       let num = id;
       try { if (typeof displayNumberOf === 'function') num = displayNumberOf(d && d.id ? d : { id: id }) || id; } catch (err) {}
-      const name = (d && (d.title || d.name || ((d.firstName || '') + ' ' + (d.lastName || '')).trim())) || '';
+      const name = (d && (d.title || d.name || d.label || ((d.firstName || '') + ' ' + (d.lastName || '')).trim())) || '';
+      const kl = _VF_HELD_LABELS[k] || (_VF_KEY_LABELS[k] ? _VF_KEY_LABELS[k].charAt(0).toUpperCase() + _VF_KEY_LABELS[k].slice(1) : k);
       items.push({
         key: k, id: id, op: e.op, at: e.at || '', isCreate: e.op === 'upsert' && (e.previous === null || e.previous === undefined),
-        label: (_VF_HELD_LABELS[k] || k) + ' ' + num + (name ? ' — ' + name : '')
+        label: kl + ' ' + num + (name ? ' — ' + name : '')
       });
     });
   });
@@ -1371,7 +1470,7 @@ function persist(opts) {
      next queued _doPersist() start before the caller's own continuation
      (e.g. a rollback) — exactly the bug R1.2 fixed. */
   const task = _persistQueue.then(function() { return _doPersistDetailed(); })
-    .then(function(detail) { return _vfPersistResultFor(detail, opts); });
+    .then(function(detail) { _vfWarnUnconfirmed(detail, opts); return _vfPersistResultFor(detail, opts); });
   /* V48B3B0 R1.2 (kritisk fix): EN och SAMMA promise (`safeTask`) används
      nu för både _persistQueue OCH returvärdet till callern — tidigare
      skapade `_persistQueue = task.catch(A)` och `return task.catch(B)` två

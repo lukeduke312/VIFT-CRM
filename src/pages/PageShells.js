@@ -7543,12 +7543,10 @@ ${hasRut?`<div class="rut">
       ? 'En aktiv länk finns redan. Generera ny länk? Den gamla ogiltigförklaras omedelbart.'
       : 'Generera digital offertlänk?';
 
-    const _doGenerate = (days) => {
-      this._generateDigitalLinkMutation(off, days);
-      persist();
-      this.render({offerId});
-      showToast('Länk genererad — giltig i ' + days + ' dagar');
-    };
+    const _doGenerate = (days) => this._commitOfferChange(offerId,
+      () => { this._generateDigitalLinkMutation(off, days); return true; },
+      { ok: 'Länk genererad — giltig i ' + days + ' dagar',
+        fail: 'Länken kunde INTE sparas av servern och fungerar inte för kunden' });
 
     Modal.open({
       title: ic('link',14) + ' Digital offertlänk',
@@ -7575,16 +7573,62 @@ ${hasRut?`<div class="rut">
     });
   },
 
+  /* E2E OFF-04 (2026-11-23): länkåtgärderna (generera/återkalla/förläng)
+     visade tidigare framgång direkt medan persist() gick i bakgrunden.
+     Reproducerat: vid serverfel stod "Länk återkallad" kvar medan kundens
+     länk fortfarande fungerade (offer-token-validate läser serverns
+     tokenRevokedAt). Nu: mutera, visa "Sparar…", vänta på serverns svar
+     för nyckeln offers; framgång först efter bekräftelse. Vid fel avgör
+     settlePersistFailure() (N1) om ändringen landade, annars rullas
+     offerten tillbaka och ett tydligt fel visas. `_offCommitting`
+     spärrar dubbelklick. */
+  async _commitOfferChange(offerId, mutate, msgs) {
+    if (this._offCommitting) return false;
+    const off0 = getOff(offerId);
+    if (!off0) return false;
+    const before = JSON.parse(JSON.stringify(off0));
+    this._offCommitting = true;
+    try {
+      if (mutate() === false) return false;
+      this.render({offerId});
+      showToast('Sparar…');
+      const ok = await persist({ keys: ['offers'] });
+      if (!ok) {
+        const n1 = (typeof settlePersistFailure === 'function') ? await settlePersistFailure('offers', offerId) : { fate: 'none' };
+        if (n1.fate === 'diverged' || n1.fate === 'conflict') {
+          this.render({offerId});
+          showToast('Offerten ändrades samtidigt av en annan session — välj i konfliktdialogen.', 6000);
+          return false;
+        }
+        if (n1.fate !== 'landed') {
+          const idx = (state.offers || []).findIndex(o => o.id === offerId);
+          if (idx >= 0) state.offers[idx] = before;
+          try { Storage.setLocal('offers', state.offers); } catch (e) {}
+          this.render({offerId});
+          showToast(msgs.fail + (n1.fate === 'not-landed' || n1.fate === 'unknown'
+            ? ' — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst.'
+            : '. Försök igen.'), 8000);
+          return false;
+        }
+      }
+      this.render({offerId});
+      showToast(msgs.ok);
+      return true;
+    } finally {
+      this._offCommitting = false;
+    }
+  },
+
   revokeDigitalLink(offerId) {
     Modal.confirm('Återkalla offertlänken? Kunden kan inte längre öppna offerten via länken.', () => {
-      const off = getOff(offerId);
-      if (!off) return;
-      off.tokenRevokedAt = new Date().toISOString();
-      off.updatedAt      = new Date().toISOString();
-      this._logEvt(off, 'send', 'Digital offertlänk återkallad');
-      persist();
-      this.render({offerId});
-      showToast('Länk återkallad');
+      this._commitOfferChange(offerId, () => {
+        const off = getOff(offerId);
+        if (!off) return false;
+        off.tokenRevokedAt = new Date().toISOString();
+        off.updatedAt      = new Date().toISOString();
+        this._logEvt(off, 'send', 'Digital offertlänk återkallad');
+        return true;
+      }, { ok: 'Länk återkallad', fail: 'Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den' });
     });
   },
 
@@ -7602,16 +7646,16 @@ ${hasRut?`<div class="rut">
       buttons: [
         { label: 'Förläng', cls: 'btn bp', onClick: () => {
           const days = parseInt(document.getElementById('extend-days')?.value || '30', 10);
-          const off  = getOff(offerId);
-          if (!off) return;
           const expiry = new Date(Date.now() + days * 86400000).toISOString().slice(0,10);
-          off.tokenExpiresAt = expiry + 'T23:59:59.000Z';
-          off.updatedAt      = new Date().toISOString();
-          this._logEvt(off, 'send', 'Giltighetstid förlängd — ny utgång: ' + expiry);
-          persist();
           Modal.close();
-          this.render({offerId});
-          showToast('Giltighetstid förlängd till ' + expiry);
+          this._commitOfferChange(offerId, () => {
+            const off = getOff(offerId);
+            if (!off) return false;
+            off.tokenExpiresAt = expiry + 'T23:59:59.000Z';
+            off.updatedAt      = new Date().toISOString();
+            this._logEvt(off, 'send', 'Giltighetstid förlängd — ny utgång: ' + expiry);
+            return true;
+          }, { ok: 'Giltighetstid förlängd till ' + expiry, fail: 'Giltighetstiden är INTE förlängd — servern bekräftade inte ändringen' });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -8696,29 +8740,41 @@ const StaffPage = {
       updatedAt: new Date().toISOString()
     };
 
+    /* E2E 2026-11-23: roll/behörighet är säkerhetsrelevant — "Sparat"
+       visas först när servern bekräftat (commitElementChange i state.js),
+       annars rollback och tydligt fel. */
     if (!staffId) {
       if ((state.staff||[]).find(s => s.username === uname)) { showToast('Användarnamnet används redan'); return; }
-      state.staff.push({ ...data, id: newId(state.staff||[], 'ST'), permissions: [], active: true, createdAt: new Date().toISOString() });
-      persist(); Modal.close(); showToast(`${first} ${last} skapad — kom ihåg att skapa inloggningskonto i Supabase Dashboard`);
-    } else {
-      const idx = (state.staff||[]).findIndex(s => s.id === staffId);
-      if (idx < 0) return;
-      if ((state.staff||[]).find(s => s.username === uname && s.id !== staffId)) { showToast('Användarnamnet används redan'); return; }
-      state.staff[idx] = { ...state.staff[idx], ...data };
-      persist(); Modal.close();
-      const _cu = Auth.getUser();
-      if (_cu && _cu.id === staffId) {
+      const nid = newId(state.staff||[], 'ST');
+      Modal.close();
+      return commitElementChange('staff', nid, () => {
+        state.staff.push({ ...data, id: nid, permissions: [], active: true, createdAt: new Date().toISOString() });
+      }, { onChange: () => this.render(), ok: `${first} ${last} skapad — kom ihåg att skapa inloggningskonto i Supabase Dashboard`,
+           fail: `${first} ${last} kunde inte skapas` });
+    }
+    const idx = (state.staff||[]).findIndex(s => s.id === staffId);
+    if (idx < 0) return;
+    if ((state.staff||[]).find(s => s.username === uname && s.id !== staffId)) { showToast('Användarnamnet används redan'); return; }
+    const _cu = Auth.getUser();
+    const isSelf = !!(_cu && _cu.id === staffId);
+    const changedName = data.firstName + ' ' + data.lastName;
+    Modal.close();
+    return commitElementChange('staff', staffId, () => {
+      const i = (state.staff||[]).findIndex(s => s.id === staffId);
+      if (i < 0) return false;
+      state.staff[i] = { ...state.staff[i], ...data };
+    }, {
+      onChange: () => this.render(),
+      onSaved: () => {
+        if (!isSelf) return;
         // Redigerar sig själv — uppdatera currentUser och re-rendera sidebar direkt
         state.currentUser = { ..._cu, firstName: data.firstName, lastName: data.lastName, role: data.role, username: data.username, title: data.title };
         Auth._resolveUser();
         Sidebar.render();
-        showToast('Sparat — dina behörigheter uppdaterade omedelbart');
-      } else {
-        const changedName = data.firstName + ' ' + data.lastName;
-        showToast('Sparat — ' + changedName + ' ser nya behörigheter vid nästa inloggning');
-      }
-    }
-    this.render();
+      },
+      ok: isSelf ? 'Sparat — dina behörigheter uppdaterade omedelbart' : 'Sparat — ' + changedName + ' ser nya behörigheter vid nästa inloggning',
+      fail: 'Ändringen för ' + changedName + ' kunde inte sparas'
+    });
   },
 
   _toggleActive(staffId) {
@@ -10937,16 +10993,18 @@ const AdminPage = {
     const label = document.getElementById('role-edit-label')?.value.trim();
     if (!label) { showToast('Visningsnamn krävs'); return; }
     const checked = Array.from(document.querySelectorAll('input[name="role-perm"]:checked')).map(cb => cb.value);
-    state.roles[idx] = {
-      ...state.roles[idx],
-      label,
-      description: document.getElementById('role-edit-desc')?.value.trim() || '',
-      permissions: checked
-    };
-    persist(); Modal.close(); AdminPage.render();
-    // Re-resolve logged-in user in case their role's permissions just changed
-    Auth._resolveUser(); Sidebar.render();
-    showToast('Roll uppdaterad — behörigheter träder i kraft direkt');
+    const description = document.getElementById('role-edit-desc')?.value.trim() || '';
+    Modal.close();
+    /* E2E ROLE-02 (2026-11-23): framgång först efter serverns bekräftelse. */
+    return commitElementChange('roles', roleId, () => {
+      const i = (state.roles||[]).findIndex(r => r.id === roleId);
+      if (i < 0) return false;
+      state.roles[i] = { ...state.roles[i], label, description, permissions: checked };
+    }, {
+      onChange: () => { AdminPage.render(); Auth._resolveUser(); Sidebar.render(); },
+      ok: 'Roll uppdaterad — behörigheter träder i kraft direkt',
+      fail: 'Rollen "' + label + '" kunde inte sparas — behörigheterna är OFÖRÄNDRADE'
+    });
   },
 
   removeRole(roleId) {

@@ -1,13 +1,14 @@
 {
   "summary": {
-    "when": "2026-11-23T07:22:25.307Z",
+    "when": "2026-11-23T08:18:07.453Z",
     "target": "simulerad backend (FakeSupabase)",
     "browser": "Chromium (Playwright)",
-    "total": 5,
-    "passed": 5,
+    "total": 62,
+    "passed": 61,
     "failed": 0,
     "blocked": 0,
-    "durationMs": 5082
+    "known": 1,
+    "durationMs": 308733
   },
   "results": [
     {
@@ -17,12 +18,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1168,
+      "ms": 990,
       "notes": [
         "Laddade 15 AO och 7 kunder"
       ],
       "metrics": {
-        "inloggning → app laddad (ms)": 1009
+        "inloggning → app laddad (ms)": 919
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -37,7 +38,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 374,
+      "ms": 400,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -55,7 +56,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 811,
+      "ms": 943,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -71,7 +72,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1574,
+      "ms": 1663,
       "notes": [
         "ekonomi såg 6 poster, fältarbetaren 3"
       ],
@@ -89,7 +90,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1064,
+      "ms": 1126,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -97,6 +98,1071 @@
       "unmodeled": [],
       "screenshots": [],
       "requests": 9
+    },
+    {
+      "id": "PAGES-01",
+      "module": "Navigering och sidmenyer",
+      "name": "Alla 37 registrerade sidor öppnas utan JS-fel och utan \"undefined/NaN\" (admin, laptop)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 14418,
+      "notes": [
+        "pg-project-detail: ingen testdata (projectId) — tomt läge",
+        "pg-propobj-detail: ingen testdata (objId) — tomt läge"
+      ],
+      "metrics": {
+        "medel renderingstid per sida (ms)": 363,
+        "långsammaste sida (ms)": 377
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "PAGES-02",
+      "module": "Navigering och sidmenyer",
+      "name": "Sidomenyn: varje synligt menyval öppnar sin sida; tillbaka-knappen fungerar",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 8714,
+      "notes": [
+        "23 menyval klickade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "RESP-DESKTOP",
+      "module": "Responsiv layout",
+      "name": "Alla sidor i desktop: ingen horisontell scroll, inga knappar utanför skärmen",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 14528,
+      "notes": [
+        "pg-project-detail: ingen testdata (projectId) — tomt läge",
+        "pg-propobj-detail: ingen testdata (objId) — tomt läge"
+      ],
+      "metrics": {
+        "medel renderingstid (desktop, ms)": 362
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "RESP-LAPTOP",
+      "module": "Responsiv layout",
+      "name": "Alla sidor i laptop: ingen horisontell scroll, inga knappar utanför skärmen",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 14528,
+      "notes": [
+        "pg-project-detail: ingen testdata (projectId) — tomt läge",
+        "pg-propobj-detail: ingen testdata (objId) — tomt läge"
+      ],
+      "metrics": {
+        "medel renderingstid (laptop, ms)": 362
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "RESP-TABLET",
+      "module": "Responsiv layout",
+      "name": "Alla sidor i tablet: ingen horisontell scroll, inga knappar utanför skärmen",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 14493,
+      "notes": [
+        "pg-project-detail: ingen testdata (projectId) — tomt läge",
+        "pg-propobj-detail: ingen testdata (objId) — tomt läge"
+      ],
+      "metrics": {
+        "medel renderingstid (tablet, ms)": 362
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "RESP-IPHONE",
+      "module": "Responsiv layout",
+      "name": "Alla sidor i iphone: ingen horisontell scroll, inga knappar utanför skärmen",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 14508,
+      "notes": [
+        "pg-project-detail: ingen testdata (projectId) — tomt läge",
+        "pg-propobj-detail: ingen testdata (objId) — tomt läge"
+      ],
+      "metrics": {
+        "medel renderingstid (iphone, ms)": 363
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "RESP-ANDROID",
+      "module": "Responsiv layout",
+      "name": "Alla sidor i android: ingen horisontell scroll, inga knappar utanför skärmen",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 14491,
+      "notes": [
+        "pg-project-detail: ingen testdata (projectId) — tomt läge",
+        "pg-propobj-detail: ingen testdata (objId) — tomt läge"
+      ],
+      "metrics": {
+        "medel renderingstid (android, ms)": 363
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "CUS-01",
+      "module": "Kundregister",
+      "name": "Ny kund via formulär sparas på servern, syns i listan och hittas med sökning",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3459,
+      "notes": [
+        "besked: Kund skapad"
+      ],
+      "metrics": {
+        "spara ny kund → bekräftelse (ms)": 306
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "CUS-02",
+      "module": "Kundregister",
+      "name": "Tomt kundnamn nekas med begripligt besked, inget sparas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2110,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "CUS-03",
+      "module": "Kundregister",
+      "name": "Redigera kund (telefon) sparas på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2481,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "CON-01",
+      "module": "Kontaktpersoner",
+      "name": "Kontaktperson på fastighet läggs till och sparas på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2615,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "PROP-01",
+      "module": "Fastighetsregister",
+      "name": "Ny fastighet utan objects_sensitive: portkodsfält visas inte, ingen portkod i registret",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1661,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "PROP-02",
+      "module": "Fastighetsregister",
+      "name": "Portkod vid ny fastighet (admin) sparas skyddat — aldrig i delade registret; fältarbetare kan inte läsa den",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2637,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/get-sensitive-fields → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 13
+    },
+    {
+      "id": "PROP-03",
+      "module": "Fastighetsregister",
+      "name": "Fastighetskortets alla flikar öppnas utan fel",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3018,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "OBJ-01",
+      "module": "Objekt och lägenheter",
+      "name": "Lägg till objekt på fastighet och öppna objektkortet",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2912,
+      "notes": [
+        "objektformulär: new-obj-type, new-obj-num, new-obj-name, new-obj-entrance, new-obj-stairwell, new-obj-floor, new-obj-area, new-obj-status, new-obj-access"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "STAFF-01",
+      "module": "Personalregister",
+      "name": "Ny personal via formulär sparas; listan visar personen",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2689,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "ROLE-01",
+      "module": "Användarroller och behörigheter",
+      "name": "Menyn visar bara sidor rollen får se; direktnavigering till otillåten sida nekas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 8933,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 20
+    },
+    {
+      "id": "ART-01",
+      "module": "Prisgrupper och artiklar",
+      "name": "Ny artikel och ny prisgrupp sparas; utan article_manage nekar servern direktskrivning",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5089,
+      "notes": [
+        "serverkontrollen är modellerad — måste upprepas mot riktig STAGING"
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_articles: forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 13
+    },
+    {
+      "id": "AO-01",
+      "module": "Arbetsordrar",
+      "name": "Ny AO via guiden (3 steg) skapas på servern via ao-time-write och får AO-nummer",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2126,
+      "notes": [
+        "besked: AO-(sparas…) skapad"
+      ],
+      "metrics": {
+        "skapa AO → serverbekräftad (ms)": 1241
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "AO-02",
+      "module": "Arbetsordrar",
+      "name": "Dubbelklick på \"Skapa order\" ger exakt en AO",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4138,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "LOG-01",
+      "module": "Arbetsorderloggar",
+      "name": "Loggpost (fältarbetare på egen AO): \"Sparar…\" och sedan \"sparad\" först efter serverns ACK",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2758,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "LOG-02",
+      "module": "Arbetsorderloggar",
+      "name": "Servern nekar loggpost: aldrig \"sparad\", posten försvinner och fel visas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1637,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "LOG-03",
+      "module": "Arbetsorderloggar",
+      "name": "Avbrott mitt i sparning: ingen bekräftelse; efter återanslutning skickas posten exakt en gång",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3416,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "LOG-04",
+      "module": "Arbetsorderloggar",
+      "name": "Servern svarar inte (timeout): \"sparad\" visas aldrig före serverns bekräftelse; exakt en post",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4200,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "LOG-05",
+      "module": "Arbetsorderloggar",
+      "name": "Osäkert utfall (servern sparade, svaret tappades): \"sparad\" först efter bekräftelse, ingen dubblett vid återförsök",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2779,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "CHK-01",
+      "module": "Arbetsorderchecklistor",
+      "name": "Admin lägger till kontrollpunkt; fältarbetare bockar av — båda på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5889,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "MAT-01",
+      "module": "Materialregistrering",
+      "name": "Material läggs till på AO med antal, pris och moms; servern får raden",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3164,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "AO-03",
+      "module": "Arbetsordrar",
+      "name": "Starta arbete ändrar status på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2742,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "AO-04",
+      "module": "Arbetsordrar",
+      "name": "Arkivera med bekräftelse → servern arkiverad; besked först efter ACK; återställ fungerar",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1612,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "AO-05",
+      "module": "Arbetsordrar",
+      "name": "Arkivering som servern nekar: AO:n återställs lokalt, inget \"arkiverad\"",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1654,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "AO-06",
+      "module": "Arbetsordrar",
+      "name": "Två användare redigerar samma AO samtidigt (olika fält): båda ändringarna finns kvar på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3200,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "AO-07",
+      "module": "Arbetsordrar",
+      "name": "Samtidiga loggposter från två enheter på samma AO (känt gap G5)",
+      "kind": "ui",
+      "status": "known",
+      "error": "Kontroll misslyckades: båda loggposterna borde finnas kvar — loggen skickas som hel array (G5)",
+      "ms": 5148,
+      "notes": [
+        "A kvar: false, B kvar: true"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "AO-09",
+      "module": "Arbetsordrar",
+      "name": "En AO-ändring = en serverskrivning (ingen extra geokodnings-patch när adressen inte kan geokodas)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3488,
+      "notes": [],
+      "metrics": {
+        "patch_ao per loggpost": 1
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
+      "id": "IMG-01",
+      "module": "Bilder och dokument",
+      "name": "Foto i AO-logg laddas upp via EF (bara imagePath i AO), visas via signerad URL",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2314,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
+      "id": "IMG-02",
+      "module": "Bilder och dokument",
+      "name": "Fil som inte är en bild nekas av servern; loggposten sparas inte",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1633,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-image-upload → 400 {\"error\":\"invalid_file_type\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "IMG-03",
+      "module": "Bilder och dokument",
+      "name": "Radera loggpost med foto: filen raderas först efter serverbekräftad radering",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3088,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "AO-08",
+      "module": "Användarroller och behörigheter",
+      "name": "Begränsad användare: servern levererar bara egna/pool-AO; direkt patch av annan AO → 403",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 887,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "TIME-01",
+      "module": "Tidregistrering och instämpling",
+      "name": "Flöde: fältarbetare stämplar in/ut på AO → serverbekräftad tidpost → löneadmin ser och attesterar → posten låst",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2915,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 409 {\"error\":\"attested_locked\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 19
+    },
+    {
+      "id": "TIME-02",
+      "module": "Tidregistrering och instämpling",
+      "name": "Stämpla in på mobil → datorn visar instämplad vid flikfokus; stämpla ut på datorn → mobilen visar utstämplad",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2571,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 18
+    },
+    {
+      "id": "TIME-03",
+      "module": "Tidregistrering och instämpling",
+      "name": "Dubbel utstämpling av samma pass från två enheter → exakt en tidpost",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5020,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 21
+    },
+    {
+      "id": "TIME-04",
+      "module": "Tidregistrering och instämpling",
+      "name": "Manuell tid på Tid-sidan: \"Sparar tiden…\" → \"Tid sparad\" efter ACK; nekad → borttagen och tydligt fel",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2402,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-eb6b08f4-4b9c-47ee-9213-a45f8d6f2a4b : forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "TIME-05",
+      "module": "Tidregistrering och instämpling",
+      "name": "Användarbyte med osynkad utstämpling: tidposten tappas inte och skickas inte i fel användares namn",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 9270,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 24
+    },
+    {
+      "id": "TIME-06",
+      "module": "Tidregistrering och instämpling",
+      "name": "Löneskydd: fältarbetare får bara egna tidposter, även vid direktanrop",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 866,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "MYJOBS-01",
+      "module": "Mina jobb",
+      "name": "Mina jobb visar egna tilldelade AO; \"Starta\" startar jobbet på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2725,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "FLOW-01",
+      "module": "Offertmodulen",
+      "name": "Arbetsflöde kund → fakturaunderlag: samma belopp i offertguide, kundlänk, AO, fakturakö och fakturautkast",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 18270,
+      "notes": [
+        "offertguide: 3952 / 988 / 4940 kr; OfferCalc: 3952 / 988 / 4940",
+        "AO prismodell fast, fast pris 3952",
+        "underlag: [{\"id\":\"fixed:AO-13b26df4-e371-4b76-b997-ce858de3c2e0\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
+        "faktura: ex 3952, moms 988, totalt 4940"
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[WorkOrderService] Serverskrivning avvisad för AO-13b26df4-e371-4b76-b997-ce858de3c2e0 : forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 41
+    },
+    {
+      "id": "OFF-03",
+      "module": "Offertmodulen",
+      "name": "Rabatt i offertguiden: kontrollen visas när första engångsraden läggs till; 10 % rabatt ger samma belopp i guide, OfferCalc, PDF och kundlänk",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3632,
+      "notes": [
+        "guide 1890 / 473 / 2363; OfferCalc 2100 − 210 = 1890, moms 473, totalt 2363"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "OFF-04",
+      "module": "Digitala offertlänkar och kundsvar",
+      "name": "Generera och återkalla kundlänk; serverfel vid återkallning ger inget \"återkallad\"-besked medan länken fortfarande fungerar",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 10970,
+      "notes": [
+        "toasts vid serverfel: Sparar… / Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_offers: http_503",
+        "[persist] merge-skrivning avvisad för vift_offers: http_503",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "GET /functions/v1/offer-token-validate?t=7850cb7d039bcb1b01e41709345cc6c9c959b340fb1f44a4cf2e1c3e7bc5ceb4 → 403 {\"error\":\"revoked\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "OFF-01",
+      "module": "Digitala offertlänkar och kundsvar",
+      "name": "Kundlänk: ogiltig/återkallad/redan besvarad ger begripligt besked; dubbelt godkännande nekas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 970,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "GET /functions/v1/offer-token-validate?t=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx → 404 {\"error\":\"not_found\"}",
+        "POST /functions/v1/offer-respond → 410 {\"error\":\"already_answered\",\"status\":\"godkänd\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 3
+    },
+    {
+      "id": "INV-01",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Fakturautkast: rad, rabatt och ROT större än totalen; servern nekar ändring av skickad faktura",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1254,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
+      "id": "INV-02",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Utan invoice_create: knappar dolda och servern nekar direktanrop",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 876,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/invoice-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "OFF-02",
+      "module": "Offertmodulen",
+      "name": "Offert-PDF (genereras i webbläsaren) visar samma totalsumma som OfferCalc för samtliga befintliga offerter",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 9375,
+      "notes": [
+        "5 offerter kontrollerade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
+      "id": "SVC-01",
+      "module": "Serviceintervall",
+      "name": "Flöde: skapa intervall → förfallodatum → Att göra vid uppstart → markera utförd med AO och kommentar → historik, uppgift stängd",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 12023,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 22
+    },
+    {
+      "id": "SVC-02",
+      "module": "Serviceintervall",
+      "name": "Serverfel vid \"Markera utförd\" ger inget definitivt \"utfört\"-besked och ingen tyst förlust",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6967,
+      "notes": [
+        "toasts: Sparar… / Utförandet kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_properties: http_503",
+        "[persist] merge-skrivning avvisad för vift_properties: http_503",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "SVC-03",
+      "module": "Serviceintervall",
+      "name": "Översikten: filter, sök och paus/återuppta sparas på servern; fältarbetare utan customer_manage nekas sidan",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6050,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "ROLE-02",
+      "module": "Roller och behörigheter",
+      "name": "Ändra rolls behörighet: serverfel → inget \"Roll uppdaterad\", behörigheten oförändrad; lyckad ändring slår igenom för rollens användare",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5574,
+      "notes": [
+        "toasts: Sparar… / Rollen \"Tekniker / Personal\" kunde inte sparas — behörigheterna är OFÖRÄNDRADE — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_roles: http_503",
+        "[persist] merge-skrivning avvisad för vift_roles: http_503",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "STAFF-02",
+      "module": "Personal",
+      "name": "Byta roll på en person: serverfel → inget \"Sparat\"; lyckat byte sparas på servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4891,
+      "notes": [
+        "toasts: Sparar… / Ändringen för Sofia Lindgren kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_staff: http_503",
+        "[persist] merge-skrivning avvisad för vift_staff: http_503",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "ADMIN-01",
+      "module": "Inställningar och administration",
+      "name": "Admin-flikarna öppnas utan fel; fältarbetare nekas Admin; äldre sparväg utan bekräftelse ger varning vid serverfel",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7001,
+      "notes": [
+        "toasts: Sparat / Varning: servern bekräftade inte den senaste ändringen (artiklar). Den kan vara osparad — kontrollera och försök igen."
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_articles: http_503",
+        "[persist] merge-skrivning avvisad för vift_articles: http_503",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
     }
   ]
 }

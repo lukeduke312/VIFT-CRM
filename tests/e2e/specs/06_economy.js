@@ -195,6 +195,51 @@ module.exports = [
     },
   },
   {
+    id: 'OFF-04', module: 'Digitala offertlänkar och kundsvar', name: 'Generera och återkalla kundlänk; serverfel vid återkallning ger inget "återkallad"-besked medan länken fortfarande fungerar',
+    async run(t) {
+      const s = await t.world.session({ viewport: 'laptop' });
+      await s.login('admin');
+      const offerId = t.fake.get('offers').find((o) => !o.deleted && !o.archived && /utkast|skickad/.test(o.status || '')).id;
+      await s.go('pg-offer-detail', { offerId });
+      const expandLink = async () => {
+        if (!(await s.page.locator('.page.active button', { hasText: /Generera digital länk|Återkalla länk/ }).count())) await s.page.locator('.page.active .off-collapse-summary', { hasText: 'Digital länk' }).click();
+      };
+      await expandLink();
+      await s.page.locator('.page.active button', { hasText: 'Generera digital länk' }).first().click();
+      await s.clickModalButton(/Generera länk/);
+      await s.waitToast(/Länk genererad/, 6000);
+      await s.settle(1200);
+      const token = (t.fake.get('offers').find((o) => o.id === offerId) || {}).publicToken;
+      t.assert(token && token.length >= 32, 'token sparad på servern');
+      const cust = await t.world.session({ viewport: 'iphone' });
+      const openLink = async () => { await cust.page.goto(lib.baseUrl + '/public-offer.html?t=' + token, { waitUntil: 'load' }); await cust.settle(1500); return cust.eval(() => document.body.innerText); };
+      t.assert(/inkl\. moms|Godkänn/i.test(await openLink()), 'kunden kan öppna länken');
+      // Återkalla — servern nekar
+      await s.clearToasts();
+      t.fake.addFault({ match: /store-key-write:writeMerge/, mode: 'fail', status: 503, error: 'http_503', times: 3 });
+      await expandLink();
+      await s.page.locator('.page.active button', { hasText: 'Återkalla länk' }).first().click();
+      await s.clickModalButton(/Bekräfta/);
+      await s.settle(2500);
+      const toasts = await s.toasts();
+      t.note('toasts vid serverfel: ' + toasts.join(' / '));
+      const stillValid = /inkl\. moms|Godkänn/i.test(await openLink());
+      t.assert(stillValid, 'förutsättning: länken fungerar fortfarande hos kunden (servern sparade inte)');
+      t.assert(!toasts.some((m) => /^Länk återkallad/.test(m)), 'inget "Länk återkallad" när servern inte bekräftat');
+      t.assert(toasts.some((m) => /INTE|inte|kunde/i.test(m)), 'tydligt fel om att länken fortfarande är aktiv');
+      t.assert(await s.eval((id) => !state.offers.find((o) => o.id === id).tokenRevokedAt, offerId), 'klienten visar inte länken som återkallad');
+      // Nytt försök utan fel
+      t.fake.clearFaults();
+      await s.clearToasts();
+      await expandLink();
+      await s.page.locator('.page.active button', { hasText: 'Återkalla länk' }).first().click();
+      await s.clickModalButton(/Bekräfta/);
+      await s.waitToast(/Länk återkallad/, 6000);
+      t.assert(!!t.fake.get('offers').find((o) => o.id === offerId).tokenRevokedAt, 'återkallad på servern');
+      t.assert(!/Godkänn/.test(await openLink()), 'kunden kan inte längre använda länken');
+    },
+  },
+  {
     id: 'OFF-01', module: 'Digitala offertlänkar och kundsvar', name: 'Kundlänk: ogiltig/återkallad/redan besvarad ger begripligt besked; dubbelt godkännande nekas',
     async run(t) {
       const c = await t.world.session({ viewport: 'iphone' });
