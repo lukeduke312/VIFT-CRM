@@ -3,10 +3,16 @@
 # Lokala sandlådetester — INTE en verifierad serveroperation i STAGING.
 set -u
 cd "$(dirname "$0")"
-total=0; fails=0
+total=0; fails=0; skips=0
 for t in *.test.js; do
   total=$((total+1))
   if node "$t" > "/tmp/vift-test-$t.log" 2>&1; then
+    if grep -q 'HOPPAS ÖVER' "/tmp/vift-test-$t.log"; then
+      # Överhoppat (t.ex. ingen lokal PostgreSQL) är INTE godkänt.
+      skips=$((skips+1))
+      echo "SKIP  $t  ($(grep -o 'RESULT: .*' "/tmp/vift-test-$t.log"))"
+      continue
+    fi
     echo "PASS  $t  ($(grep -o 'RESULT: .*' "/tmp/vift-test-$t.log"))"
   else
     fails=$((fails+1))
@@ -22,5 +28,5 @@ if [ "${SKIP_BROWSER:-}" != "1" ] && node -e "require('playwright')" 2>/dev/null
 else
   echo "SKIP  browser/*.js (Playwright saknas eller SKIP_BROWSER=1)"
 fi
-echo "--- $((total-fails))/$total testfiler gröna"
+echo "--- $((total-fails-skips))/$total testfiler gröna$([ $skips -gt 0 ] && echo ", $skips ÖVERHOPPADE (inte godkända)")"
 exit $fails

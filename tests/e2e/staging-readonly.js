@@ -1,8 +1,19 @@
 'use strict';
 /*
- * LÄSANDE kontroller mot en befintlig STAGING-miljö. Inga inloggningar,
- * inga skrivningar, inga utskick. Mål anges via miljövariabler så att inga
- * STAGING-identifierare hamnar i repot:
+ * NIVÅ 0 — oinloggade kontroller mot en befintlig STAGING-miljö (nivåerna:
+ * tests/staging/lib.js). Inga inloggningar, inga skrivåtgärder, inga utskick.
+ * Klassning per anrop (2026-11-23):
+ *  - statiska filer (index.html, storage.js, sidan i webbläsaren): ingen databas
+ *  - REST GET store utan JWT: nekas av RLS (401), ingen läsning av affärsdata
+ *  - EF:er utan JWT (work-orders-list, time-entries-list, store-key-write
+ *    readHashes): nekas (401/403) innan anropet har en identitet; källan för
+ *    store-key-write/work-orders-list finns inte i repot (G4), men ingen
+ *    skrivåtgärd skickas
+ *  - offer-token-validate och kundsidan med OGILTIG token: källverifierat att
+ *    servern svarar 404 innan något skrivs (skrivning sker bara vid första
+ *    öppning av en GILTIG token — sådan används aldrig här)
+ * Mål anges via miljövariabler så att inga STAGING-identifierare hamnar i
+ * repot:
  *
  *   VIFT_STAGING_URL=https://<staging-domän>  node tests/e2e/staging-readonly.js
  *

@@ -58,7 +58,7 @@ Tidigare samma dag (Leverans I, se `docs/E2E-RAPPORT-2026-11-23.md`) rättades 2
 ### A2. Byggt
 
 - Designstandard (`docs/DESIGNSTANDARD.md`) med tokens och gemensamma regler. Se B.
-- STAGING-verifieringsskript `tests/e2e/staging-authz.js` för G13, G9 och G6. Se A4.
+- STAGING-testverktyg i tre nivåer för G13, G9, G6 och checklistans ägarkontroll: 0 `tests/e2e/staging-readonly.js`, 1 `tests/staging/authz-read.js`, 2 `tests/staging/authz-mutation.js`. Se A4. Det tidigare `tests/e2e/staging-authz.js` är **ersatt**, eftersom det felaktigt beskrevs som skrivfritt; se rättelsen i A4.
 - Visuellt verktyg `tests/e2e/visual.js`: `capture` (30 vyer × laptop och mobil, även tomma lägen med `VIFT_VISUAL_EMPTY=1`), `compare` (pixeljämförelse) och `sheet` (kontaktark).
 - Serverförslag för G5 (migration + beskrivning) och PATCH i `offer-attachment-upload`. Båda finns bara i repot.
 
@@ -77,12 +77,24 @@ Tidigare samma dag (Leverans I, se `docs/E2E-RAPPORT-2026-11-23.md`) rättades 2
 
 ### A4. Kräver test i riktig STAGING
 
-1. **J1** `node tests/e2e/staging-authz.js --jag-har-go`, med testkonton för fält, chef, ekonomi och en begränsad roll. Det ger svaret på G13 och G9.
-   - Inga data ändras. G13 tar bort ett id som inte finns. G9 skickar `patch_ao` med oförändrade värden.
-   - Undantag: en tillåten skrivning kan uppdatera tidsstämpeln `updated_at`, och möjligen aktivitetsloggen beroende på serverns implementation.
-   - G6 körs bara med `--med-testdata`. Den skapar en märkt testtidpost och tar bort den med `delete_time`.
-2. Testfallen J2–J8 och tidigare A1–A4, T1–T4, S1–S5, O1–O3, F1, I1–I2 och E1–E10 i `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` §4.
-3. Riktig iPhone/Safari och Android. WebKit finns inte i testmiljön.
+**Rättelse (sen kväll, efter granskning av Lucas och ChatGPT mot installerade STAGING-RPC:er):** det tidigare `staging-authz.js` beskrevs som "inga data ändras". Det stämde inte:
+- En tillåten `writeMerge` uppdaterar `store.updated_at` och `vift_lastChanged`, även utan faktisk post.
+- G9-kontrollen gjorde en no-op-`patch_ao` på en **befintlig** AO, vilket kan uppdatera AO:ns `updatedAt` och synksignaturen.
+
+Verktyget är ersatt och vägrar köra. Det har delats i nivåer (`docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` §4a):
+
+1. **J1a, nivå 1:** `tests/staging/authz-read.js`. Inloggad läsning: vilka AO och tidposter varje roll ser, direkt REST-läsning och sondering av checklistans serverstöd.
+   - Inga affärsdata skrivs. Inloggningen skriver i auth-schemat.
+   - Kräver GO och testkonton.
+2. **J1b, nivå 2:** `tests/staging/authz-mutation.js`.
+   - G13: en märkt testpost per register och roll, som tas bort direkt.
+   - G9: ekonomi försöker sätta **körningens egen test-AO** till "fakturerad".
+   - G6: dubbel `create_time` på samma test-AO.
+   - Checklistans ägarkontroll.
+   - Rör aldrig befintliga poster. Har miljöspärrar, journal, ögonblicksbild före och efter, städning i alla lägen, `--torrkorning` och `--stada=<runId>`.
+   - Kräver uttryckligt GO för mutationstest.
+3. Testfallen J2–J12 på **märkta testposter**, och tidigare A1–A4, T1–T4, S1–S5, O1–O3, F1, I1–I2 och E1–E10 i `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` §4.
+4. Riktig iPhone/Safari och Android. WebKit finns inte i testmiljön.
 
 ---
 
@@ -152,7 +164,7 @@ Sista körningen gjordes efter att all kod frysts:
 | Svit | Antal | Godkända | Misslyckade | Blockerade | Kända fel |
 |---|---|---|---|---|---|
 | E2E, Chromium mot simulerad backend (`node tests/e2e/run.js`) | 107 | 105 | 0 | 1 (PERM-03) | 1 (AO-07) |
-| Enhetstester (`bash tests/run-all.sh`) | 11 filer, 220 kontroller (varav 32 SQL mot riktig PostgreSQL 16) | 220 | 0 | — | — |
+| Enhetstester (`bash tests/run-all.sh`) | 12 filer, 250 kontroller (varav 32 SQL mot riktig PostgreSQL 16 och 30 för STAGING-verktygen) | 250 | 0 | 0 | — |
 | Offertparitet i webbläsare | 120 offerter | 120 (10 ogiltiga visar varning) | 0 | — | — |
 | Läsande STAGING-kontroll (`staging-readonly.js`) | 11 | 11 | 0 | — | 1 info (proxyfel för extern resurs) |
 
@@ -221,14 +233,16 @@ Den enda gällande planen är `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (up
 
 **Migrationer:** `20261123000002_work_order_checklist_progress.sql` (§2g, kräver GO). Inga för §2a/§2e. `20261123000001_PROPOSAL_work_order_log_ops.sql` är ett förslag och ska **inte** köras.
 
-**Ordning:**
-1. J1 G13/G9 (ändrar inga data) mot nuvarande STAGING.
-2. §2a klientfiler.
-3. §2g: checklistans migration och sedan EF:en, i samma arbetspass.
-4. §2e.
-5. (§2b.)
-6. Testfallen i §4, inklusive J9–J12 för checklistan.
-7. J1 G6 med testdata, om det godkänts.
+**Ordning:** se installationsplanen §6.2.
+1. Nivå 0.
+2. J1a.
+3. J1b med torrkörning och sedan skarp körning mot nuvarande server.
+4. §2a.
+5. §2g.
+6. §2e.
+7. (§2b.)
+8. Efterkontroll med nivå 0 och J1b.
+9. Manuella integrationstester på märkta testposter.
 
 **Efter installationen:**
 - Hårdladda sidan och kontrollera de nya versionsnumren.
@@ -244,11 +258,17 @@ Den enda gällande planen är `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` (up
 
 ### GO/NO-GO
 
-| Del | Beslut |
-|---|---|
-| Klientfiler §2a (releasekandidat) | **GO för kontrollerad STAGING-installation — kräver ditt separata GO.** Inga kända klientfel kvar som blockerar test. Klienten är inte verifierad mot riktiga serversvar. |
-| Checklista §2g (migration + EF) | **GO för STAGING efter separat GO**, efter §2a. Ändrar inga befintliga data eller AO-statusar. |
-| `offer-attachment-upload` PATCH §2e | **GO efter källjämförelse och separat GO.** |
-| J1 G13/G9 mot STAGING | **Rekommenderas först**, med separat GO och testkonton. |
-| G5 serverdel, G7, aktivitetslogg som tabell | **NO-GO nu** (förslag/planerat; kräver G4). |
-| **LIVE** | **NO-GO.** LIVE saknar STAGING:s backend (ao-time-write, RPC:er, RESTRICTIVE-policyer, stamp_status, store-key-write). G13/BLOCKER-2 är oavgjord. Ingenting är STAGING-verifierat. |
+**Det enda gällande underlaget är `docs/INSTALLATIONSPLAN-STAGING-2026-11-22.md` §6.** Det innehåller förutsättningar, steg med vad som ändras, vilket GO som krävs, stoppkriterier och rollback, samt vad som ligger utanför omgången. Sammanfattning:
+
+- **GO**, var och ett efter ditt separata GO, i ordningen 1–10:
+  - nivå 0
+  - J1a (testkonton)
+  - J1b torrkörning och skarp körning (mutationstest)
+  - §2a klientfiler
+  - §2g checklistans migration och EF
+  - §2e
+  - (§2b)
+  - efterkontroll
+  - manuella integrationstester på märkta testposter
+- **NO-GO:** LIVE, G5 serverdel, aktivering av service-monitor, G7 och aktivitetsloggen som tabell. Det ersatta `staging-authz.js` får inte användas.
+- **Rekommenderad start:** nivå 0 + J1a + J1b mot den nuvarande servern, så att G13/G9/G6 är kända innan något installeras.

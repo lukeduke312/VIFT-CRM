@@ -1,3 +1,4 @@
 .claude/
 *.zip
 tests/e2e/report/last-partial.json
+tests/staging/rapport/
