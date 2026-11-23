@@ -248,7 +248,13 @@ const ServiceIntervalService = {
   },
 
   /* ── Skapa nytt serviceintervall ─────────────────────────── */
-  create(propId, data) {
+  /* E2E SVC-02 (2026-11-23): create/update/delete/setPaused/markDone tar
+     ett valfritt `{ persist: false }`. Då muterar de bara state och
+     anroparen (PropertyDetailPage._siCommit) sparar själv med
+     `await persist({keys:['properties']})`, visar framgång FÖRST efter
+     serverns bekräftelse och rullar tillbaka vid fel. Standard (utan
+     opts) är oförändrat. */
+  create(propId, data, opts) {
     const p = (state.properties || []).find(p => p.id === propId);
     if (!p) return null;
     if (!p.serviceIntervals) p.serviceIntervals = [];
@@ -282,13 +288,13 @@ const ServiceIntervalService = {
       updatedAt:             new Date().toISOString()
     });
     p.serviceIntervals.push(si);
-    persist();
+    if (!opts || opts.persist !== false) persist();
     if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
     return si;
   },
 
   /* ── Uppdatera serviceintervall ──────────────────────────── */
-  update(propId, siId, data) {
+  update(propId, siId, data, opts) {
     const p  = (state.properties || []).find(p => p.id === propId);
     if (!p)  return false;
     const si = (p.serviceIntervals || []).find(s => s.id === siId);
@@ -324,30 +330,34 @@ const ServiceIntervalService = {
       aoStaff:               data.aoStaff            !== undefined ? data.aoStaff            : si.aoStaff,
       updatedAt:             new Date().toISOString()
     });
-    persist();
+    if (!opts || opts.persist !== false) persist();
     if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
     return true;
   },
 
   /* ── Pausa / återuppta ───────────────────────────────────── */
-  setPaused(propId, siId, paused) {
-    return this.update(propId, siId, { active: !paused });
+  setPaused(propId, siId, paused, opts) {
+    return this.update(propId, siId, { active: !paused }, opts);
   },
 
   /* ── Ta bort ─────────────────────────────────────────────── */
-  delete(propId, siId) {
+  delete(propId, siId, opts) {
     const p = (state.properties || []).find(p => p.id === propId);
     if (!p || !p.serviceIntervals) return false;
     const i = p.serviceIntervals.findIndex(s => s.id === siId);
     if (i < 0) return false;
     p.serviceIntervals.splice(i, 1);
-    persist();
+    if (!opts || opts.persist !== false) persist();
     if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
     return true;
   },
 
   /* ── Markera som utförd ──────────────────────────────────── */
-  markDone(propId, siId, { date, staffId, comment, aoId } = {}) {
+  /* `persist: false` (se create): bara intervallet/historiken muteras.
+     Kopplade Att göra-poster stängs och notisen skickas först när
+     anroparen fått serverns bekräftelse, via finishMarkDone() — annars
+     kunde en uppgift stängas för en period som aldrig sparades. */
+  markDone(propId, siId, { date, staffId, comment, aoId, persist: doPersist } = {}) {
     const p  = (state.properties || []).find(p => p.id === propId);
     if (!p)  return false;
     const si = (p.serviceIntervals || []).find(s => s.id === siId);
@@ -378,23 +388,41 @@ const ServiceIntervalService = {
     si.lastActivityNotifiedForDueDate  = '';
     si.lastAOGeneratedForDueDate       = '';
 
+    if (doPersist === false) {
+      if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+      return { previousNextDue };
+    }
+
     /* Stäng kopplade Att göra-poster för den avslutade perioden */
     this._completeLinkedActivities(si, previousNextDue, { staffId, comment });
 
     persist();
     if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+    this._notifyDone(propId, si);
+    return true;
+  },
 
+  /* Efterarbete till markDone(..., {persist:false}) när servern bekräftat. */
+  finishMarkDone(propId, siId, previousNextDue, { staffId, comment } = {}) {
+    const p  = (state.properties || []).find(p => p.id === propId);
+    const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
+    if (!si) return false;
+    this._completeLinkedActivities(si, previousNextDue, { staffId, comment });
+    this._notifyDone(propId, si);
+    if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+    return true;
+  },
+
+  _notifyDone(propId, si) {
     /* In-app notification */
     if (typeof NotificationsService !== 'undefined' && state.currentUser) {
       NotificationsService.push(
         state.currentUser.id,
         'service_done',
         `${si.title} markerat som utfört — nästa: ${si.nextDue ? (typeof fmtDate === 'function' ? fmtDate(si.nextDue) : si.nextDue) : '–'}`,
-        { propId, siId }
+        { propId, siId: si.id }
       );
     }
-
-    return true;
   },
 
   /* ── Bevakningskörning (anropas vid app-start och kan anropas dagligen) ── */

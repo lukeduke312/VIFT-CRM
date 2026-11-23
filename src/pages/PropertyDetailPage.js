@@ -1065,18 +1065,73 @@ const PropertyDetailPage = {
     if (typeof ServiceIntervalsPage !== 'undefined' && document.getElementById('si-overview-list')) ServiceIntervalsPage.render();
   },
 
+  /* Renderar om fastighetens Service-flik, översikten och (vid behov)
+     översiktsfliken efter en ändring av ett serviceintervall. */
+  _siRefreshViews(propId) {
+    const p = getObj(propId);
+    if (!p) return;
+    const el = document.getElementById('prop-tab-service');
+    if (el) el.innerHTML = this._renderServiceTab(p);
+    this._refreshSIOverview();
+    const ovEl = document.getElementById('prop-tab-overview');
+    if (ovEl) ovEl.innerHTML = this._renderOverview(p, p.inspections || {}, p.serviceIntervals || []);
+  },
+
+  /* E2E SVC-02 (2026-11-23): gemensam sparväg för alla serviceintervall-
+     ändringar. Tidigare visades "Markerat som utförd"/"tillagt" direkt
+     medan persist() gick i bakgrunden — även när servern sedan nekade.
+     Nu: mutera state (utan egen persist), visa "Sparar…", vänta på
+     serverns svar för nyckeln properties, och visa framgång först då.
+     Vid fel avgör settlePersistFailure() (samma N1-regel som kund-
+     registret) om ändringen faktiskt landade; annars rullas fastigheten
+     tillbaka till läget före ändringen och ett tydligt fel visas.
+     `_siSaving` spärrar dubbelklick/parallella sparningar. */
+  async _siCommit(propId, mutate, msgs) {
+    if (this._siSaving) return false;
+    const p0 = getObj(propId);
+    if (!p0) return false;
+    const before = JSON.parse(JSON.stringify(p0));
+    this._siSaving = true;
+    try {
+      const r = mutate();
+      if (r === false || r === null || r === undefined) { showToast('Serviceintervallet hittades inte'); return false; }
+      Modal.close();
+      this._siRefreshViews(propId);
+      showToast('Sparar…');
+      const ok = await persist({ keys: ['properties'] });
+      if (!ok) {
+        const n1 = (typeof settlePersistFailure === 'function') ? await settlePersistFailure('properties', propId) : { fate: 'none' };
+        if (n1.fate === 'diverged' || n1.fate === 'conflict') {
+          this._siRefreshViews(propId);
+          showToast('Fastigheten ändrades samtidigt av en annan session — välj i konfliktdialogen.', 6000);
+          return false;
+        }
+        if (n1.fate !== 'landed') {
+          const idx = (state.properties || []).findIndex(x => x.id === propId);
+          if (idx >= 0) state.properties[idx] = before;
+          try { Storage.setLocal('properties', state.properties); } catch (e) {}
+          if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
+          this._siRefreshViews(propId);
+          showToast((msgs.fail || 'Ändringen kunde inte sparas') + (n1.fate === 'not-landed' || n1.fate === 'unknown'
+            ? ' — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst.'
+            : ' av servern. Försök igen.'), 7000);
+          return false;
+        }
+      }
+      if (typeof msgs.after === 'function') { try { msgs.after(r); } catch (e) { console.warn('[serviceintervall] efterarbete:', e); } }
+      this._siRefreshViews(propId);
+      showToast(msgs.ok);
+      return true;
+    } finally {
+      this._siSaving = false;
+    }
+  },
+
   _saveAddInterval(propId) {
     const d = this._siReadForm();
     if (!d.title) { showToast('Ange en titel'); return; }
-    ServiceIntervalService.create(propId, d);
-    Modal.close();
-    showToast('Serviceintervall tillagt');
-    const p = getObj(propId);
-    if (p) {
-      const el = document.getElementById('prop-tab-service');
-      if (el) el.innerHTML = this._renderServiceTab(p);
-      this._refreshSIOverview();
-    }
+    return this._siCommit(propId, () => ServiceIntervalService.create(propId, d, { persist: false }),
+      { ok: 'Serviceintervall tillagt', fail: 'Serviceintervallet kunde inte sparas' });
   },
 
   openEditInterval(propId, siId) {
@@ -1098,28 +1153,15 @@ const PropertyDetailPage = {
   _saveEditInterval(propId, siId) {
     const d = this._siReadForm();
     if (!d.title) { showToast('Ange en titel'); return; }
-    ServiceIntervalService.update(propId, siId, d);
-    Modal.close();
-    showToast('Serviceintervall uppdaterat');
-    const p = getObj(propId);
-    if (p) {
-      const el = document.getElementById('prop-tab-service');
-      if (el) el.innerHTML = this._renderServiceTab(p);
-      this._refreshSIOverview();
-    }
+    return this._siCommit(propId, () => ServiceIntervalService.update(propId, siId, d, { persist: false }),
+      { ok: 'Serviceintervall uppdaterat', fail: 'Ändringen av serviceintervallet kunde inte sparas' });
   },
 
   deleteInterval(propId, siId) {
     if (!Auth.can('customer_manage')) return;
     if (!confirm('Ta bort detta serviceintervall?')) return;
-    ServiceIntervalService.delete(propId, siId);
-    showToast('Serviceintervall borttaget');
-    const p = getObj(propId);
-    if (p) {
-      const el = document.getElementById('prop-tab-service');
-      if (el) el.innerHTML = this._renderServiceTab(p);
-      this._refreshSIOverview();
-    }
+    return this._siCommit(propId, () => ServiceIntervalService.delete(propId, siId, { persist: false }),
+      { ok: 'Serviceintervall borttaget', fail: 'Serviceintervallet kunde inte tas bort' });
   },
 
   openMarkDone(propId, siId) {
@@ -1175,17 +1217,10 @@ const PropertyDetailPage = {
     const staffId = document.getElementById('si-done-staff')?.value      || '';
     const aoId    = document.getElementById('si-done-ao')?.value         || '';
     const comment = document.getElementById('si-done-comment')?.value.trim() || '';
-    ServiceIntervalService.markDone(propId, siId, { date, staffId, comment, aoId });
-    Modal.close();
-    showToast('Markerat som utförd — nästa datum beräknat');
-    const p = getObj(propId);
-    if (p) {
-      const el = document.getElementById('prop-tab-service');
-      if (el) el.innerHTML = this._renderServiceTab(p);
-      this._refreshSIOverview();
-      const ovEl = document.getElementById('prop-tab-overview');
-      if (ovEl) ovEl.innerHTML = this._renderOverview(p, p.inspections || {}, p.serviceIntervals || []);
-    }
+    return this._siCommit(propId,
+      () => ServiceIntervalService.markDone(propId, siId, { date, staffId, comment, aoId, persist: false }),
+      { ok: 'Markerat som utförd — nästa datum beräknat', fail: 'Utförandet kunde inte sparas',
+        after: (r) => ServiceIntervalService.finishMarkDone(propId, siId, r.previousNextDue, { staffId, comment }) });
   },
 
   toggleSIPaused(propId, siId) {
@@ -1193,14 +1228,9 @@ const PropertyDetailPage = {
     const p  = getObj(propId);
     const si = p ? (p.serviceIntervals || []).find(s => s.id === siId) : null;
     if (!si) return;
-    ServiceIntervalService.setPaused(propId, siId, !!si.active);
-    showToast(si.active ? 'Interval pausat' : 'Interval återupptaget');
-    const freshP = getObj(propId);
-    if (freshP) {
-      const el = document.getElementById('prop-tab-service');
-      if (el) el.innerHTML = this._renderServiceTab(freshP);
-      this._refreshSIOverview();
-    }
+    const pausing = !!si.active;
+    return this._siCommit(propId, () => ServiceIntervalService.setPaused(propId, siId, pausing, { persist: false }),
+      { ok: pausing ? 'Intervall pausat' : 'Intervall återupptaget', fail: 'Ändringen kunde inte sparas' });
   },
 
   openSIHistory(propId, siId) {

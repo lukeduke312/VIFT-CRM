@@ -128,7 +128,11 @@ section('PropertyDetailPage — modalknappar är riktiga funktioner');
   const modal = fs.readFileSync(path.join(__dirname, '..', 'src/components/Modal.js'), 'utf8');
   check('Modal.open läser btn.onClick', /b\.onclick\s*=\s*btn\.onClick/.test(modal));
   check("inga döda `fn: '...'`-knappar kvar", !/\{\s*label:[^}]*\bfn:\s*['`]/.test(pdp));
-  check('översiktens uppdateringshook anropas i 5 sparvägar', (pdp.match(/this\._refreshSIOverview\(\);/g) || []).length === 5);
+  /* 2026-11-23 (E2E SVC-02): de 5 sparvägarna går via _siCommit(), som
+     renderar om via _siRefreshViews() → _refreshSIOverview(). */
+  check('_siRefreshViews anropar översiktens uppdateringshook', /_siRefreshViews\(propId\) \{[\s\S]{0,300}this\._refreshSIOverview\(\);/.test(pdp));
+  check('5 sparvägar går via _siCommit (väntar på serverns svar)', (pdp.match(/this\._siCommit\(propId,/g) || []).length === 5);
+  check('_siCommit väntar på persist för properties före framgångs-toast', /async _siCommit[\s\S]{0,900}await persist\(\{ keys: \['properties'\] \}\)[\s\S]{0,1800}showToast\(msgs\.ok\)/.test(pdp));
 }
 
 done();
