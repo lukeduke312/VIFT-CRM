@@ -398,6 +398,41 @@ const WorkOrderService = {
     return this._update_internal(id, safeData, opts);
   },
 
+  /* G5 (2026-11-23): lägg till / ta bort EN loggpost. Med serverstöd
+     (AOTimeSyncService.supportsLogOps) skickas bara posten (append_log /
+     remove_log, atomiskt på servern) — två enheter kan då inte längre
+     skriva över varandras poster. Utan serverstöd används den tidigare
+     vägen (patch_ao med hela loggen) oförändrat. Den lokala ändringen av
+     ao.log görs av anroparen före anropet, precis som tidigare. */
+  async appendLogEntry(aoId, entry, opts) {
+    return this._logOp(aoId, opts, function (ao, settle) { return AOTimeSyncService.appendLog(ao.id, entry, { onSettled: settle }); });
+  },
+  async removeLogEntry(aoId, entryId, opts) {
+    return this._logOp(aoId, opts, function (ao, settle) { return AOTimeSyncService.removeLog(ao.id, entryId, { onSettled: settle }); });
+  },
+  async _logOp(aoId, opts, send) {
+    opts = opts || {};
+    const ao = getAO(aoId);
+    const atomic = !!ao && typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.supportsLogOps === 'function'
+      && await AOTimeSyncService.supportsLogOps();
+    if (!atomic) return this._update_internal(aoId, ao ? { log: ao.log } : {}, opts);
+    ao.updatedAt = new Date().toISOString();
+    ao._pendingSync = true;
+    const settle = function (r) {
+      if (r.ok) {
+        ao._pendingSync = false;
+        if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
+      } else if (r.final) {
+        ao._pendingSync = false;
+        ao._syncFailed = r.error;
+      }
+      if (typeof WorkOrderDetailPage !== 'undefined' && typeof WorkOrderDetailPage.onSyncStatusChanged === 'function') WorkOrderDetailPage.onSyncStatusChanged(ao.id);
+      if (typeof opts.onSettled === 'function') { try { opts.onSettled(Object.assign({}, r, { ao: ao })); } catch (e) { console.error('[WorkOrderService] onSettled (logg):', e); } }
+    };
+    send(ao, settle);
+    return ao;
+  },
+
   _update_internal(id, data, opts) {
     opts = opts || {};
     const ao = getAO(id);

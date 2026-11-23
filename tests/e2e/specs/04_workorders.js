@@ -268,6 +268,27 @@ module.exports = [
     },
   },
   {
+    id: 'AO-07B', world: { backend: { logOps: true } }, module: 'Arbetsorderloggar', name: 'G5 med serverstöd (append_log): samtidiga loggposter från två enheter bevaras båda; borttagning tar bara bort sin post; ingen hel-array-patch',
+    async run(t) {
+      const a = await t.world.session(); await a.login('falt2');
+      const b = await t.world.session({ viewport: 'iphone' }); await b.login('falt2');
+      await openAO(a, 'AO-007'); await openAO(b, 'AO-007');
+      t.fake.addFault({ match: /ao-time-write:append_log/, mode: 'delay', ms: 600, times: 2 });
+      await Promise.all([addLog(a, 'E2E G5 enhet A'), addLog(b, 'E2E G5 enhet B')]);
+      await a.waitToast(/Loggpost sparad/, 8000); await b.waitToast(/Loggpost sparad/, 8000);
+      let log = t.fake.get('workOrders').find((x) => x.id === 'AO-007').log || [];
+      t.assert(log.some((l) => l.text === 'E2E G5 enhet A') && log.some((l) => l.text === 'E2E G5 enhet B'), 'båda posterna finns på servern');
+      t.assert(!t.fake.calls.some((c) => c.action === 'ao-time-write:patch_ao' && c.hasLog), 'ingen patch_ao med hel logg');
+      const idA = log.find((l) => l.text === 'E2E G5 enhet A').id;
+      await a.eval(() => DataSync._poll()); await a.settle(500);
+      await a.eval((id) => WorkOrderDetailPage.deleteLogEntry(id), idA);
+      await a.clickModalButton(/Bekräfta/);
+      await a.waitToast(/Loggpost borttagen/, 8000);
+      log = t.fake.get('workOrders').find((x) => x.id === 'AO-007').log || [];
+      t.assert(!log.some((l) => l.id === idA) && log.some((l) => l.text === 'E2E G5 enhet B'), 'A:s post borttagen, B:s kvar');
+    },
+  },
+  {
     id: 'AO-09', module: 'Arbetsordrar', name: 'En AO-ändring = en serverskrivning (ingen extra geokodnings-patch när adressen inte kan geokodas)',
     async run(t) {
       const s = await t.world.session();

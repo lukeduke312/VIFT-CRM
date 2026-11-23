@@ -203,6 +203,32 @@ const AOTimeSyncService = {
     return false; /* inconclusive (e.g. 404 = function not deployed here) — treat as unavailable for THIS call, re-probe next time */
   },
 
+  /* ── G5 (2026-11-23): atomiska loggåtgärder ───────────────────────
+     En loggpost skickades tidigare som patch_ao med AO:ns HELA log-array;
+     två enheter som lade till poster samtidigt kunde då skriva över
+     varandra (E2E AO-07). `append_log`/`remove_log` låter servern lägga
+     till/ta bort EN post under radlås (förslag:
+     supabase/migrations/20261123000001_PROPOSAL_work_order_log_ops.sql och
+     docs/G5-APPEND-LOG.md). Servern i STAGING har (ännu) inte åtgärden —
+     därför sonderas stödet en gång per session: `unknown_action` (400) =
+     stöds inte → anroparen använder den gamla vägen; ett annat definitivt
+     svar (t.ex. missing_fields/not_found) = stöds. Nätverksfel = okänt,
+     gamla vägen används för just det anropet och sonderingen görs om. */
+  _logOps: null,
+  async supportsLogOps() {
+    if (this._logOps !== null) return this._logOps;
+    const r = await this._call({ action: 'append_log', aoId: '', entry: null, idempotencyKey: this._uuid() });
+    if (r.error === 'unknown_action') { this._logOps = false; return false; }
+    if (typeof r.httpStatus === 'number' && r.httpStatus >= 400 && r.httpStatus < 500 && r.httpStatus !== 401) { this._logOps = true; return true; }
+    return false; // osäkert (nät/5xx/401) — cachas inte
+  },
+  appendLog(aoId, entry, opts) {
+    return this.enqueue('ao', aoId, { action: 'append_log', aoId: aoId, entry: entry }, opts);
+  },
+  removeLog(aoId, entryId, opts) {
+    return this.enqueue('ao', aoId, { action: 'remove_log', aoId: aoId, entryId: entryId }, opts);
+  },
+
   /* ── enqueue(): the public entry point. Adds to the durable outbox
        (survives reload), then attempts an immediate send. Resolves only
        once the server ACKs (or the caller gives up after maxAttempts on

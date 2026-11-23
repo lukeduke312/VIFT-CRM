@@ -50,6 +50,7 @@ const DEFINITE = (status, error, extra) => ({ status, body: Object.assign({ erro
 class FakeSupabase {
   constructor(opts) {
     opts = opts || {};
+    this.opts = opts;
     const seed = loadSeed();
     this.store = new Map();
     const put = (k, v) => this.store.set('vift_' + k, clone(v));
@@ -128,7 +129,7 @@ class FakeSupabase {
     const action = p.replace(/^\/(functions|rest|auth)\/v1\//, '') + (body && body.action ? ':' + body.action : '') + (u.searchParams.get('grant_type') ? ':' + u.searchParams.get('grant_type') : '');
     const auth = (headers.authorization || '').replace(/^Bearer /, '');
     const session = this.tokens.get(auth) || null;
-    const call = { t: Date.now(), method, path: p, action, user: session ? session.email : null };
+    const call = { t: Date.now(), method, path: p, action, user: session ? session.email : null, key: body && body.key, hasLog: !!(body && body.patch && body.patch.log) };
     this.calls.push(call);
     if (method === 'OPTIONS') return { status: 200, body: 'ok' };
     if (this.latencyMs) await new Promise((r) => setTimeout(r, this.latencyMs));
@@ -371,6 +372,21 @@ class FakeSupabase {
         if (!aoMut || !this.canViewAO(aos[i], perms, me.id)) return DEFINITE(403, 'forbidden');
         if (b.expectedUpdatedAt && aos[i].updatedAt && b.expectedUpdatedAt !== aos[i].updatedAt) return DEFINITE(409, 'stale_write');
         Object.assign(aos[i], clone(b.patch)); save();
+        return { status: 200, body: { workOrder: aos[i] } };
+      }
+      /* G5-förslaget (docs/G5-APPEND-LOG.md). Finns bara när världen skapas
+         med { backend: { logOps: true } } — STAGING saknar åtgärden i dag,
+         och då svarar servern unknown_action som för alla okända åtgärder. */
+      case 'append_log': case 'remove_log': {
+        if (!this.opts.logOps) return DEFINITE(400, 'unknown_action');
+        if (!b.aoId || (b.action === 'append_log' ? !(b.entry && b.entry.id) : !b.entryId)) return DEFINITE(400, 'missing_fields');
+        const i = aos.findIndex((a) => a.id === b.aoId);
+        if (i < 0) return DEFINITE(404, 'not_found');
+        if (!aoMut || !this.canViewAO(aos[i], perms, me.id)) return DEFINITE(403, 'forbidden');
+        const log = Array.isArray(aos[i].log) ? aos[i].log : [];
+        if (b.action === 'append_log') { if (!log.some((l) => l.id === b.entry.id)) log.push(clone(b.entry)); }
+        else { const k = log.findIndex((l) => l.id === b.entryId); if (k >= 0) log.splice(k, 1); }
+        aos[i].log = log; aos[i].updatedAt = now; save();
         return { status: 200, body: { workOrder: aos[i] } };
       }
       case 'delete_ao': case 'permanent_delete_ao': {

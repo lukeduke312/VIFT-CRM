@@ -1574,7 +1574,8 @@ const WorkOrderDetailPage = {
       Modal.close();
       this._rerenderTimeline();
       showToast('Sparar loggpost…');
-      WorkOrderService.update(aoId, { log: ao.log }, { onSettled: (r) => {
+      /* G5: en post i taget (atomiskt på servern när den stöder det). */
+      WorkOrderService.appendLogEntry(aoId, entry, { onSettled: (r) => {
         if (r.ok) { showToast('Loggpost sparad'); return; }
         /* Definitivt avslag: posten finns inte på servern. Ta bort den
            lokalt. Bilden städas bara bort om inget annat väntar för samma
@@ -1607,7 +1608,7 @@ const WorkOrderDetailPage = {
       ao.log = ao.log.filter(l => l.id !== logId);
       this._rerenderTimeline();
       showToast('Tar bort…');
-      WorkOrderService.update(aoId, { log: ao.log }, { onSettled: (r) => {
+      WorkOrderService.removeLogEntry(aoId, logId, { onSettled: (r) => {
         if (r.ok) {
           if (removed.imagePath && typeof WorkOrderImageService !== 'undefined') {
             WorkOrderImageService.remove(aoId, removed.imagePath).catch(function(e) {
