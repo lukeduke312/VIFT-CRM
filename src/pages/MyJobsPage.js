@@ -141,7 +141,7 @@ const MyJobsPage = {
     if (filteredUpcoming.length) {
       html += this._sectionHtml(
         `${ic('calendar',14)} Kommande jobb`,
-        filteredUpcoming, null, 'var(--br)', false,
+        filteredUpcoming, null, 'var(--mt)', false,
         ao => this._jobCard(ao, myId, false, null, true)
       );
     }

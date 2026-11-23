@@ -155,7 +155,7 @@ const SalesPage = {
           </div>
           ${!isDone ? `<button class="btn bxs bs" onclick="SalesPage.openEdit('${op.id}')">${ic('pencil',12)}</button>` : ''}
         </div>
-        <div class="card-body">
+        <div class="card-body kv">
           <div class="dr">
             <span class="dk">Kund</span>
             <span class="dv" style="cursor:pointer;color:var(--sky);"

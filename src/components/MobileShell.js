@@ -325,7 +325,7 @@ const MobileShell = {
           <span class="mclock-dot"></span>
           <span class="mclock-txt">Incheckad · <span id="mclock-elapsed">${esc(TimeService.elapsedStr(state.stampTimestamp))}</span></span>
         </button>
-        <button class="mclock-out-btn" onclick="TimePage.openClockOut()">Klocka ut</button>
+        <button class="mclock-out-btn" onclick="TimePage.openClockOut()">Stämpla ut</button>
       </div>`;
     this._syncBadge();
   },

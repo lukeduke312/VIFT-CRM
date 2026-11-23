@@ -142,7 +142,7 @@ const PropertyDetailPage = {
       <div class="ao-action-panel">
         <div class="ao-action-panel-left">
           <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(displayNumberOf(p))}${p.objectNumber?' · '+p.objectNumber:''}</span>
+          <span class="ao-action-panel-title">${esc(p.name || '')} <span>${esc(displayNumberOf(p))}${p.objectNumber?' · '+esc(p.objectNumber):''}</span></span>
         </div>
         <div class="ao-action-panel-badges">
           ${p.status!=='inaktiv'
@@ -161,7 +161,7 @@ const PropertyDetailPage = {
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`
             : ''}
           ${Auth.can('customer_manage')
-            ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bw'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
+            ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bs'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
             : ''}
           ${Auth.canViewPage('pg-activities')
             ? `<button class="btn bs bxs" onclick="ActivitiesPage.openCreate({customerId:'${p.customerId||''}',propertyId:'${p.id}'})">${ic('check-square',13)} Ny uppgift</button>`
@@ -292,7 +292,7 @@ const PropertyDetailPage = {
       ${overdueInsp.length > 0 ? `
       <div class="card" style="border-left:3px solid var(--rd);">
         <div class="card-header"><h3>${ic('alert-triangle',14)} Försenade besiktningar</h3></div>
-        <div class="card-body">
+        <div class="card-body kv">
           ${overdueInsp.map(([k,v]) =>
             `<div class="dr"><span class="dk">${inspTypes[k]||k}</span>
              <span class="dv" style="color:var(--rd);">Försenad sedan ${fmtDate(v.nextDate)}</span></div>`
@@ -321,7 +321,7 @@ const PropertyDetailPage = {
             ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
             : ''}
         </div>
-        <div class="card-body">
+        <div class="card-body kv">
           ${rows.length === 0
             ? `<p style="font-size:12px;color:var(--mt);">Ingen utökad information registrerad.
                ${Auth.can('customer_manage') ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">Redigera</button>` : ''}</p>`

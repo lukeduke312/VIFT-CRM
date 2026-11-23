@@ -846,13 +846,16 @@ const CustomerDetailPage = {
         <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
         <h2 style="font-size:17px;font-weight:800;flex:1;">${name}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
         ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>` : ''}
-        ${Auth.can('customer_manage') ? `<button class="btn bp bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>` : ''}
+        ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>` : ''}
       </div>
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
         <span class="bdg bdg-grey">${esc(CustomerService.displayNumber(cu))}</span>
         <span class="bdg bdg-grey">${CustomerService.typeLabel(cu.type)}</span>
         ${cu.orgNr ? `<span class="bdg bdg-grey">${cu.orgNr}</span>` : ''}
+        <span style="flex:1;"></span>
+        <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate('${cu.id}')">${ic('plus',14)} Ny arbetsorder</button>
+        ${Auth.canViewPage('pg-activities') ? `<button class="btn bs bsm" onclick="ActivitiesPage.openCreate({customerId:'${cu.id}'})">${ic('check-square',14)} Ny uppgift</button>` : ''}
       </div>
 
       <div class="ftabs" style="margin-bottom:4px;">
@@ -862,16 +865,7 @@ const CustomerDetailPage = {
         ).join('')}
       </div>
 
-      <div id="cu-tab-content"></div>
-
-      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate('${cu.id}')">
-          ${ic('plus',14)} Ny arbetsorder från kund
-        </button>
-        ${Auth.canViewPage('pg-activities') ? `<button class="btn bs bsm" onclick="ActivitiesPage.openCreate({customerId:'${cu.id}'})">
-          ${ic('check-square',14)} Ny uppgift
-        </button>` : ''}
-      </div>`;
+      <div id="cu-tab-content"></div>`;
 
     this._renderTab();
   },
@@ -926,7 +920,7 @@ const CustomerDetailPage = {
     return `
       <div class="card">
         <div class="card-header"><h3>Kontaktuppgifter</h3></div>
-        <div class="card-body">
+        <div class="card-body kv">
           ${rows.map(([k,v]) => `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`).join('')}
           ${diffInv ? `<div class="dr"><span class="dk">Fakturaadress</span><span class="dv">${[cu.invoiceAddress, cu.invoiceZip, cu.invoiceCity].filter(Boolean).join(', ')}</span></div>` : ''}
           ${cu.note ? `<div style="margin-top:10px;" class="ibox">${esc(cu.note)}</div>` : ''}

@@ -164,3 +164,12 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--mt);
   margin-top: 2px;
 }
+
+/* Designstandard 2026-11 (visuell granskning, Tid & stämpla på mobil):
+   fältavståndet växlade mellan 22 px och 0 px — inne i en .g2 adderades
+   gap + fältets marginal, mellan grupper försvann marginalen helt. Nu bär
+   gruppen marginalen och fälten i gruppen har ingen egen: samma rytm överallt. */
+.g2 > .fg, .g3 > .fg { margin-bottom: 0; }
+.g2, .g3 { margin-bottom: 12px; row-gap: 12px; }
+/* Korta fält som hör ihop (start/slut, från/till) stannar sida vid sida på mobil. */
+@media (max-width: 480px) { .g2.g2-keep { grid-template-columns: 1fr 1fr; } }

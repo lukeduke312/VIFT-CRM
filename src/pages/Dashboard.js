@@ -1182,10 +1182,18 @@ const Dashboard = {
 
     if (generation !== this._mapGeneration) return;
 
+    /* Kartgruppering (2026-11-23, MapGrouping): en markör per plats, med
+       antal när flera AO delar adress (Vasaplatsen 8). Räknaren skiljer på
+       jobb, platser och jobb som inte kunde placeras. */
+    const groups = (typeof MapGrouping !== 'undefined') ? MapGrouping.group(geocoded)
+      : geocoded.map(g => ({ coord: g.coord, display: g.coord, items: [g.ao], count: 1, hasAkut: g.ao.priority === 'akut' }));
+    this._mapGroups = groups;
     if (countEl) {
-      countEl.textContent = geocoded.length === jobs.length
-        ? `${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb`
-        : `${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb · ${geocoded.length} visas på karta`;
+      const nPlaced = groups.reduce((s, g) => s + g.count, 0);
+      const parts = [`${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb`];
+      if (groups.length !== nPlaced) parts.push(`${groups.length} platser på kartan`);
+      if (nPlaced < jobs.length) parts.push(`${jobs.length - nPlaced} kunde inte placeras`);
+      countEl.textContent = parts.join(' · ');
     }
 
     if (geocoded.length === 0) {
@@ -1211,22 +1219,35 @@ const Dashboard = {
       this._mapInstance = map;
 
       const bounds = new mapboxgl.LngLatBounds();
-      geocoded.forEach(({ ao, coord }) => {
-        const color = ao.priority === 'akut' ? '#dc2626' : (ao.status === 'pågående' ? '#16a34a' : '#2b7fd4');
-        const cu = getCu(ao.customerId);
-        const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const popupHtml = `<div class="dash-map-popup">
-          <div class="dash-map-popup-title">${esc(ao.title||ao.id)}</div>
-          <div class="dash-map-popup-sub">${esc(cuName)}${ao.scheduledStart ? ' · '+esc(ao.scheduledStart) : ''}</div>
-          <button type="button" class="dash-map-popup-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">Öppna</button>
-        </div>`;
-        new mapboxgl.Marker({ color })
-          .setLngLat([coord.lng, coord.lat])
-          .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
+      groups.forEach((g) => {
+        const first = g.items[0];
+        const color = g.hasAkut ? '#dc2626' : (g.items.every(a => a.status === 'pågående') ? '#16a34a' : '#2b7fd4');
+        const rows = g.items.map(ao => {
+          const cu = getCu(ao.customerId);
+          const cuName = cu ? CustomerService.displayName(cu) : '—';
+          return `<div class="dash-map-popup-item">
+            <div class="dash-map-popup-title">${ao.priority === 'akut' ? '<span class="bdg bdg-red">Akut</span> ' : ''}${esc(ao.title||ao.id)}</div>
+            <div class="dash-map-popup-sub">${esc(WorkOrderService.displayNumberOrPending ? WorkOrderService.displayNumberOrPending(ao) : ao.id)} · ${esc(typeof statusLabel === 'function' ? statusLabel(ao.status) : ao.status)} · ${esc(cuName)}${ao.scheduledStart ? ' · '+esc(ao.scheduledStart) : ''}</div>
+            <button type="button" class="dash-map-popup-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">Öppna</button>
+          </div>`;
+        }).join('');
+        const popupHtml = `<div class="dash-map-popup">${g.count > 1 ? `<div class="dash-map-popup-head">${g.count} arbetsordrar · ${esc(g.label || first.address || '')}</div>` : ''}${rows}</div>`;
+        const opts = { color };
+        if (g.count > 1) {
+          const el = document.createElement('div');
+          el.className = 'dash-map-cluster' + (g.hasAkut ? ' akut' : '');
+          el.setAttribute('aria-label', g.count + ' arbetsordrar på samma plats');
+          el.textContent = String(g.count);
+          opts.element = el;
+        }
+        const marker = new mapboxgl.Marker(opts)
+          .setLngLat([g.display.lng, g.display.lat])
+          .setPopup(new mapboxgl.Popup({ offset: 18, maxWidth: '300px' }).setHTML(popupHtml))
           .addTo(map);
-        bounds.extend([coord.lng, coord.lat]);
+        if (marker.getElement) { const me = marker.getElement(); if (me) { me.dataset.count = String(g.count); me.dataset.aoIds = g.items.map(a => a.id).join(','); } }
+        bounds.extend([g.display.lng, g.display.lat]);
       });
-      if (geocoded.length > 1) map.fitBounds(bounds, { padding: 36, maxZoom: 14 });
+      if (groups.length > 1) map.fitBounds(bounds, { padding: 36, maxZoom: 15 });
     } catch(e) {
       console.error('[Dashboard] kartfel:', e);
       if (generation === this._mapGeneration) {
@@ -1254,7 +1275,7 @@ const Dashboard = {
       btns.push(this._qbtn('refresh-cw',    'Återkommande', "Router.showPage('pg-recurring')",                                                            'Hantera återkommande uppdrag'));
     }
     if (Auth.can('ao_time')) {
-      btns.push(this._qbtn('clock',         'Stämpla tid',  "Router.showPage('pg-tid')",                                                                  'Klocka in och hantera din tid'));
+      btns.push(this._qbtn('clock',         'Stämpla tid',  "Router.showPage('pg-tid')",                                                                  'Stämpla in och hantera din tid'));
     }
     if (Auth.canAny(['invoice_view','invoice_create'])) {
       btns.push(this._qbtn('receipt',       'Fakturering',  "Router.showPage('pg-invoices')",                                                             'Fakturaunderlag och betalningsstatus'));

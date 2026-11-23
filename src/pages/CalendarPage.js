@@ -124,7 +124,8 @@ const CalendarPage = {
     ).join('');
 
     const totalH = (this._HOUR_END - this._HOUR_START + 1) * this._SLOT_H;
-    const evtHtml = timed.map(e => this._positionedEvent(e, conflicts)).join('');
+    const lanes = this._layoutLanes(timed);
+    const evtHtml = timed.map(e => this._positionedEvent(e, conflicts, lanes.get(e))).join('');
     const allDayHtml = allDay.map(e => this._chipHtml(e)).join('');
 
     return `<div class="cal-day-wrap">
@@ -169,7 +170,8 @@ const CalendarPage = {
     const timeCols = days.map(ds => {
       const timed = this._events(ds).filter(e => e.startH != null);
       const conflicts = this._detectConflicts(timed);
-      const evtHtml = timed.map(e => this._positionedEvent(e, conflicts)).join('');
+      const lanes = this._layoutLanes(timed);
+      const evtHtml = timed.map(e => this._positionedEvent(e, conflicts, lanes.get(e))).join('');
       const isToday = ds === today;
       return `<div class="cal-wk-col${isToday?' cal-today-col':''}" style="position:relative;height:${totalH}px;"
         ondragover="CalendarPage._dragOver('${ds}',event)"
@@ -439,8 +441,35 @@ const CalendarPage = {
     return conflicted;
   },
 
+  /* Visuell granskning 2026-11-23: överlappande händelser ritades i full
+     bredd ovanpå varandra (den ena dolde den andra). Händelser som
+     överlappar i tid läggs nu i kolumner sida vid sida inom sin grupp. */
+  _layoutLanes(timed) {
+    const out = new Map();
+    const evs = timed.slice().sort((a, b) => (a.startH ?? 0) - (b.startH ?? 0) || (b.endH ?? 0) - (a.endH ?? 0));
+    let group = [], groupEnd = -1;
+    const flush = () => {
+      const laneEnds = [];
+      group.forEach((e) => {
+        const s = e.startH ?? 0, en = e.endH ?? (s + 1);
+        let lane = laneEnds.findIndex((end) => end <= s);
+        if (lane < 0) { lane = laneEnds.length; laneEnds.push(en); } else laneEnds[lane] = en;
+        out.set(e, { lane, of: 0 });
+      });
+      group.forEach((e) => { out.get(e).of = laneEnds.length; });
+      group = []; groupEnd = -1;
+    };
+    evs.forEach((e) => {
+      const s = e.startH ?? 0, en = e.endH ?? (s + 1);
+      if (group.length && s >= groupEnd) flush();
+      group.push(e); groupEnd = Math.max(groupEnd, en);
+    });
+    if (group.length) flush();
+    return out;
+  },
+
   /* ── Rendering-helpers ───────────────────────────────────────────────── */
-  _positionedEvent(evt, conflicts) {
+  _positionedEvent(evt, conflicts, lane) {
     const s = Math.max(evt.startH ?? this._HOUR_START, this._HOUR_START);
     const e = Math.min(evt.endH   ?? (s + 1),          this._HOUR_END + 1);
     const top  = (s - this._HOUR_START) * this._SLOT_H;
@@ -452,8 +481,10 @@ const CalendarPage = {
       : `onclick="event.stopPropagation();${evt.onclick}"`;
 
     const dragAttr = evt.draggable ? `data-aoid="${evt.id}"` : '';
+    const of = lane && lane.of > 1 ? lane.of : 1;
+    const pos = of > 1 ? `left:calc(${(lane.lane * 100 / of).toFixed(3)}% + 2px);width:calc(${(100 / of).toFixed(3)}% - 4px);right:auto;` : '';
     return `<div class="cal-timed-evt${conflict?' cal-conflict':''}" ${draggable} ${dragAttr} ${dragEvts}
-      style="top:${top}px;height:${h}px;background:${evt.color};"
+      style="top:${top}px;height:${h}px;background:${evt.color};${pos}"
       onclick="event.stopPropagation();${evt.onclick}"
       title="${esc(evt.title)}">
       <span class="cal-evt-title">${esc(evt.title)}</span>
@@ -843,7 +874,7 @@ const CalendarPage = {
   user-select:none; touch-action:manipulation; z-index:1;
 }
 .cal-timed-evt:hover { filter:brightness(.9); z-index:2; }
-.cal-evt-title { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cal-evt-title { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
 .cal-conflict { box-shadow:0 0 0 2px var(--or)!important; }
 .cal-conflict-icon { position:absolute; bottom:2px; right:4px; color:var(--or); }
 

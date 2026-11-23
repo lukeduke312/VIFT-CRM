@@ -47,4 +47,20 @@
 
   /* Typography */
   --font: 'Inter', system-ui, sans-serif;
+
+  /* ── Designstandard 2026-11 (docs/DESIGNSTANDARD.md) ──────────────
+     Typskala: använd dessa i stället för egna px-värden. 10 px är den
+     minsta tillåtna storleken (etiketter/badges), brödtext 13 px. */
+  --fs-2xs: 10px;   /* badges, mikroetiketter */
+  --fs-xs:  11px;   /* metadata, tabellhuvud */
+  --fs-sm:  12px;   /* sekundär text, filter */
+  --fs-md:  13px;   /* brödtext, formulär */
+  --fs-lg:  15px;   /* korttitel, sektionsrubrik */
+  --fs-xl:  18px;   /* sidrubrik i innehåll */
+  --fs-2xl: 24px;   /* nyckeltal */
+  /* Avstånd: 4-px-steg */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+  /* Kontroller */
+  --ctl-h: 34px;      /* knappar/fält i verktygsrader */
+  --ctl-h-touch: 44px;/* minsta tryckyta på mobil */
 }

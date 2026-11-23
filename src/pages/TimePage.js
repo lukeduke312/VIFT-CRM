@@ -20,7 +20,7 @@ const TimePage = {
         <div class="card-body" style="text-align:center;padding:20px;">
           <button class="btn ${isOn?'bd':'bsu'} bfull" style="font-size:16px;padding:16px;"
             id="stamp-btn" onclick="TimePage.toggleStamp()">
-            ${isOn ? `${ic('stop-circle',18)} Klocka ut` : `${ic('play-circle',18)} Klocka in`}
+            ${isOn ? `${ic('stop-circle',18)} Stämpla ut` : `${ic('play-circle',18)} Stämpla in`}
           </button>
           ${isOn&&state.stampAoId ? `<div style="margin-top:10px;color:var(--mt);font-size:12px;">Kopplad till: ${state.stampAoId}</div>` : ''}
         </div>
@@ -93,7 +93,7 @@ const TimePage = {
 
   openClockIn() {
     Modal.open({
-      title: 'Klocka in',
+      title: 'Stämpla in',
       body: `
         <div class="fg"><label>Arbetsorder (valfritt)</label>
           <select id="ci-ao">
@@ -103,7 +103,7 @@ const TimePage = {
             ).join('')}
           </select></div>`,
       buttons: [
-        { label: 'Klocka in', cls: 'btn bsu', onClick: () => {
+        { label: 'Stämpla in', cls: 'btn bsu', onClick: () => {
           const aoId = document.getElementById('ci-ao')?.value || null;
           /* CLOCK-ACK AUDIT (2026-11-12): clockIn() är rent lokal (ingen
              serverskrivning finns att invänta — se WorkOrderDetailPage.
@@ -112,7 +112,7 @@ const TimePage = {
           const ok = TimeService.clockIn(aoId || null);
           if (!ok) { showToast('Kunde inte klocka in — kontrollera din behörighet.'); return; }
           Modal.close();
-          showToast('Inklockat');
+          showToast('Instämplad');
           TimePage.render();
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -129,7 +129,7 @@ const TimePage = {
       `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
     Modal.open({
-      title: 'Klocka ut',
+      title: 'Stämpla ut',
       body: `
         <div class="ibox" style="margin-bottom:12px;">${ic('clock',14)} Tid: ${TimeService.fmtDuration(mins)}</div>
         ${ao ? `<div class="dr"><span class="dk">AO</span><span class="dv">${ao.id} – ${ao.title}</span></div>` : ''}
@@ -148,7 +148,7 @@ const TimePage = {
            direkt utan att tidpostens serverskrivning bekräftats (och
            clockOut()s returvärde kontrollerades inte ens). Samma lösning
            och samma UX-beslut som där — se den kommentaren. */
-        { label: 'Klocka ut', cls: 'btn bsu', onClick: (ev) => {
+        { label: 'Stämpla ut', cls: 'btn bsu', onClick: (ev) => {
           const btnEl = ev && ev.currentTarget;
           let closed = false;
           const closeOnce = () => {
@@ -229,7 +229,7 @@ const TimePage = {
           </select>
         </div>
       </div>
-      <div class="g2">
+      <div class="g2 g2-keep">
         <div class="fg"><label>Starttid</label><input type="time" id="mt-start" value="08:00"></div>
         <div class="fg"><label>Sluttid</label><input type="time" id="mt-end" value="16:00"></div>
       </div>

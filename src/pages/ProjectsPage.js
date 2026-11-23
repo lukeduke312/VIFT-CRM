@@ -75,7 +75,9 @@ const ProjectsPage = {
     const anyFilterActive = !!(f.status || f.responsibleUserId || f.customerId || f.propertyId || f.search || f.archived);
 
     const rows = list.length === 0
-      ? `<div class="empty" style="padding:32px 0;gap:6px;">${ic('folder', 22)}<p style="font-size:12px;color:var(--mt);">Inga projekt matchar filtret.</p></div>`
+      ? (anyFilterActive || (state.projects || []).length > 0
+          ? `<div class="empty" style="padding:32px 0;gap:6px;">${ic('folder', 22)}<p style="font-size:12px;color:var(--mt);">Inga projekt matchar filtret.</p></div>`
+          : `<div class="empty" style="padding:32px 0;gap:8px;">${ic('folder', 22)}<p style="font-size:13px;font-weight:600;">Inga projekt ännu</p><p style="font-size:12px;color:var(--mt);">Samla arbetsordrar, offerter, tid och dokument för ett större uppdrag i ett projekt.</p>${Auth.can('customer_manage') || Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="ProjectsPage.openCreate()">${ic('plus',14)} Skapa första projektet</button>` : ''}</div>`)
       : list.map(p => this._rowHtml(p)).join('');
 
     el.innerHTML = `
@@ -97,7 +99,7 @@ const ProjectsPage = {
         <button class="filter-panel-chip ${f.archived ? 'on' : ''}" onclick="ProjectsPage.setFilter('archived', ${!f.archived})">${ic('archive', 11)} Arkiverade <span class="qf-cnt">${archivedAll.length}</span></button>
       </div>
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <div class="filter-panel-row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
         <select onchange="ProjectsPage.setFilter('responsibleUserId', this.value)" style="flex:1 1 180px;min-width:150px;font-size:12px;padding:7px 9px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);">${responsibleOpts}</select>
         <div style="flex:1 1 180px;min-width:150px;">
           ${CustomerPicker.render('proj-filter-cu', { value: f.customerId || '', placeholder: 'Alla kunder', onchange: 'ProjectsPage._filterCustomerChanged()' })}

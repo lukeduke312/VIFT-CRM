@@ -305,7 +305,7 @@ const InvoicesPage = {
             style="width:15px;height:15px;cursor:pointer;accent-color:var(--acc);">
         </label>
         <div class="bq-source-main">
-          <div class="bq-source-meta">${ic(typeIcon,10)} ${typeLabel} · ${meta}</div>
+          <div class="bq-source-meta">${ic(typeIcon,10)} ${typeLabel}${meta && String(meta).trim() !== typeLabel ? ' · ' + meta : ''}</div>
           <div class="bq-source-detail">${c.quantity} ${esc(c.unit)} × ${fmt(c.unitPrice)} kr</div>
         </div>
         <div class="bq-source-amount">${fkr(c.amount)}</div>

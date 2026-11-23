@@ -283,7 +283,7 @@ const WorkOrderDetailPage = {
         <div class="card-header">
           <h3>${ic('activity',14)} Händelselogg</h3>
           <div style="display:flex;gap:5px;">
-            <button class="btn bxs bsu" style="font-size:11px;padding:4px 10px;" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
+            <button class="btn bxs bs" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
             <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>
           </div>
         </div>
@@ -1226,14 +1226,14 @@ const WorkOrderDetailPage = {
     return `
       <div class="card">
         <div class="card-header"><h3>Stämpling</h3>
-          ${isActive ? `<span class="bdg bdg-green" id="ao-stamp-elapsed">Inklockat ${TimeService.elapsedStr(state.stampTimestamp)}</span>` : ''}
+          ${isActive ? `<span class="bdg bdg-green" id="ao-stamp-elapsed">Instämplad ${TimeService.elapsedStr(state.stampTimestamp)}</span>` : ''}
         </div>
         <div class="card-body" style="text-align:center;padding:16px;">
-          <button class="btn ${isActive?'bd':'bsu'} bfull" style="padding:14px;font-size:15px;"
+          <button class="btn ${isActive?'bd':'bsu'} bfull ao-stamp-btn"
             onclick="WorkOrderDetailPage.toggleStamp()">
-            ${isActive ? `${ic('stop-circle',18)} Klocka ut` : `${ic('play-circle',18)} Klocka in`}
+            ${isActive ? `${ic('stop-circle',18)} Stämpla ut` : `${ic('play-circle',18)} Stämpla in`}
           </button>
-          ${state.stampActive && !isActive ? `<div class="nbox" style="margin-top:8px;">Du är inloggad på ett annat jobb. Klocka ut därifrån först.</div>` : ''}
+          ${state.stampActive && !isActive ? `<div class="nbox" style="margin-top:8px;">Du är inloggad på ett annat jobb. Stämpla ut därifrån först.</div>` : ''}
         </div>
       </div>`;
   },
@@ -2010,7 +2010,7 @@ const WorkOrderDetailPage = {
     this._stampInterval = setInterval(() => {
       const el = document.getElementById('ao-stamp-elapsed');
       if (!el || !state.stampActive || state.stampAoId !== this.aoId) { this._stopStampTimer(); return; }
-      el.textContent = 'Inklockat ' + TimeService.elapsedStr(state.stampTimestamp);
+      el.textContent = 'Instämplad ' + TimeService.elapsedStr(state.stampTimestamp);
     }, 30000);
   },
 
@@ -2275,7 +2275,7 @@ const WorkOrderDetailPage = {
       `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
-      title: 'Klocka ut',
+      title: 'Stämpla ut',
       body: `
         <div class="ibox" style="margin-bottom:12px;">${ic('clock',14)} Tid: ${TimeService.fmtDuration(mins)}</div>
         <div class="fg"><label>Prisgrupp</label>
@@ -2305,7 +2305,7 @@ const WorkOrderDetailPage = {
            stays in the durable outbox and is retried), and a clear error
            on a final rejection. The local clock-out is not rolled back —
            same documented convention as MyJobsPage (commit 4078994). */
-        { label: 'Klocka ut', cls: 'btn bsu', onClick: (ev) => {
+        { label: 'Stämpla ut', cls: 'btn bsu', onClick: (ev) => {
           const comment = document.getElementById('co-comment')?.value.trim();
           if (!comment) { showToast('Beskriv vad som gjordes'); return; }
           const btnEl = ev && ev.currentTarget;

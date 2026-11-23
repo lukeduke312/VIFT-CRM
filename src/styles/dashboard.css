@@ -789,3 +789,16 @@ body.dash-dragging .dash-edit-card { cursor: grabbing; }
   .dash-edit-toolbar { position: static; }
   .dash-edit-chrome { padding-bottom: 6px; }
 }
+
+/* Kartgruppering (2026-11-23): flera AO på samma plats = en markör med antal. */
+.dash-map-cluster {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #2b7fd4; color: #fff; border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.35);
+  display: flex; align-items: center; justify-content: center;
+  font: 800 13px/1 var(--font); cursor: pointer;
+}
+.dash-map-cluster.akut { background: #dc2626; }
+.dash-map-popup-head { font-weight: 700; font-size: 11px; color: var(--mt); margin-bottom: 6px; text-transform: none; }
+.dash-map-popup-item + .dash-map-popup-item { border-top: 1px solid var(--br); padding-top: 6px; margin-top: 4px; }
+.dash-map-popup { max-height: 260px; overflow-y: auto; }
