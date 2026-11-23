@@ -156,8 +156,20 @@ class Session {
     await this.page.fill('#login-pass', password || PASSWORD);
     await this.page.click('#lp-login button.btn.bp');
     if (password && password !== PASSWORD) return;
-    await this.page.waitForSelector('#app', { state: 'visible', timeout: 20000 });
-    await this.page.waitForFunction(() => typeof state !== 'undefined' && state.currentUser && state.currentUser.id && state.currentUser.id !== 'unknown', null, { timeout: 15000 });
+    try {
+      await this.page.waitForSelector('#app', { state: 'visible', timeout: 20000 });
+      await this.page.waitForFunction(() => typeof state !== 'undefined' && state.currentUser && state.currentUser.id && state.currentUser.id !== 'unknown', null, { timeout: 15000 });
+    } catch (e) {
+      const diag = await this.page.evaluate(() => ({
+        app: getComputedStyle(document.getElementById('app')).display,
+        loginErr: (document.getElementById('login-err') || {}).textContent,
+        btn: (document.querySelector('#lp-login button.btn.bp') || {}).textContent,
+        user: typeof state !== 'undefined' && state.currentUser ? state.currentUser.id : null,
+        toasts: (window.__toasts || []).map((x) => x.m),
+      })).catch(() => ({}));
+      const mine = this.requests.map((r) => r.method + ' ' + r.url.split('?')[0] + '=' + r.status).slice(-12);
+      throw new Error('Inloggning fastnade: ' + JSON.stringify(diag) + ' anrop: ' + mine.join(', ') + ' konsol: ' + this.consoleErrors.filter((m) => !/Failed to load/.test(m)).slice(0, 4).join(' | '));
+    }
     await this.settle();
   }
 
@@ -175,6 +187,8 @@ class Session {
   }
   async modalOpen() { return this.page.evaluate(() => document.querySelectorAll('.modal-overlay.open').length > 0); }
   async clickModalButton(re) {
+    // .open sätts först i nästa animationsruta — vänta in den.
+    await this.page.waitForSelector('.modal-overlay.open .modal-footer button', { timeout: 5000 }).catch(() => {});
     const btns = this.page.locator('.modal-overlay.open .modal-footer button');
     const n = await btns.count();
     for (let i = n - 1; i >= 0; i--) {

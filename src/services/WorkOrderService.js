@@ -498,6 +498,13 @@ const WorkOrderService = {
     const recheck = AddressService.resolveWorkOrderQuery(getAO(ao.id) || ao);
     if (!recheck || recheck.query !== query) return;
 
+    /* Ingen skrivning om inget ändras: en adress som inte går att geokoda
+       (eller saknad kart-token) gav annars en identisk patch_ao — en hel
+       omskrivning av vift_workOrders-raden — vid VARJE AO-ändring. */
+    const nextLat = coord ? coord.lat : (ao.geocodedAddress !== query ? null : ao.lat);
+    const nextLng = coord ? coord.lng : (ao.geocodedAddress !== query ? null : ao.lng);
+    if (nextLat === ao.lat && nextLng === ao.lng && ao.geocodedAddress === query) return;
+
     if (coord) {
       ao.lat = coord.lat;
       ao.lng = coord.lng;

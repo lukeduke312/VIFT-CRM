@@ -7914,8 +7914,11 @@ const PropertiesPage = {
       </div>
       <div class="fg"><label>Antal våningar</label>
         <input type="number" id="prop-floors" value="${v('floors',1)}" min="1" max="50"></div>
+      ${!p && typeof Auth !== 'undefined' && Auth.can('objects_sensitive') ? `
       <div class="fg"><label>Portkod / åtkomst</label>
-        <input id="prop-access" value="${v('accessCode')}" placeholder="T.ex. 1234#"></div>
+        <input id="prop-access" value="" placeholder="T.ex. 1234#" autocomplete="off">
+        <div style="font-size:11px;color:var(--mt);margin-top:3px;">Sparas skyddat och visas bara för behöriga.</div></div>` : ''}
+      ${p ? `<div style="font-size:12px;color:var(--mt);margin:2px 0 10px;">Portkod och nyckelinformation ändras i fastighetskortet (skyddad lagring).</div>` : ''}
       <div class="fg"><label>Anteckning</label>
         <textarea id="prop-note" rows="2" placeholder="Intern anteckning…">${v('note')}</textarea></div>`;
   },
@@ -7951,9 +7954,15 @@ const PropertiesPage = {
     });
   },
 
-  _save(propId) {
+  /* Portkod sparas ALDRIG i fastighetsregistret (vift_properties läses av
+     alla inloggade). Vid ny fastighet skickas den, för behörig användare,
+     via den skyddade set-sensitive-fields-vägen — först när fastigheten
+     själv bekräftats sparad. Befintliga fastigheters portkod ändras i
+     fastighetskortet. Bekräftelse visas först efter serverns svar. */
+  async _save(propId) {
     const name = document.getElementById('prop-name')?.value.trim();
     if (!name) { showToast('Namn krävs'); return; }
+    if (this._saving) return;
     const data = {
       name,
       customerId: document.getElementById('prop-cu')?.value || '',
@@ -7963,22 +7972,35 @@ const PropertiesPage = {
       type:       document.getElementById('prop-type')?.value || '',
       area:       parseFloat(document.getElementById('prop-area')?.value) || 0,
       floors:     parseInt(document.getElementById('prop-floors')?.value) || 1,
-      accessCode: document.getElementById('prop-access')?.value.trim() || '',
       note:       document.getElementById('prop-note')?.value.trim() || '',
       updatedAt:  new Date().toISOString()
     };
+    const accessCode = (!propId && typeof Auth !== 'undefined' && Auth.can('objects_sensitive'))
+      ? (document.getElementById('prop-access')?.value.trim() || '') : '';
+    let newId = null;
     if (!propId) {
       state.properties = state.properties || [];
-      const _newPropId = newSafeId('OBJ', state.properties); // K3 (2026-11-12): collision-safe
-      state.properties.push({ ...data, id: _newPropId, shortNumber: newShortNumber(_newPropId, state.properties), createdAt: new Date().toISOString() }); // display number (2026-11-12)
-      showToast(`${name} skapad`);
+      newId = newSafeId('OBJ', state.properties); // K3 (2026-11-12): collision-safe
+      state.properties.push({ ...data, id: newId, shortNumber: newShortNumber(newId, state.properties), createdAt: new Date().toISOString() }); // display number (2026-11-12)
     } else {
       const idx = (state.properties||[]).findIndex(x=>x.id===propId);
       if (idx < 0) return;
       state.properties[idx] = { ...state.properties[idx], ...data };
-      showToast('Fastighet uppdaterad');
     }
-    persist(); Modal.close(); this.render();
+    this._saving = true;
+    Modal.close(); this.render();
+    showToast('Sparar…');
+    try {
+      const ok = await persist({ keys: ['properties'] });
+      if (!ok) { showToast('Fastigheten kunde inte sparas av servern — se meddelandet om osparade ändringar.', 6000); return; }
+      if (newId && accessCode && typeof PropertyDetailPage !== 'undefined') {
+        const r = await PropertyDetailPage._saveSensitiveFields({ propertyId: newId, accessCode });
+        if (!r.ok) { showToast(name + ' skapad, men portkoden sparades INTE (' + (r.error || 'fel') + ') — ange den i fastighetskortet.', 7000); return; }
+      }
+      showToast(propId ? 'Fastighet uppdaterad' : `${name} skapad`);
+    } finally {
+      this._saving = false;
+    }
   }
 };
 

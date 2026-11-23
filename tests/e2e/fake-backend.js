@@ -229,11 +229,14 @@ class FakeSupabase {
         case 'work-order-image-delete': return this.imageDelete(body, perms, me);
         case 'get-sensitive-fields': {
           if (!this.has(perms, 'objects_sensitive')) return DEFINITE(403, 'forbidden');
-          return { status: 200, body: Object.assign({ doorCode: '', keyInfo: '' }, this.sensitive.get(body && body.propertyId) || {}) };
+          return { status: 200, body: Object.assign({ accessCode: '', keyInformation: '', accessInformation: '' }, this.sensitive.get((body && (body.objectId || body.propertyId))) || {}) };
         }
         case 'set-sensitive-fields': {
           if (!this.has(perms, 'objects_sensitive')) return DEFINITE(403, 'forbidden');
-          this.sensitive.set(body.propertyId, { doorCode: body.doorCode || '', keyInfo: body.keyInfo || '' });
+          const sk = body.objectId || body.propertyId;
+          const cur = Object.assign({}, this.sensitive.get(sk) || {});
+          ['accessCode', 'keyInformation', 'accessInformation'].forEach((f) => { if (f in body) cur[f] = String(body[f] || ''); });
+          this.sensitive.set(sk, cur);
           return { status: 200, body: { ok: true } };
         }
         case 'send-push': this.outbox.push({ type: 'push', body }); return { status: 200, body: { sent: 0, simulated: true } };
@@ -473,7 +476,7 @@ class FakeSupabase {
     const item = (ao.checklist || []).find((c) => c.id === b.itemId); if (!item) return DEFINITE(404, 'not_found');
     item.done = true; item.avvikelse = b.avvikelse; item.avvikelseComment = b.avvikelseComment || ''; item.avvikelseImage = b.avvikelseImage || '';
     item.doneAt = new Date().toISOString(); item.doneBy = me.id;
-    if (ao.status === 'planerad' || ao.status === 'pool') ao.status = 'pagar';
+    if (ao.status === 'planerad' || ao.status === 'pool') ao.status = 'pågående';
     ao.updatedAt = new Date().toISOString();
     this.set('workOrders', aos); this.touch();
     return { status: 200, body: { workOrder: ao, activityLog: this.get('activityLog') } };

@@ -26,7 +26,7 @@ async function main() {
   const specs = fs.readdirSync(path.join(__dirname, 'specs')).filter((f) => f.endsWith('.js')).sort();
   let tests = [];
   specs.forEach((f) => { require(path.join(__dirname, 'specs', f)).forEach((t) => tests.push(Object.assign({ file: f }, t))); });
-  if (GREP) tests = tests.filter((t) => (t.id + ' ' + t.name).toLowerCase().includes(GREP.toLowerCase()));
+  if (GREP) { const re = new RegExp(GREP, 'i'); tests = tests.filter((t) => re.test(t.id + ' ' + t.name)); }
   if (MODULE) tests = tests.filter((t) => t.module === MODULE);
   await lib.start();
   const results = [];
@@ -51,6 +51,10 @@ async function main() {
     } catch (e) {
       status = 'failed'; error = (e && e.message || String(e)).split('\n').slice(0, 4).join(' ');
     }
+    if (t.knownIssue) {
+      if (status === 'failed') { status = 'known'; }
+      else ctx.notes.push('Känt fel ' + t.knownIssue + ' reproduceras inte längre — kontrollera och stäng');
+    }
     const consoleErrors = world.sessions.flatMap((s) => s.consoleErrors).filter((m) => !BENIGN_CONSOLE.some((r) => r.test(m)));
     const netErrors = world.sessions.flatMap((s) => s.netErrors);
     const shots = [];
@@ -65,7 +69,7 @@ async function main() {
       unmodeled: [...new Set(world.fake.unmodeled)], screenshots: shots,
       requests: world.sessions.reduce((n, s) => n + s.requests.length, 0) };
     results.push(r);
-    console.log((status === 'passed' ? 'PASS  ' : 'FAIL  ') + t.id + ' ' + t.name + (error ? '\n      ' + error : ''));
+    console.log((status === 'passed' ? 'PASS  ' : status === 'known' ? 'KNOWN ' : 'FAIL  ') + t.id + ' ' + t.name + (error ? '\n      ' + error : ''));
     await world.close();
   }
   await lib.stop();
@@ -73,13 +77,14 @@ async function main() {
     when: new Date().toISOString(), target: 'simulerad backend (FakeSupabase)', browser: 'Chromium (Playwright)',
     total: results.length, passed: results.filter((r) => r.status === 'passed').length,
     failed: results.filter((r) => r.status === 'failed').length, blocked: results.filter((r) => r.status === 'blocked').length,
+    known: results.filter((r) => r.status === 'known').length,
     durationMs: Date.now() - t0,
   };
   if (!GREP && !MODULE) {
     fs.writeFileSync(path.join(REPORT, 'results.json'), JSON.stringify({ summary, results }, null, 2));
     fs.writeFileSync(path.join(REPORT, 'REPORT.md'), renderMd(summary, results));
   }
-  console.log('\n' + summary.passed + ' godkända, ' + summary.failed + ' misslyckade, ' + summary.blocked + ' blockerade av ' + summary.total + ' (' + Math.round(summary.durationMs / 1000) + ' s)');
+  console.log('\n' + summary.passed + ' godkända, ' + summary.failed + ' misslyckade, ' + summary.blocked + ' blockerade, ' + summary.known + ' kända fel av ' + summary.total + ' (' + Math.round(summary.durationMs / 1000) + ' s)');
   process.exit(summary.failed ? 1 : 0);
 }
 
@@ -88,17 +93,17 @@ function renderMd(s, results) {
   results.forEach((r) => { (byMod[r.module] = byMod[r.module] || []).push(r); });
   let md = '# VIFT CRM — E2E-resultat\n\n';
   md += 'Genererad ' + s.when + '. Mål: ' + s.target + '. Webbläsare: ' + s.browser + '.\n\n';
-  md += '**' + s.total + ' tester: ' + s.passed + ' godkända, ' + s.failed + ' misslyckade, ' + s.blocked + ' blockerade.**\n\n';
+  md += '**' + s.total + ' tester: ' + s.passed + ' godkända, ' + s.failed + ' misslyckade, ' + s.blocked + ' blockerade, ' + s.known + ' kända fel (reproducerade, ej åtgärdade).**\n\n';
   md += 'Simulerad backend: klientens beteende mot en modell av Supabase-kontrakten — inte verifierat mot riktig STAGING.\n\n';
-  md += '| Modul | Godkända | Misslyckade | Blockerade |\n|---|---|---|---|\n';
+  md += '| Modul | Godkända | Misslyckade | Kända fel | Blockerade |\n|---|---|---|---|---|\n';
   Object.keys(byMod).forEach((m) => {
     const rs = byMod[m];
-    md += '| ' + m + ' | ' + rs.filter((r) => r.status === 'passed').length + ' | ' + rs.filter((r) => r.status === 'failed').length + ' | ' + rs.filter((r) => r.status === 'blocked').length + ' |\n';
+    md += '| ' + m + ' | ' + rs.filter((r) => r.status === 'passed').length + ' | ' + rs.filter((r) => r.status === 'failed').length + ' | ' + rs.filter((r) => r.status === 'known').length + ' | ' + rs.filter((r) => r.status === 'blocked').length + ' |\n';
   });
   md += '\n## Per test\n\n| Id | Modul | Test | Resultat | Tid | Anmärkning |\n|---|---|---|---|---|---|\n';
   results.forEach((r) => {
-    const note = r.status === 'failed' ? r.error : r.status === 'blocked' ? r.reason : (r.notes || []).join('; ');
-    md += '| ' + r.id + ' | ' + r.module + ' | ' + r.name + ' | ' + ({ passed: 'Godkänd', failed: 'Misslyckad', blocked: 'Blockerad' }[r.status]) + ' | ' + (r.ms != null ? r.ms + ' ms' : '') + ' | ' + String(note || '').replace(/\|/g, '/').slice(0, 220) + ' |\n';
+    const note = (r.status === 'failed' || r.status === 'known') ? r.error : r.status === 'blocked' ? r.reason : (r.notes || []).join('; ');
+    md += '| ' + r.id + ' | ' + r.module + ' | ' + r.name + ' | ' + ({ passed: 'Godkänd', failed: 'Misslyckad', blocked: 'Blockerad', known: 'Känt fel' }[r.status]) + ' | ' + (r.ms != null ? r.ms + ' ms' : '') + ' | ' + String(note || '').replace(/\|/g, '/').slice(0, 220) + ' |\n';
   });
   const withMetrics = results.filter((r) => r.metrics && Object.keys(r.metrics).length);
   if (withMetrics.length) {

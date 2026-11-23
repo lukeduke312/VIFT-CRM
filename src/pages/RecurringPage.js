@@ -150,7 +150,7 @@ const RecurringPage = {
         </div>
         <div class="dr"><span class="dk">Kund</span><span class="dv">${cu ? CustomerService.displayName(cu) : '—'}</span></div>
         ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${esc(AddressService.formatQuery(ro.address, ro.zip, ro.city, ''))}</span></div>` : ''}
-        ${ro.accessCode ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${esc(ro.accessCode)}</span></div>` : ''}
+        ${ro.accessCode && Auth.can('objects_sensitive') ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${esc(ro.accessCode)}</span></div>` : ''}
         ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
         <div class="dr"><span class="dk">Nästa datum</span><span class="dv">${ro.nextDate ? fmtDate(ro.nextDate) : '—'}${days !== null && days <= 0 ? ` <span class="bdg bdg-red" style="font-size:10px;">Förfallen</span>` : ''}</span></div>
         ${ro.lastCreatedDate ? `<div class="dr"><span class="dk">Senast skapad</span><span class="dv">${fmtDate(ro.lastCreatedDate)}</span></div>` : ''}
@@ -315,9 +315,9 @@ const RecurringPage = {
               <div class="fg"><label>Ort</label>
                 <input id="ro-city" value="${esc(parsedCity)}" placeholder="Stockholm"></div>
             </div>
-            <div class="fg">
+            ${Auth.can('objects_sensitive') ? `<div class="fg">
               <label>Portkod / åtkomst</label>
-              <input id="ro-access" value="${esc(src.accessCode||'')}" placeholder="T.ex. 1234#"></div>
+              <input id="ro-access" value="${esc(src.accessCode||'')}" placeholder="T.ex. 1234#"></div>` : ''}
           </div>
         </div>
 
@@ -634,7 +634,10 @@ const RecurringPage = {
       address    = (document.getElementById('ro-street')?.value || '').trim();
       zip        = (document.getElementById('ro-zip')?.value    || '').trim();
       city       = (document.getElementById('ro-city')?.value   || '').trim();
-      accessCode = (document.getElementById('ro-access')?.value || '').trim();
+      /* Utan objects_sensitive visas inte fältet — behåll då sparat värde. */
+      const _accEl = document.getElementById('ro-access');
+      const _prevRo = roId ? (state.recurringOrders || []).find(r => r.id === roId) : null;
+      accessCode = _accEl ? (_accEl.value || '').trim() : ((_prevRo && _prevRo.accessCode) || '');
       addressSource = 'manual';
       /* R2.7 §5/§6 (oberoende reproducerad blockerare) — samma praktiska
          regel som redan gäller för AO:ns egen särskilda adress (skapa/
