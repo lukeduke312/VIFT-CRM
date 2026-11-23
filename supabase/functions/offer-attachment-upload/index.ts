@@ -12,6 +12,11 @@
  * - Rate-limit: 30 req/min per IP
  * - Soft delete stöds (active=false) — filen tas inte bort ur Storage direkt
  *
+ * OFFER COMMUNICATION R2.5: appendOfferEvent() skriver nu ATOMISKT via
+ *   public.offer_events_append() i stället för det tidigare read/push/
+ *   upsert-mönstret mot hela vift_offerEvents-arrayen — upptäckt under
+ *   R2.5:s fullständiga skrivar-genomsökning av alla Edge Functions.
+ *
  * POST /functions/v1/offer-attachment-upload
  * Content-Type: multipart/form-data
  * Headers: Authorization: Bearer <SUPABASE_JWT>
@@ -30,6 +35,15 @@
  * Svar 200: { attachment: OfferAttachment }
  * Svar 400: { error: 'invalid_file_type'|'file_too_large'|'missing_fields' }
  * Svar 403: { error: 'forbidden' }
+ *
+ * PATCH (G12, 2026-11-25): ändrar en bilagas metadata atomiskt via
+ * public.offer_attachment_patch() (migration 20261125000001). Bygger på
+ * den installerade STAGING-versionen v12 (se
+ * supabase/backup/staging-ef-fore-installation/); allt i v12 är oförändrat.
+ *   PATCH /functions/v1/offer-attachment-upload
+ *   body: { attachmentId, displayName?, description?, includeInPublicView?,
+ *           includeInCombinedPdf? }
+ *   Svar 200: { ok: true, attachment }   404: { error: 'not_found' }
  */
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -43,7 +57,15 @@ const MAX_BYTES        = 50 * 1024 * 1024  /* 50 MB */
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'content-type, authorization',
+  /* OFFER-ATTACHMENT-CORS-HOTFIX-R1.1.2: `apikey` tillagd. Den faktiska
+     CRM-klienten (PageShells.js _uploadFiles()) skickar ALLTID apikey +
+     Authorization på detta anrop — utan apikey i den tillåtna
+     header-listan avvisar webbläsarens OPTIONS-preflight hela anropet
+     INNAN POST:en ens skickas (reproducerat i produktion, se rapporten).
+     Rent additivt. Baslinje: hämtad direkt från produktion (projekt
+     hjplzjsbbowiyoyhdghc), inte rekonstruerad — detta är den EXAKTA,
+     faktiskt deployade filen plus denna enda rad. */
+  'Access-Control-Allow-Headers': 'content-type, authorization, apikey',
   'Access-Control-Allow-Methods': 'POST, PATCH, DELETE, OPTIONS'
 }
 
@@ -148,18 +170,16 @@ serve(async (req: Request) => {
     return await softDeleteAttachment(supabase, attachmentId)
   }
 
-  /* ── PATCH: ändra bilagans metadata (2026-11-23, G12) ─────────
-     Klientens "Redigera bilaga" ändrade tidigare bara den lokala kopian —
-     vift_offerAttachments är skrivskyddad för den generiska sparvägen, så
-     namn, beskrivning och "synlig i kundvy" nådde aldrig servern. Endast
-     dessa fyra fält får ändras; allt annat (sökväg, låst version, aktiv)
-     är orört. Kräver offer_manage (kontrollerat ovan). */
+  /* ── PATCH: ändra bilagans metadata (G12) ─────────────────── */
   if (req.method === 'PATCH') {
     let body: Record<string, unknown>
     try { body = await req.json() } catch { return json({ error: 'invalid_json' }, 400) }
+
     const attachmentId = String(body.attachmentId ?? '').trim()
     if (!attachmentId) return json({ error: 'missing_fields' }, 400)
-    return await patchAttachment(supabase, attachmentId, body, user)
+
+    const sm = auth.staffMember as Record<string, unknown>
+    return await patchAttachment(supabase, attachmentId, body, String(sm?.id ?? ''))
   }
 
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -274,15 +294,18 @@ serve(async (req: Request) => {
     checksum
   }
 
-  const { data: attRow } = await supabase
-    .from('store').select('value').eq('key', 'vift_offerAttachments').maybeSingle()
-  const attachments: Record<string, unknown>[] =
-    Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
-  attachments.push(newAtt)
-  if (attachments.length > 5_000) attachments.splice(0, attachments.length - 5_000)
-
-  await supabase.from('store')
-    .upsert({ key: 'vift_offerAttachments', value: attachments }, { onConflict: 'key' })
+  /* P0 FINAL INTEGRATION (OFFER ATTACHMENTS R1): atomisk append via
+     offer_attachment_append() (radlåst — se
+     supabase/migrations/20261018000006_offer_attachment_atomic_rpc.sql)
+     istället för läs-hela-arrayen-i-minnet-skriv-tillbaka. ENDAST denna
+     rad ändrad — appendOfferEvent() nedan (vift_offerEvents, redan
+     fixad till offer_events_append() i detta STAGING-baserade dopp)
+     är orörd. */
+  const { error: attAppendErr } = await supabase.rpc('offer_attachment_append', { p_attachment: newAtt })
+  if (attAppendErr) {
+    console.error('[offer-attachment-upload] offer_attachment_append fel:', attAppendErr.message)
+    return json({ error: 'save_failed' }, 500)
+  }
 
   /* Logg-händelse i vift_offerEvents */
   await appendOfferEvent(supabase, {
@@ -295,56 +318,20 @@ serve(async (req: Request) => {
 })
 
 /* ── Soft delete ──────────────────────────────────────────── */
-async function patchAttachment(
-  supabase: ReturnType<typeof createClient>,
-  attachmentId: string,
-  body: Record<string, unknown>,
-  user: { id?: string; email?: string } | null
-): Promise<Response> {
-  const { data: attRow } = await supabase
-    .from('store').select('value').eq('key', 'vift_offerAttachments').maybeSingle()
-  const attachments: Record<string, unknown>[] =
-    Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
-  const att = attachments.find(a => a.id === attachmentId)
-  if (!att || att.active === false) return json({ error: 'not_found' }, 404)
-
-  if ('displayName' in body) {
-    const v = String(body.displayName ?? '').trim().slice(0, 200)
-    att.displayName = v || att.originalFileName
-  }
-  if ('description' in body) att.description = String(body.description ?? '').trim().slice(0, 1000)
-  if ('includeInPublicView' in body) att.includeInPublicView = body.includeInPublicView === true
-  if ('includeInCombinedPdf' in body) att.includeInCombinedPdf = body.includeInCombinedPdf === true
-  att.updatedAt = new Date().toISOString()
-
-  await supabase.from('store')
-    .upsert({ key: 'vift_offerAttachments', value: attachments }, { onConflict: 'key' })
-
-  await appendOfferEvent(supabase, {
-    offerId: String(att.offerId ?? ''), offerVersion: 1, type: 'attachment_updated',
-    ts: new Date().toISOString(), byUser: String(user?.email ?? ''),
-    comment: `Bilaga ändrad: ${String(att.displayName || att.originalFileName || attachmentId)}`
-  })
-  return json({ ok: true, attachment: att })
-}
-
 async function softDeleteAttachment(
   supabase: ReturnType<typeof createClient>,
   attachmentId: string
 ): Promise<Response> {
-  const { data: attRow } = await supabase
-    .from('store').select('value').eq('key', 'vift_offerAttachments').maybeSingle()
-  const attachments: Record<string, unknown>[] =
-    Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
-
-  const att = attachments.find(a => a.id === attachmentId)
-  if (!att) return json({ error: 'not_found' }, 404)
-
-  att.active    = false
-  att.deletedAt = new Date().toISOString()
-
-  await supabase.from('store')
-    .upsert({ key: 'vift_offerAttachments', value: attachments }, { onConflict: 'key' })
+  /* P0 FINAL INTEGRATION (OFFER ATTACHMENTS R1): atomisk soft-delete via
+     offer_attachment_soft_delete() istället för läs-hela-arrayen-i-
+     minnet-skriv-tillbaka. Samma princip: ENDAST denna rad ändrad. */
+  const { data: delData, error: delErr } = await supabase.rpc('offer_attachment_soft_delete', { p_attachment_id: attachmentId })
+  if (delErr) {
+    if (delErr.message?.includes('not_found')) return json({ error: 'not_found' }, 404)
+    console.error('[offer-attachment-upload] offer_attachment_soft_delete fel:', delErr.message)
+    return json({ error: 'delete_failed' }, 500)
+  }
+  const att = (delData || {}).attachment as Record<string, unknown>
 
   /* Logga borttagning */
   await appendOfferEvent(supabase, {
@@ -358,34 +345,77 @@ async function softDeleteAttachment(
   return json({ ok: true })
 }
 
-/* ── Event-logg ───────────────────────────────────────────── */
+/* ── PATCH: metadata — atomiskt via offer_attachment_patch() ──
+   Bara de fyra metadatafälten skickas vidare; RPC:n vitlistar dem
+   dessutom själv. Ingen läs-hela-arrayen-skriv-tillbaka. */
+async function patchAttachment(
+  supabase: ReturnType<typeof createClient>,
+  attachmentId: string,
+  body: Record<string, unknown>,
+  staffId: string
+): Promise<Response> {
+  const patch: Record<string, unknown> = {}
+  if ('displayName' in body)          patch.displayName          = String(body.displayName ?? '')
+  if ('description' in body)          patch.description          = String(body.description ?? '')
+  if ('includeInPublicView' in body)  patch.includeInPublicView  = body.includeInPublicView === true
+  if ('includeInCombinedPdf' in body) patch.includeInCombinedPdf = body.includeInCombinedPdf === true
+
+  const { data: patchData, error: patchErr } = await supabase.rpc('offer_attachment_patch', {
+    p_attachment_id: attachmentId, p_patch: patch
+  })
+  if (patchErr) {
+    if (patchErr.message?.includes('not_found')) return json({ error: 'not_found' }, 404)
+    console.error('[offer-attachment-upload] offer_attachment_patch fel:', patchErr.message)
+    return json({ error: 'update_failed' }, 500)
+  }
+  const att = (patchData || {}).attachment as Record<string, unknown>
+
+  await appendOfferEvent(supabase, {
+    offerId:      String(att.offerId ?? ''),
+    offerVersion: 1,
+    type:         'attachment_updated',
+    ts:           new Date().toISOString(),
+    byUser:       staffId,
+    comment:      `Bilaga ändrad: ${String(att.displayName || att.originalFileName || attachmentId)}`
+  })
+
+  return json({ ok: true, attachment: att })
+}
+
+/* ── Event-logg — R2.5: ATOMISKT via public.offer_events_append(), samma
+   RPC/mönster som send-offer-email/offer-token-validate/offer-respond, i
+   stället för det tidigare read/push/upsert-mönstret mot hela
+   vift_offerEvents-arrayen (upptäckt under R2.5:s fullständiga
+   skrivar-genomsökning — se rapporten). attachment_added/attachment_removed
+   är rena historikposter, inte en del av uppladdningens/borttagningens
+   egna framgångskontrakt (filen/metadatan är redan sparad när denna
+   anropas) — vid persisteringsfel loggas felet server-side, INGEN osäker
+   fallback-skrivning, och anropet (uppladdning/borttagning) fortsätter
+   rapportera sin egen framgång opåverkat. ── */
 async function appendOfferEvent(
   supabase: ReturnType<typeof createClient>,
   ev: Partial<{ offerId: string; offerVersion: number; type: string; ts: string; byUser: string; comment: string }>
 ): Promise<void> {
-  try {
-    const { data: row } = await supabase.from('store')
-      .select('value').eq('key', 'vift_offerEvents').maybeSingle()
-    const events: unknown[] = Array.isArray(row?.value) ? row.value as unknown[] : []
-    events.push({
-      id:           'oe-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      offerId:      ev.offerId      ?? '',
-      offerVersion: ev.offerVersion ?? 1,
-      type:         ev.type         ?? '',
-      ts:           ev.ts           ?? new Date().toISOString(),
-      byUser:       ev.byUser       ?? '',
-      byCustomer:   '',
-      byEmail:      '',
-      ip:           '',
-      comment:      ev.comment      ?? '',
-      changeRequestCategory: '',
-      declineReason: ''
-    })
-    if (events.length > 10_000) events.splice(0, events.length - 10_000)
-    await supabase.from('store')
-      .upsert({ key: 'vift_offerEvents', value: events }, { onConflict: 'key' })
-  } catch (e) {
-    console.error('[offer-attachment-upload] appendOfferEvent:', e)
+  const event = {
+    id:           'oe-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    offerId:      ev.offerId      ?? '',
+    offerVersion: ev.offerVersion ?? 1,
+    type:         ev.type         ?? '',
+    ts:           ev.ts           ?? new Date().toISOString(),
+    byUser:       ev.byUser       ?? '',
+    byCustomer:   '',
+    byEmail:      '',
+    ip:           '',
+    comment:      ev.comment      ?? '',
+    changeRequestCategory: '',
+    declineReason: ''
+  }
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const { error } = await supabase.rpc('offer_events_append', { p_event: event })
+    if (!error) return
+    console.error(`[offer-attachment-upload] offer_events_append attempt ${attempt}/${maxAttempts} fel:`, error)
+    if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 75 * attempt))
   }
 }
 

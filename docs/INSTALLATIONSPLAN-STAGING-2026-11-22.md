@@ -145,13 +145,22 @@ Ingen ny migration behövs för §2a–2b eller §2e. §2g har en egen migration
 
 ### 2e. `offer-attachment-upload` — PATCH för bilagornas metadata (separat GO)
 
-Källan i repot (`supabase/functions/offer-attachment-upload/index.ts`) har en ny PATCH-hanterare (fälten `displayName`, `description`, `includeInPublicView`, `includeInCombinedPdf`; samma `checkViftAuth` + `offer_manage` som uppladdningen) och CORS som tillåter PATCH. Utan deploy fungerar allt som förut, men att ändra en bilagas metadata ger ett tydligt felbesked ("sparades inte") och dialogen stängs inte — ingen tyst förlust. Innan deploy: jämför repots källa med den deployade STAGING-versionen (den kan skilja sig, G4).
+**Regression upptäckt och rättad (2026-11-25).** Den installerade STAGING-versionen v12 var *nyare* än repots källa. Den har atomiska `offer_attachment_append`, `offer_attachment_soft_delete` och `offer_events_append`, och `apikey` i CORS. Repots tidigare källa hade återinfört läs-hela-arrayen-skriv-tillbaka och saknade `apikey`, vilket skulle ha brutit klientens uppladdningar.
 
-1. Läs deployad källa för `offer-attachment-upload` i STAGING och jämför. Avvikelse utöver PATCH-blocket → stoppa och stäm av.
-2. `supabase functions deploy offer-attachment-upload --project-ref <STAGING>` (verify_jwt = true).
-3. Test: ändra namn och synlighet på en bilaga → "Sparat" först efter svar; omladdning visar ändringen; som roll utan `offer_manage` → 403.
+Repots källa bygger nu på v12, byte för byte, plus ett PATCH-block och `PATCH` i CORS-metoderna. PATCH går via en ny radlåst RPC, `offer_attachment_patch`, i migration `20261125000001`. Den vitlistar fyra fält, är bara körbar av service_role och har samma mönster som v12:s RPC:er. `tests/offer_attachment_upload.test.js` (43/43) kontrollerar följande:
+- Alla 375 rader i v12 finns kvar i ordning.
+- Fixturen med de installerade RPC:erna har samma md5 som i STAGING.
+- Vitlistning, not_found och behörighet fungerar.
+- Samtidig PATCH, uppladdning och borttagning tappar ingenting (riktig PostgreSQL).
+- Själva EF-källan körs i Node mot samma databas.
 
-Rollback: deploya föregående version.
+Samma test mot den gamla källan ger 9 fel.
+
+1. Migration `20261125000001_offer_attachment_patch.sql`.
+2. Deploy `offer-attachment-upload` (verify_jwt = true) med `_shared/vift-auth.ts`.
+3. Test: ändra namn och synlighet på en bilaga, ladda upp och ta bort. Som roll utan `offer_manage` → 403.
+
+Rollback: deploya `supabase/backup/staging-ef-fore-installation/offer-attachment-upload-v12/` och kör `drop function public.offer_attachment_patch(text, jsonb);`.
 
 ### 2g. Checklista med tre statuslägen (separat GO, i denna ordning)
 
@@ -547,6 +556,34 @@ Steg 5 (GO-4) är **genomfört och verifierat**. Den första uppladdningen inneh
 - Visuellt granskat på den publicerade sidan: inloggningen på laptop och iPhone. Vyerna bakom inloggningen granskas på den publicerade sidan först med testkonton (GO-1, sedan GO-9). Filerna är byte för byte identiska med paketet, vars vyer granskades före frysningen.
 
 Den nya klienten använder sina reserver mot dagens server tills §2g, §2i och §2j installeras. Ingen serverfunktion är ändrad.
+
+### 6.4c Förkontroll mot det som faktiskt är installerat (2026-11-25, bara läsning via Supabase-anslutningen)
+
+**Backup i databasen (GO-2 del B, skapad av ChatGPT):** kontrollerad oberoende. Inga skillnader mot live, och anon/authenticated har inga rättigheter på schemat.
+
+| Del | Antal | Resultat | Referenssumma |
+|---|---|---|---|
+| store | 40 | 40/40 fingeravtryck stämmer | `dc85f35f…` |
+| op_idempotency | 2146 | 2146/2146 | `ac6f2cd2…` |
+| funktionsdefinitioner | 50 | 50/50 identiska med live | `9d8e7676…` |
+
+Inga lösenord, portkoder eller nyckelfält med värden finns i store.
+
+**Kopia utanför Supabase:** saknas ännu (**stopp för GO-1 och framåt**). Verktyget `tools/staging-backup-export.js` exporterar backupen, verifierar varje rad mot databasens md5 och summor, skriver återställnings-SQL och provar återställningen i en tom lokal databas. Det är lokalt provat i `tests/staging_backup_export.test.js` (10/10, en kapad export avvisas). Återställning i databasen: `supabase/manual/staging_restore_from_backup_20261124.sql`.
+
+**Edge Functions före installation:** sparade i `supabase/backup/staging-ef-fore-installation/` med SHA-256 och Supabase `ezbr_sha256`.
+
+| Serverdel | Installerat i STAGING | Jämförelse | Bedömning |
+|---|---|---|---|
+| `store-key-write` (GO-6) | v3 | identisk med `5b239b8`; repot lägger bara till 181 rader | OK |
+| `work-order-checklist-resolve` (GO-5) | v1 | identisk med repot före `3f2dd7d` (samma låsta `supabase-js@2.118.0`) | OK |
+| `work_order_checklist_resolve` (DB, GO-5) | md5 `abb860f9…` | identisk md5 med repots `20260917000001` | OK |
+| `offer-attachment-upload` (GO-8) | v12 | repot var äldre, se §2e | **Rättat**, testat |
+| `offer_attachment_*`, `offer_events_append` (DB) | finns | fixtur med samma md5 används i testerna | OK |
+| `offer-public-pdf` (GO-8) | saknas | samma `publicToken`-, återkallnings-, utgångs- och snapshotregler som installerade `offer-token-validate` v11; skriver inget | OK |
+| `activity_log_append`, `work_order_log_*`, `work_order_checklist_set_state`, `offer_attachment_patch` | saknas | inga namnkrockar | OK |
+| `project_documents_*` + bucket `project-documents` (GO-8 §2k) | saknas | policynamnen krockar inte med befintliga 21 store- och 3 storage-policyer | OK |
+| bucket `workorder-images` (GO-8 §2b) | saknas | enda bucket i dag är `offer-attachments` | OK |
 
 ### 6.5 Nästa konkreta GO (2026-11-25)
 
