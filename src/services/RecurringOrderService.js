@@ -70,6 +70,19 @@ const RecurringOrderService = {
     const ro = this.getById(roId);
     if (!ro || ro.status !== 'aktiv') return { ok: false, error: 'Ärende ej aktivt' };
 
+    /* E2E REC-01 (2026-11-23): schemat flyttas fram först när servern
+       bekräftat AO:n (se nedan). Under den tiden visade ärendet samma
+       nästa datum, och ett andra klick på "Skapa AO nu" skapade en andra
+       AO för SAMMA tillfälle (reproducerat med långsam server). Finns
+       redan en (ej raderad) AO för ärendet och tillfället — väntande
+       eller bekräftad men schemat ännu inte framflyttat — skapas ingen ny. */
+    const occDate = ro.nextDate || tdy();
+    const existing = (state.workOrders || []).find(a => a && a.recurringOrderId === ro.id && !a.deleted && a.scheduledDate === occDate);
+    if (existing) {
+      const nr = (typeof WorkOrderService !== 'undefined' && WorkOrderService.displayNumberOrPending) ? WorkOrderService.displayNumberOrPending(existing) : existing.id;
+      return { ok: false, error: 'Det finns redan en arbetsorder (' + nr + ') för tillfället ' + occDate + (existing._pendingSync ? ' — den väntar på serverns bekräftelse.' : '.') };
+    }
+
     /* R2.5 §3/§9 (oberoende reproducerad blockerare) — `ro.address` var
        TIDIGARE ibland en hopslagen "Gata, 123 45 Ort"-sträng (skriven av
        den gamla RecurringPage._save(), se dess kommentar) medan
