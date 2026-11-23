@@ -395,7 +395,12 @@ const Storage = {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
         body: JSON.stringify({ action: 'readWithHash', key: key }),
-        extraHeaders: { 'apikey': SUPABASE_AKEY }
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        /* E2E RES-03 (2026-11-23): denna läsning används för att avgöra om
+           en tidsutlöst skrivning landade (settlePersistFailure). Utan egen
+           gräns kunde den hänga för evigt på en stillastående anslutning
+           och lämna användaren vid "Sparar…" utan besked. */
+        timeoutMs: this.WRITE_TIMEOUT_MS
       });
       const data = await res.json().catch(function() { return {}; });
       if (!res.ok) {
@@ -412,7 +417,8 @@ const Storage = {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
         body: JSON.stringify({ action: 'readHashes', keys: keys }),
-        extraHeaders: { 'apikey': SUPABASE_AKEY }
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        timeoutMs: this.WRITE_TIMEOUT_MS
       });
       const data = await res.json().catch(function() { return {}; });
       if (!res.ok) {

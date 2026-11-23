@@ -766,4 +766,27 @@ const AOTimeSyncService = {
   }
 };
 
+/* E2E RES-01 (2026-11-23): köade AO-/tidposter skickades tidigare bara vid
+   sidstart (initState → resumePending) eller när en NY ändring gjordes på
+   samma post. En fältarbetare som tappade nätet och fick tillbaka det såg
+   sina poster ligga kvar osparade tills sidan laddades om. Nu: försök igen
+   vid 'online', när fliken blir synlig och var 30:e s så länge något ligger
+   i kön — bara med giltig session och när webbläsaren rapporterar nät.
+   resumePending() har egen spärr mot parallella körningar och respekterar
+   taket för automatiska försök. */
+(function () {
+  if (typeof window === 'undefined' || !window.addEventListener || typeof document === 'undefined') return;
+  function kick() {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if (typeof Auth === 'undefined' || !Auth.getAccessToken || !Auth.getAccessToken()) return;
+      if (AOTimeSyncService.pendingCount() === 0) return;
+      AOTimeSyncService.resumePending().catch(function () {});
+    } catch (e) {}
+  }
+  window.addEventListener('online', function () { setTimeout(kick, 500); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });
+  setInterval(kick, 30000);
+})();
+
 if (typeof module !== 'undefined' && module.exports) module.exports = AOTimeSyncService;

@@ -267,19 +267,41 @@ var _VF_JOURNAL_EXCLUDED = { activityLog: true, settings: true };
 function _vfJournalUser() {
   try { return (typeof Auth !== 'undefined' && Auth._session && Auth._session.user_email) || ''; } catch (e) { return ''; }
 }
+/* E2E RES-04 (2026-11-23): journalen lagras per inloggning. Tidigare låg
+   den under EN nyckel och kastades när en annan användare loggade in på
+   samma enhet — den första användarens obekräftade ändring försvann då
+   tyst även för henne/honom. Nu ligger varje användares journal under en
+   egen nyckel; den skickas aldrig i någon annans namn och finns kvar när
+   ägaren loggar in igen (samma princip som AO/tid-utkorgen, TIME-05).
+   En äldre gemensam journal flyttas till ägarens nyckel när ägaren läser. */
+function _vfJournalStorageKey(user) {
+  const u = user === undefined ? _vfJournalUser() : user;
+  return u ? _VF_JOURNAL_KEY + ':' + String(u).toLowerCase() : _VF_JOURNAL_KEY;
+}
 function _vfJournalRead() {
+  const me = _vfJournalUser();
   try {
-    const raw = localStorage.getItem(_VF_JOURNAL_KEY);
+    let raw = localStorage.getItem(_vfJournalStorageKey(me));
+    if (!raw && me) {
+      const legacy = localStorage.getItem(_VF_JOURNAL_KEY);
+      const lj = legacy ? JSON.parse(legacy) : null;
+      if (lj && (!lj.user || String(lj.user).toLowerCase() === String(me).toLowerCase())) {
+        raw = legacy;
+        localStorage.setItem(_vfJournalStorageKey(me), legacy);
+        localStorage.removeItem(_VF_JOURNAL_KEY);
+      }
+    }
     const j = raw ? JSON.parse(raw) : null;
     if (j && typeof j === 'object' && j.keys && typeof j.keys === 'object') return j;
   } catch (e) {}
-  return { v: 1, user: _vfJournalUser(), keys: {} };
+  return { v: 1, user: me, keys: {} };
 }
 function _vfJournalWrite(j) {
   try {
+    const key = _vfJournalStorageKey(j.user || _vfJournalUser());
     const empty = !j.keys || Object.keys(j.keys).every(function(k) { return !j.keys[k] || Object.keys(j.keys[k]).length === 0; });
-    if (empty) localStorage.removeItem(_VF_JOURNAL_KEY);
-    else localStorage.setItem(_VF_JOURNAL_KEY, JSON.stringify(j));
+    if (empty) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(j));
   } catch (e) {}
 }
 function _vfJournalRecord(shortKey, upserts, removals) {
@@ -667,9 +689,10 @@ function _vfReplayPersistJournal() {
   const keys = Object.keys(j.keys || {});
   if (!keys.length) return res;
   const me = _vfJournalUser();
-  if (j.user && me && j.user !== me) {
-    console.warn('[persist-journal] Osparade ändringar tillhör en annan inloggning — spelas INTE upp, kasseras.');
-    try { localStorage.removeItem(_VF_JOURNAL_KEY); } catch (e) {}
+  if (j.user && me && String(j.user).toLowerCase() !== String(me).toLowerCase()) {
+    /* Kan bara hända med en äldre gemensam journal: lämna den orörd åt sin
+       ägare (se _vfJournalRead), spela aldrig upp den i fel namn. */
+    console.warn('[persist-journal] Osparade ändringar tillhör en annan inloggning — spelas INTE upp här.');
     return res;
   }
   keys.forEach(function(shortKey) {
