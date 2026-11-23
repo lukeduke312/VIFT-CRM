@@ -46,7 +46,13 @@ const VIEWS = [
   { id: '29-fakturadetalj', page: 'pg-inv-detail', params: { invoiceId: 'INV-003' } },
   { id: '30-offertdetalj', page: 'pg-offer-detail', params: { offerId: 'OFF-001' } },
 ];
-const SIZES = { laptop: 'laptop', mobil: 'iphone' };
+/* Standard: laptop + mobil. VIFT_VISUAL_SIZES=alla → 1920, 1366, 1024, 768, 390, 360.
+   VIFT_VISUAL_ONLY=<regex> begränsar till vissa vy-id:n. */
+const ALL_SIZES = { w1920: 'desktop', w1366: 'laptop', w1024: 'w1024', w768: 'w768', w390: 'iphone', w360: 'android' };
+const SIZES = process.env.VIFT_VISUAL_SIZES === 'alla' ? ALL_SIZES
+  : process.env.VIFT_VISUAL_SIZES ? Object.fromEntries(process.env.VIFT_VISUAL_SIZES.split(',').map((k) => [k, ALL_SIZES[k] || k]))
+  : { laptop: 'laptop', mobil: 'iphone' };
+const ONLY = process.env.VIFT_VISUAL_ONLY ? new RegExp(process.env.VIFT_VISUAL_ONLY) : null;
 const FIXED_TIME = new Date();
 
 async function capture(dir) {
@@ -68,6 +74,7 @@ async function capture(dir) {
       sessions[user] = s; return s;
     };
     for (const v of VIEWS) {
+      if (ONLY && !ONLY.test(v.id)) continue;
       const s = await get(v.user || 'admin');
       try {
         await s.eval(() => { try { Modal.close(); } catch (e) {} });

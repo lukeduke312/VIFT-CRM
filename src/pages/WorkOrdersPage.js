@@ -5,7 +5,7 @@
 
 /* Akut-badge: röd chip med emoji och fetstilstext */
 function akutBadge() {
-  return `<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`;
+  return `<span class="bdg bdg-red ao-akut-badge">${ic('alert-triangle',11)}Akut</span>`;
 }
 
 const WorkOrdersPage = {
@@ -118,6 +118,7 @@ const WorkOrdersPage = {
         if (params.filter === 'idag')            { this._f.quick = 'idag'; }
         if (params.filter === 'forsenad')        { this._f.quick = 'forsenad'; }
         if (params.filter === 'mine')            { this._f.mine = true; }
+        if (params.filter === 'unassigned')      { this._f.unassigned = true; }
       }
       if (params.propertyId) { this._f.property = params.propertyId; this.filter = 'alla'; }
       if (params.customerId) { this._f.customer = params.customerId; this.filter = 'alla'; }
@@ -133,64 +134,139 @@ const WorkOrdersPage = {
       { id: 'assign', label: 'Lägg till personal', icon: 'user-plus', permission: 'ao_edit', type: 'custom', open: (ids) => WorkOrdersPage._openBulkAssign(ids) }
     ];
     SelectionModel.init('workOrder', { stateKey: 'workOrders', actions: aoActions });
-    const activeCount = this._activeFilterCount();
+    const advCount = this._f.staffIds.length + (this._f.customer?1:0) + (this._f.property?1:0) + (this._f.categories||[]).length;
+
+    /* V3: antal per status och per snabbfilter, beräknat EN gång per render
+       (inte per tangenttryck i sökfältet). */
+    const seen = this._permittedList();
+    const live = seen.filter(a => !a.archived && !a.deleted);
+    const n = { alla: 0, arkiverade: 0, papperskorg: 0 };
+    seen.forEach(a => { if (a.deleted) n.papperskorg++; else if (a.archived) n.arkiverade++; });
+    live.forEach(a => { n[a.status] = (n[a.status] || 0) + 1; if (a.status !== 'fakturerad') n.alla++; });
 
     const STATUS_TABS = [
-      { key:'alla',        label:'Alla' },
+      { key:'alla',        label:'Aktiva' },
       { key:'nytt',        label:'Nytt' },
       { key:'pool',        label:'Pool' },
       { key:'planerad',    label:'Planerad' },
       { key:'pågående',    label:'Pågående' },
       { key:'klar',        label:'Klar' },
       { key:'fakturerad',  label:'Fakturerad' },
-      { key:'arkiverade',  label:'Arkiverade' },
+      { key:'arkiverade',  label:'Arkiv' },
       { key:'papperskorg', label:'Papperskorg' }
     ];
 
+    const tabBase = this._baseList();
+    const today = tdy();
+    const myId = state.currentUser ? state.currentUser.id : null;
+    let _r = null;
+    const q = {
+      mine: myId ? tabBase.filter(a => (a.staff||[]).includes(myId)).length : 0,
+      idag: tabBase.filter(a => a.scheduledDate === today).length,
+      forsenad: tabBase.filter(a => WorkOrderService.isOverdue(a, today)).length,
+      akut: tabBase.filter(a => a.priority === 'akut').length,
+      unassigned: tabBase.filter(a => !(a.staff||[]).length).length,
+      readyForInvoice: tabBase.filter(a => a.status === 'klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a, (_r = _r || WorkOrderService.billingStatusResolver()))).length,
+    };
+    const isLive = this.filter !== 'arkiverade' && this.filter !== 'papperskorg';
+    const f = this._f;
+    const chips = isLive ? [
+      myId ? UiKit.chip('Mina', "WorkOrdersPage.toggleQuick('mine')", { on: f.mine, n: q.mine, icon: 'user' }) : '',
+      UiKit.chip('Idag', "WorkOrdersPage.toggleQuick('idag')", { on: f.quick === 'idag', n: q.idag, icon: 'calendar' }),
+      UiKit.chip('Försenade', "WorkOrdersPage.toggleQuick('forsenad')", { on: f.quick === 'forsenad', n: q.forsenad, icon: 'clock', tone: q.forsenad ? 'danger' : '' }),
+      UiKit.chip('Akuta', "WorkOrdersPage.toggleQuick('akut')", { on: f.quick === 'akut', n: q.akut, icon: 'alert-triangle', tone: q.akut ? 'danger' : '' }),
+      UiKit.chip('Otilldelade', "WorkOrdersPage.toggleQuick('unassigned')", { on: f.unassigned, n: q.unassigned, icon: 'user-x' }),
+      (this.filter === 'alla' || this.filter === 'klar') ? UiKit.chip('Att fakturera', "WorkOrdersPage.toggleQuick('readyForInvoice')", { on: f.quick === 'readyForInvoice', n: q.readyForInvoice, icon: 'receipt' }) : '',
+    ].join('') : '';
+
+    const SORTS = [['default','Prioritet och nyast'],['scheduled','Planerat datum'],['updated','Senast ändrad'],['priority','Prioritet']];
+
     el.innerHTML = `
-      <div class="ao-toolbar">
-        <div class="swrap">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="ao-search"
-            placeholder="Sök order, kund, adress, personal, beskrivning…"
-            value="${esc(this.q)}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()"
-            style="padding-right:${this.q?'28px':'10px'}">
-          ${this.q ? `<button class="swrap-clear" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()" title="Rensa sökning">${ic('x',12)}</button>` : ''}
-        </div>
-        <button class="btn bghost bsm ao-filter-btn${activeCount?' ao-filter-active':''}" onclick="WorkOrdersPage.openFilterPanel()">
-          ${ic('sliders',13)}${activeCount ? ` (${activeCount})` : ' Filter'}
-        </button>
-        <div class="ao-toolbar-right">
-          <div class="view-toggle">
-            <button class="btn ${this.viewMode==='list'?'bp':'bghost'}" title="Listvy" onclick="WorkOrdersPage.setView('list')">${ic('list',14)}</button>
-            <button class="btn ${this.viewMode==='grid'?'bp':'bghost'}" title="Kortvy" onclick="WorkOrdersPage.setView('grid')">${ic('grid',14)}</button>
+      <div class="aol">
+        <div class="aol-bar">
+          <div class="swrap aol-search">
+            <span class="sico">${ic('search',16)}</span>
+            <input type="search" id="ao-search"
+              placeholder="Sök nummer, uppdrag, kund, adress, personal…"
+              value="${esc(this.q)}" oninput="WorkOrdersPage.q=this.value;WorkOrdersPage.renderList()"
+              aria-label="Sök arbetsorder">
+            ${this.q ? `<button class="swrap-clear" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()" title="Rensa sökning" aria-label="Rensa sökning">${ic('x',12)}</button>` : ''}
           </div>
-          ${Auth.can('ao_edit') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('workOrder',this)">${ic('download',14)} Exportera</button>
-          <div class="ao-overflow-wrap">
-            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-wo" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-wo',this)">${ic('more-vertical',14)}</button>
-            <div class="ao-overflow-menu" id="ao-ovf-wo" role="menu">
-              <button class="ao-overflow-menu-item ao-view-item" role="menuitem" onclick="aoCloseOverflow();WorkOrdersPage.setView('list')">${ic('list',13)} Listvy</button>
-              <button class="ao-overflow-menu-item ao-view-item" role="menuitem" onclick="aoCloseOverflow();WorkOrdersPage.setView('grid')">${ic('grid',13)} Kortvy</button>
-              <div class="ao-overflow-divider ao-view-item"></div>
-              ${Auth.can('ao_edit') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',13)} Importera</button>` : ''}
-              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('workOrder',this)">${ic('download',13)} Exportera</button>
+          <div class="aol-bar-right">
+            <label class="aol-sort"><span>Sortera</span>
+              <select onchange="WorkOrdersPage.setSort(this.value)" aria-label="Sortera arbetsorder">
+                ${SORTS.map(([v,l]) => `<option value="${v}"${(f.sort||'default')===v?' selected':''}>${l}</option>`).join('')}
+              </select>
+            </label>
+            <button class="btn bs bsm ao-filter-btn${advCount?' ao-filter-active':''}" onclick="WorkOrdersPage.openFilterPanel()">
+              ${ic('sliders',14)} Filter${advCount ? ` <span class="aol-badge">${advCount}</span>` : ''}
+            </button>
+            <div class="aol-seg" role="group" aria-label="Visning">
+              <button class="ibtn${this.viewMode==='list'?' on':''}" title="Tabell" aria-label="Tabellvy" aria-pressed="${this.viewMode==='list'}" onclick="WorkOrdersPage.setView('list')">${ic('list',15)}</button>
+              <button class="ibtn${this.viewMode==='grid'?' on':''}" title="Kort" aria-label="Kortvy" aria-pressed="${this.viewMode==='grid'}" onclick="WorkOrdersPage.setView('grid')">${ic('grid',15)}</button>
             </div>
+            <div class="ao-overflow-wrap">
+              <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-wo" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-wo',this)">${ic('more-horizontal',15)}</button>
+              <div class="ao-overflow-menu" id="ao-ovf-wo" role="menu">
+                ${Auth.can('ao_edit') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'workOrder'})">${ic('upload',13)} Importera</button>` : ''}
+                <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('workOrder',this)">${ic('download',13)} Exportera</button>
+              </div>
+            </div>
+            ${Auth.can('ao_create') ? `<button class="btn bp bsm aol-new" onclick="WorkOrdersPage.openCreate()">${ic('plus',15)} Ny order</button>` : ''}
           </div>
-          ${Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : ''}
         </div>
-      </div>
-      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
-          ${STATUS_TABS.map(t =>
-            `<button class="ft ${this.filter===t.key?'on':''}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}</button>`
-          ).join('')}
+        <div class="ao-tabs-row">
+          <div class="ftabs ao-status-tabs" role="tablist" aria-label="Status">
+            ${STATUS_TABS.map(t =>
+              `<button class="ft ${this.filter===t.key?'on':''}" role="tab" aria-selected="${this.filter===t.key}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}${n[t.key] ? `<span class="ft-n">${n[t.key]}</span>` : ''}</button>`
+            ).join('')}
+          </div>
         </div>
-        <div class="ao-selall-cell" id="ao-sel-all"></div>
-      </div>
-      <div id="ao-active-filters">${this._activeChipsHtml()}</div>
-      <div id="ao-list"></div>`;
+        <div class="ao-quick-row">
+          <div class="ao-quick" role="group" aria-label="Snabbfilter">${chips}</div>
+          <div class="ao-selall-cell" id="ao-sel-all"></div>
+        </div>
+        <div id="ao-active-filters">${this._advChipsHtml()}</div>
+        <div id="ao-list"></div>
+      </div>`;
     this.renderList();
+  },
+
+  /* Snabbfilter: ett klick slår på, ett till slår av. "Mina" och
+     "Otilldelade" utesluter varandra (samma regel som renderList). */
+  toggleQuick(key) {
+    const f = this._f;
+    if (key === 'mine') { f.mine = !f.mine; if (f.mine) { f.unassigned = false; f.staffIds = []; } }
+    else if (key === 'unassigned') { f.unassigned = !f.unassigned; if (f.unassigned) { f.mine = false; f.staffIds = []; } }
+    else f.quick = f.quick === key ? null : key;
+    this.render();
+  },
+
+  setSort(v) {
+    this._f.sort = v || 'default';
+    this.renderList();
+  },
+
+  /* AO som användaren får se (behörighet), alla statusar och lägen. */
+  _permittedList() {
+    let list = state.workOrders || [];
+    const canViewAll = Auth.can('ao_view_all') || Auth.can('all');
+    if (!canViewAll && Auth.can('ao_view_own') && state.currentUser) {
+      const myId = state.currentUser.id;
+      list = list.filter(a => (a.staff||[]).includes(myId) || a.status === 'pool');
+    }
+    return list;
+  },
+
+  /* Avancerade filter (personal/kund/fastighet/kategori) som chips —
+     snabbfiltren visas redan som egna chips ovanför. */
+  _advChipsHtml() {
+    const f = this._f;
+    const saved = { quick: f.quick, mine: f.mine, unassigned: f.unassigned };
+    f.quick = null; f.mine = false; f.unassigned = false;
+    let html = '';
+    try { html = this._activeChipsHtml(); } finally { Object.assign(f, saved); }
+    return html;
   },
 
   setView(mode) {
@@ -321,15 +397,8 @@ const WorkOrdersPage = {
   },
 
   _refreshFilters() {
-    const chipsEl = document.getElementById('ao-active-filters');
-    if (chipsEl) chipsEl.innerHTML = this._activeChipsHtml();
-    const btn = document.querySelector('.ao-filter-btn');
-    if (btn) {
-      const n = this._activeFilterCount();
-      btn.className = `btn bghost bsm ao-filter-btn${n?' ao-filter-active':''}`;
-      btn.innerHTML = `${ic('sliders',13)}${n ? ` (${n})` : ' Filter'}`;
-    }
-    this.renderList();
+    /* V3: räknare i flikar och snabbfilter beror på filtren — rendera om helt. */
+    this.render();
   },
 
   clearAllFilters() {
@@ -564,15 +633,7 @@ const WorkOrdersPage = {
   renderList() {
     const el = document.getElementById('ao-list');
     if (!el) return;
-    let list = state.workOrders || [];
-
-    // ao_view_own: begränsa till egna AO och pool
-    const canViewAll = Auth.can('ao_view_all') || Auth.can('all');
-    if (!canViewAll && Auth.can('ao_view_own') && state.currentUser) {
-      const myId = state.currentUser.id;
-      list = list.filter(a => (a.staff||[]).includes(myId) || a.status === 'pool');
-    }
-
+    let list = this._permittedList();
     const today = tdy();
 
     if (this.filter === 'arkiverade') {
@@ -582,7 +643,7 @@ const WorkOrdersPage = {
     } else {
       list = list.filter(a => !a.archived && !a.deleted);
       if (this.filter === 'alla') {
-        // "Alla" visar bara aktiva AO — exkluderar fakturerade
+        // "Aktiva" visar alla ej fakturerade AO
         list = list.filter(a => a.status !== 'fakturerad');
       } else {
         list = list.filter(a => a.status === this.filter);
@@ -591,7 +652,7 @@ const WorkOrdersPage = {
       if (this._f.quick === 'akut')            list = list.filter(a => a.priority==='akut');
       if (this._f.quick === 'readyForInvoice') { let _r = null; list = list.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a, (_r = _r || WorkOrderService.billingStatusResolver()))); } // L1: one candidate pass
       if (this._f.quick === 'idag')            list = list.filter(a => a.scheduledDate===today);
-      if (this._f.quick === 'forsenad')        list = list.filter(a => a.scheduledDate && a.scheduledDate<today);
+      if (this._f.quick === 'forsenad')        list = list.filter(a => WorkOrderService.isOverdue(a, today));
       // Personal
       if (this._f.mine) {
         const myId = state.currentUser ? state.currentUser.id : null;
@@ -618,7 +679,7 @@ const WorkOrdersPage = {
         const stfNames = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? s.firstName+' '+s.lastName : ''; }).join(' ');
         const matText  = (ao.materials||[]).map(m => m.description||m.name||'').join(' ');
         const haystack = nrm([
-          ao.id, ao.title, ao.description, ao.address, ao.zip, ao.city, ao.contactPerson,
+          ao.id, ao.aoNumber, ao.title, ao.description, ao.address, ao.zip, ao.city, ao.contactPerson,
           ao.phone, ao.email, ao.category,
           catObj ? catObj.label : '',
           ao.status, ao.priority,
@@ -640,146 +701,146 @@ const WorkOrdersPage = {
     }
 
     // Sortering
+    const pOrd = {akut:0,hög:1,normal:2,låg:3};
+    const pr = (a) => (pOrd[a.priority] !== undefined ? pOrd[a.priority] : 2);
     list = list.slice().sort((a,b) => {
       if (this._f.sort === 'updated')   return new Date(b.updatedAt||b.createdAt) - new Date(a.updatedAt||a.createdAt);
       if (this._f.sort === 'scheduled') {
         if (!a.scheduledDate && !b.scheduledDate) return 0;
         if (!a.scheduledDate) return 1;
         if (!b.scheduledDate) return -1;
-        return a.scheduledDate < b.scheduledDate ? -1 : 1;
+        if (a.scheduledDate !== b.scheduledDate) return a.scheduledDate < b.scheduledDate ? -1 : 1;
+        return String(a.scheduledStart||'') < String(b.scheduledStart||'') ? -1 : 1;
       }
-      if (this._f.sort === 'priority') {
-        const p = {akut:0,hög:1,normal:2,låg:3};
-        return (p[a.priority]||2) - (p[b.priority]||2);
-      }
+      if (this._f.sort === 'priority') return pr(a) - pr(b);
       // default: prioritet + skapad
-      const pOrd = {akut:0,hög:1,normal:2,låg:3};
-      const d = (pOrd[a.priority]||2) - (pOrd[b.priority]||2);
+      const d = pr(a) - pr(b);
       return d !== 0 ? d : new Date(b.createdAt) - new Date(a.createdAt);
     });
     const visibleIds = list.map(a => a.id);
     const selAllEl = document.getElementById('ao-sel-all');
-    if (selAllEl) selAllEl.innerHTML = SelectionModel.selectAllHtml(visibleIds);
+    if (selAllEl) selAllEl.innerHTML = list.length ? SelectionModel.selectAllHtml(visibleIds) : '';
     const selMode = SelectionModel.count() > 0;
 
     if (!list.length) {
       const isSearch = !!this.q;
       const isFilter = this.filter !== 'alla' || this._activeFilterCount() > 0;
       const hasAnyFilter = isSearch || isFilter;
-      el.innerHTML = `<div class="empty">${ic('clipboard-list',36)}
-        <h3>${isSearch ? 'Inga träffar' : isFilter ? 'Inga ordrar' : 'Inga arbetsorder'}</h3>
-        <p>${isSearch ? 'Inga ordrar matchar sökningen.' : isFilter ? 'Inga ordrar matchar valt filter.' : 'Skapa din första arbetsorder med knappen ovan.'}</p>
-        ${hasAnyFilter ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+      el.innerHTML = `<div class="empty">${ic('clipboard-list',32)}
+        <h3>${isSearch ? 'Inga träffar' : isFilter ? 'Inga ordrar här' : 'Inga arbetsorder ännu'}</h3>
+        <p>${isSearch ? 'Inga ordrar matchar sökningen. Pröva ett kundnamn, en adress eller ett ordernummer.' : isFilter ? 'Inga ordrar matchar valt filter.' : 'Skapa din första arbetsorder — den hamnar här och i kalendern.'}</p>
+        ${hasAnyFilter ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
           ${isSearch ? `<button class="btn bs bsm" onclick="WorkOrdersPage.q='';document.getElementById('ao-search').value='';WorkOrdersPage.renderList()">Rensa sökning</button>` : ''}
-          ${isFilter ? `<button class="btn bs bsm" onclick="WorkOrdersPage.clearAllFilters()">Rensa filter</button>` : ''}
-        </div>` : ''}
+          ${isFilter ? `<button class="btn bs bsm" onclick="WorkOrdersPage.filter='alla';WorkOrdersPage.clearAllFilters()">Visa alla aktiva</button>` : ''}
+        </div>` : (Auth.can('ao_create') ? `<button class="btn bp bsm" style="margin-top:10px" onclick="WorkOrdersPage.openCreate()">${ic('plus',14)} Ny order</button>` : '')}
       </div>`;
       return;
     }
-    /* QA FIX-ROUND 2026-11-12 (L1, confirmed): getBillingStatus() used to
-       run a full BillingQueueService.getCandidates() pass (every candidate
-       of every AO) for EACH completed-unbilled row — O(n²): 750 ms per
-       render at 333 orders, 634 ms per search keystroke. Now one pass per
-       render, created lazily on the first row that needs it, shared by all
-       rows. Same per-row result (see getPricingStatusResolver()). */
+
+    /* QA FIX-ROUND 2026-11-12 (L1, confirmed): ett faktureringsresolver-pass
+       per render, skapat vid första rad som behöver det (se tidigare
+       kommentar i git-historiken). */
     let _billRes = null;
+    const canEdit = Auth.can('ao_edit');
+    const SUB = { inväntar_material:'Inväntar material', inväntar_kund:'Inväntar kund', pausad:'Pausad', behöver_återbesök:'Återbesök', blockerad:'Blockerad' };
+    const row = (ao) => {
+      const cu     = getCu(ao.customerId);
+      const cuName = cu ? CustomerService.displayName(cu) : (ao.customerName || '');
+      const prop   = ao.propertyId ? (state.properties||[]).find(p => p.id === ao.propertyId) : null;
+      const where  = [ao.address || (prop && prop.address) || '', ao.city || (prop && prop.city) || ''].filter(Boolean).join(', ');
+      const needsInvoice = ao.status==='klar' && !ao.invoiceId;
+      /* AO-PRICING-RECOVERY R2 — Blocker 1: den DELADE fakturerbarhets-
+         sanningen (WorkOrderService.getBillingStatus()). "Saknar
+         prissättning" visas ENDAST vid en faktisk pris-blockerare. */
+      const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao, (_billRes = _billRes || WorkOrderService.billingStatusResolver())) : null; // L1
+      const isBillable   = needsInvoice && billingStatus.eligible;
+      const noPricing    = needsInvoice && billingStatus.pricingBlocked;
+      const overdue = WorkOrderService.isOverdue(ao, today);
+      const when = ao.scheduledDate
+        ? `<span class="aol-when${overdue ? ' is-late' : ao.scheduledDate === today ? ' is-today' : ''}">${overdue ? ic('clock',12) : ''}${esc(UiKit.dayLabel(ao.scheduledDate, today))}${ao.scheduledStart ? `<span class="aol-time">${esc(ao.scheduledStart)}</span>` : ''}</span>`
+        : `<span class="aol-when is-none">Ej planerad</span>`;
+      const status = canEdit && !ao.archived && !ao.deleted
+        ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" onkeydown="if(event.key==='Enter'){event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')}" title="Byt status" aria-label="Status: ${esc(statusLabel(ao.status))} — byt">${sbdg(ao.status)}${ic('chevron-down',11)}</span>`
+        : sbdg(ao.status);
+      const billing = ao.invoiceId ? `<span class="aol-bill is-done">${ic('check',12)} Underlag skapat</span>`
+        : isBillable ? `<span class="bdg bdg-blue ao-ready-inv">${ic('receipt',11)} Redo fakturering</span>`
+        : noPricing ? `<span class="bdg bdg-orange">${ic('alert-circle',11)} Saknar prissättning</span>`
+        : ao.status === 'fakturerad' ? `<span class="aol-bill is-done">Fakturerad</span>` : '<span class="aol-dash">—</span>';
+      const prio = ao.priority === 'akut' ? akutBadge() : ao.priority === 'hög' ? pbdg('hög') : '';
+      const flags = [
+        ao.substatus ? `<span class="bdg bdg-yellow">${esc(SUB[ao.substatus] || ao.substatus)}</span>` : '',
+        ao.archived ? `<span class="bdg bdg-grey">${ic('archive',11)} Arkiverad${ao.archivedAt?' '+fmtDate(ao.archivedAt):''}</span>` : '',
+        ao.deleted ? `<span class="bdg bdg-red">${ic('trash',11)} Papperskorg${ao.deletedAt?' '+fmtDate(ao.deletedAt):''}</span>` : '',
+      ].join('');
+      const rowActions = ao.archived ? `<button class="btn bxs bs" onclick="event.stopPropagation();WorkOrderDetailPage._restoreFromArchive('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',11)} Återställ</button>`
+        : ao.deleted ? `<button class="btn bxs bs" onclick="event.stopPropagation();WorkOrderDetailPage._restoreFromTrash('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',11)} Återställ</button><button class="btn bxs bd" onclick="event.stopPropagation();WorkOrderDetailPage._confirmPermanentDelete('${ao.id}');">${ic('trash-2',11)} Radera</button>` : '';
+      return { cu, cuName, where, when, status, billing, prio, flags, rowActions, chk: this._chkProgressHtml(ao), overdue };
+    };
+
     if (this.viewMode === 'grid') {
-      el.innerHTML = `<div class="ao-grid">${list.map(ao => {
-        const cu     = getCu(ao.customerId);
-        const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const chkText = this._chkProgressHtml(ao);
-        const needsInvoice = ao.status==='klar' && !ao.invoiceId;
-        /* AO-PRICING-RECOVERY R2 — Blocker 1: läser den DELADE
-           fakturerbarhets-sanningen (WorkOrderService.getBillingStatus(),
-           i sin tur BillingQueueService.getPricingStatusForAO()) istället
-           för en egen omimplementation. `noPricing` visar sig nu ENDAST
-           när blockeraren FAKTISKT är pris-relaterad (saknad prismodell/
-           timpris/fastpris/försäljningspris) — inte för ANDRA legitima
-           blockerare (t.ex. saknad kund), som denna badge aldrig var
-           avsedd att representera. */
-        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao, (_billRes = _billRes || WorkOrderService.billingStatusResolver())) : null; // L1
-        const isBillable   = needsInvoice && billingStatus.eligible;
-        const noPricing    = needsInvoice && billingStatus.pricingBlocked;
+      el.innerHTML = `<div class="ao-grid aol-cards">${list.map(ao => {
+        const r = row(ao);
         return `
-          <div class="ao-card ${priorityClass(ao.priority)}" onclick="WorkOrdersPage.openDetail('${ao.id}')">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">
-              <div style="font-size:10px;font-weight:800;color:var(--mt);">${WorkOrderService.displayNumberOrPending(ao)}</div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;" onclick="event.stopPropagation()">
-                ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
-                  ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
-                  : sbdg(ao.status)}
-                ${ao.priority==='akut'?akutBadge():pbdg(ao.priority)}
-              </div>
+          <div class="ao-card aol-card ${priorityClass(ao.priority)}" data-sel-row-id="${ao.id}" onclick="SelectionModel.rowClick('${ao.id}', function(){ WorkOrdersPage.openDetail('${ao.id}'); })">
+            <div class="aol-card-top">
+              <span class="aol-no">${WorkOrderService.displayNumberOrPending(ao)}</span>
+              <span class="aol-card-badges" onclick="event.stopPropagation()">${r.prio}${r.status}</span>
             </div>
-            <div style="font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3;">${ao.title}</div>
-            <div style="font-size:11px;color:var(--mt);margin-bottom:2px;">${cuName}</div>
-            ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);">${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart:''}</div>`:''}
-            ${ao.category?`<div style="margin-top:5px;">${catBadge(ao.category)}</div>`:''}
-            ${ao.substatus?`<div style="margin-top:4px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.12);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.3);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-            ${isBillable?`<div style="margin-top:5px;"><span class="bdg bdg-blue ao-ready-inv">${ic('receipt',10)} Redo fakturering</span></div>`:''}
-            ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span></div>`:''}
-            ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
+            <div class="aol-title">${esc(ao.title)}</div>
+            <div class="aol-sub">${esc(r.cuName || '—')}${r.where ? ' · ' + esc(r.where) : ''}</div>
+            <div class="aol-card-tags">${ao.category ? catBadge(ao.category) : ''}${r.flags}</div>
+            <div class="aol-card-foot">
+              ${r.when}
+              <span class="aol-card-foot-r">${r.chk}${UiKit.avatarStack(ao.staff, 3)}</span>
+            </div>
+            ${r.billing.includes('bdg') ? `<div class="aol-card-bill">${r.billing}</div>` : ''}
+            ${r.rowActions ? `<div class="aol-card-actions" onclick="event.stopPropagation()">${r.rowActions}</div>` : ''}
           </div>`;
       }).join('')}</div>`;
-    } else {
-      el.innerHTML = list.map(ao => {
-        const cu     = getCu(ao.customerId);
-        const cuName = cu ? CustomerService.displayName(cu) : '—';
-        const needsInvoice = ao.status==='klar' && !ao.invoiceId;
-        /* Se motsvarande kommentar i rutnäts-vyn ovan — samma delade
-           sanningskälla, "Saknar prissättning" ENDAST vid en faktisk
-           pris-blockerare. */
-        const billingStatus = needsInvoice ? WorkOrderService.getBillingStatus(ao, (_billRes = _billRes || WorkOrderService.billingStatusResolver())) : null; // L1
-        const isBillable   = needsInvoice && billingStatus.eligible;
-        const noPricing    = needsInvoice && billingStatus.pricingBlocked;
-        const metaParts = [];
-        if (cuName !== '—') metaParts.push(cuName);
-        if (ao.scheduledDate) metaParts.push(ao.scheduledDate+(ao.scheduledStart?' '+ao.scheduledStart:''));
-        const metaHtml = metaParts.join(' · ');
-        const chkHtml = this._chkProgressHtml(ao);
-        const archiveActions = ao.archived ? `
-          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;" onclick="event.stopPropagation()">
-            <span class="bdg bdg-grey">${ic('archive',9)} Arkiverad${ao.archivedAt?' · '+fmtDate(ao.archivedAt):''}</span>
-            <button class="btn bxs bghost" onclick="WorkOrderDetailPage._restoreFromArchive('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',10)} Återställ</button>
-          </div>` : '';
-        const trashActions = ao.deleted ? `
-          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;" onclick="event.stopPropagation()">
-            <span class="bdg bdg-red">${ic('trash',9)} Papperskorg${ao.deletedAt?' · '+fmtDate(ao.deletedAt):''}</span>
-            <button class="btn bxs bghost" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',10)} Återställ</button>
-            <button class="btn bxs bd" onclick="WorkOrderDetailPage._confirmPermanentDelete('${ao.id}');">${ic('trash-2',10)} Radera</button>
-          </div>` : '';
-        const selected = SelectionModel.isSelected(ao.id);
-        return `
-          <div style="display:flex;align-items:flex-start;gap:6px;"
-            onclick="SelectionModel.rowClick('${ao.id}', function(){ WorkOrdersPage.openDetail('${ao.id}'); })">
-            <div style="padding:12px 0 0;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id, ao.title)}</div>
-            <div class="ao-list-item ${priorityClass(ao.priority)}${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${ao.id}" style="flex:1;min-width:0;">
-              <div class="ao-item-top">
-                <div style="flex:1;min-width:0;">
-                  <div class="ao-item-id">${WorkOrderService.displayNumberOrPending(ao)}</div>
-                  <div class="ao-item-title">${ao.title}</div>
-                  ${metaHtml ? `<div class="ao-item-sub">${metaHtml}</div>` : ''}
-                </div>
-                <div class="ao-item-badges" onclick="event.stopPropagation()">
-                  ${Auth.can('ao_edit')&&!ao.archived&&!ao.deleted
-                    ? `<span role="button" tabindex="0" class="ao-status-btn" onclick="event.stopPropagation();WorkOrdersPage.openStatusPop(event,'${ao.id}')" title="Byt status">${sbdg(ao.status)}${ic('chevron-down',7)}</span>`
-                    : sbdg(ao.status)}
-                  ${ao.priority==='akut'?akutBadge():ao.priority!=='normal'?pbdg(ao.priority):''}
-                </div>
-              </div>
-              ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-              ${ao.category || isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
-                ${ao.category ? catBadge(ao.category) : ''}
-                ${isBillable?`<span class="bdg bdg-blue ao-ready-inv">${ic('receipt',10)} Redo fakturering</span>`:''}
-                ${noPricing?`<span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span>`:''}
-                ${chkHtml}
-              </div>` : ''}
-              ${archiveActions}${trashActions}
-            </div>
-            <button type="button" class="row-open-btn" style="margin-top:8px;" title="Öppna" aria-label="Öppna arbetsorder" onclick="event.stopPropagation();WorkOrdersPage.openDetail('${ao.id}')">${ic('chevron-right',16)}</button>
-          </div>`;
-      }).join('');
+      return;
     }
+
+    /* Tabellvy (desktop) som blir kompakta kort på smal skärm via CSS —
+       samma markup, inga dubbla renderingar. */
+    el.innerHTML = `
+      <div class="dt-wrap aol-table-wrap">
+        <div class="aol-count">${list.length} ${list.length === 1 ? 'order' : 'ordrar'}</div>
+        <div class="dt-scroll"><table class="dt aol-table${selMode ? ' sel-mode' : ''}">
+          <thead><tr>
+            <th class="c-shrink aol-c-sel"><span class="sr-only">Markera</span></th>
+            <th>Uppdrag</th>
+            <th class="aol-c-cust">Kund och plats</th>
+            <th class="aol-c-when">Planerat</th>
+            <th class="aol-c-staff">Personal</th>
+            <th class="aol-c-chk">Checklista</th>
+            <th class="aol-c-status">Status</th>
+            <th class="aol-c-bill">Fakturering</th>
+          </tr></thead>
+          <tbody>
+          ${list.map(ao => {
+            const r = row(ao);
+            const selected = SelectionModel.isSelected(ao.id);
+            return `<tr class="aol-row ${priorityClass(ao.priority)}${selected ? ' selected' : ''}${r.overdue ? ' is-late' : ''}" data-sel-row-id="${ao.id}" tabindex="0"
+                onclick="SelectionModel.rowClick('${ao.id}', function(){ WorkOrdersPage.openDetail('${ao.id}'); })"
+                onkeydown="if(event.key==='Enter'&&event.target===this){WorkOrdersPage.openDetail('${ao.id}')}">
+              <td class="aol-c-sel" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id, ao.title)}</td>
+              <td class="aol-c-main">
+                <div class="aol-main">
+                  <div class="aol-line1"><span class="aol-no">${WorkOrderService.displayNumberOrPending(ao)}</span>${r.prio}<span class="aol-title">${esc(ao.title)}</span></div>
+                  <div class="aol-line2">${ao.category ? catBadge(ao.category) : ''}${r.flags}<span class="aol-m-cust">${esc(r.cuName)}</span></div>
+                </div>
+              </td>
+              <td class="aol-c-cust"><div class="aol-cu">${esc(r.cuName || '—')}</div>${r.where ? `<div class="aol-where">${esc(r.where)}</div>` : ''}</td>
+              <td class="aol-c-when">${r.when}</td>
+              <td class="aol-c-staff">${UiKit.avatarStack(ao.staff, 3)}</td>
+              <td class="aol-c-chk">${r.chk || '<span class="aol-dash">—</span>'}</td>
+              <td class="aol-c-status" onclick="event.stopPropagation()">${r.status}${r.billing.includes('bdg') ? `<div class="aol-bill-inline">${r.billing}</div>` : ''}</td>
+              <td class="aol-c-bill" onclick="event.stopPropagation()">${r.billing}${r.rowActions ? `<div class="aol-row-actions">${r.rowActions}</div>` : ''}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table></div>
+      </div>`;
   },
 
   /* ── Skapa AO – wizard ─────────────────── */

@@ -35,6 +35,9 @@ const VIEWPORTS = {
   tablet: Object.assign({}, devices['iPad (gen 7)'], { defaultBrowserType: undefined }),
   iphone: Object.assign({}, devices['iPhone 13'], { defaultBrowserType: undefined }),
   android: Object.assign({}, devices['Galaxy S8'], { defaultBrowserType: undefined }),
+  /* Granskningsbredder för visuell kontroll (tests/e2e/visual.js). */
+  w1024: { viewport: { width: 1024, height: 768 } },
+  w768: { viewport: { width: 768, height: 1024 }, hasTouch: true },
 };
 
 let server = null, baseUrl = null, browser = null;

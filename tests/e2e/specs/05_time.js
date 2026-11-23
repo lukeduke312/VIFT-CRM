@@ -115,6 +115,27 @@ module.exports = [
     },
   },
   {
+    id: 'TIME-06', module: 'Tidregistrering och instämpling', name: 'Manuell tid med arbetsorder men utan vald kund: kunden fylls i från AO:n och tidposten får kunden på servern (tidigare tom kund → föll bort ur kundrapporter)',
+    async run(t) {
+      const s = await t.world.session();
+      await s.login('falt2');
+      await s.go('pg-tid');
+      const aoCu = t.fake.get('workOrders').find((a) => a.id === 'AO-015').customerId;
+      t.assert(!!aoCu, 'AO-015 har en kund i testdatan');
+      await s.page.fill('#mt-date', '2026-11-21');
+      await s.page.fill('#mt-start', '13:00');
+      await s.page.fill('#mt-end', '14:00');
+      await s.page.selectOption('#mt-ao', 'AO-015');
+      const shown = await s.eval(() => document.getElementById('mt-customer') && document.getElementById('mt-customer').value);
+      t.assert(shown === aoCu, 'kundfältet fylls i från AO:n (' + shown + ')');
+      await s.eval(() => { const c = document.getElementById('mt-customer'); if (c && c.tagName === 'SELECT') c.value = ''; });
+      await s.page.locator('.page.active button', { hasText: 'Spara tid' }).click();
+      await s.waitToast(/^Tid sparad$/, 6000);
+      const e = t.fake.get('timeEntries').find((x) => x.date === '2026-11-21' && x.staffId === 'ST-004' && x.minutes === 60);
+      t.assert(!!e && e.customerId === aoCu, 'tidposten på servern har AO:ns kund även om kundfältet tömts (' + (e && e.customerId) + ')');
+    },
+  },
+  {
     id: 'TIME-05', module: 'Tidregistrering och instämpling', name: 'Användarbyte med osynkad utstämpling: tidposten tappas inte och skickas inte i fel användares namn',
     async run(t) {
       const s = await t.world.session();

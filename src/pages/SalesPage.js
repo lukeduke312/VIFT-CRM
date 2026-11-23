@@ -127,7 +127,6 @@ const SalesPage = {
       : op.status === 'dismissed'
       ? `<span class="bdg bdg-grey" style="font-size:10px;">Avfärdad</span>`
       : '';
-    const leftBorder = op.priority === 'high' ? 'border-left:3px solid var(--rd);' : '';
 
     /* V46 §4: Förfallen — passerat dueDate på en fortfarande aktiv (ej
        vunnen/förlorad/klar/avfärdad, ej uppskjuten — den har redan sitt eget
@@ -142,10 +141,10 @@ const SalesPage = {
     const histOpen = !!this._historyOpen[op.id];
 
     return `
-      <div class="card" style="margin-bottom:10px;${leftBorder}${isDone?'opacity:.7':''}">
+      <div class="card so-card${op.priority==='high'?' is-high':''}${isDone?' is-done':''}">
         <div class="card-header">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:800;margin-bottom:3px;">${op.title}</div>
+            <div class="so-title">${esc(op.title)}</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
               ${op.priority==='high' ? `<span class="bdg bdg-red" style="font-size:10px;">${ic('alert-circle',9)} Hög prioritet</span>` : ''}
               ${op.type && op.type !== 'other' ? `<span class="bdg bdg-grey" style="font-size:10px;">${typeLabels[op.type]||op.type}</span>` : ''}
@@ -155,30 +154,34 @@ const SalesPage = {
           </div>
           ${!isDone ? `<button class="btn bxs bs" onclick="SalesPage.openEdit('${op.id}')">${ic('pencil',12)}</button>` : ''}
         </div>
-        <div class="card-body kv">
+        <div class="card-body kv so-body">
+          <div class="so-kv">
           <div class="dr">
             <span class="dk">Kund</span>
             <span class="dv" style="cursor:pointer;color:var(--sky);"
-              onclick="Router.showPage('pg-crm-detail',{customerId:'${op.customerId}'})">${cuName}</span>
+              onclick="Router.showPage('pg-crm-detail',{customerId:'${op.customerId}'})">${esc(cuName)}</span>
           </div>
           ${contactName ? `<div class="dr"><span class="dk">Kontaktperson</span><span class="dv">${ActivityService._escHtml(contactName)}</span></div>` : ''}
           <div class="dr"><span class="dk">Ansvarig</span><span class="dv">${ActivityService._escHtml(staffName)}</span></div>
-          ${op.reason ? `<div class="dr"><span class="dk">Varför</span><span class="dv">${esc(op.reason)}</span></div>` : ''}
-          ${op.estimatedValue > 0 ? `<div class="dr"><span class="dk">Est. värde</span><span class="dv">${fmt(op.estimatedValue)} kr</span></div>` : ''}
+          ${op.estimatedValue > 0 ? `<div class="dr"><span class="dk">Est. värde</span><span class="dv so-val">${fmt(op.estimatedValue)} kr</span></div>` : ''}
           ${op.status === 'snoozed' && op.snoozedUntil ? `<div class="dr"><span class="dk">Återkom</span><span class="dv">${fmtDate(op.snoozedUntil)}</span></div>` : ''}
+          </div>
+          ${op.reason ? `<p class="so-reason">${esc(op.reason)}</p>` : ''}
+          ${op.suggestedAction || op.dueDate || op.aiTip ? `<div class="so-next-row">
           ${op.suggestedAction || op.dueDate ? `
-            <div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:9px 12px;margin:8px 0;">
-              <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Nästa åtgärd</div>
-              ${op.suggestedAction ? `<div style="font-size:13px;font-weight:600;color:var(--tx);">${op.suggestedAction}</div>` : `<div style="font-size:12px;color:var(--mt);">—</div>`}
-              ${op.dueDate ? `<div style="font-size:11px;color:${isOverdue?'var(--rd)':'var(--mt)'};margin-top:3px;">Senast: ${fmtDate(op.dueDate)}</div>` : ''}
+            <div class="so-next${isOverdue ? ' is-late' : ''}">
+              <div class="so-lbl">Nästa åtgärd</div>
+              ${op.suggestedAction ? `<div class="so-next-t">${esc(op.suggestedAction)}</div>` : `<div class="so-next-t is-empty">—</div>`}
+              ${op.dueDate ? `<div class="so-due">Senast ${fmtDate(op.dueDate)}</div>` : ''}
             </div>` : ''}
           ${op.aiTip ? `
-            <div style="background:var(--bg);border-radius:8px;padding:9px 12px;margin-bottom:8px;border-left:2px solid var(--or);">
-              <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">${ic('zap',9)} Tips</div>
-              <div style="font-size:12px;color:var(--tx);line-height:1.5;">${op.aiTip}</div>
+            <div class="so-tip">
+              <div class="so-lbl">${ic('zap',11)} Tips</div>
+              <div class="so-tip-t">${esc(op.aiTip)}</div>
             </div>` : ''}
+          </div>` : ''}
           ${!isDone ? `
-          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
+          <div class="so-actions">
             ${op.convertedQuoteId
               ? `<button class="btn bsm bs" onclick="Router.showPage('pg-offer-detail',{offerId:'${op.convertedQuoteId}'})">${ic('file-text',13)} Öppna offert</button>`
               : `<button class="btn bsm bp" onclick="SalesPage.createOffer('${op.id}')">${ic('file-text',13)} Skapa offert</button>`}
@@ -190,8 +193,8 @@ const SalesPage = {
             <button class="btn bsm bs" onclick="SalesPage.markLost('${op.id}')">${ic('x-circle',13)} Förlorad</button>
             <button class="btn bxs bd" style="margin-left:auto;" onclick="SalesPage.dismiss('${op.id}')">${ic('trash-2',12)}</button>
           </div>` : ''}
-          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
-            <button class="btn bxs bs bfull" style="display:flex;justify-content:space-between;align-items:center;" onclick="SalesPage.toggleHistory('${op.id}')">
+          <div class="so-hist">
+            <button class="btn bxs bghost" onclick="SalesPage.toggleHistory('${op.id}')">
               <span>Historik (${acts.length})</span>${ic(histOpen?'chevron-up':'chevron-down',12)}
             </button>
             ${histOpen ? `<div style="margin-top:6px;">${acts.length ? acts.map(a => this._renderHistoryEntry(a)).join('') : '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Ingen historik ännu.</p>'}</div>` : ''}

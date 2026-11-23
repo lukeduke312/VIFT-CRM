@@ -71,17 +71,11 @@ const WorkOrderDetailPage = {
   _renderFull(el, ao) {
     const cu     = getCu(ao.customerId);
     const cuName = cu ? CustomerService.displayName(cu) : '—';
-    const staff  = (ao.staff||[]).map(id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; });
+    const staffObjs = (ao.staff||[]).map(id => getStaff(id) || { id, firstName: id, lastName: '' });
     const respS  = ao.responsibleStaffId ? getStaff(ao.responsibleStaffId) : null;
-    const respName = respS ? `${respS.firstName} ${respS.lastName}` : '';
     const chkTotal = (ao.checklist||[]).length;
-    /* AO-CHECKLIST-PROGRESS-HOTFIX R1 — chkOk/chkAvv behålls här (använda
-       av `hasChk`/andra villkor längre ner i denna funktion), men själva
-       BADGE-HTML:et hämtas nu från EN delad källa (_checklistBadgeHtml())
-       — se den funktionen för den fullständiga motiveringen till varför
-       detta var buggen. */
-    const chkOk   = (ao.checklist||[]).filter(c=>c.done||c.avvikelse==='ok').length;
-    const chkAvv  = (ao.checklist||[]).filter(c=>c.avvikelse==='avvikelse').length;
+    /* AO-CHECKLIST-PROGRESS-HOTFIX R1 — badge-HTML från EN delad källa
+       (_checklistBadgeHtml()). */
     const chkBadge = this._checklistBadgeHtml(ao);
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
@@ -90,247 +84,221 @@ const WorkOrderDetailPage = {
     const hasMat  = (ao.materials||[]).length > 0;
     const hasTime = timeEntries.length > 0;
     const isAkut  = ao.priority === 'akut';
+    const canEdit = Auth.can('ao_edit');
+    const today = tdy();
 
     /* ── Rollstyrning: vad som visas beror på behörigheter ── */
     /* Pris, faktura, TB: syns bara för admin/ledning         */
     const canSeePrice         = Auth.canAny(['invoice_view','invoice_create','reports_view']);
     const canSeeProfitability = Auth.canAny(['reports_view','staff_view']);
 
+    const SUB = {'inväntar_material':'Inväntar material','inväntar_kund':'Inväntar kund','pausad':'Pausad','behöver_återbesök':'Behöver återbesök','blockerad':'Blockerad'};
+    /* R2 §2/§3 + R2.1 §10: fullständig strukturerad adress (AO:ns egen
+       snapshot, annars fastighetens/kundens) — ren läsning. */
+    const resolved = AddressService.resolveWorkOrderDisplayAddress(ao);
+    const fullAddr = resolved.address ? AddressService.displayAddress(ao) : '';
+    const mapsUrl  = fullAddr ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullAddr)}` : '';
+    const placeBits = [ao.floor&&('Vån '+esc(ao.floor)), ao.entrance&&('Entré '+esc(ao.entrance)), ao.stairwell&&('Trapphus '+esc(ao.stairwell)), ao.apartmentNumber&&('Lgh '+esc(ao.apartmentNumber))].filter(Boolean);
+    const when = ao.scheduledDate
+      ? `${esc(UiKit.dayLabel(ao.scheduledDate, today))}${ao.scheduledStart ? ' · ' + esc(ao.scheduledStart) + (ao.scheduledEnd ? '–' + esc(ao.scheduledEnd) : '') : ''}`
+      : '';
+    const overdue = WorkOrderService.isOverdue(ao, today);
+
+    /* Nästa steg — en mening som svarar på "vad händer nu?". Knapp bara
+       för åtgärder som INTE redan finns i åtgärdsraden ovanför. */
+    const ns = WorkOrderService.nextStep(ao, today);
+    let nsBtn = '';
+    if (ns && ns.action === 'assign' && canEdit) nsBtn = `<button class="btn bs bsm" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">${ic('user-plus',14)} Tilldela</button>`;
+    if (ns && ns.action === 'plan' && canEdit) nsBtn = `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',14)} ${ao.scheduledDate ? 'Omplanera' : 'Planera'}</button>`;
+    const nsIcon = { danger: 'alert-triangle', warn: 'alert-circle', info: 'info', ok: 'check-circle', neutral: 'info' }[ns ? ns.tone : 'neutral'];
+
+    const fact = (label, value, icon) => `<div class="aod-fact"><span class="aod-fact-l">${icon ? ic(icon, 13) : ''}${label}</span><span class="aod-fact-v">${value}</span></div>`;
+
     el.innerHTML = `
-      ${ao.deleted ? `<div class="nbox" style="background:#fee2e2;border-left-color:var(--rd);margin-bottom:8px;">${ic('trash',13)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
-      ${ao.archived && !ao.deleted ? `<div class="nbox" style="background:#f1f5f9;border-left-color:var(--mt);margin-bottom:8px;">${ic('archive',13)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
+      ${ao.deleted ? `<div class="nbox aod-banner is-danger">${ic('trash',14)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
+      ${ao.archived && !ao.deleted ? `<div class="nbox aod-banner">${ic('archive',14)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
 
-      <!-- Kompakt header: tillbaka + ID + badges -->
-      <div class="ao-detail-top">
-        <button class="btn bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">
-          ${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span>
-        </button>
-        <span style="font-size:11px;font-weight:700;color:var(--mt);letter-spacing:.3px;white-space:nowrap;">${WorkOrderService.displayNumberOrPending(ao)}</span>
-        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-left:auto;">
-          ${sbdg(ao.status)}
-          ${isAkut?`<span class="bdg bdg-red ao-akut-badge">🚨 AKUT</span>`:ao.priority!=='normal'?pbdg(ao.priority):''}
-          ${ao.status==='pågående'&&ao.substatus?`<span class="bdg" style="font-size:10px;background:#fef3c7;color:#d97706;border:1px solid #fde68a;">${esc({'inväntar_material':'⏳ Inväntar material','inväntar_kund':'🔔 Inväntar kund','pausad':'⏸ Pausad','behöver_återbesök':'🔄 Återbesök','blockerad':'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span>`:''}
+      <div class="aod">
+        <!-- Sidhuvud: tillbaka, nummer, status — rubrik — var/när/vem i en rad — åtgärder -->
+        <header class="aod-head card">
+          <div class="aod-head-top">
+            <button class="btn bghost bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span></button>
+            <span class="aod-no">${WorkOrderService.displayNumberOrPending(ao)}</span>
+            <div class="aod-badges">
+              ${sbdg(ao.status)}
+              ${isAkut ? `<span class="bdg bdg-red ao-akut-badge">${ic('alert-triangle',11)}Akut</span>` : ao.priority && ao.priority!=='normal' ? pbdg(ao.priority) : ''}
+              ${ao.status==='pågående'&&ao.substatus ? `<span class="bdg bdg-yellow">${esc(SUB[ao.substatus]||ao.substatus)}</span>` : ''}
+              ${ao.category ? catBadge(ao.category) : ''}
+            </div>
+          </div>
+          <h2 class="aod-title ao-title-main">${esc(ao.title)}</h2>
+          <div class="aod-meta">
+            ${cu ? `<a class="aod-meta-i" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${ic('building-2',14)}<span>${esc(cuName)}</span></a>` : ''}
+            ${fullAddr ? `<a class="aod-meta-i ao-address-link" href="${mapsUrl}" target="_blank" rel="noopener" title="Öppna vägbeskrivning">${ic('map-pin',14)}<span>${esc(fullAddr)}</span></a>` : ''}
+            <span class="aod-meta-i${overdue ? ' is-late' : ''}">${ic('calendar',14)}<span>${when || 'Ej planerad'}</span></span>
+            <span class="aod-meta-i">${UiKit.avatarStack(ao.staff, 4)}<span>${staffObjs.length ? esc(staffObjs.map(UiKit.staffName).join(', ')) : '<span class="aod-warn">Ingen tilldelad</span>'}</span></span>
+          </div>
+          <div class="aod-actions ao-action-strip">${this._actionBtns(ao)}</div>
+        </header>
+
+        ${ns ? `<div class="aod-next tone-${ns.tone}" role="status">
+          <span class="aod-next-ico">${ic(nsIcon,16)}</span>
+          <div class="aod-next-txt"><span class="aod-next-l">Nästa steg</span><span class="aod-next-t">${esc(ns.text)}</span></div>
+          ${nsBtn}
+        </div>` : ''}
+
+        <div class="aod-grid">
+          <div class="aod-main">
+            <!-- Vad ska göras -->
+            <section class="card aod-mission ao-mission-card${isAkut?' ao-mission-akut':''}">
+              <div class="card-header"><h3>${ic('align-left',15)} Uppdrag</h3>${isAkut ? `<span class="bdg bdg-red">${ic('alert-triangle',11)}Akut — prioritera</span>` : ''}</div>
+              <div class="card-body ao-mission-body">
+                ${ao.description ? `<p class="ao-mission-text">${esc(ao.description)}</p>` : `<p class="ao-mission-empty">${ic('info',13)} Ingen beskrivning angiven</p>`}
+                ${ao.internalNote ? `<div class="aod-note">${ic('eye-off',13)}<div><strong>Intern anteckning</strong><br>${esc(ao.internalNote)}</div></div>` : ''}
+              </div>
+            </section>
+
+            <!-- Stämpling — V22: kräver ao_time specifikt (payroll_manage räcker inte) -->
+            <div class="aod-stamp">${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}</div>
+
+            <!-- Checklista -->
+            <details class="card ao-section aod-chk" ${hasChk?'open':''}>
+              <summary class="ao-section-head">
+                <span class="ao-section-title">${ic('clipboard-check',15)} Checklista</span>
+                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+                  <span id="ao-chk-counter">${chkBadge}</span>
+                  ${Auth.can('ao_checklist')?`<button class="btn bs bxs" title="Lägg till punkt" aria-label="Lägg till punkt" onclick="event.stopPropagation();WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>`:''}
+                  <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
+                </div>
+              </summary>
+              <div class="card-body" style="padding:6px 14px;" id="ao-checklist">
+                ${this._renderChecklist(ao)}
+              </div>
+            </details>
+
+            <!-- Material & kostnader -->
+            <details class="card ao-section aod-mat" ${hasMat?'open':''}>
+              <summary class="ao-section-head">
+                <span class="ao-section-title">${ic('package',15)} Material och kostnader</span>
+                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+                  ${hasMat ? `<span class="bdg bdg-grey">${(ao.materials||[]).length} st</span>` : ''}
+                  ${Auth.can('ao_material')?`<button class="btn bs bxs" title="Lägg till material" aria-label="Lägg till material" onclick="event.stopPropagation();WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>`:''}
+                  <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
+                </div>
+              </summary>
+              <div id="ao-materials" style="overflow:hidden;">${this._renderMaterials(ao)}</div>
+              <div id="ao-mat-totals">${hasMat?this._matTotals(ao):''}</div>
+            </details>
+
+            <!-- Arbetstid -->
+            <details class="card ao-section aod-time" ${hasTime?'open':''}>
+              <summary class="ao-section-head">
+                <span class="ao-section-title">${ic('clock',15)} Arbetstid</span>
+                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+                  <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>`:''}</span>
+                  ${Auth.canAny(['ao_time','payroll_manage'])?`<button class="btn bs bxs" title="Registrera tid" aria-label="Registrera tid" onclick="event.stopPropagation();WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>`:''}
+                  <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
+                </div>
+              </summary>
+              <div id="ao-timeentries" style="overflow:hidden;">${this._renderTimeEntries(ao)}</div>
+            </details>
+
+            <!-- Tid vs plan (admin/ledning) — tom div alltid för uppdateringar -->
+            <div id="ao-time-plan" class="aod-plan">${canSeePrice?this._timePlanBlock(ao):''}</div>
+
+            <!-- Händelselogg (anteckningar, bilder, händelser) -->
+            <section class="card aod-log">
+              <div class="card-header">
+                <h3>${ic('activity',15)} Logg och bilder</h3>
+                <div style="display:flex;gap:6px;">
+                  <button class="btn bxs bs" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
+                  <button class="btn bxs bp" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',12)} Anteckning</button>
+                </div>
+              </div>
+              <div id="ao-timeline" style="overflow:hidden;">
+                ${this._renderTimeline(ao)}
+              </div>
+            </section>
+          </div>
+
+          <aside class="aod-side">
+            <!-- Var -->
+            <section class="card aod-box aod-where">
+              <div class="card-header"><h3>${ic('map-pin',15)} Var</h3>${mapsUrl ? `<a class="btn bxs bs" href="${mapsUrl}" target="_blank" rel="noopener">${ic('navigation',12)} Vägbeskrivning</a>` : ''}</div>
+              <div class="card-body">
+                ${fullAddr ? `<div class="aod-addr">${esc(fullAddr)}</div>` : '<div class="aod-muted">Ingen adress angiven</div>'}
+                ${placeBits.length ? fact('Plats', placeBits.join(' · '), 'map-pin') : ''}
+                ${ao.objectId ? fact('Objekt', `<a class="aod-link" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)}</a>`, 'dashboard') : ''}
+                ${ao.accessCode && Auth.can('objects_sensitive') ? fact('Portkod', `<span class="aod-code">${esc(ao.accessCode)}</span>`, 'key') : ''}
+              </div>
+            </section>
+
+            <!-- När -->
+            <section class="card aod-box aod-when">
+              <div class="card-header"><h3>${ic('calendar',15)} När</h3>${canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) ? `<button class="btn bxs bghost" onclick="WorkOrderDetailPage.openReschedule()">${ao.scheduledDate ? 'Omplanera' : 'Planera'}</button>` : ''}</div>
+              <div class="card-body">
+                ${ao.scheduledDate
+                  ? `<div class="aod-big${overdue ? ' is-late' : ''}">${esc(UiKit.dayLabel(ao.scheduledDate, today))}${ao.scheduledStart ? ` <span>${esc(ao.scheduledStart)}${ao.scheduledEnd ? '–' + esc(ao.scheduledEnd) : ''}</span>` : ''}</div>
+                     <div class="aod-muted">${esc(ao.scheduledDate)}${overdue ? ' · försenad' : ''}</div>`
+                  : '<div class="aod-muted">Inte planerad ännu</div>'}
+                ${totalMins > 0 ? fact('Registrerad tid', TimeService.fmtDuration(totalMins), 'clock') : ''}
+              </div>
+            </section>
+
+            <!-- Vem -->
+            <section class="card aod-box aod-who">
+              <div class="card-header"><h3>${ic('users',15)} Vem</h3>${canEdit ? `<button class="btn bxs bghost" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">Ändra</button>` : ''}</div>
+              <div class="card-body">
+                ${staffObjs.length ? `<ul class="aod-people">${staffObjs.map(st => `<li>${UiKit.avatar(st, 28)}<span>${esc(UiKit.staffName(st))}</span>${respS && respS.id === st.id ? `<span class="bdg bdg-grey">${ic('star',10)} Ansvarig</span>` : ''}</li>`).join('')}</ul>`
+                  : `<div class="aod-warn">${ic('user-x',14)} Ingen personal tilldelad</div>`}
+              </div>
+            </section>
+
+            <!-- Kund och kontakt -->
+            <section class="card aod-box aod-contact">
+              <div class="card-header"><h3>${ic('phone',15)} Kund och kontakt</h3></div>
+              <div class="card-body">
+                ${cu ? fact('Kund', `<a class="aod-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a>`, 'building-2') : ''}
+                ${fact('Kontakt', ao.contactPerson ? esc(ao.contactPerson) : '<span class="aod-muted">—</span>', 'user')}
+                ${ao.phone ? `<a class="btn bs bsm aod-call" href="tel:${esc(ao.phone)}">${ic('phone',14)} Ring ${esc(ao.phone)}</a>` : ''}
+                ${ao.contactEmail ? fact('E-post', `<a class="aod-link" href="mailto:${esc(ao.contactEmail)}">${esc(ao.contactEmail)}</a>`, 'mail') : ''}
+              </div>
+            </section>
+
+            <!-- Detaljer -->
+            <section class="card aod-box aod-details">
+              <div class="card-header"><h3>${ic('info',15)} Detaljer</h3></div>
+              <div class="card-body">
+                ${ao.category ? fact('Kategori', catBadge(ao.category), 'folder') : ''}
+                ${ao.technicalCategorySlug ? fact('Tekniskt', ao.propertyId ? `<a class="aod-link" onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})">${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}</a>` : esc(ao.technicalCategoryLabel||ao.technicalCategorySlug), 'settings') : ''}
+                ${chkTotal > 0 ? fact('Checklista', `<span id="ao-chk-badge-meta">${chkBadge}</span>`, 'clipboard-check') : ''}
+                ${canSeePrice ? fact('Pris', `${this._priceLabel(ao)}${this._canEditPricing() ? ` · <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Ändra</a>` : ''}`, 'tag') : ''}
+                ${fact('Skapad', ao.createdAt ? esc(fmtDate(ao.createdAt)) : '—', 'clock')}
+              </div>
+            </section>
+
+            <!-- Fakturaunderlag + offert (bara admin/ledning) -->
+            ${canSeePrice && (ao.invoiceId || ao.offerId || (ao.status==='klar' && Auth.can('invoice_create'))) ? `
+              <section class="card aod-box aod-billing">
+                <div class="card-header"><h3>${ic('receipt',15)} Fakturering</h3></div>
+                <div class="card-body">
+                  ${ao.status==='klar'&&!ao.invoiceId&&Auth.can('invoice_create') ? `<button class="btn bsu bfull" onclick="WorkOrderDetailPage.createInvoice()">${ic('file-plus',15)} Skapa fakturaunderlag</button>` : ''}
+                  ${ao.invoiceId ? `<a class="aod-linkrow" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('receipt',14)}<span>Fakturaunderlag ${esc(ao.invoiceId)}</span>${ic('chevron-right',14)}</a>` : ''}
+                  ${ao.offerId ? this._offerUnderlag(ao) : ''}
+                  ${ao.offerId ? `<a class="aod-linkrow" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">${ic('file-text',14)}<span>Skapad från offert ${esc(ao.offerId)}</span>${ic('chevron-right',14)}</a>` : ''}
+                </div>
+              </section>` : ''}
+
+            <!-- Intern lönsamhet (bara admin/ledning med reports/staff-behörighet) -->
+            <div id="ao-lonsam">${canSeeProfitability?this._renderLonsamhet(ao):''}</div>
+
+            <!-- Återkommande (bara för användare med ao_edit) -->
+            ${canEdit ? (ao.recurringOrderId
+              ? `<a class="aod-linkrow card" onclick="Router.showPage('pg-recurring')">${ic('refresh-cw',14)}<span>Skapad från återkommande mall ${esc(ao.recurringOrderId)}</span>${ic('chevron-right',14)}</a>`
+              : `<button class="btn bghost bsm aod-recur" onclick="WorkOrderDetailPage.makeRecurring()" title="Systemet skapar automatiskt nya arbetsorder enligt valt intervall.">${ic('refresh-cw',14)} Gör återkommande</button>`) : ''}
+          </aside>
         </div>
       </div>
-
-      <!-- Titelkort: rubrik + kund/adress/datum + knappar -->
-      <div class="card ao-title-card">
-        <div class="ao-title-hero">
-          <h2 class="ao-title-main">${esc(ao.title)}</h2>
-          <div class="ao-title-meta">
-            ${cu?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('user',11)}</span><a style="color:var(--sky);text-decoration:none;font-weight:600;cursor:pointer;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a></div>`:''}
-            ${(() => {
-              /* R2 §2/§3, kompletterad i R2.1 §10 — visa den FULLSTÄNDIGA
-                 strukturerade adressen (gata + postnr/ort[, land]), inte
-                 bara den bara gatan, och bygg Google Maps-destinationen
-                 med samma fullständiga sträng. Använder nu
-                 AddressService.resolveWorkOrderDisplayAddress()/
-                 displayAddress() — som prioriterar AO:ns EGEN sparade
-                 snapshot, men FALLER TILLBAKA till den länkade
-                 fastighetens/kundens strukturerade adress för en legacy-
-                 AO som helt saknar egen adress (annars visades varken
-                 adressrad eller Maps-länk alls för sådana AO:er, trots
-                 att en fallback-koordinat kunde finnas på kartan). Ren
-                 läsning — skriver ALDRIG in fallbacken i AO:n bara för
-                 att sidan visas; det sker bara via ett explicit
-                 spara-event (t.ex. i redigera-dialogen). */
-              const resolved = AddressService.resolveWorkOrderDisplayAddress(ao);
-              if (!resolved.address) return '';
-              const fullAddr = AddressService.displayAddress(ao);
-              return `<a class="ao-title-meta-row ao-address-link" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullAddr)}" target="_blank" rel="noopener">
-              <span style="color:var(--mt);flex-shrink:0;">${ic('map-pin',11)}</span>
-              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(fullAddr)}</span>
-              <span style="color:var(--sky);flex-shrink:0;">${ic('external-link',11)}</span>
-            </a>`;
-            })()}
-            ${ao.objectId?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('layout',11)}</span><a style="color:var(--sky);text-decoration:none;font-size:12px;cursor:pointer;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectName || ao.objectId)}</a></div>`:''}
-            ${ao.scheduledDate?`<div class="ao-title-meta-row"><span style="color:var(--mt);flex-shrink:0;">${ic('calendar',11)}</span><span>${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart+'–'+ao.scheduledEnd:''}</span></div>`:''}
-          </div>
-        </div>
-        <div class="ao-action-strip">
-          ${this._actionBtns(ao)}
-        </div>
-      </div>
-
-      <!-- Beskrivning / uppdrag — mest framträdande kort på sidan -->
-      <div class="card ao-mission-card${isAkut?' ao-mission-akut':''}">
-        <div class="ao-mission-header">
-          ${ic('align-left',13)}
-          <span class="ao-mission-label">Beskrivning / uppdrag</span>
-          ${isAkut?`<span class="bdg bdg-red" style="margin-left:auto;font-size:11px;">🚨 AKUT — prioritera detta ärende</span>`:''}
-        </div>
-        <div class="ao-mission-body">
-          ${ao.description
-            ? `<p class="ao-mission-text">${esc(ao.description)}</p>`
-            : `<p class="ao-mission-empty">${ic('info',13)} Ingen beskrivning angiven</p>`
-          }
-        </div>
-      </div>
-
-      <!-- Info-rader: prioriterad ordning för fältarbete -->
-      <div class="card">
-        <div class="ao-info-list">
-          <!-- 1. Kontakt (viktigast för fältpersonal) -->
-          <div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('phone',11)} Kontakt</span>
-            <span class="ao-info-val">
-              ${ao.contactPerson ? esc(ao.contactPerson) : '<span style="color:var(--mt);">—</span>'}
-              ${ao.phone?`<br><a href="tel:${ao.phone}" style="color:var(--sky);font-size:12px;font-weight:600;">${esc(ao.phone)}</a>`:''}
-              ${ao.contactEmail?`<br><a href="mailto:${ao.contactEmail}" style="color:var(--sky);font-size:11px;">${esc(ao.contactEmail)}</a>`:''}
-            </span>
-          </div>
-          <!-- 2. Portkod — synlig enbart för objects_sensitive / customer_manage (punkt 72) -->
-          ${ao.accessCode && Auth.can('objects_sensitive')?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('key',11)} Portkod</span>
-            <span class="ao-info-val" style="font-weight:800;letter-spacing:.8px;font-size:16px;">${esc(ao.accessCode)}</span>
-          </div>`:''}
-          <!-- 2b. Objekt (lägenhet/lokal) -->
-          ${ao.objectId?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('layout',11)} Objekt</span>
-            <span class="ao-info-val" style="cursor:pointer;color:var(--sky);font-weight:600;" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)} ${ic('arrow-right',10)}</span>
-          </div>`:''}
-          ${(ao.floor||ao.entrance||ao.stairwell||ao.apartmentNumber)?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('home',11)} Plats</span>
-            <span class="ao-info-val">${[ao.floor&&('Vån '+esc(ao.floor)), ao.entrance&&('Entré '+esc(ao.entrance)), ao.stairwell&&('Trapph. '+esc(ao.stairwell)), ao.apartmentNumber&&('Lgh '+esc(ao.apartmentNumber))].filter(Boolean).join(' · ')}</span>
-          </div>`:''}
-          <!-- 3. Personal -->
-          <div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('users',11)} Personal</span>
-            <span class="ao-info-val">
-              ${staff.length
-                ? esc(staff.join(', ')) + (respName?`<br><span style="font-size:11px;color:var(--mt);">${ic('star',9)} Ansvarig: ${esc(respName)}</span>`:'')
-                : `<span style="color:var(--rd);font-weight:600;">Ej tilldelad</span>`
-              }
-            </span>
-          </div>
-          <!-- 4. Kategori -->
-          ${ao.category?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('folder',11)} Kategori</span>
-            <span class="ao-info-val">${catBadge(ao.category)}</span>
-          </div>`:''}
-          ${ao.technicalCategorySlug?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('settings',11)} Tekniskt</span>
-            <span class="ao-info-val" style="${ao.propertyId?'cursor:pointer;':''}display:flex;align-items:center;gap:4px;" ${ao.propertyId?`onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})"`:''}>${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}${ao.propertyId?ic('arrow-right',10):''}</span>
-          </div>`:''}
-          ${chkTotal>0?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('clipboard-check',11)} Lista</span>
-            <span class="ao-info-val" id="ao-chk-badge-meta">${chkBadge}</span>
-          </div>`:''}
-          ${ao.internalNote?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('eye-off',11)} Internt</span>
-            <span class="ao-info-val">${esc(ao.internalNote)}</span>
-          </div>`:''}
-          <!-- 5. Pris — BARA för admin/ledning (invoice/reports-behörighet) -->
-          ${canSeePrice?`<div class="ao-info-row">
-            <span class="ao-info-lbl">${ic('tag',11)} Pris</span>
-            <span class="ao-info-val">
-              ${this._priceLabel(ao)}
-              ${this._canEditPricing()?` · <a style="color:var(--sky);font-weight:600;cursor:pointer;" onclick="WorkOrderDetailPage.openPricingModal()">Ändra</a>`:''}
-            </span>
-          </div>`:''}
-        </div>
-      </div>
-
-      <!-- Stämpling — V22: kräver ao_time specifikt (payroll_manage räcker inte) -->
-      ${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}
-
-      <!-- Checklista (hopfällbar) -->
-      <details class="card ao-section" ${hasChk?'open':''}>
-        <summary class="ao-section-head">
-          <span class="ao-section-title">${ic('clipboard-check',14)} Checklista</span>
-          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-            <span id="ao-chk-counter">${chkBadge}</span>
-            ${Auth.can('ao_checklist')?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>`:''}
-            <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
-          </div>
-        </summary>
-        <div class="card-body" style="padding:6px 14px;" id="ao-checklist">
-          ${this._renderChecklist(ao)}
-        </div>
-      </details>
-
-      <!-- Material & kostnader (hopfällbar) -->
-      <details class="card ao-section" ${hasMat?'open':''}>
-        <summary class="ao-section-head">
-          <span class="ao-section-title">${ic('package',14)} Material & kostnader</span>
-          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-            ${Auth.can('ao_material')?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>`:''}
-            <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
-          </div>
-        </summary>
-        <div id="ao-materials" style="overflow:hidden;">${this._renderMaterials(ao)}</div>
-        <div id="ao-mat-totals">${hasMat?this._matTotals(ao):''}</div>
-      </details>
-
-      <!-- Tidsposter (hopfällbar) -->
-      <details class="card ao-section" ${hasTime?'open':''}>
-        <summary class="ao-section-head">
-          <span class="ao-section-title">${ic('clock',14)} Arbetstid</span>
-          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-            <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>`:''}</span>
-            ${Auth.canAny(['ao_time','payroll_manage'])?`<button class="btn bs bxs" onclick="event.stopPropagation();WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>`:''}
-            <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
-          </div>
-        </summary>
-        <div id="ao-timeentries" style="overflow:hidden;">${this._renderTimeEntries(ao)}</div>
-      </details>
-
-      <!-- Tid vs plan (admin/ledning) — tom div alltid för uppdateringar -->
-      <div id="ao-time-plan">${canSeePrice?this._timePlanBlock(ao):''}</div>
-
-      <!-- Händelselogg -->
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('activity',14)} Händelselogg</h3>
-          <div style="display:flex;gap:5px;">
-            <button class="btn bxs bs" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
-            <button class="btn bs bxs" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)}</button>
-          </div>
-        </div>
-        <div id="ao-timeline" style="overflow:hidden;">
-          ${this._renderTimeline(ao)}
-        </div>
-      </div>
-
-      <!-- Fakturaunderlag + offert (bara admin/ledning) -->
-      ${canSeePrice?`
-        ${ao.status==='klar'&&!ao.invoiceId&&Auth.can('invoice_create')?`
-          <button class="btn bsu bfull" style="padding:14px;" onclick="WorkOrderDetailPage.createInvoice()">
-            ${ic('file-plus',16)} Skapa fakturaunderlag
-          </button>`:''
-        }
-        ${ao.invoiceId?`
-          <div class="ibox" style="cursor:pointer;" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">
-            ${ic('receipt',14)} Fakturaunderlag: ${ao.invoiceId} – klicka för att öppna
-          </div>`:''
-        }
-        ${ao.offerId?this._offerUnderlag(ao):''}
-        ${ao.offerId?`
-          <div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">
-            ${ic('file-text',13)} Skapad från offert: ${ao.offerId} — klicka för att öppna
-          </div>`:''
-        }
-      `:''}
-
-      <!-- Intern lönsamhet (bara admin/ledning med reports/staff-behörighet) -->
-      <div id="ao-lonsam">${canSeeProfitability?this._renderLonsamhet(ao):''}</div>
-
-      <!-- Återkommande (bara för användare med ao_edit) -->
-      ${Auth.can('ao_edit')?`
-        ${ao.recurringOrderId
-          ? `<div class="ibox" style="cursor:pointer;margin-top:8px;" onclick="Router.showPage('pg-recurring')">
-               ${ic('refresh-cw',13)} Skapad från återkommande mall: ${ao.recurringOrderId}
-             </div>`
-          : `<div style="margin-top:8px;">
-               <button class="btn bghost bfull" onclick="WorkOrderDetailPage.makeRecurring()">
-                 ${ic('refresh-cw',14)} Skapa återkommande arbetsorder
-               </button>
-               <p style="font-size:11px;color:var(--mt);margin:4px 0 0;text-align:center;line-height:1.4;">
-                 Systemet skapar automatiskt nya arbetsorder enligt valt intervall.
-               </p>
-             </div>`
-        }
-      `:''}
     `;
   },
 

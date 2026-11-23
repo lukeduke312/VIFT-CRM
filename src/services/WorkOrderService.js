@@ -907,6 +907,50 @@ const WorkOrderService = {
      punkt utan uppgift om vem) kräver ao_edit — kontrollen görs på
      servern (migration 20261123000002); klientens regel nedan styr bara
      vilka knappar som visas. Härledningen är densamma som i RPC:n. */
+  /* V3: EN definition av "aktiv" och "försenad" för hela appen. Tidigare
+     räknade AO-listans snabbfilter även klara/fakturerade ordrar med
+     passerat datum som försenade, medan dashboard och Dagens drift inte
+     gjorde det — siffran på dashboard och listan man landade i skilde sig. */
+  isAlive(ao) {
+    return !!ao && !ao.deleted && !ao.archived && !['klar', 'fakturerad', 'avbruten'].includes(ao.status);
+  },
+  isOverdue(ao, today) {
+    return this.isAlive(ao) && ao.status !== 'pool' && !!ao.scheduledDate && ao.scheduledDate < (today || tdy());
+  },
+
+  /* V3: nästa steg för en AO — en mening som svarar på "vad händer nu?".
+     Ren härledning från befintliga fält; ändrar ingenting. Returnerar
+     { tone: 'danger'|'warn'|'info'|'ok'|'neutral', text, action? }. */
+  nextStep(ao, today) {
+    if (!ao) return null;
+    const t = today || tdy();
+    if (ao.deleted) return { tone: 'neutral', text: 'Ligger i papperskorgen' };
+    if (ao.archived) return { tone: 'neutral', text: 'Arkiverad' };
+    const staff = (ao.staff || []).length;
+    const chk = this.checklistCounts(ao.checklist || []);
+    const day = (d) => (typeof UiKit !== 'undefined' ? UiKit.dayLabel(d, t).replace(/^(Idag|Imorgon|Igår)$/, (m) => m.toLowerCase()) : d);
+    switch (ao.status) {
+      case 'avbruten': return { tone: 'neutral', text: 'Avbruten' };
+      case 'fakturerad': return { tone: 'ok', text: 'Fakturerad — inget kvar att göra' };
+      case 'klar':
+        if (ao.invoiceId) return { tone: 'ok', text: 'Klar och kopplad till fakturaunderlag' };
+        return { tone: 'info', text: 'Klar — skapa fakturaunderlag', action: 'invoice' };
+      case 'pool': return { tone: 'info', text: 'Ligger i arbetspoolen — väntar på att någon tar uppdraget', action: 'take' };
+      default: break;
+    }
+    if (ao.status === 'pågående' && staff) {
+      if (chk.total && chk.rest + chk.prog === 0) return { tone: 'ok', text: 'Checklistan är klar — markera ordern som klar', action: 'complete' };
+      if (chk.total) return { tone: 'info', text: 'Pågår — ' + (chk.done + chk.avv) + ' av ' + chk.total + ' punkter klara' };
+      return { tone: 'info', text: 'Pågår' };
+    }
+    if (ao.priority === 'akut' && !staff) return { tone: 'danger', text: 'Akut och ingen tilldelad — tilldela personal nu', action: 'assign' };
+    if (!staff) return { tone: 'warn', text: 'Ingen personal tilldelad', action: 'assign' };
+    if (!ao.scheduledDate && ao.status !== 'pågående') return { tone: 'warn', text: 'Inte planerad — välj datum', action: 'plan' };
+    if (this.isOverdue(ao, t)) return { tone: 'danger', text: 'Försenad — planerades ' + day(ao.scheduledDate), action: 'plan' };
+    if (ao.scheduledDate === t) return { tone: 'info', text: 'Planerad idag' + (ao.scheduledStart ? ' kl. ' + ao.scheduledStart : '') + ' — starta när arbetet börjar', action: 'start' };
+    return { tone: 'neutral', text: 'Planerad ' + day(ao.scheduledDate) + (ao.scheduledStart ? ' kl. ' + ao.scheduledStart : '') };
+  },
+
   checklistStatus(c) {
     if (!c) return 'ej_paborjad';
     if (c.avvikelse === 'avvikelse') return 'avvikelse';

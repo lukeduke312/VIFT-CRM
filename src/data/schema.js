@@ -59,8 +59,9 @@ function getCatInfo(slug) {
 }
 
 function catBadge(slug) {
+  /* V3: neutral etikett med färgruta — kategorin syns utan att konkurrera med status. */
   const c = getCatInfo(slug || 'ovrigt');
-  return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:${c.color}1a;color:${c.color};border:1px solid ${c.color}40;">${ic(c.icon,9)} ${esc(c.label)}</span>`;
+  return `<span class="cat-tag"><span class="cat-sw" style="background:${c.color}"></span>${esc(c.label)}</span>`;
 }
 
 /* ── Enheter ────────────────────────────────── */

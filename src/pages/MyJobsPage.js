@@ -186,7 +186,7 @@ const MyJobsPage = {
     const chkAvv   = (ao.checklist||[]).filter(c => c.avvikelse==='avvikelse').length;
     const chkTotal = (ao.checklist||[]).length;
     const active   = isStamped && stampAoId === ao.id;
-    const isLate   = ao.scheduledDate && ao.scheduledDate < tdy() && !['klar','fakturerad','avbruten'].includes(ao.status);
+    const isLate   = WorkOrderService.isOverdue(ao);
     const prioClass = ({akut:'p-akut',hög:'p-hog',normal:'p-normal',låg:'p-lag'}[ao.priority]||'p-lag');
 
     const timeEntries = TimeService.getByAO(ao.id);
@@ -209,7 +209,13 @@ const MyJobsPage = {
       } else if (!isStamped && Auth.can('ao_time')) {
         primaryBtn = `<button class="btn bp bfull" style="font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockIn('${ao.id}')">${ic('log-in',14)} Stämpla in</button>`;
       }
-      secondaryBtns = `<div style="display:flex;gap:6px;">` +
+      /* V3: vägbeskrivning och samtal direkt från kortet — färre klick i fält. */
+      const mapsUrl = workAddr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(workAddr) : '';
+      secondaryBtns = `<div class="job-card-v2-quick">` +
+        (mapsUrl ? `<a class="btn bs bsm" href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ic('navigation',13)} Vägbeskrivning</a>` : '') +
+        (ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}" onclick="event.stopPropagation()">${ic('phone',13)} Ring</a>` : '') +
+        `</div>` +
+        `<div style="display:flex;gap:6px;">` +
         (['nytt','pool','planerad'].includes(ao.status)
           ? `<button class="btn bs bsm" onclick="event.stopPropagation();MyJobsPage.startJob('${ao.id}')">${ic('play',12)} Starta</button>`
           : '') +
@@ -221,7 +227,7 @@ const MyJobsPage = {
       <div class="job-card-v2 ${prioClass}${active?' active':''}${isLate&&!active?' late':''}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
         <div class="job-card-v2-top">
           <div style="flex:1;min-width:0;">
-            <div class="job-card-v2-id">${ao.id}${active?' · '+ic('clock',11)+' Aktiv stämpling':''}</div>
+            <div class="job-card-v2-id">${WorkOrderService.displayNumberOrPending(ao)}${active?' · '+ic('clock',11)+' Aktiv stämpling':''}</div>
             <div class="job-card-v2-title">${esc(ao.title)}</div>
           </div>
           <div class="job-card-v2-badges">${sbdg(ao.status)}${ao.priority!=='normal'?pbdg(ao.priority):''}</div>
@@ -229,7 +235,7 @@ const MyJobsPage = {
         <div class="job-card-v2-meta">
           ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} <span>${esc(cuName)}</span></div>` : ''}
           ${workAddr        ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} <span>${esc(workAddr)}</span></div>` : ''}
-          ${ao.scheduledDate ? `<div class="job-card-v2-meta-row" style="color:${isLate?'var(--rd)':'var(--mt)'};">${ic('calendar',11)} <span>${isLate?'⚠ Försenad — ':''} ${ao.scheduledDate}${ao.scheduledStart?' '+ao.scheduledStart:''}</span></div>` : ''}
+          ${ao.scheduledDate ? `<div class="job-card-v2-meta-row" style="color:${isLate?'var(--rd)':'var(--mt)'};">${ic('calendar',11)} <span>${isLate?'Försenad — ':''}${esc(UiKit.dayLabel(ao.scheduledDate))}${ao.scheduledStart?' kl. '+esc(ao.scheduledStart):''}</span></div>` : ''}
           ${ao.substatus ? `<div class="job-card-v2-meta-row" style="color:var(--or);">${subLbls[ao.substatus]||ao.substatus}</div>` : ''}
           ${chkTotal>0 ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkHtml}</div>` : ''}
           ${estMins>0 ? `<div class="job-card-v2-meta-row" style="color:${timeOver?'var(--rd)':'var(--mt)'};">${ic('clock',11)} Plan: ${TimeService.fmtDuration(estMins)}${actualMins>0?' · Utfört: '+TimeService.fmtDuration(actualMins)+(timePct!==null?' ('+timePct+'%)':''):''}</div>` : ''}

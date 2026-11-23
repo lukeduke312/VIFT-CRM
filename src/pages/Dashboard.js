@@ -11,7 +11,15 @@ const Dashboard = {
   _colKey: 'dash_collapsed_v1',
 
   _loadCollapsed() {
-    try { this._collapsed = JSON.parse(sessionStorage.getItem(this._colKey) || '{}'); } catch(e) { this._collapsed = {}; }
+    let stored = null;
+    try { stored = sessionStorage.getItem(this._colKey); } catch(e) {}
+    try { this._collapsed = JSON.parse(stored || '{}'); } catch(e) { this._collapsed = {}; }
+    /* V3: på mobil börjar de tunga sektionerna hopfällda — dagens tavla och
+       "Kräver åtgärd" räcker för att komma igång. Användarens egna val
+       (sparade i sessionen) gäller före standardvärdet. */
+    if (!stored && typeof window !== 'undefined' && window.innerWidth < 768) {
+      this._collapsed = { 'idag-drift': true, 'verksamhet': true };
+    }
   },
 
   _saveCollapsed() {
@@ -68,8 +76,13 @@ const Dashboard = {
     // Bygg widgets i rätt ordning, filtrerat på behörighet
     this._loadCollapsed();
     const parts  = [];
+    /* V3: "Dagens drift" och "Ordrar idag" visar samma sak som dagens
+       tavla överst — i standardlayouten döljs de. En användare som själv
+       sparat en layout med dem får behålla dem. */
+    const SHOWN_IN_BOARD = new Set(['operations', 'today']);
     const sorted = layout
       .filter(m => m.visible !== false)
+      .filter(m => isCustomLayout || !SHOWN_IN_BOARD.has(m.id))
       .filter(m => this._canSee(m.id))
       .sort((a, b) => (a.order || 0) - (b.order || 0));
 
@@ -98,45 +111,8 @@ const Dashboard = {
       }
     }
 
-    const userName = user ? (user.firstName || user.username || '') : '';
-    const todayStr = new Date().toLocaleDateString('sv-SE', { weekday:'long', day:'numeric', month:'long' });
-    const todayStr2 = todayStr.charAt(0).toUpperCase() + todayStr.slice(1);
-
-    // Quick urgent summary for hero
-    /* V51A R3 §6 — blockerare A: heroSub byggdes tidigare från ALLA
-       state.workOrders utan någon AO-behörighetskontroll alls — en
-       användare helt utan ao_view_all/ao_view_own (eller med
-       ao_view_own men oupplösbar identitet) kunde ändå se bolagets
-       globala akut-/försenat-/idag-räknare i hero:n. Nu via samma
-       kanoniska hjälpfunktion som resten av AO-ytorna: admin/all →
-       oförändrat globalt; own+giltigt id → endast egna+pool-synliga
-       ordrar; annars → tom lista (inga hero-chips visas alls). */
-    const allWos   = this._scopeWorkOrdersForCurrentUser(
-      (state.workOrders||[]).filter(a => !a.archived && !a.deleted),
-      { includeSharedPool: true }
-    );
-    const alive    = a => !['klar','fakturerad','avbruten'].includes(a.status);
-    const urgCount = allWos.filter(a => a.priority==='akut' && alive(a)).length;
-    const overdueC = allWos.filter(a => a.scheduledDate && a.scheduledDate < tdy() && alive(a) && a.status !== 'pool').length;
-    const todayC   = allWos.filter(a => a.scheduledDate === tdy() && alive(a)).length;
-    const heroSub  = [
-      urgCount   > 0 ? `<span style="background:var(--lrd);color:var(--rd);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('zap',10)} ${urgCount} akut${urgCount>1?'a':''}</span>` : '',
-      overdueC   > 0 ? `<span style="background:var(--lor);color:var(--or);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">${ic('clock',10)} ${overdueC} försen${overdueC>1?'ade':'ad'}</span>` : '',
-      todayC     > 0 ? `<span style="background:var(--bg);color:var(--mt);border:1px solid var(--br);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${ic('calendar',10)} ${todayC} idag</span>` : '',
-    ].filter(Boolean).join(' ');
-
     el.innerHTML =
-      `<div class="dash-topbar">` +
-        `<div style="display:flex;flex-direction:column;gap:1px;">` +
-          (userName ? `<span style="font-size:14px;font-weight:700;color:var(--navy);">Hej, ${esc(userName)}</span>` : '<span></span>') +
-          `<span style="font-size:12px;font-weight:500;color:var(--mt);">${todayStr2}</span>` +
-        `</div>` +
-        `<div style="display:flex;gap:4px;">` +
-          `<button class="btn bghost bxs" onclick="Dashboard.openUserPrefs()" title="Mina inställningar" style="padding:6px;">${ic('user',14)}</button>` +
-          `<button class="btn bghost bxs" onclick="Dashboard.enterEditMode()" title="Anpassa dashboard" style="padding:6px;">${ic('settings',14)}</button>` +
-        `</div>` +
-      `</div>` +
-      (heroSub ? `<div style="display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">${heroSub}</div>` : '') +
+      this._todayBoard(user) +
       `<div class="dash-layout">${parts.join('')}</div>`;
 
     /* V51A R1 §9/§10 — GENERATIONSSPÄRR mot asynkrona kart-race:er.
@@ -218,6 +194,109 @@ const Dashboard = {
      hero-sammanfattningen, poolwidgeten själv) sätter detta till true.
      Kalender-/kartbundna widgets (Ordrar idag, Aktiva jobb — karta)
      behåller sitt R1/R2-beteende OFÖRÄNDRAT (ingen pool) via false. */
+  /* ── V3: Dagens tavla — överst på dashboarden ─────────────────────
+     Svarar på "vad behöver göras idag?" innan någon statistik visas.
+     Nyckeltalen använder EXAKT samma definitioner som AO-listans
+     snabbfilter (WorkOrderService.isOverdue m.fl.) och leder dit, så att
+     siffran och listan man landar i alltid stämmer överens. Behörighet:
+     samma kanoniska _scopeWorkOrdersForCurrentUser() som övriga AO-ytor. */
+  _todayBoard(user) {
+    const today = tdy();
+    const scoped = this._scopeWorkOrdersForCurrentUser(
+      (state.workOrders||[]).filter(a => !a.archived && !a.deleted), { includeSharedPool: true });
+    const live = scoped.filter(a => WorkOrderService.isAlive(a));
+    const canAO = Auth.can('ao_view_all') || Auth.can('ao_view_own');
+    const isLead = Auth.can('ao_view_all');
+    const todays = live.filter(a => a.scheduledDate === today)
+      .sort((a, b) => String(a.scheduledStart||'99') < String(b.scheduledStart||'99') ? -1 : 1);
+    let _r = null;
+    const k = {
+      today: todays.length,
+      ongoing: live.filter(a => a.status === 'pågående').length,
+      overdue: live.filter(a => WorkOrderService.isOverdue(a, today)).length,
+      urgent: live.filter(a => a.priority === 'akut').length,
+      unassigned: live.filter(a => !(a.staff||[]).length && a.status !== 'pool').length,
+      bill: Auth.canAny(['invoice_view','invoice_create']) ? scoped.filter(a => a.status === 'klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a, (_r = _r || WorkOrderService.billingStatusResolver()))).length : null,
+    };
+    const tile = (n, label, sub, go, tone, icon) => `
+      <button type="button" class="dt-tile${tone && n ? ' tone-' + tone : ''}" onclick="${go}">
+        <span class="dt-tile-ico">${ic(icon, 16)}</span>
+        <span class="dt-tile-n">${n}</span>
+        <span class="dt-tile-l">${label}</span>
+        ${sub ? `<span class="dt-tile-s">${sub}</span>` : ''}
+      </button>`;
+    const userName = user ? (user.firstName || user.username || '') : '';
+    const dateStr = new Date().toLocaleDateString('sv-SE', { weekday:'long', day:'numeric', month:'long' });
+    const hour = new Date().getHours();
+    const greet = hour < 10 ? 'God morgon' : hour < 17 ? 'Hej' : 'God kväll';
+
+    const actions = [
+      Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),0)">${ic('plus',15)} Ny order</button>` : '',
+      Auth.can('offer_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-offer')">${ic('file-text',15)} Ny offert</button>` : '',
+      Auth.can('ao_time') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-tid')">${ic('clock',15)} ${state.stampActive ? 'Instämplad' : 'Stämpla'}</button>` : '',
+      `<button class="ibtn" onclick="Dashboard.openUserPrefs()" title="Mina inställningar" aria-label="Mina inställningar">${ic('user',16)}</button>`,
+      `<button class="ibtn" onclick="Dashboard.enterEditMode()" title="Anpassa dashboard" aria-label="Anpassa dashboard">${ic('settings',16)}</button>`,
+    ].join('');
+
+    const schedule = todays.length ? todays.slice(0, 8).map(ao => {
+      const cu = getCu(ao.customerId);
+      const where = ao.address || (cu ? CustomerService.displayName(cu) : '');
+      return `<button type="button" class="dt-job" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+        <span class="dt-job-t">${ao.scheduledStart ? esc(ao.scheduledStart) : '—'}</span>
+        <span class="dt-job-m"><span class="dt-job-title">${ao.priority === 'akut' ? `<span class="bdg bdg-red">${ic('alert-triangle',11)}Akut</span>` : ''}${esc(ao.title)}</span><span class="dt-job-sub">${esc(where)}</span></span>
+        <span class="dt-job-r">${UiKit.avatarStack(ao.staff, 3)}${sbdg(ao.status)}</span>
+      </button>`;
+    }).join('') + (todays.length > 8 ? `<button type="button" class="dt-more" onclick="Router.showPage('pg-ao',{filter:'idag'})">Visa alla ${todays.length} →</button>` : '')
+      : `<div class="dt-empty">${ic('calendar',20)}<span>Inga jobb planerade idag.</span></div>`;
+
+    let load = '';
+    if (isLead && Auth.canAny(['staff_view','reports_view','ao_view_all'])) {
+      const staff = (state.staff||[]).filter(s => s.active !== false);
+      const rows = staff.map(s => {
+        const mine = live.filter(a => (a.staff||[]).includes(s.id));
+        const t = mine.filter(a => a.scheduledDate === today).length;
+        const late = mine.filter(a => WorkOrderService.isOverdue(a, today)).length;
+        return { s, t, open: mine.length, late };
+      }).filter(r => r.open > 0 || r.t > 0).sort((a, b) => b.t - a.t || b.open - a.open).slice(0, 8);
+      const max = Math.max(1, ...rows.map(r => r.t));
+      load = `<section class="dt-panel dt-load">
+        <div class="dt-panel-h"><h3>${ic('users',15)} Personal idag</h3><button class="btn bghost bxs" onclick="Router.showPage('pg-operations')">Dagens drift ${ic('arrow-right',12)}</button></div>
+        ${rows.length ? `<ul class="dt-people">${rows.map(r => `<li>
+            ${UiKit.avatar(r.s, 28)}
+            <span class="dt-p-name">${esc(UiKit.staffName(r.s))}</span>
+            <span class="dt-p-bar" aria-hidden="true"><i style="width:${Math.round(r.t / max * 100)}%"></i></span>
+            <span class="dt-p-n">${r.t} idag</span>
+            <span class="dt-p-o">${r.open} öppna${r.late ? ` · <b>${r.late} försenad${r.late > 1 ? 'e' : ''}</b>` : ''}</span>
+          </li>`).join('')}</ul>` : `<div class="dt-empty">${ic('users',20)}<span>Ingen personal har öppna jobb.</span></div>`}
+      </section>`;
+    }
+
+    return `<section class="dt">
+      <div class="dt-head">
+        <div>
+          <h2 class="dt-greet">${greet}${userName ? ', ' + esc(userName) : ''}</h2>
+          <div class="dt-date">${esc(dateStr.charAt(0).toUpperCase() + dateStr.slice(1))}</div>
+        </div>
+        <div class="dt-actions">${actions}</div>
+      </div>
+      ${canAO ? `<div class="dt-tiles">
+        ${tile(k.today, isLead ? 'Jobb idag' : 'Mina jobb idag', '', `Router.showPage('pg-ao',{filter:'idag'})`, '', 'calendar')}
+        ${tile(k.ongoing, 'Pågående', '', `Router.showPage('pg-ao',{filter:'pågående'})`, '', 'play-circle')}
+        ${tile(k.overdue, 'Försenade', k.overdue ? 'Behöver planeras om' : 'Inget försenat', `Router.showPage('pg-ao',{filter:'forsenad'})`, 'danger', 'clock')}
+        ${tile(k.urgent, 'Akuta', '', `Router.showPage('pg-ao',{filter:'akut'})`, 'danger', 'alert-triangle')}
+        ${isLead ? tile(k.unassigned, 'Otilldelade', '', `Router.showPage('pg-ao',{filter:'unassigned'})`, 'warn', 'user-x') : ''}
+        ${k.bill !== null ? tile(k.bill, 'Att fakturera', '', `Router.showPage('pg-ao',{filter:'readyForInvoice'})`, 'info', 'receipt') : ''}
+      </div>
+      <div class="dt-body${load ? '' : ' is-single'}">
+        <section class="dt-panel dt-sched">
+          <div class="dt-panel-h"><h3>${ic('calendar',15)} ${isLead ? 'Dagens schema' : 'Mina jobb idag'}</h3><button class="btn bghost bxs" onclick="Router.showPage('pg-calendar')">Kalender ${ic('arrow-right',12)}</button></div>
+          <div class="dt-jobs">${schedule}</div>
+        </section>
+        ${load}
+      </div>` : ''}
+    </section>`;
+  },
+
   _scopeWorkOrdersForCurrentUser(list, options) {
     options = options || {};
     const includeSharedPool = !!options.includeSharedPool;

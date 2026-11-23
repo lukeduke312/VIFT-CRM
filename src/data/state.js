@@ -2406,22 +2406,15 @@ function priorityClass(p) {
 }
 
 function sbdg(status) {
-  const icons = {
-    nytt:'circle',pool:'inbox',planerad:'calendar',pågående:'play-circle',
-    klar:'check-circle',fakturerad:'receipt',avbruten:'x-circle',
-    utkast:'file',skickad:'send',påmind:'bell',väntar:'clock',godkänd:'check-circle',
-    nekad:'x-circle',utgången:'alert-circle',ersatt:'copy','ändring-begärd':'edit-3',betald:'check-circle',
-    förfallen:'alert-triangle',makulerad:'x'
-  };
-  const ico = icons[status];
-  return `<span class="bdg ${statusClass(status)}" style="display:inline-flex;align-items:center;gap:3px;">${ico?ic(ico,9):''}${statusLabel(status)}</span>`;
+  /* V3: lugnt statusmärke — färgad punkt + text (designsystem, .bdg.st). */
+  return `<span class="bdg st ${statusClass(status)}"><i class="st-dot" aria-hidden="true"></i>${statusLabel(status)}</span>`;
 }
 
 function pbdg(priority) {
-  const cls   = { akut:'bdg-red', hög:'bdg-orange', normal:'bdg-sky', låg:'bdg-grey' }[priority] || 'bdg-grey';
-  const icons = { akut:'alert-circle', hög:'arrow-up', normal:'minus', låg:'arrow-down' };
+  const cls   = { akut:'bdg-red', hög:'bdg-orange', normal:'bdg-grey', låg:'bdg-grey' }[priority] || 'bdg-grey';
+  const icons = { akut:'alert-triangle', hög:'arrow-up', normal:'minus', låg:'arrow-down' };
   const ico = icons[priority];
-  return `<span class="bdg ${cls}" style="display:inline-flex;align-items:center;gap:3px;">${ico?ic(ico,9):''}${priorityLabel(priority)}</span>`;
+  return `<span class="bdg ${cls}">${ico?ic(ico,11):''}${priorityLabel(priority)}</span>`;
 }
 
 /* ── LiveSync — polling för cross-device synk ─── */

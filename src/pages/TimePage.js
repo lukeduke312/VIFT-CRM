@@ -83,6 +83,15 @@ const TimePage = {
       filtered.map(a => `<option value="${a.id}" ${curr===a.id?'selected':''}>${a.id} – ${a.title}</option>`).join('');
   },
 
+  /* V3: väljer man arbetsorder fylls kunden i (om den inte redan är vald). */
+  _aoChanged() {
+    const aoId = document.getElementById('mt-ao')?.value;
+    const cuSel = document.getElementById('mt-customer');
+    if (!aoId || !cuSel || cuSel.tagName !== 'SELECT' || cuSel.value) return;
+    const ao = getAO(aoId);
+    if (ao && ao.customerId && [...cuSel.options].some(o => o.value === ao.customerId)) cuSel.value = ao.customerId;
+  },
+
   toggleStamp() {
     if (!state.stampActive) {
       TimePage.openClockIn();
@@ -252,7 +261,7 @@ const TimePage = {
               </select>`}
         </div>
         <div class="fg"><label>Arbetsorder${allowedAoIds?'':' (valfritt)'}</label>
-          <select id="mt-ao">
+          <select id="mt-ao" onchange="TimePage._aoChanged()">
             ${!allowedAoIds ? `<option value="">— Välj AO —</option>` : ''}
             ${aoList.map(a => `<option value="${a.id}">${a.id} – ${a.title}</option>`).join('')}
           </select>
@@ -328,7 +337,9 @@ const TimePage = {
       startStr:     document.getElementById('mt-start')?.value || '',
       endStr:       document.getElementById('mt-end')?.value || '',
       aoId:         aoId,
-      customerId:   document.getElementById('mt-customer')?.value || opts.customerId || '',
+      /* V3: vald arbetsorder ger kunden om ingen kund valts — tidigare
+         sparades posten då helt utan kund och föll bort ur kundrapporter. */
+      customerId:   document.getElementById('mt-customer')?.value || opts.customerId || ((aoId && getAO(aoId)) ? (getAO(aoId).customerId || '') : ''),
       priceGroupId: document.getElementById('mt-pg')?.value || '',
       comment:      document.getElementById('mt-comment')?.value.trim() || '',
       billable:     document.getElementById('mt-billable')?.checked !== false,
