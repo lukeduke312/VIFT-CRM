@@ -70,6 +70,7 @@ async function main() {
       requests: world.sessions.reduce((n, s) => n + s.requests.length, 0) };
     results.push(r);
     console.log((status === 'passed' ? 'PASS  ' : status === 'known' ? 'KNOWN ' : 'FAIL  ') + t.id + ' ' + t.name + (error ? '\n      ' + error : ''));
+    if (status === 'failed' && ctx.notes.length) console.log('      noteringar: ' + ctx.notes.join(' | '));
     await world.close();
   }
   await lib.stop();
@@ -80,6 +81,8 @@ async function main() {
     known: results.filter((r) => r.status === 'known').length,
     durationMs: Date.now() - t0,
   };
+  fs.mkdirSync(REPORT, { recursive: true });
+  fs.writeFileSync(path.join(REPORT, 'last-partial.json'), JSON.stringify({ summary, results }, null, 2));
   if (!GREP && !MODULE) {
     fs.writeFileSync(path.join(REPORT, 'results.json'), JSON.stringify({ summary, results }, null, 2));
     fs.writeFileSync(path.join(REPORT, 'REPORT.md'), renderMd(summary, results));

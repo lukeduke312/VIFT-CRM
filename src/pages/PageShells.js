@@ -2403,10 +2403,35 @@ const OffersPage = {
     setTimeout(() => document.getElementById('qcu-name')?.focus(), 80);
   },
 
-  /* ── Step 2: Tjänster & rader ─── */
-  _step2Html() {
+  /* Rabattkontrollen visas bara när offerten har ett engångsbelopp. Ritas
+     om från _refreshTotals() när det läget ändras — tidigare beräknades det
+     bara när steg 2 först ritades (innan någon rad fanns), så en ny offert
+     fick aldrig rabattfältet och texten påstod felaktigt att engångsbelopp
+     saknades. */
+  _discountAreaHtml() {
     const discType = this._discount?.type || 'percent';
     const discVal  = this._discount?.value || 0;
+    const _discTot = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
+    const hasOneTimeForDiscount = _discTot.rawExVat > 0 || discVal > 0;
+    const discountLabel = _discTot.recurringMonthlyExVat ? 'Rabatt på engångsbelopp' : 'Rabatt';
+    return hasOneTimeForDiscount ? `
+          <div class="off-discount-ctrl">
+            <label>${discountLabel}</label>
+            <div class="off-discount-ctrl-row">
+              <select id="off-disc-type" class="off-discount-ctrl-type"
+                onchange="OffersPage._discount.type=this.value;OffersPage._refreshTotals()">
+                <option value="percent"${discType==='percent'?' selected':''}>%</option>
+                <option value="fixed"${discType==='fixed'?' selected':''}>kr</option>
+              </select>
+              <input type="number" id="off-disc-val" value="${discVal}" min="0" step="1" placeholder="0"
+                class="off-discount-ctrl-value"
+                oninput="OffersPage._discount.value=parseFloat(this.value)||0;OffersPage._refreshTotals()">
+            </div>
+          </div>` : `<div class="off-discount-ctrl-hint" style="font-size:11px;color:var(--mt);margin-top:8px;">Ingen rabatt-kontroll visas — offerten har inget engångsbelopp att rabattera på (rabatt gäller endast engångsbelopp, ej återkommande/rörliga priser).</div>`;
+  },
+
+  /* ── Step 2: Tjänster & rader ─── */
+  _step2Html() {
     /* OFFER CORE R1.1 — BLOCKER 7 (motbevis-granskad): rabatten är, och
        förblir i denna release, ENDAST en rabatt på det klassiska
        engångsbeloppet (_offDiscountAmount räknar alltid mot rawExVat,
@@ -2420,9 +2445,6 @@ const OffersPage = {
        rabattera på (annars en rabatt-kontroll utan effekt). Ingen ny
        "återkommande rabatt"-motor i denna release — se
        RAPPORT §Blocker 7 för dokumentation av begränsningen. */
-    const _discTot = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
-    const hasOneTimeForDiscount = _discTot.rawExVat > 0 || discVal > 0;
-    const discountLabel = _discTot.recurringMonthlyExVat ? 'Rabatt på engångsbelopp' : 'Rabatt';
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
@@ -2458,20 +2480,7 @@ const OffersPage = {
         </div>
         <div class="off-wiz-s2-summ">
           <div id="off-totals-bar">${this._totalsBarHtml()}</div>
-          ${hasOneTimeForDiscount ? `
-          <div class="off-discount-ctrl">
-            <label>${discountLabel}</label>
-            <div class="off-discount-ctrl-row">
-              <select id="off-disc-type" class="off-discount-ctrl-type"
-                onchange="OffersPage._discount.type=this.value;OffersPage._refreshTotals()">
-                <option value="percent"${discType==='percent'?' selected':''}>%</option>
-                <option value="fixed"${discType==='fixed'?' selected':''}>kr</option>
-              </select>
-              <input type="number" id="off-disc-val" value="${discVal}" min="0" step="1" placeholder="0"
-                class="off-discount-ctrl-value"
-                oninput="OffersPage._discount.value=parseFloat(this.value)||0;OffersPage._refreshTotals()">
-            </div>
-          </div>` : `<div class="off-discount-ctrl-hint" style="font-size:11px;color:var(--mt);margin-top:8px;">Ingen rabatt-kontroll visas — offerten har inget engångsbelopp att rabattera på (rabatt gäller endast engångsbelopp, ej återkommande/rörliga priser).</div>`}
+          <div id="off-discount-area">${this._discountAreaHtml()}</div>
         </div>
       </div>`;
   },
@@ -3684,6 +3693,17 @@ const OffersPage = {
     if (bar) bar.innerHTML = this._totalsBarHtml();
     const mobileBar = document.getElementById('off-mobile-totals');
     if (mobileBar) mobileBar.innerHTML = this._mobileTotalsHtml();
+    const discArea = document.getElementById('off-discount-area');
+    if (discArea) {
+      const shown = !!document.getElementById('off-disc-val');
+      const t = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
+      const should = t.rawExVat > 0 || (this._discount?.value || 0) > 0;
+      if (shown !== should) discArea.innerHTML = this._discountAreaHtml();
+      else if (shown) {
+        const lbl = discArea.querySelector('.off-discount-ctrl > label');
+        if (lbl) lbl.textContent = t.recurringMonthlyExVat ? 'Rabatt på engångsbelopp' : 'Rabatt';
+      }
+    }
   },
 
   /* ── Line management ─── */
