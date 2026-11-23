@@ -86,6 +86,39 @@ const ReportsPage = (function () {
     return d >= range.from && d <= range.to;
   }
 
+  /* E2E REP-01 (2026-11-23): fakturor i nuvarande datamodell (Schema.invoice)
+     saknar `amount` och `invoiceDate` — beloppet räknas från raderna
+     (InvoiceService.calcSummary, samma som fakturavyn) och fakturadatum är
+     när fakturan skickades. Rapporten läste tidigare de saknade fälten och
+     visade "—" för allt fakturerat. Fakturerat = utställda fakturor (ej
+     utkast, ej makulerade), belopp exkl. moms efter rabatt; ROT/RUT påverkar
+     vad kunden betalar, inte intäkten. Äldre poster med eget `amount` och
+     utan rader räknas som förut. Tidposter kopplas till AO via `aoId`. */
+  function _invIssued(inv) { return !!inv && inv.status !== 'makulerad' && inv.status !== 'utkast'; }
+  function _invDate(inv) {
+    return (inv && (inv.invoiceDate || inv.date || inv.sentAt || inv.createdAt) || '').slice(0, 10);
+  }
+  function _invAmount(inv) {
+    if (!inv) return 0;
+    var legacy = parseFloat(inv.amount);
+    if (!(inv.lines && inv.lines.length) && isFinite(legacy)) return legacy;
+    if (typeof InvoiceService !== 'undefined' && InvoiceService.calcSummary) {
+      var sm = InvoiceService.calcSummary(inv);
+      return (sm && isFinite(sm.exVat)) ? sm.exVat : 0;
+    }
+    return isFinite(legacy) ? legacy : 0;
+  }
+  function _invAoIds(inv) {
+    var ids = {};
+    if (inv && inv.workOrderId) ids[inv.workOrderId] = 1;
+    ((inv && inv.lines) || []).forEach(function (l) {
+      if (l && l.workOrderId) ids[l.workOrderId] = 1;
+      (l && l.sourceRefs || []).forEach(function (r) { if (r && r.workOrderId) ids[r.workOrderId] = 1; });
+    });
+    return Object.keys(ids);
+  }
+  function _teAo(e) { return e ? (e.aoId || e.workOrderId || '') : ''; }
+
   /* ── Helpers ─────────────────────────────────────────────────────── */
 
   function _ic(name, size) {
@@ -266,8 +299,8 @@ const ReportsPage = (function () {
     var avvNoAO = avvs.filter(function (a) { return !a.workOrderId; });
 
     /* Intäkter — FAKTURERAT i vald period */
-    var invs    = (state.invoices || []).filter(function (i) { return _inPeriod(i.invoiceDate || i.date, range) && i.status !== 'makulerad'; });
-    var revPeriod = invs.reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+    var invs    = (state.invoices || []).filter(function (i) { return _invIssued(i) && _inPeriod(_invDate(i), range); });
+    var revPeriod = invs.reduce(function (s, i) { return s + _invAmount(i); }, 0);
 
     /* Klara AO ej fakturerade — antal (belopp saknar standardvärde utan prissättning) */
     var klar_ej_fak = active.filter(function (a) { return a.status === 'klar' && !a.invoiceId; });
@@ -293,7 +326,7 @@ const ReportsPage = (function () {
       _kpi('clipboard-list', 'Öppna AO',           oppna.length,             'aktiva, ej klara',               'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
       _kpi('check-circle',  'Klara AO',             klara.length,             'ej fakturerade',                 'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
       _kpi('alert-circle',  'Försenade',            forsen.length,            'passerat planerat datum',         'Router.showPage(\'pg-ao\',{filter:\'forsenad\'})') +
-      _kpi('receipt',       'Fakturerat ' + range.label, revPeriod ? _fmtKr(revPeriod) : '—', 'Källa: state.invoices.amount · ej makulerade',      'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('receipt',       'Fakturerat ' + range.label, revPeriod ? _fmtKr(revPeriod) : '—', 'Utställda fakturor exkl. moms (ej utkast/makulerade)',      'ReportsPage._setTab(\'ekonomi\')') +
       _kpi('alert-triangle','Klara ej fakturerade', klar_ej_fak.length + ' st', 'belopp beräknas ej utan prissättning', 'ReportsPage._setTab(\'ekonomi\')') +
       _kpi('percent',       'Andel fakturerade AO', fakGrad + ' %',           faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat',  'ReportsPage._setTab(\'ekonomi\')') +
       _kpi('clock',         'Tim ' + range.label,   Math.round(timmar) + ' h', 'registrerad tid · ' + range.label,  'ReportsPage._setTab(\'tid\')') +
@@ -425,7 +458,7 @@ const ReportsPage = (function () {
     var maxBel = belaggning.length ? belaggning[0].hours : 1;
 
     /* Per AO */
-    var byAO  = _groupBy(entries.filter(function (e) { return e.workOrderId; }), function (e) { return e.workOrderId; });
+    var byAO  = _groupBy(entries.filter(function (e) { return _teAo(e); }), function (e) { return _teAo(e); });
     var topAO = _topN(byAO, 8, function (items) {
       return items.reduce(function (s, e) { return s + _entryHours(e); }, 0);
     }).map(function (r) { r.val = Math.round(r.val * 10) / 10; return r; });
@@ -433,7 +466,7 @@ const ReportsPage = (function () {
     /* Per fastighet via AO-koppling (alla tider, inte bara period, för total bild) */
     var byPropH = {};
     inPeriod.forEach(function (e) {
-      var ao = e.workOrderId ? (state.workOrders || []).find(function (a) { return a.id === e.workOrderId; }) : null;
+      var ao = _teAo(e) ? (state.workOrders || []).find(function (a) { return a.id === _teAo(e); }) : null;
       if (!ao || !ao.propertyId) return;
       byPropH[ao.propertyId] = (byPropH[ao.propertyId] || 0) + _entryHours(e);
     });
@@ -613,10 +646,10 @@ const ReportsPage = (function () {
        OBS: Klara och pågående AO saknar ett faktisk belopps-fält utan summering av
        material + tid × timpris. Visas som antal, inte som kr.
     ──────────────────────────────────────────────────────────────── */
-    var fakInvs    = invs.filter(function (i) { return _inPeriod(i.invoiceDate || i.date, range) && i.status !== 'makulerad'; });
-    var totalFak   = fakInvs.reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
-    var totalAllFak = invs.filter(function (i) { return i.status !== 'makulerad'; })
-      .reduce(function (s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
+    var fakInvs    = invs.filter(function (i) { return _invIssued(i) && _inPeriod(_invDate(i), range); });
+    var totalFak   = fakInvs.reduce(function (s, i) { return s + _invAmount(i); }, 0);
+    var totalAllFak = invs.filter(_invIssued)
+      .reduce(function (s, i) { return s + _invAmount(i); }, 0);
 
     var klaraEjFak = aos.filter(function (a) { return a.status === 'klar' && !a.invoiceId; });
     var pagaende   = aos.filter(function (a) { return a.status === 'pågående' || a.status === 'planerad'; });
@@ -645,7 +678,7 @@ const ReportsPage = (function () {
     var byCuRev = {};
     fakInvs.forEach(function (inv) {
       var cid = inv.customerId || '—';
-      byCuRev[cid] = (byCuRev[cid] || 0) + (parseFloat(inv.amount) || 0);
+      byCuRev[cid] = (byCuRev[cid] || 0) + _invAmount(inv);
     });
     var topCuRev = Object.keys(byCuRev).map(function (k) { return { key: k, val: byCuRev[k] }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 10);
@@ -654,9 +687,11 @@ const ReportsPage = (function () {
     /* Intäkter per fastighet via AO-koppling (period) */
     var byPropRev = {};
     fakInvs.forEach(function (inv) {
-      var ao = inv.workOrderId ? aos.find(function (a) { return a.id === inv.workOrderId; }) : null;
-      if (!ao || !ao.propertyId) return;
-      byPropRev[ao.propertyId] = (byPropRev[ao.propertyId] || 0) + (parseFloat(inv.amount) || 0);
+      var aoId = _invAoIds(inv)[0];
+      var ao = aoId ? aos.find(function (a) { return a.id === aoId; }) : null;
+      var pid = inv.propertyId || (ao && ao.propertyId);
+      if (!pid) return;
+      byPropRev[pid] = (byPropRev[pid] || 0) + _invAmount(inv);
     });
     var topPropRev = Object.keys(byPropRev).map(function (k) { return { key: k, val: byPropRev[k] }; })
       .sort(function (a, b) { return b.val - a.val; }).slice(0, 8);
@@ -664,9 +699,9 @@ const ReportsPage = (function () {
 
     /* Intäkter per månad (senaste 12) */
     var monthMap = {};
-    invs.filter(function (i) { return i.status !== 'makulerad'; }).forEach(function (inv) {
-      var m = (inv.invoiceDate || inv.date || '').slice(0, 7);
-      if (m) monthMap[m] = (monthMap[m] || 0) + (parseFloat(inv.amount) || 0);
+    invs.filter(_invIssued).forEach(function (inv) {
+      var m = _invDate(inv).slice(0, 7);
+      if (m) monthMap[m] = (monthMap[m] || 0) + _invAmount(inv);
     });
     var months12 = [];
     for (var i = 11; i >= 0; i--) {
@@ -682,16 +717,16 @@ const ReportsPage = (function () {
     var maxEjFak  = topEjFak.length ? topEjFak[0].val : 1;
 
     /* Datakvalitet */
-    var noInvLink = fakInvs.filter(function (i) { return !i.workOrderId; }).length;
+    var noInvLink = fakInvs.filter(function (i) { return !_invAoIds(i).length && !i.propertyId; }).length;
     var qualIssues = [];
     if (noMatPrice) qualIssues.push(noMatPrice + ' materialposter saknar pris (räknas ej i materialkostnad)');
-    if (noInvLink)  qualIssues.push({ msg: noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)', items: fakInvs.filter(function(i){return !i.workOrderId;}).map(function(i){ return (i.id||'?') + (i.invoiceDate ? ' · ' + i.invoiceDate : '') + (i.amount ? ' · ' + parseFloat(i.amount).toFixed(0) + ' kr' : ''); }) });
+    if (noInvLink)  qualIssues.push({ msg: noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)', items: fakInvs.filter(function(i){return !_invAoIds(i).length && !i.propertyId;}).map(function(i){ return (i.id||'?') + (_invDate(i) ? ' · ' + _invDate(i) : '') + ' · ' + _invAmount(i).toFixed(0) + ' kr'; }) });
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
     /* Intäktsförklaring */
     '<div style="background:var(--bg2,var(--br));border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--mt);">' +
-      '<strong>Intäktsdefinition:</strong> Fakturerat = summa av <code>state.invoices[].amount</code> med invoiceDate i perioden, exkl. makulerade. ' +
+      '<strong>Intäktsdefinition:</strong> Fakturerat = utställda fakturor (ej utkast, ej makulerade) med fakturadatum (skickad) i perioden, belopp exkl. moms efter rabatt — samma beräkning som fakturavyn. ROT/RUT minskar vad kunden betalar, inte intäkten. ' +
       'Klara ej fakturerade AO och pågående ordervärde visas som <em>antal</em> — belopp kräver summering av material + tid × timpris.<br>' +
       '<strong>Andel fakturerade AO (antal-baserat):</strong> Antal AO med status "fakturerad" / (antal AO med status "klar" + "fakturerad"). ' +
       'Inte ett värdebaserat mått — saknar prissättning per AO.' +

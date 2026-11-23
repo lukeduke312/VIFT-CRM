@@ -1043,12 +1043,23 @@ IMPORT_EXPORT_CONFIGS.report = {
     /* Filtrera per register med korrekt datumfält:
        AO       → scheduledDate (utförandedatum) eller createdAt
        Tid      → date / startDate (utförandedatum)
-       Faktura  → invoiceDate (fakturadatum)
+       Faktura  → skickad (sentAt; äldre poster invoiceDate)
        Avvikelse → date / createdAt (rapportdatum)
        Serviceintervall → nextDate (förfallodatum) */
     var aoInPeriod   = ao.filter(function(a){ return inPeriod(a.scheduledDate || a.createdAt || a.date); });
     var teInPeriod   = te.filter(function(e){ return inPeriod(e.date || e.startDate); });
-    var invInPeriod  = invs.filter(function(i){ return inPeriod(i.invoiceDate || i.date) && i.status !== 'makulerad'; });
+    /* E2E REP-01 (2026-11-23): samma definition som ReportsPage — fakturor
+       saknar amount/invoiceDate i nuvarande modell; belopp från raderna
+       (exkl. moms efter rabatt), datum = skickad, bara utställda fakturor. */
+    function invIssued(i){ return i && i.status !== 'makulerad' && i.status !== 'utkast'; }
+    function invDate(i){ return (i.invoiceDate || i.date || i.sentAt || i.createdAt || '').slice(0,10); }
+    function invAmt(i){
+      var legacy = parseFloat(i.amount);
+      if (!(i.lines && i.lines.length) && isFinite(legacy)) return legacy;
+      if (typeof InvoiceService !== 'undefined' && InvoiceService.calcSummary) { var sm = InvoiceService.calcSummary(i); return (sm && isFinite(sm.exVat)) ? sm.exVat : 0; }
+      return isFinite(legacy) ? legacy : 0;
+    }
+    var invInPeriod  = invs.filter(function(i){ return invIssued(i) && inPeriod(invDate(i)); });
     var avvInPeriod  = avv.filter(function(a){ return inPeriod(a.date || a.createdAt); });
 
     /* Periodrad som första rad i alla sheets */
@@ -1088,8 +1099,8 @@ IMPORT_EXPORT_CONFIGS.report = {
 
     /* ── Sheet 5: Ekonomi — fakturerat (period) */
     var cuRev = {};
-    invInPeriod.forEach(function(i){ if(i.customerId){ cuRev[i.customerId]=(cuRev[i.customerId]||0)+(parseFloat(i.amount)||0); } });
-    var totalFak = invInPeriod.reduce(function(s,i){ return s+(parseFloat(i.amount)||0); }, 0);
+    invInPeriod.forEach(function(i){ if(i.customerId){ cuRev[i.customerId]=(cuRev[i.customerId]||0)+invAmt(i); } });
+    var totalFak = invInPeriod.reduce(function(s,i){ return s+invAmt(i); }, 0);
     sheets.push({ name: 'Fakturerat per kund', headers: ['Kund','Fakturerat (kr)','Period'], rows:
       [[periodInfo, totalFak.toFixed(2), ''], ['Kund (topp 30)','Belopp',range.label]].concat(
         Object.keys(cuRev).sort(function(a,b){return cuRev[b]-cuRev[a];}).slice(0,30)
