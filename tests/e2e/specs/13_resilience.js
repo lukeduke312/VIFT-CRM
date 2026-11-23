@@ -100,4 +100,37 @@ module.exports = [
       t.assert(after === '070-444 44 44', 'chefens obekräftade ändring skickas när chefen loggar in igen (' + after + ')');
     },
   },
+  {
+    id: 'SW-01', module: 'Robusthet', name: 'Service Worker: ny driftsättning (ny ?v=) hämtas vid omladdning — ingen gammal cachad fil; offline-start visar appen från cache',
+    async run(t) {
+      const lib = require('../lib');
+      const s = await t.world.session({ viewport: 'laptop', serviceWorkers: 'allow' });
+      try {
+        await s.open();
+        await s.page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller === null ? false : true, null, { timeout: 3000 }).catch(() => {});
+        await s.page.reload({ waitUntil: 'load' });
+        await s.page.waitForFunction(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller), null, { timeout: 10000 });
+        await s.login('admin');
+        const v = await s.eval(() => (document.querySelector('script[src*="src/pages/Router.js?v="]') || {}).src.match(/v=(\d+)/)[1]);
+        // "Driftsätt" en ny Router.js: ny ?v= i index.html och nytt innehåll i filen
+        lib.setOverride('/index.html', (html) => html.replace('src/pages/Router.js?v=' + v, 'src/pages/Router.js?v=' + v + '9'));
+        lib.setOverride('/src/pages/Router.js', (js, url) => /v=\d+9\b/.test(url) ? js + '\n;window.__e2eDeploy = true;' : js);
+        await s.page.reload({ waitUntil: 'load' });
+        await s.page.waitForFunction(() => typeof Router !== 'undefined', null, { timeout: 10000 });
+        t.assert(await s.eval(() => window.__e2eDeploy === true), 'den nya Router.js laddades efter omladdning (ingen gammal cachad fil)');
+        lib.clearOverrides();
+        // Offline-start: appskalet ska komma från cachen
+        await s.context.setOffline(true);
+        s.offline = true;
+        await s.page.reload({ waitUntil: 'load' }).catch(() => {});
+        const shell = await s.eval(() => ({ hasLogin: !!document.getElementById('login-user'), hasApp: !!document.getElementById('app'), router: typeof Router !== 'undefined' })).catch(() => ({}));
+        t.note('offline-start: ' + JSON.stringify(shell));
+        t.assert(shell.hasApp && shell.router, 'appskalet och skripten laddas offline från Service Worker-cachen');
+      } finally {
+        lib.clearOverrides();
+        s.offline = false;
+        await s.context.setOffline(false).catch(() => {});
+      }
+    },
+  },
 ];

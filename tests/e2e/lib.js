@@ -27,6 +27,11 @@ const VIEWPORTS = {
 };
 
 let server = null, baseUrl = null, browser = null;
+/* Simulerad driftsättning: ersätt en fils innehåll som servern levererar
+   (sökväg utan querysträng → funktion(originalinnehåll) → nytt innehåll). */
+const OVERRIDES = {};
+function setOverride(p, fn) { OVERRIDES[p] = fn; }
+function clearOverrides() { Object.keys(OVERRIDES).forEach((k) => delete OVERRIDES[k]); }
 
 async function start() {
   if (!server) {
@@ -36,6 +41,7 @@ async function start() {
       const f = path.join(ROOT, p);
       if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+      if (OVERRIDES[p]) return res.end(OVERRIDES[p](fs.readFileSync(f, 'utf8'), req.url));
       fs.createReadStream(f).pipe(res);
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -84,7 +90,7 @@ class World {
   async session(opts) {
     opts = opts || {};
     const vp = VIEWPORTS[opts.viewport || 'laptop'];
-    const context = await browser.newContext(Object.assign({}, vp, { serviceWorkers: 'block', locale: 'sv-SE', timezoneId: 'Europe/Stockholm' }));
+    const context = await browser.newContext(Object.assign({}, vp, { serviceWorkers: opts.serviceWorkers || 'block', locale: 'sv-SE', timezoneId: 'Europe/Stockholm' }));
     const page = await context.newPage();
     const s = new Session(this, context, page, opts);
     this.sessions.push(s);
@@ -229,4 +235,4 @@ class Session {
   async shot(file) { await this.page.screenshot({ path: file, fullPage: false }).catch(() => {}); }
 }
 
-module.exports = { start, stop, World, VIEWPORTS, TEST_USERS, PASSWORD, SUPA, get baseUrl() { return baseUrl; } };
+module.exports = { start, stop, World, VIEWPORTS, TEST_USERS, PASSWORD, SUPA, setOverride, clearOverrides, get baseUrl() { return baseUrl; } };

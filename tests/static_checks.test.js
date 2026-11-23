@@ -56,5 +56,34 @@ const all = [];
 files.forEach((f) => { precedenceHits(fs.readFileSync(f, 'utf8')).forEach((ln) => all.push(path.relative(ROOT, f) + ':' + ln)); });
 check('inget `+ (villkor) ? a : b` utan omslutande parentes i frontendkoden', all.length === 0, all.join(', '));
 
+/*
+ * 2. Cachebuster: varje lokal .js/.css i index.html laddas med ?v=N, och
+ *    varje fil som ändrats sedan den driftsatta STAGING-baslinjen
+ *    (commit 56a943d) har ett HÖGRE N än baslinjen — annars kan Service
+ *    Workern/webbläsaren servera den gamla filen (E2E: gamla cachefiler).
+ */
+const { execFileSync } = require('child_process');
+const idxHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const refRe = /(?:src|href)="((?:src\/|config)[^"?]*\.(?:js|css))(\?v=(\d+))?"/g;
+const missing = []; const cur = {};
+let mm; while ((mm = refRe.exec(idxHtml))) { if (!mm[2]) missing.push(mm[1]); else cur[mm[1]] = Number(mm[3]); }
+check('alla lokala skript/stilmallar i index.html har ?v=', missing.length === 0, missing.join(', '));
+let baseIdx = null;
+try { baseIdx = execFileSync('git', ['show', '56a943d:index.html'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { baseIdx = null; }
+if (baseIdx) {
+  const base = {}; const re2 = /(?:src|href)="([^"?]+\.(?:js|css))\?v=(\d+)"/g; let b;
+  while ((b = re2.exec(baseIdx))) base[b[1]] = Number(b[2]);
+  const stale = [];
+  Object.keys(cur).forEach((f) => {
+    if (!(f in base)) return;
+    let changed = false;
+    try { execFileSync('git', ['diff', '--quiet', '56a943d', '--', f], { cwd: ROOT, stdio: 'ignore' }); } catch (e) { changed = true; }
+    if (changed && !(cur[f] > base[f])) stale.push(f + ' (v' + cur[f] + ', baslinje v' + base[f] + ')');
+  });
+  check('ändrade filer sedan STAGING-baslinjen har högre ?v=', stale.length === 0, stale.join(', '));
+} else {
+  console.log('SKIP — git/baslinjecommit saknas; versionsjämförelsen hoppas över');
+}
+
 console.log('\nRESULT: ' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
