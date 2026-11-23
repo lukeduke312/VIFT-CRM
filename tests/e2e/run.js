@@ -20,6 +20,9 @@ const TIMEOUT = Number(opt('--timeout') || 90000);
 /* Kända, avsiktliga konsolmeddelanden som inte är fel i sig. */
 const BENIGN_CONSOLE = [/Failed to load resource/i, /ERR_BLOCKED_BY_CLIENT/i, /frame-ancestors/i];
 
+// Ett testfels kvarlämnade väntande löften får aldrig krascha hela körningen.
+process.on('unhandledRejection', (e) => { console.warn('      (ohanterat löfte efter testfel: ' + String(e && e.message || e).split('\n')[0] + ')'); });
+
 async function main() {
   fs.mkdirSync(SHOTS, { recursive: true });
   fs.readdirSync(SHOTS).forEach((f) => fs.unlinkSync(path.join(SHOTS, f)));

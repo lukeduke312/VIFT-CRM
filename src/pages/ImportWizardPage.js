@@ -26,6 +26,7 @@ const ImportWizardPage = (function () {
   var _conflicts       = {};     // rowIndex → 'skip' | 'create' | 'update'
   var _relChoices      = {};     // 'rowIndex:targetField' → chosenId (disambiguation)
   var _lastLogId       = null;
+  var _lastSaveOk      = true;   // E2E IMP-02: bekräftade servern importen?
   var _entityType      = 'customer';
   var _caps            = null;   // checkCapabilities() result
   var _validationTime  = null;   // ISO timestamp när steg 4 kördes (för konfliktsdetektering)
@@ -852,7 +853,11 @@ const ImportWizardPage = (function () {
       }
     });
 
-    persist();
+    /* E2E IMP-02 (2026-11-23): vänta på serverns svar för registret innan
+       resultatsidan visas. Tidigare stod "Import slutförd!" kvar även när
+       servern nekade skrivningen (posterna fanns bara lokalt). AO/tid går
+       via sin egen outbox (nedan) och påverkas inte av detta. */
+    _lastSaveOk = _isAoTimeImport ? true : await persist({ keys: [cfg.stateKey] });
 
     /* P0 AO/TID-FIX: speglar varje AO-/tidpost-rad till den atomiska
        RPC-vägen. Körs EFTER den synkrona lokala commit:en ovan (precis
@@ -902,9 +907,17 @@ const ImportWizardPage = (function () {
     var targetPage = cfg.targetPage || 'pg-dash';
     var targetLabel = cfg.label ? 'Till ' + cfg.label.toLowerCase() : 'Till registret';
 
+    var head = _lastSaveOk
+      ? '<div class="imp-result-icon">' + _ic('check-circle', 40) + '</div>' +
+        '<h3 style="margin:12px 0 4px">Import slutförd!</h3>'
+      : '<div class="imp-result-icon" style="color:var(--rd)">' + _ic('alert-triangle', 40) + '</div>' +
+        '<h3 style="margin:12px 0 4px;color:var(--rd)">Importen är INTE bekräftad av servern</h3>' +
+        '<p style="font-size:13px;color:var(--mt);max-width:460px;margin:6px auto 0;line-height:1.5;">' +
+          'Posterna nedan finns än så länge bara i den här webbläsaren. De skickas igen automatiskt när servern svarar ' +
+          '(senast vid nästa inloggning). Kontrollera registret innan du importerar filen igen — eller välj ' +
+          '<strong>Ångra import</strong> för att kasta dem.</p>';
     var html = '<div class="imp-result">' +
-      '<div class="imp-result-icon">' + _ic('check-circle', 40) + '</div>' +
-      '<h3 style="margin:12px 0 4px">Import slutförd!</h3>' +
+      head +
       '<div class="imp-stats-row" style="justify-content:center;margin:16px 0">' +
         _statChip(log.createdCount, 'Skapade',     'green') +
         _statChip(log.updatedCount, 'Uppdaterade', 'sky')   +

@@ -206,8 +206,13 @@ const ExportCenterPage = (function () {
         '</div>' +
       '</div>' +
 
-      /* Känsliga fält */
-      (cfg && (cfg.sensitiveFields || []).length > 0 && typeof Auth !== 'undefined' && Auth.can('objects_sensitive'))
+      /* Känsliga fält.
+         E2E EXP-01 (2026-11-23): villkoret MÅSTE ligga inom egna parenteser.
+         Utan dem band `+` hårdare än `?:` — hela den föregående HTML-
+         strängen blev villkoret (alltid sant) och sidan visade BARA denna
+         ruta: ingen registerväljare, inget format, inga kolumner, ingen
+         Exportera-knapp, för alla register och alla användare. */
+      ((cfg && (cfg.sensitiveFields || []).length > 0 && typeof Auth !== 'undefined' && Auth.can('objects_sensitive'))
         ? '<div style="margin-bottom:16px;padding:10px 14px;background:color-mix(in srgb, var(--or) 8%, transparent);border:1px solid color-mix(in srgb, var(--or) 25%, transparent);border-radius:8px;">' +
             '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">' +
               '<input type="checkbox" ' + (_includeSensitive ? 'checked' : '') +
@@ -215,7 +220,7 @@ const ExportCenterPage = (function () {
               '<span>' + _ic('alert-triangle', 13) + ' <strong>Inkludera känsliga fält</strong> — portkoder, nycklar, lösenord</span>' +
             '</label>' +
           '</div>'
-        : '' +
+        : '') +
 
       /* Kolumner — eller, för nästlade/exportFn-register, en förklarande notis */
       (isNested
