@@ -64,4 +64,22 @@ module.exports = [
       await s.page.waitForFunction(() => typeof state !== 'undefined' && state.currentUser && state.currentUser.id === 'ST-003', null, { timeout: 15000 });
     },
   },
+  {
+    id: 'AUTH-06', module: 'Inloggning och utloggning', name: 'Snabb inmatning direkt när inloggningen visas: lösenordet hamnar aldrig i e-postfältet (fördröjd autofokus)',
+    async run(t) {
+      const s = await t.world.session({ viewport: 'iphone' });
+      await s.open();
+      await s.page.waitForSelector('#login-user', { state: 'visible' });
+      await s.page.fill('#login-user', 'admin@example.test');
+      // Visa inloggningen igen (som vid utloggning) och börja direkt skriva lösenordet
+      await s.eval(() => App.showLogin());
+      await s.page.focus('#login-pass');
+      await s.page.keyboard.type('e2e-test-password', { delay: 15 });
+      await s.settle(200);
+      const v = await s.eval(() => ({ user: document.getElementById('login-user').value, pass: document.getElementById('login-pass').value }));
+      t.assert(v.user === 'admin@example.test' && v.pass === 'e2e-test-password', 'fälten har rätt innehåll: ' + JSON.stringify({ user: v.user, passLen: v.pass.length }));
+      await s.page.click('#lp-login button.btn.bp');
+      await s.page.waitForFunction(() => typeof state !== 'undefined' && state.currentUser && state.currentUser.id === 'ST-001', null, { timeout: 15000 });
+    },
+  },
 ];

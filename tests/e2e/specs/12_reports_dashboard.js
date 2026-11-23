@@ -60,7 +60,7 @@ module.exports = [
     },
   },
   {
-    id: 'NOTIF-01', module: 'Push och notifieringar', name: 'Notiser: in-app-notis visas i notislistan, kan markeras läst; push-prenumeration registreras utan att något skickas på riktigt',
+    id: 'NOTIF-01', module: 'Push och notifieringsgränssnitt', name: 'Notiser: in-app-notis visas i notislistan, kan markeras läst; push-prenumeration registreras utan att något skickas på riktigt',
     async run(t) {
       const s = await t.world.session({ viewport: 'laptop' });
       await s.login('falt');

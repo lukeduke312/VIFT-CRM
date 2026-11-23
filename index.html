@@ -611,7 +611,20 @@ const App = {
     });
   },
 
-  showLoginPanel()      { this._loginPanel('lp-login');   setTimeout(() => { const e = document.getElementById('login-user'); if(e) e.focus(); }, 80); },
+  showLoginPanel()      { this._loginPanel('lp-login');   setTimeout(() => this._focusLoginIfIdle(), 80); },
+
+  /* E2E PROP-03 (2026-11-23): den fördröjda autofokusen flyttade fokus till
+     e-postfältet även om användaren (eller en lösenordshanterare) redan hade
+     börjat skriva i lösenordsfältet — tecknen hamnade då i e-postfältet
+     ("admin@…lösenord") och inloggningen nekades med "Fyll i e-post och
+     lösenord". Fokusera bara om inget fält redan har fokus. */
+  _focusLoginIfIdle() {
+    const el = document.getElementById('login-user');
+    const ae = document.activeElement;
+    if (!el) return;
+    if (ae && ae !== document.body && ae !== document.documentElement && ae !== el) return;
+    el.focus();
+  },
   showForgotPassword()  { this._loginPanel('lp-forgot');  setTimeout(() => { const e = document.getElementById('reset-email'); if(e) e.focus(); }, 80); },
   showSetPassword()     {
     document.getElementById('login-screen').style.display = 'flex';
@@ -631,10 +644,7 @@ const App = {
     document.getElementById('app').style.display = 'none';
     this._loginPanel('lp-login');
     BrandingService.applyToLogin();
-    setTimeout(() => {
-      const el = document.getElementById('login-user');
-      if (el) el.focus();
-    }, 100);
+    setTimeout(() => this._focusLoginIfIdle(), 100);
   },
 
   /* Skicka återställningslänk */

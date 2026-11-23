@@ -94,6 +94,14 @@ async function main() {
   process.exit(summary.failed ? 1 : 0);
 }
 
+/* De 32 moduler uppdraget räknar upp, i samma ordning. */
+const MODULES = ['Inloggning och utloggning', 'Dashboard', 'Navigering och menyer', 'Kundregister', 'Kontaktpersoner', 'Fastighetsregister',
+  'Objekt och lägenheter', 'Arbetsordrar', 'Arbetsorderchecklistor', 'Arbetsorderloggar', 'Bilder och dokument', 'Materialregistrering',
+  'Tidregistrering och instämpling', 'Mina jobb', 'Personalregister', 'Användarroller och behörigheter', 'Offertmodulen',
+  'Digitala offertlänkar och kundsvar', 'Fakturering och fakturaunderlag', 'Prisgrupper och artiklar', 'Projekt', 'Rondering', 'Avvikelser',
+  'Serviceintervall', 'Återkommande AO', 'Att göra', 'Kalender', 'Säljchanser', 'Rapporter och statistik', 'Import och export',
+  'Inställningar och administration', 'Push och notifieringsgränssnitt'];
+
 function renderMd(s, results) {
   const byMod = {};
   results.forEach((r) => { (byMod[r.module] = byMod[r.module] || []).push(r); });
@@ -101,11 +109,21 @@ function renderMd(s, results) {
   md += 'Genererad ' + s.when + '. Mål: ' + s.target + '. Webbläsare: ' + s.browser + '.\n\n';
   md += '**' + s.total + ' tester: ' + s.passed + ' godkända, ' + s.failed + ' misslyckade, ' + s.blocked + ' blockerade, ' + s.known + ' kända fel (reproducerade, ej åtgärdade).**\n\n';
   md += 'Simulerad backend: klientens beteende mot en modell av Supabase-kontrakten — inte verifierat mot riktig STAGING.\n\n';
-  md += '| Modul | Godkända | Misslyckade | Kända fel | Blockerade |\n|---|---|---|---|---|\n';
-  Object.keys(byMod).forEach((m) => {
-    const rs = byMod[m];
-    md += '| ' + m + ' | ' + rs.filter((r) => r.status === 'passed').length + ' | ' + rs.filter((r) => r.status === 'failed').length + ' | ' + rs.filter((r) => r.status === 'known').length + ' | ' + rs.filter((r) => r.status === 'blocked').length + ' |\n';
+  const wf = results.filter((r) => r.kind === 'workflow');
+  const covered = MODULES.filter((m) => (byMod[m] || []).some((r) => r.status === 'passed' || r.status === 'known'));
+  md += '**Modultäckning: ' + covered.length + ' av ' + MODULES.length + ' moduler har minst ett godkänt webbläsartest. Kritiska arbetsflöden: ' + wf.filter((r) => r.status === 'passed').length + ' av ' + wf.length + ' godkända.** ';
+  md += 'Ett godkänt test visar att det beskrivna flödet fungerar — inte att varje knapp på sidan är prövad; se kolumnen Omfattning.\n\n';
+  md += '| # | Modul | Tester | Godkända | Misslyckade | Kända fel | Blockerade | Omfattning |\n|---|---|---|---|---|---|---|---|\n';
+  MODULES.forEach((m, i) => {
+    const rs = byMod[m] || [];
+    const depth = rs.some((r) => r.kind === 'workflow') ? 'arbetsflöde end-to-end' : rs.some((r) => r.kind === 'contract') ? 'UI + serverkontrakt (simulerat)' : rs.length ? 'UI-funktioner' : 'EJ TESTAD';
+    md += '| ' + (i + 1) + ' | ' + m + ' | ' + rs.map((r) => r.id).join(', ') + ' | ' + rs.filter((r) => r.status === 'passed').length + ' | ' + rs.filter((r) => r.status === 'failed').length + ' | ' + rs.filter((r) => r.status === 'known').length + ' | ' + rs.filter((r) => r.status === 'blocked').length + ' | ' + depth + ' |\n';
   });
+  const extra = Object.keys(byMod).filter((m) => MODULES.indexOf(m) === -1);
+  if (extra.length) {
+    md += '\n**Tvärgående:** ';
+    md += extra.map((m) => m + ' (' + byMod[m].filter((r) => r.status === 'passed').length + '/' + byMod[m].length + ' godkända: ' + byMod[m].map((r) => r.id).join(', ') + ')').join('; ') + '.\n';
+  }
   md += '\n## Per test\n\n| Id | Modul | Test | Resultat | Tid | Anmärkning |\n|---|---|---|---|---|---|\n';
   results.forEach((r) => {
     const note = (r.status === 'failed' || r.status === 'known') ? r.error : r.status === 'blocked' ? r.reason : (r.notes || []).join('; ');

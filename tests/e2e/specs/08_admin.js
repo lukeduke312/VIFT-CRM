@@ -13,7 +13,7 @@ const rolePerms = (t, id) => (t.fake.get('roles').find((r) => r.id === id) || {}
 
 module.exports = [
   {
-    id: 'ROLE-02', module: 'Roller och behörigheter', name: 'Ändra rolls behörighet: serverfel → inget "Roll uppdaterad", behörigheten oförändrad; lyckad ändring slår igenom för rollens användare',
+    id: 'ROLE-02', module: 'Användarroller och behörigheter', name: 'Ändra rolls behörighet: serverfel → inget "Roll uppdaterad", behörigheten oförändrad; lyckad ändring slår igenom för rollens användare',
     async run(t) {
       const a = await t.world.session({ viewport: 'desktop' });
       await a.login('admin');
@@ -44,7 +44,7 @@ module.exports = [
     },
   },
   {
-    id: 'STAFF-02', module: 'Personal', name: 'Byta roll på en person: serverfel → inget "Sparat"; lyckat byte sparas på servern',
+    id: 'STAFF-02', module: 'Personalregister', name: 'Byta roll på en person: serverfel → inget "Sparat"; lyckat byte sparas på servern',
     async run(t) {
       const a = await t.world.session({ viewport: 'laptop' });
       await a.login('admin');

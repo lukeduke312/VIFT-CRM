@@ -1,0 +1,100 @@
+{
+  "when": "2026-11-23T09:03:30.321Z",
+  "checks": [
+    {
+      "id": "VERSIONER",
+      "ok": true,
+      "detail": "77 versionsatta filer driftsatta; 27 nyare i repot, 0 ÄLDRE i repot än i STAGING, 4 bara i repot"
+    },
+    {
+      "id": "PROJEKT",
+      "ok": true,
+      "detail": "driftsatt klient pekar på projekt ett annat projekt än LIVE (inte LIVE)"
+    },
+    {
+      "id": "START",
+      "ok": true,
+      "detail": "inloggningsformulär visas, JS-fel: 0, laddtid 6720 ms"
+    },
+    {
+      "id": "KONSOL",
+      "ok": null,
+      "detail": "1 konsolfel: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED"
+    },
+    {
+      "id": "NÄTVERK",
+      "ok": true,
+      "detail": "kontaktade Supabase-projekt: inga före inloggning; misslyckade anrop: 1"
+    },
+    {
+      "id": "PUBLIK OFFERT",
+      "ok": true,
+      "detail": "ogiltig token visar: \"Digital offert — säker länk 🖨 Skriv ut ⚠ Offerten hittades inte. Kontrollera att länken är korrekt.\""
+    },
+    {
+      "id": "REST OINLOGGAD",
+      "ok": true,
+      "detail": "GET store (bara nycklar) utan inloggning → HTTP 401"
+    },
+    {
+      "id": "LÖNEDATA OINLOGGAD",
+      "ok": true,
+      "detail": "GET vift_timeEntries utan inloggning → HTTP 401"
+    },
+    {
+      "id": "EF work-orders-list",
+      "ok": true,
+      "detail": "utan JWT → HTTP 403"
+    },
+    {
+      "id": "EF time-entries-list",
+      "ok": true,
+      "detail": "utan JWT → HTTP 403"
+    },
+    {
+      "id": "EF store-key-write (läsaktion)",
+      "ok": true,
+      "detail": "readHashes utan JWT → HTTP 403"
+    },
+    {
+      "id": "EF offer-token-validate",
+      "ok": true,
+      "detail": "ogiltig token → HTTP 404"
+    }
+  ],
+  "newerInRepo": [
+    "src/styles/components.css 103→104",
+    "src/data/storage.js 20→22",
+    "src/data/state.js 63→70",
+    "src/services/AuthService.js 22→23",
+    "src/services/WorkOrderService.js 24→26",
+    "src/services/TimeService.js 20→22",
+    "src/services/AOTimeSyncService.js 3→8",
+    "src/services/BillingQueueService.js 9→10",
+    "src/services/RecurringOrderService.js 6→7",
+    "src/services/ServiceIntervalService.js 3→5",
+    "src/services/ImportExportConfigs.js 11→12",
+    "src/pages/ImportWizardPage.js 10→11",
+    "src/pages/ExportCenterPage.js 5→6",
+    "src/components/Modal.js 8→9",
+    "src/components/Sidebar.js 31→32",
+    "src/pages/Router.js 30→31",
+    "src/pages/CustomersPage.js 36→37",
+    "src/pages/WorkOrdersPage.js 66→67",
+    "src/pages/WorkOrderDetailPage.js 81→84",
+    "src/pages/TimePage.js 13→14",
+    "src/pages/InvoicesPage.js 34→35",
+    "src/pages/RecurringPage.js 15→16",
+    "src/pages/PropertyDetailPage.js 30→32",
+    "src/pages/PageShells.js 173→180",
+    "src/pages/ReportsPage.js 9→10",
+    "src/pages/RonderingUtforandePage.js 12→13",
+    "src/pages/RonderingWizardPage.js 9→10"
+  ],
+  "onlyInRepo": [
+    "src/styles/tokens.css",
+    "src/styles/reset.css",
+    "src/services/WorkOrderImageService.js",
+    "src/pages/ServiceIntervalsPage.js"
+  ]
+}

@@ -59,7 +59,7 @@ async function sweep(t, s, label, viewportChecks) {
 
 const tests = [
   {
-    id: 'PAGES-01', module: 'Navigering och sidmenyer', name: 'Alla 37 registrerade sidor öppnas utan JS-fel och utan "undefined/NaN" (admin, laptop)',
+    id: 'PAGES-01', module: 'Navigering och menyer', name: 'Alla 37 registrerade sidor öppnas utan JS-fel och utan "undefined/NaN" (admin, laptop)',
     async run(t) {
       const s = await t.world.session();
       await s.login('admin');
@@ -70,7 +70,7 @@ const tests = [
     },
   },
   {
-    id: 'PAGES-02', module: 'Navigering och sidmenyer', name: 'Sidomenyn: varje synligt menyval öppnar sin sida; tillbaka-knappen fungerar',
+    id: 'PAGES-02', module: 'Navigering och menyer', name: 'Sidomenyn: varje synligt menyval öppnar sin sida; tillbaka-knappen fungerar',
     async run(t) {
       const s = await t.world.session();
       await s.login('admin');
