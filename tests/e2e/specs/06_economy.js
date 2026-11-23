@@ -316,4 +316,71 @@ module.exports = [
       t.assert(bad.length === 0, bad.join('; '));
     },
   },
+  {
+    id: 'ECO-01', kind: 'workflow', module: 'Fakturering och fakturaunderlag', name: 'Löpande AO: 80 min à 595 kr + material 3 × 33,33 kr → fakturakö → fakturautkast → ROT; öresavrundning och ROT på arbete inkl. moms (samma regel som offerten)',
+    async run(t) {
+      const s = await t.world.session({ viewport: 'desktop' });
+      await s.login('admin');
+      const aoId = await s.eval(() => WorkOrderService.create({ title: 'Löpande E2E', customerId: 'K-003', priceType: 'timpris', priceGroupId: 'PG-003', staff: ['ST-001'], status: 'pågående', scheduledDate: new Date().toISOString().slice(0, 10) }).id);
+      await s.page.waitForFunction((id) => !(state.workOrders.find((a) => a.id === id) || {})._pendingSync, aoId, { timeout: 8000 });
+      // Tid via Tid-sidan (riktiga fält)
+      await s.go('pg-tid');
+      await s.page.fill('#mt-date', '2026-11-20');
+      await s.page.fill('#mt-start', '08:00');
+      await s.page.fill('#mt-end', '09:20');
+      await s.eval((id) => { const e = document.getElementById('mt-ao'); e.value = id; e.dispatchEvent(new Event('change', { bubbles: true })); }, aoId);
+      await s.eval(() => { const e = document.getElementById('mt-pg'); if (e) { e.value = 'PG-003'; e.dispatchEvent(new Event('change', { bubbles: true })); } });
+      await s.page.locator('.page.active button', { hasText: 'Spara tid' }).click();
+      await s.waitToast(/^Tid sparad$/, 8000);
+      // Material via AO-detaljen
+      await s.go('pg-ao-detail', { aoId });
+      await s.eval(() => WorkOrderDetailPage.openAddMaterial());
+      await s.page.waitForSelector('.modal-overlay.open #mat-name');
+      await s.page.fill('#mat-name', 'E2E Silikon');
+      await s.page.fill('#mat-qty', '3');
+      await s.page.fill('#mat-sell', '33.33');
+      await s.clickModalButton(/Lägg till/);
+      await s.settle(1500);
+      await s.eval((id) => WorkOrderService.setStatus ? WorkOrderService.setStatus(id, 'klar') : WorkOrderService.update(id, { status: 'klar' }), aoId);
+      await s.settle(1500);
+      // Fakturakö
+      const e = await t.world.session({ viewport: 'desktop' });
+      await e.login('ekonomi');
+      await e.go('pg-invoices');
+      await e.eval(() => InvoicesPage._setView && InvoicesPage._setView('queue'));
+      await e.settle(400);
+      const cands = await e.eval((id) => BillingQueueService.getCandidates().filter((c) => c.workOrderId === id).map((c) => ({ id: c.id, type: c.sourceType, q: c.quantity, p: c.unitPrice, a: c.amount, sel: c.selectable, issues: c.issues })), aoId);
+      t.note('underlag: ' + JSON.stringify(cands));
+      const time = cands.find((c) => c.type === 'time'); const mat = cands.find((c) => c.type === 'material');
+      t.assert(time && time.sel && time.q === 1.33 && time.a === 791.35, 'tid: 80 min = 1,33 h × 595 = 791,35 kr (' + JSON.stringify(time) + ')');
+      t.assert(mat && mat.sel && Math.abs(mat.a - 99.99) < 0.001, 'material: 3 × 33,33 = 99,99 kr (' + JSON.stringify(mat) + ')');
+      for (const c of cands) await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c.id + '\')"]').check();
+      await e.eval((ids) => InvoicesPage._openCreateConfirm(ids), cands.map((c) => c.id));
+      await e.clickModalButton(/Skapa fakturautkast/);
+      await e.settle(1500);
+      const inv = t.fake.get('invoices').find((i) => (i.lines || []).some((l) => (l.sourceRefs || []).some((r) => r.workOrderId === aoId)));
+      t.assert(inv, 'fakturautkast på servern');
+      // Rabatt 10 % och ROT via fakturavyn
+      await e.go('pg-inv-detail', { invoiceId: inv.id });
+      await e.eval(() => InvoiceDetailPage.openTaxReduction());
+      await e.page.waitForSelector('.modal-overlay.open #tr-type');
+      await e.page.selectOption('#tr-type', 'rot');
+      await e.page.fill('#tr-basis', '791.35');
+      await e.page.dispatchEvent('#tr-basis', 'input');
+      const autoRot = Number(await e.page.inputValue('#tr-amount'));
+      const offerRule = Math.round((791.35 + Math.round(791.35 * 0.25)) * 0.30); // OfferCalc/_calcLineRutAmount: 30 % av arbete inkl. moms
+      t.note('ROT auto i fakturan: ' + autoRot + ' kr; offertens regel: ' + offerRule + ' kr');
+      t.assert(autoRot === offerRule, 'ROT i fakturan räknas som i offerten (30 % av arbetskostnad inkl. moms): ' + autoRot + ' vs ' + offerRule);
+      await e.clickModalButton(/^Spara$/);
+      await e.settle(1200);
+      t.note('toasts efter ROT: ' + (await e.toasts()).join(' / ') + ' | anrop: ' + t.fake.calls.filter((c) => /invoice-write/.test(c.action)).map((c) => c.action + '=' + c.status).join(','));
+      const srv = t.fake.get('invoices').find((i) => i.id === inv.id);
+      const sum = await e.eval((i) => InvoiceService.calcSummary(i), srv);
+      t.note('faktura: ex ' + sum.exVat + ', moms ' + sum.vat + ', totalt ' + sum.totalInclVat + ', ROT ' + sum.trAmount + ', kunden betalar ' + sum.customerPays);
+      t.assert(sum.exVat === 891.34 && sum.vat === 222.84 && Math.abs(sum.totalInclVat - 1114.18) < 0.001, 'ex 891,34 / moms 222,84 / totalt 1 114,18 (öre)');
+      t.assert(sum.customerPays > 0 && Math.abs(sum.customerPays - (1114.18 - offerRule)) < 0.001, 'kunden betalar totalt − ROT');
+      const billingRejected = (await e.toasts()).some((m) => /faktureringsstatusen kunde inte sparas/.test(m));
+      if (billingRejected) t.note('OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen "fakturerad" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk.');
+    },
+  },
 ];

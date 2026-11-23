@@ -432,7 +432,7 @@ class FakeSupabase {
       case 'lineUpdate': { const l = (inv.lines || []).find((x) => x.id === b.lineId); if (!l) return DEFINITE(404, 'line_not_found'); Object.assign(l, clone(b.patch)); break; }
       case 'lineDelete': inv.lines = (inv.lines || []).filter((x) => x.id !== b.lineId); break;
       case 'discountSet': inv.discount = clone(b.discount); break;
-      case 'taxReductionSet': inv.taxReduction = { type: b.type, amount: b.amount, basis: b.basis, note: b.note }; break;
+      case 'taxReductionSet': { const tr = b.taxReduction || b; inv.taxReduction = { type: tr.type, amount: tr.amount, basis: tr.basis, note: tr.note }; break; }
       case 'metaUpdate': Object.assign(inv, clone(b.patch)); break;
       case 'setStatus': inv.status = b.status; break;
       case 'draftDelete': { const i = invs.indexOf(inv); invs.splice(i, 1); save(); return { status: 200, body: { ok: true, activityLog: this.get('activityLog') } }; }

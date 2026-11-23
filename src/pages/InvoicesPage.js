@@ -1422,6 +1422,7 @@ const InvoiceDetailPage = {
           <div class="fg"><label>Underlag – berättigat arbete ex moms (kr)</label>
             <input type="number" id="tr-basis" value="${tr.basis||0}" min="0" step="100"
               oninput="InvoiceDetailPage._trCalc()"></div>
+          <div style="font-size:11px;color:var(--mt);margin:-4px 0 8px;">Avdraget räknas på arbetskostnaden inkl. moms (25 %), samma regel som i offerten.</div>
           <div class="fg"><label>Avdragsbelopp (kr) <span style="color:var(--mt);font-size:11px;">— auto-beräknat, kan justeras</span></label>
             <input type="number" id="tr-amount" value="${tr.amount||0}" min="0" step="100"></div>
           <div class="fg"><label>Notering (visas på faktura)</label>
@@ -1455,7 +1456,13 @@ const InvoiceDetailPage = {
     const amtEl  = document.getElementById('tr-amount');
     if (!amtEl || type === 'none') return;
     const rate   = type === 'rut' ? 0.50 : 0.30;
-    amtEl.value  = Math.round(basis * rate);
+    /* E2E ECO-01 (2026-11-23): RUT/ROT räknas på arbetskostnaden INKL.
+       moms — samma regel som offerten (OffersPage._calcLineRutAmount:
+       underlag ex moms + moms 25 % på underlaget, × 30 %/50 %). Tidigare
+       räknades procenten på underlaget ex moms, så fakturan gav ett ~20 %
+       lägre avdrag än offerten för samma arbete (791,35 kr: 237 i st.f. 297). */
+    const inclVat = basis + Math.round(basis * 25 / 100);
+    amtEl.value  = Math.round(inclVat * rate);
   },
 
   showPrintView() {
