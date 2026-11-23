@@ -365,7 +365,7 @@ const WorkOrderService = {
     else text = `${by} kopplade loss arbetsordern från projekt ${oldProj ? oldProj.name : oldProjectId}`;
 
     const log = (ao.log || []).slice();
-    log.push({ id: 'L' + Date.now(), type: 'project_relation_changed', text, userName: by, timestamp: new Date().toISOString() });
+    log.push({ id: newEntryId('L'), type: 'project_relation_changed', text, userName: by, timestamp: new Date().toISOString() });
     this._update_internal(id, { projectId: newProjectId, log });
     return { ok: true, workOrder: getAO(id) };
   },
@@ -1279,7 +1279,7 @@ const WorkOrderService = {
       ao.staff = [];
       ao.status = 'pool';
       ao.responsibleStaffId = '';
-      ao.log.push({ id: 'L'+Date.now(), type: 'staff_changed', text: `${by} flyttade ordern till arbetspoolen`, userName: by, timestamp: new Date().toISOString() });
+      ao.log.push({ id: newEntryId('L'), type: 'staff_changed', text: `${by} flyttade ordern till arbetspoolen`, userName: by, timestamp: new Date().toISOString() });
     } else {
       const staffName = id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; };
       const added   = staffIds.filter(id => !oldStaff.includes(id));
@@ -1289,11 +1289,11 @@ const WorkOrderService = {
       if (ao.status === 'pool' && staffIds.length > 0) ao.status = 'planerad';
       const t = Date.now();
       if (added.length > 0)
-        ao.log.push({ id: 'L'+t,   type: 'staff_added',       text: `${by} lade till: ${added.map(staffName).join(', ')}`,   userName: by, timestamp: new Date().toISOString() });
+        ao.log.push({ id: newEntryId('L'),   type: 'staff_added',       text: `${by} lade till: ${added.map(staffName).join(', ')}`,   userName: by, timestamp: new Date().toISOString() });
       if (removed.length > 0)
-        ao.log.push({ id: 'L'+(t+1), type: 'staff_removed',   text: `${by} tog bort: ${removed.map(staffName).join(', ')}`, userName: by, timestamp: new Date().toISOString() });
+        ao.log.push({ id: newEntryId('L'), type: 'staff_removed',   text: `${by} tog bort: ${removed.map(staffName).join(', ')}`, userName: by, timestamp: new Date().toISOString() });
       if (responsibleStaffId !== oldResp)
-        ao.log.push({ id: 'L'+(t+2), type: 'staff_responsible', text: `${by} satte ansvarig: ${responsibleStaffId ? staffName(responsibleStaffId) : 'Ingen'}`, userName: by, timestamp: new Date().toISOString() });
+        ao.log.push({ id: newEntryId('L'), type: 'staff_responsible', text: `${by} satte ansvarig: ${responsibleStaffId ? staffName(responsibleStaffId) : 'Ingen'}`, userName: by, timestamp: new Date().toISOString() });
     }
 
     ao.updatedAt = new Date().toISOString();
@@ -1315,7 +1315,7 @@ const WorkOrderService = {
     const staffName = `${user.firstName} ${user.lastName}`.trim();
     ao.log = ao.log || [];
     ao.log.push({
-      id: 'L' + Date.now(), type: 'taken_from_pool',
+      id: newEntryId('L'), type: 'taken_from_pool',
       text: `${staffName} tog jobbet från arbetspoolen`,
       userName: staffName, timestamp: new Date().toISOString()
     });

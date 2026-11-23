@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Bygger STAGING-publiceringspaketet (VIFT CRM) i en arbetskopia av
+# STAGING-repot. Ändrar ingenting i STAGING eller LIVE.
+#
+#   tools/build-staging-package.sh <staging-arbetskopia> <publicerad-commit>
+#
+# - Grund: den PUBLICERADE STAGING-versionen (Loopia), t.ex. branchen
+#   chatgpt/staging-all-blockers-2026-11-17 (26ce058).
+# - Klientfiler kopieras från HEAD i detta repo (docs/, tests/, supabase/,
+#   tools/ följer inte med).
+# - config.js behålls från STAGING.
+# - STAGING-överlägget återinförs med trevägssammanslagning mot
+#   baslinjen 56a943d (där LIVE-överlägget infördes) för storage.js,
+#   AuthService.js och index.html; public-offer.html får STAGING-adressen.
+# - Avbryter vid sammanslagningskonflikt eller om LIVE-projektet finns kvar
+#   någon annanstans än i återställningslänkarna i AuthService.js.
+set -euo pipefail
+W="$1"; DEPLOYED="$2"; BASE=56a943d
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+LIVE_REF=hjplzjsbbowiyoyhdghc
+STG_URL=$(git -C "$W" show "$DEPLOYED:src/data/storage.js" | sed -n "s/^const SUPABASE_URL *= *'\(.*\)';/\1/p")
+[ -n "$STG_URL" ] || { echo "Hittar inte STAGING-adressen i publicerad storage.js"; exit 1; }
+case "$STG_URL" in *$LIVE_REF*) echo "Publicerad storage.js pekar på LIVE — avbryter"; exit 1;; esac
+git -C "$W" checkout -q "$DEPLOYED" -- .
+cd "$REPO"
+n=0
+for f in $(git ls-tree -r --name-only HEAD | grep -v '^docs/\|^tests/\|^supabase/\|^tools/\|^\.gitignore$\|^CLAUDE.md$\|^README'); do
+  case "$f" in config.js|src/data/storage.js|src/services/AuthService.js|index.html|public-offer.html) continue;; esac
+  if [ ! -f "$W/$f" ] || ! cmp -s <(git show "HEAD:$f") "$W/$f"; then mkdir -p "$W/$(dirname "$f")"; git show "HEAD:$f" > "$W/$f"; n=$((n+1)); fi
+done
+T=$(mktemp -d)
+for f in src/data/storage.js src/services/AuthService.js index.html; do
+  git show "HEAD:$f" > "$T/cur"; git show "$BASE:$f" > "$T/base"; git -C "$W" show "$DEPLOYED:$f" > "$T/oth"
+  if ! git merge-file -p "$T/cur" "$T/base" "$T/oth" > "$W/$f"; then echo "KONFLIKT i $f — avbryter"; exit 1; fi
+done
+git show HEAD:public-offer.html | sed "s#'https://$LIVE_REF.supabase.co'#'$STG_URL'#" > "$W/public-offer.html"
+rm -rf "$T"
+bad=$(cd "$W" && grep -rln "$LIVE_REF" --include=*.js --include=*.html --include=*.json . | grep -v '^./_staging_integration' | grep -v '^./src/services/AuthService.js$' || true)
+[ -z "$bad" ] || { echo "LIVE-projektet finns kvar i: $bad"; exit 1; }
+for r in $(cd "$W" && grep -ohE '(src|assets)/[^"? ]+\.(js|css|png|svg|json)' index.html public-offer.html | sort -u); do [ -f "$W/$r" ] || { echo "SAKNAS: $r"; exit 1; }; done
+echo "Paket byggt i $W: $n klientfiler + 4 överläggsfiler. Inga LIVE-anrop; alla resurser finns."

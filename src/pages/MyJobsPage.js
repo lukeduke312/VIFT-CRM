@@ -306,7 +306,7 @@ const MyJobsPage = {
     if (ao && user) {
       ao.log = ao.log || [];
       ao.log.push({
-        id:        'L' + Date.now(),
+        id:        newEntryId('L'),
         type:      'clock_in',
         text:      `${user.firstName} ${user.lastName} stämplade in`,
         userName:  `${user.firstName} ${user.lastName}`.trim(),
@@ -402,7 +402,7 @@ const MyJobsPage = {
       if (ao) {
         ao.log = ao.log || [];
         ao.log.push({
-          id:        'L' + (Date.now() + 1),
+          id:        newEntryId('L'),
           type:      'clock_out',
           text:      `${entry.staffName} stämplade ut — ${TimeService.fmtDuration(entry.minutes)}`,
           userName:  entry.staffName,

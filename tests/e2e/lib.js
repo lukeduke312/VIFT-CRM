@@ -14,8 +14,11 @@ const path = require('path');
 const { chromium, devices } = require('playwright');
 const { FakeSupabase, TEST_USERS, PASSWORD } = require('./fake-backend');
 
-const ROOT = path.resolve(__dirname, '..', '..');
-const SUPA = 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+/* VIFT_E2E_ROOT/VIFT_E2E_SUPA: kör sviten mot ett publiceringspaket (t.ex.
+   STAGING-paketet med STAGING-överlägg). Alla anrop till SUPA fångas av den
+   simulerade servern — ingen trafik når den riktiga Supabase-servern. */
+const ROOT = process.env.VIFT_E2E_ROOT ? path.resolve(process.env.VIFT_E2E_ROOT) : path.resolve(__dirname, '..', '..');
+const SUPA = process.env.VIFT_E2E_SUPA || 'https://hjplzjsbbowiyoyhdghc.supabase.co';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
 const VIEWPORTS = {
@@ -83,7 +86,12 @@ function parseMultipart(buf, contentType) {
 class World {
   constructor(opts) {
     this.opts = opts || {};
-    this.fake = new FakeSupabase(this.opts.backend);
+    /* VIFT_E2E_KEYPERMS=staging: hela sviten körs mot STAGING:s faktiska
+       skrivregler per nyckel (store-key-write v3) i stället för den
+       tillåtande standardmodellen. */
+    const backend = Object.assign({}, this.opts.backend || {});
+    if (process.env.VIFT_E2E_KEYPERMS === 'staging' && !backend.keyPerms) backend.keyPerms = require('./staging-key-perms.js');
+    this.fake = new FakeSupabase(backend);
     this.sessions = [];
   }
 
@@ -145,6 +153,9 @@ class Session {
       }
       // Externa resurser (fonter, kartor) blockeras och noteras — inga anrop lämnar maskinen.
       try { this.blockedHosts.add(new URL(url).host); } catch (e) {}
+      // Anrop till ett ANNAT Supabase-projekt än det paketet ska använda (t.ex. LIVE
+      // från ett STAGING-paket) är ett fel — blockeras och underkänner testet.
+      if (/\.supabase\.co\//.test(url)) this.pageErrors.push('OTILLÅTEN SUPABASE-ADRESS: ' + url.split('?')[0]);
       return route.abort('blockedbyclient');
     });
   }

@@ -685,7 +685,11 @@ function _vfWarnUnconfirmed(detail, opts) {
   if (opts && (opts.detailed || (Array.isArray(opts.keys) && opts.keys.length))) return;
   if (!detail || typeof detail !== 'object' || detail.ok) return;
   const r = detail.results || {};
-  const bad = Object.keys(r).filter(function(k) { return r[k] === 'failed' || r[k] === 'unverified' || r[k] === 'blocked'; });
+  /* activityLog är historik, inte användarens data, och är redan undantagen
+     från journalen. STAGING:s store-key-write v3
+     kräver admin_manage för den — utan undantaget fick varje fältarbetare
+     en varning efter varje åtgärd (E2E STG-01, 2026-11-23). */
+  const bad = Object.keys(r).filter(function(k) { return k !== 'activityLog' && (r[k] === 'failed' || r[k] === 'unverified' || r[k] === 'blocked'); });
   if (!bad.length && !detail.degraded && !detail.error) return;
   if (Date.now() - _vfLastUnconfirmedWarnAt < 5000) return;
   _vfLastUnconfirmedWarnAt = Date.now();
@@ -2311,6 +2315,14 @@ function fkr(n) {
 function cap(s) {
   if (!s) return '';
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/* Unikt id för poster som flera enheter kan skapa samtidigt (AO-loggposter).
+   Tidigare prefix + Date.now(): två enheter under samma millisekund fick
+   samma id och servern behöll bara den ena (E2E AO-07C, 2026-11-23). */
+function newEntryId(prefix) {
+  var r = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10);
+  return String(prefix || '') + Date.now() + '-' + r;
 }
 
 function relDate(isoStr) {

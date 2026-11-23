@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-23T12:00:17.456Z",
+  "when": "2026-11-23T14:20:16.518Z",
   "checks": [
     {
       "id": "VERSIONER",
@@ -14,7 +14,7 @@
     {
       "id": "START",
       "ok": true,
-      "detail": "inloggningsformulär visas, JS-fel: 0, laddtid 3644 ms"
+      "detail": "inloggningsformulär visas, JS-fel: 0, laddtid 4878 ms"
     },
     {
       "id": "KONSOL",
@@ -63,15 +63,15 @@
     }
   ],
   "newerInRepo": [
-    "src/styles/components.css 103→106",
+    "src/styles/components.css 103→107",
     "src/styles/forms.css 13→14",
     "src/styles/dashboard.css 30→31",
     "src/data/storage.js 20→22",
-    "src/data/state.js 63→71",
+    "src/data/state.js 63→72",
     "src/data/DashboardConfig.js 11→12",
     "src/shared/OfferCalc.js 1→2",
     "src/services/AuthService.js 22→23",
-    "src/services/WorkOrderService.js 24→28",
+    "src/services/WorkOrderService.js 24→29",
     "src/services/TimeService.js 20→22",
     "src/services/AOTimeSyncService.js 3→9",
     "src/services/InvoiceService.js 17→18",
@@ -87,8 +87,8 @@
     "src/pages/Router.js 30→31",
     "src/pages/Dashboard.js 54→55",
     "src/pages/CustomersPage.js 36→39",
-    "src/pages/WorkOrdersPage.js 66→68",
-    "src/pages/WorkOrderDetailPage.js 81→87",
+    "src/pages/WorkOrdersPage.js 66→69",
+    "src/pages/WorkOrderDetailPage.js 81→88",
     "src/pages/TimePage.js 13→15",
     "src/pages/ContractsPage.js 2→3",
     "src/pages/ProjectsPage.js 4→6",
@@ -100,7 +100,7 @@
     "src/pages/RonderingPage.js 10→11",
     "src/pages/ReportsPage.js 9→10",
     "src/pages/CalendarPage.js 2→3",
-    "src/pages/MyJobsPage.js 15→16",
+    "src/pages/MyJobsPage.js 15→17",
     "src/pages/RonderingUtforandePage.js 12→13",
     "src/pages/RonderingWizardPage.js 9→11"
   ],

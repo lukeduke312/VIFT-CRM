@@ -1,14 +1,14 @@
 {
   "summary": {
-    "when": "2026-11-23T13:13:13.874Z",
+    "when": "2026-11-23T14:43:29.277Z",
     "target": "simulerad backend (FakeSupabase)",
     "browser": "Chromium (Playwright)",
-    "total": 107,
-    "passed": 105,
-    "failed": 0,
+    "total": 108,
+    "passed": 104,
+    "failed": 2,
     "blocked": 1,
     "known": 1,
-    "durationMs": 586855
+    "durationMs": 599511
   },
   "results": [
     {
@@ -18,12 +18,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 961,
+      "ms": 940,
       "notes": [
         "Laddade 15 AO och 7 kunder"
       ],
       "metrics": {
-        "inloggning → app laddad (ms)": 905
+        "inloggning → app laddad (ms)": 882
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -38,7 +38,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 406,
+      "ms": 368,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -56,7 +56,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 870,
+      "ms": 951,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -72,7 +72,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1654,
+      "ms": 1677,
       "notes": [
         "ekonomi såg 6 poster, fältarbetaren 3"
       ],
@@ -90,7 +90,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1143,
+      "ms": 1122,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -106,7 +106,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 974,
+      "ms": 994,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -122,14 +122,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14410,
+      "ms": 14385,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
         "medel renderingstid per sida (ms)": 363,
-        "långsammaste sida (ms)": 383
+        "långsammaste sida (ms)": 376
       },
       "consoleErrors": [],
       "netErrors": [
@@ -146,7 +146,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8691,
+      "ms": 8746,
       "notes": [
         "23 menyval klickade"
       ],
@@ -164,13 +164,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14609,
+      "ms": 14614,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (desktop, ms)": 363
+        "medel renderingstid (desktop, ms)": 362
       },
       "consoleErrors": [],
       "netErrors": [
@@ -187,7 +187,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14640,
+      "ms": 14490,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -210,7 +210,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14515,
+      "ms": 14569,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -233,7 +233,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14573,
+      "ms": 14546,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -256,13 +256,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14548,
+      "ms": 14476,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (android, ms)": 364
+        "medel renderingstid (android, ms)": 363
       },
       "consoleErrors": [],
       "netErrors": [
@@ -279,18 +279,28 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3429,
+      "ms": 3479,
       "notes": [
         "besked: Kund skapad"
       ],
       "metrics": {
-        "spara ny kund → bekräftelse (ms)": 260
+        "spara ny kund → bekräftelse (ms)": 339
       },
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 7
+      "requests": 8
     },
     {
       "id": "CUS-02",
@@ -299,7 +309,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2183,
+      "ms": 2097,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -315,11 +325,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2611,
+      "ms": 2627,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
       "requests": 7
@@ -331,7 +347,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2505,
+      "ms": 2477,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -347,7 +363,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1683,
+      "ms": 1634,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -363,7 +379,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2543,
+      "ms": 2529,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -381,7 +397,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3034,
+      "ms": 2958,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -401,7 +417,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2960,
+      "ms": 2827,
       "notes": [
         "objektformulär: new-obj-type, new-obj-num, new-obj-name, new-obj-entrance, new-obj-stairwell, new-obj-floor, new-obj-area, new-obj-status, new-obj-access"
       ],
@@ -423,7 +439,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2626,
+      "ms": 2748,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -439,7 +455,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9005,
+      "ms": 8880,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -455,7 +471,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5002,
+      "ms": 5035,
       "notes": [
         "serverkontrollen är modellerad — måste upprepas mot riktig STAGING"
       ],
@@ -477,18 +493,32 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2138,
+      "ms": 2182,
       "notes": [
         "besked: AO-(sparas…) skapad"
       ],
       "metrics": {
-        "skapa AO → serverbekräftad (ms)": 1265
+        "skapa AO → serverbekräftad (ms)": 1250
       },
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 11
     },
     {
       "id": "AO-02",
@@ -497,14 +527,28 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4135,
+      "ms": 4096,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 11
     },
     {
       "id": "LOG-01",
@@ -513,17 +557,30 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2876,
+      "ms": 2871,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 12
     },
     {
       "id": "LOG-02",
@@ -532,20 +589,32 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1692,
+      "ms": 1624,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 12
     },
     {
       "id": "LOG-03",
@@ -554,7 +623,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3603,
+      "ms": 3333,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -579,17 +648,30 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4055,
+      "ms": 4168,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 13
     },
     {
       "id": "LOG-05",
@@ -598,17 +680,30 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2847,
+      "ms": 2705,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 13
     },
     {
       "id": "CHK-01",
@@ -617,7 +712,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5992,
+      "ms": 5808,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -636,16 +731,25 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3068,
+      "ms": 3169,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 9
     },
     {
       "id": "AO-03",
@@ -654,16 +758,25 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2807,
+      "ms": 2821,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 9
     },
     {
       "id": "AO-04",
@@ -672,7 +785,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1726,
+      "ms": 1685,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -690,7 +803,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1693,
+      "ms": 1625,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -711,14 +824,28 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3352,
+      "ms": 3292,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 18
     },
     {
       "id": "AO-07",
@@ -727,30 +854,47 @@
       "kind": "ui",
       "status": "known",
       "error": "Kontroll misslyckades: båda loggposterna borde finnas kvar — loggen skickas som hel array (G5)",
-      "ms": 5307,
+      "ms": 5216,
       "notes": [
         "A kvar: false, B kvar: true"
       ],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden"
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 20
+      "requests": 24
     },
     {
       "id": "AO-07B",
       "module": "Arbetsorderloggar",
       "name": "G5 med serverstöd (append_log): samtidiga loggposter från två enheter bevaras båda; borttagning tar bara bort sin post; ingen hel-array-patch",
       "kind": "ui",
-      "status": "passed",
-      "error": null,
-      "ms": 4562,
+      "status": "failed",
+      "error": "Kontroll misslyckades: båda posterna finns på servern",
+      "ms": 3463,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -761,8 +905,11 @@
         "POST /functions/v1/ao-time-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
-      "screenshots": [],
-      "requests": 21
+      "screenshots": [
+        "screenshots/AO-07B-1.png",
+        "screenshots/AO-07B-2.png"
+      ],
+      "requests": 16
     },
     {
       "id": "AO-09",
@@ -771,19 +918,35 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3462,
+      "ms": 3315,
       "notes": [],
       "metrics": {
         "patch_ao per loggpost": 1
       },
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden"
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 15
     },
     {
       "id": "IMG-01",
@@ -792,17 +955,30 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2263,
+      "ms": 2219,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 14
     },
     {
       "id": "IMG-02",
@@ -811,7 +987,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1752,
+      "ms": 1646,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -830,7 +1006,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3263,
+      "ms": 3203,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -852,7 +1028,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 914,
+      "ms": 863,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -870,16 +1046,29 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 3088,
+      "ms": 2982,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/ao-time-write → 409 {\"error\":\"attested_locked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 19
+      "requests": 21
     },
     {
       "id": "TIME-02",
@@ -888,14 +1077,28 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2666,
+      "ms": 2560,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 20
     },
     {
       "id": "TIME-03",
@@ -904,14 +1107,32 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5236,
+      "ms": 5043,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 21
+      "requests": 25
     },
     {
       "id": "TIME-04",
@@ -920,18 +1141,31 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2453,
+      "ms": 2362,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
-        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-de08bf8c-2ad7-4514-91c1-7fe4f8935405 : forbidden"
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-fe8bf439-c7dd-4ce7-8cf6-a1892e10846f : forbidden"
       ],
       "netErrors": [
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 11
     },
     {
       "id": "TIME-05",
@@ -940,16 +1174,29 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9335,
+      "ms": 9239,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
-        "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}"
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 24
+      "requests": 26
     },
     {
       "id": "TIME-06",
@@ -958,7 +1205,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 864,
+      "ms": 840,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -974,14 +1221,24 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2821,
+      "ms": 2743,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 7
+      "requests": 8
     },
     {
       "id": "FLOW-01",
@@ -990,19 +1247,23 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 18391,
+      "ms": 18034,
       "notes": [
         "offertguide: 3952 / 988 / 4940 kr; OfferCalc: 3952 / 988 / 4940",
         "AO prismodell fast, fast pris 3952",
-        "underlag: [{\"id\":\"fixed:AO-04c901d2-fe19-429f-94bc-af3af0bbcc8e\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"fixed:AO-93adaa48-8462-4e6f-ad08-46c12d6d38c1\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
         "faktura: ex 3952, moms 988, totalt 4940"
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-04c901d2-fe19-429f-94bc-af3af0bbcc8e : forbidden"
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[WorkOrderService] Serverskrivning avvisad för AO-93adaa48-8462-4e6f-ad08-46c12d6d38c1 : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
@@ -1016,7 +1277,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3618,
+      "ms": 3572,
       "notes": [
         "guide 1890 / 473 / 2363; OfferCalc 2100 − 210 = 1890, moms 473, totalt 2363"
       ],
@@ -1034,7 +1295,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10903,
+      "ms": 10836,
       "notes": [
         "toasts vid serverfel: Sparar… / Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1046,7 +1307,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "GET /functions/v1/offer-token-validate?t=0e44180cb290bb71d0981e07956381bb18987982fa064e112469ea797104d49f → 403 {\"error\":\"revoked\"}"
+        "GET /functions/v1/offer-token-validate?t=c57d81ab67e4f48d8b5a0446116931b39e580c30323188fe9b52399e8e7f99cc → 403 {\"error\":\"revoked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1059,7 +1320,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 988,
+      "ms": 957,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1078,11 +1339,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1302,
+      "ms": 1231,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
       "requests": 10
@@ -1094,7 +1361,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 895,
+      "ms": 833,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1112,7 +1379,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9365,
+      "ms": 9303,
       "notes": [
         "5 offerter kontrollerade"
       ],
@@ -1130,19 +1397,23 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11156,
+      "ms": 10741,
       "notes": [
-        "underlag: [{\"id\":\"time:TID-afbc4067-54e7-461d-b2f2-fbf4f9df68f1\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-21b4c343-9cf4-472b-bbf8-11e5a6c18e58:M1795439283111\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"time:TID-5e1693a1-73cb-4684-95b9-b4863386dd75\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-3208cc56-ee08-4d2c-b741-acf7d3e174bb:M1795444681584\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
         "ROT auto i fakturan: 297 kr; offertens regel: 297 kr",
-        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-21b4c343-9cf4-472b-bbf8-11e5a6c18e58: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
+        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-3208cc56-ee08-4d2c-b741-acf7d3e174bb: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
         "faktura: ex 891.34, moms 222.84, totalt 1114.18, ROT 297, kunden betalar 817.1800000000001",
         "OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen \"fakturerad\" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk."
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-21b4c343-9cf4-472b-bbf8-11e5a6c18e58 : forbidden"
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[WorkOrderService] Serverskrivning avvisad för AO-3208cc56-ee08-4d2c-b741-acf7d3e174bb : forbidden"
       ],
       "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
@@ -1156,7 +1427,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 12159,
+      "ms": 11839,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1172,7 +1443,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6830,
+      "ms": 6952,
       "notes": [
         "toasts: Sparar… / Utförandet kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1187,7 +1458,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 15
     },
     {
       "id": "SVC-03",
@@ -1196,7 +1467,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6060,
+      "ms": 5889,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1212,7 +1483,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5605,
+      "ms": 5445,
       "notes": [
         "toasts: Sparar… / Rollen \"Tekniker / Personal\" kunde inte sparas — behörigheterna är OFÖRÄNDRADE — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1236,7 +1507,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4809,
+      "ms": 4773,
       "notes": [
         "toasts: Sparar… / Ändringen för Sofia Lindgren kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1260,7 +1531,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6974,
+      "ms": 6967,
       "notes": [
         "toasts: Sparat / Varning: servern bekräftade inte den senaste ändringen (artiklar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1284,14 +1555,33 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 12213,
+      "ms": 12095,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 36
+      "requests": 41
     },
     {
       "id": "RON-02",
@@ -1300,7 +1590,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4220,
+      "ms": 4118,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1319,9 +1609,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5290,
+      "ms": 5320,
       "notes": [
-        "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (aktivitetslogg, ronderingar). Den kan vara osparad — kontrollera och försök igen. / Ronderingen kunde inte skapas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
+        "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (ronderingar). Den kan vara osparad — kontrollera och försök igen. / Ronderingen kunde inte skapas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {},
       "consoleErrors": [
@@ -1355,9 +1645,9 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8768,
+      "ms": 8705,
       "notes": [
-        "AO för tillfället: AO-433430f3-6e2a-4412-85f5-a80c338aa449 2026-11-23"
+        "AO för tillfället: AO-abfc8d88-23a0-4910-a0df-34a77afcdbf7 2026-11-23"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -1375,9 +1665,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6868,
+      "ms": 7003,
       "notes": [
-        "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (säljchanser, aktivitetslogg). Den kan vara osparad — kontrollera och försök igen. / Ändringen kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
+        "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (säljchanser). Den kan vara osparad — kontrollera och försök igen. / Ändringen kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {},
       "consoleErrors": [
@@ -1409,7 +1699,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6555,
+      "ms": 6596,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1423,18 +1713,29 @@
       "module": "Att göra",
       "name": "Skapa uppgift åt fältarbetare → fältarbetaren ser och klarmarkerar den på mobilen → servern; fältarbetaren kan inte ta bort andras uppgift",
       "kind": "ui",
-      "status": "passed",
-      "error": null,
-      "ms": 8631,
-      "notes": [
-        "serverns per-nyckel-behörighet för activities kan inte verifieras i simulerad backend (G4) — upprepa mot STAGING"
-      ],
+      "status": "failed",
+      "error": "Kontroll misslyckades: klarmarkerad på servern",
+      "ms": 5971,
+      "notes": [],
       "metrics": {},
-      "consoleErrors": [],
-      "netErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activities: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activities: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activities: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activities: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
       "unmodeled": [],
-      "screenshots": [],
-      "requests": 17
+      "screenshots": [
+        "screenshots/TASK-01-1.png",
+        "screenshots/TASK-01-2.png"
+      ],
+      "requests": 13
     },
     {
       "id": "CAL-01",
@@ -1443,7 +1744,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7177,
+      "ms": 7070,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1459,7 +1760,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6586,
+      "ms": 6577,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1475,7 +1776,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7154,
+      "ms": 7172,
       "notes": [
         "toasts: Varning: servern bekräftade inte den senaste ändringen (kunder, importloggar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1506,7 +1807,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4781,
+      "ms": 4816,
       "notes": [
         "property: ﻿Namn;Fastighetsbeteckning;Adress;Postnummer;Ort;Objektnummer;Fastighetstyp;Byggnadsår;Antal lägenheter;Total yta (m²);Förvaltningsform;Driftområde;Status;Antec",
         "propertyObject: ﻿Namn;Objektnummer;Typ (lagenhet/lokal/etc.);Adress;Postnummer;Ort;Port/Entré;Trapphus;Våning;Yta (m²);Status;Beskrivning\r",
@@ -1526,7 +1827,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4113,
+      "ms": 4081,
       "notes": [
         "förväntat fakturerat (exkl. moms): 17975"
       ],
@@ -1544,7 +1845,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7644,
+      "ms": 7498,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1560,7 +1861,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3144,
+      "ms": 3035,
       "notes": [
         "simulerade push-utskick: 0 (inga riktiga utskick — send-push registreras bara)"
       ],
@@ -1578,7 +1879,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3543,
+      "ms": 3607,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1603,18 +1904,31 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5575,
+      "ms": 5502,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [],
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/ao-time-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 20
     },
     {
       "id": "RES-03",
@@ -1623,12 +1937,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10667,
+      "ms": 10600,
       "notes": [
-        "besked efter 9340 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
+        "besked efter 9303 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {
-        "feedback_ms": 9337
+        "feedback_ms": 9301
       },
       "consoleErrors": [
         "[persist] merge-skrivning avvisad för vift_customers: network_error",
@@ -1647,7 +1961,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8961,
+      "ms": 8873,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1669,7 +1983,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1597,
+      "ms": 1410,
       "notes": [
         "offline-start: {\"hasLogin\":true,\"hasApp\":true,\"router\":true}"
       ],
@@ -1678,7 +1992,7 @@
       "netErrors": [],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 7
     },
     {
       "id": "PERM-01",
@@ -1687,7 +2001,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 956,
+      "ms": 831,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1709,7 +2023,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2825,
+      "ms": 2519,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1738,7 +2052,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15881,
+      "ms": 15597,
       "notes": [
         "admin: 26 tillåtna, 0 nekade",
         "chef: 20 tillåtna, 6 nekade",
@@ -1761,24 +2075,24 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 40278,
+      "ms": 40182,
       "notes": [
         "observation: pollningen var pausad så länge sökfältet hade fokus",
-        "mätvärden: {\"inloggning_till_klar_ms\":1221,\"anrop_vid_start\":5,\"ao_lista_ms\":936,\"ao_rader\":0,\"ao_detalj_ms\":97,\"kundlista_ms\":393,\"dashboard_ms\":275,\"rapport_tid_ms\":118,\"loneunderlag_ms\":720,\"kalender_ms\":137}"
+        "mätvärden: {\"inloggning_till_klar_ms\":1126,\"anrop_vid_start\":5,\"ao_lista_ms\":951,\"ao_rader\":0,\"ao_detalj_ms\":96,\"kundlista_ms\":447,\"dashboard_ms\":308,\"rapport_tid_ms\":149,\"loneunderlag_ms\":655,\"kalender_ms\":125}"
       ],
       "metrics": {
-        "inloggning_till_klar_ms": 1221,
+        "inloggning_till_klar_ms": 1126,
         "anrop_vid_start": 5,
-        "ao_lista_ms": 936,
+        "ao_lista_ms": 951,
         "ao_rader": 0,
-        "ao_detalj_ms": 97,
-        "kundlista_ms": 393,
-        "dashboard_ms": 275,
-        "rapport_tid_ms": 118,
-        "loneunderlag_ms": 720,
-        "kalender_ms": 137,
-        "kundsokning_ms": 299,
-        "sparning_kund_till_ack_ms": 38,
+        "ao_detalj_ms": 96,
+        "kundlista_ms": 447,
+        "dashboard_ms": 308,
+        "rapport_tid_ms": 149,
+        "loneunderlag_ms": 655,
+        "kalender_ms": 125,
+        "kundsokning_ms": 277,
+        "sparning_kund_till_ack_ms": 42,
         "anrop_i_vila_35s": 5,
         "js_heap_mb": 16
       },
@@ -1795,7 +2109,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4218,
+      "ms": 4043,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1811,7 +2125,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2720,
+      "ms": 2792,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1829,7 +2143,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 21881,
+      "ms": 21801,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1863,7 +2177,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2888,
+      "ms": 2871,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1879,7 +2193,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5724,
+      "ms": 5751,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1895,7 +2209,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4870,
+      "ms": 4846,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1911,7 +2225,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2166,
+      "ms": 2062,
       "notes": [
         "räknare: 13 aktiva jobb · 2 platser på kartan · 10 kunde inte placeras"
       ],
@@ -1929,7 +2243,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1689,
+      "ms": 1683,
       "notes": [
         "händelser: 3"
       ],
@@ -1947,7 +2261,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3388,
+      "ms": 3319,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1963,7 +2277,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3050,
+      "ms": 3118,
       "notes": [
         "laptop: {\"nameShown\":true,\"clipped\":false,\"text\":\"Solgläntan Hus A OBJ-001\"}",
         "iphone: {\"nameShown\":false,\"clipped\":false,\"text\":\"OBJ-001\"}"
@@ -1982,7 +2296,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3314,
+      "ms": 3250,
       "notes": [
         "laptop: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":232}",
         "iphone: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":232}"
@@ -2001,7 +2315,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2849,
+      "ms": 2838,
       "notes": [
         "badge: 2/4 utförda"
       ],
@@ -2021,7 +2335,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4039,
+      "ms": 4071,
       "notes": [
         "badge A: 1/4 utförda · 2 pågår"
       ],
@@ -2042,7 +2356,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4025,
+      "ms": 3973,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2064,7 +2378,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1383,
+      "ms": 1359,
       "notes": [
         "efter synk: utford (servern: utförd)"
       ],
@@ -2085,7 +2399,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2082,
+      "ms": 2077,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2104,7 +2418,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2497,
+      "ms": 2503,
       "notes": [
         "iphone: {\"scroll\":false,\"minBtn\":36,\"below\":true,\"right\":false,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}",
         "laptop: {\"scroll\":false,\"minBtn\":28,\"below\":false,\"right\":true,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}"
@@ -2126,7 +2440,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2425,
+      "ms": 2451,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2136,6 +2450,41 @@
       "unmodeled": [],
       "screenshots": [],
       "requests": 10
+    },
+    {
+      "id": "STG-01",
+      "module": "Sparning och synk",
+      "name": "STAGING-regler: fältarbetarens aktivitetsloggpost nekas av servern (admin_manage) — ingen återkommande falsk varning; en nekad ändring av användarens egna data varnar fortfarande",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 22412,
+      "notes": [
+        "aktivitetslogg-skrivningar nekade av servern: 3; toasts: [\"\",\"\",\"\"]"
+      ],
+      "metrics": {},
+      "consoleErrors": [
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_activityLog: forbidden",
+        "[persist] merge-skrivning avvisad för vift_activityLog: forbidden",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
+        "[Storage.writeBusinessKeyMerge] avvisad för vift_customers: forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
     }
   ]
 }

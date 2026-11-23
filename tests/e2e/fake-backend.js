@@ -290,6 +290,10 @@ class FakeSupabase {
   }
   /* MODELL för skrivbehörighet per nyckel (store-key-write-källan saknas i repot). */
   canWriteKey(fullKey, perms) {
+    /* opts.keyPerms: exakt behörighetstabell per nyckel, t.ex. STAGING:s
+       store-key-write v3 (KEY_PERMISSIONS i _staging_integration/server/
+       candidate/20261117/store-key-write/index.ts). Nyckel utan post nekas. */
+    if (this.opts.keyPerms) { const req = this.opts.keyPerms[fullKey]; return !!req && this.has(perms, req); }
     const k = fullKey.replace(/^vift_/, '');
     if (k === 'roles' || k === 'settings') return this.has(perms, 'admin_manage');
     if (k === 'staff') return this.has(perms, 'staff_manage') || this.has(perms, 'admin_manage');

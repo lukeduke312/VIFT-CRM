@@ -289,6 +289,23 @@ module.exports = [
     },
   },
   {
+    id: 'AO-07C', world: { backend: { logOps: true } }, module: 'Arbetsorderloggar', name: 'Två enheter sparar loggpost under samma millisekund: båda posterna får egna id och finns kvar på servern (tidigare samma id → den ena tappades tyst trots "sparad")',
+    async run(t) {
+      // Samma klocka på båda enheterna (deterministisk version av ett verkligt, sällsynt sammanträffande).
+      const FROZEN = () => { const t0 = 1795000000000; Date.now = () => t0; };
+      const a = await t.world.session(); await a.page.addInitScript(FROZEN); await a.login('falt2');
+      const b = await t.world.session({ viewport: 'iphone' }); await b.page.addInitScript(FROZEN); await b.login('falt2');
+      await openAO(a, 'AO-007'); await openAO(b, 'AO-007');
+      await addLog(a, 'E2E samma ms A'); await a.waitToast(/Loggpost sparad/, 8000);
+      await addLog(b, 'E2E samma ms B'); await b.waitToast(/Loggpost sparad/, 8000);
+      const log = t.fake.get('workOrders').find((x) => x.id === 'AO-007').log || [];
+      const ids = log.filter((l) => /E2E samma ms/.test(l.text)).map((l) => l.id);
+      t.note('id: ' + ids.join(', '));
+      t.assert(log.some((l) => l.text === 'E2E samma ms A') && log.some((l) => l.text === 'E2E samma ms B'), 'båda posterna finns på servern');
+      t.assert(new Set(ids).size === ids.length, 'posterna har olika id');
+    },
+  },
+  {
     id: 'AO-09', module: 'Arbetsordrar', name: 'En AO-ändring = en serverskrivning (ingen extra geokodnings-patch när adressen inte kan geokodas)',
     async run(t) {
       const s = await t.world.session();

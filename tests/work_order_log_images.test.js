@@ -49,7 +49,7 @@ function setup(opts) {
     AOTimeSyncService: { hasPendingEntry: () => !!opts.otherPending },
   };
   vm.createContext(sb);
-  vm.runInContext(extractFn(STATE, 'esc') + '\n' + extractFn(STATE, 'isSafeImageDataUrl') + '\n' + WODP + '\n;globalThis.__P = WorkOrderDetailPage;', sb);
+  vm.runInContext(extractFn(STATE, 'esc') + '\n' + extractFn(STATE, 'newEntryId') + '\n' + extractFn(STATE, 'isSafeImageDataUrl') + '\n' + WODP + '\n;globalThis.__P = WorkOrderDetailPage;', sb);
   const P = sb.__P;
   P.aoId = 'AO-1';
   P._rerenderTimeline = () => {};

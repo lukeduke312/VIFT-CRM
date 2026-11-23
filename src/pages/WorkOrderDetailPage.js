@@ -894,7 +894,7 @@ const WorkOrderDetailPage = {
           ao.updatedAt = new Date().toISOString();
           ao.log = ao.log || [];
           ao.log.push({
-            id: 'L' + Date.now(), type: 'estimated_time_changed',
+            id: newEntryId('L'), type: 'estimated_time_changed',
             text: `${by} satte uppskattad tid: ${TimeService.fmtDuration(h * 60 + m)}${comment ? ' — ' + comment : ''}`,
             userName: by, timestamp: new Date().toISOString()
           });
@@ -1080,7 +1080,7 @@ const WorkOrderDetailPage = {
     const by = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : 'Okänd';
     ao.log = ao.log || [];
     ao.log.push({
-      id: 'LOG-' + Date.now(),
+      id: newEntryId('LOG-'),
       type: 'pricing_corrected',
       text: `${by} ändrade prissättning: "${beforeLabel}" → "${afterLabel}"`,
       userName: by,
@@ -1201,7 +1201,7 @@ const WorkOrderDetailPage = {
           `${c.entryId} (${c.before.priceGroupName || 'Ej satt'}/${fmt(c.before.hourRate||0)} kr → ${c.after.priceGroupName}/${fmt(c.after.hourRate)} kr)`
         ).join(', ');
         freshAo.log.push({
-          id: 'LOG-' + Date.now(),
+          id: newEntryId('LOG-'),
           type: 'pricing_timeentry_repair',
           text: `${by} reparerade prissättning på ${changes.length} tidpost${changes.length===1?'':'er'}: ${summary}`,
           userName: by,
@@ -1618,7 +1618,7 @@ const WorkOrderDetailPage = {
       }
       if (!ao.log) ao.log = [];
       const entry = {
-        id: 'LOG-' + Date.now(),
+        id: newEntryId('LOG-'),
         type: imagePath ? 'photo' : 'log',
         text: text || '',
         imageData: '',
@@ -1732,7 +1732,7 @@ const WorkOrderDetailPage = {
     if (!ao.log) ao.log = [];
     const who = state.currentUser ? `${state.currentUser.firstName} ${state.currentUser.lastName}`.trim() : '';
     const entry = {
-      id: 'LOG-' + Date.now(),
+      id: newEntryId('LOG-'),
       type: 'uppföljning',
       text: `${type}: ${comment}`,
       followUpDate: date,
