@@ -107,7 +107,7 @@ class World {
     /* VIFT_E2E_SERVER=ny: serverändringarna som är förberedda för STAGING-GO
        (installationsplan §2i/§2j): per-post-regel för uppgifter,
        appendActivity (append-only aktivitetslogg) och work-order-log-write. */
-    if (process.env.VIFT_E2E_SERVER === 'ny') Object.assign(backend, { activitiesPolicy: true, activityAppend: true, logOps: backend.logOps !== false });
+    if (process.env.VIFT_E2E_SERVER === 'ny') ['activitiesPolicy', 'activityAppend', 'logOps'].forEach((k) => { if (backend[k] === undefined) backend[k] = true; }); // ett test som uttryckligen anger dagens server behåller det
     this.fake = new FakeSupabase(backend);
     this.sessions = [];
   }

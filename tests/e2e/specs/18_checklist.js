@@ -138,8 +138,13 @@ module.exports = [
       await s.waitToast(/Kunde inte nå servern|Inget sparades/i, 25000);
       const r2 = await rowState(s, 'k3');
       t.assert(r2.st !== 'utford', 'svar som aldrig kom: visas inte som utförd (osäkert utfall)');
-      await s.eval(() => DataSync._poll());
-      await s.page.waitForFunction((sel) => { const r = document.querySelector(sel); return r && r.dataset.status !== 'ej_paborjad'; }, row('k3'), { timeout: 5000 }).catch(() => {});
+      // Synken hoppas medvetet över medan en skrivning pågår (R1) — som appens
+      // återkommande cykel: synka om tills serverns läge syns (högst ~10 s).
+      for (let i = 0; i < 10; i++) {
+        await s.eval(() => DataSync._poll());
+        const done = await s.page.waitForFunction((sel) => { const r = document.querySelector(sel); return r && r.dataset.status !== 'ej_paborjad'; }, row('k3'), { timeout: 1000 }).then(() => true).catch(() => false);
+        if (done) break;
+      }
       const r3 = await rowState(s, 'k3');
       t.note('efter synk: ' + r3.st + ' (servern: ' + (srvItem(t, 'k3').done ? 'utförd' : 'ej') + ')');
       t.assert(r3.st === (srvItem(t, 'k3').done ? 'utford' : 'ej_paborjad'), 'efter synk visar raden serverns faktiska läge');

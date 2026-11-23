@@ -6,7 +6,7 @@
 const STAGING_KEY_PERMS = require('../staging-key-perms.js');
 module.exports = [
   {
-    id: 'STG-01', world: { backend: { keyPerms: STAGING_KEY_PERMS } }, module: 'Sparning och synk', name: 'STAGING-regler: fältarbetarens aktivitetsloggpost nekas av servern (admin_manage) — ingen återkommande falsk varning; en nekad ändring av användarens egna data varnar fortfarande',
+    id: 'STG-01', world: { backend: { keyPerms: STAGING_KEY_PERMS, activityAppend: false, activitiesPolicy: false } }, module: 'Sparning och synk', name: 'STAGING-regler: fältarbetarens aktivitetsloggpost nekas av servern (admin_manage) — ingen återkommande falsk varning; en nekad ändring av användarens egna data varnar fortfarande',
     async run(t) {
       const s = await t.world.session({ viewport: 'iphone' });
       await s.login('falt2');

@@ -12,6 +12,22 @@ Statusord i rapporten:
 
 ---
 
+## Slutuppdrag 2026-11-24 — inför STAGING
+
+Gjort utan Lucas dator och utan att ändra någon driftsatt miljö. Allt är byggt och lokalt testat; **inget är installerat eller STAGING-verifierat**. Det samlade GO-underlaget finns i installationsplanen §6.
+
+| Del | Status | Bevis |
+|---|---|---|
+| TASK-01: fältarbetare kan inte klarmarka uppgifter | Serverrättning byggd: per-post-regel i `store-key-write` (§2i) | Policy 26/26 mot riktig TS-källa; E2E TASK-01 och TASK-02 med STAGING-reglerna efter installation |
+| Aktivitetslogg: säker, spårbar historik | Byggd: `appendActivity` med serverns användare och tid, append-only, atomisk RPC (§2i) | SQL mot PostgreSQL; E2E ACT-01 |
+| G5: samtidiga loggposter | Byggd: ny EF `work-order-log-write` med radlåst RPC (§2j), utan att `ao-time-write` ändras | SQL inklusive samtidighet; E2E AO-07/07B/07C/07D och LOG-01–05 på båda vägarna |
+| Serverberoenden | Inventerade och förberedda: `offer-public-pdf` (§2h), bilagor PATCH (§2e), checklista (§2g), bilder (§2b + migration), projektdokument (§2k) | `tsc --strict` OK, utom en typvarning för `crypto.subtle.digest` i 2 befintliga EF:er |
+| Riktig STAGING-testning | `tests/staging/e2e-real.js` (R0, F2–F5) i E2E-bibliotekets riktiga läge | 15/15 lokalt mot paketet |
+| Paket | v2 (47 filer), MANIFEST-v2, återställning verifierad 44/44 mot dagens STAGING, v1 märkt ERSATT, WinSCP-instruktion | `verify-staging-deploy.sh` |
+| Backup och testkonton | SQL för kontroll och backup; instruktion för testkonton utan bred token | Installationsplan §6.1 |
+
+__SLUTUPPDRAG_TESTER__
+
 ## A. Funktioner
 
 ### A1. Rättat

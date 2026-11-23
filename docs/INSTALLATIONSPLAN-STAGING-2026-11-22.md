@@ -20,6 +20,16 @@ Direktkontroll mot Supabase STAGING `yyzljlqyzzcbxmcdbual` efter Claudes slutrap
 
 ## 0. Vad som har ändrats sedan förra versionen
 
+**2026-11-24 — slutuppdrag inför STAGING (allt i repot, inget installerat).**
+- **TASK-01:** per-post-regel för uppgifter i `store-key-write` (§2i).
+- **Aktivitetsloggen:** serverstyrd och append-only, via `appendActivity` och en ny RPC (§2i).
+- **G5:** ny Edge Function `work-order-log-write` med en atomisk RPC (§2j). `ao-time-write` ändras inte.
+- **Bildbucket:** som migrationsfil (§2b).
+- **Projektdokument:** inventerade (§2k).
+- **Testverktyg:** `tests/staging/e2e-real.js` för riktig STAGING (§4a).
+- **Paket:** publiceringspaket v2 ersätter v1. WinSCP-instruktion: `docs/WINSCP-STAGING-PUBLICERING.md`. Backup-SQL: `supabase/manual/staging_backup_och_kontroll_2026-11-24.sql`.
+- **§6** är omskriven till det samlade GO-underlaget.
+
 **2026-11-23 (sen kväll) — rättelse av testverktygen (§4a).** Det tidigare `tests/e2e/staging-authz.js` kallades "ändrar inga data". Det stämde inte:
 - En tillåten `writeMerge` uppdaterar `store.updated_at` och `vift_lastChanged`, även utan faktisk post.
 - G9-kontrollen gjorde en no-op-`patch_ao` på en befintlig AO, vilket kan uppdatera AO:ns `updatedAt` och synksignaturen.
@@ -119,8 +129,7 @@ Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid sy
 
 ### 2b. Nya Supabase-objekt för AO-loggbilder (separat GO, i denna ordning)
 
-1. Bucket `workorder-images` (privat, 10 MB, `image/jpeg|jpg|png|webp`) — SQL i `src/services/WorkOrderImageService.js` filhuvud.
-2. Storage-policies SELECT/INSERT/DELETE — alla `service_role`-only (samma filhuvud).
+1–2. Kör `supabase/migrations/20261124000003_workorder_images_bucket.sql`. Den skapar en privat bucket (10 MB, jpeg/png/webp) och policies som bara gäller `service_role`. Migrationen är idempotent och innehåller samma SQL som tidigare stod i filhuvudet i `WorkOrderImageService.js`.
 3. `supabase functions deploy work-order-image-url`
 4. `supabase functions deploy work-order-image-upload`
 5. `supabase functions deploy work-order-image-delete`
@@ -171,9 +180,76 @@ Funktionen är skrivfri: den läser offerten via token och har rate-limit i minn
 
 **Övrigt som saknas i STAGING (oförändrat, ingen regression):** `project-document-upload` och `project-document-url` anropas av den nuvarande STAGING-klienten också. Projektdokument fungerar därför inte i STAGING, varken före eller efter. Detta förs till masterplanen.
 
-### 2f. G5 serverdel — append_log/remove_log (FÖRSLAG, ej installerbart nu)
+### 2f. ~~G5 serverdel i ao-time-write~~ — ERSATT av §2j (2026-11-24)
 
-Klienten (§2a) sonderar själv om `ao-time-write` stöder `append_log`; svarar servern `400 unknown_action` (som i STAGING idag) används den gamla vägen med hela loggen — oförändrat beteende. Serverdelen (RPC-förslag i `supabase/migrations/20261123000001_PROPOSAL_work_order_log_ops.sql`, ändring i `ao-time-write` beskriven i `docs/G5-APPEND-LOG.md`) kan inte färdigställas förrän `ao-time-write`:s källa finns i repot (G4).
+Lösningen kräver inte längre källan till `ao-time-write` (G4). I stället finns en egen Edge Function (§2j), byggd på samma mönster som `work-order-checklist-resolve`. Förslaget `20261123000001_PROPOSAL_…` är märkt som ersatt och ska inte köras.
+
+### 2i. store-key-write: uppgifter (TASK-01) och serverstyrd aktivitetslogg (separat GO)
+
+**Problem:**
+- `store-key-write` v3 kräver `admin_manage` för `vift_activities`. Fältarbetare kan därför inte klarmarka sina uppgifter (E2E TASK-01 mot STAGING-reglerna).
+- Samma behörighet krävs för `vift_activityLog`. Vanliga användares händelser sparas aldrig, och den som har skrivrätt kan skriva om historiken.
+
+**Lösning:** källan är `supabase/functions/store-key-write/`. Den installerade v3 är införd oförändrad i commit `5b239b8`, och ändringarna ligger i senare commits.
+
+- **Per-post-regel för uppgifter** (`activities-policy.ts`):
+  - Admin och arbetsledare (`ao_edit` + `ao_view_all`) har full åtkomst.
+  - **Ansvarig** får ändra status, klardatum, "klar av" (bara sig själv) och förfallodatum på sin egen tilldelade uppgift.
+  - **Skapare** får ändra sin egen uppgift, men inte flytta den till någon annan.
+  - Att skapa eller radera en uppgift är bara tillåtet för egna uppgifter.
+  - Allt annat nekas, och en enda otillåten post nekar hela anropet.
+  - Regeln bedöms på `previous`. Den installerade RPC:n tillämpar en ändring bara när serverns aktuella post exakt motsvarar `previous` (kontrollerat i `20261108000001`), så ett förfalskat `previous` ger konflikt och ingen skrivning.
+  - Ingen databasändring krävs för regeln.
+- **Aktivitetslogg** (`activity-log.ts` + migration `20261124000001_activity_log_append.sql`):
+  - Ny åtgärd `appendActivity`. Servern godtar bara kända händelsetyper.
+  - `userId` och tidpunkt sätts från den verifierade JWT:n; klientens värden ignoreras.
+  - Text och referensfält har längdgränser.
+  - Posten läggs till atomiskt först under radlås, omsändning är idempotent och loggen kapas till 500 poster.
+  - `write`/`writeMerge` av `vift_activityLog` nekas för alla (append-only).
+- **Klienten (§2a):**
+  - sonderar stödet och skickar en post i taget via en liten utkorg;
+  - skickar aldrig hela listan;
+  - beter sig som förut mot en äldre server.
+
+**Installation:**
+1. Backup enligt §6.1 F2.
+2. Jämför den deployade `store-key-write` med commit `5b239b8` (`supabase functions download store-key-write`). Finns det andra skillnader: stoppa och stäm av.
+3. Kör migrationen `20261124000001`.
+4. `supabase functions deploy store-key-write`. Den tar med `stamp-status.ts`, `activities-policy.ts`, `activity-log.ts` och `../_shared/vift-auth.ts`, där repots version är en ren utökning av den installerade.
+
+**Test:**
+- J1b (`authz-mutation`): `vift_activities` för fältarbetare. Ny post åt annan och ändring av annans uppgift ska nekas.
+- TASK-01 manuellt.
+- J13: aktivitetslogg. En fältarbetares åtgärd syns i loggen med rätt användare.
+
+**Rollback:** deploya den sparade versionen av `store-key-write` och kör `drop function public.activity_log_append(jsonb,int);`.
+
+### 2j. work-order-log-write — atomiska AO-loggposter, G5 (separat GO)
+
+Ny Edge Function `supabase/functions/work-order-log-write/` med migration `20261124000002_work_order_log_ops.sql`.
+
+- **`append_log`** lägger till en post under radlås. Samma id med samma innehåll räknas som omsändning och ger ingen ändring. Samma id med annat innehåll ger `id_collision`.
+- **`remove_log`** tar bort en post. Saknas posten görs ingen skrivning.
+- Servern stämplar `staffId` på nya poster. Borttagning tillåts för den egna posten eller med `ao_edit`; äldre poster utan `staffId` kräver `ao_edit`.
+- Synlighet: `ao_view_all`, annars tilldelad eller pool.
+- Inga andra AO-fält än `log` och `updatedAt` ändras.
+- Klienten skickar `append_log`/`remove_log`, även från utkorgen, hit när funktionen finns. En 404 betyder att den gamla vägen används.
+
+**Installation:**
+1. Kör migrationen.
+2. `supabase functions deploy work-order-log-write`.
+
+**Test:** E10, som förväntas lyckas efter installationen, och F4 i `e2e-real.js`.
+
+**Rollback:** ta bort funktionen och kör `drop function` för de två RPC:erna. Klienten faller då tillbaka automatiskt.
+
+### 2k. Projektdokument — saknas i STAGING (separat GO, valfri)
+
+- `project-document-upload` och `project-document-url` ger 404 i STAGING, men både dagens och den nya klienten anropar dem. Projektdokument fungerar därför inte i STAGING i dag, och det är ingen regression.
+- Källa och migrationer finns i repot: `20260907000001_storage_project_documents.sql`, `20260908000001_project_documents_atomic_rpc.sql` och `20260908000002_project_documents_r2_lastchanged_and_rls.sql`.
+- **Före GO:** kör del A i backup-SQL:en (A2/A3) för att se om RPC:n och bucketen redan finns. Kör bara de migrationer som saknas, och deploya sedan de två funktionerna.
+- `tsc`: `project-document-upload` har samma typvarning för `crypto.subtle.digest` som `offer-attachment-upload`. Det är en typdefinitionsfråga; Deno kör koden.
+
 
 ---
 
@@ -274,7 +350,8 @@ Ett anrop som **kan** uppdatera databasen kallas aldrig läsande.
 |---|---|---|---|
 | 0 | `tests/e2e/staging-readonly.js` | Inget. Oinloggat; anropen nekas innan något läses eller skrivs. Källverifierat för EF:er i repot; ogiltig offerttoken ger 404 före skrivning. | Tillåtet (läsande) |
 | 1 | `tests/staging/authz-read.js` | Inga affärsdata. Skickar bara läsåtgärder (`readWithHash`, `readHashes`, `readAllWithHashes`, GET); allt annat underkänner körningen. Inloggningen skriver i auth-schemat (session, refresh-token, `last_sign_in_at`). För `work-orders-list`/`store-key-write` (G4) bygger "läsande" på kontraktet, inte på granskad kod. En självkontroll avbryter med avvikelse om en skrivåtgärd skulle ha skickats. | GO + testkonton |
-| 2 | `tests/staging/authz-mutation.js` | Skapar och tar bort egna märkta testposter. Metadata ändras och återställs inte (se nedan). | Uttryckligt GO för mutationstest + testkonton |
+| 2 | `tests/staging/authz-mutation.js` | Skapar och tar bort egna märkta testposter. Metadata ändras och återställs inte (se nedan). |
+| 2 | `tests/staging/e2e-real.js` | Webbläsartest mot den publicerade webbplatsen och riktig server:<br>• R0: sidor per roll<br>• F2: checklista<br>• F3: stämpling på två enheter, exakt en tidpost<br>• F4: samtidiga loggposter<br>• F5: nätavbrott<br>Skapar egna test-AO och tidposter, med journal, städning och redovisning av automatiska ändringar. Det kan förekomma även vid inloggning, eftersom serviceintervallens dagliga kontroll kan skapa uppgifter. Ekonomikedjan körs som manuella testfall (O1–O3, F1, J4, J5). Lokalt prövat 15/15 mot paketet och den simulerade servern (`tests/staging_e2e_real.test.js`). | Uttryckligt GO för mutationstest + testkonton |
 
 **Testkonton (nivå 1–2):**
 - Ett konto per roll: admin (ao_create + ao_edit + ao_view_all + tidadmin), fältarbetare, valfritt en andra fältarbetare, arbetsledare, ekonomi och begränsad.
@@ -378,74 +455,80 @@ Detta bevisar verktyget, **inte** serverns verkliga behörigheter.
 
 ## 6. Samlat GO/NO-GO-underlag — STAGING-installation och integrationstester
 
-**Detta är det enda gällande GO/NO-GO-underlaget.** `docs/RELEASEKANDIDAT-2026-11-23.md` hänvisar hit. **Inget av stegen är utfört.** Varje steg som ändrar något i STAGING kräver ett eget, uttryckligt GO från Lucas. Ett GO för ett steg gäller inte nästa.
+**Det här är det enda gällande GO/NO-GO-underlaget.** Det uppdaterades 2026-11-24 och ersätter versionen från 2026-11-23. **Inget av stegen är utfört.** Varje steg som ändrar något i STAGING kräver ett eget, uttryckligt GO från Lucas. Allt nedan rör bara STAGING (`yyzljlqyzzcbxmcdbual`); LIVE rörs aldrig.
 
-### 6.1 Förutsättningar (före första GO)
+### 6.1 Förutsättningar
 
-**Testkonton (F1)** skapas av Lucas i STAGING. Varje konto ska ha "e2e" i e-postens lokaldel och en personalpost med samma e-post. Alla delar samma lösenord, som bara finns i `VIFT_PW` på den maskin som kör testerna.
+**F1 Testkonton (6 st). Lucas skapar dem efter GO-1; ingen bred åtkomsttoken behövs.**
+1. Supabase Dashboard (STAGING) → Authentication → Add user → "Auto confirm". Skapa sex användare med "e2e" i e-postens lokaldel:
 
-| Miljövariabel | Roll | Behörigheter som krävs |
-|---|---|---|
-| `VIFT_USER_ADMIN` | admin | `ao_create`, `ao_edit`, `ao_view_all`, tidadministration (`all` räcker) |
-| `VIFT_USER_FALT` | fältarbetare | `ao_view_own`, `ao_time`, `ao_checklist` |
-| `VIFT_USER_FALT2` | andra fältarbetare (för checklistans ägarkontroll) | som ovan |
-| `VIFT_USER_CHEF` | arbetsledare | enligt rollen i STAGING |
-| `VIFT_USER_EKONOMI` | ekonomi | enligt rollen i STAGING |
-| `VIFT_USER_BEGRANSAD` | begränsad | endast `dashboard_view`, `ao_view_own` |
+   | Konto | Roll i CRM | Behörigheter |
+   |---|---|---|
+   | e2e-admin | Superadmin | `all` |
+   | e2e-falt1 | Fältarbetare | `ao_view_own`, `ao_time`, `ao_material`, `ao_checklist` |
+   | e2e-falt2 | Fältarbetare | samma som e2e-falt1 |
+   | e2e-chef | Arbetsledare | enligt rollen i STAGING |
+   | e2e-ekonomi | Ekonomi | enligt rollen i STAGING |
+   | e2e-begransad | E2E begränsad | `dashboard_view`, `ao_view_own` |
 
-Dessutom krävs:
-- `VIFT_SUPABASE_URL`: det godkända STAGING-projektet. Projektlåset nekar alla andra.
-- `VIFT_SUPABASE_ANON`: den publika nyckeln.
-- `VIFT_MILJO=staging`, för nivå 2.
+   Alla får samma lösenord.
+2. I STAGING-appen som admin:
+   - Personal → lägg till en personalpost per konto med **samma e-post** och rätt roll.
+   - Admin → Roller → skapa rollen "E2E begränsad" om den saknas.
+3. Lösenordet anges **aldrig i chatten**. Lucas lägger in det som miljövariabeln `VIFT_PW`, tillsammans med `VIFT_USER_ADMIN`, `VIFT_USER_FALT`, `VIFT_USER_FALT2`, `VIFT_USER_CHEF`, `VIFT_USER_EKONOMI`, `VIFT_USER_BEGRANSAD` och `VIFT_SUPABASE_ANON` (publik nyckel), i Claude-miljöns inställningar. Variabeln är synlig för den som kan se miljön, så den ska bara användas för dessa isolerade testkonton och bytas efter testomgången.
+4. Kontroll: del A5 i backup-SQL:en ska ge 6 rader, och nivå 1 ska rapportera rätt synlighet per roll.
 
-**Backup (F2), före steg 4 och före steg 5–8.** Spara utanför databasen och notera tidpunkten:
-- `select key, value, updated_at from public.store where key in ('vift_workOrders','vift_timeEntries','vift_customers','vift_properties','vift_offers','vift_salesOpps','vift_roles','vift_staff','vift_settings','vift_articles','vift_priceGroups','vift_contracts','vift_activities','vift_activityLog')`
-- `select pg_get_functiondef('public.work_order_checklist_resolve'::regproc)`
-- Deployade källor för `work-order-checklist-resolve` och `offer-attachment-upload`.
+**F2 Backup** (före steg 4 och före steg 6–9), med `supabase/manual/staging_backup_och_kontroll_2026-11-24.sql`:
+- Del A är bara läsning och kan köras direkt.
+- Del B (backupschemat `vift_staging_backup_20261124`) kräver GO-2.
+- Del C är efterkontrollen. Ladda dessutom ner backupen som CSV/JSON, så att en kopia finns utanför Supabase.
+- Spara de deployade versionerna av `store-key-write`, `work-order-checklist-resolve` och `offer-attachment-upload` (`supabase functions download …`).
+- Klienten återställs med `VIFT-CRM-STAGING-2026-11-24-aterstallning.zip`. Den är verifierad 44/44 mot det STAGING levererar idag.
 
-**Övrigt:**
-- **F3:** ingen annan arbetar i STAGING under steg 3–4 och steg 9.
-- **F4:** STAGING-överlägget är klart för §2a.
-- **F5:** lokala tester är gröna på den commit som installeras. Det gäller nu: `bash tests/run-all.sh` 12/12 (260 kontroller) och `node tests/e2e/run.js` med 105 godkända, 0 misslyckade, 1 blockerad och 1 känt fel.
+**F3** Ingen annan arbetar i STAGING under steg 4, 10 och 11.
 
-### 6.2 Steg, beslut och stoppkriterier
+**F4** Lokala tester är gröna på den commit som installeras (se rapporten §C).
 
-| Steg | Vad | Ändrar i STAGING | GO som krävs | Beslut | Stoppa om | Rollback |
-|---|---|---|---|---|---|---|
-| 1 | Nivå 0 `staging-readonly.js` | Inget | — | **GO** (tillåtet) | Någon kontroll avviker | — |
-| 2 | J1a nivå 1 `authz-read.js` | Inloggningsposter i auth-schemat | GO-1: testkonton får användas | **GO efter GO-1** | R1–R4 visar att en roll ser data den inte ska. Det är ett säkerhetsfynd: dokumentera, fortsätt bara efter beslut. | — |
-| 3 | J1b `--torrkorning` | Inloggningsposter | GO-2: mutationstest i STAGING | **GO efter GO-2** | En spärr slår till (t.ex. projektlåset), ögonblicksbilden misslyckas, eller ett testkonto saknar personalpost | — |
-| 4 | J1b skarp körning (G13, G9, G6) mot **nuvarande** server | Egna märkta testposter skapas och tas bort; `store.updated_at` och `vift_lastChanged` ändras | GO-2 | **GO efter GO-2** | Kod 3 eller 5: kör `--stada=<runId>` tills den ger kod 0; vidare först då.<br>Kod 4: granska listan.<br>Kod 1 (G13): BLOCKER-2 bekräftad. Installationen av klienten kan fortsätta, eftersom den inte ändrar serverbehörigheter, men LIVE förblir NO-GO och serveråtgärd planeras. | `--stada=<runId>` |
-| 5 | §2a klientfiler: paket `release/staging-2026-11-24` (`eb047a3`) | Filer på Loopia (46 filer) | GO-3 | **GO efter GO-3.** Lucas laddar upp med FileZilla; Claude kör `verify-staging-deploy.sh` och nivå 0 | Någon fil avviker från manifestet, inloggning ger konsolfel, eller nivå 0 visar fel versioner | Ladda upp återställnings-zippen (`26ce058`), `index.html` sist |
-| 6 | §2g checklistans migration och EF | DB-funktioner (`work_order_checklist_set_state`, ersatt `…_resolve`) och EF. Inga data, inga AO-statusar. | GO-4 | **GO efter GO-4** | Migrationen ger fel, eller EF-deploy misslyckas (fönstret mellan dem ska vara kort) | Enligt §2g |
-| 7 | §2e `offer-attachment-upload` PATCH | EF | GO-5 | **GO efter GO-5 och källjämförelse** | Den deployade källan avviker utöver PATCH-blocket | Föregående EF-version |
-| 7b | §2h `offer-public-pdf` *(valfritt)* | EF (skrivfri) | GO-5b | **GO efter GO-5b** | Deploy misslyckas | Ta bort funktionen |
-| 8 | §2b bildobjekt + 3 EF *(valfritt i omgången)* | Bucket, policies, 3 EF | GO-6 | **GO för granskning; installation efter GO-6** | Bucket blir publik eller policies avviker | Enligt §5 |
-| 9 | Efterkontroll: nivå 0 igen, och J1b igen (nu med checklistans ägarkontroll) | Som steg 1 och 4 | GO-2 gäller i samma omgång | **GO** | Som steg 1 och 4 | Som steg 4 |
-| 10 | Manuella integrationstester §4 (A, T, S, B, O, F, I, E, J2–J12) på **märkta testposter** | Testposter | GO-7: testdata för manuella tester | **GO efter GO-7** | Ett test som skriver till en befintlig post. Avbryt och återställ. | Ta bort testposterna |
+### 6.2 Steg i ordning
+
+| # | Steg | Ändrar i STAGING | GO | Stoppa om | Rollback |
+|---|---|---|---|---|---|
+| 1 | Nivå 0 (`staging-readonly.js`) | Inget | — (tillåtet) | Någon kontroll avviker | — |
+| 2 | F1 testkonton (Lucas) + nivå 1 (`authz-read.js`) | Auth-användare, personalposter, en roll | **GO-1** | En roll ser data den inte ska | Ta bort testkonton och personalposter |
+| 3 | F2 backup del B + kopia utanför Supabase + EF-nedladdning | Backupschema | **GO-2** | Del C visar skillnad | `drop schema vift_staging_backup_20261124 cascade` |
+| 4 | Nivå 2 mot **nuvarande** server: `authz-mutation.js`, först `--torrkorning` | Egna märkta testposter; metadata (se §4a) | **GO-3** | Kod 3 eller 5: kör `--stada`. Kod 1 för G13: dokumentera; LIVE förblir NO-GO | `--stada=<runId>` |
+| 5 | **Publicering**: Lucas laddar upp v2 med WinSCP (`docs/WINSCP-STAGING-PUBLICERING.md`); Claude kör `verify-staging-deploy.sh MANIFEST-v2.txt` och nivå 0 | Filer på Loopia (47 st) | **GO-4** | En fil avviker, eller inloggning ger konsolfel | Ladda upp återställnings-zippen |
+| 6 | §2g checklistans migration och EF | 2 DB-funktioner och 1 EF | **GO-5** | Fel vid migration eller deploy | Enligt §2g |
+| 7 | §2i store-key-write (TASK-01 + aktivitetslogg) | 1 DB-funktion och 1 EF | **GO-6** | Den deployade källan avviker från `5b239b8`, eller deployen misslyckas | Föregående EF och `drop function` |
+| 8 | §2j work-order-log-write | 2 DB-funktioner och 1 ny EF | **GO-7** | Fel vid migration eller deploy | `drop function` och ta bort EF:en |
+| 9 | §2e bilagor (PATCH), §2h `offer-public-pdf`, §2b bilder, §2k projektdokument | EF:er, bucket och policies | **GO-8** (delbart) | Avvikande källa; en bucket blir publik | Enligt respektive avsnitt |
+| 10 | Efterkontroll: nivå 0, nivå 1 och nivå 2 igen | Testposter | GO-3 gäller | Som steg 1, 2 och 4 | Som steg 4 |
+| 11 | `e2e-real.js` (R0, F2–F5) och manuella testfall i §4 på märkta testposter, plus visuell granskning av den publicerade sidan | Testposter | **GO-9** | Ett test skriver till en befintlig post | `--stada` och borttagning av testposter |
+
+Steg 5 kan göras före steg 4 om Lucas vill se klienten först. Klienten fungerar mot den nuvarande servern, eftersom alla nya vägar har reserv. Den rekommenderade ordningen är ändå 1–4 först, så att G13, G9 och G6 är kända innan något ändras.
 
 ### 6.3 Utanför denna omgång
 
 | Del | Beslut | Skäl |
 |---|---|---|
-| LIVE | **NO-GO** | LIVE saknar STAGING:s backend (§7). G13/BLOCKER-2 är oavgjord. Inget är STAGING-verifierat. |
-| §2f G5 serverdel (`append_log`) | **NO-GO** | Förslag; kräver källan till `ao-time-write` (G4). |
-| §3 service-monitor-aktivering | **NO-GO nu** | Testas och beslutas separat. |
-| G7 historisk bildmigrering, aktivitetslogg som tabell | **NO-GO nu** | Planerat; kräver egen plan, backup och GO. |
-| Det ersatta `tests/e2e/staging-authz.js` | **Får inte användas** | Det kunde ändra data; vägrar nu köra. |
-| §2c activityLog-städning | **UTGÅR** | Uppgiften om dubblett var felaktig. |
+| LIVE | **NO-GO** | LIVE saknar STAGING:s backend (§7). Inget är STAGING-verifierat. G13 är oavgjord. |
+| §3 aktivering av service-monitor | **NO-GO nu** | Separat beslut |
+| G7 historisk bildmigrering | **NO-GO nu** | Kräver egen plan, backup och GO |
+| `ao-time-write`-källan (G4) | Kvar | Behövs inte längre för G5. Övriga skäl (granskning, återskapbarhet) kvarstår. |
+| Det ersatta `tests/e2e/staging-authz.js` | Får inte användas | Kunde ändra data |
 
 ### 6.4 Samlad bedömning
 
-- **Klientens releasekandidat är redo för kontrollerad STAGING-installation (steg 5–8) efter respektive GO.** Inga kända klientfel blockerar test. Testverktygen för serverbehörigheter är rättade och lokalt prövade.
-- **Rekommenderad start:** steg 1–4 *före* installationen. Då vet vi hur den nuvarande servern beter sig för G13, G9 och G6 innan något ändras.
-- **Kända risker:**
-  - G13 (serverns behörighet per register) är okänd tills steg 4 är kört.
-  - G9 kräver beslut efter steg 4.
-  - G6 är overifierad.
-  - Äldre cachade klienter visar pågående checklistpunkter som ej påbörjade tills de laddats om.
-  - Borttagen autostart: fältarbetare måste starta AO:n själva. Det bör kommuniceras.
-- **STAGING-verifierad** blir en punkt först när steg 9–10 är gröna för den. Masterplanens status uppdateras då från LOKALT TESTAD till STAGING-VERIFIERAD, punkt för punkt.
+**Byggt och lokalt testat:**
+- klientens releasekandidat (paket v2);
+- serverändringarna §2g, §2i och §2j, med SQL mot riktig PostgreSQL och policyn mot den riktiga TypeScript-källan;
+- testverktyg för nivå 0–2 och för webbläsartest mot riktig STAGING.
+
+**Kräver STAGING-GO:** allt i 6.2 från steg 2.
+
+**STAGING-verifierat:** inget ännu.
+
+**Blockerat:** inget tekniskt. Det som återstår är beslut och åtkomst: testkonton, backup, uppladdning och deploy.
 
 ## 7. LIVE senare
 
