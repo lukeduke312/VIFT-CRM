@@ -56,7 +56,26 @@ Direktverifierat (läsande) i `docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md` och 
 
 ## 2. Vad som ska installeras i STAGING
 
-### 2a. Klientfiler (kodsynk till staging-repot, inga Supabase-ändringar)
+### 2a. Klientfiler (inga Supabase-ändringar)
+
+**Publiceringsväg — verifierad 2026-11-23, ersätter antagandet om GitHub Pages:**
+- `staging-crm.viftfast.se` ligger på **Loopia**: `Server: nginx`, `X-Loopia-Node`, IP 93.188.2.53.
+- Den publicerade sidan motsvarar fil för fil branchen `chatgpt/staging-all-blockers-2026-11-17` (`26ce058`) i STAGING-repot, inte `gh-pages`. `gh-pages` står på `58a23d4`; dess CNAME är inaktuellt, och enligt `DEPLOY_RESULT_20261117.md` byggdes Pages aldrig.
+- **En push till `gh-pages` ändrar alltså inte webbplatsen.** Publicering görs genom att filerna laddas upp till Loopia med FileZilla, på samma sätt som för LIVE.
+- Loopia-FTP går inte att nå från Claudes miljö. Lucas laddar upp, och Claude gör efterkontrollen.
+
+**Paket:**
+- Byggs med `tools/build-staging-package.sh <STAGING-arbetskopia> origin/chatgpt/staging-all-blockers-2026-11-17`.
+- Grunden är den publicerade versionen, med klientfilerna från detta repos HEAD.
+- STAGING-överlägget återinförs genom trevägssammanslagning. Bygget avbryter vid konflikt eller om en LIVE-referens finns kvar.
+- Resultatet är en release-commit på den lokala branchen `release/staging-2026-11-24` i STAGING-repot, plus två zip-filer (publicering och återställning) och `MANIFEST.txt` med SHA-256 per fil.
+
+**Uppladdning:** alla filer under `src/` först, därefter `index.html` och `public-offer.html`. `config.js`, `staging-banner.js` och övriga filer på servern rörs inte.
+
+**Efterkontroll:** `tools/verify-staging-deploy.sh MANIFEST.txt` hämtar varje fil som webbplatsen faktiskt levererar och jämför SHA-256. Därefter körs nivå 0, där versionsjämförelsen ska visa "0 nyare i repot".
+
+**Återställning:** ladda upp återställnings-zippen (filerna från `26ce058`), med `index.html` sist. Före paketbygget verifierades att Loopia idag levererar exakt `26ce058` för alla 43 berörda filer.
+
 
 **Exakt omfång (läsande jämförelse mot driftsatt STAGING, körd igen 2026-11-23 kväll: 77 versionsatta filer driftsatta, 40 nyare i repot, 0 äldre, 5 bara i repot):**
 
@@ -138,6 +157,19 @@ Beslut Lucas 2026-11-23: ingen autostart av AO från checklistan; egen åtgärd 
 **Äldre klienter:** en webbläsare som fortfarande kör den gamla klienten visar pågående punkter som ej påbörjade (de nya fälten ignoreras, inget skrivs över — den gamla klienten skickar bara OK/avvikelse/återställ via samma RPC). Hårdladdning efter §2a löser det.
 
 **Test (J9–J12 i §4).** **Rollback:** kör om `20260917000001_work_order_checklist_atomic_rpc.sql` (återställer den äldre RPC:n med autostart), `drop function public.work_order_checklist_set_state(text,text,text,text,text,text,text,text,text,boolean,boolean);` och deploya föregående EF-version. De nya fälten i punkterna kan ligga kvar (ignoreras); ingen datafix.
+
+### 2h. `offer-public-pdf` — kundsidans PDF-nedladdning (separat GO, valfri)
+
+Den nya `public-offer.html` har knappen "Ladda ner PDF", som anropar `offer-public-pdf`. Funktionen finns i repot (`supabase/functions/offer-public-pdf/`) men **inte i STAGING**; en CORS-förfrågan ger 404 (2026-11-23).
+
+Utan deploy får kunden ett tydligt felmeddelande ("Kunde inte ladda ner PDF"), och ingenting annat påverkas.
+
+Funktionen är skrivfri: den läser offerten via token och har rate-limit i minnet, men inga skrivningar.
+
+- Deploy: `supabase functions deploy offer-public-pdf --no-verify-jwt`. Den är publik på samma sätt som `offer-token-validate`.
+- Rollback: ta bort funktionen.
+
+**Övrigt som saknas i STAGING (oförändrat, ingen regression):** `project-document-upload` och `project-document-url` anropas av den nuvarande STAGING-klienten också. Projektdokument fungerar därför inte i STAGING, varken före eller efter. Detta förs till masterplanen.
 
 ### 2f. G5 serverdel — append_log/remove_log (FÖRSLAG, ej installerbart nu)
 
@@ -384,9 +416,10 @@ Dessutom krävs:
 | 2 | J1a nivå 1 `authz-read.js` | Inloggningsposter i auth-schemat | GO-1: testkonton får användas | **GO efter GO-1** | R1–R4 visar att en roll ser data den inte ska. Det är ett säkerhetsfynd: dokumentera, fortsätt bara efter beslut. | — |
 | 3 | J1b `--torrkorning` | Inloggningsposter | GO-2: mutationstest i STAGING | **GO efter GO-2** | En spärr slår till (t.ex. projektlåset), ögonblicksbilden misslyckas, eller ett testkonto saknar personalpost | — |
 | 4 | J1b skarp körning (G13, G9, G6) mot **nuvarande** server | Egna märkta testposter skapas och tas bort; `store.updated_at` och `vift_lastChanged` ändras | GO-2 | **GO efter GO-2** | Kod 3 eller 5: kör `--stada=<runId>` tills den ger kod 0; vidare först då.<br>Kod 4: granska listan.<br>Kod 1 (G13): BLOCKER-2 bekräftad. Installationen av klienten kan fortsätta, eftersom den inte ändrar serverbehörigheter, men LIVE förblir NO-GO och serveråtgärd planeras. | `--stada=<runId>` |
-| 5 | §2a klientfiler (+ överlägg) | Staging-repots filer | GO-3 | **GO efter GO-3** | Inloggning ger konsolfel, eller nivå 0 visar fel versioner | Återställ staging-repots föregående commit |
+| 5 | §2a klientfiler: paket `release/staging-2026-11-24` (`eb047a3`) | Filer på Loopia (46 filer) | GO-3 | **GO efter GO-3.** Lucas laddar upp med FileZilla; Claude kör `verify-staging-deploy.sh` och nivå 0 | Någon fil avviker från manifestet, inloggning ger konsolfel, eller nivå 0 visar fel versioner | Ladda upp återställnings-zippen (`26ce058`), `index.html` sist |
 | 6 | §2g checklistans migration och EF | DB-funktioner (`work_order_checklist_set_state`, ersatt `…_resolve`) och EF. Inga data, inga AO-statusar. | GO-4 | **GO efter GO-4** | Migrationen ger fel, eller EF-deploy misslyckas (fönstret mellan dem ska vara kort) | Enligt §2g |
 | 7 | §2e `offer-attachment-upload` PATCH | EF | GO-5 | **GO efter GO-5 och källjämförelse** | Den deployade källan avviker utöver PATCH-blocket | Föregående EF-version |
+| 7b | §2h `offer-public-pdf` *(valfritt)* | EF (skrivfri) | GO-5b | **GO efter GO-5b** | Deploy misslyckas | Ta bort funktionen |
 | 8 | §2b bildobjekt + 3 EF *(valfritt i omgången)* | Bucket, policies, 3 EF | GO-6 | **GO för granskning; installation efter GO-6** | Bucket blir publik eller policies avviker | Enligt §5 |
 | 9 | Efterkontroll: nivå 0 igen, och J1b igen (nu med checklistans ägarkontroll) | Som steg 1 och 4 | GO-2 gäller i samma omgång | **GO** | Som steg 1 och 4 | Som steg 4 |
 | 10 | Manuella integrationstester §4 (A, T, S, B, O, F, I, E, J2–J12) på **märkta testposter** | Testposter | GO-7: testdata för manuella tester | **GO efter GO-7** | Ett test som skriver till en befintlig post. Avbryt och återställ. | Ta bort testposterna |
