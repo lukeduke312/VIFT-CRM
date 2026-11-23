@@ -1295,13 +1295,44 @@ const InvoiceDetailPage = {
     this.render({ invoiceId: this.invoiceId });
   },
 
+  /* G10: beslutsruta när en kopplad offert lovade RUT/ROT och fakturan
+     saknar avdrag. Inget förs över automatiskt. */
+  _renderOfferTaxNotice(inv) {
+    const need = InvoiceService.taxReductionReviewNeeded(inv);
+    if (!need) return '';
+    const canEdit = Auth.can('invoice_create') && InvoiceService.canEditDraft(inv);
+    const sum = need.reduce((s, o) => s + o.amount, 0);
+    const kind = need[0].type ? need[0].type.toUpperCase() : 'RUT/ROT';
+    return `<div class="inv-tr-notice" role="alert" style="margin:0 14px 10px;padding:10px 12px;border:1px solid color-mix(in srgb, var(--or) 40%, transparent);background:color-mix(in srgb, var(--or) 8%, transparent);border-radius:8px;font-size:12px;">
+      <div style="font-weight:700;margin-bottom:4px;">${ic('alert-triangle',12)} Offerten angav ${kind}-avdrag — fakturan saknar avdrag</div>
+      <div style="color:var(--mt);margin-bottom:8px;">Offert ${need.map(o => esc(o.offerId)).join(', ')} lovade kunden ${fkr(sum)} i avdrag. Kontrollera avdragsrätten och välj innan fakturan markeras skickad.</div>
+      ${canEdit ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn bxs bp" onclick="InvoiceDetailPage.openTaxReduction(true)">${ic('percent',11)} Lägg till avdrag från offerten</button>
+        <button class="btn bxs bs" onclick="InvoiceDetailPage.confirmNoTaxReduction()">Fakturera utan avdrag</button>
+      </div>` : ''}
+    </div>`;
+  },
+
+  async confirmNoTaxReduction() {
+    const inv = getInv(this.invoiceId);
+    const need = inv && InvoiceService.taxReductionReviewNeeded(inv);
+    if (!need) return;
+    const ok = await Modal.confirm('Fakturera utan RUT/ROT-avdrag trots att offert ' + need.map(o => o.offerId).join(', ') + ' angav avdrag? Beslutet sparas på fakturan.');
+    if (!ok) return;
+    showToast('Sparar…');
+    const r = await InvoiceService.setTaxReduction(inv.id, 'none', 0, 0, InvoiceService.OFFER_TR_REVIEWED_PREFIX + ' inget avdrag trots offert ' + need.map(o => o.offerId).join(', '));
+    if (!r.ok) { showToast(r.error || 'Beslutet kunde inte sparas'); return; }
+    this._refresh();
+    showToast('Sparat: fakturan skickas utan avdrag');
+  },
+
   _renderTotals(inv) {
     const s    = InvoiceService.calcSummary(inv);
     const disc = inv.discount    || { type: 'none', value: 0 };
     const tr   = inv.taxReduction|| { type: 'none', amount: 0, note: '' };
     const hasDiscount = s.discAmt > 0;
     const hasRot      = s.trAmount > 0;
-    return `
+    return `${this._renderOfferTaxNotice(inv)}
       <div style="padding:12px 14px;border-top:2px solid var(--br);">
         ${hasDiscount ? `
         <div class="dr"><span class="dk" style="color:var(--mt);">Radernas summa</span><span class="dv">${fkr(s.linesEx)}</span></div>
@@ -1403,12 +1434,17 @@ const InvoiceDetailPage = {
     if (lbl)  lbl.textContent = type === 'percent' ? 'Rabatt %' : 'Rabatt kr';
   },
 
-  openTaxReduction() {
+  openTaxReduction(fromOffer) {
     if (!Auth.require('invoice_create')) return;
     const inv = getInv(this.invoiceId);
     if (!inv) return;
     if (!InvoiceService.canEditDraft(inv)) { showToast(`Fakturan är ${statusLabel(inv.status)} och kan inte ändras.`); return; }
-    const tr = inv.taxReduction || { type: 'none', amount: 0, basis: 0, note: '' };
+    let tr = inv.taxReduction || { type: 'none', amount: 0, basis: 0, note: '' };
+    /* G10: förifyllt från offerten — användaren bekräftar med Spara. */
+    if (fromOffer) {
+      const o = (InvoiceService.offerTaxReductionFor(inv) || [])[0];
+      if (o) tr = { type: o.type || 'rot', basis: o.basisExVat || 0, amount: o.amount, note: (o.type || 'ROT').toUpperCase() + ' enligt offert ' + o.offerId };
+    }
     Modal.open({
       title: `${ic('percent',15)} RUT/ROT-avdrag`,
       body: `

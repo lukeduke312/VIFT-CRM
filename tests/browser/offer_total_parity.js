@@ -65,7 +65,15 @@ const num = (t) => Number(String(t).replace(/[^\d−-]/g, '').replace('−', '-'
     for (let i = 0; i < N; i++) {
       current = randomOffer(i, { legacyPrice: legacy });
       await page.goto('http://127.0.0.1:' + port + '/public-offer.html?t=test-token-' + i, { waitUntil: 'load' });
-      await page.waitForSelector('.po-total-row.main', { timeout: 5000 }).catch(() => {});
+      await page.waitForSelector('.po-total-row.main, .po-totals .po-status-banner', { timeout: 5000 }).catch(() => {});
+      /* G8 (2026-11-23): en offert där RUT/ROT > totalen visar ingen summa
+         (aldrig negativt "att betala") utan en varning, och kan inte godkännas. */
+      if (!OfferCalc.validate(current).ok) {
+        const warned = await page.evaluate(() => /behöver kontrolleras/.test(document.body.innerText) && !document.querySelector('.po-total-row.main') && !/Godkänn offert/.test(document.body.innerText));
+        results.total++; results.invalid = (results.invalid || 0) + 1;
+        if (!warned) results.mismatches.push({ legacy, i, got: 'ingen varning', exp: 'varning' });
+        continue;
+      }
       const shown = await page.evaluate(() => {
         const rows = Array.from(document.querySelectorAll('.po-total-row'));
         const get = (re) => { const r = rows.find((x) => re.test(x.children[0].textContent)); return r ? r.children[1].textContent : null; };
@@ -80,7 +88,7 @@ const num = (t) => Number(String(t).replace(/[^\d−-]/g, '').replace('−', '-'
     }
   }
   await browser.close(); srv.close();
-  console.log('Offerter jämförda: ' + results.total + ', avvikelser: ' + results.mismatches.length);
+  console.log('Offerter jämförda: ' + results.total + ' (varav ' + (results.invalid || 0) + ' ogiltiga med varning), avvikelser: ' + results.mismatches.length);
   const byKind = { modern: results.mismatches.filter((m) => !m.legacy).length, legacyPrice: results.mismatches.filter((m) => m.legacy).length };
   console.log('Avvikelser — nya data: ' + byKind.modern + ', med äldre `price`-rader: ' + byKind.legacyPrice);
   results.mismatches.slice(0, 6).forEach((m) => console.log('  ' + (m.legacy ? '[legacy] ' : '') + 'OFF-' + m.i + ' kundsida=' + JSON.stringify(m.got) + ' OfferCalc=' + JSON.stringify(m.exp)));

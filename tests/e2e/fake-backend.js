@@ -248,6 +248,12 @@ class FakeSupabase {
           // Repots EF (2026-11-23) har PATCH; den driftsatta i STAGING har det inte
           // ännu → 405 som där. Världen kan slå på { attachmentPatch: true }.
           if (!this.has(perms, 'offer_manage')) return DEFINITE(403, 'forbidden');
+          if (method === 'DELETE') { // finns i driftsatt EF
+            const dl = this.get('offerAttachments') || [];
+            const da = dl.find((a) => a.id === body.attachmentId); if (!da) return DEFINITE(404, 'not_found');
+            da.active = false; da.deletedAt = new Date().toISOString(); this.set('offerAttachments', dl); this.touch();
+            return { status: 200, body: { ok: true } };
+          }
           if (method !== 'PATCH' || !this.opts.attachmentPatch) return DEFINITE(405, 'method_not_allowed');
           const list = this.get('offerAttachments') || [];
           const att = list.find((a) => a.id === body.attachmentId);

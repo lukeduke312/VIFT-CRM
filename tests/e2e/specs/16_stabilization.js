@@ -110,4 +110,89 @@ module.exports = [
       }
     },
   },
+  {
+    id: 'ATT-02', module: 'Offertmodulen', name: 'Ta bort offertbilaga: Bekräfta tar faktiskt bort bilagan på servern (await Modal.confirm gav tidigare undefined)',
+    async run(t) {
+      seedAttachment(t.fake);
+      const s = await t.world.session({ viewport: 'laptop' });
+      await s.login('admin');
+      await s.go('pg-offer-detail', { offerId: 'OFF-001' });
+      await s.eval(() => { OfferDetailPage._deleteAttachment('ATT-E2E-1', 'OFF-001'); });
+      await s.clickModalButton(/Bekräfta/);
+      await s.settle(1200);
+      t.assert(t.fake.get('offerAttachments').find((a) => a.id === 'ATT-E2E-1').active === false, 'bilagan borttagen på servern');
+    },
+  },
+  {
+    id: 'G10-01', kind: 'workflow', module: 'Fakturering och fakturaunderlag', name: 'G10: godkänd offert med ROT → AO → fakturautkast: varning, "skickad" spärras tills avdraget lagts in (förifyllt från offerten) eller "utan avdrag" bekräftats',
+    async run(t) {
+      const offers = t.fake.get('offers');
+      offers.push({ id: 'OFF-ROT', title: 'Badrum ROT E2E', customerId: 'K-003', status: 'godkänd', lines: [{ id: 'L1', type: 'fixed', description: 'Arbete badrum', qty: 1, unitPrice: 10000, vatRate: 25, reductionType: 'rot', reductionBaseExVat: 10000, rutAmount: 3750, billingType: 'onetime' }], extras: [], discount: { type: 'percent', value: 0 }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), timeline: [] });
+      t.fake.set('offers', offers);
+      const aos = t.fake.get('workOrders');
+      aos.push({ id: 'AO-ROT', title: 'Badrum ROT E2E', customerId: 'K-003', offerId: 'OFF-ROT', priceType: 'fastpris', fixedPrice: 10000, status: 'klar', staff: [], log: [], materials: [], checklist: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      t.fake.set('workOrders', aos);
+      const e = await t.world.session({ viewport: 'desktop' });
+      await e.login('admin');
+      await e.go('pg-invoices');
+      await e.eval(() => InvoicesPage._setView && InvoicesPage._setView('queue'));
+      await e.settle(400);
+      const cands = await e.eval(() => BillingQueueService.getCandidates().filter((c) => c.workOrderId === 'AO-ROT').map((c) => c.id));
+      t.assert(cands.length >= 1, 'AO:n finns i faktureringskön');
+      for (const c of cands) await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c + '\')"]').check();
+      await e.eval((ids) => InvoicesPage._openCreateConfirm(ids), cands);
+      await e.clickModalButton(/Skapa fakturautkast/);
+      await e.settle(1500);
+      const inv = t.fake.get('invoices').find((i) => (i.lines || []).some((l) => (l.sourceRefs || []).some((r) => r.workOrderId === 'AO-ROT')));
+      t.assert(inv, 'fakturautkast skapat');
+      await e.go('pg-inv-detail', { invoiceId: inv.id });
+      t.assert(/Offerten angav ROT-avdrag/.test(await e.text('.page.active')), 'varning om offertens ROT visas');
+      const blocked = await e.eval((id) => InvoiceService.setStatus(id, 'skickad'), inv.id);
+      t.assert(blocked.ok === false && blocked.code === 'tax_reduction_review', 'skickad spärras: ' + JSON.stringify(blocked).slice(0, 160));
+      await e.page.locator('.page.active button', { hasText: 'Lägg till avdrag från offerten' }).click();
+      await e.page.waitForSelector('.modal-overlay.open #tr-type');
+      const pre = await e.eval(() => ({ type: document.getElementById('tr-type').value, amount: Number(document.getElementById('tr-amount').value) }));
+      t.assert(pre.type === 'rot' && pre.amount === 3750, 'förifyllt från offerten: ' + JSON.stringify(pre));
+      await e.clickModalButton(/^Spara$/);
+      await e.settle(1200);
+      const srv = t.fake.get('invoices').find((i) => i.id === inv.id);
+      t.assert(srv.taxReduction && srv.taxReduction.type === 'rot' && Number(srv.taxReduction.amount) === 3750, 'ROT på servern');
+      const ok = await e.eval((id) => InvoiceService.setStatus(id, 'skickad'), inv.id);
+      t.assert(ok.ok === true, 'nu kan fakturan markeras skickad: ' + JSON.stringify(ok).slice(0, 120));
+      const sum = await e.eval((id) => InvoiceService.calcSummary(getInv(id)), inv.id);
+      t.assert(sum.customerPays === 12500 - 3750, 'kunden betalar samma som offerten (8 750 kr): ' + sum.customerPays);
+    },
+  },
+  {
+    id: 'G8-01', module: 'Offertmodulen', name: 'G8: RUT-avdrag större än totalen (efter rabatt) — offerten kan inte sparas; kundsidan visar inget negativt belopp och tillåter inte godkännande',
+    async run(t) {
+      const s = await t.world.session({ viewport: 'laptop' });
+      await s.login('admin');
+      await s.go('pg-offer');
+      await s.page.locator('.page.active button', { hasText: 'Ny offert' }).first().click();
+      await s.page.waitForSelector('#off-title', { state: 'visible' });
+      await s.page.fill('#off-title', 'RUT-fel E2E');
+      await s.eval(() => { const e = document.getElementById('off-cu'); e.value = 'K-003'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+      await s.page.locator('button:visible', { hasText: /Nästa: Tjänster/ }).click();
+      await s.page.locator('button:visible', { hasText: /Löpande rad/ }).click();
+      await s.page.locator('#off-lines .off-wiz-line-field-desc').nth(0).fill('Städning');
+      const p = s.page.locator('#off-lines .off-money-input').nth(0); await p.fill('10000'); await p.dispatchEvent('change');
+      await s.eval(() => { const l = OffersPage._editLines[0]; l.reductionType = 'rut'; l.reductionBaseExVat = 10000; l.rutAmount = OffersPage._calcLineRutAmount(l); OffersPage._discount = { type: 'percent', value: 70 }; OffersPage._refreshTotals(); });
+      await s.page.locator('button:visible', { hasText: /Nästa: Villkor/ }).click();
+      await s.page.locator('button:visible', { hasText: /Spara offert/ }).click();
+      await s.settle(1200);
+      t.assert((await s.toasts()).some((m) => /RUT\/ROT-avdraget .* större än/.test(m)), 'tydligt besked');
+      t.assert(!t.fake.get('offers').some((o) => o.title === 'RUT-fel E2E'), 'ingen offert sparad');
+      // Äldre offert med samma fel på kundsidan
+      const offers = t.fake.get('offers');
+      offers.push({ id: 'OFF-NEG', title: 'Negativ E2E', customerId: 'K-003', status: 'skickad', publicToken: 'neg'.repeat(12), tokenExpiresAt: new Date(Date.now() + 86400000 * 10).toISOString(), lockedSnapshotJSON: '', lines: [{ id: 'L1', type: 'fixed', description: 'Städning', qty: 1, unitPrice: 10000, vatRate: 25, reductionType: 'rut', reductionBaseExVat: 10000, rutAmount: 6250, billingType: 'onetime' }], extras: [], discount: { type: 'percent', value: 70 } });
+      t.fake.set('offers', offers);
+      const c = await t.world.session({ viewport: 'iphone' });
+      await c.page.goto(require('../lib').baseUrl + '/public-offer.html?t=' + 'neg'.repeat(12), { waitUntil: 'load' });
+      await c.settle(2000);
+      const txt = await c.eval(() => document.body.innerText);
+      t.assert(!/−\s?\d[\d\s]*\s?kr\s*$/m.test(txt.split('Totalt att betala')[1] || '') && !/Totalt att betala\s*\n?\s*-/.test(txt), 'inget negativt att betala');
+      t.assert(/behöver kontrolleras/.test(txt) && !/Godkänn offert/.test(txt), 'varning och ingen Godkänn-knapp');
+    },
+  },
 ];

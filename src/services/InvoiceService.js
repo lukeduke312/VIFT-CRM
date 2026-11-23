@@ -338,6 +338,54 @@ const InvoiceService = {
     };
   },
 
+  /* ── G10 (2026-11-23): RUT/ROT från offert → faktura ───────────────
+     En godkänd offert kan ha lovat kunden ett RUT/ROT-avdrag. Fakturautkast
+     som skapas ur faktureringskön fick tidigare INGET avdrag och inget
+     varnade — kunden kunde faktureras fullt pris i strid med offerten.
+     Regeln nu: avdraget förs inte över automatiskt (avdragsrätt avgörs av
+     människa), men fakturan kan inte markeras skickad förrän någon antingen
+     lagt in ett avdrag eller uttryckligen bekräftat "utan avdrag". */
+  OFFER_TR_REVIEWED_PREFIX: 'Kontrollerat:',
+  offerTaxReductionFor(inv) {
+    if (!inv || typeof OfferCalc === 'undefined') return [];
+    const aoIds = new Set();
+    if (inv.workOrderId) aoIds.add(inv.workOrderId);
+    (inv.lines || []).forEach(l => {
+      if (l && l.workOrderId) aoIds.add(l.workOrderId);
+      (l && l.sourceRefs || []).forEach(r => { if (r && r.workOrderId) aoIds.add(r.workOrderId); });
+    });
+    const seen = new Set();
+    const out = [];
+    aoIds.forEach(id => {
+      const ao = getAO(id);
+      const off = ao && ao.offerId ? getOff(ao.offerId) : null;
+      if (!off || seen.has(off.id)) return;
+      seen.add(off.id);
+      const tot = OfferCalc.totals(off);
+      if (!(tot.rutRotAmount > 0)) return;
+      const types = new Set();
+      let basis = 0;
+      (off.lines || []).forEach(l => {
+        if (!((l.rutAmount || 0) > 0)) return;
+        const t = (l.reductionType === 'rot' || l.reductionType === 'rut') ? l.reductionType
+          : (l.inputValues && l.inputValues.rot) ? 'rot' : (l.inputValues && l.inputValues.rut) ? 'rut' : '';
+        if (t) types.add(t);
+        basis += +l.reductionBaseExVat || 0;
+      });
+      out.push({ offerId: off.id, type: types.size === 1 ? [...types][0] : '', amount: tot.rutRotAmount, basisExVat: Math.round(basis * 100) / 100 });
+    });
+    return out;
+  },
+  /* Returnerar offertens avdrag om fakturan saknar beslut, annars null. */
+  taxReductionReviewNeeded(inv) {
+    const offers = this.offerTaxReductionFor(inv);
+    if (!offers.length) return null;
+    const tr = inv.taxReduction || {};
+    if (tr.type && tr.type !== 'none') return null;
+    if (String(tr.note || '').indexOf(this.OFFER_TR_REVIEWED_PREFIX) === 0) return null;
+    return offers;
+  },
+
   /* Sant om 'skickad' just nu skulle nekas p.g.a. en ogodkänd avvikelse. */
   isSendBlockedByStalePrice(inv) {
     const st = this.staleOverrideStatus(inv);
@@ -724,6 +772,12 @@ const InvoiceService = {
        till 'skickad' så länge en känd prisavvikelse saknar ett giltigt,
        matchande godkännande. Noll mutation, inget serveranrop. */
     if (status === 'skickad') {
+      const trReview = this.taxReductionReviewNeeded(inv);
+      if (trReview) {
+        return { ok: false, code: 'tax_reduction_review',
+          error: 'Offert ' + trReview.map(o => o.offerId).join(', ') + ' angav ' + (trReview[0].type ? trReview[0].type.toUpperCase() : 'RUT/ROT') + '-avdrag (' +
+            trReview.reduce((s, o) => s + o.amount, 0) + ' kr), men fakturan saknar avdrag. Lägg till avdraget eller bekräfta "Fakturera utan avdrag" innan fakturan markeras skickad.' };
+      }
       const st = this.staleOverrideStatus(inv);
       if (st.stale.length && !st.covered) {
         return {

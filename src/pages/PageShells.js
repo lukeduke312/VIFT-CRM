@@ -4250,6 +4250,11 @@ const OffersPage = {
       });
       if (!cleanLines.some(l=>l.type!=='text')) { showToast('Lägg till minst en offertrad eller tjänst'); return; }
       const cleanExtras = this._editExtras.filter(e=>(e.description||'').trim()||(e.unitPrice||0)>0);
+      /* G8: samma regel som fakturan — avdraget får inte överstiga totalen. */
+      if (typeof OfferCalc !== 'undefined' && OfferCalc.validate) {
+        const v = OfferCalc.validate({ lines: cleanLines, extras: cleanExtras, discount: this._discount });
+        if (!v.ok) { showToast(v.issues[0].message, 7000); return; }
+      }
       const now  = new Date().toISOString();
       const data = {
         customerId:   d.customerId,
@@ -6552,6 +6557,10 @@ ${hasRut?`<div class="rut">
     const bodyTxt = (document.getElementById('send-body')?.value||'').trim();
 
     if (!toRaw)    { showToast('Fyll i e-postadress'); return; }
+    if (typeof OfferCalc !== 'undefined' && OfferCalc.validate) {
+      const v = OfferCalc.validate(off);
+      if (!v.ok) { showToast('Offerten kan inte skickas: ' + v.issues[0].message, 7000); return; }
+    }
     if (!subject)  { showToast('Ämnesrad saknas');     return; }
     if (!bodyTxt)  { showToast('Meddelandetext saknas'); return; }
 

@@ -376,7 +376,7 @@ a { color: var(--blue); text-decoration: none; }
   </div>
 </div>
 
-<script src="src/shared/OfferCalc.js?v=1"></script>
+<script src="src/shared/OfferCalc.js?v=2"></script>
 <script>
 /* ── Konfig ─────────────────────────────────────────────── */
 /* SUPABASE_URL injiceras från window.VIFT_CONFIG om tillgängligt,
@@ -752,9 +752,19 @@ function renderOffer(off) {
     (rutAmt ? '<div style="font-size:10px;color:var(--mt);margin-top:6px;">Totalt inkl. moms: ' + fmt(incVat) + ' kr — RUT/ROT-avdrag: −' + fmt(rutAmt) + ' kr = Kundpris: ' + fmt(cust) + ' kr</div>' : '') +
     '</div>';
 
+  /* G8: ett avdrag större än totalen ger negativt "att betala" — visa
+     aldrig ett negativt belopp och tillåt inte godkännande av ett sådant
+     underlag (samma regel som CRM:et och fakturan, OfferCalc.validate). */
+  var _valid = OfferCalc.validate ? OfferCalc.validate(off) : { ok: true };
+  if (!_valid.ok) {
+    totalsHtml = '<div class="po-totals"><div class="po-status-banner warning">Offertens belopp behöver kontrolleras av VIFT innan den kan godkännas. Kontakta oss så skickar vi en rättad offert.</div></div>';
+  }
+
   /* Aktionspanel */
   var actionsHtml = '';
-  if (!answered) {
+  if (!answered && !_valid.ok) {
+    actionsHtml = '<div class="po-actions" id="po-actions"><p>Godkännande är tillfälligt inte möjligt för den här offerten. Kontakta VIFT.</p></div>';
+  } else if (!answered) {
     actionsHtml = '<div class="po-actions" id="po-actions">' +
       '<h2>Vad vill du göra?</h2>' +
       '<p>Du kan godkänna offerten, begära ändringar eller meddela att du inte vill gå vidare.</p>' +

@@ -131,7 +131,21 @@ var OfferCalc = (function () {
     return Object.keys(seen).map(Number).sort(function (a, b) { return b - a; });
   }
 
+  /* G8 (2026-11-23): samma regel som fakturan (InvoiceService prospektiv
+     kontroll): RUT/ROT-avdraget får inte överstiga engångsbeloppet inkl.
+     moms — då blir "att betala" negativt. Beräkningen ändras inte; offerten
+     får inte sparas/skickas/godkännas förrän avdraget rättats. */
+  function validate(off) {
+    var t = totals(off);
+    var issues = [];
+    if (t.rutRotAmount > 0 && t.rutRotAmount > t.totalInclVat) {
+      issues.push({ code: 'rut_exceeds_total', message: 'RUT/ROT-avdraget (' + t.rutRotAmount + ' kr) är större än engångsbeloppet inkl. moms (' + t.totalInclVat + ' kr). Kontrollera avdragsunderlaget på raderna.' });
+    }
+    return { ok: issues.length === 0, issues: issues, totals: t };
+  }
+
   return {
+    validate: validate,
     normVat: normVat, lineExVat: lineExVat, extraIncludedInTotal: extraIncludedInTotal, extraExVat: extraExVat,
     rawExVat: rawExVat, rawVat: rawVat, discountAmount: discountAmount,
     recurringLines: recurringLines, recurringMonthlyExVat: recurringMonthlyExVat,

@@ -89,7 +89,12 @@ const Modal = {
     while (this._stack.length > 0) this.close();
   },
 
+  /* 2026-11-23: returnerar även ett löfte (true = Bekräfta, false = Avbryt).
+     `await Modal.confirm(…)` användes vid borttagning av offertbilaga men
+     gav undefined — Bekräfta gjorde då ingenting. Återanrop fungerar som förut. */
   confirm(message, onConfirm, onCancel) {
+    let resolve;
+    const p = new Promise(r => { resolve = r; });
     Modal.open({
       title: 'Bekräfta',
       body: `<p style="font-size:14px;line-height:1.5;color:var(--tx);">${message}</p>`,
@@ -98,16 +103,19 @@ const Modal = {
           label: 'Bekräfta', cls: 'btn bp', onClick: () => {
             Modal.close();
             if (onConfirm) onConfirm();
+            resolve(true);
           }
         },
         {
           label: 'Avbryt', cls: 'btn bs', onClick: () => {
             Modal.close();
             if (onCancel) onCancel();
+            resolve(false);
           }
         }
       ]
     });
+    return p;
   }
 };
 
