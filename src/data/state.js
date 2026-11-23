@@ -2196,13 +2196,34 @@ function _vfScheduleShortNumberReconcile() {
   }, 0);
 }
 
-function getCu(id)   { return state.customers.find(c => c.id === id) || null; }
-function getAO(id)   { return state.workOrders.find(a => a.id === id) || null; }
-function getOff(id)  { return state.offers.find(o => o.id === id) || null; }
-function getInv(id)  { return state.invoices.find(i => i.id === id) || null; }
-function getObj(id)  { return state.properties.find(o => o.id === id) || null; }
-function getSO(id)   { return state.salesOpportunities.find(s => s.id === id) || null; }
-function getStaff(id){ return state.staff.find(s => s.id === id) || null; }
+/* E2E PERF-01 (2026-11-23): uppslagningarna nedan anropas per rad i listor
+   (AO-listan med 3 000 AO och 2 000 kunder/3 000 fastigheter: ~1 s av
+   2 s renderingstid i linjär find()). Ett id→index-register per array
+   byggs om när arrayen byts ut eller ändrar längd, och varje träff
+   kontrolleras (arr[i].id === id) — vid minsta avvikelse används samma
+   linjära sökning som förut. Semantiken är oförändrad: första elementet
+   med exakt samma id (===), annars null. */
+var _vfIdx = {};
+function _vfFindById(arr, id, cacheKey) {
+  if (!Array.isArray(arr)) return null;
+  let c = _vfIdx[cacheKey];
+  if (!c || c.arr !== arr || c.len !== arr.length) {
+    c = _vfIdx[cacheKey] = { arr: arr, len: arr.length, map: new Map() };
+    for (let i = arr.length - 1; i >= 0; i--) { const el = arr[i]; if (el && el.id !== undefined && el.id !== null) c.map.set(el.id, i); }
+  }
+  const i = c.map.get(id);
+  if (i !== undefined) { const el = arr[i]; if (el && el.id === id) return el; }
+  const found = arr.find(x => x && x.id === id) || null;
+  if (found) c.len = -1; // registret var inaktuellt — bygg om vid nästa anrop
+  return found;
+}
+function getCu(id)   { return _vfFindById(state.customers, id, 'customers'); }
+function getAO(id)   { return _vfFindById(state.workOrders, id, 'workOrders'); }
+function getOff(id)  { return _vfFindById(state.offers, id, 'offers'); }
+function getInv(id)  { return _vfFindById(state.invoices, id, 'invoices'); }
+function getObj(id)  { return _vfFindById(state.properties, id, 'properties'); }
+function getSO(id)   { return _vfFindById(state.salesOpportunities, id, 'salesOpportunities'); }
+function getStaff(id){ return _vfFindById(state.staff, id, 'staff'); }
 function getMall(id)  { return state.ronderingsmallar.find(m => m.id === id) || null; }
 function getRon(id)   { return state.ronderingar.find(r => r.id === id) || null; }
 function getAvv(id)   { return state.avvikelser.find(a => a.id === id) || null; }
