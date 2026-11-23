@@ -1,3 +1,4 @@
+-- ERSATT 2026-11-24 av 20261124000002_work_order_log_ops.sql (via ny EF work-order-log-write). Kör INTE denna fil.
 -- =====================================================================
 -- PROPOSAL (G5) — INTE KÖRD NÅGONSTANS. Kräver granskning mot den
 -- driftsatta work_order_patch/ao-time-write (källa saknas i repot, G4)

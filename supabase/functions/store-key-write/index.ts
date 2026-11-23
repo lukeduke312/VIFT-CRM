@@ -48,6 +48,8 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleGetStampStatus, handleSetStampStatus } from './stamp-status.ts'
 import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
+import { activitiesWriteAllowed } from './activities-policy.ts'
+import { buildActivityEntry, MAX_ENTRIES } from './activity-log.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -195,11 +197,23 @@ serve(async (req: Request) => {
     return json({ hashes: data || {} })
   }
 
+  /* 2026-11-24: serverstyrd aktivitetslogg (se activity-log.ts). Alla
+     aktiva, inloggade användare får logga sina egna händelser; servern sätter
+     tid och användare. */
+  if (action === 'appendActivity') {
+    const built = buildActivityEntry(body.entry, callerStaffId, new Date().toISOString())
+    if (!built.ok) return json({ error: built.error }, 400)
+    const { data, error } = await supabase.rpc('activity_log_append', { p_entry: built.entry, p_max: MAX_ENTRIES })
+    if (error) { console.error('[store-key-write] activity_log_append:', error.message); return json({ error: 'append_failed' }, 500) }
+    return json(data || { ok: true, id: built.entry.id })
+  }
+
   if (action === 'write') {
     const key = String(body.key ?? '')
     const value = body.value
     const expectedHash = body.expectedHash === undefined ? null : String(body.expectedHash)
     if (!key || value === undefined) return json({ error: 'missing_fields' }, 400)
+    if (key === 'vift_activityLog') return json({ error: 'append_only' }, 403)
 
     const requiredPerm = KEY_PERMISSIONS[key]
     if (!requiredPerm) return json({ error: 'key_not_allowlisted' }, 400)
@@ -237,7 +251,12 @@ serve(async (req: Request) => {
 
     const requiredPerm = KEY_PERMISSIONS[key]
     if (!requiredPerm) return json({ error: 'key_not_allowlisted' }, 400)
+    if (key === 'vift_activityLog') return json({ error: 'append_only' }, 403)
+    /* TASK-01 (2026-11-24): per-post-regel för uppgifter — se
+       activities-policy.ts. Bedöms på `previous`, som RPC:n verifierar mot
+       serverns aktuella element under radlås. */
     const authorized = hasPerm(perms, requiredPerm)
+      || (key === 'vift_activities' && activitiesWriteAllowed(upserts as unknown[], removals, perms, callerStaffId).ok)
 
     const { data, error } = await supabase.rpc('store_business_key_merge_write', {
       p_key: key,
