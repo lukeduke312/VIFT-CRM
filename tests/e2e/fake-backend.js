@@ -244,6 +244,21 @@ class FakeSupabase {
         case 'offer-pdf': this.outbox.push({ type: 'pdf', body }); return { status: 200, headers: { 'content-type': 'application/pdf' }, raw: Buffer.from('%PDF-1.4\n% e2e\n') };
         case 'send-offer-email': this.outbox.push({ type: 'email', body }); return { status: 200, body: { ok: true, simulated: true } };
         case 'offer-attachment-url': return { status: 200, body: { urls: {} } };
+        case 'offer-attachment-upload': {
+          // Repots EF (2026-11-23) har PATCH; den driftsatta i STAGING har det inte
+          // ännu → 405 som där. Världen kan slå på { attachmentPatch: true }.
+          if (!this.has(perms, 'offer_manage')) return DEFINITE(403, 'forbidden');
+          if (method !== 'PATCH' || !this.opts.attachmentPatch) return DEFINITE(405, 'method_not_allowed');
+          const list = this.get('offerAttachments') || [];
+          const att = list.find((a) => a.id === body.attachmentId);
+          if (!att || att.active === false) return DEFINITE(404, 'not_found');
+          if ('displayName' in body) att.displayName = String(body.displayName || '').trim() || att.originalFileName;
+          if ('description' in body) att.description = String(body.description || '');
+          if ('includeInPublicView' in body) att.includeInPublicView = body.includeInPublicView === true;
+          if ('includeInCombinedPdf' in body) att.includeInCombinedPdf = body.includeInCombinedPdf === true;
+          this.set('offerAttachments', list); this.touch();
+          return { status: 200, body: { ok: true, attachment: att } };
+        }
         default:
           this.unmodeled.push(fn + (body && body.action ? ':' + body.action : ''));
           return DEFINITE(501, 'not_modeled_in_fake_backend');

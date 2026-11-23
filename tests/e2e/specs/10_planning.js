@@ -76,12 +76,15 @@ module.exports = [
       await s.settle(2500);
       const toasts = await s.toasts();
       t.note('toasts: ' + toasts.join(' / '));
-      t.assert(/servern bekräftade inte/.test(toasts[toasts.length - 1] || ''), 'sista beskedet varnar att vinsten inte är sparad');
+      // G12: aldrig "Markerad vunnen!"; tydligt fel; lokalt återställd; kvar som osparad med Återuppta
+      t.assert(!toasts.some((m) => /Markerad vunnen/.test(m)), 'inget "Markerad vunnen!" vid serverfel');
+      t.assert(/kunde inte sparas/.test(toasts[toasts.length - 1] || ''), 'sista beskedet: kunde inte sparas');
       t.assert(t.fake.get('salesOpps').find((o) => o.id === op.id).status === 'new', 'servern oförändrad');
+      t.assert(await s.eval((id) => state.salesOpportunities.find((o) => o.id === id).status === 'new', op.id), 'klienten återställd till serverns läge');
       t.fake.clearFaults();
-      await s.eval(() => persist());
-      await s.settle(1500);
-      t.assert(t.fake.get('salesOpps').find((o) => o.id === op.id).status === 'won', 'ändringen skickas när servern fungerar igen');
+      await s.page.locator('#vf-unsaved-banner button', { hasText: 'Återuppta' }).click();
+      await s.waitToast(/Ändringen är sparad/, 6000);
+      t.assert(t.fake.get('salesOpps').find((o) => o.id === op.id).status === 'won', 'Återuppta skickar ändringen när servern fungerar igen');
     },
   },
   {

@@ -926,7 +926,9 @@ const WorkOrderService = {
   },
 
   /* Material */
-  addMaterial(aoId, mat) {
+  /* G12: valfritt sista argument { onSettled } — anroparen visar besked
+     först när servern bekräftat (samma kontrakt som update()). */
+  addMaterial(aoId, mat, syncOpts) {
     const ao = getAO(aoId);
     if (!ao) return;
     ao.materials = ao.materials || [];
@@ -936,19 +938,19 @@ const WorkOrderService = {
     ActivityService.log('material_added',
       `Material tillagt på ${ao.id}: ${mat.name}`,
       { workOrderId: aoId, customerId: ao.customerId });
-    this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt });
+    this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt }, syncOpts);
     persist();
     return entry;
   },
 
-  updateMaterial(aoId, matId, data) {
+  updateMaterial(aoId, matId, data, syncOpts) {
     const ao = getAO(aoId);
     if (!ao) return;
     const mat = (ao.materials || []).find(m => m.id === matId);
     if (mat) {
       Object.assign(mat, data);
       ao.updatedAt = new Date().toISOString();
-      this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt });
+      this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt }, syncOpts);
       persist();
     }
   },
@@ -1149,7 +1151,7 @@ const WorkOrderService = {
     Sidebar.updateBadges();
   },
 
-  updateStaff(aoId, opts = {}) {
+  updateStaff(aoId, opts = {}, syncOpts) {
     const ao = getAO(aoId);
     if (!ao) return;
     const user = state.currentUser;
@@ -1182,7 +1184,7 @@ const WorkOrderService = {
 
     ao.updatedAt = new Date().toISOString();
     ActivityService.log('work_order_updated', `Personal ändrad på ${ao.id}`, { workOrderId: aoId, customerId: ao.customerId });
-    this._syncAO(ao, { staff: ao.staff, responsibleStaffId: ao.responsibleStaffId, status: ao.status, log: ao.log, updatedAt: ao.updatedAt });
+    this._syncAO(ao, { staff: ao.staff, responsibleStaffId: ao.responsibleStaffId, status: ao.status, log: ao.log, updatedAt: ao.updatedAt }, syncOpts);
     persist();
     Sidebar.updateBadges();
   },

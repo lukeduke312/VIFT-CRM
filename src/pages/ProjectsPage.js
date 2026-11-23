@@ -309,12 +309,14 @@ const ProjectsPage = {
     if (!result.ok) { showToast(result.error); return; }
 
     Modal.close();
-    showToast(id ? 'Projekt uppdaterat' : 'Projekt skapat');
-    if (Router.currentPage === 'pg-project-detail' && Router.currentParams && Router.currentParams.projectId === id) {
-      ProjectDetailPage.render({ projectId: id });
-    } else {
-      this.render();
-    }
+    const rr = () => {
+      if (Router.currentPage === 'pg-project-detail' && Router.currentParams && Router.currentParams.projectId === id) ProjectDetailPage.render({ projectId: id });
+      else this.render();
+    };
+    rr();
+    /* G12: besked först efter serverns bekräftelse. */
+    const savedId = id || (result.project && result.project.id);
+    return confirmPersist('projects', savedId, { ok: id ? 'Projekt uppdaterat' : 'Projekt skapat', fail: 'Projektet kunde inte sparas', onChange: rr });
   },
 
   /* ── Arkivering ───────────────────────────────────────────────── */

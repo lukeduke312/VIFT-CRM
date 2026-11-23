@@ -718,7 +718,10 @@ const PropertyDetailPage = {
         }
       }
       Modal.close(); // I1: closeModal() does not exist
-      showToast('Objekt uppdaterat');
+      /* G12: objektets fält bekräftade av servern innan "uppdaterat". */
+      confirmPersist('propertyObjects', objId, { ok: 'Objekt uppdaterat', fail: 'Objektet kunde inte sparas', onChange: () => {
+        const pp = getObj(obj.propertyId); const e2 = pp && document.getElementById('prop-tab-objects'); if (e2) e2.innerHTML = this._renderObjectsTab(pp);
+      }});
       const p = getObj(obj.propertyId);
       if (p) {
         const el = document.getElementById('prop-tab-objects');
@@ -2412,21 +2415,20 @@ const PropertyDetailPage = {
     };
     if (idx !== null) prop.contacts[idx] = contact;
     else prop.contacts.push(contact);
-    persist();
     Modal.close();
-    const el = document.getElementById('prop-contacts');
-    if (el) el.innerHTML = this._renderContacts(prop.contacts);
-    showToast(idx !== null ? 'Kontaktperson uppdaterad' : 'Kontaktperson tillagd');
+    /* G12: framgång först efter serverns bekräftelse (confirmPersist). */
+    const _rr = () => { const p = getObj(this.propId); const el = document.getElementById('prop-contacts'); if (p && el) el.innerHTML = this._renderContacts(p.contacts || []); };
+    _rr();
+    return confirmPersist('properties', prop.id, { ok: idx !== null ? 'Kontaktperson uppdaterad' : 'Kontaktperson tillagd', fail: 'Kontaktpersonen kunde inte sparas', onChange: _rr });
   },
 
   removeContact(idx) {
     const prop = getObj(this.propId);
     if (!prop || !prop.contacts) return;
     prop.contacts.splice(idx, 1);
-    persist();
-    const el = document.getElementById('prop-contacts');
-    if (el) el.innerHTML = this._renderContacts(prop.contacts);
-    showToast('Kontaktperson borttagen');
+    const _rr = () => { const p = getObj(this.propId); const el = document.getElementById('prop-contacts'); if (p && el) el.innerHTML = this._renderContacts(p.contacts || []); };
+    _rr();
+    return confirmPersist('properties', prop.id, { ok: 'Kontaktperson borttagen', fail: 'Kontaktpersonen kunde inte tas bort', onChange: _rr });
   },
 
   /* ── Teknisk info per system ───────────────────────────── */
@@ -2567,11 +2569,21 @@ const PropertyDetailPage = {
       else delete t[f.key];
     });
     prop.technicalSystems[key] = t;
-    persist();
     Modal.close();
-    showToast('Teknisk info sparad');
-    const tabEl = document.getElementById('prop-tab-tech');
-    if (tabEl) tabEl.innerHTML = this._renderTechTab(prop.technicalSystems, prop.inspections||{});
+    return this._confirmTech(prop.id, 'Teknisk info sparad', 'Teknisk info kunde inte sparas');
+  },
+
+  /* G12: gemensam bekräftad sparning för teknik-/besiktningsfliken. */
+  _confirmTech(propId, ok, fail) {
+    const _rr = () => {
+      const p = getObj(propId); if (!p) return;
+      const tabEl = document.getElementById('prop-tab-tech');
+      if (tabEl) tabEl.innerHTML = this._renderTechTab(p.technicalSystems || {}, p.inspections || {});
+      const ov = document.getElementById('prop-tab-overview');
+      if (ov) ov.innerHTML = this._renderOverview(p, p.inspections || {}, p.serviceIntervals || []);
+    };
+    _rr();
+    return confirmPersist('properties', propId, { ok, fail, onChange: _rr });
   },
 
   _saveTechSystem(key, fields) {
@@ -2584,11 +2596,8 @@ const PropertyDetailPage = {
       if (val) t[f.id] = val;
     });
     prop.technicalSystems[key] = t;
-    persist();
     Modal.close();
-    showToast('Teknisk info sparad');
-    const tabEl = document.getElementById('prop-tab-tech');
-    if (tabEl) tabEl.innerHTML = this._renderTechTab(prop.technicalSystems, prop.inspections||{});
+    return this._confirmTech(prop.id, 'Teknisk info sparad', 'Teknisk info kunde inte sparas');
   },
 
   /* ── Besiktningar ──────────────────────────────────────── */
@@ -2645,13 +2654,8 @@ const PropertyDetailPage = {
       if (last||next||status) insp[t.key] = { lastDate:last||'', nextDate:next||'', status:status||'' };
     });
     prop.inspections = insp;
-    persist();
     Modal.close();
-    showToast('Besiktningar sparade');
-    const techTab = document.getElementById('prop-tab-tech');
-    if (techTab) techTab.innerHTML = this._renderTechTab(prop.technicalSystems||{}, insp);
-    const overviewTab = document.getElementById('prop-tab-overview');
-    if (overviewTab) overviewTab.innerHTML = this._renderOverview(prop, insp);
+    return this._confirmTech(prop.id, 'Besiktningar sparade', 'Besiktningarna kunde inte sparas');
   },
 
   /* ── Bilder (Supabase Storage) ────────────────────────── */
@@ -2788,11 +2792,10 @@ const PropertyDetailPage = {
         ? `${state.currentUser.firstName||''} ${state.currentUser.lastName||''}`.trim()
         : 'Okänd'
     });
-    persist();
     Modal.close();
-    const el = document.getElementById('prop-notes');
-    if (el) el.innerHTML = this._renderNotes(prop.notes);
-    showToast('Anteckning sparad');
+    const _rr = () => { const p = getObj(this.propId); const el = document.getElementById('prop-notes'); if (p && el) el.innerHTML = this._renderNotes(p.notes || []); };
+    _rr();
+    return confirmPersist('properties', prop.id, { ok: 'Anteckning sparad', fail: 'Anteckningen kunde inte sparas', onChange: _rr });
   },
 
   toggleStatus() {
@@ -2950,9 +2953,9 @@ const PropertyDetailPage = {
     state.properties = state.properties || [];
     copy.shortNumber = newShortNumber(copy.id, state.properties); // display number (2026-11-12), never copied from the source
     state.properties.push(copy);
-    persist();
     Modal.close();
-    showToast('Fastighet kopierad — öppnar ny fastighet');
-    setTimeout(() => Router.showPage('pg-obj-detail', { propId: copy.id }), 300);
+    /* G12: öppna kopian först när servern bekräftat den. */
+    return confirmPersist('properties', copy.id, { ok: 'Fastighet kopierad', fail: 'Kopian kunde inte sparas',
+      onSaved: () => setTimeout(() => Router.showPage('pg-obj-detail', { propId: copy.id }), 300) });
   }
 };

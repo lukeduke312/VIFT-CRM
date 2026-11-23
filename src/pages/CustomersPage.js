@@ -1119,10 +1119,11 @@ const CustomerDetailPage = {
       cu.contacts.push(contact);
     }
     cu.updatedAt = new Date().toISOString();
-    persist();
     Modal.close();
-    this._renderFull(document.getElementById('pg-crm-detail-content'));
-    showToast('Kontaktperson sparad');
+    /* G12: "sparad" först när servern bekräftat (confirmPersist, state.js). */
+    const _rr = () => this._renderFull(document.getElementById('pg-crm-detail-content'));
+    _rr();
+    return confirmPersist('customers', cu.id, { ok: 'Kontaktperson sparad', fail: 'Kontaktpersonen kunde inte sparas', onChange: _rr });
   },
 
   removeContact(idx) {
@@ -1146,9 +1147,9 @@ const CustomerDetailPage = {
         if (n === idx) op.contactId = '';
         else if (n > idx) op.contactId = String(n - 1);
       });
-      persist();
-      this._renderFull(document.getElementById('pg-crm-detail-content'));
-      showToast('Kontaktperson borttagen');
+      const _rr = () => this._renderFull(document.getElementById('pg-crm-detail-content'));
+      _rr();
+      confirmPersist('customers', cu.id, { ok: 'Kontaktperson borttagen', fail: 'Kontaktpersonen kunde inte tas bort', onChange: _rr });
     });
   },
 

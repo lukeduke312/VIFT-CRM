@@ -44,7 +44,7 @@ const MAX_BYTES        = 50 * 1024 * 1024  /* 50 MB */
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'content-type, authorization',
-  'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS'
+  'Access-Control-Allow-Methods': 'POST, PATCH, DELETE, OPTIONS'
 }
 
 /* ── Tillåtna filtyper ────────────────────────────────────── */
@@ -146,6 +146,20 @@ serve(async (req: Request) => {
     if (!attachmentId) return json({ error: 'not_found' }, 404)
 
     return await softDeleteAttachment(supabase, attachmentId)
+  }
+
+  /* ── PATCH: ändra bilagans metadata (2026-11-23, G12) ─────────
+     Klientens "Redigera bilaga" ändrade tidigare bara den lokala kopian —
+     vift_offerAttachments är skrivskyddad för den generiska sparvägen, så
+     namn, beskrivning och "synlig i kundvy" nådde aldrig servern. Endast
+     dessa fyra fält får ändras; allt annat (sökväg, låst version, aktiv)
+     är orört. Kräver offer_manage (kontrollerat ovan). */
+  if (req.method === 'PATCH') {
+    let body: Record<string, unknown>
+    try { body = await req.json() } catch { return json({ error: 'invalid_json' }, 400) }
+    const attachmentId = String(body.attachmentId ?? '').trim()
+    if (!attachmentId) return json({ error: 'missing_fields' }, 400)
+    return await patchAttachment(supabase, attachmentId, body, user)
   }
 
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -281,6 +295,39 @@ serve(async (req: Request) => {
 })
 
 /* ── Soft delete ──────────────────────────────────────────── */
+async function patchAttachment(
+  supabase: ReturnType<typeof createClient>,
+  attachmentId: string,
+  body: Record<string, unknown>,
+  user: { id?: string; email?: string } | null
+): Promise<Response> {
+  const { data: attRow } = await supabase
+    .from('store').select('value').eq('key', 'vift_offerAttachments').maybeSingle()
+  const attachments: Record<string, unknown>[] =
+    Array.isArray(attRow?.value) ? attRow.value as Record<string, unknown>[] : []
+  const att = attachments.find(a => a.id === attachmentId)
+  if (!att || att.active === false) return json({ error: 'not_found' }, 404)
+
+  if ('displayName' in body) {
+    const v = String(body.displayName ?? '').trim().slice(0, 200)
+    att.displayName = v || att.originalFileName
+  }
+  if ('description' in body) att.description = String(body.description ?? '').trim().slice(0, 1000)
+  if ('includeInPublicView' in body) att.includeInPublicView = body.includeInPublicView === true
+  if ('includeInCombinedPdf' in body) att.includeInCombinedPdf = body.includeInCombinedPdf === true
+  att.updatedAt = new Date().toISOString()
+
+  await supabase.from('store')
+    .upsert({ key: 'vift_offerAttachments', value: attachments }, { onConflict: 'key' })
+
+  await appendOfferEvent(supabase, {
+    offerId: String(att.offerId ?? ''), offerVersion: 1, type: 'attachment_updated',
+    ts: new Date().toISOString(), byUser: String(user?.email ?? ''),
+    comment: `Bilaga ändrad: ${String(att.displayName || att.originalFileName || attachmentId)}`
+  })
+  return json({ ok: true, attachment: att })
+}
+
 async function softDeleteAttachment(
   supabase: ReturnType<typeof createClient>,
   attachmentId: string

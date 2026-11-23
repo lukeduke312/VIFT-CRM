@@ -606,6 +606,67 @@ async function commitElementChange(shortKey, elementId, mutate, msgs) {
   }
 }
 
+/* ── G12 (2026-11-23): confirmPersist() ──────────────────────────────
+   För sparvägar där ändringen REDAN är gjord i state (de ~40 äldre
+   anropsställena som tidigare gjorde `persist(); showToast('Sparat')`).
+   Ett anrop ersätter de två raderna:
+     confirmPersist('customers', cu.id, { ok: 'Kontaktperson sparad',
+       fail: 'Kontaktpersonen kunde inte sparas', onChange: () => rerender() });
+   Visar "Sparar…", väntar på serverns svar för nyckeln och visar framgång
+   först då. Vid avslag avgör settlePersistFailure() (N1) utfallet:
+   landed → framgång; krock → konfliktdialogen; annars återställs posten
+   till serverns senast bekräftade värde (diff-baslinjen) och felet visas.
+   Utan element-id (objektformade nycklar som settings) visas bara felet —
+   ändringen ligger kvar osparad och skickas med nästa sparning.
+   Samma nyckel+id kan inte sparas parallellt (dubbelklick). */
+var _vfConfirmBusy = {};
+async function confirmPersist(shortKey, elementId, msgs) {
+  msgs = msgs || {};
+  const id = elementId === null || elementId === undefined ? null : String(elementId);
+  const busyKey = shortKey + '|' + (id === null ? '*' : id);
+  const say = function(m, ms) { if (m && typeof showToast === 'function') showToast(m, ms); };
+  const changed = function() { if (typeof msgs.onChange === 'function') { try { msgs.onChange(); } catch (e) { console.warn('[confirmPersist] onChange:', e); } } };
+  if (_vfConfirmBusy[busyKey]) return _vfConfirmBusy[busyKey];
+  const run = (async function() {
+    if (msgs.saving !== false) say(msgs.saving || 'Sparar…');
+    const ok = await persist({ keys: [shortKey] });
+    if (ok) {
+      if (typeof msgs.onSaved === 'function') { try { msgs.onSaved(); } catch (e) { console.warn('[confirmPersist] onSaved:', e); } }
+      say(msgs.ok);
+      return { ok: true, fate: 'ok' };
+    }
+    const stateKey = _vfBusinessStateKey(shortKey);
+    if (id === null || !Array.isArray(state[stateKey])) {
+      say((msgs.fail || 'Ändringen kunde inte sparas') + ' — servern bekräftade inte ändringen. Försök igen.', 8000);
+      return { ok: false, fate: 'unknown' };
+    }
+    const n1 = (typeof settlePersistFailure === 'function') ? await settlePersistFailure(shortKey, id) : { fate: 'none' };
+    if (n1.fate === 'landed') {
+      if (typeof msgs.onSaved === 'function') { try { msgs.onSaved(); } catch (e) {} }
+      say(msgs.ok); return { ok: true, fate: 'landed' };
+    }
+    if (n1.fate === 'diverged' || n1.fate === 'conflict') {
+      changed();
+      say('Ändringen krockade med en ändring från en annan session — välj i konfliktdialogen.', 6000);
+      return { ok: false, fate: n1.fate };
+    }
+    let base = null;
+    try { base = JSON.parse(state._keySnapshot[shortKey] || 'null'); } catch (e) { base = null; }
+    if (Array.isArray(base)) {
+      const srv = base.find(function(el) { return el && String(el.id) === id; });
+      _vfAdoptServerElement(shortKey, id, srv === undefined ? null : srv);
+    }
+    if (typeof Sidebar !== 'undefined' && Sidebar.updateBadges) { try { Sidebar.updateBadges(); } catch (e) {} }
+    changed();
+    say((msgs.fail || 'Ändringen kunde inte sparas') + (n1.fate === 'not-landed' || n1.fate === 'unknown'
+      ? ' — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst.'
+      : '. Servern avvisade ändringen — försök igen.'), 8000);
+    return { ok: false, fate: n1.fate };
+  })();
+  _vfConfirmBusy[busyKey] = run;
+  try { return await run; } finally { delete _vfConfirmBusy[busyKey]; }
+}
+
 /* Global skyddsnät för de äldre anropsställen som anropar persist()
    utan argument och visar framgång direkt (≈40 ställen, se docs/E2E).
    Misslyckas skrivningen för en ändrad nyckel (inte konflikt — den har

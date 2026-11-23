@@ -261,10 +261,11 @@ const ContractsPage = (function() {
       if (!state.contracts) state.contracts = [];
       state.contracts.push(c);
     }
-    persist();
     Modal.close();
     render();
-    showToast(contractId ? 'Avtal uppdaterat' : 'Avtal skapat');
+    /* G12: besked först efter serverns bekräftelse. */
+    const savedId = contractId || state.contracts[state.contracts.length - 1].id;
+    return confirmPersist('contracts', savedId, { ok: contractId ? 'Avtal uppdaterat' : 'Avtal skapat', fail: 'Avtalet kunde inte sparas', onChange: render });
   }
 
   /* ── Filter ───────────────────────────────────────────────── */

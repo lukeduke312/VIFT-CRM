@@ -904,12 +904,16 @@ const WorkOrderDetailPage = {
              andra AO-mutationer, istället för att lämnas på den gamla
              generiska vägen. */
           if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
-            WorkOrderService._syncAO(ao, { estimatedHours: ao.estimatedHours, log: ao.log, updatedAt: ao.updatedAt });
+            /* G12: besked först när servern bekräftat. */
+            WorkOrderService._syncAO(ao, { estimatedHours: ao.estimatedHours, log: ao.log, updatedAt: ao.updatedAt }, { onSettled: (r) => {
+              if (r.ok) showToast('Uppskattad tid uppdaterad');
+              else if (r.final) showToast('Uppskattad tid kunde inte sparas (' + (r.error || 'okänt fel') + ').', 6000);
+            }});
           }
           persist();
           Modal.close();
           WorkOrderDetailPage.render({ aoId });
-          showToast('Uppskattad tid uppdaterad');
+          showToast('Sparar…');
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -1534,6 +1538,21 @@ const WorkOrderDetailPage = {
      en `imagePath`-referens, inga bildbytes i vift_workOrders. Loggposten
      sparas via WorkOrderService.update() → ao-time-write; "sparad" visas
      först när servern bekräftat (onSettled ok). */
+  /* G12: gemensamt besked för AO-skrivningar via utkorgen — framgång
+     först vid serverns ACK, tydligt fel vid definitivt avslag (då har
+     WorkOrderService/AOTimeSync redan markerat AO:n och omläsning sker).
+     Transienta fel (nät) ligger kvar i kön och ger inget besked här. */
+  _ackOpts(okMsg, failMsg) {
+    const aoId = this.aoId;
+    return { onSettled: (r) => {
+      if (r && r.ok) { showToast(okMsg); return; }
+      if (r && r.final) {
+        showToast(failMsg + ' (' + (r.error || 'okänt fel') + ').', 6000);
+        if (this.aoId === aoId) { try { this.render({ aoId }); } catch (e) {} }
+      }
+    }};
+  },
+
   async _saveLog() {
     if (this._logSaving) return;
     const text = document.getElementById('log-text')?.value.trim();
@@ -1920,12 +1939,12 @@ const WorkOrderDetailPage = {
       articleId:document.getElementById('mat-article-id')?.value || '',
       addedAt:  existingId ? undefined : new Date().toISOString()
     };
+    /* G12: besked först när servern bekräftat. */
+    showToast('Sparar…');
     if (existingId) {
-      WorkOrderService.updateMaterial(this.aoId, existingId, data);
-      showToast('Material uppdaterat');
+      WorkOrderService.updateMaterial(this.aoId, existingId, data, this._ackOpts('Material uppdaterat', 'Materialraden kunde inte sparas'));
     } else {
-      WorkOrderService.addMaterial(this.aoId, data);
-      showToast('Material tillagt');
+      WorkOrderService.addMaterial(this.aoId, data, this._ackOpts('Material tillagt', 'Materialraden kunde inte sparas'));
     }
     Modal.close();
     this._refreshMaterialSection();
@@ -2393,7 +2412,7 @@ const WorkOrderDetailPage = {
     if (!ao) return;
     if (!ao.checklist) ao.checklist = [];
     ao.checklist.push({ id: 'c' + Date.now(), text, description: desc, avvikelse: null, done: false });
-    WorkOrderService.update(this.aoId, { checklist: ao.checklist });
+    WorkOrderService.update(this.aoId, { checklist: ao.checklist }, this._ackOpts('Checkpunkt tillagd', 'Checkpunkten kunde inte sparas'));
     Modal.close();
     const aoUp = getAO(this.aoId);
     if (aoUp) {
@@ -2401,7 +2420,7 @@ const WorkOrderDetailPage = {
       this._updateChecklistCounter(aoUp);
       this._openSectionOf('ao-checklist');
     }
-    showToast('Checkpunkt tillagd');
+    showToast('Sparar…');
   },
 
   /* AO-CHECKLIST-AUTOSTART R1.2 — ATOMISK CHECKLISTMUTATION (se RAPPORT
@@ -2787,7 +2806,7 @@ const WorkOrderDetailPage = {
     }
 
     const prevStaff = (ao.staff || []).slice();
-    WorkOrderService.updateStaff(aoId, { staffIds: selectedIds, responsibleStaffId: responsibleId, moveToPool });
+    WorkOrderService.updateStaff(aoId, { staffIds: selectedIds, responsibleStaffId: responsibleId, moveToPool }, this._ackOpts('Personal uppdaterad', 'Personaländringen kunde inte sparas'));
     // Log assignment changes
     const added = selectedIds.filter(id => !prevStaff.includes(id));
     if (added.length > 0) {
@@ -2809,7 +2828,7 @@ const WorkOrderDetailPage = {
     }
     Modal.close();
     WorkOrderDetailPage.render({ aoId });
-    showToast('Personal uppdaterad');
+    showToast('Sparar…');
     Sidebar.updateBadges();
   },
 

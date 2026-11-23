@@ -5112,9 +5112,9 @@ const OfferDetailPage = {
     if (status === 'påmind')  off.reminderSentAt  = new Date().toISOString();
     if (status === 'godkänd' || status === 'nekad') off.answeredAt = new Date().toISOString();
     this._logEvt(off, 'status', 'Status: ' + statusLabel(prev) + ' → ' + statusLabel(status));
-    persist();
     this.render({offerId: this.offerId});
-    showToast('Status: ' + statusLabel(status));
+    /* G12: besked först efter serverns bekräftelse; avslag återställer offerten. */
+    return confirmPersist('offers', off.id, { ok: 'Status: ' + statusLabel(status), fail: 'Statusändringen kunde inte sparas', onChange: () => this.render({offerId: off.id}) });
   },
 
   /* ─ Single-instance event handlers — inga läckor vid upprepad öppning ─ */
@@ -5317,10 +5317,9 @@ const OfferDetailPage = {
        personal som registrerat ett manuellt godkännande i efterhand. */
     off.manualApproval = { method: method, comment: comment, registeredAt: now, registeredBy: registeredBy };
     this._logEvt(off, 'status', 'Godkännande registrerat via ' + method + (comment ? ': ' + comment : ''));
-    persist();
     Modal.close();
     this.render({offerId});
-    showToast('Godkännande registrerat (' + method + ')');
+    return confirmPersist('offers', off.id, { ok: 'Godkännande registrerat (' + method + ')', fail: 'Godkännandet kunde inte sparas', onChange: () => this.render({offerId}) });
   },
 
   duplicate(offerId) {
@@ -5355,9 +5354,8 @@ const OfferDetailPage = {
     });
     this._logEvt(newOff, 'create', 'Duplicerad från ' + offerId);
     state.offers.push(newOff);
-    persist();
-    Router.showPage('pg-offer-detail', {offerId: newOff.id});
-    showToast('Kopia ' + newOff.id + ' skapad');
+    return confirmPersist('offers', newOff.id, { ok: 'Kopia ' + newOff.id + ' skapad', fail: 'Kopian kunde inte sparas',
+      onSaved: () => Router.showPage('pg-offer-detail', {offerId: newOff.id}), onChange: () => { try { Router.refreshCurrent(); } catch (e) {} } });
   },
 
   archiveOffer(offerId) {
@@ -5367,10 +5365,9 @@ const OfferDetailPage = {
       off.archived = true;
       off.updatedAt = new Date().toISOString();
       this._logEvt(off, 'arkiverad', 'Offert arkiverad');
-      persist();
       OffersPage._setFilter('arkiverade');
       Router.showPage('pg-offer');
-      showToast('Offert arkiverad');
+      confirmPersist('offers', off.id, { ok: 'Offert arkiverad', fail: 'Arkiveringen kunde inte sparas', onChange: () => { try { Router.refreshCurrent(); } catch (e) {} } });
     });
   },
 
@@ -5382,9 +5379,8 @@ const OfferDetailPage = {
       off.archived = false;
       off.updatedAt = new Date().toISOString();
       this._logEvt(off, 'borttagen', 'Offert flyttad till papperskorg');
-      persist();
       Router.showPage('pg-offer');
-      showToast('Offert i papperskorgen');
+      confirmPersist('offers', off.id, { ok: 'Offert i papperskorgen', fail: 'Offerten kunde inte flyttas till papperskorgen', onChange: () => { try { Router.refreshCurrent(); } catch (e) {} } });
     });
   },
 
@@ -5395,18 +5391,16 @@ const OfferDetailPage = {
     off.deleted  = false;
     off.updatedAt = new Date().toISOString();
     this._logEvt(off, 'återställd', 'Offert återställd');
-    persist();
     this.render({offerId});
-    showToast('Offert återställd');
+    return confirmPersist('offers', off.id, { ok: 'Offert återställd', fail: 'Återställningen kunde inte sparas', onChange: () => this.render({offerId}) });
   },
 
   permanentDeleteOffer(offerId) {
     Modal.confirm('Radera offert ' + offerId + ' permanent? Detta går inte att ångra.', () => {
       const idx = (state.offers||[]).findIndex(o => o.id === offerId);
       if (idx >= 0) state.offers.splice(idx, 1);
-      persist();
       Router.showPage('pg-offer');
-      showToast('Offert raderad');
+      confirmPersist('offers', offerId, { ok: 'Offert raderad', fail: 'Offerten kunde inte raderas', onChange: () => { try { Router.refreshCurrent(); } catch (e) {} } });
     });
   },
 
@@ -5815,11 +5809,10 @@ const OfferDetailPage = {
             const dateStr = new Date(date).toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
             this._logEvt(off, 'followup', `Uppföljning bokad ${dateStr}${time?' kl '+time:''}${note?': '+note:''}`);
             off.updatedAt = new Date().toISOString();
-            persist();
             Sidebar.updateBadges();
             Modal.close();
             this.render({offerId});
-            showToast(`Aktivitet skapad — ${dateStr}`);
+            confirmPersist('offers', off.id, { ok: `Aktivitet skapad — ${dateStr}`, fail: 'Aktiviteten kunde inte sparas', onChange: () => this.render({offerId}) });
           }},
           { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
         ]
@@ -5860,9 +5853,8 @@ const OfferDetailPage = {
     if (!off) return;
     this._logEvt(off, 'comment', txt);
     off.updatedAt = new Date().toISOString();
-    persist();
     this.render({offerId});
-    showToast('Kommentar sparad');
+    return confirmPersist('offers', off.id, { ok: 'Kommentar sparad', fail: 'Kommentaren kunde inte sparas', onChange: () => this.render({offerId}) });
   },
 
   _toggleKalk(kId) {
@@ -6963,10 +6955,9 @@ ${hasRut?`<div class="rut">
           newOff.convertedAt   = '';
           this._logEvt(newOff, 'create', 'Version ' + newVer + ' skapad från ' + offerId + ' v' + (off.versionNumber||1));
           state.offers.push(newOff);
-          persist();
           Modal.close();
-          Router.showPage('pg-offer-detail', {offerId: newOff.id});
-          showToast('Version ' + newVer + ' skapad: ' + newOff.id);
+          confirmPersist('offers', newOff.id, { ok: 'Version ' + newVer + ' skapad: ' + newOff.id, fail: 'Den nya versionen kunde inte sparas',
+            onSaved: () => Router.showPage('pg-offer-detail', {offerId: newOff.id}), onChange: () => { try { Router.refreshCurrent(); } catch (e) {} } });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -7292,15 +7283,55 @@ ${hasRut?`<div class="rut">
       </div>`,
       okLabel: 'Spara',
       ok: () => {
-        att.displayName          = document.getElementById('att-edit-name').value.trim() || att.originalFileName;
-        att.description          = document.getElementById('att-edit-desc').value.trim();
-        att.includeInPublicView  = document.getElementById('att-edit-pub').checked;
-        att.includeInCombinedPdf = document.getElementById('att-edit-pdf').checked;
-        persist();
-        this.render({offerId});
-        showToast('Bilaga uppdaterad');
+        const patch = {
+          attachmentId: att.id, offerId: offerId,
+          displayName:          document.getElementById('att-edit-name').value.trim() || att.originalFileName,
+          description:          document.getElementById('att-edit-desc').value.trim(),
+          includeInPublicView:  document.getElementById('att-edit-pub').checked,
+          includeInCombinedPdf: document.getElementById('att-edit-pdf').checked
+        };
+        this._patchAttachment(att, patch, offerId);
       }
     });
+  },
+
+  /* G12 (2026-11-23): bilagans metadata sparas via offer-attachment-upload
+     (PATCH). Tidigare ändrades bara den lokala kopian — nyckeln är skriv-
+     skyddad för den generiska sparvägen — så "Bilaga uppdaterad" visades
+     medan servern (och kundvyn) var oförändrade. Lokalt läge uppdateras
+     först när servern bekräftat; utan PATCH-stöd (äldre driftsatt EF)
+     visas ett tydligt fel och ingenting ändras. */
+  async _patchAttachment(att, patch, offerId) {
+    const EDGE_BASE = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '').replace(/\/$/, '');
+    showToast('Sparar…');
+    let res = null, j = {};
+    try {
+      res = await fetch(EDGE_BASE + '/functions/v1/offer-attachment-upload', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'apikey': (typeof SUPABASE_AKEY !== 'undefined' ? SUPABASE_AKEY : ''), 'Authorization': 'Bearer ' + (Auth.getAccessToken() || '') },
+        body: JSON.stringify(patch)
+      });
+      j = await res.json().catch(() => ({}));
+    } catch (e) {
+      showToast('Bilagan kunde inte sparas (nätverksfel) — ingenting har ändrats. Försök igen.', 6000);
+      return { ok: false };
+    }
+    if (!res.ok) {
+      const why = res.status === 405 || j.error === 'method_not_allowed'
+        ? 'servern stöder ännu inte ändring av bilagor (kräver installation av offer-attachment-upload)'
+        : (j.error || ('HTTP ' + res.status));
+      showToast('Bilagan kunde inte sparas: ' + why + '. Ingenting har ändrats.', 7000);
+      return { ok: false };
+    }
+    const srv = j.attachment || {};
+    ['displayName', 'description', 'includeInPublicView', 'includeInCombinedPdf', 'updatedAt'].forEach(k => {
+      if (k in srv) att[k] = srv[k]; else if (k in patch) att[k] = patch[k];
+    });
+    if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('offerAttachments', state.offerAttachments);
+    Modal.close();
+    this.render({offerId});
+    showToast('Bilaga uppdaterad');
+    return { ok: true };
   },
 
   async _deleteAttachment(attachmentId, offerId) {
@@ -7679,11 +7710,10 @@ ${hasRut?`<div class="rut">
       const note = act.note ? `: ${act.note}` : '';
       this._logEvt(off, 'followup', `Uppföljning utförd${note}`);
       off.updatedAt = new Date().toISOString();
-      persist();
     }
     Sidebar.updateBadges();
     this.render({offerId});
-    showToast('Uppföljning markerad klar');
+    if (off) confirmPersist('offers', off.id, { ok: 'Uppföljning markerad klar', fail: 'Uppföljningen kunde inte sparas', onChange: () => this.render({offerId}) });
   },
 
   _rescheduleActivity(actId, offerId) {
@@ -7709,12 +7739,11 @@ ${hasRut?`<div class="rut">
             const toStr   = new Date(d + 'T12:00:00').toLocaleDateString('sv-SE', {day:'numeric',month:'short'});
             this._logEvt(off, 'reminder', `Uppföljning flyttad från ${fromStr} till ${toStr}`);
             off.updatedAt = new Date().toISOString();
-            persist();
           }
           Modal.close();
           Sidebar.updateBadges();
           this.render({offerId});
-          showToast('Uppföljning flyttad');
+          if (off) confirmPersist('offers', off.id, { ok: 'Uppföljning flyttad', fail: 'Flytten kunde inte sparas', onChange: () => this.render({offerId}) });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -8249,16 +8278,18 @@ const ArticlesPage = {
       sellPrice:parseFloat(document.getElementById('art-sell')?.value) || 0,
       updatedAt: new Date().toISOString()
     };
+    /* G12: besked först efter serverns bekräftelse. */
+    let savedId = artId;
     if (!artId) {
-      state.articles.push({ ...data, id: newId(state.articles,'ART'), active: true, createdAt: new Date().toISOString() });
-      showToast(`${name} skapad`);
+      savedId = newId(state.articles,'ART');
+      state.articles.push({ ...data, id: savedId, active: true, createdAt: new Date().toISOString() });
     } else {
       const idx = (state.articles||[]).findIndex(a=>a.id===artId);
       if (idx < 0) return;
       state.articles[idx] = { ...state.articles[idx], ...data };
-      showToast('Artikel uppdaterad');
     }
-    persist(); Modal.close(); this.render();
+    Modal.close(); this.render();
+    return confirmPersist('articles', savedId, { ok: artId ? 'Artikel uppdaterad' : `${name} skapad`, fail: 'Artikeln kunde inte sparas', onChange: () => this.render() });
   },
 
   _toggleActive(artId) {
@@ -8453,17 +8484,18 @@ const PriceGroupsPage = {
       description: document.getElementById('pg-desc')?.value.trim() || '',
       updatedAt: new Date().toISOString()
     };
+    let savedId = pgId;
     if (!pgId) {
       state.priceGroups = state.priceGroups || [];
-      state.priceGroups.push({ ...data, id: newId(state.priceGroups,'PG'), active: true, createdAt: new Date().toISOString() });
-      showToast(`${name} skapad`);
+      savedId = newId(state.priceGroups,'PG');
+      state.priceGroups.push({ ...data, id: savedId, active: true, createdAt: new Date().toISOString() });
     } else {
       const idx = (state.priceGroups||[]).findIndex(x=>x.id===pgId);
       if (idx < 0) return;
       state.priceGroups[idx] = { ...state.priceGroups[idx], ...data };
-      showToast('Prisgrupp uppdaterad');
     }
-    persist(); Modal.close(); this.render();
+    Modal.close(); this.render();
+    return confirmPersist('priceGroups', savedId, { ok: pgId ? 'Prisgrupp uppdaterad' : `${name} skapad`, fail: 'Prisgruppen kunde inte sparas', onChange: () => this.render() });
   },
 
   _saveProfile(ppId) {
@@ -8475,18 +8507,19 @@ const PriceGroupsPage = {
       notes: document.getElementById('pp-notes')?.value.trim() || '',
       updatedAt: new Date().toISOString()
     };
+    let savedId = ppId;
     state.priceProfiles = state.priceProfiles || [];
     if (!ppId) {
       const maxSort = state.priceProfiles.reduce((m,p)=>Math.max(m,p.sortOrder||0),0);
-      state.priceProfiles.push({ ...data, id: newId(state.priceProfiles, 'PP'), active: true, sortOrder: maxSort+10, createdAt: new Date().toISOString() });
-      showToast(`${name} skapad`);
+      savedId = newId(state.priceProfiles, 'PP');
+      state.priceProfiles.push({ ...data, id: savedId, active: true, sortOrder: maxSort+10, createdAt: new Date().toISOString() });
     } else {
       const idx = state.priceProfiles.findIndex(x=>x.id===ppId);
       if (idx < 0) return;
       state.priceProfiles[idx] = { ...state.priceProfiles[idx], ...data };
-      showToast('Prisprofil uppdaterad');
     }
-    persist(); Modal.close(); this.render();
+    Modal.close(); this.render();
+    return confirmPersist('priceProfiles', savedId, { ok: ppId ? 'Prisprofil uppdaterad' : `${name} skapad`, fail: 'Prisprofilen kunde inte sparas', onChange: () => this.render() });
   }
 };
 
@@ -10053,11 +10086,11 @@ const AdminPage = {
             updatedAt: now
           });
         }
-        persist();
         Modal.close();
         AdminPage._tab = 'epost';
         AdminPage.render();
-        showToast(t ? 'Mall sparad' : 'Mall skapad');
+        const tplId = t ? t.id : state.emailTemplates[state.emailTemplates.length - 1].id;
+        confirmPersist('emailTemplates', tplId, { ok: t ? 'Mall sparad' : 'Mall skapad', fail: 'Mallen kunde inte sparas', onChange: () => AdminPage.render() });
       }
     });
   },
@@ -10320,10 +10353,9 @@ const AdminPage = {
           if (cat.fields.some(f => f.key === key)) { showToast('Nyckel används redan i kategorin'); return; }
           const id = 'f-' + cat.slug + '-' + Date.now();
           cat.fields.push({ id, key, label, type, order, active, required, options });
-          persist();
           Modal.close();
           AdminPage.openManageFields(catId);
-          showToast('Fält tillagt');
+          confirmPersist('propertyCategories', cat.id, { ok: 'Fält tillagt', fail: 'Fältet kunde inte sparas', onChange: () => AdminPage.openManageFields(catId) });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => AdminPage.openManageFields(catId) }
       ]
@@ -10389,10 +10421,9 @@ const AdminPage = {
           const options = optsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
           if (!label) { showToast('Fältnamn krävs'); return; }
           Object.assign(field, { label, type, order, active, required, options });
-          persist();
           Modal.close();
           AdminPage.openManageFields(catId);
-          showToast('Fält uppdaterat');
+          confirmPersist('propertyCategories', cat.id, { ok: 'Fält uppdaterat', fail: 'Fältet kunde inte sparas', onChange: () => AdminPage.openManageFields(catId) });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => AdminPage.openManageFields(catId) }
       ]
@@ -10405,9 +10436,8 @@ const AdminPage = {
     const field = cat && (cat.fields||[]).find(f => f.id === fieldId);
     if (!field) return;
     field.active = active;
-    persist();
     AdminPage.openManageFields(catId);
-    showToast(active ? 'Fält aktiverat' : 'Fält inaktiverat');
+    confirmPersist('propertyCategories', cat.id, { ok: active ? 'Fält aktiverat' : 'Fält inaktiverat', fail: 'Ändringen kunde inte sparas', onChange: () => AdminPage.openManageFields(catId) });
   },
 
   _deleteField(catId, fieldId) {
@@ -10420,9 +10450,8 @@ const AdminPage = {
       return;
     }
     cat.fields = (cat.fields||[]).filter(f => f.id !== fieldId);
-    persist();
     AdminPage.openManageFields(catId);
-    showToast('Fält borttaget');
+    confirmPersist('propertyCategories', cat.id, { ok: 'Fält borttaget', fail: 'Fältet kunde inte tas bort', onChange: () => AdminPage.openManageFields(catId) });
   },
 
   _moveField(catId, fieldId, dir) {
@@ -10437,8 +10466,8 @@ const AdminPage = {
     const bOrd = sorted[swapIdx].order || (swapIdx + 1);
     sorted[idx].order    = bOrd;
     sorted[swapIdx].order = aOrd;
-    persist();
     AdminPage.openManageFields(catId);
+    confirmPersist('propertyCategories', cat.id, { saving: false, fail: 'Ordningen kunde inte sparas', onChange: () => AdminPage.openManageFields(catId) });
   },
 
   _duplicateField(catId, fieldId) {
@@ -10457,9 +10486,8 @@ const AdminPage = {
       order: maxOrder + 1
     });
     cat.fields.push(newField);
-    persist();
     AdminPage.openManageFields(catId);
-    showToast('Fält duplicerat');
+    confirmPersist('propertyCategories', cat.id, { ok: 'Fält duplicerat', fail: 'Fältet kunde inte sparas', onChange: () => AdminPage.openManageFields(catId) });
   },
 
   openAddCategory() {
@@ -10491,10 +10519,9 @@ const AdminPage = {
           const cats = state.propertyCategories || [];
           cats.push({ id: 'cat-'+slug, slug, label, icon, order, active, showByDefault: active, fields: [] });
           state.propertyCategories = cats;
-          persist();
           Modal.close();
           AdminPage.render();
-          showToast('Kategori skapad');
+          confirmPersist('propertyCategories', 'cat-' + slug, { ok: 'Kategori skapad', fail: 'Kategorin kunde inte sparas', onChange: () => AdminPage.render() });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -10528,10 +10555,9 @@ const AdminPage = {
           const active= document.getElementById('cat-active')?.checked !== false;
           if (!label) { showToast('Namn krävs'); return; }
           Object.assign(cat, { label, icon, order, active });
-          persist();
           Modal.close();
           AdminPage.render();
-          showToast('Kategori sparad');
+          confirmPersist('propertyCategories', cat.id, { ok: 'Kategori sparad', fail: 'Kategorin kunde inte sparas', onChange: () => AdminPage.render() });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -10635,7 +10661,8 @@ const AdminPage = {
             orgNr:          document.getElementById('co-orgnr')?.value.trim()  || '',
             vatNr:          document.getElementById('co-vatnr')?.value.trim()  || ''
           };
-          persist(); Modal.close(); AdminPage.render(); showToast('Sparat');
+          Modal.close(); AdminPage.render();
+          confirmPersist('settings', null, { ok: 'Sparat', fail: 'Företagsuppgifterna kunde inte sparas' });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -10657,8 +10684,8 @@ const AdminPage = {
         { label: 'Spara', cls: 'btn bp', onClick: () => {
           const rate = parseFloat(document.getElementById('ek-rate')?.value) || 250;
           state.settings = Object.assign({}, state.settings, { internalHourlyCost: rate });
-          persist(); Modal.close(); AdminPage.render();
-          showToast(`Intern timkostnad: ${fmt(rate)} kr/h`);
+          Modal.close(); AdminPage.render();
+          confirmPersist('settings', null, { ok: `Intern timkostnad: ${fmt(rate)} kr/h`, fail: 'Timkostnaden kunde inte sparas' });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -10718,7 +10745,8 @@ const AdminPage = {
       }
     }
     r.active = r.active === false ? true : false;
-    persist(); AdminPage.render(); showToast(r.active ? 'Roll aktiverad' : 'Roll inaktiverad');
+    AdminPage.render();
+    confirmPersist('roles', r.id, { ok: r.active ? 'Roll aktiverad' : 'Roll inaktiverad', fail: 'Rolländringen kunde inte sparas — behörigheterna är oförändrade', onChange: () => AdminPage.render() });
   },
 
   showTitleStaff(title) {
@@ -10765,7 +10793,8 @@ const AdminPage = {
     state.titles = state.titles || [];
     const newId_ = 'TIT-' + String(Date.now()).slice(-6);
     state.titles.push({ id: newId_, name, description: desc, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    persist(); Modal.close(); AdminPage.render(); showToast(`"${name}" tillagd`);
+    Modal.close(); AdminPage.render();
+    confirmPersist('titles', newId_, { ok: `"${name}" tillagd`, fail: 'Titeln kunde inte sparas', onChange: () => AdminPage.render() });
   },
 
   openEditTitle(idx) {
@@ -10803,7 +10832,8 @@ const AdminPage = {
     t.name = name;
     t.description = (document.getElementById('adm-edit-desc')?.value || '').trim();
     t.updatedAt = new Date().toISOString();
-    persist(); Modal.close(); AdminPage.render(); showToast('Titel uppdaterad');
+    Modal.close(); AdminPage.render();
+    confirmPersist('titles', t.id, { ok: 'Titel uppdaterad', fail: 'Titeln kunde inte sparas', onChange: () => AdminPage.render() });
   },
 
   toggleTitleActive(idx) {
@@ -10811,7 +10841,8 @@ const AdminPage = {
     if (!t) return;
     t.active = !t.active;
     t.updatedAt = new Date().toISOString();
-    persist(); AdminPage.render(); showToast(t.active ? 'Titel aktiverad' : 'Titel inaktiverad');
+    AdminPage.render();
+    confirmPersist('titles', t.id, { ok: t.active ? 'Titel aktiverad' : 'Titel inaktiverad', fail: 'Ändringen kunde inte sparas', onChange: () => AdminPage.render() });
   },
 
   removeTitle(idx) {
@@ -10821,7 +10852,8 @@ const AdminPage = {
     if (usageCount > 0) { showToast(`Kan inte ta bort – används av ${usageCount} person${usageCount===1?'':'er'}`); return; }
     if (!confirm(`Ta bort titeln "${t.name}"?`)) return;
     state.titles.splice(idx, 1);
-    persist(); AdminPage.render(); showToast('Borttagen');
+    AdminPage.render();
+    confirmPersist('titles', t.id, { ok: 'Borttagen', fail: 'Titeln kunde inte tas bort', onChange: () => AdminPage.render() });
   },
 
   openAddRole() {
@@ -10855,7 +10887,8 @@ const AdminPage = {
       description: document.getElementById('role-desc')?.value.trim() || '',
       permissions: []
     });
-    persist(); Modal.close(); AdminPage.render(); showToast(`Roll "${label}" skapad`);
+    Modal.close(); AdminPage.render();
+    confirmPersist('roles', id, { ok: `Roll "${label}" skapad`, fail: 'Rollen kunde inte skapas', onChange: () => AdminPage.render() });
   },
 
   _PERMISSIONS: [
@@ -11012,7 +11045,8 @@ const AdminPage = {
     if (usageCount > 0) { showToast(`Kan inte ta bort – används av ${usageCount} person${usageCount===1?'':'er'}`); return; }
     if (!confirm('Ta bort rollen?')) return;
     state.roles = (state.roles||[]).filter(r => r.id !== roleId);
-    persist(); AdminPage.render(); showToast('Roll borttagen');
+    AdminPage.render();
+    confirmPersist('roles', roleId, { ok: 'Roll borttagen', fail: 'Rollen kunde inte tas bort', onChange: () => AdminPage.render() });
   }
 };
 
@@ -11251,16 +11285,17 @@ const ActivitiesPage = {
        uttryckliga krav): ett direkt anrop (t.ex. via konsolen) nekas
        precis lika säkert som ett klick på en dold/inaktiverad kryssruta. */
     if (!this._canCompleteTask(act)) { showToast('Du saknar behörighet för den åtgärden'); return; }
-    if (act.status === 'open') {
+    const completing = act.status === 'open';
+    if (completing) {
       ActivitiesService.complete(id);
       this._logCompletion(act);
-      showToast('Uppgift markerad klar');
     } else {
       ActivitiesService.reopen(id);
-      showToast('Uppgift återöppnad');
     }
     Sidebar.updateBadges();
     this.render();
+    /* G12: besked först efter serverns bekräftelse. */
+    confirmPersist('activities', id, { ok: completing ? 'Uppgift markerad klar' : 'Uppgift återöppnad', fail: 'Uppgiften kunde inte sparas', onChange: () => { Sidebar.updateBadges(); this.render(); } });
   },
 
   /* Bevarar den befintliga sido-effekten: en slutförd offert-/AO-länkad
@@ -11743,14 +11778,13 @@ const ActivitiesPage = {
         this._logReschedule(existing, oldDueDate, data.dueDate, oldDueTime, data.dueTime);
       }
       ActivitiesService.update(id, data);
-      showToast('Uppgift uppdaterad');
     } else {
-      ActivitiesService.create(data);
-      showToast('Uppgift skapad');
+      id = ActivitiesService.create(data).id;
     }
     Modal.close();
     Sidebar.updateBadges();
     this.render();
+    confirmPersist('activities', id, { ok: isEdit ? 'Uppgift uppdaterad' : 'Uppgift skapad', fail: 'Uppgiften kunde inte sparas', onChange: () => { Sidebar.updateBadges(); this.render(); } });
   },
 
   /* ── Ta bort ──────────────────────────── */
@@ -11775,7 +11809,7 @@ const ActivitiesPage = {
           Modal.close();
           Sidebar.updateBadges();
           this.render();
-          showToast('Uppgift borttagen');
+          confirmPersist('activities', id, { ok: 'Uppgift borttagen', fail: 'Uppgiften kunde inte tas bort', onChange: () => { Sidebar.updateBadges(); this.render(); } });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]

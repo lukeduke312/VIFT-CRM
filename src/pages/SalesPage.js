@@ -348,16 +348,16 @@ const SalesPage = {
       reason:         document.getElementById('so-reason')?.value.trim() || '',
       suggestedAction:document.getElementById('so-action')?.value.trim() || ''
     };
+    /* G12: besked först efter serverns bekräftelse. */
+    let savedId = opId;
     if (!opId) {
-      SalesService.create({ ...data, status: 'new' });
-      showToast('Säljchans skapad');
+      savedId = SalesService.create({ ...data, status: 'new' }).id;
     } else {
       const op = getSO(opId);
       if (!op) return;
       Object.assign(op, data, { updatedAt: new Date().toISOString() });
-      persist();
-      showToast('Uppdaterad');
     }
+    confirmPersist('salesOpps', savedId, { ok: opId ? 'Uppdaterad' : 'Säljchans skapad', fail: 'Säljchansen kunde inte sparas', onChange: () => { Sidebar.updateBadges(); SalesPage.render(); } });
     Modal.close();
     Sidebar.updateBadges();
     SalesPage.render();
@@ -433,7 +433,7 @@ const SalesPage = {
           if (!d) { showToast('Välj datum'); return; }
           SalesService.snooze(opId, d);
           Modal.close(); Sidebar.updateBadges(); SalesPage.render();
-          showToast('Uppskjuten');
+          confirmPersist('salesOpps', opId, { ok: 'Uppskjuten', fail: 'Uppskjutningen kunde inte sparas', onChange: () => { Sidebar.updateBadges(); SalesPage.render(); } });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -446,8 +446,8 @@ const SalesPage = {
     op.status = 'contacted';
     op.snoozedUntil = '';
     op.updatedAt = new Date().toISOString();
-    persist(); Sidebar.updateBadges(); SalesPage.render();
-    showToast('Återaktiverad');
+    Sidebar.updateBadges(); SalesPage.render();
+    confirmPersist('salesOpps', op.id, { ok: 'Återaktiverad', fail: 'Ändringen kunde inte sparas', onChange: () => { Sidebar.updateBadges(); SalesPage.render(); } });
   },
 
   markWon(opId) {
@@ -456,7 +456,8 @@ const SalesPage = {
       if (!op) return;
       op.status = 'won'; op.completedAt = new Date().toISOString(); op.updatedAt = new Date().toISOString();
       ActivityService.log('sales_opportunity_won', `Säljchans vunnen: ${op.title}`, { customerId: op.customerId, salesOpportunityId: op.id });
-      persist(); Sidebar.updateBadges(); SalesPage.render(); showToast('Markerad vunnen!');
+      Sidebar.updateBadges(); SalesPage.render();
+      confirmPersist('salesOpps', op.id, { ok: 'Markerad vunnen!', fail: 'Ändringen kunde inte sparas', onChange: () => { Sidebar.updateBadges(); SalesPage.render(); } });
     });
   },
 
@@ -475,7 +476,8 @@ const SalesPage = {
           const r = document.getElementById('lost-reason')?.value.trim();
           if (r) op.reason = (op.reason ? op.reason + ' · Förlorad: ' : 'Förlorad: ') + r;
           ActivityService.log('sales_opportunity_lost', `Säljchans förlorad: ${op.title}`, { customerId: op.customerId, salesOpportunityId: op.id });
-          persist(); Modal.close(); Sidebar.updateBadges(); SalesPage.render(); showToast('Markerad förlorad');
+          Modal.close(); Sidebar.updateBadges(); SalesPage.render();
+          confirmPersist('salesOpps', op.id, { ok: 'Markerad förlorad', fail: 'Ändringen kunde inte sparas', onChange: () => { Sidebar.updateBadges(); SalesPage.render(); } });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -487,7 +489,8 @@ const SalesPage = {
       const op = getSO(opId);
       if (!op) return;
       op.status = 'dismissed'; op.updatedAt = new Date().toISOString();
-      persist(); Sidebar.updateBadges(); SalesPage.render(); showToast('Avfärdad');
+      Sidebar.updateBadges(); SalesPage.render();
+      confirmPersist('salesOpps', op.id, { ok: 'Avfärdad', fail: 'Ändringen kunde inte sparas', onChange: () => { Sidebar.updateBadges(); SalesPage.render(); } });
     });
   }
 };

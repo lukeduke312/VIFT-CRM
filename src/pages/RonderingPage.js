@@ -453,10 +453,13 @@ const RonderingPage = {
       }
       categories.push({ id: 'cat-' + Date.now() + '-' + ci, name: catName, sortOrder: ci, points });
     }
-    if (id) { RonderingService.updateMall(id, { name: name.trim(), description: desc, categories }); showToast('Mall uppdaterad'); }
-    else { RonderingService.createMall({ name: name.trim(), description: desc, categories, interval: 'månadsvis', active: true }); showToast('Mall skapad'); }
+    let mallId = id;
+    if (id) RonderingService.updateMall(id, { name: name.trim(), description: desc, categories });
+    else { RonderingService.createMall({ name: name.trim(), description: desc, categories, interval: 'månadsvis', active: true }); mallId = (state.ronderingsmallar[state.ronderingsmallar.length - 1] || {}).id; }
     Modal.close();
     this._renderTab();
+    /* G12: besked först efter serverns bekräftelse. */
+    confirmPersist('ronderingsmallar', mallId, { ok: id ? 'Mall uppdaterad' : 'Mall skapad', fail: 'Mallen kunde inte sparas', onChange: () => this._renderTab() });
   },
 
   duplicateMall(id) { RonderingService.duplicateMall(id); showToast('Mall duplicerad'); this._renderTab(); },

@@ -674,14 +674,10 @@ const RecurringPage = {
       status:       'aktiv'
     };
 
-    if (roId) {
-      RecurringOrderService.update(roId, data);
-      showToast('Ärende uppdaterat');
-    } else {
-      RecurringOrderService.create(data);
-      showToast('Återkommande ärende skapat');
-    }
+    /* G12: besked först efter serverns bekräftelse. */
+    const saved = roId ? RecurringOrderService.update(roId, data) : RecurringOrderService.create(data);
     Modal.close();
     RecurringPage.render();
+    if (saved) confirmPersist('recurringOrders', saved.id, { ok: roId ? 'Ärende uppdaterat' : 'Återkommande ärende skapat', fail: 'Ärendet kunde inte sparas', onChange: () => RecurringPage.render() });
   }
 };

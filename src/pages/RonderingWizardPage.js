@@ -412,13 +412,13 @@ const RonderingWizardPage = {
         { label: 'Spara mall', cls: 'btn bp bfull', onClick: () => {
           const name = (document.getElementById('save-mall-name') || {}).value || '';
           if (!name.trim()) { showToast('Ange mallnamn'); return; }
-          RonderingService.createMall({
+          const mall = RonderingService.createMall({
             name: name.trim(), description: this._d.description || '',
             categories: JSON.parse(JSON.stringify(this._d.categories)),
             customerId: this._d.customerId || '', interval: 'månadsvis', active: true
           });
           Modal.close();
-          showToast('Mall sparad');
+          confirmPersist('ronderingsmallar', mall.id, { ok: 'Mall sparad', fail: 'Mallen kunde inte sparas' });
         }},
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -811,11 +811,11 @@ const RonderingWizardPage = {
       RonderingService.updateRondering(this._editId, Object.assign({}, data, {
         results: this._buildResults(cats, existing)
       }));
-      showToast('Utkast uppdaterat');
+      return confirmPersist('ronderingar', this._editId, { ok: 'Utkast uppdaterat', fail: 'Utkastet kunde inte sparas' });
     } else {
       const ron = RonderingService.createRondering(data);
       this._editId = ron.id;
-      showToast('Utkast sparat');
+      return confirmPersist('ronderingar', ron.id, { ok: 'Utkast sparat', fail: 'Utkastet kunde inte sparas', onChange: () => { if (!getRon(ron.id)) this._editId = null; } });
     }
   },
 

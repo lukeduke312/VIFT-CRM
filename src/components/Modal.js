@@ -7,6 +7,16 @@ const Modal = {
 
   open(opts) {
     const id = 'modal-' + Date.now();
+    /* E2E MODAL-01 (2026-11-23): tre dialoger (nytt/redigera avtal, e-post-
+       mall, offertbilaga) angav `ok`/`okLabel` — ett format open() inte
+       läste — och visades därför HELT utan knappar: avtal och mallar kunde
+       inte sparas alls. Formatet stöds nu centralt som [Avbryt, okLabel]. */
+    if ((!opts.buttons || !opts.buttons.length) && typeof opts.ok === 'function') {
+      opts = Object.assign({}, opts, { buttons: [
+        { label: opts.cancelLabel || 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: opts.okLabel || 'OK', cls: 'btn bp', onClick: opts.ok }
+      ] });
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
