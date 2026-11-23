@@ -569,7 +569,23 @@ Den nya klienten använder sina reserver mot dagens server tills §2g, §2i och 
 
 Inga lösenord, portkoder eller nyckelfält med värden finns i store.
 
-**Kopia utanför Supabase:** saknas ännu (**stopp för GO-1 och framåt**). Verktyget `tools/staging-backup-export.js` exporterar backupen, verifierar varje rad mot databasens md5 och summor, skriver återställnings-SQL och provar återställningen i en tom lokal databas. Det är lokalt provat i `tests/staging_backup_export.test.js` (10/10, en kapad export avvisas). Återställning i databasen: `supabase/manual/staging_restore_from_backup_20261124.sql`.
+**Kopia utanför Supabase:** delvis klar (**fortfarande stopp för GO-1 och framåt**). Verktyget `tools/staging-backup-export.js` gör följande:
+- exporterar backupen;
+- verifierar varje rad mot databasens md5 och summor;
+- skriver återställnings-SQL;
+- provar återställningen i en tom lokal databas.
+
+Verktyget är lokalt provat i `tests/staging_backup_export.test.js` (12/12; en kapad eller ändrad export avvisas). Återställning i databasen: `supabase/manual/staging_restore_from_backup_20261124.sql`.
+
+Status för Lucas CSV-export från SQL Editor:
+
+| Del | Resultat | Referenssumma |
+|---|---|---|
+| `store` | **Godkänd.** 40/40 rader med identisk md5. | `dc85f35f…` |
+| Funktionsdefinitioner | **Godkänd.** 50/50. | `9d8e7676…` |
+| Idempotensposter | **Avvisad.** SQL Editor kapade vid 100 av 2 146 rader. | — |
+
+**Återstår:** Lucas kör frågan `op_idempotency_delar` (`node tools/staging-backup-export.js --visa-fragor`) i SQL Editor. Den ger 9 rader om högst 250 poster och är provad mot STAGING med bara läsning. Han laddar upp CSV-filen, och därefter körs verifieringen och den lokala återställningsprovningen av hela kopian.
 
 **Edge Functions före installation:** sparade i `supabase/backup/staging-ef-fore-installation/` med SHA-256 och Supabase `ezbr_sha256`.
 
