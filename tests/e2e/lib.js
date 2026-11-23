@@ -19,6 +19,14 @@ const { FakeSupabase, TEST_USERS, PASSWORD } = require('./fake-backend');
    simulerade servern — ingen trafik når den riktiga Supabase-servern. */
 const ROOT = process.env.VIFT_E2E_ROOT ? path.resolve(process.env.VIFT_E2E_ROOT) : path.resolve(__dirname, '..', '..');
 const SUPA = process.env.VIFT_E2E_SUPA || 'https://hjplzjsbbowiyoyhdghc.supabase.co';
+/* Riktigt läge: Supabase-anropen går till riktig server (eller, vid lokal
+   provning, vidarebefordras till VIFT_E2E_FORWARD). Kan bara aktiveras av
+   tests/staging/e2e-real.js, som sätter VIFT_E2E_REAL_GUARD efter sina
+   spärrar (godkänt STAGING-projekt, GO-flaggor). LIVE nekas alltid. */
+const REAL = process.env.VIFT_E2E_REAL === '1';
+if (REAL && (process.env.VIFT_E2E_REAL_GUARD !== 'godkand-av-e2e-real' || /hjplzjsbbowiyoyhdghc/.test(SUPA))) {
+  console.error('Riktigt läge får bara startas av tests/staging/e2e-real.js (och aldrig mot LIVE).'); process.exit(2);
+}
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
 const VIEWPORTS = {
@@ -49,6 +57,11 @@ async function start() {
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     baseUrl = 'http://127.0.0.1:' + server.address().port;
+  }
+  /* Riktigt läge (tests/staging/e2e-real.js, efter dess spärrar): sidan
+     hämtas från den publicerade webbplatsen. */
+  if (REAL && process.env.VIFT_E2E_BASEURL) {
+    baseUrl = process.env.VIFT_E2E_BASEURL.replace(/\/$/, '');
   }
   if (!browser) browser = await chromium.launch();
   return { baseUrl, browser };
@@ -141,6 +154,18 @@ class Session {
       const req = route.request();
       const url = req.url();
       if (url.startsWith(baseUrl)) return route.continue();
+      if (url.startsWith(SUPA) && REAL) {
+        if (this.offline) return route.abort('internetdisconnected');
+        const t0 = Date.now();
+        const fwd = process.env.VIFT_E2E_FORWARD;
+        try {
+          if (!fwd) { await route.continue(); this.requests.push({ url: url.replace(SUPA, ''), method: req.method(), status: 0, ms: Date.now() - t0 }); return; }
+          const resp = await route.fetch({ url: url.replace(SUPA, fwd) });
+          this.requests.push({ url: url.replace(SUPA, ''), method: req.method(), status: resp.status(), ms: Date.now() - t0 });
+          if (resp.status() >= 400) this.netErrors.push(req.method() + ' ' + url.replace(SUPA, '') + ' → ' + resp.status());
+          return route.fulfill({ response: resp, headers: Object.assign({}, resp.headers(), { 'access-control-allow-origin': '*' }) });
+        } catch (e) { return route.abort('failed'); }
+      }
       if (url.startsWith(SUPA)) {
         if (this.offline) return route.abort('internetdisconnected');
         const t0 = Date.now();
@@ -170,6 +195,19 @@ class Session {
 
   /* Riktig inloggning via formuläret. */
   async login(alias, password) {
+    if (REAL) {
+      // Riktigt läge: testkontots e-post ur VIFT_USER_<ALIAS>, lösenord ur VIFT_PW (visas aldrig).
+      alias = process.env['VIFT_USER_' + String(alias).toUpperCase()] || alias;
+      password = process.env.VIFT_PW;
+      if (!this.page.url().startsWith(baseUrl)) await this.open();
+      await this.page.waitForSelector('#login-user', { state: 'visible', timeout: 20000 });
+      await this.page.fill('#login-user', alias);
+      await this.page.fill('#login-pass', password || '');
+      await this.page.click('#lp-login button.btn.bp');
+      await this.page.waitForFunction(() => typeof state !== 'undefined' && state.currentUser && state.currentUser.id && state.currentUser.id !== 'unknown', null, { timeout: 30000 });
+      await this.settle(1500);
+      return;
+    }
     const u = TEST_USERS[alias];
     if (!this.page.url().startsWith(baseUrl)) await this.open();
     await this.page.waitForSelector('#login-user', { state: 'visible', timeout: 15000 });
