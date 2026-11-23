@@ -26,7 +26,18 @@ Gjort utan Lucas dator och utan att ändra någon driftsatt miljö. Allt är byg
 | Paket | v2 (47 filer), MANIFEST-v2, återställning verifierad 44/44 mot dagens STAGING, v1 märkt ERSATT, WinSCP-instruktion | `verify-staging-deploy.sh` |
 | Backup och testkonton | SQL för kontroll och backup; instruktion för testkonton utan bred token | Installationsplan §6.1 |
 
-__SLUTUPPDRAG_TESTER__
+**Regression 2026-11-24.** Sista fullständiga körningarna; inga anrop till något annat Supabase-projekt i någon av dem.
+
+| Svit | Resultat |
+|---|---|
+| Enhetstester (`bash tests/run-all.sh`) | 15/15 testfiler gröna, varav 2 SQL-sviter mot riktig PostgreSQL 16 |
+| E2E, standardregler | 112 tester: 110 godkända, 0 misslyckade, 1 blockerad (PERM-03), 1 känt fel (AO-07, G5 med gamla vägen) |
+| E2E med **dagens** STAGING-regler | 109 godkända, 1 misslyckad: TASK-01, alltså felet som §2i rättar; 1 blockerad, 1 känt fel |
+| E2E mot **paketet**, med STAGING-reglerna **efter installation** (§2g, §2i, §2j) | 111 godkända, 0 misslyckade, 1 blockerad (PERM-03), **0 kända fel** (G5 löst) |
+| Testverktyget för riktig STAGING, lokalt | 15/15 |
+| Visuell regression av paketet | Identiskt med den granskade versionen, utom AO-detaljen (checklistan, granskad) och en tidsberoende text i Offerter (0,02 %) |
+
+Två instabila tester rättades; båda var testfel, inga appfel. CHK-05 anropade synken bara en gång, och STG-01 gällde dagens server även i läget för den nya servern.
 
 ## A. Funktioner
 
