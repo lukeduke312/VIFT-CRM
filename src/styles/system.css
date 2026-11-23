@@ -1010,3 +1010,17 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
   .so-kv .dv { text-align: right; }
 }
 .aol-more { align-self: center; margin: 4px auto 0; display: flex; }
+
+/* 1024–1279 px: innehållsytan är bara ~720–980 px bred — kvartsbreda
+   dashboardwidgetar blev 180 px smala. Två per rad i stället. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .dash-layout .dgw-3 { grid-column: span 6; }
+}
+/* AO-tabellen under 1200 px: kund visas i uppdragsraden i stället för egen kolumn,
+   så att status och personal alltid syns utan sidledsrullning. */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .aol-table .aol-c-cust { display: none; }
+  .aol-table .aol-m-cust { display: inline; }
+  .aol-table .aol-line2 .aol-m-cust::before { content: '· '; color: var(--faint); }
+  .aol-table .aol-line2 .cat-tag + .aol-m-cust::before, .aol-table .aol-line2 .aol-m-cust:first-child::before { content: ''; }
+}
