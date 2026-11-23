@@ -36,6 +36,9 @@ const die = (m, code) => { console.error('STOPP: ' + m); process.exit(code || 2)
 const Q = {
   store: `select key, md5(value::text) as md5, length(value::text) as tecken, value::text as v, updated_at::text as updated_at from ${SCHEMA}.store order by key collate "C"`,
   op_idempotency: `select fn_name, idem_key, md5(result::text) as md5, result::text as v, created_at::text as created_at from ${SCHEMA}.op_idempotency order by fn_name collate "C", idem_key collate "C"`,
+  // SQL Editor kapar vid 100 rader: idempotensposterna packas i delar om 250
+  // (varje post behåller sin egen md5 och sitt råa result::text).
+  op_idempotency_delar: `select del, n, md5(v) as md5, v from (select (rn - 1) / 250 as del, count(*) as n, jsonb_agg(o order by rn)::text as v from (select row_number() over (order by fn_name collate "C", idem_key collate "C") as rn, jsonb_build_object('fn_name', fn_name, 'idem_key', idem_key, 'md5', md5(result::text), 'v', result::text, 'created_at', created_at::text) as o from ${SCHEMA}.op_idempotency) s group by 1) t order by del`,
   function_definitions: `select proname::text as proname, args, md5(definition) as md5, definition as v from ${SCHEMA}.function_definitions order by proname collate "C", args collate "C"`,
   summary: `select (select count(*) from ${SCHEMA}.store) as store_n, (select count(*) from ${SCHEMA}.op_idempotency) as idem_n, (select count(*) from ${SCHEMA}.function_definitions) as func_n,
     (select md5(string_agg(key || ':' || md5(value::text), '|' order by key collate "C")) from ${SCHEMA}.store) as store_sum,
@@ -45,7 +48,7 @@ const Q = {
 
 if (arg('visa-fragor')) {
   console.log('-- Kör var för sig i SQL Editor och ladda ner resultatet som CSV:');
-  console.log('-- store.csv\n' + Q.store + ';\n-- op_idempotency.csv\n' + Q.op_idempotency + ';\n-- function_definitions.csv\n' + Q.function_definitions + ';\n-- summering (anteckna eller skärmbild)\n' + Q.summary + ';');
+  console.log('-- store.csv\n' + Q.store + ';\n-- op_idempotency_delar.csv (högst 250 poster per rad, ryms under SQL Editors 100-radersgräns)\n' + Q.op_idempotency_delar + ';\n-- function_definitions.csv\n' + Q.function_definitions + ';\n-- summering (anteckna eller skärmbild)\n' + Q.summary + ';');
   process.exit(0);
 }
 
@@ -86,7 +89,18 @@ async function fromApi(ref) {
 
 function fromCsv(dir) {
   const out = {};
+  const delar = path.join(dir, 'op_idempotency_delar.csv');
   for (const k of ['store', 'op_idempotency', 'function_definitions']) {
+    if (k === 'op_idempotency' && fs.existsSync(delar)) {
+      out[k] = [];
+      for (const p of parseCsv(fs.readFileSync(delar, 'utf8'))) {
+        if (md5(p.v) !== p.md5) die('op_idempotency_delar: md5 stämmer inte för del ' + p.del + ' (kapad eller ändrad export)', 1);
+        const rows = JSON.parse(p.v);
+        if (rows.length !== Number(p.n)) die('op_idempotency_delar: del ' + p.del + ' har ' + rows.length + ' poster, väntat ' + p.n, 1);
+        out[k].push(...rows);
+      }
+      continue;
+    }
     const f = path.join(dir, k + '.csv');
     if (!fs.existsSync(f)) die('saknar ' + f);
     out[k] = parseCsv(fs.readFileSync(f, 'utf8'));
