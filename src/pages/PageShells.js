@@ -7774,7 +7774,7 @@ const PropertiesPage = {
       <div class="ao-toolbar" style="margin-bottom:6px;">
         <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="prop-search" placeholder="Sök fastighet…" value="${this._q}"
+          <input type="search" id="prop-search" placeholder="Sök fastighet…" value="${esc(this._q)}"
             oninput="PropertiesPage._q=this.value;PropertiesPage.renderList()">
         </div>
         <div class="ao-toolbar-right">
@@ -7997,18 +7997,18 @@ const ArticlesPage = {
     const el = document.getElementById('pg-articles-content');
     if (!el) return;
     el.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <div class="swrap" style="flex:1;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px;">
+        <div class="swrap" style="flex:1 1 180px;">
           <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="art-search" placeholder="Sök artikel, artnr…" value="${this._q}"
+          <input type="search" id="art-search" placeholder="Sök artikel, artnr…" value="${esc(this._q)}"
             oninput="ArticlesPage._q=this.value;ArticlesPage.renderList()">
         </div>
         ${Auth.can('article_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'article'})">${ic('upload',14)} Importera</button>` : ''}
         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('article',this)">${ic('download',14)} Exportera</button>
         <button class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)} Ny artikel</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <div class="ftabs" id="art-filter-tabs" style="margin-bottom:0;flex:1;"></div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="ftabs" id="art-filter-tabs" style="margin-bottom:0;flex:1 1 auto;"></div>
         <div id="art-sel-all"></div>
       </div>
       <div id="art-list"></div>`;
@@ -8232,7 +8232,7 @@ const PriceGroupsPage = {
     if (!el) return;
     const pgs = state.priceGroups || [];
     el.innerHTML =
-      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
          <h3 style="flex:1;font-size:14px;font-weight:700;">Prisgrupper</h3>
          ${Auth.can('article_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'priceGroup'})">${ic('upload',14)} Importera</button>` : ''}
          <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('priceGroup',this)">${ic('download',14)} Exportera</button>
@@ -8262,7 +8262,7 @@ const PriceGroupsPage = {
     const pgs = state.priceGroups || [];
     const pgName = id => { const g = pgs.find(x=>x.id===id); return g ? g.name : (id||'—'); };
     el.innerHTML =
-      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
          <h3 style="flex:1;font-size:14px;font-weight:700;">Prisprofiler</h3>
          <button class="btn bp bsm" onclick="PriceGroupsPage.openCreateProfile()">${ic('plus',14)} Ny profil</button>
        </div>` +
@@ -8430,8 +8430,8 @@ const StaffPage = {
     const roleLabel = (rid) => { const r = (state.roles||[]).find(x=>x.id===rid); return r ? r.label : (rid || '—'); };
 
     el.innerHTML =
-      `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-         <div class="ftabs" style="flex:1;margin-bottom:0;">
+      `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
+         <div class="ftabs" style="flex:1 1 auto;margin-bottom:0;">
            <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="StaffPage._filter='aktiva';StaffPage.render()">Aktiva (${aktiva.length})</button>
            <button class="ft ${this._filter==='inaktiva'?'on':''}" onclick="StaffPage._filter='inaktiva';StaffPage.render()">Inaktiva (${inaktiva.length})</button>
          </div>
@@ -9337,7 +9337,7 @@ const AdminPage = {
           <div style="padding:6px 16px 4px;">
             <div class="swrap">
               <span class="sico">${ic('search',14)}</span>
-              <input type="search" placeholder="Sök titel…" value="${this._titleQ}"
+              <input type="search" placeholder="Sök titel…" value="${esc(this._titleQ)}"
                 oninput="AdminPage._titleQ=this.value;AdminPage.render()" style="font-size:12px;">
             </div>
           </div>

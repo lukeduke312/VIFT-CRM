@@ -1,0 +1,102 @@
+{
+  "summary": {
+    "when": "2026-11-23T07:22:25.307Z",
+    "target": "simulerad backend (FakeSupabase)",
+    "browser": "Chromium (Playwright)",
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "blocked": 0,
+    "durationMs": 5082
+  },
+  "results": [
+    {
+      "id": "AUTH-01",
+      "module": "Inloggning och utloggning",
+      "name": "Inloggning med giltigt konto visar appen och rätt användare",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1168,
+      "notes": [
+        "Laddade 15 AO och 7 kunder"
+      ],
+      "metrics": {
+        "inloggning → app laddad (ms)": 1009
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "AUTH-02",
+      "module": "Inloggning och utloggning",
+      "name": "Fel lösenord ger begripligt fel och ingen inloggning",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 374,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /auth/v1/token?grant_type=password → 400 {\"error\":\"invalid_grant\",\"error_description\":\"Invalid login credentials\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 1
+    },
+    {
+      "id": "AUTH-03",
+      "module": "Inloggning och utloggning",
+      "name": "Utloggning via menyn rensar session och skyddad cache",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 811,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "AUTH-04",
+      "module": "Inloggning och utloggning",
+      "name": "Användarbyte på samma enhet: ny användare ser inte föregåendes lönedata",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1574,
+      "notes": [
+        "ekonomi såg 6 poster, fältarbetaren 3"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
+    },
+    {
+      "id": "AUTH-05",
+      "module": "Inloggning och utloggning",
+      "name": "Sessionen överlever omladdning",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1064,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    }
+  ]
+}

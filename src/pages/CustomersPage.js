@@ -842,7 +842,7 @@ const CustomerDetailPage = {
     const sales  = (state.salesOpportunities||[]).filter(s => s.customerId === cu.id);
 
     el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:4px;">
         <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
         <h2 style="font-size:17px;font-weight:800;flex:1;">${name}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
         ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>` : ''}
