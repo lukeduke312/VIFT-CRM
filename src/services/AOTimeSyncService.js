@@ -67,6 +67,19 @@ const AOTimeSyncService = {
     return 'idem-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
   },
 
+  /* ── Ägare per post ─────────────────────────────────────────────────
+     Outboxen är gemensam för enheten (localStorage) och töms medvetet
+     inte vid utloggning — osynkat arbete får aldrig försvinna. Men en
+     post får bara skickas med sin egen ägares session: tidigare skickades
+     användare A:s väntande tidpost med användare B:s JWT efter ett
+     användarbyte; servern nekade (403), posten räknades som definitivt
+     avvisad och togs bort — A:s arbetstid försvann. Poster utan ägare
+     (skapade före denna ändring) behandlas som förut. */
+  _owner() {
+    try { return String((typeof Auth !== 'undefined' && Auth.getUserEmail && Auth.getUserEmail()) || '').toLowerCase(); } catch (e) { return ''; }
+  },
+  _isMine(entry) { return !entry || !entry.owner || entry.owner === this._owner(); },
+
   /* ── Is a given AO/time-entry id currently unconfirmed (still in the
        outbox, not yet ACKed by the server)? Read paths (invoicing,
        payroll, reports, calendar) MUST treat such an id as "not yet
@@ -98,8 +111,9 @@ const AOTimeSyncService = {
      risk of "disappearing", only of NOT YET showing their latest patch,
      which is a different, already-accepted last-write-wins tradeoff). */
   getPendingCreateObject(entityType, localRefId) {
+    const self = this;
     const entry = this._readOutbox().find(function(it) {
-      return it.entityType === entityType && it.localRefId === localRefId &&
+      return self._isMine(it) && it.entityType === entityType && it.localRefId === localRefId &&
              it.payload && (it.payload.action === 'create_ao' || it.payload.action === 'create_time');
     });
     if (!entry) return null;
@@ -124,8 +138,9 @@ const AOTimeSyncService = {
      canonical record when the in-memory object itself is not available
      (e.g. a fresh reload) in state.js's reconcilePendingAoTime(). */
   getPendingPatchFields(entityType, localRefId) {
+    const self = this;
     const entries = this._readOutbox().filter(function(it) {
-      return it.entityType === entityType && it.localRefId === localRefId &&
+      return self._isMine(it) && it.entityType === entityType && it.localRefId === localRefId &&
              it.payload && (it.payload.action === 'patch_ao' || it.payload.action === 'patch_time');
     });
     if (!entries.length) return null;
@@ -139,8 +154,9 @@ const AOTimeSyncService = {
      in-memory/reconstructed object over a canonical snapshot record at
      all, regardless of which specific action is queued. */
   hasPendingEntry(entityType, localRefId) {
+    const self = this;
     return this._readOutbox().some(function(it) {
-      return it.entityType === entityType && it.localRefId === localRefId;
+      return self._isMine(it) && it.entityType === entityType && it.localRefId === localRefId;
     });
   },
 
@@ -417,6 +433,7 @@ const AOTimeSyncService = {
     const entry = {
       id: idempotencyKey,
       entityType, localRefId, payload,
+      owner: this._owner(),
       attempts: 0,
       createdAt: new Date().toISOString()
     };
@@ -483,6 +500,7 @@ const AOTimeSyncService = {
       const e = box[i];
       const still = this._readOutbox().find(function (it) { return it.id === e.id; });
       if (!still) continue; // already settled by an earlier drain
+      if (!this._isMine(still)) continue; // annan användares post — väntar på sin ägare, blockerar inte
       if (opts.automatic && (still.attempts || 0) >= this._MAX_AUTO_RETRY_ATTEMPTS) {
         return { ok: false, error: 'blocked_by_exhausted_entry', entry: box[uptoIdx], final: false, blockedBy: e.id };
       }
@@ -571,6 +589,7 @@ const AOTimeSyncService = {
       for (let i = 0; i < box.length; i++) {
         const entry = box[i];
         if ((entry.attempts || 0) >= self._MAX_AUTO_RETRY_ATTEMPTS) continue; // see _MAX_AUTO_RETRY_ATTEMPTS
+        if (!self._isMine(entry)) continue; // skickas först när ägaren är inloggad
         // Re-fetch outbox each iteration in case a concurrent _sendOne
         // (e.g. triggered by a fresh user action) already resolved it.
         const stillThere = this._readOutbox().some(function(it) { return it.id === entry.id; });
@@ -600,6 +619,7 @@ const AOTimeSyncService = {
   async retryOne(idemKey) {
     const entry = this._readOutbox().find(function(it) { return it.id === idemKey; });
     if (!entry) return { ok: true, alreadyGone: true };
+    if (!this._isMine(entry)) return { ok: false, error: 'other_user_entry', final: false };
     // M3: an explicit retry still respects order (older entries for the
     // same target go first); explicit = not subject to the automatic cap.
     return this._sendInOrder(entry);
