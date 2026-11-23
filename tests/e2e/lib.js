@@ -197,6 +197,13 @@ class Session {
     }
     throw new Error('Modalknapp saknas: ' + re + ' (fanns: ' + (await btns.allTextContents()).join(' | ') + ')');
   }
+  /* Välj i en CustomSelect som en användare: klicka triggern, sedan alternativet. */
+  async pickCustom(id, value) {
+    const wrap = this.page.locator('select#' + id + ' + .cswrap').first();
+    await wrap.locator('.cstrig').click();
+    await wrap.locator('.cso[data-v="' + value + '"]').click();
+    await this.settle(150);
+  }
   async text(sel) { return (await this.page.locator(sel).first().textContent()) || ''; }
   /* Horisontell scroll och element utanför skärmen. */
   async layoutIssues() {

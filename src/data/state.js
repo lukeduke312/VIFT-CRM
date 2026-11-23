@@ -526,22 +526,29 @@ async function resumeHeldPersist(shortKey, elementId) {
    mutate() returning false aborts without saving. On failure the N1
    rule decides (settlePersistFailure): landed -> success; diverged ->
    conflict dialog, no rollback; otherwise the element is restored to
-   its pre-change value and `fail` is shown. Returns {ok, fate}. */
+   its pre-change value and `fail` is shown. Returns {ok, fate}.
+   For a create whose id is assigned inside mutate(), pass `null` as
+   elementId and return the new element (or its id) from mutate(). */
 var _vfCommitBusy = {};
 async function commitElementChange(shortKey, elementId, mutate, msgs) {
   msgs = msgs || {};
-  const id = String(elementId);
-  const busyKey = shortKey + '|' + id;
+  let id = elementId === null || elementId === undefined ? null : String(elementId);
+  const busyKey = shortKey + '|' + (id === null ? '*new*' : id);
   if (_vfCommitBusy[busyKey]) return { ok: false, fate: 'busy' };
   const stateKey = _vfBusinessStateKey(shortKey);
   const find = function(a) { return (a || []).findIndex(function(el) { return el && String(el.id) === id; }); };
-  const i0 = find(state[stateKey]);
+  const i0 = id === null ? -1 : find(state[stateKey]);
   const before = i0 >= 0 ? _vfDeepClone(state[stateKey][i0]) : undefined;
   _vfCommitBusy[busyKey] = true;
   const say = function(m, ms) { if (m && typeof showToast === 'function') showToast(m, ms); };
   const changed = function() { if (typeof msgs.onChange === 'function') { try { msgs.onChange(); } catch (e) { console.warn('[commit] onChange:', e); } } };
   try {
-    if (mutate() === false) return { ok: false, fate: 'aborted' };
+    const m = mutate();
+    if (m === false) return { ok: false, fate: 'aborted' };
+    if (id === null) {
+      id = m && typeof m === 'object' ? String(m.id) : (m !== undefined && m !== null ? String(m) : null);
+      if (id === null) return { ok: false, fate: 'aborted' };
+    }
     changed();
     say(msgs.saving || 'Sparar…');
     let fate = 'ok';

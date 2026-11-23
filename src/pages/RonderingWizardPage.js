@@ -846,17 +846,29 @@ const RonderingWizardPage = {
 
     const saveData = Object.assign({}, d, { categories: cats });
 
+    /* E2E RON-03 (2026-11-23): ronderingen måste vara bekräftad av
+       servern INNAN tillfällen skapas — annars kunde pass skapas för en
+       rondering som servern aldrig fått, och "Rondering skapad" visades
+       även när sparningen nekades. commitElementChange() väntar på
+       serverns svar, rullar tillbaka vid fel och visar felet. */
+    if (this._saving) return;
+    this._saving = true;
     try {
       if (this._editId) {
-        const existing = getRon(this._editId);
-        RonderingService.updateRondering(this._editId, Object.assign({}, saveData, {
+        const editId = this._editId;
+        const existing = getRon(editId);
+        const res = await commitElementChange('ronderingar', editId, () => RonderingService.updateRondering(editId, Object.assign({}, saveData, {
           results: this._buildResults(cats, existing),
           status: saveData.isDraft ? 'utkast' : (existing && existing.status !== 'utkast' ? existing.status : 'planerad')
-        }));
-        await RonderingService.generatePassesFromRecurring(this._editId);
+        })) || false, { fail: 'Ronderingen kunde inte sparas' });
+        if (!res.ok) return;
+        await RonderingService.generatePassesFromRecurring(editId);
         showToast('Rondering sparad');
       } else {
-        const ron = RonderingService.createRondering(saveData);
+        let ron = null;
+        const res = await commitElementChange('ronderingar', null, () => (ron = RonderingService.createRondering(saveData)),
+          { fail: 'Ronderingen kunde inte skapas' });
+        if (!res.ok) return;
         const nPasses = await RonderingService.generatePassesFromRecurring(ron.id);
         showToast('Rondering skapad' + (nPasses > 0 ? ' · ' + nPasses + ' tillfällen schemalagda' : ''));
       }
@@ -864,6 +876,8 @@ const RonderingWizardPage = {
     } catch (e) {
       console.error('[Wizard] Save failed:', e);
       showToast('Fel vid sparande: ' + e.message);
+    } finally {
+      this._saving = false;
     }
   },
 

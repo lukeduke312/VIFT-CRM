@@ -442,25 +442,60 @@ class FakeSupabase {
     return { status: 200, body: { invoice: inv, activityLog: this.get('activityLog'), changed: true } };
   }
 
-  /* ── rondering-pass-write (MODELL) ───────────────────────── */
+  /* ── rondering-pass-write (MODELL) ───────────────────────────
+     Efter klientens dokumenterade kontrakt (RonderingSyncService +
+     kommentarerna i RonderingUtforandePage): servern tilldelar id och
+     status 'planerat', pointPatch är radlåst och räknar om summary samt
+     auto-startar ('pågående'), complete beslutar själv slutstatus
+     ('har_avvikelser' om någon punkt har anmärkning, annars 'slutfört')
+     och sätter completedBy. bulkCreate skapar flera och returnerar
+     created[]. SQL-källan finns inte i repot — se E2E-rapporten. */
   ronderingWrite(b, perms, me) {
     if (!this.has(perms, 'ao_view_all')) return DEFINITE(403, 'forbidden');
     const passes = this.get('ronderingspass') || [];
     const save = () => { this.set('ronderingspass', passes); this.touch(); };
-    if (b.action === 'create' || b.action === 'migrateLegacy') {
-      const pass = clone(b.passTemplate || b.pass);
-      if (!pass.id) pass.id = 'RP-' + crypto.randomBytes(4).toString('hex');
+    const fresh = (tpl) => {
+      const pass = clone(tpl);
+      pass.id = 'RP-' + crypto.randomBytes(4).toString('hex');
+      pass.status = 'planerat';
+      pass.createdAt = new Date().toISOString(); pass.createdBy = me.id;
+      recompute(pass);
+      return pass;
+    };
+    const recompute = (pass) => {
+      const sm = { total: 0, ok: 0, anmärkningar: 0, ejKontrollerad: 0, ejAktuell: 0 };
+      (pass.categories || []).forEach((c) => (c.points || []).forEach((pt) => {
+        sm.total++;
+        if (pt.status === 'ok') sm.ok++; else if (pt.status === 'anmärkning') sm.anmärkningar++;
+        else if (pt.status === 'ej_aktuell') sm.ejAktuell++; else sm.ejKontrollerad++;
+      }));
+      pass.summary = sm;
+    };
+    if (b.action === 'create') { const pass = fresh(b.passTemplate || {}); passes.push(pass); save(); return { status: 200, body: { pass } }; }
+    if (b.action === 'bulkCreate') {
+      const created = (b.candidates || []).map((c) => fresh(Object.assign({ ronderingId: b.ronderingId }, c)));
+      created.forEach((p) => passes.push(p)); save();
+      return { status: 200, body: { created, createdCount: created.length } };
+    }
+    if (b.action === 'migrateLegacy') {
+      const pass = clone(b.pass);
       if (passes.some((x) => x.id === pass.id)) return { status: 200, body: { pass: passes.find((x) => x.id === pass.id) } };
-      passes.push(pass); save(); return { status: 200, body: { pass } };
+      recompute(pass); passes.push(pass); save(); return { status: 200, body: { pass } };
     }
     const pass = passes.find((x) => x.id === b.passId); if (!pass) return DEFINITE(404, 'not_found');
+    if ((pass.status === 'slutfört' || pass.status === 'har_avvikelser') && b.action !== 'saveNote') return DEFINITE(409, 'pass_completed');
     const point = () => { const c = (pass.categories || []).find((x) => x.id === b.categoryId); return c && (c.points || []).find((x) => x.id === b.pointId); };
     switch (b.action) {
-      case 'pointPatch': { const pt = point(); if (!pt) return DEFINITE(404, 'point_not_found'); Object.assign(pt, { status: b.status, comment: b.comment || '', deviationId: b.deviationId || pt.deviationId || null, workOrderId: b.workOrderId || pt.workOrderId || null, checkedAt: new Date().toISOString(), checkedBy: me.id }); break; }
-      case 'pointReset': { const pt = point(); if (!pt) return DEFINITE(404, 'point_not_found'); Object.assign(pt, { status: '', comment: '', checkedAt: null, checkedBy: null }); break; }
-      case 'saveNote': pass.note = b.note; break;
-      case 'autoStart': if (!pass.status || pass.status === 'planerad') { pass.status = 'pågår'; pass.startedAt = new Date().toISOString(); } break;
-      case 'complete': pass.status = 'slutförd'; pass.completedAt = new Date().toISOString(); break;
+      case 'pointPatch': {
+        const pt = point(); if (!pt) return DEFINITE(404, 'point_not_found');
+        Object.assign(pt, { status: b.status, comment: b.comment || '', deviationId: b.deviationId || pt.deviationId || null, workOrderId: b.workOrderId || pt.workOrderId || null, checkedAt: new Date().toISOString(), checkedBy: me.id });
+        if (!pass.status || pass.status === 'planerat') { pass.status = 'pågående'; pass.startedAt = new Date().toISOString(); }
+        recompute(pass); break;
+      }
+      case 'pointReset': { const pt = point(); if (!pt) return DEFINITE(404, 'point_not_found'); Object.assign(pt, { status: '', comment: '', deviationId: null, checkedAt: null, checkedBy: null }); recompute(pass); break; }
+      case 'saveNote': pass.internalNote = b.note; break;
+      case 'autoStart': if (!pass.status || pass.status === 'planerat') { pass.status = 'pågående'; pass.startedAt = new Date().toISOString(); } break;
+      case 'complete': recompute(pass); pass.status = pass.summary.anmärkningar > 0 ? 'har_avvikelser' : 'slutfört'; pass.completedAt = new Date().toISOString(); pass.completedBy = me.id; break;
       default: return DEFINITE(400, 'unknown_action');
     }
     save(); return { status: 200, body: { pass } };
