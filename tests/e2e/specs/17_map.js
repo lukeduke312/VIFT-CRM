@@ -70,4 +70,61 @@ module.exports = [
       t.assert(overlaps.length === 0, 'inga händelser ritas ovanpå varandra: ' + overlaps.join('; '));
     },
   },
+  {
+    id: 'UI-KV-01', module: 'Designstandard', name: 'Etikett/värde (kv): på dator står värdet nära etiketten; på mobil står etikett och värde kvar på samma rad (staplade rader gjorde säljkorten ~20 % högre)',
+    async run(t) {
+      const measure = () => [...document.querySelectorAll('#pg-sales .kv .dr')].filter((r) => r.offsetParent && r.querySelector('.dv')).slice(0, 6).map((r) => {
+        const l = r.firstElementChild.getBoundingClientRect(); const v = r.querySelector('.dv').getBoundingClientRect();
+        return { sameRow: Math.abs(l.top - v.top) < 8, gap: Math.round(v.left - l.right) };
+      });
+      const d = await t.world.session({ viewport: 'laptop' });
+      await d.login('admin'); await d.go('pg-sales'); await d.settle(400);
+      const dm = await d.eval(measure);
+      t.assert(dm.length >= 3, 'säljkorten har etikett/värde-rader (laptop): ' + dm.length);
+      t.assert(dm.every((x) => x.sameRow && x.gap < 200), 'laptop: värdet på samma rad och nära etiketten ' + JSON.stringify(dm));
+      const m = await t.world.session({ viewport: 'iphone' });
+      await m.login('admin'); await m.go('pg-sales'); await m.settle(400);
+      const mm = await m.eval(measure);
+      t.assert(mm.length >= 3, 'säljkorten har etikett/värde-rader (iPhone): ' + mm.length);
+      t.assert(mm.filter((x) => x.sameRow).length >= mm.length - 1, 'iPhone: etikett och värde på samma rad (högst en lång text får brytas) ' + JSON.stringify(mm));
+    },
+  },
+  {
+    id: 'UI-PROP-01', module: 'Designstandard', name: 'Fastighetskortets åtgärdsrad: namnet visas på dator; på mobil kapas ingen rubrik (bara numret visas, namnet står redan i kortet)',
+    async run(t) {
+      const probe = () => { const el = document.querySelector('#pg-obj-detail .ao-action-panel-title'); if (!el) return null; const n = el.querySelector('.apt-name'); return { nameShown: !!(n && n.offsetWidth > 0), clipped: el.scrollWidth > el.clientWidth + 1, text: el.innerText }; };
+      for (const vp of ['laptop', 'iphone']) {
+        const s = await t.world.session({ viewport: vp });
+        await s.login('admin');
+        const pid = await s.eval(() => state.properties[0].id);
+        await s.go('pg-obj-detail', { propId: pid });
+        await s.settle(300);
+        const r = await s.eval(probe);
+        t.note(vp + ': ' + JSON.stringify(r));
+        t.assert(r, vp + ': åtgärdsraden har en rubrik');
+        t.assert(!r.clipped, vp + ': rubriken kapas inte (' + r.text + ')');
+        t.assert(vp === 'laptop' ? r.nameShown : !r.nameShown, vp + ': namnet ' + (vp === 'laptop' ? 'visas' : 'döljs i den smala raden'));
+      }
+    },
+  },
+  {
+    id: 'UI-BDG-01', module: 'Designstandard', name: 'AO-listan: "Redo fakturering" är ett ljust statusmärke som övriga, inte ett fyllt marinblått filterchip',
+    async run(t) {
+      for (const vp of ['laptop', 'iphone']) {
+        const s = await t.world.session({ viewport: vp });
+        await s.login('admin');
+        await s.go('pg-ao');
+        await s.settle(400);
+        const r = await s.eval(() => {
+          const el = [...document.querySelectorAll('#pg-ao span')].find((x) => x.children.length <= 1 && /Redo fakturering/.test(x.textContent) && x.offsetParent && !x.closest('.qf-row, .filter-panel, .ao-tabs-row, [class*="quick"]') && x.getBoundingClientRect().top > 150);
+          if (!el) return null;
+          const m = getComputedStyle(el).backgroundColor.match(/\d+/g).map(Number);
+          return { cls: el.className, lum: Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) };
+        });
+        t.note(vp + ': ' + JSON.stringify(r));
+        t.assert(r, vp + ': listan har minst en AO som är redo för fakturering');
+        t.assert(r.lum > 180, vp + ': märket har ljus bakgrund (luminans ' + r.lum + ')');
+      }
+    },
+  },
 ];

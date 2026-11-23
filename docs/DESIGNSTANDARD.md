@@ -30,7 +30,7 @@ Ny kod använder tokens, inte egna px-värden. 9 px är förbjudet: en övergån
 
 ## Ordval
 
-En term per handling. **"Stämpla in / Stämpla ut / Instämplad"** gäller överallt (tidigare blandades "Klocka in", "Inklockat" och "Stämpla in").
+En term per handling: **"Stämpla in / Stämpla ut / Instämplad"** (tidigare blandades "Klocka in", "Inklockat" och "Stämpla in"). Genomfört i knappar och statusetiketter (AO-detalj, Tid & stämpla, Mina jobb, mobilmenyn, dashboardens snabbknapp). **Ej genomfört än:** ett tiotal toast- och felmeddelanden ("Inklockat", "Kunde inte klocka in/ut", "Du är inklockat på ett annat jobb") i AO-detalj, Tid & stämpla och Mina jobb, samt "inklockad" i Dagens drift. Förs som återstående punkt.
 
 ## Kort, listor och uppgiftsrader
 

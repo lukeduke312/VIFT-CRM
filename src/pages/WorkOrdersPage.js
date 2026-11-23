@@ -714,7 +714,7 @@ const WorkOrdersPage = {
             ${ao.scheduledDate?`<div style="font-size:11px;color:var(--mt);">${ao.scheduledDate}${ao.scheduledStart?' · '+ao.scheduledStart:''}</div>`:''}
             ${ao.category?`<div style="margin-top:5px;">${catBadge(ao.category)}</div>`:''}
             ${ao.substatus?`<div style="margin-top:4px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.12);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.3);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
-            ${isBillable?`<div style="margin-top:5px;"><span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span></div>`:''}
+            ${isBillable?`<div style="margin-top:5px;"><span class="bdg bdg-blue ao-ready-inv">${ic('receipt',10)} Redo fakturering</span></div>`:''}
             ${noPricing?`<div style="margin-top:5px;"><span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span></div>`:''}
             ${chkText?`<div style="margin-top:5px;">${chkText}</div>`:''}
           </div>`;
@@ -768,7 +768,7 @@ const WorkOrdersPage = {
               ${ao.substatus?`<div style="margin-top:3px;"><span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.1);color:var(--or);border-radius:8px;border:1px solid rgba(251,191,36,.25);">${({inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'}[ao.substatus]||ao.substatus)}</span></div>`:''}
               ${ao.category || isBillable || noPricing || chkHtml ? `<div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap;">
                 ${ao.category ? catBadge(ao.category) : ''}
-                ${isBillable?`<span class="qf-chip on" style="font-size:10px;padding:2px 7px;">${ic('receipt',10)} Redo fakturering</span>`:''}
+                ${isBillable?`<span class="bdg bdg-blue ao-ready-inv">${ic('receipt',10)} Redo fakturering</span>`:''}
                 ${noPricing?`<span class="qf-chip" style="font-size:10px;padding:2px 7px;border-color:var(--or);color:var(--or);">${ic('alert-circle',10)} Saknar prissättning</span>`:''}
                 ${chkHtml}
               </div>` : ''}

@@ -54,6 +54,10 @@ async function capture(dir) {
   await lib.start();
   for (const [label, vp] of Object.entries(SIZES)) {
     const world = new lib.World();
+    if (process.env.VIFT_VISUAL_EMPTY) {
+      // Tomma lägen: inga affärsregister (personal, roller och inställningar finns kvar för inloggning).
+      ['customers', 'properties', 'propertyObjects', 'workOrders', 'timeEntries', 'offers', 'invoices', 'salesOpps', 'activities', 'recurringOrders', 'ronderingar', 'ronderingspass', 'avvikelser', 'contracts', 'projects', 'notifications', 'activityLog'].forEach((k) => world.fake.set(k, []));
+    }
     const sessions = {};
     const get = async (user) => {
       if (sessions[user]) return sessions[user];

@@ -4922,13 +4922,25 @@ body.gsearch-open { overflow: hidden; touch-action: none; }
 
 /* 7. Uppgiftslistor (etikett/värde) i breda kort: värdet direkt efter
       etiketten i stället för längst ut till höger (kundkort m.fl.). */
-.kv .dr { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: var(--sp-3); align-items: baseline; }
-.kv .dr .dv { text-align: left; justify-self: start; }
-@media (max-width: 479px) { .kv .dr { grid-template-columns: 1fr; gap: 2px; } }
+/*    Bara från 768 px: på smala skärmar är avståndet etikett→värde kort
+      redan, och staplade rader gjorde mobilkorten ~20 % högre (visuell
+      regression funnen i slutkontrollen 2026-11-23). */
+@media (min-width: 768px) {
+  .kv .dr { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: var(--sp-3); align-items: baseline; }
+  .kv .dr .dv { text-align: left; justify-self: start; }
+}
 
 /* 8. Detaljsidornas åtgärdsrad: objektets namn som rubrik (fastighetskort). */
 .ao-action-panel-title { font-size: var(--fs-lg); font-weight: 800; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
-.ao-action-panel-title > span { font-size: var(--fs-xs); font-weight: 700; color: var(--mt); margin-left: 4px; }
+.ao-action-panel-title > .apt-num { font-size: var(--fs-xs); font-weight: 700; color: var(--mt); margin-left: 4px; }
+/*    Mobil: namnet står redan i rubrikraden och i kortet nedanför — i den
+      smala åtgärdsraden kapades det ("Solgläntan Hus A o…"). Bara numret
+      visas där, som före 2026-11-23 (fynd i slutkontrollen). */
+@media (max-width: 767px) {
+  .ao-action-panel-title { max-width: none; }
+  .ao-action-panel-title > .apt-name { display: none; }
+  .ao-action-panel-title > .apt-num { margin-left: 0; }
+}
 /* 9. Flikar med ikon: ikonen på samma rad som texten. */
 @media (min-width: 640px) {
   .ftabs .ft { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; flex: 0 0 auto; }

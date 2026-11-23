@@ -20,6 +20,8 @@ Direktkontroll mot Supabase STAGING `yyzljlqyzzcbxmcdbual` efter Claudes slutrap
 
 ## 0. Vad som har ändrats sedan förra versionen
 
+**2026-11-23 (kväll) — releasekandidat (Leverans J).** G5 (klient), G12, G10, G8, döda dialoger, bilagornas metadata, karta, kalender och designstandard är byggda och lokalt testade. §2a har nytt exakt filomfång (45 filer + `index.html` + `public-offer.html`). Nytt: §2e (`offer-attachment-upload` PATCH), §2f (G5-serverförslag, ej installerbart före G4), §4 STAGING-verifiering med `tests/e2e/staging-authz.js`. Samlad rapport och GO/NO-GO: `docs/RELEASEKANDIDAT-2026-11-23.md`.
+
 **2026-11-23 (eftermiddag) — fullständigt webbläsartest.** Hela klienten är testad i Chromium mot en simulerad backend (88 tester, alla 32 moduler, 7 kritiska arbetsflöden: 86 godkända, 0 misslyckade, 1 blockerad, 1 känt fel). 20 verifierade fel är rättade i branchen, vart och ett med ett regressionstest som underkänns mot föregående kod. Resultat, kvarstående fel och exakt vad som måste upprepas mot STAGING: `docs/E2E-RAPPORT-2026-11-23.md`. Filomfånget i §2a är uppdaterat utifrån en läsande jämförelse mot den driftsatta STAGING-klienten (`tests/e2e/staging-readonly.js`, inga ändringar i STAGING).
 
 **Rättelse — aktivitetsloggen (§2c):** min tidigare uppgift att `vift_activityLog` i STAGING innehöll ett dubblett-id som blockerade varje skrivning byggde på en kommentar i koden, inte på verifierad data. Lucas läsande kontroll (ovan) visar 0 dubbletter. Uppgiften var fel; §2c utgår.
@@ -50,7 +52,21 @@ Direktverifierat (läsande) i `docs/STAGING-FAKTISK-KOD-DIFF-2026-11-22.md` och 
 
 ### 2a. Klientfiler (kodsynk till staging-repot, inga Supabase-ändringar)
 
-**Exakt omfång (läsande jämförelse mot driftsatt STAGING 2026-11-23):** 27 versionsatta filer är nyare i repot och 4 finns bara i repot; ingen fil är äldre i repot än i STAGING. Nyare: `components.css`, `storage.js`, `state.js`, `AuthService.js`, `WorkOrderService.js`, `TimeService.js`, `AOTimeSyncService.js`, `BillingQueueService.js`, `RecurringOrderService.js`, `ServiceIntervalService.js`, `ImportExportConfigs.js`, `ImportWizardPage.js`, `ExportCenterPage.js`, `Modal.js`, `Sidebar.js`, `Router.js`, `CustomersPage.js`, `WorkOrdersPage.js`, `WorkOrderDetailPage.js`, `TimePage.js`, `InvoicesPage.js`, `RecurringPage.js`, `PropertyDetailPage.js`, `PageShells.js`, `ReportsPage.js`, `RonderingUtforandePage.js`, `RonderingWizardPage.js`. Bara i repot: `tokens.css`, `reset.css` (fick `?v=1`), `WorkOrderImageService.js`, `ServiceIntervalsPage.js`. Dessutom `index.html` och `public-offer.html`. Webbläsartestets rättningar i dessa filer listas i `docs/E2E-RAPPORT-2026-11-23.md` §3.
+**Exakt omfång (läsande jämförelse mot driftsatt STAGING, körd igen 2026-11-23 kväll: 77 versionsatta filer driftsatta, 40 nyare i repot, 0 äldre, 5 bara i repot):**
+
+*Nyare i repot (STAGING-version → repo-version):*
+- Stilar: `src/styles/components.css` 103→106, `forms.css` 13→14, `dashboard.css` 30→31
+- Data: `src/data/storage.js` 20→22, `state.js` 63→71, `DashboardConfig.js` 11→12
+- Delat: `src/shared/OfferCalc.js` 1→2
+- Tjänster: `AuthService.js` 22→23, `WorkOrderService.js` 24→28, `TimeService.js` 20→22, `AOTimeSyncService.js` 3→9, `InvoiceService.js` 17→18, `BillingQueueService.js` 9→10, `RecurringOrderService.js` 6→7, `ServiceIntervalService.js` 3→5, `ImportExportConfigs.js` 11→12
+- Komponenter: `Modal.js` 8→11, `Sidebar.js` 31→32, `MobileShell.js` 6→7
+- Sidor: `ImportWizardPage.js` 10→11, `ExportCenterPage.js` 5→6, `Router.js` 30→31, `Dashboard.js` 54→55, `CustomersPage.js` 36→39, `WorkOrdersPage.js` 66→68, `WorkOrderDetailPage.js` 81→87, `TimePage.js` 13→15, `ContractsPage.js` 2→3, `ProjectsPage.js` 4→6, `InvoicesPage.js` 34→37, `RecurringPage.js` 15→17, `SalesPage.js` 8→10, `PropertyDetailPage.js` 30→35, `PageShells.js` 173→182, `RonderingPage.js` 10→11, `ReportsPage.js` 9→10, `CalendarPage.js` 2→3, `MyJobsPage.js` 15→16, `RonderingUtforandePage.js` 12→13, `RonderingWizardPage.js` 9→11
+
+*Bara i repot (nya filer):* `src/styles/tokens.css`, `src/styles/reset.css` (fick `?v=1`), `src/services/WorkOrderImageService.js`, `src/services/MapGrouping.js`, `src/pages/ServiceIntervalsPage.js`
+
+*Ej versionsatta:* `index.html` (versionsnummer, nya script-taggar) och `public-offer.html` (OfferCalc v2 med G8-validering).
+
+Webbläsartestets rättningar listas i `docs/E2E-RAPPORT-2026-11-23.md` §3; Leverans J:s rättningar i `docs/RELEASEKANDIDAT-2026-11-23.md` §A. Kopiera **hela** listan i ett steg — filerna beror på varandra (t.ex. `confirmPersist` i `state.js` används av nästan alla sidor; `OfferCalc.validate` av `PageShells.js` och `public-offer.html`).
 
 Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid synk till staging-repot ska **STAGING-överlägget** läggas tillbaka i fyra punkter: `config.js` (STAGING-VAPID-nyckel), `src/data/storage.js` (STAGING `SUPABASE_URL`/anon-nyckel), `src/services/AuthService.js` (STAGING-posten i `_ENV_REDIRECT_BY_PROJECT_REF`), `index.html` (STAGING-miljöindikatorn).
 
@@ -91,7 +107,21 @@ Jämfört med den deployade STAGING-klienten skiljer sig följande filer. Vid sy
 
 ### 2d. Migrationer
 
-Ingen ny migration behövs för §2a–2b. `20261120000001_PROPOSAL_push_subscriptions_index.sql` är fortfarande overifierat mot STAGING:s indexlista — kontrollera `pg_indexes` först.
+Ingen ny migration behövs för §2a–2b eller §2e. `20261120000001_PROPOSAL_push_subscriptions_index.sql` är fortfarande overifierat mot STAGING:s indexlista — kontrollera `pg_indexes` först. `20261123000001_PROPOSAL_work_order_log_ops.sql` hör till §2f och ska **inte** köras nu.
+
+### 2e. `offer-attachment-upload` — PATCH för bilagornas metadata (separat GO)
+
+Källan i repot (`supabase/functions/offer-attachment-upload/index.ts`) har en ny PATCH-hanterare (fälten `displayName`, `description`, `includeInPublicView`, `includeInCombinedPdf`; samma `checkViftAuth` + `offer_manage` som uppladdningen) och CORS som tillåter PATCH. Utan deploy fungerar allt som förut, men att ändra en bilagas metadata ger ett tydligt felbesked ("sparades inte") och dialogen stängs inte — ingen tyst förlust. Innan deploy: jämför repots källa med den deployade STAGING-versionen (den kan skilja sig, G4).
+
+1. Läs deployad källa för `offer-attachment-upload` i STAGING och jämför. Avvikelse utöver PATCH-blocket → stoppa och stäm av.
+2. `supabase functions deploy offer-attachment-upload --project-ref <STAGING>` (verify_jwt = true).
+3. Test: ändra namn och synlighet på en bilaga → "Sparat" först efter svar; omladdning visar ändringen; som roll utan `offer_manage` → 403.
+
+Rollback: deploya föregående version.
+
+### 2f. G5 serverdel — append_log/remove_log (FÖRSLAG, ej installerbart nu)
+
+Klienten (§2a) sonderar själv om `ao-time-write` stöder `append_log`; svarar servern `400 unknown_action` (som i STAGING idag) används den gamla vägen med hela loggen — oförändrat beteende. Serverdelen (RPC-förslag i `supabase/migrations/20261123000001_PROPOSAL_work_order_log_ops.sql`, ändring i `ao-time-write` beskriven i `docs/G5-APPEND-LOG.md`) kan inte färdigställas förrän `ao-time-write`:s källa finns i repot (G4).
 
 ---
 
@@ -157,7 +187,17 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 - [ ] E7 Exportcentret: register, format, kolumner och Exportera-knapp visas; fastighets-/objektexport utan portkoder.
 - [ ] E8 Tappa nätet på mobilen mitt i loggpost → skickas automatiskt när nätet kommer tillbaka.
 - [ ] E9 Rondering: guide → tillfälle → utförande på mobil → anmärkning med AO → slutför → server sätter "har_avvikelser" → AO klar → avvikelse åtgärdad.
-- [ ] E10 Samtidiga loggposter från två enheter (G5) — förväntas fortfarande tappa en post.
+- [ ] E10 Samtidiga loggposter från två enheter (G5) — förväntas fortfarande tappa en post tills §2f är installerad.
+
+**Från Leverans J (releasekandidat)**
+- [ ] J1 Serverns behörighet per nyckel och AO-status (G13, G9) och idempotens (G6): `node tests/e2e/staging-authz.js --jag-har-go` med testkonton i miljövariabler (se filhuvudet). G13/G9-anropen ändrar inga data (borttagning av ett id som inte finns; `patch_ao` med oförändrade värden). G6 körs bara med `--med-testdata` och skapar då en testtidpost som rensas. **Simulerade tester räknas inte som bevis** — bara denna körning avgör G13/G9/G6.
+- [ ] J2 Sparbesked (G12): ändra kontaktperson, teknisk info, artikel, prisgrupp, säljchans, avtal, projekt och admininställning → "Sparar…" och sedan "Sparat" först efter svar. Med nätet avstängt (devtools) → "sparades inte" och värdet återgår eller hålls som osparad ändring.
+- [ ] J3 Avtal och e-postmall går att skapa (dialogknapparna var döda).
+- [ ] J4 ROT/RUT (G10): godkänd offert med ROT → fakturautkast visar offertens avdrag; "Skickad" nekas tills avdraget lagts till eller "Kontrollerat: inget avdrag" valts.
+- [ ] J5 Offert där RUT/ROT-raderna överstiger totalen (G8) → kan inte sparas eller skickas; kundsidan visar varning och ingen Godkänn-knapp.
+- [ ] J6 Karta: två AO på samma adress → en markör med "2" och lista; två olika adresser nära varandra → två markörer.
+- [ ] J7 Mobil (riktig iPhone/Safari och Android): AO-detaljens åtgärder i två kolumner, Tid & stämpla, Mina jobb, fakturakön — inget klipps, inga knappar utanför skärmen.
+- [ ] J8 Hårdladda efter installation → nya versionsnummer laddas (Service Worker).
 
 ---
 
@@ -174,23 +214,29 @@ Automatiska lokala tester (`bash tests/run-all.sh`: 7 filer med 172 kontroller +
 **Kvarstående gap (kräver beslut/åtkomst):**
 - **G1** `work_order_create` saknar committad migration i detta repo.
 - **G4** Backend-källor (`ao-time-write`, `store-key-write`, `work-orders-list`, `invoice-write`, `rondering-pass-write`, deras migrationer och staging-repots `tests/`) finns bara i staging-repot. Repot är därför inte en komplett, återskapbar källa. Åtgärd: pusha staging-repots `supabase/` och `tests/` till denna branch.
-- **G5** En loggändring skickas som `patch_ao` med AO:ns **hela** `log`-array. Två enheter som lägger till loggposter i samma AO samtidigt kan tappa en. Kräver en `append_log`-åtgärd i `ao-time-write` (kan inte byggas utan G4).
+- **G5** Klienten är byggd (§2f): den använder `append_log`/`remove_log` så fort servern stöder dem. Tills dess skickas loggen som förut (`patch_ao` med hela `log`-arrayen), och samtidiga loggposter från två enheter kan tappa en. Serverdelen är ett förslag som kräver G4.
 - **G6** Dubbel utstämpling (S3) bygger på att servern deduplicerar `create_time` per idempotensnyckel över enheter — dokumenterat i klientkoden men inte verifierat mot servern.
 - **G7** Historiska inbäddade bilder i `vift_workOrders` gör varje AO-ändring ~46× dyrare i WAL (uppmätt lokalt). Migrering kräver egen plan + GO.
-- **G8** Negativt "att betala" är möjligt i offert om radernas RUT/ROT-belopp överstiger totalen (OfferCalc har ingen spärr; fakturan har det). Kräver beslut om valideringsregel i offertredigeringen.
-- **G9** Ekonomirollen (`invoice_create` utan AO-behörighet): att sätta AO-status "fakturerad" nekades av den simulerade `ao-time-write`. Verkligt serverbeteende okänt (G4) — testfall E3.
-- **G10** ROT/RUT från en godkänd offert följer inte med till fakturautkastet; ekonomi måste lägga till avdraget manuellt och inget varnar. Kräver beslut (automatisk överföring eller varning).
-- **G11** DataSync pausar medan fokus står i ett inmatningsfält — även sökfält. Uppdateringar från andra enheter syns först när fokus lämnas.
-- **G12** ~35 äldre sparvägar (persist() utan argument: t.ex. kontaktpersoner, teknisk info, artikelkategorier, säljchansstatus) visar fortfarande "Sparat" innan servern svarat. Ett globalt skyddsnät visar nu en tydlig varning om servern nekar, men framgångsbeskedet hinner synas först. Kritiska vägar (serviceintervall, offertlänk, roller, personal, rondering, import) är rättade.
-- **G13** `store-key-write`:s behörighet per generisk nyckel är okänd (BLOCKER-2) — PERM-03 är blockerad tills den prövats mot STAGING (E2).
+- **G8** ~~Negativt "att betala" möjligt i offert~~ — **rättat i klienten** (Leverans J): `OfferCalc.validate` spärrar sparande och utskick, och kundsidan visar en varning i stället för totaler. Offerter som redan finns i STAGING med för stora avdrag visas med varning tills de rättas; ingen data ändras automatiskt.
+- **G9** Ekonomirollen (`invoice_create` utan AO-behörighet): att sätta AO-status "fakturerad" nekades av den simulerade `ao-time-write`. Det verkliga serverbeteendet är okänt (G4). Klienten säger nu tydligt till och rullar tillbaka. Verifieras med J1. **Behörigheter öppnas inte generellt** — beslut tas efter J1.
+- **G10** ~~ROT/RUT försvinner tyst mellan offert och faktura~~ — **rättat i klienten**: fakturan visar offertens avdrag, kan förifylla det, och "Skickad" spärras tills avdraget lagts till eller uttryckligen markerats som kontrollerat. Inga antaganden om avdragsrätt görs; beslutet ligger kvar hos ekonomi.
+- **G11** DataSync pausar medan fokus står i ett inmatningsfält — även sökfält. Uppdateringar från andra enheter syns först när fokus lämnas. Oförändrad, planerad.
+- **G12** ~~Äldre sparvägar visar "Sparat" före svar~~ — **rättat**: alla kända sparvägar går via `confirmPersist`/`commitElementChange` (besked efter ACK, återställning vid avslag). Ett globalt skyddsnät (`_vfWarnUnconfirmed`) fångar eventuella kvarvarande vägar.
+- **G13** `store-key-write`:s behörighet per generisk nyckel är okänd (BLOCKER-2) — PERM-03 är fortfarande blockerad. Prövas med J1; **simulerade tester räknas inte som bevis**.
 
 ---
 
 ## 6. GO/NO-GO per del
 
+**Installationsordning:** (1) J1 `staging-authz.js` utan `--med-testdata` mot nuvarande STAGING — den kräver inga nya filer och ger svaret på G13/G9 före allt annat. (2) §2a klientfiler. (3) §2e `offer-attachment-upload`. (4) §2b bildobjekt (om de ska med i samma omgång). (5) Testfallen i §4. (6) J1 med `--med-testdata` (G6), om testdata godkänts. §2f och §3 ingår inte.
+
 | Del | Status |
 |---|---|
-| §2a Klientfiler | **GO för STAGING-installation (efter separat GO)** — 88 webbläsartester i Chromium (alla 32 moduler; 86 godkända, 0 misslyckade, 1 blockerad i väntan på STAGING, 1 känt serverberoende gap G5), 20 verifierade fel rättade, enhetstester gröna, läsande STAGING-kontroll 11/11. Klientsidan är redo att prövas mot riktig backend; den är **inte** verifierad mot riktiga serversvar. |
+| §2a Klientfiler (releasekandidat, Leverans J) | **GO för kontrollerad STAGING-installation — efter separat GO från Lucas.** Lokalt: se slutrapporten §C för exakta siffror från sista körningen. Klientsidan är **inte** verifierad mot riktiga serversvar. |
+| §2e offer-attachment-upload PATCH | **GO för STAGING-granskning + deploy efter separat GO** — jämför först med deployad källa. |
+| §2f G5 serverdel | **NO-GO** — förslag; kräver G4. |
+| J1 staging-authz (G13/G9) | **Redo att köras efter GO** — ändrar inga data utan `--med-testdata`. |
+| LIVE | **NO-GO** — se §7. |
 | §2b Bildobjekt + 3 EF | **GO för STAGING-granskning** — `tsc --strict` OK. Kräver separat GO. |
 | §2c activityLog-städning | **UTGÅR** — uppgiften om dubblett var felaktig (verifierat 0 dubbletter). |
 | §3 service-monitor-aktivering | **VÄNTAR PÅ TEST** — testlista ovan. |

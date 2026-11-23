@@ -33,7 +33,12 @@ module.exports = [
       await s.waitToast(/Utstämplad — tid sparad/, 8000);
       const te = t.fake.get('timeEntries').find((e) => e.staffId === 'ST-004' && e.aoId === 'AO-015');
       t.assert(te && te.minutes === 75, 'tidpost 75 min på servern: ' + JSON.stringify(te && { m: te.minutes, ao: te.aoId }));
-      t.assert(t.fake.stamp.get(F2).active === false, 'serverns stämpling rensad');
+      // Serverns stämpling rensas i ett eget anrop efter tidpostens ACK (den
+      // varaktiga intentionen täcker en stängd flik däremellan) — vänta på
+      // det i stället för att kontrollera direkt efter beskedet (instabilt
+      // under last: misslyckades 1 av 6 körningar i full svit).
+      for (let i = 0; i < 50 && t.fake.stamp.get(F2).active !== false; i++) await s.settle(100);
+      t.assert(t.fake.stamp.get(F2).active === false, 'serverns stämpling rensad (inom 5 s)');
       const e = await t.world.session({ viewport: 'desktop' });
       await e.login('ekonomi');
       await e.go('pg-payroll');

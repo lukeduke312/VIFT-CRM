@@ -551,6 +551,34 @@ Rapport: `docs/E2E-RAPPORT-2026-11-23.md`. Svit: `node tests/e2e/run.js` (Chromi
 
 Rättelse: uppgiften om ett dubblett-id i STAGING:s `vift_activityLog` (tidigare §2c) var felaktig — verifierat 0 dubbletter. Punkten utgår.
 
+## Leverans J — Stabilisering, UI/UX och releasekandidat (2026-11-23)
+
+Slutrapport: `docs/RELEASEKANDIDAT-2026-11-23.md`. Visuell granskning: `docs/UI-GRANSKNING-2026-11-23.md`. Designstandard: `docs/DESIGNSTANDARD.md`.
+
+**Statuskategorier (gäller denna och kommande leveranser):** **BYGGD** = kod i branchen · **LOKALT TESTAD** = automatiskt test i Chromium mot simulerad backend och/eller enhetstest, underkänns mot föregående kod · **STAGING-VERIFIERAD** = prövad mot riktig STAGING-backend · **LIVE** = driftsatt på crm.viftfast.se. Ingen punkt nedan är STAGING-verifierad eller LIVE.
+
+| # | Funktion / rättning | Status | Test | Commit |
+|---|---|---|---|---|
+| 174 | G5: atomisk loggpost — klienten använder `append_log`/`remove_log` när servern stöder det (sondering via `400 unknown_action`), annars som förut | BYGGD, LOKALT TESTAD. Serverdelen är **förslag** (`supabase/migrations/20261123000001_PROPOSAL_work_order_log_ops.sql` + beskrivning för `ao-time-write` i `docs/G5-APPEND-LOG.md`); kräver G4 + GO | AO-07B | a707b22 |
+| 175 | G12: bekräftad sparning i hela CRM (`confirmPersist`/`commitElementChange`): "Sparar…" → besked först efter serverns ACK, återställning vid avslag, varning för okonverterade vägar | BYGGD, LOKALT TESTAD | G12-01 m.fl. | 6b63267 |
+| 176 | Döda dialogknappar: avtal och e-postmallar gick inte att skapa (`Modal.open` ignorerade `ok`) | BYGGD, LOKALT TESTAD | MODAL-01 | 6b63267 |
+| 177 | Bilagornas metadata (namn, beskrivning, synlighet) sparades aldrig; `Modal.confirm` gjorde radering död | BYGGD, LOKALT TESTAD. Kräver deploy av `offer-attachment-upload` (PATCH) — separat GO | ATT-01/02 | 6b63267, f5d3f78 |
+| 178 | G10: ROT/RUT från offert försvinner inte tyst — fakturan visar offertens avdrag, förifyller det, och "Skickad" spärras tills avdraget lagts till eller uttryckligen kontrollerats | BYGGD, LOKALT TESTAD. Inga antaganden om avdragsrätt | G10-01 | f5d3f78 |
+| 179 | G8: inget negativt "att betala" — `OfferCalc.validate` spärrar sparande/utskick; kundsidan visar varning i stället för totaler och ingen Godkänn | BYGGD, LOKALT TESTAD (120 offerter i paritetstest) | G8-01, paritet | f5d3f78 |
+| 180 | G13/G9/G6: STAGING-verifiering förberedd (`tests/e2e/staging-authz.js`, kräver `--jag-har-go`; minimala, icke-förändrande anrop) | FÖRBEREDD — EJ KÖRD (kräver GO + testkonton) | — | f5d3f78 |
+| 181 | Karta: flera AO på samma adress = en markör med antal och lista; olika adresser grupperas aldrig; nära platser sprids; räknare för jobb/platser/ej placerade | BYGGD, LOKALT TESTAD | MAP-01, map_grouping (9) | 88b5f36 |
+| 182 | Kalender: överlappande händelser sida vid sida | BYGGD, LOKALT TESTAD | CAL-02 | 88b5f36 |
+| 183 | Designstandard (tokens för typografi/avstånd/kontrollhöjd, knapphierarki, `.bdg`, `kv`, filterhöjd, 12 px formulärrytm, fokusring, ordvalet "Stämpla in/ut") + rättningar i 10 vyer | BYGGD, visuellt granskad (se granskningsnivå per vy) | RESP-*, visuell jämförelse | 88b5f36 |
+| 184 | UI som återstår: "klocka"/"inklockad" kvar i ~10 toast-/felmeddelanden och Dagens drift, instabil ordning i AO-listan vid lika sorteringsnyckel, dashboard-rubrik/widgethöjder, AO-radhöjd, fastighetskortets kapade flik och dubblerade "Snabböversikt", offertguidens fälthöjder, admin/avvikelser etikett-värde, fastighetslistans tomläge utan förklaring, "Välj alla" i tom lista, ~1 300 inline-`font-size`, tomläge serviceintervall | PLANERAD | — | — |
+| 185 | Slutkontrollens visuella regressioner (mobil): `kv` staplade rader (säljkort ~20 % högre); kapad rubrik i fastighetskortets åtgärdsrad; "Redo fakturering" fyllt chip | BYGGD, LOKALT TESTAD, visuellt granskad före/efter | UI-KV-01, UI-PROP-01, UI-BDG-01 | (denna commit) |
+
+Statusändringar för äldre punkter (identifierare behålls):
+- **151** (G5): från BLOCKERAD till **klient BYGGD** (punkt 174); serverdelen är fortfarande blockerad av G4.
+- **172**: G10 → punkt 178, G12 → punkt 175, G9 → förberedd (punkt 180). **G11** (DataSync pausar vid fokus i sökfält) kvarstår PLANERAD.
+- **173**: oförändrad, VÄNTAR PÅ GO; testlistan är utökad med `staging-authz.js`.
+
+Tidigare beslutade framtida områden finns kvar oförändrade och byggs inte nu: teknisk underhållsplanering (`ROADMAP-UNDERHALL-2026-10-23`), integrationer (133: Bokio, Momentum), artikelpriser/prisintegrationer (153: Solar, Ahlsell), AI-arbetsorderinkorg (132).
+
 ## Kända begränsningar och planerade stabiliseringar
 
 ### AO-snapshot-fält (punkt 12 — KLAR)

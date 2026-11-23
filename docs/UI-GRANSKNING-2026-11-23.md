@@ -17,7 +17,7 @@ Safari/WebKit finns inte i miljön; alla bilder kommer från Chromium. Riktig iP
 | 4 | Fastigheter (lista) | Översikt | Inga avvikelser i översikt. | — |
 | 5 | Fastighetskort | Detalj, före och efter | Namnet fanns bara i sidokolumnen. Fliken "Ansvariga" hade ikonen ovanför texten. "Inaktivera" var orange som en huvudåtgärd. Värden långt från etiketter. | Namnet i åtgärdsraden, ikon i linje, "Inaktivera" sekundär, `kv`. Kvar: sista fliken kapas i kanten; "Snabböversikt" upprepar uppgifter. |
 | 6 | Objekt (flik) | Översikt | Inga avvikelser i översikt. | — |
-| 7 | Arbetsorderlista | Detalj | Höga rader med mycket tomrum till höger. Märket "Redo fakturering" är fyllt marinblått, avvikande från övriga märken. | Märkena enhetliga via `.bdg`; radhöjd kvar ("Återstår"). |
+| 7 | Arbetsorderlista | Detalj | Höga rader med mycket tomrum till höger. Märket "Redo fakturering" är fyllt marinblått, avvikande från övriga märken. | "Redo fakturering" är ett ljust `.bdg`-märke. Rättat först i slutkontrollen: den gemensamma `.bdg`-regeln träffade inte märket, som var ett filterchip. Radhöjden står kvar under "Återstår". |
 | 8 | Arbetsorderdetalj (laptop) | Detalj, före | Stämpelknappen var grön och ~1 030 px bred. "Uppföljning" var grön som en huvudhandling. | Normal bredd på dator; "Uppföljning" sekundär. |
 | 8m | Arbetsorderdetalj (mobil) | Detalj, före och efter | "Starta arbete" och "Klocka in" var två gröna knappar med olika ord för stämpling. "Fler åtgärder" hamnade ensam på en rad. | Ordvalet "Stämpla in" enhetligt; tvåkolumnsrutnät för åtgärderna (rättat efter att efterbilden visade att första regeln träffade fel behållare). |
 | 9 | Arbetsorderguide | Översikt | — | — |
@@ -43,6 +43,32 @@ Safari/WebKit finns inte i miljön; alla bilder kommer från Chromium. Riktig iP
 
 Detaljgranskade: AO-detalj, Mina jobb, Tid & stämpla. Översikt (kontaktark): dashboard, kunder, AO-lista, fakturering. Övriga mobilvyer är bara kontrollerade automatiskt (RESP-*: ingen horisontell scroll, inga knappar utanför skärmen). De är **inte** visuellt granskade.
 
+## Tomma lägen (alla affärsregister tömda, `VIFT_VISUAL_EMPTY=1`)
+
+Granskade i kontaktark:
+- **Dator (6 vyer per ark):** dashboard, kundregister, fastigheter, AO-lista, offerter, fakturering.
+- **Mobil (3 vyer per ark):** kundregister, AO-lista, Mina jobb.
+
+Nivå: översikt. Rubrik och knappar går att läsa i mobilarket, men brödtexten i dator-arket gör det inte.
+
+Helhetsintrycket är rent. Ingen vy visar "undefined", NaN eller trasig layout. Dashboardens nyckeltal visar 0 och korten har egna tomtexter. Offerter har en tydlig knapp ("Ny offert") i tomläget.
+
+Fynd, inte rättade (släppfrysning, kosmetiskt):
+- Fastighetslistans tomläge, "Inga fastigheter", saknar förklarande text och knapp. Kundregistret har en undertext men ingen knapp; knappen finns i verktygsraden.
+- "Välj alla" visas trots att listan är tom (kunder, AO).
+
+## Slutkontroll (visuell regression, före → slutläge)
+
+Hela uppsättningen (60 bilder) jämfördes pixel för pixel mellan första före-bilden och slutläget. Varje vy med större skillnad än väntat öppnades och granskades sida vid sida. Tre fel hittades som mina egna ändringar hade orsakat i vyer som bara var översiktsgranskade. Alla tre är rättade och har regressionstest som underkänns mot föregående kod.
+
+| Fynd | Orsak | Rättning | Test |
+|---|---|---|---|
+| Säljchanser (mobil): varje kort ~20 % högre (+1 300 px på sidan) | `kv`-regeln staplade etikett och värde på smala skärmar | `kv` gäller bara från 768 px; på mobil står etikett och värde på samma rad som förut | UI-KV-01 |
+| Fastighets-/objektkort (mobil): rubriken i åtgärdsraden kapades ("Solgläntan Hus A o…"), och namnet stod tre gånger | Den nya namnrubriken fick inte plats på 390 px | På mobil visas bara numret, som förut; namnet visas på dator | UI-PROP-01 |
+| AO-lista: "Redo fakturering" fortfarande fyllt marinblått | Se rad 7 ovan | Ljust statusmärke (`bdg bdg-blue`) | UI-BDG-01 |
+
+Övriga skillnader mot före-bilden är avsiktliga och granskade: etikett/värde, knapphierarki, flikar med ikon på samma rad (rapporter, fastighetskort), formulärrytm, fakturakön och kalendern. Ett fynd är inte ett fel i ändringarna: AO-listans ordning mellan poster med lika sorteringsnyckel kan skifta mellan laddningar (instabil sortering). Det förs till masterplanen.
+
 ## Återstår (förs till masterplanen)
 
 - Dashboard: rubriken "Kräver åtgärd" upprepas; olika widgethöjder i samma rad.
@@ -50,4 +76,7 @@ Detaljgranskade: AO-detalj, Mina jobb, Tid & stämpla. Översikt (kontaktark): d
 - Fastighetskort: kapad sista flik; dubblerad "Snabböversikt".
 - Offertguide: fälthöjder och dubblerad "Uppdragsbeskrivning".
 - Admin och avvikelserapport: etikett/värde-layout och tunna kort.
+- Ordval: ett tiotal toast-/felmeddelanden säger fortfarande "klocka in/ut"/"inklockat", och Dagens drift säger "inklockad" (knappar och statusetiketter är rättade).
+- AO-lista: poster med lika sorteringsnyckel kan byta plats mellan laddningar.
+- Tomlägen: fastighetslistan saknar förklaring/åtgärd; "Välj alla" i tom lista. Serviceintervallens tomläge saknar vägledning.
 - ~1 300 inline-`font-size` ska flyttas till tokens/klasser (pågående konsolidering; 9 px lyfts redan centralt).

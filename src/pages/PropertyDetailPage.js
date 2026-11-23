@@ -142,7 +142,7 @@ const PropertyDetailPage = {
       <div class="ao-action-panel">
         <div class="ao-action-panel-left">
           <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span class="ao-action-panel-title">${esc(p.name || '')} <span>${esc(displayNumberOf(p))}${p.objectNumber?' · '+esc(p.objectNumber):''}</span></span>
+          <span class="ao-action-panel-title"><span class="apt-name">${esc(p.name || '')}</span> <span class="apt-num">${esc(displayNumberOf(p))}${p.objectNumber?' · '+esc(p.objectNumber):''}</span></span>
         </div>
         <div class="ao-action-panel-badges">
           ${p.status!=='inaktiv'
