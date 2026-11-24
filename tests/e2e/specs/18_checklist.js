@@ -83,7 +83,8 @@ module.exports = [
       t.note('badge A: ' + badge);
       t.assert(/2 pågår/.test(badge), 'indikatorn visar "2 pågår" separat från utförda');
       await b.go('pg-ao', {}); await b.settle(500);
-      const seg = await b.eval((id) => { const card = [...document.querySelectorAll('#pg-ao [onclick]')].find((x) => (x.getAttribute('onclick') || '').includes(id)); return card ? !!card.querySelector('.ao-chk-seg-prog') : null; }, AO_ID);
+      // AO-listans rader bär id:t i data-sel-row-id (2026-11-26: id:t skickas inte längre in i inline-hanterare).
+      const seg = await b.eval((id) => { const card = [...document.querySelectorAll('#pg-ao [data-sel-row-id]')].find((x) => x.getAttribute('data-sel-row-id') === id); return card ? !!card.querySelector('.ao-chk-seg-prog') : null; }, AO_ID);
       t.assert(seg === true, 'AO-listans stapel har ett eget segment för pågående');
     },
   },
