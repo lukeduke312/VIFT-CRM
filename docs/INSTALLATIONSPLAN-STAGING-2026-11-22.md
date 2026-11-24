@@ -672,6 +672,101 @@ Rapporter, med den slutliga testversionen: en körning med e2e-falt1 och en med 
 
 **Borttagning:** Ta bort kontona i Dashboard (Authentication → Users). Kör sedan `supabase/manual/staging_go1_e2e_konton_borttagning.sql`. Båda stegen kräver GO.
 
+### 6.7 GO-3 genomfört (2026-11-24)
+
+Lucas gav GO. Körningen gjordes mot STAGING med `runId E2E-AUTHZ-20261124143601-2aab43`.
+- Torrkörningen var godkänd: spärrar, sex inloggningar, ögonblicksbild och plan fungerade.
+- Det fanns inga tidigare testposter och inga öppna spärrar.
+
+Rapport och journal ligger i `docs/staging-rapporter/`.
+
+| Del | Resultat |
+|---|---|
+| G13, 9 array-register × 4 roller | 36 av 36 är korrekta: tillåtet där rollen har behörigheten, nekat annars. Ekonomi (`qa_p2_avgransad`) fick skapa poster i kunder, fastigheter, offerter och kontrakt, eftersom rollen har `customer_manage`/`offer_manage`. |
+| G13 `vift_activities` | Alla fyra rollerna nekades. **Inte en säkerhetsavvikelse:** installerad v3 kräver `admin_manage`, och testposten är inte en egen uppgift. Testets förväntan var fel och är rättad (`KEY_PERM.vift_activities`). Funktionellt gap: fältarbetare kan inte klarmarka sina uppgifter. Det löses av GO-6 (§2i). |
+| G13 `vift_settings` | Inte prövat, eftersom registret är objektformat. |
+| G9 | Ekonomi nekades att sätta test-AO:n till "fakturerad" (HTTP 403), och statusen är oförändrad. |
+| G6 | Två samtidiga `create_time` med samma nyckel gav 200/200 och exakt **1** tidpost. |
+| Checklistans serverstöd | Kunde inte avgöras. Fältkontots roll saknar `ao_checklist`, så sonderingen gav `forbidden`. |
+| Städning | Efterkontrollerad: inga testposter finns kvar. |
+| Affärsposter | Identiska med ögonblicksbilden. Oberoende kontroll: alla 6 nycklar som testet skrev i har **samma md5 som före körningen**, och inga spår av `E2E-AUTHZ` finns i store. |
+
+**Verkliga säkerhetsavvikelser:** inga. **Oväntad åtkomst:** ingen.
+
+**Metadata som inte återställs:**
+- `vift_lastChanged`.
+- `store.updated_at` för `vift_customers`, `vift_properties`, `vift_offers`, `vift_contracts`, `vift_workOrders` och `vift_timeEntries`.
+- 5 idempotensposter: `work_order_create`, `time_entry_create`, `time_entry_soft_delete`, `work_order_soft_delete` och `work_order_permanent_delete` med runId. Antalet gick från 2 146 till 2 151.
+- Inloggningar i auth.
+- EF-loggar.
+- Aktivitetsloggen fick 0 nya poster.
+
+**Otestad behörighetstäckning.** Ett grönt resultat betyder inte full täckning.
+- **Arbetsledare:** STAGING saknar rollen, och e2e-chef har ingen giltig roll. Därför är inget av följande testat:
+  - arbetsledarens skrivrätt;
+  - full åtkomst till uppgifter (`ao_edit` + `ao_view_all`);
+  - återställning av annans checklistpunkt;
+  - arkivering av AO.
+- **Fältarbetare med planens behörigheter** (`ao_material`, `ao_checklist`): ingen sådan roll finns. Följande är otestat:
+  - checklistans tre lägen och ägarkontroll (J9–J12);
+  - material.
+- **Ekonomi med planens behörigheter** (`invoice_view`/`invoice_create`, utan kundhantering): otestat. Det testade kontot har en QA-roll med `customer_manage` och `offer_manage`.
+- **Övrigt otestat:**
+  - objektformade register (`vift_settings`);
+  - per-post-regler för uppgifter;
+  - ändring och borttagning av befintliga poster;
+  - fältnivå;
+  - skrivning av hel nyckel (`write`).
+
+**Förslag till GO-1b, en liten utökning av testrollerna:**
+- `e2e_falt`: `dashboard_view`, `ao_view_own`, `ao_time`, `ao_material`, `ao_checklist`, `ao_complete`.
+- `e2e_arbetsledare`: `dashboard_view`, `ao_view_all`, `ao_create`, `ao_edit`, `ao_complete`, `ao_time`, `ao_material`, `ao_checklist`, `customer_manage`, `offer_manage`, `sales_manage`, `staff_view`.
+- `e2e_ekonomi`: `dashboard_view`, `invoice_view`, `invoice_create`, `ao_view_all`, `reports_view`.
+- e2e-falt1/2, e2e-chef och e2e-ekonomi flyttas till rollerna ovan. Det gäller bara personalposterna och `app_users.role_id` för testkontona.
+
+### 6.8 GO-5–GO-8 som en samordnad installationsomgång (förberedd, inte genomförd)
+
+**Förkontroll 2026-11-24, bara läsning:** de installerade `store-key-write` v3, `work-order-checklist-resolve` v1 och `offer-attachment-upload` v12 har samma `ezbr_sha256` som de sparade versionerna i `supabase/backup/staging-ef-fore-installation/`. Förkontrollerna i §2g steg 2, §2i steg 2 och §2e gäller därför fortfarande.
+
+Följande saknas i STAGING:
+- `work-order-log-write`;
+- `work-order-image-*`;
+- `offer-public-pdf`;
+- `project-document-*`.
+
+**Metod:** Claude gör stegen via Supabase-anslutningen, så ingen dator och inget CLI behövs hos Lucas.
+- Migrationer körs med exakt SQL-fil från repot.
+- EF:er deployas med repots filer, inklusive `_shared/vift-auth.ts`, och samma `verify_jwt` som tidigare.
+- Efter varje deploy kontrolleras version och `ezbr_sha256`.
+
+| Ordning | GO | Innehåll | Kontroll direkt efter | Rollback |
+|---|---|---|---|---|
+| 0 | — | Ny fingeravtrycksbild av store och `pg_get_functiondef` för berörda funktioner. Den externa backupen är redan verifierad. | — | — |
+| 1 | GO-5 | §2g: migration `20261123000002`, deploy `work-order-checklist-resolve` direkt efter (kort fönster) | Sondering ger `item_not_found`; J9–J12 kräver `e2e_falt` (GO-1b) | §2g: kör om `20260917000001`, `drop function work_order_checklist_set_state(...)` och deploya v1 från backupen |
+| 2 | GO-6 | §2i: migration `20261124000001`, deploy `store-key-write` | Nivå 1; nivå 2 med `vift_activities` (egen uppgift tillåten, annans nekad); `appendActivity` | Deploya v3 från backupen och `drop function activity_log_append(jsonb,int)` |
+| 3 | GO-7 | §2j: migration `20261124000002`, deploy `work-order-log-write` | `append_log`/`remove_log` på test-AO (E10/F4) | Ta bort EF:en och `drop function` för de två RPC:erna |
+| 4 | GO-8a | §2e: migration `20261125000001`, deploy `offer-attachment-upload` | PATCH av namn och synlighet på en testbilaga; 403 utan `offer_manage` | Deploya v12 från backupen och `drop function offer_attachment_patch(text,jsonb)` |
+| 5 | GO-8b | §2b: migration `20261124000003` (privat bucket) och de tre `work-order-image-*` | Bucketen är privat; uppladdning, URL och borttagning på test-AO | Ta bort EF:erna och bucketen (tom) |
+| 6 | GO-8c | §2h: `offer-public-pdf` (verify_jwt=false, skrivfri) | PDF via testofferts token | Ta bort EF:en |
+| 7 | GO-8d | §2k: först del A (finns RPC/bucket?), sedan bara saknade migrationer och de två `project-document-*` | Uppladdning och URL på testprojekt | Enligt §2k |
+| 8 | (GO-3 gäller) | Efterkontroll: nivå 0, nivå 1 och nivå 2 | Som GO-3; store-md5 jämförs med steg 0 | `--stada` |
+
+**Stoppvillkor i varje steg:**
+- migration eller deploy misslyckas;
+- deployad `ezbr_sha256` eller källa avviker från repot;
+- en befintlig nyckels md5 ändras;
+- en bucket blir publik;
+- ett test skriver till en befintlig post.
+
+Vid stopp: rollback av steget, inga fler steg, rapport.
+
+**Inte i denna omgång:**
+- GO-4 (publicering av klienten med WinSCP);
+- GO-9 (`e2e-real.js` mot den publicerade sidan);
+- service-monitor;
+- G7;
+- LIVE.
+
 ## 7. LIVE senare
 
 LIVE (`hjplzjsbbowiyoyhdghc`, Loopia) kör en äldre klient och saknar sannolikt allt i §1 (ao-time-write, RPC:er, RESTRICTIVE-policyer, stamp_status, store-key-write, work-orders-list m.fl.). Denna klient kan **inte** gå till LIVE förrän samma backend är installerad där, i samma ordning som STAGING fick den, med backup före varje migration. Det kräver G4 (källorna i repot) och en egen LIVE-plan.

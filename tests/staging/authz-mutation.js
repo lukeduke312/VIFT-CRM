@@ -87,7 +87,12 @@ const KEY_PERM = {
   vift_customers: 'customer_manage', vift_properties: 'customer_manage', vift_contracts: 'customer_manage',
   vift_offers: 'offer_manage', vift_salesOpps: 'sales_manage',
   vift_roles: 'admin_manage', vift_settings: 'admin_manage', vift_staff: 'staff_manage',
-  vift_articles: 'article_manage', vift_priceGroups: 'article_manage', vift_activities: null,
+  vift_articles: 'article_manage', vift_priceGroups: 'article_manage',
+  /* Testposten saknar createdBy/assignedTo (inte egen uppgift). Både
+     installerad store-key-write v3 (admin_manage för hela registret) och
+     per-post-regeln i activities-policy.ts tillåter den då bara med
+     admin_manage eller arbetsledarbehörighet (ao_edit + ao_view_all). */
+  vift_activities: (p) => p.includes('all') || p.includes('admin_manage') || (p.includes('ao_edit') && p.includes('ao_view_all')),
 };
 const KEYS = Object.keys(EXPECT);
 const G13_ROLES = ['falt', 'chef', 'ekonomi', 'begransad'];
@@ -140,7 +145,7 @@ function testElement(id) {
       const s = staff.find((x) => String(x.id) === ids[r]);
       const role = s && roles.find((x) => x.id === s.role);
       const perms = (role && role.permissions) || [];
-      for (const k of KEYS) EXPECT[k][r] = KEY_PERM[k] === null ? true : (perms.includes('all') || perms.includes(KEY_PERM[k]));
+      for (const k of KEYS) EXPECT[k][r] = typeof KEY_PERM[k] === 'function' ? KEY_PERM[k](perms) : (perms.includes('all') || perms.includes(KEY_PERM[k]));
       rep.add('ROLL ' + r, null, (s ? s.role : '?') + (role ? ' [' + perms.join(', ') + ']' : ' (rollen finns inte — inga behörigheter)'));
     }
   } else rep.add('ROLL', null, 'rollerna kunde inte läsas — planens standardförväntan används');
