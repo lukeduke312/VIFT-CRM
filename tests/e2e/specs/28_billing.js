@@ -5,8 +5,8 @@
  * samma antal och belopp som BillingQueueService, att markering med tre
  * lägen och "Välj alla" följer filtret uttryckligen, att "Kräver åtgärd"
  * visar exakt de ej valbara kandidaterna, att summeringen av valt underlag
- * (ex moms/moms/inkl. moms) är exakt de utkast som skapas — utan
- * dubbelfakturering — och att detaljvyns rader (ex moms) stämmer mot
+ * (exkl. moms/moms/inkl. moms) är exakt de utkast som skapas — utan
+ * dubbelfakturering — och att detaljvyns rader (exkl. moms) stämmer mot
  * summorna vid blandad moms 25/12/0 %. Plus renderingsbudget för 10/100/1000
  * kandidater och ingen horisontell överbredd 360–1920 px.
  */
@@ -36,6 +36,25 @@ function seedQa(fake) {
   const invs = fake.get('invoices');
   invs.push(Object.assign({}, base, { id: 'INV-QA-MIX', title: 'Blandad moms (QA)', lines: lines.map((l) => Object.assign({}, l)) }));
   invs.push(Object.assign({}, base, { id: 'INV-QA-DISC', title: 'Blandad moms med rabatt (QA)', lines: lines.map((l) => Object.assign({}, l)), discount: { type: 'percent', value: 10 } }));
+  /* Decimaler och avrundning: antal och à-pris med decimaler, rader som inte
+     går jämnt ut i hela ören (2 × 2,5 × 19,99 = 49,975;
+     0,75 × 133,33 = 99,9975) och 1 tim × 430 kr (= 537,50 inkl. 25 %). */
+  const dec = [
+    { id: 'd1', description: 'Arbetstid 80 min', qty: 1.33, unit: 'tim', unitPrice: 595, vatRate: 25, source: 'Tid' },
+    { id: 'd2', description: 'Arbetstid', qty: 1, unit: 'tim', unitPrice: 430, vatRate: 25, source: 'Tid' },
+    { id: 'd3', description: 'Silikon', qty: 3, unit: 'st', unitPrice: 33.33, vatRate: 25, source: 'Material' },
+    { id: 'd4', description: 'Kabel', qty: 2.5, unit: 'm', unitPrice: 19.99, vatRate: 25, source: 'Material' },
+    { id: 'd5', description: 'Kabelskarv', qty: 2.5, unit: 'm', unitPrice: 19.99, vatRate: 25, source: 'Material' },
+    { id: 'd6', description: 'Kaffe till möte', qty: 0.75, unit: 'kg', unitPrice: 133.33, vatRate: 12, source: 'Övrigt' },
+  ];
+  invs.push(Object.assign({}, base, { id: 'INV-QA-DEC', title: 'Decimaler och avrundning (QA)', lines: dec.map((l) => Object.assign({}, l)) }));
+  invs.push(Object.assign({}, base, { id: 'INV-QA-DEC25', title: 'Decimaler, endast 25 % (QA)', lines: dec.filter((l) => l.vatRate === 25).map((l) => Object.assign({}, l)) }));
+  /* Fakturaunderlag i varje status. */
+  const d = (n) => new Date(Date.now() + n * 86400000).toISOString();
+  [['INV-QA-SKICKAD', 'skickad', { sentAt: d(-3) }], ['INV-QA-BETALD', 'betald', { sentAt: d(-20), paidAt: d(-2) }],
+   ['INV-QA-FORF', 'förfallen', { sentAt: d(-40), dueDate: d(-10).slice(0, 10) }], ['INV-QA-MAK', 'makulerad', {}]].forEach(([id, st, extra]) => {
+    invs.push(Object.assign({}, base, { id, status: st, title: 'Status ' + st + ' (QA)', lines: lines.map((l) => Object.assign({}, l)) }, extra));
+  });
   fake.set('invoices', invs);
 }
 
@@ -60,6 +79,23 @@ function seedBulk(fake, n) {
     }
   }
   fake.set('customers', custs); fake.set('workOrders', aos); fake.set('timeEntries', tes);
+}
+
+/* Innehåll som klipps inne i en rad/ett kort (text eller knapp som sticker
+   ut ur sin rad) — fångas inte av sidans skrollbredd eftersom korten klipper. */
+async function clipIssues(s) {
+  return s.eval(() => {
+    const out = [];
+    document.querySelectorAll('.page.active .invl-row, .page.active .bqv-row, .page.active .bqv-src, .page.active .bqv-sel, .page.active .bqv-issue, .page.active .doc-top, .page.active .invt-r, .page.active .invd-facts > div').forEach((box) => {
+      if (!box.offsetParent) return;
+      const br = box.getBoundingClientRect();
+      box.querySelectorAll('*').forEach((e) => {
+        const r = e.getBoundingClientRect();
+        if (r.width > 0 && r.right > br.right + 1) out.push((String(e.className || e.tagName).split(' ')[0]) + ' i ' + String(box.className).split(' ')[0] + ' (' + Math.round(r.right) + ' > ' + Math.round(br.right) + ')');
+      });
+    });
+    return [...new Set(out)].slice(0, 5);
+  });
 }
 
 async function openQueue(s) {
@@ -93,12 +129,12 @@ module.exports = [
           parts: ['time', 'material', 'fixed'].map((k) => head.querySelector('[data-part="' + k + '"]').textContent), all: all.length,
           issues: all.filter((c) => !c.selectable).length };
       });
-      t.note('kö: ' + r.all + ' kandidater, ' + r.issues + ' kräver åtgärd, total ' + r.sum.totalAmount + ' kr ex moms');
+      t.note('kö: ' + r.all + ' kandidater, ' + r.issues + ' kräver åtgärd, total ' + r.sum.totalAmount + ' kr exkl. moms');
       const parts = r.parts.map(num);
       t.assert(num(r.headTotal) === r.sum.totalAmount, 'huvudets total = getSummary().totalAmount (' + r.headTotal + ')');
       t.assert(r2(parts[0] + parts[1] + parts[2]) === r.sum.totalAmount, 'Tid + Material + Fastpris = totalen (' + parts.join(' + ') + ' = ' + r.sum.totalAmount + ')');
       t.assert(parts[0] === r.sum.timeAmount && parts[1] === r.sum.materialAmount && parts[2] === r.sum.fixedAmount, 'delsummorna visas med öre och stämmer mot getSummary()');
-      t.assert(/Hela kön/i.test(r.headText) && /ex moms/i.test(r.headText), 'huvudet är märkt "Hela kön" och "ex moms"');
+      t.assert(/Hela kön/i.test(r.headText) && /exkl\. moms/i.test(r.headText), 'huvudet är märkt "Hela kön" och "exkl. moms"');
       t.assert(new RegExp(r.issues + ' poster kräver åtgärd').test(r.headText) && /ingår inte i summan/.test(r.headText), 'åtgärdsräkningen visas och sägs inte ingå i summan');
       t.assert(r.groups.length === Object.keys(r.byCust).length, 'en kundrad per kund (' + r.groups.length + ')');
       t.assert(r.groups.every((g) => !g.open && g.rows === 0), 'standardläget är kompakt: inga underlagsrader utfällda');
@@ -127,7 +163,7 @@ module.exports = [
         const el = document.querySelector('#bq-list [data-filtered-sum]');
         return { exp, shown: el && el.getAttribute('data-filtered-sum'), text: document.querySelector('#bq-list .bqv-result').innerText, head: document.querySelector('#bq-head [data-total]').getAttribute('data-total') };
       });
-      t.assert(/Summa för filtrerat urval/.test(f.text) && /ex moms/.test(f.text), 'filtrerad summa är märkt "Summa för filtrerat urval … ex moms": ' + f.text.replace(/\s+/g, ' '));
+      t.assert(/Summa för filtrerat urval/.test(f.text) && /exkl\. moms/.test(f.text), 'filtrerad summa är märkt "Summa för filtrerat urval … exkl. moms": ' + f.text.replace(/\s+/g, ' '));
       t.assert(num(f.shown) === f.exp, 'filtrerad summa = summan av valbara tidunderlag (' + f.shown + ' = ' + f.exp + ')');
       t.assert(num(f.head) === r.sum.totalAmount, 'köns total i huvudet påverkas inte av filtret');
     },
@@ -237,7 +273,7 @@ module.exports = [
     },
   },
   {
-    id: 'BILL-04', kind: 'workflow', module: 'Fakturering och fakturaunderlag', name: 'Delvis urval → fakturautkast: summeringen (ex moms/moms/inkl.) = skapade utkast, exakt de valda raderna, de försvinner ur kön och kan inte faktureras igen',
+    id: 'BILL-04', kind: 'workflow', module: 'Fakturering och fakturaunderlag', name: 'Delvis urval → fakturautkast: summeringen (exkl. moms/moms/inkl.) = skapade utkast, exakt de valda raderna, de försvinner ur kön och kan inte faktureras igen',
     async run(t) {
       const s = await t.world.session({ viewport: 'laptop' });
       await s.login('ekonomi');
@@ -261,7 +297,7 @@ module.exports = [
       const shown = await s.eval(() => { const q = (a) => document.querySelector('#bq-selsum [' + a + ']'); return { n: q('data-sel-count').getAttribute('data-sel-count'), ex: q('data-sel-ex').getAttribute('data-sel-ex'), vat: q('data-sel-vat').getAttribute('data-sel-vat'), total: q('data-sel-total').getAttribute('data-sel-total'), text: document.getElementById('bq-selsum').innerText.replace(/\s+/g, ' ') }; });
       t.note('valt: ' + shown.text);
       t.assert(Number(shown.n) === 3 && /3 underlag valda · 2 kunder/.test(shown.text), 'summeringen: 3 underlag, 2 kunder');
-      t.assert(/Ex moms/i.test(shown.text) && /\bMoms\b/i.test(shown.text) && /Inkl\. moms/i.test(shown.text), 'ex moms, moms och inkl. moms är märkta');
+      t.assert(/Exkl\. moms/i.test(shown.text) && /\bMoms\b/i.test(shown.text) && /Inkl\. moms/i.test(shown.text), 'exkl. moms, moms och inkl. moms är märkta');
       t.assert(Number(shown.ex) === exp.ex && Number(shown.vat) === exp.vat && Number(shown.total) === exp.total, 'summering ' + [shown.ex, shown.vat, shown.total].join('/') + ' = förväntat ' + [exp.ex, exp.vat, exp.total].join('/'));
       const invBefore = new Set(t.fake.get('invoices').map((i) => i.id));
       const headBefore = await s.eval(() => BillingQueueService.getSummary().totalAmount);
@@ -282,7 +318,7 @@ module.exports = [
       const q = await s.eval((ids) => { const all = BillingQueueService.getCandidates(); return { left: ids.filter((id) => all.some((c) => c.id === id)), rest: all.filter((c) => c.customerId === 'K-001' && c.selectable).length, total: BillingQueueService.getSummary(all).totalAmount, sel: SelectionModel.count(), dom: ids.filter((id) => document.querySelector('#bq-list [data-sel-id="' + id + '"]')).length }; }, ids);
       t.assert(q.left.length === 0 && q.dom === 0, 'de fakturerade raderna finns inte längre i kön');
       t.assert(q.rest === k1.length - 2, 'K-001:s övriga ' + (k1.length - 2) + ' underlag ligger kvar (' + q.rest + ')');
-      t.assert(r2(headBefore - q.total) === exp.ex, 'köns total minskade med exakt ex moms-summan (' + r2(headBefore - q.total) + ')');
+      t.assert(r2(headBefore - q.total) === exp.ex, 'köns total minskade med exakt exkl. moms-summan (' + r2(headBefore - q.total) + ')');
       // Ingen dubbelfakturering: samma urval igen nekas och skapar inget.
       const again = await s.eval((ids) => BillingQueueService.createInvoicesFromSourceKeys(ids), ids);
       t.assert(again.ok === false, 'samma underlag igen nekas: ' + String(again.error).slice(0, 100));
@@ -290,7 +326,7 @@ module.exports = [
     },
   },
   {
-    id: 'BILL-05', module: 'Fakturering och fakturaunderlag', name: 'Fakturaunderlagets detalj: rader visas ex moms med momssats i egen kolumn och stämmer mot summa ex moms, moms per sats och totalt inkl. moms (blandad 25/12/0 %, med och utan rabatt); statushjälp',
+    id: 'BILL-05', module: 'Fakturering och fakturaunderlag', name: 'Fakturaunderlagets detalj: rader visas exkl. moms med momssats i egen kolumn och stämmer mot summa exkl. moms, moms per sats och totalt inkl. moms (blandad 25/12/0 %, med och utan rabatt); statushjälp',
     async run(t) {
       seedQa(t.fake);
       for (const [vp, inv] of [['laptop', 'INV-QA-MIX'], ['laptop', 'INV-QA-DISC'], ['android', 'INV-QA-MIX']]) {
@@ -311,22 +347,22 @@ module.exports = [
           };
         }, inv);
         const tag = vp + ' ' + inv + ': ';
-        if (vp !== 'android') t.assert(r.head.includes('Belopp ex moms') && r.head.includes('Moms') && r.head.includes('À-pris ex moms'), tag + 'kolumnrubriker: ' + r.head.join(' | '));
-        t.assert(r.rows.every((x) => x.label === 'Belopp ex moms'), tag + 'varje radbelopp är märkt "Belopp ex moms"');
+        if (vp !== 'android') t.assert(r.head.includes('Belopp exkl. moms') && r.head.includes('Moms') && r.head.includes('À-pris exkl. moms'), tag + 'kolumnrubriker: ' + r.head.join(' | '));
+        t.assert(r.rows.every((x) => x.label === 'Belopp exkl. moms'), tag + 'varje radbelopp är märkt "Belopp exkl. moms"');
         const first = r.rows[0];
-        t.assert(/2 tim/.test(first.qty) && num(first.price) === 430 && num(first.amt) === 860 && /25 %/.test(first.vat), tag + '2 tim × 430 kr visas som 860,00 kr ex moms med 25 % moms (inte 1 075 kr) ' + JSON.stringify(first));
+        t.assert(/2 tim/.test(first.qty) && num(first.price) === 430 && num(first.amt) === 860 && /25 %/.test(first.vat), tag + '2 tim × 430 kr visas som 860,00 kr exkl. moms med 25 % moms (inte 1 075 kr) ' + JSON.stringify(first));
         const rowSum = r2(r.rows.reduce((a, x) => a + num(x.amt), 0));
         const partsSum = r2(r.parts.reduce((a, x) => a + num(x.value), 0));
         t.assert(r.parts.length === 3 && ['25', '12', '0'].every((k) => r.parts.some((p) => p.rate === k)), tag + 'moms per sats 25/12/0 visas');
         t.assert(num(r.vat.value) === r.calc.vat && partsSum === r.calc.vat, tag + 'moms ' + r.vat.value + ' = calcSummary ' + r.calc.vat + ' = summan per sats ' + partsSum);
         t.assert(num(r.total.value) === r.calc.totalInclVat && r2(num(r.ex.value) + num(r.vat.value)) === num(r.total.value), tag + 'ex + moms = totalt inkl. moms (' + r.total.value + ')');
         if (inv === 'INV-QA-DISC') {
-          t.assert(r.lines && num(r.lines.value) === rowSum && rowSum === r.calc.linesEx, tag + 'Summa rader ex moms ' + (r.lines && r.lines.value) + ' = radernas summa ' + rowSum);
-          t.assert(r2(num(r.lines.value) - num(r.disc.value.replace('−', ''))) === num(r.ex.value) && num(r.ex.value) === r.calc.exVat, tag + 'rader − rabatt = ex moms efter rabatt (' + r.ex.value + ')');
+          t.assert(r.lines && num(r.lines.value) === rowSum && rowSum === r.calc.linesEx, tag + 'Summa rader exkl. moms ' + (r.lines && r.lines.value) + ' = radernas summa ' + rowSum);
+          t.assert(r2(num(r.lines.value) - num(r.disc.value.replace('−', ''))) === num(r.ex.value) && num(r.ex.value) === r.calc.exVat, tag + 'rader − rabatt = exkl. moms efter rabatt (' + r.ex.value + ')');
           t.assert(r.parts.every((p) => /efter rabatt/.test(p.label)), tag + 'moms per sats märkt "efter rabatt"');
           t.note(inv + ': rader ' + rowSum + ' − rabatt ' + r.calc.discAmt + ' = ' + r.calc.exVat + ', moms ' + r.calc.vat + ', totalt ' + r.calc.totalInclVat);
         } else {
-          t.assert(num(r.ex.value) === rowSum && rowSum === r.calc.exVat, tag + 'radernas summa ' + rowSum + ' = Summa ex moms ' + r.ex.value);
+          t.assert(num(r.ex.value) === rowSum && rowSum === r.calc.exVat, tag + 'radernas summa ' + rowSum + ' = Summa exkl. moms ' + r.ex.value);
           t.note(inv + ' (' + vp + '): rader ' + rowSum + ' = ex ' + r.calc.exVat + ', moms ' + r.calc.vat + ' (' + r.parts.map((p) => p.rate + '%:' + num(p.value)).join(', ') + '), totalt ' + r.calc.totalInclVat);
         }
         t.assert(/Utkast/.test(r.help) && /VIFT skickar ingenting/.test(r.help), tag + 'statushjälpen förklarar utkast: ' + r.help.slice(0, 80));
@@ -408,7 +444,7 @@ module.exports = [
           });
           return [...new Set(bad)].slice(0, 5);
         });
-        li.concat(extra.map((x) => 'utanför: ' + x)).forEach((m) => issues.push(where + ': ' + m));
+        li.concat(extra.map((x) => 'utanför: ' + x), (await clipIssues(s)).map((x) => 'klippt: ' + x)).forEach((m) => issues.push(where + ': ' + m));
       };
       const sizes = [['android', 360], ['iphone', 390], ['desktop', 768], ['desktop', 1024], ['desktop', 1366], ['desktop', 1920]];
       let desk = null;
@@ -472,6 +508,154 @@ module.exports = [
       t.assert(/<b>material<\/b>/.test(txt2), 'Kräver åtgärd visar datat som text');
       t.assert(/<b>kund<\/b>/.test(txt3), 'bekräftelsedialogen visar kundnamnet som text');
       t.assert(/<b>rad<\/b>/.test(txt4) && /<b>anteckning<\/b>/.test(txt4), 'fakturadetaljen visar rad och anteckning som text');
+    },
+  },
+  {
+    id: 'BILL-09', module: 'Fakturering och fakturaunderlag', name: 'Radbelopp mot summor med decimaler och avrundning: radbeloppen (exkl. moms, som rubriken säger) + ev. öresavrundning = Summa exkl. moms; moms = satsen på raderna; totalt = exkl. + moms; 1 tim × 430 kr = 430,00 kr exkl. (537,50 inkl.)',
+    async run(t) {
+      seedQa(t.fake);
+      for (const [vp, inv] of [['laptop', 'INV-QA-DEC'], ['laptop', 'INV-QA-DEC25'], ['iphone', 'INV-QA-DEC']]) {
+        const s = await t.world.session({ viewport: vp });
+        await s.login('ekonomi');
+        await s.go('pg-inv-detail', { invoiceId: inv });
+        await s.settle(400);
+        const r = await s.eval((id) => {
+          const pg = document.querySelector('.page.active');
+          const tv = (k) => { const e = pg.querySelector('#inv-totals [data-t="' + k + '"]'); return e ? { label: e.children[0].textContent.trim(), value: e.children[1].textContent } : null; };
+          return {
+            rows: [...pg.querySelectorAll('.invl-row')].map((e) => ({ id: e.getAttribute('data-line-id'), text: e.innerText, amt: e.querySelector('.invl-amt-v').textContent, label: e.querySelector('.invl-amt .invl-k').textContent, vat: e.querySelector('.invl-vat span:last-child').textContent })),
+            head: [...pg.querySelectorAll('.invl-head span')].map((e) => e.textContent.trim()),
+            round: tv('round'), ex: tv('ex'), vat: tv('vat'), vatRound: tv('vat-round'), total: tv('total'),
+            parts: [...pg.querySelectorAll('#inv-totals [data-t="vat-part"]')].map((e) => ({ rate: Number(e.getAttribute('data-rate')), value: e.children[1].textContent })),
+            lines: getInv(id).lines, calc: InvoiceService.calcSummary(getInv(id)),
+            overflow: (() => { const cs = document.getElementById('content-scroll'); return cs.scrollWidth - cs.clientWidth; })(),
+          };
+        }, inv);
+        const tag = vp + ' ' + inv + ': ';
+        if (vp === 'laptop') t.assert(r.head.includes('Belopp exkl. moms') && r.head.includes('À-pris exkl. moms'), tag + 'rubrikerna säger exkl. moms');
+        t.assert(r.rows.length === r.lines.length && r.rows.every((x) => x.label === 'Belopp exkl. moms'), tag + 'varje radbelopp märkt "Belopp exkl. moms"');
+        // Varje rad: belopp = antal × à-pris (i hela ören), momssatsen = radens sats.
+        for (const l of r.lines) {
+          const row = r.rows.find((x) => x.id === l.id);
+          t.assert(row && num(row.amt) === r2(l.qty * l.unitPrice), tag + l.description + ': ' + (row && row.amt) + ' = ' + l.qty + ' × ' + l.unitPrice);
+          t.assert(num(row.vat) === l.vatRate, tag + l.description + ': moms ' + row.vat + ' = radens sats ' + l.vatRate + ' %');
+        }
+        const r430 = r.rows.find((x) => x.id === 'd2');
+        t.assert(num(r430.amt) === 430 && !/537/.test(r430.text), tag + '1 tim × 430 kr visas som 430,00 kr exkl. moms (inte 537,50 utan etikett)');
+        const rowsSum = r2(r.rows.reduce((a, x) => a + num(x.amt), 0));
+        const roundV = r.round ? num(r.round.value.replace('−', '-')) : 0;
+        t.assert(r2(rowsSum + roundV) === num(r.ex.value) && num(r.ex.value) === r.calc.exVat, tag + 'radbelopp ' + rowsSum + (r.round ? ' + öresavrundning ' + roundV : '') + ' = Summa exkl. moms ' + r.ex.value + ' (calcSummary ' + r.calc.exVat + ')');
+        if (r.round) t.assert(/Öresavrundning/.test(r.round.label) && Math.abs(roundV) <= 0.01 * r.lines.length, tag + 'öresavrundningen är märkt och liten (' + r.round.value + ')');
+        if (inv === 'INV-QA-DEC') t.assert(!!r.round, tag + 'rader som inte går jämnt ut i ören ger en synlig öresavrundning');
+        const vatExp = r2(r.lines.reduce((a, l) => a + l.qty * l.unitPrice * l.vatRate / 100, 0));
+        t.assert(num(r.vat.value) === r.calc.vat && r.calc.vat === vatExp, tag + 'moms ' + r.vat.value + ' = Σ rad × sats = ' + vatExp);
+        const rates = [...new Set(r.lines.map((l) => l.vatRate))];
+        if (rates.length > 1) {
+          for (const p of r.parts) {
+            const base = r.lines.filter((l) => l.vatRate === p.rate).reduce((a, l) => a + l.qty * l.unitPrice, 0);
+            t.assert(num(p.value) === r2(base * p.rate / 100), tag + 'moms ' + p.rate + ' % = ' + p.rate + ' % av ' + r2(base) + ' (' + p.value + ')');
+          }
+          const partsSum = r2(r.parts.reduce((a, p) => a + num(p.value), 0) + (r.vatRound ? num(r.vatRound.value.replace('−', '-')) : 0));
+          t.assert(partsSum === num(r.vat.value), tag + 'momsen per sats summerar till momsen (' + partsSum + ')');
+        } else {
+          t.assert(/Moms 25 %/.test(r.vat.label) && Math.abs(num(r.vat.value) - num(r.ex.value) * 0.25) <= 0.005 + 1e-9, tag + 'endast 25 %: moms ' + r.vat.value + ' ≈ 25 % av ' + r.ex.value + ' (beräknad på radernas exakta summa)');
+        }
+        t.assert(num(r.total.value) === r2(num(r.ex.value) + num(r.vat.value)) && num(r.total.value) === r.calc.totalInclVat, tag + 'Totalt inkl. moms ' + r.total.value + ' = exkl. + moms');
+        t.assert(r.overflow <= 2, tag + 'ingen horisontell överbredd');
+        t.note(tag + 'rader ' + rowsSum + (r.round ? ' + avrundning ' + roundV : '') + ' = ' + r.calc.exVat + ', moms ' + r.calc.vat + ', totalt ' + r.calc.totalInclVat);
+        await s.context.close();
+      }
+    },
+  },
+  {
+    id: 'BILL-10', kind: 'workflow', module: 'Fakturering och fakturaunderlag', name: 'Mobil 390 px: välj underlag per fastighet, se vald summa, skapa underlag, läs raderna utan sidscroll och byt status',
+    async run(t) {
+      const s = await t.world.session({ viewport: 'iphone' });
+      await s.login('ekonomi');
+      await openQueue(s);
+      const cust = '#bq-list .bqv-cust[data-key="c:K-002"]';
+      await s.page.locator(cust + ' .bqv-cust-row .bqv-tog').tap();
+      await s.settle(250);
+      const prop = s.page.locator(cust + ' .bqv-prop-row input.bqv-cb').first();
+      const ids = (await prop.getAttribute('data-group-ids')).split('|');
+      await prop.tap();
+      await s.settle(250);
+      const v = await s.eval(() => {
+        const sel = document.querySelector('#bq-selsum .bqv-sel');
+        const r = sel.getBoundingClientRect();
+        const nav = document.getElementById('mobile-bottom-nav').getBoundingClientRect();
+        return { n: SelectionModel.count(), top: r.top, bottom: r.bottom, navTop: nav.top, text: sel.innerText.replace(/\s+/g, ' '), ex: Number(sel.querySelector('[data-sel-ex]').getAttribute('data-sel-ex')) };
+      });
+      t.assert(v.n === ids.length && ids.length >= 2, 'fastighetens kryssruta valde dess ' + ids.length + ' underlag (' + v.n + ')');
+      t.assert(v.top >= 0 && v.bottom <= v.navTop + 1, 'vald summa syns ovanför bottenmenyn utan att scrolla');
+      t.assert(/exkl\. moms/i.test(v.text) && /inkl\. moms/i.test(v.text) && v.ex > 0, 'vald summa visas med exkl./inkl. moms: ' + v.text);
+      const before = new Set(t.fake.get('invoices').map((i) => i.id));
+      await s.page.locator('#bq-selsum [data-act="create"]').tap();
+      await s.clickModalButton(/^Skapa fakturautkast$/);
+      await s.page.waitForFunction(() => Router.currentPage === 'pg-inv-detail', null, { timeout: 8000 });
+      await s.settle(500);
+      const inv = t.fake.get('invoices').find((i) => !before.has(i.id));
+      t.assert(inv && inv.lines.length === ids.length, 'underlaget skapat med ' + ids.length + ' rader');
+      const d = await s.eval(() => {
+        const cs = document.getElementById('content-scroll');
+        const vw = cs.getBoundingClientRect().right;
+        const rows = [...document.querySelectorAll('.page.active .invl-row')];
+        return { overflow: cs.scrollWidth - cs.clientWidth, rows: rows.length, outside: rows.filter((r) => r.getBoundingClientRect().right > vw + 1).length,
+          labels: rows.every((r) => /Belopp exkl\. moms/i.test(r.innerText)), font: Math.min(...rows.map((r) => parseFloat(getComputedStyle(r.querySelector('.invl-amt-v')).fontSize))), head: getComputedStyle(document.querySelector('.page.active .invl-head')).display };
+      });
+      t.assert(d.rows === ids.length && d.overflow <= 2 && d.outside === 0, 'raderna ryms utan sidscroll (' + JSON.stringify(d) + ')');
+      t.assert(d.labels && d.head === 'none' && d.font >= 12, 'mobil: ett kort per rad med märkt belopp, läsbar text');
+      const clip = await clipIssues(s);
+      t.assert(clip.length === 0, 'inget klipps i raderna eller huvudet: ' + clip.join(' ; '));
+      await s.page.selectOption('.page.active .doc-status-sel', 'skickad');
+      await s.clickModalButton(/Bekräfta/);
+      await s.page.waitForFunction((id) => (getInv(id) || {}).status === 'skickad', inv.id, { timeout: 8000 });
+      await s.settle(500);
+      t.assert(t.fake.get('invoices').find((i) => i.id === inv.id).status === 'skickad', 'statusen ändrad till skickad på servern');
+      t.assert(/Skickad/.test(await s.text('.page.active [data-status-help]')), 'statushjälpen visar Skickad');
+    },
+  },
+  {
+    id: 'BILL-11', module: 'Fakturering och fakturaunderlag', kind: 'ui', name: 'Statusar och innehåll: underlag i utkast/skickad/betald/förfallen/makulerad visar rätt hjälptext och låsning; listan med alla statusar, tom kö och långa namn utan överbredd på 360 px',
+    async run(t) {
+      seedQa(t.fake);
+      const cu = t.fake.get('customers'); cu.find((c) => c.id === 'K-002').name = 'Bostadsrättsföreningen Långa Namnets Fastigheter i Stora Sundbyberg med Omnejd Ekonomisk Förening'; t.fake.set('customers', cu);
+      const aos = t.fake.get('workOrders'); aos.find((a) => a.id === 'AO-012').title = 'VVS-service och tryckkontroll av samtliga stammar i hus A, B och C inklusive dokumentation'; t.fake.set('workOrders', aos);
+      const s = await t.world.session({ viewport: 'android' });
+      await s.login('ekonomi');
+      const ovf = () => s.eval(() => { const cs = document.getElementById('content-scroll'); return cs.scrollWidth - cs.clientWidth; });
+      const cases = { 'INV-QA-MIX': ['utkast', /Utkast/], 'INV-QA-SKICKAD': ['skickad', /Skickad/], 'INV-QA-BETALD': ['betald', /Betald/], 'INV-QA-FORF': ['förfallen', /Förfallen/], 'INV-QA-MAK': ['makulerad', /Makulerad[\s\S]*släppts tillbaka/] };
+      for (const [id, [st, re]] of Object.entries(cases)) {
+        await s.go('pg-inv-detail', { invoiceId: id }); await s.settle(300);
+        const r = await s.eval(() => ({ help: (document.querySelector('.page.active [data-status-help]') || {}).innerText || '', edit: document.querySelectorAll('.page.active .invl-act button').length,
+          opts: [...document.querySelectorAll('.page.active .doc-status-sel option')].map((o) => o.value) }));
+        const allowed = await s.eval((i) => [getInv(i).status].concat(InvoiceService.getAllowedStatusTransitions(getInv(i))), id);
+        t.assert(re.test(r.help), id + ': statushjälpen beskriver ' + st + ' (' + r.help.slice(0, 60) + ')');
+        t.assert(st === 'utkast' ? r.edit > 0 : r.edit === 0, id + ': radknappar bara i utkast (' + r.edit + ')');
+        t.assert(JSON.stringify(r.opts) === JSON.stringify(allowed), id + ': statusväljaren = tillåtna övergångar ' + r.opts.join(','));
+        t.assert(await ovf() <= 2, id + ': ingen överbredd på 360 px');
+        const clip = await clipIssues(s);
+        t.assert(clip.length === 0, id + ': inget klipps på 360 px: ' + clip.join(' ; '));
+      }
+      await s.go('pg-invoices');
+      await s.eval(() => InvoicesPage._setView('list')); await s.settle(300);
+      t.assert(await ovf() <= 2, 'Fakturaunderlag-listan med alla statusar: ingen överbredd');
+      await s.eval(() => { InvoicesPage._qShow = 'alla'; InvoicesPage._setView('queue'); }); await s.settle(300);
+      await s.page.locator('#bq-expand-all').tap(); await s.settle(300);
+      t.assert(await ovf() <= 2, 'kön utfälld med långa namn: ingen överbredd');
+      const longOk = await s.eval(() => { const e = document.querySelector('#bq-list .bqv-cust[data-key="c:K-002"] .bqv-title'); const r = e.getBoundingClientRect(); return r.right <= document.getElementById('content-scroll').getBoundingClientRect().right + 1 && e.scrollWidth <= e.clientWidth + 1; });
+      t.assert(longOk, 'långt kundnamn radbryts inom kortet');
+      // Tom kö: inga debiterbara poster.
+      const w = new lib.World();
+      try {
+        w.fake.set('timeEntries', []); w.fake.set('workOrders', []);
+        const e = await w.session({ viewport: 'android' });
+        await e.login('ekonomi');
+        await openQueue(e);
+        const empty = await e.eval(() => ({ text: (document.querySelector('#bq-list .empty') || {}).innerText || '', total: document.querySelector('#bq-head [data-total]').getAttribute('data-total') }));
+        t.assert(/Inget att fakturera/.test(empty.text) && Number(empty.total) === 0, 'tom kö: tomläge och 0 kr');
+        t.assert(e.pageErrors.length === 0, 'tom kö: inga JS-fel');
+      } finally { await w.close(); }
     },
   },
 ];
