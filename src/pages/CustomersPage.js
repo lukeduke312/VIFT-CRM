@@ -841,27 +841,34 @@ const CustomerDetailPage = {
     const invoices = (state.invoices||[]).filter(i => i.customerId === cu.id);
     const sales  = (state.salesOpportunities||[]).filter(s => s.customerId === cu.id);
 
+    /* V3 2026-11-26 (F-10): gemensamt detaljhuvud (MxUi, PropertyDetailPage.js).
+       Tillbaka + namn på en rad, nummer/org.nr under, typ/status som märken,
+       Ny arbetsorder som primär åtgärd; Redigera/Ny uppgift som knappar på
+       dator, i ⋮ på mobil tillsammans med Inaktivera/Aktivera. */
+    const canManage = Auth.can('customer_manage');
+    const head = MxUi.detailHead({
+      back: 'Router.back()',
+      title: esc(name),
+      sub: `<span class="mx-dh-no">${esc(CustomerService.displayNumber(cu))}</span>${cu.orgNr ? `<span class="mx-sep">·</span><span>${esc(cu.orgNr)}</span>` : ''}`,
+      badges: `<span class="bdg bdg-grey">${esc(CustomerService.typeLabel(cu.type))}</span>${cu.inactive ? '<span class="bdg st bdg-grey"><span class="st-dot"></span>Inaktiv</span>' : ''}`,
+      primary: { label: 'Ny arbetsorder', icon: 'plus', fn: `WorkOrdersPage.openCreate('${esc(cu.id)}')` },
+      menuId: 'cu-head-menu',
+      actions: [
+        canManage ? { label: 'Redigera', icon: 'pencil', fn: `CustomersPage.openEdit('${esc(cu.id)}')`, inline: true } : null,
+        Auth.canViewPage('pg-activities') ? { label: 'Ny uppgift', icon: 'check-square', fn: `ActivitiesPage.openCreate({customerId:'${esc(cu.id)}'})`, inline: true } : null,
+        canManage ? (cu.inactive
+          ? { label: 'Aktivera kunden', icon: 'user-check', fn: `CustomerDetailPage.toggleInactive('${esc(cu.id)}')` }
+          : { label: 'Inaktivera kunden', icon: 'user-x', fn: `CustomerDetailPage.toggleInactive('${esc(cu.id)}')`, destructive: true }) : null
+      ]
+    });
+
     el.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:4px;">
-        <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-        <h2 style="font-size:17px;font-weight:800;flex:1;">${esc(name)}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
-        ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>` : ''}
-        ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>` : ''}
-      </div>
+      ${head}
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
-        <span class="bdg bdg-grey">${esc(CustomerService.displayNumber(cu))}</span>
-        <span class="bdg bdg-grey">${CustomerService.typeLabel(cu.type)}</span>
-        ${cu.orgNr ? `<span class="bdg bdg-grey">${esc(cu.orgNr)}</span>` : ''}
-        <span style="flex:1;"></span>
-        <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate('${cu.id}')">${ic('plus',14)} Ny arbetsorder</button>
-        ${Auth.canViewPage('pg-activities') ? `<button class="btn bs bsm" onclick="ActivitiesPage.openCreate({customerId:'${cu.id}'})">${ic('check-square',14)} Ny uppgift</button>` : ''}
-      </div>
-
-      <div class="ftabs" style="margin-bottom:4px;">
+      <div class="ftabs mx-cutabs" role="tablist">
         ${[['info','Info'],['ao','AO ('+aos.length+')'],['offers','Offerter ('+offers.length+')'],
            ['invoices','Fakturor ('+invoices.length+')'],['sales','Säljchanser ('+sales.length+')'],['activity','Aktivitet']].map(([t,l]) =>
-          `<button class="ft ${this.tab===t?'on':''}" onclick="CustomerDetailPage.switchTab('${t}')">${l}</button>`
+          `<button class="ft ${this.tab===t?'on':''}" role="tab" aria-selected="${this.tab===t?'true':'false'}" onclick="CustomerDetailPage.switchTab('${t}')">${l}</button>`
         ).join('')}
       </div>
 
@@ -872,11 +879,13 @@ const CustomerDetailPage = {
 
   switchTab(tab) {
     this.tab = tab;
-    document.querySelectorAll('#pg-crm-detail-content .ft').forEach(b =>
-      b.classList.toggle('on', b.textContent.trim().startsWith(
+    document.querySelectorAll('#pg-crm-detail-content .ft').forEach(b => {
+      const on = b.textContent.trim().startsWith(
         {info:'Info',ao:'AO',offers:'Offerter',invoices:'Fakturor',sales:'Säljchanser',activity:'Aktivitet'}[tab]
-      ))
-    );
+      );
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     this._renderTab();
   },
 

@@ -162,6 +162,12 @@ const ProjectsPage = {
     return { label: ProjectService.statusLabel(status), color: colors[status] || 'var(--mt)' };
   },
 
+  /* V3: status som statusmärke (punkt + text) i samma färgfamilj som tidigare. */
+  _statusBadge(status) {
+    const cls = { planerad: 'bdg-sky', 'pågående': 'bdg-green', pausad: 'bdg-orange', klar: 'bdg-blue', avslutad: 'bdg-grey' }[status] || 'bdg-grey';
+    return `<span class="bdg st ${cls}"><span class="st-dot"></span>${esc(ProjectService.statusLabel(status) || status || '—')}</span>`;
+  },
+
   /* V54C1 R1 — Filter Polish 2: status och arkiverad är ÖMSESIDIGT
      uteslutande, aldrig en dold kombination. Att välja en namngiven
      status återgår alltid till aktiva projekt (archived=false); att slå
