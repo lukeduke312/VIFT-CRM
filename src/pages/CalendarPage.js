@@ -187,7 +187,10 @@ const CalendarPage = {
       <div class="cal-pool-items">${pool.map(ao => this._poolChip(ao)).join('')}</div>
     </div>` : '';
 
-    return `<div class="cal-wk-wrap">
+    /* F-08 (V3 2026-11-26): på mobil (<768 px) pressades sju kolumner in
+       så att titlar bröts per bokstav. Samma vecka visas där som en
+       dagslista (CSS väljer vy efter bredd — inget ritas om vid rotation). */
+    return this._veckaList(days) + `<div class="cal-wk-wrap">
       <div class="cal-wk-grid">
         <div class="cal-wk-gutter"></div>
         <div class="cal-wk-headers">${dayHeaders}</div>
@@ -198,6 +201,28 @@ const CalendarPage = {
       </div>
       ${poolSection}
     </div>`;
+  },
+
+  /* Veckan som dagslista (mobil): varje dag med rubrik, händelser som
+     agendarader (långtryck på en AO öppnar Flytta till…) och tomma dagar
+     som en kort rad. Tryck på dagrubriken öppnar dagvyn. */
+  _veckaList(days) {
+    const today = tdy();
+    const rows = days.map((ds, i) => {
+      const d = this._parseDate(ds);
+      const evts = this._events(ds);
+      const isToday = ds === today;
+      return `<section class="cal-wl-day${isToday ? ' is-today' : ''}${evts.length ? '' : ' is-empty'}">
+        <button type="button" class="cal-wl-hd" onclick="CalendarPage._navDay('${ds}')" aria-label="Visa ${this._DAYS_SHORT[i]} ${d.getDate()} ${this._MONTHS[d.getMonth()]} som dag">
+          <span class="cal-wl-dow">${this._DAYS_SHORT[i]}</span>
+          <span class="cal-wl-date">${d.getDate()} ${this._MONTHS_SHORT[d.getMonth()]}.</span>
+          ${isToday ? '<span class="cal-wl-today">Idag</span>' : ''}
+          <span class="cal-wl-n">${evts.length ? evts.length + ' ' + (evts.length === 1 ? 'händelse' : 'händelser') : 'Inget planerat'}</span>
+        </button>
+        ${evts.length ? `<div class="cal-wl-rows">${evts.map(e => this._agendaRow(e)).join('')}</div>` : ''}
+      </section>`;
+    }).join('');
+    return `<div class="cal-wk-list" aria-label="Veckan dag för dag">${rows}</div>`;
   },
 
   /* ── MÅNAD-vy ────────────────────────────────────────────────────────── */
@@ -333,7 +358,7 @@ const CalendarPage = {
           ao,
           cu,
           prop,
-          onclick: `Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})`,
+          onclick: `Router.showPage('pg-ao-detail',{aoId:'${esc(ao.id)}'})`,
           draggable: Auth.can('ao_edit')
         });
       });
@@ -362,7 +387,7 @@ const CalendarPage = {
           color:   'var(--indigo,#6366f1)',
           startH, endH,
           passId:  pass.id,
-          onclick: `Router.showPage('pg-rondering-rapport',{passId:'${pass.id}'})`,
+          onclick: `Router.showPage('pg-rondering-rapport',{passId:'${esc(pass.id)}'})`,
           draggable: false
         });
       });
@@ -388,7 +413,7 @@ const CalendarPage = {
             color:   overdue ? 'var(--rd)' : 'var(--or)',
             startH:  null, endH: null,
             propId:  prop.id,
-            onclick: `Router.showPage('pg-obj-detail',{propId:'${prop.id}',tab:'service'})`,
+            onclick: `Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}',tab:'service'})`,
             draggable: false
           });
         });
@@ -532,12 +557,13 @@ const CalendarPage = {
         ${cu ? `<span>${ic('building-2',10)} ${esc(typeof CustomerService!=='undefined'?CustomerService.displayName(cu):(cu.name||cu.id))}</span>` : ''}
         ${prop ? `<span>${ic('map-pin',10)} ${esc(prop.name||prop.address||prop.id)}</span>` : ''}
         ${staffNames.length ? `<span>${ic('users',10)} ${staffNames.map(esc).join(', ')}</span>` : ''}
-        ${ao.status ? `<span class="bdg ${this._statusCls(ao.status)}">${esc(ao.status)}</span>` : ''}
+        ${ao.status ? sbdg(ao.status) : ''}
       </div>`;
     }
 
-    return `<div class="cal-ag-row${overdue?' cal-ag-overdue':''}" onclick="${evt.onclick}" style="border-left:3px solid ${evt.color};">
-      <div class="cal-ag-time">${timeStr}${endStr ? `<br><span style="font-size:10px;opacity:.7;">${endStr}</span>` : ''}</div>
+    /* data-aoid: långtryck på mobil öppnar "Flytta till…" (_bindDelegated). */
+    return `<div class="cal-ag-row${overdue?' cal-ag-overdue':''}" role="button" tabindex="0" ${evt.draggable ? `data-aoid="${esc(evt.id)}"` : ''} onclick="${evt.onclick}" onkeydown="if(event.key==='Enter')this.click()" style="border-left:3px solid ${evt.color};">
+      <div class="cal-ag-time">${timeStr}${endStr ? `<span class="cal-ag-end">${endStr}</span>` : ''}</div>
       <div class="cal-ag-body">
         <div class="cal-ag-title">${esc(evt.title)}</div>
         ${meta}

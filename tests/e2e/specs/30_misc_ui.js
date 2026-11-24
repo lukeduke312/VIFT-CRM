@@ -246,6 +246,49 @@ const tests = [
       }
     },
   },
+  {
+    id: 'MISC-CAL-01', module: 'Kalender', name: 'Kalender veckovy (F-08): på 360/390 en läsbar dagslista (7 dagar, titlar inte bokstav för bokstav, vyväljaren på en rad, långtryck flyttar AO); på dator oförändrat rutnät',
+    async run(t) {
+      for (const vp of ['mx360', 'mx390']) {
+        const s = await open(t, vp, 'admin', 'pg-calendar');
+        await s.eval(() => CalendarPage.setView('vecka'));
+        await s.settle(300);
+        const r = await s.eval(() => {
+          const vis = (e) => e && e.offsetParent && e.getBoundingClientRect().height > 0;
+          const grid = document.querySelector('#pg-calendar .cal-wk-grid');
+          const days = [...document.querySelectorAll('#pg-calendar .cal-wk-list .cal-wl-day')].filter(vis);
+          const titles = [...document.querySelectorAll('#pg-calendar .cal-wk-list .cal-ag-title')].filter(vis).map((e) => {
+            const b = e.getBoundingClientRect(); const lh = parseFloat(getComputedStyle(e).lineHeight) || 16;
+            return { t: e.textContent.trim().slice(0, 30), w: Math.round(b.width), lines: Math.round(b.height / lh) };
+          });
+          const tabs = [...document.querySelectorAll('#pg-calendar .cal-view-tabs .ft')].map((b) => Math.round(b.getBoundingClientRect().top));
+          return { gridShown: vis(grid), days: days.length, titles, tabsTops: [...new Set(tabs)], rows: document.querySelectorAll('#pg-calendar .cal-wk-list [data-aoid]').length };
+        });
+        const ov = await s.eval(overflowProbe);
+        t.note(vp + ' ' + JSON.stringify({ days: r.days, n: r.titles.length, minW: Math.min(...r.titles.map((x) => x.w)) }));
+        t.assert(!r.gridShown && r.days === 7, vp + ': sju dagar som lista i stället för sju smala kolumner');
+        t.assert(r.titles.length >= 2, vp + ': veckan har händelser i testdatan (' + r.titles.length + ')');
+        t.assert(r.titles.every((x) => x.w >= 150 && x.lines <= 3), vp + ': titlarna är läsbara (minst 150 px breda, högst 3 rader) ' + JSON.stringify(r.titles.filter((x) => x.w < 150 || x.lines > 3)));
+        t.assert(r.tabsTops.length === 1, vp + ': Dag/Vecka/Månad/Agenda på en rad');
+        t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': inget sidöverflöd ' + JSON.stringify(ov));
+        t.assert(r.rows > 0, vp + ': AO-rader går att långtrycka (data-aoid)');
+        // Långtryck på första AO-raden öppnar "Flytta till…"
+        const box = await s.page.locator('#pg-calendar .cal-wk-list [data-aoid]').first().boundingBox();
+        await s.page.mouse.move(box.x + 20, box.y + 10);
+        await s.page.mouse.down();
+        await s.page.waitForTimeout(650);
+        await s.page.mouse.up();
+        const modal = await s.eval(() => !!document.querySelector('.modal-overlay.open #touch-move-date'));
+        t.assert(modal, vp + ': långtryck öppnar Flytta till-dialogen');
+        await s.eval(() => Modal.close());
+      }
+      const d = await open(t, 'mx1366', 'admin', 'pg-calendar');
+      await d.eval(() => CalendarPage.setView('vecka'));
+      await d.settle(300);
+      const dr = await d.eval(() => ({ grid: !!document.querySelector('#pg-calendar .cal-wk-grid').offsetParent, list: !!(document.querySelector('#pg-calendar .cal-wk-list') || {}).offsetParent, cols: document.querySelectorAll('#pg-calendar .cal-wk-col').length }));
+      t.assert(dr.grid && !dr.list && dr.cols === 7, 'dator: veckorutnätet med sju kolumner visas, listan inte ' + JSON.stringify(dr));
+    },
+  },
 ];
 module.exports = tests;
 module.exports.seedMisc = seedMisc;
