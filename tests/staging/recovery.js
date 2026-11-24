@@ -138,11 +138,22 @@ function createRecovery(o) {
     return out;
   }
 
+  const diffs = [];
   function compare(before, after) {
     const changed = [];
     const cmp = (label, a, b) => {
       const A = byId((a || []).filter((x) => !isTest(x))), B = byId((b || []).filter((x) => !isTest(x)));
-      for (const [id, v] of A) if (B.get(id) !== v) changed.push(label + ' ' + id + (B.has(id) ? ' ändrad' : ' borta'));
+      for (const [id, v] of A) if (B.get(id) !== v) {
+        changed.push(label + ' ' + id + (B.has(id) ? ' ändrad' : ' borta'));
+        /* Diagnostik (2026-11-26): vilka fält skiljer — för att kunna skilja verklig ändring från läsavvikelse. */
+        if (B.has(id) && diffs.length < 5) {
+          try {
+            const x = JSON.parse(v), y = JSON.parse(B.get(id));
+            const keys = [...new Set([...Object.keys(x), ...Object.keys(y)])].filter((f) => JSON.stringify(x[f]) !== JSON.stringify(y[f]));
+            diffs.push(label + ' ' + id + ': ' + keys.map((f) => f + ' ' + JSON.stringify(x[f]).slice(0, 60) + ' → ' + JSON.stringify(y[f]).slice(0, 60)).join('; '));
+          } catch (e) { diffs.push(label + ' ' + id + ': (kunde inte jämföras fältvis)'); }
+        }
+      }
       for (const id of B.keys()) if (!A.has(id)) changed.push(label + ' ' + id + ' ny');
     };
     KEYS.forEach((k) => { if (Array.isArray(before.data[k])) cmp(k, before.data[k], after.data[k]); else if (L.stable(before.data[k]) !== L.stable(after.data[k])) changed.push(k + ' (objekt) ändrad'); });
@@ -187,7 +198,7 @@ function createRecovery(o) {
     }
     if (after && before) {
       const changed = compare(before, after);
-      rep.add('AFFÄRSPOSTER', changed.length === 0 ? true : false, changed.length ? 'EJ GODKÄNT: befintliga poster ändrade under körningen (automatik vid inloggning, annan användare eller testet — granska): ' + changed.slice(0, 20).join(', ') : 'befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före');
+      rep.add('AFFÄRSPOSTER', changed.length === 0 ? true : false, changed.length ? 'EJ GODKÄNT: befintliga poster ändrade under körningen (automatik vid inloggning, annan användare eller testet — granska): ' + changed.slice(0, 20).join(', ') + (diffs.length ? ' | fält: ' + diffs.join(' | ') : '') : 'befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före');
       if (changed.length && exitCode === L.EXIT.OK) exitCode = L.EXIT.OSAKER;
     } else if (before) rep.add('AFFÄRSPOSTER', false, 'EJ GODKÄNT: kunde inte jämföras — efterkontroll saknas');
     rep.add('DATABASIDENTITET', null, 'INTE fullständig (förväntat). Kvar som metadata: ' + metadataReport(before, after).join(' · '));
