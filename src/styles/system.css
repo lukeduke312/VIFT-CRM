@@ -438,7 +438,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .list-item:hover { border-color: var(--line-2); background: var(--surface-2); }
 
 /* Datatabell — återanvändbar för listvyer */
-.dt { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); }
+.dtab { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); }
 .dt-wrap {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -447,7 +447,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
   overflow: hidden;
 }
 .dt-scroll { overflow-x: auto; }
-.dt th {
+.dtab th {
   position: sticky; top: 0; z-index: 1;
   background: var(--surface-2);
   text-align: left;
@@ -459,7 +459,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
-.dt td {
+.dtab td {
   padding: 0 12px;
   height: var(--row-h);
   border-bottom: 1px solid var(--line);
@@ -467,12 +467,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
   color: var(--ink-2);
   vertical-align: middle;
 }
-.dt tr:last-child td { border-bottom: none; }
-.dt tbody tr { cursor: pointer; transition: background-color .08s; }
-.dt tbody tr:hover td { background: var(--surface-2); }
-.dt tbody tr.selected td { background: var(--accent-soft); }
-.dt .c-num { text-align: right; font-variant-numeric: tabular-nums; }
-.dt .c-shrink { width: 1%; white-space: nowrap; }
+.dtab tr:last-child td { border-bottom: none; }
+.dtab tbody tr { cursor: pointer; transition: background-color .08s; }
+.dtab tbody tr:hover td { background: var(--surface-2); }
+.dtab tbody tr.selected td { background: var(--accent-soft); }
+.dtab .c-num { text-align: right; font-variant-numeric: tabular-nums; }
+.dtab .c-shrink { width: 1%; white-space: nowrap; }
 
 /* ── Tomma lägen ────────────────────────────────────────────────── */
 .empty {
@@ -631,49 +631,7 @@ a:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible { outli
 @media (max-width: 1099px) {
   .aol-table .aol-c-chk { display: none; }
 }
-/* Smal skärm: tabellraden blir ett kompakt kort (samma markup) */
-@media (max-width: 899px) {
-  .aol-bar-right { width: 100%; }
-  .aol-sort span { display: none; }
-  .aol-bar-right .aol-new { margin-left: auto; }
-  .aol-seg { display: none; }
-  .aol-table-wrap { background: transparent; border: none; box-shadow: none; border-radius: 0; }
-  .aol-count { background: transparent; border: none; padding: 0 2px 6px; }
-  .aol-table, .aol-table tbody { display: block; background: transparent; }
-  .aol-table thead { display: none; }
-  .aol-table .aol-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas: "main status" "when staff";
-    gap: 8px 10px;
-    padding: 12px 14px;
-    margin-bottom: 8px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
-  }
-  .aol-table .aol-row.selected { border-color: var(--accent); background: var(--accent-soft); }
-  .aol-table .aol-row.p-akut { box-shadow: inset 3px 0 0 var(--danger), var(--shadow-1); }
-  .aol-table .aol-row.p-hog  { box-shadow: inset 3px 0 0 #e08a1e, var(--shadow-1); }
-  .aol-table td { display: block; height: auto; padding: 0; border: none; background: transparent !important; box-shadow: none !important; }
-  .aol-table .aol-c-sel { display: none; }
-  .aol-table.sel-mode .aol-c-sel { display: block; position: absolute; right: 10px; bottom: 10px; }
-  .aol-table .aol-c-main { grid-area: main; min-width: 0; }
-  .aol-table .aol-c-status { grid-area: status; justify-self: end; }
-  .aol-table .aol-c-when { grid-area: when; align-self: center; }
-  .aol-table .aol-c-staff { grid-area: staff; justify-self: end; }
-  .aol-table .aol-c-cust, .aol-table .aol-c-chk, .aol-table .aol-c-bill { display: none; }
-  .aol-table .aol-row .aol-c-bill:has(.aol-row-actions) { display: block; grid-column: 1 / -1; }
-  .aol-title { white-space: normal; line-height: 1.35; }
-  .aol-line1 { flex-wrap: wrap; row-gap: 2px; }
-  .aol-m-cust { display: inline; }
-  .aol-line2 .aol-m-cust::before { content: ''; }
-  .ao-quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -14px; padding: 0 14px; }
-  .ao-quick::-webkit-scrollbar { display: none; }
-  .ao-quick-row { gap: 8px; }
-  #pg-ao .ao-status-tabs { overflow-x: auto; }
-}
+
 @media (max-width: 899px) {
   .aol-table-wrap .dt-scroll { overflow: visible; }
   .aol-table .aol-c-status { display: flex; flex-direction: column; align-items: flex-end; }
@@ -769,50 +727,94 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
 .aod .ao-section-title svg { color: var(--muted); }
 .aod .ao-stamp-btn { min-height: 48px; font-size: 15px; }
 
-/* Smalare skrivbord: sidospalt under rubrik-raden i två kolumner */
-@media (max-width: 1199px) {
-  .aod-grid { grid-template-columns: 1fr; }
-  .aod-side { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .aod-side > #ao-lonsam, .aod-side > .aod-recur, .aod-side > .aod-linkrow { grid-column: 1 / -1; }
-  .aod-main { order: 2; }
-  .aod-side { order: 1; }
-}
-/* Mobil: en kolumn i fältordning — vad → var → när → vem → stämpla → checklista … */
-@media (max-width: 767px) {
-  .aod-head { padding: 12px 14px 14px; }
-  .aod-title { font-size: 20px; }
-  .aod-meta { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .aod-meta-i { font-size: 13px; }
-  .aod-meta-i > span { white-space: normal; }
-  .aod-grid, .aod-main, .aod-side { display: contents; }
-  .aod { gap: 12px; }
+/* Fältkort och snabbåtgärdsrad finns bara på mobil */
+.aod-field, .aod-qbar { display: none; }
+
+/* Surfplatta och smalt skrivbord (768–1199): ett rutnät — uppdraget först,
+   därefter Var/När/Vem/Kontakt två och två, sedan arbetsdelarna i full bredd
+   och till sist detaljer och ekonomi. */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .aod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .aod-main, .aod-side { display: contents; }
+  .aod-grid > * , .aod-main > *, .aod-side > * { grid-column: 1 / -1; }
+  .aod-where, .aod-when, .aod-who, .aod-contact, .aod-details, .aod-billing { grid-column: auto; }
   .aod-mission { order: 1; }
-  .aod-where   { order: 2; }
-  .aod-when    { order: 3; }
-  .aod-who     { order: 4; }
-  .aod-stamp   { order: 5; }
-  .aod-chk     { order: 6; }
-  .aod-contact { order: 7; }
-  .aod-mat     { order: 8; }
-  .aod-time    { order: 9; }
-  .aod-log     { order: 10; }
-  .aod-plan    { order: 11; }
-  .aod-billing { order: 12; }
-  .aod-details { order: 13; }
-  .aod-side > #ao-lonsam { order: 14; }
-  .aod-recur, .aod-side > .aod-linkrow { order: 15; }
-  .aod-fact { grid-template-columns: 100px 1fr; }
-  .aod-next { padding: 10px 12px; }
-  .aod-next .btn { flex-shrink: 0; }
+  .aod-where { order: 2; } .aod-when { order: 3; } .aod-who { order: 4; } .aod-contact { order: 5; }
+  .aod-stamp { order: 6; } .aod-chk { order: 7; } .aod-mat { order: 8; } .aod-time { order: 9; }
+  .aod-log { order: 10; } .aod-plan { order: 11; }
+  .aod-details { order: 12; } .aod-billing { order: 13; }
+  .aod-side > #ao-lonsam { order: 14; } .aod-recur, .aod-side > .aod-linkrow { order: 15; }
 }
 
-/* Tryckytor på mobil: varje knapp minst 36 px (designstandard). */
-@media (max-width: 767px), (pointer: coarse) {
-  .btn.bxs { min-height: 36px; padding: 0 10px; }
-  .btn.bsm { min-height: 38px; }
-  .btn { min-height: 40px; }
-  .ibtn { width: 38px; height: 38px; }
-  .chip { height: 36px; }
+/* Mobil (<768): fältordning och färre kort.
+   Sidhuvud (vad/var/när/vem) → nästa steg → uppdrag → plats och kontakt →
+   (stämpling när aktiv) → checklista → material → tid → logg → ekonomi/detaljer.
+   Snabbåtgärder (stämpla, checklista, material, foto) sitter fast ovanför bottenmenyn. */
+@media (max-width: 767px) {
+  .aod { gap: 10px; }
+  .aod-head { padding: 10px 12px 12px; gap: 8px; }
+  .aod-head-top { gap: 8px; }
+  .aod-head-top .ao-back-btn { margin-left: -6px; padding: 0 8px; }
+  .aod-head-top .ao-back-label { display: none; }
+  .aod-badges .cat-tag { display: none; }
+  .aod-title { font-size: 19px; }
+  .aod-meta { display: grid; grid-template-columns: 1fr; gap: 4px; }
+  .aod-meta-i { font-size: 13px; }
+  .aod-meta-i > span { white-space: normal; }
+  .aod-actions { padding-top: 10px; }
+  .aod-actions .ao-acts-mobile { display: flex !important; flex-wrap: wrap; gap: 6px; }
+  .aod-actions .ao-acts-mobile > .btn, .aod-actions .ao-acts-mobile > select, .aod-actions .ao-acts-mobile > .ao-overflow-wrap { flex: 1 1 0; min-width: 0; }
+  .aod-actions .ao-acts-mobile > .btn.bsu, .aod-actions .ao-acts-mobile > .btn.bp { flex: 1 1 100%; min-height: 44px; font-size: 14px; }
+  .aod-actions .ao-acts-mobile > .btn:not(.bsu):not(.bp), .aod-actions .ao-acts-mobile .ao-overflow-wrap > .btn {
+    background: transparent; border: 1px solid var(--line); color: var(--ink-2); box-shadow: none; width: 100%; min-height: 36px; font-size: 12.5px;
+  }
+  .aod-next { padding: 8px 10px; gap: 10px; border-radius: var(--radius); }
+  .aod-next-ico { width: 26px; height: 26px; }
+  .aod-next-l { display: none; }
+  .aod-next-t { font-size: 13px; }
+  .aod-grid, .aod-main, .aod-side { display: contents; }
+  .aod-where, .aod-when, .aod-who, .aod-contact { display: none; }
+  .aod-field { display: block; order: 3; padding: 10px 12px; }
+  .aod-field-acts { display: flex; gap: 6px; }
+  .aod-field-acts:empty { display: none; }
+  .aod-field-acts .btn { flex: 1 1 0; text-decoration: none; }
+  .aod-field-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .aod-field-acts:empty + .aod-field-rows { margin-top: 0; }
+  .aod-fr { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink-2); }
+  .aod-fr > svg { color: var(--faint); flex-shrink: 0; margin-top: 2px; }
+  .aod-fr em { font-style: normal; color: var(--muted); }
+  .aod-mission { order: 2; }
+  .aod-mission .card-header { padding: 10px 12px 8px; }
+  .aod-mission .card-body { padding: 10px 12px 12px; }
+  .aod-mission .ao-mission-text { font-size: 14px; line-height: 1.5; }
+  .aod-stamp { order: 4; }
+  .aod-stamp:not(.is-active) { display: none; }
+  .aod-chk { order: 5; } .aod-mat { order: 6; } .aod-time { order: 7; } .aod-log { order: 8; }
+  .aod-plan { order: 9; } .aod-billing { order: 10; } .aod-details { order: 11; }
+  .aod-side > #ao-lonsam { order: 12; } .aod-recur, .aod-side > .aod-linkrow { order: 13; }
+  .aod .ao-section-head { padding: 11px 12px; }
+  .aod .card-header { padding: 10px 12px 9px; }
+  .aod .card-body { padding: 10px 12px 12px; }
+  .aod-log .card-header h3 { font-size: 14px; }
+  .aod-log .card-header .btn { min-height: 34px; padding: 0 9px; }
+  .aod-qbar {
+    order: 99; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px;
+    position: sticky; bottom: calc(var(--mobile-bottom-reserve, calc(78px + env(safe-area-inset-bottom))) + 8px); z-index: 20;
+    padding: 6px; margin-top: 2px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(8px);
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-3);
+  }
+  .aod-q {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 50px; padding: 4px 2px; border: none; border-radius: 10px; background: transparent;
+    color: var(--ink-2); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .aod-q span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .aod-q svg { color: var(--muted); }
+  .aod-q:active { background: var(--hover); }
+  .aod-q.is-in { background: var(--ok); color: #fff; }
+  .aod-q.is-in svg, .aod-q.is-out svg { color: currentColor; }
+  .aod-q.is-out { background: var(--danger); color: #fff; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1023,4 +1025,152 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
   .aol-table .aol-m-cust { display: inline; }
   .aol-table .aol-line2 .aol-m-cust::before { content: '· '; color: var(--faint); }
   .aol-table .aol-line2 .cat-tag + .aol-m-cust::before, .aol-table .aol-line2 .aol-m-cust:first-child::before { content: ''; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ARBETSORDERLISTA — omgång 2 (granskning): fasta kolumner, två raders
+   titel, räknare + Välj alla på samma rad, kompakta mobilkort.
+   ═══════════════════════════════════════════════════════════════════ */
+.aol-status-sel { display: none; }
+.aol-countrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.aol-countrow .sel-all-label { font-size: 12.5px !important; }
+.aol-table { table-layout: fixed; }
+.aol-table th.aol-c-sel, .aol-table td.aol-c-sel { width: 44px; }
+.aol-table th.aol-c-cust { width: 21%; }
+.aol-table th.aol-c-when { width: 132px; }
+.aol-table th.aol-c-staff { width: 96px; }
+.aol-table th.aol-c-chk { width: 118px; }
+.aol-table th.aol-c-status { width: 150px; }
+.aol-table th.aol-c-bill { width: 170px; }
+.aol-table td { height: auto; padding-top: 10px; padding-bottom: 10px; }
+.aol-table td.aol-c-cust, .aol-table td.aol-c-main { overflow: hidden; }
+.aol-line1 { align-items: flex-start; }
+.aol-line1 .bdg { flex-shrink: 0; margin-top: 1px; }
+.aol-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+.aol-line2 .aol-no { font-size: 11.5px; }
+.aol-m-no { display: none; }
+.aol-cu, .aol-where { max-width: 100%; }
+.aol-table .aol-c-status .bdg { max-width: 100%; }
+
+@media (max-width: 899px) {
+  .aol { gap: 10px; }
+  .aol-search { flex-basis: 100%; }
+  .aol-bar { gap: 8px; }
+  .aol-bar-right { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 6px; }
+  .aol-bar-right .aol-new { grid-column: 4; }
+  .aol-sort { min-width: 0; }
+  .aol-sort select { width: 100%; max-width: none; }
+  .aol-bar-right .ao-filter-btn { padding: 0 10px; }
+  #pg-ao .ao-tabs-row { display: block; }
+  #pg-ao .ao-status-tabs { display: none !important; }
+  .aol-status-sel { display: block; }
+  .aol-status-sel select { width: 100%; height: 40px; font-weight: 600; font-size: 14px; }
+  #pg-ao .ao-quick { flex-wrap: wrap !important; overflow: visible !important; margin: 0; padding: 0; gap: 6px; }
+  .aol-sort > span { display: none; }
+  .aol-seg { display: none; }
+  .ao-quick .chip svg { display: none; }
+  .ao-quick .chip { padding: 0 10px; }
+  .aol-table-wrap { background: transparent; border: none; box-shadow: none; border-radius: 0; overflow: visible; }
+  .aol-table-wrap .dt-scroll { overflow: visible; }
+  .aol-count { background: transparent; border: none; padding: 0 2px 6px; }
+  .aol-table, .aol-table tbody { display: block; background: transparent; table-layout: auto; }
+  .aol-table thead { display: none; }
+  .aol-table .aol-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "main status" "cust cust" "when staff";
+    gap: 3px 10px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-1);
+    position: relative;
+  }
+  .aol-table .aol-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .aol-table .aol-row.p-akut { box-shadow: inset 3px 0 0 var(--danger), var(--shadow-1); }
+  .aol-table .aol-row.p-hog  { box-shadow: inset 3px 0 0 #e08a1e, var(--shadow-1); }
+  .aol-table td { display: block; height: auto; padding: 0; border: none; background: transparent !important; box-shadow: none !important; width: auto !important; }
+  .aol-table .aol-c-sel { display: none; }
+  .aol-table.sel-mode .aol-c-sel { display: block; position: absolute; right: 8px; bottom: 8px; }
+  .aol-table .aol-c-main { grid-area: main; min-width: 0; }
+  .aol-table .aol-line2 { display: none; }
+  .aol-table .aol-line2:has(.bdg) { display: flex; margin-top: 3px; }
+  .aol-table .aol-line2 .cat-tag, .aol-table .aol-line2 .aol-no, .aol-table .aol-line2 .aol-m-cust { display: none; }
+  .aol-title { font-size: 14px; -webkit-line-clamp: 2; }
+  .aol-table .aol-c-status { grid-area: status; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .aol-table .aol-c-status .aol-bill-inline { display: flex; margin: 0; }
+  .aol-table .aol-c-status .aol-bill-inline .bdg { height: 20px; font-size: 10.5px; }
+  .aol-table .aol-c-cust { grid-area: cust; display: flex !important; gap: 4px; min-width: 0; font-size: 12.5px; color: var(--muted); }
+  .aol-table .aol-c-cust .aol-cu { flex: 0 1 auto; font-weight: 500; color: var(--ink-2); font-size: 12.5px; }
+  .aol-table .aol-c-cust .aol-where { flex: 1 1 0; margin: 0; font-size: 12.5px; }
+  .aol-table .aol-c-cust .aol-where::before { content: '· '; color: var(--faint); }
+  .aol-table .aol-c-when { grid-area: when; align-self: center; display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .aol-m-no { display: inline; font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .aol-table .aol-c-staff { grid-area: staff; justify-self: end; align-self: center; }
+  .aol-table .aol-c-staff .av, .aol-table .aol-c-staff .av-none { width: 24px; height: 24px; font-size: 9.5px; }
+  .aol-table .aol-c-chk, .aol-table .aol-c-bill { display: none; }
+  .aol-table .aol-row .aol-c-bill:has(.aol-row-actions) { display: block; grid-column: 1 / -1; }
+  .aol-line1 { gap: 6px; }
+  .aol-line1 .bdg { height: 20px; font-size: 10.5px; }
+}
+@media (max-width: 379px) {
+  .aol-bar-right { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+  .aol-bar-right .aol-new { padding: 0 10px; }
+}
+
+.aol-m-bill { display: none; }
+.aol-countrow > span:first-child { white-space: nowrap; }
+.aol-countrow .ao-selall-cell { width: auto !important; order: 0 !important; }
+@media (max-width: 899px) {
+  .aol-bar-right > * { order: 0 !important; grid-row: 1; }
+  .aol-bar-right > .aol-sort { grid-column: 1; }
+  .aol-bar-right > .ao-filter-btn { grid-column: 2; width: auto; }
+  .aol-bar-right > .ao-overflow-wrap { grid-column: 3; }
+  .aol-bar-right > .aol-new { grid-column: 4; }
+  .aol-table .aol-c-status .aol-bill-inline { display: none !important; }
+  .aol-table .aol-c-when { flex-wrap: wrap; row-gap: 4px; }
+  .aol-m-bill { display: inline-flex; }
+  .aol-m-bill .bdg { height: 20px; font-size: 10.5px; }
+  .aol-countrow { padding: 0 2px; }
+}
+
+/* Surfplatta (768–1023, bottenmenyn syns): samma snabbåtgärdsrad som mobil */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .aod-stamp:not(.is-active) { display: none; }
+  .aod-qbar {
+    order: 99; grid-column: 1 / -1;
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px;
+    position: sticky; bottom: calc(var(--mobile-bottom-reserve, calc(78px + env(safe-area-inset-bottom))) + 10px); z-index: 20;
+    padding: 6px; max-width: 640px; width: 100%; justify-self: center;
+    background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(8px);
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-3);
+  }
+  .aod-q { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border: none; border-radius: 10px; background: transparent; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .aod-q svg { color: var(--muted); }
+  .aod-q.is-in { background: var(--ok); color: #fff; }
+  .aod-q.is-out { background: var(--danger); color: #fff; }
+  .aod-q.is-in svg, .aod-q.is-out svg { color: currentColor; }
+}
+/* Mobilkort i AO-listan: lite tätare */
+@media (max-width: 899px) {
+  .aol-table .aol-row { padding: 9px 12px; gap: 2px 10px; }
+  .aol-title { line-height: 1.3; }
+  .aol-table .aol-c-status .bdg { height: 20px; font-size: 11px; padding: 0 7px; }
+  .aol-table .aol-c-cust { line-height: 1.35; }
+}
+@media (min-width: 900px) and (max-width: 1279px) {
+  .aol-search { flex: 1 1 200px; min-width: 180px; }
+  .aol-sort > span { display: none; }
+}
+
+/* Tryckytor på mobil: varje knapp minst 36 px (designstandard). */
+@media (max-width: 767px), (pointer: coarse) {
+  .btn.bxs { min-height: 36px; padding: 0 10px; }
+  .btn.bsm { min-height: 38px; }
+  .btn { min-height: 40px; }
+  .ibtn { width: 38px; height: 38px; }
+  .chip { height: 36px; }
 }

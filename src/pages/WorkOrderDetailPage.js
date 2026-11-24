@@ -158,8 +158,23 @@ const WorkOrderDetailPage = {
               </div>
             </section>
 
+            <!-- Mobil: plats och kontakt i ETT kort (ersätter Var/När/Vem/Kontakt under 768 px;
+                 tid och personal står redan i sidhuvudet) -->
+            <section class="card aod-field" aria-label="Plats och kontakt">
+              <div class="aod-field-acts">
+                ${mapsUrl ? `<a class="btn bs bsm" href="${mapsUrl}" target="_blank" rel="noopener">${ic('navigation',14)} Vägbeskrivning</a>` : ''}
+                ${ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}">${ic('phone',14)} Ring${ao.contactPerson ? ' ' + esc(String(ao.contactPerson).split(' ')[0]) : ''}</a>` : ''}
+              </div>
+              <div class="aod-field-rows">
+                ${fullAddr ? `<div class="aod-fr">${ic('map-pin',14)}<span>${esc(fullAddr)}${placeBits.length ? ` <em>· ${placeBits.join(' · ')}</em>` : ''}</span></div>` : ''}
+                ${ao.accessCode && Auth.can('objects_sensitive') ? `<div class="aod-fr">${ic('key',14)}<span>Portkod <b class="aod-code">${esc(ao.accessCode)}</b></span></div>` : ''}
+                ${ao.objectId ? `<div class="aod-fr">${ic('dashboard',14)}<a class="aod-link" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)}</a></div>` : ''}
+                ${ao.contactPerson || ao.phone ? `<div class="aod-fr">${ic('user',14)}<span>${ao.contactPerson ? esc(ao.contactPerson) : ''}${ao.phone ? ` <span class="aod-muted">${esc(ao.phone)}</span>` : ''}</span></div>` : ''}
+              </div>
+            </section>
+
             <!-- Stämpling — V22: kräver ao_time specifikt (payroll_manage räcker inte) -->
-            <div class="aod-stamp">${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}</div>
+            <div class="aod-stamp${isStampedOnThis ? ' is-active' : ''}">${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}</div>
 
             <!-- Checklista -->
             <details class="card ao-section aod-chk" ${hasChk?'open':''}>
@@ -298,8 +313,25 @@ const WorkOrderDetailPage = {
               : `<button class="btn bghost bsm aod-recur" onclick="WorkOrderDetailPage.makeRecurring()" title="Systemet skapar automatiskt nya arbetsorder enligt valt intervall.">${ic('refresh-cw',14)} Gör återkommande</button>`) : ''}
           </aside>
         </div>
+
+        <!-- Mobil: snabbåtgärder fästa ovanför bottenmenyn -->
+        <nav class="aod-qbar" aria-label="Snabbåtgärder">
+          ${Auth.can('ao_time') && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.deleted
+            ? `<button type="button" class="aod-q ${isStampedOnThis ? 'is-out' : 'is-in'}" onclick="WorkOrderDetailPage.toggleStamp()">${ic(isStampedOnThis ? 'stop-circle' : 'play-circle',18)}<span>${isStampedOnThis ? 'Stämpla ut' : 'Stämpla in'}</span></button>` : ''}
+          <button type="button" class="aod-q" onclick="WorkOrderDetailPage._goSection('ao-checklist')">${ic('clipboard-check',18)}<span>Checklista${chkTotal ? ` ${WorkOrderService.checklistCounts(ao.checklist).done + WorkOrderService.checklistCounts(ao.checklist).avv}/${chkTotal}` : ''}</span></button>
+          ${Auth.can('ao_material') ? `<button type="button" class="aod-q" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('package',18)}<span>Material</span></button>` : ''}
+          <button type="button" class="aod-q" onclick="WorkOrderDetailPage.openAddLog()">${ic('camera',18)}<span>Foto/anteckn.</span></button>
+        </nav>
       </div>
     `;
+  },
+
+  /* Öppna en hopfällbar sektion och scrolla dit (snabbåtgärdsraden på mobil). */
+  _goSection(elementId) {
+    this._openSectionOf(elementId);
+    const el = document.getElementById(elementId);
+    const box = el && (el.closest('details.ao-section') || el);
+    if (box && box.scrollIntoView) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
   },
 
   _renderLonsamhet(ao) {

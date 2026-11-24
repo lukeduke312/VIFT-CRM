@@ -180,7 +180,7 @@ const WorkOrdersPage = {
       (this.filter === 'alla' || this.filter === 'klar') ? UiKit.chip('Att fakturera', "WorkOrdersPage.toggleQuick('readyForInvoice')", { on: f.quick === 'readyForInvoice', n: q.readyForInvoice, icon: 'receipt' }) : '',
     ].join('') : '';
 
-    const SORTS = [['default','Prioritet och nyast'],['scheduled','Planerat datum'],['updated','Senast ändrad'],['priority','Prioritet']];
+    const SORTS = [['default','Standard'],['scheduled','Planerat datum'],['updated','Senast ändrad'],['priority','Prioritet']];
 
     el.innerHTML = `
       <div class="aol">
@@ -217,6 +217,11 @@ const WorkOrdersPage = {
           </div>
         </div>
         <div class="ao-tabs-row">
+          <label class="aol-status-sel"><span class="sr-only">Status</span>
+            <select onchange="WorkOrdersPage.setFilter(this.value)" aria-label="Visa status">
+              ${STATUS_TABS.map(t => `<option value="${t.key}"${this.filter===t.key?' selected':''}>${t.label}${n[t.key] ? ' (' + n[t.key] + ')' : ''}</option>`).join('')}
+            </select>
+          </label>
           <div class="ftabs ao-status-tabs" role="tablist" aria-label="Status">
             ${STATUS_TABS.map(t =>
               `<button class="ft ${this.filter===t.key?'on':''}" role="tab" aria-selected="${this.filter===t.key}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}${n[t.key] ? `<span class="ft-n">${n[t.key]}</span>` : ''}</button>`
@@ -225,7 +230,6 @@ const WorkOrdersPage = {
         </div>
         <div class="ao-quick-row">
           <div class="ao-quick" role="group" aria-label="Snabbfilter">${chips}</div>
-          <div class="ao-selall-cell" id="ao-sel-all"></div>
         </div>
         <div id="ao-active-filters">${this._advChipsHtml()}</div>
         <div id="ao-list"></div>
@@ -728,8 +732,7 @@ const WorkOrdersPage = {
       return d !== 0 ? d : new Date(b.createdAt) - new Date(a.createdAt);
     });
     const visibleIds = list.map(a => a.id);
-    const selAllEl = document.getElementById('ao-sel-all');
-    if (selAllEl) selAllEl.innerHTML = list.length ? SelectionModel.selectAllHtml(visibleIds) : '';
+    const selAllHtml = list.length ? SelectionModel.selectAllHtml(visibleIds) : '';
     const selMode = SelectionModel.count() > 0;
 
     if (!list.length) {
@@ -777,6 +780,8 @@ const WorkOrdersPage = {
         : noPricing ? `<span class="bdg bdg-orange">${ic('alert-circle',11)} Saknar prissättning</span>`
         : ao.status === 'fakturerad' ? `<span class="aol-bill is-done">Fakturerad</span>` : '<span class="aol-dash">—</span>';
       const prio = ao.priority === 'akut' ? akutBadge() : ao.priority === 'hög' ? pbdg('hög') : '';
+      /* Kategorin Akut/jour + prioritet Akut sa samma sak två gånger — visa bara prioriteten. */
+      const cat = ao.category && !(ao.priority === 'akut' && ao.category === 'akut') ? catBadge(ao.category) : '';
       const flags = [
         ao.substatus ? `<span class="bdg bdg-yellow">${esc(SUB[ao.substatus] || ao.substatus)}</span>` : '',
         ao.archived ? `<span class="bdg bdg-grey">${ic('archive',11)} Arkiverad${ao.archivedAt?' '+fmtDate(ao.archivedAt):''}</span>` : '',
@@ -784,7 +789,7 @@ const WorkOrdersPage = {
       ].join('');
       const rowActions = ao.archived ? `<button class="btn bxs bs" onclick="event.stopPropagation();WorkOrderDetailPage._restoreFromArchive('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',11)} Återställ</button>`
         : ao.deleted ? `<button class="btn bxs bs" onclick="event.stopPropagation();WorkOrderDetailPage._restoreFromTrash('${ao.id}');WorkOrdersPage.render();">${ic('rotate-ccw',11)} Återställ</button><button class="btn bxs bd" onclick="event.stopPropagation();WorkOrderDetailPage._confirmPermanentDelete('${ao.id}');">${ic('trash-2',11)} Radera</button>` : '';
-      return { cu, cuName, where, when, status, billing, prio, flags, rowActions, chk: this._chkProgressHtml(ao), overdue };
+      return { cu, cuName, where, when, status, billing, prio, cat, flags, rowActions, chk: this._chkProgressHtml(ao), overdue };
     };
 
     const total = list.length;
@@ -793,7 +798,7 @@ const WorkOrdersPage = {
     list = list.slice(0, lim);
 
     if (this.viewMode === 'grid') {
-      el.innerHTML = `<div class="ao-grid aol-cards">${list.map(ao => {
+      el.innerHTML = `<div class="aol-countrow"><span>${total} ${total === 1 ? 'order' : 'ordrar'}${total > list.length ? ` · visar ${list.length}` : ''}</span><span class="ao-selall-cell">${selAllHtml}</span></div><div class="ao-grid aol-cards">${list.map(ao => {
         const r = row(ao);
         return `
           <div class="ao-card aol-card ${priorityClass(ao.priority)}" data-sel-row-id="${ao.id}" onclick="SelectionModel.rowClick('${ao.id}', function(){ WorkOrdersPage.openDetail('${ao.id}'); })">
@@ -803,7 +808,7 @@ const WorkOrdersPage = {
             </div>
             <div class="aol-title">${esc(ao.title)}</div>
             <div class="aol-sub">${esc(r.cuName || '—')}${r.where ? ' · ' + esc(r.where) : ''}</div>
-            <div class="aol-card-tags">${ao.category ? catBadge(ao.category) : ''}${r.flags}</div>
+            <div class="aol-card-tags">${r.cat}${r.flags}</div>
             <div class="aol-card-foot">
               ${r.when}
               <span class="aol-card-foot-r">${r.chk}${UiKit.avatarStack(ao.staff, 3)}</span>
@@ -819,8 +824,8 @@ const WorkOrdersPage = {
        samma markup, inga dubbla renderingar. */
     el.innerHTML = `
       <div class="dt-wrap aol-table-wrap">
-        <div class="aol-count">${total} ${total === 1 ? 'order' : 'ordrar'}${total > list.length ? ` · visar ${list.length}` : ''}</div>
-        <div class="dt-scroll"><table class="dt aol-table${selMode ? ' sel-mode' : ''}">
+        <div class="aol-count aol-countrow"><span>${total} ${total === 1 ? 'order' : 'ordrar'}${total > list.length ? ` · visar ${list.length}` : ''}</span><span class="ao-selall-cell">${selAllHtml}</span></div>
+        <div class="dt-scroll"><table class="dtab aol-table${selMode ? ' sel-mode' : ''}">
           <thead><tr>
             <th class="c-shrink aol-c-sel"><span class="sr-only">Markera</span></th>
             <th>Uppdrag</th>
@@ -841,12 +846,12 @@ const WorkOrdersPage = {
               <td class="aol-c-sel" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(ao.id, ao.title)}</td>
               <td class="aol-c-main">
                 <div class="aol-main">
-                  <div class="aol-line1"><span class="aol-no">${WorkOrderService.displayNumberOrPending(ao)}</span>${r.prio}<span class="aol-title">${esc(ao.title)}</span></div>
-                  <div class="aol-line2">${ao.category ? catBadge(ao.category) : ''}${r.flags}<span class="aol-m-cust">${esc(r.cuName)}</span></div>
+                  <div class="aol-line1">${r.prio}<span class="aol-title" title="${esc(ao.title)}">${esc(ao.title)}</span></div>
+                  <div class="aol-line2"><span class="aol-no">${WorkOrderService.displayNumberOrPending(ao)}</span>${r.cat}${r.flags}<span class="aol-m-cust">${esc(r.cuName)}</span></div>
                 </div>
               </td>
               <td class="aol-c-cust"><div class="aol-cu">${esc(r.cuName || '—')}</div>${r.where ? `<div class="aol-where">${esc(r.where)}</div>` : ''}</td>
-              <td class="aol-c-when">${r.when}</td>
+              <td class="aol-c-when">${r.when}<span class="aol-m-no">${WorkOrderService.displayNumberOrPending(ao)}</span>${r.billing.includes('bdg') ? `<div class="aol-m-bill">${r.billing}</div>` : ''}</td>
               <td class="aol-c-staff">${UiKit.avatarStack(ao.staff, 3)}</td>
               <td class="aol-c-chk">${r.chk || '<span class="aol-dash">—</span>'}</td>
               <td class="aol-c-status" onclick="event.stopPropagation()">${r.status}${r.billing.includes('bdg') ? `<div class="aol-bill-inline">${r.billing}</div>` : ''}</td>
