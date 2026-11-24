@@ -440,7 +440,7 @@
 #pg-calendar .cal-ag-row:focus-visible { outline: none; box-shadow: var(--focus); }
 #pg-calendar .cal-ag-title { color: var(--ink); }
 #pg-calendar .cal-ag-meta { color: var(--muted); font-size: 12px; }
-#pg-calendar .cal-wk-list { display: none; }
+#pg-calendar .cal-wk-list, #pg-calendar .cal-day-list { display: none; }
 #pg-calendar .cal-wl-day { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); overflow: hidden; }
 #pg-calendar .cal-wl-day.is-today { border-color: var(--info-line); box-shadow: inset 3px 0 0 var(--accent), var(--shadow-1); }
 #pg-calendar .cal-wl-hd { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 12px; border: none; background: var(--surface-2); border-bottom: 1px solid var(--line); font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
@@ -455,6 +455,8 @@
 @media (max-width: 767px) {
   #pg-calendar .cal-wk-list { display: flex; flex-direction: column; gap: 8px; }
   #pg-calendar .cal-wk-wrap > .cal-wk-grid { display: none; }
+  #pg-calendar .cal-day-list { display: flex; flex-direction: column; gap: 6px; }
+  #pg-calendar .cal-day-wrap { display: none; }
   #pg-calendar .cal-wk-wrap { overflow: visible; }
   #pg-calendar .cal-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 12px; }
   #pg-calendar .cal-nav { grid-column: 1 / -1; min-width: 0; }
@@ -544,7 +546,7 @@ button.rw-step:focus-visible { outline: none; box-shadow: var(--focus); }
 .mx-li-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
 .mx-li-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-li-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; min-width: 0; }
-.mx-li-meta .mx-sep { color: var(--faint); margin: 0 2px; }
+.mx-li-meta .mx-sep { color: var(--faint); margin: 0 5px 0 3px; }
 .mx-li-no { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
 .mx-li-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; text-align: right; }
 .mx-li-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }

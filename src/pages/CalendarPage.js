@@ -128,7 +128,13 @@ const CalendarPage = {
     const evtHtml = timed.map(e => this._positionedEvent(e, conflicts, lanes.get(e))).join('');
     const allDayHtml = allDay.map(e => this._chipHtml(e)).join('');
 
-    return `<div class="cal-day-wrap">
+    /* F-08 (V3): på mobil blir överlappande händelser för smala i
+       tidsrutnätet — dagen visas där som en tidsordnad lista. */
+    const dayList = `<div class="cal-day-list" aria-label="Dagens händelser">${events.length
+      ? events.map(e => this._agendaRow(e)).join('')
+      : `<div class="empty mx-empty" style="padding:28px 16px;">${ic('calendar',26)}<h3>Inget planerat</h3><p>Inga händelser den här dagen.</p></div>`}</div>`;
+
+    return dayList + `<div class="cal-day-wrap">
       ${allDay.length ? `<div class="cal-allday-row"><span class="cal-allday-lbl">Hela dagen</span><div class="cal-allday-events">${allDayHtml}</div></div>` : ''}
       <div class="cal-time-grid" style="position:relative;min-height:${totalH}px;">
         <div class="cal-slots">${slotRows}</div>

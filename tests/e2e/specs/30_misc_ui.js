@@ -558,8 +558,9 @@ const tests = [
         t.assert(r.minW >= 150 && r.maxLines <= 4, vp + ': även långa titlar är läsbara (' + Math.round(r.minW) + ' px, ' + r.maxLines + ' rader)');
         await s.eval(() => CalendarPage.setView('dag'));
         await s.settle(300);
-        const dag = await s.eval(() => [...document.querySelectorAll('#pg-calendar .cal-timed-evt, #pg-calendar .cal-chip')].filter((e) => e.offsetParent).length);
-        t.assert(dag >= 9, vp + ': dagvyn visar dagens jobb (' + dag + ')');
+        const dag = await s.eval(() => ({ rows: [...document.querySelectorAll('#pg-calendar .cal-day-list .cal-ag-row')].filter((e) => e.offsetParent).length, grid: !!(document.querySelector('#pg-calendar .cal-day-wrap') || {}).offsetParent,
+          minW: Math.min(...[...document.querySelectorAll('#pg-calendar .cal-day-list .cal-ag-title')].map((e) => e.getBoundingClientRect().width)) }));
+        t.assert(dag.rows >= 9 && !dag.grid && dag.minW >= 150, vp + ': dagvyn visar dagens jobb som läsbar lista (' + JSON.stringify(dag) + ')');
         const ov = await s.eval(overflowProbe);
         t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': dagvyn utan sidöverflöd ' + JSON.stringify(ov));
         await s.eval(() => CalendarPage.setView('vecka'));
