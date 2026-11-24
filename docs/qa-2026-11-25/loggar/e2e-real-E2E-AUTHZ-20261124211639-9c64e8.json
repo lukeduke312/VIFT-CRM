@@ -1,0 +1,192 @@
+{
+  "verktyg": "e2e-real",
+  "runId": "E2E-AUTHZ-20261124211639-9c64e8",
+  "tid": "2026-11-24T21:22:25.507Z",
+  "results": [
+    {
+      "id": "F6.1 kund skapad (UI, arbetsledare)",
+      "ok": true,
+      "detail": "K-d483b452-07ce-4b93-82b9-9e52d79844d3 e-post e2e-kund@example.invalid"
+    },
+    {
+      "id": "F6.2 fastighet kopplad till kunden",
+      "ok": true,
+      "detail": "OBJ-09c0a9c0-7a8b-4d21-b7b1-2847dba6b656 → K-d483b452-07ce-4b93-82b9-9e52d79844d3"
+    },
+    {
+      "id": "F6.3 kontaktperson sparad på servern",
+      "ok": true,
+      "detail": "på fastigheten"
+    },
+    {
+      "id": "F6.4 offert med två rader, belopp",
+      "ok": true,
+      "detail": "ex 3952, moms 988, totalt 4940 (förväntat 3952/988/4940); guiden visade {\"Summa ex. moms\":\"3 952 kr\",\"Moms\":\"988 kr\",\"Totalt inkl. moms\":\"4 940 kr\"}"
+    },
+    {
+      "id": "F6.5 bilaga uppladdad",
+      "ok": true,
+      "detail": "HTTP 200 att-cdc72d4e8f5f4781"
+    },
+    {
+      "id": "F6.6 offerten öppnas igen med samma totalsumma",
+      "ok": true,
+      "detail": "detaljvyn visar 4 940 och 3 952: true"
+    },
+    {
+      "id": "F6.8 publik länk och låst version (utan mejl)",
+      "ok": true,
+      "detail": "token 64 tecken, status utkast"
+    },
+    {
+      "id": "F6.9 kund-PDF visar rätt offert och totalsumma",
+      "ok": true,
+      "detail": "HTTP 200, innehåller offert-id: true, totalt 4 940: true"
+    },
+    {
+      "id": "F6.10 kundsidan visar offerten och 4 940 kr",
+      "ok": true,
+      "detail": "kundsidan visar totalsumman: true (omladdningar: försök 1: upstream request failed)"
+    },
+    {
+      "id": "F6.11 godkänd på servern med kundens namn",
+      "ok": true,
+      "detail": "status godkänd, namn E2E Kund E2E-AUTHZ-20261124211639-9c64e8"
+    },
+    {
+      "id": "F6.11b godkännandet syns i arbetsledarens klient",
+      "ok": true,
+      "detail": "lokal status godkänd efter 0 s"
+    },
+    {
+      "id": "F6.12 en AO skapad från offerten",
+      "ok": true,
+      "detail": "1 AO med offerId"
+    },
+    {
+      "id": "F6.13 AO ärver kund, fastighet och belopp",
+      "ok": true,
+      "detail": "kund K-d483b452-07ce-4b93-82b9-9e52d79844d3, fastighet OBJ-09c0a9c0-7a8b-4d21-b7b1-2847dba6b656, fast pris 3952"
+    },
+    {
+      "id": "F6.12b andra försöket skapar ingen dubblett",
+      "ok": true,
+      "detail": "1 AO"
+    },
+    {
+      "id": "F6.14 fältarbetare tilldelad på servern",
+      "ok": true,
+      "detail": "staff [\"ST-E2E-FALT1\"]"
+    },
+    {
+      "id": "F6.15a instämplad (bekräftad av servern)",
+      "ok": true,
+      "detail": "toast efter serverbekräftelse"
+    },
+    {
+      "id": "F6.16 material sparat på servern (via formuläret, fältroll)",
+      "ok": true,
+      "detail": "besked efter serverns svar: true; serverns rad: 2 st × 150 kr, moms 25 %"
+    },
+    {
+      "id": "F6.17 checklista: lägg till (arbetsledare) → påbörja → utförd (fält)",
+      "ok": true,
+      "detail": "HTTP 200/200/200"
+    },
+    {
+      "id": "F6.18 bild uppladdad och anteckning i loggen",
+      "ok": true,
+      "detail": "bild HTTP 200; anteckning i serverns logg: true"
+    },
+    {
+      "id": "F6.15b exakt en tidpost på rätt AO och kund",
+      "ok": true,
+      "detail": "1 tidpost(er), kund K-d483b452-07ce-4b93-82b9-9e52d79844d3"
+    },
+    {
+      "id": "F6.19 AO klar på servern",
+      "ok": true,
+      "detail": "status klar"
+    },
+    {
+      "id": "F6.20a underlag i fakturakön",
+      "ok": true,
+      "detail": "[{\"id\":\"material:AO-425f4dba-15d6-4765-a067-4517c5f44ae7:M1795555142047\",\"type\":\"material\",\"amount\":300,\"sel\":true,\"issues\":[]},{\"id\":\"fixed:AO-425f4dba-15d6-4765-a067-4517c5f44ae7\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]"
+    },
+    {
+      "id": "F6.20 fakturaunderlag skapat på servern",
+      "ok": true,
+      "detail": "1 underlag"
+    },
+    {
+      "id": "F6.21 fakturans belopp = köns underlag, 25 % moms",
+      "ok": true,
+      "detail": "ex 4252 (kö 4252), moms 1063, totalt 5315; rader: [E2E-TEST] Kopplingar undefined×150 | Fastpris undefined×3952"
+    },
+    {
+      "id": "F6.21b fakturan har rätt kund",
+      "ok": true,
+      "detail": "kund K-d483b452-07ce-4b93-82b9-9e52d79844d3"
+    },
+    {
+      "id": "F6.22 underlaget öppnas igen med samma totalsumma",
+      "ok": true,
+      "detail": "visar 5 315: true"
+    },
+    {
+      "id": "F6.23 underlagen erbjuds inte igen (ingen dubbelfakturering)",
+      "ok": true,
+      "detail": "0 kvar i kön"
+    },
+    {
+      "id": "F7 kundsvar \"neka\" registrerat",
+      "ok": true,
+      "detail": "status nekad, skäl annan_leverantör"
+    },
+    {
+      "id": "F7 ingen AO skapad från ej godkänd offert",
+      "ok": true,
+      "detail": "0 AO"
+    },
+    {
+      "id": "F8 kundsvar \"begär ändring\" registrerat",
+      "ok": true,
+      "detail": "status ändring-begärd"
+    },
+    {
+      "id": "F8 ingen AO skapad från ej godkänd offert",
+      "ok": true,
+      "detail": "0 AO"
+    },
+    {
+      "id": "MILJÖ",
+      "ok": true,
+      "detail": "inga anrop till andra Supabase-projekt"
+    },
+    {
+      "id": "STÄDNING testartefakter",
+      "ok": true,
+      "detail": "fakturautkast 0, offerter 3 (bilagor 2, filer 2, händelser 14), AO-bildfiler 1"
+    },
+    {
+      "id": "ÅTERSTÄLLNING",
+      "ok": true,
+      "detail": "efterkontrollerat: inga testposter kvar"
+    },
+    {
+      "id": "AFFÄRSPOSTER",
+      "ok": true,
+      "detail": "befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före"
+    },
+    {
+      "id": "DATABASIDENTITET",
+      "ok": null,
+      "detail": "INTE fullständig (förväntat). Kvar som metadata: vift_lastChanged och store.updated_at för berörda nycklar (ändras vid varje skrivning, även borttagning) · idempotensposter på servern för ao-time-write-anropen · inloggningsposter i auth-schemat (session, refresh-token, last_sign_in_at) och Edge Function-loggar · WAL/backup-historik som innehåller testposterna · aktivitetsflöde: 9 nya poster under körningen (varav 5 nämner testkörningen) — tas inte bort"
+    }
+  ],
+  "niva": 2,
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "journal": "/home/user/vift-v2/tests/staging/rapport/E2E-AUTHZ-20261124211639-9c64e8.journal.json",
+  "kvar": [],
+  "efterkontroll": true
+}

@@ -1,0 +1,92 @@
+{
+  "verktyg": "e2e-real",
+  "runId": "E2E-AUTHZ-20261124212635-656925",
+  "tid": "2026-11-24T21:30:25.175Z",
+  "results": [
+    {
+      "id": "A1 Admin-flikar laptop",
+      "ok": true,
+      "detail": "10 flikar, 5 ikoner som SVG-element; ingen markup som text, ingen överbred flik"
+    },
+    {
+      "id": "A1 Admin-flikar iphone",
+      "ok": true,
+      "detail": "10 flikar, 5 ikoner som SVG-element; ingen markup som text, ingen överbred flik"
+    },
+    {
+      "id": "X1 admin lagrad XSS (publicerad klient)",
+      "ok": true,
+      "detail": "38 sidvisningar; poster med HTML i fritext: kunder 1, AO 0, fastigheter 0, offerter 0; inget skript kördes"
+    },
+    {
+      "id": "X1 chef lagrad XSS (publicerad klient)",
+      "ok": true,
+      "detail": "29 sidvisningar; poster med HTML i fritext: kunder 1, AO 0, fastigheter 0, offerter 0; inget skript kördes"
+    },
+    {
+      "id": "X1 ekonomi lagrad XSS (publicerad klient)",
+      "ok": true,
+      "detail": "16 sidvisningar; poster med HTML i fritext: kunder 1, AO 0, fastigheter 0, offerter 0; inget skript kördes"
+    },
+    {
+      "id": "X1 falt lagrad XSS (publicerad klient)",
+      "ok": true,
+      "detail": "8 sidvisningar; poster med HTML i fritext: kunder 1, AO 0, fastigheter 0, offerter 0; inget skript kördes"
+    },
+    {
+      "id": "R0 admin",
+      "ok": true,
+      "detail": "37 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "R0 falt",
+      "ok": true,
+      "detail": "7 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "R0 chef",
+      "ok": true,
+      "detail": "28 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "R0 ekonomi",
+      "ok": true,
+      "detail": "15 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "R0 begransad",
+      "ok": true,
+      "detail": "6 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "R0 falt2",
+      "ok": true,
+      "detail": "7 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "MILJÖ",
+      "ok": true,
+      "detail": "inga anrop till andra Supabase-projekt"
+    },
+    {
+      "id": "ÅTERSTÄLLNING",
+      "ok": true,
+      "detail": "efterkontrollerat: inga testposter kvar"
+    },
+    {
+      "id": "AFFÄRSPOSTER",
+      "ok": true,
+      "detail": "befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före"
+    },
+    {
+      "id": "DATABASIDENTITET",
+      "ok": null,
+      "detail": "INTE fullständig (förväntat). Kvar som metadata: vift_lastChanged och store.updated_at för berörda nycklar (ändras vid varje skrivning, även borttagning) · idempotensposter på servern för ao-time-write-anropen · inloggningsposter i auth-schemat (session, refresh-token, last_sign_in_at) och Edge Function-loggar · WAL/backup-historik som innehåller testposterna · aktivitetsflöde: 0 nya poster under körningen (varav 0 nämner testkörningen) — tas inte bort"
+    }
+  ],
+  "niva": 2,
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "journal": "/home/user/vift-v2/tests/staging/rapport/E2E-AUTHZ-20261124212635-656925.journal.json",
+  "kvar": [],
+  "efterkontroll": true
+}

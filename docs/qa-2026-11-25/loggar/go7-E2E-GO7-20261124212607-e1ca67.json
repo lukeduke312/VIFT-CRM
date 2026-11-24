@@ -1,0 +1,63 @@
+{
+  "verktyg": "go7",
+  "runId": "E2E-GO7-20261124212607-e1ca67",
+  "tid": "2026-11-24T21:26:28.404Z",
+  "results": [
+    {
+      "id": "LOGG tillägg (fält, tilldelad)",
+      "ok": true,
+      "detail": "HTTP 200; staffId ST-E2E-FALT1"
+    },
+    {
+      "id": "G5 samtidiga tillägg från två enheter",
+      "ok": true,
+      "detail": "HTTP 200/200; poster: 3"
+    },
+    {
+      "id": "LOGG omsändning samma post",
+      "ok": true,
+      "detail": "HTTP 200 noop=true"
+    },
+    {
+      "id": "LOGG samma id, annat innehåll",
+      "ok": true,
+      "detail": "HTTP 409 id_collision"
+    },
+    {
+      "id": "LOGG ej tilldelad fältarbetare",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "LOGG roll utan AO-skrivbehörighet",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "LOGG fält tar bort annans post",
+      "ok": true,
+      "detail": "HTTP 403 forbidden_other"
+    },
+    {
+      "id": "LOGG borttagning egen + ao_edit annans + omsänd borttagning",
+      "ok": true,
+      "detail": "HTTP 200/200/200 (noop true); kvar: E2E-GO7-20261124212607-e1ca67-L3"
+    },
+    {
+      "id": "LOGG inga andra AO-fält ändrade",
+      "ok": true,
+      "detail": "titel, status, prioritet, personal, checklista och material oförändrade"
+    },
+    {
+      "id": "LOGG historik (vem)",
+      "ok": true,
+      "detail": "kvarvarande post staffId ST-E2E-CHEF"
+    },
+    {
+      "id": "STÄDNING test-AO",
+      "ok": true,
+      "detail": "test-AO borttagen permanent"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}

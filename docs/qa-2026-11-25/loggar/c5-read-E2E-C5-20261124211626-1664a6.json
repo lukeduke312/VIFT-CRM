@@ -1,0 +1,143 @@
+{
+  "verktyg": "c5-read",
+  "runId": "E2E-C5-20261124211626-1664a6",
+  "tid": "2026-11-24T21:17:15.996Z",
+  "results": [
+    {
+      "id": "REFERENS (admin) — vad som finns i STAGING-datan",
+      "ok": null,
+      "detail": "{\"token\":true,\"offerLines\":true,\"invoices\":true,\"personnr\":false,\"doorCode\":false,\"bankgiro\":true,\"offerEvents\":true,\"sales\":true}"
+    },
+    {
+      "id": "C5 readAllWithHashes admin",
+      "ok": true,
+      "detail": "HTTP 200; token=ja offerLines=ja invoices=ja bankgiro=ja offerEvents=ja sales=ja"
+    },
+    {
+      "id": "C5 readWithHash admin",
+      "ok": true,
+      "detail": "offerter HTTP 200 token ja; kunder personnr nej"
+    },
+    {
+      "id": "C5 work-orders-list portkod admin",
+      "ok": true,
+      "detail": "HTTP 200, 364 AO, fältet accessCode finns (förväntat finns)"
+    },
+    {
+      "id": "C5 REST admin",
+      "ok": true,
+      "detail": "HTTP 200; synliga känsliga nycklar: vift_customers,vift_emailTemplates,vift_importLogs,vift_invoices,vift_offerAttachments,vift_offerEvents,vift_offers,vift_propertyObjects,vift_recurringOrders,vift_salesOpps,vift_settings,vift_staff"
+    },
+    {
+      "id": "C5 readAllWithHashes chef",
+      "ok": true,
+      "detail": "HTTP 200; token=ja offerLines=ja invoices=ja bankgiro=ja offerEvents=ja sales=ja"
+    },
+    {
+      "id": "C5 readWithHash chef",
+      "ok": true,
+      "detail": "offerter HTTP 200 token ja; kunder personnr nej"
+    },
+    {
+      "id": "C5 work-orders-list portkod chef",
+      "ok": true,
+      "detail": "HTTP 200, 363 AO, fältet accessCode finns (förväntat finns)"
+    },
+    {
+      "id": "C5 REST chef",
+      "ok": true,
+      "detail": "HTTP 200; synliga känsliga nycklar: vift_customers,vift_emailTemplates,vift_invoices,vift_offerAttachments,vift_offerEvents,vift_offers,vift_propertyObjects,vift_salesOpps,vift_settings,vift_staff"
+    },
+    {
+      "id": "C5 readAllWithHashes ekonomi",
+      "ok": true,
+      "detail": "HTTP 200; token=nej offerLines=ja invoices=ja bankgiro=ja offerEvents=nej sales=ja"
+    },
+    {
+      "id": "C5 readWithHash ekonomi",
+      "ok": true,
+      "detail": "offerter HTTP 200 token nej; kunder personnr nej"
+    },
+    {
+      "id": "C5 work-orders-list portkod ekonomi",
+      "ok": true,
+      "detail": "HTTP 200, 363 AO, fältet accessCode saknas (förväntat saknas)"
+    },
+    {
+      "id": "C5 REST ekonomi",
+      "ok": true,
+      "detail": "HTTP 200; synliga känsliga nycklar: vift_customers,vift_invoices,vift_salesOpps,vift_settings,vift_staff"
+    },
+    {
+      "id": "C5 readAllWithHashes falt",
+      "ok": true,
+      "detail": "HTTP 200; token=nej offerLines=nej invoices=nej bankgiro=nej offerEvents=nej sales=nej"
+    },
+    {
+      "id": "C5 readWithHash falt",
+      "ok": true,
+      "detail": "offerter HTTP 200 token nej; kunder personnr nej"
+    },
+    {
+      "id": "C5 work-orders-list portkod falt",
+      "ok": true,
+      "detail": "HTTP 200, 53 AO, fältet accessCode saknas (förväntat saknas)"
+    },
+    {
+      "id": "C5 REST falt",
+      "ok": true,
+      "detail": "HTTP 200; synliga känsliga nycklar: vift_staff"
+    },
+    {
+      "id": "C5 readAllWithHashes falt2",
+      "ok": true,
+      "detail": "HTTP 200; token=nej offerLines=nej invoices=nej bankgiro=nej offerEvents=nej sales=nej"
+    },
+    {
+      "id": "C5 readWithHash falt2",
+      "ok": true,
+      "detail": "offerter HTTP 200 token nej; kunder personnr nej"
+    },
+    {
+      "id": "C5 work-orders-list portkod falt2",
+      "ok": true,
+      "detail": "HTTP 200, 53 AO, fältet accessCode saknas (förväntat saknas)"
+    },
+    {
+      "id": "C5 REST falt2",
+      "ok": true,
+      "detail": "HTTP 200; synliga känsliga nycklar: vift_staff"
+    },
+    {
+      "id": "C5 readAllWithHashes begransad",
+      "ok": true,
+      "detail": "HTTP 200; token=nej offerLines=nej invoices=nej bankgiro=nej offerEvents=nej sales=nej"
+    },
+    {
+      "id": "C5 readWithHash begransad",
+      "ok": true,
+      "detail": "offerter HTTP 200 token nej; kunder personnr nej"
+    },
+    {
+      "id": "C5 work-orders-list portkod begransad",
+      "ok": true,
+      "detail": "HTTP 200, 53 AO, fältet accessCode saknas (förväntat saknas)"
+    },
+    {
+      "id": "C5 REST begransad",
+      "ok": true,
+      "detail": "HTTP 200; synliga känsliga nycklar: vift_staff"
+    },
+    {
+      "id": "C5 oinloggad REST",
+      "ok": true,
+      "detail": "HTTP 401, rader -"
+    },
+    {
+      "id": "C5 oinloggad readAllWithHashes",
+      "ok": true,
+      "detail": "HTTP 401"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}
