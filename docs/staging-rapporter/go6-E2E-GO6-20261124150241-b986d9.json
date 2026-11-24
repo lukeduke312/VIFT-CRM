@@ -1,0 +1,108 @@
+{
+  "verktyg": "go6",
+  "runId": "E2E-GO6-20261124150241-b986d9",
+  "tid": "2026-11-24T15:03:17.001Z",
+  "results": [
+    {
+      "id": "UPP fält skapar egen uppgift",
+      "ok": true,
+      "detail": "HTTP 200 "
+    },
+    {
+      "id": "UPP fält skapar uppgift åt annan",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "UPP fält skapar uppgift i annans namn (createdBy)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "UPP arbetsledare skapar uppgift åt fält",
+      "ok": true,
+      "detail": "HTTP 200 "
+    },
+    {
+      "id": "UPP ansvarig ändrar rubrik",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "UPP ansvarig anger annan som utförare",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "UPP annan fältarbetare klarmarkerar andras uppgift",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "UPP ansvarig klarmarkerar egen tilldelad uppgift",
+      "ok": true,
+      "detail": "HTTP 200; status done"
+    },
+    {
+      "id": "UPP falskt previous",
+      "ok": true,
+      "detail": "HTTP 200 konflikter 1; status kvar done"
+    },
+    {
+      "id": "UPP fält raderar uppgift skapad av annan",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "UPP fält raderar egen uppgift",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "LOGG appendActivity (fält)",
+      "ok": true,
+      "detail": "HTTP 200; userId ST-E2E-FALT1 (förfalskat värde ignorerat: true), källa klientrapport"
+    },
+    {
+      "id": "LOGG omsändning samma id",
+      "ok": true,
+      "detail": "HTTP 200 duplicate=true"
+    },
+    {
+      "id": "LOGG okänd typ nekas",
+      "ok": true,
+      "detail": "HTTP 400 invalid_type"
+    },
+    {
+      "id": "LOGG ogiltig referens nekas",
+      "ok": true,
+      "detail": "HTTP 400 invalid_reference"
+    },
+    {
+      "id": "LOGG append-only writeMerge (falt)",
+      "ok": true,
+      "detail": "HTTP 403 append_only"
+    },
+    {
+      "id": "LOGG append-only writeMerge (admin)",
+      "ok": true,
+      "detail": "HTTP 403 append_only"
+    },
+    {
+      "id": "LOGG append-only write (admin)",
+      "ok": true,
+      "detail": "HTTP 403 append_only"
+    },
+    {
+      "id": "LOGG testposter kvar (append-only)",
+      "ok": null,
+      "detail": "id ACT-E2E-GO6-20261124150241-b986d9 — städas av operatören (postgres), se rapport"
+    },
+    {
+      "id": "STÄDNING uppgifter",
+      "ok": true,
+      "detail": "2 testuppgifter borttagna"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}
