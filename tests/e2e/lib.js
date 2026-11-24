@@ -265,7 +265,16 @@ class Session {
     const n = await btns.count();
     for (let i = n - 1; i >= 0; i--) {
       const t = (await btns.nth(i).textContent()) || '';
-      if (re.test(t)) { await btns.nth(i).click(); return true; }
+      if (re.test(t)) {
+        const b = btns.nth(i);
+        await b.scrollIntoViewIfNeeded().catch(() => {});
+        try { await b.click({ timeout: 10000 }); } catch (e) {
+          /* QA 2026-11-24: rapportera VAD som täcker knappen i stället för en tom timeout. */
+          const info = await b.evaluate((el) => { const r = el.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const top = document.elementFromPoint(x, y); return { rect: [r.left, r.top, r.width, r.height].map(Math.round), vw: innerWidth, vh: innerHeight, disabled: el.disabled, top: top ? (top.tagName + '.' + String(top.className).slice(0, 60) + '#' + top.id) : null, inside: top ? el.contains(top) : false }; }).catch(() => null);
+          throw new Error('Modalknapp ' + re + ' kunde inte klickas: ' + JSON.stringify(info) + ' — ' + String(e.message).split('\n')[0]);
+        }
+        return true;
+      }
     }
     throw new Error('Modalknapp saknas: ' + re + ' (fanns: ' + (await btns.allTextContents()).join(' | ') + ')');
   }
@@ -301,4 +310,4 @@ class Session {
   async shot(file) { await this.page.screenshot({ path: file, fullPage: false }).catch(() => {}); }
 }
 
-module.exports = { start, stop, World, VIEWPORTS, TEST_USERS, PASSWORD, SUPA, setOverride, clearOverrides, get baseUrl() { return baseUrl; } };
+module.exports = { start, stop, World, VIEWPORTS, TEST_USERS, PASSWORD, SUPA, setOverride, clearOverrides, get baseUrl() { return baseUrl; }, get browserRef() { return browser; } };
