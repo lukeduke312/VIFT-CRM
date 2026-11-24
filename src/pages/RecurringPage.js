@@ -1,69 +1,166 @@
 /**
- * RecurringPage — Återkommande ärenden
+ * RecurringPage — Återkommande ärenden (omarbetad QA 2026-11-26)
+ *
+ * Verktygsrad (sök, statusfilter, "+ Nytt ärende"), en kort förklaring av
+ * hur arbetsorder skapas, och en lista där nästa tillfälle och läget
+ * (aktiv/pausad/avslutad, förfallen/idag/om N dagar) syns direkt. Ärenden
+ * som är dags kan skapas direkt från listan. Skapa-, spara- och
+ * pausa-flödena går via RecurringOrderService som tidigare.
  */
 const RecurringPage = {
   _tempChecklist: [],
   _tempStaff: [],
+  _q: '',
+  _status: 'alla',   // alla | aktiv | pausad | avslutad
+  _due: false,       // snabbval: bara ärenden där det är dags att skapa AO
+  _qTimer: null,
+
+  /* F-12: "Om 1 dag" / "Om 3 dagar", "Förfallen sedan 1 dag" / "… 2 dagar". */
+  _daysText(days) {
+    if (days === null || days === undefined || isNaN(days)) return '';
+    if (days === 0) return 'Idag';
+    const n = Math.abs(days);
+    const unit = n === 1 ? 'dag' : 'dagar';
+    return days < 0 ? `Förfallen sedan ${n} ${unit}` : `Om ${n} ${unit}`;
+  },
+
+  _isDue(ro) {
+    const d = RecurringOrderService.daysUntilNext(ro);
+    return ro.status === 'aktiv' && d !== null && d <= 0;
+  },
+
+  _matches(ro, q) {
+    if (!q) return true;
+    const cu = getCu(ro.customerId);
+    const hay = [ro.title, cu ? CustomerService.displayName(cu) : '', ro.address, ro.city, RecurringOrderService.intervalLabel(ro.interval)].join(' ').toLowerCase();
+    return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+  },
+
+  _filtered() {
+    const items = RecurringOrderService.getAll();
+    const st = this._status;
+    const rank = ro => ro.status === 'aktiv' ? 0 : ro.status === 'pausad' ? 1 : 2;
+    return items.filter(ro => this._matches(ro, this._q))
+      .filter(ro => (st === 'alla' || ro.status === st) && (!this._due || this._isDue(ro)))
+      .sort((a, b) => rank(a) - rank(b) || String(a.nextDate || '9999').localeCompare(String(b.nextDate || '9999')) || String(a.title || '').localeCompare(String(b.title || ''), 'sv'));
+  },
 
   render() {
     const el = document.getElementById('pg-recurring-content');
     if (!el) return;
     const items = RecurringOrderService.getAll();
 
-    el.innerHTML = `
-      <div class="nbox" style="border-left:3px solid var(--sky);margin-bottom:2px;">
-        <strong style="font-size:12px;color:var(--navy);">Om återkommande ärenden</strong>
-        <p style="font-size:12px;color:var(--mt);margin-top:3px;line-height:1.4;">
-          Schemalägg återkommande service, rondering eller underhåll. Systemet skapar automatiskt
-          arbetsorder när det är dags, baserat på ditt valda intervall.
-        </p>
-      </div>
+    if (items.length === 0) {
+      el.innerHTML = `<div class="rc">
+        <div class="empty rc-empty">${ic('refresh-cw', 30)}<h3>Inga återkommande ärenden</h3>
+          <p>Skapa mallar för regelbundet återkommande arbete – t.ex. månadsservice, kvartalskontroll eller veckorondering.</p>
+          <button type="button" class="btn bp" onclick="RecurringPage.openCreate()">${ic('plus', 15)} Skapa första ärende</button>
+        </div></div>`;
+      return;
+    }
 
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <h3 style="flex:1;font-size:14px;font-weight:700;">Återkommande ärenden</h3>
-        <button class="btn bp bsm" onclick="RecurringPage.openCreate()">
-          ${ic('plus',14)} Nytt ärende
-        </button>
+    el.innerHTML = `<div class="rc">
+      <div class="rc-toolbar">
+        <label class="rc-search">
+          <span class="rc-search-ico" aria-hidden="true">${ic('search', 16)}</span>
+          <input type="search" id="rc-q" aria-label="Sök återkommande ärenden" placeholder="Sök titel, kund eller adress" value="${esc(this._q)}" oninput="RecurringPage._onSearch(this.value)" autocomplete="off">
+        </label>
+        <button type="button" class="btn bp rc-new" onclick="RecurringPage.openCreate()">${ic('plus', 15)} Nytt ärende</button>
       </div>
+      <div class="rc-chips" id="rc-chips">${this._chipsHtml()}</div>
+      <p class="rc-note">${ic('info', 14)}<span>Arbetsordern skapas när du väljer <b>Skapa AO nu</b> på ett ärende. Nästa datum flyttas då fram med valt intervall. Pausade och avslutade ärenden skapar inga arbetsorder.</span></p>
+      <div id="rc-results">${this._listHtml()}</div>
+    </div>`;
+  },
 
-      ${items.length === 0
-        ? `<div class="empty">${ic('refresh-cw',32)}<h3>Inga återkommande ärenden</h3>
-             <p>Skapa mallar för regelbundet återkommande arbete – t.ex. månadsservice, kvartalskontroll eller veckorondering.</p>
-             <button class="btn bp" style="margin-top:12px;" onclick="RecurringPage.openCreate()">${ic('plus',14)} Skapa första ärende</button>
-           </div>`
-        : items.map(ro => this._renderCard(ro)).join('')
-      }`;
+  _chipsHtml() {
+    const items = RecurringOrderService.getAll().filter(ro => this._matches(ro, this._q));
+    const n = (k) => k === 'alla' ? items.length : items.filter(ro => ro.status === k).length;
+    const dueN = items.filter(ro => this._isDue(ro)).length;
+    const st = this._status;
+    const c = (k, label, opts) => UiKit.chip(label, `RecurringPage.setStatus('${k}')`, Object.assign({ on: st === k, n: n(k) }, opts || {}));
+    /* Snabbval och statusfilter är olika typer — två grupper (komponentstandard §4). */
+    return `<div class="rc-chipgrp" role="group" aria-label="Snabbval">${UiKit.chip('Dags att skapa', 'RecurringPage.toggleDue()', { on: this._due, n: dueN, tone: dueN ? 'danger' : '', icon: 'alert-circle' })}</div>
+      <div class="rc-chipgrp" role="group" aria-label="Status">${c('alla', 'Alla') + c('aktiv', 'Aktiva') + c('pausad', 'Pausade', { icon: 'pause-circle' }) + c('avslutad', 'Avslutade')}</div>`
+      + (st !== 'alla' || this._due || this._q ? `<button type="button" class="btn bghost bsm" onclick="RecurringPage.clearFilters()">${ic('x', 13)} Rensa filter</button>` : '');
+  },
+
+  _listHtml() {
+    const all = RecurringOrderService.getAll().length;
+    const list = this._filtered();
+    const count = `<div class="rc-count" id="rc-count">Visar ${list.length} av ${all}</div>`;
+    if (!list.length) {
+      return count + `<div class="empty rc-empty">${ic('search', 24)}<h3>Inga ärenden matchar</h3><p>Ändra sökningen eller statusfiltret.</p>
+        <button type="button" class="btn bs" onclick="RecurringPage.clearFilters()">${ic('x', 14)} Rensa filter</button></div>`;
+    }
+    return count + `<div class="rc-list">${list.map(ro => this._renderCard(ro)).join('')}</div>`;
+  },
+
+  /* Sökningen ritar bara om resultatlistan och chipsen — aldrig fältet (fokus behålls). */
+  _onSearch(v) {
+    clearTimeout(this._qTimer);
+    this._qTimer = setTimeout(() => {
+      this._q = String(v || '').trim();
+      const r = document.getElementById('rc-results'); if (r) r.innerHTML = this._listHtml();
+      const c = document.getElementById('rc-chips'); if (c) c.innerHTML = this._chipsHtml();
+    }, 150);
+  },
+
+  toggleDue() {
+    this._due = !this._due;
+    const r = document.getElementById('rc-results'); if (r) r.innerHTML = this._listHtml();
+    const c = document.getElementById('rc-chips'); if (c) c.innerHTML = this._chipsHtml();
+  },
+
+  setStatus(k) {
+    this._status = ['alla', 'aktiv', 'pausad', 'avslutad'].includes(k) ? k : 'alla';
+    const r = document.getElementById('rc-results'); if (r) r.innerHTML = this._listHtml();
+    const c = document.getElementById('rc-chips'); if (c) c.innerHTML = this._chipsHtml();
+  },
+
+  clearFilters() {
+    this._q = ''; this._status = 'alla'; this._due = false;
+    this.render();
+  },
+
+  _statusBadge(ro) {
+    if (ro.status === 'pausad') return `<span class="bdg bdg-yellow">${ic('pause-circle', 11)}Pausad</span>`;
+    if (ro.status === 'avslutad') return `<span class="bdg bdg-grey">Avslutad</span>`;
+    if (ro.status === 'aktiv') return `<span class="bdg bdg-green">${ic('refresh-cw', 11)}Aktiv</span>`;
+    return `<span class="bdg bdg-grey">${esc(statusLabel(ro.status))}</span>`;
   },
 
   _renderCard(ro) {
     const cu = getCu(ro.customerId);
     const days = RecurringOrderService.daysUntilNext(ro);
-    const isOverdue  = days !== null && days < 0;
-    const isSoon     = days !== null && days >= 0 && days <= 7;
-    const isInactive = ro.status === 'pausad' || ro.status === 'avslutad';
-    const leftBorder = isOverdue ? 'border-left:3px solid var(--rd);'
-      : isSoon      ? 'border-left:3px solid var(--or);'
-      : !isInactive ? 'border-left:3px solid var(--gr);'
-      :               'border-left:3px solid var(--br);';
-    const daysLabel = days === null ? '' : days < 0
-      ? `<span style="color:var(--rd);font-weight:700;">Förfallen ${Math.abs(days)} d sedan</span>`
-      : days === 0 ? `<span style="color:var(--or);font-weight:700;">Idag</span>`
-      : days <= 7  ? `<span style="color:var(--or);">Om ${days} dagar</span>`
-      : `<span style="color:var(--mt);">Om ${days} dagar</span>`;
-    const stCls = { aktiv: 'bdg-green', pausad: 'bdg-grey', avslutad: 'bdg-grey' }[ro.status] || 'bdg-grey';
-    const stLbl = { aktiv: 'Aktiv', pausad: 'Pausad', avslutad: 'Avslutad' }[ro.status] || ro.status;
-
+    const active = ro.status === 'aktiv';
+    const isOverdue = active && days !== null && days < 0;
+    const isToday = active && days === 0;
+    const isSoon = active && days !== null && days > 0 && days <= 7;
+    const tone = !active ? 'is-off' : isOverdue ? 'is-late' : isToday ? 'is-due' : isSoon ? 'is-soon' : '';
+    const rel = active ? this._daysText(days) : (ro.status === 'pausad' ? 'Pausad – skapar inga arbetsorder' : 'Avslutad');
+    const relCls = isOverdue ? 'is-late' : (isToday || isSoon) ? 'is-soon' : !active ? 'is-off' : '';
+    const addr = ro.address ? AddressService.formatQuery(ro.address, ro.zip, ro.city, '') : '';
+    const canCreateNow = active && days !== null && days <= 0;
     return `
-      <div class="list-item" style="${leftBorder}" onclick="RecurringPage.openDetail('${ro.id}')">
-        <div class="item-row">
-          <div style="flex:1;min-width:0;">
-            <div class="item-title">${esc(ro.title)}</div>
-            <div class="item-sub">${esc(cu ? CustomerService.displayName(cu) : '—')} · ${RecurringOrderService.intervalLabel(ro.interval)}</div>
-            ${ro.nextDate ? `<div style="font-size:11px;margin-top:3px;display:flex;align-items:center;gap:5px;">${ic('calendar',10)} <span style="color:var(--mt);">Nästa: ${fmtDate(ro.nextDate)}</span> ${daysLabel}</div>` : ''}
+      <article class="rc-item ${tone}" data-ro="${esc(ro.id)}" onclick="RecurringPage.openDetail(this.dataset.ro)">
+        <div class="rc-main">
+          <h3 class="rc-title"><button type="button" class="rc-open" data-ro="${esc(ro.id)}" onclick="event.stopPropagation();RecurringPage.openDetail(this.dataset.ro)">${esc(ro.title)}</button></h3>
+          <div class="rc-sub">
+            <span>${ic('user', 12)}<span>${esc(cu ? CustomerService.displayName(cu) : '—')}</span></span>
+            <span>${ic('repeat', 12)}<span>${esc(RecurringOrderService.intervalLabel(ro.interval))}${ro.interval === 'eget' && ro.intervalDays ? ' (' + esc(ro.intervalDays) + ' dagar)' : ''}</span></span>
+            ${addr ? `<span class="rc-addr">${ic('map-pin', 12)}<span>${esc(addr)}</span></span>` : ''}
           </div>
-          <span class="bdg ${stCls}" style="align-self:flex-start;">${stLbl}</span>
         </div>
-      </div>`;
+        <dl class="rc-facts">
+          <div class="rc-next"><dt>Nästa tillfälle</dt><dd>${ro.nextDate ? esc(fmtDate(ro.nextDate)) : '—'}${rel ? `<span class="rc-rel ${relCls}">${esc(rel)}</span>` : ''}</dd></div>
+          ${(ro.staff || []).length ? `<div class="rc-staff"><dt>Personal</dt><dd>${UiKit.avatarStack(ro.staff, 3)}</dd></div>` : ''}
+        </dl>
+        <div class="rc-side">
+          ${this._statusBadge(ro)}
+          ${canCreateNow ? `<button type="button" class="btn bs bsm" data-ro="${esc(ro.id)}" onclick="event.stopPropagation();RecurringPage._createAO(this.dataset.ro)">${ic('plus', 13)} Skapa AO nu</button>` : ''}
+        </div>
+      </article>`;
   },
 
   openCreate() {
@@ -111,14 +208,13 @@ const RecurringPage = {
     const ro = RecurringOrderService.getById(roId);
     if (!ro) return;
     const cu = getCu(ro.customerId);
+    const prop = ro.propertyId && typeof getObj === 'function' ? getObj(ro.propertyId) : null;
     const days = RecurringOrderService.daysUntilNext(ro);
+    const active = ro.status === 'aktiv';
     const chkHtml = (ro.checklist || []).length > 0
-      ? `<div class="fg"><label>Checklistemall (${ro.checklist.length})</label><div style="margin-top:4px;">${
-          ro.checklist.map(c => `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--bg);">
-            <span style="color:var(--gr);flex-shrink:0;margin-top:2px;">${ic('check-circle',13)}</span>
-            <div><div style="font-size:13px;font-weight:600;">${esc(c.text)}</div>${c.description?`<div style="font-size:11px;color:var(--mt);">${esc(c.description)}</div>`:''}</div>
-          </div>`).join('')
-        }</div></div>` : '';
+      ? `<div class="rc-d-sec"><h4>Checklistemall <span class="bdg bdg-grey">${ro.checklist.length}</span></h4><ul class="rc-chk">${
+          ro.checklist.map(c => `<li>${ic('check-circle', 14)}<div><div class="rc-chk-t">${esc(c.text)}</div>${c.description ? `<div class="rc-chk-d">${esc(c.description)}</div>` : ''}</div></li>`).join('')
+        }</ul></div>` : '';
 
     const staffNames = (ro.staff || []).map(id => {
       const s = getStaff(id);
@@ -128,63 +224,81 @@ const RecurringPage = {
     const aoHistory = (state.workOrders||[]).filter(ao => ao.recurringOrderId === ro.id)
       .sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
     const histHtml = aoHistory.length > 0
-      ? `<div style="margin-top:12px;">
-           <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Skapade arbetsorder (${aoHistory.length})</div>
-           ${aoHistory.slice(0,8).map(ao => {
-             return `<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-               <div><div style="font-size:13px;font-weight:700;">${WorkOrderService.displayNumberOrPending(ao)} – ${esc(ao.title)}</div>
-               <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt||'')}</div></div>
-               ${sbdg(ao.status)}</div>`;
-           }).join('')}
-           ${aoHistory.length > 8 ? `<p style="font-size:11px;color:var(--mt);text-align:center;margin-top:4px;">+${aoHistory.length-8} till</p>` : ''}
+      ? `<div class="rc-d-sec"><h4>Skapade arbetsorder <span class="bdg bdg-grey">${aoHistory.length}</span></h4>
+           ${aoHistory.slice(0,8).map(ao => `<div class="crow rc-hist" data-ao="${esc(ao.id)}" role="button" tabindex="0" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})" onkeydown="if(event.key==='Enter'){this.click();}">
+               <div class="rc-hist-m"><div class="rc-hist-t">${esc(WorkOrderService.displayNumberOrPending(ao))} – ${esc(ao.title)}</div>
+               <div class="rc-hist-d">${esc(fmtDate(ao.scheduledDate||ao.createdAt||''))}</div></div>
+               ${sbdg(ao.status)}</div>`).join('')}
+           ${aoHistory.length > 8 ? `<p class="rc-hist-more">+${aoHistory.length-8} till</p>` : ''}
          </div>` : '';
 
+    /* Nästa tillfälle — tydligt vad som händer härnäst och vad knappen gör. */
+    let nextBox;
+    if (ro.status === 'pausad') {
+      nextBox = `<div class="rc-d-next is-off">${ic('pause-circle', 18)}<div><div class="rc-d-next-h">Pausad</div><div class="rc-d-next-s">Inga arbetsorder skapas förrän ärendet aktiveras igen.${ro.nextDate ? ' Nästa datum när det aktiveras: ' + esc(fmtDate(ro.nextDate)) + '.' : ''}</div></div></div>`;
+    } else if (ro.status === 'avslutad') {
+      nextBox = `<div class="rc-d-next is-off">${ic('archive', 18)}<div><div class="rc-d-next-h">Avslutad</div><div class="rc-d-next-s">Ärendet har nått sitt slutdatum eller avslutats. Aktivera det för att skapa fler arbetsorder.</div></div></div>`;
+    } else {
+      const late = days !== null && days < 0, due = days !== null && days <= 0;
+      nextBox = `<div class="rc-d-next ${late ? 'is-late' : due ? 'is-due' : ''}">${ic(late ? 'alert-triangle' : 'calendar', 18)}<div>
+        <div class="rc-d-next-h">Nästa tillfälle: ${ro.nextDate ? esc(fmtDate(ro.nextDate)) : '—'}${ro.nextDate ? ` <span class="rc-rel ${late ? 'is-late' : due ? 'is-soon' : ''}">${esc(this._daysText(days))}</span>` : ''}</div>
+        <div class="rc-d-next-s">${due ? 'Det är dags att skapa arbetsordern. ' : ''}<b>Skapa AO nu</b> skapar arbetsordern för tillfället och flyttar nästa datum fram enligt intervallet (${esc(RecurringOrderService.intervalLabel(ro.interval).toLowerCase())}).</div>
+      </div></div>`;
+    }
+
+    const fact = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+    const buttons = [
+      { label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }
+    ];
+    if (active) buttons.push({ label: `${ic('plus', 15)} Skapa AO nu`, cls: 'btn bp', onClick: () => {
+      Modal.close();
+      RecurringPage._createAO(roId);
+    }});
     Modal.open({
-      title: esc(ro.title),
+      title: `<span class="fm-mt">${ic('refresh-cw', 18)}<span>${esc(ro.title)}</span></span>`,
       wide: true,
-      body: `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-          ${sbdg(ro.status)}
-          ${pbdg(ro.priority)}
-          <span class="bdg bdg-sky">${RecurringOrderService.intervalLabel(ro.interval)}</span>
+      body: `<div class="rc-d">
+        <div class="rc-d-top">
+          <div class="rc-d-badges">${this._statusBadge(ro)}${['akut', 'hög', 'normal', 'låg'].includes(ro.priority) ? pbdg(ro.priority) : ''}<span class="bdg bdg-sky">${esc(RecurringOrderService.intervalLabel(ro.interval))}</span></div>
+          <div class="rc-d-acts">
+            <button type="button" class="btn bs bsm" data-ro="${esc(roId)}" onclick="Modal.close();RecurringPage._openForm(this.dataset.ro)">${ic('pencil', 14)} Redigera</button>
+            <button type="button" class="btn bs bsm" data-ro="${esc(roId)}" onclick="RecurringPage._toggleStatus(this.dataset.ro)">${active ? `${ic('pause-circle', 14)} Pausa` : `${ic('play-circle', 14)} Aktivera`}</button>
+          </div>
         </div>
-        <div class="dr"><span class="dk">Kund</span><span class="dv">${esc(cu ? CustomerService.displayName(cu) : '—')}</span></div>
-        ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${esc(AddressService.formatQuery(ro.address, ro.zip, ro.city, ''))}</span></div>` : ''}
-        ${ro.accessCode && Auth.can('objects_sensitive') ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${esc(ro.accessCode)}</span></div>` : ''}
-        ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
-        <div class="dr"><span class="dk">Nästa datum</span><span class="dv">${ro.nextDate ? fmtDate(ro.nextDate) : '—'}${days !== null && days <= 0 ? ` <span class="bdg bdg-red" style="font-size:10px;">Förfallen</span>` : ''}</span></div>
-        ${ro.lastCreatedDate ? `<div class="dr"><span class="dk">Senast skapad</span><span class="dv">${fmtDate(ro.lastCreatedDate)}</span></div>` : ''}
-        <div class="dr"><span class="dk">Intervall</span><span class="dv">${RecurringOrderService.intervalLabel(ro.interval)}${ro.interval==='eget'?' ('+ro.intervalDays+' dagar)':''}</span></div>
-        <div class="dr"><span class="dk">Slutdatum</span><span class="dv">${ro.tillsvidare ? 'Tillsvidare' : (fmtDate(ro.endDate) || '—')}</span></div>
-        ${ro.description ? `<div class="nbox" style="margin-top:8px;">${esc(ro.description)}</div>` : ''}
-        <div class="nbox" style="margin-top:8px;border-left:3px solid var(--sky);">
-          <strong style="font-size:11px;color:var(--navy);">Nästa arbetsorder</strong>
-          <p style="font-size:12px;color:var(--mt);margin-top:3px;">
-            Tryck på <strong>Skapa AO nu</strong> för att omedelbart skapa en arbetsorder från den här mallen.
-            Nästa datum räknas automatiskt framåt med valt intervall.
-          </p>
-        </div>
+        ${nextBox}
+        <dl class="rc-d-facts">
+          ${fact('Kund', esc(cu ? CustomerService.displayName(cu) : '—'))}
+          ${prop ? fact('Fastighet', esc(prop.name || prop.address || prop.id)) : ''}
+          ${ro.address ? fact('Arbetsadress', esc(AddressService.formatQuery(ro.address, ro.zip, ro.city, ''))) : ''}
+          ${ro.accessCode && Auth.can('objects_sensitive') ? fact('Portkod', esc(ro.accessCode)) : ''}
+          ${staffNames.length ? fact('Personal', esc(staffNames.join(', '))) : ''}
+          ${fact('Intervall', esc(RecurringOrderService.intervalLabel(ro.interval)) + (ro.interval === 'eget' ? ' (' + esc(ro.intervalDays) + ' dagar)' : ''))}
+          ${ro.startDate ? fact('Startdatum', esc(fmtDate(ro.startDate))) : ''}
+          ${fact('Slutdatum', ro.tillsvidare ? 'Tillsvidare' : esc(ro.endDate ? fmtDate(ro.endDate) : '—'))}
+          ${ro.lastCreatedDate ? fact('Senast skapad', esc(fmtDate(ro.lastCreatedDate))) : ''}
+        </dl>
+        ${ro.description ? `<div class="rc-d-sec"><h4>Beskrivning</h4><p class="rc-d-desc">${esc(ro.description)}</p></div>` : ''}
         ${chkHtml}
-        ${histHtml}`,
-      buttons: [
-        { label: 'Skapa AO nu', cls: 'btn bsu', onClick: () => {
-          Modal.close();
-          RecurringPage._createAO(roId);
-        }},
-        { label: 'Redigera', cls: 'btn bs', onClick: () => {
-          Modal.close();
-          RecurringPage._openForm(roId);
-        }},
-        { label: ro.status==='aktiv' ? 'Pausa' : 'Aktivera', cls: 'btn bw', onClick: () => {
-          const newStatus = ro.status === 'aktiv' ? 'pausad' : 'aktiv';
-          RecurringOrderService.update(roId, { status: newStatus });
-          Modal.close();
-          RecurringPage.render();
-          showToast(newStatus === 'aktiv' ? 'Aktiverat' : 'Pausat');
-        }},
-        { label: 'Stäng', cls: 'btn bghost', onClick: () => Modal.close() }
-      ]
+        ${histHtml}
+      </div>`,
+      buttons
     });
+  },
+
+  /* Pausa/aktivera med serverbekräftelse (samma mönster som _save, G12). */
+  _toggleStatus(roId) {
+    const ro = RecurringOrderService.getById(roId);
+    if (!ro) return;
+    const newStatus = ro.status === 'aktiv' ? 'pausad' : 'aktiv';
+    const saved = RecurringOrderService.update(roId, { status: newStatus });
+    Modal.close();
+    RecurringPage.render();
+    if (saved) confirmPersist('recurringOrders', roId, {
+      ok: newStatus === 'aktiv' ? 'Ärendet är aktiverat' : 'Ärendet är pausat',
+      fail: 'Statusändringen kunde inte sparas',
+      onChange: () => RecurringPage.render()
+    });
+    else showToast(newStatus === 'aktiv' ? 'Aktiverat' : 'Pausat');
   },
 
   _createAO(roId) {
@@ -256,7 +370,7 @@ const RecurringPage = {
     }
 
     Modal.open({
-      title: isEdit ? 'Redigera återkommande ärende' : (pf.title ? 'Gör återkommande' : 'Nytt återkommande ärende'),
+      title: `<span class="fm-mt">${ic(isEdit ? 'pencil' : 'refresh-cw', 18)}<span>${isEdit ? 'Redigera återkommande ärende' : (pf.title ? 'Gör återkommande' : 'Nytt återkommande ärende')}</span></span>`,
       wide: true,
       body: `
         <div class="fg"><label>Titel <span style="color:var(--rd)">*</span></label>
@@ -288,13 +402,13 @@ const RecurringPage = {
                 ${addrMode==='property'?'checked':''} ${prop0?'':'disabled'} onchange="RecurringPage._addrModeChanged()">
               Använd fastighetens adress
             </label>
-            <div id="ro-prop-addr-display" style="font-size:12px;color:var(--mt);margin-left:22px;">${prop0 ? [prop0.address, prop0.zip, prop0.city].filter(Boolean).join(', ') : '(välj fastighet ovan)'}</div>
+            <div id="ro-prop-addr-display" style="font-size:12px;color:var(--mt);margin-left:22px;">${prop0 ? esc([prop0.address, prop0.zip, prop0.city].filter(Boolean).join(', ')) : '(välj fastighet ovan)'}</div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;cursor:pointer;">
               <input type="radio" name="ro-addr-mode" id="ro-addr-cu" value="cu"
                 ${addrMode==='cu'?'checked':''} onchange="RecurringPage._addrModeChanged()">
               Använd kundens adress
             </label>
-            <div id="ro-cu-addr-display" style="font-size:12px;color:var(--mt);margin-left:22px;">${cu0Addr || '(välj kund ovan)'}</div>
+            <div id="ro-cu-addr-display" style="font-size:12px;color:var(--mt);margin-left:22px;">${cu0Addr ? esc(cu0Addr) : '(välj kund ovan)'}</div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;cursor:pointer;">
               <input type="radio" name="ro-addr-mode" id="ro-addr-custom" value="custom"
                 ${addrMode==='custom'?'checked':''} onchange="RecurringPage._addrModeChanged()">
@@ -381,8 +495,8 @@ const RecurringPage = {
         <div class="fg"><label>Internanteckning</label>
           <textarea id="ro-note" rows="2" placeholder="Syns ej för kund">${esc(ro ? ro.internalNote||'' : '')}</textarea></div>`,
       buttons: [
-        { label: isEdit ? 'Spara ändringar' : 'Skapa ärende', cls: 'btn bp', onClick: () => RecurringPage._save(roId) },
-        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: isEdit ? 'Spara ändringar' : 'Skapa ärende', cls: 'btn bp', onClick: () => RecurringPage._save(roId) }
       ]
     });
 
@@ -472,8 +586,8 @@ const RecurringPage = {
       if (!s) return '';
       return `
         <span style="display:inline-flex;align-items:center;gap:4px;background:var(--navy10,#eef2ff);color:var(--navy);border-radius:20px;padding:3px 8px;font-size:12px;font-weight:600;">
-          ${s.firstName} ${s.lastName}
-          <button type="button" onclick="RecurringPage._rpmRemove('${id}')" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:var(--mt);">${ic('x',11)}</button>
+          ${esc(s.firstName)} ${esc(s.lastName)}
+          <button type="button" data-id="${esc(id)}" onclick="RecurringPage._rpmRemove(this.dataset.id)" aria-label="Ta bort ${esc(s.firstName)} ${esc(s.lastName)}" title="Ta bort" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:var(--mt);">${ic('x',11)}</button>
         </span>`;
     }).join('');
   },
@@ -596,7 +710,12 @@ const RecurringPage = {
 
   _save(roId) {
     const title = document.getElementById('ro-title')?.value.trim();
-    if (!title) { showToast('Titel krävs'); return; }
+    if (!title) {
+      const t = document.getElementById('ro-title');
+      if (t) { t.classList.add('is-invalid'); t.setAttribute('aria-invalid', 'true'); t.focus(); }
+      showToast('Titel krävs');
+      return;
+    }
 
     const tillsvidare = document.getElementById('ro-tillsvidare')?.checked !== false;
     const interval    = document.getElementById('ro-interval')?.value || 'månadsvis';
@@ -671,7 +790,10 @@ const RecurringPage = {
       staff:        this._tempStaff.slice(),
       checklist:    this._tempChecklist.slice(),
       internalNote: document.getElementById('ro-note')?.value.trim() || '',
-      status:       'aktiv'
+      /* QA 2026-11-26: redigering behåller ärendets status — tidigare sattes
+         alltid 'aktiv', så att spara ett pausat/avslutat ärende tyst
+         återaktiverade det. Nytt ärende är aktivt som förut. */
+      status:       roId ? (((state.recurringOrders || []).find(r => r.id === roId) || {}).status || 'aktiv') : 'aktiv'
     };
 
     /* G12: besked först efter serverns bekräftelse. */
