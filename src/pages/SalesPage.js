@@ -209,7 +209,7 @@ const SalesPage = {
   _staffOptionsHtml(selectedId) {
     const activeStaff = (state.staff || []).filter(s => s.active);
     let html = `<option value="">— Ej tilldelad —</option>`;
-    html += activeStaff.map(s => `<option value="${s.id}" ${selectedId===s.id?'selected':''}>${ActivityService._escHtml((s.firstName+' '+s.lastName).trim())}</option>`).join('');
+    html += activeStaff.map(s => `<option value="${s.id}" ${selectedId===s.id?'selected':''}>${ActivityService._escHtml((s.firstName+' '+esc(s.lastName)).trim())}</option>`).join('');
     return html;
   },
 
@@ -251,7 +251,7 @@ const SalesPage = {
         <div class="fg"><label>Kund</label>
           <select id="so-cu" onchange="SalesPage._customerChanged()">
             <option value="">— Välj kund —</option>
-            ${(state.customers||[]).map(c=>`<option value="${c.id}" ${v('customerId')===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
+            ${(state.customers||[]).map(c=>`<option value="${c.id}" ${v('customerId')===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`).join('')}
           </select></div>
         <div class="fg"><label>Kontaktperson</label>
           <select id="so-contact">
@@ -427,7 +427,7 @@ const SalesPage = {
     Modal.open({
       title: 'Skjut upp',
       body: `
-        <p style="font-size:13px;color:var(--mt);margin-bottom:12px;">${op.title}</p>
+        <p style="font-size:13px;color:var(--mt);margin-bottom:12px;">${esc(op.title)}</p>
         <div class="fg"><label>Återkom datum</label>
           <input type="date" id="snooze-date" value="${def}" min="${tdy()}"></div>`,
       buttons: [
@@ -470,7 +470,7 @@ const SalesPage = {
     Modal.open({
       title: 'Markera som förlorad',
       body: `
-        <p style="font-size:13px;color:var(--mt);margin-bottom:8px;">${op.title}</p>
+        <p style="font-size:13px;color:var(--mt);margin-bottom:8px;">${esc(op.title)}</p>
         <div class="fg"><label>Anledning (valfritt)</label>
           <input id="lost-reason" placeholder="T.ex. Valde annan leverantör, priset för högt…"></div>`,
       buttons: [

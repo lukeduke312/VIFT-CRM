@@ -264,7 +264,7 @@ const Router = {
                 <div>
                   <div style="font-weight:800;color:var(--rd);font-size:14px;">Ingen behörighet</div>
                   <div style="font-size:12px;color:var(--mt);margin-top:2px;">
-                    Du har inte tillgång till <strong>${pageMeta.title}</strong>.
+                    Du har inte tillgång till <strong>${esc(pageMeta.title)}</strong>.
                     Kontakta en administratör om du anser att detta är fel.
                   </div>
                 </div>

@@ -215,9 +215,9 @@ const ProjectsPage = {
       if (assigned && !assigned.active) inactiveAssigned = assigned;
     }
     let html = `<option value="">— Ej tilldelad —</option>`;
-    html += activeStaff.map(s => `<option value="${esc(s.id)}" ${selectedId === s.id ? 'selected' : ''}>${esc((s.firstName + ' ' + s.lastName).trim())}</option>`).join('');
+    html += activeStaff.map(s => `<option value="${esc(s.id)}" ${selectedId === s.id ? 'selected' : ''}>${esc((s.firstName + ' ' +s.lastName).trim())}</option>`).join('');
     if (inactiveAssigned) {
-      html += `<option value="${esc(inactiveAssigned.id)}" selected>${esc((inactiveAssigned.firstName + ' ' + inactiveAssigned.lastName).trim())} (inaktiv)</option>`;
+      html += `<option value="${esc(inactiveAssigned.id)}" selected>${esc((inactiveAssigned.firstName + ' ' +inactiveAssigned.lastName).trim())} (inaktiv)</option>`;
     }
     return html;
   },
@@ -256,7 +256,7 @@ const ProjectsPage = {
         <div class="g2">
           <div class="fg"><label>Status</label>
             <select id="prj-status">
-              ${PROJECT_STATUSES.map(s => `<option value="${s.key}" ${v('status', 'planerad') === s.key ? 'selected' : ''}>${s.label}</option>`).join('')}
+              ${PROJECT_STATUSES.map(s => `<option value="${s.key}" ${v('status', 'planerad') === s.key ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
             </select></div>
           <div></div>
         </div>

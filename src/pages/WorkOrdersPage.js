@@ -219,12 +219,12 @@ const WorkOrdersPage = {
         <div class="ao-tabs-row">
           <label class="aol-status-sel"><span class="sr-only">Status</span>
             <select onchange="WorkOrdersPage.setFilter(this.value)" aria-label="Visa status">
-              ${STATUS_TABS.map(t => `<option value="${t.key}"${this.filter===t.key?' selected':''}>${t.label}${n[t.key] ? ' (' + n[t.key] + ')' : ''}</option>`).join('')}
+              ${STATUS_TABS.map(t => `<option value="${t.key}"${this.filter===t.key?' selected':''}>${esc(t.label)}${n[t.key] ? ' (' + n[t.key] + ')' : ''}</option>`).join('')}
             </select>
           </label>
           <div class="ftabs ao-status-tabs" role="tablist" aria-label="Status">
             ${STATUS_TABS.map(t =>
-              `<button class="ft ${this.filter===t.key?'on':''}" role="tab" aria-selected="${this.filter===t.key}" onclick="WorkOrdersPage.setFilter('${t.key}')">${t.label}${n[t.key] ? `<span class="ft-n">${n[t.key]}</span>` : ''}</button>`
+              `<button class="ft ${this.filter===t.key?'on':''}" role="tab" aria-selected="${this.filter===t.key}" onclick="WorkOrdersPage.setFilter('${t.key}')">${esc(t.label)}${n[t.key] ? `<span class="ft-n">${n[t.key]}</span>` : ''}</button>`
             ).join('')}
           </div>
         </div>
@@ -503,7 +503,7 @@ const WorkOrdersPage = {
     ];
     const quickHtml = quickOpts.map(o =>
       `<button class="filter-panel-chip ${f.quick===o.key?'on':''}" onclick="WorkOrdersPage._fpToggleQuick('${o.key}')">
-        ${ic(o.icon,11)} ${o.label}${o.cnt ? `<span class="qf-cnt">${o.cnt}</span>` : ''}
+        ${ic(o.icon,11)} ${esc(o.label)}${o.cnt ? `<span class="qf-cnt">${o.cnt}</span>` : ''}
       </button>`
     ).join('');
 
@@ -538,7 +538,7 @@ const WorkOrdersPage = {
       const cnt = base.filter(a=>a.category===c.slug).length;
       const isOn = selCats.includes(c.slug);
       return `<button class="filter-panel-chip ${isOn?'on':''}" onclick="WorkOrdersPage._fpToggleCat('${c.slug}')">
-        ${isOn?ic('check',10)+' ':''}${c.label}${cnt ? `<span class="qf-cnt">${cnt}</span>` : ''}
+        ${isOn?ic('check',10)+' ':''}${esc(c.label)}${cnt ? `<span class="qf-cnt">${cnt}</span>` : ''}
       </button>`;
     }).join('');
 
@@ -562,7 +562,7 @@ const WorkOrdersPage = {
       { key:'priority',  label:'Enbart prioritet' }
     ];
     const sortHtml = SORT_OPTS.map(o =>
-      `<button class="filter-panel-chip ${f.sort===o.key?'on':''}" onclick="WorkOrdersPage._fpSetSort('${o.key}')">${o.label}</button>`
+      `<button class="filter-panel-chip ${f.sort===o.key?'on':''}" onclick="WorkOrdersPage._fpSetSort('${o.key}')">${esc(o.label)}</button>`
     ).join('');
 
     return `
@@ -1036,7 +1036,7 @@ const WorkOrdersPage = {
         <div class="fg"><label>Kategori</label>
           <select id="wiz-category">
             <option value="">— Välj kategori —</option>
-            ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${d.category===c.slug?'selected':''}>${c.label}</option>`).join('')}
+            ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${d.category===c.slug?'selected':''}>${esc(c.label)}</option>`).join('')}
           </select>
         </div>
         <div class="fg" style="align-self:flex-end;"><label>&nbsp;</label>
@@ -1217,7 +1217,7 @@ const WorkOrdersPage = {
     const sel = d.staff || [];
     const staffChips = sel.map(id => {
       const s = getStaff(id);
-      return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
+      return s ? `<span class="mpicker-tag">${esc(s.firstName)} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
     }).join('');
 
     const td = new Date(); const todayStr = tdy();
@@ -1306,7 +1306,7 @@ const WorkOrdersPage = {
 
   _wizStep3Html(d) {
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${d.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+      `<option value="${p.id}" ${d.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
     /* Bakåtkompatibilitet: gamla AO:n med priceType='prisgrupp' visas som 'timpris' i UI */
     const pt = (d.priceType === 'prisgrupp' ? 'timpris' : d.priceType) || 'ej_satt';
@@ -1418,8 +1418,8 @@ const WorkOrdersPage = {
             ${ic('check',13)}
           </div>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:700;color:var(--tx);">${s.firstName} ${s.lastName}</div>
-            ${s.title?`<div style="font-size:12px;color:var(--mt);">${s.title}</div>`:''}
+            <div style="font-size:14px;font-weight:700;color:var(--tx);">${esc(s.firstName)} ${esc(s.lastName)}</div>
+            ${s.title?`<div style="font-size:12px;color:var(--mt);">${esc(s.title)}</div>`:''}
           </div>
         </div>`;
     }).join('');
@@ -1456,7 +1456,7 @@ const WorkOrdersPage = {
     const sel = this._wiz.data.staff || [];
     chipsEl.innerHTML = sel.map(id => {
       const s = getStaff(id);
-      return s ? `<span class="mpicker-tag">${s.firstName} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
+      return s ? `<span class="mpicker-tag">${esc(s.firstName)} ${s.lastName.charAt(0)}.<button onclick="WorkOrdersPage._spmRemove('${id}');event.stopPropagation();">${ic('x',9)}</button></span>` : '';
     }).join('');
     // Update button label in step 2 if visible
     const openBtn = document.querySelector('.wiz-staff-btn');
@@ -1557,7 +1557,7 @@ const WorkOrdersPage = {
     }
 
     document.getElementById('wiz-autofill').innerHTML = cu
-      ? `<div class="ibox" style="margin-bottom:8px;">${ic('check',14)} ${CustomerService.displayName(cu)}</div>`
+      ? `<div class="ibox" style="margin-bottom:8px;">${ic('check',14)} ${esc(CustomerService.displayName(cu))}</div>`
       : '';
 
     // Uppdatera fastighetsväljaren för ny kund

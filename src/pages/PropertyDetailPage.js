@@ -52,17 +52,17 @@ const PropertyDetailPage = {
         <div class="card-body" style="padding:14px;">
           <div style="display:flex;align-items:flex-start;gap:12px;">
             <div style="flex:1;min-width:0;">
-              <div style="font-size:18px;font-weight:900;color:var(--navy);line-height:1.2;margin-bottom:4px;">${p.name}</div>
+              <div style="font-size:18px;font-weight:900;color:var(--navy);line-height:1.2;margin-bottom:4px;">${esc(p.name)}</div>
               ${addrLine ? `<div style="font-size:12px;color:var(--mt);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
                 <a href="${mapsUrl}" target="_blank" rel="noopener"
-                  style="color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-color:rgba(0,0,0,.3);">${addrLine}${cityLine ? ', ' + cityLine : ''}</a>
+                  style="color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-color:rgba(0,0,0,.3);">${esc(addrLine)}${cityLine ? ', ' + esc(cityLine) : ''}</a>
                 <a href="${mapsUrl}" target="_blank" rel="noopener"
                   class="btn bs bxs" style="font-size:10px;padding:2px 8px;line-height:1.8;">${ic('navigation',11)} Navigera</a>
               </div>` : ''}
               ${cu ? `<div style="font-size:12px;margin-top:4px;">
                 <span style="color:var(--mt);">Ägare: </span>
                 <span style="color:var(--sky);cursor:pointer;font-weight:600;"
-                  onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${cuName}</span>
+                  onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</span>
               </div>` : ''}
               ${p.group ? `<div style="font-size:12px;color:var(--mt);">Koncern: ${p.group}</div>` : ''}
               ${p.operationalArea ? `<div style="font-size:12px;color:var(--mt);">Driftområde: ${p.operationalArea}</div>` : ''}
@@ -95,7 +95,7 @@ const PropertyDetailPage = {
             ${cu ? `<div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;">
               <span style="color:var(--mt);">Kund</span>
               <span style="color:var(--sky);cursor:pointer;font-weight:600;text-align:right;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${cuName}</span>
+                onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</span>
             </div>` : ''}
             ${p.type ? `<div style="display:flex;justify-content:space-between;font-size:12px;">
               <span style="color:var(--mt);">Typ</span><span>${p.type}</span>
@@ -104,7 +104,7 @@ const PropertyDetailPage = {
               <span style="color:var(--mt);">Status</span>
               ${p.status!=='inaktiv'?`<span class="bdg bdg-green">Aktiv</span>`:`<span class="bdg bdg-grey">Inaktiv</span>`}
             </div>
-            ${addrLine ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${addrLine}${cityLine?', '+cityLine:''}</div>` : ''}
+            ${addrLine ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc(addrLine)}${cityLine?', '+esc(cityLine):''}</div>` : ''}
           </div>
         </div>
       </div>`;
@@ -174,7 +174,7 @@ const PropertyDetailPage = {
 
       <!-- Mobile quick-info banner (hidden on desktop via CSS) -->
       <div class="prop-mobile-quick">
-        <span class="prop-mobile-quick-name">${p.name}</span>
+        <span class="prop-mobile-quick-name">${esc(p.name)}</span>
         <span class="prop-mobile-quick-ao${openAos>0?' prop-mobile-quick-ao--active':''}">${openAos} AO</span>
         ${p.status!=='inaktiv'?`<span class="bdg bdg-green" style="font-size:10px;">Aktiv</span>`:`<span class="bdg bdg-grey" style="font-size:10px;">Inaktiv</span>`}
       </div>
@@ -307,7 +307,7 @@ const PropertyDetailPage = {
         <div class="card-body">
           ${alertSIs.map(si => `
             <div class="dr" style="align-items:center;">
-              <span class="dk">${si.title}</span>
+              <span class="dk">${esc(si.title)}</span>
               <span class="dv">${SIS.statusBadge(si)}</span>
             </div>`).join('')}
           <button class="btn bs bsm" style="margin-top:8px;" onclick="PropertyDetailPage.switchTab('service')">Visa serviceintervall</button>
@@ -326,7 +326,7 @@ const PropertyDetailPage = {
             ? `<p style="font-size:12px;color:var(--mt);">Ingen utökad information registrerad.
                ${Auth.can('customer_manage') ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">Redigera</button>` : ''}</p>`
             : rows.map(([k,v]) =>
-                `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`
+                `<div class="dr"><span class="dk">${k}</span><span class="dv">${esc(v)}</span></div>`
               ).join('')}
         </div>
       </div>
@@ -366,10 +366,10 @@ const PropertyDetailPage = {
       <div class="si-filter-bar" style="margin-bottom:10px;">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;">
           <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="PropertyDetailPage._objFApply({type:this.value})">
-            ${typeOptions.map(t => `<option value="${t.key}" ${f.type===t.key?'selected':''}>${t.label}</option>`).join('')}
+            ${typeOptions.map(t => `<option value="${t.key}" ${f.type===t.key?'selected':''}>${esc(t.label)}</option>`).join('')}
           </select>
           <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="PropertyDetailPage._objFApply({status:this.value})">
-            ${statusOptions.map(s => `<option value="${s.key}" ${f.status===s.key?'selected':''}>${s.label}</option>`).join('')}
+            ${statusOptions.map(s => `<option value="${s.key}" ${f.status===s.key?'selected':''}>${esc(s.label)}</option>`).join('')}
           </select>
           <input type="text" class="fi" placeholder="Sök objekt…" value="${esc(f.search||'')}"
             style="font-size:12px;padding:5px 10px;height:32px;min-width:120px;"
@@ -434,9 +434,9 @@ const PropertyDetailPage = {
     const p = getObj(propId);
     if (!p) return;
     const typeOptions = (typeof PROPERTY_OBJECT_TYPES !== 'undefined' ? PROPERTY_OBJECT_TYPES : [])
-      .map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+      .map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join('');
     const statusOptions = (typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])
-      .map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+      .map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
     /* QA FIX-ROUND 2026-11-12 (I1, confirmed): `openModal()`/`closeModal()`
        are not defined anywhere in the codebase — "Lägg till objekt" threw a
        ReferenceError and no property object could ever be created. Now uses
@@ -612,9 +612,9 @@ const PropertyDetailPage = {
     const obj = getPropObj(objId);
     if (!obj) return;
     const typeOptions = (typeof PROPERTY_OBJECT_TYPES !== 'undefined' ? PROPERTY_OBJECT_TYPES : [])
-      .map(t => `<option value="${t.key}" ${obj.type===t.key?'selected':''}>${t.label}</option>`).join('');
+      .map(t => `<option value="${t.key}" ${obj.type===t.key?'selected':''}>${esc(t.label)}</option>`).join('');
     const statusOptions = (typeof PROPERTY_OBJECT_STATUSES !== 'undefined' ? PROPERTY_OBJECT_STATUSES : [])
-      .map(s => `<option value="${s.key}" ${obj.status===s.key?'selected':''}>${s.label}</option>`).join('');
+      .map(s => `<option value="${s.key}" ${obj.status===s.key?'selected':''}>${esc(s.label)}</option>`).join('');
     /* I1 (2026-11-12): same fix as openAddObject() — Modal.open(). */
     Modal.open({
       title: `${ic('pencil',14)} Redigera objekt — ${esc(obj.name || obj.objectNumber)}`,
@@ -836,7 +836,7 @@ const PropertyDetailPage = {
                 <div style="flex:1;min-width:0;">
                   <div class="si-card-title">${esc(si.title)}</div>
                   <div class="si-card-meta">
-                    ${cat ? `<span>${cat.label}</span>` : ''}
+                    ${cat ? `<span>${esc(cat.label)}</span>` : ''}
                     <span>${SIS.intervalLabel(si)}</span>
                     ${respName ? `<span>${ic('user',10)} ${respName}</span>` : ''}
                     ${si.supplier ? `<span>${ic('package',10)} ${esc(si.supplier)}</span>` : ''}
@@ -921,13 +921,13 @@ const PropertyDetailPage = {
         <div class="fg">
           <label>Kategori</label>
           <select id="si-category" class="fi">
-            ${cats.map(c => `<option value="${c.key}" ${selCat===c.key?'selected':''}>${c.label}</option>`).join('')}
+            ${cats.map(c => `<option value="${c.key}" ${selCat===c.key?'selected':''}>${esc(c.label)}</option>`).join('')}
           </select>
         </div>
         <div class="fg">
           <label>Intervall *</label>
           <select id="si-interval-type" class="fi" onchange="PropertyDetailPage._siToggleCustom()">
-            ${iTypes.map(t => `<option value="${t.key}" ${selType===t.key?'selected':''}>${t.label}</option>`).join('')}
+            ${iTypes.map(t => `<option value="${t.key}" ${selType===t.key?'selected':''}>${esc(t.label)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -944,7 +944,7 @@ const PropertyDetailPage = {
           <label>Ansvarig person</label>
           <select id="si-staff" class="fi">
             <option value="">— Välj —</option>
-            ${staff.map(s => `<option value="${s.id}" ${selStaff===s.id?'selected':''}>${s.firstName} ${s.lastName}</option>`).join('')}
+            ${staff.map(s => `<option value="${s.id}" ${selStaff===s.id?'selected':''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`).join('')}
           </select>
         </div>
         <div class="fg">
@@ -996,7 +996,7 @@ const PropertyDetailPage = {
             <label>AO-personal (valfritt)</label>
             <select id="si-ao-staff" class="fi">
               <option value="">— Välj —</option>
-              ${staff.map(s => `<option value="${s.id}" ${aoStaff.includes(s.id)?'selected':''}>${s.firstName} ${s.lastName}</option>`).join('')}
+              ${staff.map(s => `<option value="${s.id}" ${aoStaff.includes(s.id)?'selected':''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -1189,7 +1189,7 @@ const PropertyDetailPage = {
           <label>Utförd av</label>
           <select id="si-done-staff" class="fi">
             <option value="">— Välj —</option>
-            ${staff.map(s => `<option value="${s.id}" ${curStaff===s.id?'selected':''}>${s.firstName} ${s.lastName}</option>`).join('')}
+            ${staff.map(s => `<option value="${s.id}" ${curStaff===s.id?'selected':''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`).join('')}
           </select>
         </div>
         <div class="fg">
@@ -1408,8 +1408,8 @@ const PropertyDetailPage = {
     return contacts.map((c, i) => `
       <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${c.name||'—'}</div>
-          ${c.role ? `<div style="font-size:11px;color:var(--mt);">${c.role}</div>` : ''}
+          <div style="font-size:13px;font-weight:700;">${esc(c.name||'—')}</div>
+          ${c.role ? `<div style="font-size:11px;color:var(--mt);">${esc(c.role)}</div>` : ''}
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
             ${c.phone ? `<a href="tel:${c.phone}" style="font-size:11px;color:var(--sky);">${ic('phone',10)} ${c.phone}</a>` : ''}
             ${c.email ? `<a href="mailto:${c.email}" style="font-size:11px;color:var(--sky);">${ic('mail',10)} ${c.email}</a>` : ''}
@@ -1464,7 +1464,7 @@ const PropertyDetailPage = {
           <div class="prop-acc-row" id="${accId}">
             <div class="prop-acc-hd" onclick="PropertyDetailPage._toggleAcc('${accId}')">
               <span class="prop-acc-hd-icon">${ic(sys.icon,14)}</span>
-              <span class="prop-acc-hd-label">${sys.label}</span>
+              <span class="prop-acc-hd-label">${esc(sys.label)}</span>
               <div class="prop-acc-hd-right">
                 ${openCatAOs > 0 ? `<span class="bdg bdg-blue" style="font-size:9px;" title="${openCatAOs} öppna AO">${ic('clipboard-list',9)} ${openCatAOs}</span>` : ''}
                 ${hasData
@@ -1532,7 +1532,7 @@ const PropertyDetailPage = {
     if (!entries.length) return `<p style="font-size:12px;color:var(--mt);">Ingen information registrerad</p>`;
     return entries.map(f => {
       const displayed = this._displayFieldValue(f.type, t[f.key]);
-      return `<div class="dr"><span class="dk">${f.label}</span><span class="dv">${displayed}</span></div>`;
+      return `<div class="dr"><span class="dk">${esc(f.label)}</span><span class="dv">${displayed}</span></div>`;
     }).join('');
   },
 
@@ -1818,7 +1818,7 @@ const PropertyDetailPage = {
             : aos.map(ao => `
               <div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
                 <div style="flex:1;min-width:0;">
-                  <div class="crow-title"><span style="font-size:10px;font-weight:700;color:var(--mt);margin-right:4px;">${ao.id}</span>${ao.title}</div>
+                  <div class="crow-title"><span style="font-size:10px;font-weight:700;color:var(--mt);margin-right:4px;">${ao.id}</span>${esc(ao.title)}</div>
                   <div class="crow-sub">${fmtDate(ao.scheduledDate||ao.createdAt)}</div>
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
@@ -1843,7 +1843,7 @@ const PropertyDetailPage = {
             : recs.map(r => `
               <div class="crow" onclick="Router.showPage('pg-recurring')">
                 <div style="flex:1;min-width:0;">
-                  <div class="crow-title">${r.title}</div>
+                  <div class="crow-title">${esc(r.title)}</div>
                   <div class="crow-sub">${r.frequencyLabel||r.frequency||''}</div>
                 </div>
                 <span class="bdg bdg-${r.active!==false?'green':'grey'}" style="font-size:9px;">${r.active!==false?'Aktiv':'Pausad'}</span>
@@ -1901,13 +1901,13 @@ const PropertyDetailPage = {
               <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;background:#fff;"
                 onclick="PropertyDetailPage.viewImage(${i})">
                 <div style="position:relative;">
-                  <img src="${img.signedUrl}" alt="${img.title||''}"
+                  <img src="${img.signedUrl}" alt="${esc(img.title||'')}"
                     loading="lazy"
                     style="width:100%;height:90px;object-fit:cover;display:block;">
                   ${img.category ? `<span class="img-cat-badge">${img.category}</span>` : ''}
                 </div>
                 <div style="padding:5px 7px;font-size:10px;font-weight:700;color:var(--navy);
-                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${img.title||'Bild'}</div>
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(img.title||'Bild')}</div>
               </div>`).join('')}
           </div>`;
     } catch(e) {
@@ -2170,7 +2170,7 @@ const PropertyDetailPage = {
     const mgmtTypes = ['Teknisk förvaltning','Ekonomisk förvaltning','Full förvaltning','Egen förvaltning','Tillsynsavtal'];
     const activeStaff = (state.staff||[]).filter(s => s.active!==false);
     const staffOpts = id => activeStaff.map(s =>
-      `<option value="${s.id}" ${v(id)===s.id?'selected':''}>${s.firstName} ${s.lastName}</option>`
+      `<option value="${s.id}" ${v(id)===s.id?'selected':''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`
     ).join('');
 
     return `
@@ -2525,7 +2525,7 @@ const PropertyDetailPage = {
         wide: true,
         body: legacyNote + dynFields.map(f => `
           <div class="fg">
-            <label>${f.label}${f.required ? ' <span style="color:var(--rd);">*</span>' : ''}</label>
+            <label>${esc(f.label)}${f.required ? ' <span style="color:var(--rd);">*</span>' : ''}</label>
             ${this._buildFieldInput(f, t[f.key])}
           </div>`).join(''),
         buttons: [
@@ -2541,9 +2541,9 @@ const PropertyDetailPage = {
         wide: true,
         body: cfg.fields.map(f =>
           f.textarea
-            ? `<div class="fg"><label>${f.label}</label>
+            ? `<div class="fg"><label>${esc(f.label)}</label>
                  <textarea id="tech-${f.id}" rows="3" placeholder="${f.ph}">${esc(t[f.id]||legacyVal||'')}</textarea></div>`
-            : `<div class="fg"><label>${f.label}</label>
+            : `<div class="fg"><label>${esc(f.label)}</label>
                  <input id="tech-${f.id}" value="${esc(t[f.id]||'')}" placeholder="${f.ph}"></div>`
         ).join(''),
         buttons: [
@@ -2620,7 +2620,7 @@ const PropertyDetailPage = {
         const iv = insp[t.key] || {};
         return `
           <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--bg);">
-            <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">${t.label}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">${esc(t.label)}</div>
             <div class="g2">
               <div class="fg"><label>Senaste datum</label>
                 <input type="date" id="insp-${t.key}-last" value="${iv.lastDate||''}"></div>
@@ -2843,7 +2843,7 @@ const PropertyDetailPage = {
       body: `
         <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;">
           <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:4px;">Ny fastighet skapas</div>
-          <div style="font-size:12px;color:var(--mt);">Namn: <strong style="color:var(--navy);">Kopia av ${p.name}</strong></div>
+          <div style="font-size:12px;color:var(--mt);">Namn: <strong style="color:var(--navy);">Kopia av ${esc(p.name)}</strong></div>
           <div style="font-size:11px;color:var(--mt);margin-top:4px;">Grunddata (adress, typ, kund, ytor, förvaltning, åtkomst) kopieras alltid.</div>
         </div>
 

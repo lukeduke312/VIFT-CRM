@@ -447,7 +447,7 @@ const RonderingWizardPage = {
         <div style="background:#f9fafb;border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
           <div style="flex:1;">
             <div style="font-size:13px;font-weight:700;">${fmtDate(occ.date)}${occ.time?' kl '+occ.time:''}</div>
-            <div style="font-size:11px;color:var(--mt);">${occ.staffName||'Ej tilldelad'}${occ.estimatedDuration?' · '+fmtDur(occ.estimatedDuration):''}${occ.comment?' · '+occ.comment:''}</div>
+            <div style="font-size:11px;color:var(--mt);">${occ.staffName||'Ej tilldelad'}${occ.estimatedDuration?' · '+fmtDur(occ.estimatedDuration):''}${occ.comment?' · '+esc(occ.comment):''}</div>
           </div>
           <button class="btn bd bsm" onclick="RonderingWizardPage._removeOcc(${oi})">${ic('x',12)}</button>
         </div>`).join('')}

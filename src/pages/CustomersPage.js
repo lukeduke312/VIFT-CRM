@@ -132,7 +132,7 @@ const CustomersPage = {
         <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
           ${TYPE_TABS.map(t =>
             `<button class="ft ${this._typeFilter===t.key?'on':''}"
-              onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${t.label}</button>`
+              onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${esc(t.label)}</button>`
           ).join('')}
         </div>
         <div class="ao-selall-cell" id="crm-sel-all"></div>
@@ -184,8 +184,8 @@ const CustomersPage = {
           <div class="item-row">
             ${SelectionModel.checkboxHtml(cu.id, name)}
             <div style="flex:1;min-width:0;">
-              <div class="item-title">${name}</div>
-              <div class="item-sub">${CustomerService.typeLabel(cu.type)}${cu.phone?' · '+cu.phone:''}${cu.city?' · '+cu.city:''}</div>
+              <div class="item-title">${esc(name)}</div>
+              <div class="item-sub">${CustomerService.typeLabel(cu.type)}${cu.phone?' · '+esc(cu.phone):''}${cu.city?' · '+esc(cu.city):''}</div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
@@ -844,7 +844,7 @@ const CustomerDetailPage = {
     el.innerHTML = `
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:4px;">
         <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-        <h2 style="font-size:17px;font-weight:800;flex:1;">${name}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
+        <h2 style="font-size:17px;font-weight:800;flex:1;">${esc(name)}${cu.inactive ? ' <span class="bdg bdg-grey" style="font-size:10px;vertical-align:middle;">Inaktiv</span>' : ''}</h2>
         ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomerDetailPage.toggleInactive('${cu.id}')">${cu.inactive ? ic('user-check',13)+' Aktivera' : ic('user-x',13)+' Inaktivera'}</button>` : ''}
         ${Auth.can('customer_manage') ? `<button class="btn bs bsm" onclick="CustomersPage.openEdit('${cu.id}')">${ic('pencil',14)} Redigera</button>` : ''}
       </div>
@@ -852,7 +852,7 @@ const CustomerDetailPage = {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
         <span class="bdg bdg-grey">${esc(CustomerService.displayNumber(cu))}</span>
         <span class="bdg bdg-grey">${CustomerService.typeLabel(cu.type)}</span>
-        ${cu.orgNr ? `<span class="bdg bdg-grey">${cu.orgNr}</span>` : ''}
+        ${cu.orgNr ? `<span class="bdg bdg-grey">${esc(cu.orgNr)}</span>` : ''}
         <span style="flex:1;"></span>
         <button class="btn bp bsm" onclick="WorkOrdersPage.openCreate('${cu.id}')">${ic('plus',14)} Ny arbetsorder</button>
         ${Auth.canViewPage('pg-activities') ? `<button class="btn bs bsm" onclick="ActivitiesPage.openCreate({customerId:'${cu.id}'})">${ic('check-square',14)} Ny uppgift</button>` : ''}
@@ -905,14 +905,14 @@ const CustomerDetailPage = {
     const isLegacyIdOnPrivate = normType === 'privat' && !cu.personnr && !!cu.orgNr;
     const rows = [
       ['Typ',         CustomerService.typeLabel(cu.type)],
-      ['Telefon',     cu.phone   || '—'],
-      ['E-post',      cu.email   || '—'],
-      ['Adress',      [cu.address, cu.zip, cu.city].filter(Boolean).join(', ') || '—'],
+      ['Telefon',     esc(cu.phone   || '—')],
+      ['E-post',      esc(cu.email   || '—')],
+      ['Adress',      esc([cu.address, cu.zip, cu.city].filter(Boolean).join(', ') || '—')],
       isLegacyIdOnPrivate
         ? ['Importerat nummer', `${esc(cu.orgNr)} <span style="color:var(--mt);font-weight:500;">(ligger i fältet Org.nr)</span>`]
-        : (cu.orgNr ? ['Org.nr', cu.orgNr] : null),
-      (!isLegacyIdOnPrivate && cu.personnr) ? ['Personnummer', cu.personnr] : null,
-      cu.contactPerson ? ['Kontaktperson',   cu.contactPerson] : null,
+        : (cu.orgNr ? ['Org.nr', esc(cu.orgNr)] : null),
+      (!isLegacyIdOnPrivate && cu.personnr) ? ['Personnummer', esc(cu.personnr)] : null,
+      cu.contactPerson ? ['Kontaktperson',   esc(cu.contactPerson)] : null,
     ].filter(Boolean);
 
     const diffInv = cu.invoiceAddress || cu.invoiceZip || cu.invoiceCity;
@@ -922,7 +922,7 @@ const CustomerDetailPage = {
         <div class="card-header"><h3>Kontaktuppgifter</h3></div>
         <div class="card-body kv">
           ${rows.map(([k,v]) => `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`).join('')}
-          ${diffInv ? `<div class="dr"><span class="dk">Fakturaadress</span><span class="dv">${[cu.invoiceAddress, cu.invoiceZip, cu.invoiceCity].filter(Boolean).join(', ')}</span></div>` : ''}
+          ${diffInv ? `<div class="dr"><span class="dk">Fakturaadress</span><span class="dv">${esc([cu.invoiceAddress, cu.invoiceZip, cu.invoiceCity].filter(Boolean).join(', '))}</span></div>` : ''}
           ${cu.note ? `<div style="margin-top:10px;" class="ibox">${esc(cu.note)}</div>` : ''}
         </div>
       </div>
@@ -936,8 +936,8 @@ const CustomerDetailPage = {
             contacts.map((c, i) => `
               <div class="crow">
                 <div>
-                  <div style="font-size:13px;font-weight:700;">${c.name}${c.primary?' <span class="bdg bdg-blue" style="font-size:9px;">Primär</span>':''}</div>
-                  <div style="font-size:11px;color:var(--mt);">${c.role||''}${c.phone?' · '+c.phone:''}${c.email?' · '+c.email:''}</div>
+                  <div style="font-size:13px;font-weight:700;">${esc(c.name)}${c.primary?' <span class="bdg bdg-blue" style="font-size:9px;">Primär</span>':''}</div>
+                  <div style="font-size:11px;color:var(--mt);">${esc(c.role||'')}${c.phone?' · '+esc(c.phone):''}${c.email?' · '+esc(c.email):''}</div>
                 </div>
                 <div style="display:flex;gap:4px;">
                   ${Auth.can('customer_manage') ? `<button class="btn bxs bs" onclick="CustomerDetailPage.openAddContact(${i})">${ic('pencil',12)}</button>` : ''}
@@ -955,7 +955,7 @@ const CustomerDetailPage = {
       <div class="list-item ${priorityClass(ao.priority)}"
            onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
         <div class="item-row">
-          <div><div class="item-title">${ao.id} – ${ao.title}</div>
+          <div><div class="item-title">${ao.id} – ${esc(ao.title)}</div>
             <div class="item-sub">${ao.scheduledDate||'Ej planerad'}</div></div>
           <div style="display:flex;gap:4px;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
         </div>
@@ -1044,7 +1044,7 @@ const CustomerDetailPage = {
         <div class="list-item" onclick="Router.showPage('pg-sales')">
           <div class="item-row">
             <div>
-              <div class="item-title">${s.title}</div>
+              <div class="item-title">${esc(s.title)}</div>
               ${sub ? `<div class="item-sub">${sub}</div>` : ''}
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">

@@ -175,9 +175,9 @@ const ContractsPage = (function() {
     const c = contractId ? (state.contracts||[]).find(x=>x.id===contractId) : null;
     const isNew = !c;
 
-    const typeOpts  = CONTRACT_TYPES.map(t=>`<option value="${t.key}"${(c?.type||'service')===t.key?' selected':''}>${t.label}</option>`).join('');
-    const statusOpts= CONTRACT_STATUSES.map(s=>`<option value="${s.key}"${(c?.status||'utkast')===s.key?' selected':''}>${s.label}</option>`).join('');
-    const periOpts  = PERIODS.map(p=>`<option value="${p.key}"${(c?.period||'månad')===p.key?' selected':''}>${p.label}</option>`).join('');
+    const typeOpts  = CONTRACT_TYPES.map(t=>`<option value="${t.key}"${(c?.type||'service')===t.key?' selected':''}>${esc(t.label)}</option>`).join('');
+    const statusOpts= CONTRACT_STATUSES.map(s=>`<option value="${s.key}"${(c?.status||'utkast')===s.key?' selected':''}>${esc(s.label)}</option>`).join('');
+    const periOpts  = PERIODS.map(p=>`<option value="${p.key}"${(c?.period||'månad')===p.key?' selected':''}>${esc(p.label)}</option>`).join('');
     const propOpts  = [{ id:'', name:'— välj fastighet —' }].concat(
       (state.properties||[]).filter(x=>!x.deleted).map(x=>({ id:x.id, name:x.name||x.objectNumber||x.id }))
         .sort((a,b)=>a.name.localeCompare(b.name,'sv'))

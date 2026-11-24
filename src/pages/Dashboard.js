@@ -907,8 +907,8 @@ const Dashboard = {
     return `<div class="dash-action-item ${t.cls||''}" onclick="${t.onClick}">
       <span style="color:${iconColor};flex-shrink:0;">${ic(t.icon, 14)}</span>
       <div class="dai-text">
-        <div class="dai-title">${t.title}</div>
-        ${t.sub ? `<div class="dai-sub">${t.sub}</div>` : ''}
+        <div class="dai-title">${esc(t.title)}</div>
+        ${t.sub ? `<div class="dai-sub">${esc(t.sub)}</div>` : ''}
       </div>
       <span class="dai-count ${countCls}">${t.badge}</span>
       <span style="color:#cbd5e1;flex-shrink:0;">${ic('chevron-right',12)}</span>
@@ -1462,7 +1462,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-today';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${ao.title}</div>${sbdg(ao.status)}</div><div class="crow-sub">${ao.scheduledStart||'?'}–${ao.scheduledEnd||'?'} · ${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${esc(ao.title)}</div>${sbdg(ao.status)}</div><div class="crow-sub">${ao.scheduledStart||'?'}–${ao.scheduledEnd||'?'} · ${esc(cu?CustomerService.displayName(cu):'—')}</div></div>`; };
               const visible = todayAOs.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = todayAOs.length > LIMIT ? `<div id="${uid}" style="display:none;">${todayAOs.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${todayAOs.length})</button>` : '';
               return visible + hidden;
@@ -1506,7 +1506,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-pool';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${ao.title}</div>${pbdg(ao.priority)}</div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${esc(ao.title)}</div>${pbdg(ao.priority)}</div><div class="crow-sub">${esc(cu?CustomerService.displayName(cu):'—')}</div></div>`; };
               const visible = pool.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = pool.length > LIMIT ? `<div id="${uid}" style="display:none;">${pool.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pool.length})</button>` : '';
               return visible + hidden;
@@ -1559,7 +1559,7 @@ const Dashboard = {
         ${(() => {
           const LIMIT = 4;
           const uid = 'vm-recur';
-          const renderRow = r => { var days = Math.ceil((new Date(r.nextDate)-new Date(tdy()))/86400000); var cu = getCu(r.customerId); return `<div class="crow" onclick="Router.showPage('pg-recurring')"><div class="crow-top"><div class="crow-title">${r.title}</div><span class="bdg ${days<=0?'bdg-red':'bdg-orange'}" style="font-size:10px;white-space:nowrap;flex-shrink:0;">${days<=0?'Förfallen':days===0?'Idag':days+' d'}</span></div><div class="crow-sub">${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
+          const renderRow = r => { var days = Math.ceil((new Date(r.nextDate)-new Date(tdy()))/86400000); var cu = getCu(r.customerId); return `<div class="crow" onclick="Router.showPage('pg-recurring')"><div class="crow-top"><div class="crow-title">${esc(r.title)}</div><span class="bdg ${days<=0?'bdg-red':'bdg-orange'}" style="font-size:10px;white-space:nowrap;flex-shrink:0;">${days<=0?'Förfallen':days===0?'Idag':days+' d'}</span></div><div class="crow-sub">${esc(cu?CustomerService.displayName(cu):'—')}</div></div>`; };
           const visible = recurring.slice(0, LIMIT).map(renderRow).join('');
           const hidden  = recurring.length > LIMIT ? `<div id="${uid}" style="display:none;">${recurring.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${recurring.length})</button>` : '';
           return visible + hidden;
@@ -1602,7 +1602,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-planned';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${ao.title}</div>${sbdg(ao.status)}</div><div class="crow-sub">${fmtDate(ao.scheduledDate)} · ${cu?CustomerService.displayName(cu):'—'}</div></div>`; };
+              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${esc(ao.title)}</div>${sbdg(ao.status)}</div><div class="crow-sub">${fmtDate(ao.scheduledDate)} · ${esc(cu?CustomerService.displayName(cu):'—')}</div></div>`; };
               const visible = planned.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = planned.length > LIMIT ? `<div id="${uid}" style="display:none;">${planned.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${planned.length})</button>` : '';
               return visible + hidden;
@@ -1646,10 +1646,10 @@ const Dashboard = {
               var overdueBadge = isOverdue ? `<span class="bdg bdg-red" style="font-size:9px;flex-shrink:0;">${ic('alert-triangle',9)} Förfallen</span>` : '';
               return `<div class="crow" style="cursor:pointer;" onclick="Router.showPage('pg-sales')">
                 <div class="crow-top">
-                  <div class="crow-title">${opp.title}</div>
+                  <div class="crow-title">${esc(opp.title)}</div>
                   ${pBadge}
                 </div>
-                <div class="crow-sub">${cuName}${val}</div>
+                <div class="crow-sub">${esc(cuName)}${val}</div>
                 ${(overdueBadge || deadline) ? `<div class="crow-extra-badges">${overdueBadge}${deadline}</div>` : ''}
                 ${tip}
               </div>`;
@@ -1679,7 +1679,7 @@ const Dashboard = {
           : (() => {
               const LIMIT = 3;
               const uid = 'vm-offers';
-              const renderRow = o => { var cu = getCu(o.customerId); var cuName = cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):'—'; var total = (function() { var pd = typeof _offPrimaryDisplay === 'function' ? _offPrimaryDisplay(o) : null; return pd ? pd.compact : fmt((o.lines||[]).reduce((s,l)=>s+(l.total||0),0)) + ' kr'; })(); /* OFFER CORE R1.3 — BLOCKER 1: R1.2's _offRawExVat() routing fixed the wrong-blended-total bug but introduced a new "0 kr" bug for pure-recurring offers (_offRawExVat excludes recurring by design). This is a display surface — routed through the canonical _offPrimaryDisplay(off), which already handles recurring/mixed/discounted/rate-only correctly in one place. */ var age = o.sentAt?Math.floor((Date.now()-new Date(o.sentAt))/86400000):null; return `<div class="crow" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})"><div class="crow-top"><div class="crow-title">${cuName}</div>${sbdg(o.status)}</div><div class="crow-sub">${total}${age!==null?' · '+age+' dagar':''}</div></div>`; };
+              const renderRow = o => { var cu = getCu(o.customerId); var cuName = cu?(cu.name||(cu.firstName+' '+cu.lastName).trim()):'—'; var total = (function() { var pd = typeof _offPrimaryDisplay === 'function' ? _offPrimaryDisplay(o) : null; return pd ? pd.compact : fmt((o.lines||[]).reduce((s,l)=>s+(l.total||0),0)) + ' kr'; })(); /* OFFER CORE R1.3 — BLOCKER 1: R1.2's _offRawExVat() routing fixed the wrong-blended-total bug but introduced a new "0 kr" bug for pure-recurring offers (_offRawExVat excludes recurring by design). This is a display surface — routed through the canonical _offPrimaryDisplay(off), which already handles recurring/mixed/discounted/rate-only correctly in one place. */ var age = o.sentAt?Math.floor((Date.now()-new Date(o.sentAt))/86400000):null; return `<div class="crow" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})"><div class="crow-top"><div class="crow-title">${esc(cuName)}</div>${sbdg(o.status)}</div><div class="crow-sub">${total}${age!==null?' · '+age+' dagar':''}</div></div>`; };
               const visible = pending.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = pending.length > LIMIT ? `<div id="${uid}" style="display:none;">${pending.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pending.length})</button>` : '';
               return visible + hidden;

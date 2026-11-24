@@ -287,7 +287,7 @@ const WorkOrderDetailPage = {
                 ${ao.category ? fact('Kategori', catBadge(ao.category), 'folder') : ''}
                 ${ao.technicalCategorySlug ? fact('Tekniskt', ao.propertyId ? `<a class="aod-link" onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})">${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}</a>` : esc(ao.technicalCategoryLabel||ao.technicalCategorySlug), 'settings') : ''}
                 ${chkTotal > 0 ? fact('Checklista', `<span id="ao-chk-badge-meta">${chkBadge}</span>`, 'clipboard-check') : ''}
-                ${canSeePrice ? fact('Pris', `${this._priceLabel(ao)}${this._canEditPricing() ? ` · <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Ändra</a>` : ''}`, 'tag') : ''}
+                ${canSeePrice ? fact('Pris', `${esc(this._priceLabel(ao))}${this._canEditPricing() ? ` · <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Ändra</a>` : ''}`, 'tag') : ''}
                 ${fact('Skapad', ao.createdAt ? esc(fmtDate(ao.createdAt)) : '—', 'clock')}
               </div>
             </section>
@@ -369,7 +369,7 @@ const WorkOrderDetailPage = {
 
     const _inlineBtn = (it) => {
       const cls = it.destructive ? 'btn bsm bd' : 'btn bsm bghost';
-      return `<button class="${cls}" onclick="${it.fn}">${ic(it.icon,13)} ${it.label}</button>`;
+      return `<button class="${cls}" onclick="${it.fn}">${ic(it.icon,13)} ${esc(it.label)}</button>`;
     };
 
     /* V52A — "Fler åtgärder" öppnade tidigare en generisk full Modal
@@ -413,7 +413,7 @@ const WorkOrderDetailPage = {
     items.forEach((it, idx) => {
       if (it.divider && idx > 0) rows += '<div class="ao-overflow-divider"></div>';
       const cls = it.destructive ? 'ao-overflow-menu-item ao-overflow-menu-item--red' : 'ao-overflow-menu-item';
-      rows += `<button class="${cls}" role="menuitem" onclick="aoCloseOverflow();${it.fn}">${ic(it.icon,13)} ${it.label}</button>`;
+      rows += `<button class="${cls}" role="menuitem" onclick="aoCloseOverflow();${it.fn}">${ic(it.icon,13)} ${esc(it.label)}</button>`;
     });
     return `
       <div class="ao-overflow-wrap">
@@ -471,7 +471,7 @@ const WorkOrderDetailPage = {
         {v:'blockerad',label:'Blockerad'},
       ];
       btns.push(`<select class="btn bs bsm" style="padding:5px 8px;font-size:11px;" onchange="WorkOrderDetailPage.setSubstatus(this.value);this.blur();" title="Substatus">
-        ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${o.label}</option>`).join('')}
+        ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${esc(o.label)}</option>`).join('')}
       </select>`);
     }
     // Invoice CTA
@@ -737,7 +737,7 @@ const WorkOrderDetailPage = {
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg);">
         <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic('git-compare',10)} Offert vs faktiskt utfall</div>
         <div class="dr"><span class="dk">Offererat ex moms</span><span class="dv">${fkr(vs.offerExVat)}</span></div>
-        <div class="dr"><span class="dk">${tb.revenue.label}</span>
+        <div class="dr"><span class="dk">${esc(tb.revenue.label)}</span>
           <span class="dv" style="color:${vs.revDiff >= 0 ? 'var(--gr)' : 'var(--rd)'};">
             ${fkr(vs.actualRev)}
             ${vs.revDiff !== 0 ? `<span style="font-size:10px;font-weight:600;margin-left:4px;">(${vs.revDiff >= 0 ? '+' : ''}${fmt(Math.round(vs.revDiff))} kr)</span>` : ''}
@@ -762,7 +762,7 @@ const WorkOrderDetailPage = {
         <div class="card-body" style="padding:10px 14px;">
           <div class="dr">
             <span class="dk">Intäkt ex moms</span>
-            <span class="dv">${fkr(tb.revenue.value)} <span style="font-size:10px;color:var(--mt);">${tb.revenue.label}</span></span>
+            <span class="dv">${fkr(tb.revenue.value)} <span style="font-size:10px;color:var(--mt);">${esc(tb.revenue.label)}</span></span>
           </div>
 
           ${hasMat ? `
@@ -794,7 +794,7 @@ const WorkOrderDetailPage = {
               <span class="dk">TB %</span>
               <span class="dv" style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
                 <strong style="font-size:15px;color:${tb.color};">${Math.round(tb.tbPct)} %</strong>
-                <span class="bdg ${tb.badge}">${tb.label}</span>
+                <span class="bdg ${tb.badge}">${esc(tb.label)}</span>
               </span>
             </div>` : ''}
           </div>
@@ -1375,7 +1375,7 @@ const WorkOrderDetailPage = {
             const inklMoms = exMoms + momsAmt;
             return `<tr style="border-bottom:1px solid var(--bg);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
               <td style="padding:9px 14px;">
-                <div style="font-weight:700;color:var(--tx);">${m.name}</div>
+                <div style="font-weight:700;color:var(--tx);">${esc(m.name)}</div>
                 ${canSeePrice && buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;">Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>
                 <button type="button" onclick="(function(){var e=document.getElementById('mat-int-${m.id}');e.style.display=e.style.display==='none'?'':'none';})()" style="font-size:9px;color:var(--mt);background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;gap:2px;margin-top:2px;">${ic('eye',9)} Intern</button>` : ''}
               </td>
@@ -1411,7 +1411,7 @@ const WorkOrderDetailPage = {
       <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}${t.attested ? ` <span class="bdg bdg-green" style="font-size:9px;">${ic('lock',9)} Attesterad</span>` : ''}</div>
-          <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+t.comment:''}</div>
+          <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+esc(t.comment):''}</div>
           ${t.priceGroupName ? `<div style="font-size:11px;color:var(--sky);">${t.priceGroupName} – ${fmt(t.hourRate)} kr/tim ex moms</div>` : ''}
           ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
           ${!t.billable ? `<span style="font-size:10px;color:var(--mt);font-style:italic;">Ej debiterbar</span>` : ''}
@@ -1770,12 +1770,12 @@ const WorkOrderDetailPage = {
     if (!Auth.require('ao_material')) return;
     const articles = (state.articles||[]).filter(a=>a.active);
     const artListHtml = articles.length ? articles.map(a => `
-      <div class="art-row" data-id="${a.id}" data-name="${a.name}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${a.category||''}"
+      <div class="art-row" data-id="${a.id}" data-name="${esc(a.name)}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${a.category||''}"
         onclick="WorkOrderDetailPage._matSelectArticle(this)"
         style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .1s;"
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;font-weight:700;">${a.articleNumber ? a.articleNumber+' – ':'' }${a.name}</div>
+          <div style="font-size:12px;font-weight:700;">${a.articleNumber ? a.articleNumber+' – ':'' }${esc(a.name)}</div>
           <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr ex moms</div>
         </div>
         <div id="art-check-${a.id}" style="display:none;color:var(--grn);">${ic('check',14)}</div>
@@ -2311,7 +2311,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Stämpla ut',
@@ -2682,7 +2682,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Registrera tid',
@@ -2692,7 +2692,7 @@ const WorkOrderDetailPage = {
           <select id="t-staff">
             <option value="">— Inloggad användare (${state.currentUser ? state.currentUser.firstName : ''}) —</option>
             ${(state.staff||[]).filter(s=>s.active).map(s=>
-              `<option value="${s.id}:${s.firstName} ${s.lastName}">${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`
+              `<option value="${s.id}:${esc(s.firstName)} ${esc(s.lastName)}">${esc(s.firstName)} ${esc(s.lastName)}${s.title?' – '+esc(s.title):''}</option>`
             ).join('')}
           </select>
         </div>` : ''}
@@ -2720,7 +2720,7 @@ const WorkOrderDetailPage = {
     const guard = TimeService._guardMutation(t);
     if (!guard.ok) { showToast(guard.error); return; }
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
     ).join('');
     Modal.open({
       title: 'Redigera tid',
@@ -2937,7 +2937,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     if (!ao) return;
     const cuOptions = (state.customers||[]).map(c =>
-      `<option value="${c.id}" ${ao.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
+      `<option value="${c.id}" ${ao.customerId===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`
     ).join('');
     /* V51B ARBETSORDER §11 — samma särskild-adress-togglemönster som
        skapa-guiden (WorkOrdersPage._wizAddressBlockHtml), men här skrivs
@@ -3035,7 +3035,7 @@ const WorkOrderDetailPage = {
         <div class="fg"><label>Kategori</label>
           <select id="edit-category">
             <option value="">— Ingen kategori —</option>
-            ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${ao.category===c.slug?'selected':''}>${c.label}</option>`).join('')}
+            ${AO_CATEGORIES.map(c=>`<option value="${c.slug}" ${ao.category===c.slug?'selected':''}>${esc(c.label)}</option>`).join('')}
           </select></div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: (mainEv) => {

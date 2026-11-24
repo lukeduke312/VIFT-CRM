@@ -99,7 +99,7 @@ const Sidebar = {
       html += `
         <button class="ni" id="nav-${item.id}" onclick="Router.showPage('${item.id}')">
           <span class="ico">${ic(item.icon)}</span>
-          <span class="lbl">${item.label}</span>
+          <span class="lbl">${esc(item.label)}</span>
           ${item.comingSoon ? '<span class="nbdg-soon">Snart</span>' : (badge ? `<span class="${badgeCls}">${badge}</span>` : '')}
         </button>`;
     });

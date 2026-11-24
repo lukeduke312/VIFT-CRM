@@ -435,9 +435,9 @@ const InvoicesPage = {
         const subset = invoices.filter(i => i.status === k.key);
         const total  = subset.reduce((s,i) => s + InvoiceService.calcTotals(i).total, 0);
         const active = this._tab === k.key;
-        return `<div class="kpi-card ${k.cls}${active?' kpi-active':''}" onclick="InvoicesPage._setTab('${k.key}')" style="${active?'box-shadow:0 0 0 2px var(--sky)22;':''}" title="${k.label}">
+        return `<div class="kpi-card ${k.cls}${active?' kpi-active':''}" onclick="InvoicesPage._setTab('${k.key}')" style="${active?'box-shadow:0 0 0 2px var(--sky)22;':''}" title="${esc(k.label)}">
           <div class="kpi-number">${counts[k.key]}</div>
-          <div class="kpi-label">${k.label}${total > 0 ? `<br><span style="font-size:10px;font-weight:500;">${fkr(total)}</span>` : ''}</div>
+          <div class="kpi-label">${esc(k.label)}${total > 0 ? `<br><span style="font-size:10px;font-weight:500;">${fkr(total)}</span>` : ''}</div>
         </div>`;
       }).join('')}
     </div>`;
@@ -456,7 +456,7 @@ const InvoicesPage = {
             return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
               <div>
                 <div style="font-size:13px;font-weight:700;">${ao.id} – ${esc(ao.title)}</div>
-                <div style="font-size:11px;color:var(--mt);">${cu?CustomerService.displayName(cu):'—'}${alreadyInvoiced?' · '+ic('check',10)+' Faktura '+ao.invoiceId:''}</div>
+                <div style="font-size:11px;color:var(--mt);">${esc(cu?CustomerService.displayName(cu):'—')}${alreadyInvoiced?' · '+ic('check',10)+' Faktura '+ao.invoiceId:''}</div>
               </div>
               ${alreadyInvoiced
                 ? `<button class="btn bsm bs" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('receipt',13)} Visa</button>`
@@ -860,7 +860,7 @@ const InvoiceDetailPage = {
             <span class="dk">TB %</span>
             <span class="dv" style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
               <strong style="font-size:14px;color:${tb.color};">${Math.round(tb.tbPct)} %</strong>
-              <span class="bdg ${tb.badge}">${tb.label}</span>
+              <span class="bdg ${tb.badge}">${esc(tb.label)}</span>
             </span>
           </div>` : ''}
         </div>

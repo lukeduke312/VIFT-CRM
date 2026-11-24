@@ -124,7 +124,7 @@ const ServiceIntervalsPage = {
             oninput="ServiceIntervalsPage._fApply({search:this.value})">
           <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="ServiceIntervalsPage._fApply({category:this.value})">
             <option value="all" ${f.category === 'all' ? 'selected' : ''}>Alla kategorier</option>
-            ${categoriesUsed.map(c => `<option value="${c.key}" ${f.category === c.key ? 'selected' : ''}>${c.label}</option>`).join('')}
+            ${categoriesUsed.map(c => `<option value="${c.key}" ${f.category === c.key ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
           </select>
           <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="ServiceIntervalsPage._fApply({sort:this.value})">
             <option value="nextDue"  ${f.sort === 'nextDue'  ? 'selected' : ''}>Sorterat efter förfall</option>
@@ -170,7 +170,7 @@ const ServiceIntervalsPage = {
           <div style="flex:1;min-width:0;">
             <div class="si-card-title">${esc(si.title)}</div>
             <div class="si-card-meta">
-              ${cat ? `<span>${cat.label}</span>` : ''}
+              ${cat ? `<span>${esc(cat.label)}</span>` : ''}
               <span>${SIS.intervalLabel(si)}</span>
               <span style="cursor:pointer;color:var(--sky);" onclick="Router.showPage('pg-obj-detail',{propId:'${x.propertyId}'})">${ic('building-2', 10)} ${esc(x.propertyName || '—')}</span>
               ${respName ? `<span>${ic('user', 10)} ${esc(respName)}</span>` : ''}

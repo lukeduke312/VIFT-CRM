@@ -57,8 +57,8 @@ const RecurringPage = {
       <div class="list-item" style="${leftBorder}" onclick="RecurringPage.openDetail('${ro.id}')">
         <div class="item-row">
           <div style="flex:1;min-width:0;">
-            <div class="item-title">${ro.title}</div>
-            <div class="item-sub">${cu ? CustomerService.displayName(cu) : '—'} · ${RecurringOrderService.intervalLabel(ro.interval)}</div>
+            <div class="item-title">${esc(ro.title)}</div>
+            <div class="item-sub">${esc(cu ? CustomerService.displayName(cu) : '—')} · ${RecurringOrderService.intervalLabel(ro.interval)}</div>
             ${ro.nextDate ? `<div style="font-size:11px;margin-top:3px;display:flex;align-items:center;gap:5px;">${ic('calendar',10)} <span style="color:var(--mt);">Nästa: ${fmtDate(ro.nextDate)}</span> ${daysLabel}</div>` : ''}
           </div>
           <span class="bdg ${stCls}" style="align-self:flex-start;">${stLbl}</span>
@@ -132,7 +132,7 @@ const RecurringPage = {
            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Skapade arbetsorder (${aoHistory.length})</div>
            ${aoHistory.slice(0,8).map(ao => {
              return `<div class="crow" onclick="Modal.close();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-               <div><div style="font-size:13px;font-weight:700;">${WorkOrderService.displayNumberOrPending(ao)} – ${ao.title}</div>
+               <div><div style="font-size:13px;font-weight:700;">${WorkOrderService.displayNumberOrPending(ao)} – ${esc(ao.title)}</div>
                <div style="font-size:11px;color:var(--mt);">${fmtDate(ao.scheduledDate||ao.createdAt||'')}</div></div>
                ${sbdg(ao.status)}</div>`;
            }).join('')}
@@ -148,7 +148,7 @@ const RecurringPage = {
           ${pbdg(ro.priority)}
           <span class="bdg bdg-sky">${RecurringOrderService.intervalLabel(ro.interval)}</span>
         </div>
-        <div class="dr"><span class="dk">Kund</span><span class="dv">${cu ? CustomerService.displayName(cu) : '—'}</span></div>
+        <div class="dr"><span class="dk">Kund</span><span class="dv">${esc(cu ? CustomerService.displayName(cu) : '—')}</span></div>
         ${ro.address ? `<div class="dr"><span class="dk">Arbetsadress</span><span class="dv">${esc(AddressService.formatQuery(ro.address, ro.zip, ro.city, ''))}</span></div>` : ''}
         ${ro.accessCode && Auth.can('objects_sensitive') ? `<div class="dr"><span class="dk">Portkod</span><span class="dv">${esc(ro.accessCode)}</span></div>` : ''}
         ${staffNames.length ? `<div class="dr"><span class="dk">Personal</span><span class="dv">${staffNames.join(', ')}</span></div>` : ''}
@@ -266,7 +266,7 @@ const RecurringPage = {
           <div class="fg"><label>Kund</label>
             <select id="ro-cu" onchange="RecurringPage._customerChanged()">
               <option value="">— Välj kund —</option>
-              ${(state.customers||[]).map(c=>`<option value="${c.id}" ${src.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`).join('')}
+              ${(state.customers||[]).map(c=>`<option value="${c.id}" ${src.customerId===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`).join('')}
             </select></div>
           <div class="fg"><label>Fastighet (valfritt)</label>
             <select id="ro-prop" onchange="RecurringPage._propertyChanged()">
@@ -327,7 +327,7 @@ const RecurringPage = {
         <div class="g2">
           <div class="fg"><label>Intervall</label>
             <select id="ro-interval" onchange="RecurringPage._toggleCustomInterval()">
-              ${intervals.map(i=>`<option value="${i.value}" ${ro&&ro.interval===i.value?'selected':''}>${i.label}</option>`).join('')}
+              ${intervals.map(i=>`<option value="${i.value}" ${ro&&ro.interval===i.value?'selected':''}>${esc(i.label)}</option>`).join('')}
             </select></div>
           <div class="fg" id="ro-custom-wrap" style="display:none;">
             <label>Antal dagar</label>
@@ -363,7 +363,7 @@ const RecurringPage = {
         <div class="fg"><label>Prisgrupp</label>
           <select id="ro-pg">
             <option value="">— Ingen —</option>
-            ${(state.priceGroups||[]).filter(p=>p.active).map(p=>`<option value="${p.id}" ${(src.priceGroupId||'')===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim ex moms</option>`).join('')}
+            ${(state.priceGroups||[]).filter(p=>p.active).map(p=>`<option value="${p.id}" ${(src.priceGroupId||'')===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`).join('')}
           </select></div>
 
         <div class="fg">
@@ -424,8 +424,8 @@ const RecurringPage = {
         <div class="crow" id="rpm-row-${s.id}" onclick="RecurringPage._rpmToggle('${s.id}')"
           style="background:${sel ? 'var(--navy10,#eef2ff)' : ''};">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${s.firstName} ${s.lastName}</div>
-            ${s.title ? `<div style="font-size:11px;color:var(--mt);">${s.title}</div>` : ''}
+            <div style="font-size:13px;font-weight:700;">${esc(s.firstName)} ${esc(s.lastName)}</div>
+            ${s.title ? `<div style="font-size:11px;color:var(--mt);">${esc(s.title)}</div>` : ''}
           </div>
           <div id="rpm-chk-${s.id}" style="color:var(--grn);${sel ? '' : 'display:none'}">${ic('check-circle',16)}</div>
         </div>`;
@@ -585,8 +585,8 @@ const RecurringPage = {
       <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid var(--br);background:#fff;border-radius:6px;margin-bottom:4px;">
         <span style="color:var(--gr);flex-shrink:0;margin-top:2px;">${ic('check-circle',14)}</span>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;">${item.text}</div>
-          ${item.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${item.description}</div>` : ''}
+          <div style="font-size:13px;font-weight:600;">${esc(item.text)}</div>
+          ${item.description ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc(item.description)}</div>` : ''}
         </div>
         <button class="btn bxs bd" type="button" onclick="RecurringPage._removeCheckItem(${idx})" style="flex-shrink:0;">${ic('trash',11)}</button>
       </div>`).join('');

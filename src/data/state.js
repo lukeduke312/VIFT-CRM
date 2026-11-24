@@ -2354,7 +2354,12 @@ function relDate(isoStr) {
 }
 
 function esc(s) {
-  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  /* QA 2026-11-24 (QA-P0-3): tål tal och andra icke-strängar (t.ex. numeriskt
+     postnummer) nu när alla HTML-sänkor för fritext går via esc(); null,
+     undefined och false blir tom sträng som förut. Apostrof kodas också så
+     att värden i '...'-attribut och onclick-strängar inte kan bryta sig ut. */
+  if (s === null || s === undefined || s === false) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 /* Inbäddade bilder (data-URL) i delad data som andra användare kan skriva:

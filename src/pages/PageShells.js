@@ -1377,7 +1377,7 @@ const OffersPage = {
     <div>
       ${cu
         ? `<button type="button" class="off-offer-card-cu off-offer-card-cu--link" onclick="event.stopPropagation();Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${ic('user',11)} ${esc(cuName)}</button>`
-        : `<div class="off-offer-card-cu">${ic('user',11)} ${cuName}</div>`}
+        : `<div class="off-offer-card-cu">${ic('user',11)} ${esc(cuName)}</div>`}
       <div class="off-offer-card-meta">
         ${ic('calendar',9)} ${fmtDate(o.createdAt)}
         ${o.sentAt ? `&nbsp;·&nbsp;${ic('send',9)} Skickad ${fmtDate(o.sentAt)}` : ''}
@@ -2882,7 +2882,7 @@ const OffersPage = {
       <input value="${(l.blockTitle||'').replace(/"/g,'&quot;')}" placeholder="Rubrik (t.ex. Förutsättningar)" class="off-wiz-line-field-title"
         oninput="OffersPage._editLines[${i}].blockTitle=this.value">
       <textarea rows="2" placeholder="Fritext som visas på offerten…"
-        oninput="OffersPage._editLines[${i}].text=this.value">${l.text||''}</textarea>
+        oninput="OffersPage._editLines[${i}].text=this.value">${esc(l.text||'')}</textarea>
     </div>`;
     return `<div class="off-wiz-line-card off-wiz-line-card--text" data-expanded="${expanded?'1':'0'}">${summary}${editor}</div>`;
   },
@@ -3880,7 +3880,7 @@ const OffersPage = {
       return `<button type="button" id="off-svc-menu-${t.id}"
         onclick="OffersPage._activateSvc('${t.id}',false)"
         class="off-svc-menu-item${active ? ' off-svc-menu-item--active' : ''}">
-        ${ic(t.icon,16)}<span>${t.name}</span>
+        ${ic(t.icon,16)}<span>${esc(t.name)}</span>
       </button>`;
     }).join('');
 
@@ -3972,7 +3972,7 @@ const OffersPage = {
       const unit = {area:'m²',length:'lm',hours:'tim',qty:'tim',months:'mån'}[f.id]||'';
       const val  = this._svcFields[f.id]!=null&&this._svcFields[f.id]!==0 ? this._svcFields[f.id] : (f.def||'');
       html += `<div class="off-svc-field">
-        <label class="off-svc-field-label">${f.label}${reqMark(f)}</label>
+        <label class="off-svc-field-label">${esc(f.label)}${reqMark(f)}</label>
         <div class="off-svc-field-row">
           <input type="number" id="svc-f-${f.id}" class="off-svc-field-number" value="${val}" min="0"
             step="${['rate','monthly','material'].includes(f.id)?'1':'0.5'}" placeholder="0"
@@ -3987,7 +3987,7 @@ const OffersPage = {
       const pgs = (state.priceGroups || []).filter(p => p.active !== false && p.billingType !== 'monthly');
       const curVal = this._svcFields[f.id] || f.def || (pgs[0] && pgs[0].id) || '';
       html += `<div class="off-svc-field">
-        <label class="off-svc-field-label">${f.label}${reqMark(f)}</label>
+        <label class="off-svc-field-label">${esc(f.label)}${reqMark(f)}</label>
         <select id="svc-f-${f.id}" class="off-svc-field-select"
           onchange="OffersPage._svcFields['${f.id}']=this.value;var _pg=(state.priceGroups||[]).find(p=>p.id===this.value);if(_pg){OffersPage._svcFields['rate']=_pg.hourRate;var rEl=document.getElementById('svc-f-rate');if(rEl)rEl.value=_pg.hourRate;}OffersPage._updateSvcPreview()">
           ${pgs.map(pg => `<option value="${pg.id}" ${curVal===pg.id?'selected':''}>${esc(pg.name)} (${fmt(pg.hourRate)} kr/tim)</option>`).join('')}
@@ -4007,7 +4007,7 @@ const OffersPage = {
     // ── Chip selectors ──
     chipF.forEach(f => {
       html += `<div class="off-svc-field off-svc-field--compact">
-        <label class="off-svc-field-label--sub">${f.label}</label>
+        <label class="off-svc-field-label--sub">${esc(f.label)}</label>
         <div class="off-svc-field-chip-row" data-chips="${f.id}">
           ${(f.opts||[]).map(o=>`<button type="button" data-val="${o}" class="off-svc-field-chip"
             onclick="OffersPage._setChip('${f.id}','${o.replace(/'/g,"\\'")}',this)">${o}</button>`).join('')}
@@ -4602,10 +4602,11 @@ const OfferDetailPage = {
     })();
 
     // ── Quick facts strip ──
+    /* QA-P0-3: alla anrop skickar ren text — värdet escapas här. */
     const _fa = (icon, col, lbl, val, warn) =>
       `<div class="off-detail-fact${warn?' off-detail-fact--warn':''}">` +
       `<span class="off-detail-fact-icon" style="color:${col};">${ic(icon,12)}</span>` +
-      `<div><span class="off-detail-fact-lbl">${lbl}</span><span class="off-detail-fact-val">${val}</span></div>` +
+      `<div><span class="off-detail-fact-lbl">${lbl}</span><span class="off-detail-fact-val">${esc(val)}</span></div>` +
       `</div>`;
     /* V48B5 R1 §14/§18: paymentTerms/validityText hörde tidigare hemma i
        den här FASTA faktarutan — nu ett eget flyttbart "commercialTerms"-
@@ -4677,7 +4678,7 @@ const OfferDetailPage = {
             : `<span class="off-line-kundpris">${fmt(lRut2 ? lCust2 : totInc)} kr${bt2==='recurring'?('/' + esc(l.unit||'mån')):''}</span><span style="font-size:10px;opacity:.6;margin-left:3px;">inkl. moms</span>`;
           return `<div class="off-line-row">` +
             `<div class="off-line-row-header">` +
-              `<div class="off-line-row-name">${l.description||'—'} ${OffersPage._billingTypeBadgeHtml(l)}</div>` +
+              `<div class="off-line-row-name">${esc(l.description||'—')} ${OffersPage._billingTypeBadgeHtml(l)}</div>` +
               `<div class="off-line-row-price">` +
                 (lRut2 ? `<span class="off-line-rut-badge">${l.reductionType==='rot'?'ROT':'RUT'}</span>` : '') +
                 priceCellHtml +
@@ -4695,7 +4696,7 @@ const OfferDetailPage = {
             <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
             <div>
               <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}${(off.versionNumber||1) > 1 ? ` <span class="bdg bdg-purple" style="font-size:10px;">v${off.versionNumber}</span>` : ''}${off.parentOfferId ? ` <span style="font-size:10px;opacity:.7;"> ← ${off.parentOfferId}</span>` : ''}</div>
-              <div style="font-size:20px;font-weight:700;line-height:1.25;">${off.title||'Offert'}</div>
+              <div style="font-size:20px;font-weight:700;line-height:1.25;">${esc(off.title||'Offert')}</div>
             </div>
           </div>
           <div class="off-hero-brand-status">
@@ -4709,7 +4710,7 @@ const OfferDetailPage = {
         <div class="off-detail-customer-validity-row">
           ${cu
             ? `<button type="button" class="off-detail-customer-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}${ic('chevron-right',12)}</button>`
-            : `<span class="off-detail-customer-link">${cuName}</span>`}
+            : `<span class="off-detail-customer-link">${esc(cuName)}</span>`}
           ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:var(--warn);font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
         </div>
         ${_offPropertyDisplayText(off) ? `<div class="off-detail-property-row" style="font-size:13px;color:var(--muted);margin-top:2px;">${ic('map-pin',11)} Fastighet: ${esc(_offPropertyDisplayText(off))}</div>` : ''}
@@ -4855,7 +4856,7 @@ const OfferDetailPage = {
             const included = _extraIncludedInTotal(e);
             return `<div class="off-line-row">
             <div class="off-line-row-header">
-              <div class="off-line-row-name">${e.description||'—'}${!included?` <span class="bdg bdg-purple off-billing-badge">Ingår ej i totalsumman</span>`:''}</div>
+              <div class="off-line-row-name">${esc(e.description||'—')}${!included?` <span class="bdg bdg-purple off-billing-badge">Ingår ej i totalsumman</span>`:''}</div>
               <div class="off-line-row-price"><span class="off-line-kundpris">${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">ex. moms</span></div>
             </div>
             <div class="off-line-desc">${e.qty||1} ${e.unit||'st'} × ${fmt(e.unitPrice||0)} kr</div>
@@ -4887,7 +4888,7 @@ const OfferDetailPage = {
         return _resolveSectionOrder(off.sectionOrder).map(id => renderers[id] || '').join('');
       })()}
 
-      ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${off.internalNote}</div>`:''}
+      ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${esc(off.internalNote)}</div>`:''}
 
       ${(() => {
         const attCount = (state.offerAttachments || []).filter(a => a.offerId === off.id && a.active !== false).length;
@@ -5182,7 +5183,7 @@ const OfferDetailPage = {
     }
     const rows = actions.map((a, i) => `<button type="button" role="menuitem" tabindex="-1" id="offd-status-item-${i}"
         class="off-status-popover-item" onclick="${a.onClick};OfferDetailPage._statusMenuClose();">
-        <span class="off-status-popover-item-icon">${ic(a.icon,13)}</span><span class="off-status-popover-item-label">${a.label}</span>
+        <span class="off-status-popover-item-icon">${ic(a.icon,13)}</span><span class="off-status-popover-item-label">${esc(a.label)}</span>
       </button>`).join('');
     return `<div class="off-status-wrap">
       <button type="button" id="offd-status-btn" class="off-status-btn"
@@ -5720,7 +5721,7 @@ const OfferDetailPage = {
               <div style="flex:1;min-width:0;">
                 <div style="font-size:12px;font-weight:700;color:${isOverdue?'var(--rd)':'var(--navy)'};">${dateStr}${isOverdue?' <span class="bdg bdg-red" style="font-size:9px;margin-left:4px;">Försenad</span>':''}</div>
                 ${a.note?`<div style="font-size:11px;color:var(--tx);margin-top:1px;">${esc(a.note)}</div>`:''}
-                <div style="font-size:10px;color:var(--mt);margin-top:1px;">${ic('user',9)} ${staffName}${a.priority&&a.priority!=='normal'?' · '+a.priority:''}</div>
+                <div style="font-size:10px;color:var(--mt);margin-top:1px;">${ic('user',9)} ${esc(staffName)}${a.priority&&a.priority!=='normal'?' · '+a.priority:''}</div>
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0;">
                 <button class="btn bxs bsu" style="font-size:11px;padding:3px 7px;" onclick="OfferDetailPage._completeActivity('${a.id}','${off.id}')" title="Markera klar">${ic('check',12)} Klar</button>
@@ -5736,7 +5737,7 @@ const OfferDetailPage = {
           : tl.map(e => `<div class="off-tl-item">
               <span class="off-tl-dot" style="color:${typeColor[e.type]||'var(--mt)'};">${ic(typeIcon[e.type]||'circle',10)}</span>
               <div class="off-tl-body">
-                <div class="off-tl-text">${e.text||''}</div>
+                <div class="off-tl-text">${esc(e.text||'')}</div>
                 <div class="off-tl-meta">${fmtDateTime(e.ts)} · ${e.user||''}</div>
               </div>
             </div>`).join('')}
@@ -5758,7 +5759,7 @@ const OfferDetailPage = {
     if (type === 'followup' || type === 'reminder') {
       const tomorrow = _ds(1);
       const staffOpts = (state.staff || []).filter(s => s.active !== false)
-        .map(s => `<option value="${s.id}"${state.currentUser && s.id === state.currentUser.id ? ' selected' : ''}>${s.firstName} ${s.lastName}</option>`).join('');
+        .map(s => `<option value="${s.id}"${state.currentUser && s.id === state.currentUser.id ? ' selected' : ''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`).join('');
       const actType = type === 'followup' ? 'followup' : 'call';
       Modal.open({
         title: `${ic('bell',14)} ${label}`,
@@ -6013,7 +6014,7 @@ const OfferDetailPage = {
         ${tips.map(t=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--bg);border-radius:var(--rs);">
           <span style="color:${t.color};flex-shrink:0;margin-top:1px;">${ic(t.icon,14)}</span>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px;">${t.title}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px;">${esc(t.title)}</div>
             <div style="font-size:11px;color:var(--mt);line-height:1.4;">${esc(t.body)}</div>
             ${t.cta?`<button type="button" class="btn bs bxs" style="margin-top:6px;font-size:10px;" onclick="${t.ctaFn}">${t.cta}</button>`:''}
           </div>
@@ -6234,7 +6235,7 @@ td.fw{font-weight:600;color:#0d2b4e;}
     <div class="logo-info">
       <div class="logo-co">${esc2(co)}</div>
       ${coAddr?`<div class="logo-detail">${esc2(coAddr)}</div>`:''}
-      ${coPhone||coEmail?`<div class="logo-detail">${[coPhone?'Tel: '+esc2(coPhone):'',coEmail?esc2(coEmail):''].filter(Boolean).join('  ·  ')}</div>`:''}
+      ${coPhone||coEmail?`<div class="logo-detail">${esc([coPhone?'Tel: '+esc2(coPhone):'',coEmail?esc2(coEmail):''].filter(Boolean).join('  ·  '))}</div>`:''}
     </div>
   </div>
   <div class="off-meta">
@@ -6251,7 +6252,7 @@ td.fw{font-weight:600;color:#0d2b4e;}
   <div class="party">
     <div class="p-lbl">Offereras till</div>
     <div class="p-name">${esc2(cuName)}</div>
-    <div class="p-det">${[cuContact?esc2(cuContact):'', cuPhone?'Tel: '+esc2(cuPhone):'', cuEmail?esc2(cuEmail):'', cuAddr?esc2(cuAddr):''].filter(Boolean).join('<br>')}</div>
+    <div class="p-det">${esc([cuContact?esc2(cuContact):'', cuPhone?'Tel: '+esc2(cuPhone):'', cuEmail?esc2(cuEmail):'', cuAddr?esc2(cuAddr):''].filter(Boolean).join('<br>'))}</div>
     ${(function(){
       /* OFFER CORE R1.2 — BLOCKER 3: printPdf() visade tidigare ALDRIG
          offertens fastighet alls (bara kundens EGEN adress ovan, som
@@ -6264,7 +6265,7 @@ td.fw{font-weight:600;color:#0d2b4e;}
   </div>
   <div class="party">
     <div class="p-lbl">Utfärdare</div>
-    <div class="p-det">${[orgNr?'Org.nr: '+esc2(orgNr):''].filter(Boolean).join('<br>')}</div>
+    <div class="p-det">${esc([orgNr?'Org.nr: '+esc2(orgNr):''].filter(Boolean).join('<br>'))}</div>
   </div>
 </div>
 
@@ -7948,9 +7949,9 @@ const PropertiesPage = {
               <div class="item-row">
                 ${SelectionModel.checkboxHtml(p.id, p.name)}
                 <div style="flex:1;min-width:0;">
-                  <div class="item-title">${p.name}</div>
-                  <div class="item-sub">${[p.address, p.city].filter(Boolean).join(', ')}${cuName!=='—'?' · '+cuName:''}</div>
-                  ${p.type||p.area ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${[p.type,p.area?p.area+' m²':null].filter(Boolean).join(' · ')}</div>` : ''}
+                  <div class="item-title">${esc(p.name)}</div>
+                  <div class="item-sub">${esc([p.address, p.city].filter(Boolean).join(', '))}${cuName!=='—'?' · '+esc(cuName):''}</div>
+                  ${p.type||p.area ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc([p.type,p.area?p.area+' m²':null].filter(Boolean).join(' · '))}</div>` : ''}
                 </div>
                 ${aos > 0 ? `<span class="bdg bdg-sky" style="align-self:flex-start;">${aos} AO</span>` : ''}
                 <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna fastighet" onclick="event.stopPropagation();PropertiesPage.openDetail('${p.id}')">${ic('chevron-right',16)}</button>
@@ -8182,7 +8183,7 @@ const ArticlesPage = {
             <div style="flex:1;min-width:0;">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
                 ${a.active===false?`<span style="width:6px;height:6px;border-radius:50%;background:var(--mt);flex-shrink:0;display:inline-block;"></span>`:''}
-                <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${a.articleNumber} – </span>` : ''}${a.name}</span>
+                <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${esc(a.articleNumber)} – </span>` : ''}${esc(a.name)}</span>
               </div>
               <div class="item-sub">
                 ${fmt(a.sellPrice)} kr/${a.unit} inkl ${_normVat(a.vatRate)}% moms
@@ -8577,8 +8578,8 @@ const StaffPage = {
               <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
                 <div style="width:38px;height:38px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc-text);flex-shrink:0;">${(s.firstName||'?').charAt(0)}${(s.lastName||'').charAt(0)}</div>
                 <div>
-                  <div class="item-title">${s.firstName} ${s.lastName}</div>
-                  <div class="item-sub">${s.title||'—'}${s.phone?' · '+s.phone:''}</div>
+                  <div class="item-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
+                  <div class="item-sub">${esc(s.title||'—')}${s.phone?' · '+esc(s.phone):''}</div>
                 </div>
               </div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
@@ -8616,7 +8617,7 @@ const StaffPage = {
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
             <div id="sf-title-display" style="flex:1;">
               ${s && s.title
-                ? `<span class="chip on">${s.title}</span>`
+                ? `<span class="chip on">${esc(s.title)}</span>`
                 : '<span style="font-size:12px;color:var(--mt);">Ingen titel vald</span>'}
             </div>
             <button type="button" class="btn bs bsm" onclick="StaffPage._openTitlePicker()">
@@ -8625,7 +8626,7 @@ const StaffPage = {
           </div>
           <input type="hidden" id="sf-title" value="${s?s.title||'':''}">
           ${s && s.title && !activeTitles.some(t => t.name === s.title)
-            ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ "${s.title}" finns inte bland aktiva titlar</div>`
+            ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ "${esc(s.title)}" finns inte bland aktiva titlar</div>`
             : ''}` :
           `<div class="nbox" style="font-size:12px;">Inga aktiva titlar. <button type="button" class="btn bghost bxs" style="margin-left:4px;" onclick="Modal.close();Router.showPage('pg-admin')">Gå till Admin ${ic('arrow-right',10)}</button></div>
           <input type="hidden" id="sf-title" value="${s?s.title||'':''}">`
@@ -8876,7 +8877,7 @@ const ServiceTemplatesPage = {
                   ${ic(s.icon||'zap',16)}
                 </div>
                 <div style="flex:1;min-width:0;">
-                  <div style="font-size:13px;font-weight:700;color:var(--navy);">${s.name}${s.active===false?' <span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>':''}</div>
+                  <div style="font-size:13px;font-weight:700;color:var(--navy);">${esc(s.name)}${s.active===false?' <span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>':''}</div>
                   <div style="font-size:11px;color:var(--mt);">${s.category||'—'} · ${ServiceTemplateService.modelLabel(s.pricingModel)} · Min ${fmt(s.minChargeExVat||0)} kr</div>
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -9193,10 +9194,10 @@ const ServiceTemplatesPage = {
     });
     const redOpts = [{v:'ingen',l:'Ingen'},{v:'rut',l:'RUT 50%'},{v:'rot',l:'ROT 30%'}];
     const fieldHtml = (svc.fields||[]).filter(f=>!f.isRut&&!f.isRot).map(f => {
-      if (f.type === 'number') return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
+      if (f.type === 'number') return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${esc(f.label)}</label>
         <input type="number" value="${f.def||0}" min="0" style="width:100%;"
           oninput="ServiceTemplatesPage._testFields['${f.id}']=parseFloat(this.value)||0;ServiceTemplatesPage._updateTestPreview('${id}')"></div>`;
-      if (f.type === 'chips') return `<div style="margin-bottom:6px;"><div style="font-size:10px;font-weight:700;color:var(--mt);margin-bottom:3px;">${f.label}</div>
+      if (f.type === 'chips') return `<div style="margin-bottom:6px;"><div style="font-size:10px;font-weight:700;color:var(--mt);margin-bottom:3px;">${esc(f.label)}</div>
         <div style="display:flex;flex-wrap:wrap;gap:3px;">
           ${(f.opts||[]).map(o=>`<button type="button"
             style="padding:3px 8px;border-radius:12px;border:1.5px solid var(--br);font-size:10px;cursor:pointer;background:${o===(f.def||f.opts[0])?'var(--navy)':'#fff'};color:${o===(f.def||f.opts[0])?'#fff':'var(--tx)'};"
@@ -9208,12 +9209,12 @@ const ServiceTemplatesPage = {
       if (f.type === 'pricegroup') {
         const pgs = (state.priceGroups || []).filter(p => p.billingType !== 'monthly');
         const defVal = f.def || (pgs[0]&&pgs[0].id) || '';
-        return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
+        return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${esc(f.label)}</label>
           <select style="width:100%;" onchange="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._testFields['rate']=(state.priceGroups||[]).filter(p=>p.billingType!=='monthly').find(p=>p.id===this.value)?.hourRate||0;ServiceTemplatesPage._updateTestPreview('${id}')">
             ${pgs.map(pg=>`<option value="${pg.id}" ${(f.def||defVal)===pg.id?'selected':''}>${esc(pg.name)} (${fmt(pg.hourRate)} kr/tim)</option>`).join('')}
           </select></div>`;
       }
-      return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${f.label}</label>
+      return `<div class="fg" style="margin-bottom:6px;"><label style="font-size:10px;">${esc(f.label)}</label>
         <input type="text" value="" style="width:100%;"
           oninput="ServiceTemplatesPage._testFields['${f.id}']=this.value;ServiceTemplatesPage._updateTestPreview('${id}')"></div>`;
     }).join('');
@@ -9320,7 +9321,7 @@ const AdminPage = {
       { key: 'epost',          label: `${ic('mail',12)} E-post-mallar`             }
     ];
     const tabBar = `<div class="admin-tabs">
-      ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.label}</button>`).join('')}
+      ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${esc(t.label)}</button>`).join('')}
     </div>`;
 
     const sections = {};
@@ -9341,12 +9342,12 @@ const AdminPage = {
             <div style="font-size:12px;font-weight:800;color:var(--navy);">Uppgifter</div>
             <button class="btn bs bxs" onclick="AdminPage.openEditCompany()">${ic('pencil',13)} Redigera</button>
           </div>
-          <div class="dr"><span class="dk">Företag</span><span class="dv">${s.companyName || '—'}</span></div>
+          <div class="dr"><span class="dk">Företag</span><span class="dv">${esc(s.companyName || '—')}</span></div>
           <div class="dr"><span class="dk">Slogan</span><span class="dv">${s.slogan || '—'}</span></div>
           <div class="dr"><span class="dk">Telefon</span><span class="dv">${s.companyPhone || '—'}</span></div>
           <div class="dr"><span class="dk">E-post</span><span class="dv">${s.companyEmail || '—'}</span></div>
           <div class="dr"><span class="dk">Adress</span><span class="dv">${s.companyAddress || '—'}</span></div>
-          <div class="dr"><span class="dk">Org.nr</span><span class="dv">${s.orgNr || '—'}</span></div>
+          <div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(s.orgNr || '—')}</span></div>
           <div class="dr"><span class="dk">Moms-nr</span><span class="dv">${s.vatNr || '—'}</span></div>
         </div>
 
@@ -9567,7 +9568,7 @@ const AdminPage = {
             ${OffersPage._T.map(t=>`<div style="padding:7px 0;border-bottom:1px solid var(--bg);display:flex;align-items:center;gap:8px;">
               <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--acc-text);flex-shrink:0;">${ic(t.icon,13)}</span>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;">${t.name}</div>
+                <div style="font-size:12px;font-weight:700;">${esc(t.name)}</div>
                 <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${_normVat(t.vatRate)} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
               </div>
               <span class="bdg bdg-green" style="font-size:9px;">Aktiv</span>
@@ -10040,7 +10041,7 @@ const AdminPage = {
       { key:'declined',    label:'Tack för återkoppling'   },
       { key:'new_ao',      label:'Ny arbetsorder (intern)' },
       { key:'övrigt',      label:'Övrigt'                  }
-    ].map(x=>`<option value="${x.key}"${(t?.type||'övrigt')===x.key?' selected':''}>${x.label}</option>`).join('');
+    ].map(x=>`<option value="${x.key}"${(t?.type||'övrigt')===x.key?' selected':''}>${esc(x.label)}</option>`).join('');
 
     Modal.open({
       title: isNew ? ic('mail',13) + ' Ny e-post-mall' : ic('pencil',13) + ' Redigera e-post-mall',
@@ -10642,7 +10643,7 @@ const AdminPage = {
     Modal.open({
       title: 'Företagsinformation',
       body: `
-        <div class="fg"><label>Företagsnamn</label><input id="co-name" value="${s.companyName||''}"></div>
+        <div class="fg"><label>Företagsnamn</label><input id="co-name" value="${esc(s.companyName||'')}"></div>
         <div class="fg"><label>Slogan / verksamhetsbeskrivning</label><input id="co-slogan" value="${s.slogan||''}" placeholder="Fastighetsservice & Förvaltning"></div>
         <div class="g2">
           <div class="fg"><label>Telefon</label><input id="co-phone" value="${s.companyPhone||''}" type="tel"></div>
@@ -10651,7 +10652,7 @@ const AdminPage = {
         <div class="fg"><label>Adress</label><input id="co-addr" value="${s.companyAddress||''}"></div>
         <div class="fg"><label>Webbsida</label><input id="co-web" value="${s.website||''}" type="url" placeholder="https://"></div>
         <div class="g2">
-          <div class="fg"><label>Org.nr</label><input id="co-orgnr" value="${s.orgNr||''}"></div>
+          <div class="fg"><label>Org.nr</label><input id="co-orgnr" value="${esc(s.orgNr||'')}"></div>
           <div class="fg"><label>Moms-nr</label><input id="co-vatnr" value="${s.vatNr||''}"></div>
         </div>`,
       buttons: [
@@ -10731,8 +10732,8 @@ const AdminPage = {
       body: staffList.map(s => `
         <div class="crow">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${s.firstName} ${s.lastName}</div>
-            <div style="font-size:11px;color:var(--mt);">${s.title||''} ${s.email?'· '+s.email:''}</div>
+            <div style="font-size:13px;font-weight:700;">${esc(s.firstName)} ${esc(s.lastName)}</div>
+            <div style="font-size:11px;color:var(--mt);">${esc(s.title||'')} ${s.email?'· '+esc(s.email):''}</div>
           </div>
           <span class="bdg ${s.active?'bdg-green':'bdg-grey'}">${s.active?'Aktiv':'Inaktiv'}</span>
         </div>`).join(''),
@@ -10763,7 +10764,7 @@ const AdminPage = {
       body: staffWithTitle.map(s => `
         <div class="crow" onclick="Modal.close();Router.showPage('pg-staff')">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${s.firstName} ${s.lastName}</div>
+            <div style="font-size:13px;font-weight:700;">${esc(s.firstName)} ${esc(s.lastName)}</div>
             <div style="font-size:11px;color:var(--mt);">${s.email||''}</div>
           </div>
           <span class="bdg ${s.active?'bdg-green':'bdg-grey'}">${s.active?'Aktiv':'Inaktiv'}</span>
@@ -10976,7 +10977,7 @@ const AdminPage = {
         <div style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--br);">
             <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${g.label}</span>
+              <span style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${esc(g.label)}</span>
               <span class="bdg bdg-${groupCheckedCount>0?'sky':'grey'}" style="font-size:9px;">${groupCheckedCount}/${g.perms.length}</span>
             </div>
             <button type="button" class="btn bghost bxs" style="font-size:10px;padding:2px 7px;"

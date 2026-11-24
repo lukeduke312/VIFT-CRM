@@ -80,7 +80,7 @@ const TimePage = {
       ? (state.workOrders||[]).filter(a => a.customerId === cuId && !['avbruten'].includes(a.status))
       : (state.workOrders||[]).filter(a => !['avbruten'].includes(a.status));
     aoSel.innerHTML = `<option value="">— Välj AO —</option>` +
-      filtered.map(a => `<option value="${a.id}" ${curr===a.id?'selected':''}>${a.id} – ${a.title}</option>`).join('');
+      filtered.map(a => `<option value="${a.id}" ${curr===a.id?'selected':''}>${a.id} – ${esc(a.title)}</option>`).join('');
   },
 
   /* V3: väljer man arbetsorder fylls kunden i (om den inte redan är vald). */
@@ -108,7 +108,7 @@ const TimePage = {
           <select id="ci-ao">
             <option value="">— Utan AO-koppling —</option>
             ${(state.workOrders||[]).filter(a=>['planerad','pågående','pool','nytt'].includes(a.status)).map(a=>
-              `<option value="${a.id}">${a.id} – ${a.title}</option>`
+              `<option value="${a.id}">${a.id} – ${esc(a.title)}</option>`
             ).join('')}
           </select></div>`,
       buttons: [
@@ -135,14 +135,14 @@ const TimePage = {
     const ao = aoId ? getAO(aoId) : null;
     const cu = ao ? getCu(ao.customerId) : null;
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+      `<option value="${p.id}">${esc(p.name)} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
     Modal.open({
       title: 'Stämpla ut',
       body: `
         <div class="ibox" style="margin-bottom:12px;">${ic('clock',14)} Tid: ${TimeService.fmtDuration(mins)}</div>
-        ${ao ? `<div class="dr"><span class="dk">AO</span><span class="dv">${ao.id} – ${ao.title}</span></div>` : ''}
-        ${cu ? `<div class="dr"><span class="dk">Kund</span><span class="dv">${CustomerService.displayName(cu)}</span></div>` : ''}
+        ${ao ? `<div class="dr"><span class="dk">AO</span><span class="dv">${ao.id} – ${esc(ao.title)}</span></div>` : ''}
+        ${cu ? `<div class="dr"><span class="dk">Kund</span><span class="dv">${esc(CustomerService.displayName(cu))}</span></div>` : ''}
         <div class="fg"><label>Prisgrupp</label>
           <select id="co-pg"><option value="">— Ingen —</option>${pgOptions}</select></div>
         <div class="fg"><label>Kommentar</label>
@@ -233,7 +233,7 @@ const TimePage = {
           <select id="mt-pg">
             <option value="">— Välj —</option>
             ${(state.priceGroups||[]).filter(p=>p.active).map(p=>
-              `<option value="${p.id}">${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+              `<option value="${p.id}">${esc(p.name)} – ${fmt(p.hourRate)} kr/tim</option>`
             ).join('')}
           </select>
         </div>
@@ -245,9 +245,9 @@ const TimePage = {
       ${(typeof Auth !== 'undefined' && Auth.can('payroll_manage')) ? `
       <div class="fg"><label>Utförd av <span style="color:var(--sky);font-size:9px;">Lönebehörighet</span></label>
         <select id="mt-staff">
-          <option value="">— Inloggad användare (${state.currentUser.firstName}) —</option>
+          <option value="">— Inloggad användare (${esc(state.currentUser.firstName)}) —</option>
           ${(state.staff||[]).filter(s=>s.active).map(s=>
-            `<option value="${s.id}:${s.firstName} ${s.lastName}">${s.firstName} ${s.lastName}${s.title?' – '+s.title:''}</option>`
+            `<option value="${s.id}:${esc(s.firstName)} ${esc(s.lastName)}">${esc(s.firstName)} ${esc(s.lastName)}${s.title?' – '+esc(s.title):''}</option>`
           ).join('')}
         </select>
       </div>` : ''}
@@ -257,13 +257,13 @@ const TimePage = {
             ? `<input type="text" disabled value="${esc(cuName)}"><input type="hidden" id="mt-customer" value="${esc(opts.customerId||'')}">`
             : `<select id="mt-customer" onchange="TimePage._customerChanged()">
                 <option value="">— Välj kund —</option>
-                ${(state.customers||[]).map(c=>`<option value="${c.id}">${CustomerService.displayName(c)}</option>`).join('')}
+                ${(state.customers||[]).map(c=>`<option value="${c.id}">${esc(CustomerService.displayName(c))}</option>`).join('')}
               </select>`}
         </div>
         <div class="fg"><label>Arbetsorder${allowedAoIds?'':' (valfritt)'}</label>
           <select id="mt-ao" onchange="TimePage._aoChanged()">
             ${!allowedAoIds ? `<option value="">— Välj AO —</option>` : ''}
-            ${aoList.map(a => `<option value="${a.id}">${a.id} – ${a.title}</option>`).join('')}
+            ${aoList.map(a => `<option value="${a.id}">${a.id} – ${esc(a.title)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -386,10 +386,10 @@ const TimePage = {
         <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
           <div style="flex:1;min-width:0;">
             <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}${t.attested ? ` <span class="bdg bdg-green" style="font-size:9px;">${ic('lock',9)} Attesterad</span>` : ''}</div>
-            <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+t.comment:''}</div>
+            <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+esc(t.comment):''}</div>
             <div style="font-size:11px;color:var(--sky);">
               ${cu?CustomerService.displayName(cu):''}
-              ${ao?' · '+ao.id+' '+ao.title:''}
+              ${ao?' · '+ao.id+' '+esc(ao.title):''}
               ${t.priceGroupName?' · '+t.priceGroupName:''}
             </div>
             ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
@@ -408,13 +408,13 @@ const TimePage = {
     const t = (state.timeEntries||[]).find(x=>x.id===id);
     if (!t) return;
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${p.name} – ${fmt(p.hourRate)} kr/tim</option>`
+      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim</option>`
     ).join('');
     const cuOptions = (state.customers||[]).map(c =>
-      `<option value="${c.id}" ${t.customerId===c.id?'selected':''}>${CustomerService.displayName(c)}</option>`
+      `<option value="${c.id}" ${t.customerId===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`
     ).join('');
     const aoOptions = (state.workOrders||[]).filter(a=>!['avbruten'].includes(a.status)).map(a=>
-      `<option value="${a.id}" ${t.aoId===a.id?'selected':''}>${a.id} – ${a.title}</option>`
+      `<option value="${a.id}" ${t.aoId===a.id?'selected':''}>${a.id} – ${esc(a.title)}</option>`
     ).join('');
 
     Modal.open({
