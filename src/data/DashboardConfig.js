@@ -84,10 +84,34 @@ const DashboardConfig = {
      Moduler som inte listas visas med visible:false (kan aktiveras manuellt).
   ─────────────────────────────────────────────────────────────────────── */
   ROLE_DEFAULTS: {
-    admin:    ['overdue_alert','todos','operations','ops_map','today','pool','stamp','activities','my_tasks','rondering','recurring','kpi','ao_categories','sales','offers','activity_log','quickbtns'],
-    chef:     ['overdue_alert','todos','operations','ops_map','today','pool','stamp','activities','my_tasks','rondering','recurring','kpi','ao_categories','sales','offers','activity_log','quickbtns'],
-    personal: ['overdue_alert','ops_map','today','pool','stamp','activities','my_tasks','rondering','kpi','quickbtns'],
+    /* V3 omgång 2: dagens tavla överst i Dashboard.render() visar redan
+       dagens jobb, nyckeltal, stämpling och snabbåtgärder — de widgetar som
+       upprepade samma sak (operations, today, stamp, kpi, quickbtns) ingår
+       inte längre i standardlayouten för admin/chef/personal. De finns kvar
+       och kan läggas till via "Anpassa". Sparade personliga layouter
+       påverkas inte. Ordningen ger hela rader i 12-kolumnsgridet (se
+       V3_DEFAULT_SPANS). */
+    admin:    ['overdue_alert','todos','ops_map','pool','my_tasks','rondering','recurring','activities','sales','offers','activity_log','ao_categories'],
+    chef:     ['overdue_alert','todos','ops_map','pool','my_tasks','rondering','recurring','activities','sales','offers','activity_log','ao_categories'],
+    personal: ['overdue_alert','my_tasks','pool','ops_map','activities','rondering'],
     ekonomi:  ['overdue_alert','todos','kpi','offers','activity_log','quickbtns'],
+  },
+
+  /* V3: standardbredder för rollstandarden (ger fyllda rader). Gäller bara
+     användare utan sparad personlig layout. */
+  V3_DEFAULT_SPANS: {
+    ops_map: 9, pool: 3, my_tasks: 3, rondering: 6, recurring: 3,
+    sales: 6, offers: 6, activity_log: 6, ao_categories: 6,
+  },
+  V3_ROLE_SPANS: {
+    personal: { my_tasks: 6, pool: 6, ops_map: 12, rondering: 12 },
+    ekonomi: { offers: 6, activity_log: 6 },
+  },
+  defaultSpan(id, roleId) {
+    const m = this.MODULES[id];
+    const r = (this.V3_ROLE_SPANS[roleId] || {})[id];
+    const v = r !== undefined ? r : this.V3_DEFAULT_SPANS[id];
+    return this.clampSpan(v !== undefined ? v : this.sizeToSpan(m && m.defaultSize), id);
   },
 
   /* V51A R1 §3: kategori-prioritetsordning som den fysiska renderings-
@@ -130,7 +154,7 @@ const DashboardConfig = {
     const result = [];
     ids.forEach((id, i) => {
       const m = this.MODULES[id];
-      if (m) result.push({ id, visible:true, span:this.clampSpan(this.sizeToSpan(m.defaultSize), id), order:i });
+      if (m) result.push({ id, visible:true, span:this.defaultSpan(id, roleId), order:i });
     });
     let next = ids.length;
     allIds.forEach(id => {

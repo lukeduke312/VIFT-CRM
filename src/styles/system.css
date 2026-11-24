@@ -1174,3 +1174,9 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
   .ibtn { width: 38px; height: 38px; }
   .chip { height: 36px; }
 }
+
+/* Dashboard: widgetar på samma rad får samma höjd (inga trappsteg). */
+.dash-layout { align-items: stretch; }
+.dash-layout > [data-sec-hdr] { align-self: start; }
+.dash-layout > [data-sec] { display: flex; flex-direction: column; min-width: 0; }
+.dash-layout > [data-sec] > .card { flex: 1 1 auto; }

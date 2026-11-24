@@ -17,9 +17,8 @@ const Dashboard = {
     /* V3: på mobil börjar de tunga sektionerna hopfällda — dagens tavla och
        "Kräver åtgärd" räcker för att komma igång. Användarens egna val
        (sparade i sessionen) gäller före standardvärdet. */
-    if (!stored && typeof window !== 'undefined' && window.innerWidth < 768) {
-      this._collapsed = { 'idag-drift': true, 'verksamhet': true };
-    }
+    /* V3 omgång 2: inget hopfällt från start på mobil — viktiga funktioner
+       ska inte gömmas; standardlayouten är i stället kortare. */
   },
 
   _saveCollapsed() {
@@ -72,6 +71,9 @@ const Dashboard = {
        (ingen sparad personlig layout ännu) behåller den befintliga,
        kategorigrupperade visuella hierarkin precis som innan V51B. */
     const isCustomLayout = DashboardConfig.hasCustomLayout(layoutUserId);
+
+    // Tavlan visar AO-nyckeltal för den som får se arbetsordrar (se _todayBoard)
+    this._boardTiles = Auth.can('ao_view_all') || Auth.can('ao_view_own');
 
     // Bygg widgets i rätt ordning, filtrerat på behörighet
     this._loadCollapsed();
@@ -1889,7 +1891,11 @@ const Dashboard = {
        och beräknas medvetet kvar från `allAos`, oskopat mot AO-ägande. */
     const aos = this._scopeWorkOrdersForCurrentUser(allAos, { includeSharedPool: true });
 
-    if (Auth.canAny(['ao_view_all','ao_view_own'])) {
+    /* V3: när dagens tavla visar nyckeltalen (akuta, försenade, att
+       fakturera) upprepas de inte här — "Kräver åtgärd" visar då det
+       tavlan inte visar (offerter, säljchanser, uppföljningar). */
+    const inBoard = !!this._boardTiles;
+    if (Auth.canAny(['ao_view_all','ao_view_own']) && !inBoard) {
       const akut = aos.filter(a => a.priority==='akut' && !['klar','fakturerad','avbruten'].includes(a.status));
       if (akut.length > 0) todos.push({
         icon:'alert-triangle', iconCls:'red', cls:'urgent',
@@ -1899,9 +1905,8 @@ const Dashboard = {
         onClick:"Router.showPage('pg-ao',{filter:'akut'})"
       });
 
-      const late = aos.filter(a =>
-        ['planerad','pågående'].includes(a.status) && a.scheduledDate && a.scheduledDate < today
-      );
+      /* Samma definition som AO-listans "Försenade" som raden länkar till. */
+      const late = aos.filter(a => WorkOrderService.isOverdue(a, today));
       if (late.length > 0) todos.push({
         icon:'clock', iconCls:'orange',
         title:'Försenade arbetsorder',
@@ -1911,8 +1916,10 @@ const Dashboard = {
       });
     }
 
-    if (Auth.canAny(['invoice_view','invoice_create'])) {
-      const readyBill = allAos.filter(a => a.status==='klar' && !a.invoiceId);
+    if (Auth.canAny(['invoice_view','invoice_create']) && !inBoard) {
+      /* Samma urval som AO-listans "Att fakturera" som raden länkar till. */
+      let _r = null;
+      const readyBill = allAos.filter(a => a.status==='klar' && !a.invoiceId && WorkOrderService._hasBillableContent(a, (_r = _r || WorkOrderService.billingStatusResolver())));
       if (readyBill.length > 0) todos.push({
         icon:'receipt', iconCls:'orange',
         title:'Klara ordrar utan fakturaunderlag',
