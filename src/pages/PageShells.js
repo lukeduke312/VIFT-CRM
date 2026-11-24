@@ -4617,7 +4617,8 @@ const OfferDetailPage = {
       cu && cu.phone   ? _fa('phone','var(--blue)','Telefon', cu.phone) : '',
       cu && (cu.address||cu.zip||cu.city) ? _fa('building-2','var(--mt)','Adress', [cu.address,cu.zip,cu.city].filter(Boolean).join(', ')) : '',
       off.createdAt    ? _fa('calendar','var(--mt)','Datum', fmtDate(off.createdAt)) : '',
-      off.validUntil   ? _fa('clock', expiring?'var(--or)':'var(--mt)', 'Giltig till', fmtDate(off.validUntil)+(expiring?` · ${daysLeft}d kvar`:''), expiring) : '',
+      /* V3 slutpolering: "Giltig till" visas inte här längre — huvudet
+         visar redan "Giltig t.o.m." med dagar kvar när den snart går ut. */
     ].filter(Boolean).join('');
 
     // ── Offer line rows (customer-facing, kalkyl hidden by default) ──
@@ -4759,12 +4760,8 @@ const OfferDetailPage = {
         </div>
       </div>
 
-      <!-- Mobile quick-info banner (hidden on desktop via CSS) -->
-      <div class="off-mobile-quick">
-        <span class="off-mobile-quick-name">${cuName}</span>
-        ${sbdg(off.status)}
-        <span style="font-size:11px;font-weight:700;color:var(--navy);margin-left:auto;">${priceDisp.isRecurring ? priceDisp.compact : 'Kund: ' + fmt(cust) + ' kr'}</span>
-      </div>
+      <!-- V3 slutpolering: mobilens snabbinforad (kund, status, belopp) är
+           borttagen — huvudet ovanför visar redan samma tre uppgifter. -->
 
       ${off.status === 'godkänd' && off.manualApproval ? `
       <div class="card" style="border-left:3px solid var(--gr);background:color-mix(in srgb,var(--gr) 6%,var(--bg));">
@@ -4830,7 +4827,7 @@ const OfferDetailPage = {
             <div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp ex. moms':'Summa ex. moms'}</span><strong>${fmt(rawExVat)} kr</strong></div>
             ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">${hasRecurringDetail?"Rabatt på engångsbelopp (":"Rabatt ("}${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
             <div class="off-detail-sum-row"><span class="dk">Moms</span><span>${fmt(vat)} kr</span></div>
-            <div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms'}</span><strong>${fmt(incVat)} kr</strong></div>
+            ${rutAmt?`<div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms'}</span><strong>${fmt(incVat)} kr</strong></div>`:'' /* utan avdrag är raden identisk med slutraden nedan */}
             ${rutAmt?`<div class="off-detail-sum-row rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>`:''}
             <div class="off-detail-sum-final">
               <span class="off-detail-sum-final-lbl">${rutAmt?'Kundpris inkl. moms':(hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms')}</span>

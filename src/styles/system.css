@@ -979,7 +979,10 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
 .doc-top .ao-back-btn { margin-left: -8px; }
 .doc-no { font-size: 12.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .doc-status { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.doc-status-sel { height: 30px; padding: 0 26px 0 10px; font-size: 12.5px; font-weight: 600; }
+.doc-status-sel { height: 30px; padding: 0 26px 0 10px; font-size: 12.5px; font-weight: 600; width: auto; min-width: max-content; flex-shrink: 0; }
+/* Huvudet är ljust: tillbakaknappen ska inte ärva den mörka herons vita stil (components.css). */
+.doc-head .ao-back-btn { background: transparent !important; color: var(--ink-2) !important; border-color: var(--line) !important; }
+.doc-head .ao-back-btn:hover { background: var(--hover) !important; }
 .doc-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px; flex-wrap: wrap; }
 .doc-who { min-width: 0; }
 .doc-kicker { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
@@ -1003,7 +1006,13 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
 .doc-link.is-ok { cursor: default; color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
 @media (max-width: 767px) {
   .doc-head { padding: 12px 14px 14px; }
+  .doc-top { gap: 8px; flex-wrap: nowrap; }
   .doc-top .ao-back-label { display: none; }
+  .doc-top .ao-back-btn { margin-left: -4px; flex-shrink: 0; }
+  .doc-no { flex-shrink: 0; }
+  .doc-status { min-width: 0; gap: 6px; }
+  /* 16 px behövs för att iOS inte ska zooma vid fokus; höjden hålls nere. */
+  .doc-status-sel { height: 36px; min-height: 36px; padding: 0 24px 0 10px; font-size: 16px; background-position: right 6px center; }
   .doc-title { font-size: 19px; }
   .doc-main { flex-direction: column; align-items: stretch; }
   .doc-figs { justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
@@ -1213,7 +1222,7 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
     order: 99; grid-column: 1 / -1;
     display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px;
     position: sticky; bottom: calc(var(--mobile-bottom-reserve, calc(78px + env(safe-area-inset-bottom))) + 10px); z-index: 20;
-    padding: 6px; max-width: 640px; width: 100%; justify-self: center;
+    padding: 6px; max-width: 640px; width: 100%; justify-self: center; margin-left: auto; margin-right: auto;
     background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-3);
   }
@@ -1277,6 +1286,22 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
   .bq-ao-header { margin-left: 10px !important; }
   .bq-source-row { margin-left: 22px !important; padding: 7px 8px; }
 }
+/* Slutpolering: varje arbetsorder är ett kort med sina underlag inuti, så
+   att det syns vilka rader som hör till vilken order. Kryssrutans storlek
+   och indrag följer nivån: kund (störst) → fastighet → AO → underlag. */
+.bq-ao-group { margin: 6px 0 0 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+.bq-ao-group > .bq-ao-header { margin: 0 !important; border: none !important; border-bottom: 1px solid var(--line) !important; border-radius: 0 !important; background: var(--surface-2) !important; }
+.bq-ao-group > .bq-ao-header:hover { background: var(--hover) !important; }
+.bq-ao-group > .bq-source-row { margin: 0 !important; padding: 8px 12px 8px 36px; border-bottom: 1px solid var(--line); border-radius: 0; }
+.bq-ao-group > .bq-source-row:last-child { border-bottom: none; }
+.bq-ao-group > .bq-source-row.selected { background: var(--accent-soft); }
+.bq-cust-header .bq-group-cb { width: 18px !important; height: 18px !important; }
+.bq-prop-header .bq-group-cb { width: 14px !important; height: 14px !important; }
+.bq-prop-group { margin-left: 4px; }
+@media (max-width: 767px) {
+  .bq-ao-group { margin-left: 6px; }
+  .bq-ao-group > .bq-source-row { padding: 7px 10px 7px 30px; }
+}
 
 /* ── Offertlistan (omgång 2): lugnare nyckeltal, vänsterställda ─── */
 .off-kpi-card { text-align: left; border-radius: var(--radius); border-color: var(--line); box-shadow: var(--shadow-1); padding: 12px 14px; }
@@ -1293,3 +1318,38 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
 }
 .job-card-v2-row { display: flex; gap: 6px; }
 .job-card-v2-row > .btn { flex: 1 1 0; min-width: 0; padding: 0 6px; text-decoration: none; }
+
+/* ── Mobildashboard (slutpolering): Kräver åtgärd direkt efter nyckeltalen,
+   långa listor med "Visa fler", kartan bakom "Visa karta". ─────────── */
+.dm-hidden { display: none !important; }
+.dm-map-hidden { display: none !important; }
+.dm-more { margin-top: 6px; color: var(--accent-ink); }
+@media (max-width: 767px) {
+  #dash-content { display: flex; flex-direction: column; gap: 12px; }
+  #dash-content > .dt, #dash-content > .dash-layout { display: contents; }
+  #dash-content > .dt > .dt-head { order: 1; }
+  #dash-content > .dt > .dt-tiles { order: 2; }
+  #dash-content > .dash-layout > [data-sec-hdr^="kr"] { order: 3; }
+  #dash-content > .dash-layout > [data-sec^="kr"] { order: 4; }
+  #dash-content > .dt > .dt-body { order: 5; }
+  #dash-content > .dash-layout > * { order: 10; }
+  #dash-content > .dash-layout > [data-sec-hdr^="kr"] { order: 3; }
+  #dash-content > .dash-layout > [data-sec^="kr"] { order: 4; }
+  .dash-ops-map-wrap { display: block; }
+  .dm-map-btn { margin-top: 8px; }
+}
+@media (max-width: 767px) {
+  .dt-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .dt-tile { grid-template-columns: 1fr; grid-template-rows: auto auto; padding: 8px 10px; row-gap: 0; }
+  .dt-tile-ico, .dt-tile-s { display: none; }
+  .dt-tile-n { font-size: 20px; }
+  .dt-tile-l { font-size: 11.5px; line-height: 1.25; }
+  .dash-layout [data-sec] .empty { flex-direction: row; justify-content: center; gap: 8px; padding: 10px 12px !important; border-style: dashed; }
+  .dash-layout [data-sec] .empty p { margin: 0; }
+  .dash-layout [data-sec] .empty > svg { width: 16px; height: 16px; margin: 0; }
+  .dash-layout .card-body { padding: 8px 12px 10px; }
+  .dash-layout .card-header { padding: 10px 12px 8px; }
+}
+/* Snabbåtgärdsraden döljs när ett fält i sidan har fokus (mobilens
+   tangentbord ska aldrig få raden ovanpå det man skriver i). */
+.aod:has(input:focus, textarea:focus, select:focus) .aod-qbar { display: none !important; }

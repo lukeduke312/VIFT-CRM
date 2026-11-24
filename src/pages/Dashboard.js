@@ -109,7 +109,7 @@ const Dashboard = {
         const span = typeof m.span === 'number' ? m.span : DashboardConfig.clampSpan(DashboardConfig.sizeToSpan(m.size), m.id);
         const cls = 'dgw-' + DashboardConfig.clampSpan(span, m.id);
         const collapsed = !isCustomLayout && !!this._collapsed[key];
-        parts.push(`<div class="${cls}" data-sec="${key}"${collapsed ? ' style="display:none;"' : ''}>${html}</div>`);
+        parts.push(`<div class="${cls}" data-sec="${key}" data-w="${m.id}"${collapsed ? ' style="display:none;"' : ''}>${html}</div>`);
       }
     }
 
@@ -131,6 +131,53 @@ const Dashboard = {
        igen innan den första kartinitieringen ens hunnit starta) aldrig kan
        smyga in fel data i ett äldre, redan schemalagt pass. */
     this._scheduleMapInit(sorted.some(m => m.id === 'ops_map'));
+    this._compactMobile(el);
+  },
+
+  /* V3 slutpolering — mobil (<768 px): långa listor visar tre rader och
+     "Visa fler (N)"; kartan ligger bakom "Visa karta". Inget tas bort och
+     ingen layoutinställning ändras — bara visningen på smal skärm.
+     "Kräver åtgärd" flyttas upp efter nyckeltalen med CSS-ordning. */
+  _compactMobile(root) {
+    if (!root || typeof window === 'undefined' || window.innerWidth >= 768) return;
+    /* Sekundär information (Verksamhet) visar färre rader; kategorifördelningen
+       bara som sammanfattning tills man väljer "Visa fördelning". */
+    const LIMITS = { sales: 2, offers: 2, ao_categories: 0 };
+    const clamp = (box, rows, limit) => {
+      const LIMIT = limit === undefined ? 3 : limit;
+      if (rows.length <= LIMIT || box.dataset.dmDone) return;
+      box.dataset.dmDone = '1';
+      rows.slice(LIMIT).forEach(r => r.classList.add('dm-hidden'));
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn bghost bsm bfull dm-more';
+      b.textContent = (LIMIT === 0 ? 'Visa fördelning (' : 'Visa fler (') + (rows.length - LIMIT) + ')';
+      b.onclick = (e) => { e.stopPropagation(); rows.forEach(r => r.classList.remove('dm-hidden')); b.remove(); };
+      rows[rows.length - 1].after(b);
+      if (LIMIT === 0) b.classList.add('dm-more-sum');
+    };
+    root.querySelectorAll('.dt-jobs').forEach(l => clamp(l, [...l.children].filter(c => c.classList.contains('dt-job'))));
+    root.querySelectorAll('.dash-ops-map-list').forEach(l => clamp(l, [...l.children]));
+    root.querySelectorAll('.dash-layout [data-sec] .card-body').forEach(cb => {
+      if (cb.closest('[data-sec^="kr"]')) return;   // Kräver åtgärd visas alltid i sin helhet
+      const w = (cb.closest('[data-w]') || {}).dataset || {};
+      let rows = [...cb.children].filter(c => !c.matches('.btn, button, .empty, .dm-more, .kpi-row') && !c.classList.contains('dash-ops-map-wrap'));
+      if (w.w === 'ao_categories') rows = rows.filter(r => r.hasAttribute('onclick'));   // sammanfattningsraden visas alltid
+      if (!rows.length) return;
+      if (w.w === 'ao_categories') { clamp(rows[0].parentElement, rows, 0); return; }
+      clamp(cb, rows, LIMITS[w.w]);
+    });
+    root.querySelectorAll('.dash-ops-map-canvas-wrap').forEach(w => {
+      if (w.dataset.dmDone) return;
+      w.dataset.dmDone = '1';
+      w.classList.add('dm-map-hidden');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn bs bsm bfull dm-map-btn';
+      b.innerHTML = ic('map-pin', 14) + ' Visa karta';
+      b.onclick = (e) => { e.stopPropagation(); w.classList.remove('dm-map-hidden'); b.remove(); try { window.dispatchEvent(new Event('resize')); } catch (x) {} };
+      w.before(b);
+    });
   },
 
   /* V51B — utbruten ur render() så att BÅDE normalläget och redigeringsläget

@@ -98,4 +98,10 @@ Allt nedan finns i `src/styles/system.css` (laddas sist) och `src/components/UiK
 
 **Mobila arbetsordrar (omgång 2).** Snabbåtgärdsraden `.aod-qbar` sitter fast ovanför bottenmenyn (`--mobile-bottom-reserve`) under 1 024 px. Sidans primära åtgärd har full bredd; sekundära är diskreta. Filter och flikar får aldrig ligga dolda utanför skärmen på 360–390 px — använd rullista eller radbrytning.
 
+**Slutpolering (avslutar V3:s designarbete).**
+- Mobildashboard (under 768 px): nyckeltal → Kräver åtgärd → dagens schema → personal idag → övriga widgetar. Listor visar tre rader (säljchanser och offerter två) och "Visa fler (N)"; kategorifördelningen visas som sammanfattning med "Visa fördelning"; kartan ligger bakom "Visa karta". Allt görs vid visning — sparade dashboardinställningar ändras inte, och dator ser ut som förut.
+- Snabbåtgärdsraden täcker aldrig innehåll: den ligger ovanför bottenmenyn och stämplingsraden (safe-area ingår i `--mobile-bottom-reserve`), sidans sista innehåll hamnar ovanför den, dialoger ligger ovanpå och den döljs när ett fält har fokus (tangentbord). E2E QBAR-01 kontrollerar 360, 390, 768 och 1 024 px.
+- Dokumenthuvuden visar kund, status, giltighet och belopp en gång; upprepa dem inte i rader eller faktarutor under huvudet. Statusväljare heter "Byt status" (ingen ellips som ser avklippt ut) och har 16 px text på mobil (iOS zoomar annars).
+- Fakturakön: varje arbetsorder är ett kort med sina underlag inuti; kryssrutans storlek och indrag följer nivån. En grupp med bara några markerade underlag visas delvis markerad. Urvalslogiken är oförändrad (E2E ECO-V3-02).
+
 **Granskning.** `node tests/e2e/measure.js` mäter sidhöjd och scrollavstånd till viktiga åtgärder. `VIFT_VISUAL_SIZES=alla node tests/e2e/visual.js capture <katalog>` tar alla vyer i 1920, 1366, 1024, 768, 390 och 360 px; `compare <före> <efter>` ger pixeldiff och `sheet` kontaktark.

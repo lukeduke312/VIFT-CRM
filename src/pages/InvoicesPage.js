@@ -186,6 +186,29 @@ const InvoicesPage = {
     }
 
     listEl.innerHTML = mainHtml + issuesHtml;
+    this._syncGroupCbs();
+    /* "Välj alla" och "Avmarkera" i markeringsfältet går direkt via
+       SelectionModel och ritar inte om listan; gruppernas kryssrutor
+       synkas därför efter varje klick medan kön visas. */
+    if (!this._groupSyncBound) {
+      this._groupSyncBound = true;
+      document.addEventListener('click', () => requestAnimationFrame(() => InvoicesPage._syncGroupCbs()), true);
+    }
+  },
+
+  /* Endast visning: gruppens kryssruta är markerad när alla dess underlag
+     är markerade och delvis markerad när bara några är det. Påverkar inte
+     urvalet — ett klick markerar fortfarande alla underlag i gruppen,
+     precis som förut (_onGroupCheckboxChange). */
+  _syncGroupCbs() {
+    const listEl = document.getElementById('bq-list');
+    if (!listEl) return;
+    listEl.querySelectorAll('.bq-group-cb').forEach(cb => {
+      const ids = (cb.getAttribute('data-group-ids') || '').split('|').filter(Boolean);
+      const n = ids.filter(id => SelectionModel.isSelected(id)).length;
+      cb.checked = ids.length > 0 && n === ids.length;
+      cb.indeterminate = n > 0 && n < ids.length;
+    });
   },
 
   _queueHeaderHtml(s) {
@@ -224,11 +247,11 @@ const InvoicesPage = {
     return customers;
   },
 
-  _groupCbHtml(ids) {
+  _groupCbHtml(ids, label) {
     const allSelected = ids.length > 0 && ids.every(id => SelectionModel.isSelected(id));
     return `<label class="sel-cb-wrap" onclick="event.stopPropagation()">
       <input type="checkbox" class="bq-group-cb" data-group-ids="${ids.join('|')}" ${allSelected?'checked':''}
-        aria-label="Markera grupp" onchange="event.stopPropagation();InvoicesPage._onGroupCheckboxChange(this)"
+        aria-label="${esc(label || 'Markera grupp')}" onchange="event.stopPropagation();InvoicesPage._onGroupCheckboxChange(this)"
         style="width:15px;height:15px;cursor:pointer;accent-color:var(--acc);">
     </label>`;
   },
@@ -257,7 +280,7 @@ const InvoicesPage = {
       return `
       <div class="bq-cust-group">
         <div class="bq-group-header bq-cust-header">
-          ${this._groupCbHtml(custIds)}
+          ${this._groupCbHtml(custIds, 'Markera alla underlag för ' + (cu.name || 'kunden'))}
           <span class="bq-group-title">${esc(cu.name)}</span>
           <span class="bq-group-amount">${fkr(cu.total)}</span>
         </div>
@@ -267,7 +290,7 @@ const InvoicesPage = {
           return `
           <div class="bq-prop-group">
             <div class="bq-group-header bq-prop-header">
-              ${this._groupCbHtml(propIds)}
+              ${this._groupCbHtml(propIds, 'Markera alla underlag för ' + (p.name || 'fastigheten'))}
               <span class="bq-group-title">${esc(p.name)}</span>
               <span class="bq-group-amount">${fkr(p.total)}</span>
             </div>
@@ -276,7 +299,7 @@ const InvoicesPage = {
               return `
               <div class="bq-ao-group">
                 <div class="bq-group-header bq-ao-header" onclick="Router.showPage('pg-ao-detail',{aoId:'${w.id}'})">
-                  ${this._groupCbHtml(woIds)}
+                  ${this._groupCbHtml(woIds, 'Markera alla underlag för ' + (w.id || 'arbetsordern'))}
                   <span class="bq-group-title">${w.id} · ${esc(w.title || '')}</span>
                   <span class="bq-group-amount">${fkr(w.total)}</span>
                 </div>
@@ -616,8 +639,8 @@ const InvoiceDetailPage = {
           <div class="doc-status">
             ${sbdg(inv.status)}
             ${Auth.can('invoice_create') && statusOpts.length > 1 ? `
-            <select class="doc-status-sel" aria-label="Ändra status" onchange="InvoiceDetailPage.setStatus(this.value)">
-              ${statusOpts.map(st=>`<option value="${st}" ${inv.status===st?'selected':''}>${st===inv.status?'Ändra status…':statusLabel(st)}</option>`).join('')}
+            <select class="doc-status-sel" aria-label="Byt status" onchange="InvoiceDetailPage.setStatus(this.value)">
+              ${statusOpts.map(st=>`<option value="${st}" ${inv.status===st?'selected':''}>${st===inv.status?'Byt status':statusLabel(st)}</option>`).join('')}
             </select>` : ''}
           </div>
         </div>
