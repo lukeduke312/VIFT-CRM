@@ -565,6 +565,9 @@ module.exports = [
         t.assert(li.length === 0, vp + ': filtrerad vy utan sidledsrullning ' + li.join('; '));
         const chips = await inView(s, '#pg-ao .ao-quick .chip, #ao-active-filters .aol-fchip, #ao-active-filters .aol-reset, #pg-ao .aol-status-sel select');
         t.assert(chips.every((c) => c.ok), vp + ': filterkontrollerna ligger inom skärmen ' + JSON.stringify(chips.filter((c) => !c.ok)));
+        const small = await s.eval(() => [...document.querySelectorAll('#pg-ao .ao-quick .chip, #ao-active-filters .aol-fchip button, #ao-active-filters .aol-reset, #ao-list .aol-pickbtn, #ao-list .aol-vbtn, #pg-ao .aol-status-sel select, #pg-ao .aol-bar button, #pg-ao .aol-bar select')]
+          .map((e) => ({ t: (e.textContent || e.getAttribute('aria-label') || '').trim().slice(0, 20), r: e.getBoundingClientRect() })).filter((x) => x.r.width > 0 && (x.r.height < 39.5 || x.r.width < 39.5)).map((x) => x.t + ' ' + Math.round(x.r.width) + '×' + Math.round(x.r.height)));
+        t.assert(small.length === 0, vp + ': tryckytor ≥ 40 px i verktygsrad, filter och resultatrad ' + JSON.stringify(small));
         // 4. Massval: Markera → tre rader → dölj en med filter → Ändra status via Åtgärder
         await s.page.locator('#ao-active-filters .aol-reset').click(); await s.settle(250);
         await s.page.locator('#ao-list .aol-pickbtn').click(); await s.settle(200);

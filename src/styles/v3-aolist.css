@@ -193,15 +193,21 @@ body:has(#_selbar) #pg-ao .aol-results { padding-bottom: 84px; }
   #pg-ao .ao-quick-row.aol-frow-quick .ao-quick { width: 100%; }
 
   #pg-ao .aol-summary { padding: 6px 6px 6px 10px; }
-  #pg-ao .aol-reset { min-height: 36px; }
-  #pg-ao .aol-fchip { height: 32px; }
-  #pg-ao .aol-fchip button { width: 30px; height: 30px; }
+  #pg-ao .aol-reset { min-height: 40px; }
+  #pg-ao .aol-fchip { height: 40px; padding-left: 12px; }
+  #pg-ao .aol-fchip button { width: 40px; height: 40px; margin-right: -2px; }
 
   #pg-ao .aol-countrow { padding: 0 2px 6px; }
   #pg-ao .aol-countrow-r { justify-content: flex-end; gap: 6px; }
   #pg-ao .aol-pickbtn { display: inline-flex; }
-  #pg-ao .aol-vbtn { height: 36px; width: 40px; padding: 0; justify-content: center; }
+  #pg-ao .aol-vbtn { height: 40px; width: 44px; padding: 0; justify-content: center; }
   #pg-ao .aol-vbtn span { display: none; }
+  /* Tryckytor ≥ 40 px (V3-komponentstandarden §2). */
+  #pg-ao .ao-quick .chip { height: 40px; }
+  #pg-ao .aol-bar .btn { min-height: 40px; }
+  #pg-ao .aol-bar .ao-overflow-btn { width: 40px; }
+  #pg-ao .aol-pickbtn, #pg-ao .aol-selmatch { min-height: 40px; }
+  #pg-ao .aol-selall { min-height: 40px; }
   /* "Välj alla" visas när man valt att markera, eller när något redan är markerat. */
   #pg-ao .aol-results:not(.aol-pick):not(:has(.sel-mode)) .ao-selall-cell { display: none; }
   #pg-ao .aol-countrow .ao-selall-cell { margin-right: auto; }
@@ -228,4 +234,7 @@ body:has(#_selbar) #pg-ao .aol-results { padding-bottom: 84px; }
 }
 @media (max-width: 379px) {
   #pg-ao .aol-pickbtn { padding: 0 10px; }
+  /* 360 px: ⋮ och Ny order behöver sina 40 px — "Filter" klarar sig utan ikon,
+     så att sorteringsvalet ryms. */
+  #pg-ao .aol-bar .ao-filter-btn svg { display: none; }
 }
