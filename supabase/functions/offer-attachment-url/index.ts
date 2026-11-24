@@ -1,5 +1,5 @@
 /**
- * offer-attachment-url — Supabase Edge Function (Leverans E, Del E2b-3)
+ * offer-attachment-url — Supabase Edge Function (Leverans E, Del E2b-3, v3)
  *
  * Genererar en tidsbegränsad signerad URL för nedladdning av offertbilaga.
  * Två separata autentiseringsvägar:
@@ -7,7 +7,8 @@
  *  A. Publik tokenväg (kund utan inloggning):
  *     Body: { token: string, attachmentId: string }
  *     Kontroller: giltig token → ej återkallad → ej utgången →
- *                 bilaga tillhör offerten → includeInPublicView = true →
+ *                 bilaga tillhör offerten →
+ *                 snapshot.publicAttachmentIds (om finns) ELLER includeInPublicView=true →
  *                 bilaga aktiv → URL
  *
  *  B. Intern JWT-väg (CRM-användare):
@@ -19,58 +20,11 @@
  *
  * Signerad URL: TTL = 600 s (10 min), reusable under TTL
  *
- * ── Testfall ──────────────────────────────────────────────────────────
- * Ersätt <URL>, <JWT-utan-offer_manage>, <JWT-med-offer_manage>, <TOKEN>,
- * <ATTACHMENT_ID>, <OFFER_ID> med verkliga värden vid testning.
- *
- * 1. JWT-väg utan offer_manage → 403
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Authorization: Bearer <JWT-utan-offer_manage>" \
- *      -H "Content-Type: application/json" \
- *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"<OFFER_ID>"}'
- *    Förväntat: {"error":"forbidden"}  HTTP 403
- *
- * 2. Inaktiv användare → 403
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Authorization: Bearer <JWT-inaktiv-användare>" \
- *      -H "Content-Type: application/json" \
- *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"<OFFER_ID>"}'
- *    Förväntat: {"error":"Forbidden"}  HTTP 403
- *
- * 3. Manipulerat attachmentId (tillhör annan offert) → 403
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
- *      -H "Content-Type: application/json" \
- *      -d '{"attachmentId":"<ID-FÖR-BILAGA-TILLHÖRANDE-OFF-999>","offerId":"<OFFER_ID>"}'
- *    Förväntat: {"error":"forbidden"}  HTTP 403
- *
- * 4. Bilaga från annan offert (offerId stämmer ej) → 403
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
- *      -H "Content-Type: application/json" \
- *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"ANNAN-OFFER-ID"}'
- *    Förväntat: {"error":"forbidden"}  HTTP 403
- *
- * 5. Borttagen bilaga (active=false) → 404
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
- *      -H "Content-Type: application/json" \
- *      -d '{"attachmentId":"<RADERAD-ATTACHMENT-ID>","offerId":"<OFFER_ID>"}'
- *    Förväntat: {"error":"not_found"}  HTTP 404
- *
- * 6. Korrekt intern åtkomst → 200
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Authorization: Bearer <JWT-med-offer_manage>" \
- *      -H "Content-Type: application/json" \
- *      -d '{"attachmentId":"<ATTACHMENT_ID>","offerId":"<OFFER_ID>"}'
- *    Förväntat: {"url":"https://...","expiresAt":"...","fileName":"...","mimeType":"..."}  HTTP 200
- *
- * 7. Korrekt publik tokenåtkomst → 200
- *    curl -X POST <URL>/functions/v1/offer-attachment-url \
- *      -H "Content-Type: application/json" \
- *      -d '{"token":"<PUBLIK-TOKEN>","attachmentId":"<ATTACHMENT_ID>"}'
- *    Förväntat: {"url":"https://...","expiresAt":"...","fileName":"...","mimeType":"..."}  HTTP 200
- * ──────────────────────────────────────────────────────────────────────
+ * 2026-11-24: repots källa ersatt med den INSTALLERADE STAGING-versionen
+ * v11 (hämtad via Supabase-anslutningen, ezbr_sha256 8565b726…). Repots
+ * tidigare källa var äldre: saknade snapshot-låsningen av publika bilagor,
+ * `mode` och `apikey`/`x-client-info` i CORS. Testfallsbeskrivningen i den
+ * installerade filen är oförändrad i STAGING; här förkortad.
  */
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
@@ -84,7 +38,7 @@ const SIGNED_URL_TTL_SECONDS = 600   /* 10 min — reusable under TTL, INTE eng�
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'content-type, authorization',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Cache-Control':                'no-store, no-cache',
   'Referrer-Policy':              'no-referrer',
@@ -123,6 +77,19 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
+
+function parseValidSnapshot(raw: unknown, offerId: string): Record<string, unknown> | null {
+  try {
+    if (!raw) return null
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const snap = parsed as Record<string, unknown>
+    if (String(snap.id ?? '') !== offerId) return null
+    if (!Array.isArray(snap.lines) || !Array.isArray(snap.extras) || !Array.isArray(snap.publicAttachmentIds)) return null
+    return snap
+  } catch { return null }
+}
+
 /* ── Handler ─────────────────────────────────────────────── */
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -136,6 +103,7 @@ serve(async (req: Request) => {
 
   const attachmentId  = String(body.attachmentId  ?? '').trim()
   const customerToken = String(body.token          ?? '').trim()
+  const mode          = body.mode === 'view' ? 'view' : 'download'
 
   if (!attachmentId) return json({ error: 'not_found' }, 404)
 
@@ -163,10 +131,7 @@ serve(async (req: Request) => {
   const jwt        = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
 
   if (customerToken && customerToken.length >= 32 && !jwt) {
-    /* ════════════════════════════════════════════════════════
-     * A. PUBLIK TOKENVÄG — kund utan Supabase-konto
-     * ════════════════════════════════════════════════════════ */
-
+    /* A. PUBLIK TOKENVÄG — kund utan Supabase-konto */
     const { data: offRow } = await supabase
       .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
     const offers: Record<string, unknown>[] =
@@ -186,17 +151,22 @@ serve(async (req: Request) => {
       }
     }
 
-    /* Bilagan måste tillhöra denna offert och vara synlig för kund */
-    if (att.offerId !== offer.id || att.includeInPublicView !== true) {
+    /* Verifiera att bilagan tillhör denna offert */
+    if (att.offerId !== offer.id) {
       return json({ error: 'forbidden' }, 403)
     }
 
-    /* Alla publika kontroller godkända — fall through till URL-generering */
+    /* Giltigt snapshot låser exakt vilka kundbilagor som hör till denna token. */
+    const snapshot = parseValidSnapshot(offer.lockedSnapshotJSON, String(offer.id ?? ''))
+    const allowed = snapshot
+      ? (snapshot.publicAttachmentIds as unknown[]).map(id => String(id)).includes(attachmentId)
+      : att.includeInPublicView === true
+    if (!allowed) {
+      return json({ error: 'forbidden' }, 403)
+    }
 
   } else if (jwt) {
-    /* ════════════════════════════════════════════════════════
-     * B. INTERN JWT-VÄG — inloggad CRM-användare
-     * ════════════════════════════════════════════════════════ */
+    /* B. INTERN JWT-VÄG — inloggad CRM-användare */
 
     /* 1. Aktiv VIFT-användare + personal + roll */
     const auth = await checkViftAuth(supabase, jwt, CORS)
@@ -241,8 +211,6 @@ serve(async (req: Request) => {
       }
     }
 
-    /* Alla interna kontroller godkända — fall through till URL-generering */
-
   } else {
     /* Varken token eller JWT — neka utan ledtråd */
     return json({ error: 'forbidden' }, 403)
@@ -254,11 +222,15 @@ serve(async (req: Request) => {
 
   /* ── Generera signerad URL ───────────────────────────────── */
   const pathInBucket = storagePath.replace(`${STORAGE_BUCKET}/`, '')
+  const fileName = String(att.displayName || att.originalFileName || 'bilaga')
+
   const { data: signedData, error: signedErr } = await supabase.storage
     .from(STORAGE_BUCKET)
-    .createSignedUrl(pathInBucket, SIGNED_URL_TTL_SECONDS, {
-      download: String(att.displayName || att.originalFileName || 'bilaga')
-    })
+    .createSignedUrl(
+      pathInBucket,
+      SIGNED_URL_TTL_SECONDS,
+      mode === 'download' ? { download: fileName } : {}
+    )
 
   if (signedErr || !signedData?.signedUrl) {
     console.error('[offer-attachment-url] signedUrl fel')

@@ -1,0 +1,53 @@
+{
+  "verktyg": "go8c",
+  "runId": "E2E-GO8C-20261124160255-0afd9f",
+  "tid": "2026-11-24T16:03:07.273Z",
+  "results": [
+    {
+      "id": "PDF giltig token (A)",
+      "ok": true,
+      "detail": "HTTP 200 application/pdf, 28687 byte"
+    },
+    {
+      "id": "PDF token A ger bara offert A",
+      "ok": true,
+      "detail": "A innehåller A/ej B; B innehåller B/ej A"
+    },
+    {
+      "id": "PDF interna fält exponeras inte",
+      "ok": true,
+      "detail": "internalNote/purchasePrice saknas i PDF:en"
+    },
+    {
+      "id": "PDF logotyp inbäddad (från vift-branding)",
+      "ok": true,
+      "detail": "bildobjekt finns"
+    },
+    {
+      "id": "PDF återkallad token",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "PDF utgången token",
+      "ok": true,
+      "detail": "HTTP 410"
+    },
+    {
+      "id": "PDF saknad snapshot",
+      "ok": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "id": "PDF okänd/kort/saknad token",
+      "ok": true,
+      "detail": "HTTP 404/404/404"
+    },
+    {
+      "id": "STÄDNING testofferter",
+      "ok": true,
+      "detail": "5 borttagna"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}

@@ -1,0 +1,83 @@
+{
+  "verktyg": "go8d",
+  "runId": "E2E-GO8D-20261124160834-3d4051",
+  "tid": "2026-11-24T16:09:10.493Z",
+  "results": [
+    {
+      "id": "DOK uppladdning (arbetsledare, customer_manage)",
+      "ok": "ST-E2E-CHEF",
+      "detail": "HTTP 200 project-documents/E2E-GO8D-20261124160834-3d4051-PRJ/doc-c1177d27ecf0693d/E2E_aao_test.pdf"
+    },
+    {
+      "id": "DOK belopp utan invoice_view nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden_amount"
+    },
+    {
+      "id": "DOK belopp med behörighet (admin)",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "DOK uppladdning utan customer_manage (fält)",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "DOK okänt projekt",
+      "ok": true,
+      "detail": "HTTP 404 project_not_found"
+    },
+    {
+      "id": "DOK signerad URL + hämtning",
+      "ok": true,
+      "detail": "HTTP 200; hämtning 200, 57 byte"
+    },
+    {
+      "id": "DOK URL fel projekt / utan behörighet",
+      "ok": true,
+      "detail": "HTTP 403/403"
+    },
+    {
+      "id": "DOK bucket privat",
+      "ok": true,
+      "detail": "publik URL HTTP 400"
+    },
+    {
+      "id": "DOK PATCH vitlistning",
+      "ok": true,
+      "detail": "HTTP 200; storagePath/uploadedBy orörda: true"
+    },
+    {
+      "id": "DOK PATCH belopp utan invoice_view",
+      "ok": true,
+      "detail": "HTTP 403 forbidden_amount_change"
+    },
+    {
+      "id": "DOK PATCH fel projekt",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "DOK radering fel projekt",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "DOK radering + borta efteråt",
+      "ok": true,
+      "detail": "kvar 0; URL efteråt HTTP 404"
+    },
+    {
+      "id": "STÄDNING testprojekt",
+      "ok": true,
+      "detail": "borttagna"
+    },
+    {
+      "id": "STÄDNING operatör",
+      "ok": null,
+      "detail": "inaktiva dokumentposter i vift_projectDocuments med projectId E2E-GO8D-20261124160834-3d4051-PRJ tas bort med SQL"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}
