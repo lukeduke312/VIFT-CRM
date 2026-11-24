@@ -9420,7 +9420,8 @@ const AdminPage = {
                 <div style="display:flex;align-items:center;gap:8px;">
                   <input type="color" value="${s.primaryColor||'#0f3763'}"
                     style="width:36px;height:28px;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px;"
-                    oninput="AdminPage._saveColor(this.value,'primaryColor');this.nextElementSibling.textContent=this.value">
+                    oninput="AdminPage._previewColor(this.value,'primaryColor');this.nextElementSibling.textContent=this.value"
+                    onchange="AdminPage._saveColor(this.value,'primaryColor')">
                   <span style="font-size:11px;color:var(--mt);font-family:monospace;">${s.primaryColor||'#0f3763'}</span>
                 </div>
               </div>
@@ -9429,7 +9430,8 @@ const AdminPage = {
                 <div style="display:flex;align-items:center;gap:8px;">
                   <input type="color" value="${s.secondaryColor||'#1d75d8'}"
                     style="width:36px;height:28px;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px;"
-                    oninput="AdminPage._saveColor(this.value,'secondaryColor');this.nextElementSibling.textContent=this.value">
+                    oninput="AdminPage._previewColor(this.value,'secondaryColor');this.nextElementSibling.textContent=this.value"
+                    onchange="AdminPage._saveColor(this.value,'secondaryColor')">
                   <span style="font-size:11px;color:var(--mt);font-family:monospace;">${s.secondaryColor||'#1d75d8'}</span>
                 </div>
               </div>
@@ -10722,7 +10724,22 @@ const AdminPage = {
     showToast('Logga återställd till standard');
   },
 
+  /* QA 2026-11-25: färgväljaren sparade tidigare HELA vift_settings vid
+     varje input-händelse (en skrivning per steg när man drar i väljaren —
+     23 skrivningar på 15 s observerade i STAGING). Nu: förhandsvisning
+     medan man drar (bara CSS-variabler, ingen skrivning), EN sparning när
+     valet är klart (change), och ingen sparning om värdet är oförändrat. */
+  _previewColor(value, field) {
+    if (!/^#[0-9a-fA-F]{3,6}$/.test(value || '')) return;
+    const v = field === 'primaryColor' ? 'primary' : 'secondary';
+    try {
+      document.documentElement.style.setProperty('--brand-' + v, value);
+      document.documentElement.style.setProperty('--brand-' + v + '-text', BrandingService._yiqText(value));
+    } catch (e) {}
+  },
+
   _saveColor(value, field) {
+    if ((state.settings || {})[field] === value) return;
     BrandingService.update({ [field]: value });
   },
 
