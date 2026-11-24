@@ -233,10 +233,29 @@ function testElement(id) {
       const own = await ck(tok.falt, { itemId: it, action: 'reset' });
       rep.add('CHK återställ egen (fält)', own.status === 200, 'HTTP ' + own.status);
       const d = await ck(tok.falt, { itemId: it, action: 'done' });
-      const ed = await ck(tok.admin, { itemId: it, action: 'reset' });
+      // Arbetsledaren (ao_edit) återställer fältets åtgärd; utan arbetsledarkonto används admin.
+      const editor = tok.chef ? 'chef' : 'admin';
+      const ed = await ck(tok[editor], { itemId: it, action: 'reset' });
       const fin = await getAO();
       const item = ((fin && fin.checklist) || []).find((x) => x.id === it);
-      rep.add('CHK ao_edit återställer annans + historik', d.status === 200 && ed.status === 200 && !!item && (item.history || []).map((h) => h.a).join(',') === 'add,start,reset,done,reset', 'HTTP ' + d.status + '/' + ed.status + '; historik: ' + (item ? (item.history || []).map((h) => h.a).join(',') : '—'));
+      const hist = item ? (item.history || []) : [];
+      const histIds = hist.map((h) => h.byId).join(',');
+      const wantIds = [ids.admin, ids.falt, ids.falt, ids.falt, ids[editor]].join(',');
+      rep.add('CHK ao_edit (' + editor + ') återställer annans + historik', d.status === 200 && ed.status === 200 && hist.map((h) => h.a).join(',') === 'add,start,reset,done,reset' && histIds === wantIds, 'HTTP ' + d.status + '/' + ed.status + '; historik: ' + hist.map((h) => h.a).join(',') + '; vem: ' + (histIds === wantIds ? 'rätt personal-id per steg' : histIds));
+      // Avvikelse kräver kommentar; fält2 får inte skriva över fältets avvikelse; utan ao_checklist nekas.
+      const nc = await ck(tok.falt, { itemId: it, action: 'avvikelse' });
+      const av = await ck(tok.falt, { itemId: it, action: 'avvikelse', avvikelseComment: '[E2E-TEST] avvikelse' });
+      rep.add('CHK avvikelse kräver kommentar', nc.status === 400 && nc.body.error === 'comment_required' && av.status === 200, 'utan kommentar HTTP ' + nc.status + ' ' + (nc.body.error || '') + '; med kommentar HTTP ' + av.status);
+      if (tok.falt2) {
+        const ow = await ck(tok.falt2, { itemId: it, action: 'done' });
+        rep.add('CHK skriva över annans avvikelse (fält2)', ow.status === 403 && ow.body.error === 'forbidden_other', 'HTTP ' + ow.status + ' ' + (ow.body.error || ''));
+      }
+      if (tok.begransad) {
+        const nb = await ck(tok.begransad, { itemId: it, action: 'start' });
+        rep.add('CHK utan ao_checklist (begränsad)', nb.status === 403, 'HTTP ' + nb.status + ' ' + (nb.body.error || ''));
+      }
+      const fin2 = await getAO();
+      rep.add('CHK AO-status oförändrad efter alla checklisteåtgärder', !!fin2 && fin2.status === (ao1 && ao1.status), 'status: ' + (fin2 && fin2.status));
     }
     rep.add('G13 TÄCKNING', null, 'DELVIS: skrivrätt för ny post per array-register och roll. Inte prövat: objektformade register, per-post-regler (egna/andras), ändring/borttagning av befintliga poster, fältnivå, hel-nyckel-skrivning. Ett grönt G13 betyder inte att BLOCKER-2 är löst i sin helhet.');
   } catch (e) {

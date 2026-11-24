@@ -38,7 +38,7 @@
  */
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'  // samma låsning som installerad v1 (2026-11-12)
 import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
