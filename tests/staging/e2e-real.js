@@ -561,7 +561,11 @@ async function purgeTestArtifacts() {
   const open = (x) => x.status !== 'borttagen';
   const cuIds = new Set(R.journal.filter((x) => x.typ === 'element' && x.key === 'vift_customers').map((x) => x.id));
   if (cuIds.size) {
-    const invs = (await readKey('vift_invoices')).filter((i) => cuIds.has(i.customerId) && i.status === 'utkast');
+    // vift_invoices är inte tillåten i readWithHash (readKey) — läs via readAllWithHashes.
+    const ra = await req('/functions/v1/store-key-write', { token: tok.admin, body: { action: 'readAllWithHashes', keys: ['vift_invoices'] } });
+    const allInv = (ra.body && ra.body.data && ra.body.data.invoices) || [];
+    if (ra.status !== 200) out.fel.push('fakturor kunde inte läsas (HTTP ' + ra.status + ')');
+    const invs = allInv.filter((i) => cuIds.has(i.customerId) && i.status === 'utkast');
     for (const i of invs) {
       const r = await req('/functions/v1/invoice-write', { token: tok.admin, body: { action: 'draftDelete', invoiceId: i.id, expectedRevision: i.revision == null ? 0 : i.revision } });
       if (r.status === 200) out.inv++; else out.fel.push('fakturautkast ' + i.id + ' HTTP ' + r.status);
