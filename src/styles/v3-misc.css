@@ -43,29 +43,6 @@
 .mx-count b { color: var(--ink); font-weight: 650; }
 .mx-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
 
-/* Lista: rader i ett kort (dator) / kort per rad (mobil) */
-.mx-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); overflow: hidden; }
-.mx-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center;
-  padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer;
-  background: var(--surface); transition: background-color .08s; text-align: left; width: 100%;
-  font: inherit; color: inherit; border-left: 0; border-right: 0; border-top: 0;
-}
-.mx-row:last-child { border-bottom: none; }
-.mx-row:hover { background: var(--surface-2); }
-.mx-row:focus-visible { outline: none; background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-.mx-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.mx-row-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.mx-row-title { font-size: 14px; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 100%; }
-.mx-row-no { font-size: 11.5px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
-.mx-row-sub { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.mx-row-sub .mx-sep { color: var(--faint); margin: 0 4px; }
-.mx-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
-.mx-row-amt { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.mx-row-amt small { font-size: 12px; font-weight: 500; color: var(--muted); }
-.mx-row-meta { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.mx-row .bdg { height: 22px; }
-.mx-row-acts { display: flex; gap: 6px; align-items: center; }
 
 /* Nyckeltal (samma mönster som dashboardens dt-tile, utan ikon) */
 .mx-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -84,8 +61,6 @@
 .mx-empty p { margin: 0 auto; }
 .mx-empty .btn { margin-top: 8px; }
 
-/* Sidhuvud i innehållet (används där sidan behöver egen rubrik i kortet) */
-.mx-sec-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
 
 @media (max-width: 767px) {
   .mx-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
@@ -96,13 +71,9 @@
   .mx-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: 100%; }
   .mx-filters > * { min-width: 0 !important; width: 100%; }
   .mx-filters select { height: 40px; font-size: 16px; }
-  .mx-filters .mx-filters-wide { grid-column: 1 / -1; }
   .mx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .mx-kpi { padding: 10px 12px; }
   .mx-kpi-n { font-size: 18px; }
-  .mx-list { background: transparent; border: none; box-shadow: none; border-radius: 0; overflow: visible; display: flex; flex-direction: column; gap: 8px; }
-  .mx-row { border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); padding: 11px 12px; }
-  .mx-row:last-child { border-bottom: 1px solid var(--line); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════

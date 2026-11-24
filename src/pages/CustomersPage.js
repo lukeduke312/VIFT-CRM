@@ -851,14 +851,14 @@ const CustomerDetailPage = {
       title: esc(name),
       sub: `<span class="mx-dh-no">${esc(CustomerService.displayNumber(cu))}</span>${cu.orgNr ? `<span class="mx-sep">·</span><span>${esc(cu.orgNr)}</span>` : ''}`,
       badges: `<span class="bdg bdg-grey">${esc(CustomerService.typeLabel(cu.type))}</span>${cu.inactive ? '<span class="bdg st bdg-grey"><span class="st-dot"></span>Inaktiv</span>' : ''}`,
-      primary: { label: 'Ny arbetsorder', icon: 'plus', fn: `WorkOrdersPage.openCreate('${esc(cu.id)}')` },
+      primary: { label: 'Ny arbetsorder', icon: 'plus', onclick: `WorkOrdersPage.openCreate('${esc(cu.id)}')` },
       menuId: 'cu-head-menu',
       actions: [
-        canManage ? { label: 'Redigera', icon: 'pencil', fn: `CustomersPage.openEdit('${esc(cu.id)}')`, inline: true } : null,
-        Auth.canViewPage('pg-activities') ? { label: 'Ny uppgift', icon: 'check-square', fn: `ActivitiesPage.openCreate({customerId:'${esc(cu.id)}'})`, inline: true } : null,
+        canManage ? { label: 'Redigera', icon: 'pencil', onclick: `CustomersPage.openEdit('${esc(cu.id)}')`, inline: true } : null,
+        Auth.canViewPage('pg-activities') ? { label: 'Ny uppgift', icon: 'check-square', onclick: `ActivitiesPage.openCreate({customerId:'${esc(cu.id)}'})`, inline: true } : null,
         canManage ? (cu.inactive
-          ? { label: 'Aktivera kunden', icon: 'user-check', fn: `CustomerDetailPage.toggleInactive('${esc(cu.id)}')` }
-          : { label: 'Inaktivera kunden', icon: 'user-x', fn: `CustomerDetailPage.toggleInactive('${esc(cu.id)}')`, destructive: true }) : null
+          ? { label: 'Aktivera kunden', icon: 'user-check', onclick: `CustomerDetailPage.toggleInactive('${esc(cu.id)}')` }
+          : { label: 'Inaktivera kunden', icon: 'user-x', onclick: `CustomerDetailPage.toggleInactive('${esc(cu.id)}')`, destructive: true }) : null
       ]
     });
 

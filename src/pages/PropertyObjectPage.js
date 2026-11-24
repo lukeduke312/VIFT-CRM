@@ -58,11 +58,11 @@ const PropertyObjectPage = {
         title: esc(obj.name || typeLbl),
         sub: `<span class="mx-dh-no">${esc(PropertyObjectService.displayNumber(obj))}</span>${obj.objectNumber && obj.objectNumber !== PropertyObjectService.displayNumber(obj) ? `<span class="mx-sep">·</span><span>${esc(obj.objectNumber)}</span>` : ''}<span class="mx-sep">·</span><span>${esc(typeLbl)}</span>`,
         badges: `<span class="bdg st ${badgeCls}"><span class="st-dot"></span>${esc(statLbl)}</span>${openAOs.length > 0 ? `<span class="bdg bdg-orange">${openAOs.length} öppna AO</span>` : ''}`,
-        primary: Auth.can('ao_create') ? { label: 'Ny AO', icon: 'plus', fn: 'PropertyObjectPage.openCreateAO()' } : null,
+        primary: Auth.can('ao_create') ? { label: 'Ny AO', icon: 'plus', onclick: 'PropertyObjectPage.openCreateAO()' } : null,
         menuId: 'propobj-head-menu',
         actions: [
-          canManage ? { label: 'Redigera', icon: 'pencil', fn: `PropertyDetailPage.openEditObject('${esc(obj.id)}'); Router.back();`, inline: true } : null,
-          prop ? { label: 'Till fastigheten', icon: 'building-2', fn: `Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}',tab:'objects'})` } : null
+          canManage ? { label: 'Redigera', icon: 'pencil', onclick: `PropertyDetailPage.openEditObject('${esc(obj.id)}'); Router.back();`, inline: true } : null,
+          prop ? { label: 'Till fastigheten', icon: 'building-2', onclick: `Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}',tab:'objects'})` } : null
         ]
       })}
 

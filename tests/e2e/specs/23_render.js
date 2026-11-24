@@ -27,12 +27,19 @@ async function check(s, where, hits) {
   if (r.length) hits.push(where + ' → ' + r.join(' | '));
 }
 
-module.exports = [{
-  id: 'RENDER-01', module: 'Säkerhet', kind: 'ui',
-  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin, arbetsledare, ekonomi, fält)',
+/* 2026-11-26: testet delas upp per roll (samma kontroller, samma sidor,
+   flikar och dialoger). Som ett enda test låg det redan på 88 s av
+   körarens 90 s-gräns före V3-nattkörningen; nya flikar/chips med
+   role="tab"/.chip (som testet klickar igenom) gjorde att det slog i
+   gränsen. Varje roll har nu egen tidsbudget. */
+const ROLES = [['admin', 'laptop', 'RENDER-01', 'admin'], ['chef', 'laptop', 'RENDER-01-CHEF', 'arbetsledare'], ['ekonomi', 'laptop', 'RENDER-01-EKONOMI', 'ekonomi'], ['falt', 'iphone', 'RENDER-01-FALT', 'fält']];
+
+module.exports = ROLES.map(([role, vp, id, label]) => ({
+  id, module: 'Säkerhet', kind: 'ui',
+  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (' + label + ')',
   async run(t) {
     const hits = [];
-    for (const [role, vp] of [['admin', 'laptop'], ['chef', 'laptop'], ['ekonomi', 'laptop'], ['falt', 'iphone']]) {
+    {
       const s = await t.world.session({ viewport: vp });
       await s.login(role);
       const pages = await s.eval(() => Object.keys(Auth.PAGE_PERMISSIONS || {}).filter((p) => Auth.canViewPage(p)));
@@ -76,4 +83,4 @@ module.exports = [{
     }
     t.assert(hits.length === 0, 'markup visas som text: ' + hits.join(' ;; '));
   }
-}];
+}));

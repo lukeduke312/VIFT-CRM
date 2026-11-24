@@ -85,15 +85,15 @@ const PropertyDetailPage = {
       back: 'Router.back()',
       title: esc(p.name || displayNumberOf(p) || 'Fastighet'),
       sub, badges,
-      primary: Auth.can('ao_create') ? { label: 'Ny AO', icon: 'plus', fn: 'PropertyDetailPage.openCreateAO()' } : null,
+      primary: Auth.can('ao_create') ? { label: 'Ny AO', icon: 'plus', onclick: 'PropertyDetailPage.openCreateAO()' } : null,
       menuId: 'prop-head-menu',
       actions: [
-        canManage ? { label: 'Redigera', icon: 'pencil', fn: 'PropertyDetailPage.openEdit()', inline: true } : null,
-        Auth.canViewPage('pg-activities') ? { label: 'Ny uppgift', icon: 'check-square', fn: `ActivitiesPage.openCreate({customerId:'${esc(p.customerId||'')}',propertyId:'${esc(p.id)}'})`, inline: true } : null,
-        canManage ? { label: 'Kopiera fastighet', icon: 'copy', fn: 'PropertyDetailPage.openCopyProperty()' } : null,
+        canManage ? { label: 'Redigera', icon: 'pencil', onclick: 'PropertyDetailPage.openEdit()', inline: true } : null,
+        Auth.canViewPage('pg-activities') ? { label: 'Ny uppgift', icon: 'check-square', onclick: `ActivitiesPage.openCreate({customerId:'${esc(p.customerId||'')}',propertyId:'${esc(p.id)}'})`, inline: true } : null,
+        canManage ? { label: 'Kopiera fastighet', icon: 'copy', onclick: 'PropertyDetailPage.openCopyProperty()' } : null,
         canManage ? (p.status === 'inaktiv'
-          ? { label: 'Aktivera fastigheten', icon: 'check-circle', fn: 'PropertyDetailPage.toggleStatus()' }
-          : { label: 'Inaktivera fastigheten', icon: 'eye-off', fn: 'PropertyDetailPage.toggleStatus()', destructive: true }) : null
+          ? { label: 'Aktivera fastigheten', icon: 'check-circle', onclick: 'PropertyDetailPage.toggleStatus()' }
+          : { label: 'Inaktivera fastigheten', icon: 'eye-off', onclick: 'PropertyDetailPage.toggleStatus()', destructive: true }) : null
       ].filter(Boolean)
     });
 
@@ -3015,22 +3015,22 @@ const PropertyDetailPage = {
  * Stilar: src/styles/v3-misc.css (.mx-dh-*). Menyn använder den delade
  * aoToggleOverflow/aoCloseOverflow (state.js: Escape, klick utanför).
  *
- * o.title och o.sub/o.badges ska vara färdig, escapad HTML. o.*.fn är
- * betrodd JS (byggd av anroparen med esc() på data).
+ * o.title och o.sub/o.badges ska vara färdig, escapad HTML. primary/actions[].onclick är
+ * betrodd JS-sträng för onclick (byggd av anroparen med esc() på data).
  */
 const MxUi = {
   detailHead(o) {
     const acts = (o.actions || []).filter(Boolean);
     const menuId = o.menuId || 'mx-dh-menu';
     const inline = acts.filter(a => a.inline).map(a =>
-      `<button type="button" class="btn bs bsm mx-only-d" onclick="${a.fn}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
+      `<button type="button" class="btn bs bsm mx-only-d" onclick="${a.onclick}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
     /* Komponentstandard §3: destruktiva poster sist, avskilda och röda
        (bekräftelsen ligger i respektive åtgärd). */
     const ordered = acts.filter(a => !a.destructive).concat(acts.filter(a => a.destructive));
     const firstDestr = ordered.findIndex(a => a.destructive);
     const items = ordered.map((a, i) =>
       (i > 0 && i === firstDestr ? '<div class="ao-overflow-divider" role="separator"></div>' : '') +
-      `<button type="button" class="ao-overflow-menu-item${a.destructive ? ' ao-overflow-menu-item--red' : ''}${a.inline ? ' mx-only-m' : ''}" role="menuitem" onclick="aoCloseOverflow();${a.fn}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
+      `<button type="button" class="ao-overflow-menu-item${a.destructive ? ' ao-overflow-menu-item--red' : ''}${a.inline ? ' mx-only-m' : ''}" role="menuitem" onclick="aoCloseOverflow();${a.onclick}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
     const onlyInline = acts.length > 0 && acts.every(a => a.inline);
     const more = acts.length ? `
       <div class="ao-overflow-wrap mx-dh-more-wrap${onlyInline ? ' mx-hide-d' : ''}">
@@ -3038,7 +3038,7 @@ const MxUi = {
         <div class="ao-overflow-menu" id="${menuId}" role="menu">${items}</div>
       </div>` : '';
     const p = o.primary;
-    const primary = p ? `<button type="button" class="btn ${p.cls || 'bp'} bsm mx-dh-primary" onclick="${p.fn}">${ic(p.icon || 'plus', 14)} ${esc(p.label)}</button>` : '';
+    const primary = p ? `<button type="button" class="btn ${p.cls || 'bp'} bsm mx-dh-primary" onclick="${p.onclick}">${ic(p.icon || 'plus', 14)} ${esc(p.label)}</button>` : '';
     const badges = o.badges || '';
     return `
       <header class="mx-dh${badges ? '' : ' no-row2'}">

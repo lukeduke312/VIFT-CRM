@@ -76,16 +76,16 @@ const ProjectDetailPage = {
       title: esc(p.name || 'Namnlöst projekt'),
       sub: `<span class="mx-dh-no">${esc(p.id)}</span>${(p.startDate || p.endDate) ? `<span class="mx-sep">·</span><span>${p.startDate ? esc(fmtDate(p.startDate)) : '?'} – ${p.endDate ? esc(fmtDate(p.endDate)) : '?'}</span>` : ''}`,
       badges: ProjectsPage._statusBadge(p.status) + (p.archived ? `<span class="bdg bdg-grey">${ic('archive', 11)} Arkiverad</span>` : ''),
-      primary: canAoCreate ? { label: 'Ny arbetsorder', icon: 'plus', fn: 'ProjectDetailPage.newWorkOrder()' } : null,
+      primary: canAoCreate ? { label: 'Ny arbetsorder', icon: 'plus', onclick: 'ProjectDetailPage.newWorkOrder()' } : null,
       menuId: 'pd-head-menu',
       actions: [
-        canTasks ? { label: 'Ny uppgift', icon: 'check-square', fn: 'ProjectDetailPage.newTask()', inline: true } : null,
-        { label: 'Redigera', icon: 'pencil', fn: `ProjectsPage.openEdit('${esc(p.id)}')`, inline: true },
-        canAoEdit ? { label: 'Koppla arbetsorder', icon: 'link', fn: 'ProjectDetailPage.openLinkWorkOrder()' } : null,
-        canOffer ? { label: 'Koppla offert', icon: 'link', fn: 'ProjectDetailPage.openLinkOffer()' } : null,
+        canTasks ? { label: 'Ny uppgift', icon: 'check-square', onclick: 'ProjectDetailPage.newTask()', inline: true } : null,
+        { label: 'Redigera', icon: 'pencil', onclick: `ProjectsPage.openEdit('${esc(p.id)}')`, inline: true },
+        canAoEdit ? { label: 'Koppla arbetsorder', icon: 'link', onclick: 'ProjectDetailPage.openLinkWorkOrder()' } : null,
+        canOffer ? { label: 'Koppla offert', icon: 'link', onclick: 'ProjectDetailPage.openLinkOffer()' } : null,
         p.archived
-          ? { label: 'Återställ', icon: 'rotate-ccw', fn: `ProjectsPage.unarchive('${esc(p.id)}')` }
-          : { label: 'Arkivera', icon: 'archive', fn: `Modal.confirm('Arkivera projektet? Det flyttas till Arkiverade och kan återställas.', () => ProjectsPage.archive('${esc(p.id)}'))`, destructive: true }
+          ? { label: 'Återställ', icon: 'rotate-ccw', onclick: `ProjectsPage.unarchive('${esc(p.id)}')` }
+          : { label: 'Arkivera', icon: 'archive', onclick: `Modal.confirm('Arkivera projektet? Det flyttas till Arkiverade och kan återställas.', () => ProjectsPage.archive('${esc(p.id)}'))`, destructive: true }
       ]
     });
 
