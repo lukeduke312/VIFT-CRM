@@ -211,15 +211,14 @@ const MyJobsPage = {
       }
       /* V3: vägbeskrivning och samtal direkt från kortet — färre klick i fält. */
       const mapsUrl = workAddr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(workAddr) : '';
-      secondaryBtns = `<div class="job-card-v2-quick">` +
-        (mapsUrl ? `<a class="btn bs bsm" href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ic('navigation',13)} Vägbeskrivning</a>` : '') +
-        (ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}" onclick="event.stopPropagation()">${ic('phone',13)} Ring</a>` : '') +
-        `</div>` +
-        `<div style="display:flex;gap:6px;">` +
+      /* V3 omgång 2: vägbeskrivning, ring, starta och öppna i EN rad — tidigare två rader. */
+      secondaryBtns = `<div class="job-card-v2-row">` +
+        (mapsUrl ? `<a class="btn bs bsm" href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Vägbeskrivning">${ic('navigation',13)} Karta</a>` : '') +
+        (ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}" onclick="event.stopPropagation()" title="Ring kontaktperson">${ic('phone',13)} Ring</a>` : '') +
         (['nytt','pool','planerad'].includes(ao.status)
           ? `<button class="btn bs bsm" onclick="event.stopPropagation();MyJobsPage.startJob('${ao.id}')">${ic('play',12)} Starta</button>`
           : '') +
-        `<button class="btn bghost bsm" style="flex:1;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',12)} Öppna</button>` +
+        `<button class="btn bghost bsm" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',12)} Öppna</button>` +
         `</div>`;
     }
 

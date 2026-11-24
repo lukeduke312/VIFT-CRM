@@ -94,4 +94,8 @@ Allt nedan finns i `src/styles/system.css` (laddas sist) och `src/components/UiK
 - Info som hör ihop visas ihop: arbetsordern svarar på vad, var, när, vem och nästa steg innan detaljer.
 - Mobil: fältordning (vad → var → när → vem → stämpla → checklista), tryckytor minst 36 px, ingen vågrät scroll.
 
-**Granskning.** `VIFT_VISUAL_SIZES=alla node tests/e2e/visual.js capture <katalog>` tar alla vyer i 1920, 1366, 1024, 768, 390 och 360 px; `compare <före> <efter>` ger pixeldiff och `sheet` kontaktark.
+**Kontrast.** All text klarar WCAG AA (4,5:1) mot vit yta: `--ink` 17,1, `--ink-2` 11,5, `--muted` 5,1, `--faint` 4,7 (omgång 2, tidigare 3,0); märken mot sin bakgrund 4,5–5,5.
+
+**Mobila arbetsordrar (omgång 2).** Snabbåtgärdsraden `.aod-qbar` sitter fast ovanför bottenmenyn (`--mobile-bottom-reserve`) under 1 024 px. Sidans primära åtgärd har full bredd; sekundära är diskreta. Filter och flikar får aldrig ligga dolda utanför skärmen på 360–390 px — använd rullista eller radbrytning.
+
+**Granskning.** `node tests/e2e/measure.js` mäter sidhöjd och scrollavstånd till viktiga åtgärder. `VIFT_VISUAL_SIZES=alla node tests/e2e/visual.js capture <katalog>` tar alla vyer i 1920, 1366, 1024, 768, 390 och 360 px; `compare <före> <efter>` ger pixeldiff och `sheet` kontaktark.

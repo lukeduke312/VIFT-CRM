@@ -12,7 +12,7 @@
   --ink:        #0e1c2f;
   --ink-2:      #2c3a4f;
   --muted:      #5f6f84;
-  --faint:      #8a97a8;
+  --faint:      #66758a;  /* 4,7:1 mot vitt — används även för liten text */
   --line:       #e3e8ef;
   --line-2:     #d2dae5;
   --canvas:     #f3f5f8;
@@ -32,7 +32,7 @@
   --ok:     #137a47;  --ok-bg:     #e5f4eb;  --ok-line:     #b9e1c9;
   --warn:   #a85b06;  --warn-bg:   #fdf1df;  --warn-line:   #f3d3a3;
   --danger: #bf2a2f;  --danger-bg: #fdebeb;  --danger-line: #f4c0c1;
-  --info:   #1f6fd6;  --info-bg:   #e8f1fc;  --info-line:   #bcd5f5;
+  --info:   #1a60bd;  --info-bg:   #e8f1fc;  --info-line:   #bcd5f5;  /* 5,3:1 mot info-bg */
   --violet: #6a47cc;  --violet-bg: #efeafb;  --violet-line: #d4c8f3;
   --cyan:   #0b6f8f;  --cyan-bg:   #e3f3f8;  --cyan-line:   #b5dde9;
   --neutral:#4a5a70;  --neutral-bg:#eef1f5;  --neutral-line:#d9e0e8;
@@ -1291,3 +1291,5 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
   .off-kpi-val { font-size: 16px; }
   .off-kpi-lbl { font-size: 11px; margin-bottom: 1px; }
 }
+.job-card-v2-row { display: flex; gap: 6px; }
+.job-card-v2-row > .btn { flex: 1 1 0; min-width: 0; padding: 0 6px; text-decoration: none; }
