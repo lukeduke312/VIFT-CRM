@@ -382,6 +382,59 @@ const FLOW = {
   /* F7: offert nekas av kunden; F8: kunden begär ändring. Isolerade testfall. */
   async F7(W) { await offerResponseFlow(W, 'F7', 'neka'); },
   async F8(W) { await offerResponseFlow(W, 'F8', 'andring'); },
+  /* X1 (läsande, QA 2026-11-25): lagrad XSS mot PUBLICERAD klient. Befintliga
+     STAGING-poster med HTML i fritext (t.ex. QA-kunden från 2026-11-17 med
+     <img onerror=alert>) öppnas i alla sidor rollen får se + detaljsidor;
+     varje dialogruta eller körd onerror räknas. Inga skrivningar. */
+  async X1(W) {
+    for (const role of ['admin', 'chef', 'ekonomi', 'falt']) {
+      const s = await W.session({ viewport: role === 'falt' ? 'iphone' : 'laptop' });
+      let dialogs = 0; s.page.on('dialog', (d) => { dialogs++; d.dismiss().catch(() => {}); });
+      await s.page.addInitScript(() => { window.__imgErr = 0; document.addEventListener('error', (e) => { if (e.target && e.target.tagName === 'IMG' && /\/x$/.test(e.target.src || '')) window.__imgErr++; }, true); });
+      await s.login(role);
+      const info = await s.eval(() => {
+        const has = (v) => typeof v === 'string' && /<[a-z!\/]|onerror|onload|onmouseover/i.test(v);
+        const scan = (arr) => (arr || []).filter((o) => o && Object.values(o).some(has)).map((o) => o.id);
+        return { pages: Object.keys(Auth.PAGE_PERMISSIONS || {}).filter((p) => Auth.canViewPage(p)), cu: scan(state.customers).slice(0, 4), ao: scan(state.workOrders).slice(0, 4), prop: scan(state.properties).slice(0, 3), off: scan(state.offers).slice(0, 3) };
+      });
+      const visits = info.pages.map((p) => [p, {}]);
+      info.cu.forEach((id) => visits.push(['pg-crm-detail', { customerId: id }]));
+      info.ao.forEach((id) => visits.push(['pg-ao-detail', { aoId: id }]));
+      info.prop.forEach((id) => visits.push(['pg-obj-detail', { propId: id }]));
+      info.off.forEach((id) => visits.push(['pg-offer-detail', { offerId: id }]));
+      const hits = [];
+      for (const [p, prm] of visits) {
+        if (!(await s.eval((x) => Auth.canViewPage(x), p))) continue;
+        const d0 = dialogs; await s.eval(() => { window.__imgErr = 0; });
+        await s.eval(([x, q]) => { try { Router.showPage(x, q); } catch (e) {} }, [p, prm]); await s.settle(500);
+        const ie = await s.eval(() => window.__imgErr || 0);
+        if (dialogs > d0 || ie) hits.push(p + (Object.values(prm)[0] ? '(' + Object.values(prm)[0] + ')' : '') + ': dialog ' + (dialogs - d0) + ', injicerad bild ' + ie);
+      }
+      rep.add('X1 ' + role + ' lagrad XSS (publicerad klient)', hits.length === 0, visits.length + ' sidvisningar; poster med HTML i fritext: kunder ' + info.cu.length + ', AO ' + info.ao.length + ', fastigheter ' + info.prop.length + ', offerter ' + info.off.length + (hits.length ? '; KÖRDES: ' + hits.join(' ; ') : '; inget skript kördes'));
+      await s.context.close();
+    }
+  },
+  /* A1 (läsande, QA 2026-11-25): Admin → Systeminställningar, alla flikar, dator
+     och mobil. Ingen markup (t.ex. <svg>) får synas som text; flikraden får inte
+     bli bredare än skärmen. Skärmbilder sparas. Inga skrivningar. */
+  async A1(W) {
+    const RE = /<\/?(svg|path|span|div|i|b|strong|a|button|br|img)\b[^>]*>|&(lt|gt|amp|quot|#39);/i;
+    for (const vp of ['laptop', 'iphone']) {
+      const s = await W.session({ viewport: vp }); await s.login('admin');
+      await s.go('pg-admin'); await s.settle(800);
+      const tabs = await s.eval(() => [...document.querySelectorAll('.admin-tab')].map((b) => ((b.getAttribute('onclick') || '').match(/_tab='([^']+)'/) || [])[1]).filter(Boolean));
+      const bad = [];
+      for (const k of tabs) {
+        await s.eval((x) => { AdminPage._tab = x; AdminPage.render(); }, k); await s.settle(300);
+        const r = await s.eval((src) => { const re = new RegExp(src, 'i'); const pg = document.querySelector('.page.active'); const txt = pg ? pg.innerText : ''; const m = txt.match(re); const bar = document.querySelector('.admin-tabs'); const widest = Math.max(0, ...[...document.querySelectorAll('.admin-tab')].map((b) => b.getBoundingClientRect().width)); return { hit: m ? txt.slice(Math.max(0, m.index - 10), m.index + 40) : '', widest: Math.round(widest), vw: innerWidth, svg: document.querySelectorAll('.admin-tab svg').length }; }, RE.source);
+        if (r.hit || r.widest > Math.min(320, r.vw)) bad.push(k + ': ' + (r.hit ? 'text "' + r.hit + '"' : '') + ' bredaste flik ' + r.widest + ' px');
+        if (k === tabs[0] || k === 'fastighetskort') await s.page.screenshot({ path: path.join(__dirname, 'rapport', 'A1-admin-' + vp + '-' + k + '.png') }).catch(() => {});
+      }
+      const icons = await s.eval(() => document.querySelectorAll('.admin-tab svg').length);
+      rep.add('A1 Admin-flikar ' + vp, bad.length === 0 && icons >= 5, tabs.length + ' flikar, ' + icons + ' ikoner som SVG-element' + (bad.length ? '; AVVIKER: ' + bad.join(' ; ') : '; ingen markup som text, ingen överbred flik'));
+      await s.context.close();
+    }
+  },
   async R0(W) {
     for (const role of Object.keys(emails)) {
       const s = await W.session({ viewport: role === 'falt' ? 'iphone' : 'laptop' });
