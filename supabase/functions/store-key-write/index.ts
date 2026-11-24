@@ -184,7 +184,13 @@ serve(async (req: Request) => {
     if (!key || !ALLOWED_KEYS.has(key)) return json({ error: 'key_not_allowlisted' }, 400)
     const { data, error } = await supabase.rpc('store_business_key_read_with_hash', { p_key: key })
     if (error) { console.error('[store-key-write] readWithHash RPC-fel:', error.message); return json({ error: 'read_failed' }, 500) }
-    return json(data || { value: null, hash: null })
+    /* C-5 (2026-11-25): värdet projiceras för anroparens roll — samma
+       SQL-regel (vift_store_project) som RLS-policyn store_read_by_role och
+       readAllWithHashes. Hash avser det fullständiga servervärdet. */
+    const d = (data || { value: null, hash: null }) as Record<string, unknown>
+    const proj = await supabase.rpc('vift_store_project', { p_key: key, p_value: d.value ?? null, p_perms: perms })
+    if (proj.error) { console.error('[store-key-write] readWithHash projektion:', proj.error.message); return json({ error: 'read_failed' }, 500) }
+    return json({ ...d, value: proj.data ?? null })
   }
 
   if (action === 'readHashes') {
@@ -278,8 +284,14 @@ serve(async (req: Request) => {
       ? (body.keys as unknown[]).map(String)
       : Array.from(READABLE_KEYS)
     const businessFullKeys = requested.filter(k => READABLE_KEYS.has(k))
-    const { data, error } = await supabase.rpc('store_read_all_with_hashes', {
+    /* C-5 (2026-11-25): läsbehörighet per roll och nyckel enligt minsta
+       privilegium — se migration 20261125000003_store_read_by_role.sql.
+       Nycklar rollen inte ska se kommer som tomt värde; skyddsvärda fält
+       (offerttoken, personnummer, portkoder, bankgiro, internt timpris)
+       tas bort för roller som bara får läsa. Skrivare får alltid hela värdet. */
+    const { data, error } = await supabase.rpc('store_read_all_with_hashes_projected', {
       p_business_keys: businessFullKeys,
+      p_perms: perms,
     })
     if (error) { console.error('[store-key-write] readAllWithHashes RPC-fel:', error.message); return json({ error: 'read_failed' }, 500) }
     const raw = (data && data.data) || {}

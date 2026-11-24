@@ -551,8 +551,38 @@ async function offerResponseFlow(W, tag, mode) {
   await s.context.close();
 }
 
+/* Testartefakter utan egen återställning i recovery.js (2026-11-25, QA C-8):
+   fakturautkast för testkunder (officiell väg: invoice-write draftDelete),
+   testoffertens bilagor + filer + händelser och testarbetsorderns bilder
+   (STAGING-verktyget e2e-test-cleanup, som bara rör poster vars titel börjar
+   med "[E2E-TEST]"). Körs FÖRE R.finish, medan offerter/AO ännu finns. */
+async function purgeTestArtifacts() {
+  const out = { inv: 0, offers: 0, att: 0, evt: 0, files: 0, aoFiles: 0, fel: [] };
+  const open = (x) => x.status !== 'borttagen';
+  const cuIds = new Set(R.journal.filter((x) => x.typ === 'element' && x.key === 'vift_customers').map((x) => x.id));
+  if (cuIds.size) {
+    const invs = (await readKey('vift_invoices')).filter((i) => cuIds.has(i.customerId) && i.status === 'utkast');
+    for (const i of invs) {
+      const r = await req('/functions/v1/invoice-write', { token: tok.admin, body: { action: 'draftDelete', invoiceId: i.id, expectedRevision: i.revision == null ? 0 : i.revision } });
+      if (r.status === 200) out.inv++; else out.fel.push('fakturautkast ' + i.id + ' HTTP ' + r.status);
+    }
+  }
+  for (const e of R.journal.filter((x) => x.typ === 'element' && x.key === 'vift_offers' && open(x))) {
+    const r = await req('/functions/v1/e2e-test-cleanup', { token: tok.admin, body: { action: 'purgeOffer', offerId: e.id } });
+    if (r.status === 200) { out.offers++; out.att += r.body.attachments || 0; out.evt += r.body.events || 0; out.files += r.body.filesRemoved || 0; }
+    else if (!(r.body && r.body.error === 'not_test_offer' && r.status === 403)) out.fel.push('offert ' + e.id + ' HTTP ' + r.status + ' ' + ((r.body && r.body.error) || ''));
+  }
+  for (const e of R.journal.filter((x) => x.typ === 'ao' && open(x))) {
+    const r = await req('/functions/v1/e2e-test-cleanup', { token: tok.admin, body: { action: 'purgeAoImages', aoId: e.id } });
+    if (r.status === 200) out.aoFiles += r.body.filesRemoved || 0;
+    else if (!(r.status === 403 && r.body && r.body.error === 'not_test_ao')) out.fel.push('AO-bilder ' + e.id + ' HTTP ' + r.status);
+  }
+  if (out.inv || out.offers || out.aoFiles || out.fel.length) rep.add('STÄDNING testartefakter', out.fel.length === 0, 'fakturautkast ' + out.inv + ', offerter ' + out.offers + ' (bilagor ' + out.att + ', filer ' + out.files + ', händelser ' + out.evt + '), AO-bildfiler ' + out.aoFiles + (out.fel.length ? '; FEL: ' + out.fel.join('; ') : ''));
+}
+
 async function finish(before, aborted) {
   try { await refreshTracked(); } catch (e) {}
+  try { await purgeTestArtifacts(); } catch (e) { rep.add('STÄDNING testartefakter', false, 'avbröts: ' + e.message); }
   const res = await R.finish(rep, before, aborted);
   const f = rep.save({ niva: 2, projekt: env.ref, journal: journalFile, kvar: res.left, efterkontroll: !!res.after });
   console.log('\nRapport: ' + f + '\nJournal: ' + journalFile);
