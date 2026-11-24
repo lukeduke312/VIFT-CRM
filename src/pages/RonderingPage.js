@@ -21,12 +21,12 @@ const RonderingPage = {
       this._detailId = null;
     }
     el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-        <div style="display:flex;gap:4px;flex:1;">
-          <button class="btn ${this._tab==='ronderingar'?'bp':'bs'} bsm" onclick="RonderingPage.switchTab('ronderingar')">Ronderingar</button>
-          <button class="btn ${this._tab==='mallar'?'bp':'bs'} bsm" onclick="RonderingPage.switchTab('mallar')">Mallar</button>
+      <div class="ron-top">
+        <div class="ftabs ron-seg" role="tablist" aria-label="Rondering">
+          <button class="ft ${this._tab==='ronderingar'?'on':''}" role="tab" aria-selected="${this._tab==='ronderingar'}" onclick="RonderingPage.switchTab('ronderingar')">Ronderingar</button>
+          <button class="ft ${this._tab==='mallar'?'on':''}" role="tab" aria-selected="${this._tab==='mallar'}" onclick="RonderingPage.switchTab('mallar')">Mallar</button>
         </div>
-        <div id="ron-hdr-btn"></div>
+        <div id="ron-hdr-btn" class="ron-hdr-btn"></div>
       </div>
       <div id="ron-tab-content"></div>`;
     this._renderTab();
@@ -48,22 +48,29 @@ const RonderingPage = {
         btn.innerHTML = '';
       } else if (this._tab === 'ronderingar') {
         btn.innerHTML =
-          `${Auth.can('ao_edit') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'ronderingPass'})">${ic('upload',13)} Importera pass</button>` : ''}` +
-          `<button class="btn bs bsm" onclick="ImportExportService.showExportMenu('ronderingSchema',this)">${ic('download',13)} Exportera</button>` +
-          `<button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">+ Ny rondering</button>`;
+          `${Auth.can('ao_edit') ? `<button class="btn bs bsm" title="Importera pass" onclick="Router.showPage('pg-import-wizard',{type:'ronderingPass'})">${ic('upload',13)} Importera pass</button>` : ''}` +
+          `<button class="btn bs bsm" title="Exportera" onclick="ImportExportService.showExportMenu('ronderingSchema',this)">${ic('download',13)} Exportera</button>` +
+          `<button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">${ic('plus',13)} Ny rondering</button>`;
       } else {
         btn.innerHTML =
-          `${Auth.can('ao_edit') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'ronderingsmall'})">${ic('upload',13)} Importera</button>` : ''}` +
-          `<button class="btn bs bsm" onclick="ImportExportService.showExportMenu('ronderingsmall',this)">${ic('download',13)} Exportera</button>` +
-          `<button class="btn bp bsm" onclick="RonderingPage.openNewMall()">+ Ny mall</button>`;
+          `${Auth.can('ao_edit') ? `<button class="btn bs bsm" title="Importera mallar" onclick="Router.showPage('pg-import-wizard',{type:'ronderingsmall'})">${ic('upload',13)} Importera</button>` : ''}` +
+          `<button class="btn bs bsm" title="Exportera" onclick="ImportExportService.showExportMenu('ronderingsmall',this)">${ic('download',13)} Exportera</button>` +
+          `<button class="btn bp bsm" onclick="RonderingPage.openNewMall()">${ic('plus',13)} Ny mall</button>`;
       }
     }
+    /* Sökfältet ritas om vid varje tangent — behåll fokus och markör. */
+    const act = document.activeElement;
+    const keep = act && act.id === 'ron-search' ? act.selectionStart : null;
     if (this._tab === 'mallar') {
       this._renderMallar(el);
     } else if (this._view === 'detail') {
       this._renderDetail(el);
     } else {
       this._renderList(el);
+    }
+    if (keep !== null) {
+      const inp = document.getElementById('ron-search');
+      if (inp) { inp.focus(); try { inp.setSelectionRange(keep, keep); } catch (e) {} }
     }
   },
 
@@ -77,7 +84,7 @@ const RonderingPage = {
     const statusBadge = s => {
       const cls = {utkast:'bdg-grey',planerad:'bdg-blue',pågående:'bdg-orange',slutförd:'bdg-green',har_avvikelser:'bdg-red'}[s]||'bdg-grey';
       const lbl = {utkast:'Utkast',planerad:'Planerad',pågående:'Pågående',slutförd:'Slutförd',har_avvikelser:'Har avvikelser'}[s]||s;
-      return `<span class="bdg ${cls}">${lbl}</span>`;
+      return `<span class="bdg ${cls}">${esc(lbl)}</span>`;
     };
     const filtered = (state.ronderingar||[]).filter(r => {
       if (this._filterStatus !== 'alla' && r.status !== this._filterStatus) return false;
@@ -94,7 +101,7 @@ const RonderingPage = {
       <div class="ao-toolbar" style="margin-bottom:6px;">
         <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
-          <input type="search" placeholder="Sök rondering, kund…" value="${esc(this._search)}"
+          <input type="search" id="ron-search" placeholder="Sök rondering, kund…" value="${esc(this._search)}" aria-label="Sök rondering"
             oninput="RonderingPage._search=this.value;RonderingPage._renderTab()">
         </div>
       </div>
@@ -217,7 +224,7 @@ const RonderingPage = {
             const btnLabel = isDone ? ic('file-text',12)+' Rapport'
               : (pass.status==='pågående' ? ic('play',12)+' Fortsätt' : ic('play',12)+' Starta');
             const btnCls = isDone ? 'bs' : 'bp';
-            const progColor = stats&&stats.anmärkningar>0 ? '#dc2626' : '#16a34a';
+            const progColor = stats&&stats.anmärkningar>0 ? 'var(--danger)' : 'var(--ok)';
             return `
               <div class="ron-pass ${pass.status||''}" onclick="RonderingPage.openPass('${pass.id}')">
                 <div style="display:flex;align-items:flex-start;gap:10px;">
@@ -226,12 +233,12 @@ const RonderingPage = {
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
                       <span style="font-weight:800;font-size:14px;color:var(--navy);">${pass.scheduledDate?fmtDate(pass.scheduledDate):'Inget datum'}</span>
                       ${pass.scheduledTime?`<span style="font-size:12px;color:var(--mt);font-weight:600;">${pass.scheduledTime}</span>`:''}
-                      ${isLegacy?`<span style="font-size:9px;color:var(--mt);padding:1px 5px;background:#f3f4f6;border-radius:4px;font-weight:600;">Historisk</span>`:''}
+                      ${isLegacy?`<span class="bdg bdg-grey">Historisk</span>`:''}
                     </div>
                     <div style="font-size:11px;color:var(--mt);display:flex;gap:10px;flex-wrap:wrap;">
-                      ${staffNames?`<span>${ic('user',10)} ${staffNames}</span>`:''}
-                      ${stats&&stats.total>0?`<span>${ic('check-square',10)} ${stats.checked}/${stats.total}</span>`:''}
-                      ${stats&&stats.anmärkningar>0?`<span style="color:#dc2626;font-weight:700;">${ic('alert-triangle',10)} ${stats.anmärkningar} anm.</span>`:''}
+                      ${staffNames?`<span>${ic('user',11)} ${esc(staffNames)}</span>`:''}
+                      ${stats&&stats.total>0?`<span>${ic('check-square',11)} ${stats.checked}/${stats.total}</span>`:''}
+                      ${stats&&stats.anmärkningar>0?`<span style="color:var(--danger);font-weight:700;">${ic('alert-triangle',11)} ${stats.anmärkningar} anm.</span>`:''}
                       ${stats&&stats.unchecked>0&&!isDone&&pass.status!=='planerat'?`<span style="color:var(--mt);">${stats.unchecked} kvar</span>`:''}
                     </div>
                     ${stats&&stats.total>0&&pass.status!=='planerat'?`

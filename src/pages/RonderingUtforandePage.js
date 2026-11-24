@@ -138,31 +138,31 @@ const RonderingUtforandePage = {
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{ronId:'${pass.ronderingId}'})">${ic('arrow-left',14)}</button>
+        <button class="btn bs bsm" aria-label="Tillbaka" onclick="Router.showPage('pg-rondering',{ronId:'${esc(pass.ronderingId)}'})">${ic('arrow-left',14)}</button>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ronName)}</div>
-          <div style="font-size:11px;color:var(--mt);">${esc(cuName)}${prop?' · '+esc(prop.name):''}
-            · Tillfälle #${pass.sequenceNumber||1}${pass.scheduledDate?' · '+fmtDate(pass.scheduledDate):''}
+          <div style="font-weight:700;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ronName)}</div>
+          <div style="font-size:12px;color:var(--muted);">${esc(cuName)}${prop?' · '+esc(prop.name):''}
+            · Tillfälle #${esc(String(pass.sequenceNumber||1))}${pass.scheduledDate?' · '+esc(fmtDate(pass.scheduledDate)):''}
           </div>
         </div>
-        <button class="btn bs bsm" style="font-size:10px;white-space:nowrap;"
-          onclick="Router.showPage('pg-rondering-rapport',{passId:'${pass.id}'})">${ic('file-text',13)} Rapport</button>
+        <button class="btn bs bsm" style="white-space:nowrap;"
+          onclick="Router.showPage('pg-rondering-rapport',{passId:'${esc(pass.id)}'})">${ic('file-text',13)} Rapport</button>
       </div>
 
       <div style="background:var(--wh);border:1px solid var(--br);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-          <span style="font-size:12px;font-weight:700;color:var(--navy);">${stats?stats.checked:0} / ${stats?stats.total:0} kontrollerade</span>
-          <span style="font-size:14px;font-weight:900;color:${pct===100?'var(--green)':'var(--blue)'};">${pct}%</span>
+          <span style="font-size:13px;font-weight:700;color:var(--ink);">${stats?stats.checked:0} / ${stats?stats.total:0} kontrollerade</span>
+          <span style="font-size:15px;font-weight:800;color:${pct===100?'var(--ok)':'var(--info)'};">${pct}%</span>
         </div>
-        <div style="background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;">
-          <div style="background:${pct===100?'#16a34a':'var(--blue)'};width:${pct}%;height:8px;border-radius:4px;transition:width .4s ease;"></div>
+        <div style="background:var(--line);border-radius:4px;height:8px;overflow:hidden;">
+          <div style="background:${pct===100?'var(--ok)':'var(--info)'};width:${pct}%;height:8px;border-radius:4px;transition:width .4s ease;"></div>
         </div>
-        <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;flex-wrap:wrap;">
-          <span style="color:#16a34a;font-weight:600;">${ic('check',10)} ${stats?stats.ok:0} godkända</span>
-          <span style="color:#dc2626;font-weight:600;">${ic('alert-triangle',10)} ${stats?stats.anmärkningar:0} anmärkningar</span>
-          <span style="color:var(--mt);">${ic('minus',10)} ${stats?stats.ejAktuell:0} ej aktuell</span>
+        <div class="ru-stats">
+          <span class="ru-st ru-st-ok">${ic('check',12)} ${stats?stats.ok:0} godkända</span>
+          <span class="ru-st ru-st-avv">${ic('alert-triangle',12)} ${stats?stats.anmärkningar:0} anmärkningar</span>
+          <span class="ru-st ru-st-ej">${ic('minus',12)} ${stats?stats.ejAktuell:0} ej aktuell</span>
         </div>
-        ${staffNames?`<div style="font-size:11px;color:var(--mt);margin-top:5px;">${ic('user',10)} ${staffNames}</div>`:''}
+        ${staffNames?`<div class="ru-staff">${ic('user',12)} ${esc(staffNames)}</div>`:''}
       </div>
 
       ${(pass.categories||[]).map((cat, ci) => this._renderCat(pass, cat, ci)).join('')}
@@ -196,12 +196,12 @@ const RonderingUtforandePage = {
     const checked = pts.filter(p => p.status !== '').length;
     const allDone = checked === pts.length && pts.length > 0;
     const headCls = allDone ? 'done' : 'open';
-    const bdrClr  = allDone ? '#bbf7d0' : 'var(--br)';
+    const bdrClr  = allDone ? 'var(--ok-line)' : 'var(--line)';
     return `
       <div style="margin-bottom:12px;">
         <div class="roncat-head ${headCls}">
           <span>${esc(cat.name)}</span>
-          <span class="roncat-head-cnt" style="color:${allDone?'#16a34a':'var(--mt)'};">
+          <span class="roncat-head-cnt" style="color:${allDone?'var(--ok)':'var(--muted)'};">
             ${allDone ? ic('check',11)+' Klar' : checked + '/' + pts.length}
           </span>
         </div>
@@ -240,7 +240,8 @@ const RonderingUtforandePage = {
     }
 
     const stIcon  = {ok:'check-circle',anmärkning:'alert-triangle',ej_aktuell:'minus-circle',ej_kontrollerad:'circle'}[pt.status]||'circle';
-    const stColor = {ok:'#16a34a',anmärkning:'#dc2626',ej_aktuell:'#9ca3af',ej_kontrollerad:'#9ca3af'}[pt.status]||'#9ca3af';
+    /* F-09: #16a34a/#9ca3af gav 3,1–3,3:1 resp. 2,5:1 — tokens ger ≥ 4,5:1. */
+    const stColor = {ok:'var(--ok)',anmärkning:'var(--danger)',ej_aktuell:'var(--muted)',ej_kontrollerad:'var(--muted)'}[pt.status]||'var(--muted)';
     const stLabel = {ok:'Godkänd',anmärkning:'Anmärkning',ej_aktuell:'Ej aktuell',ej_kontrollerad:'Ej kontrollerad'}[pt.status]||pt.status;
 
     return `
@@ -248,7 +249,7 @@ const RonderingUtforandePage = {
         <span style="color:${stColor};flex-shrink:0;">${ic(stIcon,16)}</span>
         <div class="ronpt-info">
           <div class="ronpt-name">${esc(pt.title)}</div>
-          <div style="font-size:11px;font-weight:600;color:${stColor};">${stLabel}${pt.comment?' — '+esc(pt.comment):''}</div>
+          <div class="ru-pt-st" style="color:${stColor};">${esc(stLabel)}${pt.comment?' — '+esc(pt.comment):''}</div>
           ${avv?`
             <div class="ron-anm">
               <div class="ron-anm-title">${esc(avv.title)}</div>
@@ -256,10 +257,10 @@ const RonderingUtforandePage = {
               ${avv && avv.images && avv.images.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${avv.images.filter(img=>isSafeImageDataUrl(img.url)).map(img=>`<img src="${img.url}" class="ron-img-thumb">`).join('')}</div>` : ''}
               <div class="ron-anm-actions">
                 ${pbdg(avv.priority)}
-                ${avv.severity?`<span class="bdg bdg-orange" style="font-size:9px;">${avv.severity}</span>`:''}
-                ${avv.issueType?`<span class="bdg bdg-grey" style="font-size:9px;">${avv.issueType}</span>`:''}
+                ${avv.severity?`<span class="bdg bdg-orange">${esc(avv.severity)}</span>`:''}
+                ${avv.issueType?`<span class="bdg bdg-grey">${esc(avv.issueType)}</span>`:''}
                 ${avv.workOrderId
-                  ?`<span class="bdg bdg-green" style="font-size:9px;cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${avv.workOrderId}'})">${ic('clipboard',9)} ${avv.workOrderId}</span>`
+                  ?`<span class="bdg bdg-green" style="cursor:pointer;" onclick="Router.showPage('pg-ao-detail',{aoId:'${esc(avv.workOrderId)}'})">${ic('clipboard',11)} ${esc(avv.workOrderId)}</span>`
                   :(pt.canCreateAO!==false
                     ?`<button class="btn bp bsm" style="font-size:10px;" onclick="RonderingUtforandePage.createAO('${avv.id}')">Skapa AO</button>`
                     :'')}
@@ -642,7 +643,7 @@ const RonderingRapportPage = {
           <div style="font-size:11px;color:var(--mt);">${esc(ronName)} · Tillfälle #${pass.sequenceNumber||1}</div>
         </div>
         ${passStatusBadge(pass.status)}
-        <button class="btn bs bsm" onclick="RonderingRapportPage.copyLink('${pass.id}')">${ic('share-2',14)} Dela</button>
+        <button class="btn bs bsm" onclick="RonderingRapportPage.copyLink('${pass.id}')">${ic('link',14)} Dela</button>
         <button class="btn bs bsm" onclick="window.print()">${ic('printer',14)} Skriv ut</button>
       </div>
 

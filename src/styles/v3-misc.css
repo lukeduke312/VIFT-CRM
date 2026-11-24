@@ -463,3 +463,63 @@
   #pg-calendar .cal-toolbar-right .btn { min-height: 40px; }
   #pg-calendar .cal-ag-row { padding: 10px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   6. Rondering (F-09 kontrast ≥ 4,5:1 för text; F-02 ikoner inline)
+   ═══════════════════════════════════════════════════════════════════ */
+/* Lista: Ronderingar/Mallar som segmentkontroll (inte två knappar) */
+.ron-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ron-seg { margin: 0 !important; flex: 0 0 auto; }
+#pg-rondering .ron-seg .ft { min-width: 0 !important; flex: 0 0 auto !important; padding: 0 14px; }
+.ron-hdr-btn { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 639px) {
+  .ron-seg { flex: 1 1 200px; display: grid !important; grid-template-columns: 1fr 1fr; }
+  .ron-hdr-btn { flex-wrap: nowrap; flex: 0 0 auto; margin-left: auto; }
+  /* Importera/Exportera som ikonknappar (title/tooltip har texten) så att raden inte bryts */
+  .ron-hdr-btn .btn.bs { font-size: 0; gap: 0; width: 40px; padding: 0; justify-content: center; }
+  .ron-hdr-btn .btn.bp { padding: 0 10px; }
+}
+
+
+/* Ny rondering: stegindikator */
+.rw-steps { position: relative; margin: 4px 0 20px; }
+.rw-steps-line, .rw-steps-fill { position: absolute; top: 14px; left: 14%; right: 14%; height: 2px; background: var(--line-2); z-index: 0; }
+.rw-steps-fill { right: auto; width: calc(72% * var(--rw-pct, 0)); background: var(--ok); }
+.rw-steps-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; position: relative; z-index: 1; }
+.rw-step { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; background: none; border: none; padding: 0; font: inherit; color: var(--muted); text-align: center; }
+button.rw-step { cursor: pointer; border-radius: var(--radius-sm); }
+button.rw-step:hover .rw-step-l { text-decoration: underline; text-underline-offset: 2px; }
+button.rw-step:focus-visible { outline: none; box-shadow: var(--focus); }
+.rw-step-n { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; background: var(--surface); border: 1.5px solid var(--line-2); color: var(--muted); font-variant-numeric: tabular-nums; }
+#pg-rondering-wizard .rw-step-n svg { display: block; }
+.rw-step-l { font-size: 12px; font-weight: 600; line-height: 1.25; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rw-step.is-active .rw-step-n { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 0 0 3px rgba(13,43,78,.12); }
+.rw-step.is-active .rw-step-l { color: var(--ink); font-weight: 700; }
+.rw-step.is-done .rw-step-n { background: var(--ok); border-color: var(--ok); color: #fff; }
+.rw-step.is-done .rw-step-l { color: var(--ok); }
+.rw-ready { margin-top: 12px; padding: 10px 14px; background: var(--ok-bg); border: 1px solid var(--ok-line); border-radius: var(--radius); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rw-ready-t { color: var(--ok); font-size: 13px; font-weight: 600; flex: 1; display: inline-flex; align-items: center; gap: 6px; }
+
+/* Utför rondering */
+.ru-stats { display: flex; gap: 6px 14px; margin-top: 8px; font-size: 12.5px; flex-wrap: wrap; }
+.ru-st { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.ru-st-ok { color: var(--ok); }
+.ru-st-avv { color: var(--danger); }
+.ru-st-ej { color: var(--muted); font-weight: 500; }
+.ru-staff { font-size: 12.5px; color: var(--muted); margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+.ru-pt-st { font-size: 12px; font-weight: 600; }
+#pg-rondering-utfor .roncat-head { color: var(--ink); font-weight: 700; }
+#pg-rondering-utfor .roncat-head.done { background: var(--ok-bg); border-color: var(--ok-line); }
+#pg-rondering-utfor .roncat-head-cnt { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+#pg-rondering-utfor .ronpt-desc { color: var(--muted); }
+#pg-rondering-utfor .rona-ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+#pg-rondering-utfor .rona-avv { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger); }
+#pg-rondering-utfor .rona-ej { background: var(--surface-2); border-color: var(--line-2); color: var(--ink-2); }
+#pg-rondering-utfor .rona-lbl { font-size: 12px; }
+#pg-rondering-utfor .rona-undo { color: var(--ink-2); border-color: var(--line-2); }
+#pg-rondering-utfor .ron-anm-body, #pg-rondering .item-sub { color: var(--muted); }
+@media (max-width: 767px) {
+  #pg-rondering-utfor .rona-ok, #pg-rondering-utfor .rona-avv, #pg-rondering-utfor .rona-ej { width: 40px; height: 40px; }
+  #pg-rondering-utfor .rona-undo { width: 36px; height: 36px; }
+}

@@ -65,46 +65,30 @@ const RonderingWizardPage = {
 
   _renderWizard(el) {
     const stepLabels = ['Ronderingsinfo', 'Kontrollpunkter', 'Tillfällen', 'Prissättning'];
+    const stepShort  = ['Info', 'Punkter', 'Tillfällen', 'Pris'];   // mobil (< 768 px)
 
     const stepInd = (() => {
       const pct = (this._step - 1) / (stepLabels.length - 1); // 0..1
 
+      /* F-09 (V3 2026-11-26): stegetiketterna var 9 px i #94a3b8 (2,1–2,3:1)
+         och kapades ("Rondering…"). Nu 12 px i tokenfärger (≥ 4,5:1) som
+         får radbrytas; klarade steg är knappar (gå tillbaka). */
       const circles = stepLabels.map((lbl, i) => {
         const n      = i + 1;
         const active = n === this._step;
         const done   = n < this._step;
-
-        const bg     = active ? 'var(--navy)' : done ? '#16a34a' : '#e2e8f0';
-        const clr    = (active || done) ? '#fff' : '#94a3b8';
-        const cnt    = done ? '✓' : n;
-        const lblClr = active ? 'var(--navy)' : done ? '#15803d' : '#94a3b8';
-        const lblW   = active ? '700' : done ? '600' : '400';
-        const ring   = active ? 'box-shadow:0 0 0 3px rgba(13,43,78,.12);' : '';
-        const cursor = done ? 'cursor:pointer;' : '';
-        const click  = done ? `onclick="RonderingWizardPage._goToStep(${n})"` : '';
-
-        return `
-          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;z-index:1;flex:1;min-width:0;${cursor}"
-              ${click}>
-            <div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${clr};
-              display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;
-              ${ring}flex-shrink:0;">
-              ${cnt}
-            </div>
-            <div style="font-size:9px;font-weight:${lblW};color:${lblClr};text-align:center;line-height:1.2;
-              max-width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px;">
-              ${lbl}
-            </div>
-          </div>`;
+        const cls    = active ? ' is-active' : done ? ' is-done' : '';
+        const inner  = `<span class="rw-step-n">${done ? ic('check', 13) : n}</span><span class="rw-step-l"><span class="mx-tl">${esc(lbl)}</span><span class="mx-ts">${esc(stepShort[i])}</span></span>`;
+        return done
+          ? `<button type="button" class="rw-step${cls}" onclick="RonderingWizardPage._goToStep(${n})" aria-label="Steg ${n}: ${esc(lbl)} (klart, gå tillbaka)">${inner}</button>`
+          : `<div class="rw-step${cls}"${active ? ' aria-current="step"' : ''}>${inner}</div>`;
       }).join('');
 
       return `
-        <div style="position:relative;padding-bottom:4px;margin-bottom:20px;">
-          <div style="position:absolute;top:14px;left:14px;right:14px;height:2px;background:#e2e8f0;z-index:0;"></div>
-          ${pct > 0 ? `<div style="position:absolute;top:14px;left:14px;width:calc((100% - 28px) * ${pct.toFixed(3)});height:2px;background:#16a34a;z-index:0;"></div>` : ''}
-          <div style="display:flex;justify-content:space-between;position:relative;">
-            ${circles}
-          </div>
+        <div class="rw-steps" style="--rw-pct:${pct.toFixed(3)};">
+          <div class="rw-steps-line"></div>
+          <div class="rw-steps-fill"></div>
+          <div class="rw-steps-row">${circles}</div>
         </div>`;
     })();
 
@@ -121,16 +105,16 @@ const RonderingWizardPage = {
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <button class="btn bs bsm" onclick="RonderingWizardPage._backOrPrev()">${ic('arrow-left', 14)}</button>
-        <div style="flex:1;font-weight:800;font-size:15px;">${this._editId ? 'Redigera rondering' : 'Ny rondering'}</div>
+        <button class="btn bs bsm" aria-label="Tillbaka" onclick="RonderingWizardPage._backOrPrev()">${ic('arrow-left', 14)}</button>
+        <div style="flex:1;font-weight:700;font-size:17px;color:var(--ink);">${this._editId ? 'Redigera rondering' : 'Ny rondering'}</div>
         <button class="btn bs bsm" onclick="RonderingWizardPage._saveDraft()">Spara utkast</button>
       </div>
       ${stepInd}
       <div id="wizard-step-content">${content}</div>
       ${canStart ? `
-        <div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;display:flex;align-items:center;gap:10px;">
-          <span style="color:#16a34a;font-size:12px;flex:1;">Rondering klar att utföra</span>
-          <button class="btn bsm" style="background:#16a34a;color:#fff;border-color:#16a34a;font-weight:700;"
+        <div class="rw-ready">
+          <span class="rw-ready-t">${ic('check-circle',14)} Rondering klar att utföra</span>
+          <button class="btn bsu bsm"
             onclick="RonderingWizardPage._saveAndStart()">${ic('play',13)} Starta utförande</button>
         </div>` : ''}
       <div style="display:flex;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--br);">

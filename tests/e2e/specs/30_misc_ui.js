@@ -86,6 +86,48 @@ function leakProbe(rootSel) {
   return hits;
 }
 
+/* Kontrast (WCAG) mellan beräknad textfärg och närmaste ogenomskinliga
+   bakgrund; opacitet längs vägen blandas in. */
+function contrastProbe(sel) {
+  const parse = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return { r: 0, g: 0, b: 0, a: 0 }; const p = m[1].split(',').map((x) => parseFloat(x)); return { r: p[0], g: p[1], b: p[2], a: p[3] === undefined ? 1 : p[3] }; };
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const lum = (c) => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+  return [...document.querySelectorAll(sel)].filter((el) => el.offsetParent && (el.textContent || '').trim()).map((el) => {
+    let fg = parse(getComputedStyle(el).color);
+    let e = el, bg = null, op = 1;
+    for (let x = el; x; x = x.parentElement) op *= +getComputedStyle(x).opacity;
+    while (e) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a >= 0.99) { bg = c; break; } e = e.parentElement; }
+    bg = bg || { r: 255, g: 255, b: 255, a: 1 };
+    const a = fg.a * op;
+    if (a < 1) fg = { r: fg.r * a + bg.r * (1 - a), g: fg.g * a + bg.g * (1 - a), b: fg.b * a + bg.b * (1 - a), a: 1 };
+    const L1 = lum(fg), L2 = lum(bg);
+    const cs = getComputedStyle(el);
+    const large = parseFloat(cs.fontSize) >= 24 || (parseFloat(cs.fontSize) >= 18.66 && +cs.fontWeight >= 700);
+    return { t: el.textContent.trim().slice(0, 30), ratio: Math.round(((Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05)) * 100) / 100, large };
+  });
+}
+
+/* F-02: en ikon (svg) med display:block i ett element som inte är flex/grid
+   och som också har text hamnar på egen rad ovanför texten. */
+function iconLineProbe(rootSel) {
+  const root = document.querySelector(rootSel);
+  const hits = [];
+  root.querySelectorAll('svg').forEach((svg) => {
+    if (!svg.getBoundingClientRect().width || !svg.parentElement || !svg.parentElement.offsetParent) return;
+    const p = svg.parentElement; const pd = getComputedStyle(p).display;
+    if (/flex|grid/.test(pd)) return;
+    const txt = [...p.childNodes].some((n) => (n.nodeType === 3 && n.nodeValue.trim()) || (n.nodeType === 1 && n !== svg && (n.textContent || '').trim()));
+    if (!txt) return;
+    // Textrader (textnoder i föräldern): ligger någon på samma höjd som ikonen?
+    const sr = svg.getBoundingClientRect();
+    const textRects = [];
+    [...p.childNodes].forEach((n) => { if (n.nodeType === 3 && n.nodeValue.trim()) { const r = document.createRange(); r.selectNodeContents(n); textRects.push(...[...r.getClientRects()].filter((x) => x.width > 0)); } });
+    const ownLine = textRects.length > 0 && !textRects.some((r) => r.top < sr.bottom - 1 && r.bottom > sr.top + 1);
+    if (getComputedStyle(svg).display === 'block' || ownLine) hits.push((p.className || p.tagName).toString().split(' ')[0] + ': ' + (p.textContent || '').trim().slice(0, 30));
+  });
+  return hits.slice(0, 8);
+}
+
 const tests = [
   {
     id: 'MISC-IMP-01', module: 'Import och export', name: 'Importera (F-03/F-11): guiden ryms i 360/390/1366 utan att klippas, stegen syns, inaktiv Nästa ser ut som en knapp och aktiveras när fil valts',
@@ -287,6 +329,56 @@ const tests = [
       await d.settle(300);
       const dr = await d.eval(() => ({ grid: !!document.querySelector('#pg-calendar .cal-wk-grid').offsetParent, list: !!(document.querySelector('#pg-calendar .cal-wk-list') || {}).offsetParent, cols: document.querySelectorAll('#pg-calendar .cal-wk-col').length }));
       t.assert(dr.grid && !dr.list && dr.cols === 7, 'dator: veckorutnätet med sju kolumner visas, listan inte ' + JSON.stringify(dr));
+    },
+  },
+  {
+    id: 'MISC-RON-01', module: 'Rondering', name: 'Rondering (F-09): stegetiketter, statusrad, punktstatus (Godkänd/Anmärkning/Ej aktuell) och "Klar" har kontrast ≥ 4,5:1 beräknat från faktiska färger; stegetiketterna kapas inte',
+    async run(t) {
+      const fails = [];
+      const check = (where, list, min) => list.forEach((x) => { if (x.ratio < (x.large ? 3 : min)) fails.push(where + ' "' + x.t + '" ' + x.ratio + ':1'); });
+      for (const vp of ['mx390', 'mx1366']) {
+        const s = await open(t, vp, 'admin', 'pg-rondering-wizard', { reset: true });
+        const w1 = await s.eval(contrastProbe, '#pg-rondering-wizard .rw-step-l');
+        t.assert(w1.length === 4, vp + ': fyra stegetiketter (' + w1.length + ')');
+        check(vp + ' guide steg 1', w1, 4.5);
+        const clip = await s.eval(() => [...document.querySelectorAll('#pg-rondering-wizard .rw-step-l')].filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent));
+        t.assert(clip.length === 0, vp + ': stegetiketterna kapas inte ' + JSON.stringify(clip));
+        // Gå till steg 2 så att ett klart steg (grönt) också mäts.
+        await s.page.fill('#wiz-name', 'Kontrast E2E');
+        await s.pickCustom('wiz-cu', 'K-001');
+        await s.page.locator('.page.active button', { hasText: 'Nästa' }).click();
+        await s.settle(300);
+        check(vp + ' guide steg 2', await s.eval(contrastProbe, '#pg-rondering-wizard .rw-step-l'), 4.5);
+        await s.go('pg-rondering-utfor', { passId: 'PASS-001' });
+        await s.settle(300);
+        const st = await s.eval(contrastProbe, '#pg-rondering-utfor .ru-st, #pg-rondering-utfor .ru-staff, #pg-rondering-utfor .ru-pt-st, #pg-rondering-utfor .roncat-head-cnt, #pg-rondering-utfor .ronpt-name, #pg-rondering-utfor .ronpt-desc');
+        const texts = st.map((x) => x.t).join('|');
+        t.assert(/godkända/.test(texts) && /Godkänd/.test(texts) && /Anmärkning/.test(texts) && /Ej aktuell/.test(texts) && /Klar/.test(texts), vp + ': mätningen omfattar statusrad, Godkänd, Anmärkning, Ej aktuell och Klar');
+        check(vp + ' utför', st, 4.5);
+        await s.go('pg-rondering');
+        check(vp + ' lista', await s.eval(contrastProbe, '#pg-rondering .item-title, #pg-rondering .item-sub, #pg-rondering .ft, #pg-rondering .bdg'), 4.5);
+      }
+      t.assert(fails.length === 0, 'text under 4,5:1: ' + fails.join(' ; '));
+    },
+  },
+  {
+    id: 'MISC-ICON-01', module: 'Designstandard', name: 'Ikoner på samma rad som texten (F-02) i blockets sidor: Projekt, Projektkort, Kontrakt, Importera, Importlogg, Exportcenter, Fastighetskort, Objekt, Kundkort, Kalender, Rondering',
+    async run(t) {
+      const views = [
+        ['pg-projects', {}], ['pg-project-detail', { projectId: 'PRJ-001' }], ['pg-contracts', {}], ['pg-import-wizard', { type: 'customer' }],
+        ['pg-import-log', {}], ['pg-export-center', {}], ['pg-obj-detail', { propId: 'OBJ-001' }], ['pg-propobj-detail', { objId: 'POBJ-E2E-1' }],
+        ['pg-crm-detail', { customerId: 'K-001' }], ['pg-calendar', {}], ['pg-rondering', {}], ['pg-rondering-utfor', { passId: 'PASS-001' }], ['pg-rondering-wizard', { reset: true }],
+      ];
+      const hits = [];
+      for (const vp of ['mx390', 'mx1366']) {
+        const s = await open(t, vp, 'admin');
+        for (const [pg, prm] of views) {
+          await s.go(pg, prm);
+          await s.settle(250);
+          (await s.eval(iconLineProbe, '#' + pg)).forEach((h) => hits.push(vp + ' ' + pg + ' → ' + h));
+        }
+      }
+      t.assert(hits.length === 0, 'ikon på egen rad: ' + hits.join(' ; '));
     },
   },
 ];
