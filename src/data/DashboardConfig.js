@@ -10,6 +10,17 @@
  *   källbaserad anledning finns (se kommentarer per modul nedan) — INTE
  *   godtyckligt begränsat.
  * description: visas i "Anpassa dashboard"-panelen
+ * sizes (2026-11-26): de storlekar (Liten/Halv/Hel = 3/6/12) som är
+ *   relevanta för widgeten och erbjuds i redigeringsläget. Styr BARA vad
+ *   som erbjuds — en redan sparad bredd (t.ex. ¾ = 9 från en äldre
+ *   layout) behålls och visas som vald tills användaren själv byter.
+ * emptyHint: förklaring i redigeringsläget för widgetar som bara visas
+ *   när det finns något att visa (annars döljs de i vanliga vyn).
+ *
+ * Lagring (oförändrad): layouten är PERSONLIG per användare OCH enhet —
+ * den sparas i webbläsarens localStorage under dashLayoutV2_<staff-id>
+ * (äldre dashLayout_<staff-id> läses fortfarande). Den synkas inte till
+ * servern och påverkar aldrig andra användares dashboard.
  */
 const DashboardConfig = {
 
@@ -20,6 +31,17 @@ const DashboardConfig = {
   VALID_SPANS: [3, 6, 9, 12],
 
   SPAN_LABELS: { 3: '¼', 6: '½', 9: '¾', 12: 'Hel' },
+
+  /* 2026-11-26: begripliga storleksnamn i redigeringsläget (ersätter
+     bråktalsväljaren). 9 (¾) erbjuds inte längre som nytt val men visas
+     som "Bred" för widgetar som redan har den sparad. */
+  SIZE_LABELS: { 3: 'Liten', 6: 'Halv', 9: 'Bred', 12: 'Hel' },
+  SIZE_HINTS: {
+    3: 'En fjärdedel av bredden (två per rad på mindre skärmar)',
+    6: 'Halva bredden',
+    9: 'Tre fjärdedelar av bredden (sparad från en äldre layout)',
+    12: 'Hela bredden',
+  },
 
   /* Migrerar ENDAST det gamla 'full'/'half'/'third'/'twothird'-systemet
      till det nya numeriska span-systemet (V51B). 'third' fanns inte som
@@ -43,40 +65,40 @@ const DashboardConfig = {
      en sparad PERSONLIG layout renderas däremot som ETT sammanhängande
      grid utan kategirirubriker — se Dashboard.js). */
   MODULES: {
-    overdue_alert: { id:'overdue_alert', title:'Försenade aktiviteter',  icon:'alert-triangle',  category:'Kräver åtgärd',  description:'Varnar om försenade uppföljningar och aktiviteter',           requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
-    todos:         { id:'todos',         title:'Kräver åtgärd',          icon:'alert-circle',    category:'Kräver åtgärd',  description:'Åtgärder som kräver omedelbar uppmärksamhet',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
-    operations:    { id:'operations',    title:'Dagens drift',           icon:'layout-dashboard', category:'Idag & drift',   description:'Chefsoversikt: försenade, akuta, saknar personal, klara ej fakt.', requiredPermissions:['staff_view','reports_view'],             defaultSize:'full'  },
+    overdue_alert: { id:'overdue_alert', title:'Försenade aktiviteter',  icon:'alert-triangle',  category:'Kräver åtgärd',  description:'Varnar om försenade uppföljningar och aktiviteter',           requiredPermissions:['dashboard_view'],                        defaultSize:'full',  sizes:[6,12],   emptyHint:'Visas bara när det finns försenade uppföljningar.' },
+    todos:         { id:'todos',         title:'Kräver åtgärd',          icon:'alert-circle',    category:'Kräver åtgärd',  description:'Åtgärder som kräver omedelbar uppmärksamhet',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full',  sizes:[6,12],   emptyHint:'Visas bara när något behöver åtgärdas (t.ex. offerter utan svar).' },
+    operations:    { id:'operations',    title:'Dagens drift',           icon:'layout-dashboard', category:'Idag & drift',   description:'Chefsoversikt: försenade, akuta, saknar personal, klara ej fakt.', requiredPermissions:['staff_view','reports_view'],             defaultSize:'full',  sizes:[6,12] },
     /* ops_map: kombinerad karta + lista sida vid sida (CSS-layout från
        V51A). Källbaserad begränsning: widgetens EGEN interna
        .dash-ops-map-wrap-layout lägger redan karta+lista bredvid varandra
        från 1024px och kräver rimligt om utrymme för att förbli läsbar —
        source-verifierat i dashboard.css. Tillåter INTE ¼ (3), stödjer
        ½/¾/Hel. */
-    ops_map:       { id:'ops_map',       title:'Aktiva jobb — karta',    icon:'map-pin',          category:'Idag & drift',   description:'Karta och lista över dagens/aktiva arbetsorder med adress',    requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'full',  minSpan: 6 },
-    today:         { id:'today',         title:'Ordrar idag',            icon:'calendar',        category:'Idag & drift',   description:'Schemalagda arbetsorder för dagens datum',                    requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
-    pool:          { id:'pool',          title:'Arbetspool',             icon:'inbox',           category:'Idag & drift',   description:'Arbetsorder i poolen utan tilldelad resurs',                  requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
-    stamp:         { id:'stamp',         title:'Stämpla tid',            icon:'clock',           category:'Idag & drift',   description:'Stämpla in och ut, se aktiv stämplingstid',                   requiredPermissions:['ao_time'],                              defaultSize:'third' },
-    activities:    { id:'activities',    title:'Aktiviteter',            icon:'bell',            category:'Idag & drift',   description:'Uppföljningar, bokade möten och påminnelser',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    ops_map:       { id:'ops_map',       title:'Aktiva jobb — karta',    icon:'map-pin',          category:'Idag & drift',   description:'Karta och lista över dagens/aktiva arbetsorder med adress',    requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'full',  minSpan: 6, sizes:[6,12] },
+    today:         { id:'today',         title:'Ordrar idag',            icon:'calendar',        category:'Idag & drift',   description:'Schemalagda arbetsorder för dagens datum',                    requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third', sizes:[3,6,12] },
+    pool:          { id:'pool',          title:'Arbetspool',             icon:'inbox',           category:'Idag & drift',   description:'Arbetsorder i poolen utan tilldelad resurs',                  requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third', sizes:[3,6,12] },
+    stamp:         { id:'stamp',         title:'Stämpla tid',            icon:'clock',           category:'Idag & drift',   description:'Stämpla in och ut, se aktiv stämplingstid',                   requiredPermissions:['ao_time'],                              defaultSize:'third', sizes:[3,6,12] },
+    activities:    { id:'activities',    title:'Aktiviteter',            icon:'bell',            category:'Idag & drift',   description:'Uppföljningar, bokade möten och påminnelser',                 requiredPermissions:['dashboard_view'],                        defaultSize:'full',  sizes:[6,12],   emptyHint:'Visas bara när det finns försenade, dagens eller kommande aktiviteter.' },
     /* V53B: "Mina uppgifter" — samma requiredPermissions som pg-activities
        sidans egna åtkomstspärr (PAGE_PERMISSIONS['pg-activities']), inte
        en ny, egen behörighet — widgeten ska bara synas för användare som
        ändå kan öppna Uppgifter-sidan den länkar till. Ingen minSpan: en
        kompakt radlista fungerar lika bra i alla fyra bredder. */
-    my_tasks:      { id:'my_tasks',      title:'Mina uppgifter',         icon:'check-square',    category:'Idag & drift',   description:'Dina öppna uppgifter — försenade, dagens och kommande',       requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third' },
-    rondering:     { id:'rondering',     title:'Rondering',              icon:'clipboard-check', category:'Idag & drift',   description:'Ronderingsschema, ronderingsmallar och öppna avvikelser',      requiredPermissions:['ao_view_all'],                          defaultSize:'full'  },
-    recurring:     { id:'recurring',     title:'Återkommande',           icon:'refresh-cw',      category:'Idag & drift',   description:'Återkommande uppdrag som snart ska skapas',                   requiredPermissions:['recurring_manage'],                      defaultSize:'third' },
+    my_tasks:      { id:'my_tasks',      title:'Mina uppgifter',         icon:'check-square',    category:'Idag & drift',   description:'Dina öppna uppgifter — försenade, dagens och kommande',       requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'third', sizes:[3,6,12] },
+    rondering:     { id:'rondering',     title:'Rondering',              icon:'clipboard-check', category:'Idag & drift',   description:'Ronderingsschema, ronderingsmallar och öppna avvikelser',      requiredPermissions:['ao_view_all'],                          defaultSize:'full',  sizes:[6,12] },
+    recurring:     { id:'recurring',     title:'Återkommande',           icon:'refresh-cw',      category:'Idag & drift',   description:'Återkommande uppdrag som snart ska skapas',                   requiredPermissions:['recurring_manage'],                      defaultSize:'third', sizes:[3,6,12] },
     /* kpi: upp till 5 nyckeltalskort i en rad, med EGEN viewport-baserad
        (inte container-baserad) responsiv kolumnindelning (kpi-row i
        dashboard.css) — source-verifierat att den INTE anpassar sig efter
        widgetens egen gridbredd. Vid ¼ bredd på en bred skärm skulle
        kpi-row:s interna 3-5-kolumnslayout tvingas ihop orimligt smalt.
        Tillåter INTE ¼, stödjer ½/¾/Hel. */
-    kpi:           { id:'kpi',           title:'Nyckeltal',              icon:'bar-chart-2',     category:'Verksamhet',     description:'Nyckeltal för arbetsorder, offerter och fakturering',          requiredPermissions:['ao_view_all','ao_view_own','ao_time'],    defaultSize:'full',  minSpan: 6 },
-    ao_categories: { id:'ao_categories', title:'Öppna per kategori',     icon:'layers',           category:'Verksamhet',     description:'Hur belastningen fördelas per arbetsorderkategori', requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'full'  },
-    sales:         { id:'sales',         title:'Säljchanser',            icon:'target',          category:'Verksamhet',     description:'Aktiva säljchanser att kontakta och följa upp',               requiredPermissions:['sales_manage'],                          defaultSize:'third' },
-    offers:        { id:'offers',        title:'Offerter väntar',        icon:'file-text',       category:'Verksamhet',     description:'Skickade offerter som väntar på kundens svar',                requiredPermissions:['offer_manage'],                          defaultSize:'third' },
-    activity_log:  { id:'activity_log',  title:'Senaste händelser',      icon:'activity',        category:'Verksamhet',     description:'Bolagets senaste händelser, ändringar och loggar',            requiredPermissions:['reports_view','staff_view'],             defaultSize:'third' },
-    quickbtns:     { id:'quickbtns',     title:'Snabbåtgärder',          icon:'zap',             category:'Verksamhet',     description:'Skapa ny order, offert eller kund med ett klick',             requiredPermissions:['dashboard_view'],                        defaultSize:'full'  },
+    kpi:           { id:'kpi',           title:'Nyckeltal',              icon:'bar-chart-2',     category:'Verksamhet',     description:'Nyckeltal för arbetsorder, offerter och fakturering',          requiredPermissions:['ao_view_all','ao_view_own','ao_time'],    defaultSize:'full',  minSpan: 6, sizes:[6,12] },
+    ao_categories: { id:'ao_categories', title:'Öppna per kategori',     icon:'layers',           category:'Verksamhet',     description:'Hur belastningen fördelas per arbetsorderkategori', requiredPermissions:['ao_view_all','ao_view_own'],             defaultSize:'full',  sizes:[3,6,12] },
+    sales:         { id:'sales',         title:'Säljchanser',            icon:'target',          category:'Verksamhet',     description:'Aktiva säljchanser att kontakta och följa upp',               requiredPermissions:['sales_manage'],                          defaultSize:'third', sizes:[3,6,12] },
+    offers:        { id:'offers',        title:'Offerter väntar',        icon:'file-text',       category:'Verksamhet',     description:'Skickade offerter som väntar på kundens svar',                requiredPermissions:['offer_manage'],                          defaultSize:'third', sizes:[3,6,12] },
+    activity_log:  { id:'activity_log',  title:'Senaste händelser',      icon:'activity',        category:'Verksamhet',     description:'Bolagets senaste händelser, ändringar och loggar',            requiredPermissions:['reports_view','staff_view'],             defaultSize:'third', sizes:[3,6,12] },
+    quickbtns:     { id:'quickbtns',     title:'Snabbåtgärder',          icon:'zap',             category:'Verksamhet',     description:'Skapa ny order, offert eller kund med ett klick',             requiredPermissions:['dashboard_view'],                        defaultSize:'full',  sizes:[3,6,12] },
   },
 
   /* ── Rollbaserade standardlayouter ──────────────────────────────────────
@@ -99,8 +121,12 @@ const DashboardConfig = {
 
   /* V3: standardbredder för rollstandarden (ger fyllda rader). Gäller bara
      användare utan sparad personlig layout. */
+  /* 2026-11-26: bara Liten/Halv/Hel i standardlayouten. Tidigare 9+3
+     (karta ¾ + pool ¼) gav en halvtom rad på 1024–1279 px där ¼ breddas
+     till ½. Kartan får hel bredd (karta och lista sida vid sida), pool och
+     uppgifter delar raden under den. */
   V3_DEFAULT_SPANS: {
-    ops_map: 9, pool: 3, my_tasks: 3, rondering: 6, recurring: 3,
+    ops_map: 12, pool: 6, my_tasks: 6, rondering: 6, recurring: 6,
     sales: 6, offers: 6, activity_log: 6, ao_categories: 6,
   },
   V3_ROLE_SPANS: {
@@ -123,6 +149,19 @@ const DashboardConfig = {
   CATEGORY_ORDER: ['Kräver åtgärd', 'Idag & drift', 'Verksamhet'],
 
   getModule(id) { return this.MODULES[id] || null; },
+
+  /* 2026-11-26: storlekar som erbjuds för en widget i redigeringsläget.
+     `keep` = span-värden som ska visas även om de inte ingår i modulens
+     egna val (widgetens nuvarande/ursprungliga sparade bredd) — så att en
+     äldre sparad bredd aldrig försvinner tyst ur väljaren. */
+  getSizeOptions(id, keep) {
+    const m = this.MODULES[id];
+    if (!m) return [];
+    const min = this.getMinSpan(id);
+    const base = (Array.isArray(m.sizes) && m.sizes.length ? m.sizes : [3, 6, 12]).filter(s => this.VALID_SPANS.includes(s) && s >= min);
+    (keep || []).forEach(s => { if (this.VALID_SPANS.includes(s) && s >= min && !base.includes(s)) base.push(s); });
+    return base.sort((a, b) => a - b);
+  },
   getAllModules() { return Object.values(this.MODULES); },
   getMinSpan(id) {
     const m = this.MODULES[id];
