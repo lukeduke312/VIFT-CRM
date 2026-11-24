@@ -1,0 +1,15 @@
+VIFT CRM STAGING — kopia av vift_staging_backup_20261124 utanför Supabase
+Skapad: 2026-11-24T13:58:30.014Z
+Källa: CSV från SQL Editor
+store: 40 nycklar, summa dc85f35f332e4151e606c89226c16964
+op_idempotency: 2146 rader, summa ac6f2cd259496b09b4eca85656513cc9
+function_definitions: 50 funktioner, summa 9d8e76769dd308dddb432b8f09533a99
+Summor jämförda med databasen: JA, identiska
+Lokal återställningsprov: OK — 40 nycklar med identisk md5, 2146 idempotensposter (summa ac6f2cd259496b09b4eca85656513cc9)
+
+SHA-256:
+d836680dbed686b56ad7fcf3600f92b6272bc08aab5a7618d722af8172d94a8f  aterstall_funktioner.sql
+6dad68a6f91269e2dd1e113e18b69d959e3046951f12e61a3794f46ec0c2e7d9  aterstall_store.sql
+c494d83b22ffdf3753dbfb58fe033bb8eecb385ca6549b5c689b2f8108423384  function_definitions.json
+43d784c584906865b14b450400a3463e8707ef47c8c6c94c923bf29b1d99cbc8  op_idempotency.json
+4c875fe510da1f2a7c05ad2d3cda57ddb257c690dda6430300060c5ec474e310  store.json

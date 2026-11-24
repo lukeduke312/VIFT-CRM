@@ -569,7 +569,7 @@ Den nya klienten använder sina reserver mot dagens server tills §2g, §2i och 
 
 Inga lösenord, portkoder eller nyckelfält med värden finns i store.
 
-**Kopia utanför Supabase:** delvis klar (**fortfarande stopp för GO-1 och framåt**). Verktyget `tools/staging-backup-export.js` gör följande:
+**Kopia utanför Supabase:** **klar och verifierad 2026-11-24**. Förutsättningen för GO-1 och framåt är uppfylld. Verktyget `tools/staging-backup-export.js` gör följande:
 - exporterar backupen;
 - verifierar varje rad mot databasens md5 och summor;
 - skriver återställnings-SQL;
@@ -583,9 +583,14 @@ Status för Lucas CSV-export från SQL Editor:
 |---|---|---|
 | `store` | **Godkänd.** 40/40 rader med identisk md5. | `dc85f35f…` |
 | Funktionsdefinitioner | **Godkänd.** 50/50. | `9d8e7676…` |
-| Idempotensposter | **Avvisad.** SQL Editor kapade vid 100 av 2 146 rader. | — |
+| Idempotensposter | Första exporten **avvisades**: SQL Editor kapade vid 100 av 2 146 rader. Med delfrågan `op_idempotency_delar` (9 rader om högst 250 poster) är den **godkänd**: 2 146/2 146 med identisk md5. | `ac6f2cd2…` |
 
-**Återstår:** Lucas kör frågan `op_idempotency_delar` (`node tools/staging-backup-export.js --visa-fragor`) i SQL Editor. Den ger 9 rader om högst 250 poster och är provad mot STAGING med bara läsning. Han laddar upp CSV-filen, och därefter körs verifieringen och den lokala återställningsprovningen av hela kopian.
+**Hela kopian (2026-11-24):**
+- Summorna för alla tre delarna är identiska med databasens.
+- Återställningen är provad i en tom lokal PostgreSQL och gav identisk md5 för alla 40 nycklar och 2 146 idempotensposter.
+- Kopian innehåller inga lösenord, portkoder, nyckelfält med värden eller hemliga nycklar.
+- Kopian är levererad till Lucas som `VIFT-STAGING-backup-20261124-extern-kopia.zip`, med SHA-256 `7e2693d5…`. Samma kontroll ger samma resultat från den uppackade filen.
+- Datan ligger inte i git. Manifest och kontrollsummor finns i `supabase/backup/staging-backup-20261124-extern/`.
 
 **Edge Functions före installation:** sparade i `supabase/backup/staging-ef-fore-installation/` med SHA-256 och Supabase `ezbr_sha256`.
 
