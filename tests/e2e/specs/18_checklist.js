@@ -58,7 +58,8 @@ module.exports = [
       t.assert(t.fake.get('workOrders').find((a) => a.id === AO_ID).status === 'planerad', 'AO:ns status fortfarande oförändrad efter Utförd');
       const badge = await s.text('#ao-chk-counter');
       t.note('badge: ' + badge);
-      t.assert(/1\/4 utförda|2\/4 utförda/.test(badge), 'framstegsindikatorn räknar utförda');
+      /* V3 2026-11-26: indikatorn visar "N av 4 klara" + "N utförda" (tidigare "N/4 utförda"). */
+      t.assert(/[12] av 4 klara/.test(badge) && /[12] utförda/.test(badge), 'framstegsindikatorn räknar utförda');
     },
   },
   {
