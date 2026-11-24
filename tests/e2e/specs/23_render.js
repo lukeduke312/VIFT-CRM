@@ -5,10 +5,13 @@
    (innerText) får inte innehålla HTML-taggar eller HTML-entiteter.
    Simulerad server. */
 const MARKUP = /<\/?(svg|path|span|div|i|b|strong|em|a|button|br|img|small|p|ul|li|table|td|tr|label|input|select|option)\b[^>]*>|&(lt|gt|amp|quot|#39|nbsp);/i;
+/* QA 2026-11-26: även trasig HTML där en tagg i ett attribut avslutat elementet
+   för tidigt — då syns attributfragment som text (Serviceintervall-sökfältet). */
+const BROKEN = /\b(on[a-z]+|value|placeholder|class|style|href|xmlns|viewBox|stroke-width)=["']|<svg\b|<path\b/i;
 
 async function check(s, where, hits) {
-  const r = await s.eval((src) => {
-    const re = new RegExp(src, 'i');
+  const r = await s.eval(([src, bsrc]) => {
+    const re = new RegExp(src, 'i'); const broken = new RegExp(bsrc, 'i');
     const out = [];
     const roots = [document.querySelector('.page.active'), ...document.querySelectorAll('.modal-overlay.open')].filter(Boolean);
     for (const root of roots) {
@@ -16,14 +19,14 @@ async function check(s, where, hits) {
       let n; while ((n = walker.nextNode())) {
         const el = n.parentElement;
         if (!el || el.closest('script,style,textarea,code,pre') || !el.offsetParent) continue;
-        const t = n.nodeValue; const m = t.match(re);
+        const t = n.nodeValue; const m = t.match(re) || t.match(broken);
         if (m) out.push((el.className ? String(el.className).split(' ')[0] : el.tagName) + ': "' + t.trim().slice(Math.max(0, m.index - 20), m.index + 40) + '"');
       }
       // Attribut som visas för användaren (title/placeholder/aria-label)
-      root.querySelectorAll('[title],[placeholder],[aria-label]').forEach((e) => ['title', 'placeholder', 'aria-label'].forEach((a) => { const v = e.getAttribute(a); if (v && re.test(v)) out.push(a + ': "' + v.slice(0, 60) + '"'); }));
+      root.querySelectorAll('[title],[placeholder],[aria-label]').forEach((e) => ['title', 'placeholder', 'aria-label'].forEach((a) => { const v = e.getAttribute(a); if (v && (re.test(v) || v.includes('<'))) out.push(a + ': "' + v.slice(0, 60) + '"'); }));
     }
     return out.slice(0, 5);
-  }, MARKUP.source);
+  }, [MARKUP.source, BROKEN.source]);
   if (r.length) hits.push(where + ' → ' + r.join(' | '));
 }
 

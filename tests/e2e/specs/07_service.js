@@ -53,7 +53,7 @@ module.exports = [
       t.assert(acts.length === 1, 'andra uppstarten skapar ingen dubblett (' + acts.length + ')');
       // Markera utförd via Serviceintervall-översikten
       await s.go('pg-service-intervals');
-      const card = s.page.locator('.page.active .si-card', { hasText: 'Filterbyte E2E' });
+      const card = s.page.locator('.page.active .si2-card', { hasText: 'Filterbyte E2E' });
       await card.locator('button', { hasText: 'Markera utförd' }).click();
       await s.page.waitForSelector('.modal-overlay.open #si-done-ao');
       const aoOpt = await s.eval(() => Array.from(document.querySelectorAll('#si-done-ao option')).map((o) => o.value).find(Boolean));
@@ -70,7 +70,7 @@ module.exports = [
       acts = (t.fake.get('activities') || []).filter((a) => a.relatedId === si.id);
       t.assert(acts.length === 1 && acts[0].status === 'done', 'Att göra-posten stängd på servern (' + acts.map((a) => a.status) + ')');
       // Historik → AO-länk
-      await s.page.locator('.page.active .si-card', { hasText: 'Filterbyte E2E' }).locator('button', { hasText: 'Historik' }).click();
+      await s.page.locator('.page.active .si2-card', { hasText: 'Filterbyte E2E' }).locator('button', { hasText: 'Historik' }).click();
       await s.page.waitForSelector('.modal-overlay.open .si-hist-row');
       await s.page.locator('.modal-overlay.open .si-hist-row a', { hasText: aoOpt }).click();
       await s.settle(600);
@@ -90,7 +90,7 @@ module.exports = [
       await s.clearToasts();
       t.fake.addFault({ match: /store-key-write:writeMerge/, mode: 'fail', status: 503, error: 'http_503', times: 3 });
       await s.go('pg-service-intervals');
-      await s.page.locator('.page.active .si-card', { hasText: 'OVK E2E' }).locator('button', { hasText: 'Markera utförd' }).click();
+      await s.page.locator('.page.active .si2-card', { hasText: 'OVK E2E' }).locator('button', { hasText: 'Markera utförd' }).click();
       await s.page.waitForSelector('.modal-overlay.open #si-done-date');
       await s.clickModalButton(/Markera utförd/);
       await s.settle(2500);
@@ -103,7 +103,7 @@ module.exports = [
       t.assert(local.h === 0 && local.next === siOnServer(t, 'OVK E2E').nextDue, 'klienten rullade tillbaka till serverns läge (' + JSON.stringify(local) + ')');
       t.fake.clearFaults();
       await s.clearToasts();
-      await s.page.locator('.page.active .si-card', { hasText: 'OVK E2E' }).locator('button', { hasText: 'Markera utförd' }).click();
+      await s.page.locator('.page.active .si2-card', { hasText: 'OVK E2E' }).locator('button', { hasText: 'Markera utförd' }).click();
       await s.page.waitForSelector('.modal-overlay.open #si-done-date');
       await s.clickModalButton(/Markera utförd/);
       await s.waitToast(/Markerat som utförd/, 6000);
@@ -120,13 +120,14 @@ module.exports = [
       await s.waitToast(/tillagt/, 6000);
       await s.settle(1000);
       await s.go('pg-service-intervals');
-      await s.page.fill('#pg-service-intervals-content input.fi', 'Brand');
-      await s.settle(200);
-      t.assert((await s.page.locator('.page.active .si-card').count()) === 1, 'sök filtrerar till ett kort');
-      await s.page.locator('.page.active .si-card', { hasText: 'Brandkontroll E2E' }).locator('button[title="Pausa"]').click();
+      // 2026-11-26: sökfältet heter #si2-q (renderas om bara listan, 150 ms fördröjning); paus-knappen har synlig text.
+      await s.page.fill('#si2-q', 'Brand');
+      await s.settle(400);
+      t.assert((await s.page.locator('.page.active .si2-card').count()) === 1, 'sök filtrerar till ett kort');
+      await s.page.locator('.page.active .si2-card', { hasText: 'Brandkontroll E2E' }).locator('button', { hasText: /^\s*Pausa\s*$/ }).click();
       await s.settle(1200);
       t.assert(siOnServer(t, 'Brandkontroll E2E').active === false, 'pausad på servern');
-      await s.page.locator('.page.active .si-fchip', { hasText: 'Pausade' }).click();
+      await s.page.locator('.page.active .si2-chips .chip', { hasText: 'Pausade' }).click();
       t.assert(/Brandkontroll E2E/.test(await s.text('#si-overview-list')), 'filtret Pausade visar intervallet');
       const f = await t.world.session({ viewport: 'iphone' });
       await f.login('falt');

@@ -4230,13 +4230,8 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
 .si-hist-by      { color: var(--mt); }
 .si-hist-comment { margin-top: 4px; color: var(--tx); }
 
-@media (prefers-color-scheme: dark) {
-  .si-card { background: var(--card-bg, #1e293b); }
-  .si-badge-ok       { background: rgba(34,197,94,.15);  }
-  .si-badge-approaching { background: rgba(234,179,8,.15); }
-  .si-badge-due-soon { background: rgba(249,115,22,.15); }
-  .si-badge-overdue  { background: rgba(239,68,68,.15);  }
-}
+/* QA 2026-11-26: borttaget @media (prefers-color-scheme: dark)-block — appen har inget mörkt tema, så
+   blocket gav mörk bakgrund med mörk text på enheter i mörkt läge (oläsliga serviceintervallkort). */
 
 /* ── Objekt-kort (lägenheter, lokaler) — Leverans C ────────────────────── */
 .obj-card {
@@ -4295,10 +4290,8 @@ details.ao-section[open] .ao-section-chevron { transform: rotate(180deg); }
   margin-top: 10px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .obj-card { background: var(--card-bg, #1e293b); }
-  .obj-card-num { background: rgba(14,165,233,.15); }
-}
+/* QA 2026-11-26: borttaget @media (prefers-color-scheme: dark)-block — appen har inget mörkt tema, så
+   blocket gav mörk bakgrund med mörk text på enheter i mörkt läge (oläsliga objektkort). */
 
 /* ── Import Wizard (Leverans B) ─────────── */
 .imp-wizard { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }

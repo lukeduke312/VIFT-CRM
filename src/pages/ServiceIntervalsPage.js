@@ -81,24 +81,7 @@ const ServiceIntervalsPage = {
     const canManage = typeof Auth !== 'undefined' && Auth.can('customer_manage');
     const canMark   = canManage || (typeof Auth !== 'undefined' && Auth.can('ao_edit'));
 
-    /* ── Filter ───────────────────────────── */
-    let list = all.slice();
-    if (f.status   !== 'all') list = list.filter(x => x.status === f.status);
-    if (f.category !== 'all') list = list.filter(x => x.interval.category === f.category);
-    const q = (f.search || '').toLowerCase();
-    if (q) {
-      list = list.filter(x => {
-        const resp = x.interval.responsibleStaffId ? (state.staff || []).find(s => s.id === x.interval.responsibleStaffId) : null;
-        const respName = resp ? `${resp.firstName} ${resp.lastName}`.trim() : '';
-        return (x.interval.title + ' ' + (x.propertyName || '') + ' ' + respName + ' ' + (x.interval.supplier || '')).toLowerCase().includes(q);
-      });
-    }
-
-    /* ── Sort ─────────────────────────────── (list är redan sorterad efter
-       nästa förfall via getAllAcrossProperties() — bara de två alternativa
-       sorteringarna behöver hanteras explicit här) */
-    if (f.sort === 'name')     list.sort((a, b) => (a.interval.title   || '').localeCompare(b.interval.title   || '', 'sv'));
-    else if (f.sort === 'property') list.sort((a, b) => (a.propertyName || '').localeCompare(b.propertyName || '', 'sv'));
+    let list = this._filtered(SIS);
 
     /* ── Status-räknare för filter-chips (mot HELA, ofiltrerade listan) ── */
     const counts = { overdue: 0, due_soon: 0, approaching: 0, ok: 0, paused: 0, not_set: 0 };
@@ -106,51 +89,58 @@ const ServiceIntervalsPage = {
 
     const categoriesUsed = SIS.CATEGORIES.filter(c => all.some(x => x.interval.category === c.key));
 
+    const chips = [
+      ['all',         'Alla',            all.length,         ''],
+      ['overdue',     'Förfallna',       counts.overdue,     'chip-danger'],
+      ['due_soon',    'Förfaller snart', counts.due_soon,    ''],
+      ['approaching', 'Närmar sig',      counts.approaching, ''],
+      ['ok',          'OK',              counts.ok,          ''],
+      ['paused',      'Pausade',         counts.paused,      '']
+    ];
+    /* QA 2026-11-26: sökfältets placeholder innehöll tidigare ic()-SVG INNE i
+       attributet, vilket bröt input-taggen (attribut och SVG syntes som text).
+       Ikonen är nu ett eget element; placeholder är ren text. Sökningen
+       renderar bara om listan (fältet behåller fokus). */
     const filterBar = `
-      <div class="si-filter-bar">
-        <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;">
-          ${[
-            ['all',         'Alla',             all.length],
-            ['overdue',     'Förfallna',        counts.overdue],
-            ['due_soon',    'Förfaller snart',  counts.due_soon],
-            ['approaching', 'Närmar sig',       counts.approaching],
-            ['ok',          'OK',               counts.ok],
-            ['paused',      'Pausade',          counts.paused]
-          ].map(([k, l, n]) => `<button class="si-fchip ${f.status === k ? 'on' : ''}" onclick="ServiceIntervalsPage._fApply({status:'${k}'})">${l}${n > 0 ? ` <span class="si-fchip-cnt">${n}</span>` : ''}</button>`).join('')}
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <input type="text" class="fi" placeholder="${ic('search', 11)} Sök titel, fastighet, ansvarig…" value="${esc(f.search || '')}"
-            style="font-size:12px;padding:5px 10px;height:32px;min-width:160px;max-width:220px;"
-            oninput="ServiceIntervalsPage._fApply({search:this.value})">
-          <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="ServiceIntervalsPage._fApply({category:this.value})">
+      <div class="si2-toolbar">
+        <label class="si2-search">
+          ${ic('search', 15)}
+          <input type="search" id="si2-q" placeholder="Sök titel, fastighet, ansvarig, leverantör…" value="${esc(f.search || '')}"
+            aria-label="Sök serviceintervall" autocomplete="off" oninput="ServiceIntervalsPage._onSearch(this.value)">
+        </label>
+        <div class="si2-selects">
+          <select class="fi" aria-label="Kategori" onchange="ServiceIntervalsPage._fApply({category:this.value})">
             <option value="all" ${f.category === 'all' ? 'selected' : ''}>Alla kategorier</option>
-            ${categoriesUsed.map(c => `<option value="${c.key}" ${f.category === c.key ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
+            ${categoriesUsed.map(c => `<option value="${esc(c.key)}" ${f.category === c.key ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
           </select>
-          <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="ServiceIntervalsPage._fApply({sort:this.value})">
-            <option value="nextDue"  ${f.sort === 'nextDue'  ? 'selected' : ''}>Sorterat efter förfall</option>
-            <option value="name"     ${f.sort === 'name'     ? 'selected' : ''}>Sorterat efter namn</option>
-            <option value="property" ${f.sort === 'property' ? 'selected' : ''}>Sorterat efter fastighet</option>
+          <select class="fi" aria-label="Sortering" onchange="ServiceIntervalsPage._fApply({sort:this.value})">
+            <option value="nextDue"  ${f.sort === 'nextDue'  ? 'selected' : ''}>Sortera: nästa förfall</option>
+            <option value="name"     ${f.sort === 'name'     ? 'selected' : ''}>Sortera: namn</option>
+            <option value="property" ${f.sort === 'property' ? 'selected' : ''}>Sortera: fastighet</option>
           </select>
         </div>
+      </div>
+      <div class="si2-chips" role="group" aria-label="Filtrera på status">
+        ${chips.map(([k, l, n, cls]) => `<button type="button" class="chip ${cls} ${f.status === k ? 'on' : ''}" aria-pressed="${f.status === k}" onclick="ServiceIntervalsPage._fApply({status:'${k}'})">${l}${` <span class="chip-n">${n}</span>`}</button>`).join('')}
       </div>`;
-
-    const itemsHtml = list.length === 0
-      ? `<div class="empty" style="padding:24px 0;">
-           ${ic('tool', 28)}
-           <p style="font-size:12px;color:var(--mt);margin-top:6px;">${all.length === 0 ? 'Inga serviceintervall registrerade ännu.' : 'Inga intervall matchar filtret.'}</p>
-         </div>`
-      : list.map(x => this._renderRow(x, SIS, canManage, canMark)).join('');
 
     return `
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('tool', 14)} Serviceintervall — alla fastigheter</h3>
-        </div>
-        <div class="card-body" style="padding-top:8px;">
-          ${all.length > 0 ? filterBar : ''}
-          <div id="si-overview-list" style="margin-top:${all.length > 0 ? '10' : '0'}px;">${itemsHtml}</div>
-        </div>
+      <div class="si2">
+        ${all.length > 0 ? filterBar : ''}
+        <div id="si-overview-list" class="si2-list">${this._renderList(list, all.length, SIS, canManage, canMark)}</div>
       </div>`;
+  },
+
+  _renderList(list, total, SIS, canManage, canMark) {
+    if (list.length === 0) {
+      return `<div class="empty si2-empty">
+           ${ic('tool', 28)}
+           <h3>${total === 0 ? 'Inga serviceintervall ännu' : 'Inga intervall matchar'}</h3>
+           <p>${total === 0 ? 'Serviceintervall läggs till på fastighetskortet under fliken Service.' : 'Ändra sökningen eller statusfiltret för att se fler.'}</p>
+         </div>`;
+    }
+    return `<div class="si2-count" aria-live="polite">Visar ${list.length} av ${total} serviceintervall</div>` +
+      list.map(x => this._renderRow(x, SIS, canManage, canMark)).join('');
   },
 
   _renderRow(x, SIS, canManage, canMark) {
@@ -158,48 +148,70 @@ const ServiceIntervalsPage = {
     const respS    = si.responsibleStaffId ? (state.staff || []).find(s => s.id === si.responsibleStaffId) : null;
     const respName = respS ? `${respS.firstName} ${respS.lastName}`.trim() : '';
     const cat      = SIS.CATEGORIES.find(c => c.key === si.category);
-    const cardCls  = x.status === 'overdue' ? 'si-card--overdue'
-                    : x.status === 'due_soon' ? 'si-card--due-soon'
-                    : x.status === 'approaching' ? 'si-card--approaching'
-                    : x.status === 'paused' ? 'si-card--paused' : '';
-    const nextColor = x.status === 'overdue' ? 'var(--rd)' : (x.status === 'due_soon' || x.status === 'approaching') ? 'var(--or)' : 'inherit';
+    const tone     = x.status === 'overdue' ? 'danger' : (x.status === 'due_soon' || x.status === 'approaching') ? 'warn' : x.status === 'paused' ? 'paused' : x.status === 'not_set' ? 'muted' : 'ok';
+    const hist     = (si.history || []).length;
+    const pid = esc(x.propertyId), sid = esc(si.id);
 
     return `
-      <div class="si-card ${cardCls}">
-        <div class="si-card-header">
-          <div style="flex:1;min-width:0;">
-            <div class="si-card-title">${esc(si.title)}</div>
-            <div class="si-card-meta">
-              ${cat ? `<span>${esc(cat.label)}</span>` : ''}
-              <span>${SIS.intervalLabel(si)}</span>
-              <span style="cursor:pointer;color:var(--sky);" onclick="Router.showPage('pg-obj-detail',{propId:'${x.propertyId}'})">${ic('building-2', 10)} ${esc(x.propertyName || '—')}</span>
-              ${respName ? `<span>${ic('user', 10)} ${esc(respName)}</span>` : ''}
-              ${si.supplier ? `<span>${ic('package', 10)} ${esc(si.supplier)}</span>` : ''}
+      <article class="si2-card si2-${tone}">
+        <div class="si2-head">
+          <div class="si2-title-wrap">
+            <h3 class="si2-title">${esc(si.title)}</h3>
+            <div class="si2-sub">
+              ${cat ? `<span class="si2-cat">${esc(cat.label)}</span>` : ''}
+              <button type="button" class="si2-link" onclick="Router.showPage('pg-obj-detail',{propId:'${pid}'})">${ic('building-2', 13)}<span>${esc(x.propertyName || '—')}</span></button>
             </div>
           </div>
-          <div class="si-card-status">${SIS.statusBadge(si)}</div>
+          <div class="si2-status">${SIS.statusBadge(si)}</div>
         </div>
-        <div class="si-card-body">
-          <div class="si-info-row">
-            <span>Senast utfört:</span>
-            <span>${si.lastDone ? fmtDate(si.lastDone) : '—'}</span>
-          </div>
-          <div class="si-info-row">
-            <span>Nästa förfall:</span>
-            <span style="font-weight:600;color:${nextColor};">
-              ${si.nextDue ? fmtDate(si.nextDue) : '—'}
-              ${si.nextDue && x.status !== 'ok' && x.status !== 'paused' ? ` <span style="font-size:11px;font-weight:400;color:var(--mt);">(${SIS.statusLabel(si)})</span>` : ''}
-            </span>
-          </div>
-          ${si.autoCreateAO ? `<div class="si-info-row"><span class="bdg bdg-blue" style="font-size:10px;">${ic('clipboard-list', 10)} Automatisk AO</span></div>` : ''}
+        <dl class="si2-facts">
+          <div><dt>Intervall</dt><dd>${esc(SIS.intervalLabel(si))}</dd></div>
+          <div><dt>Senast utfört</dt><dd>${si.lastDone ? esc(fmtDate(si.lastDone)) : '—'}</dd></div>
+          <div class="si2-next"><dt>Nästa förfall</dt><dd>${si.nextDue ? esc(fmtDate(si.nextDue)) : '—'}${si.nextDue && x.status !== 'ok' && x.status !== 'paused' ? `<span class="si2-rel">${esc(SIS.statusLabel(si))}</span>` : ''}</dd></div>
+          <div><dt>Ansvarig</dt><dd>${respName ? esc(respName) : '<span class="si2-none">Ingen</span>'}</dd></div>
+          ${si.supplier ? `<div><dt>Leverantör</dt><dd>${esc(si.supplier)}</dd></div>` : ''}
+          ${si.autoCreateAO ? `<div><dt>Arbetsorder</dt><dd><span class="bdg bdg-blue">${ic('clipboard-list', 11)} Skapas automatiskt</span></dd></div>` : ''}
+        </dl>
+        <div class="si2-actions">
+          ${canMark && si.active ? `<button type="button" class="btn bp bsm" onclick="ServiceIntervalsPage.markDone('${pid}','${sid}')">${ic('check-circle', 14)} Markera utförd</button>` : ''}
+          ${hist > 0 ? `<button type="button" class="btn bs bsm" onclick="PropertyDetailPage.openSIHistory('${pid}','${sid}')">${ic('clock', 14)} Historik (${hist})</button>` : ''}
+          ${canManage ? `<button type="button" class="btn bs bsm" onclick="ServiceIntervalsPage.editInterval('${pid}','${sid}')">${ic('pencil', 14)} Redigera</button>` : ''}
+          ${canManage ? `<button type="button" class="btn bghost bsm" onclick="ServiceIntervalsPage.togglePaused('${pid}','${sid}')">${ic(si.active ? 'pause-circle' : 'play-circle', 14)} ${si.active ? 'Pausa' : 'Återuppta'}</button>` : ''}
         </div>
-        <div class="si-card-actions">
-          ${canMark && si.active ? `<button class="btn bp bsm" onclick="ServiceIntervalsPage.markDone('${x.propertyId}','${si.id}')">${ic('check-circle', 13)} Markera utförd</button>` : ''}
-          ${(si.history || []).length > 0 ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openSIHistory('${x.propertyId}','${si.id}')">${ic('clock', 13)} Historik (${si.history.length})</button>` : ''}
-          ${canManage ? `<button class="btn bghost bsm" onclick="ServiceIntervalsPage.editInterval('${x.propertyId}','${si.id}')">${ic('pencil', 13)}</button>` : ''}
-          ${canManage ? `<button class="btn bghost bsm" title="${si.active ? 'Pausa' : 'Återuppta'}" onclick="ServiceIntervalsPage.togglePaused('${x.propertyId}','${si.id}')">${ic(si.active ? 'pause' : 'play', 13)}</button>` : ''}
-        </div>
-      </div>`;
+      </article>`;
+  },
+
+  /* Sök: uppdatera bara listan (behåll fokus i fältet), kort fördröjning. */
+  _onSearch(v) {
+    this._filter.search = v;
+    clearTimeout(this._qT);
+    this._qT = setTimeout(() => {
+      const host = document.getElementById('si-overview-list');
+      if (!host) { this.render(); return; }
+      const SIS = ServiceIntervalService;
+      const canManage = Auth.can('customer_manage');
+      const canMark = canManage || Auth.can('ao_edit');
+      host.innerHTML = this._renderList(this._filtered(SIS), SIS.getAllAcrossProperties().length, SIS, canManage, canMark);
+    }, 150);
+  },
+
+  _filtered(SIS) {
+    const f = this._filter;
+    let list = SIS.getAllAcrossProperties().slice();
+    if (f.status   !== 'all') list = list.filter(x => x.status === f.status);
+    if (f.category !== 'all') list = list.filter(x => x.interval.category === f.category);
+    const q = (f.search || '').toLowerCase().trim();
+    if (q) {
+      list = list.filter(x => {
+        const resp = x.interval.responsibleStaffId ? (state.staff || []).find(s => s.id === x.interval.responsibleStaffId) : null;
+        const respName = resp ? `${resp.firstName} ${resp.lastName}`.trim() : '';
+        return ((x.interval.title || '') + ' ' + (x.propertyName || '') + ' ' + respName + ' ' + (x.interval.supplier || '')).toLowerCase().includes(q);
+      });
+    }
+    /* getAllAcrossProperties() är redan sorterad efter nästa förfall. */
+    if (f.sort === 'name')          list.sort((a, b) => (a.interval.title || '').localeCompare(b.interval.title || '', 'sv'));
+    else if (f.sort === 'property') list.sort((a, b) => (a.propertyName || '').localeCompare(b.propertyName || '', 'sv'));
+    return list;
   },
 
   /* ── Filter-state ─────────────────────────────────────────── */
