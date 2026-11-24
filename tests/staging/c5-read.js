@@ -76,6 +76,13 @@ const nonEmpty = (v) => Array.isArray(v) ? v.length > 0 : (v && typeof v === 'ob
     rep.add('C5 readWithHash ' + role, one.status === 200 && oneTok === (ex.token && exists.token) && onePn === (ex.personnr && exists.personnr),
       'offerter HTTP ' + one.status + ' token ' + (oneTok ? 'ja' : 'nej') + '; kunder personnr ' + (onePn ? 'ja' : 'nej'));
 
+    // work-orders-list: portkod (accessCode) bara för objects_sensitive/ao_edit (admin, arbetsledare).
+    const wl = await req('/functions/v1/work-orders-list', { method: 'GET', token: tok });
+    const wos = (wl.body && wl.body.workOrders) || [];
+    const hasAc = wos.some((a) => a && Object.prototype.hasOwnProperty.call(a, 'accessCode'));
+    const wantAc = role === 'admin' || role === 'chef';
+    rep.add('C5 work-orders-list portkod ' + role, wl.status === 200 && (wos.length === 0 || hasAc === wantAc), 'HTTP ' + wl.status + ', ' + wos.length + ' AO, fältet accessCode ' + (hasAc ? 'finns' : 'saknas') + ' (förväntat ' + (wantAc ? 'finns' : 'saknas') + ')');
+
     // REST direkt: vilka nycklar syns, och läcker någon känslig nyckel?
     const rest = await req('/rest/v1/store?select=key,value&key=in.(' + KEYS.join(',') + ')', { method: 'GET', token: tok });
     const rows = Array.isArray(rest.body) ? rest.body : [];
