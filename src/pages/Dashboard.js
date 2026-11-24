@@ -1241,7 +1241,7 @@ const Dashboard = {
           <div style="flex:1;min-width:0;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
               <span style="font-size:12px;font-weight:700;color:var(--navy);">${esc(c.label)}</span>
-              <span style="font-size:13px;font-weight:800;color:var(--navy);">${count}${urgent > 0 ? `&nbsp;<span style="color:var(--rd);font-size:10px;font-weight:700;">${ic('zap',9)} ${urgent}</span>` : ''}</span>
+              <span style="font-size:13px;font-weight:800;color:var(--navy);">${count}${urgent > 0 ? `&nbsp;<span style="display:inline-flex;align-items:center;gap:2px;color:var(--rd);font-size:10px;font-weight:700;" title="${urgent} akuta">${ic('zap',9)} ${urgent}</span>` : ''}</span>
             </div>
             <div style="height:4px;background:var(--br);border-radius:4px;overflow:hidden;">
               <div style="width:${barW}%;height:100%;background:${c.color};border-radius:4px;"></div>
@@ -1371,32 +1371,50 @@ const Dashboard = {
   },
 
   /* ── 2026-11-26: varför hamnar ett jobb inte på kartan? ────────────────
-     Kartan kan bara visa ett jobb som har koordinater. Koordinater finns
-     (a) sparade på AO:n (ao.lat/ao.lng, sätts av WorkOrderService.
-     geocodeAddressIfNeeded() när en AO skapas/ändras i appen), eller (b)
-     tas fram av kartan själv via Mapbox-sökning, ENDAST i minnet, högst
-     20 nya adresser per visning, och ENDAST om adressen har postnummer
-     eller ort (AddressService.geocodeTrusted: hellre ingen nål än en nål
-     i fel stad). Importerade AO:er (ImportWizard) får bara gatuadress och
-     går inte via WorkOrderService.create() — de saknar därför koordinater
-     och oftast postnummer/ort. Statusen nedan gör orsaken synlig per jobb.
-       coords   — har koordinater (sparade på AO:n)
-       geocoded — placerad via kartans adressökning (sessionen)
-       noaddr   — ingen adress alls (varken AO, fastighet eller kund)
-       nocity   — bara gatuadress utan postnummer/ort
-       pending  — kan geokodas, inte sökt ännu
-       notfound — adressökningen gav ingen träff
-       error    — adressökningen misslyckades (nätverk/token)
-       skipped  — inte sökt i denna visning (max 20 nya per visning) */
-  _GEO_REASONS: {
-    noaddr:   { label: 'Saknar adress', hint: 'Arbetsordern har ingen adress, och ingen kopplad fastighet eller kund med adress.' },
-    nocity:   { label: 'Saknar postnummer/ort', hint: 'Bara gatuadress. Kartan placerar inte en gata utan postnummer eller ort (risk för fel stad).' },
-    notfound: { label: 'Adressen hittades inte', hint: 'Kartsökningen (Mapbox) gav ingen säker träff för adressen.' },
-    error:    { label: 'Kartsökningen svarade inte', hint: 'Adressökningen mot Mapbox misslyckades (nätverk, eller token som inte gäller för den här domänen). Försöks igen om en stund.' },
-    skipped:  { label: 'Inte sökt ännu', hint: 'Kartan söker högst 20 nya adresser per visning. Resten söks vid nästa uppdatering.' },
-    pending:  { label: 'Behöver geokodas', hint: 'Har gatuadress med postnummer/ort men inga sparade koordinater. Kartan söker adressen när den laddas.' },
+     Orsakerna redovisas VAR FÖR SIG med antal — inga tal döljs:
+       KARTFEL (hela kartan, inte enskilda jobb): kartbiblioteket Mapbox GL
+         laddas inte → "Kartan kunde inte laddas"; token saknas → "Kartan är
+         inte konfigurerad"; fel vid ritning → "Kartan kunde inte visas";
+         kartbakgrunden nekas efter laddning → rad ovanpå kartan.
+       GEOKODNING SAKNAS (adress med postnummer/ort finns, inga koordinater):
+         pending/skipped — "inte geokodade ännu" (kartan söker högst 20 nya
+                            adresser per visning; resten väntar)
+         error           — "geokodning misslyckades" (401/403 eller nätverk;
+                            vid 401/403 ser admin "Kartnyckeln nekas för den
+                            här domänen")
+       ADRESSEN BEHÖVER KOMPLETTERAS:
+         nocity   — "adress saknar ort/postnummer" (geokodas inte: hellre
+                     ingen nål än en nål i fel stad, AddressService.geocodeTrusted)
+         noaddr   — "saknar adress" (varken AO, fastighet eller kund)
+         notfound — "adressen hittades inte" (kartsökningen gav ingen träff)
+     Koordinater finns sparade på AO:n (ao.lat/ao.lng — sätts av
+     WorkOrderService.geocodeAddressIfNeeded() när en AO skapas/ändras i
+     appen) eller tas fram av kartan själv, ENDAST i minnet för sessionen.
+     Importerade AO (ImportWizard) går inte via WorkOrderService.create()
+     och saknar därför koordinater. */
+  _GEO_LABELS: {
+    pending:  'inte geokodade ännu',
+    skipped:  'inte geokodade ännu',
+    error:    'geokodning misslyckades',
+    nocity:   'adress saknar ort/postnummer',
+    noaddr:   'saknar adress',
+    notfound: 'adressen hittades inte',
   },
-  _GEO_ORDER: ['nocity', 'noaddr', 'notfound', 'error', 'skipped', 'pending'],
+  _GEO_GROUPS: [
+    { key: 'nogeo', label: 'Geokodning saknas', items: ['notyet', 'error'],
+      hint: 'Adressen har postnummer eller ort men inga koordinater är sparade. Koordinater sparas när arbetsordern skapas eller ändras i appen; importerade och äldre arbetsordrar saknar dem. Kartan söker själv högst 20 nya adresser per visning och sparar inte resultatet.' },
+    { key: 'badaddr', label: 'Adressen behöver kompletteras', items: ['nocity', 'noaddr', 'notfound'],
+      hint: 'Kartan placerar inte en gata utan ort eller postnummer (risk för fel stad). Jobb utan adress — och utan kopplad fastighet eller kund med adress — kan inte visas.' },
+  ],
+  _GEO_ITEM_LABEL: {
+    notyet: 'inte geokodade ännu', error: 'geokodning misslyckades',
+    nocity: 'adress saknar ort/postnummer', noaddr: 'saknar adress', notfound: 'adressen hittades inte',
+  },
+  _GEO_STATUSES: ['pending', 'skipped', 'error', 'nocity', 'noaddr', 'notfound'],
+  _GEO_FAIL_MS: 5 * 60000,
+  _geoFailed: {},      // query → { at, status } — misslyckade sökningar (visas som misslyckade i 5 min)
+  _geoDenied: false,   // senaste felet var 401/403 (token nekas för domänen)
+  _mapTileDenied: false,
 
   _aoCoord(ao) {
     const num = (v) => typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v.replace(',', '.')) : NaN);
@@ -1415,17 +1433,29 @@ const Dashboard = {
     const cached = this._geoCache[r.query];
     if (cached) return { ao, status: 'geocoded', coord: cached, query: r.query };
     if (cached === null) return { ao, status: 'notfound', query: r.query };
+    const f = this._geoFailed[r.query];
+    if (f && Date.now() - f.at < this._GEO_FAIL_MS) return { ao, status: 'error', query: r.query, http: f.status };
     return { ao, status: 'pending', query: r.query };
   },
 
   _geoCounts(diag) {
     const c = { total: diag.length, coords: 0, geocoded: 0 };
-    this._GEO_ORDER.forEach(k => { c[k] = 0; });
+    this._GEO_STATUSES.forEach(k => { c[k] = 0; });
     diag.forEach(d => { c[d.status] = (c[d.status] || 0) + 1; });
     c.placed = c.coords + c.geocoded;
     c.missing = c.total - c.placed;
+    c.notyet = c.pending + c.skipped;
+    c.nogeo = c.notyet + c.error;
+    c.badaddr = c.nocity + c.noaddr + c.notfound;
     return c;
   },
+
+  /* "190 inte geokodade ännu · 1 adress saknar ort/postnummer · 14 saknar adress" */
+  _geoCauseText(c) {
+    return ['notyet', 'error', 'nocity', 'noaddr', 'notfound'].filter(k => c[k] > 0).map(k => `${c[k]} ${this._GEO_ITEM_LABEL[k]}`).join(' · ');
+  },
+
+  _isMapAdmin() { return Auth.can('all') || Auth.can('admin_manage'); },
 
   /* Räknarraden ovanför kartan. `groups` = platser på kartan (efter
      kartritning), annars null (synkront läge / ingen karta). */
@@ -1448,31 +1478,32 @@ const Dashboard = {
     const c = this._geoCounts(diag);
     if (!c.missing) return '';
     const open = !!this._geoListOpen;
-    const groups = this._GEO_ORDER.filter(k => c[k] > 0).map(k => {
-      const rows = diag.filter(d => d.status === k);
-      const R = this._GEO_REASONS[k];
-      const MAX = 40;
-      return `<div class="dash-ops-geo-group" data-reason="${k}">
-        <h4>${esc(R.label)} <span class="bdg">${rows.length}</span></h4>
-        <p class="dash-ops-geo-hint">${esc(R.hint)}</p>
+    const MAX = 40;
+    const itemOf = (d) => (d.status === 'pending' || d.status === 'skipped') ? 'notyet' : d.status;
+    const causeRows = this._GEO_GROUPS.filter(g => c[g.key] > 0).map(g =>
+      `<span class="dash-ops-geo-cause" data-group="${g.key}"><span class="dash-ops-geo-cl">${esc(g.label)}:</span> ${g.items.filter(k => c[k] > 0).map(k => `<span class="dash-ops-geo-chip" data-reason="${k}"><b>${c[k]}</b> ${esc(this._GEO_ITEM_LABEL[k])}</span>`).join(' ')}</span>`).join('');
+    const denied = c.error > 0 && this._geoDenied;
+    const adminNote = denied && this._isMapAdmin()
+      ? `<span class="dash-ops-geo-admin" data-denied="1">${ic('lock', 12)} Kartnyckeln nekas för den här domänen (Mapbox svarar 401/403). Kontrollera tokenens URL-begränsning i Mapbox.</span>` : '';
+    const groups = this._GEO_GROUPS.filter(g => c[g.key] > 0).map(g => {
+      const rows = diag.filter(d => g.items.includes(itemOf(d)));
+      return `<div class="dash-ops-geo-group" data-reason="${g.key}">
+        <h4>${esc(g.label)} <span class="bdg">${rows.length}</span></h4>
+        <p class="dash-ops-geo-hint">${esc(g.hint)}</p>
         <ul>${rows.slice(0, MAX).map(d => {
           const addr = AddressService.displayAddress(d.ao);
-          return `<li><button type="button" class="dash-ops-geo-row" data-ao="${esc(d.ao.id)}" onclick="Dashboard._openAo(this)"><span class="dash-ops-geo-t">${esc(d.ao.title || d.ao.id)}</span><span class="dash-ops-geo-a">${esc(addr || 'Ingen adress')}</span></button></li>`;
+          return `<li><button type="button" class="dash-ops-geo-row" data-ao="${esc(d.ao.id)}" data-status="${d.status}" onclick="Dashboard._openAo(this)"><span class="dash-ops-geo-t">${esc(d.ao.title || d.ao.id)}</span><span class="dash-ops-geo-a">${esc(addr || 'Ingen adress')} · ${esc(this._GEO_LABELS[d.status] || '')}</span></button></li>`;
         }).join('')}</ul>
         ${rows.length > MAX ? `<p class="dash-ops-geo-hint">+${rows.length - MAX} till — se arbetsorderlistan.</p>` : ''}
       </div>`;
     }).join('');
-    const chips = this._GEO_ORDER.filter(k => c[k] > 0).map(k => `<span class="dash-ops-geo-chip" data-reason="${k}">${c[k]} ${esc(this._GEO_REASONS[k].label.toLowerCase())}</span>`).join('');
-    return `<div class="dash-ops-geo" id="dash-ops-geo" data-missing="${c.missing}" data-total="${c.total}">
+    return `<div class="dash-ops-geo" id="dash-ops-geo" data-missing="${c.missing}" data-total="${c.total}" data-notyet="${c.notyet}" data-error="${c.error}" data-nocity="${c.nocity}" data-noaddr="${c.noaddr}" data-notfound="${c.notfound}">
       <button type="button" class="dash-ops-geo-sum" aria-expanded="${open}" aria-controls="dash-ops-geo-list" onclick="Dashboard._toggleGeoList()">
         <span class="dash-ops-geo-ico">${ic('alert-circle', 15)}</span>
-        <span class="dash-ops-geo-txt"><b>${c.missing} av ${c.total} jobb saknar koordinater</b> — adresserna behöver geokodas för att visas på kartan.<span class="dash-ops-geo-chips">${chips}</span></span>
+        <span class="dash-ops-geo-txt"><b>${c.missing} av ${c.total} aktiva jobb visas inte på kartan</b>${causeRows}${adminNote}</span>
         <span class="dash-ops-geo-act">${open ? 'Dölj' : 'Visa vilka'} ${ic(open ? 'chevron-up' : 'chevron-down', 13)}</span>
       </button>
-      <div class="dash-ops-geo-list" id="dash-ops-geo-list"${open ? '' : ' hidden'}>
-        <p class="dash-ops-geo-why">${ic('info', 13)} <span>Koordinater sparas på arbetsordern när den skapas eller ändras i appen och adressen har postnummer eller ort. Importerade och äldre arbetsordrar saknar dem. Kartan söker själv högst 20 adresser per visning och sparar inte resultatet.</span></p>
-        ${groups}
-      </div>
+      <div class="dash-ops-geo-list" id="dash-ops-geo-list"${open ? '' : ' hidden'}>${groups}</div>
     </div>`;
   },
 
@@ -1491,34 +1522,46 @@ const Dashboard = {
     if (id) Router.showPage('pg-ao-detail', { aoId: id });
   },
 
-  /* Tomt/felläge i kartytan — talen döljs aldrig. */
+  /* Tomt/felläge i kartytan — talen döljs aldrig.
+     kind: 'nolib' (Mapbox GL laddas inte) | 'notoken' | 'error' (fel vid
+     ritning) = kartfel; 'none' = kartan fungerar men inget jobb kan placeras. */
   _mapEmptyHtml(kind, diag) {
     const c = this._geoCounts(diag || []);
-    let title, text;
-    if (kind === 'notoken') {
-      title = 'Kartan är inte konfigurerad';
-      text = 'Ingen Mapbox-token finns i config.js. ' + (c.placed ? `${c.placed} av ${c.total} jobb har koordinater.` : `${c.missing} av ${c.total} jobb saknar koordinater.`);
-    } else if (kind === 'nolib') {
+    const causes = this._geoCauseText(c);
+    let title, text, icon = 'alert-triangle';
+    if (kind === 'nolib') {
       title = 'Kartan kunde inte laddas';
-      text = 'Kartbiblioteket (Mapbox) gick inte att nå. Listan fungerar som vanligt. ' + `${c.placed} av ${c.total} jobb har koordinater, ${c.missing} saknar.`;
+      text = `Kartbiblioteket (Mapbox GL) gick inte att nå. Det beror inte på jobbens adresser — listan fungerar som vanligt. ${c.placed} av ${c.total} jobb har koordinater.`;
+    } else if (kind === 'notoken') {
+      title = 'Kartan är inte konfigurerad';
+      text = `Ingen Mapbox-token är inställd (config.js). ${c.placed} av ${c.total} jobb har koordinater.`;
     } else if (kind === 'error') {
       title = 'Kartan kunde inte visas';
       text = `Ett fel uppstod när kartan ritades. ${c.placed} av ${c.total} jobb har koordinater.`;
     } else {
+      icon = 'map-pin';
       title = c.total === 1 ? 'Det aktiva jobbet har inga koordinater' : `Inga av de ${c.total} aktiva jobben har koordinater`;
-      text = 'Adresserna behöver geokodas innan jobben kan visas på kartan.' +
-        (c.nocity ? ` ${c.nocity} har bara gatuadress utan postnummer/ort.` : '') +
-        (c.noaddr ? ` ${c.noaddr} saknar adress.` : '') +
-        (c.notfound ? ` ${c.notfound} hittades inte av kartsökningen.` : '') +
-        (c.error ? ` Kartsökningen svarade inte för ${c.error}.` : '') +
-        (c.skipped ? ` ${c.skipped} har inte sökts ännu.` : '');
+      text = `${causes}.` + (c.nogeo ? ' Adresserna behöver geokodas.' : '');
     }
-    return `<div class="dash-ops-map-empty" data-kind="${esc(kind)}">
-      ${ic('map-pin', 22)}
-      <strong>${esc(title)}</strong>
-      <span>${esc(text)}</span>
+    return `<div class="dash-ops-map-empty" data-kind="${esc(kind)}" role="status">
+      ${ic(icon, 22)}
+      <h3>${esc(title)}</h3>
+      <p>${esc(text)}</p>
       ${c.missing ? `<button type="button" class="btn bs bsm" onclick="Dashboard._toggleGeoList(true)">${ic('list', 13)} Visa jobb utan plats (${c.missing})</button>` : ''}
     </div>`;
+  },
+
+  /* Kartbakgrunden/stilen nekas eller laddas inte EFTER att Mapbox GL
+     laddats: markörerna finns kvar, en rad ovanpå kartan förklarar. */
+  _mapAlert(wrap, generation, status) {
+    if (generation !== this._mapGeneration || !wrap || !wrap.isConnected || wrap.querySelector('.dash-ops-map-alert')) return;
+    const denied = status === 401 || status === 403;
+    if (denied) this._mapTileDenied = true;
+    const el = document.createElement('div');
+    el.className = 'dash-ops-map-alert';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `${ic('alert-triangle', 14)}<span>${esc(denied && this._isMapAdmin() ? 'Kartbakgrunden kunde inte laddas — kartnyckeln nekas för den här domänen.' : 'Kartbakgrunden kunde inte laddas. Markörerna och listan visas ändå.')}</span>`;
+    wrap.appendChild(el);
   },
 
   /* Adressökning för kartan: samma beslut som AddressService.geocodeTrusted()
@@ -1539,7 +1582,9 @@ const Dashboard = {
       if (!best || best.lat == null || best.lng == null) return { status: 'notfound' };
       return { status: 'ok', coord: { lat: best.lat, lng: best.lng } };
     } catch (e) {
-      return { status: 'error', message: String(e && e.message || e) };
+      const message = String(e && e.message || e);
+      const m = /HTTP (\d{3})/.exec(message);
+      return { status: 'error', message, http: m ? Number(m[1]) : 0 };
     }
   },
   _geoErrUntil: 0,
@@ -1638,8 +1683,9 @@ const Dashboard = {
       if (d.status !== 'pending') continue;
       /* Efter ett misslyckat anrop (t.ex. 401/403 när token inte gäller
          för domänen) görs inga nya sökningar på 5 min — inget hamrande
-         mot Mapbox vid varje uppdatering. */
-      if (Date.now() < this._geoErrUntil) { d.status = 'error'; continue; }
+         mot Mapbox vid varje uppdatering. Ej sökta räknas som "inte
+         geokodade ännu", det misslyckade som "geokodning misslyckades". */
+      if (Date.now() < this._geoErrUntil) { d.status = 'skipped'; continue; }
       if (newLookups >= MAX_LOOKUPS) { d.status = 'skipped'; continue; }
       newLookups++;
       const res = await this._geocodeForMap(d.query);
@@ -1649,12 +1695,15 @@ const Dashboard = {
            som null). Ett fel cachas aldrig. Bara i minnet för sessionen. */
         this._geoCache[d.query] = res.coord;
         d.status = 'geocoded'; d.coord = res.coord;
+        this._geoDenied = false;
       } else if (res.status === 'notfound') {
         this._geoCache[d.query] = null;
         d.status = 'notfound';
       } else {
-        d.status = 'error';
-        this._geoErrUntil = Date.now() + 5 * 60000;
+        d.status = 'error'; d.http = res.http;
+        this._geoFailed[d.query] = { at: Date.now(), status: res.http || 0 };
+        this._geoDenied = res.http === 401 || res.http === 403;
+        this._geoErrUntil = Date.now() + this._GEO_FAIL_MS;
         console.warn('[Dashboard] kartans adressökning misslyckades:', res.message);
       }
     }
@@ -1691,6 +1740,14 @@ const Dashboard = {
         zoom: 11
       });
       this._mapInstance = map;
+      if (typeof map.on === 'function') {
+        let loaded = false;
+        map.on('load', () => { loaded = true; });
+        map.on('error', (ev) => {
+          const st = ev && ev.error && (ev.error.status || ev.error.statusCode);
+          if (!loaded || st === 401 || st === 403) this._mapAlert(wrap, generation, st);
+        });
+      }
 
       const bounds = new mapboxgl.LngLatBounds();
       groups.forEach((g) => {
@@ -2190,7 +2247,7 @@ const Dashboard = {
             ${ic('alert-triangle',12)} ${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}
             <button class="btn bghost bxs" style="margin-left:auto;font-size:10px;padding:2px 8px;" onclick="Router.showPage('pg-rondering')">Visa</button>
           </div>` : ''}
-        ${avvUanAO.length > 0 ? `<div style="font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
+        ${avvUanAO.length > 0 ? `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">${ic('plus',13)} Ny rondering</button>
           <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">${ic('layout-template',13)} Mallar</button>
