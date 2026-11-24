@@ -305,10 +305,9 @@ const ProjectDetailPage = {
       if (ao.propertyId && !seen.has(ao.propertyId)) { seen.add(ao.propertyId); const prop = getObj(ao.propertyId); if (prop) properties.push(prop); }
     });
     const statuses = Array.from(new Set(workOrders.map(a => a.status))).sort();
-    const chip = (key, label) => `<button class="btn ${st.scope===key?'bp':'bs'} bxs" onclick="ProjectDetailPage.setAOFilterScope('${key}')">${label}</button>`;
     return `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;">
-        ${chip('all','Alla')}${chip('open','Öppna')}${chip('done','Klara')}
+      <div class="mx-pd-filter">
+        <span class="mx-chips" id="pd-ao-chips" role="group" aria-label="Urval">${this._aoChipsHtml()}</span>
         ${statuses.length > 1 ? `
         <select id="ao-filter-status" onchange="ProjectDetailPage.setAOFilterField('status', this.value)" style="font-size:12px;padding:5px 8px;">
           <option value="">Alla statusar</option>
@@ -323,8 +322,17 @@ const ProjectDetailPage = {
     `;
   },
 
+  /* V3: snabbfilter som .chip (komponentstandard §4); markeringen följer valet. */
+  _aoChipsHtml() {
+    const st = this._aoFilterState;
+    return [['all','Alla'],['open','Öppna'],['done','Klara']].map(([k, l]) =>
+      UiKit.chip(l, `ProjectDetailPage.setAOFilterScope('${k}')`, { on: st.scope === k })).join('');
+  },
+
   setAOFilterScope(scope) {
     this._aoFilterState.scope = scope;
+    const c = document.getElementById('pd-ao-chips');
+    if (c) c.innerHTML = this._aoChipsHtml();
     this._refreshAOResults();
   },
   setAOFilterField(field, value) {
@@ -735,39 +743,34 @@ const ProjectDetailPage = {
   _documentFilterState: { type: '', search: '' },
 
   _renderDocumentsTab(p, canFinance) {
-    const chip = (key, label) => `<button class="btn ${this._documentFilterState.type===key?'bp':'bs'} bxs" onclick="ProjectDetailPage.setDocumentFilter('${key}')">${label}</button>`;
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('file-text',14)} Dokument</h3>
-          <span class="bdg bdg-blue">${ProjectService.getDocuments(p.id).length}</span>
-          <div style="margin-left:auto;">
-            <button class="btn bp bxs" onclick="ProjectDetailPage.openUploadDocument()">${ic('plus',13)} Ladda upp dokument</button>
-          </div>
+          <h3>${ic('file-text',14)} Dokument <span class="ft-n">${ProjectService.getDocuments(p.id).length}</span></h3>
+          <button class="btn bp bsm" onclick="ProjectDetailPage.openUploadDocument()">${ic('upload',13)} Ladda upp dokument</button>
         </div>
         <div class="card-body">
-          <div class="fg" style="margin-bottom:8px;">
+          <label class="mx-isearch mx-isearch-wide">${ic('search',13)}<span class="sr-only">Sök dokument</span>
             <input type="search" id="doc-search" placeholder="Sök dokument / leverantör…" value="${esc(this._documentFilterState.search)}"
-              oninput="ProjectDetailPage.setDocumentSearch(this.value)"
-              style="width:100%;font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg);color:var(--tx);">
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
-            ${chip('', 'Alla')}
-            ${chip('ue_offert', 'UE-offerter')}
-            ${chip('avtal', 'Avtal')}
-            ${chip('leverantorsfaktura', 'Fakturor')}
-            ${chip('ritning', 'Ritningar')}
-            ${chip('protokoll', 'Protokoll')}
-            ${chip('ovrigt', 'Övrigt')}
-          </div>
+              oninput="ProjectDetailPage.setDocumentSearch(this.value)">
+          </label>
+          <div class="mx-chips" id="pd-doc-chips" role="group" aria-label="Dokumenttyp" style="margin:10px 0 12px;">${this._docChipsHtml()}</div>
           <div id="pd-doc-results">${this._renderDocumentResults(p, canFinance)}</div>
         </div>
       </div>
     `;
   },
 
+  _docChipsHtml() {
+    const cur = this._documentFilterState.type;
+    return [['', 'Alla'], ['ue_offert', 'UE-offerter'], ['avtal', 'Avtal'], ['leverantorsfaktura', 'Fakturor'], ['ritning', 'Ritningar'], ['protokoll', 'Protokoll'], ['ovrigt', 'Övrigt']]
+      .map(([k, l]) => UiKit.chip(l, `ProjectDetailPage.setDocumentFilter('${k}')`, { on: cur === k })).join('');
+  },
+
   setDocumentFilter(type) {
     this._documentFilterState.type = type;
+    const c = document.getElementById('pd-doc-chips');
+    if (c) c.innerHTML = this._docChipsHtml();
     this._refreshDocumentResults();
   },
   setDocumentSearch(val) {

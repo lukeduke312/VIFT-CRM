@@ -28,6 +28,56 @@ function seedMisc(fake) {
   fake.set('importLogs', [{ id: 'IMP-001', type: 'customer', filename: 'kunder-november.csv', createdAt: now, performedBy: 'ST-001', createdCount: 12, updatedCount: 3, skippedCount: 1, errorCount: 0, errors: [], undone: false, createdIds: [], updatedSnapshots: [] }]);
 }
 
+/* Realistisk mängd (granskning och test med innehåll, inte tomläge):
+   120 projekt i alla faser (långa namn, försenade, arkiverade), 110 avtal,
+   14 importer, en fastighet med långt namn, 9 AO samma dag i kalendern
+   (överlappande, långa titlar) och tre AO kopplade till PRJ-001. */
+const LONG = 'Byte av samtliga radiatorventiler i trapphus A–C inklusive injustering av värmesystemet och protokoll till styrelsen';
+function seedRealistic(fake) {
+  seedMisc(fake);
+  const now = new Date().toISOString();
+  const cus = ['K-001', 'K-002', 'K-003', 'K-004', 'K-005', 'K-006', 'K-007'];
+  const props = { 'K-001': 'OBJ-001', 'K-002': 'OBJ-002', 'K-004': 'OBJ-003', 'K-006': 'OBJ-004' };
+  const sts = ['planerad', 'pågående', 'pausad', 'klar', 'avslutad'];
+  const resp = ['ST-001', 'ST-003', 'ST-002', ''];
+  const names = ['Stambyte', 'Takrenovering', 'Fönsterbyte etapp', 'Hissmodernisering', 'Fasadrenovering', 'Energieffektivisering och byte av ventilationsaggregat', 'Laddplatser garage', 'Tvättstuga', 'Relining avlopp', 'Balkongrenovering'];
+  const projects = fake.get('projects');
+  for (let i = 6; i <= 125; i++) {
+    const cu = cus[i % cus.length];
+    projects.push({ id: 'PRJ-' + String(i).padStart(3, '0'), name: names[i % names.length] + ' ' + (i % 3 === 0 ? 'hus ' + 'ABC'[i % 3] + ', trapphus 1–4 med tillhörande gemensamma utrymmen' : 'nr ' + i), customerId: cu, propertyId: props[cu] || '', allowMultiProperty: false,
+      status: sts[i % 5], responsibleUserId: resp[i % 4], startDate: ld(-200 + i), endDate: i % 7 === 0 ? '' : ld(-90 + i * 2), description: '', note: '', archived: i % 11 === 0,
+      createdAt: now, updatedAt: new Date(Date.now() - i * 3600000).toISOString(), createdBy: 'ST-001' });
+  }
+  fake.set('projects', projects);
+  const types = ['service', 'rondering', 'städ', 'övrigt'];
+  const cst = ['aktiv', 'aktiv', 'utkast', 'pausad', 'avslutad'];
+  const per = ['månad', 'kvartal', 'år', 'månad'];
+  const contracts = fake.get('contracts');
+  for (let i = 5; i <= 114; i++) {
+    contracts.push({ id: 'KON-' + String(i).padStart(3, '0'), customerId: cus[i % cus.length], propertyId: '', title: (i % 4 === 0 ? 'Serviceavtal gemensamma utrymmen, tvättstugor och undercentraler – ' : 'Avtal ') + i, type: types[i % 4], description: '',
+      startDate: ld(-400 + i), endDate: i % 3 === 0 ? ld(30 + i) : '', tillsvidare: i % 3 !== 0, noticePeriod: 3, autoRenew: i % 2 === 0, amount: 1500 + (i * 731) % 40000, period: per[i % 4], services: [], status: cst[i % 5], note: '',
+      createdAt: new Date(Date.now() - i * 86400000).toISOString(), updatedAt: now });
+  }
+  fake.set('contracts', contracts);
+  const logs = fake.get('importLogs');
+  for (let i = 2; i <= 15; i++) {
+    logs.push({ id: 'IMP-' + String(i).padStart(3, '0'), type: ['customer', 'property', 'article', 'staff'][i % 4], filename: (i % 5 === 0 ? 'export-från-gamla-systemet-med-mycket-långt-filnamn-' : 'import-') + i + '.csv', createdAt: new Date(Date.now() - i * 86400000 * 3).toISOString(),
+      performedBy: i % 2 ? 'ST-001' : 'ST-003', createdCount: (i * 7) % 130, updatedCount: i % 4, skippedCount: i % 3, errorCount: i % 6 === 0 ? 2 : 0,
+      errors: i % 6 === 0 ? [{ row: 4, field: 'orgNr', message: 'Ogiltigt organisationsnummer' }, { row: 9, field: 'name', message: 'Namn saknas' }] : [], undone: i % 7 === 0, createdIds: [], updatedSnapshots: [] });
+  }
+  fake.set('importLogs', logs);
+  const properties = fake.get('properties');
+  properties.push(Object.assign({}, properties[0], { id: 'OBJ-LONG', name: 'Bostadsrättsföreningen Kungsholmens Strand Hus C – Västra gaveln med garage', address: 'Kungsholms Strand 147', serviceIntervals: [], contacts: [], notes: [] }));
+  fake.set('properties', properties);
+  const aos = fake.get('workOrders');
+  const base = aos.find((a) => a.id === 'AO-001');
+  const times = [['07:00', '09:00'], ['07:30', '10:00'], ['08:00', '12:00'], ['09:00', '11:30'], ['10:00', '14:00'], ['12:30', '13:30'], ['13:00', '16:00'], ['14:00', '15:00'], ['', '']];
+  times.forEach(([s, e], k) => aos.push(Object.assign(JSON.parse(JSON.stringify(base)), { id: 'AO-D' + (k + 1), title: (k % 3 === 0 ? LONG : 'Felanmälan lägenhet ' + (1100 + k)), status: k % 4 === 0 ? 'planerad' : 'pågående',
+    scheduledDate: ld(0), scheduledStart: s, scheduledEnd: e, staff: [['ST-002'], ['ST-003'], ['ST-004'], ['ST-002', 'ST-004']][k % 4], timeEntries: [], invoiceId: '' })));
+  ['AO-001', 'AO-002', 'AO-004'].forEach((id) => { const a = aos.find((x) => x.id === id); if (a) a.projectId = 'PRJ-001'; });
+  fake.set('workOrders', aos);
+}
+
 /* Mätbredder (skala 1). Läggs till i harnessens VIEWPORTS bara för denna fil. */
 const lib = require('../lib');
 lib.VIEWPORTS.mx360 = { viewport: { width: 360, height: 740 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true };
@@ -36,7 +86,7 @@ lib.VIEWPORTS.mx1366 = { viewport: { width: 1366, height: 768 }, deviceScaleFact
 lib.VIEWPORTS.mx1920 = { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 };
 
 async function open(t, vp, user, page, params) {
-  if (!t.__seeded) { seedMisc(t.fake); t.__seeded = true; }
+  if (!t.__seeded) { (t.__seedFn || seedMisc)(t.fake); t.__seeded = true; }
   const s = await t.world.session({ viewport: vp });
   await s.login(user || 'admin');
   if (page) { await s.go(page, params || {}); await s.settle(300); }
@@ -381,6 +431,195 @@ const tests = [
       t.assert(hits.length === 0, 'ikon på egen rad: ' + hits.join(' ; '));
     },
   },
+  {
+    id: 'MISC-DATA-01', module: 'Projekt', name: 'Projekt med 120 projekt: statuschips filtrerar och räknar rätt, sök behåller fokus och visar "Visar X av Y", Rensa filter; ingen sidscroll 360–1920 och rader högst ~1320 px breda på 1920',
+    async run(t) {
+      t.__seedFn = seedRealistic;
+      for (const vp of ['mx360', 'mx390', 'mx1366', 'mx1920']) {
+        const s = await open(t, vp, 'admin', 'pg-projects');
+        const r = await s.eval(() => ({ rows: document.querySelectorAll('#prj-results .mx-li').length, count: document.querySelector('#prj-results .mx-count').innerText, w: Math.round(Math.max(...[...document.querySelectorAll('#prj-results .mx-li')].map((e) => e.getBoundingClientRect().width))) }));
+        const ov = await s.eval(overflowProbe);
+        t.note(vp + ' ' + JSON.stringify(r));
+        t.assert(r.rows >= 100 && new RegExp('Visar ' + r.rows + ' av ' + r.rows).test(r.count), vp + ': alla aktiva projekt listas och antalet visas (' + r.count + ')');
+        t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': inget sidöverflöd ' + JSON.stringify(ov));
+        if (vp === 'mx1920') t.assert(r.w <= 1330, '1920: raderna är högst ~1320 px breda (' + r.w + ')');
+        if (vp !== 'mx390' && vp !== 'mx1366') continue;
+        // Statuschip "Pågående": bara pågående rader, antal = chippets siffra.
+        const chip = s.page.locator('#prj-chips .chip', { hasText: 'Pågående' });
+        const n = +(await chip.locator('.chip-n').innerText());
+        await chip.click();
+        await s.settle(250);
+        const f = await s.eval(() => ({ rows: [...document.querySelectorAll('#prj-results .mx-li')].map((e) => e.querySelector('.bdg.st').innerText.trim()), on: [...document.querySelectorAll('#prj-chips .chip.on')].map((c) => c.innerText.replace(/\s+/g, ' ').trim()), clear: !!document.querySelector('#prj-clear button') }));
+        t.assert(f.rows.length === n && f.rows.every((x) => x === 'Pågående'), vp + ': chippet Pågående visar ' + n + ' pågående projekt (fick ' + f.rows.length + ')');
+        t.assert(f.on.length === 1 && /Pågående/.test(f.on[0]) && f.clear, vp + ': chippet är markerat och Rensa filter visas');
+        // Sök: fokus kvar, färre träffar, antal uppdateras.
+        await s.page.locator('#prj-search').click();
+        await s.page.keyboard.type('Stambyte', { delay: 20 });
+        await s.settle(400);
+        const q = await s.eval(() => ({ focus: document.activeElement && document.activeElement.id, v: document.getElementById('prj-search').value, rows: [...document.querySelectorAll('#prj-results .mx-li-title')].map((e) => e.innerText), count: document.querySelector('#prj-results .mx-count').innerText }));
+        t.assert(q.focus === 'prj-search' && q.v === 'Stambyte', vp + ': sökfältet behåller fokus och text');
+        t.assert(q.rows.length > 0 && q.rows.every((x) => /Stambyte/.test(x)) && new RegExp('Visar ' + q.rows.length + ' av').test(q.count), vp + ': sökningen filtrerar och antalet uppdateras (' + q.count + ')');
+        await s.page.locator('#prj-clear button').click();
+        await s.settle(250);
+        const c = await s.eval(() => ({ rows: document.querySelectorAll('#prj-results .mx-li').length, v: document.getElementById('prj-search').value }));
+        t.assert(c.rows === r.rows && c.v === '', vp + ': Rensa filter återställer listan och sökfältet');
+      }
+    },
+  },
+  {
+    id: 'MISC-DATA-02', module: 'Kundregister', name: 'Kontrakt (110 avtal) och Importlogg (15 importer): tabell på dator, kort per rad på 360/390, statuschip filtrerar med rätt antal, ingen sidscroll, begränsad bredd på 1920',
+    async run(t) {
+      t.__seedFn = seedRealistic;
+      for (const vp of ['mx360', 'mx390', 'mx1366', 'mx1920']) {
+        const s = await open(t, vp, 'admin', 'pg-contracts');
+        const r = await s.eval(() => {
+          const rows = [...document.querySelectorAll('#con-results .mx-ctr')];
+          const head = document.querySelector('#con-results thead');
+          return { rows: rows.length, rowDisplay: rows[0] && getComputedStyle(rows[0]).display, headShown: !!(head && head.offsetParent && head.getBoundingClientRect().height > 0), w: Math.round(document.querySelector('#con-results .dt-wrap').getBoundingClientRect().width), count: document.querySelector('#con-results .mx-count').innerText };
+        });
+        const ov = await s.eval(overflowProbe);
+        t.note(vp + ' ' + JSON.stringify(r));
+        t.assert(r.rows === 114 && /Visar 114 av 114/.test(r.count), vp + ': alla 114 avtal listas (' + r.count + ')');
+        t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': inget sidöverflöd ' + JSON.stringify(ov));
+        if (vp === 'mx360' || vp === 'mx390') t.assert(!r.headShown && r.rowDisplay === 'grid', vp + ': kort per rad (ingen tabellrubrik)');
+        else t.assert(r.headShown && r.rowDisplay === 'table-row', vp + ': tabell med rubrikrad');
+        if (vp === 'mx1920') t.assert(r.w <= 1330, '1920: tabellen är begränsad (' + r.w + ' px)');
+        if (vp === 'mx390' || vp === 'mx1366') {
+          const chip = s.page.locator('#con-chips .chip', { hasText: 'Aktiv' });
+          const n = +(await chip.locator('.chip-n').innerText());
+          await chip.click();
+          await s.settle(250);
+          const st = await s.eval(() => [...document.querySelectorAll('#con-results .mx-ctr .bdg.st')].map((b) => b.innerText.trim()));
+          t.assert(st.length === n && st.every((x) => x === 'Aktiv'), vp + ': chippet Aktiv visar ' + n + ' aktiva avtal (fick ' + st.length + ')');
+          await s.page.locator('#con-search').click();
+          await s.page.keyboard.type('Serviceavtal', { delay: 15 });
+          await s.settle(400);
+          const q = await s.eval(() => ({ focus: document.activeElement && document.activeElement.id, n: document.querySelectorAll('#con-results .mx-ctr').length }));
+          t.assert(q.focus === 'con-search' && q.n > 0 && q.n < n, vp + ': sök i kombination med status behåller fokus och filtrerar (' + q.n + ')');
+        }
+        await s.go('pg-import-log');
+        const l = await s.eval(() => ({ rows: document.querySelectorAll('#pg-import-log .imp-log-row').length, w: Math.round(document.querySelector('#pg-import-log .mx-page').getBoundingClientRect().width), undo: document.querySelectorAll('#pg-import-log .imp-log-row .btn.bd').length }));
+        const ov2 = await s.eval(overflowProbe);
+        t.assert(l.rows === 15 && l.undo > 0, vp + ': importloggen listar 15 importer med Ångra');
+        t.assert(ov2.page <= 1 && ov2.wide.length === 0, vp + ': importlogg utan sidöverflöd ' + JSON.stringify(ov2));
+        if (vp === 'mx1920') t.assert(l.w <= 1330, '1920: importloggen är begränsad (' + l.w + ' px)');
+        await s.go('pg-export-center', { type: 'customer' });
+        const ov3 = await s.eval(overflowProbe);
+        t.assert(ov3.page <= 1 && ov3.wide.length === 0, vp + ': exportcenter utan sidöverflöd ' + JSON.stringify(ov3));
+      }
+    },
+  },
+  {
+    id: 'MISC-TASK-01', module: 'Projekt', name: 'Projektkort på 360/390 (uppgifter): status och ekonomi syns, AO under projektet, Ladda upp dokument nås och öppnar dialogen; inga åtgärder avklippta',
+    async run(t) {
+      t.__seedFn = seedRealistic;
+      for (const vp of ['mx360', 'mx390']) {
+        const s = await open(t, vp, 'admin', 'pg-project-detail', { projectId: 'PRJ-001' });
+        const h = await s.eval(() => ({ st: (document.querySelector('#pg-project-detail .mx-dh .bdg.st') || {}).innerText }));
+        t.assert(/Pågående/.test(h.st || ''), vp + ': status syns i huvudet (' + h.st + ')');
+        await s.page.locator('#pd-tabs .ft', { hasText: 'Ekonomi' }).click();
+        await s.settle(250);
+        const eco = await s.eval(() => document.getElementById('pd-tab-economy').innerText);
+        t.assert(/kr/.test(eco), vp + ': Ekonomi-fliken visar belopp');
+        await s.page.locator('#pd-tabs .ft', { hasText: 'Arbetsorder' }).click();
+        await s.settle(250);
+        const ao = await s.eval(() => document.getElementById('pd-tab-ao').innerText);
+        t.assert(/AO-001/.test(ao) && /AO-002/.test(ao), vp + ': arbetsordrarna under projektet syns');
+        await s.page.locator('#pd-tabs .ft', { hasText: 'Dokument' }).click();
+        await s.settle(250);
+        const b = await s.eval(() => { const x = [...document.querySelectorAll('#pd-tab-documents button')].find((e) => /Ladda upp dokument/.test(e.textContent)); const r = x.getBoundingClientRect(); return { right: r.right, w: r.width, vw: document.documentElement.clientWidth, clip: x.scrollWidth > x.clientWidth + 1 }; });
+        t.assert(b.w > 0 && b.right <= b.vw && !b.clip, vp + ': Ladda upp dokument syns och är inte avklippt');
+        await s.page.locator('#pd-tab-documents button', { hasText: 'Ladda upp dokument' }).click();
+        await s.page.waitForSelector('.modal-overlay.open #doc-file', { timeout: 4000 });
+        t.assert(await s.eval(() => !!document.querySelector('.modal-overlay.open #doc-file')), vp + ': uppladdningsdialogen öppnas med filfält');
+        await s.eval(() => Modal.close());
+        const tabs = await s.eval(() => { const bar = document.getElementById('pd-tabs'); return { scroll: bar.scrollWidth - bar.clientWidth, out: [...bar.querySelectorAll('.ft')].filter((b) => b.getBoundingClientRect().right > document.documentElement.clientWidth || b.scrollWidth > b.clientWidth + 1).length }; });
+        t.assert(tabs.scroll <= 1 && tabs.out === 0, vp + ': alla projektflikar syns');
+        const ov = await s.eval(overflowProbe);
+        t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': inget sidöverflöd ' + JSON.stringify(ov));
+      }
+    },
+  },
+  {
+    id: 'MISC-TASK-02', module: 'Kalender', name: 'Kalender på 360/390 med nio jobb samma dag: dagens och veckans jobb syns läsbart, ett jobb öppnas, Skapa AO öppnar formuläret',
+    async run(t) {
+      t.__seedFn = seedRealistic;
+      for (const vp of ['mx360', 'mx390']) {
+        const s = await open(t, vp, 'admin', 'pg-calendar');
+        await s.eval(() => CalendarPage.setView('vecka'));
+        await s.settle(300);
+        const r = await s.eval(() => {
+          const day = document.querySelector('#pg-calendar .cal-wl-day.is-today');
+          const rows = [...day.querySelectorAll('.cal-ag-row')];
+          const titles = rows.map((x) => { const e = x.querySelector('.cal-ag-title'); const b = e.getBoundingClientRect(); return { w: b.width, h: b.height, lh: parseFloat(getComputedStyle(e).lineHeight) || 17 }; });
+          return { n: rows.length, minW: Math.min(...titles.map((x) => x.w)), maxLines: Math.max(...titles.map((x) => Math.round(x.h / x.lh))) };
+        });
+        t.assert(r.n >= 9, vp + ': idag visas alla jobb (' + r.n + ')');
+        t.assert(r.minW >= 150 && r.maxLines <= 4, vp + ': även långa titlar är läsbara (' + Math.round(r.minW) + ' px, ' + r.maxLines + ' rader)');
+        await s.eval(() => CalendarPage.setView('dag'));
+        await s.settle(300);
+        const dag = await s.eval(() => [...document.querySelectorAll('#pg-calendar .cal-timed-evt, #pg-calendar .cal-chip')].filter((e) => e.offsetParent).length);
+        t.assert(dag >= 9, vp + ': dagvyn visar dagens jobb (' + dag + ')');
+        const ov = await s.eval(overflowProbe);
+        t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': dagvyn utan sidöverflöd ' + JSON.stringify(ov));
+        await s.eval(() => CalendarPage.setView('vecka'));
+        await s.settle(300);
+        const btn = await s.eval(() => { const b = [...document.querySelectorAll('#pg-calendar .cal-toolbar-right .btn')].find((x) => /Skapa AO/.test(x.textContent)); const r = b.getBoundingClientRect(); return { right: r.right, vw: document.documentElement.clientWidth, h: r.height }; });
+        t.assert(btn.right <= btn.vw && btn.h >= 38, vp + ': Skapa AO syns med tryckvänlig höjd');
+        await s.page.locator('#pg-calendar .cal-toolbar-right .btn', { hasText: 'Skapa AO' }).click();
+        await s.settle(500);
+        t.assert(await s.modalOpen(), vp + ': Skapa AO öppnar arbetsorderformuläret');
+        await s.eval(() => Modal.close());
+        await s.settle(200);
+        await s.page.locator('#pg-calendar .cal-wl-day.is-today .cal-ag-row').first().click();
+        await s.settle(400);
+        t.assert(await s.eval(() => Router.currentPage === 'pg-ao-detail'), vp + ': tryck på ett jobb öppnar arbetsordern');
+      }
+    },
+  },
+  {
+    id: 'MISC-TASK-03', module: 'Fastighetsregister', name: 'Fastighetskort på 360/390 (uppgifter): adress, portkod (admin), Ny AO, Lägg till objekt och serviceintervall nås utan avklippta knappar; långt namn kapas inte bort',
+    async run(t) {
+      t.__seedFn = seedRealistic;
+      for (const vp of ['mx360', 'mx390']) {
+        const s = await open(t, vp, 'admin', 'pg-obj-detail', { propId: 'OBJ-001' });
+        await s.eval(() => PropertyDetailPage._saveSensitiveFields({ propertyId: 'OBJ-001', accessCode: '2580', keyInformation: 'Nyckelskåp vid entré' }));
+        const addr = await s.eval(() => (document.querySelector('#pg-obj-detail .mx-pf-addr') || {}).innerText || '');
+        t.assert(/Solvägen/.test(addr), vp + ': adressen syns i faktaraden (' + addr + ')');
+        const visBtn = (sel, re) => s.eval(([q, src]) => { const b = [...document.querySelectorAll(q)].find((x) => x.offsetParent && new RegExp(src).test(x.textContent)); if (!b) return null; const r = b.getBoundingClientRect(); return { right: r.right, left: r.left, vw: document.documentElement.clientWidth, clip: b.scrollWidth > b.clientWidth + 1, h: r.height }; }, [sel, re]);
+        const ny = await visBtn('#pg-obj-detail .mx-dh button', 'Ny AO');
+        t.assert(ny && ny.right <= ny.vw && !ny.clip && ny.h >= 38, vp + ': Ny AO syns i huvudet');
+        await s.page.locator('#prop-tabs .ft[data-tab="contact"]').click();
+        await s.page.waitForFunction(() => /2580/.test((document.getElementById('sensitive-prop-OBJ-001') || {}).innerText || ''), null, { timeout: 5000 }).catch(() => {});
+        t.assert(await s.eval(() => /2580/.test(document.getElementById('sensitive-prop-OBJ-001').innerText)), vp + ': portkoden visas för admin under Kontakter & åtkomst');
+        await s.page.locator('#prop-tabs .ft[data-tab="objects"]').click();
+        const ob = await visBtn('#prop-tab-objects button', 'Lägg till objekt');
+        t.assert(ob && ob.right <= ob.vw && !ob.clip, vp + ': Lägg till objekt syns');
+        await s.page.locator('#prop-tab-objects button', { hasText: 'Lägg till objekt' }).first().click();
+        await s.settle(300);
+        t.assert(await s.modalOpen(), vp + ': objektformuläret öppnas');
+        await s.eval(() => Modal.close());
+        await s.page.locator('#prop-tabs .ft[data-tab="service"]').click();
+        const si = await visBtn('#prop-tab-service button', 'Lägg till');
+        t.assert(si && si.right <= si.vw && !si.clip, vp + ': Lägg till serviceintervall syns');
+        await s.page.locator('#prop-tab-service button', { hasText: 'Lägg till' }).first().click();
+        await s.settle(300);
+        t.assert(await s.modalOpen(), vp + ': serviceintervallformuläret öppnas');
+        await s.eval(() => Modal.close());
+        await s.page.locator('#pg-obj-detail .mx-dh .mx-dh-primary').click();
+        await s.settle(700);
+        t.assert(await s.modalOpen(), vp + ': Ny AO öppnar arbetsorderformuläret');
+        await s.eval(() => Modal.close());
+        // Långt namn: rubriken på en rad med ellips, title-attribut saknas inte i DOM-texten och sidan svämmar inte över.
+        await s.go('pg-obj-detail', { propId: 'OBJ-LONG' });
+        const lg = await s.eval(() => { const e = document.querySelector('#pg-obj-detail .mx-dh-title'); const h = document.querySelector('#pg-obj-detail .mx-dh').getBoundingClientRect(); return { text: e.textContent, w: e.getBoundingClientRect().width, right: e.getBoundingClientRect().right, hr: h.right, hh: h.height }; });
+        const ov = await s.eval(overflowProbe);
+        t.assert(/Kungsholmens Strand/.test(lg.text) && lg.right <= lg.hr && lg.hh <= 156, vp + ': långt namn ryms i huvudet (högst två rader) (' + Math.round(lg.hh) + ' px)');
+        t.assert(ov.page <= 1 && ov.wide.length === 0, vp + ': inget sidöverflöd med långt namn ' + JSON.stringify(ov));
+      }
+    },
+  },
 ];
 module.exports = tests;
 module.exports.seedMisc = seedMisc;
+module.exports.seedRealistic = seedRealistic;

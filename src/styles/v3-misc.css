@@ -149,7 +149,7 @@
   .mx-dh-back { grid-area: back; margin-left: 0; width: 40px; padding: 0; justify-content: center; }
   .mx-dh-back .mx-dh-back-l { display: none; }
   .mx-dh-tt { grid-area: tt; }
-  .mx-dh-title { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+  .mx-dh-title { font-size: 17px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; line-height: 1.25; }
   .mx-dh-sub { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
   .mx-dh-badges { grid-area: badges; min-width: 0; }
   .mx-dh-acts { grid-area: acts; flex-wrap: nowrap; margin-left: 0; }
@@ -652,4 +652,14 @@ button.rw-step:focus-visible { outline: none; box-shadow: var(--focus); }
   .mx-exc-foot .btn { flex: 1 1 auto; justify-content: center; }
   .imp-log-row .imp-log-actions { justify-content: flex-start; }
   #pg-import-log .mx-bar { display: flex; }
+}
+
+/* Projektkort: filterrader och sökfält enligt standard */
+.mx-pd-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.mx-pd-filter select { height: var(--ctl-h-sm); font-size: 12.5px; padding: 0 28px 0 10px; }
+.mx-isearch-wide { display: flex; width: 100%; max-width: 440px; }
+#pg-project-detail .card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+#pg-project-detail .card-header h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+@media (max-width: 767px) {
+  .mx-pd-filter select { height: 40px; font-size: 16px; flex: 1 1 140px; }
 }
