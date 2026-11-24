@@ -1,0 +1,312 @@
+{
+  "verktyg": "authz-mutation",
+  "runId": "E2E-AUTHZ-20261124191659-606af6",
+  "tid": "2026-11-24T19:18:18.928Z",
+  "results": [
+    {
+      "id": "ROLL falt",
+      "ok": null,
+      "detail": "e2e_falt [dashboard_view, ao_view_own, ao_time, ao_material, ao_checklist, ao_complete]"
+    },
+    {
+      "id": "ROLL chef",
+      "ok": null,
+      "detail": "e2e_arbetsledare [dashboard_view, ao_view_all, ao_create, ao_edit, ao_complete, ao_time, ao_material, ao_checklist, customer_manage, offer_manage, sales_manage, staff_view]"
+    },
+    {
+      "id": "ROLL ekonomi",
+      "ok": null,
+      "detail": "e2e_ekonomi [dashboard_view, invoice_view, invoice_create, ao_view_all, reports_view]"
+    },
+    {
+      "id": "ROLL begransad",
+      "ok": null,
+      "detail": "e2e_begransad [dashboard_view, ao_view_own]"
+    },
+    {
+      "id": "G13 vift_customers falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_customers chef",
+      "ok": true,
+      "detail": "servern TILLÄT ny testpost (förväntat: tillåten)"
+    },
+    {
+      "id": "G13 vift_customers ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_customers begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_properties falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_properties chef",
+      "ok": true,
+      "detail": "servern TILLÄT ny testpost (förväntat: tillåten)"
+    },
+    {
+      "id": "G13 vift_properties ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_properties begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_offers falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_offers chef",
+      "ok": true,
+      "detail": "servern TILLÄT ny testpost (förväntat: tillåten)"
+    },
+    {
+      "id": "G13 vift_offers ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_offers begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_salesOpps falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_salesOpps chef",
+      "ok": true,
+      "detail": "servern TILLÄT ny testpost (förväntat: tillåten)"
+    },
+    {
+      "id": "G13 vift_salesOpps ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_salesOpps begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_roles falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_roles chef",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_roles ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_roles begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_staff falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_staff chef",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_staff ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_staff begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_settings",
+      "ok": null,
+      "detail": "objektformat register — INTE prövat (ingen skrivning)"
+    },
+    {
+      "id": "G13 vift_articles falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_articles chef",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_articles ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_articles begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_priceGroups falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_priceGroups chef",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_priceGroups ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_priceGroups begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_contracts falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_contracts chef",
+      "ok": true,
+      "detail": "servern TILLÄT ny testpost (förväntat: tillåten)"
+    },
+    {
+      "id": "G13 vift_contracts ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_contracts begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad)"
+    },
+    {
+      "id": "G13 vift_activities falt",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad) — per-post-regeln (egna/andras uppgifter) prövas inte"
+    },
+    {
+      "id": "G13 vift_activities chef",
+      "ok": true,
+      "detail": "servern TILLÄT ny testpost (förväntat: tillåten) — per-post-regeln (egna/andras uppgifter) prövas inte"
+    },
+    {
+      "id": "G13 vift_activities ekonomi",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad) — per-post-regeln (egna/andras uppgifter) prövas inte"
+    },
+    {
+      "id": "G13 vift_activities begransad",
+      "ok": true,
+      "detail": "servern nekade ny testpost (förväntat: nekad) — per-post-regeln (egna/andras uppgifter) prövas inte"
+    },
+    {
+      "id": "G9 ekonomi → fakturerad (test-AO)",
+      "ok": null,
+      "detail": "HTTP 403 forbidden; status efteråt: klar — underlag för beslut"
+    },
+    {
+      "id": "G6 dubbel create_time samma nyckel",
+      "ok": true,
+      "detail": "svar 200/200, tidposter på servern: 1"
+    },
+    {
+      "id": "CHK serverstöd",
+      "ok": null,
+      "detail": "servern stöder tre lägen (migration 20261123000002 installerad)"
+    },
+    {
+      "id": "CHK påbörja (fält)",
+      "ok": true,
+      "detail": "HTTP 200/200; AO-status oförändrad: true"
+    },
+    {
+      "id": "CHK återställ annans (fält2, ao_checklist)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden_other"
+    },
+    {
+      "id": "CHK återställ egen (fält)",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "CHK ao_edit (chef) återställer annans + historik",
+      "ok": true,
+      "detail": "HTTP 200/200; historik: add,start,reset,done,reset; vem: rätt personal-id per steg"
+    },
+    {
+      "id": "CHK avvikelse kräver kommentar",
+      "ok": true,
+      "detail": "utan kommentar HTTP 400 comment_required; med kommentar HTTP 200"
+    },
+    {
+      "id": "CHK skriva över annans avvikelse (fält2)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden_other"
+    },
+    {
+      "id": "CHK utan ao_checklist (begränsad)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "CHK AO-status oförändrad efter alla checklisteåtgärder",
+      "ok": true,
+      "detail": "status: klar"
+    },
+    {
+      "id": "G13 TÄCKNING",
+      "ok": null,
+      "detail": "DELVIS: skrivrätt för ny post per array-register och roll. Inte prövat: objektformade register, per-post-regler (egna/andras), ändring/borttagning av befintliga poster, fältnivå, hel-nyckel-skrivning. Ett grönt G13 betyder inte att BLOCKER-2 är löst i sin helhet."
+    },
+    {
+      "id": "ÅTERSTÄLLNING",
+      "ok": true,
+      "detail": "efterkontrollerat: inga testposter kvar"
+    },
+    {
+      "id": "AFFÄRSPOSTER",
+      "ok": true,
+      "detail": "befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före"
+    },
+    {
+      "id": "DATABASIDENTITET",
+      "ok": null,
+      "detail": "INTE fullständig (förväntat). Kvar som metadata: vift_lastChanged och store.updated_at för berörda nycklar (ändras vid varje skrivning, även borttagning) · idempotensposter på servern för ao-time-write-anropen · inloggningsposter i auth-schemat (session, refresh-token, last_sign_in_at) och Edge Function-loggar · WAL/backup-historik som innehåller testposterna · aktivitetsflöde: 0 nya poster under körningen (varav 0 nämner testkörningen) — tas inte bort"
+    }
+  ],
+  "niva": 2,
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "journal": "/home/user/vift-v2/tests/staging/rapport/E2E-AUTHZ-20261124191659-606af6.journal.json",
+  "kvar": [],
+  "efterkontroll": true
+}

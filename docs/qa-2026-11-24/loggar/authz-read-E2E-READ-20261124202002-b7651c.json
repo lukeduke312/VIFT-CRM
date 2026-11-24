@@ -1,0 +1,169 @@
+{
+  "verktyg": "authz-read",
+  "runId": "E2E-READ-20261124202002-b7651c",
+  "tid": "2026-11-24T20:20:29.492Z",
+  "results": [
+    {
+      "id": "R1 falt",
+      "ok": true,
+      "detail": "ser bara egna/pool-AO (53)",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R2 falt",
+      "ok": true,
+      "detail": "HTTP 200, andras tidposter synliga: 0",
+      "kalla": "repo — skriver inte (in-memory rate-limit)"
+    },
+    {
+      "id": "R3 falt vift_workOrders",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R3 falt vift_timeEntries",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R4 falt",
+      "ok": true,
+      "detail": "readWithHash vift_workOrders: HTTP 400 key_not_allowlisted utan data",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R1 chef",
+      "ok": null,
+      "detail": "ser 363 AO (ao_view_all)",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R2 chef",
+      "ok": true,
+      "detail": "HTTP 200, andras tidposter synliga: 0",
+      "kalla": "repo — skriver inte (in-memory rate-limit)"
+    },
+    {
+      "id": "R3 chef vift_workOrders",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R3 chef vift_timeEntries",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R4 chef",
+      "ok": true,
+      "detail": "readWithHash vift_workOrders: HTTP 400 key_not_allowlisted utan data",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R1 ekonomi",
+      "ok": null,
+      "detail": "ser 363 AO (ao_view_all)",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R2 ekonomi",
+      "ok": true,
+      "detail": "HTTP 200, andras tidposter synliga: 0",
+      "kalla": "repo — skriver inte (in-memory rate-limit)"
+    },
+    {
+      "id": "R3 ekonomi vift_workOrders",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R3 ekonomi vift_timeEntries",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R4 ekonomi",
+      "ok": true,
+      "detail": "readWithHash vift_workOrders: HTTP 400 key_not_allowlisted utan data",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R1 begransad",
+      "ok": true,
+      "detail": "ser bara egna/pool-AO (53)",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R2 begransad",
+      "ok": true,
+      "detail": "HTTP 200, andras tidposter synliga: 0",
+      "kalla": "repo — skriver inte (in-memory rate-limit)"
+    },
+    {
+      "id": "R3 begransad vift_workOrders",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R3 begransad vift_timeEntries",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R4 begransad",
+      "ok": true,
+      "detail": "readWithHash vift_workOrders: HTTP 400 key_not_allowlisted utan data",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R1 admin",
+      "ok": null,
+      "detail": "ser 363 AO (ao_view_all)",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R2 admin",
+      "ok": null,
+      "detail": "ser 1122 tidposter (payroll_view)",
+      "kalla": "repo — skriver inte (in-memory rate-limit)"
+    },
+    {
+      "id": "R3 admin vift_workOrders",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R3 admin vift_timeEntries",
+      "ok": true,
+      "detail": "direkt REST-läsning: HTTP 200 utan data",
+      "kalla": "PostgREST GET (RLS)"
+    },
+    {
+      "id": "R4 admin",
+      "ok": true,
+      "detail": "readWithHash vift_workOrders: HTTP 400 key_not_allowlisted utan data",
+      "kalla": "ej i repo (G4) — läsåtgärd enligt kontrakt"
+    },
+    {
+      "id": "R1 jämförelse",
+      "ok": null,
+      "detail": "admin ser 363 AO"
+    },
+    {
+      "id": "SJÄLVKONTROLL",
+      "ok": true,
+      "detail": "inga skrivåtgärder skickade (32 anrop, varav 5 inloggningar)"
+    }
+  ],
+  "niva": 1,
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}

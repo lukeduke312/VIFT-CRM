@@ -1,0 +1,23 @@
+VIFT CRM STAGING-uppdatering 2026-11-24 v3.1 (QA-sluttest): rättning av lagrad XSS (QA-P0-3). Källa: VIFT-CRM gren claude/vift-v3-major-redesign 8cab8ac + STAGING-överlägg (storage.js/AuthService.js/config.js/public-offer.html oförändrade).
+Prövat mot riktig STAGING före uppladdning (lokalt serverat paket): e2e-real R0 sex roller utan JS-fel, F6 kund→offert→kundgodkännande; simulerad svit 117/118 (XSS-01 och VAT-01 gröna).
+Uppladdning: src/ först, index.html SIST. Ladda INTE upp något annat.
+18 filer.
+SHA-256 per fil (tools/verify-staging-deploy.sh <denna fil>):
+8980b53b9a5003f78a1df566849390344cd34c4ee03a348054d5a3294a4467bb  index.html
+1aeca54c32e14c5585407e83f816dd2433225a736796b068e356ecf5699d608e  src/components/Sidebar.js
+44762bf6a72c04ceff0bfc64a49ceb12e3ee08e205d65ac0a1a39df1cd1366f9  src/data/state.js
+fefd88da1b986b2463bd732a440e62d2e976751dda9cc9808d8e5ab3b4ae234b  src/pages/ContractsPage.js
+ab36153008334542767e35f3328291e592c3d24449af45545ad210b69228b24c  src/pages/CustomersPage.js
+2c933c4cfe681e404733b7fdd1cb3f0047767764b6984b1dda8cf74b8e38f282  src/pages/Dashboard.js
+457945e5e9c1d520bc3b9b5846e28544dfabf79d627f81bf6df20fcf0fe033f7  src/pages/InvoicesPage.js
+eac0805f1d16557309dcb7ae4d00180d93b5c8b9d28288aab5493b550b3e22aa  src/pages/PageShells.js
+c8784d1b212f447fdb7a89075c9cb214eb7181704243b2c4d318121fca40e265  src/pages/ProjectsPage.js
+5d959693572f4a01ecfe5484adad193f7a8172437c528be4d35d35af9b36f1c6  src/pages/PropertyDetailPage.js
+89c9ff8a6d4bcda296bd5eb0b2e24f570bdcf04289a60e055d155cb716dd19d0  src/pages/RecurringPage.js
+94e6a25d396649cc23629bb0012b82db6d25309c7cf2c589e0dd1cf52fac824c  src/pages/RonderingWizardPage.js
+925967af15d7146aec72a00b56dd390ea030fafe9006d2f435759ab62dd0e40d  src/pages/Router.js
+efd093cb3fab460a40e1e8bd33dcc587ab2954c21d0fd7c5ecc963abb1407bd2  src/pages/SalesPage.js
+959712f604d99115b7be93c553bc864d96bdace03e63be70eebb467bcba6982a  src/pages/ServiceIntervalsPage.js
+09c0ab97d0b08284cc950de872e08b3cd88fa61b174841d3296f52f2fb50b283  src/pages/TimePage.js
+a907b1324f500a2a5ca7eece6c987554dfbb64e9d90f3cfb1c2a1424da960763  src/pages/WorkOrderDetailPage.js
+a1f62a1865ae4b476cca1a28d489a4e7f5cfe065b405b224e3d3c5a591bfff38  src/pages/WorkOrdersPage.js

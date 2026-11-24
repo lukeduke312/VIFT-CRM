@@ -1,0 +1,93 @@
+{
+  "verktyg": "qa-ao-material",
+  "runId": "E2E-QAMAT-20261124191342-2dbb8b",
+  "tid": "2026-11-24T19:14:43.541Z",
+  "results": [
+    {
+      "id": "MAT fält lägger till material på tilldelad AO",
+      "ok": true,
+      "detail": "HTTP 200 ; serverns rader: 1"
+    },
+    {
+      "id": "MAT omsändning samma nyckel → ingen dubblett",
+      "ok": true,
+      "detail": "HTTP 200; rader: 1"
+    },
+    {
+      "id": "MAT fält ändrar antal + lägger till rad 2",
+      "ok": true,
+      "detail": "HTTP 200; rader 2, antal rad 1: 3"
+    },
+    {
+      "id": "MAT blandad patch (material + kund) nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden; kund oförändrad: true"
+    },
+    {
+      "id": "MAT material + statusändring nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "MAT fält 1 på fält 2:s AO nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden; rader på AO2: 0"
+    },
+    {
+      "id": "MAT roll utan ao_material (begransad) nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "MAT roll utan ao_material (ekonomi) nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "MAT ogiltig materialform nekas",
+      "ok": true,
+      "detail": "HTTP 400 missing_fields"
+    },
+    {
+      "id": "START fält startar egen AO; annans/annan status/blandat nekas",
+      "ok": true,
+      "detail": "annans 403, egen 200 (status pågående), pausad 403, blandat 403"
+    },
+    {
+      "id": "KLAR fält klarmarkerar (oförändrat)",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "MAT fakturerad AO låst för fält",
+      "ok": true,
+      "detail": "HTTP 200/403; rader kvar: 2"
+    },
+    {
+      "id": "MAT arbetsledare (ao_edit) oförändrad",
+      "ok": true,
+      "detail": "HTTP 200 "
+    },
+    {
+      "id": "POOL fält tar jobb; loggförlust/annan person/obehörig/redan tagen nekas",
+      "ok": true,
+      "detail": "tappar logg 403, annan person 403, begränsad 403, korrekt 200 (status planerad, logg 2), redan tagen 403"
+    },
+    {
+      "id": "STÄDNING AO1",
+      "ok": true,
+      "detail": "borttagen permanent"
+    },
+    {
+      "id": "STÄDNING AO2",
+      "ok": true,
+      "detail": "borttagen permanent"
+    },
+    {
+      "id": "STÄDNING AO3",
+      "ok": true,
+      "detail": "borttagen permanent"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual"
+}

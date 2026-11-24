@@ -1,0 +1,122 @@
+{
+  "verktyg": "e2e-real",
+  "runId": "E2E-AUTHZ-20261124192500-d644a9",
+  "tid": "2026-11-24T19:30:07.898Z",
+  "results": [
+    {
+      "id": "F6.1 kund skapad (UI, arbetsledare)",
+      "ok": true,
+      "detail": "K-5c6c5137-246a-4014-9e1a-5fed5125e9e1 e-post e2e-kund@example.invalid"
+    },
+    {
+      "id": "F6.2 fastighet kopplad till kunden",
+      "ok": true,
+      "detail": "OBJ-7081c906-bc8e-4306-8bbc-a459894624cd → K-5c6c5137-246a-4014-9e1a-5fed5125e9e1"
+    },
+    {
+      "id": "F6.3 kontaktperson sparad på servern",
+      "ok": true,
+      "detail": "på fastigheten"
+    },
+    {
+      "id": "F6.4 offert med två rader, belopp",
+      "ok": true,
+      "detail": "ex 3952, moms 988, totalt 4940 (förväntat 3952/988/4940); guiden visade {\"Summa ex. moms\":\"3 952 kr\",\"Moms\":\"988 kr\",\"Totalt inkl. moms\":\"4 940 kr\"}"
+    },
+    {
+      "id": "F6.5 bilaga uppladdad",
+      "ok": true,
+      "detail": "HTTP 200 att-362c54afbe234a9e"
+    },
+    {
+      "id": "F6.6 offerten öppnas igen med samma totalsumma",
+      "ok": true,
+      "detail": "detaljvyn visar 4 940 och 3 952: true"
+    },
+    {
+      "id": "F6.8 publik länk och låst version (utan mejl)",
+      "ok": true,
+      "detail": "token 64 tecken, status utkast"
+    },
+    {
+      "id": "F6.9 kund-PDF visar rätt offert och totalsumma",
+      "ok": true,
+      "detail": "HTTP 200, innehåller offert-id: true, totalt 4 940: true"
+    },
+    {
+      "id": "F6.10 kundsidan visar offerten och 4 940 kr",
+      "ok": false,
+      "detail": "kundsidan visar totalsumman: false"
+    },
+    {
+      "id": "F6.10 kundgodkännande",
+      "ok": false,
+      "detail": "avbröts: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button').filter({ hasText: /Godkänn/ }).first()\u001b[22m\n"
+    },
+    {
+      "id": "F6.11b godkännandet syns i arbetsledarens klient",
+      "ok": false,
+      "detail": "lokal status utkast efter 60 s"
+    },
+    {
+      "id": "F6.12 diagnos",
+      "ok": null,
+      "detail": "dialog:  · besked: Offerten måste vara godkänd innan den kan konverteras till en arbetsorder."
+    },
+    {
+      "id": "F6.12 en AO skapad från offerten",
+      "ok": false,
+      "detail": "0 AO med offerId"
+    },
+    {
+      "id": "F6.12b andra försöket skapar ingen dubblett",
+      "ok": false,
+      "detail": "0 AO"
+    },
+    {
+      "id": "F7 kundsvar \"neka\" registrerat",
+      "ok": true,
+      "detail": "status nekad, skäl annan_leverantör"
+    },
+    {
+      "id": "F7 ingen AO skapad från ej godkänd offert",
+      "ok": true,
+      "detail": "0 AO"
+    },
+    {
+      "id": "F8 kundsvar \"begär ändring\" registrerat",
+      "ok": true,
+      "detail": "status ändring-begärd"
+    },
+    {
+      "id": "F8 ingen AO skapad från ej godkänd offert",
+      "ok": true,
+      "detail": "0 AO"
+    },
+    {
+      "id": "MILJÖ",
+      "ok": true,
+      "detail": "inga anrop till andra Supabase-projekt"
+    },
+    {
+      "id": "ÅTERSTÄLLNING",
+      "ok": true,
+      "detail": "efterkontrollerat: inga testposter kvar"
+    },
+    {
+      "id": "AFFÄRSPOSTER",
+      "ok": true,
+      "detail": "befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före"
+    },
+    {
+      "id": "DATABASIDENTITET",
+      "ok": null,
+      "detail": "INTE fullständig (förväntat). Kvar som metadata: vift_lastChanged och store.updated_at för berörda nycklar (ändras vid varje skrivning, även borttagning) · idempotensposter på servern för ao-time-write-anropen · inloggningsposter i auth-schemat (session, refresh-token, last_sign_in_at) och Edge Function-loggar · WAL/backup-historik som innehåller testposterna · aktivitetsflöde: 3 nya poster under körningen (varav 3 nämner testkörningen) — tas inte bort"
+    }
+  ],
+  "niva": 2,
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "journal": "/home/user/vift-v2/tests/staging/rapport/E2E-AUTHZ-20261124192500-d644a9.journal.json",
+  "kvar": [],
+  "efterkontroll": true
+}

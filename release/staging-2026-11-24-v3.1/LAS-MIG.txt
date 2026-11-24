@@ -1,0 +1,28 @@
+VIFT CRM - uppdateringspaket V3.1 för STAGING (säkerhetsrättning XSS) (staging-crm.viftfast.se)
+=====================================================================
+
+ENDAST STAGING. Ladda aldrig upp detta till crm.viftfast.se (LIVE).
+
+Innehåll
+  webbplats/          18 filer som ska till STAGING-webbplatsens rotmapp
+     index.html
+     src/...           (17 filer i undermappar)
+  MANIFEST-v3.1.txt     SHA-256 för varje fil (ska INTE laddas upp)
+  LAS-MIG.txt         denna fil (ska INTE laddas upp)
+
+Så här gör du i WinSCP
+  1. Logga in och öppna STAGING-webbplatsens rotmapp, alltså den mapp där
+     index.html för staging-crm.viftfast.se redan ligger tillsammans med
+     mappen src/ och filen config.js.
+  2. Ladda upp mappen webbplats/src/ så att filerna hamnar i den
+     befintliga src/-mappen (skriv över). Ladda alltså upp INNEHÅLLET i
+     webbplats/, inte själva mappen "webbplats".
+  3. Ladda upp webbplats/index.html SIST och skriv över den befintliga.
+  4. Använd binärt överföringsläge om WinSCP frågar (inte "text").
+  5. Ladda inte upp något annat. config.js, src/data/storage.js och
+     src/services/AuthService.js ingår inte och ska ligga kvar orörda.
+
+Kontroll efteråt
+  https://staging-crm.viftfast.se/src/pages/Router.js ska visa
+  JavaScript-kod (inte "404 Not Found"). Säg till Claude, så verifieras
+  alla 18 filer mot MANIFEST-v3.1.txt.
