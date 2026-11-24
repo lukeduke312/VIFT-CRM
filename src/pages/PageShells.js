@@ -4694,7 +4694,7 @@ const OfferDetailPage = {
             <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
             <div>
               <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}${(off.versionNumber||1) > 1 ? ` <span class="bdg bdg-purple" style="font-size:10px;">v${off.versionNumber}</span>` : ''}${off.parentOfferId ? ` <span style="font-size:10px;opacity:.7;"> ← ${off.parentOfferId}</span>` : ''}</div>
-              <div style="font-size:16px;font-weight:800;line-height:1.2;color:#fff;">${off.title||'Offert'}</div>
+              <div style="font-size:20px;font-weight:700;line-height:1.25;">${off.title||'Offert'}</div>
             </div>
           </div>
           <div class="off-hero-brand-status">
@@ -4708,10 +4708,10 @@ const OfferDetailPage = {
         <div class="off-detail-customer-validity-row">
           ${cu
             ? `<button type="button" class="off-detail-customer-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}${ic('chevron-right',12)}</button>`
-            : `<span style="font-size:15px;font-weight:800;color:#fff;">${cuName}</span>`}
-          ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:#fbbf24;font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
+            : `<span class="off-detail-customer-link">${cuName}</span>`}
+          ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:var(--warn);font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
         </div>
-        ${_offPropertyDisplayText(off) ? `<div class="off-detail-property-row" style="font-size:12px;color:rgba(255,255,255,.75);margin-top:2px;">${ic('map-pin',11)} Fastighet: ${esc(_offPropertyDisplayText(off))}</div>` : ''}
+        ${_offPropertyDisplayText(off) ? `<div class="off-detail-property-row" style="font-size:13px;color:var(--muted);margin-top:2px;">${ic('map-pin',11)} Fastighet: ${esc(_offPropertyDisplayText(off))}</div>` : ''}
 
         ${_tot.recurringMonthlyExVat ? `
         <div class="off-hero-price-grid off-hero-price-grid--recurring">
@@ -4731,12 +4731,12 @@ const OfferDetailPage = {
           <div>
             <div class="off-hero-pg-lbl">${_tot.recurringMonthlyExVat?'Engångsbelopp ex. moms':'Ex. moms'}</div>
             <div class="off-hero-pg-val">${fmt(exVat)} kr</div>
-            ${discAmt?`<div class="off-hero-pg-sub" style="color:#fbbf24;">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
+            ${discAmt?`<div class="off-hero-pg-sub" style="color:var(--warn);">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
           </div>
           <div>
             <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':(_tot.recurringMonthlyExVat?'Engångsbelopp inkl. moms':'Totalt inkl. moms')}</div>
             <div class="off-hero-pg-val${_tot.recurringMonthlyExVat?'':' off-hero-pg-val--big'}">${fmt(cust)} kr</div>
-            ${rutAmt?`<div class="off-hero-pg-sub" style="color:#86efac;">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. moms</div>`}
+            ${rutAmt?`<div class="off-hero-pg-sub" style="color:var(--ok);">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. moms</div>`}
           </div>
         </div>` : ''}
 

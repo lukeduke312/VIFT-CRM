@@ -968,15 +968,84 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
   .ftabs .ft { padding: 4px 6px; font-size: 12px; justify-content: center; text-align: center; min-height: 32px; }
 }
 
-/* ── Dokumenthuvuden (faktura, offert, AO-hero, sidhero) ───────────
-   Behåller mörk VIFT-yta (texten är vit i markupen) men solid, utan
-   gradient, med samma form som övriga kort. */
-.inv-hero, .off-detail-hero, .ao-hero-head, .page-hero {
-  background: var(--brand) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-2) !important;
+/* ── Dokumenthuvuden (omgång 2): ljusa, med tydlig hierarki ───────
+   Fakturaunderlag (.doc-head) och offert (.off-detail-hero): typ och
+   nummer, kund som rubrik, belopp till höger, kopplingar som länkrad,
+   åtgärder diskret i nederkant. Sidhero/AO-hero behåller marinblått. */
+.ao-hero-head, .page-hero { background: var(--brand) !important; border-radius: var(--radius-lg) !important; }
+
+.doc-head { padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 12px; overflow: visible; }
+.doc-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.doc-top .ao-back-btn { margin-left: -8px; }
+.doc-no { font-size: 12.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.doc-status { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.doc-status-sel { height: 30px; padding: 0 26px 0 10px; font-size: 12.5px; font-weight: 600; }
+.doc-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px; flex-wrap: wrap; }
+.doc-who { min-width: 0; }
+.doc-kicker { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.doc-title { font-size: 22px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); margin: 2px 0 0; line-height: 1.25; }
+.doc-cust { color: inherit; cursor: pointer; text-decoration: none; }
+.doc-cust:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+.doc-sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+.doc-figs { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; }
+.doc-fig { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+.doc-fig span { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.doc-fig b { font-size: 24px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.doc-fig b.sm { font-size: 15px; font-weight: 650; letter-spacing: 0; }
+.doc-fig small { font-size: 11.5px; color: var(--muted); }
+.doc-fig.is-struck b { font-size: 16px; color: var(--muted); text-decoration: line-through; }
+.doc-fig.is-pay b { color: var(--ok); }
+.doc-fig.is-late b, .doc-fig.is-late small { color: var(--danger); }
+.doc-links { display: flex; flex-wrap: wrap; gap: 6px 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.doc-link { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; font-weight: 500; color: var(--ink-2); cursor: pointer; text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-link:hover { border-color: var(--line-2); background: var(--hover); }
+.doc-link.is-plain { cursor: default; background: transparent; border-color: transparent; padding-left: 0; color: var(--muted); }
+.doc-link.is-ok { cursor: default; color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
+@media (max-width: 767px) {
+  .doc-head { padding: 12px 14px 14px; }
+  .doc-top .ao-back-label { display: none; }
+  .doc-title { font-size: 19px; }
+  .doc-main { flex-direction: column; align-items: stretch; }
+  .doc-figs { justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .doc-fig { text-align: left; }
+  .doc-fig b { font-size: 20px; }
 }
-.off-detail-hero .off-hero-cta-btn--or, .off-hero-cta-btn--or { box-shadow: none; }
+
+/* Offert: samma ljusa dokumenthuvud via befintliga klasser */
+.off-detail-hero {
+  background: var(--surface) !important; color: var(--ink) !important;
+  border: 1px solid var(--line); border-radius: var(--radius-lg) !important; box-shadow: var(--shadow-1) !important;
+  padding: 14px 20px 16px !important;
+}
+.off-detail-hero-nav { align-items: flex-start; }
+.off-detail-hero-id { color: var(--muted) !important; font-size: 12.5px !important; font-weight: 600; opacity: 1 !important; }
+.off-hero-logo, .off-hero-vift-badge { display: none !important; }
+.off-detail-customer-link { color: var(--ink-2) !important; background: none !important; border: none !important; padding: 0 !important; font-size: 14px !important; font-weight: 600 !important; }
+.off-detail-customer-link:hover { color: var(--accent-ink) !important; }
+.off-detail-validity { color: var(--muted) !important; opacity: 1 !important; font-size: 12.5px !important; }
+.off-hero-price-grid { border-color: var(--line) !important; }
+.off-hero-pg-lbl { color: var(--muted); opacity: 1 !important; font-size: 11px; letter-spacing: .04em; }
+.off-hero-pg-val { color: var(--ink); font-variant-numeric: tabular-nums; }
+.off-hero-pg-sub { color: var(--muted); opacity: 1 !important; }
+.off-detail-hero-actions { border-top-color: var(--line) !important; }
+.off-hero-btn {
+  background: var(--surface) !important; color: var(--ink-2) !important;
+  border: 1px solid var(--line-2) !important; border-radius: var(--radius-sm) !important;
+  min-height: 32px; font-weight: 600 !important; box-shadow: var(--shadow-1);
+}
+.off-hero-btn:hover { background: var(--surface-2) !important; }
+.off-hero-btn--green { color: var(--ok) !important; border-color: var(--ok-line) !important; background: var(--ok-bg) !important; }
+.off-hero-btn--dim { color: var(--muted) !important; }
+.off-hero-cta { margin: 4px 0 0; }
+.off-hero-cta-btn {
+  background: var(--brand) !important; color: #fff !important; border: 1px solid var(--brand) !important;
+  border-radius: var(--radius-sm) !important; min-height: 38px; font-weight: 600 !important; box-shadow: var(--shadow-1) !important;
+  width: auto !important; padding: 0 16px !important;
+}
+.off-hero-cta-btn--or { background: var(--warn-bg) !important; color: var(--warn) !important; border-color: var(--warn-line) !important; }
+.off-hero-cta-btn--gr { background: var(--ok) !important; border-color: var(--ok) !important; }
+.off-hero-cta-btn--dim { background: var(--surface) !important; color: var(--ink-2) !important; border-color: var(--line-2) !important; }
+.off-status-badge-only, .off-status-wrap .bdg { box-shadow: none; }
 
 /* ── Säljchanser (V3): kompakta kort ────────────────────────────── */
 .so-card { margin-bottom: 12px; }
@@ -1180,3 +1249,45 @@ a.aod-meta-i:hover span { color: var(--accent-ink); text-decoration: underline; 
 .dash-layout > [data-sec-hdr] { align-self: start; }
 .dash-layout > [data-sec] { display: flex; flex-direction: column; min-width: 0; }
 .dash-layout > [data-sec] > .card { flex: 1 1 auto; }
+.off-detail-hero .off-status-btn:hover { background: var(--hover); }
+.off-detail-hero .off-status-btn:focus-visible { outline: none; box-shadow: var(--focus); }
+.off-detail-hero .off-status-arrow { color: var(--muted); }
+.off-detail-hero .off-status-btn { min-height: 36px; }
+
+/* ── Fakturakö (omgång 2): kompakt filtrering och tydliga nivåer ── */
+.bq-toolbar .ao-toolbar-right select { height: var(--ctl-h-sm); font-size: 12.5px; padding: 0 26px 0 10px; }
+@media (max-width: 767px) {
+  .bq-toolbar { flex-wrap: wrap; gap: 8px; }
+  .bq-toolbar .swrap { flex: 1 1 100%; }
+  .bq-toolbar .ao-toolbar-right { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; }
+  .bq-toolbar .ao-toolbar-right select { width: 100%; min-width: 0; height: 38px; }
+  .bq-toolbar .ao-toolbar-right label { grid-column: 1 / -1; justify-self: start; }
+}
+/* Nivåer: kund (rubrik) → fastighet (etikett) → AO (fet rad) → underlag (lätt rad) */
+.bq-prop-header { background: transparent !important; border: none !important; padding: 8px 12px 2px !important; margin-top: 4px; }
+.bq-prop-header .bq-group-title { font-size: 11.5px !important; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.bq-prop-header .bq-group-amount { font-size: 12px; color: var(--muted); font-weight: 600; }
+.bq-ao-header { background: var(--surface) !important; border: 1px solid var(--line) !important; border-radius: var(--radius-sm); }
+.bq-ao-header .bq-group-title { font-weight: 650; color: var(--ink); }
+.bq-source-row { background: transparent; }
+.bq-source-meta { color: var(--muted); }
+.bq-source-amount { font-weight: 600; color: var(--ink-2); }
+@media (max-width: 767px) {
+  .bq-prop-header { margin-left: 0 !important; }
+  .bq-ao-header { margin-left: 10px !important; }
+  .bq-source-row { margin-left: 22px !important; padding: 7px 8px; }
+}
+
+/* ── Offertlistan (omgång 2): lugnare nyckeltal, vänsterställda ─── */
+.off-kpi-card { text-align: left; border-radius: var(--radius); border-color: var(--line); box-shadow: var(--shadow-1); padding: 12px 14px; }
+.off-kpi-card--green { background: var(--surface); border-color: var(--line); box-shadow: inset 3px 0 0 var(--ok), var(--shadow-1); }
+.off-kpi-card--navy { background: var(--surface); border-color: var(--line); box-shadow: inset 3px 0 0 var(--brand), var(--shadow-1); }
+.off-kpi-card--navy .off-kpi-val, .off-kpi-card--navy .off-kpi-lbl, .off-kpi-card--navy .off-kpi-count, .off-kpi-card--navy .off-kpi-unit { color: inherit; opacity: 1; }
+.off-kpi-lbl { color: var(--muted); font-weight: 500; font-size: 12px; }
+.off-kpi-val { color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+@media (max-width: 600px) {
+  .off-kpi-row { gap: 6px; margin-bottom: 10px; }
+  .off-kpi-card { padding: 8px 10px; }
+  .off-kpi-val { font-size: 16px; }
+  .off-kpi-lbl { font-size: 11px; margin-bottom: 1px; }
+}

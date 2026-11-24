@@ -51,7 +51,7 @@ const InvoicesPage = {
       .slice().sort((a,b) => (a.name||'').localeCompare(b.name||'', 'sv'));
     body.innerHTML = `
       <div id="bq-header"></div>
-      <div class="ao-toolbar" style="margin-bottom:6px;">
+      <div class="ao-toolbar bq-toolbar" style="margin-bottom:6px;">
         <div class="swrap">
           <span class="sico">${ic('search',16)}</span>
           <input type="search" id="bq-search" placeholder="Sök kund, fastighet, AO, personal…" value="${esc(this._qQuery)}"
@@ -595,49 +595,45 @@ const InvoiceDetailPage = {
        för bakåtkompatibla konsumenter, men hero-metan visar hela listan
        när den finns. */
     const woIds = (inv.workOrderIds && inv.workOrderIds.length) ? inv.workOrderIds : (inv.workOrderId ? [inv.workOrderId] : []);
-    const heroMeta = [];
-    if (inv.sentAt) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;">${ic('send',10)} Skickad ${fmtDate(inv.sentAt)}</span>`);
-    if (inv.paidAt) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;color:#86efac;">${ic('check-circle',10)} Betald ${fmtDate(inv.paidAt)}</span>`);
+    /* V3: ljust dokumenthuvud (.doc-head) — kund, belopp och förfallodag
+       i tydlig hierarki; kopplingar till AO/offert som länkrad. Samma
+       belopp och samma statusövergångar som tidigare. */
+    const docLinks = [];
+    if (inv.sentAt) docLinks.push(`<span class="doc-link is-plain">${ic('send',13)} Skickad ${fmtDate(inv.sentAt)}</span>`);
+    if (inv.paidAt) docLinks.push(`<span class="doc-link is-ok">${ic('check-circle',13)} Betald ${fmtDate(inv.paidAt)}</span>`);
     woIds.forEach(woId => {
       const woAo = (state.workOrders||[]).find(a=>a.id===woId);
-      heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-ao-detail',{aoId:'${woId}'})">${ic('clipboard',10)} ${woId}${woAo?' – '+esc(woAo.title.substring(0,28))+(woAo.title.length>28?'…':''):''}</span>`);
+      docLinks.push(`<a class="doc-link" onclick="Router.showPage('pg-ao-detail',{aoId:'${woId}'})">${ic('clipboard-list',13)} ${esc(woAo ? WorkOrderService.displayNumberOrPending(woAo) : woId)}${woAo?' – '+esc(woAo.title):''}</a>`);
     });
-    if (inv.offerId) heroMeta.push(`<span style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${ic('file-text',10)} Offert ${inv.offerId}</span>`);
+    if (inv.offerId) docLinks.push(`<a class="doc-link" onclick="Router.showPage('pg-offer-detail',{offerId:'${inv.offerId}'})">${ic('file-text',13)} Offert ${esc(inv.offerId)}${off&&off.title?' – '+esc(off.title):''}</a>`);
+    const overdue = inv.dueDate && inv.dueDate < tdy() && !['betald','makulerad'].includes(inv.status);
 
     el.innerHTML = `
-      <!-- Hero — full width -->
-      <div class="card inv-hero" style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);color:#fff;border-radius:12px;margin-bottom:8px;">
-        <div style="padding:12px 14px 12px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-            <button class="btn bxs ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',13)} Tillbaka</button>
-            <span style="font-size:11px;font-weight:700;opacity:.6;letter-spacing:.3px;">${inv.id}</span>
-            <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
-              ${sbdg(inv.status)}
-              ${Auth.can('invoice_create') ? `
-              <select class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);font-weight:600;font-size:11px;" onchange="InvoiceDetailPage.setStatus(this.value)">
-                ${statusOpts.map(s=>`<option style="color:#17324d;background:#fff;" value="${s}" ${inv.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
-              </select>` : ''}
-            </div>
+      <div class="card doc-head inv-hero">
+        <div class="doc-top">
+          <button class="btn bghost bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span></button>
+          <span class="doc-no">${esc(inv.id)}</span>
+          <div class="doc-status">
+            ${sbdg(inv.status)}
+            ${Auth.can('invoice_create') && statusOpts.length > 1 ? `
+            <select class="doc-status-sel" aria-label="Ändra status" onchange="InvoiceDetailPage.setStatus(this.value)">
+              ${statusOpts.map(st=>`<option value="${st}" ${inv.status===st?'selected':''}>${st===inv.status?'Ändra status…':statusLabel(st)}</option>`).join('')}
+            </select>` : ''}
           </div>
-          <div style="font-size:18px;font-weight:800;line-height:1.2;margin-bottom:2px;">${cuName}</div>
-          ${inv.title ? `<div style="font-size:12px;opacity:.7;margin-bottom:8px;">${esc(inv.title)}</div>` : '<div style="margin-bottom:8px;"></div>'}
-          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:${heroMeta.length?'10':'0'}px;">
-            <div>
-              <div style="font-size:10px;opacity:.6;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Totalt inkl. moms</div>
-              <div style="font-size:26px;font-weight:900;line-height:1.1;${hasRot?'text-decoration:line-through;opacity:.7;font-size:18px;':''}">${fkr(tots.total)}</div>
-            </div>
-            ${hasRot ? `<div>
-              <div style="font-size:10px;opacity:.6;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Kunden betalar</div>
-              <div style="font-size:26px;font-weight:900;line-height:1.1;color:#86efac;">${fkr(summ.customerPays)}</div>
-              <div style="font-size:10px;opacity:.65;">inkl. ${(inv.taxReduction||{}).type||'RUT/ROT'}-avdrag</div>
-            </div>` : ''}
-            ${inv.dueDate ? `<div style="margin-left:auto;">
-              <div style="font-size:10px;opacity:.6;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Förfallodatum</div>
-              <div style="font-size:13px;font-weight:700;">${fmtDate(inv.dueDate)}</div>
-            </div>` : ''}
-          </div>
-          ${heroMeta.length ? `<div style="border-top:1px solid rgba(255,255,255,.15);padding-top:8px;display:flex;flex-wrap:wrap;gap:10px;font-size:11px;opacity:.8;">${heroMeta.join('')}</div>` : ''}
         </div>
+        <div class="doc-main">
+          <div class="doc-who">
+            <div class="doc-kicker">Fakturaunderlag</div>
+            <h2 class="doc-title">${cu ? `<a class="doc-cust" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a>` : esc(cuName)}</h2>
+            ${inv.title ? `<div class="doc-sub">${esc(inv.title)}</div>` : ''}
+          </div>
+          <div class="doc-figs">
+            <div class="doc-fig${hasRot ? ' is-struck' : ''}"><span>Totalt inkl. moms</span><b>${fkr(tots.total)}</b></div>
+            ${hasRot ? `<div class="doc-fig is-pay"><span>Kunden betalar</span><b>${fkr(summ.customerPays)}</b><small>efter ${esc((inv.taxReduction||{}).type||'RUT/ROT')}-avdrag</small></div>` : ''}
+            ${inv.dueDate ? `<div class="doc-fig${overdue ? ' is-late' : ''}"><span>Förfallodatum</span><b class="sm">${fmtDate(inv.dueDate)}</b>${overdue ? '<small>Förfallen</small>' : ''}</div>` : ''}
+          </div>
+        </div>
+        ${docLinks.length ? `<div class="doc-links">${docLinks.join('')}</div>` : ''}
       </div>
 
       <!-- Two-column layout -->
