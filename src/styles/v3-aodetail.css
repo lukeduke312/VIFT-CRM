@@ -1,1 +1,311 @@
-/* V3 nattkörning 2026-11-26 — aodetail. Ägs av ett eget arbetsblock; laddas efter system.css. */
+/* V3 nattkörning 2026-11-26 — aodetail. Ägs av ett eget arbetsblock; laddas efter system.css.
+   Arbetsorderdetaljen: åtgärdsrad med EN primär åtgärd + grupperad meny,
+   kompakt stämplingsrad (Din arbetstid), "Uppdrag & utförande" med
+   checklistan i samma kort, eget prissättningskort, rader i stället för
+   tabeller, bildkort och ordning efter hur man arbetar.
+   Bygger på system.css-tokens (--ink, --line, --ok, --radius …). */
+
+/* ── Sidhuvud: åtgärdsrad ─────────────────────────────────────────── */
+.aod-actbar {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-top: 12px; margin-top: 2px;
+  border-top: 1px solid var(--line);
+}
+.aod-actbar .aod-acts { gap: 8px; align-items: center; }
+.aod-actbar .ao-acts-desktop { flex-wrap: wrap; }
+.aod-actbar .btn { white-space: nowrap; }
+.aod-actbar .aod-sec svg, .aod-more-btn svg { color: var(--muted); }
+.aod-actbar .aod-primary { padding: 0 16px; }
+.aod-subsel { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 10px; font-size: 13px; font-weight: 600; max-width: 220px; cursor: pointer; }
+.aod-more { position: relative; }
+
+/* Menyn: grupper med rubrik, ikon + text, tryckytor ≥ 40 px */
+.ao-overflow-menu.aod-menu {
+  min-width: 240px; max-width: calc(100vw - 16px);
+  padding: 6px 0; border-radius: var(--radius); border-color: var(--line);
+  background: var(--surface); box-shadow: var(--shadow-3);
+  overscroll-behavior: contain;
+}
+.aod-menu .aod-menu-h {
+  padding: 8px 14px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.aod-menu .ao-overflow-menu-item {
+  min-height: 40px; padding: 8px 14px; gap: 10px;
+  font-size: 13.5px; font-weight: 500; color: var(--ink-2);
+}
+.aod-menu .ao-overflow-menu-item svg { color: var(--muted); flex-shrink: 0; }
+.aod-menu .ao-overflow-menu-item:hover, .aod-menu .ao-overflow-menu-item:focus-visible { background: var(--hover); color: var(--ink); outline: none; }
+.aod-menu .ao-overflow-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.aod-menu .ao-overflow-menu-item--red, .aod-menu .ao-overflow-menu-item--red svg { color: var(--danger); }
+.aod-menu .ao-overflow-divider { margin: 6px 0; background: var(--line); }
+
+/* ── Din arbetstid (stämpling) ────────────────────────────────────── */
+.aod-stamp {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 2px; padding: 8px 10px 8px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.aod-stamp-ico {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+}
+.aod-stamp-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.aod-stamp-l { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.aod-stamp-s { font-size: 13.5px; font-weight: 600; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.aod-stamp-clock { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+.aod-stamp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(19,122,71,.18); flex-shrink: 0; }
+.aod-stamp .ao-stamp-btn, .aod-stamp .aod-stamp-go { min-height: var(--ctl-h); padding: 0 14px; font-size: 13px; flex-shrink: 0; width: auto; min-width: 0; }
+.aod-stamp .aod-stamp-in svg { color: var(--ok); }
+.aod-stamp.is-active { background: var(--ok-bg); border-color: var(--ok-line); }
+.aod-stamp.is-active .aod-stamp-ico { color: var(--ok); border-color: var(--ok-line); }
+.aod-stamp.is-active .aod-stamp-s { color: var(--ok); }
+.aod-stamp.is-other { background: var(--warn-bg); border-color: var(--warn-line); }
+.aod-stamp.is-other .aod-stamp-ico { color: var(--warn); border-color: var(--warn-line); }
+.aod-stamp.is-other .aod-stamp-s { font-weight: 500; }
+
+/* ── Kortrubriker med åtgärder ────────────────────────────────────── */
+.aod .card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aod .card-header h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.aod-card-acts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.aod-card-acts:empty { display: none; }
+.aod-card-acts > span:empty { display: none; }
+.aod-card-acts .btn svg { color: var(--muted); }
+
+/* ── Uppdrag & utförande ──────────────────────────────────────────── */
+.aod-mission .card-body { display: flex; flex-direction: column; gap: 14px; }
+.aod-mission .ao-mission-body { padding: 14px 18px 16px; }
+.aod-mission .aod-note { margin-top: 0; }
+.aod-exec {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 13px; color: var(--ink-2);
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.aod-exec svg { color: var(--muted); flex-shrink: 0; }
+.aod-exec-l { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.aod-exec strong { font-weight: 700; color: var(--ink); }
+.aod-exec-x { color: var(--muted); }
+.aod-exec.tone-warn { background: var(--warn-bg); border-color: var(--warn-line); }
+.aod-exec.tone-warn svg, .aod-exec.tone-warn strong { color: var(--warn); }
+.aod-exec.tone-ok { background: var(--ok-bg); border-color: var(--ok-line); }
+.aod-exec.tone-ok svg, .aod-exec.tone-ok strong { color: var(--ok); }
+.aod-sub { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.aod-sub-h {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+}
+.aod-sub-h svg { color: var(--muted); }
+.aod-mission .ao-mission-text { font-size: 15px; line-height: 1.6; }
+
+/* Checklistan i uppdraget */
+.aod-chk-sec { padding-top: 12px; border-top: 1px solid var(--line); gap: 8px; scroll-margin-top: 12px; }
+.aod-chk-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aod-chk-head .aod-sub-h { font-size: 12.5px; color: var(--ink); letter-spacing: .04em; }
+.aod-chk-head .aod-sub-h svg { color: var(--accent); }
+.aod-chk-add svg { color: var(--muted); }
+.aod-chkp-wrap:empty { display: none; }
+.aod-chkp { display: flex; flex-direction: column; gap: 6px; }
+.aod-chkp-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aod-chkp-n { font-size: 14px; color: var(--ink-2); }
+.aod-chkp-n b { font-size: 17px; font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; }
+.aod-chkp-left { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.aod-chkp.tone-ok .aod-chkp-left { color: var(--ok); }
+.aod-chkp.tone-warn .aod-chkp-left { color: var(--warn); }
+.aod-chkp-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--neutral-bg); }
+.aod-chkp-bar i { display: block; height: 100%; }
+.aod-chkp-bar .seg-done { background: var(--ok); }
+.aod-chkp-bar .seg-avv  { background: var(--danger); }
+.aod-chkp-bar .seg-prog { background: #e08a1e; }
+.aod-chkp-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.aod-lg { display: inline-flex; align-items: center; gap: 6px; }
+.aod-lg i { width: 8px; height: 8px; border-radius: 50%; background: var(--neutral-line); }
+.aod-lg.lg-done i { background: var(--ok); }
+.aod-lg.lg-avv i  { background: var(--danger); }
+.aod-lg.lg-prog i { background: #e08a1e; }
+.aod-chk-list { margin-top: 2px; }
+.aod-chk-list .chk-row:first-child { padding-top: 4px; }
+.aod-avv {
+  margin-top: 4px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--danger-bg); border: 1px solid var(--danger-line); font-size: 13px; color: var(--ink-2);
+}
+.aod-avv-h { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--danger); margin-bottom: 4px; }
+.aod-avv ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+
+/* Tomma lägen (checklista, material, tid, bilder) */
+.aod-empty {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; font-size: 13px; color: var(--muted);
+}
+.aod-empty svg { color: var(--faint); flex-shrink: 0; }
+.aod-chk-list .aod-empty { padding: 8px 0; }
+
+/* ── Rader: material och arbetstid ────────────────────────────────── */
+.aod-rows { display: flex; flex-direction: column; }
+.aod-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px; border-bottom: 1px solid var(--line);
+}
+.aod-row:last-child { border-bottom: 0; }
+.aod-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aod-row-t { font-size: 13.5px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.aod-row-t .bdg { vertical-align: 1px; margin-left: 4px; }
+.aod-row-s { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.aod-row-s.is-price { color: var(--info); }
+.aod-row-s.is-note { font-style: italic; font-size: 12px; }
+.aod-row-sum { text-align: right; font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aod-row-sum small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+.aod-row-acts { display: flex; gap: 6px; flex-shrink: 0; }
+.aod .aod-ibtn { width: 32px; min-height: 32px; padding: 0; justify-content: center; }
+.aod-int-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 0; font-size: 11.5px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.aod-int-btn:hover { color: var(--ink); }
+.aod-int { font-size: 12px; color: var(--muted); font-style: italic; }
+.aod-mat-tot { padding: 10px 18px 12px; border-top: 1px solid var(--line); background: var(--surface-2); border-radius: 0 0 var(--radius-lg) var(--radius-lg); display: flex; flex-direction: column; gap: 3px; }
+.aod-mat-tot > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.aod-mat-tot > div.is-sum { font-size: 13.5px; font-weight: 750; color: var(--ink); }
+#ao-mat-totals:empty { display: none; }
+
+/* Tid mot plan (i Arbetstid-kortet) */
+.aod-plan:empty { display: none; }
+.aod-planbox { margin: 12px 18px 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
+.aod-planbox-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aod-planbox-h .btn { margin-left: auto; }
+.aod-planbox-t { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.aod-planbox-t svg { color: var(--muted); }
+.aod-planbox-kv { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12.5px; color: var(--muted); }
+.aod-planbox-kv b { color: var(--ink); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.aod-planbox-bar { height: 6px; border-radius: 999px; background: var(--neutral-bg); overflow: hidden; }
+.aod-planbox-bar i { display: block; height: 100%; border-radius: 999px; }
+.aod-planbox-warn { font-size: 12px; color: var(--danger); display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Bilder ───────────────────────────────────────────────────────── */
+.aod-ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; padding: 14px 18px 16px; }
+.aod-ph {
+  display: flex; flex-direction: column; gap: 4px; padding: 0; margin: 0; min-width: 0;
+  background: none; border: 0; cursor: zoom-in; text-align: left; font: inherit; color: inherit;
+}
+.aod-ph img {
+  width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block;
+  border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--neutral-bg);
+}
+.aod-ph-cap { font-size: 11.5px; color: var(--muted); line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.aod-ph:focus-visible { outline: none; }
+.aod-ph:focus-visible img { box-shadow: var(--focus); border-color: var(--accent); }
+.aod-ph-full { max-width: 100%; max-height: 70vh; display: block; margin: 0 auto; border-radius: var(--radius-sm); }
+
+/* ── Prissättning ─────────────────────────────────────────────────── */
+.aod-price .card-body { gap: 6px; }
+.aod-pmodel-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.aod-pmodel { height: 24px; font-size: 12px; }
+.aod-pr { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 13px; }
+.aod-pr-l { color: var(--muted); font-size: 12.5px; }
+.aod-pr-v { color: var(--ink-2); min-width: 0; overflow-wrap: anywhere; }
+.aod-pr-big { font-size: 15px; font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; }
+.aod-pwarn { display: flex; gap: 6px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--ink-2); font-size: 12.5px; line-height: 1.45; }
+.aod-pwarn svg { color: var(--warn); flex-shrink: 0; margin-top: 1px; }
+.aod-pnote { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.aod-pnote svg { color: var(--info); flex-shrink: 0; margin-top: 1px; }
+.aod-int-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px; background: var(--neutral-bg); color: var(--neutral); font-size: 10.5px; font-weight: 600; vertical-align: 1px; }
+.aod-psec { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.aod-psec-h { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.aod-psec-h svg { color: var(--muted); }
+.aod-bill-btn { justify-content: center; }
+.aod-offer { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); }
+.aod-offer-scope { margin: 0 0 4px; padding-left: 8px; border-left: 3px solid var(--accent); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.aod-offl { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+.aod-offl-n { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); min-width: 0; overflow-wrap: anywhere; }
+.aod-offl-v { color: var(--ink); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aod-offer-inc { margin-top: 4px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+
+/* ── Detaljer (hopfällbar metadata) och intern lönsamhet ─────────── */
+.aod-details > summary.ao-section-head { padding: 11px 16px; }
+/* Stängd <details>: innehållet får ingen layoutruta (annars räknas det som
+   innehåll under snabbåtgärdsraden vid sidans slut). */
+.aod details.ao-section:not([open]) > :not(summary) { display: none; }
+.aod-details .ao-section-title { font-size: 13px; }
+.aod-sum-hint { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.aod-details[open] .aod-sum-hint { display: none; }
+.aod-details[open] .ao-section-chevron { margin-left: auto; }
+.aod-lonsam:empty { display: none; }
+.aod-lonsam > details.ao-section { margin-top: 0 !important; }
+
+/* Sidokolumnen följer med sidan (inte sticky): den är nu högre än fönstret
+   för roller med prissättning, och en klistrad kolumn gömde då sin nederdel. */
+.aod-side { position: static; }
+
+/* ── Surfplatta och smalt skrivbord (768–1199) ───────────────────── */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .aod-mission { order: 1; }
+  .aod-price { order: 2; grid-column: 1 / -1; }
+  .aod-side > #ao-lonsam { order: 3; grid-column: 1 / -1; }
+  .aod-where { order: 4; } .aod-when { order: 5; } .aod-who { order: 6; } .aod-contact { order: 7; }
+  .aod-mat { order: 8; } .aod-time { order: 9; } .aod-photos { order: 10; } .aod-log { order: 11; }
+  .aod-details { order: 12; grid-column: 1 / -1; }
+  .aod-recur, .aod-side > .aod-linkrow { order: 13; }
+  .aod-side > #ao-lonsam:empty { display: none; }
+}
+/* Surfplatta med snabbåtgärdsrad (768–1023): stämplingsraden bara när man
+   är instämplad (knappen finns i snabbåtgärdsraden). */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .aod-stamp:not(.is-active):not(.is-other) { display: none; }
+}
+
+/* ── Mobil (<768) ─────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .aod-actbar { padding-top: 10px; gap: 8px; }
+  .aod-actbar .ao-acts-mobile {
+    display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%;
+  }
+  .aod-actbar .ao-acts-mobile > * { min-width: 0; }
+  .aod-actbar .ao-acts-mobile > .aod-primary,
+  .aod-actbar .ao-acts-mobile > .aod-subsel { grid-column: 1 / -1; }
+  .aod-actbar .ao-acts-mobile > :last-child:nth-child(odd):not(.aod-primary) { grid-column: auto; }
+  .aod-actbar .ao-acts-mobile > .ao-overflow-wrap:only-child,
+  .aod-actbar .ao-acts-mobile > .aod-sec:only-child { grid-column: 1 / -1; }
+  .aod-actbar .ao-acts-mobile .btn { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
+  .aod-actbar .ao-acts-mobile .aod-subsel { width: 100%; max-width: none; min-height: 44px; }
+  .aod-actbar .ao-acts-mobile > .ao-overflow-wrap { display: flex; }
+  .aod-menu .ao-overflow-menu-item { min-height: 44px; font-size: 14px; }
+
+  .aod-stamp { padding: 8px 8px 8px 10px; gap: 10px; }
+  .aod-stamp:not(.is-active):not(.is-other) { display: none; }
+  .aod-stamp-l { font-size: 10.5px; }
+  .aod-stamp-s { font-size: 13px; }
+  .aod-stamp .ao-stamp-btn, .aod-stamp .aod-stamp-go { min-height: 40px; padding: 0 12px; }
+
+  .aod-mission .ao-mission-body { padding: 12px; gap: 12px; }
+  .aod-mission .ao-mission-text { font-size: 14px; line-height: 1.5; }
+  .aod-exec { font-size: 12.5px; }
+
+  .aod-card-acts .btn { min-height: 40px; }
+  .aod-chk-head .aod-chk-add { min-height: 40px; }
+
+  .aod-row { padding: 10px 12px; gap: 8px; align-items: flex-start; }
+  .aod-row-sum { font-size: 13px; }
+  .aod .aod-ibtn { width: 40px; min-height: 40px; }
+  .aod-mat-tot { padding: 10px 12px 12px; }
+  .aod-planbox { margin: 10px 12px 2px; }
+  .aod-empty { padding: 12px; }
+  .aod-ph-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+  .aod-pr { grid-template-columns: 112px minmax(0, 1fr); }
+
+  /* Ordning: sidhuvud → nästa steg → plats och kontakt (kompakt: vägbeskrivning,
+     ring) → uppdrag & utförande med checklista → material → arbetstid →
+     (prissättning) → bilder → historik → detaljer. */
+  .aod-field { order: 2; }
+  .aod-mission { order: 3; }
+  .aod-mat { order: 5; } .aod-time { order: 6; }
+  .aod-price { order: 7; }
+  .aod-side > #ao-lonsam { order: 8; }
+  .aod-photos { order: 9; } .aod-log { order: 10; }
+  .aod-details { order: 11; }
+  .aod-recur, .aod-side > .aod-linkrow { order: 12; }
+  .aod-side > #ao-lonsam:empty { display: none; }
+  .aod-log .card-header .btn, .aod-photos .card-header .btn { min-height: 40px; padding: 0 10px; }
+}
+@media (max-width: 379px) {
+  .aod-ph-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aod-card-acts .btn { padding: 0 10px; font-size: 12.5px; }
+}
