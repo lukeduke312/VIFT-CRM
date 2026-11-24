@@ -5,6 +5,9 @@
    tabeller, bildkort och ordning efter hur man arbetar.
    Bygger på system.css-tokens (--ink, --line, --ok, --radius …). */
 
+/* Banderoller (papperskorg/arkiv): ikon och text på samma rad. */
+.aod-banner { display: flex; align-items: center; gap: 8px; }
+
 /* ── Sidhuvud: åtgärdsrad ─────────────────────────────────────────── */
 .aod-actbar {
   display: flex; flex-direction: column; gap: 8px;
@@ -18,6 +21,12 @@
 .aod-actbar .aod-primary { padding: 0 16px; }
 .aod-subsel { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 10px; font-size: 13px; font-weight: 600; max-width: 220px; cursor: pointer; }
 .aod-more { position: relative; }
+/* ⋮ (komponentstandarden §3): ikonknapp med ram, samma höjd som knapparna bredvid */
+.aod-actbar .aod-more-btn {
+  width: var(--ctl-h); height: var(--ctl-h); flex-shrink: 0;
+  border: 1px solid var(--line-2); background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink-2);
+}
+.aod-actbar .aod-more-btn:hover, .aod-actbar .aod-more-btn[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
 
 /* Menyn: grupper med rubrik, ikon + text, tryckytor ≥ 40 px */
 .ao-overflow-menu.aod-menu {
@@ -54,14 +63,17 @@
 }
 .aod-stamp-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .aod-stamp-l { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-.aod-stamp-s { font-size: 13.5px; font-weight: 600; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.aod-stamp-clock { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
-.aod-stamp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(19,122,71,.18); flex-shrink: 0; }
+.aod-stamp-s { font-size: 13.5px; font-weight: 600; color: var(--ink-2); display: block; line-height: 1.35; }
+.aod-stamp-clock { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.aod-stamp-dot { display: inline-block; vertical-align: 1px; margin-right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(19,122,71,.18); }
 .aod-stamp .ao-stamp-btn, .aod-stamp .aod-stamp-go { min-height: var(--ctl-h); padding: 0 14px; font-size: 13px; flex-shrink: 0; width: auto; min-width: 0; }
 .aod-stamp .aod-stamp-in svg { color: var(--ok); }
 .aod-stamp.is-active { background: var(--ok-bg); border-color: var(--ok-line); }
 .aod-stamp.is-active .aod-stamp-ico { color: var(--ok); border-color: var(--ok-line); }
 .aod-stamp.is-active .aod-stamp-s { color: var(--ok); }
+/* system.css döljer .aod-stamp:not(.is-active) under 1024 px (knappen finns i
+   snabbåtgärdsraden) — "instämplad på en annan order" ska ändå synas där. */
+.aod-stamp.is-active, .aod-stamp.is-other { display: flex; }
 .aod-stamp.is-other { background: var(--warn-bg); border-color: var(--warn-line); }
 .aod-stamp.is-other .aod-stamp-ico { color: var(--warn); border-color: var(--warn-line); }
 .aod-stamp.is-other .aod-stamp-s { font-weight: 500; }
@@ -134,13 +146,23 @@
 .aod-avv-h { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--danger); margin-bottom: 4px; }
 .aod-avv ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
 
-/* Tomma lägen (checklista, material, tid, bilder) */
-.aod-empty {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 18px; font-size: 13px; color: var(--muted);
+/* Tomma lägen (checklista, material, tid, bilder, historik): .empty enligt
+   komponentstandarden — ikon, rubrik, en mening, en åtgärd — kompakt i kortet. */
+.empty.aod-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px;
+  margin: 12px 18px 14px; padding: 12px 14px;
+  border: 1px dashed var(--line-2); border-radius: var(--radius); background: var(--surface-2);
 }
-.aod-empty svg { color: var(--faint); flex-shrink: 0; }
-.aod-chk-list .aod-empty { padding: 8px 0; }
+.empty.aod-empty > svg { margin-bottom: 2px; color: var(--faint); }
+.empty.aod-empty h3 { font-size: 14px; margin: 0; }
+.empty.aod-empty p { margin: 0 0 4px; max-width: 420px; font-size: 13px; color: var(--muted); }
+.empty.aod-empty .btn { margin-top: 4px; }
+.aod-chk-list .empty.aod-empty { margin: 4px 0 0; }
+/* En åtgärd, inte två: kortets rubrikknapp döljs medan tomläget visas. */
+.aod-mat:has(#ao-materials .aod-empty) .aod-card-acts .btn,
+.aod-time:has(#ao-timeentries .aod-empty) .aod-card-acts .btn,
+.aod-photos:has(#ao-photos .aod-empty) .aod-card-acts .btn,
+.aod-chk-sec:has(#ao-checklist .aod-empty) .aod-chk-add { display: none; }
 
 /* ── Rader: material och arbetstid ────────────────────────────────── */
 .aod-rows { display: flex; flex-direction: column; }
@@ -199,9 +221,7 @@
 .aod-price .card-body { gap: 6px; }
 .aod-pmodel-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
 .aod-pmodel { height: 24px; font-size: 12px; }
-.aod-pr { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 13px; }
-.aod-pr-l { color: var(--muted); font-size: 12.5px; }
-.aod-pr-v { color: var(--ink-2); min-width: 0; overflow-wrap: anywhere; }
+.aod-fact.aod-pr { grid-template-columns: 128px minmax(0, 1fr); }
 .aod-pr-big { font-size: 15px; font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; }
 .aod-pwarn { display: flex; gap: 6px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--ink-2); font-size: 12.5px; line-height: 1.45; }
 .aod-pwarn svg { color: var(--warn); flex-shrink: 0; margin-top: 1px; }
@@ -255,21 +275,25 @@
 /* ── Mobil (<768) ─────────────────────────────────────────────────── */
 @media (max-width: 767px) {
   .aod-actbar { padding-top: 10px; gap: 8px; }
+  /* Primär i full bredd; därunder Kontakt + ⋮ (44 × 44). */
   .aod-actbar .ao-acts-mobile {
-    display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%;
+    display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; width: 100%;
   }
-  .aod-actbar .ao-acts-mobile > * { min-width: 0; }
-  .aod-actbar .ao-acts-mobile > .aod-primary,
-  .aod-actbar .ao-acts-mobile > .aod-subsel { grid-column: 1 / -1; }
-  .aod-actbar .ao-acts-mobile > :last-child:nth-child(odd):not(.aod-primary) { grid-column: auto; }
-  .aod-actbar .ao-acts-mobile > .ao-overflow-wrap:only-child,
-  .aod-actbar .ao-acts-mobile > .aod-sec:only-child { grid-column: 1 / -1; }
+  .aod-actbar .ao-acts-mobile > * { min-width: 0; grid-column: 1 / -1; }
+  .aod-actbar .ao-acts-mobile > .aod-sec { grid-column: 1; }
+  .aod-actbar .ao-acts-mobile > .aod-sec:last-child { grid-column: 1 / -1; }
+  .aod-actbar .ao-acts-mobile > .ao-overflow-wrap { grid-column: 2; display: flex; }
+  .aod-actbar .ao-acts-mobile > .ao-overflow-wrap:only-child { grid-column: 1 / -1; justify-self: end; }
   .aod-actbar .ao-acts-mobile .btn { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
   .aod-actbar .ao-acts-mobile .aod-subsel { width: 100%; max-width: none; min-height: 44px; }
-  .aod-actbar .ao-acts-mobile > .ao-overflow-wrap { display: flex; }
+  .aod-actbar .aod-more-btn { width: 44px; height: 44px; }
   .aod-menu .ao-overflow-menu-item { min-height: 44px; font-size: 14px; }
+  /* "Checklista 11/22" ryms inte på en rad i en fjärdedel av 360–390 px:
+     antalet bryts till egen rad i stället för att klippas med "…". */
+  .aod-qbar .aod-q-chk span { white-space: normal; text-align: center; line-height: 1.15; }
 
-  .aod-stamp { padding: 8px 8px 8px 10px; gap: 10px; }
+  .aod-stamp { padding: 8px 8px 8px 12px; gap: 10px; }
+  .aod-stamp-ico { display: none; }
   .aod-stamp:not(.is-active):not(.is-other) { display: none; }
   .aod-stamp-l { font-size: 10.5px; }
   .aod-stamp-s { font-size: 13px; }
@@ -287,9 +311,9 @@
   .aod .aod-ibtn { width: 40px; min-height: 40px; }
   .aod-mat-tot { padding: 10px 12px 12px; }
   .aod-planbox { margin: 10px 12px 2px; }
-  .aod-empty { padding: 12px; }
+  .empty.aod-empty { margin: 12px; }
   .aod-ph-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px; }
-  .aod-pr { grid-template-columns: 112px minmax(0, 1fr); }
+  .aod-fact.aod-pr { grid-template-columns: 112px minmax(0, 1fr); }
 
   /* Ordning: sidhuvud → nästa steg → plats och kontakt (kompakt: vägbeskrivning,
      ring) → uppdrag & utförande med checklista → material → arbetstid →

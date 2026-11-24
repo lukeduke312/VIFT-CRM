@@ -84,6 +84,19 @@ const WorkOrderDetailPage = {
     return String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9_.:\-]/g, '');
   },
 
+  /* Tomläge enligt V3-komponentstandarden (§6): .empty med ikon, h3, en
+     mening och en åtgärd om sådan finns — här kompakt inne i kortet. Kortets
+     egen rubrikknapp döljs medan tomläget visas (en åtgärd, inte två). */
+  _empty(icon, title, text, action) {
+    return `<div class="empty aod-empty">${ic(icon,22)}<h3>${esc(title)}</h3><p>${esc(text)}</p>${action || ''}</div>`;
+  },
+
+  /* Timmar med svensk decimal enligt V3-komponentstandarden ("26,5 h"). */
+  _h(min) {
+    const h = Math.round((Number(min) || 0) / 60 * 100) / 100;
+    return h.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' h';
+  },
+
   /* Utförandestatus i klartext (härledd ur befintlig status — ändrar inget). */
   _execStatus(ao) {
     const SUB = {'inväntar_material':'Inväntar material','inväntar_kund':'Inväntar kund','pausad':'Pausad','behöver_återbesök':'Behöver återbesök','blockerad':'Blockerad'};
@@ -242,7 +255,7 @@ const WorkOrderDetailPage = {
               <div class="card-header">
                 <h3 id="aod-time-h">${ic('clock',15)} Arbetstid</h3>
                 <div class="aod-card-acts">
-                  <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>`:''}</span>
+                  <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${WorkOrderDetailPage._h(totalMins)}</span>`:''}</span>
                   ${Auth.canAny(['ao_time','payroll_manage'])?`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)} Registrera tid</button>`:''}
                 </div>
               </div>
@@ -303,7 +316,7 @@ const WorkOrderDetailPage = {
                   ? `<div class="aod-big${overdue ? ' is-late' : ''}">${esc(UiKit.dayLabel(ao.scheduledDate, today))}${ao.scheduledStart ? ` <span>${esc(ao.scheduledStart)}${ao.scheduledEnd ? '–' + esc(ao.scheduledEnd) : ''}</span>` : ''}</div>
                      <div class="aod-muted">${esc(ao.scheduledDate)}${overdue ? ' · försenad' : ''}</div>`
                   : '<div class="aod-muted">Inte planerad ännu</div>'}
-                ${totalMins > 0 ? fact('Registrerad tid', TimeService.fmtDuration(totalMins), 'clock') : ''}
+                ${totalMins > 0 ? fact('Registrerad tid', WorkOrderDetailPage._h(totalMins), 'clock') : ''}
               </div>
             </section>
 
@@ -430,6 +443,10 @@ const WorkOrderDetailPage = {
     /* Status och huvudsteg (villkor oförändrade från _primaryActionBtns) */
     if (canEdit && ['nytt','pool','planerad'].includes(ao.status))
       add({ key:'start', label:'Starta arbete', icon:'play-circle', fn:`WorkOrderDetailPage.setStatus('pågående')`, group:'status', main:true });
+    /* Tilldelad utan ao_edit (t.ex. fältarbetare): samma "Starta" som Mina
+       jobb redan erbjuder samma person för samma order — se _canStartOwn(). */
+    else if (this._canStartOwn(ao))
+      add({ key:'start', label:'Starta arbete', icon:'play-circle', fn:`WorkOrderDetailPage.startOwnJob()`, group:'status', main:true });
     if (ao.status === 'pågående' && canComplete)
       add({ key:'complete', label:'Klarmarkera', icon:'check-circle', fn:`WorkOrderDetailPage.markComplete()`, group:'status', main:true });
     if (ao.status === 'klar' && !ao.invoiceId && canInvoice)
@@ -480,6 +497,34 @@ const WorkOrderDetailPage = {
     /* Substatus-väljaren (bara när en substatus redan är satt — oförändrat villkor). */
     const substatus = ao.status === 'pågående' && canEdit && ao.substatus;
     return { all: A, primary, substatus: !!substatus };
+  },
+
+  /* "Starta" för den som är tilldelad ordern men saknar ao_edit — exakt
+     samma villkor som Mina jobb (MyJobsPage.render(): sidan Mina jobb får
+     visas, ordern är ens egen — staff innehåller en själv —, inte arkiverad
+     eller borttagen, status nytt/pool/planerad). Ingen ny behörighet:
+     fältarbetaren kan redan starta samma order från Mina jobb; här slipper
+     hen byta sida. Servern avgör som förut. */
+  _canStartOwn(ao) {
+    if (!ao || Auth.can('ao_edit')) return false;
+    const me = state.currentUser && state.currentUser.id;
+    return !!me && Auth.canViewPage('pg-myjobs') && (ao.staff || []).includes(me)
+      && !ao.archived && !ao.deleted && ['nytt','pool','planerad'].includes(ao.status);
+  },
+
+  /* Samma anrop och samma besked som MyJobsPage.startJob(): bara status →
+     pågående (serverbekräftat besked), ingen stämpling, ingen tidpost. */
+  startOwnJob() {
+    const ao = getAO(this.aoId);
+    if (!this._canStartOwn(ao)) { showToast('Du saknar behörighet för den åtgärden'); return; }
+    WorkOrderService.setStatus(this.aoId, 'pågående', {
+      onSettled: function (r) {
+        if (r && r.ok) showToast('Status: Pågående');
+        else if (r && r.final) showToast('Statusändringen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.');
+      }
+    });
+    this.render({ aoId: this.aoId });
+    Sidebar.updateBadges();
   },
 
   /* Synliga sekundära åtgärder per läge. Dator: upp till tre bredvid den
@@ -562,7 +607,7 @@ const WorkOrderDetailPage = {
     });
     return `
       <div class="ao-overflow-wrap aod-more">
-        <button class="btn bs aod-more-btn" id="${btnId}" aria-label="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" onclick="WorkOrderDetailPage._toggleActionsMenu('${menuId}',this)">${ic('more-horizontal',15)}${showLabel ? ' <span>Fler åtgärder</span>' : ''}</button>
+        <button class="ibtn aod-more-btn" id="${btnId}" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" onclick="WorkOrderDetailPage._toggleActionsMenu('${menuId}',this)">${ic('more-vertical',18)}</button>
         <div class="ao-overflow-menu aod-menu" id="${menuId}" role="menu" aria-labelledby="${btnId}">${rows}</div>
       </div>`;
   },
@@ -585,6 +630,14 @@ const WorkOrderDetailPage = {
       menu.style.right = Math.max(8, vw - r.right) + 'px';
       menu.style.maxWidth = (vw - 16) + 'px';
       menu.style.overflowY = 'auto';
+      /* Högerjusterad mot knappen; ligger knappen långt till vänster (radbruten
+         åtgärdsrad) vänsterjusteras menyn i stället, så att den aldrig hamnar
+         utanför fönstrets vänsterkant. */
+      const w = menu.offsetWidth;
+      if (r.right - w < 8) {
+        menu.style.right = 'auto';
+        menu.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + 'px';
+      }
       const natural = menu.scrollHeight;
       if (natural > below && above > below) {
         menu.style.top = 'auto';
@@ -746,7 +799,7 @@ const WorkOrderDetailPage = {
       const qty   = (l.type !== 'service' && l.qty) ? `${esc(l.qty)} ${esc(l.unit||'st')} · ` : '';
       return `<div class="aod-offl">
         <span class="aod-offl-n">${l.type==='service'?ic('zap',11):ic('minus',11)} ${esc(name)}</span>
-        <span class="aod-offl-v">${qty}${fmt(price)} kr ex moms</span>
+        <span class="aod-offl-v">${qty}${fmt(price)} kr exkl. moms</span>
       </div>`;
     }).join('');
     return `
@@ -778,7 +831,8 @@ const WorkOrderDetailPage = {
     const pt = ao.priceType === 'prisgrupp' ? 'timpris' : ao.priceType === 'fast' ? 'fastpris' : (ao.priceType || 'ej_satt');
     const pg = ao.priceGroupId ? (state.priceGroups || []).find(p => p.id === ao.priceGroupId) : null;
     const canEditP = this._canEditPricing();
-    const row = (label, value, cls) => `<div class="aod-pr${cls ? ' ' + cls : ''}"><span class="aod-pr-l">${label}</span><span class="aod-pr-v">${value}</span></div>`;
+    /* Faktarader enligt sidans mönster (aod-fact, V3-komponentstandarden §6). */
+    const row = (label, value) => `<div class="aod-fact aod-pr"><span class="aod-fact-l">${label}</span><span class="aod-fact-v">${value}</span></div>`;
     const canOffer = Auth.canViewPage('pg-offer-detail');
     const offerRef = ao.offerId
       ? (canOffer ? `<a class="aod-link" onclick="Router.showPage('pg-offer-detail',{offerId:'${this._id(ao.offerId)}'})">Offert ${esc(ao.offerId)}</a>` : `Offert ${esc(ao.offerId)}`)
@@ -790,16 +844,16 @@ const WorkOrderDetailPage = {
     let model = '', body = '';
     if (pt === 'fastpris') {
       model = `<span class="bdg bdg-purple aod-pmodel">${ic('tag',11)} Fastpris</span>`;
-      body += row('Avtalat pris', `<b class="aod-pr-big">${fmt(ao.fixedPrice)} kr</b> <span class="aod-muted">ex moms</span>`);
-      body += row('Priset kommer från', ao.offerId ? `${offerRef} <span class="aod-muted">(offertens summa ex moms efter rabatt)</span>` : 'Satt på arbetsordern');
+      body += row('Avtalat pris', `<b class="aod-pr-big">${fmt(ao.fixedPrice)} kr</b> <span class="aod-muted">exkl. moms</span>`);
+      body += row('Priset kommer från', ao.offerId ? `${offerRef} <span class="aod-muted">(offertens summa exkl. moms efter rabatt)</span>` : 'Satt på arbetsordern');
     } else if (pt === 'timpris') {
       model = `<span class="bdg bdg-blue aod-pmodel">${ic('clock',11)} Löpande timpris</span>`;
       if (pg) {
         body += row('Prisgrupp', esc(pg.name));
-        body += row('Timpris', `<b class="aod-pr-big">${fmt(pg.hourRate)} kr/tim</b> <span class="aod-muted">ex moms</span>`);
-        body += row('Priset kommer från', `Prisgruppen i prisregistret (vald på arbetsordern, förval vid tidregistrering). Varje tidpost faktureras med timpriset som sparades på posten.`);
+        body += row('Timpris', `<b class="aod-pr-big">${fmt(pg.hourRate)} kr/tim</b> <span class="aod-muted">exkl. moms</span>`);
+        body += row('Priset kommer från', `Prisgruppen i prisregistret, vald på arbetsordern. Tidposter faktureras med sitt sparade timpris.`);
         if (typeof TimeService !== 'undefined' && TimeService.isValidBillingPriceGroup && !TimeService.isValidBillingPriceGroup(pg)) {
-          body += `<div class="aod-pwarn">${ic('alert-circle',13)} Prisgruppen saknar ett giltigt timpris (&gt; 0 kr) och kan inte användas för kundfakturering.</div>`;
+          body += `<div class="aod-pwarn">${ic('alert-circle',13)}<span>Prisgruppen saknar ett giltigt timpris (&gt; 0 kr) och kan inte användas för kundfakturering.</span></div>`;
         }
       } else {
         body += row('Prisgrupp', ao.priceGroupId ? `<span class="aod-warn">Finns inte längre (${esc(ao.priceGroupId)})</span>` : '<span class="aod-warn">Ingen prisgrupp vald</span>');
@@ -808,7 +862,7 @@ const WorkOrderDetailPage = {
       if (ao.offerId) body += row('Offert', offerRef);
     } else {
       model = `<span class="bdg bdg-orange aod-pmodel">${ic('alert-circle',11)} Ej satt</span>`;
-      body += `<div class="aod-pwarn">${ic('alert-circle',13)} Ingen prismodell är satt. Fakturaunderlag kan inte skapas förrän prissättningen är satt.${canEditP && !ao.invoiceId ? ` <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Sätt prissättning</a>` : ''}</div>`;
+      body += `<div class="aod-pwarn">${ic('alert-circle',13)}<span>Ingen prismodell är satt. Fakturaunderlag kan inte skapas förrän prissättningen är satt.${canEditP && !ao.invoiceId ? ` <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Sätt prissättning</a>` : ''}</span></div>`;
       if (ao.offerId) body += row('Offert', offerRef);
     }
     if (contractRef) body += row('Avtal', contractRef);
@@ -822,8 +876,8 @@ const WorkOrderDetailPage = {
       const markup = sellEx - buyEx;
       matHtml = `<div class="aod-psec">
           <div class="aod-psec-h">${ic('package',13)} Material</div>
-          ${row(`${mats.length} rad${mats.length === 1 ? '' : 'er'}, försäljning`, `${fmt(sellEx)} kr <span class="aod-muted">ex moms</span>`)}
-          ${buyEx > 0 ? row('Inköp <span class="aod-int-tag">internt</span>', `${fmt(buyEx)} kr`) + row('Påslag <span class="aod-int-tag">internt</span>', `${fmt(markup)} kr${sellEx > 0 ? ` <span class="aod-muted">(${Math.round(markup / sellEx * 100)} % av försäljning)</span>` : ''}`) : ''}
+          ${row(`${mats.length} rad${mats.length === 1 ? '' : 'er'}, försäljning`, `${fmt(sellEx)} kr <span class="aod-muted">exkl. moms</span>`)}
+          ${buyEx > 0 ? row('Inköp <span class="aod-int-tag">internt</span>', `${fmt(buyEx)} kr <span class="aod-muted">exkl. moms</span>`) + row('Påslag <span class="aod-int-tag">internt</span>', `${fmt(markup)} kr <span class="aod-muted">exkl. moms${sellEx > 0 ? ` (${Math.round(markup / sellEx * 100)} % av försäljning)` : ''}</span>`) : ''}
         </div>`;
     }
 
@@ -844,10 +898,10 @@ const WorkOrderDetailPage = {
       const differs = pt === 'timpris' && pg && snaps.some(x => Number(x.rate) !== Number(pg.hourRate));
       timeHtml = `<div class="aod-psec">
           <div class="aod-psec-h">${ic('clock',13)} Arbetstid</div>
-          ${row('Registrerad tid', `${TimeService.fmtDuration(total)}${billMins !== total ? ` <span class="aod-muted">(${TimeService.fmtDuration(billMins)} debiterbar)</span>` : ''}`)}
-          ${snaps.length ? row('Tidposternas pris', snaps.map(x => `${esc(x.name)} – ${fmt(x.rate)} kr/tim <span class="aod-muted">(${x.n} st)</span>`).join('<br>')) : ''}
+          ${row('Registrerad tid', `${WorkOrderDetailPage._h(total)}${billMins !== total ? ` <span class="aod-muted">(${WorkOrderDetailPage._h(billMins)} debiterbar)</span>` : ''}`)}
+          ${snaps.length ? row('Tidposternas pris', snaps.map(x => `${esc(x.name)} – ${fmt(x.rate)} kr/tim <span class="aod-muted">exkl. moms (${x.n} st)</span>`).join('<br>')) : ''}
           ${differs ? `<div class="aod-pnote">${ic('info',13)} Minst en tidpost har ett annat timpris än arbetsorderns prisgrupp. Faktureringen använder tidpostens sparade timpris.</div>` : ''}
-          ${broken ? `<div class="aod-pwarn">${ic('alert-circle',13)} ${broken} tidpost${broken === 1 ? '' : 'er'} saknar prissättning.${canEditP && !ao.invoiceId ? ` <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Åtgärda</a>` : ''}</div>` : ''}
+          ${broken ? `<div class="aod-pwarn">${ic('alert-circle',13)}<span>${broken} tidpost${broken === 1 ? '' : 'er'} saknar prissättning.${canEditP && !ao.invoiceId ? ` <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Åtgärda</a>` : ''}</span></div>` : ''}
         </div>`;
     }
 
@@ -888,13 +942,13 @@ const WorkOrderDetailPage = {
 
     const tb   = ProfitabilityService.calcTB(ao);
     const vs   = ProfitabilityService.calcVsOffer(ao);
-    const fmtM = m => TimeService.fmtDuration(m);
+    const fmtM = m => WorkOrderDetailPage._h(m);
     const borderColor = tb.tbPct !== null ? tb.color : 'var(--br)';
 
     const vsHtml = vs ? `
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg);">
-        <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic('git-compare',10)} Offert vs faktiskt utfall</div>
-        <div class="dr"><span class="dk">Offererat ex moms</span><span class="dv">${fkr(vs.offerExVat)}</span></div>
+        <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:4px;">${ic('git-compare',10)} Offert vs faktiskt utfall</div>
+        <div class="dr"><span class="dk">Offererat exkl. moms</span><span class="dv">${fkr(vs.offerExVat)}</span></div>
         <div class="dr"><span class="dk">${esc(tb.revenue.label)}</span>
           <span class="dv" style="color:${vs.revDiff >= 0 ? 'var(--gr)' : 'var(--rd)'};">
             ${fkr(vs.actualRev)}
@@ -914,20 +968,20 @@ const WorkOrderDetailPage = {
     return `
       <div class="card" style="border-left:3px solid ${borderColor};">
         <div class="card-header">
-          <h3>${ic('trending-up',14)} Lönsamhet <span style="font-size:10px;font-weight:600;color:var(--mt);margin-left:4px;">${ic('eye-off',9)} Intern</span></h3>
+          <h3>${ic('trending-up',14)} Lönsamhet <span style="font-size:10px;font-weight:600;color:var(--mt);margin-left:4px;display:inline-flex;align-items:center;gap:3px;">${ic('eye-off',9)} Intern</span></h3>
           ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
           <div class="dr">
-            <span class="dk">Intäkt ex moms</span>
+            <span class="dk">Intäkt exkl. moms</span>
             <span class="dv">${fkr(tb.revenue.value)} <span style="font-size:10px;color:var(--mt);">${esc(tb.revenue.label)}</span></span>
           </div>
 
           ${hasMat ? `
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
-            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('package',10)} Material</div>
-            <div class="dr"><span class="dk">Försäljning ex moms</span><span class="dv">${fkr(tb.material.sellEx)}</span></div>
-            <div class="dr"><span class="dk">Inköp ex moms</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>
+            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${ic('package',10)} Material</div>
+            <div class="dr"><span class="dk">Försäljning exkl. moms</span><span class="dv">${fkr(tb.material.sellEx)}</span></div>
+            <div class="dr"><span class="dk">Inköp exkl. moms</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>
             <div class="dr"><span class="dk">Materialmarginal</span>
               <span class="dv" style="color:var(--gr);">${fkr(tb.material.margin)}
                 ${tb.material.sellEx > 0 ? `<span style="font-size:10px;font-weight:600;margin-left:4px;">(${Math.round(tb.material.marginPct)} %)</span>` : ''}
@@ -936,16 +990,16 @@ const WorkOrderDetailPage = {
           </div>` : ''}
 
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
-            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('clock',10)} Arbetstid</div>
+            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${ic('clock',10)} Arbetstid</div>
             <div class="dr"><span class="dk">Registrerad tid</span><span class="dv">${tb.labor.minutes > 0 ? fmtM(tb.labor.minutes) : '<span style="color:var(--mt);">Ingen tid registrerad</span>'}</span></div>
             <div class="dr"><span class="dk">Intern timkostnad</span><span class="dv" style="color:var(--mt);">${fmt(tb.labor.rate)} kr/h</span></div>
             ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)}</span></div>` : ''}
           </div>
 
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);">
-            <div class="dr"><span class="dk">Total kostnad</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
+            <div class="dr"><span class="dk">Total kostnad exkl. moms</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
             <div class="dr" style="font-size:15px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
-              <span class="dk" style="color:${tb.color};">Täckningsbidrag</span>
+              <span class="dk" style="color:${tb.color};">Täckningsbidrag exkl. moms</span>
               <span class="dv" style="color:${tb.color};">${fkr(tb.tb)}</span>
             </div>
             ${tb.tbPct !== null ? `<div class="dr">
@@ -969,7 +1023,7 @@ const WorkOrderDetailPage = {
     const actualMins = TimeService.totalMinutes(entries);
     const estMins    = Math.round((ao.estimatedHours || 0) * 60);
     if (estMins === 0 && actualMins === 0) return '';
-    const fmt = m => TimeService.fmtDuration(m);
+    const fmt = m => WorkOrderDetailPage._h(m);
     const canEdit = Auth.can('ao_edit');
     const aoId = this._id(ao.id);
 
@@ -1063,11 +1117,11 @@ const WorkOrderDetailPage = {
   },
 
   _priceLabel(ao) {
-    if (ao.priceType === 'fastpris' || ao.priceType === 'fast') return `Fastpris: ${fmt(ao.fixedPrice)} kr ex moms`;
+    if (ao.priceType === 'fastpris' || ao.priceType === 'fast') return `Fastpris: ${fmt(ao.fixedPrice)} kr exkl. moms`;
     if (ao.priceType === 'timpris' || ao.priceType === 'prisgrupp') {
       if (ao.priceGroupId) {
         const pg = (state.priceGroups||[]).find(p => p.id === ao.priceGroupId);
-        return pg ? `Löpande timpris – ${pg.name} (${fmt(pg.hourRate)} kr/tim ex moms)` : 'Löpande timpris';
+        return pg ? `Löpande timpris – ${pg.name} (${fmt(pg.hourRate)} kr/tim exkl. moms)` : 'Löpande timpris';
       }
       return 'Löpande timpris';
     }
@@ -1142,7 +1196,7 @@ const WorkOrderDetailPage = {
        andra (legacy/interna) syften, men ska aldrig ens vara VALBAR i
        denna kundfaktureringsåterhämtnings-vy. */
     const pgOptions = (state.priceGroups || []).filter(p => TimeService.isValidBillingPriceGroup(p)).map(p =>
-      `<option value="${p.id}" ${p.id === ao.priceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id === ao.priceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     const brokenCount = this._brokenTimeEntries(ao.id).length;
     Modal.open({
@@ -1155,12 +1209,12 @@ const WorkOrderDetailPage = {
             <option value="timpris" ${priceType==='timpris'?'selected':''}>Löpande timpris</option>
           </select></div>
         <div class="fg" id="pr-fixed-wrap" style="display:${priceType==='fastpris'?'block':'none'};">
-          <label>Fastpris (kr, ex moms)</label>
+          <label>Fastpris (kr, exkl. moms)</label>
           <input type="number" id="pr-fixed" min="0" step="1" value="${ao.fixedPrice || ''}"></div>
         <div class="fg" id="pr-pg-wrap" style="display:${priceType==='timpris'?'block':'none'};">
           <label>Prisgrupp</label>
           <select id="pr-pg"><option value="">— Välj prisgrupp —</option>${pgOptions}</select></div>
-        ${brokenCount>0?`<div class="ibox" style="margin-top:10px;">${ic('alert-circle',14)} ${brokenCount} tidpost${brokenCount===1?'':'er'} på denna arbetsorder saknar prissättning. Efter att du sparat får du möjlighet att åtgärda ${brokenCount===1?'den':'dem'}.</div>`:''}
+        ${brokenCount>0?`<div class="ibox" style="margin-top:10px;display:flex;gap:8px;align-items:flex-start;">${ic('alert-circle',14)}<span>${brokenCount} tidpost${brokenCount===1?'':'er'} på denna arbetsorder saknar prissättning. Efter att du sparat får du möjlighet att åtgärda ${brokenCount===1?'den':'dem'}.</span></div>`:''}
       `,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => WorkOrderDetailPage._savePricing() },
@@ -1268,7 +1322,7 @@ const WorkOrderDetailPage = {
     if (broken.length === 0) { this.render({ aoId: this.aoId }); return; }
     /* Blocker C, samma regel som huvudprissättningsmodalen ovan. */
     const pgOptions = (state.priceGroups || []).filter(p => TimeService.isValidBillingPriceGroup(p)).map(p =>
-      `<option value="${p.id}" ${p.id === defaultPriceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id === defaultPriceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     const rowsHtml = broken.map(t => {
       const dateStr = t.date || (t.startTs ? fmtDate(t.startTs) : '');
@@ -1445,7 +1499,7 @@ const WorkOrderDetailPage = {
   },
   _renderChecklist(ao) {
     const items = ao.checklist || [];
-    if (!items.length) return `<div class="aod-empty">${ic('clipboard-check',18)}<span>Ingen checklista för den här ordern.${Auth.can('ao_checklist') ? ' Lägg till punkter med <b>Lägg till punkt</b>.' : ''}</span></div>`;
+    if (!items.length) return this._empty('clipboard-check', 'Ingen checklista', 'Den här ordern har inga checkpunkter.', Auth.can('ao_checklist') ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)} Lägg till punkt</button>` : '');
     const v2 = WorkOrderService._chkV2 === true;
     if (WorkOrderService._chkV2 === null && !this._chkProbing) {
       this._chkProbing = true;
@@ -1519,9 +1573,9 @@ const WorkOrderDetailPage = {
     const inkl = exMoms + momsAmt;
     return `
       <div class="aod-mat-tot">
-        <div><span>Totalt ex moms</span><span>${fmt(exMoms)} kr</span></div>
+        <div><span>Totalt exkl. moms</span><span>${fmt(exMoms)} kr</span></div>
         <div><span>Moms</span><span>${fmt(momsAmt)} kr</span></div>
-        <div class="is-sum"><span>Totalt inkl moms</span><span>${fmt(inkl)} kr</span></div>
+        <div class="is-sum"><span>Totalt inkl. moms</span><span>${fmt(inkl)} kr</span></div>
       </div>`;
   },
 
@@ -1531,7 +1585,7 @@ const WorkOrderDetailPage = {
   _renderMaterials(ao) {
     const canSeePrice = Auth.canAny(['invoice_view','invoice_create','reports_view']);
     const mats = ao.materials || [];
-    if (!mats.length) return `<div class="aod-empty">${ic('package',18)}<span>Inget material registrerat ännu.</span></div>`;
+    if (!mats.length) return this._empty('package', 'Inget material', 'Inget material är registrerat på ordern ännu.', Auth.can('ao_material') ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)} Lägg till material</button>` : '');
     return `<div class="aod-rows">${mats.map(m => {
       const mid  = this._id(m.id);
       const qty  = m.qty || 0;
@@ -1543,7 +1597,7 @@ const WorkOrderDetailPage = {
       return `<div class="aod-row aod-mrow">
         <div class="aod-row-main">
           <div class="aod-row-t">${esc(m.name)}</div>
-          <div class="aod-row-s">${esc(qty)} ${esc(m.unit || '')}${canSeePrice ? ` · ${fmt(sell)} kr/${esc(m.unit || 'st')} ex moms` : ''}</div>
+          <div class="aod-row-s">${fmt(qty)} ${esc(m.unit || '')}${canSeePrice ? ` · ${fmt(sell)} kr/${esc(m.unit || 'st')} exkl. moms` : ''}</div>
           ${canSeePrice && buy > 0 ? `<button type="button" class="aod-int-btn" aria-expanded="false" onclick="var e=document.getElementById('mat-int-${mid}');var o=e.hidden;e.hidden=!o;this.setAttribute('aria-expanded',o?'true':'false');">${ic('eye',11)} Intern</button>
             <div id="mat-int-${mid}" class="aod-int" hidden>Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>` : ''}
         </div>
@@ -1558,7 +1612,7 @@ const WorkOrderDetailPage = {
 
   _renderTimeEntries(ao) {
     const entries = TimeService.getByAO(ao.id);
-    if (!entries.length) return `<div class="aod-empty">${ic('clock',18)}<span>Ingen tid registrerad ännu.</span></div>`;
+    if (!entries.length) return this._empty('clock', 'Ingen tid registrerad', 'Ingen tid är registrerad på ordern ännu.', Auth.canAny(['ao_time','payroll_manage']) ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)} Registrera tid</button>` : '');
     /* V21: samma behörighetsprincip som TimePage._renderList() — inte längre
        antagandet att alla som når denna sida får redigera/radera vad som helst. */
     const isSuper    = typeof Auth !== 'undefined' && Auth.can('all');
@@ -1571,9 +1625,9 @@ const WorkOrderDetailPage = {
       return `
       <div class="aod-row aod-trow">
         <div class="aod-row-main">
-          <div class="aod-row-t">${esc(t.staffName)} · ${TimeService.fmtDuration(t.minutes)}${t.attested ? ` <span class="bdg bdg-green">${ic('lock',10)} Attesterad</span>` : ''}${!t.billable ? ` <span class="bdg bdg-grey">Ej debiterbar</span>` : ''}</div>
+          <div class="aod-row-t">${esc(t.staffName)} · ${WorkOrderDetailPage._h(t.minutes)}${t.attested ? ` <span class="bdg bdg-green">${ic('lock',10)} Attesterad</span>` : ''}${!t.billable ? ` <span class="bdg bdg-grey">Ej debiterbar</span>` : ''}</div>
           <div class="aod-row-s">${esc(t.date)} ${esc(t.startStr)}–${esc(t.endStr)}${t.comment?' · '+esc(t.comment):''}</div>
-          ${t.priceGroupName ? `<div class="aod-row-s is-price">${esc(t.priceGroupName)} – ${fmt(t.hourRate)} kr/tim ex moms</div>` : ''}
+          ${t.priceGroupName ? `<div class="aod-row-s is-price">${esc(t.priceGroupName)} – ${fmt(t.hourRate)} kr/tim exkl. moms</div>` : ''}
           ${t.registeredByName ? `<div class="aod-row-s is-note">Registrerat av ${esc(t.registeredByName)}</div>` : ''}
         </div>
         ${canEdit ? `
@@ -1590,14 +1644,14 @@ const WorkOrderDetailPage = {
     const events = [];
     (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
     (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', imagePath:l.imagePath||'', followUpDate:l.followUpDate||'', id:l.id }));
-    TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
+    TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${WorkOrderDetailPage._h(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
     (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
       if (a.type==='status_change'||a.type==='work_order_status'||a.type==='created')
         events.push({ type:a.type, ts:a.timestamp||'', who:'', text:a.description||'' });
     });
 
-    if (!events.length) return `<div style="padding:20px 14px;text-align:center;color:var(--mt);font-size:13px;">Ingen logg ännu</div>`;
+    if (!events.length) return this._empty('history', 'Ingen historik ännu', 'Anteckningar, bilder, tid, material och statusändringar visas här.', '');
     events.sort((a,b) => (b.ts>a.ts?1:b.ts<a.ts?-1:0));
 
     const LIMIT   = 5;
@@ -1747,7 +1801,7 @@ const WorkOrderDetailPage = {
 
   _renderPhotos(ao) {
     const items = this._photoItems(ao);
-    if (!items.length) return `<div class="aod-empty">${ic('camera',18)}<span>Inga bilder ännu. Foton du lägger till i loggen visas här.</span></div>`;
+    if (!items.length) return this._empty('camera', 'Inga bilder ännu', 'Foton som läggs till i loggen visas här.', `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddLog()">${ic('camera',13)} Foto eller anteckning</button>`);
     return `<div class="aod-ph-grid">${items.map(p => {
       const cap = [p.text, p.ts ? fmtDate(p.ts) : '', p.who].filter(Boolean).join(' · ');
       const img = p.imageData
@@ -1993,7 +2047,7 @@ const WorkOrderDetailPage = {
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;">${a.articleNumber ? a.articleNumber+' – ':'' }${esc(a.name)}</div>
-          <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr ex moms</div>
+          <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr exkl. moms</div>
         </div>
         <div id="art-check-${a.id}" style="display:none;color:var(--grn);">${ic('check',14)}</div>
       </div>`).join('') : '<p style="padding:8px;font-size:12px;color:var(--mt);">Inga artiklar i register</p>';
@@ -2027,7 +2081,7 @@ const WorkOrderDetailPage = {
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
         <div class="g2">
-          <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+          <div class="fg"><label>Försäljningspris exkl. moms (kr/enhet)</label>
             <input type="number" id="mat-sell" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Moms</label>
             <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
@@ -2036,9 +2090,9 @@ const WorkOrderDetailPage = {
         </div>
         <input type="hidden" id="mat-article-id" value="">
         <div id="mat-calc" style="display:none;background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">0 kr</span></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span id="mat-vat-lbl" style="color:var(--mt)">Moms 25%</span><span id="mat-moms">0 kr</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">0 kr</span></div>
         </div>`,
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => this._saveMaterial(null) },
@@ -2156,7 +2210,7 @@ const WorkOrderDetailPage = {
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
         <div class="g2">
-          <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+          <div class="fg"><label>Försäljningspris exkl. moms (kr/enhet)</label>
             <input type="number" id="mat-sell" value="${m.sellPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Moms</label>
             <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
@@ -2165,9 +2219,9 @@ const WorkOrderDetailPage = {
         </div>
         <input type="hidden" id="mat-article-id" value="${m.articleId||''}">
         <div id="mat-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms ${vat}%</span><span id="mat-moms">${fmt((m.qty||0)*(m.sellPrice||0)*vat/100)} kr</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">${fmt((m.qty||0)*(m.sellPrice||0)*(1+vat/100))} kr</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">${fmt((m.qty||0)*(m.sellPrice||0)*(1+vat/100))} kr</span></div>
         </div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => this._saveMaterial(matId) },
@@ -2226,7 +2280,7 @@ const WorkOrderDetailPage = {
     if (listEl)  listEl.innerHTML  = this._renderTimeEntries(ao);
 
     const badge   = document.getElementById('ao-time-badge');
-    if (badge)   badge.innerHTML   = totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : '';
+    if (badge)   badge.innerHTML   = totalMins > 0 ? `<span class="bdg bdg-sky">${WorkOrderDetailPage._h(totalMins)}</span>` : '';
 
     /* Tid mot plan: samma rollspärr som vid full rendering (tidigare
        ritades blocket om utan spärr efter en tidsändring). */
@@ -2377,7 +2431,7 @@ const WorkOrderDetailPage = {
       Modal.open({
         title: 'Ofullständig checklista',
         body: `
-          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade${chkProgCnt ? ` · ${chkProgCnt} pågår fortfarande` : ''}</div>
+          <div class="nbox" style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-start;">${ic('alert-triangle',16)}<span>${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade${chkProgCnt ? ` · ${chkProgCnt} pågår fortfarande` : ''}</span></div>
           <p style="font-size:13px;color:var(--mt);">Vill du ändå klarmarkera ordern?</p>`,
         buttons: [
           { label: 'Klarmarkera ändå', cls: 'btn bsu', onClick: () => { Modal.close(); doComplete(); } },
@@ -2546,12 +2600,12 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     Modal.open({
       title: 'Stämpla ut',
       body: `
-        <div class="ibox" style="margin-bottom:12px;">${ic('clock',14)} Tid: ${TimeService.fmtDuration(mins)}</div>
+        <div class="ibox" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">${ic('clock',14)}<span>Tid: ${TimeService.fmtDuration(mins)}</span></div>
         <div class="fg"><label>Prisgrupp</label>
           <select id="co-pg"><option value="">— Ingen —</option>${pgOptions}</select></div>
         <div class="fg"><label>Vad utfördes? <span style="color:var(--rd)">*</span></label>
@@ -2837,7 +2891,7 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: `${ic('alert-triangle',14)} Markera avvikelse`,
       body: `
-        <div class="nbox" style="margin-bottom:12px;">${ic('clipboard-check',13)} ${esc(c.text)}</div>
+        <div class="nbox" style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-start;">${ic('clipboard-check',13)}<span>${esc(c.text)}</span></div>
         <div class="fg">
           <label>Kommentar <span style="color:var(--rd)">*</span></label>
           <textarea id="avv-comment" rows="3" placeholder="Beskriv avvikelsen – vad som är skadat, var och hur…">${esc(c.avvikelseComment||'')}</textarea>
@@ -2947,7 +3001,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     Modal.open({
       title: 'Registrera tid',
@@ -2985,7 +3039,7 @@ const WorkOrderDetailPage = {
     const guard = TimeService._guardMutation(t);
     if (!guard.ok) { showToast(guard.error); return; }
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     Modal.open({
       title: 'Redigera tid',
