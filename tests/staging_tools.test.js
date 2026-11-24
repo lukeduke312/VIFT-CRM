@@ -116,7 +116,7 @@ server.listen(0, '127.0.0.1', async () => {
     const patchedExisting = fake.calls.filter((c) => /ao-time-write:patch_ao/.test(c.action)).length;
     ok(patchedExisting === 1, 'nivå 2: exakt en patch_ao (G9 på test-AO:n), ingen mot befintliga AO');
     ok(/G6 dubbel create_time samma nyckel — svar \d+\/\d+, tidposter på servern: 1/.test(r.out), 'nivå 2: G6 kördes på test-AO:n');
-    ok(/CHK återställ annans \(fält2, ao_checklist\)/.test(r.out) && /OK +CHK ao_edit återställer annans \+ historik/.test(r.out), 'nivå 2: checklistans ägarkontroll prövad');
+    ok(/CHK återställ annans \(fält2, ao_checklist\)/.test(r.out) && /OK +CHK ao_edit \((chef|admin)\) återställer annans \+ historik/.test(r.out), 'nivå 2: checklistans ägarkontroll prövad');
     const rapport = rid && path.join(ROOT, 'tests/staging/rapport/authz-mutation-' + rid + '.json');
     ok(rapport && fs.existsSync(rapport) && fs.existsSync(path.join(ROOT, 'tests/staging/rapport/' + rid + '.journal.json')), 'nivå 2: rapport och journal skrivna');
 
