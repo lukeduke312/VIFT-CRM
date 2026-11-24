@@ -767,6 +767,52 @@ Vid stopp: rollback av steget, inga fler steg, rapport.
 - G7;
 - LIVE.
 
+### 6.9 Installationsomgång GO-1b, GO-5–GO-8b genomförd (2026-11-24)
+
+Lucas gav GO för varje steg. Installationen gjordes via Supabase-anslutningen, steg för steg i §6.8-ordning. Varje steg kontrollerades före och efter.
+
+**Installerat i STAGING:**
+
+| GO | Databas | Edge Function (version, `ezbr_sha256`) | Test | Resultat |
+|---|---|---|---|---|
+| 1b | Testrollerna `e2e_falt`, `e2e_arbetsledare` och `e2e_ekonomi`. Bara testkontona har bytt roll. | — | Nivå 1 × 2 | 22 OK, 0 avvikelser |
+| 5 | `work_order_checklist_set_state` (ny), `work_order_checklist_resolve` (delegerar) | `work-order-checklist-resolve` v2 (`4ec8c6b8…`). `supabase-js@2.118.0` är låst som i v1. Källan är läst tillbaka och identisk med repot. | Nivå 2 CHK (J9–J12) | 8/8 OK |
+| 6 | `activity_log_append` | `store-key-write` v4 (`1f2af616…`), v3 + tillägg | `tests/staging/go6-tasks-activity.js` | 19/19 OK |
+| 7 | `work_order_log_append`, `work_order_log_remove` | `work-order-log-write` v1 (`6010ec9e…`) | `tests/staging/go7-ao-log.js` | 11/11 OK. G5 är rättat på servern. |
+| 8a | `offer_attachment_patch` | `offer-attachment-upload` v13 (`0523451b…`), v12 + PATCH | `tests/staging/go8a-attachments.js` | 11/11 OK |
+| 8b | bucket `workorder-images` (privat, 10 MB) och 3 policyer för bara service_role | `work-order-image-url`, `-upload` och `-delete`, alla v1 (`a7c2a290…`, `be890df0…`, `68ca452c…`) | `tests/staging/go8b-ao-images.js` | 14/14 OK |
+
+Alla nya databasfunktioner är `SECURITY DEFINER` med `search_path=public`, och bara `postgres` och `service_role` får köra dem.
+
+**Rättning före deploy (GO-8b):** AO-bildernas tre EF:er tillät inte `apikey` i CORS, men klienten skickar alltid `apikey`. Webbläsarens preflight hade därför stoppat varje bildanrop. Testet på serversidan hade inte upptäckt det. `apikey` och `x-client-info` är tillagda, och en preflight-kontroll ingår nu i testet.
+
+**Inte genomfört:**
+- **GO-8c** (`offer-public-pdf`): källan bäddar in logotypen som base64. Filen är 70 KB och går inte att föra över säkert via anslutningens deploy. Inget är ändrat. Två alternativ:
+  1. Lucas kör `supabase functions deploy offer-public-pdf --no-verify-jwt` från repot.
+  2. GO för att flytta logotypen till en egen fil eller till Storage.
+- **GO-8d** (projektdokument): inte påbörjat, eftersom 8c inte är klart.
+
+**Slutkontroll:**
+- Nivå 0: 11 OK.
+- Nivå 1: 22 OK.
+- Nivå 2: 0 avvikelser.
+  - G13 är korrekt för alla roller. Arbetsledaren får nu full åtkomst till uppgifter.
+  - G6 ger en tidpost.
+  - G9 nekas.
+  - Checklistan med tre lägen är grön.
+  - Städning och affärsposter är efterkontrollerade.
+
+**Dataintegritet:** alla 39 affärsnycklar har samma md5 som i referensbilden före GO-5. Bara `vift_lastChanged` har ändrats. Inga spår av `E2E-GO`/`E2E-AUTHZ` finns kvar i store.
+
+**Kvar efter testerna (metadata):**
+- Idempotensposter: 2 151 → 2 167.
+- `store.updated_at` för berörda nycklar.
+- Inloggningar och EF-loggar.
+- **1 test-PDF (99 byte) i den privata bucketen `offer-attachments/E2E-GO8A-20261124150859-74b01f-OFF/`.** Supabase tillåter inte direkt radering i storage-tabellerna. Ta bort den i Dashboard → Storage.
+- Testkontona och testrollerna finns kvar till efter GO-9. Avveckla dem sedan med `supabase/manual/staging_go1_e2e_konton_borttagning.sql`, och ta bort de tre GO-1b-rollerna på samma sätt.
+
+**Rollback per steg:** enligt §6.8, med sparade versioner i `supabase/backup/staging-ef-fore-installation/`.
+
 ## 7. LIVE senare
 
 LIVE (`hjplzjsbbowiyoyhdghc`, Loopia) kör en äldre klient och saknar sannolikt allt i §1 (ao-time-write, RPC:er, RESTRICTIVE-policyer, stamp_status, store-key-write, work-orders-list m.fl.). Denna klient kan **inte** gå till LIVE förrän samma backend är installerad där, i samma ordning som STAGING fick den, med backup före varje migration. Det kräver G4 (källorna i repot) och en egen LIVE-plan.

@@ -37,7 +37,9 @@ const BUCKET           = 'workorder-images'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'content-type, authorization',
+  /* apikey + x-client-info: klienten (WorkOrderImageService._h, Storage._authFetch) skickar alltid apikey —
+     utan den i listan stoppar webbläsarens preflight anropet (samma rättning som offer-attachment-upload R1.1.2). */
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Cache-Control':                'no-store, no-cache',
   'Referrer-Policy':              'no-referrer',

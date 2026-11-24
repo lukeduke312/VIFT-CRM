@@ -1,0 +1,70 @@
+{
+  "verktyg": "go8a",
+  "runId": "E2E-GO8A-20261124150859-74b01f",
+  "tid": "2026-11-24T15:09:19.372Z",
+  "results": [
+    {
+      "id": "BIL uppladdning (befintlig väg)",
+      "ok": true,
+      "detail": "HTTP 200 att-514395417bb50b7c"
+    },
+    {
+      "id": "BIL uppladdning utan offer_manage (fält)",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "BIL signerad URL (offer-attachment-url)",
+      "ok": true,
+      "detail": "HTTP 200 url utfärdad"
+    },
+    {
+      "id": "BIL URL med fel offert-id nekas",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "BIL PATCH namn + synlighet",
+      "ok": true,
+      "detail": "HTTP 200 "
+    },
+    {
+      "id": "BIL PATCH vitlistning (storagePath/active orörda)",
+      "ok": true,
+      "detail": "active true, storagePath oförändrad: true"
+    },
+    {
+      "id": "BIL PATCH utan offer_manage (fält)",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "BIL PATCH utan offer_manage (ekonomi)",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "id": "BIL PATCH okänd bilaga",
+      "ok": true,
+      "detail": "HTTP 404 not_found"
+    },
+    {
+      "id": "BIL soft delete + PATCH efteråt nekas",
+      "ok": true,
+      "detail": "HTTP 200/404"
+    },
+    {
+      "id": "STÄDNING testoffert",
+      "ok": true,
+      "detail": "testoffert E2E-GO8A-20261124150859-74b01f-OFF"
+    },
+    {
+      "id": "STÄDNING operatör",
+      "ok": null,
+      "detail": "bilagepost att-514395417bb50b7c, offerthändelser för E2E-GO8A-20261124150859-74b01f-OFF och Storage-objekt under offer-attachments/E2E-GO8A-20261124150859-74b01f-OFF/ städas med SQL"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "attachmentId": "att-514395417bb50b7c",
+  "offerId": "E2E-GO8A-20261124150859-74b01f-OFF"
+}

@@ -1,0 +1,79 @@
+{
+  "verktyg": "go8b",
+  "runId": "E2E-GO8B-20261124151421-92a260",
+  "tid": "2026-11-24T15:14:50.250Z",
+  "results": [
+    {
+      "id": "BILD preflight work-order-image-upload",
+      "ok": true,
+      "detail": "HTTP 200; tillåtna: authorization, apikey, content-type, x-client-info"
+    },
+    {
+      "id": "BILD preflight work-order-image-url",
+      "ok": true,
+      "detail": "HTTP 200; tillåtna: authorization, apikey, content-type, x-client-info"
+    },
+    {
+      "id": "BILD preflight work-order-image-delete",
+      "ok": true,
+      "detail": "HTTP 200; tillåtna: authorization, apikey, content-type, x-client-info"
+    },
+    {
+      "id": "BILD uppladdning (fält, tilldelad)",
+      "ok": true,
+      "detail": "HTTP 200 E2E-GO8B-20261124151421-92a260-AO/1795533269306-n5dkoz.jpg"
+    },
+    {
+      "id": "BILD uppladdning ej tilldelad (fält2)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "BILD uppladdning utan ao_checklist/ao_edit (ekonomi)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "BILD förfalskad filtyp nekas",
+      "ok": true,
+      "detail": "HTTP 400 invalid_file_type"
+    },
+    {
+      "id": "BILD signerad URL + hämtning (fält)",
+      "ok": true,
+      "detail": "HTTP 200; hämtning 200, 134 byte"
+    },
+    {
+      "id": "BILD URL ej tilldelad (fält2)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "BILD sökvägsmanipulation nekas",
+      "ok": true,
+      "detail": "HTTP 400/400"
+    },
+    {
+      "id": "BILD bucket privat (publik URL, direkt med JWT, anon)",
+      "ok": true,
+      "detail": "HTTP 400/400/400"
+    },
+    {
+      "id": "BILD radering ej tilldelad (fält2)",
+      "ok": true,
+      "detail": "HTTP 403 forbidden"
+    },
+    {
+      "id": "BILD radering (fält) + borta efteråt",
+      "ok": true,
+      "detail": "HTTP 200; URL efteråt: saknas"
+    },
+    {
+      "id": "STÄDNING test-AO",
+      "ok": true,
+      "detail": "test-AO E2E-GO8B-20261124151421-92a260-AO"
+    }
+  ],
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "path": "E2E-GO8B-20261124151421-92a260-AO/1795533269306-n5dkoz.jpg"
+}
