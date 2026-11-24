@@ -1,1 +1,278 @@
-/* V3 nattkörning 2026-11-26 — billing. Ägs av ett eget arbetsblock; laddas efter system.css. */
+/* V3 nattkörning 2026-11-26 — billing. Ägs av ett eget arbetsblock; laddas efter system.css.
+   6A: faktureringskön (pg-invoices, vyn "Att fakturera") — kompakt grupperad vy (.bqv-*).
+   6B: fakturaunderlagets detalj (pg-inv-detail) — rader, moms och summor (.invl-*, .invt-*, .invd-*). */
+
+/* ═════════════════════ 6A · Faktureringskön ═════════════════════ */
+
+.bqv { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.bqv * { min-width: 0; }
+
+/* Hela köns summering (överst) */
+.bqv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; padding: 14px 18px; }
+.bqv-kicker { font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.bqv-head-amt { font-size: 26px; font-weight: 750; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.bqv-head-amt span { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.bqv-head-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.bqv-head-break { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+.bqv-head-break > div { display: flex; flex-direction: column; gap: 2px; }
+.bqv-head-break dt { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.bqv-head-break dd { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bqv-head-iss {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px; text-align: left;
+  min-height: 40px; padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer;
+  background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn); font-size: 13px;
+}
+.bqv-head-iss b { display: block; font-weight: 700; }
+.bqv-head-iss small { display: block; font-size: 11.5px; color: var(--ink-2); opacity: .8; }
+.bqv-head-iss:hover { filter: brightness(.98); border-color: #e9bd77; }
+.bqv-head-iss:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* Sök, visa-flikar och filter */
+.bqv-tools { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.bqv-tools-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.bqv-search { flex: 1 1 280px; position: relative; }
+.bqv-search input { width: 100%; }
+.bqv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bqv-chips .chip svg { flex-shrink: 0; }
+.bqv-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 10px; }
+.bqv-f { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.bqv-f select { width: 100%; height: var(--ctl-h); font-size: 13px; padding: 0 26px 0 10px; }
+.bqv-ftoggle { display: none; }
+.bqv-fcount { font-weight: 700; }
+
+/* Resultatrad: hur mycket som visas, filtrerad summa, välj alla, fäll ut/ihop */
+.bqv-result { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 2px 2px; }
+.bqv-result-txt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; color: var(--ink-2); }
+.bqv-result-txt b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.bqv-fsum { color: var(--muted); }
+.bqv-result-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.bqv-selall { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.bqv-selall input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.bqv-selall:focus-within { box-shadow: var(--focus); border-color: var(--accent); }
+
+/* Grupper: kund → fastighet → AO → underlag */
+.bqv-groups { display: flex; flex-direction: column; gap: 8px; }
+.bqv-cust { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); overflow: hidden; }
+.bqv-cust.has-sel { border-color: #9fc3ef; box-shadow: 0 0 0 1px #9fc3ef inset, var(--shadow-1); }
+.bqv-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 6px; }
+.bqv-cust-row { min-height: 60px; cursor: pointer; }
+.bqv-cust-row:hover, .bqv-ao-row:hover { background: var(--surface-2); }
+.bqv-cust.is-open > .bqv-cust-row { border-bottom: 1px solid var(--line); background: var(--surface-2); }
+
+.bqv-cbw { flex: 0 0 auto; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); cursor: pointer; }
+.bqv-cbw:hover { background: var(--hover); }
+.bqv-cbw input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.bqv-cbw:focus-within { box-shadow: var(--focus); }
+.bqv-cbw.is-empty { cursor: default; }
+.bqv-cbw.is-empty:hover { background: transparent; }
+.bqv-cbw.is-blocked { color: var(--warn); cursor: default; }
+.bqv-cbw.is-blocked:hover { background: transparent; }
+
+.bqv-tog {
+  flex: 0 0 auto; width: 32px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--muted); border-radius: var(--radius-sm); cursor: pointer; padding: 0;
+}
+.bqv-tog svg { transition: transform .15s ease; }
+.bqv-tog[aria-expanded="true"] svg { transform: rotate(90deg); }
+.bqv-tog:hover { background: var(--hover); color: var(--ink); }
+.bqv-tog:focus-visible { outline: none; box-shadow: var(--focus); }
+
+.bqv-main { flex: 1 1 auto; min-width: 0; }
+.bqv-title { font-size: 14px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.bqv-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 1px 12px; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.bqv-meta > span:empty { display: none; }
+.bqv-iss { color: var(--warn); font-weight: 650; display: inline-flex; align-items: center; gap: 3px; }
+.bqv-selinfo { color: var(--accent-ink); font-weight: 650; }
+.bqv-selinfo.is-partial { color: var(--accent-ink); }
+
+.bqv-amt { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bqv-amt b { font-size: 14px; font-weight: 700; color: var(--ink); }
+.bqv-amt small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.bqv-amt.is-muted b { color: var(--muted); font-weight: 600; text-decoration: line-through; text-decoration-color: rgba(95,111,132,.45); }
+
+.bqv-open { flex: 0 0 auto; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: var(--radius-sm); cursor: pointer; padding: 0; }
+.bqv-open:hover { background: var(--surface); border-color: var(--line-2); color: var(--accent-ink); }
+.bqv-open:focus-visible { outline: none; box-shadow: var(--focus); }
+
+.bqv-kids { padding: 4px 10px 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.bqv-prop-row { padding: 6px 4px 2px 0; }
+.bqv-prop-row .bqv-title { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.bqv-prop-row .bqv-amt b { font-size: 12.5px; color: var(--muted); font-weight: 650; }
+.bqv-prop-row .bqv-cbw input { width: 16px; height: 16px; }
+.bqv-prop { display: flex; flex-direction: column; gap: 6px; padding-left: 12px; }
+
+.bqv-ao { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; margin-left: 12px; }
+.bqv-ao.has-sel { border-color: #9fc3ef; }
+.bqv-ao-row { cursor: pointer; min-height: 52px; padding-top: 4px; padding-bottom: 4px; }
+.bqv-ao-row .bqv-title { font-size: 13.5px; }
+.bqv-ao.is-open > .bqv-ao-row { background: var(--surface-2); border-bottom: 1px solid var(--line); }
+
+.bqv-srcs { display: flex; flex-direction: column; }
+.bqv-src { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 30px; border-bottom: 1px solid var(--line); }
+.bqv-src:last-child { border-bottom: none; }
+.bqv-src.selected { background: var(--accent-soft); }
+.bqv-src.is-issue { background: #fffaf2; }
+.bqv-src-head { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.bqv-src .bqv-meta { margin-top: 1px; }
+.bqv-src .bqv-amt b { font-size: 13px; font-weight: 650; }
+.bqv-att { font-size: 10.5px; padding: 1px 6px; }
+.bqv-why { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.bqv-why span { font-size: 11.5px; font-weight: 650; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 999px; padding: 1px 8px; }
+
+.bqv-more { align-self: center; min-height: 40px; margin-top: 4px; }
+
+/* Kräver åtgärd: ett kort per post med orsak och direkt åtgärd */
+.bqv-issues { display: flex; flex-direction: column; gap: 8px; }
+.bqv-issue { padding: 12px 14px; border-left: 3px solid var(--warn); display: flex; flex-direction: column; gap: 8px; }
+.bqv-issue-head { display: flex; align-items: flex-start; gap: 10px; }
+.bqv-issue-ico { flex: 0 0 auto; width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--warn-bg); color: var(--warn); display: inline-flex; align-items: center; justify-content: center; }
+.bqv-why-list { margin: 0; padding: 0 0 0 18px; font-size: 13px; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
+.bqv-why-list b { color: var(--warn); }
+.bqv-issue-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.bqv-issue-acts .btn { min-height: 36px; }
+.bqv-noact { font-size: 12.5px; color: var(--muted); }
+
+/* Klistrad summering av VALT underlag (skild från hela köns summa) */
+.bqv-selsum-wrap { position: sticky; bottom: 12px; z-index: 30; }
+.bqv-selsum-wrap:not(.is-on) { display: none; }
+.bqv-sel {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
+  padding: 10px 12px 10px 16px; border-radius: var(--radius);
+  background: var(--brand-ink, #0a2748); color: #fff; box-shadow: var(--shadow-3);
+}
+.bqv-sel-info { flex: 1 1 220px; display: flex; flex-direction: column; gap: 4px; }
+.bqv-sel-count { font-size: 14px; }
+.bqv-sel-count b { font-size: 16px; }
+.bqv-sel-sub { color: rgba(255,255,255,.72); font-size: 12.5px; margin-left: 4px; }
+.bqv-sel-notes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: #ffe1ad; }
+.bqv-sel-notes > div { display: inline-flex; align-items: center; gap: 5px; }
+.bqv-sel-notes .btn { background: rgba(255,255,255,.12); color: #fff; border-color: transparent; }
+.bqv-sel-sums { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; }
+.bqv-sel-sums > div { display: flex; flex-direction: column; }
+.bqv-sel-sums dt { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: rgba(255,255,255,.7); }
+.bqv-sel-sums dd { margin: 0; font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bqv-sel-sums .is-total dd { font-size: 16px; font-weight: 750; }
+.bqv-sel-acts { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.bqv-sel-acts .btn.bs { background: transparent; color: #fff; border-color: rgba(255,255,255,.35); }
+.bqv-sel-acts .btn.bs:hover { background: rgba(255,255,255,.1); }
+.bqv-sel-acts .bqv-create { background: #fff; color: var(--brand-ink, #0a2748); border-color: #fff; font-weight: 700; min-height: 40px; }
+.bqv-sel-acts .bqv-create:hover { background: #eef4fb; }
+.bqv-sel .btn:focus-visible { box-shadow: 0 0 0 3px rgba(255,255,255,.55); }
+
+/* Den delade flytande markeringsraden behövs inte här — kön har en egen
+   klistrad summering med samma åtgärd (Skapa fakturautkast / Avmarkera). */
+body:has(#pg-invoices.active #bq-list) #_selbar { display: none !important; }
+
+/* Bekräftelsedialogen */
+.bqv-cf-lead { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+.bqv-cf-note, .bqv-cf-warn { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; margin: 0 0 10px; padding: 8px 10px; border-radius: var(--radius-sm); }
+.bqv-cf-note { background: var(--info-bg); color: var(--info); }
+.bqv-cf-warn { background: var(--warn-bg); color: var(--warn); }
+.bqv-cf-list { border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.bqv-cf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.bqv-cf-row:last-child { border-bottom: none; }
+.bqv-cf-sub { font-size: 11.5px; color: var(--muted); }
+.bqv-cf-amt { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bqv-cf-amt small { font-size: 11px; color: var(--muted); }
+.bqv-cf-sums { margin: 10px 0 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.bqv-cf-sums > div { display: flex; justify-content: space-between; gap: 10px; }
+.bqv-cf-sums dt { color: var(--muted); }
+.bqv-cf-sums dd { margin: 0; font-variant-numeric: tabular-nums; }
+.bqv-cf-sums .is-total { font-weight: 750; font-size: 14px; border-top: 1px solid var(--line); padding-top: 5px; margin-top: 2px; }
+.bqv-cf-sums .is-total dt { color: var(--ink); }
+
+@media (max-width: 1100px) {
+  .bqv-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1023px) {
+  .bqv-selsum-wrap { bottom: calc(var(--mobile-bottom-reserve, calc(78px + env(safe-area-inset-bottom))) + 8px); }
+}
+@media (max-width: 767px) {
+  .bqv-head { padding: 12px 14px; gap: 10px 18px; }
+  .bqv-head-amt { font-size: 22px; }
+  .bqv-head-iss { margin-left: 0; width: 100%; }
+  .bqv-tools { padding: 10px; }
+  .bqv-filters { display: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; }
+  .bqv-tools.is-fopen .bqv-filters { display: grid; }
+  .bqv-filters > .bqv-f:last-child { grid-column: 1 / -1; }
+  .bqv-f select { height: 40px; }
+  .bqv-ftoggle { display: inline-flex; min-height: 40px; width: 100%; justify-content: center; }
+  .bqv-chips { width: 100%; }
+  .bqv-chips .chip { height: 40px; flex: 1 1 auto; justify-content: center; }
+  .bqv-result { flex-direction: column; align-items: stretch; }
+  .bqv-result-acts .btn { min-height: 40px; }
+  .bqv-selall { min-height: 40px; }
+  .bqv-row { padding: 6px 8px 6px 2px; gap: 4px; }
+  .bqv-cust-row { align-items: flex-start; }
+  .bqv-cust-row > .bqv-cbw, .bqv-cust-row > .bqv-tog { margin-top: 2px; }
+  .bqv-kids { padding: 4px 6px 8px 6px; }
+  .bqv-prop { padding-left: 4px; }
+  .bqv-ao { margin-left: 6px; }
+  .bqv-ao-row { align-items: flex-start; }
+  .bqv-src { padding: 6px 8px 6px 14px; align-items: flex-start; }
+  .bqv-src .bqv-amt { padding-top: 10px; }
+  .bqv-title { font-size: 13.5px; }
+  .bqv-amt b { font-size: 13.5px; }
+  .bqv-sel { padding: 10px 12px; gap: 8px 12px; }
+  .bqv-sel-info { flex-basis: 100%; }
+  .bqv-sel-sums { flex: 1 1 auto; gap: 2px 12px; }
+  .bqv-sel-sums dd { font-size: 13px; }
+  .bqv-sel-sums .is-total dd { font-size: 14.5px; }
+  .bqv-sel-acts { flex: 1 1 100%; }
+  .bqv-sel-acts .btn { flex: 1 1 0; min-height: 44px; justify-content: center; }
+}
+
+/* ═════════════════════ 6B · Fakturaunderlagets detalj ═════════════════════ */
+
+.invd-status-help { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; line-height: 1.45; }
+.invd-status-help > svg { flex-shrink: 0; color: var(--muted); margin-top: 1px; }
+.invd-status-help b { color: var(--ink); }
+
+.invd-check { margin: 10px 14px 0; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--info-bg); border: 1px solid var(--info-line); color: var(--ink-2); font-size: 12.5px; }
+.invd-check b { color: var(--info); display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.invd-check ul { margin: 0; padding-left: 18px; }
+
+/* Rader: beskrivning | antal | à-pris ex moms | moms | belopp ex moms */
+.invl { display: flex; flex-direction: column; }
+.invl-head, .invl-row { display: grid; grid-template-columns: minmax(0, 1fr) 82px 110px 64px 118px 72px; align-items: center; gap: 4px 10px; padding: 10px 14px; }
+.invl-head { padding-top: 8px; padding-bottom: 8px; font-size: 11px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.invl-head > span:nth-child(n+2), .invl-row > .invl-c:nth-child(n+2) { text-align: right; }
+.invl-row { border-bottom: 1px solid var(--line); font-size: 13px; }
+.invl-row:last-child { border-bottom: none; }
+.invl-desc b { display: block; font-size: 13.5px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.invl-desc .bdg { font-size: 10.5px; margin-top: 3px; }
+.invl-src { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.invl-c { font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+.invl-k { display: none; }
+.invl-amt { font-weight: 700; color: var(--ink); }
+.invl-act { display: flex; gap: 4px; justify-content: flex-end; }
+.invl-row.is-info { grid-template-columns: minmax(0, 1fr) 72px; color: var(--muted); font-style: italic; }
+.invl-row.is-zero .invl-amt { color: var(--warn); }
+
+.invt { padding: 12px 14px; border-top: 2px solid var(--line-2); display: flex; flex-direction: column; gap: 2px; }
+.invt-r { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; padding: 3px 0; color: var(--ink-2); }
+.invt-r > span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.invt-r.is-sub { font-size: 12px; color: var(--muted); padding-left: 12px; }
+.invt-r.is-disc { color: var(--ok); }
+.invt-r.is-strong { font-weight: 650; color: var(--ink); }
+.invt-r.is-total { font-size: 16px; font-weight: 750; color: var(--ink); border-top: 2px solid var(--line-2); padding-top: 8px; margin-top: 4px; }
+.invt-r.is-pay { font-size: 16px; font-weight: 750; color: var(--ink); border-top: 2px solid var(--line-2); padding-top: 8px; margin-top: 4px; }
+.invt-r.is-rot { color: var(--ok); }
+.invt-note { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.invt-tools { display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+
+.invd-note { margin: 0; }
+.invd-note-k { display: block; font-size: 11px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+.invd-aos .dr .dv { white-space: normal; text-align: right; }
+
+@media (max-width: 767px) {
+  .invl-head { display: none; }
+  .invl-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 10px 12px; }
+  .invl-row > .invl-desc { grid-column: 1 / -1; }
+  .invl-row > .invl-c { display: flex; justify-content: space-between; gap: 6px; text-align: left !important; }
+  .invl-k { display: inline; color: var(--muted); font-size: 12px; }
+  .invl-row > .invl-amt { grid-column: 1 / -1; border-top: 1px dashed var(--line); padding-top: 5px; margin-top: 2px; }
+  .invl-row > .invl-act { grid-column: 1 / -1; justify-content: flex-start; }
+  .invl-row.is-info { grid-template-columns: minmax(0, 1fr); }
+  .invl-act .btn { min-width: 40px; min-height: 40px; justify-content: center; }
+}
