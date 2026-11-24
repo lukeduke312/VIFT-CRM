@@ -1209,7 +1209,7 @@ const WorkOrderDetailPage = {
           visibility: 'intern',
           entries: changes
         });
-        WorkOrderService.update(this.aoId, { log: freshAo.log });
+        WorkOrderService.appendLogEntry(this.aoId, freshAo.log[freshAo.log.length - 1]);
       }
     }
 
@@ -1744,7 +1744,7 @@ const WorkOrderDetailPage = {
       timestamp: new Date().toISOString()
     };
     ao.log.push(entry);
-    WorkOrderService.update(this.aoId, { log: ao.log });
+    WorkOrderService.appendLogEntry(this.aoId, entry);
     ActivityService.log('uppföljning', `${type}: ${comment} (${date}${time?' '+time:''})`, {
       workOrderId: this.aoId,
       customerId: ao.customerId

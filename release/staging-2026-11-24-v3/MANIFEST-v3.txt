@@ -1,0 +1,26 @@
+VIFT CRM STAGING-release 2026-11-24 v3 (V3-design + V2-server + rättningar F3/F5). Källa: VIFT-CRM gren claude/vift-v3-major-redesign + STAGING-överlägg (publicerade storage.js/AuthService.js/config.js/public-offer.html oförändrade).
+Prövat mot riktig STAGING före uppladdning: e2e-real R0 (6 roller) + F2–F5 gröna (lokalt serverat paket).
+Uppladdning: src/ först, index.html SIST. Ladda INTE upp något annat.
+21 filer.
+SHA-256 per fil (tools/verify-staging-deploy.sh <denna fil>):
+44c70ca501310012a13b053c646af5653275a6095e9cfb0f2696852fb6d5918a  index.html
+ccda3d336961dd8433bcc6eb27993c3239d34ed37e89e829bebd60c9957f10a6  src/components/UiKit.js
+e58e6280a1cc09a35af37bf2b6fad711c86a9372f1f24c1b462583de5cfaf562  src/data/DashboardConfig.js
+b87f4e8f6f13cc78ad188f1f1645dda377f9f5d125190b5a8900539b3cae1c24  src/data/schema.js
+2fd717591c18f4ce2a2ca24824f139fb9f490a2841dc174640f1163a4ed32d1d  src/data/seedData.js
+9d9547b91f27db0077aa503194f7b3a01afb6789a4e3cdd68dab6de1b5e5de12  src/data/state.js
+a14ab40b7e0f2b28806db08befcaf956a2f99a05ffbcff68e4f34d2d757b941e  src/pages/Dashboard.js
+b64a3ede46d83a66457ea0b27ffcbba5b850efabf47755f2b32be106fdfc3e5b  src/pages/ExportCenterPage.js
+f9e9b41c9cf4a5fc48a37d2ea39c08bc247d0d8cf8194e6d3ba14bac0cfe10b0  src/pages/InvoicesPage.js
+d685ae191c29f7e9c593b44aa2d77bec5db64972b4c906a276f9844073eb17c8  src/pages/MyJobsPage.js
+19d50096ad3f6fbfd951b2f3f1ca29786697fd3ef40cdefa97c9d7e5133cd8b1  src/pages/PageShells.js
+40a6e3aa4de5e1895458119d4a92475a6f07d7b6ff1e8727ca5fe1001f39b2bf  src/pages/ReportsPage.js
+c9062022a0e21f033becdb8e2a188b9fb5f59f15819a2f1fc2ec55ba9391c6e4  src/pages/SalesPage.js
+fe29490e906e34003991a9bd01eed4fe1c3e16213a9adf1cf3ef5454b8810042  src/pages/TimePage.js
+7d641d31f2f8ccecf75f21b75e8e45322dea00bf6dfa1873b37dcd0a25a7aa72  src/pages/WorkOrderDetailPage.js
+e7b96886bb541369c6788a4474eb55f00ae122a585552e7fd70e35bbadea1ce0  src/pages/WorkOrdersPage.js
+6104b31d8a2c29f68e050410edcd52bf1398b3ae7119c9a5db6fb70d71c3fd60  src/services/AOTimeSyncService.js
+7bf60663e99e10bad6303ee36e650434c1a44de7cd7ade4c62f17cd0fa327cf6  src/services/ImportExportConfigs.js
+ab3a1e6c8995343a501daa361ac0acac630343be1d84579b1fe9f168067cb49e  src/services/InvoiceService.js
+926425399fe0889ffb07439646660f3157ded2bc0c097e7593f5836ac0073a84  src/services/WorkOrderService.js
+66644789a5c91b2a25572d73969d78e1db9dcc2e01c502f52cb4dea1d76fd420  src/styles/system.css

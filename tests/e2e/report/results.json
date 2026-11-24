@@ -1,6 +1,6 @@
 {
   "summary": {
-    "when": "2026-11-24T13:47:25.745Z",
+    "when": "2026-11-24T16:51:57.502Z",
     "target": "simulerad backend (FakeSupabase)",
     "browser": "Chromium (Playwright)",
     "total": 117,
@@ -8,7 +8,7 @@
     "failed": 0,
     "blocked": 1,
     "known": 1,
-    "durationMs": 636041
+    "durationMs": 653397
   },
   "results": [
     {
@@ -18,12 +18,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 987,
+      "ms": 1039,
       "notes": [
         "Laddade 15 AO och 7 kunder"
       ],
       "metrics": {
-        "inloggning → app laddad (ms)": 925
+        "inloggning → app laddad (ms)": 980
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -38,7 +38,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 382,
+      "ms": 528,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -56,7 +56,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 856,
+      "ms": 1020,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -72,7 +72,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1400,
+      "ms": 1536,
       "notes": [
         "ekonomi såg 6 poster, fältarbetaren 3"
       ],
@@ -90,7 +90,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1173,
+      "ms": 1216,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -106,7 +106,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 943,
+      "ms": 1087,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -122,22 +122,23 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14453,
+      "ms": 14503,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid per sida (ms)": 363,
-        "långsammaste sida (ms)": 389
+        "medel renderingstid per sida (ms)": 362,
+        "långsammaste sida (ms)": 382
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "PAGES-02",
@@ -146,16 +147,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8863,
+      "ms": 8795,
       "notes": [
         "23 menyval klickade"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 5
+      "requests": 6
     },
     {
       "id": "RESP-DESKTOP",
@@ -164,21 +167,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14601,
+      "ms": 14660,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (desktop, ms)": 363
+        "medel renderingstid (desktop, ms)": 362
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "RESP-LAPTOP",
@@ -187,21 +191,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14573,
+      "ms": 14680,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (laptop, ms)": 362
+        "medel renderingstid (laptop, ms)": 361
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "RESP-TABLET",
@@ -210,21 +215,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14536,
+      "ms": 14586,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (tablet, ms)": 363
+        "medel renderingstid (tablet, ms)": 362
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "RESP-IPHONE",
@@ -233,21 +239,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14446,
+      "ms": 14634,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (iphone, ms)": 362
+        "medel renderingstid (iphone, ms)": 363
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "RESP-ANDROID",
@@ -256,7 +263,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14469,
+      "ms": 14698,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -266,11 +273,12 @@
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "CUS-01",
@@ -279,20 +287,21 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3411,
+      "ms": 3657,
       "notes": [
         "besked: Kund skapad"
       ],
       "metrics": {
-        "spara ny kund → bekräftelse (ms)": 308
+        "spara ny kund → bekräftelse (ms)": 392
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 9
     },
     {
       "id": "CUS-02",
@@ -301,7 +310,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2010,
+      "ms": 2242,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -317,7 +326,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2426,
+      "ms": 2709,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -335,7 +344,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2435,
+      "ms": 2738,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -351,7 +360,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1566,
+      "ms": 1776,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -367,7 +376,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2587,
+      "ms": 2617,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -385,7 +394,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2938,
+      "ms": 3097,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -405,7 +414,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2854,
+      "ms": 2925,
       "notes": [
         "objektformulär: new-obj-type, new-obj-num, new-obj-name, new-obj-entrance, new-obj-stairwell, new-obj-floor, new-obj-area, new-obj-status, new-obj-access"
       ],
@@ -428,7 +437,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2611,
+      "ms": 2795,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -444,14 +453,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8846,
+      "ms": 9226,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 20
+      "requests": 23
     },
     {
       "id": "ART-01",
@@ -460,7 +473,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5028,
+      "ms": 5243,
       "notes": [
         "serverkontrollen är modellerad — måste upprepas mot riktig STAGING"
       ],
@@ -469,11 +482,12 @@
         "[Storage.writeBusinessKeyMerge] avvisad för vift_articles: forbidden"
       ],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 13
+      "requests": 14
     },
     {
       "id": "AO-01",
@@ -482,12 +496,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2139,
+      "ms": 2325,
       "notes": [
         "besked: AO-(sparas…) skapad"
       ],
       "metrics": {
-        "skapa AO → serverbekräftad (ms)": 1251
+        "skapa AO → serverbekräftad (ms)": 1359
       },
       "consoleErrors": [],
       "netErrors": [
@@ -504,16 +518,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4151,
+      "ms": 4282,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "LOG-01",
@@ -522,7 +537,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2786,
+      "ms": 2900,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -542,7 +557,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1604,
+      "ms": 1876,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -565,7 +580,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3456,
+      "ms": 3567,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -591,7 +606,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4067,
+      "ms": 4185,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -611,7 +626,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2872,
+      "ms": 2904,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -631,7 +646,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5833,
+      "ms": 5964,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -652,7 +667,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3076,
+      "ms": 3176,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -672,7 +687,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2824,
+      "ms": 2876,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -692,7 +707,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1647,
+      "ms": 1605,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -712,7 +727,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1633,
+      "ms": 1770,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -735,17 +750,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3270,
+      "ms": 3433,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 19
     },
     {
       "id": "AO-07",
@@ -754,7 +770,7 @@
       "kind": "ui",
       "status": "known",
       "error": "Kontroll misslyckades: båda loggposterna borde finnas kvar — loggen skickas som hel array (G5)",
-      "ms": 5213,
+      "ms": 5372,
       "notes": [
         "A kvar: false, B kvar: true"
       ],
@@ -779,7 +795,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3741,
+      "ms": 4275,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -800,9 +816,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3069,
+      "ms": 3476,
       "notes": [
-        "id: LOG-1795000000000-788a32b1, LOG-1795000000000-0979942f"
+        "id: LOG-1795000000000-7c41a782, LOG-1795000000000-434b3d0f"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -823,7 +839,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3333,
+      "ms": 3558,
       "notes": [],
       "metrics": {
         "patch_ao per loggpost": 1
@@ -845,7 +861,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2257,
+      "ms": 2424,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -865,7 +881,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1583,
+      "ms": 1850,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -885,7 +901,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3197,
+      "ms": 3348,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -908,7 +924,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 865,
+      "ms": 1034,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -926,17 +942,18 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2988,
+      "ms": 3036,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/ao-time-write → 409 {\"error\":\"attested_locked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 20
+      "requests": 24
     },
     {
       "id": "TIME-02",
@@ -945,16 +962,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2594,
+      "ms": 2750,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 19
+      "requests": 26
     },
     {
       "id": "TIME-03",
@@ -963,17 +983,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4983,
+      "ms": 5258,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 23
+      "requests": 30
     },
     {
       "id": "TIME-04",
@@ -982,11 +1004,11 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2435,
+      "ms": 2399,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
-        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-ad2bac08-5c1b-48f6-8c84-c8dfad3d523e : forbidden"
+        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-a8dde450-3f94-4e57-8804-3b00250feb0e : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1003,7 +1025,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1286,
+      "ms": 1381,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1021,17 +1043,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8975,
+      "ms": 9019,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 25
+      "requests": 29
     },
     {
       "id": "TIME-06",
@@ -1040,7 +1063,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 845,
+      "ms": 973,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1056,7 +1079,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2733,
+      "ms": 2937,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1074,26 +1097,28 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 17965,
+      "ms": 18240,
       "notes": [
         "offertguide: 3952 / 988 / 4940 kr; OfferCalc: 3952 / 988 / 4940",
         "AO prismodell fast, fast pris 3952",
-        "underlag: [{\"id\":\"fixed:AO-00e71412-4433-434f-971c-1191996e7b61\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"fixed:AO-dc77dca1-a5fc-47a0-a267-f0c6a4089adb\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
         "faktura: ex 3952, moms 988, totalt 4940"
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-00e71412-4433-434f-971c-1191996e7b61 : forbidden"
+        "[WorkOrderService] Serverskrivning avvisad för AO-dc77dca1-a5fc-47a0-a267-f0c6a4089adb : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 44
+      "requests": 46
     },
     {
       "id": "OFF-03",
@@ -1102,16 +1127,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3478,
+      "ms": 3703,
       "notes": [
         "guide 1890 / 473 / 2363; OfferCalc 2100 − 210 = 1890, moms 473, totalt 2363"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 7
+      "requests": 8
     },
     {
       "id": "OFF-04",
@@ -1120,7 +1147,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10726,
+      "ms": 10995,
       "notes": [
         "toasts vid serverfel: Sparar… / Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1131,12 +1158,13 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "GET /functions/v1/offer-token-validate?t=9f1b037d12ddfaf8f3a88ab9659f5f367ad1c500ff2defab96ed1a6fa96c34ac → 403 {\"error\":\"revoked\"}"
+        "GET /functions/v1/offer-token-validate?t=2a4395aa11a0707516fcc7fd4b0a53c20461c921937cff9aa8165ea606f1708b → 403 {\"error\":\"revoked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 13
     },
     {
       "id": "OFF-01",
@@ -1145,7 +1173,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1002,
+      "ms": 1041,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1164,7 +1192,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1207,
+      "ms": 1394,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1182,7 +1210,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 802,
+      "ms": 977,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1200,16 +1228,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9319,
+      "ms": 9342,
       "notes": [
         "5 offerter kontrollerade"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "ECO-01",
@@ -1218,26 +1248,28 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 10842,
+      "ms": 11458,
       "notes": [
-        "underlag: [{\"id\":\"time:TID-f98d38a5-65fa-45ae-ad22-0ebf83b94bd3\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-ecde904d-d011-498c-92b0-8bf6e6843578:M1795527685055\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"time:TID-cdac50e4-5dbf-4385-b08a-801f1df60ef8\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-0b569dcb-39fb-4f6e-a245-94ed37c22c87:M1795538749235\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
         "ROT auto i fakturan: 297 kr; offertens regel: 297 kr",
-        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-ecde904d-d011-498c-92b0-8bf6e6843578: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
+        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-0b569dcb-39fb-4f6e-a245-94ed37c22c87: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
         "faktura: ex 891.34, moms 222.84, totalt 1114.18, ROT 297, kunden betalar 817.1800000000001",
         "OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen \"fakturerad\" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk."
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-ecde904d-d011-498c-92b0-8bf6e6843578 : forbidden"
+        "[WorkOrderService] Serverskrivning avvisad för AO-0b569dcb-39fb-4f6e-a245-94ed37c22c87 : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 26
+      "requests": 28
     },
     {
       "id": "SVC-01",
@@ -1246,14 +1278,17 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11830,
+      "ms": 11972,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 22
+      "requests": 24
     },
     {
       "id": "SVC-02",
@@ -1262,7 +1297,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6758,
+      "ms": 6920,
       "notes": [
         "toasts: Sparar… / Utförandet kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1273,11 +1308,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 15
+      "requests": 16
     },
     {
       "id": "SVC-03",
@@ -1286,14 +1322,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5858,
+      "ms": 6051,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 13
     },
     {
       "id": "ROLE-02",
@@ -1302,7 +1340,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5508,
+      "ms": 5741,
       "notes": [
         "toasts: Sparar… / Rollen \"Tekniker / Personal\" kunde inte sparas — behörigheterna är OFÖRÄNDRADE — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1313,11 +1351,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 14
+      "requests": 15
     },
     {
       "id": "STAFF-02",
@@ -1326,7 +1365,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4687,
+      "ms": 4897,
       "notes": [
         "toasts: Sparar… / Ändringen för Sofia Lindgren kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1337,11 +1376,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 9
     },
     {
       "id": "ADMIN-01",
@@ -1350,7 +1390,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6893,
+      "ms": 7086,
       "notes": [
         "toasts: Sparat / Varning: servern bekräftade inte den senaste ändringen (artiklar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1361,11 +1401,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 12
     },
     {
       "id": "RON-01",
@@ -1374,18 +1415,20 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 12083,
+      "ms": 12476,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 39
+      "requests": 41
     },
     {
       "id": "RON-02",
@@ -1394,17 +1437,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4041,
+      "ms": 4361,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/rondering-pass-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/rondering-pass-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 15
+      "requests": 16
     },
     {
       "id": "RON-03",
@@ -1413,7 +1457,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5210,
+      "ms": 5396,
       "notes": [
         "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (ronderingar). Den kan vara osparad — kontrollera och försök igen. / Ronderingen kunde inte skapas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1436,11 +1480,12 @@
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 13
     },
     {
       "id": "REC-01",
@@ -1449,19 +1494,20 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8815,
+      "ms": 8628,
       "notes": [
-        "AO för tillfället: AO-55f9d393-5a62-4d98-b5e5-0a12f9b9d795 2026-11-24"
+        "AO för tillfället: AO-75ab08da-0eaf-4de0-aa71-5e9df21d5d20 2026-11-24"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"not_found\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 15
+      "requests": 16
     },
     {
       "id": "SALES-01",
@@ -1470,7 +1516,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6744,
+      "ms": 6785,
       "notes": [
         "toasts: Sparar… / Ändringen kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1489,6 +1535,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
@@ -1496,7 +1543,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 17
     },
     {
       "id": "PROJ-01",
@@ -1505,16 +1552,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6383,
+      "ms": 6702,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 12
     },
     {
       "id": "TASK-01",
@@ -1523,16 +1571,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8609,
+      "ms": 8638,
       "notes": [
         "serverns per-nyckel-behörighet för activities kan inte verifieras i simulerad backend (G4) — upprepa mot STAGING"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 17
+      "requests": 19
     },
     {
       "id": "CAL-01",
@@ -1541,17 +1592,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7011,
+      "ms": 7219,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 19
     },
     {
       "id": "IMP-01",
@@ -1560,14 +1612,16 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6506,
+      "ms": 6538,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 10
     },
     {
       "id": "IMP-02",
@@ -1576,7 +1630,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7105,
+      "ms": 7138,
       "notes": [
         "toasts: Varning: servern bekräftade inte den senaste ändringen (kunder, importloggar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1594,11 +1648,12 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 9
     },
     {
       "id": "EXP-01",
@@ -1607,7 +1662,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4541,
+      "ms": 4601,
       "notes": [
         "property: ﻿Namn;Fastighetsbeteckning;Adress;Postnummer;Ort;Objektnummer;Fastighetstyp;Byggnadsår;Antal lägenheter;Total yta (m²);Förvaltningsform;Driftområde;Status;Antec",
         "propertyObject: ﻿Namn;Objektnummer;Typ (lagenhet/lokal/etc.);Adress;Postnummer;Ort;Port/Entré;Trapphus;Våning;Yta (m²);Status;Beskrivning\r",
@@ -1616,11 +1671,12 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "REP-01",
@@ -1629,16 +1685,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4022,
+      "ms": 4076,
       "notes": [
         "förväntat fakturerat (exkl. moms): 17975"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "DASH-01",
@@ -1647,14 +1705,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7389,
+      "ms": 7718,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 20
+      "requests": 23
     },
     {
       "id": "NOTIF-01",
@@ -1663,7 +1725,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2957,
+      "ms": 3043,
       "notes": [
         "simulerade push-utskick: 0 (inga riktiga utskick — send-push registreras bara)"
       ],
@@ -1681,7 +1743,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3485,
+      "ms": 3567,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1693,11 +1755,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 7
+      "requests": 8
     },
     {
       "id": "RES-02",
@@ -1706,7 +1769,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5457,
+      "ms": 5630,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1714,11 +1777,12 @@
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 19
+      "requests": 20
     },
     {
       "id": "RES-03",
@@ -1727,12 +1791,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10571,
+      "ms": 10645,
       "notes": [
-        "besked efter 9301 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
+        "besked efter 9323 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {
-        "feedback_ms": 9298
+        "feedback_ms": 9322
       },
       "consoleErrors": [
         "[persist] merge-skrivning avvisad för vift_customers: network_error",
@@ -1740,11 +1804,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 10
     },
     {
       "id": "RES-04",
@@ -1753,7 +1818,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8596,
+      "ms": 8636,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1762,11 +1827,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 19
+      "requests": 20
     },
     {
       "id": "SW-01",
@@ -1775,7 +1841,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1457,
+      "ms": 1676,
       "notes": [
         "offline-start: {\"hasLogin\":true,\"hasApp\":true,\"router\":true}"
       ],
@@ -1784,7 +1850,7 @@
       "netErrors": [],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 7
     },
     {
       "id": "PERM-01",
@@ -1793,7 +1859,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 925,
+      "ms": 904,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1815,7 +1881,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2593,
+      "ms": 2717,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1844,7 +1910,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15433,
+      "ms": 16091,
       "notes": [
         "admin: 26 tillåtna, 0 nekade",
         "chef: 20 tillåtna, 6 nekade",
@@ -1855,10 +1921,16 @@
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 31
+      "requests": 36
     },
     {
       "id": "PERF-01",
@@ -1867,32 +1939,34 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 38960,
+      "ms": 39464,
       "notes": [
         "observation: pollningen var pausad så länge sökfältet hade fokus",
-        "mätvärden: {\"inloggning_till_klar_ms\":1150,\"anrop_vid_start\":5,\"ao_lista_ms\":179,\"ao_rader\":151,\"ao_detalj_ms\":31,\"kundlista_ms\":360,\"dashboard_ms\":253,\"rapport_tid_ms\":91,\"loneunderlag_ms\":644,\"kalender_ms\":119}"
+        "mätvärden: {\"inloggning_till_klar_ms\":1247,\"anrop_vid_start\":5,\"ao_lista_ms\":237,\"ao_rader\":151,\"ao_detalj_ms\":31,\"kundlista_ms\":406,\"dashboard_ms\":322,\"rapport_tid_ms\":108,\"loneunderlag_ms\":627,\"kalender_ms\":163}"
       ],
       "metrics": {
-        "inloggning_till_klar_ms": 1150,
+        "inloggning_till_klar_ms": 1247,
         "anrop_vid_start": 5,
-        "ao_lista_ms": 179,
+        "ao_lista_ms": 237,
         "ao_rader": 151,
         "ao_detalj_ms": 31,
-        "kundlista_ms": 360,
-        "dashboard_ms": 253,
-        "rapport_tid_ms": 91,
-        "loneunderlag_ms": 644,
-        "kalender_ms": 119,
-        "kundsokning_ms": 148,
-        "sparning_kund_till_ack_ms": 30,
+        "kundlista_ms": 406,
+        "dashboard_ms": 322,
+        "rapport_tid_ms": 108,
+        "loneunderlag_ms": 627,
+        "kalender_ms": 163,
+        "kundsokning_ms": 132,
+        "sparning_kund_till_ack_ms": 38,
         "anrop_i_vila_35s": 5,
         "js_heap_mb": 16
       },
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 12
     },
     {
       "id": "MODAL-01",
@@ -1901,14 +1975,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4009,
+      "ms": 4168,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 7
+      "requests": 8
     },
     {
       "id": "ATT-01",
@@ -1917,7 +1993,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2619,
+      "ms": 2656,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1935,7 +2011,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 21724,
+      "ms": 21552,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1952,6 +2028,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
@@ -1960,7 +2037,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 25
+      "requests": 26
     },
     {
       "id": "ATT-02",
@@ -1969,7 +2046,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2887,
+      "ms": 2831,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1985,16 +2062,17 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5695,
+      "ms": 5660,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 12
     },
     {
       "id": "G8-01",
@@ -2003,14 +2081,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4796,
+      "ms": 4776,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 6
+      "requests": 7
     },
     {
       "id": "MAP-01",
@@ -2019,7 +2099,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2059,
+      "ms": 2049,
       "notes": [
         "räknare: 13 aktiva jobb · 2 platser på kartan · 10 kunde inte placeras"
       ],
@@ -2037,7 +2117,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1609,
+      "ms": 1641,
       "notes": [
         "händelser: 4"
       ],
@@ -2055,14 +2135,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3326,
+      "ms": 3346,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "UI-PROP-01",
@@ -2071,7 +2153,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3104,
+      "ms": 3114,
       "notes": [
         "laptop: {\"nameShown\":true,\"clipped\":false,\"text\":\"Solgläntan Hus A OBJ-001\"}",
         "iphone: {\"nameShown\":false,\"clipped\":false,\"text\":\"OBJ-001\"}"
@@ -2090,17 +2172,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3259,
+      "ms": 3254,
       "notes": [
         "laptop: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}",
         "iphone: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "CHK-02",
@@ -2109,7 +2193,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2883,
+      "ms": 2899,
       "notes": [
         "badge: 2/4 utförda"
       ],
@@ -2129,7 +2213,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4059,
+      "ms": 4160,
       "notes": [
         "badge A: 1/4 utförda · 2 pågår"
       ],
@@ -2137,11 +2221,13 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 20
     },
     {
       "id": "CHK-04",
@@ -2150,7 +2236,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 3897,
+      "ms": 4466,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2158,12 +2244,13 @@
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden_other\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden_other\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 25
+      "requests": 26
     },
     {
       "id": "CHK-05",
@@ -2172,7 +2259,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1329,
+      "ms": 1496,
       "notes": [
         "efter synk: utford (servern: utförd)"
       ],
@@ -2193,7 +2280,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2024,
+      "ms": 2100,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2212,7 +2299,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2411,
+      "ms": 2682,
       "notes": [
         "iphone: {\"scroll\":false,\"minBtn\":36,\"below\":true,\"right\":false,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}",
         "laptop: {\"scroll\":false,\"minBtn\":24,\"below\":false,\"right\":true,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}"
@@ -2234,7 +2321,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2438,
+      "ms": 2460,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2252,7 +2339,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22428,
+      "ms": 22477,
       "notes": [
         "aktivitetslogg-skrivningar nekade av servern: 3; toasts: [\"\",\"\",\"\"]"
       ],
@@ -2272,6 +2359,7 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
@@ -2279,7 +2367,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 13
     },
     {
       "id": "TASK-02",
@@ -2288,13 +2376,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3171,
+      "ms": 3425,
       "notes": [
         "direktanrop: {\"complete_other\":403,\"forge_new\":403,\"delete_other\":403,\"full_write\":403}"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
@@ -2302,7 +2391,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "ACT-01",
@@ -2311,7 +2400,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5040,
+      "ms": 5212,
       "notes": [
         "poster: [[\"time_entry_created\",\"ST-004\",\"klientrapport\"],[\"work_order_updated\",\"ST-004\",\"klientrapport\"]]"
       ],
@@ -2320,12 +2409,13 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"invalid_entry\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"invalid_entry\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"invalid_type\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"append_only\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 17
     },
     {
       "id": "AO-07D",
@@ -2334,7 +2424,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1991,
+      "ms": 2151,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2354,19 +2444,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8391,
+      "ms": 8441,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 25
+      "requests": 28
     },
     {
       "id": "ECO-V3-01",
@@ -2375,14 +2468,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8698,
+      "ms": 8865,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 25
+      "requests": 29
     },
     {
       "id": "ECO-V3-02",
@@ -2391,14 +2489,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3251,
+      "ms": 3250,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 5
+      "requests": 6
     },
     {
       "id": "DASH-M-01",
@@ -2407,14 +2507,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3666,
+      "ms": 3725,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     }
   ]
 }
