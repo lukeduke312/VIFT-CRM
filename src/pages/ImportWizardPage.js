@@ -67,15 +67,15 @@ const ImportWizardPage = (function () {
 
     var _requiredPerm = TYPE_PERMISSIONS[_entityType] || 'admin_manage';
     if (typeof Auth !== 'undefined' && !Auth.can(_requiredPerm)) {
-      el.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center;">' +
-        _ic('lock', 32) + '<h3 style="margin-top:12px">Åtkomst nekad</h3>' +
+      el.innerHTML = '<div class="empty mx-empty">' +
+        _ic('lock', 28) + '<h3>Åtkomst nekad</h3>' +
         '<p>Du saknar behörighet att importera detta register.</p></div>';
       return;
     }
 
     var cfg = ImportExportService.getConfig(_entityType);
     if (!cfg) {
-      el.innerHTML = '<div class="ibox">Okänd registertyp: ' + esc(_entityType) + '</div>';
+      el.innerHTML = '<div class="empty mx-empty">' + _ic('alert-circle', 28) + '<h3>Okänd registertyp</h3><p>' + esc(_entityType) + '</p></div>';
       return;
     }
 
@@ -93,32 +93,55 @@ const ImportWizardPage = (function () {
     _renderStep();
   }
 
+  /* V3 (2026-11-26): rubrik med registertyp (toppraden visar bara
+     "Importera"), stegindikator som får plats på mobil (F-03), innehållet
+     i ett kort och knapparna i en fot med en tydlig primär åtgärd (F-11). */
   function _html(cfg) {
+    var canLog = typeof Auth !== 'undefined' && Auth.canViewPage('pg-import-log');
     return '<div class="imp-wizard">' +
-      '<div class="imp-wizard-header">' +
-        '<h2 style="margin:0 0 4px">' + _ic('upload', 20) + ' Importera ' + esc(cfg.label) + '</h2>' +
-        '<p style="margin:0;color:var(--text-muted);font-size:13px">' +
-          'Importera ' + esc(cfg.label.toLowerCase()) + ' från CSV- eller XLSX-fil.' +
-          (_caps && !_caps.xlsxRead ? ' <strong style="color:var(--orange)">OBS: XLSX-import stöds inte av din webbläsare — använd CSV.</strong>' : '') +
-        '</p>' +
+      '<div class="imp-wizard-header mx-imp-head">' +
+        '<span class="mx-imp-ico" aria-hidden="true">' + _ic('upload', 20) + '</span>' +
+        '<div class="mx-imp-tt">' +
+          '<h2 class="mx-imp-title">Importera ' + esc(String(cfg.label || '').toLowerCase()) + '</h2>' +
+          '<p class="mx-imp-sub">Från CSV- eller XLSX-fil. Importen loggas och kan ångras efteråt.' +
+            (_caps && !_caps.xlsxRead ? ' <strong class="mx-imp-warn">XLSX stöds inte av din webbläsare — använd CSV.</strong>' : '') +
+          '</p>' +
+        '</div>' +
+        (canLog ? '<button class="btn bghost bsm mx-imp-logbtn" aria-label="Importlogg" title="Importlogg" onclick="Router.showPage(\'pg-import-log\',{})">' + _ic('clock', 14) + '<span class="mx-imp-logbtn-l"> Importlogg</span></button>' : '') +
       '</div>' +
-      '<nav class="imp-steps" id="imp-steps">' + _stepsHtml() + '</nav>' +
+      '<nav class="imp-steps" id="imp-steps" aria-label="Steg i importen">' + _stepsHtml() + '</nav>' +
       '<div class="imp-body" id="imp-body"></div>' +
       '<div class="imp-footer" id="imp-footer"></div>' +
     '</div>';
   }
 
+  /* Dator: alla sex steg i ett rutnät som alltid ryms i bredden (F-03).
+     Mobil: "Förhandsgranskning · Steg 2 av 6" med en stapel per steg. */
   function _stepsHtml() {
-    return STEPS.map(function (s, i) {
+    var full = '<ol class="mx-steps">' + STEPS.map(function (s, i) {
       var n   = i + 1;
-      var cls = 'imp-step';
-      if (n < _step)       cls += ' imp-step-done';
-      else if (n === _step) cls += ' imp-step-active';
-      return '<div class="' + cls + '">' +
-        '<span class="imp-step-num">' + (n < _step ? _ic('check', 12) : n) + '</span>' +
-        '<span class="imp-step-label">' + s + '</span>' +
-      '</div>';
-    }).join('');
+      var cls = 'mx-step';
+      if (n < _step)       cls += ' is-done';
+      else if (n === _step) cls += ' is-active';
+      return '<li class="' + cls + '"' + (n === _step ? ' aria-current="step"' : '') + '>' +
+        '<span class="mx-step-bar"></span>' +
+        '<span class="mx-step-l"><span class="mx-step-n">' + (n < _step ? _ic('check', 12) : n) + '</span>' +
+        '<span class="mx-step-t">' + esc(s) + '</span></span>' +
+      '</li>';
+    }).join('') + '</ol>';
+    var compact = '<div class="mx-steps-m">' +
+      '<div class="mx-steps-m-top"><span class="mx-steps-m-t">' + esc(STEPS[_step - 1] || '') + '</span>' +
+      '<span class="mx-steps-m-n">Steg ' + _step + ' av ' + STEPS.length + '</span></div>' +
+      '<div class="mx-steps-m-bar" aria-hidden="true">' + STEPS.map(function (_, i) {
+        var n = i + 1;
+        return '<i class="' + (n < _step ? 'is-done' : n === _step ? 'is-active' : '') + '"></i>';
+      }).join('') + '</div>' +
+    '</div>';
+    return full + compact;
+  }
+
+  function _fmtInt(n) {
+    return (Number(n) || 0).toLocaleString('sv-SE');
   }
 
   function _renderStep() {
@@ -135,36 +158,41 @@ const ImportWizardPage = (function () {
     _bindStepEvents();
   }
 
+  /* Klassen btn-primary behålls som krok (E2E IMP-01 och _runImport). */
   function _footerHtml() {
     if (_step === 6) return '';
     var prev = _step > 1 && _step < 6
-      ? '<button class="btn btn-ghost" onclick="ImportWizardPage._back()">' + _ic('arrow-left', 14) + ' Tillbaka</button>'
+      ? '<button class="btn bs" onclick="ImportWizardPage._back()">' + _ic('arrow-left', 14) + ' Tillbaka</button>'
       : '';
-    var next = '';
-    if (_step === 1) next = '<button class="btn btn-primary" onclick="ImportWizardPage._parseFile()" id="imp-btn-next" disabled>Nästa</button>';
-    else if (_step === 2) next = '<button class="btn btn-primary" onclick="ImportWizardPage._toStep3()">Nästa ' + _ic('arrow-right', 14) + '</button>';
-    else if (_step === 3) next = '<button class="btn btn-primary" onclick="ImportWizardPage._toStep4()">Validera ' + _ic('arrow-right', 14) + '</button>';
-    else if (_step === 4) next = '<button class="btn btn-primary" onclick="ImportWizardPage._toStep5()">Gå vidare ' + _ic('arrow-right', 14) + '</button>';
-    else if (_step === 5) next = '<button class="btn btn-primary" onclick="ImportWizardPage._runImport()">' + _ic('upload', 14) + ' Importera</button>';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0;">' + prev + next + '</div>';
+    var next = '', hint = '';
+    if (_step === 1) {
+      next = '<button class="btn bp btn-primary" onclick="ImportWizardPage._parseFile()" id="imp-btn-next"' + (_file ? '' : ' disabled') + '>Nästa ' + _ic('arrow-right', 14) + '</button>';
+      hint = '<span class="mx-imp-hint" id="imp-next-hint">' + (_file ? '' : 'Välj en fil för att fortsätta') + '</span>';
+    }
+    else if (_step === 2) next = '<button class="btn bp btn-primary" onclick="ImportWizardPage._toStep3()">Nästa ' + _ic('arrow-right', 14) + '</button>';
+    else if (_step === 3) next = '<button class="btn bp btn-primary" onclick="ImportWizardPage._toStep4()">Validera ' + _ic('arrow-right', 14) + '</button>';
+    else if (_step === 4) next = '<button class="btn bp btn-primary" onclick="ImportWizardPage._toStep5()">Gå vidare ' + _ic('arrow-right', 14) + '</button>';
+    else if (_step === 5) next = '<button class="btn bp btn-primary" onclick="ImportWizardPage._runImport()">' + _ic('upload', 14) + ' Importera</button>';
+    return '<div class="mx-imp-foot">' + prev + '<div class="mx-imp-foot-r">' + hint + next + '</div></div>';
   }
 
   /* ── Steg 1: Välj fil ────────────────────────────────────────────────── */
 
   function _step1() {
     var accept = (_caps && !_caps.xlsxRead) ? '.csv' : '.csv,.xlsx';
-    return '<div class="imp-drop-zone" id="imp-drop" onclick="document.getElementById(\'imp-file-input\').click()">' +
+    return '<div class="imp-drop-zone' + (_file ? ' imp-drop-active' : '') + '" id="imp-drop" role="button" tabindex="0" aria-label="Välj fil att importera" ' +
+        'onclick="document.getElementById(\'imp-file-input\').click()" ' +
+        'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();document.getElementById(\'imp-file-input\').click();}">' +
       '<input type="file" id="imp-file-input" accept="' + accept + '" style="display:none" onchange="ImportWizardPage._onFileInput(event)">' +
-      '<div style="text-align:center;padding:40px 20px;">' +
-        '<div style="color:var(--text-muted);margin-bottom:12px">' + _ic('upload-cloud', 40) + '</div>' +
-        '<p style="font-size:15px;font-weight:600;margin:0 0 4px">Dra och släpp fil här</p>' +
-        '<p style="color:var(--text-muted);font-size:13px;margin:0">eller klicka för att välja fil</p>' +
-        '<p style="color:var(--text-muted);font-size:12px;margin:12px 0 0">' +
-          ((_caps && !_caps.xlsxRead) ? 'CSV (semikolon/komma) · max 10 MB' : 'CSV (semikolon/komma) och XLSX stöds · max 10 MB') +
-        '</p>' +
-      '</div>' +
+      '<span class="mx-drop-ico" aria-hidden="true">' + _ic('upload', 22) + '</span>' +
+      '<p class="mx-drop-t">Dra och släpp filen här</p>' +
+      '<p class="mx-drop-s">eller klicka för att välja fil</p>' +
+      '<span class="btn bs bsm mx-drop-btn" aria-hidden="true">' + _ic('file-text', 14) + ' Välj fil</span>' +
+      '<p class="mx-drop-f">' +
+        ((_caps && !_caps.xlsxRead) ? 'CSV (semikolon/komma) · max 10 MB' : 'CSV (semikolon/komma) och XLSX · max 10 MB') +
+      '</p>' +
     '</div>' +
-    '<div id="imp-file-info" style="margin-top:12px;min-height:24px"></div>';
+    '<div id="imp-file-info">' + (_file ? '<p class="mx-file-msg is-ok" role="status">' + _ic('file-text', 14) + ' ' + esc(_file.name) + ' (' + _fmtSize(_file.size) + ')</p>' : '') + '</div>';
   }
 
   function _onFileInput(e) {
@@ -187,9 +215,11 @@ const ImportWizardPage = (function () {
       return;
     }
     _file = f;
-    _showFileInfo(_ic('file', 14) + ' ' + esc(f.name) + ' (' + _fmtSize(f.size) + ')', 'ok');
+    _showFileInfo(_ic('file-text', 14) + ' ' + esc(f.name) + ' (' + _fmtSize(f.size) + ')', 'ok');
     var btn = document.getElementById('imp-btn-next');
     if (btn) btn.disabled = false;
+    var hint = document.getElementById('imp-next-hint');
+    if (hint) hint.textContent = '';
     var dz = document.getElementById('imp-drop');
     if (dz) dz.classList.add('imp-drop-active');
   }
@@ -197,14 +227,14 @@ const ImportWizardPage = (function () {
   function _showFileInfo(msg, type) {
     var el = document.getElementById('imp-file-info');
     if (!el) return;
-    el.innerHTML = '<p style="color:' + (type === 'error' ? 'var(--red)' : 'var(--green)') +
-      ';font-size:13px;margin:0">' + msg + '</p>';
+    el.innerHTML = '<p class="mx-file-msg ' + (type === 'error' ? 'is-error' : 'is-ok') + '" role="' + (type === 'error' ? 'alert' : 'status') + '">' +
+      (type === 'error' ? _ic('alert-circle', 14) + ' ' : '') + msg + '</p>';
   }
 
   function _fmtSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1).replace('.', ',') + ' kB';
+    return (bytes / (1024 * 1024)).toFixed(1).replace('.', ',') + ' MB';
   }
 
   async function _parseFile() {
@@ -232,7 +262,7 @@ const ImportWizardPage = (function () {
       _step = 2;
       _renderStep();
     } catch (e) {
-      _showFileInfo('Fel vid läsning: ' + e.message, 'error');
+      _showFileInfo('Fel vid läsning: ' + esc(e.message), 'error');
       if (btn) { btn.disabled = false; btn.textContent = 'Nästa'; }
     }
   }
@@ -264,14 +294,15 @@ const ImportWizardPage = (function () {
 
     // Bokio-knapp bara för kunder
     var bokioBtn = _entityType === 'customer'
-      ? '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyBokioProfile()">' + _ic('zap', 14) + ' Bokio-profil</button>'
+      ? '<button class="btn bs bsm" onclick="ImportWizardPage._applyBokioProfile()">' + _ic('zap', 14) + ' Bokio-profil</button>'
       : '';
 
-    var html = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
-      '<div><strong>' + totalRows + ' rader</strong> · ' + h.length + ' kolumner</div>' +
+    var html = '<div class="mx-imp-intro">' +
+      '<div><strong>' + _fmtInt(totalRows) + ' ' + (totalRows === 1 ? 'rad' : 'rader') + '</strong> · ' + h.length + ' ' + (h.length === 1 ? 'kolumn' : 'kolumner') +
+        (totalRows > 5 ? ' · de 5 första visas' : '') + '</div>' +
       bokioBtn +
     '</div>' +
-    '<div style="overflow-x:auto">' +
+    '<div class="imp-preview-wrap">' +
     '<table class="imp-preview-table">' +
     '<thead><tr>' + h.map(function (col) { return '<th>' + esc(col) + '</th>'; }).join('') + '</tr></thead>' +
     '<tbody>';
@@ -284,7 +315,7 @@ const ImportWizardPage = (function () {
     });
 
     if (totalRows > 5) {
-      html += '<tr><td colspan="' + h.length + '" style="text-align:center;color:var(--text-muted);font-size:12px">… och ' + (totalRows - 5) + ' rader till</td></tr>';
+      html += '<tr><td colspan="' + h.length + '" style="text-align:center;color:var(--muted);font-size:12px">… och ' + _fmtInt(totalRows - 5) + ' rader till</td></tr>';
     }
 
     html += '</tbody></table></div>';
@@ -311,14 +342,14 @@ const ImportWizardPage = (function () {
     var fields = ImportExportService.getFieldsForType(_entityType);
     var showBokio = _entityType === 'customer';
 
-    var html = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
-      '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyAutoMatch()">' +
-        _ic('cpu', 14) + ' Auto-matcha' +
+    var html = '<div class="mx-imp-intro">' +
+      '<button class="btn bs bsm" onclick="ImportWizardPage._applyAutoMatch()">' +
+        _ic('sparkles', 14) + ' Auto-matcha' +
       '</button>' +
       (showBokio
-        ? '<button class="btn btn-ghost btn-sm" onclick="ImportWizardPage._applyBokioProfile()">' + _ic('zap', 14) + ' Bokio-profil</button>'
+        ? '<button class="btn bs bsm" onclick="ImportWizardPage._applyBokioProfile()">' + _ic('zap', 14) + ' Bokio-profil</button>'
         : '') +
-      '<span style="color:var(--text-muted);font-size:12px;margin-left:auto">* = obligatoriskt fält</span>' +
+      '<span class="mx-imp-req">* = obligatoriskt fält</span>' +
     '</div>' +
     '<div class="imp-mapping-grid">';
 
@@ -349,7 +380,7 @@ const ImportWizardPage = (function () {
     for (var i = 0; i < Math.min(3, _rawParsed.rows.length); i++) {
       if (_rawParsed.rows[i][hi]) { v = _rawParsed.rows[i][hi]; break; }
     }
-    if (!v) return '<span style="color:var(--text-muted);font-size:11px">(tom)</span>';
+    if (!v) return '<span style="color:var(--muted);font-size:11.5px">(tom)</span>';
     return '<span class="imp-sample" title="' + esc(v) + '">' + esc(v.length > 22 ? v.slice(0, 22) + '…' : v) + '</span>';
   }
 
@@ -465,27 +496,27 @@ const ImportWizardPage = (function () {
       else                               stats.err++;
     });
 
-    var html = '<div class="imp-stats-row">' +
+    var html = '<div class="mx-imp-stats">' +
       _statChip(stats.ok,  'Nya',        'green') +
       _statChip(stats.dup, 'Dubbletter', 'orange') +
       _statChip(stats.err, 'Fel',        'red') +
     '</div>';
 
     if (stats.err > 0) {
-      html += '<div class="imp-section-title">Rader med fel (hoppas över automatiskt)</div>' +
+      html += '<div class="imp-section-title">' + _ic('alert-circle', 13) + ' Rader med fel (hoppas över automatiskt)</div>' +
         '<div class="imp-row-list">';
       _validated.filter(function (v) { return v.status === 'error'; }).forEach(function (v) {
         html += '<div class="imp-row-item imp-row-error">' +
           '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
           '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '(tomt)') + '</span>' +
-          '<span class="imp-row-msg">' + v.errors.join(', ') + '</span>' +
+          '<span class="imp-row-msg">' + esc((v.errors || []).join(', ')) + '</span>' +
         '</div>';
       });
       html += '</div>';
     }
 
     if (stats.dup > 0) {
-      html += '<div class="imp-section-title" style="margin-top:16px">Dubbletter — välj åtgärd per rad</div>' +
+      html += '<div class="imp-section-title" style="margin-top:16px">' + _ic('copy', 13) + ' Dubbletter — välj åtgärd per rad</div>' +
         '<div class="imp-row-list">';
       _validated.filter(function (v) { return v.status === 'duplicate'; }).forEach(function (v) {
         var ri     = v.rowIndex - 2;
@@ -504,9 +535,9 @@ const ImportWizardPage = (function () {
               '</select>' +
             '</span>' +
           '</div>' +
-          '<details style="margin-top:4px;">' +
-            '<summary style="cursor:pointer;font-size:11px;color:var(--mt);padding:2px 0;user-select:none;">' +
-              _ic('git-branch', 11) + ' Visa fältändringar' +
+          '<details class="mx-imp-diff" style="margin-top:4px;">' +
+            '<summary>' +
+              _ic('git-compare', 12) + ' Visa fältändringar' +
             '</summary>' +
             _diffHtml(v) +
           '</details>' +
@@ -533,7 +564,7 @@ const ImportWizardPage = (function () {
             '<span class="imp-row-num">Rad ' + v.rowIndex + '</span>' +
             '<span class="imp-row-name">' + esc(v.mapped.name || v.mapped.firstName || '') + '</span>' +
           '</div>' +
-          '<div class="imp-row-msg" style="color:var(--orange);margin-top:2px;">' + esc(v.warnings.join(' · ')) + '</div>' +
+          '<div class="imp-row-msg mx-imp-warnrow" style="margin-top:2px;">' + esc(v.warnings.join(' · ')) + '</div>' +
         '</div>';
       });
       html += '</div>';
@@ -543,7 +574,7 @@ const ImportWizardPage = (function () {
     var ambigRows = _validated.filter(function (v) { return v.needsRelation; });
     if (ambigRows.length > 0) {
       html += '<div class="imp-section-title" style="margin-top:16px">' +
-        _ic('git-merge', 14) + ' Ambiguösa relationer — välj rätt post manuellt' +
+        _ic('link', 13) + ' Ambiguösa relationer — välj rätt post manuellt' +
       '</div>' +
       '<div class="imp-row-list">';
 
@@ -558,21 +589,21 @@ const ImportWizardPage = (function () {
         ambigs.forEach(function (log) {
           var key    = v.rowIndex + ':' + log.targetField;
           var chosen = _relChoices[key] || '';
-          html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:8px;">' +
-            '<span style="font-size:12px;min-width:90px;color:var(--text-muted);">' + esc(log.label) + ':</span>' +
-            '<span style="font-size:11px;color:var(--mt);">"' + esc(log.refValue) + '" — ' + log.candidates.length + ' träffar</span>' +
-            '<select style="font-size:12px;border:1px solid var(--brd);border-radius:6px;padding:4px 8px;background:var(--card);" ' +
-              'onchange="ImportWizardPage._onRelChoice(\'' + key + '\',this.value)">' +
+          html += '<div class="mx-imp-rel">' +
+            '<span class="mx-imp-rel-l">' + esc(log.label) + ':</span>' +
+            '<span class="mx-imp-rel-c">"' + esc(log.refValue) + '" — ' + log.candidates.length + ' träffar</span>' +
+            '<select ' +
+              'onchange="ImportWizardPage._onRelChoice(\'' + esc(key) + '\',this.value)">' +
               '<option value="">— Välj —</option>' +
               log.candidates.map(function (c) {
                 var n = (c.item.name || ((c.item.firstName||'') + ' ' + (c.item.lastName||'')).trim() || c.id);
                 var shown = (typeof displayNumberOf === 'function') ? displayNumberOf(c.item) || c.id : c.id; // label only (2026-11-12)
-                return '<option value="' + c.id + '"' + (chosen === c.id ? ' selected' : '') + '>' + esc(n) + ' (' + esc(shown) + ')</option>';
+                return '<option value="' + esc(c.id) + '"' + (chosen === c.id ? ' selected' : '') + '>' + esc(n) + ' (' + esc(shown) + ')</option>';
               }).join('') +
             '</select>' +
             (log.required
-              ? '<span style="color:var(--red);font-size:11px;font-weight:600;">Krävs</span>'
-              : '<span style="color:var(--mt);font-size:11px;">Valfri</span>') +
+              ? '<span class="mx-imp-req-y">Krävs</span>'
+              : '<span class="mx-imp-req-n">Valfri</span>') +
           '</div>';
         });
 
@@ -583,18 +614,20 @@ const ImportWizardPage = (function () {
     }
 
     if (stats.ok === 0 && stats.dup === 0 && ambigRows.length === 0) {
-      html += '<div class="empty-state" style="padding:30px;text-align:center;">' +
-        _ic('alert-circle', 24) + '<p>Inga importerbara rader hittades.</p></div>';
+      html += '<div class="empty mx-empty" style="margin-top:12px;padding:28px 16px;">' +
+        _ic('alert-circle', 24) + '<h3>Inga importerbara rader</h3><p>Kontrollera kolumnmatchningen eller filen och försök igen.</p></div>';
     }
 
     return html;
   }
 
+  /* Nyckeltal i V3-form (samma som .mx-kpi i övriga block). Färgen
+     följer innebörden; 0 visas neutralt. */
   function _statChip(n, label, color) {
-    var colors = { green: 'var(--green)', orange: 'var(--orange)', red: 'var(--red)', sky: 'var(--sky)' };
-    return '<div class="imp-stat-chip" style="border-color:' + (colors[color] || 'var(--text-muted)') + '">' +
-      '<span style="font-size:22px;font-weight:800;color:' + (colors[color] || 'var(--text-muted)') + '">' + n + '</span>' +
-      '<span style="color:var(--text-muted);font-size:12px">' + label + '</span>' +
+    var tone = { green: 'tone-ok', orange: 'tone-warn', red: 'tone-danger', sky: 'tone-info' }[color] || '';
+    return '<div class="mx-kpi ' + (n ? tone : '') + '">' +
+      '<span class="mx-kpi-n">' + _fmtInt(n) + '</span>' +
+      '<span class="mx-kpi-l">' + esc(label) + '</span>' +
     '</div>';
   }
 
@@ -623,20 +656,16 @@ const ImportWizardPage = (function () {
       rows.push({ label: (f.label || f.value).replace(' *', ''), oldVal: oldVal != null ? oldVal : '(tomt)', newVal: newVal });
     });
     if (!rows.length) {
-      return '<p style="font-size:11px;color:var(--mt);margin:4px 0 0">' + _ic('check', 12) + ' Inga fältskillnader.</p>';
+      return '<p style="font-size:12px;color:var(--muted);margin:4px 0 0">' + _ic('check', 12) + ' Inga fältskillnader.</p>';
     }
-    return '<div style="overflow-x:auto;margin-top:6px">' +
-      '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
-      '<thead><tr>' +
-        '<th style="text-align:left;padding:3px 6px;color:var(--mt);font-weight:600;border-bottom:1px solid var(--br)">Fält</th>' +
-        '<th style="text-align:left;padding:3px 6px;color:var(--mt);font-weight:600;border-bottom:1px solid var(--br)">Nuvarande</th>' +
-        '<th style="text-align:left;padding:3px 6px;color:var(--mt);font-weight:600;border-bottom:1px solid var(--br)">Från fil</th>' +
-      '</tr></thead><tbody>' +
+    return '<div style="overflow-x:auto">' +
+      '<table>' +
+      '<thead><tr><th>Fält</th><th>Nuvarande</th><th>Från fil</th></tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr>' +
-          '<td style="padding:3px 6px;color:var(--mt)">' + esc(r.label) + '</td>' +
-          '<td style="padding:3px 6px;color:var(--rd);text-decoration:line-through;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(String(r.oldVal)) + '</td>' +
-          '<td style="padding:3px 6px;color:var(--gr);font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(String(r.newVal)) + '</td>' +
+          '<td style="color:var(--muted)">' + esc(r.label) + '</td>' +
+          '<td class="is-old">' + esc(String(r.oldVal)) + '</td>' +
+          '<td class="is-new">' + esc(String(r.newVal)) + '</td>' +
         '</tr>';
       }).join('') +
       '</tbody></table></div>';
@@ -679,26 +708,23 @@ const ImportWizardPage = (function () {
     });
 
     var cfg = ImportExportService.getConfig(_entityType);
-    var html = '<div style="margin-bottom:24px;">' +
-      '<p style="font-size:14px;margin:0 0 16px">Granskat <strong>' + _validated.length + '</strong> rader i ' + esc((cfg && cfg.label) || _entityType) + '. Klicka <strong>Importera</strong> för att genomföra.</p>' +
-      '<div class="imp-confirm-summary">' +
-        _confirmRow(_ic('user-plus', 14), toCreate, 'Skapas',      'var(--green)') +
-        _confirmRow(_ic('edit', 14),      toUpdate, 'Uppdateras',  'var(--sky)') +
-        _confirmRow(_ic('skip-forward', 14), toSkip, 'Hoppas över', 'var(--text-muted)') +
+    var html = '<p style="font-size:14px;margin:0 0 14px;color:var(--ink-2);">Granskat <strong>' + _fmtInt(_validated.length) + '</strong> rader i ' + esc(String((cfg && cfg.label) || _entityType).toLowerCase()) + '. Klicka <strong>Importera</strong> för att genomföra.</p>' +
+      '<div class="mx-imp-sum">' +
+        _confirmRow(_ic('plus-circle', 14), toCreate, 'Skapas',      'tone-ok') +
+        _confirmRow(_ic('edit', 14),        toUpdate, 'Uppdateras',  'tone-info') +
+        _confirmRow(_ic('minus-circle', 14), toSkip,  'Hoppas över', '') +
       '</div>' +
-    '</div>' +
-    '<p style="color:var(--text-muted);font-size:12px">' +
-      _ic('info', 12) + ' Importen loggas och kan ångras direkt efter genomförande.' +
+    '<p class="mx-imp-note">' +
+      _ic('info', 13) + ' Importen loggas och kan ångras direkt efter genomförande.' +
     '</p>';
 
     return html;
   }
 
-  function _confirmRow(icon, count, label, color) {
-    return '<div class="imp-confirm-row">' +
-      '<span style="color:' + color + '">' + icon + '</span>' +
-      '<span style="font-weight:700;font-size:18px;color:' + color + '">' + count + '</span>' +
-      '<span style="color:var(--text-muted)">' + label + '</span>' +
+  function _confirmRow(icon, count, label, tone) {
+    return '<div class="mx-kpi ' + (count ? tone : '') + '">' +
+      '<span class="mx-kpi-n">' + _fmtInt(count) + '</span>' +
+      '<span class="mx-kpi-l">' + icon + ' ' + esc(label) + '</span>' +
     '</div>';
   }
 
@@ -908,33 +934,34 @@ const ImportWizardPage = (function () {
     var targetLabel = cfg.label ? 'Till ' + cfg.label.toLowerCase() : 'Till registret';
 
     var head = _lastSaveOk
-      ? '<div class="imp-result-icon">' + _ic('check-circle', 40) + '</div>' +
-        '<h3 style="margin:12px 0 4px">Import slutförd!</h3>'
-      : '<div class="imp-result-icon" style="color:var(--rd)">' + _ic('alert-triangle', 40) + '</div>' +
-        '<h3 style="margin:12px 0 4px;color:var(--rd)">Importen är INTE bekräftad av servern</h3>' +
-        '<p style="font-size:13px;color:var(--mt);max-width:460px;margin:6px auto 0;line-height:1.5;">' +
+      ? '<div class="imp-result-icon">' + _ic('check-circle', 30) + '</div>' +
+        '<h3 class="mx-imp-res-t">Import slutförd!</h3>'
+      : '<div class="imp-result-icon is-fail">' + _ic('alert-triangle', 30) + '</div>' +
+        '<h3 class="mx-imp-res-t is-fail">Importen är INTE bekräftad av servern</h3>' +
+        '<p class="mx-imp-res-p">' +
           'Posterna nedan finns än så länge bara i den här webbläsaren. De skickas igen automatiskt när servern svarar ' +
           '(senast vid nästa inloggning). Kontrollera registret innan du importerar filen igen — eller välj ' +
           '<strong>Ångra import</strong> för att kasta dem.</p>';
+    var canLog = typeof Auth !== 'undefined' && Auth.canViewPage('pg-import-log');
     var html = '<div class="imp-result">' +
       head +
-      '<div class="imp-stats-row" style="justify-content:center;margin:16px 0">' +
+      '<div class="mx-imp-stats">' +
         _statChip(log.createdCount, 'Skapade',     'green') +
         _statChip(log.updatedCount, 'Uppdaterade', 'sky')   +
         _statChip(log.skippedCount, 'Hoppade',     'orange') +
         _statChip(log.errorCount,   'Fel',          'red')   +
       '</div>' +
       (log.errors && log.errors.length
-        ? '<details style="margin:8px 0"><summary style="cursor:pointer;font-size:13px">Visa ' + log.errors.length + ' felposter</summary>' +
-          '<ul style="font-size:12px;margin-top:8px">' +
-            log.errors.map(function (e) { return '<li>Rad ' + e.row + ': ' + esc(e.message) + '</li>'; }).join('') +
+        ? '<details class="mx-imp-diff" style="margin:4px 0;align-self:stretch;"><summary>' + _ic('alert-circle', 12) + ' Visa ' + log.errors.length + ' felposter</summary>' +
+          '<ul class="mx-imp-errlist">' +
+            log.errors.map(function (e) { return '<li>Rad ' + esc(String(e.row)) + ': ' + esc(e.message) + '</li>'; }).join('') +
           '</ul></details>'
         : '') +
-      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:20px;">' +
-        '<button class="btn btn-ghost" onclick="ImportWizardPage._undoLast()">' + _ic('rotate-ccw', 14) + ' Ångra import</button>' +
-        '<button class="btn btn-primary" onclick="Router.showPage(\'' + targetPage + '\',{})">' + _ic('list', 14) + ' ' + esc(targetLabel) + '</button>' +
-        '<button class="btn btn-ghost" onclick="Router.showPage(\'pg-import-log\',{})">' + _ic('clock', 14) + ' Importlogg</button>' +
-        '<button class="btn btn-ghost" onclick="ImportWizardPage._reset()">' + _ic('upload', 14) + ' Ny import</button>' +
+      '<div class="mx-imp-res-acts">' +
+        '<button class="btn bp btn-primary" onclick="Router.showPage(\'' + esc(targetPage) + '\',{})">' + _ic('list', 14) + ' ' + esc(targetLabel) + '</button>' +
+        '<button class="btn bs" onclick="ImportWizardPage._undoLast()">' + _ic('rotate-ccw', 14) + ' Ångra import</button>' +
+        (canLog ? '<button class="btn bghost" onclick="Router.showPage(\'pg-import-log\',{})">' + _ic('clock', 14) + ' Importlogg</button>' : '') +
+        '<button class="btn bghost" onclick="ImportWizardPage._reset()">' + _ic('upload', 14) + ' Ny import</button>' +
       '</div>' +
     '</div>';
 
@@ -948,18 +975,20 @@ const ImportWizardPage = (function () {
 
     var overlay = document.createElement('div');
     overlay.id = 'imp-undo-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,22,38,.48);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
     overlay.innerHTML =
-      '<div style="background:var(--bg);border-radius:12px;max-width:440px;width:100%;padding:24px;">' +
-        '<h3 style="margin:0 0 8px;">' + _ic('rotate-ccw', 16) + ' Ångra import</h3>' +
-        '<p style="font-size:13px;color:var(--mt);margin:0 0 20px;line-height:1.5;">' +
-          '<strong>' + log.createdCount + '</strong> skapade poster raderas. ' +
-          '<strong>' + log.updatedCount + '</strong> uppdaterade poster återställs till sina värden före importen. ' +
+      '<div class="mx-imp-dlg">' +
+        '<h3>' + _ic('rotate-ccw', 16) + ' Ångra import</h3>' +
+        '<p>' +
+          '<strong>' + _fmtInt(log.createdCount) + '</strong> skapade poster raderas. ' +
+          '<strong>' + _fmtInt(log.updatedCount) + '</strong> uppdaterade poster återställs till sina värden före importen. ' +
           'Poster som ändrats manuellt efter importen bevaras och flaggas.' +
         '</p>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-          '<button class="btn bp" onclick="ImportWizardPage._doUndo()">' + _ic('check', 14) + ' Ångra importen</button>' +
+        '<div class="mx-imp-dlg-acts">' +
           '<button class="btn bs" onclick="ImportWizardPage._closeUndoDialog()">Avbryt</button>' +
+          '<button class="btn bp" onclick="ImportWizardPage._doUndo()">' + _ic('rotate-ccw', 14) + ' Ångra importen</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -986,17 +1015,17 @@ const ImportWizardPage = (function () {
     // Show brief inline notice then navigate
     var body = document.getElementById('imp-body');
     if (body) {
-      body.innerHTML = '<div style="text-align:center;padding:40px 20px;">' +
-        '<div style="color:var(--gr);margin-bottom:12px;">' + _ic('check-circle', 36) + '</div>' +
-        '<h3 style="margin:0 0 8px;">Import ångrades</h3>' +
-        '<p style="color:var(--mt);font-size:13px;">' + esc(summary) + '</p>' +
+      body.innerHTML = '<div class="imp-result">' +
+        '<div class="imp-result-icon">' + _ic('check-circle', 30) + '</div>' +
+        '<h3 class="mx-imp-res-t">Import ångrades</h3>' +
+        '<p class="mx-imp-res-p">' + esc(summary) + '</p>' +
       '</div>';
     }
     var foot = document.getElementById('imp-footer');
     if (foot) {
       var cfg = ImportExportService.getConfig(_entityType);
-      foot.innerHTML = '<div style="display:flex;justify-content:center;padding:16px 0;">' +
-        '<button class="btn bp" onclick="Router.showPage(\'' + (cfg ? cfg.targetPage : 'pg-dash') + '\',{})">' + _ic('list', 14) + ' Till registret</button>' +
+      foot.innerHTML = '<div class="mx-imp-foot" style="justify-content:center;">' +
+        '<button class="btn bp" onclick="Router.showPage(\'' + esc(cfg ? cfg.targetPage : 'pg-dash') + '\',{})">' + _ic('list', 14) + ' Till registret</button>' +
       '</div>';
     }
   }
@@ -1004,27 +1033,29 @@ const ImportWizardPage = (function () {
   function _showUndoConflictResult(result) {
     var overlay = document.createElement('div');
     overlay.id = 'imp-undo-conflict-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,22,38,.48);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
 
     var conflictRows = (result.conflicts || []).map(function (c) {
-      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--br);">' +
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);">' +
         '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:13px;font-weight:600;">' + esc(c.name || c.id || '—') + '</div>' +
-          '<div style="font-size:11px;color:var(--mt);">Ändrades manuellt efter importen — ursprungsvärdet bevarades ej</div>' +
+          '<div style="font-size:13px;font-weight:600;color:var(--ink);">' + esc(c.name || c.id || '—') + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);">Ändrades manuellt efter importen — ursprungsvärdet bevarades ej</div>' +
         '</div>' +
-        '<span class="bdg bdg-orange" style="font-size:10px;flex-shrink:0;">Bevarad</span>' +
+        '<span class="bdg bdg-orange" style="flex-shrink:0;">Bevarad</span>' +
       '</div>';
     }).join('');
 
     overlay.innerHTML =
-      '<div style="background:var(--bg);border-radius:12px;max-width:520px;width:100%;padding:24px;max-height:80vh;overflow-y:auto;">' +
-        '<h3 style="margin:0 0 8px;">' + _ic('alert-triangle', 16) + ' Konflikter vid ångring</h3>' +
-        '<p style="font-size:13px;color:var(--mt);margin:0 0 16px;line-height:1.5;">' +
-          result.removed + ' poster raderades, ' + result.restored + ' återställdes. ' +
+      '<div class="mx-imp-dlg" style="max-width:520px;max-height:80vh;overflow-y:auto;">' +
+        '<h3>' + _ic('alert-triangle', 16) + ' Konflikter vid ångring</h3>' +
+        '<p>' +
+          _fmtInt(result.removed) + ' poster raderades, ' + _fmtInt(result.restored) + ' återställdes. ' +
           '<strong>' + result.conflicts.length + ' poster</strong> ändrades manuellt efter importen och bevarades med sina nuvarande värden.' +
         '</p>' +
         '<div style="margin-bottom:16px;max-height:300px;overflow-y:auto;">' + conflictRows + '</div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<div class="mx-imp-dlg-acts">' +
           '<button class="btn bp" onclick="ImportWizardPage._closeConflictDialog()">' + _ic('check', 14) + ' OK, förstått</button>' +
         '</div>' +
       '</div>';
