@@ -296,7 +296,7 @@ const InvoicesPage = {
        den visas. Billigt: bara synliga gruppers kryssrutor + summeringen. */
     if (!this._groupSyncBound) {
       this._groupSyncBound = true;
-      document.addEventListener('click', () => requestAnimationFrame(() => { if (document.getElementById('bq-list')) InvoicesPage._afterSelChange(); }), true);
+      document.addEventListener('click', () => requestAnimationFrame(() => { if (document.querySelector('#pg-invoices.active #bq-list')) InvoicesPage._afterSelChange(); }), true);
     }
     this._lastRenderMs = Math.round((((typeof performance !== 'undefined') ? performance.now() : Date.now()) - t0) * 10) / 10;
   },
