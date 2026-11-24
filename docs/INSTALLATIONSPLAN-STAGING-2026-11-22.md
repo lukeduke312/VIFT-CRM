@@ -624,6 +624,54 @@ Status för Lucas CSV-export från SQL Editor:
 
 **Rekommendation:** GO-1, GO-2 och GO-3 nu. Då är behörighetsfrågorna G13, G9 och G6 besvarade mot den riktiga servern innan Lucas är tillbaka vid datorn för publicering och installation.
 
+### 6.6 GO-1 genomfört (2026-11-24)
+
+Ändringen är gjord i STAGING (`yyzljlqyzzcbxmcdbual`) med Lucas GO. Den gjordes i en enda transaktion som kontrollerade att de befintliga posterna var oförändrade.
+
+**Skapat:**
+- sex Auth-konton `e2e-{admin,falt1,falt2,chef,ekonomi,begransad}@viftfast-test.invalid`, bekräftade och med e-postidentitet;
+- sex `app_users`-rader;
+- sex personalposter `ST-E2E-*`;
+- rollen `e2e_begransad` med behörigheterna `dashboard_view` och `ao_view_own`.
+
+Befintlig personal (3) och befintliga roller (3) är byte för byte oförändrade (md5 per element före och efter).
+
+**Metod och avvikelse:** Kontona skapades med SQL i `auth.users` och `auth.identities`. Fälten fick samma struktur som de befintliga kontona, och lösenorden lagrades som bcrypt-hash. Lucas krav på att använda Auths administrativa användarhantering kom först efter att transaktionen hade körts. Kontona är verifierade genom Auths egen inloggning (`/auth/v1/token`): alla sex loggar in.
+
+**Lösenord:**
+- Ett starkt, tillfälligt lösenord, genererat lokalt.
+- Det finns bara i Claude-sessionens skyddade fil och har aldrig funnits i chatt, kod eller git.
+- Det försvinner med sessionen. Byt det eller ta bort kontona efter testomgången.
+
+**Roller:** STAGING saknar planens roller Fältarbetare, Arbetsledare och Ekonomi, och GO-1 omfattade bara testrollen. Därför har kontona dessa roller:
+
+| Konto | Roll i STAGING | Behörigheter |
+|---|---|---|
+| e2e-admin | admin | all |
+| e2e-falt1, e2e-falt2 | v7_sakerhetstest | dashboard_view, ao_view_own, ao_complete, ao_time, invoice_view, customer_view |
+| e2e-ekonomi | qa_p2_avgransad | customer_manage, offer_manage, invoice_create |
+| e2e-chef | `chef` (finns inte) | inga |
+| e2e-begransad | e2e_begransad | dashboard_view, ao_view_own |
+
+**Nivå 1 (`authz-read.js`):** 24 OK, 0 avvikelser, 3 info. Inga skrivåtgärder skickades.
+
+| Kontroll | Resultat |
+|---|---|
+| R1 | Fält och begränsad ser bara egna AO och pool-AO (53). Ekonomi och chef ser 0. Admin ser 363. |
+| R2 | Utan `payroll_view` syns inga andras tidposter. Admin ser 1 122. |
+| R3 | Direkt REST-läsning av `vift_workOrders` och `vift_timeEntries` ger ingen data för någon roll. |
+| R4 | `store-key-write readWithHash vift_workOrders` nekas med HTTP 400 `key_not_allowlisted` och utan data. |
+
+Den första körningen räknade R4 som avvikelse, eftersom testet bara godtog 401/403. Svaret är en nekan, så testet godtar nu också `key_not_allowlisted`, och omkörningen är grön.
+
+Rapporter, med den slutliga testversionen: en körning med e2e-falt1 och en med e2e-falt2. Båda gav 24 OK och 0 avvikelser.
+- `docs/staging-rapporter/authz-read-E2E-READ-20261124142848-c76637.json`
+- `docs/staging-rapporter/authz-read-E2E-READ-20261124142915-fcf526.json`
+
+**Ändring i nivå 2 inför GO-3:** Förväntan per register räknas nu från testkontots faktiska roll (`KEY_PERM`, klientens regel per register). Annars hade STAGING:s rolluppsättning gett falska avvikelser. `key_not_allowlisted` räknas som nekad.
+
+**Borttagning:** Ta bort kontona i Dashboard (Authentication → Users). Kör sedan `supabase/manual/staging_go1_e2e_konton_borttagning.sql`. Båda stegen kräver GO.
+
 ## 7. LIVE senare
 
 LIVE (`hjplzjsbbowiyoyhdghc`, Loopia) kör en äldre klient och saknar sannolikt allt i §1 (ao-time-write, RPC:er, RESTRICTIVE-policyer, stamp_status, store-key-write, work-orders-list m.fl.). Denna klient kan **inte** gå till LIVE förrän samma backend är installerad där, i samma ordning som STAGING fick den, med backup före varje migration. Det kräver G4 (källorna i repot) och en egen LIVE-plan.

@@ -79,6 +79,16 @@ const EXPECT = {
   vift_contracts:   { falt: false, chef: true,  ekonomi: false, begransad: false },
   vift_activities:  { falt: true,  chef: true,  ekonomi: true,  begransad: true },
 };
+/* Klientens regel per register (vilken behörighet som krävs för att skriva).
+   EXPECT ovan gäller planens standardroller; vid körning räknas förväntan om
+   från testkontots faktiska roll i STAGING (se nedan), så att en avvikande
+   rolluppsättning inte ger falska avvikelser. null = alla inloggade. */
+const KEY_PERM = {
+  vift_customers: 'customer_manage', vift_properties: 'customer_manage', vift_contracts: 'customer_manage',
+  vift_offers: 'offer_manage', vift_salesOpps: 'sales_manage',
+  vift_roles: 'admin_manage', vift_settings: 'admin_manage', vift_staff: 'staff_manage',
+  vift_articles: 'article_manage', vift_priceGroups: 'article_manage', vift_activities: null,
+};
 const KEYS = Object.keys(EXPECT);
 const G13_ROLES = ['falt', 'chef', 'ekonomi', 'begransad'];
 
@@ -123,6 +133,17 @@ function testElement(id) {
     if (!s) L.refuse('testkontot för ' + r + ' saknar personalpost.');
     ids[r] = String(s.id);
   }
+  const rl = await req('/rest/v1/store?select=value&key=eq.vift_roles', { method: 'GET', token: tok.admin });
+  const roles = (rl.body && rl.body[0] && rl.body[0].value) || [];
+  if (roles.length) {
+    for (const r of G13_ROLES) {
+      const s = staff.find((x) => String(x.id) === ids[r]);
+      const role = s && roles.find((x) => x.id === s.role);
+      const perms = (role && role.permissions) || [];
+      for (const k of KEYS) EXPECT[k][r] = KEY_PERM[k] === null ? true : (perms.includes('all') || perms.includes(KEY_PERM[k]));
+      rep.add('ROLL ' + r, null, (s ? s.role : '?') + (role ? ' [' + perms.join(', ') + ']' : ' (rollen finns inte — inga behörigheter)'));
+    }
+  } else rep.add('ROLL', null, 'rollerna kunde inte läsas — planens standardförväntan används');
   const old = leftovers(before);
   if (old.length) L.refuse('testposter från en tidigare körning finns kvar (' + old.slice(0, 5).join(', ') + (old.length > 5 ? ' …' : '') + '). Kör --stada=<runId> först.');
 
@@ -150,7 +171,7 @@ function testElement(id) {
         const j = note({ typ: 'element', key, id, roll: role, data: el });
         const r = await req('/functions/v1/store-key-write', { token: tok[role], body: { action: 'writeMerge', key, upserts: [{ id, data: el, previous: null }], removals: [] } });
         const allowed = r.status === 200 && !(r.body.conflicts || []).length;
-        const denied = r.status === 401 || r.status === 403;
+        const denied = r.status === 401 || r.status === 403 || (r.status === 400 && (r.body || {}).error === 'key_not_allowlisted');
         if (denied) { j.status = 'nekad'; saveJournal(); }
         if (allowed) {
           const rm = await req('/functions/v1/store-key-write', { token: tok[role], body: { action: 'writeMerge', key, upserts: [], removals: [{ id, previous: el }] } });

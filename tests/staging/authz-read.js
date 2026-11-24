@@ -75,7 +75,12 @@ const READ_ACTIONS = new Set(['readWithHash', 'readHashes', 'readAllWithHashes']
       rep.add('R3 ' + role + ' ' + key, !leaked, 'direkt REST-läsning: HTTP ' + r.status + (leaked ? ' MED DATA' : ' utan data'), { kalla: 'PostgREST GET (RLS)' });
     }
     const rh = await req('/functions/v1/store-key-write', { token: tok[role], body: { action: 'readWithHash', key: 'vift_workOrders' } });
-    rep.add('R4 ' + role, rh.status === 401 || rh.status === 403, 'readWithHash vift_workOrders: HTTP ' + rh.status, { kalla: 'ej i repo (G4) — läsåtgärd enligt kontrakt' });
+    /* Nekad = 401/403, eller 400 med felkoden key_not_allowlisted (STAGING:s
+       store-key-write tillåter inte nyckeln alls). Data får aldrig följa med. */
+    const rhErr = String((rh.body && rh.body.error) || '');
+    const rhData = !!(rh.body && (rh.body.value !== undefined || rh.body.data !== undefined));
+    const denied = !rhData && (rh.status === 401 || rh.status === 403 || (rh.status === 400 && rhErr === 'key_not_allowlisted'));
+    rep.add('R4 ' + role, denied, 'readWithHash vift_workOrders: HTTP ' + rh.status + (rhErr ? ' ' + rhErr : '') + (rhData ? ' MED DATA' : ' utan data'), { kalla: 'ej i repo (G4) — läsåtgärd enligt kontrakt' });
   }
 
   if (adminAoCount !== null) rep.add('R1 jämförelse', null, 'admin ser ' + adminAoCount + ' AO');
