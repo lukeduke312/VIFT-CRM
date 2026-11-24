@@ -103,27 +103,25 @@ const ExportCenterPage = (function () {
     if (!el) return;
 
     if (!_entityType) {
-      el.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center;">' +
-        _ic('lock', 32) + '<h3 style="margin-top:12px">Inga exporterbara register</h3>' +
+      el.innerHTML = '<div class="empty mx-empty">' +
+        _ic('lock', 28) + '<h3>Inga exporterbara register</h3>' +
         '<p>Du saknar behörighet att exportera något register i systemet.</p></div>';
       return;
     }
 
     var backBtn = _sourcePage
-      ? '<button type="button" class="btn bghost bsm" style="margin-bottom:10px;" onclick="ExportCenterPage._goBack()">' +
+      ? '<button type="button" class="btn bghost bsm" onclick="ExportCenterPage._goBack()">' +
           _ic('arrow-left', 13) + ' Tillbaka till ' + esc(_sourceLabel) +
         '</button>'
       : '';
 
+    /* V3 2026-11-26: sidtiteln står i toppraden (ingen egen h2); register
+       och format till vänster, kolumner till höger, en primär åtgärd. */
     el.innerHTML =
-      '<div style="max-width:640px;margin:0 auto;padding:16px 0;">' +
-        backBtn +
-        '<h2 style="margin:0 0 4px;display:flex;align-items:center;gap:8px;">' +
-          _ic('download', 20) + ' Exportcenter' +
-        '</h2>' +
-        '<p style="margin:0 0 20px;color:var(--mt);font-size:13px;">' +
-          'Välj register, kolumner och format. Känsliga fält är av som standard.' +
-        '</p>' +
+      '<div class="mx-page mx-exc">' +
+        '<div class="mx-exc-intro">' + backBtn +
+          '<p class="mx-muted">Välj register, format och kolumner. Känsliga fält är av som standard.</p>' +
+        '</div>' +
         '<div id="exc-body"></div>' +
       '</div>';
 
@@ -155,7 +153,7 @@ const ExportCenterPage = (function () {
     /* Register-väljare */
     var registerOpts = allCfgKeys.map(function (k) {
       var c = IMPORT_EXPORT_CONFIGS[k];
-      return '<option value="' + k + '"' + (_entityType === k ? ' selected' : '') + '>' + esc(c.label) + '</option>';
+      return '<option value="' + esc(k) + '"' + (_entityType === k ? ' selected' : '') + '>' + esc(c.label) + '</option>';
     }).join('');
 
     var isNested = _isNested(cfg);
@@ -170,12 +168,11 @@ const ExportCenterPage = (function () {
         var checked = _selectedCols[f.value] ? 'checked' : '';
         var disabled = (isSens && !_includeSensitive) ? 'disabled' : '';
         colsHtml +=
-          '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:13px;">' +
+          '<label class="mx-exc-col' + (disabled ? ' is-off' : '') + '">' +
             '<input type="checkbox" ' + checked + ' ' + disabled +
-              ' onchange="ExportCenterPage._toggleCol(\'' + f.value + '\',this.checked)" style="width:15px;height:15px;flex-shrink:0;">' +
-            '<span>' + esc((f.label || f.value).replace(' *', '')) +
-              (isSens ? ' <span style="font-size:10px;color:var(--or);background:color-mix(in srgb, var(--or) 12%, transparent);padding:1px 5px;border-radius:4px;margin-left:2px;">Känsligt</span>' : '') +
-            '</span>' +
+              ' onchange="ExportCenterPage._toggleCol(\'' + esc(f.value) + '\',this.checked)">' +
+            '<span>' + esc((f.label || f.value).replace(' *', '')) + '</span>' +
+              (isSens ? '<span class="bdg bdg-orange">Känsligt</span>' : '') +
           '</label>';
       });
     }
@@ -183,70 +180,63 @@ const ExportCenterPage = (function () {
     /* Antal valda */
     var selCount = Object.keys(_selectedCols).filter(function (k) { return _selectedCols[k]; }).length;
 
-    el.innerHTML =
-      /* Register */
-      '<div style="margin-bottom:16px;">' +
-        '<label style="display:block;font-size:12px;font-weight:700;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Register</label>' +
-        '<select style="width:100%;padding:9px 12px;border:1px solid var(--br);border-radius:8px;font-size:14px;background:var(--card);color:var(--text);" ' +
-          'onchange="ExportCenterPage._onRegisterChange(this.value)">' +
-          registerOpts +
-        '</select>' +
-      '</div>' +
+    var fmtOpt = function (val, label, sub) {
+      return '<label class="mx-exc-fmt' + (_format === val ? ' is-on' : '') + '">' +
+        '<input type="radio" name="exc-fmt" value="' + val + '" ' + (_format === val ? 'checked' : '') + ' onchange="ExportCenterPage._setFormat(\'' + val + '\')">' +
+        '<span class="mx-exc-fmt-t">' + label + '</span><span class="mx-exc-fmt-s">' + sub + '</span>' +
+      '</label>';
+    };
+    var canSens = cfg && (cfg.sensitiveFields || []).length > 0 && typeof Auth !== 'undefined' && Auth.can('objects_sensitive');
 
-      /* Format */
-      '<div style="margin-bottom:16px;">' +
-        '<label style="display:block;font-size:12px;font-weight:700;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Format</label>' +
-        '<div style="display:flex;gap:8px;">' +
-          '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border:1px solid var(--br);border-radius:8px;' + (_format === 'xlsx' ? 'border-color:var(--acc);background:color-mix(in srgb, var(--acc) 8%, transparent);' : '') + '">' +
-            '<input type="radio" name="exc-fmt" value="xlsx" ' + (_format === 'xlsx' ? 'checked' : '') + ' onchange="ExportCenterPage._setFormat(\'xlsx\')" style="accent-color:var(--acc);"> XLSX (Excel)' +
-          '</label>' +
-          '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border:1px solid var(--br);border-radius:8px;' + (_format === 'csv' ? 'border-color:var(--acc);background:color-mix(in srgb, var(--acc) 8%, transparent);' : '') + '">' +
-            '<input type="radio" name="exc-fmt" value="csv" ' + (_format === 'csv' ? 'checked' : '') + ' onchange="ExportCenterPage._setFormat(\'csv\')" style="accent-color:var(--acc);"> CSV (semikolon)' +
-          '</label>' +
+    el.innerHTML =
+      '<div class="mx-exc-grid">' +
+        '<div class="card mx-exc-card">' +
+          '<div class="card-header"><h3>' + _ic('layers', 14) + ' Register och format</h3></div>' +
+          '<div class="card-body mx-exc-body">' +
+            '<div class="fg"><label for="exc-register">Register</label>' +
+              '<select id="exc-register" onchange="ExportCenterPage._onRegisterChange(this.value)">' + registerOpts + '</select>' +
+            '</div>' +
+            '<div class="fg"><span class="mx-exc-lbl">Format</span>' +
+              '<div class="mx-exc-fmts" role="radiogroup" aria-label="Format">' +
+                fmtOpt('xlsx', 'XLSX', 'Excel') + fmtOpt('csv', 'CSV', 'semikolonseparerad') +
+              '</div>' +
+            '</div>' +
+            /* Känsliga fält — bara för objects_sensitive (oförändrat villkor).
+               E2E EXP-01 (2026-11-23): villkoret ligger i egna parenteser. */
+            (canSens
+              ? '<label class="mx-exc-sens">' +
+                  '<input type="checkbox" ' + (_includeSensitive ? 'checked' : '') +
+                    ' onchange="ExportCenterPage._toggleSensitive(this.checked)">' +
+                  '<span>' + _ic('alert-triangle', 14) + ' <strong>Inkludera känsliga fält</strong> — portkoder, nycklar, lösenord</span>' +
+                '</label>'
+              : '') +
+          '</div>' +
+        '</div>' +
+        /* Kolumner — eller, för nästlade/exportFn-register, en förklarande notis */
+        '<div class="card mx-exc-card">' +
+          (isNested
+            ? '<div class="card-header"><h3>' + _ic('list', 14) + ' Kolumner</h3></div>' +
+              '<div class="card-body"><p class="mx-imp-note">' + _ic('info', 14) +
+                ' Detta register har ett fast kolumnformat — alla kolumner ingår automatiskt i exporten.</p></div>'
+            : '<div class="card-header"><h3>' + _ic('list', 14) + ' Kolumner <span class="ft-n" id="exc-colcount">' + selCount + ' valda</span></h3>' +
+                '<div class="mx-exc-colacts">' +
+                  '<button class="btn bghost bxs" onclick="ExportCenterPage._selectAll(true)">Välj alla</button>' +
+                  '<button class="btn bghost bxs" onclick="ExportCenterPage._selectAll(false)">Rensa</button>' +
+                '</div>' +
+              '</div>' +
+              '<div class="card-body mx-exc-cols">' +
+                (colsHtml || '<p class="mx-muted">Inga exporterbara fält.</p>') +
+              '</div>'
+          ) +
         '</div>' +
       '</div>' +
-
-      /* Känsliga fält.
-         E2E EXP-01 (2026-11-23): villkoret MÅSTE ligga inom egna parenteser.
-         Utan dem band `+` hårdare än `?:` — hela den föregående HTML-
-         strängen blev villkoret (alltid sant) och sidan visade BARA denna
-         ruta: ingen registerväljare, inget format, inga kolumner, ingen
-         Exportera-knapp, för alla register och alla användare. */
-      ((cfg && (cfg.sensitiveFields || []).length > 0 && typeof Auth !== 'undefined' && Auth.can('objects_sensitive'))
-        ? '<div style="margin-bottom:16px;padding:10px 14px;background:color-mix(in srgb, var(--or) 8%, transparent);border:1px solid color-mix(in srgb, var(--or) 25%, transparent);border-radius:8px;">' +
-            '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">' +
-              '<input type="checkbox" ' + (_includeSensitive ? 'checked' : '') +
-                ' onchange="ExportCenterPage._toggleSensitive(this.checked)" style="width:15px;height:15px;">' +
-              '<span>' + _ic('alert-triangle', 13) + ' <strong>Inkludera känsliga fält</strong> — portkoder, nycklar, lösenord</span>' +
-            '</label>' +
-          '</div>'
-        : '') +
-
-      /* Kolumner — eller, för nästlade/exportFn-register, en förklarande notis */
-      (isNested
-        ? '<div style="margin-bottom:20px;padding:10px 14px;background:var(--bg);border-radius:8px;font-size:13px;color:var(--mt);display:flex;align-items:center;gap:8px;">' +
-            _ic('info', 14) +
-            '<span>Detta register har ett fast kolumnformat — alla kolumner ingår automatiskt i exporten.</span>' +
-          '</div>'
-        : '<div style="margin-bottom:20px;">' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-              '<label style="font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.05em;flex:1;">Kolumner (' + selCount + ' valda)</label>' +
-              '<button class="btn bs bxs" onclick="ExportCenterPage._selectAll(true)" style="font-size:11px;padding:3px 8px;">Välj alla</button>' +
-              '<button class="btn bs bxs" onclick="ExportCenterPage._selectAll(false)" style="font-size:11px;padding:3px 8px;">Rensa</button>' +
-            '</div>' +
-            '<div style="border:1px solid var(--br);border-radius:8px;padding:8px 12px;max-height:280px;overflow-y:auto;">' +
-              (colsHtml || '<p style="color:var(--mt);font-size:13px;margin:4px 0;">Inga exporterbara fält.</p>') +
-            '</div>' +
-          '</div>'
-      ) +
-
-      /* Export-knapp */
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+      /* Export-knapp (onclick-strängen används av E2E EXP-01) */
+      '<div class="mx-exc-foot">' +
+        '<button class="btn bs" onclick="history.back()">' + _ic('arrow-left', 14) + ' Tillbaka</button>' +
         '<button class="btn bp" onclick="ExportCenterPage._doExport()">' +
           _ic('download', 14) + ' Exportera' +
           (cfg ? ' ' + esc(cfg.label.toLowerCase()) : '') +
         '</button>' +
-        '<button class="btn bs" onclick="history.back()">' + _ic('arrow-left', 14) + ' Tillbaka</button>' +
       '</div>';
   }
 
@@ -276,8 +266,8 @@ const ExportCenterPage = (function () {
     _selectedCols[fieldValue] = checked;
     /* Uppdatera bara räknaren */
     var selCount = Object.keys(_selectedCols).filter(function (k) { return _selectedCols[k]; }).length;
-    var lbl = document.querySelector('[style*="Kolumner ("]');
-    if (lbl) lbl.textContent = 'Kolumner (' + selCount + ' valda)';
+    var lbl = document.getElementById('exc-colcount');
+    if (lbl) lbl.textContent = selCount + ' valda';
   }
 
   function _toggleSensitive(checked) {

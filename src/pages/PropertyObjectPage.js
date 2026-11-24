@@ -72,13 +72,13 @@ const PropertyObjectPage = {
           ${cu ? `<div class="mx-pf-line">${ic('users',14)}<span class="mx-pf-muted">Kund</span><a class="mx-dh-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${esc(cu.id)}'})">${esc(cuName)}</a></div>` : ''}
           ${obj.address ? `<div class="mx-pf-line mx-pf-muted">${ic('map-pin',14)} ${esc([obj.address, [obj.postalCode, obj.city].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</div>` : ''}
         </div>
-        <div class="mx-pf-figs">
-          ${obj.floor     ? `<div class="mx-pf-fig"><span class="mx-pf-l">Våning</span><span class="mx-pf-v">${esc(obj.floor)}</span></div>` : ''}
-          ${obj.entrance  ? `<div class="mx-pf-fig"><span class="mx-pf-l">Entré</span><span class="mx-pf-v">${esc(obj.entrance)}</span></div>` : ''}
-          ${obj.stairwell ? `<div class="mx-pf-fig"><span class="mx-pf-l">Trapphus</span><span class="mx-pf-v">${esc(obj.stairwell)}</span></div>` : ''}
-          ${obj.area      ? `<div class="mx-pf-fig"><span class="mx-pf-l">Yta</span><span class="mx-pf-v">${fmt(obj.area)} m²</span></div>` : ''}
-          ${obj.apartmentNumber ? `<div class="mx-pf-fig"><span class="mx-pf-l">Lgh-nr</span><span class="mx-pf-v">${esc(obj.apartmentNumber)}</span></div>` : ''}
-        </div>
+        <dl class="mx-pf-figs">
+          ${obj.floor     ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Våning</dt><dd class="mx-pf-v">${esc(obj.floor)}</dd></div>` : ''}
+          ${obj.entrance  ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Entré</dt><dd class="mx-pf-v">${esc(obj.entrance)}</dd></div>` : ''}
+          ${obj.stairwell ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Trapphus</dt><dd class="mx-pf-v">${esc(obj.stairwell)}</dd></div>` : ''}
+          ${obj.area      ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Yta</dt><dd class="mx-pf-v">${fmt(obj.area)} m²</dd></div>` : ''}
+          ${obj.apartmentNumber ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Lgh-nr</dt><dd class="mx-pf-v">${esc(obj.apartmentNumber)}</dd></div>` : ''}
+        </dl>
         ${obj.description ? `<div class="mx-pf-desc">${esc(obj.description)}</div>` : ''}
       </section>
       <!-- Tillträdeskod / nyckelinfo — hämtas via EF (objects_sensitive krävs) -->

@@ -85,7 +85,7 @@ const ProjectDetailPage = {
         canOffer ? { label: 'Koppla offert', icon: 'link', fn: 'ProjectDetailPage.openLinkOffer()' } : null,
         p.archived
           ? { label: 'Återställ', icon: 'rotate-ccw', fn: `ProjectsPage.unarchive('${esc(p.id)}')` }
-          : { label: 'Arkivera', icon: 'archive', fn: `ProjectsPage.archive('${esc(p.id)}')`, destructive: true }
+          : { label: 'Arkivera', icon: 'archive', fn: `Modal.confirm('Arkivera projektet? Det flyttas till Arkiverade och kan återställas.', () => ProjectsPage.archive('${esc(p.id)}'))`, destructive: true }
       ]
     });
 
@@ -97,11 +97,11 @@ const ProjectDetailPage = {
           <div class="mx-pf-line">${ic('users', 14)}<span class="mx-pf-muted">Kund</span>${cu ? `<a class="mx-dh-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${esc(cu.id)}'})">${esc(CustomerService.displayName(cu))}</a>` : '<span>—</span>'}</div>
           ${prop ? `<div class="mx-pf-line">${ic('building-2', 14)}<span class="mx-pf-muted">Fastighet</span><a class="mx-dh-link" onclick="Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}'})">${esc(prop.name || prop.address || prop.id)}</a></div>` : ''}
         </div>
-        <div class="mx-pf-figs">
-          <div class="mx-pf-fig"><span class="mx-pf-l">Ansvarig</span><span class="mx-pf-v mx-pf-v-sm">${resp ? esc((resp.firstName + ' ' + resp.lastName).trim()) : '—'}</span></div>
-          <div class="mx-pf-fig"><button type="button" class="mx-pf-figbtn" onclick="ProjectDetailPage.switchTab('ao')"><span class="mx-pf-l">Arbetsorder</span><span class="mx-pf-v">${workOrders.length}</span></button></div>
-          <div class="mx-pf-fig"><button type="button" class="mx-pf-figbtn" onclick="ProjectDetailPage.switchTab('offers')"><span class="mx-pf-l">Offerter</span><span class="mx-pf-v">${offers.length}</span></button></div>
-        </div>
+        <dl class="mx-pf-figs">
+          <div class="mx-pf-fig"><dt class="mx-pf-l">Ansvarig</dt><dd class="mx-pf-v mx-pf-v-sm">${resp ? esc((resp.firstName + ' ' + resp.lastName).trim()) : '—'}</dd></div>
+          <div class="mx-pf-fig"><dt class="mx-pf-l">Arbetsorder</dt><dd class="mx-pf-v"><button type="button" class="mx-pf-figbtn" aria-label="Arbetsorder: visa" onclick="ProjectDetailPage.switchTab('ao')">${workOrders.length}</button></dd></div>
+          <div class="mx-pf-fig"><dt class="mx-pf-l">Offerter</dt><dd class="mx-pf-v"><button type="button" class="mx-pf-figbtn" aria-label="Offerter: visa" onclick="ProjectDetailPage.switchTab('offers')">${offers.length}</button></dd></div>
+        </dl>
       </section>
       <div class="ftabs mx-pdtabs" id="pd-tabs" role="tablist">
         <button class="ft ${this.activeTab==='overview' ?'on':''}" onclick="ProjectDetailPage.switchTab('overview')">Översikt</button>

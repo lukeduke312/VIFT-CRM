@@ -100,7 +100,7 @@ const PropertyDetailPage = {
     /* ── Fakta: adress, ägare och nyckeltal — en gång, inte tre ── */
     /* extra=true: visas inte på mobil (finns redan i Grundinformation/flikraden) */
     const fig = (label, value, onclick, extra) => value === '' || value == null ? '' :
-      `<div class="mx-pf-fig${extra ? ' mx-pf-x' : ''}">${onclick ? `<button type="button" class="mx-pf-figbtn" onclick="${onclick}">` : ''}<span class="mx-pf-l">${label}</span><span class="mx-pf-v">${value}</span>${onclick ? '</button>' : ''}</div>`;
+      `<div class="mx-pf-fig${extra ? ' mx-pf-x' : ''}"><dt class="mx-pf-l">${label}</dt><dd class="mx-pf-v">${onclick ? `<button type="button" class="mx-pf-figbtn" onclick="${onclick}" aria-label="${label}: visa">${value}</button>` : value}</dd></div>`;
     const figs = [
       fig('Öppna AO', `<b class="${openAos > 0 ? 'is-on' : ''}">${openAos}</b>`, `PropertyDetailPage.switchTab('ao')`),
       p.area ? fig('Total yta', `${fmt(p.area)} m²`) : '',
@@ -120,7 +120,7 @@ const PropertyDetailPage = {
           ${p.group ? `<div class="mx-pf-line mx-pf-muted">${ic('layers',14)} Koncern: ${esc(p.group)}</div>` : ''}
           ${p.operationalArea ? `<div class="mx-pf-line mx-pf-muted">${ic('map-pin',14)} Driftområde: ${esc(p.operationalArea)}</div>` : ''}
         </div>
-        <div class="mx-pf-figs">${figs}</div>
+        <dl class="mx-pf-figs">${figs}</dl>
       </section>`;
 
     /* ── Flikar: alla grupper syns (radbryts vid behov), tydlig aktiv flik ── */
@@ -3024,12 +3024,17 @@ const MxUi = {
     const menuId = o.menuId || 'mx-dh-menu';
     const inline = acts.filter(a => a.inline).map(a =>
       `<button type="button" class="btn bs bsm mx-only-d" onclick="${a.fn}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
-    const items = acts.map(a =>
+    /* Komponentstandard §3: destruktiva poster sist, avskilda och röda
+       (bekräftelsen ligger i respektive åtgärd). */
+    const ordered = acts.filter(a => !a.destructive).concat(acts.filter(a => a.destructive));
+    const firstDestr = ordered.findIndex(a => a.destructive);
+    const items = ordered.map((a, i) =>
+      (i > 0 && i === firstDestr ? '<div class="ao-overflow-divider" role="separator"></div>' : '') +
       `<button type="button" class="ao-overflow-menu-item${a.destructive ? ' ao-overflow-menu-item--red' : ''}${a.inline ? ' mx-only-m' : ''}" role="menuitem" onclick="aoCloseOverflow();${a.fn}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
     const onlyInline = acts.length > 0 && acts.every(a => a.inline);
     const more = acts.length ? `
       <div class="ao-overflow-wrap mx-dh-more-wrap${onlyInline ? ' mx-hide-d' : ''}">
-        <button type="button" class="btn bs bsm mx-dh-more" id="${menuId}-btn" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('${menuId}',this)">${ic('more-horizontal', 16)}</button>
+        <button type="button" class="ibtn mx-dh-more" id="${menuId}-btn" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('${menuId}',this)">${ic('more-horizontal', 16)}</button>
         <div class="ao-overflow-menu" id="${menuId}" role="menu">${items}</div>
       </div>` : '';
     const p = o.primary;
