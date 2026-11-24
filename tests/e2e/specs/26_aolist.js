@@ -318,7 +318,7 @@ module.exports = [
       t.assert(r.sorted.join() === 'Status:ascending' && r.status.every((x, i) => i === 0 || ord[r.status[i - 1]] <= ord[x]), 'status i arbetsflödesordning ' + r.status.join(','));
       await head('Status');
       r = await st();
-      t.assert(r.sel === 'status:desc' && await s.eval(() => [...document.getElementById('ao-sort').options].some((o) => o.value === 'status:desc' && /omvänd/.test(o.textContent))), 'omvänd status finns som val i väljaren');
+      t.assert(r.sel === 'status:desc' && await s.eval(() => [...document.getElementById('ao-sort').options].some((o) => o.value === 'status:desc' && o.textContent === 'Status ↓')), 'omvänd status finns som val i väljaren');
       await s.page.selectOption('#ao-sort', 'default');
       await s.settle(200);
       t.assert((await st()).sorted.length === 0, 'tillbaka till standard');
@@ -436,6 +436,17 @@ module.exports = [
       for (const vp of ['android', 'iphone', 'w768', 'w1024', 'laptop', 'desktop']) {
         const s = await t.world.session({ viewport: vp });
         await s.login('admin');
+        // Sorteringsväljaren: varje vals text får plats i den stängda väljaren (klipps inte).
+        await openList(s, 'list');
+        const sortFit = await s.eval(() => {
+          const sel = document.getElementById('ao-sort'); const cs = getComputedStyle(sel);
+          const c = document.createElement('canvas').getContext('2d'); c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+          const inner = sel.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+          return [...sel.options].map((o) => [o.textContent, Math.round(c.measureText(o.textContent).width), Math.round(inner)]).filter((x) => x[1] > x[2]);
+        });
+        if (sortFit.length) problems.push(vp + ': sorteringsvalet klipps ' + JSON.stringify(sortFit));
+        const ovf = await s.eval(() => { const b = document.querySelector('#pg-ao .aol-bar .ao-overflow-btn'); const r = b && b.getBoundingClientRect(); return !!(r && r.width >= 30 && r.right <= window.innerWidth); });
+        if (!ovf) problems.push(vp + ': ⋮-menyn (Importera/Exportera) saknas');
         for (const mode of ['list', 'grid']) {
           await openList(s, mode);
           const li = await s.layoutIssues();

@@ -291,23 +291,26 @@ const WorkOrdersPage = {
   },
 
   /* ── Sortering ─────────────────────────── */
+  /* Korta etiketter: den stängda väljaren är bara ~80 px bred på 360 px
+     (Filter, ⋮ och Ny order delar raden) — längre text klipptes.
+     Pilen följer kolumnrubrikernas: ↑ stigande, ↓ fallande. */
   _SORTS: {
-    default:   { label: 'Standard',        dir: 'asc'  },
-    scheduled: { label: 'Planerat datum',  dir: 'asc'  },
-    updated:   { label: 'Senast ändrad',   dir: 'desc' },
-    priority:  { label: 'Prioritet',       dir: 'asc'  },
-    number:    { label: 'AO-nummer',       dir: 'asc'  },
-    customer:  { label: 'Kund',            dir: 'asc'  },
-    status:    { label: 'Status',          dir: 'asc'  }
+    default:   { label: 'Standard',  dir: 'asc'  },
+    scheduled: { label: 'Datum',     dir: 'asc'  },
+    updated:   { label: 'Ändrad',    dir: 'desc' },
+    priority:  { label: 'Prioritet', dir: 'asc'  },
+    number:    { label: 'AO-nr',     dir: 'asc'  },
+    customer:  { label: 'Kund',      dir: 'asc'  },
+    status:    { label: 'Status',    dir: 'asc'  }
   },
   _SORT_OPTIONS: [
     ['default', 'Standard'],
-    ['scheduled', 'Planerat datum'],
-    ['scheduled:desc', 'Planerat, senast först'],
-    ['updated', 'Senast ändrad'],
+    ['scheduled', 'Datum ↑'],
+    ['scheduled:desc', 'Datum ↓'],
+    ['updated', 'Ändrad'],
     ['priority', 'Prioritet'],
-    ['number', 'AO-nummer'],
-    ['number:desc', 'AO-nummer, fallande'],
+    ['number', 'AO-nr ↑'],
+    ['number:desc', 'AO-nr ↓'],
     ['customer', 'Kund A–Ö'],
     ['customer:desc', 'Kund Ö–A'],
     ['status', 'Status']
@@ -318,7 +321,7 @@ const WorkOrdersPage = {
   _sortOptionsHtml() {
     const cur = this._sortValue();
     const opts = this._SORT_OPTIONS.slice();
-    if (!opts.some(o => o[0] === cur)) opts.unshift([cur, this._SORTS[this._sortKey()].label + ' (omvänd)']);
+    if (!opts.some(o => o[0] === cur)) opts.unshift([cur, this._SORTS[this._sortKey()].label + (this._sortDir() === 'asc' ? ' ↑' : ' ↓')]);
     return opts.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('');
   },
 
