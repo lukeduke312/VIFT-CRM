@@ -31,6 +31,169 @@ async function openAO(s, id) {
   await s.settle(200);
 }
 
+/* ── Realistiskt innehåll (komponentstandarden §12) ────────────────────
+   Små riktiga PNG-bilder (data-URL som klarar isSafeImageDataUrl), 22
+   checkpunkter i blandade lägen, sex materialrader, fem tidposter (olika
+   personer, ej debiterbar, attesterad, annat sparat timpris), foton,
+   anteckningar och uppföljning, långa texter — samt en order med saknade fält. */
+function pngDataUrl(r, g, b) {
+  const zlib = require('zlib');
+  const W = 8, H = 6;
+  const raw = Buffer.alloc((W * 3 + 1) * H);
+  for (let y = 0; y < H; y++) { raw[y * (W * 3 + 1)] = 0; for (let x = 0; x < W; x++) { const o = y * (W * 3 + 1) + 1 + x * 3; raw[o] = Math.min(255, r + x * 8); raw[o + 1] = Math.min(255, g + y * 10); raw[o + 2] = b; } }
+  const crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
+  const crc = (buf) => { let c = 0xffffffff; for (const v of buf) c = crcT[(c ^ v) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+  return 'data:image/png;base64,' + png.toString('base64');
+}
+
+const RICH_TEXTS = ['Stäng av huvudkranen i källaren och informera boende i trapphus A', 'Fotografera skadan före åtgärd', 'Kontrollera fuktnivå i bjälklaget med fuktmätare (minst tre punkter)', 'Demontera golvbrunnens klämring', 'Rensa golvbrunn och vattenlås', 'Kontrollera tätskiktets anslutning mot brunnen', 'Byt klämring (rostfri, 110 mm)', 'Montera ny tätmanschett', 'Provtryck tappvatten 10 bar i 30 minuter', 'Kontrollera avloppets fall med vattenpass', 'Fogning runt rörgenomföringar', 'Kontrollera golvvärmekretsen', 'Mät spänning på golvvärmetermostaten', 'Byt silikonfog vid badkar', 'Rengör ventilationsdon i badrummet', 'Kontrollera frånluftsflödet', 'Montera tillbaka golvbrunnslocket', 'Torka upp och ställ ut avfuktare', 'Informera kunden om torktid (minst 72 timmar)', 'Fotografera efter åtgärd', 'Städa arbetsplatsen och trapphuset', 'Lämna nyckel till fastighetsskötaren'];
+
+/* status: 'nytt'|'planerad'|'pågående'|'pausad'|'klar'|'fakturerad'|'avbruten'. */
+function richAO(id, status) {
+  const now = Date.now();
+  const iso = (min) => new Date(now - min * 60000).toISOString();
+  const st = status === 'pausad' ? 'pågående' : status;
+  const done = { nytt: 0, planerad: 0, 'pågående': 9, pausad: 7, klar: 20, fakturerad: 20, avbruten: 4 }[status];
+  const avv = { nytt: 0, planerad: 0, 'pågående': 2, pausad: 1, klar: 2, fakturerad: 2, avbruten: 0 }[status];
+  const prog = { nytt: 0, planerad: 0, 'pågående': 3, pausad: 2, klar: 0, fakturerad: 0, avbruten: 1 }[status];
+  const who = [['Jonas Pettersson', 'ST-004'], ['Erik Andersson', 'ST-002']];
+  const checklist = RICH_TEXTS.map((text, i) => {
+    const c = { id: 'r' + (i + 1), text, done: false, avvikelse: null };
+    if (i === 2) c.description = 'Mät vid brunnen, vid dörren och under handfatet. Notera värdena i loggen.';
+    const [n, sid] = who[i % 2];
+    if (i < done) Object.assign(c, { done: true, avvikelse: 'ok', doneAt: iso(300 - i), doneBy: n, doneById: sid, startedAt: iso(320 - i), startedBy: n, startedById: sid });
+    else if (i < done + avv) Object.assign(c, { avvikelse: 'avvikelse', avvikelseComment: i % 2 ? 'Sprucken klämring, nytt material beställt — leverans torsdag.' : 'Fukt 22 % i bjälklaget nära dörren, behöver torkas innan fogning.', avvikelseImage: pngDataUrl(200, 60, 40), avvikelseBy: n, avvikelseById: sid, avvikelseAt: iso(200 - i) });
+    else if (i < done + avv + prog) Object.assign(c, { startedAt: iso(60 - i), startedBy: 'Jonas Pettersson', startedById: 'ST-004' });
+    return c;
+  });
+  const materials = [
+    ['Golvbrunn plastrens 110 mm med klämring och tätmanschett (Purus)', 1, 'st', 110, 220], ['Rostfri klämring 110 mm', 2, 'st', 48, 95],
+    ['Fogmassa Sikaflex 291i', 3, 'st', 75, 145], ['Silikon sanitet vit 300 ml', 2, 'st', 45, 89], ['Tätskiktsmassa Wetroom 1 l', 1.5, 'l', 160, 320], ['Avfuktare hyra', 3, 'dygn', 0, 250],
+  ].map(([name, qty, unit, buy, sell], i) => ({ id: 'rm' + (i + 1), name, qty, unit, buyPrice: buy, sellPrice: sell, vatRate: 25, addedAt: iso(240 - i * 10) }));
+  const log = [
+    { id: 'rl1', type: 'photo', text: 'Skadan före åtgärd — vatten vid brunnen', imageData: pngDataUrl(40, 90, 160), userName: 'Jonas Pettersson', timestamp: iso(310) },
+    { id: 'rl2', type: 'photo', text: 'Fuktmätning vid dörren', imageData: pngDataUrl(60, 140, 90), userName: 'Erik Andersson', timestamp: iso(290) },
+    { id: 'rl3', type: 'log', text: 'Ankomst 07:45. Boende informerade, vatten avstängt kl. 07:55. Källardörren var låst — nyckel hämtad hos fastighetsskötaren.', userName: 'Jonas Pettersson', timestamp: iso(305) },
+    { id: 'rl4', type: 'photo', text: 'Ny klämring monterad', imageData: pngDataUrl(150, 150, 60), userName: 'Jonas Pettersson', timestamp: iso(120) },
+    { id: 'rl5', type: 'photo', text: '', imageData: pngDataUrl(90, 60, 150), userName: 'Erik Andersson', timestamp: iso(100) },
+    { id: 'rl6', type: 'uppföljning', text: 'Kontrollera arbete: torktid och fuktnivå efter 72 timmar', followUpDate: new Date(now + 3 * 864e5).toISOString().slice(0, 10), userName: 'Maria Karlsson', timestamp: iso(90) },
+  ];
+  return {
+    id, displayNumber: id, status: st, substatus: status === 'pausad' ? 'pausad' : '', priority: 'hög', category: 'felanmalan',
+    title: 'Vattenläckage vid golvbrunn i badrum, lägenhet 1102 — byte av klämring och tätning',
+    description: 'Boende i lgh 1102 rapporterar vatten på badrumsgolvet vid golvbrunnen efter dusch. Misstänkt otät klämring eller skadat tätskikt vid brunnen. Undersök orsaken, åtgärda läckaget och dokumentera med foton före och efter.\n\nObs! Boende har husdjur (katt) — håll badrumsdörren stängd. Parkering på gården är tillåten för servicebil.',
+    internalNote: 'Kunden har tidigare klagat på lång handläggningstid — ring kontaktpersonen när arbetet startar och när det är klart. Nyckel finns i nyckelskåpet, kod lämnas av arbetsledaren.',
+    customerId: 'K-002', propertyId: '', address: 'Parkgatan 8', zip: '411 38', city: 'Göteborg', floor: '11', apartmentNumber: '1102', entrance: 'B',
+    contactPerson: 'Mikael Strand', phone: '070-400 50 60', contactEmail: 'mikael.strand@example.test',
+    staff: ['ST-004', 'ST-002', 'ST-003'], responsibleStaffId: 'ST-003',
+    scheduledDate: new Date(now).toISOString().slice(0, 10), scheduledStart: '07:30', scheduledEnd: '15:00', estimatedHours: 6,
+    priceType: 'timpris', priceGroupId: 'PG-002', fixedPrice: 0,
+    checklist, materials, log, notes: [], invoiceId: status === 'fakturerad' ? 'INV-003' : '', offerId: '', recurringOrderId: '',
+    archived: false, deleted: false, createdAt: iso(3000), updatedAt: iso(30),
+    completedAt: ['klar', 'fakturerad'].includes(status) ? iso(20) : '', completedBy: ['klar', 'fakturerad'].includes(status) ? 'Maria Karlsson' : '',
+  };
+}
+function richTime(aoId) {
+  const d = new Date().toISOString().slice(0, 10);
+  const mk = (i, staffId, staffName, start, end, extra) => Object.assign({ id: 'RT-' + aoId + '-' + i, aoId, staffId, staffName, date: d, startStr: start, endStr: end,
+    minutes: (Number(end.slice(0, 2)) * 60 + Number(end.slice(3))) - (Number(start.slice(0, 2)) * 60 + Number(start.slice(3))), comment: 'Felsökning och åtgärd vid golvbrunn', priceGroupId: 'PG-002', priceGroupName: 'Fastighetsservice standard', hourRate: 430, billable: true, internal: false, createdAt: new Date().toISOString() }, extra || {});
+  return [mk(1, 'ST-004', 'Jonas Pettersson', '07:30', '10:00'), mk(2, 'ST-002', 'Erik Andersson', '07:30', '09:15'), mk(3, 'ST-004', 'Jonas Pettersson', '10:30', '12:00', { billable: false, comment: 'Hämtade material på grossisten' }),
+    mk(4, 'ST-003', 'Maria Karlsson', '13:00', '13:30', { attested: true, comment: 'Platsbesök arbetsledare' }), mk(5, 'ST-004', 'Jonas Pettersson', '12:30', '14:45', { priceGroupId: 'PG-004', priceGroupName: 'Akut / kväll / helg', hourRate: 695 })];
+}
+const RICH_STATUSES = ['nytt', 'planerad', 'pågående', 'pausad', 'klar', 'fakturerad', 'avbruten'];
+const RICH_IDS = { nytt: 'AO-R1', planerad: 'AO-R2', 'pågående': 'AO-R3', pausad: 'AO-R4', klar: 'AO-R5', fakturerad: 'AO-R6', avbruten: 'AO-R7' };
+/* Order med saknade fält: ingen beskrivning, adress, kontakt, datum, kategori, prismodell eller checklista. */
+function missingAO(id) {
+  return { id, displayNumber: id, status: 'planerad', substatus: '', priority: 'normal', category: '', title: 'Okänd felanmälan', description: '', internalNote: '',
+    customerId: '', propertyId: '', address: '', zip: '', city: '', contactPerson: '', phone: '', staff: ['ST-004'], responsibleStaffId: '',
+    scheduledDate: '', scheduledStart: '', scheduledEnd: '', priceType: 'ej_satt', priceGroupId: '', fixedPrice: 0,
+    checklist: [], materials: [], log: [], notes: [], invoiceId: '', offerId: '', archived: false, deleted: false, createdAt: new Date().toISOString(), updatedAt: '' };
+}
+function seedRich(t) {
+  const aos = t.fake.get('workOrders').filter((a) => !/^AO-R/.test(a.id));
+  const tes = t.fake.get('timeEntries').filter((e) => !/^RT-/.test(e.id));
+  RICH_STATUSES.forEach((st) => { aos.push(richAO(RICH_IDS[st], st)); if (st !== 'nytt' && st !== 'planerad') tes.push(...richTime(RICH_IDS[st])); });
+  aos.push(missingAO('AO-RM'));
+  aos.push(Object.assign(richAO('AO-RF', 'planerad'), { title: 'Fältflöde: byte av blandare i tvättstuga' }));
+  t.fake.set('workOrders', aos);
+  t.fake.set('timeEntries', tes);
+}
+
+/* Förväntad primär åtgärd per roll och status (befintliga funktioner och behörigheter). */
+const RICH_PRIMARY = {
+  falt2:   { nytt: 'own', planerad: 'own', 'pågående': null, pausad: null, klar: null, fakturerad: null, avbruten: null, saknas: 'own' },
+  chef:    { nytt: 'start', planerad: 'start', 'pågående': 'complete', pausad: 'complete', klar: 'invoice', fakturerad: null, avbruten: 'reactivate', saknas: 'start' },
+  ekonomi: { nytt: null, planerad: null, 'pågående': null, pausad: null, klar: 'invoice', fakturerad: null, avbruten: null, saknas: null },
+  admin:   { nytt: 'start', planerad: 'start', 'pågående': 'complete', pausad: 'complete', klar: 'invoice', fakturerad: null, avbruten: 'reactivate', saknas: 'start' },
+};
+const RICH_HANDLED = { nytt: 0, planerad: 0, 'pågående': 11, pausad: 8, klar: 22, fakturerad: 22, avbruten: 4 };
+const RICH_TIME_ROWS = { falt2: 3, chef: 1, ekonomi: 5, admin: 5 }; // time-entries-list: egna, eller alla med payroll_view
+
+async function richMatrix(t, vp) {
+  seedRich(t);
+  const problems = [];
+  const P = (c, m) => { if (!c) problems.push(m); };
+  for (const role of ['falt2', 'chef', 'ekonomi', 'admin']) {
+    const s = await t.world.session({ viewport: vp });
+    await s.login(role);
+    const price = await s.eval(() => Auth.canAny(['invoice_view', 'invoice_create', 'reports_view']));
+    const timeP = await s.eval(() => Auth.can('ao_time'));
+    for (const st of RICH_STATUSES.concat(['saknas'])) {
+      const id = st === 'saknas' ? 'AO-RM' : RICH_IDS[st];
+      const tag = vp + ' ' + role + ' ' + st + ' (' + id + ')';
+      await openAO(s, id);
+      const li = await s.layoutIssues();
+      P(li.length === 0, tag + ': layout ' + JSON.stringify(li));
+      const r = await s.eval(() => {
+        const pg = document.querySelector('.page.active');
+        const prim = pg.querySelector('.' + (window.innerWidth < 768 ? 'ao-acts-mobile' : 'ao-acts-desktop') + ' .aod-primary');
+        const stamp = pg.querySelector('.aod-stamp');
+        return {
+          txt: pg.innerText, prim: prim ? { act: prim.dataset.act, fn: prim.getAttribute('onclick'), vis: prim.getBoundingClientRect().width > 0 } : null,
+          chk: (document.getElementById('ao-chk-counter') || {}).innerText || '', rows: pg.querySelectorAll('#ao-checklist .chk-row').length,
+          rowsVis: [...pg.querySelectorAll('#ao-checklist .chk-row')].filter((x) => x.getBoundingClientRect().height > 0).length,
+          mats: pg.querySelectorAll('#ao-materials .aod-mrow').length, sums: [...pg.querySelectorAll('#ao-materials .aod-row-sum')].map((x) => x.innerText.replace(/\s+/g, ' ')),
+          times: pg.querySelectorAll('#ao-timeentries .aod-trow').length, photos: pg.querySelectorAll('#ao-photos .aod-ph img[src^="data:image/png"]').length,
+          priceCard: (pg.querySelector('.aod-price') || {}).innerText || null,
+          stampVis: !!stamp && getComputedStyle(stamp).display !== 'none' && stamp.getBoundingClientRect().height > 0,
+          empties: [...pg.querySelectorAll('.empty.aod-empty h3')].map((x) => x.textContent),
+          clipped: [...pg.querySelectorAll('.aod *')].filter((e) => e.offsetParent && !e.closest('.ao-overflow-menu')).filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.right > document.documentElement.clientWidth + 1; }).length,
+        };
+      });
+      P(!/\b(undefined|NaN|\[object Object\])\b/.test(r.txt), tag + ': visar undefined/NaN');
+      P(r.clipped === 0, tag + ': ' + r.clipped + ' element utanför skärmen');
+      const want = RICH_PRIMARY[role][st];
+      const fn = { own: 'WorkOrderDetailPage.startOwnJob()', start: "WorkOrderDetailPage.setStatus('pågående')", complete: 'WorkOrderDetailPage.markComplete()', invoice: "InvoicesPage.createFromAO('" + id + "')", reactivate: 'WorkOrderDetailPage.openReactivateModal()' }[want];
+      P(want ? (r.prim && r.prim.vis && r.prim.fn === fn) : !r.prim, tag + ': primär ' + (want || 'ingen') + ' (fick ' + JSON.stringify(r.prim) + ')');
+      if (st === 'saknas') {
+        P(/Ingen beskrivning angiven/.test(r.txt) && /Ej planerad/.test(r.txt), tag + ': saknade fält visas som "Ingen beskrivning angiven" / "Ej planerad"');
+        P(['Ingen checklista', 'Inget material', 'Inga bilder ännu'].every((h) => r.empties.includes(h)), tag + ': tomlägen med rubrik ' + JSON.stringify(r.empties));
+        if (price) P(r.priceCard && /Ej satt/.test(r.priceCard) && /Fakturaunderlag kan inte skapas/.test(r.priceCard), tag + ': prissättning "Ej satt" med varning');
+      } else {
+        P(r.rows === 22 && r.rowsVis === 22, tag + ': 22 checkpunkter synliga (' + r.rowsVis + '/' + r.rows + ')');
+        P(new RegExp('\\b' + RICH_HANDLED[st] + ' av 22 klara').test(r.chk), tag + ': framsteg ' + RICH_HANDLED[st] + ' av 22 (' + r.chk.replace(/\s+/g, ' ') + ')');
+        P(r.mats === 6, tag + ': 6 materialrader (' + r.mats + ')');
+        P(price ? (r.sums.length === 6 && r.sums.every((x) => /kr inkl\. moms/.test(x))) : r.sums.length === 0, tag + ': materialpriser ' + (price ? 'med inkl. moms' : 'dolda') + ' ' + JSON.stringify(r.sums.slice(0, 2)));
+        P(r.photos === 4, tag + ': 4 bilder i Bilder (' + r.photos + ')');
+        const expT = ['nytt', 'planerad'].includes(st) ? 0 : RICH_TIME_ROWS[role];
+        P(r.times === expT, tag + ': ' + expT + ' tidposter (' + r.times + ')');
+        if (price) P(r.priceCard && /Löpande timpris/.test(r.priceCard) && /430 kr\/tim/.test(r.priceCard) && /exkl\. moms/.test(r.priceCard), tag + ': prissättning med timpris exkl. moms');
+        if (price && expT >= 5) P(/Akut \/ kväll \/ helg – 695 kr\/tim/.test(r.priceCard) && /annat timpris/.test(r.priceCard), tag + ': tidposternas sparade timpris och skillnadsnotis');
+      }
+      if (!price) P(r.priceCard === null && !/Prissättning|Inköp|Påslag|Tid mot plan|Intern lönsamhet/.test(r.txt), tag + ': ingen prissättning/ekonomi för rollen');
+      const closed = ['klar', 'fakturerad', 'avbruten'].includes(st);
+      if (vp === 'laptop') P(r.stampVis === (timeP && !closed), tag + ': Din arbetstid ' + (timeP && !closed ? 'visas' : 'visas inte') + ' (' + r.stampVis + ')');
+      else P(!r.stampVis, tag + ': mobil — Din arbetstid bara när man är instämplad');
+    }
+    await s.context.close();
+  }
+  t.note(vp + ': 4 roller × 8 ordrar granskade');
+  t.assert(problems.length === 0, problems.length + ' fel: ' + problems.slice(0, 12).join(' ;; '));
+}
+
 /* Den TIDIGARE åtgärdsraden (WorkOrderDetailPage före 2026-11-26:
    _primaryActionBtns + _secondaryActions), avskriven villkor för villkor.
    Varje [etikett, anrop] här måste fortfarande nås i den nya raden/menyn. */
@@ -68,7 +231,7 @@ const collectActs = (s) => s.eval(() => {
   }));
   return { d: pick(document.querySelector('.page.active .ao-acts-desktop')), m: pick(document.querySelector('.page.active .ao-acts-mobile')) };
 });
-const perms = (s) => s.eval(() => ({ ao_edit: Auth.can('ao_edit'), ao_complete: Auth.can('ao_complete'), invoice_create: Auth.can('invoice_create'), activities: Auth.canViewPage('pg-activities') }));
+const perms = (s) => s.eval(() => ({ ao_edit: Auth.can('ao_edit'), ao_complete: Auth.can('ao_complete'), invoice_create: Auth.can('invoice_create'), activities: Auth.canViewPage('pg-activities'), myjobs: Auth.canViewPage('pg-myjobs') }));
 const primaryOf = (s) => s.eval(() => {
   const d = document.querySelectorAll('.page.active .ao-acts-desktop .aod-primary');
   const m = document.querySelectorAll('.page.active .ao-acts-mobile .aod-primary');
@@ -109,7 +272,9 @@ module.exports = [
         admin:   { 'AO-T1': ['start', "WorkOrderDetailPage.setStatus('pågående')"], 'AO-T2': ['complete', 'WorkOrderDetailPage.markComplete()'], 'AO-T3': ['invoice', "InvoicesPage.createFromAO('AO-T3')"] },
         chef:    { 'AO-T1': ['start', "WorkOrderDetailPage.setStatus('pågående')"], 'AO-T2': ['complete', 'WorkOrderDetailPage.markComplete()'], 'AO-T3': ['invoice', "InvoicesPage.createFromAO('AO-T3')"] },
         ekonomi: { 'AO-T1': null, 'AO-T2': null, 'AO-T3': ['invoice', "InvoicesPage.createFromAO('AO-T3')"] },
-        falt2:   { 'AO-T1': null, 'AO-T2': null, 'AO-T3': null },
+        /* Fält saknar ao_edit/ao_complete: på sin egen planerade order får hen samma
+           Starta som Mina jobb (MyJobsPage.startJob-vägen), inget annat. */
+        falt2:   { 'AO-T1': ['start', 'WorkOrderDetailPage.startOwnJob()'], 'AO-T2': null, 'AO-T3': null },
       };
       // Stämplingsraden: bara med ao_time och bara på ej avslutade ordrar.
       const stamp = { admin: [true, true, false], chef: [false, false, false], ekonomi: [false, false, false], falt2: [true, true, false] };
@@ -187,8 +352,11 @@ module.exports = [
           }
           // Inga nya statusövergångar: varje setStatus-anrop i nya raden fanns i den gamla.
           const oldFns = new Set(old.map((x) => x[1]));
-          const extra = now.d.concat(now.m).filter((x) => /setStatus|markComplete|_restoreFrom|createFromAO|openReactivateModal/.test(x.fn) && !oldFns.has(x.fn));
-          t.assert(extra.length === 0, role + ' ' + id + ': inga nya status-/faktureringsanrop ' + JSON.stringify(extra));
+          const extra = now.d.concat(now.m).filter((x) => /setStatus|markComplete|_restoreFrom|createFromAO|openReactivateModal|startOwnJob/.test(x.fn) && !oldFns.has(x.fn));
+          /* Enda tillägget: Starta för den som är tilldelad utan ao_edit — samma villkor som Mina jobb visar Starta. */
+          const mine = (ao.staff || []).includes(STAFF[role]);
+          const okOwn = (x) => x.fn === 'WorkOrderDetailPage.startOwnJob()' && !p.ao_edit && p.myjobs && mine && !ao.archived && !ao.deleted && ['nytt', 'pool', 'planerad'].includes(ao.status);
+          t.assert(extra.every(okOwn), role + ' ' + id + ': inga nya status-/faktureringsanrop utöver Mina jobb-starten ' + JSON.stringify(extra.filter((x) => !okOwn(x))));
           // Nåbart på skärmen: synliga knappar inom fönstret, menyposterna inom fönstret.
           const vis = await s.eval(() => {
             const vw = document.documentElement.clientWidth;
@@ -432,4 +600,101 @@ module.exports = [
       t.assert(issues.length === 0, 'layoutfel: ' + issues.join(' ;; '));
     },
   },
+  {
+    id: 'AOD-07', module: 'Arbetsordrar', name: 'AO-detalj med realistiskt innehåll, mobil 390 px: alla statusar (ny, planerad, pågår, pausad, klar, fakturerad, avbruten) + saknade fält × fält, arbetsledare, ekonomi, admin — rätt primär åtgärd, 22 checkpunkter, material, tid, bilder, pris per roll, inget klipps',
+    async run(t) { await richMatrix(t, 'iphone'); },
+  },
+  {
+    id: 'AOD-08', module: 'Arbetsordrar', name: 'AO-detalj med realistiskt innehåll, dator 1366 px: alla statusar + saknade fält × fält, arbetsledare, ekonomi, admin (samma kontroller som AOD-07)',
+    async run(t) { await richMatrix(t, 'laptop'); },
+  },
+  {
+    id: 'AOD-09', kind: 'workflow', module: 'Arbetsordrar', name: 'Fältflöde på mobil 390 px utan att något klipps: öppna jobbet från Mina jobb → Starta arbete → Stämpla in → bocka av checklista → lägg till material och bild → Stämpla ut → (med ao_complete i rollen) Klarmarkera',
+    async run(t) {
+      seedRich(t);
+      const AO = 'AO-RF';
+      const s = await t.world.session({ viewport: 'iphone' });
+      await s.login('falt2');
+      const noClip = async (step) => { const li = await s.layoutIssues(); t.assert(li.length === 0, step + ': inget klipps / ingen sidledsrullning ' + JSON.stringify(li)); };
+      // 1. Öppna jobbet från Mina jobb.
+      await s.go('pg-myjobs');
+      await s.page.locator('.page.active .job-card-v2-title', { hasText: 'Fältflöde' }).first().click();
+      await s.page.waitForFunction((x) => Router.currentPage === 'pg-ao-detail' && WorkOrderDetailPage.aoId === x, AO, { timeout: 8000 });
+      await s.settle(400);
+      await noClip('öppna');
+      // 2. Starta arbete (status) — samma väg som Mina jobb; ingen tid, ingen stämpling.
+      const n0 = t.fake.get('timeEntries').filter((e) => e.aoId === AO).length;
+      const start = s.page.locator('.page.active .ao-acts-mobile .aod-primary');
+      t.assert(/Starta arbete/.test(await start.textContent()), 'mobil: primär åtgärd Starta arbete för fältarbetaren på egen planerad order');
+      await start.click();
+      await s.waitToast(/Status: Pågående/, 8000);
+      t.assert(t.fake.get('workOrders').find((a) => a.id === AO).status === 'pågående', 'servern: pågående');
+      t.assert(t.fake.get('timeEntries').filter((e) => e.aoId === AO).length === n0 && !(await s.eval(() => state.stampActive)), 'Starta arbete: ingen tidpost och ingen stämpling');
+      await noClip('starta');
+      // 3. Stämpla in via snabbåtgärdsraden.
+      await s.page.locator('.page.active .aod-qbar button', { hasText: 'Stämpla in' }).click();
+      await s.page.waitForFunction((x) => state.stampActive && state.stampAoId === x, AO, { timeout: 5000 });
+      await s.settle(400);
+      t.assert(await s.eval(() => { const e = document.querySelector('.page.active .aod-stamp.is-active'); return !!e && e.getBoundingClientRect().height > 0 && !!e.querySelector('#ao-stamp-clock'); }), 'instämplad: raden Din arbetstid med tidräknare syns');
+      await noClip('stämpla in');
+      // 4. Bocka av checklistan (Checklista i snabbåtgärdsraden leder dit).
+      await s.page.locator('.page.active .aod-qbar .aod-q-chk').click();
+      await s.settle(600);
+      const firstOpen = await s.eval(() => (document.querySelector('#ao-checklist .chk-row[data-status="ej_paborjad"]') || {}).dataset.id);
+      await s.page.click('#ao-checklist .chk-row[data-id="' + firstOpen + '"] .chk-btn[title="Markera utförd"]');
+      await s.waitToast(/Utförd/, 6000);
+      const it = t.fake.get('workOrders').find((a) => a.id === AO).checklist.find((c) => c.id === firstOpen);
+      t.assert(it.done === true && it.doneById === 'ST-004', 'servern: punkten utförd av fältarbetaren');
+      t.assert(/1 av 22 klara/.test(await s.text('#ao-chk-counter')) && /1\/22/.test(await s.text('#ao-qbar-chk')), 'framsteg 1 av 22 och snabbåtgärden 1/22');
+      await noClip('checklista');
+      // 5a. Material via snabbåtgärdsraden.
+      await s.page.locator('.page.active .aod-qbar button', { hasText: 'Material' }).click();
+      await s.page.waitForSelector('.modal-overlay.open #mat-name');
+      await s.page.fill('#mat-name', 'E2E Blandare tvättstuga');
+      await s.page.fill('#mat-qty', '1');
+      await s.clickModalButton(/Lägg till/);
+      await s.waitToast(/Material tillagt/, 8000);
+      t.assert((t.fake.get('workOrders').find((a) => a.id === AO).materials || []).some((m) => m.name === 'E2E Blandare tvättstuga'), 'servern: materialraden finns');
+      t.assert(await s.eval(() => [...document.querySelectorAll('#ao-materials .aod-mrow')].some((r) => /E2E Blandare/.test(r.textContent))), 'materialraden syns direkt');
+      // 5b. Bild via snabbåtgärdsraden.
+      const JPEG = { name: 'foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64') };
+      const photos0 = await s.eval(() => document.querySelectorAll('#ao-photos .aod-ph').length);
+      await s.page.locator('.page.active .aod-qbar button', { hasText: 'Foto' }).click();
+      await s.page.waitForSelector('.modal-overlay.open #log-text');
+      await s.page.fill('#log-text', 'E2E ny blandare monterad');
+      await s.page.setInputFiles('#log-img', JPEG);
+      await s.clickModalButton(/^Spara$/);
+      await s.waitToast(/Loggpost sparad/, 10000);
+      const lg = (t.fake.get('workOrders').find((a) => a.id === AO).log || []).find((l) => l.text === 'E2E ny blandare monterad');
+      t.assert(lg && lg.imagePath, 'servern: loggposten har bild (imagePath)');
+      t.assert(await s.eval(() => document.querySelectorAll('#ao-photos .aod-ph').length) === photos0 + 1, 'bilden syns i kortet Bilder');
+      await noClip('material och bild');
+      // 6. Stämpla ut → exakt en tidpost.
+      await s.eval(() => { document.getElementById('content-scroll').scrollTop = 0; });
+      await s.page.locator('.page.active .aod-qbar button', { hasText: 'Stämpla ut' }).click();
+      await s.page.waitForSelector('.modal-overlay.open #co-comment');
+      await s.page.fill('#co-comment', 'E2E fältflöde klart');
+      await s.clickModalButton(/^Stämpla ut$/);
+      await s.waitToast(/Utloggad — tid sparad/, 8000);
+      await s.settle(600);
+      t.assert(t.fake.get('timeEntries').filter((e) => e.aoId === AO).length === n0 + 1, 'exakt en ny tidpost efter utstämpling');
+      // 7. Slutför: rollen "personal" saknar ao_complete i dag → ingen Klarmarkera (rollen styr, inte sidan).
+      t.assert(!(await s.eval(() => !!document.querySelector('.page.active [data-act="complete"]'))), 'utan ao_complete: ingen Klarmarkera (oförändrad behörighet)');
+      // Med ao_complete i rollen (rollerna är data): Klarmarkera blir primär och slutför ordern på servern.
+      const roles = t.fake.get('roles'); roles.find((r) => r.id === 'personal').permissions.push('ao_complete'); t.fake.set('roles', roles);
+      const s2 = await t.world.session({ viewport: 'iphone' });
+      await s2.login('falt2');
+      await openAO(s2, AO);
+      const done = s2.page.locator('.page.active .ao-acts-mobile .aod-primary');
+      t.assert(/Klarmarkera/.test(await done.textContent()), 'med ao_complete: primär åtgärd Klarmarkera');
+      await done.click();
+      await s2.clickModalButton(/Klarmarkera ändå|Ja|OK|Bekräfta/);
+      await s2.waitToast(/Order markerad klar/, 8000);
+      t.assert(t.fake.get('workOrders').find((a) => a.id === AO).status === 'klar', 'servern: klar');
+      const li2 = await s2.layoutIssues();
+      t.assert(li2.length === 0, 'klar: inget klipps ' + JSON.stringify(li2));
+    },
+  },
 ];
+/* Hjälpare för granskningsskärmbilder (docs/qa-2026-11-26/AO-DETALJ.md). */
+module.exports.helpers = { seedRich, RICH_IDS, RICH_STATUSES };
