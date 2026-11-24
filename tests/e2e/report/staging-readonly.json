@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-23T21:42:35.542Z",
+  "when": "2026-11-24T15:15:31.572Z",
   "checks": [
     {
       "id": "VERSIONER",
@@ -14,17 +14,17 @@
     {
       "id": "START",
       "ok": true,
-      "detail": "inloggningsformulär visas, JS-fel: 0, laddtid 3927 ms"
+      "detail": "inloggningsformulär visas, JS-fel: 0, laddtid 9405 ms"
     },
     {
       "id": "KONSOL",
       "ok": null,
-      "detail": "1 konsolfel: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED"
+      "detail": "4 konsolfel: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED | Refused to apply style from 'https://staging-crm.viftfast.se/src/styles/components.css?v=107' becaus | Refused to apply style from 'https://staging-crm.viftfast.se/src/styles/forms.css?v=14' because its "
     },
     {
       "id": "NÄTVERK",
       "ok": true,
-      "detail": "kontaktade Supabase-projekt: inga före inloggning; misslyckade anrop: 1"
+      "detail": "kontaktade Supabase-projekt: inga före inloggning; misslyckade anrop: 4"
     },
     {
       "id": "PUBLIK OFFERT",
