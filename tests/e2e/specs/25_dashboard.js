@@ -17,21 +17,46 @@ Object.assign(lib.VIEWPORTS, {
   d25_1920: { viewport: { width: 1920, height: 1080 } },
 });
 
-/* Samma Mapbox-stubbe som MAP-01: kartbiblioteket "laddas", markörer
-   registreras — adressökningen (fetch mot api.mapbox.com) är blockerad. */
-const STUB = () => {
+/* Mapbox via Playwright-route (ingen riktig trafik): mapbox-gl.js ersätts
+   av en stubbe som registrerar markörer (styleError = HTTP-status som
+   kartbakgrunden "svarar" med), CSS:en är tom och geokodningen svarar
+   'hits' (träff, utom för adresser med "Finnsinte"), 'none' (inga
+   träffar) eller '403'. gl:false = biblioteket nås inte. */
+const GL_STUB = (styleError) => {
   window.__markers = [];
-  Object.defineProperty(window, 'VIFT_CONFIG', { configurable: true, get() { return Object.assign({}, this.__vc || {}, { mapboxToken: 'pk.e2e-stub' }); }, set(v) { this.__vc = v; } });
   function Popup() { this.html = ''; } Popup.prototype.setHTML = function (h) { this.html = h; return this; };
   function Marker(o) { this.opts = o || {}; this.el = (o && o.element) || document.createElement('div'); }
   Marker.prototype.setLngLat = function (ll) { this.ll = ll; return this; };
   Marker.prototype.setPopup = function (p) { this.popup = p; return this; };
   Marker.prototype.addTo = function () { window.__markers.push(this); return this; };
   Marker.prototype.getElement = function () { return this.el; };
-  function Map() {} Map.prototype.fitBounds = function () {}; Map.prototype.remove = function () {};
+  function Map() {}
+  Map.prototype.on = function (ev, cb) { if (ev === 'error' && styleError) setTimeout(() => cb({ error: { status: styleError } }), 20); return this; };
+  Map.prototype.fitBounds = function () {}; Map.prototype.remove = function () {};
   function LngLatBounds() {} LngLatBounds.prototype.extend = function () { return this; };
   window.mapboxgl = { Map, Marker, Popup, LngLatBounds, accessToken: '' };
 };
+async function mapboxRoutes(s, o) {
+  o = Object.assign({ gl: true, geo: 'hits', styleError: 0 }, o || {});
+  const calls = { geo: 0 };
+  await s.page.route('https://api.mapbox.com/**', (route) => {
+    const url = route.request().url();
+    if (/mapbox-gl\.js/.test(url)) return o.gl ? route.fulfill({ status: 200, contentType: 'application/javascript', body: '(' + GL_STUB.toString() + ')(' + Number(o.styleError) + ');' }) : route.abort('blockedbyclient');
+    if (/mapbox-gl\.css/.test(url)) return route.fulfill({ status: 200, contentType: 'text/css', body: '' });
+    if (/\/geocoding\//.test(url)) {
+      calls.geo++;
+      const h = { 'access-control-allow-origin': '*' };
+      if (o.geo === '403') return route.fulfill({ status: 403, headers: h, contentType: 'application/json', body: '{"message":"Forbidden"}' });
+      const q = decodeURIComponent(url.split('mapbox.places/')[1].split('.json')[0]);
+      const miss = o.geo === 'none' || /Finnsinte/i.test(q);
+      let n = 0; for (const ch of q) n = (n * 31 + ch.charCodeAt(0)) % 997;
+      const body = { features: miss ? [] : [{ center: [11.9 + n / 10000, 57.65 + n / 20000], text: 'Testgatan', address: '1', place_name: q, context: [], relevance: 1 }] };
+      return route.fulfill({ status: 200, headers: h, contentType: 'application/json', body: JSON.stringify(body) });
+    }
+    return route.abort('blockedbyclient');
+  });
+  return calls;
+}
 
 const normalOrder = () => [...document.querySelectorAll('#dash-content .dash-layout > [data-w]')].map((e) => e.dataset.w);
 const editOrder = () => [...document.querySelectorAll('.dash-edit-card')].map((e) => e.dataset.widgetId);
@@ -325,7 +350,7 @@ module.exports = [
     },
   },
   {
-    id: 'DASH-E-06', module: 'Dashboard (mobil)', name: 'Mobil 390: Flytta upp/Flytta ned med tryck (inget dra-handtag, inget storleksval), stora tryckytor, inget sidledes överspill; sparas',
+    id: 'DASH-E-06', module: 'Dashboard (mobil)', name: 'Mobil 390: Flytta upp/Flytta ned med tryck (inget dra-handtag, inget storleksval), tryckytor ≥ 40 px, inget sidledes överspill; sparas',
     async run(t) {
       const s = await t.world.session({ viewport: 'd25_390' });
       await s.login('admin');
@@ -339,14 +364,14 @@ module.exports = [
           handle: vis(first.querySelector('.dash-edit-handle')), size: vis(first.querySelector('.dash-edit-size')),
           up: vis(first.querySelector('.dash-move-up')), down: vis(first.querySelector('.dash-move-down')),
           upDisabled: first.querySelector('.dash-move-up').disabled,
-          small: btns.filter((b) => b.getBoundingClientRect().height < 38).map((b) => b.textContent.trim().slice(0, 20)),
+          small: btns.filter((b) => b.getBoundingClientRect().height < 40).map((b) => b.textContent.trim().slice(0, 20)),
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
           barBtnsInside: [...document.querySelectorAll('.dash-edit-bar button')].every((b) => b.getBoundingClientRect().right <= window.innerWidth + 1),
         };
       });
       t.assert(!ui.handle && !ui.size, 'mobil: inget dra-handtag och inget storleksval (alla widgets är fullbreda på telefon) ' + JSON.stringify(ui));
       t.assert(ui.up && ui.down && ui.upDisabled, 'mobil: Flytta upp/Flytta ned synliga, upp inaktiv på första');
-      t.assert(ui.small.length === 0, 'tryckytor minst 38 px: ' + ui.small.join(', '));
+      t.assert(ui.small.length === 0, 'tryckytor minst 40 px (V3-standard): ' + ui.small.join(', '));
       t.assert(ui.overflow <= 1 && ui.barBtnsInside, 'inget sidledes överspill i redigeringsläget (' + ui.overflow + ')');
       const ids = await s.eval(editOrder);
       await s.page.locator('.dash-edit-card').nth(0).locator('.dash-move-down').tap();
@@ -391,26 +416,29 @@ module.exports = [
     },
   },
   {
-    id: 'DASH-E-08', module: 'Dashboard', name: 'Kartan när jobben saknar koordinater: talen visas, ärlig förklaring per orsak (saknar postnummer/ort, behöver geokodas, kartsökningen svarade inte), lista "Visa vilka" som öppnar AO; koordinater som text placeras',
+    id: 'DASH-E-08', module: 'Dashboard', name: 'Kartan — kartfel skiljs från geokodning och adress: Mapbox GL blockerat → "Kartan kunde inte laddas" med alla tal; GL laddat men geokodningen svarar 403 → "geokodning misslyckades" + admintext om kartnyckeln; kartbakgrunden nekas → rad ovanpå kartan, markörer kvar',
     async run(t) {
-      // A. Kartbiblioteket blockerat (som i harnessen): synkron klassning syns ändå
+      // A. Mapbox blockerat (harnessens route-abort): GL laddas inte
       const s = await t.world.session({ viewport: 'desktop' });
       await s.login('admin');
       await openDash(s);
       await s.page.waitForSelector('.dash-ops-map-empty', { timeout: 15000 });
-      const a = await s.eval(() => ({
-        n: Dashboard._opsMapJobs.length,
-        count: document.getElementById('dash-ops-map-count').textContent,
-        kind: document.querySelector('.dash-ops-map-empty').dataset.kind,
-        empty: document.querySelector('.dash-ops-map-empty').innerText,
-        geo: document.getElementById('dash-ops-geo').innerText,
-        missing: +document.getElementById('dash-ops-geo').dataset.missing,
-      }));
-      t.note('A: ' + a.count + ' | ' + a.empty.replace(/\s+/g, ' '));
+      const a = await s.eval(() => {
+        const g = document.getElementById('dash-ops-geo');
+        return {
+          n: Dashboard._opsMapJobs.length,
+          count: document.getElementById('dash-ops-map-count').textContent,
+          kind: document.querySelector('.dash-ops-map-empty').dataset.kind,
+          empty: document.querySelector('.dash-ops-map-empty').innerText,
+          geo: g.innerText, d: Object.assign({}, g.dataset),
+        };
+      });
+      t.note('A (GL blockerat): ' + a.count + ' | ' + a.empty.replace(/\s+/g, ' ') + ' | ' + a.geo.replace(/\s+/g, ' ').slice(0, 200));
       t.assert(a.n > 0 && a.count === a.n + ' aktiva jobb · 0 med koordinater · ' + a.n + ' saknar koordinater', 'räknaren visar alla tal: ' + a.count);
-      t.assert(a.kind === 'nolib' && /Kartan kunde inte laddas/.test(a.empty) && new RegExp('0 av ' + a.n + ' jobb har koordinater').test(a.empty), 'kartytan förklarar att kartan inte kunde laddas, med tal');
-      t.assert(a.missing === a.n && new RegExp(a.n + ' av ' + a.n + ' jobb saknar koordinater').test(a.geo) && /adresserna behöver geokodas/.test(a.geo), 'sammanfattning: N av N saknar koordinater — behöver geokodas');
-      t.assert(/saknar postnummer\/ort/.test(a.geo), 'orsaken "saknar postnummer/ort" redovisas med antal');
+      t.assert(a.kind === 'nolib' && /Kartan kunde inte laddas/.test(a.empty) && /Mapbox GL/.test(a.empty) && new RegExp('0 av ' + a.n + ' jobb har koordinater').test(a.empty), 'kartfel: "Kartan kunde inte laddas" med förklaring och tal');
+      t.assert(new RegExp(a.n + ' av ' + a.n + ' aktiva jobb visas inte på kartan').test(a.geo), 'sammanfattningen: N av N visas inte på kartan');
+      t.assert(+a.d.notyet > 0 && +a.d.nocity > 0 && +a.d.notyet + +a.d.nocity + +a.d.noaddr + +a.d.notfound + +a.d.error === a.n, 'orsakerna summerar till alla jobb ' + JSON.stringify(a.d));
+      t.assert(new RegExp(a.d.notyet + ' inte geokodade ännu').test(a.geo.replace(/\s+/g, ' ')) && new RegExp(a.d.nocity + ' adress saknar ort/postnummer').test(a.geo.replace(/\s+/g, ' ')), 'geokodning saknas och adress utan ort redovisas var för sig med antal');
       await s.page.locator('.dash-ops-geo-sum').click();
       await s.settle(200);
       const list = await s.eval(() => ({
@@ -419,40 +447,73 @@ module.exports = [
         groups: [...document.querySelectorAll('.dash-ops-geo-group')].map((g) => ({ r: g.dataset.reason, n: +g.querySelector('h4 .bdg').textContent, rows: g.querySelectorAll('.dash-ops-geo-row').length, hint: g.querySelector('.dash-ops-geo-hint').textContent })),
       }));
       t.assert(list.open && list.expanded === 'true', '"Visa vilka" fäller ut listan');
-      t.assert(list.groups.reduce((x, g) => x + g.n, 0) === a.n && list.groups.every((g) => g.rows === g.n && g.hint.length > 20), 'listan grupperar alla jobb per orsak med förklaring ' + JSON.stringify(list.groups.map((g) => g.r + ':' + g.n)));
+      t.assert(list.groups.map((g) => g.r).join(',') === 'nogeo,badaddr' && list.groups.reduce((x, g) => x + g.n, 0) === a.n && list.groups.every((g) => g.rows === g.n && g.hint.length > 40), 'listan: "Geokodning saknas" och "Adressen behöver kompletteras" med förklaring ' + JSON.stringify(list.groups.map((g) => g.r + ':' + g.n)));
       const firstId = await s.eval(() => document.querySelector('.dash-ops-geo-row').dataset.ao);
       await s.page.locator('.dash-ops-geo-row').first().click();
       await s.settle(400);
       t.assert(await s.eval((id) => Router.currentPage === 'pg-ao-detail' && Router.currentParams.aoId === id, firstId), 'en rad öppnar arbetsordern');
-      // B. Kartbiblioteket laddat (stubbe) men adressökningen svarar inte → tomvy med orsak
+
+      // B. GL laddat (route-stubbe) men geokodningen svarar 403
       const b = await t.world.session({ viewport: 'desktop' });
-      await b.page.addInitScript(STUB);
+      const calls = await mapboxRoutes(b, { geo: '403' });
       await b.login('admin');
       await openDash(b);
       await b.page.waitForSelector('.dash-ops-map-empty[data-kind="none"]', { timeout: 15000 });
-      const r = await b.eval(() => ({ n: Dashboard._opsMapJobs.length, empty: document.querySelector('.dash-ops-map-empty').innerText, geo: document.getElementById('dash-ops-geo').innerText, count: document.getElementById('dash-ops-map-count').textContent, markers: window.__markers.length, btn: (document.querySelector('.dash-ops-map-empty .btn') || {}).textContent || '' }));
-      t.note('B: ' + r.count + ' | ' + r.empty.replace(/\s+/g, ' '));
-      t.assert(r.markers === 0, 'inga markörer');
-      t.assert(new RegExp('Inga av de ' + r.n + ' aktiva jobben har koordinater').test(r.empty) && /Adresserna behöver geokodas/.test(r.empty) && /har bara gatuadress utan postnummer\/ort/.test(r.empty), 'tomvyn säger hur många och varför: ' + r.empty.replace(/\s+/g, ' '));
-      t.assert(/kartsökningen svarade inte/.test(r.geo) && /saknar postnummer\/ort/.test(r.geo), 'orsakerna skiljs åt (kartsökningen svarade inte / saknar postnummer/ort): ' + r.geo.replace(/\s+/g, ' '));
-      t.assert(new RegExp('Visa jobb utan plats \\(' + r.n + '\\)').test(r.btn), 'tomvyn har en väg till listan (' + r.btn.trim() + ')');
-      t.assert(r.count === r.n + ' aktiva jobb · 0 med koordinater · ' + r.n + ' saknar koordinater', 'räknaren döljer inga tal: ' + r.count);
-      await b.page.locator('.dash-ops-map-empty .btn').click();
-      await b.settle(200);
-      t.assert(await b.eval(() => !document.getElementById('dash-ops-geo-list').hidden), 'knappen i tomvyn öppnar listan');
-      // C. Koordinater sparade som text (t.ex. från import) placeras på kartan
+      await b.settle(300);
+      const r = await b.eval(() => { const g = document.getElementById('dash-ops-geo'); return { n: Dashboard._opsMapJobs.length, empty: document.querySelector('.dash-ops-map-empty').innerText, geo: g.innerText, d: Object.assign({}, g.dataset), admin: (g.querySelector('.dash-ops-geo-admin') || {}).textContent || '', markers: window.__markers.length, page: document.getElementById('pg-dash').innerText }; });
+      t.note('B (GL ok, geokodning 403): ' + r.empty.replace(/\s+/g, ' ') + ' | sökningar: ' + calls.geo);
+      t.assert(r.markers === 0 && !/Kartan kunde inte laddas/.test(r.page), 'kartan laddades — inget "Kartan kunde inte laddas" när bara geokodningen nekas');
+      t.assert(new RegExp('Inga av de ' + r.n + ' aktiva jobben har koordinater').test(r.empty) && /geokodning misslyckades/.test(r.empty) && /Adresserna behöver geokodas/.test(r.empty), 'tomläget räknar upp orsakerna: ' + r.empty.replace(/\s+/g, ' '));
+      t.assert(+r.d.error >= 1 && +r.d.error + +r.d.notyet === +a.d.notyet && calls.geo >= 1 && calls.geo <= 2, 'en misslyckad sökning stoppar fler (inget hamrande): ' + JSON.stringify(r.d) + ' sökningar ' + calls.geo);
+      t.assert(/Kartnyckeln nekas för den här domänen/.test(r.admin), 'admin ser att kartnyckeln nekas (401/403)');
+
+      // C. Kartbakgrunden nekas efter att GL laddats; jobb med sparade koordinater
       const aos = t.fake.get('workOrders');
-      aos.push({ id: 'AO-STR1', title: 'Koordinater som text', customerId: 'K-002', staff: ['ST-001'], log: [], materials: [], checklist: [], status: 'planerad', scheduledDate: new Date().toISOString().slice(0, 10), address: 'Testgatan 1', zip: '411 34', city: 'Göteborg', lat: '57.7012', lng: '11.9681', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      aos.push({ id: 'AO-KOORD1', title: 'Har koordinater', customerId: 'K-002', staff: ['ST-001'], log: [], materials: [], checklist: [], status: 'planerad', scheduledDate: new Date().toISOString().slice(0, 10), address: 'Testgatan 1', zip: '411 34', city: 'Göteborg', lat: 57.7012, lng: 11.9681, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       t.fake.set('workOrders', aos);
       const c = await t.world.session({ viewport: 'desktop' });
-      await c.page.addInitScript(STUB);
+      await mapboxRoutes(c, { geo: 'none', styleError: 403 });
       await c.login('admin');
       await openDash(c);
-      await c.page.waitForFunction(() => (window.__markers || []).length > 0, null, { timeout: 15000 });
-      await c.settle(300);
-      const m = await c.eval(() => ({ n: Dashboard._opsMapJobs.length, ids: [...new Set(window.__markers.map((x) => x.el.dataset.aoIds))].join(','), /* stubben behåller markörer från tidigare ritningar */ count: document.getElementById('dash-ops-map-count').textContent, empty: !!document.querySelector('.dash-ops-map-empty') }));
-      t.assert(m.ids === 'AO-STR1' && !m.empty, 'AO med koordinater som text får en markör: ' + m.ids);
-      t.assert(m.count === m.n + ' aktiva jobb · 1 på kartan · ' + (m.n - 1) + ' saknar koordinater', 'räknaren: ' + m.count);
+      await c.page.waitForSelector('.dash-ops-map-alert', { timeout: 15000 });
+      const m = await c.eval(() => ({ alert: document.querySelector('.dash-ops-map-alert').textContent, ids: [...new Set(window.__markers.map((x) => x.el.dataset.aoIds))].join(','), empty: !!document.querySelector('.dash-ops-map-empty'), count: document.getElementById('dash-ops-map-count').textContent }));
+      t.note('C (bakgrund nekas): ' + m.alert + ' | ' + m.count);
+      t.assert(/kartnyckeln nekas/.test(m.alert) && !m.empty, 'kartbakgrunden nekas: en rad ovanpå kartan, kartan ersätts inte');
+      t.assert(m.ids === 'AO-KOORD1' && /1 på kartan/.test(m.count), 'jobbet med sparade koordinater har en markör: ' + m.ids + ' | ' + m.count);
+    },
+  },
+  {
+    id: 'DASH-E-10', module: 'Dashboard', name: 'Kartan — geokodningen svarar med träffar: över 20 jobb utan koordinater → högst 20 sökningar per visning, resten "inte geokodade ännu"; adress som inte hittas, adress utan ort och jobb utan adress redovisas var för sig; koordinater som text placeras',
+    async run(t) {
+      const aos = t.fake.get('workOrders');
+      const today = new Date().toISOString().slice(0, 10);
+      const base = { customerId: 'K-002', staff: ['ST-001'], log: [], materials: [], checklist: [], status: 'planerad', scheduledDate: today, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      for (let i = 1; i <= 41; i++) aos.push(Object.assign({}, base, { id: 'AO-G' + i, title: 'Geokoda ' + i, address: 'Lastgatan ' + i, zip: '411 ' + String(10 + i), city: 'Göteborg' }));
+      aos.push(Object.assign({}, base, { id: 'AO-NF1', title: 'Adress finns inte', priority: 'akut', address: 'Finnsintegatan 99', zip: '999 99', city: 'Ingenstans' }));
+      aos.push(Object.assign({}, base, { id: 'AO-NA1', title: 'Utan adress', customerId: null, address: '' }));
+      aos.push(Object.assign({}, base, { id: 'AO-NC1', title: 'Utan ort', address: 'Ensamgatan 3' }));
+      aos.push(Object.assign({}, base, { id: 'AO-STR1', title: 'Koordinater som text', address: 'Testgatan 1', zip: '411 34', city: 'Göteborg', lat: '57.7012', lng: '11.9681' }));
+      t.fake.set('workOrders', aos);
+      const s = await t.world.session({ viewport: 'desktop' });
+      const calls = await mapboxRoutes(s, { geo: 'hits' });
+      await s.login('admin');
+      await openDash(s);
+      await s.page.waitForFunction(() => (window.__markers || []).length > 20, null, { timeout: 20000 });
+      await s.settle(800);
+      const r = await s.eval(() => {
+        const g = document.getElementById('dash-ops-geo');
+        const st = {}; (Dashboard._opsMapDiag || []).forEach((d) => { st[d.status] = (st[d.status] || 0) + 1; });
+        const byId = {}; (Dashboard._opsMapDiag || []).forEach((d) => { byId[d.ao.id] = d.status; });
+        return { n: Dashboard._opsMapJobs.length, st, byId: { NF: byId['AO-NF1'], NA: byId['AO-NA1'], NC: byId['AO-NC1'], STR: byId['AO-STR1'] }, d: Object.assign({}, g.dataset), geo: g.innerText.replace(/\s+/g, ' '), count: document.getElementById('dash-ops-map-count').textContent, ids: new Set(window.__markers.map((x) => x.el.dataset.aoIds)).size, str: window.__markers.some((x) => x.el.dataset.aoIds === 'AO-STR1'), empty: !!document.querySelector('.dash-ops-map-empty'), page: document.getElementById('pg-dash').innerText };
+      });
+      t.note('status: ' + JSON.stringify(r.st) + ' sökningar: ' + calls.geo + ' | ' + r.count + ' | ' + r.geo.slice(0, 220));
+      t.assert(!r.empty && !/Kartan kunde inte laddas/.test(r.page), 'kartan visas');
+      t.assert(r.byId.STR === 'coords' && r.str, 'koordinater sparade som text placeras utan sökning');
+      t.assert(r.byId.NF === 'notfound' && r.byId.NA === 'noaddr' && r.byId.NC === 'nocity', 'orsak per jobb: hittades inte / saknar adress / saknar ort ' + JSON.stringify(r.byId));
+      t.assert((r.st.geocoded || 0) >= 19 && +r.d.notyet >= 1 && calls.geo <= 40, 'högst 20 sökningar per visning, resten väntar: ' + JSON.stringify(r.st) + ' sökningar ' + calls.geo);
+      t.assert(new RegExp(r.d.notyet + ' inte geokodade ännu').test(r.geo) && /1 adress saknar ort\/postnummer|\d+ adress saknar ort\/postnummer/.test(r.geo) && /1 saknar adress/.test(r.geo) && /1 adressen hittades inte/.test(r.geo), 'sammanfattningen räknar varje orsak separat: ' + r.geo.slice(0, 260));
+      t.assert(+r.d.missing + (r.st.coords || 0) + (r.st.geocoded || 0) === r.n, 'placerade + saknade = alla aktiva jobb');
+      t.assert(/på kartan/.test(r.count) && new RegExp(r.d.missing + ' saknar koordinater').test(r.count), 'räknaren: ' + r.count);
     },
   },
   {
@@ -502,6 +563,66 @@ module.exports = [
       await s.page.locator('[data-w="overdue_alert"] .dw-go').click();
       await s.settle(400);
       t.assert(await s.eval(() => Router.currentPage === 'pg-activities'), 'Visa försenade öppnar Aktiviteter');
+    },
+  },
+  {
+    id: 'DASH-E-11', module: 'Dashboard', name: 'Realistiskt innehåll (V3-standard §12): 40 försenade aktiviteter, 30 jobb i poolen, 150 aktiva jobb och långa titlar → korten visar de viktigaste först och "Visa …", titlar kortas av, inget sidledes överspill vid 390/1366; tomlägen utan NaN/undefined',
+    async run(t) {
+      const ago = (d) => new Date(Date.now() - d * 86400000).toISOString();
+      const LONG = 'Byte av samtliga termostatventiler och injustering av värmesystemet i trapphus B, C och D inklusive besiktningsprotokoll och slutdokumentation';
+      t.fake.set('activities', Array.from({ length: 40 }, (_, i) => ({ id: 'ACT-R' + i, type: i % 2 ? 'call' : 'followup', title: LONG + ' (' + (i + 1) + ')', status: 'open', dueDate: ago(2 + i).slice(0, 10), assignedTo: 'ST-001', createdBy: 'ST-001', createdAt: ago(60) })));
+      const aos = t.fake.get('workOrders');
+      const base = { customerId: 'K-002', log: [], materials: [], checklist: [], updatedAt: ago(0) };
+      const prios = ['låg', 'normal', 'hög', 'akut'];
+      for (let i = 0; i < 30; i++) aos.push(Object.assign({}, base, { id: 'AO-RP' + i, title: LONG + ' — pool ' + i, status: 'pool', staff: [], priority: prios[i % 4], createdAt: ago(1 + i) }));
+      for (let i = 0; i < 150; i++) aos.push(Object.assign({}, base, { id: 'AO-RA' + i, title: LONG + ' — jobb ' + i, status: 'planerad', staff: ['ST-001'], scheduledDate: ago(-1 - (i % 20)).slice(0, 10), address: 'Långa vägen ' + (i + 1), createdAt: ago(10) }));
+      t.fake.set('workOrders', aos);
+      const problems = [];
+      for (const vp of ['d25_390', 'd25_1366']) {
+        const s = await t.world.session({ viewport: vp });
+        await s.login('admin');
+        await openDash(s);
+        await s.settle(400);
+        const r = await s.eval(() => {
+          const vis = (e) => !!e && e.offsetParent !== null && e.getBoundingClientRect().height > 0;
+          const od = document.querySelector('[data-w="overdue_alert"]');
+          const pool = document.querySelector('[data-w="pool"]');
+          const mapRows = [...document.querySelectorAll('.dash-ops-map-list .dash-job-row')];
+          const titles = [...document.querySelectorAll('.dash-layout .dwr-t, .dash-layout .crow-title, .dash-job-row-title')].filter(vis);
+          return {
+            odRows: od ? od.querySelectorAll('.dwr').length : -1, odCount: od && (od.querySelector('.dw-count') || {}).textContent, odH: od ? Math.round(od.getBoundingClientRect().height) : 0,
+            odGo: !!(od && od.querySelector('.dw-go')),
+            poolVis: pool ? [...pool.querySelectorAll('.crow')].filter(vis).length : -1, poolFirst: pool && (pool.querySelector('.crow .bdg') || {}).textContent, poolMore: pool ? [...pool.querySelectorAll('button')].some((b) => vis(b) && /Visa (alla|fler)/.test(b.textContent)) : false,
+            poolCount: pool && (pool.querySelector('.dw-count') || {}).textContent,
+            mapRows: mapRows.length, mapMore: (document.querySelector('.dash-ops-more') || {}).textContent || '',
+            wrapped: titles.filter((e) => e.getBoundingClientRect().height > 40).length, truncated: titles.filter((e) => e.scrollWidth > e.clientWidth + 1).length,
+            bad: /NaN|undefined|\[object Object\]/.test(document.getElementById('pg-dash').innerText),
+          };
+        });
+        t.note(vp + ': ' + JSON.stringify(r));
+        if (r.odRows !== 3 || r.odCount !== '40' || !r.odGo) problems.push(vp + ' Försenade aktiviteter: ' + JSON.stringify([r.odRows, r.odCount, r.odGo]));
+        if (r.odH > 420) problems.push(vp + ' Försenade aktiviteter för högt: ' + r.odH);
+        if (r.poolVis > 4 || r.poolVis < 1 || !r.poolMore) problems.push(vp + ' Arbetspool visar ' + r.poolVis + ' rader, Visa-knapp ' + r.poolMore);
+        if (!/Akut/.test(r.poolFirst || '')) problems.push(vp + ' Arbetspool: akut inte först (' + r.poolFirst + ')');
+        if (!/^3\d väntar$/.test((r.poolCount || '').trim())) problems.push(vp + ' Arbetspool antal: ' + r.poolCount);
+        if (r.mapRows > 25) problems.push(vp + ' kartlistan renderar ' + r.mapRows + ' rader');
+        if (vp === 'd25_1366' && !/Visa alla 1\d\d aktiva jobb/.test(r.mapMore)) problems.push(vp + ' kartlistan saknar "Visa alla N aktiva jobb" (' + r.mapMore + ')');
+        if (r.wrapped > 0) problems.push(vp + ' ' + r.wrapped + ' titlar bryts på flera rader i stället för att kortas av');
+        if (r.truncated < 3) problems.push(vp + ' långa titlar kortas inte av (' + r.truncated + ')');
+        if (r.bad) problems.push(vp + ' NaN/undefined i texten');
+        (await s.layoutIssues()).forEach((x) => problems.push(vp + ': ' + x));
+        await s.context.close();
+      }
+      // Tomlägen: användare med få/inga egna jobb
+      const e = await t.world.session({ viewport: 'd25_390' });
+      await e.login('begransad');
+      await openDash(e);
+      await e.settle(400);
+      const em = await e.eval(() => ({ txt: document.getElementById('pg-dash').innerText, empties: [...document.querySelectorAll('#pg-dash .empty, #pg-dash .dt-empty')].filter((x) => x.offsetParent).map((x) => x.innerText.trim()).filter(Boolean) }));
+      t.note('begränsad: tomlägen ' + JSON.stringify(em.empties.slice(0, 5)));
+      if (/NaN|undefined|\[object Object\]/.test(em.txt)) problems.push('begränsad: NaN/undefined');
+      (await e.layoutIssues()).forEach((x) => problems.push('begränsad: ' + x));
+      t.assert(problems.length === 0, problems.join(' ; '));
     },
   },
 ];
