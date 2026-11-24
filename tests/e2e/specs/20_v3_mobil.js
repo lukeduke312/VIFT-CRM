@@ -116,49 +116,52 @@ module.exports = [
       await s.go('pg-invoices');
       await s.eval(() => InvoicesPage._setView && InvoicesPage._setView('queue'));
       await s.settle(500);
+      // V3 6A: kön är kompakt (ihopfälld) som standard — fäll ut alla rader som en användare gör.
+      await s.page.locator('#bq-expand-all').click();
+      await s.settle(300);
       // Första kunden med minst två underlag, så att "delvis markerad" kan uppstå.
-      const gi = await s.eval(() => [...document.querySelectorAll('.bq-cust-group')].findIndex((g) => g.querySelectorAll('.bq-source-row').length >= 2));
+      const gi = await s.eval(() => [...document.querySelectorAll('.bqv-cust')].findIndex((g) => g.querySelectorAll('.bqv-src input._sel-cb').length >= 2));
       t.assert(gi >= 0, 'det finns en kund med minst två underlag i kön');
-      const grp = () => s.page.locator('.bq-cust-group').nth(gi);
+      const grp = () => s.page.locator('.bqv-cust').nth(gi);
       const st = () => s.eval((gi) => {
-        const cust = document.querySelectorAll('.bq-cust-group')[gi];
-        const ids = cust.querySelector('.bq-cust-header .bq-group-cb').getAttribute('data-group-ids').split('|');
+        const cust = document.querySelectorAll('.bqv-cust')[gi];
+        const ids = cust.querySelector('.bqv-cust-row .bqv-cb').getAttribute('data-group-ids').split('|');
         const cb = (sel) => { const e = cust.querySelector(sel); return { c: e.checked, i: e.indeterminate }; };
-        return { n: ids.length, sel: ids.filter((id) => SelectionModel.isSelected(id)).length, total: SelectionModel.count(), cust: cb('.bq-cust-header .bq-group-cb'), prop: cb('.bq-prop-header .bq-group-cb'), ao: cb('.bq-ao-header .bq-group-cb') };
+        return { n: ids.length, sel: ids.filter((id) => SelectionModel.isSelected(id)).length, total: SelectionModel.count(), cust: cb('.bqv-cust-row .bqv-cb'), prop: cb('.bqv-prop-row .bqv-cb'), ao: cb('.bqv-ao-row .bqv-cb') };
       }, gi);
       // Struktur: varje rad ligger i sin AO-grupp och indraget följer nivån.
       const lay = await s.eval(() => {
-        const rows = [...document.querySelectorAll('#bq-list .bq-source-row')];
+        const rows = [...document.querySelectorAll('#bq-list .bqv-src')];
         const x = (sel) => { const e = document.querySelector('#bq-list ' + sel); return e ? e.getBoundingClientRect().left : null; };
-        return { rows: rows.length, inAo: rows.filter((r) => r.parentElement.classList.contains('bq-ao-group')).length, cx: x('.bq-cust-header input'), ax: x('.bq-ao-header input'), rx: x('.bq-source-row input'), labels: [...document.querySelectorAll('#bq-list .bq-group-cb')].slice(0, 3).map((e) => e.getAttribute('aria-label')) };
+        return { rows: rows.length, inAo: rows.filter((r) => r.parentElement.classList.contains('bqv-srcs') && r.parentElement.parentElement.classList.contains('bqv-ao')).length, cx: x('.bqv-cust-row input'), ax: x('.bqv-ao-row input'), rx: x('.bqv-src input'), labels: [...document.querySelectorAll('#bq-list .bqv-cb')].slice(0, 3).map((e) => e.getAttribute('aria-label')) };
       });
       t.assert(lay.rows > 0 && lay.inAo === lay.rows, 'alla underlagsrader ligger i sin arbetsorders kort (' + lay.inAo + '/' + lay.rows + ')');
       t.assert(lay.cx < lay.ax && lay.ax < lay.rx, 'indraget följer nivån: kund < AO < rad (' + [lay.cx, lay.ax, lay.rx].map(Math.round).join(' < ') + ')');
       t.assert(lay.labels.every((l) => /^Markera alla underlag för /.test(l)), 'gruppernas kryssrutor har beskrivande etiketter ' + JSON.stringify(lay.labels));
       // 1. Kundens kryssruta markerar alla kundens underlag (oförändrad logik).
-      await grp().locator('.bq-cust-header input').check();
+      await grp().locator('.bqv-cust-row input.bqv-cb').check();
       await s.settle(200);
       let a = await st();
       t.assert(a.sel === a.n && a.total === a.n && a.cust.c && a.prop.c && a.ao.c, 'kund markerad → alla ' + a.n + ' underlag markerade och underliggande grupper markerade ' + JSON.stringify(a));
       // 2. Avmarkera en rad → kund/fastighet/AO delvis markerade, ett underlag mindre.
-      await grp().locator('.bq-source-row input').first().uncheck();
+      await grp().locator('.bqv-src input._sel-cb').first().uncheck();
       await s.settle(200);
       a = await st();
       t.assert(a.sel === a.n - 1, 'en rad avmarkerad → ' + (a.n - 1) + ' markerade (' + a.sel + ')');
       t.assert(!a.cust.c && a.cust.i && !a.prop.c && a.prop.i, 'kund och fastighet visas delvis markerade ' + JSON.stringify(a));
       // 3. Klick på delvis markerad grupp markerar alla igen (samma beteende som förut).
-      await grp().locator('.bq-cust-header input').click();
+      await grp().locator('.bqv-cust-row input.bqv-cb').click();
       await s.settle(200);
       a = await st();
       t.assert(a.sel === a.n && a.cust.c && !a.cust.i, 'klick på delvis markerad kund markerar alla igen ' + JSON.stringify(a));
       // 4. Välj alla / Avmarkera via markeringsfältet → gruppernas kryssrutor följer med.
       await s.page.locator('#bq-list ._sel-all-cb').click();
       await s.settle(300);
-      const all = await s.eval(() => ({ groups: [...document.querySelectorAll('#bq-list .bq-group-cb')].every((e) => e.checked), n: SelectionModel.count(), rows: document.querySelectorAll('#bq-list .bq-source-row').length }));
+      const all = await s.eval(() => ({ groups: [...document.querySelectorAll('#bq-list .bqv-cb')].every((e) => e.checked), n: SelectionModel.count(), rows: document.querySelectorAll('#bq-list .bqv-src input._sel-cb').length }));
       t.assert(all.n === all.rows && all.groups, 'Välj alla markerar alla underlag och alla grupper visas markerade ' + JSON.stringify(all));
       await s.page.locator('#bq-list ._sel-all-cb').click();
       await s.settle(300);
-      const none = await s.eval(() => ({ groups: [...document.querySelectorAll('#bq-list .bq-group-cb')].every((e) => !e.checked && !e.indeterminate), n: SelectionModel.count() }));
+      const none = await s.eval(() => ({ groups: [...document.querySelectorAll('#bq-list .bqv-cb')].every((e) => !e.checked && !e.indeterminate), n: SelectionModel.count() }));
       t.assert(none.n === 0 && none.groups, 'Välj alla igen avmarkerar allt och grupperna följer med ' + JSON.stringify(none));
     },
   },

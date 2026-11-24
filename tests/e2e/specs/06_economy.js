@@ -161,7 +161,9 @@ module.exports = [
       t.assert(cands.length >= 1 && cands.every((c) => c.sel), '9. AO:ns underlag valbara');
       const queueSum = cands.reduce((a, c) => a + c.amount, 0);
       t.assert(queueSum === calc.exVatAfterDiscount, '9. köns summa ' + queueSum + ' = offertens ex moms ' + calc.exVatAfterDiscount);
-      for (const c of cands) await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c.id + '\')"]').check();
+      // V3 6A: kön är ihopfälld som standard — fäll ut alla rader och kryssa underlagen som en användare.
+      await e.page.locator('#bq-expand-all').click(); await e.settle(300);
+      for (const c of cands) await e.page.locator('#bq-list input._sel-cb[data-sel-id="' + c.id + '"]').check();
       await e.eval((ids) => InvoicesPage._openCreateConfirm(ids), cands.map((c) => c.id));
       await e.clickModalButton(/Skapa fakturautkast/);
       await e.settle(1500);
@@ -354,7 +356,9 @@ module.exports = [
       const time = cands.find((c) => c.type === 'time'); const mat = cands.find((c) => c.type === 'material');
       t.assert(time && time.sel && time.q === 1.33 && time.a === 791.35, 'tid: 80 min = 1,33 h × 595 = 791,35 kr (' + JSON.stringify(time) + ')');
       t.assert(mat && mat.sel && Math.abs(mat.a - 99.99) < 0.001, 'material: 3 × 33,33 = 99,99 kr (' + JSON.stringify(mat) + ')');
-      for (const c of cands) await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c.id + '\')"]').check();
+      // V3 6A: kön är ihopfälld som standard — fäll ut alla rader och kryssa underlagen som en användare.
+      await e.page.locator('#bq-expand-all').click(); await e.settle(300);
+      for (const c of cands) await e.page.locator('#bq-list input._sel-cb[data-sel-id="' + c.id + '"]').check();
       await e.eval((ids) => InvoicesPage._openCreateConfirm(ids), cands.map((c) => c.id));
       await e.clickModalButton(/Skapa fakturautkast/);
       await e.settle(1500);
