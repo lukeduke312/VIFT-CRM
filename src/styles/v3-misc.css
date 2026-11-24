@@ -296,3 +296,116 @@
   #pg-import-wizard .imp-row-item .imp-conflict-sel { width: 100%; }
   #pg-import-wizard .imp-row-name { min-width: 0; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. Fastighetskort (pg-obj-detail): huvud → fakta → flikar → innehåll.
+      Ingen högerspalt; namn/adress/nyckeltal visas en gång (F-06, F-10).
+   ═══════════════════════════════════════════════════════════════════ */
+.mx-prop { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mx-prop > .mx-dh { margin-bottom: 0; }
+.mx-dh-no { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mx-bdg-btn { cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; }
+.mx-bdg-btn:hover { text-decoration: underline; text-underline-offset: 2px; }
+.mx-bdg-btn:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* Fakta */
+.mx-pf { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: 12px 16px; }
+.mx-pf-who { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 300px; }
+.mx-pf-line { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-2); min-width: 0; flex-wrap: wrap; }
+.mx-pf-line > svg { color: var(--faint); }
+.mx-pf-addr { color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.mx-pf-addr:hover { text-decoration-color: currentColor; }
+.mx-pf-muted { color: var(--muted); }
+.mx-pf-nav { min-height: 28px; }
+.mx-pf-figs { display: flex; gap: 6px 22px; flex-wrap: wrap; }
+.mx-pf-fig { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mx-pf-figbtn { display: flex; flex-direction: column; gap: 1px; background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+.mx-pf-figbtn:hover .mx-pf-v { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+.mx-pf-figbtn:focus-visible { outline: none; box-shadow: var(--focus); }
+.mx-pf-l { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .02em; white-space: nowrap; }
+.mx-pf-v { font-size: 15px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mx-pf-v b { font-weight: 700; color: var(--muted); }
+.mx-pf-v b.is-on { color: var(--ink); }
+
+/* Flikar: alla nåbara — radbryts i stället för att rulla ut ur bild */
+#pg-obj-detail .mx-ptabs { flex-wrap: wrap !important; overflow: visible !important; align-self: stretch; margin: 0 !important; }
+#pg-obj-detail .mx-ptabs .ft { flex: 0 0 auto; }
+#pg-obj-detail .mx-ptabs .ft.on { color: var(--ink); }
+#pg-obj-detail .mx-ptabs .si-tab-alert { margin-left: 2px; }
+
+/* Paneler och tvåspaltiga grupper */
+.mx-ppanels { display: flex; flex-direction: column; min-width: 0; }
+.mx-ppanel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mx-ppanel > .card { margin: 0 !important; }
+.mx-pgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (min-width: 1024px) {
+  .mx-ppanels[data-group="contact"] .mx-pgrid-contact,
+  .mx-ppanels[data-group="images"] .mx-pgrid-media { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+}
+#pg-obj-detail .mx-ppanel .card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#pg-obj-detail .mx-ppanel .card-header h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+
+/* Översikt */
+.mx-ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.mx-ov-grid > .card { margin: 0 !important; }
+.mx-ov-alert { border-color: var(--danger-line) !important; box-shadow: inset 3px 0 0 var(--danger), var(--shadow-1) !important; }
+.mx-late { color: var(--danger) !important; font-weight: 600; }
+.mx-ov-list { display: flex; flex-direction: column; gap: 2px; padding-top: 8px !important; }
+.mx-ov-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 6px; margin: 0 -6px; border: none; border-radius: var(--radius-sm); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; width: calc(100% + 12px); }
+.mx-ov-row:hover { background: var(--surface-2); }
+.mx-ov-row:focus-visible { outline: none; box-shadow: var(--focus); }
+.mx-ov-main { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.mx-ov-t { font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-ov-s { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mx-ov-person { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.mx-ov-person:last-child { border-bottom: none; }
+.mx-ov-pn { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.mx-ov-pr { font-size: 12.5px; color: var(--muted); }
+.mx-ov-pr a { color: var(--accent-ink); }
+.mx-ov-kv { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; color: var(--ink); }
+.mx-ov-kv:last-child { border-bottom: none; }
+.mx-ov-kv > span:first-child { display: flex; flex-direction: column; min-width: 0; font-weight: 600; }
+.mx-ov-kv small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.mx-ov-note { margin-top: 10px; display: flex; gap: 8px; align-items: flex-start; background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--ink-2); }
+.mx-muted { font-size: 13px; color: var(--muted); margin: 0; }
+.mx-more { color: var(--accent-ink); }
+.mx-link-sm { font-size: 12.5px; color: var(--accent-ink); display: inline-flex; align-items: center; gap: 4px; }
+.mx-kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mx-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.mx-sec-h { font-size: 15px; font-weight: 650; color: var(--ink); margin: 0; display: inline-flex; align-items: center; gap: 8px; }
+.mx-sec-h svg { color: var(--muted); }
+
+/* Sökfält med ikon bredvid (inte i placeholder) */
+.mx-isearch { position: relative; display: inline-flex; align-items: center; min-width: 140px; flex: 0 1 200px; margin: 0; }
+.mx-isearch > svg { position: absolute; left: 9px; color: var(--faint); pointer-events: none; }
+.mx-isearch input { width: 100%; height: var(--ctl-h-sm); padding: 0 10px 0 30px !important; font-size: 12.5px; }
+
+/* Listkort i flikarna: tokens i stället för äldre färger */
+#pg-obj-detail .si-fchip { height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+#pg-obj-detail .si-fchip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+#pg-obj-detail .si-card, #pg-obj-detail .obj-card { border-color: var(--line); border-radius: var(--radius); background: var(--surface); }
+#pg-obj-detail .obj-card:hover { border-color: var(--line-2); box-shadow: var(--shadow-2); }
+#pg-obj-detail .si-filter-bar select { height: var(--ctl-h-sm) !important; }
+
+@media (max-width: 1023px) {
+  .mx-ov-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+  .mx-pf { padding: 10px 12px; gap: 10px; }
+  .mx-pf-who { flex-basis: 100%; gap: 4px; }
+  .mx-pf-line { font-size: 13px; }
+  .mx-pf-figs { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .mx-pf-v { font-size: 14px; }
+  .mx-pf-l { font-size: 10.5px; }
+  #pg-obj-detail .mx-ptabs { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+  #pg-obj-detail .mx-ptabs .ft { min-width: 0 !important; width: auto; padding: 4px; min-height: 40px; font-size: 11.5px; line-height: 1.2; white-space: normal; text-align: center; justify-content: center; flex-wrap: wrap; gap: 2px 4px; }
+  #pg-obj-detail .mx-ptabs .ft .ft-n { font-size: 10.5px; }
+  .mx-isearch { flex: 1 1 100%; }
+  .mx-isearch input { height: 40px; font-size: 16px; }
+  .mx-pf-x { display: none !important; }
+  .mx-tl { display: none; }
+  .mx-ts { display: inline !important; }
+}
+.mx-ts { display: none; }
+.mx-dh-sub .mx-sep { margin: 0 2px; }
