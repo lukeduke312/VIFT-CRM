@@ -9308,20 +9308,23 @@ const AdminPage = {
       ? allTitles.filter(t => typeof t === 'object' && t.name && t.name.toLowerCase().includes(this._titleQ.toLowerCase()))
       : allTitles;
 
+    /* QA 2026-11-25: ikon (betrodd, statisk ic()-markup) och text hålls isär —
+       texten escapas, ikonen renderas som HTML. Tidigare låg ic() i label och
+       escapades bort till rå SVG-text efter XSS-rättningen (QA-P0-3). */
     const tabDefs = [
-      { key: 'foretag',        label: 'Företag'                                    },
-      { key: 'ekonomi',        label: 'Ekonomi'                                    },
-      { key: 'personal',       label: 'Personal'                                   },
-      { key: 'priser',         label: 'Priser'                                     },
-      { key: 'system',         label: 'System'                                     },
-      { key: 'fastighetskort', label: `${ic('building-2',12)} Fastighetskort`      },
-      { key: 'ansvariga',      label: `${ic('user-check',12)} Ansvariga`           },
-      { key: 'avvikelse',      label: `${ic('alert-triangle',12)} Avvikelser`      },
-      { key: 'notiser',        label: `${ic('bell',12)} Notiser`                   },
-      { key: 'epost',          label: `${ic('mail',12)} E-post-mallar`             }
+      { key: 'foretag',        label: 'Företag'                          },
+      { key: 'ekonomi',        label: 'Ekonomi'                          },
+      { key: 'personal',       label: 'Personal'                         },
+      { key: 'priser',         label: 'Priser'                           },
+      { key: 'system',         label: 'System'                           },
+      { key: 'fastighetskort', label: 'Fastighetskort', icon: 'building-2'     },
+      { key: 'ansvariga',      label: 'Ansvariga',      icon: 'user-check'     },
+      { key: 'avvikelse',      label: 'Avvikelser',     icon: 'alert-triangle' },
+      { key: 'notiser',        label: 'Notiser',        icon: 'bell'           },
+      { key: 'epost',          label: 'E-post-mallar',  icon: 'mail'           }
     ];
     const tabBar = `<div class="admin-tabs">
-      ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${esc(t.label)}</button>`).join('')}
+      ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.icon ? ic(t.icon,12) + ' ' : ''}${esc(t.label)}</button>`).join('')}
     </div>`;
 
     const sections = {};
