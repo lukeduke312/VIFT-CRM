@@ -59,7 +59,22 @@ const Dashboard = {
     // Applicera personliga preferenser (accentfärg, täthet)
     if (userId) UserPrefsService.apply(userId);
 
-    if (this._editMode) { this._renderEditMode(el, user, roleId); return; }
+    if (this._editMode) {
+      /* En draft hör till EN användare. Har inloggningen bytts (eller
+         identiteten blivit oupplösbar) kastas den — den får aldrig visas
+         eller sparas under någon annan. */
+      if (!layoutUserId || layoutUserId !== this._editUserId) {
+        this._clearEditState();
+      } else if (this._dnd) {
+        /* Pågående dragning: en bakgrundsuppdatering (DataSync) skulle
+           ersätta kortet som dras och avbryta dragningen — vänta. */
+        this._dndPendingRender = true;
+        return;
+      } else {
+        this._renderEditMode(el);
+        return;
+      }
+    }
 
     // Hämta layout för användaren (sparad V51B-personlig, migrerad legacy, eller rollstandard)
     const layout = DashboardConfig.getUserLayout(layoutUserId, roleId);
@@ -95,7 +110,12 @@ const Dashboard = {
         const mod = DashboardConfig.getModule(m.id);
         const cat = mod ? (mod.category || null) : null;
         const key = cat ? cat.toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'other';
-        if (!isCustomLayout && cat && cat !== lastCat) {
+        /* 2026-11-26: "Kräver åtgärd" får ingen egen sektionsrubrik — den
+           upprepade bara widgetens rubrik ("KRÄVER ÅTGÄRD" + "Kräver
+           åtgärd") och det som brådskar ska aldrig kunna fällas ihop. */
+        const urgentCat = cat === DashboardConfig.CATEGORY_ORDER[0];
+        if (urgentCat) delete this._collapsed[key];
+        if (!isCustomLayout && cat && cat !== lastCat && !urgentCat) {
           const collapsed = !!this._collapsed[key];
           parts.push(`<div class="dgw-12" data-sec-hdr="${key}">
             <div class="dash-sec-toggle" onclick="Dashboard.toggleSection('${key}')">
@@ -157,11 +177,12 @@ const Dashboard = {
       if (LIMIT === 0) b.classList.add('dm-more-sum');
     };
     root.querySelectorAll('.dt-jobs').forEach(l => clamp(l, [...l.children].filter(c => c.classList.contains('dt-job'))));
-    root.querySelectorAll('.dash-ops-map-list').forEach(l => clamp(l, [...l.children]));
+    root.querySelectorAll('.dash-ops-map-list').forEach(l => clamp(l, [...l.children].filter(c => c.classList.contains('dash-job-row'))));
     root.querySelectorAll('.dash-layout [data-sec] .card-body').forEach(cb => {
       if (cb.closest('[data-sec^="kr"]')) return;   // Kräver åtgärd visas alltid i sin helhet
+      if (cb.classList.contains('dash-ops-map-body')) return;   // kartans lista hanteras ovan
       const w = (cb.closest('[data-w]') || {}).dataset || {};
-      let rows = [...cb.children].filter(c => !c.matches('.btn, button, .empty, .dm-more, .kpi-row') && !c.classList.contains('dash-ops-map-wrap'));
+      let rows = [...cb.children].filter(c => !c.matches('.btn, button, .empty, .dm-more, .kpi-row, .dw-lead') && !c.classList.contains('dash-ops-map-wrap'));
       if (w.w === 'ao_categories') rows = rows.filter(r => r.hasAttribute('onclick'));   // sammanfattningsraden visas alltid
       if (!rows.length) return;
       if (w.w === 'ao_categories') { clamp(rows[0].parentElement, rows, 0); return; }
@@ -191,7 +212,8 @@ const Dashboard = {
     const myGen = this._mapGeneration;
     if (hasOpsMap && document.getElementById('dash-ops-map-canvas-wrap')) {
       const jobsSnapshot = this._opsMapJobs;
-      this._mapInitTimer = setTimeout(() => this._initOpsMap(myGen, jobsSnapshot), 30);
+      const diagSnapshot = this._opsMapDiag;
+      this._mapInitTimer = setTimeout(() => this._initOpsMap(myGen, jobsSnapshot, diagSnapshot), 30);
     } else if (this._mapInstance) {
       // ops_map inte längre synlig i denna layout (t.ex. avstängd via
       // Anpassa, eller dold i redigeringsläget) — städa bort en ev.
@@ -283,8 +305,8 @@ const Dashboard = {
       Auth.can('ao_create') ? `<button class="btn bp bsm" onclick="Router.showPage('pg-ao');setTimeout(()=>WorkOrdersPage.openCreate(),0)">${ic('plus',15)} Ny order</button>` : '',
       Auth.can('offer_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-offer')">${ic('file-text',15)} Ny offert</button>` : '',
       Auth.can('ao_time') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-tid')">${ic('clock',15)} ${state.stampActive ? 'Instämplad' : 'Stämpla'}</button>` : '',
+      `<button type="button" class="btn bghost bsm dash-customize-btn" onclick="Dashboard.enterEditMode()" title="Flytta, ändra storlek på eller dölj widgets">${ic('sliders',15)} Anpassa</button>`,
       `<button class="ibtn" onclick="Dashboard.openUserPrefs()" title="Mina inställningar" aria-label="Mina inställningar">${ic('user',16)}</button>`,
-      `<button class="ibtn" onclick="Dashboard.enterEditMode()" title="Anpassa dashboard" aria-label="Anpassa dashboard">${ic('settings',16)}</button>`,
     ].join('');
 
     const schedule = todays.length ? todays.slice(0, 8).map(ao => {
@@ -361,13 +383,34 @@ const Dashboard = {
     return [];
   },
 
+  /* ── 2026-11-26: gemensamt kortchrome för widgetar ───────────────────
+     Samma rubrikrad överallt: ikon + rubrik till vänster; antal (märke)
+     och EN länk "Visa alla →" till höger. `o.go` är betrodd, statisk
+     kod (sidbyte med fasta parametrar) — aldrig data. */
+  _head(icon, title, o) {
+    o = o || {};
+    const has = (v) => v !== undefined && v !== null && v !== '';
+    const count = has(o.count) ? `<span class="bdg${o.tone ? ' bdg-' + o.tone : ''} dw-count"${o.countLabel ? ` title="${esc(o.countLabel)}"` : ''}>${esc(String(o.count))}${o.countSuffix ? ' ' + esc(o.countSuffix) : ''}</span>` : '';
+    const act = o.go ? `<button type="button" class="btn bghost bxs dw-go" onclick="${o.go}">${esc(o.goLabel || 'Visa alla')} ${ic('arrow-right', 12)}</button>` : '';
+    const side = (count || act || o.extra) ? `<div class="dw-head-r">${o.extra || ''}${count}${act}</div>` : '';
+    return `<div class="card-header"><h3 class="ch3">${ic(icon, 14)} ${esc(title)}</h3>${side}</div>`;
+  },
+
+  /* Hur länge sedan (hela dagar) ett ISO-datum var — för "väntar sedan". */
+  _daysSince(iso) {
+    if (!iso) return null;
+    const t = new Date(iso).getTime();
+    if (!isFinite(t)) return null;
+    return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  },
+
   /* ── Widget-dispatcher ─────────────────────────────────────────────── */
   _renderWidget(id) {
     try {
       switch (id) {
         case 'overdue_alert': {
-          const n = this._calcOverdueActivities();
-          return n > 0 ? this._widgetOverdueAlert(n) : null;
+          const list = this._myOverdueActivities();
+          return list.length > 0 ? this._widgetOverdueAlert(list) : null;
         }
         case 'kpi':          return this._widgetKpi();
         case 'todos': {
@@ -434,159 +477,202 @@ const Dashboard = {
      standardinnehållet) — annars (flaggan har nollställts av en
      efterföljande genuin ändring) sparas draften som en vanlig personlig
      V51B-layout, exakt som förut. */
+  /* ── 2026-11-26 — "Anpassa dashboard" som ett tydligt, separat läge ────
+     Samma DRAFT/SAVE-kontrakt som V51B (se ovan), men nytt gränssnitt:
+       • sticky verktygsrad: Spara (primär), Avbryt, Återställ standard
+         (med bekräftelse) och en tydlig "Osparade ändringar"-status;
+       • varje widget får en kompakt redigeringsrad: "Flytta"-handtag (dra
+         med musen — HTML5 drag-and-drop med släppmarkering — eller
+         piltangenter), storleksknappar Liten/Halv/Hel (bara de som är
+         relevanta för widgeten) och "Dölj";
+       • mobil/pekskärm: "Flytta upp"/"Flytta ned"-knappar (ingen precision);
+       • "Dolda widgets" listar dolda widgets med beskrivning och "Visa";
+       • återkoppling via toast + en beständig aria-live-yta.
+     Inget persisteras förrän Spara. Avbryt kastar draften (läser om exakt
+     samma sparade layout som innan). Spara utan ändringar skriver ingenting
+     (rollstandarden förblir orörd). Byts inloggad användare medan läget är
+     öppet kastas draften — en draft kan aldrig sparas under fel användare. */
   _editMode: false,
   _editDraft: null,
   _editSourceLayout: null,
+  _editInitial: null,        // signatur av draften när redigeringen startade
+  _editInitialSpans: null,   // { id: span } vid start — äldre sparad bredd finns kvar i väljaren
+  _editUserId: null,         // vems layout som redigeras
   _editResetToDefault: false,
-  _drag: null,
+  _editMsg: '',
+  _dnd: null,
+  _dndPendingRender: false,
 
-  enterEditMode() {
-    const user = Auth.getUser();
-    if (!user) return;
-    const layoutUserId = this._layoutUserId(user);
-    const roleId = user.role || 'personal';
-    const layout = DashboardConfig.getUserLayout(layoutUserId, roleId);
-    /* V51B R2 §4 — spara en PRIVAT, ren minnessnapshot av HELA den
-       normaliserade käll-layouten (innan behörighetsfiltrering) — inte
-       persisterad, bara i minnet under redigeringssessionen. Detta är
-       vad som gör det möjligt att BEVARA en tillfälligt obehörig
-       widgets sparade konfiguration vid Spara (se saveEditMode()),
-       utan att den någonsin visas i själva redigerings-UI:t (draften
-       nedan förblir strikt behörighetsfiltrerad, precis som förut). */
-    this._editSourceLayout = layout;
-    this._editDraft = this._buildDraftFrom(layout, user);
-    this._editResetToDefault = false;
-    this._editMode = true;
-    this.render();
-  },
+  /* Sex punkter — ett vedertaget "dra här"-handtag (finns inte i Icons). Statisk, betrodd markup. */
+  _GRIP: '<svg class="dash-grip" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5.5" r="1.7"/><circle cx="15" cy="5.5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18.5" r="1.7"/><circle cx="15" cy="18.5" r="1.7"/></svg>',
 
-  exitEditModeCancel() {
+  _sig(draft) { return JSON.stringify((draft || []).map(e => [e.id, !!e.visible, e.span])); },
+  _editDirty() { return !!this._editDraft && this._sig(this._editDraft) !== this._editInitial; },
+  _modTitle(id) { const m = DashboardConfig.getModule(id); return m ? m.title : id; },
+
+  _clearEditState() {
     this._editMode = false;
     this._editDraft = null;
     this._editSourceLayout = null;
+    this._editInitial = null;
+    this._editInitialSpans = null;
+    this._editUserId = null;
     this._editResetToDefault = false;
+    this._editMsg = '';
+    this._dnd = null;
+    this._dndPendingRender = false;
+    if (typeof document !== 'undefined') document.body.classList.remove('dash-dragging');
+  },
+
+  /* Återkoppling: synlig statusrad i verktygsraden + en BESTÄNDIG
+     aria-live-yta utanför #dash-content (som byggs om vid varje
+     rendering — en nyskapad live-yta läses annars inte upp). */
+  _announce(msg, toast) {
+    this._editMsg = msg || '';
+    let live = document.getElementById('dash-live');
+    if (!live) {
+      live = document.createElement('div');
+      live.id = 'dash-live';
+      live.className = 'sr-only';
+      live.setAttribute('role', 'status');
+      live.setAttribute('aria-live', 'polite');
+      document.body.appendChild(live);
+    }
+    live.textContent = '';
+    setTimeout(() => { live.textContent = msg || ''; }, 20);
+    const st = document.getElementById('dash-edit-status-msg');
+    if (st) st.textContent = msg || '';
+    if (toast && typeof showToast === 'function') showToast(msg);
+  },
+
+  _focus(sel) {
+    const el = document.querySelector(sel);
+    if (el && !el.disabled) { try { el.focus(); } catch (e) {} return true; }
+    return false;
+  },
+
+  enterEditMode() {
+    const user = Auth.getUser();
+    const layoutUserId = this._layoutUserId(user);
+    if (!user || !layoutUserId) { showToast('Kan inte anpassa dashboarden — okänd användare'); return; }
+    const roleId = user.role || 'personal';
+    const layout = DashboardConfig.getUserLayout(layoutUserId, roleId);
+    /* V51B R2 §4 — PRIVAT minnessnapshot av HELA den normaliserade
+       käll-layouten (innan behörighetsfiltrering), så att en tillfälligt
+       obehörig widgets sparade plats bevaras vid Spara (se saveEditMode). */
+    this._editSourceLayout = layout;
+    this._editDraft = this._buildDraftFrom(layout, user);
+    this._editInitial = this._sig(this._editDraft);
+    this._editInitialSpans = {};
+    this._editDraft.forEach(e => { this._editInitialSpans[e.id] = e.span; });
+    this._editUserId = layoutUserId;
+    this._editResetToDefault = false;
+    this._editMsg = '';
+    this._editMode = true;
     this.render();
+    const sc = document.getElementById('content-scroll');
+    if (sc) sc.scrollTop = 0;
+    this._focus('#dash-edit-title');
+    this._announce('Flytta, ändra storlek eller dölj widgets. Inget sparas förrän du klickar Spara.');
+  },
+
+  exitEditModeCancel() {
+    const dirty = this._editDirty() || this._editResetToDefault;
+    this._clearEditState();
+    this.render();
+    this._announce(dirty ? 'Ändringarna kastades — dashboarden är som innan.' : 'Anpassningen avbröts — inget ändrades.', true);
   },
 
   saveEditMode() {
     const user = Auth.getUser();
     const layoutUserId = this._layoutUserId(user);
-    if (!layoutUserId) {
+    if (!layoutUserId || !this._editDraft) {
       showToast('Kunde inte spara — okänd användaridentitet');
       return;
     }
-    if (this._editResetToDefault) {
-      /* Äkta återställning: ta bort BÅDA lagringsnycklarna (legacy +
-         V51B) via den kanoniska vägen, så hasCustomLayout() blir false
-         och Dashboard genuint återgår till den orörda, kategigrupperade
-         rollstandard-presentationen — inte bara samma widget-innehåll
-         under en "personlig layout finns"-flagga. En ÄKTA återställning
-         ska INTE bevara gamla, tillfälligt obehöriga widgets sparade
-         inställningar (§8 — det vore motsatsen till vad "återställ
-         till standard" betyder). */
-      DashboardConfig.resetUserLayout(layoutUserId);
-      this._editMode = false;
-      this._editDraft = null;
-      this._editSourceLayout = null;
-      this._editResetToDefault = false;
+    if (this._editUserId && this._editUserId !== layoutUserId) {
+      this._clearEditState();
       this.render();
-      showToast('Dashboard återställd till standard');
+      showToast('Inloggad användare har bytts — ändringarna sparades inte');
       return;
     }
-    /* V51B R2 §5 / R3 — BLOCKERARE-FIX: sparade tidigare BARA den
-       behörighetsfiltrerade draften rakt av, vilket TYST RADERADE en
-       giltig sparad konfiguration för varje widget användaren för
-       tillfället saknar behörighet till (t.ex. "Offerter" om
-       offer_manage temporärt saknas) — även om ändringen som faktiskt
-       gjordes handlade om en helt annan widget. Behörighetsfiltrering
-       och persistens är två separata frågor (§3): en obehörig widget
-       får ALDRIG synas, men dess sparade inställning ska ändå överleva
-       en icke-relaterad Spara.
-
-       R2:s FÖRSTA version av sammanslagningen bevarade rätt
-       id/visible/span, men flyttade ALLTID de obehöriga posterna sist
-       — vilket i praktiken ändrade en tillfälligt obehörig widgets
-       PLATS i layouten trots att inget faktiskt sparbart beslut om just
-       den widgeten hade fattats. R3 bevarar nu ÄVEN den ursprungliga
-       platsen (§4):
-
-       1. `_editSourceLayout` (fångad, oförändrad, vid enterEditMode())
-          representerar de ORIGINALA "platserna" i ordning.
-       2. Ett käll-id som INTE finns i den behörighetsfiltrerade
-          draften är "reserverat" — den platsen ska behållas EXAKT som
-          den var (id/visible/span oförändrade).
-       3. Övriga ("icke-reserverade") platser fylls, i tur och ordning,
-          med den redigerade draftens poster I DRAFTENS NYA ordning —
-          detta är vad som gör att en genuin användar-omordning bland de
-          AUKTORISERADE widgetsen fortfarande slår igenom fullt ut,
-          samtidigt som den reserverade platsen inte rör sig.
-       4. Eventuella draft-poster utan en käll-plats (nya moduler som
-          inte fanns med i källan alls) läggs till sist, deterministiskt.
-       5. Sekventiella order-nummer 0..N-1 tilldelas till sist.
-
-       Exempel (käll-verifierat, se PRE-bevis i rapporten):
+    if (this._editResetToDefault) {
+      /* Äkta återställning (V51B R1 BLOCKER B-FIX): ta bort BÅDA
+         lagringsnycklarna via den kanoniska vägen, så hasCustomLayout()
+         blir false och Dashboard återgår till den orörda, kategori-
+         grupperade rollstandarden — inte bara samma innehåll under en
+         "personlig layout finns"-flagga. */
+      DashboardConfig.resetUserLayout(layoutUserId);
+      this._clearEditState();
+      this.render();
+      this._announce('Standardlayouten är sparad.', true);
+      return;
+    }
+    if (!this._editDirty()) {
+      /* Inget ändrat → skriv ingenting. Annars skulle en orörd
+         rollstandard tyst bli en "personlig layout" bara för att någon
+         öppnade läget och tryckte Spara. */
+      this._clearEditState();
+      this.render();
+      this._announce('Inga ändringar att spara — dashboarden är oförändrad.', true);
+      return;
+    }
+    /* V51B R2 §5 / R3 — sammanslagning som bevarar en tillfälligt obehörig
+       widgets sparade konfiguration OCH plats:
          KÄLLA:  [A, U, B, C]   (U tillfälligt obehörig)
          DRAFT (efter omordning av A/B/C): [C, A, B]
-         RESULTAT: [C, U, A, B]  — U kvar på sin plats (index 1),
-                    C/A/B i sin NYA inbördes ordning på de kvarvarande
-                    platserna.
-
-       Endast KÄND, redan normaliserad modul-id kan någonsin hamna i den
-       reserverade delen — okända/borttagna modul-id:n filtrerades redan
-       bort av normalizePersonalLayout() när _editSourceLayout byggdes,
-       så inget nytt säkerhetshål öppnas här (oförändrat sedan R2). */
+         RESULTAT: [C, U, A, B]
+       Okända modul-id:n har redan filtrerats bort av
+       normalizePersonalLayout() när _editSourceLayout byggdes. */
     const source = this._editSourceLayout || [];
     const draftIds = new Set(this._editDraft.map(e => e.id));
     const draftQueue = this._editDraft.map(e => ({ id: e.id, visible: e.visible, span: e.span }));
     let draftPtr = 0;
-
     const merged = source.map(srcEntry => {
-      if (draftIds.has(srcEntry.id)) {
-        // Behörig plats — fyll med nästa post i draftens NYA ordning
-        // (inte nödvändigtvis samma id som ursprungligen låg i just
-        // denna källplats — det är precis poängen: den redigerade
-        // inbördes ordningen bland de behöriga widgetsen ska slå
-        // igenom, medan de reserverade platserna inte rör sig).
-        const next = draftQueue[draftPtr++];
-        return next;
-      }
-      // Reserverad (för tillfället obehörig) plats — behåll oförändrad.
+      if (draftIds.has(srcEntry.id)) return draftQueue[draftPtr++];
       return { id: srcEntry.id, visible: srcEntry.visible, span: srcEntry.span };
     });
-    // Draft-poster utan en käll-plats (t.ex. helt nya moduler som aldrig
-    // funnits i den sparade layouten) läggs till sist, deterministiskt.
     while (draftPtr < draftQueue.length) merged.push(draftQueue[draftPtr++]);
 
     const layout = merged.map((e, i) => ({ id: e.id, visible: e.visible, span: e.span, order: i }));
     DashboardConfig.saveUserLayout(layoutUserId, layout);
-    this._editMode = false;
-    this._editDraft = null;
-    this._editSourceLayout = null;
+    this._clearEditState();
     this.render();
-    showToast('Dashboard-layout sparad');
+    this._announce('Dashboard sparad. Layouten gäller för dig på den här enheten.', true);
+  },
+
+  /* "Återställ standard" frågar först. Själva återställningen laddar bara
+     rollens standard i draften — persisteras INTE förrän Spara. */
+  confirmResetEditDraft() {
+    if (!this._editMode) return;
+    Modal.open({
+      title: `${ic('rotate-ccw', 15)} Återställ standardlayout?`,
+      body: `<p class="dash-reset-text">Alla widgets får standardordning, standardstorlek och standardsynlighet för din roll. Det sparas först när du klickar <strong>Spara</strong> — <strong>Avbryt</strong> i verktygsraden ångrar det.</p>`,
+      buttons: [
+        { label: 'Behåll nuvarande', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: `${ic('rotate-ccw', 13)} Återställ standard`, cls: 'btn bp', onClick: () => { Modal.close(); Dashboard.resetEditDraft(); } },
+      ]
+    });
   },
 
   /* Nollställer BARA draften (§13) — inte persisterat förrän Spara.
-     Markerar draften som en ÄKTA återställning (se _editResetToDefault
-     ovan) tills en genuin efterföljande ändring (resize/dölj/återställ-
-     widget/flytta/drag) nollställer flaggan igen — se respektive metod. */
+     Markerar draften som en ÄKTA återställning (_editResetToDefault) tills
+     en efterföljande ändring nollställer flaggan. */
   resetEditDraft() {
     const user = Auth.getUser();
-    if (!user) return;
+    if (!user || !this._editMode) return;
     const roleId = user.role || 'personal';
     const def = DashboardConfig.getDefaultLayout(roleId);
     this._editDraft = this._buildDraftFrom(def, user);
     this._editResetToDefault = true;
     this.render();
-    showToast('Standardlayout inläst i redigeringsläget — klicka Spara för att bekräfta');
+    this._announce('Standardlayouten är inläst. Klicka Spara för att behålla den, eller Avbryt för att ångra.', true);
   },
 
   /* Bygger redigeringsdraften: EN rad per modul användaren faktiskt har
      behörighet att se (§11 — obehöriga moduler kan aldrig dyka upp i
-     draften eller i den dolda-widgets-hyllan, oavsett vad en sparad
-     layout råkar innehålla). Ordning följer den inkommande layoutens
-     `order`; moduler som saknas i layouten (nya, ej ännu sparade)
-     hamnar sist. */
+     draften eller bland dolda widgets). Ordning följer den inkommande
+     layoutens ordning; moduler som saknas i layouten hamnar sist. */
   _buildDraftFrom(layout, user) {
     const permitted = DashboardConfig.getAllModules().filter(m => this._canSee(m.id));
     const draft = permitted.map(m => {
@@ -605,31 +691,41 @@ const Dashboard = {
     return draft;
   },
 
-  /* ── Draft-mutationer (ALLA renderar om draften, ALDRIG persistens) ───
-     V51B R1 §9: VARJE genuin draft-mutation nedan nollställer
-     _editResetToDefault — en "Återställ standard" följt av en faktisk
-     ändring är INTE längre en ren återställning, och Spara ska då
-     persistera den resulterande anpassade layouten via saveUserLayout()
-     (inte resetUserLayout()). */
+  /* ── Draft-mutationer (renderar om draften, ALDRIG persistens) ───────
+     Varje genuin ändring nollställer _editResetToDefault (V51B R1 §9). */
   _editSetSpan(id, span) {
+    if (!this._editDraft) return;
     const e = this._editDraft.find(x => x.id === id);
     if (!e) return;
-    e.span = DashboardConfig.clampSpan(parseInt(span, 10), id);
+    const next = DashboardConfig.clampSpan(parseInt(span, 10), id);
+    if (next === e.span) return;
+    e.span = next;
     this._editResetToDefault = false;
     this.render();
+    this._focus(`.dash-edit-card[data-widget-id="${id}"] .dash-size-btn[data-span="${next}"]`);
+    this._announce(`${this._modTitle(id)}: storlek ${DashboardConfig.SIZE_LABELS[next] || next}.`);
   },
 
   _editHideWidget(id) {
+    if (!this._editDraft) return;
+    const vis = this._editDraft.filter(x => x.visible);
+    const vIdx = vis.findIndex(x => x.id === id);
     const e = this._editDraft.find(x => x.id === id);
-    if (!e) return;
+    if (!e || !e.visible) return;
     e.visible = false;
     this._editResetToDefault = false;
     this.render();
+    // Fokus till nästa (annars föregående) widgets handtag, eller till Dolda widgets.
+    const rest = vis.filter(x => x.id !== id);
+    const nextFocus = rest[Math.min(vIdx, rest.length - 1)];
+    if (!(nextFocus && this._focus(`.dash-edit-card[data-widget-id="${nextFocus.id}"] .dash-edit-handle`))) this._focus('#dash-edit-hidden .dash-edit-show');
+    this._announce(`${this._modTitle(id)} är dold. Du hittar den under Dolda widgets.`, true);
   },
 
-  /* §12: återställd widget använder sitt sparade/standard-span och
-     placeras deterministiskt sist i griddet. */
+  /* §12: återställd widget behåller sin sparade/standard-storlek och
+     placeras deterministiskt sist bland widgetarna. */
   _editRestoreWidget(id) {
+    if (!this._editDraft) return;
     const idx = this._editDraft.findIndex(x => x.id === id);
     if (idx === -1) return;
     const [e] = this._editDraft.splice(idx, 1);
@@ -637,13 +733,20 @@ const Dashboard = {
     this._editDraft.push(e);
     this._editResetToDefault = false;
     this.render();
+    const card = document.querySelector(`.dash-edit-card[data-widget-id="${id}"]`);
+    if (card) {
+      card.classList.add('is-new');
+      setTimeout(() => card.classList.remove('is-new'), 1800);
+      try { card.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) {}
+    }
+    this._focus(`.dash-edit-card[data-widget-id="${id}"] .dash-edit-handle`) || this._focus(`.dash-edit-card[data-widget-id="${id}"] .dash-move-up`);
+    this._announce(`${this._modTitle(id)} visas igen, längst ned. Flytta den dit du vill ha den.`, true);
   },
 
-  /* Tillgänglig/tangentbords-/touch-säker ordningsfallback (§15) — flyttar
-     widgeten ett steg upp/ned bland de SYNLIGA widgetsen. Detta är INTE
-     en andra, separat layout-editor — det är samma draft, samma
-     grid, bara manipulerad utan pekardrag. */
-  _editMoveWidget(id, dir) {
+  /* Flytta ett steg bland de SYNLIGA widgetarna (mobilens knappar och
+     tangentbordet). Samma draft, samma grid — ingen andra editor. */
+  _editMoveWidget(id, dir, from) {
+    if (!this._editDraft) return;
     const draft = this._editDraft;
     const visibleIds = draft.filter(e => e.visible).map(e => e.id);
     const vIdx = visibleIds.indexOf(id);
@@ -656,121 +759,215 @@ const Dashboard = {
     [draft[i1], draft[i2]] = [draft[i2], draft[i1]];
     this._editResetToDefault = false;
     this.render();
+    const base = `.dash-edit-card[data-widget-id="${id}"] `;
+    if (from === 'handle') this._focus(base + '.dash-edit-handle');
+    else if (from === 'btn') this._focus(base + (dir < 0 ? '.dash-move-up' : '.dash-move-down')) || this._focus(base + (dir < 0 ? '.dash-move-down' : '.dash-move-up'));
+    this._announce(`${this._modTitle(id)} flyttad till plats ${targetVIdx + 1} av ${visibleIds.length}.`);
   },
 
-  /* ── Pekar-/musbaserad drag-omordning ──────────────────────────────────
-     V51B §14: native HTML5 drag-and-drop (dragstart/dragover/drop) kräver
-     att draggable="true" sitter på HELA kortet, vilket gör det svårt att
-     begränsa dragstart till bara draghandtaget utan bräckliga workarounds
-     — och är notoriskt opålitligt att simulera i automatiserad testning.
-     En enkel pekar-baserad (mousedown/mousemove/mouseup) drag som bara
-     LYSSNAR från handtaget är enklare, mer förutsägbar och lättare att
-     verifiera med riktiga musrörelser i Chromium. */
-  _dragStart(e, id) {
-    e.preventDefault();
-    e.stopPropagation();
-    this._drag = { id, moveHandler: null, upHandler: null };
-    document.body.classList.add('dash-dragging');
-    const move = (ev) => this._dragMove(ev);
-    const up   = (ev) => this._dragEnd(ev);
-    this._drag.moveHandler = move;
-    this._drag.upHandler = up;
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-    document.addEventListener('touchmove', move, { passive: false });
-    document.addEventListener('touchend', up);
-  },
-
-  _dragMove(e) {
-    if (!this._drag) return;
-    if (e.touches) e.preventDefault();
-    const point = e.touches ? e.touches[0] : e;
-    const el = document.elementFromPoint(point.clientX, point.clientY);
-    const card = el && el.closest ? el.closest('.dash-edit-card') : null;
-    if (!card) return;
-    const overId = card.getAttribute('data-widget-id');
-    if (!overId || overId === this._drag.id) return;
+  /* Flytta till en given plats: före/efter targetId, eller sist (targetId null). */
+  _editMoveTo(id, targetId, after) {
+    if (!this._editDraft || id === targetId) return;
     const draft = this._editDraft;
-    const fromIdx = draft.findIndex(x => x.id === this._drag.id);
-    const toIdx   = draft.findIndex(x => x.id === overId);
-    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-    const [moved] = draft.splice(fromIdx, 1);
-    draft.splice(toIdx, 0, moved);
-    this._editResetToDefault = false;
+    const before = this._sig(draft);
+    const from = draft.findIndex(x => x.id === id);
+    if (from === -1) return;
+    const [moved] = draft.splice(from, 1);
+    let to = draft.length;
+    if (targetId) {
+      const ti = draft.findIndex(x => x.id === targetId);
+      if (ti === -1) { draft.splice(from, 0, moved); return; }
+      to = ti + (after ? 1 : 0);
+    } else {
+      // "Sist" = efter sista SYNLIGA widgeten (dolda widgets ordning spelar ingen roll)
+      const vis = draft.map((x, i) => (x.visible ? i : -1)).filter(i => i !== -1);
+      to = vis.length ? vis[vis.length - 1] + 1 : draft.length;
+    }
+    draft.splice(to, 0, moved);
+    if (this._sig(draft) !== before) this._editResetToDefault = false;
     this.render();
+    this._focus(`.dash-edit-card[data-widget-id="${id}"] .dash-edit-handle`);
+    const vis = draft.filter(x => x.visible);
+    this._announce(`${this._modTitle(id)} flyttad till plats ${vis.findIndex(x => x.id === id) + 1} av ${vis.length}.`);
   },
 
-  _dragEnd() {
-    if (!this._drag) return;
-    document.removeEventListener('mousemove', this._drag.moveHandler);
-    document.removeEventListener('mouseup', this._drag.upHandler);
-    document.removeEventListener('touchmove', this._drag.moveHandler);
-    document.removeEventListener('touchend', this._drag.upHandler);
+  /* Tangentbord på "Flytta"-handtaget: pilar flyttar ett steg, Home/End
+     till första/sista plats. */
+  _handleKey(e, id) {
+    const k = e.key;
+    if (k === 'ArrowUp' || k === 'ArrowLeft') { e.preventDefault(); this._editMoveWidget(id, -1, 'handle'); }
+    else if (k === 'ArrowDown' || k === 'ArrowRight') { e.preventDefault(); this._editMoveWidget(id, 1, 'handle'); }
+    else if (k === 'Home' || k === 'End') {
+      e.preventDefault();
+      const vis = (this._editDraft || []).filter(x => x.visible);
+      if (!vis.length) return;
+      if (k === 'Home') this._editMoveTo(id, vis[0].id, false);
+      else this._editMoveTo(id, null, true);
+    }
+  },
+
+  /* ── Drag och släpp (dator) — HTML5 DnD från "Flytta"-handtaget ──────
+     Hela kortet visas som dragbild; under dragningen markeras var
+     widgeten hamnar (linje före/efter målkortet, eller "Släpp här för att
+     lägga sist"). Släpp utanför ett mål ändrar ingenting. */
+  _dndStart(e, id) {
+    if (!this._editMode) return;
+    const card = e.target && e.target.closest ? e.target.closest('.dash-edit-card') : null;
+    this._dnd = { id, target: null };
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); } catch (x) {}
+    try { if (card && e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(card, 36, 22); } catch (x) {}
+    document.body.classList.add('dash-dragging');
+    if (card) setTimeout(() => card.classList.add('is-dragging'), 0);
+  },
+
+  _dndClearMarks() {
+    document.querySelectorAll('.dash-edit-card.is-drop-before, .dash-edit-card.is-drop-after, .dash-edit-dropend.is-over')
+      .forEach(c => c.classList.remove('is-drop-before', 'is-drop-after', 'is-over', 'drop-x'));
+  },
+
+  _dndOver(e, toEnd) {
+    if (!this._dnd) return;
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'move'; } catch (x) {}
+    if (toEnd) {
+      if (!(this._dnd.target && this._dnd.target.end)) { this._dndClearMarks(); e.currentTarget.classList.add('is-over'); }
+      this._dnd.target = { end: true };
+      return;
+    }
+    const card = e.target && e.target.closest ? e.target.closest('.dash-edit-card') : null;
+    if (!card || card.getAttribute('data-widget-id') === this._dnd.id) {
+      if (this._dnd.target) this._dndClearMarks();
+      this._dnd.target = null;
+      return;
+    }
+    const r = card.getBoundingClientRect();
+    const g = card.parentElement.getBoundingClientRect();
+    const horiz = r.width < g.width * 0.85;
+    const after = horiz ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
+    const tid = card.getAttribute('data-widget-id');
+    const t = this._dnd.target;
+    if (t && t.id === tid && t.after === after) return;
+    this._dndClearMarks();
+    card.classList.add(after ? 'is-drop-after' : 'is-drop-before');
+    if (horiz) card.classList.add('drop-x');
+    this._dnd.target = { id: tid, after };
+  },
+
+  _dndLeave(e) {
+    if (!this._dnd) return;
+    if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
+    this._dndClearMarks();
+    this._dnd.target = null;
+  },
+
+  _dndDrop(e, toEnd) {
+    if (!this._dnd) return;
+    e.preventDefault();
+    const d = this._dnd;
+    this._dndEnd(true);
+    if (toEnd || (d.target && d.target.end)) this._editMoveTo(d.id, null, true);
+    else if (d.target && d.target.id) this._editMoveTo(d.id, d.target.id, d.target.after);
+  },
+
+  _dndEnd(dropped) {
+    this._dndClearMarks();
+    document.querySelectorAll('.dash-edit-card.is-dragging').forEach(c => c.classList.remove('is-dragging'));
     document.body.classList.remove('dash-dragging');
-    this._drag = null;
+    const pending = this._dndPendingRender;
+    this._dnd = null;
+    this._dndPendingRender = false;
+    if (pending && !dropped && this._editMode) this.render();
+  },
+
+  _jumpToHidden() {
+    const sec = document.getElementById('dash-edit-hidden');
+    if (!sec) return;
+    try { sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (x) {}
+    this._focus('#dash-edit-hidden .dash-edit-show') || this._focus('#dash-edit-hidden-h');
   },
 
   /* ── Redigeringsläge — render ──────────────────────────────────────── */
-  _renderEditMode(el, user, roleId) {
+  _renderEditMode(el) {
     const draft = this._editDraft || [];
     const visible = draft.filter(e => e.visible);
     const hidden  = draft.filter(e => !e.visible);
+    const n = visible.length;
+    const dirty = this._editDirty() || this._editResetToDefault;
 
     const cardHtml = (e, idx) => {
       const mod = DashboardConfig.getModule(e.id);
       if (!mod) return '';
-      const minSpan = DashboardConfig.getMinSpan(e.id);
-      const widgetHtml = this._renderWidget(e.id) ||
-        `<div class="card"><div class="card-header"><h3 class="ch3">${ic(mod.icon||'square',14)} ${esc(mod.title)}</h3></div><div class="card-body"><div class="empty" style="padding:12px 0;gap:4px;">${ic('inbox',20)}<p style="font-size:11px;">Inget att visa just nu</p></div></div></div>`;
-      const spanOpts = DashboardConfig.VALID_SPANS
-        .filter(s => s >= minSpan)
-        .map(s => `<option value="${s}" ${s === e.span ? 'selected' : ''}>${DashboardConfig.SPAN_LABELS[s]}</option>`)
-        .join('');
-      return `<div class="dgw-${e.span} dash-edit-card" data-widget-id="${e.id}">
+      const t = esc(mod.title);
+      const content = this._renderWidget(e.id);
+      const widgetHtml = content ||
+        `<div class="card dash-edit-ph">${this._head(mod.icon || 'layers', mod.title)}<div class="card-body"><p class="dash-edit-ph-text">${ic('info', 14)} <span>${esc(mod.emptyHint || 'Inget att visa just nu.')}</span></p></div></div>`;
+      const sizes = DashboardConfig.getSizeOptions(e.id, [e.span, (this._editInitialSpans || {})[e.id]]);
+      const sizeHtml = sizes.length > 1 ? `<div class="dash-edit-size" role="group" aria-label="Storlek för ${t}">
+          <span class="dash-edit-size-l" aria-hidden="true">Storlek</span>
+          ${sizes.map(s => `<button type="button" class="dash-size-btn${s === e.span ? ' is-on' : ''}" aria-pressed="${s === e.span}" data-span="${s}" title="${esc(DashboardConfig.SIZE_HINTS[s] || '')}" onclick="Dashboard._editSetSpan('${e.id}',${s})">${esc(DashboardConfig.SIZE_LABELS[s] || String(s))}</button>`).join('')}
+        </div>` : '';
+      return `<div class="dgw-${e.span} dash-edit-card" data-widget-id="${e.id}" data-pos="${idx + 1}">
         <div class="dash-edit-chrome">
-          <span class="dash-edit-handle" title="Dra för att flytta" onmousedown="Dashboard._dragStart(event,'${e.id}')" ontouchstart="Dashboard._dragStart(event,'${e.id}')">${ic('more-vertical',13)}</span>
-          <span class="dash-edit-title">${esc(mod.title)}</span>
-          <div class="dash-edit-actions">
-            <button type="button" class="btn bghost bxs" title="Flytta upp" aria-label="Flytta ${esc(mod.title)} upp" ${idx===0?'disabled':''} onclick="Dashboard._editMoveWidget('${e.id}',-1)">${ic('chevron-up',12)}</button>
-            <button type="button" class="btn bghost bxs" title="Flytta ned" aria-label="Flytta ${esc(mod.title)} ned" ${idx===visible.length-1?'disabled':''} onclick="Dashboard._editMoveWidget('${e.id}',1)">${ic('chevron-down',12)}</button>
-            <select title="Bredd" aria-label="Bredd för ${esc(mod.title)}" onchange="Dashboard._editSetSpan('${e.id}',this.value)">${spanOpts}</select>
-            <button type="button" class="btn bghost bxs" title="Dölj widget" aria-label="Dölj ${esc(mod.title)}" onclick="Dashboard._editHideWidget('${e.id}')">${ic('eye-off',12)}</button>
-          </div>
+          <button type="button" class="dash-edit-handle" draggable="true" aria-label="Flytta ${t}, plats ${idx + 1} av ${n}. Dra med musen eller använd piltangenterna." title="Dra för att flytta — eller använd piltangenterna" ondragstart="Dashboard._dndStart(event,'${e.id}')" ondragend="Dashboard._dndEnd()" onkeydown="Dashboard._handleKey(event,'${e.id}')">${this._GRIP}<span>Flytta</span></button>
+          <div class="dash-edit-name"><span class="dash-edit-title">${t}</span><span class="dash-edit-pos">Plats ${idx + 1} av ${n}</span></div>
+          ${sizeHtml}
+          <button type="button" class="btn bghost bsm dash-edit-hide" aria-label="Dölj ${t}" onclick="Dashboard._editHideWidget('${e.id}')">${ic('eye-off', 14)} Dölj</button>
         </div>
-        <div class="dash-edit-card-body">${widgetHtml}</div>
+        <div class="dash-edit-move">
+          <button type="button" class="btn bs bsm dash-move-up" ${idx === 0 ? 'disabled' : ''} aria-label="Flytta ${t} upp" onclick="Dashboard._editMoveWidget('${e.id}',-1,'btn')">${ic('arrow-up', 14)} Flytta upp</button>
+          <button type="button" class="btn bs bsm dash-move-down" ${idx === n - 1 ? 'disabled' : ''} aria-label="Flytta ${t} ned" onclick="Dashboard._editMoveWidget('${e.id}',1,'btn')">${ic('arrow-down', 14)} Flytta ned</button>
+        </div>
+        <div class="dash-edit-preview" inert aria-hidden="true">${widgetHtml}</div>
       </div>`;
     };
 
-    const gridHtml = visible.map((e, i) => cardHtml(e, i)).join('');
+    const gridHtml = n ? visible.map((e, i) => cardHtml(e, i)).join('')
+      : `<div class="dgw-12 dash-edit-allhidden">${ic('eye-off', 18)} <span>Alla widgets är dolda. Välj <b>Visa</b> under Dolda widgets för att lägga tillbaka någon.</span></div>`;
 
-    const hiddenHtml = hidden.length ? `
-      <div class="dash-edit-hidden-tray">
-        <div class="dash-edit-hidden-title">${ic('eye-off',12)} Dolda widgets</div>
-        <div class="dash-edit-hidden-list">
-          ${hidden.map(e => {
-            const mod = DashboardConfig.getModule(e.id);
-            if (!mod) return '';
-            return `<button type="button" class="dash-edit-hidden-chip" onclick="Dashboard._editRestoreWidget('${e.id}')">
-              ${ic(mod.icon||'square',12)} ${esc(mod.title)}
-              <span class="dash-edit-hidden-restore">${ic('plus',10)} Visa</span>
-            </button>`;
-          }).join('')}
+    const hiddenHtml = `<section class="dash-edit-hidden" id="dash-edit-hidden" aria-labelledby="dash-edit-hidden-h">
+      <div class="dash-edit-hidden-head">
+        <h3 id="dash-edit-hidden-h" tabindex="-1">${ic('eye-off', 15)} Dolda widgets <span class="bdg">${hidden.length}</span></h3>
+        <p>Dolda widgets syns inte på din dashboard. Klicka <b>Visa</b> så läggs widgeten tillbaka längst ned.</p>
+      </div>
+      ${hidden.length ? `<ul class="dash-edit-hidden-list">${hidden.map(e => {
+        const mod = DashboardConfig.getModule(e.id);
+        if (!mod) return '';
+        return `<li class="dash-edit-hidden-item" data-widget-id="${e.id}">
+          <span class="dash-edit-hidden-ico">${ic(mod.icon || 'layers', 16)}</span>
+          <span class="dash-edit-hidden-txt"><span class="dash-edit-hidden-t">${esc(mod.title)}</span><span class="dash-edit-hidden-d">${esc(mod.description || '')}</span></span>
+          <button type="button" class="btn bs bsm dash-edit-show" aria-label="Visa ${esc(mod.title)} igen" onclick="Dashboard._editRestoreWidget('${e.id}')">${ic('plus', 14)} Visa</button>
+        </li>`;
+      }).join('')}</ul>`
+      : `<p class="dash-edit-hidden-empty">Inga dolda widgets just nu. Använd <b>Dölj</b> på en widget för att ta bort den från vyn.</p>`}
+    </section>`;
+
+    el.innerHTML = `<div class="dash-edit${dirty ? ' is-dirty' : ''}">
+      <div class="dash-edit-bar" role="region" aria-labelledby="dash-edit-title">
+        <div class="dash-edit-bar-main">
+          <h2 class="dash-edit-bar-title" id="dash-edit-title" tabindex="-1">${ic('sliders', 16)} Anpassa dashboard</h2>
+          <p class="dash-edit-status${dirty ? ' is-dirty' : ''}"><span class="dash-edit-dot" aria-hidden="true"></span><span class="dash-edit-state">${dirty ? 'Osparade ändringar' : 'Inga ändringar ännu'}</span><span class="dash-edit-status-msg" id="dash-edit-status-msg">${esc(this._editMsg || '')}</span></p>
         </div>
-      </div>` : '';
-
-    el.innerHTML = `
-      <div class="dash-edit-toolbar">
-        <div class="dash-edit-toolbar-title">${ic('settings',15)} Anpassa dashboard</div>
-        <div class="dash-edit-toolbar-actions">
-          <button type="button" class="btn bs bsm" onclick="Dashboard.resetEditDraft()">${ic('rotate-ccw',12)} Återställ standard</button>
-          <button type="button" class="btn bghost bsm" onclick="Dashboard.exitEditModeCancel()">Avbryt</button>
-          <button type="button" class="btn bp bsm" onclick="Dashboard.saveEditMode()">${ic('check',13)} Spara</button>
+        <div class="dash-edit-bar-actions">
+          <button type="button" class="btn bghost bsm dash-edit-reset" onclick="Dashboard.confirmResetEditDraft()">${ic('rotate-ccw', 14)} <span class="dash-lbl-l">Återställ standard</span><span class="dash-lbl-s" aria-hidden="true">Återställ</span></button>
+          <button type="button" class="btn bs bsm dash-edit-cancel" onclick="Dashboard.exitEditModeCancel()">${ic('x', 14)} Avbryt</button>
+          <button type="button" class="btn bp bsm dash-edit-save" onclick="Dashboard.saveEditMode()">${ic('check', 14)} Spara</button>
         </div>
       </div>
-      <p class="dash-edit-hint">Dra i handtaget ${ic('more-vertical',10)} för att ändra ordning, eller använd pilknapparna. Välj bredd, eller dölj widgets du inte vill se.</p>
-      <div class="dash-layout">${gridHtml}</div>
+      <div class="dash-edit-help" id="dash-edit-help">
+        <span class="dash-edit-tip tip-dnd">${this._GRIP}<span><b>Dra i Flytta</b> för att byta plats — eller markera Flytta och använd piltangenterna.</span></span>
+        <span class="dash-edit-tip tip-touch">${ic('arrow-up', 14)}<span><b>Flytta upp / Flytta ned</b> byter plats med widgeten intill.</span></span>
+        <span class="dash-edit-tip tip-size">${ic('grid', 14)}<span><b>Storlek</b>: Liten, Halv eller Hel bredd.</span></span>
+        <span class="dash-edit-tip">${ic('eye-off', 14)}<span><b>Dölj</b> flyttar widgeten till Dolda widgets.</span></span>
+        <button type="button" class="btn bghost bsm dash-edit-jump" onclick="Dashboard._jumpToHidden()">${ic('eye-off', 14)} Dolda widgets (${hidden.length})</button>
+      </div>
+      <p class="dash-edit-note">${ic('info', 13)} <span>Layouten sparas bara för dig, på den här enheten. Dagens tavla överst (nyckeltal och schema) är fast och påverkas inte.</span></p>
+      <div class="dash-layout dash-edit-grid" ondragover="Dashboard._dndOver(event)" ondrop="Dashboard._dndDrop(event)" ondragleave="Dashboard._dndLeave(event)">${gridHtml}</div>
+      <div class="dash-edit-dropend" ondragover="Dashboard._dndOver(event,true)" ondrop="Dashboard._dndDrop(event,true)">${ic('arrow-down', 14)} Släpp här för att lägga widgeten sist</div>
       ${hiddenHtml}
-    `;
+    </div>`;
+
+    // Långa förhandsvisningar kapas med en tonad kant (bara när de faktiskt kapas).
+    el.querySelectorAll('.dash-edit-preview').forEach(p => { if (p.scrollHeight > p.clientHeight + 4) p.classList.add('is-clipped'); });
 
     this._scheduleMapInit(visible.some(e => e.id === 'ops_map'));
   },
@@ -841,15 +1038,43 @@ const Dashboard = {
     showToast('Inställningar sparade');
   },
 
-  /* ── Widget: Försenade aktiviteter ──────────────────────────────────── */
-  _widgetOverdueAlert(count) {
-    return `<div class="attention-banner" onclick="Router.showPage('pg-activities',{filter:'försenade'})" style="cursor:pointer;">
-      <div class="attention-banner-icon">${ic('alert-circle',18)}</div>
-      <div class="attention-banner-body">
-        <div class="attention-banner-title">${count} försenad${count===1?'':'e'} uppföljning${count===1?'':'ar'} — kräver åtgärd nu</div>
-        <div class="attention-banner-sub">Klicka för att se och åtgärda</div>
+  /* ── Widget: Försenade aktiviteter ──────────────────────────────────
+     2026-11-26: från en stor röd banderoll till ett kort i samma stil som
+     övriga — antal, de äldsta försenade uppföljningarna med hur många
+     dagar de är sena, och EN väg vidare ("Visa försenade"). Urvalet är
+     samma som Aktiviteter-widgeten: alla för den som ser all personal,
+     annars egna/otilldelade (se _myOverdueActivities). */
+  _myOverdueActivities() {
+    let overdue = [];
+    try { overdue = ActivitiesService.getOverdue() || []; } catch (e) { return []; }
+    const user = Auth.getUser();
+    const userId = user ? user.id : null;
+    const canSeeAll = Auth.can('all') || Auth.can('staff_view');
+    const mine = canSeeAll ? overdue : overdue.filter(a => !a.assignedTo || a.assignedTo === userId || a.createdBy === userId);
+    return mine.slice().sort((a, b) => String(a.dueDate || '') < String(b.dueDate || '') ? -1 : 1);
+  },
+
+  _widgetOverdueAlert(list) {
+    const items = Array.isArray(list) ? list : this._myOverdueActivities();
+    const count = items.length;
+    if (!count) return null;
+    const go = "Router.showPage('pg-activities',{filter:'försenade'})";
+    const rows = items.slice(0, 3).map(a => {
+      const days = this._daysSince(a.dueDate);
+      const cu = ActivitiesService.resolveCustomer ? ActivitiesService.resolveCustomer(a) : null;
+      const who = cu ? CustomerService.displayName(cu) : '';
+      return `<button type="button" class="dwr dwr--danger" onclick="${go}">
+        <span class="dwr-ico">${ic(ActivitiesService.typeIcon(a.type), 14)}</span>
+        <span class="dwr-main"><span class="dwr-t">${esc(a.title || a.note || ActivitiesService.typeLabel(a.type))}</span><span class="dwr-s">${days !== null ? `<b>${days} dag${days === 1 ? '' : 'ar'} sen</b> · ` : ''}${esc(fmtDate(a.dueDate))}${who ? ' · ' + esc(who) : ''}</span></span>
+        <span class="dwr-go">${ic('chevron-right', 14)}</span>
+      </button>`;
+    }).join('');
+    return `<div class="card dw-card dw-tone-danger">
+      ${this._head('alert-triangle', 'Försenade aktiviteter', { count, tone: 'red', countLabel: count + ' försenade', go, goLabel: 'Visa försenade' })}
+      <div class="card-body dw-list">
+        <p class="dw-lead">${count} uppföljning${count === 1 ? '' : 'ar'} har passerat sitt datum${count > 3 ? ' — de äldsta visas här' : ''}.</p>
+        ${rows}
       </div>
-      <div style="color:var(--rd);flex-shrink:0;">${ic('chevron-right',14)}</div>
     </div>`;
   },
 
@@ -886,33 +1111,35 @@ const Dashboard = {
     </div>`;
   },
 
-  /* ── Widget: Kräver åtgärd (behörighetsfiltrad) ───────────────────── */
+  /* ── Widget: Kräver åtgärd (behörighetsfiltrad) ───────────────────
+     2026-11-26: raderna är riktiga knappar (tangentbord/skärmläsare),
+     mest brådskande först, och kortet har samma rubrikrad som övriga. */
   _widgetTodos(todos) {
+    const rank = (t) => t.cls === 'urgent' ? 0 : (t.badgeCls === 'orange' ? 1 : 2);
+    const sorted = todos.slice().sort((a, b) => rank(a) - rank(b));
     const hasUrgent = todos.some(t => t.cls === 'urgent');
-    return `<div class="card" style="border-top:2px solid ${hasUrgent?'var(--rd)':'var(--or)'};">
-      <div class="card-header">
-        <h3 class="ch3">${ic('alert-circle',14)} Kräver åtgärd</h3>
-        <span class="bdg ${hasUrgent?'bdg-red':'bdg-orange'}">${todos.length}</span>
-      </div>
-      <div style="padding:2px 6px 6px;">
-        ${todos.map(t => this._actionItem(t)).join('')}
+    const total = todos.reduce((n, t) => n + (Number(t.badge) || 0), 0);
+    return `<div class="card dw-card ${hasUrgent ? 'dw-tone-danger' : 'dw-tone-warn'}">
+      ${this._head('alert-circle', 'Kräver åtgärd', { count: todos.length, tone: hasUrgent ? 'red' : 'orange', countLabel: todos.length + ' typer av ärenden, ' + total + ' st totalt' })}
+      <div class="card-body dw-list">
+        ${sorted.map(t => this._actionItem(t)).join('')}
       </div>
     </div>`;
   },
 
   _actionItem(t) {
     const isUrgent = t.cls === 'urgent';
-    const iconColor = isUrgent ? 'var(--rd)' : t.iconCls === 'orange' ? 'var(--or)' : t.iconCls === 'blue' ? 'var(--sky)' : 'var(--mt)';
+    const iconColor = isUrgent ? 'var(--rd)' : t.iconCls === 'orange' ? 'var(--or)' : t.iconCls === 'blue' ? 'var(--sky)' : t.iconCls === 'purple' ? 'var(--pu)' : 'var(--mt)';
     const countCls = isUrgent ? 'urgent' : (t.badgeCls === 'orange' ? 'orange' : '');
-    return `<div class="dash-action-item ${t.cls||''}" onclick="${t.onClick}">
-      <span style="color:${iconColor};flex-shrink:0;">${ic(t.icon, 14)}</span>
-      <div class="dai-text">
-        <div class="dai-title">${esc(t.title)}</div>
-        ${t.sub ? `<div class="dai-sub">${esc(t.sub)}</div>` : ''}
-      </div>
-      <span class="dai-count ${countCls}">${t.badge}</span>
-      <span style="color:#cbd5e1;flex-shrink:0;">${ic('chevron-right',12)}</span>
-    </div>`;
+    return `<button type="button" class="dash-action-item dwr ${t.cls||''}" onclick="${t.onClick}">
+      <span class="dwr-ico" style="color:${iconColor};">${ic(t.icon, 15)}</span>
+      <span class="dai-text dwr-main">
+        <span class="dai-title dwr-t">${esc(t.title)}</span>
+        ${t.sub ? `<span class="dai-sub dwr-s">${esc(t.sub)}</span>` : ''}
+      </span>
+      <span class="dai-count ${countCls}">${esc(String(t.badge))}</span>
+      <span class="dwr-go">${ic('chevron-right',14)}</span>
+    </button>`;
   },
 
   /* ── Widget: Dagens drift (chef/admin) ────────────────────────────── */
@@ -949,10 +1176,7 @@ const Dashboard = {
       </div>`;
 
     return `<div class="card"${alert ? ' style="border-left:2px solid var(--or);"' : ''}>
-      <div class="card-header">
-        <h3 class="ch3">${ic('layout-dashboard',14)} Dagens drift</h3>
-        <button class="btn bghost bxs" style="font-size:11px;" onclick="Router.showPage('pg-operations')">Öppna ${ic('arrow-right',11)}</button>
-      </div>
+      ${this._head('layout-dashboard', 'Dagens drift', { go: "Router.showPage('pg-operations')", goLabel: 'Öppna' })}
       <div class="card-body" style="padding:12px 14px;">
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${chip(todayCnt,  'Planerade',      'blue')}
@@ -1017,7 +1241,7 @@ const Dashboard = {
           <div style="flex:1;min-width:0;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
               <span style="font-size:12px;font-weight:700;color:var(--navy);">${esc(c.label)}</span>
-              <span style="font-size:13px;font-weight:800;color:var(--navy);">${count}${urgent > 0 ? `&nbsp;<span style="color:var(--rd);font-size:10px;font-weight:700;">${ic('zap',9)} ${urgent}</span>` : ''}</span>
+              <span style="font-size:13px;font-weight:800;color:var(--navy);">${count}${urgent > 0 ? `&nbsp;<span style="display:inline-flex;align-items:center;gap:2px;color:var(--rd);font-size:10px;font-weight:700;" title="${urgent} akuta">${ic('zap',9)} ${urgent}</span>` : ''}</span>
             </div>
             <div style="height:4px;background:var(--br);border-radius:4px;overflow:hidden;">
               <div style="width:${barW}%;height:100%;background:${c.color};border-radius:4px;"></div>
@@ -1028,16 +1252,13 @@ const Dashboard = {
 
     if (!rows) {
       return `<div class="card">
-        <div class="card-header"><h3 class="ch3">${ic('layers',14)} Öppna per kategori</h3></div>
+        ${this._head('layers', 'Öppna per kategori')}
         <div class="card-body"><div class="empty" style="padding:12px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;">Inga öppna ordrar</p></div></div>
       </div>`;
     }
 
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('layers',14)} Öppna per kategori</h3>
-        <button class="btn bghost bxs" style="font-size:11px;padding:3px 8px;" onclick="Router.showPage('pg-ao')">${ic('arrow-right',11)} Se alla</button>
-      </div>
+      ${this._head('layers', 'Öppna per kategori', { count: openN, countLabel: openN + ' öppna arbetsordrar', go: "Router.showPage('pg-ao')", goLabel: 'Se alla' })}
       <div class="card-body" style="padding:8px 14px 4px;">
         <div style="display:flex;gap:14px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--br);">
           <span style="font-size:11px;color:var(--mt);"><strong style="color:var(--navy);font-size:12px;">${doneN}</strong> klara denna månad</span>
@@ -1058,6 +1279,7 @@ const Dashboard = {
      minnet för sessionen (Dashboard._geoCache), aldrig i localStorage/
      state/Supabase. */
   _opsMapJobs: [],
+  _opsMapDiag: null,
   _geoCache: {},
   _mapInstance: null,
   _mapGeneration: 0,
@@ -1076,21 +1298,14 @@ const Dashboard = {
       !a.archived && !a.deleted && ACTIVE_STATUSES.includes(a.status)
     );
 
-    /* V51A R1 §6 — FAIL-CLOSED behörighetskontrakt (blockerare B).
-       V51A R3 §10: numera implementerad via den kanoniska
-       _scopeWorkOrdersForCurrentUser()-hjälpen (samma kontrakt som
-       _widgetToday() och alla andra AO-ytor delar) istället för en egen
-       kopia av logiken — men det FUNKTIONELLA beteendet är exakt
-       oförändrat mot R1/R2:
+    /* V51A R1 §6 — FAIL-CLOSED behörighetskontrakt (oförändrat):
          ao_view_all              → alla operativa jobb
          ao_view_own + giltigt id → ENDAST jobb tilldelade exakt det id:t
-                                     (ingen delad pool på kartan — samma
-                                     som tidigare, includeSharedPool:false)
+                                     (ingen delad pool på kartan)
          annars                   → inga jobb alls (fail closed) */
     let jobs = this._scopeWorkOrdersForCurrentUser(allOperational, { includeSharedPool: false });
 
-    // Sortera: idag/försenat/akut överst, sedan planerat datum
-    const today = tdy();
+    // Sortera: akut överst, sedan planerat datum (försenat/idag före kommande)
     jobs = jobs.slice().sort((a, b) => {
       const aUrgent = a.priority === 'akut' ? 0 : 1;
       const bUrgent = b.priority === 'akut' ? 0 : 1;
@@ -1098,42 +1313,24 @@ const Dashboard = {
       return (a.scheduledDate || '9999') < (b.scheduledDate || '9999') ? -1 : 1;
     });
     this._opsMapJobs = jobs;
+    /* 2026-11-26: klassa varje jobb SYNKRONT (utan nätverk) — har
+       koordinater / saknar adress / saknar postnummer-ort / behöver
+       geokodas. Talen visas direkt, även när kartan inte kan laddas. */
+    const diag = jobs.map(ao => this._geoStatusOf(ao));
+    this._opsMapDiag = diag;
 
     if (jobs.length === 0) {
-      return `<div class="card">
-        <div class="card-header"><h3 class="ch3">${ic('map-pin',14)} Aktiva jobb — karta</h3></div>
+      return `<div class="card dw-card">
+        ${this._head('map-pin', 'Aktiva jobb — karta')}
         <div class="card-body"><div class="empty" style="padding:12px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;">Inga aktiva jobb just nu</p></div></div>
       </div>`;
     }
 
+    const LIST_LIMIT = 25;
     const jobRow = ao => {
       const cu = getCu(ao.customerId);
-      /* V51A R4 — adress-precedensfix. ao.address (om satt) är den
-         KANONISKA arbetsplatsadressen överallt annars i appen
-         (WorkOrderDetailPage, MyJobsPage, OperationsPage visar alltid
-         ao.address rakt av, utan någon fastighets-precedens) — Dashboard
-         var den ENDA ytan i hela kodbasen som lät en länkad fastighets
-         (ev. inaktuella) adress permanent övertrumfa AO:ns egen,
-         redigerbara adressfält. Resultat: en användare som redigerade
-         AO:ns adress via redigera-ordern-modalen såg sin nya adress
-         korrekt på AO-sidan, men Dashboard fortsatte tyst visa den gamla
-         fastighetsadressen oavsett hur många gånger Dashboard
-         renderades om — inte en cache-/race-bugg, utan en
-         precedensbugg isolerad till denna widget. Fastighetens adress
-         används bara som FALLBACK när AO:n saknar egen adress (nu via
-         AddressService.resolveWorkOrderDisplayAddress(), samma precedens,
-         se nedan). */
-      /* R2 §4, kompletterad i R2.1 §10 — visa AO:ns strukturerade postnr/
-         ort tillsammans med gatan (om de finns) istället för att kasta
-         bort den kontext denna omgång just lagt till. Kompakt: "Gata,
-         Postnr Ort" på en rad, konsekvent med AO-detaljens
-         ao-address-link-formattering (AddressService.displayAddress).
-         AddressService.displayAddress() FALLER SJÄLV TILLBAKA till
-         fastighetens/kundens strukturerade adress om AO:n helt saknar
-         egen (resolveWorkOrderDisplayAddress) — samma legacy-gap som
-         AO-detaljen hade (bara den bara gatan visades, inte postnr/ort)
-         fanns tidigare även här. Sista utvägen (ingen adress alls
-         någonstans) är fortfarande kundens NAMN, inte en tom sträng. */
+      /* V51A R4 — adress-precedens: AO:ns egen adress vinner, länkad
+         fastighets/kunds adress är bara fallback (AddressService.displayAddress). */
       const resolvedDisplay = AddressService.displayAddress(ao);
       const locLabel = resolvedDisplay || (cu ? CustomerService.displayName(cu) : '—');
       const cl = ao.checklist || [];
@@ -1146,7 +1343,7 @@ const Dashboard = {
             <span class="dash-job-row-title">${esc(ao.title||ao.id)}</span>
             ${sbdg(ao.status)}
           </div>
-          <div class="dash-job-row-sub">${esc(locLabel)}${ao.scheduledStart ? ' · '+ao.scheduledStart : ''}</div>
+          <div class="dash-job-row-sub">${esc(locLabel)}${ao.scheduledStart ? ' · '+esc(ao.scheduledStart) : ''}</div>
           ${hasChecklist ? `
             <div style="display:flex;align-items:center;gap:6px;">
               <div class="dash-job-progress-track" style="flex:1;"><div class="dash-job-progress-fill" style="width:${Math.round(clDone/cl.length*100)}%;background:${barColor};"></div></div>
@@ -1155,23 +1352,242 @@ const Dashboard = {
         </div>
       </div>`;
     };
+    const more = jobs.length > LIST_LIMIT
+      ? `<button type="button" class="btn bghost bsm bfull dash-ops-more" onclick="Router.showPage('pg-ao',{filter:'active'})">Visa alla ${jobs.length} aktiva jobb ${ic('arrow-right',12)}</button>` : '';
 
-    return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('map-pin',14)} Aktiva jobb — karta</h3>
-        <button class="btn bghost bxs" style="font-size:11px;padding:3px 8px;" onclick="Router.showPage('pg-ao',{filter:'active'})">${ic('arrow-right',11)} Se alla</button>
-      </div>
-      <div class="card-body" style="padding:10px 14px;">
-        <div class="dash-ops-map-count" id="dash-ops-map-count">${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb</div>
+    return `<div class="card dw-card dash-map-card">
+      ${this._head('map-pin', 'Aktiva jobb — karta', { count: jobs.length, countLabel: jobs.length + ' aktiva jobb', go: "Router.showPage('pg-ao',{filter:'active'})", goLabel: 'Se alla' })}
+      <div class="card-body dash-ops-map-body">
+        <div class="dash-ops-map-count" id="dash-ops-map-count">${esc(this._geoCountText(diag, null))}</div>
         <div class="dash-ops-map-wrap">
-          <div class="dash-ops-map-list">${jobs.map(jobRow).join('')}</div>
+          <div class="dash-ops-map-list">${jobs.slice(0, LIST_LIMIT).map(jobRow).join('')}${more}</div>
           <div class="dash-ops-map-canvas-wrap" id="dash-ops-map-canvas-wrap">
             <div id="dash-ops-map"></div>
           </div>
         </div>
+        <div class="dash-ops-geo-wrap" id="dash-ops-geo-wrap">${this._geoDiagHtml(diag)}</div>
       </div>
     </div>`;
   },
+
+  /* ── 2026-11-26: varför hamnar ett jobb inte på kartan? ────────────────
+     Orsakerna redovisas VAR FÖR SIG med antal — inga tal döljs:
+       KARTFEL (hela kartan, inte enskilda jobb): kartbiblioteket Mapbox GL
+         laddas inte → "Kartan kunde inte laddas"; token saknas → "Kartan är
+         inte konfigurerad"; fel vid ritning → "Kartan kunde inte visas";
+         kartbakgrunden nekas efter laddning → rad ovanpå kartan.
+       GEOKODNING SAKNAS (adress med postnummer/ort finns, inga koordinater):
+         pending/skipped — "inte geokodade ännu" (kartan söker högst 20 nya
+                            adresser per visning; resten väntar)
+         error           — "geokodning misslyckades" (401/403 eller nätverk;
+                            vid 401/403 ser admin "Kartnyckeln nekas för den
+                            här domänen")
+       ADRESSEN BEHÖVER KOMPLETTERAS:
+         nocity   — "adress saknar ort/postnummer" (geokodas inte: hellre
+                     ingen nål än en nål i fel stad, AddressService.geocodeTrusted)
+         noaddr   — "saknar adress" (varken AO, fastighet eller kund)
+         notfound — "adressen hittades inte" (kartsökningen gav ingen träff)
+     Koordinater finns sparade på AO:n (ao.lat/ao.lng — sätts av
+     WorkOrderService.geocodeAddressIfNeeded() när en AO skapas/ändras i
+     appen) eller tas fram av kartan själv, ENDAST i minnet för sessionen.
+     Importerade AO (ImportWizard) går inte via WorkOrderService.create()
+     och saknar därför koordinater. */
+  _GEO_LABELS: {
+    pending:  'inte geokodade ännu',
+    skipped:  'inte geokodade ännu',
+    error:    'geokodning misslyckades',
+    nocity:   'adress saknar ort/postnummer',
+    noaddr:   'saknar adress',
+    notfound: 'adressen hittades inte',
+  },
+  _GEO_GROUPS: [
+    { key: 'nogeo', label: 'Geokodning saknas', items: ['notyet', 'error'],
+      hint: 'Adressen har postnummer eller ort men inga koordinater är sparade. Koordinater sparas när arbetsordern skapas eller ändras i appen; importerade och äldre arbetsordrar saknar dem. Kartan söker själv högst 20 nya adresser per visning och sparar inte resultatet.' },
+    { key: 'badaddr', label: 'Adressen behöver kompletteras', items: ['nocity', 'noaddr', 'notfound'],
+      hint: 'Kartan placerar inte en gata utan ort eller postnummer (risk för fel stad). Jobb utan adress — och utan kopplad fastighet eller kund med adress — kan inte visas.' },
+  ],
+  _GEO_ITEM_LABEL: {
+    notyet: 'inte geokodade ännu', error: 'geokodning misslyckades',
+    nocity: 'adress saknar ort/postnummer', noaddr: 'saknar adress', notfound: 'adressen hittades inte',
+  },
+  _GEO_STATUSES: ['pending', 'skipped', 'error', 'nocity', 'noaddr', 'notfound'],
+  _GEO_FAIL_MS: 5 * 60000,
+  _geoFailed: {},      // query → { at, status } — misslyckade sökningar (visas som misslyckade i 5 min)
+  _geoDenied: false,   // senaste felet var 401/403 (token nekas för domänen)
+  _mapTileDenied: false,
+
+  _aoCoord(ao) {
+    const num = (v) => typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v.replace(',', '.')) : NaN);
+    const lat = num(ao && ao.lat), lng = num(ao && ao.lng);
+    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return null;
+    return { lat, lng };
+  },
+
+  _geoStatusOf(ao) {
+    const c = this._aoCoord(ao);
+    if (c) return { ao, status: 'coords', coord: c };
+    let r = null;
+    try { r = AddressService.resolveWorkOrderQuery(ao); } catch (e) { r = null; }
+    if (!r || !r.query) return { ao, status: 'noaddr' };
+    if (!r.hasCityContext) return { ao, status: 'nocity', query: r.query };
+    const cached = this._geoCache[r.query];
+    if (cached) return { ao, status: 'geocoded', coord: cached, query: r.query };
+    if (cached === null) return { ao, status: 'notfound', query: r.query };
+    const f = this._geoFailed[r.query];
+    if (f && Date.now() - f.at < this._GEO_FAIL_MS) return { ao, status: 'error', query: r.query, http: f.status };
+    return { ao, status: 'pending', query: r.query };
+  },
+
+  _geoCounts(diag) {
+    const c = { total: diag.length, coords: 0, geocoded: 0 };
+    this._GEO_STATUSES.forEach(k => { c[k] = 0; });
+    diag.forEach(d => { c[d.status] = (c[d.status] || 0) + 1; });
+    c.placed = c.coords + c.geocoded;
+    c.missing = c.total - c.placed;
+    c.notyet = c.pending + c.skipped;
+    c.nogeo = c.notyet + c.error;
+    c.badaddr = c.nocity + c.noaddr + c.notfound;
+    return c;
+  },
+
+  /* "190 inte geokodade ännu · 1 adress saknar ort/postnummer · 14 saknar adress" */
+  _geoCauseText(c) {
+    return ['notyet', 'error', 'nocity', 'noaddr', 'notfound'].filter(k => c[k] > 0).map(k => `${c[k]} ${this._GEO_ITEM_LABEL[k]}`).join(' · ');
+  },
+
+  _isMapAdmin() { return Auth.can('all') || Auth.can('admin_manage'); },
+
+  /* Räknarraden ovanför kartan. `groups` = platser på kartan (efter
+     kartritning), annars null (synkront läge / ingen karta). */
+  _geoCountText(diag, groups) {
+    const c = this._geoCounts(diag);
+    const parts = [`${c.total} aktiv${c.total === 1 ? 't' : 'a'} jobb`];
+    if (groups) {
+      const nPlaced = groups.reduce((s, g) => s + g.count, 0);
+      parts.push(groups.length !== nPlaced ? `${groups.length} platser på kartan` : `${nPlaced} på kartan`);
+    } else {
+      parts.push(`${c.placed} med koordinater`);
+    }
+    if (c.missing > 0) parts.push(`${c.missing} saknar koordinater`);
+    return parts.join(' · ');
+  },
+
+  _geoListOpen: false,
+
+  _geoDiagHtml(diag) {
+    const c = this._geoCounts(diag);
+    if (!c.missing) return '';
+    const open = !!this._geoListOpen;
+    const MAX = 40;
+    const itemOf = (d) => (d.status === 'pending' || d.status === 'skipped') ? 'notyet' : d.status;
+    const causeRows = this._GEO_GROUPS.filter(g => c[g.key] > 0).map(g =>
+      `<span class="dash-ops-geo-cause" data-group="${g.key}"><span class="dash-ops-geo-cl">${esc(g.label)}:</span> ${g.items.filter(k => c[k] > 0).map(k => `<span class="dash-ops-geo-chip" data-reason="${k}"><b>${c[k]}</b> ${esc(this._GEO_ITEM_LABEL[k])}</span>`).join(' ')}</span>`).join('');
+    const denied = c.error > 0 && this._geoDenied;
+    const adminNote = denied && this._isMapAdmin()
+      ? `<span class="dash-ops-geo-admin" data-denied="1">${ic('lock', 12)} Kartnyckeln nekas för den här domänen (Mapbox svarar 401/403). Kontrollera tokenens URL-begränsning i Mapbox.</span>` : '';
+    const groups = this._GEO_GROUPS.filter(g => c[g.key] > 0).map(g => {
+      const rows = diag.filter(d => g.items.includes(itemOf(d)));
+      return `<div class="dash-ops-geo-group" data-reason="${g.key}">
+        <h4>${esc(g.label)} <span class="bdg">${rows.length}</span></h4>
+        <p class="dash-ops-geo-hint">${esc(g.hint)}</p>
+        <ul>${rows.slice(0, MAX).map(d => {
+          const addr = AddressService.displayAddress(d.ao);
+          return `<li><button type="button" class="dash-ops-geo-row" data-ao="${esc(d.ao.id)}" data-status="${d.status}" onclick="Dashboard._openAo(this)"><span class="dash-ops-geo-t">${esc(d.ao.title || d.ao.id)}</span><span class="dash-ops-geo-a">${esc(addr || 'Ingen adress')} · ${esc(this._GEO_LABELS[d.status] || '')}</span></button></li>`;
+        }).join('')}</ul>
+        ${rows.length > MAX ? `<p class="dash-ops-geo-hint">+${rows.length - MAX} till — se arbetsorderlistan.</p>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="dash-ops-geo" id="dash-ops-geo" data-missing="${c.missing}" data-total="${c.total}" data-notyet="${c.notyet}" data-error="${c.error}" data-nocity="${c.nocity}" data-noaddr="${c.noaddr}" data-notfound="${c.notfound}">
+      <button type="button" class="dash-ops-geo-sum" aria-expanded="${open}" aria-controls="dash-ops-geo-list" onclick="Dashboard._toggleGeoList()">
+        <span class="dash-ops-geo-ico">${ic('alert-circle', 15)}</span>
+        <span class="dash-ops-geo-txt"><b>${c.missing} av ${c.total} aktiva jobb visas inte på kartan</b>${causeRows}${adminNote}</span>
+        <span class="dash-ops-geo-act">${open ? 'Dölj' : 'Visa vilka'} ${ic(open ? 'chevron-up' : 'chevron-down', 13)}</span>
+      </button>
+      <div class="dash-ops-geo-list" id="dash-ops-geo-list"${open ? '' : ' hidden'}>${groups}</div>
+    </div>`;
+  },
+
+  _toggleGeoList(force) {
+    this._geoListOpen = force === undefined ? !this._geoListOpen : !!force;
+    const wrap = document.getElementById('dash-ops-geo-wrap');
+    if (wrap && this._opsMapDiag) wrap.innerHTML = this._geoDiagHtml(this._opsMapDiag);
+    if (this._geoListOpen) {
+      const l = document.getElementById('dash-ops-geo-list');
+      if (l) { try { l.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }
+    }
+  },
+
+  _openAo(btn) {
+    const id = btn && btn.getAttribute('data-ao');
+    if (id) Router.showPage('pg-ao-detail', { aoId: id });
+  },
+
+  /* Tomt/felläge i kartytan — talen döljs aldrig.
+     kind: 'nolib' (Mapbox GL laddas inte) | 'notoken' | 'error' (fel vid
+     ritning) = kartfel; 'none' = kartan fungerar men inget jobb kan placeras. */
+  _mapEmptyHtml(kind, diag) {
+    const c = this._geoCounts(diag || []);
+    const causes = this._geoCauseText(c);
+    let title, text, icon = 'alert-triangle';
+    if (kind === 'nolib') {
+      title = 'Kartan kunde inte laddas';
+      text = `Kartbiblioteket (Mapbox GL) gick inte att nå. Det beror inte på jobbens adresser — listan fungerar som vanligt. ${c.placed} av ${c.total} jobb har koordinater.`;
+    } else if (kind === 'notoken') {
+      title = 'Kartan är inte konfigurerad';
+      text = `Ingen Mapbox-token är inställd (config.js). ${c.placed} av ${c.total} jobb har koordinater.`;
+    } else if (kind === 'error') {
+      title = 'Kartan kunde inte visas';
+      text = `Ett fel uppstod när kartan ritades. ${c.placed} av ${c.total} jobb har koordinater.`;
+    } else {
+      icon = 'map-pin';
+      title = c.total === 1 ? 'Det aktiva jobbet har inga koordinater' : `Inga av de ${c.total} aktiva jobben har koordinater`;
+      text = `${causes}.` + (c.nogeo ? ' Adresserna behöver geokodas.' : '');
+    }
+    return `<div class="dash-ops-map-empty" data-kind="${esc(kind)}" role="status">
+      ${ic(icon, 22)}
+      <h3>${esc(title)}</h3>
+      <p>${esc(text)}</p>
+      ${c.missing ? `<button type="button" class="btn bs bsm" onclick="Dashboard._toggleGeoList(true)">${ic('list', 13)} Visa jobb utan plats (${c.missing})</button>` : ''}
+    </div>`;
+  },
+
+  /* Kartbakgrunden/stilen nekas eller laddas inte EFTER att Mapbox GL
+     laddats: markörerna finns kvar, en rad ovanpå kartan förklarar. */
+  _mapAlert(wrap, generation, status) {
+    if (generation !== this._mapGeneration || !wrap || !wrap.isConnected || wrap.querySelector('.dash-ops-map-alert')) return;
+    const denied = status === 401 || status === 403;
+    if (denied) this._mapTileDenied = true;
+    const el = document.createElement('div');
+    el.className = 'dash-ops-map-alert';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `${ic('alert-triangle', 14)}<span>${esc(denied && this._isMapAdmin() ? 'Kartbakgrunden kunde inte laddas — kartnyckeln nekas för den här domänen.' : 'Kartbakgrunden kunde inte laddas. Markörerna och listan visas ändå.')}</span>`;
+    wrap.appendChild(el);
+  },
+
+  /* Adressökning för kartan: samma beslut som AddressService.geocodeTrusted()
+     (ingen nål utan postnummer/ort, första träffen), men skiljer "ingen
+     träff" från "sökningen misslyckades" så att orsaken kan visas ärligt.
+     AddressService.search() sväljer fel och returnerar [] — därför anropas
+     dess _fetchMapbox() direkt när den finns. */
+  async _geocodeForMap(query) {
+    const AS = AddressService;
+    if (typeof AS._fetchMapbox !== 'function' || typeof AS._token !== 'function') {
+      const c = await AS.geocodeTrusted(query, true);
+      return c ? { status: 'ok', coord: c } : { status: 'notfound' };
+    }
+    if (!AS._token() || String(query || '').trim().length < 3) return { status: 'notfound' };
+    try {
+      const results = await AS._fetchMapbox(String(query).trim());
+      const best = (results || [])[0];
+      if (!best || best.lat == null || best.lng == null) return { status: 'notfound' };
+      return { status: 'ok', coord: { lat: best.lat, lng: best.lng } };
+    } catch (e) {
+      const message = String(e && e.message || e);
+      const m = /HTTP (\d{3})/.exec(message);
+      return { status: 'error', message, http: m ? Number(m[1]) : 0 };
+    }
+  },
+  _geoErrUntil: 0,
 
   /* V51A R1 §13: Mapbox GL JS laddas nu LAT/ON-DEMAND — bara när
      dashboardens kart-widget faktiskt ska visas — istället för som en
@@ -1230,11 +1646,10 @@ const Dashboard = {
      WorkOrderService.geocodeAddressIfNeeded() anropar SAMMA funktion och kan
      därför aldrig divergera igen. */
 
-  async _initOpsMap(generation, jobs) {
+  async _initOpsMap(generation, jobs, diagIn) {
     if (generation !== this._mapGeneration) return; // redan föråldrad innan start
 
     const wrap = document.getElementById('dash-ops-map-canvas-wrap');
-    const countEl = document.getElementById('dash-ops-map-count');
     if (!wrap) return; // widgeten är inte synlig i aktuell layout
 
     if (this._mapInstance) {
@@ -1242,98 +1657,78 @@ const Dashboard = {
       this._mapInstance = null;
     }
 
+    jobs = jobs || [];
+    const diag = (diagIn && diagIn.length === jobs.length) ? diagIn : jobs.map(ao => this._geoStatusOf(ao));
+    const setCount = (groups) => { const el = document.getElementById('dash-ops-map-count'); if (el) el.textContent = this._geoCountText(diag, groups); };
+    const setDiag = () => { const w = document.getElementById('dash-ops-geo-wrap'); if (w) w.innerHTML = this._geoDiagHtml(diag); this._opsMapDiag = diag; };
+    const empty = (kind) => { wrap.innerHTML = this._mapEmptyHtml(kind, diag); wrap.classList.add('is-empty'); };
+
     const token = (window.VIFT_CONFIG && window.VIFT_CONFIG.mapboxToken) || '';
-    if (!token) {
-      wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Kartan kunde inte laddas</span></div>`;
-      return;
-    }
+    if (!token) { setCount(null); setDiag(); empty('notoken'); return; }
 
     try {
       await this._loadMapboxGl();
     } catch(e) {
       if (generation !== this._mapGeneration) return;
-      wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Kartan kunde inte laddas</span></div>`;
+      setCount(null); setDiag(); empty('nolib');
       return;
     }
     if (generation !== this._mapGeneration) return;
 
-    jobs = jobs || [];
-    const geocoded = [];
     const MAX_LOOKUPS = 20; // V51A §19: begränsa antal NYA geokodningsanrop per uppdatering
     let newLookups = 0;
 
-    for (const ao of jobs) {
-      if (generation !== this._mapGeneration) return; // avbruten mitt i geokodningsloopen av en nyare render()
-
-      /* V51B ARBETSORDER §7/§9 — persisterade koordinater (satta av
-         WorkOrderService.geocodeAddressIfNeeded() efter en AO-spara)
-         vinner ALLTID och kräver ingen geokodning alls här. Detta är den
-         AVSEDDA, vanliga vägen för varje AO som skapats/redigerats sedan
-         denna omgång — kartan geokodar bara ÄLDRE AO:er som saknar egna
-         koordinater, via AddressService.resolveWorkOrderQuery()s
-         fallback-kedja nedan. */
-      if (typeof ao.lat === 'number' && typeof ao.lng === 'number') {
-        geocoded.push({ ao, coord: { lat: ao.lat, lng: ao.lng } });
-        continue;
+    for (const d of diag) {
+      if (generation !== this._mapGeneration) return; // avbruten av en nyare render()
+      if (d.status !== 'pending') continue;
+      /* Efter ett misslyckat anrop (t.ex. 401/403 när token inte gäller
+         för domänen) görs inga nya sökningar på 5 min — inget hamrande
+         mot Mapbox vid varje uppdatering. Ej sökta räknas som "inte
+         geokodade ännu", det misslyckade som "geokodning misslyckades". */
+      if (Date.now() < this._geoErrUntil) { d.status = 'skipped'; continue; }
+      if (newLookups >= MAX_LOOKUPS) { d.status = 'skipped'; continue; }
+      newLookups++;
+      const res = await this._geocodeForMap(d.query);
+      if (generation !== this._mapGeneration) return; // svaret hann bli inaktuellt
+      if (res.status === 'ok') {
+        /* V51A R1 §12: ENDAST ett äkta API-svar cachas (även "ingen träff"
+           som null). Ett fel cachas aldrig. Bara i minnet för sessionen. */
+        this._geoCache[d.query] = res.coord;
+        d.status = 'geocoded'; d.coord = res.coord;
+        this._geoDenied = false;
+      } else if (res.status === 'notfound') {
+        this._geoCache[d.query] = null;
+        d.status = 'notfound';
+      } else {
+        d.status = 'error'; d.http = res.http;
+        this._geoFailed[d.query] = { at: Date.now(), status: res.http || 0 };
+        this._geoDenied = res.http === 401 || res.http === 403;
+        this._geoErrUntil = Date.now() + this._GEO_FAIL_MS;
+        console.warn('[Dashboard] kartans adressökning misslyckades:', res.message);
       }
-
-      const resolved = AddressService.resolveWorkOrderQuery(ao);
-      if (!resolved) continue;
-      const { query, hasCityContext } = resolved;
-
-      let coord = this._geoCache[query];
-      if (coord === undefined) {
-        if (newLookups >= MAX_LOOKUPS) continue; // hoppa över — visas fortfarande i listan, bara inte på kartan denna gång
-        newLookups++;
-        try {
-          /* V51B ARBETSORDER §6/§8 — geocodeTrusted() bygger på samma
-             AddressService.search() som tidigare, men (a) skickar en
-             fullständig gata+postnr+ort-fråga när vi har den kontexten
-             (hasCityContext) istället för bara en bar gatuadress, och (b)
-             kräver ett minimikonfidenspoäng från Mapbox innan en bar
-             gatuadress (sista utvägen, ingen postnr/ort-kontext alls)
-             tillåts sätta en nål — hellre ingen nål än en nål i fel stad. */
-          coord = await AddressService.geocodeTrusted(query, hasCityContext);
-          if (generation !== this._mapGeneration) return; // svaret hann bli inaktuellt medan vi väntade
-          /* V51A R1 §12 (oförändrat): ENDAST ett äkta, LYCKAT API-svar
-             cachas (inkl. som null om inget tillräckligt säkert resultat
-             hittades). Ett undantag (nätverksfel, timeout etc.) cachas
-             ALDRIG — frågan lämnas `undefined` i _geoCache så en SENARE
-             rendering får försöka igen. */
-          this._geoCache[query] = coord;
-        } catch(e) {
-          coord = null; // visas inte i DENNA runda, men försöks igen nästa gång (ej cachat)
-        }
-      }
-      if (coord) geocoded.push({ ao, coord });
     }
 
     if (generation !== this._mapGeneration) return;
 
+    const geocoded = diag.filter(d => d.coord && (d.status === 'coords' || d.status === 'geocoded')).map(d => ({ ao: d.ao, coord: d.coord }));
+
     /* Kartgruppering (2026-11-23, MapGrouping): en markör per plats, med
        antal när flera AO delar adress (Vasaplatsen 8). Räknaren skiljer på
-       jobb, platser och jobb som inte kunde placeras. */
+       jobb, platser och jobb som saknar koordinater. */
     const groups = (typeof MapGrouping !== 'undefined') ? MapGrouping.group(geocoded)
       : geocoded.map(g => ({ coord: g.coord, display: g.coord, items: [g.ao], count: 1, hasAkut: g.ao.priority === 'akut' }));
     this._mapGroups = groups;
-    if (countEl) {
-      const nPlaced = groups.reduce((s, g) => s + g.count, 0);
-      const parts = [`${jobs.length} aktiv${jobs.length===1?'t':'a'} jobb`];
-      if (groups.length !== nPlaced) parts.push(`${groups.length} platser på kartan`);
-      if (nPlaced < jobs.length) parts.push(`${jobs.length - nPlaced} kunde inte placeras`);
-      countEl.textContent = parts.join(' · ');
-    }
+    setCount(geocoded.length ? groups : null);
+    setDiag();
 
-    if (geocoded.length === 0) {
-      wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Inga jobb kunde placeras på kartan${jobs.length?' — se listan':''}</span></div>`;
-      return;
-    }
+    if (geocoded.length === 0) { empty('none'); return; }
 
     // Återställ canvas-elementet (kan ha ersatts av tom-läge ovan i ett tidigare pass)
     if (!document.getElementById('dash-ops-map')) {
       if (generation !== this._mapGeneration) return;
       wrap.innerHTML = '<div id="dash-ops-map"></div>';
     }
+    wrap.classList.remove('is-empty');
     if (generation !== this._mapGeneration || !document.getElementById('dash-ops-map-canvas-wrap')) return;
 
     try {
@@ -1345,6 +1740,14 @@ const Dashboard = {
         zoom: 11
       });
       this._mapInstance = map;
+      if (typeof map.on === 'function') {
+        let loaded = false;
+        map.on('load', () => { loaded = true; });
+        map.on('error', (ev) => {
+          const st = ev && ev.error && (ev.error.status || ev.error.statusCode);
+          if (!loaded || st === 401 || st === 403) this._mapAlert(wrap, generation, st);
+        });
+      }
 
       const bounds = new mapboxgl.LngLatBounds();
       groups.forEach((g) => {
@@ -1356,7 +1759,7 @@ const Dashboard = {
           return `<div class="dash-map-popup-item">
             <div class="dash-map-popup-title">${ao.priority === 'akut' ? '<span class="bdg bdg-red">Akut</span> ' : ''}${esc(ao.title||ao.id)}</div>
             <div class="dash-map-popup-sub">${esc(WorkOrderService.displayNumberOrPending ? WorkOrderService.displayNumberOrPending(ao) : ao.id)} · ${esc(typeof statusLabel === 'function' ? statusLabel(ao.status) : ao.status)} · ${esc(cuName)}${ao.scheduledStart ? ' · '+esc(ao.scheduledStart) : ''}</div>
-            <button type="button" class="dash-map-popup-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">Öppna</button>
+            <button type="button" class="dash-map-popup-btn" data-ao="${esc(ao.id)}" onclick="Dashboard._openAo(this)">Öppna</button>
           </div>`;
         }).join('');
         const popupHtml = `<div class="dash-map-popup">${g.count > 1 ? `<div class="dash-map-popup-head">${g.count} arbetsordrar · ${esc(g.label || first.address || '')}</div>` : ''}${rows}</div>`;
@@ -1378,9 +1781,7 @@ const Dashboard = {
       if (groups.length > 1) map.fitBounds(bounds, { padding: 36, maxZoom: 15 });
     } catch(e) {
       console.error('[Dashboard] kartfel:', e);
-      if (generation === this._mapGeneration) {
-        wrap.innerHTML = `<div class="dash-ops-map-empty">${ic('map-pin',22)}<span>Kartan kunde inte laddas</span></div>`;
-      }
+      if (generation === this._mapGeneration) empty('error');
     }
   },
 
@@ -1411,7 +1812,7 @@ const Dashboard = {
 
     if (btns.length === 0) return '';
     return `<div class="card">
-      <div class="card-header"><h3 class="ch3">${ic('zap',14)} Snabbåtgärder</h3></div>
+      ${this._head('zap', 'Snabbåtgärder')}
       <div class="card-body" style="padding:4px 14px 10px;">
         <div class="quick-list">${btns.join('')}</div>
       </div>
@@ -1452,10 +1853,7 @@ const Dashboard = {
 
     const dateStr = new Date().toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'short'});
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('calendar',14)} ${hasAll ? 'Ordrar idag' : 'Mina ordrar idag'}</h3>
-        <span style="font-size:10px;color:var(--mt);font-weight:600;text-transform:capitalize;">${dateStr}</span>
-      </div>
+      ${this._head('calendar', hasAll ? 'Ordrar idag' : 'Mina ordrar idag', { count: todayAOs.length || '', countLabel: todayAOs.length + ' ordrar idag', extra: `<span class="dw-date">${esc(dateStr)}</span>` })}
       <div class="card-body">
         ${todayAOs.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('calendar',22)}<p style="font-size:11px;text-align:center;">Inga planerade ordrar idag</p></div>`
@@ -1486,30 +1884,39 @@ const Dashboard = {
      härdning som resten av Dashboardens AO-ytor, istället för att lita på
      att "poolen är ändå delad så det spelar ingen roll". En bruten
      identitetsupplösning ska aldrig tolkas som "visa ändå". */
+  /* 2026-11-26: mest brådskande överst (akut → hög → normal → låg), och
+     inom samma prioritet det som väntat längst. Varje rad visar kund/plats
+     och hur länge jobbet legat i poolen. */
+  _POOL_PRIO: { akut: 0, 'hög': 1, normal: 2, 'låg': 3 },
   _widgetPool() {
     const poolScope = this._scopeWorkOrdersForCurrentUser(
       (state.workOrders || []).filter(a => !a.archived && !a.deleted),
       { includeSharedPool: true }
     );
-    const pool = poolScope.filter(a => a.status === 'pool');
-    return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('inbox',14)} Arbetspool</h3>
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${pool.length > 0 ? `<span class="bdg">${pool.length} väntar</span>` : ''}
-          <button class="btn bghost bxs" style="font-size:10px;padding:3px 7px;" onclick="Router.showPage('pg-ao',{filter:'pool'})">Visa ${ic('arrow-right',10)}</button>
-        </div>
-      </div>
+    const pr = (a) => { const r = this._POOL_PRIO[a.priority]; return r === undefined ? 2 : r; };
+    const pool = poolScope.filter(a => a.status === 'pool')
+      .sort((a, b) => pr(a) - pr(b) || String(a.createdAt || '9999').localeCompare(String(b.createdAt || '9999')));
+    const urgentN = pool.filter(a => a.priority === 'akut').length;
+    const go = "Router.showPage('pg-ao',{filter:'pool'})";
+    const renderRow = ao => {
+      const cu = getCu(ao.customerId);
+      const where = AddressService.displayAddress(ao) || (cu ? CustomerService.displayName(cu) : '');
+      const who = cu ? CustomerService.displayName(cu) : '';
+      const days = this._daysSince(ao.createdAt);
+      const sub = [who, where && where !== who ? where : '', days !== null ? (days === 0 ? 'i poolen sedan idag' : 'väntat ' + days + ' d') : ''].filter(Boolean).join(' · ');
+      return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${esc(ao.title)}</div>${pbdg(ao.priority)}</div><div class="crow-sub">${esc(sub || '—')}</div></div>`;
+    };
+    return `<div class="card dw-card${urgentN ? ' dw-tone-danger' : ''}">
+      ${this._head('inbox', 'Arbetspool', { count: pool.length || '', countSuffix: pool.length ? 'väntar' : '', tone: urgentN ? 'red' : '', countLabel: pool.length + ' jobb väntar på att tilldelas' + (urgentN ? ', varav ' + urgentN + ' akuta' : ''), go, goLabel: 'Visa alla' })}
       <div class="card-body">
         ${pool.length === 0
-          ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('inbox',22)}<p style="font-size:11px;text-align:center;">Arbetspoolen är tom</p></div>`
+          ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('inbox',22)}<p style="font-size:11px;text-align:center;">Arbetspoolen är tom — inga jobb väntar på att tilldelas</p></div>`
           : (() => {
               const LIMIT = 4;
               const uid = 'vm-pool';
-              const renderRow = ao => { var cu = getCu(ao.customerId); return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})"><div class="crow-top"><div class="crow-title">${esc(ao.title)}</div>${pbdg(ao.priority)}</div><div class="crow-sub">${esc(cu?CustomerService.displayName(cu):'—')}</div></div>`; };
               const visible = pool.slice(0, LIMIT).map(renderRow).join('');
               const hidden  = pool.length > LIMIT ? `<div id="${uid}" style="display:none;">${pool.slice(LIMIT).map(renderRow).join('')}</div><button class="btn bghost bfull bsm" style="margin-top:2px;" onclick="document.getElementById('${uid}').style.display='';this.remove()">${ic('chevron-down',11)} Visa alla (${pool.length})</button>` : '';
-              return visible + hidden;
+              return (urgentN ? `<p class="dw-lead dw-lead--danger">${ic('alert-triangle', 13)} ${urgentN} akut${urgentN === 1 ? '' : 'a'} jobb väntar på att tilldelas.</p>` : '') + visible + hidden;
             })()
         }
       </div>
@@ -1529,13 +1936,7 @@ const Dashboard = {
     }
     const timeStr = (active && ts) ? new Date(ts).toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'}) : '';
     return `<div class="card"${active?' style="border-left:2px solid var(--gr);"':''}>
-      <div class="card-header">
-        <h3 class="ch3">${ic('clock',14)} Stämpla tid</h3>
-        ${active
-          ? `<span class="bdg bdg-green">${ic('check-circle',10)} Incheckad</span>`
-          : `<span style="font-size:11px;color:var(--mt);">Utcheckad</span>`
-        }
-      </div>
+      ${this._head('clock', 'Stämpla tid', { extra: active ? `<span class="bdg bdg-green">${ic('check-circle',10)} Incheckad</span>` : `<span class="dw-date">Utcheckad</span>` })}
       <div class="card-body" style="text-align:center;padding:16px 12px;">
         ${active
           ? `<div style="font-size:26px;font-weight:900;color:var(--gr);line-height:1;margin-bottom:4px;">${elapsed}</div>
@@ -1551,10 +1952,7 @@ const Dashboard = {
   /* ── Widget: Återkommande ──────────────────────────────────────────── */
   _widgetRecurring(recurring) {
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('refresh-cw',14)} Återkommande snart</h3>
-        <span class="bdg">${recurring.length}</span>
-      </div>
+      ${this._head('refresh-cw', 'Återkommande snart', { count: recurring.length, tone: recurring.some(r => Math.ceil((new Date(r.nextDate) - new Date(tdy())) / 86400000) <= 0) ? 'red' : '', countLabel: recurring.length + ' återkommande uppdrag inom 7 dagar', go: "Router.showPage('pg-recurring')", goLabel: 'Visa alla' })}
       <div class="card-body">
         ${(() => {
           const LIMIT = 4;
@@ -1592,10 +1990,7 @@ const Dashboard = {
     );
     const planned = this._scopeWorkOrdersForCurrentUser(eligible, { includeSharedPool: false });
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('calendar-check',14)} Planerade</h3>
-        ${planned.length > 0 ? `<span class="bdg bdg-sky">${planned.length}</span>` : ''}
-      </div>
+      ${this._head('calendar-check', 'Planerade', { count: planned.length || '', tone: 'sky', countLabel: planned.length + ' planerade denna vecka' })}
       <div class="card-body">
         ${planned.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('calendar',22)}<p style="font-size:11px;text-align:center;">Inga planerade denna vecka</p></div>`
@@ -1623,13 +2018,7 @@ const Dashboard = {
     const prioSv   = { high:'Hög', medium:'Normal', low:'Låg', akut:'Akut', hög:'Hög', normal:'Normal', låg:'Låg' };
     const prioCls  = { high:'bdg-orange', medium:'bdg-sky', low:'bdg-grey', akut:'bdg-red', hög:'bdg-orange', normal:'bdg-sky', låg:'bdg-grey' };
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('target',14)} Säljchanser</h3>
-        <div style="display:flex;gap:5px;align-items:center;">
-          ${active.length > 0 ? `<span class="bdg">${active.length}</span>` : ''}
-          <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;" onclick="Router.showPage('pg-sales')">Visa alla ${ic('arrow-right',10)}</button>
-        </div>
-      </div>
+      ${this._head('target', 'Säljchanser', { count: active.length || '', countLabel: active.length + ' aktiva säljchanser', go: "Router.showPage('pg-sales')", goLabel: 'Visa alla' })}
       <div class="card-body">
         ${active.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('target',22)}<p style="font-size:11px;text-align:center;">Inga aktiva säljchanser</p></div>`
@@ -1669,10 +2058,7 @@ const Dashboard = {
        !a.deleted överallt i denna fil). */
     const pending = (state.offers||[]).filter(o => !o.deleted && !o.archived && ['skickad','väntar'].includes(o.status));
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('file-text',14)} Offerter väntar</h3>
-        ${pending.length > 0 ? `<span class="bdg bdg-orange">${pending.length}</span>` : ''}
-      </div>
+      ${this._head('file-text', 'Offerter väntar', { count: pending.length || '', tone: 'orange', countLabel: pending.length + ' offerter väntar på svar', go: "Router.showPage('pg-offer')", goLabel: 'Visa alla' })}
       <div class="card-body">
         ${pending.length === 0
           ? `<div class="empty" style="padding:12px 0;gap:4px;">${ic('file-text',22)}<p style="font-size:11px;text-align:center;">Inga offerter väntar svar</p></div>`
@@ -1693,7 +2079,7 @@ const Dashboard = {
   _widgetActivity() {
     const acts = ActivityService.getRecent(8);
     return `<div class="card">
-      <div class="card-header"><h3 class="ch3">${ic('activity',14)} Senaste händelser</h3></div>
+      ${this._head('activity', 'Senaste händelser')}
       <div class="card-body">
         ${ActivityService.renderList(acts)}
       </div>
@@ -1731,10 +2117,7 @@ const Dashboard = {
     const urgent = [...myOverdue, ...myToday].slice(0, 4);
 
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('bell',14)} Aktiviteter & uppföljningar</h3>
-        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;" onclick="Router.showPage('pg-activities')">Visa alla ${ic('arrow-right',10)}</button>
-      </div>
+      ${this._head('bell', 'Aktiviteter & uppföljningar', { go: "Router.showPage('pg-activities')", goLabel: 'Visa alla' })}
       <div class="card-body" style="padding:10px 12px;">
         <div style="display:flex;gap:8px;margin-bottom:${urgent.length>0?'10px':'0'};">
           ${_cnt(myStats.overdue, 'Försenade', 'var(--rd)', 'försenade')}
@@ -1824,10 +2207,7 @@ const Dashboard = {
         </div>`;
 
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('check-square',14)} Mina uppgifter</h3>
-        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 8px;gap:3px;" onclick="Router.showPage('pg-activities',{filter:'mina'})">Visa alla ${ic('arrow-right',10)}</button>
-      </div>
+      ${this._head('check-square', 'Mina uppgifter', { count: totalN || '', tone: overdueN ? 'red' : '', countLabel: totalN + ' öppna uppgifter' + (overdueN ? ', ' + overdueN + ' försenade' : ''), go: "Router.showPage('pg-activities',{filter:'mina'})", goLabel: 'Visa alla' })}
       <div class="card-body" style="padding:10px 12px;">${bodyHtml}</div>
     </div>`;
   },
@@ -1841,12 +2221,7 @@ const Dashboard = {
     const avvUanAO        = oppnaAvvikelser.filter(a => !a.workOrderId);
 
     return `<div class="card">
-      <div class="card-header">
-        <h3 class="ch3">${ic('clipboard-check',14)} Rondering</h3>
-        <button class="btn bghost bxs" style="font-size:10px;font-weight:700;padding:3px 7px;gap:3px;" onclick="Router.showPage('pg-rondering')">
-          Visa alla ${ic('arrow-right',10)}
-        </button>
-      </div>
+      ${this._head('clipboard-check', 'Rondering', { go: "Router.showPage('pg-rondering')", goLabel: 'Visa alla' })}
       <div class="card-body" style="padding:10px 14px;">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
           <div style="border:1px solid var(--br);border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;background:#fff;" onclick="Router.showPage('pg-rondering')">
@@ -1872,7 +2247,7 @@ const Dashboard = {
             ${ic('alert-triangle',12)} ${akutaAvvikelser.length} akut/hög avvikelse${akutaAvvikelser.length===1?'':'r'}
             <button class="btn bghost bxs" style="margin-left:auto;font-size:10px;padding:2px 8px;" onclick="Router.showPage('pg-rondering')">Visa</button>
           </div>` : ''}
-        ${avvUanAO.length > 0 ? `<div style="font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
+        ${avvUanAO.length > 0 ? `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mt);padding:4px 0;">${ic('info',11)} ${avvUanAO.length} avvikelse${avvUanAO.length===1?'':'r'} saknar arbetsorder</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn bp bsm" onclick="RonderingPage.openNewRondering()">${ic('plus',13)} Ny rondering</button>
           <button class="btn bs bsm" onclick="Router.showPage('pg-rondering',{tab:'mallar'})">${ic('layout-template',13)} Mallar</button>
