@@ -4,7 +4,7 @@
  * InvoiceDetailPage (fakturadetalj) ligger kvar längre ner i samma fil.
  *
  * V3 2026-11-26 (6A): kön är omgjord till en kompakt, grupperad vy —
- * en rad per kund (antal AO/underlag, belopp ex moms, åtgärdsräkning,
+ * en rad per kund (antal AO/underlag, belopp exkl. moms, åtgärdsräkning,
  * kryssruta med tre lägen) som fälls ut till arbetsordrar och sedan till
  * enskilda underlag. Endast presentation: kandidaterna, beloppen, momsen,
  * anspråken (sourceKey) och skapandet kommer oförändrat från
@@ -59,11 +59,13 @@ const InvoicesPage = {
     const el = document.getElementById('pg-invoices-content');
     if (!el) return;
     el.innerHTML = `
+      <div class="inv-page">
       <div class="ftabs" style="margin-bottom:8px;">
         <button class="ft ${this._view==='queue'?'on':''}" onclick="InvoicesPage._setView('queue')">Att fakturera</button>
         <button class="ft ${this._view==='list'?'on':''}" onclick="InvoicesPage._setView('list')">Fakturaunderlag</button>
       </div>
-      <div id="inv-view-body"></div>`;
+      <div id="inv-view-body"></div>
+      </div>`;
     this._renderViewBody();
   },
 
@@ -163,7 +165,8 @@ const InvoicesPage = {
   _onSearch(v) {
     this._qQuery = v || '';
     this._qLimit = this._QSTEP;
-    this._renderQueueList();
+    clearTimeout(this._searchT);
+    this._searchT = setTimeout(() => InvoicesPage._renderQueueList(), 150);
   },
 
   _setFilter(kind, value) {
@@ -268,7 +271,7 @@ const InvoicesPage = {
     SelectionModel.init('billingSource', {
       itemsProvider: () => BillingQueueService.getCandidates().filter(c => c.selectable),
       labelSingular: 'underlag', labelPlural: 'underlag',
-      selectionSummary: () => InvoicesPage._kr(InvoicesPage._selTotals(SelectionModel.getSelected()).ex) + ' ex moms',
+      selectionSummary: () => InvoicesPage._kr(InvoicesPage._selTotals(SelectionModel.getSelected()).ex) + ' exkl. moms',
       actions
     });
     /* "Välj alla" gäller ALLA valbara underlag som matchar filtret — även de
@@ -307,10 +310,10 @@ const InvoicesPage = {
       <div class="card bqv-head" id="bq-head">
         <div class="bqv-head-total">
           <div class="bqv-kicker">Hela kön · redo att fakturera</div>
-          <div class="bqv-head-amt" data-total="${s.totalAmount}">${this._kr(s.totalAmount)} <span>ex moms</span></div>
+          <div class="bqv-head-amt" data-total="${s.totalAmount}">${this._kr(s.totalAmount)} <span>exkl. moms</span></div>
           <div class="bqv-head-sub">${s.selectableCount} underlag · ${custs} ${custs===1?'kund':'kunder'}</div>
         </div>
-        <dl class="bqv-head-break" aria-label="Fördelning ex moms">
+        <dl class="bqv-head-break" aria-label="Fördelning exkl. moms">
           <div><dt>${ic('clock',12)} Tid</dt><dd data-part="time">${this._kr(s.timeAmount)}</dd></div>
           <div><dt>${ic('package',12)} Material</dt><dd data-part="material">${this._kr(s.materialAmount)}</dd></div>
           <div><dt>${ic('file-check',12)} Fastpris</dt><dd data-part="fixed">${this._kr(s.fixedAmount)}</dd></div>
@@ -330,9 +333,9 @@ const InvoicesPage = {
     if (this._qShow === 'atgard') {
       txt = `<b>${o.shown.length}</b> ${o.shown.length===1?'post':'poster'} kräver åtgärd${o.filtersActive ? ' (filtrerat urval)' : ''} · ingår inte i någon summa`;
     } else if (o.filtersActive || this._qShow !== 'alla') {
-      txt = `Visar <b>${o.shown.length}</b> av ${o.total} underlag · <span class="bqv-fsum">Summa för filtrerat urval: <b data-filtered-sum="${this._sumAmounts(o.matchedSel)}">${this._kr(this._sumAmounts(o.matchedSel))}</b> ex moms</span>`;
+      txt = `Visar <b>${o.shown.length}</b> av ${o.total} underlag · <span class="bqv-fsum">Summa för filtrerat urval: <b data-filtered-sum="${this._sumAmounts(o.matchedSel)}">${this._kr(this._sumAmounts(o.matchedSel))}</b> exkl. moms</span>`;
     } else {
-      txt = `<b>${o.matchedSel.length}</b> underlag kan faktureras · <span class="bqv-fsum"><b>${this._kr(this._sumAmounts(o.matchedSel))}</b> ex moms</span>`;
+      txt = `Visar <b>${o.shown.length}</b> av ${o.total} underlag · <span class="bqv-fsum"><b>${o.matchedSel.length}</b> kan faktureras: <b data-filtered-sum="${this._sumAmounts(o.matchedSel)}">${this._kr(this._sumAmounts(o.matchedSel))}</b> exkl. moms</span>`;
     }
     const canExpand = this._qShow !== 'atgard' && o.shown.length > 0;
     return `
@@ -385,7 +388,7 @@ const InvoicesPage = {
     });
     const r2 = (v) => Math.round(v * 100) / 100;
     Object.values(idx).forEach(g => { g.amount = r2(g.amount); });
-    const cmpName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'sv');
+    const cmpName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'sv', { numeric: true });
     const sorters = {
       customer: cmpName,
       amount: (a, b) => (b.amount - a.amount) || cmpName(a, b),
@@ -394,8 +397,8 @@ const InvoicesPage = {
     };
     const sortFn = sorters[this._qSort] || sorters.amount;
     const aoSort = {
-      customer: (a, b) => String(a.id).localeCompare(String(b.id), 'sv'),
-      amount: (a, b) => (b.amount - a.amount) || String(a.id).localeCompare(String(b.id), 'sv'),
+      customer: (a, b) => String(a.id).localeCompare(String(b.id), 'sv', { numeric: true }),
+      amount: (a, b) => (b.amount - a.amount) || String(a.id).localeCompare(String(b.id), 'sv', { numeric: true }),
       date: (a, b) => (String(a.firstDate || '9999') < String(b.firstDate || '9999') ? -1 : String(a.firstDate || '9999') > String(b.firstDate || '9999') ? 1 : 0),
       issues: (a, b) => (b.issues - a.issues) || (b.amount - a.amount)
     }[this._qSort] || ((a, b) => b.amount - a.amount);
@@ -432,7 +435,7 @@ const InvoicesPage = {
       <div class="bqv-cust${open ? ' is-open' : ''}" role="listitem" data-key="${esc(cu.key)}">
         <div class="bqv-row bqv-cust-row" data-act="toggle" data-key="${esc(cu.key)}">
           ${this._cbHtml(cu.key, cu.selIds, 'Markera alla underlag för ' + (cu.name || 'kunden'))}
-          <button type="button" class="bqv-tog" data-act="toggle" data-key="${esc(cu.key)}" aria-expanded="${open}" aria-label="${open ? 'Dölj' : 'Visa'} arbetsordrar för ${esc(cu.name)}">${ic('chevron-right',16)}</button>
+          <button type="button" class="bqv-tog" data-act="toggle" data-key="${esc(cu.key)}" aria-expanded="${open}" aria-label="${open ? 'Dölj' : 'Visa'} arbetsordrar för ${esc(cu.name)}" title="${open ? 'Dölj' : 'Visa'} arbetsordrar">${ic('chevron-right',16)}</button>
           <div class="bqv-main">
             <div class="bqv-title">${esc(cu.name)}</div>
             <div class="bqv-meta">
@@ -441,7 +444,7 @@ const InvoicesPage = {
               <span class="bqv-selinfo" data-selinfo="${esc(cu.key)}"></span>
             </div>
           </div>
-          <div class="bqv-amt"><b>${this._kr(cu.amount)}</b><small>ex moms</small></div>
+          <div class="bqv-amt"><b>${this._kr(cu.amount)}</b><small>exkl. moms</small></div>
         </div>
         ${open ? `<div class="bqv-kids">${cu.propList.map(p => this._propHtml(p)).join('')}</div>` : ''}
       </div>`;
@@ -472,7 +475,7 @@ const InvoicesPage = {
       <div class="bqv-ao${open ? ' is-open' : ''}" data-key="${esc(a.key)}">
         <div class="bqv-row bqv-ao-row" data-act="toggle" data-key="${esc(a.key)}">
           ${this._cbHtml(a.key, a.selIds, 'Markera alla underlag för ' + aoLabel)}
-          <button type="button" class="bqv-tog" data-act="toggle" data-key="${esc(a.key)}" aria-expanded="${open}" aria-label="${open ? 'Dölj' : 'Visa'} underlag för ${esc(aoLabel)}">${ic('chevron-right',15)}</button>
+          <button type="button" class="bqv-tog" data-act="toggle" data-key="${esc(a.key)}" aria-expanded="${open}" aria-label="${open ? 'Dölj' : 'Visa'} underlag för ${esc(aoLabel)}" title="${open ? 'Dölj' : 'Visa'} underlag">${ic('chevron-right',15)}</button>
           <div class="bqv-main">
             <div class="bqv-title">${esc(aoLabel)}${a.title ? ' · ' + esc(a.title) : ''}</div>
             <div class="bqv-meta">${parts.map(p => `<span>${esc(p)}</span>`).join('')}
@@ -756,7 +759,7 @@ const InvoicesPage = {
             <button type="button" class="btn bghost bxs" data-act="desel-hidden">Avmarkera dolda</button></div>` : ''}
         </div>
         <dl class="bqv-sel-sums">
-          <div><dt>Ex moms</dt><dd data-sel-ex="${t.ex}">${this._kr(t.ex)}</dd></div>
+          <div><dt>Exkl. moms</dt><dd data-sel-ex="${t.ex}">${this._kr(t.ex)}</dd></div>
           <div><dt>Moms</dt><dd data-sel-vat="${t.vat}">${this._kr(t.vat)}</dd></div>
           <div class="is-total"><dt>Inkl. moms</dt><dd data-sel-total="${t.total}">${this._kr(t.total)}</dd></div>
         </dl>
@@ -787,28 +790,30 @@ const InvoicesPage = {
       ${t.stale.length ? `<p class="bqv-cf-warn">${ic('alert-triangle',13)} ${t.stale.length} av de markerade kan inte längre faktureras — då skapas inget alls. Uppdatera kön och markera om.</p>` : ''}
       <div class="bqv-cf-list">
       ${t.perCustomer.map(p => `<div class="bqv-cf-row"><div><strong>${esc(p.name)}</strong><div class="bqv-cf-sub">${p.count} underlag</div></div>
-        <div class="bqv-cf-amt"><b>${this._kr(p.ex)}</b><small>ex moms</small></div></div>`).join('')}
+        <div class="bqv-cf-amt"><b>${this._kr(p.ex)}</b><small>exkl. moms</small></div></div>`).join('')}
       </div>
       <dl class="bqv-cf-sums">
-        <div><dt>Summa ex moms</dt><dd>${this._kr(t.ex)}</dd></div>
+        <div><dt>Summa exkl. moms</dt><dd>${this._kr(t.ex)}</dd></div>
         <div><dt>Moms</dt><dd>${this._kr(t.vat)}</dd></div>
         <div class="is-total"><dt>Totalt inkl. moms</dt><dd>${this._kr(t.total)}</dd></div>
       </dl>`;
 
     Modal.open({
-      title: 'Skapa fakturautkast?',
+      title: `${ic('file-plus',16)} Skapa fakturautkast?`,
       body,
       buttons: [
         { label: t.perCustomer.length > 1 ? `Skapa ${t.perCustomer.length} fakturautkast` : 'Skapa fakturautkast', cls: 'btn bp',
-          onClick: () => InvoicesPage._confirmCreate() },
+          onClick: (ev) => InvoicesPage._confirmCreate(ev) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
   },
 
-  async _confirmCreate() {
+  async _confirmCreate(ev) {
     if (InvoicesPage._createBusy) return; /* dubbelklicksskydd */
     InvoicesPage._createBusy = true;
+    const btnEl = ev && ev.currentTarget;
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Skapar…'; }
     /* Exakt de underlag som visades i bekräftelsedialogen (inte en ny,
        eventuellt ändrad markering). BillingQueueService revaliderar allt
        och skapar inget alls om något av dem inte längre kan faktureras. */
@@ -865,7 +870,7 @@ const InvoicesPage = {
         const active = this._tab === k.key;
         return `<div class="kpi-card ${k.cls}${active?' kpi-active':''}" onclick="InvoicesPage._setTab('${k.key}')" style="${active?'box-shadow:0 0 0 2px var(--sky)22;':''}" title="${esc(k.label)}">
           <div class="kpi-number">${counts[k.key]}</div>
-          <div class="kpi-label">${esc(k.label)}${total > 0 ? `<br><span style="font-size:10px;font-weight:500;">${fkr(total)}</span>` : ''}</div>
+          <div class="kpi-label">${esc(k.label)}${total > 0 ? `<br><span style="font-size:10px;font-weight:500;">${fkr(total)} inkl. moms</span>` : ''}</div>
         </div>`;
       }).join('')}
     </div>`;
@@ -881,14 +886,14 @@ const InvoicesPage = {
           ${ready.slice(0,5).map(ao => {
             const cu = getCu(ao.customerId);
             const alreadyInvoiced = !!ao.invoiceId;
-            return `<div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+            return `<div class="crow" data-ao="${esc(ao.id)}" onclick="Router.showPage('pg-ao-detail',{aoId:this.getAttribute('data-ao')})">
               <div>
-                <div style="font-size:13px;font-weight:700;">${ao.id} – ${esc(ao.title)}</div>
-                <div style="font-size:11px;color:var(--mt);">${esc(cu?CustomerService.displayName(cu):'—')}${alreadyInvoiced?' · '+ic('check',10)+' Faktura '+ao.invoiceId:''}</div>
+                <div style="font-size:13px;font-weight:700;">${esc(ao.id)} – ${esc(ao.title)}</div>
+                <div class="invlist-meta">${esc(cu?CustomerService.displayName(cu):'—')}${alreadyInvoiced?` · <span class="invlist-i">${ic('check',10)} Faktura ${esc(ao.invoiceId)}</span>`:''}</div>
               </div>
               ${alreadyInvoiced
-                ? `<button class="btn bsm bs" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('receipt',13)} Visa</button>`
-                : `<button class="btn bsm bsu" onclick="event.stopPropagation();InvoicesPage.createFromAO('${ao.id}')">${ic('file-plus',13)} Skapa</button>`}
+                ? `<button class="btn bsm bs" data-inv="${esc(ao.invoiceId)}" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:this.getAttribute('data-inv')})">${ic('receipt',13)} Visa</button>`
+                : `<button class="btn bsm bsu" data-ao="${esc(ao.id)}" onclick="event.stopPropagation();InvoicesPage.createFromAO(this.getAttribute('data-ao'))">${ic('file-plus',13)} Skapa</button>`}
             </div>`;
           }).join('')}
         </div>
@@ -897,7 +902,7 @@ const InvoicesPage = {
     // Tab bar
     const tabHtml = `<div class="ftabs" style="margin-bottom:0;">
       ${tabs.map(t => `<button class="ft ${this._tab===t?'on':''}" onclick="InvoicesPage._setTab('${t}')">
-        ${TAB_LABELS[t]}${counts[t]>0?` <span style="background:rgba(0,0,0,.10);border-radius:9px;padding:0 5px;font-size:9px;">${counts[t]}</span>`:''}
+        ${TAB_LABELS[t]}${counts[t]>0?` <span class="ft-n">${counts[t]}</span>`:''}
       </button>`).join('')}
     </div>`;
 
@@ -917,23 +922,23 @@ const InvoicesPage = {
           const selected = SelectionModel.isSelected(inv.id);
           /* SPRINT2 §32: tydligare hierarki — fakturanummer/titel överst,
              kund på egen rad, AO(er)+datum sekundärt, status+belopp höger. */
-          return `<div class="list-item-v2${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${inv.id}"
-            onclick="SelectionModel.rowClick('${inv.id}', function(){ Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'}); })">
+          return `<div class="list-item-v2${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${esc(inv.id)}"
+            onclick="InvoicesPage._listRowClick(this)">
             <div class="list-item-v2-row">
               <div style="padding-top:2px;" onclick="event.stopPropagation()">${SelectionModel.checkboxHtml(inv.id, inv.id)}</div>
               <div class="list-item-v2-main">
-                <div class="list-item-v2-title">${inv.id}${title?' — '+esc(title):''}</div>
+                <div class="list-item-v2-title">${esc(inv.id)}${title?' — '+esc(title):''}</div>
                 ${cuName ? `<div class="list-item-v2-cust">${ic('user',10)} ${esc(cuName)}</div>` : ''}
                 <div class="list-item-v2-meta">
-                  ${woIds.length ? `<span style="color:var(--sky);">${ic('clipboard',10)} ${woIds.length>1?woIds.length+' AO':woIds[0]}</span>` : ''}
+                  ${woIds.length ? `<span class="invlist-i is-link">${ic('clipboard',11)} ${woIds.length>1?woIds.length+' AO':esc(woIds[0])}</span>` : ''}
                   <span>${fmtDate(inv.createdAt)}</span>
                 </div>
               </div>
               <div class="list-item-v2-aside">
                 ${sbdg(inv.status)}
-                <span style="font-size:13px;font-weight:800;color:var(--navy);white-space:nowrap;">${fkr(t.total)}</span>
+                <span class="invlist-amt"><b>${InvoicesPage._kr(t.total)}</b><small>inkl. moms</small></span>
               </div>
-              <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna faktura" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:'${inv.id}'})">${ic('chevron-right',16)}</button>
+              <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna fakturaunderlag ${esc(inv.id)}" data-inv="${esc(inv.id)}" onclick="event.stopPropagation();Router.showPage('pg-inv-detail',{invoiceId:this.getAttribute('data-inv')})">${ic('chevron-right',16)}</button>
             </div>
           </div>`;
         }).join('');
@@ -954,6 +959,13 @@ const InvoicesPage = {
         <button class="btn bp bsm" style="flex-shrink:0;" onclick="InvoicesPage.createBlank()">${ic('plus',14)} Ny faktura</button>
       </div>
       ${listHtml}`;
+  },
+
+  /* Radklick i Fakturaunderlag-listan: id läses ur data-attributet. */
+  _listRowClick(el) {
+    const id = el && el.getAttribute('data-sel-row-id');
+    if (!id) return;
+    SelectionModel.rowClick(id, function () { Router.showPage('pg-inv-detail', { invoiceId: id }); });
   },
 
   _setTab(tab) {
@@ -1060,11 +1072,11 @@ const InvoiceDetailPage = {
     const overdue = inv.dueDate && inv.dueDate < tdy() && !['betald','makulerad'].includes(inv.status);
     const addr = cu ? [cu.invoiceAddress || cu.address, cu.invoiceZip || cu.zip, cu.invoiceCity || cu.city].filter(Boolean).map(esc).join(', ') : '';
 
-    el.innerHTML = `
+    el.innerHTML = `<div class="inv-page">
       <div class="card doc-head inv-hero">
         <div class="doc-top">
           <button class="btn bghost bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span></button>
-          <span class="doc-no">${esc(inv.id)}</span>
+          <span class="doc-no" title="${esc(inv.id)}">${esc(inv.id)}</span>
           <div class="doc-status">
             ${sbdg(inv.status)}
             ${Auth.can('invoice_create') && statusOpts.length > 1 ? `
@@ -1080,7 +1092,7 @@ const InvoiceDetailPage = {
             ${inv.title ? `<div class="doc-sub">${esc(inv.title)}</div>` : ''}
           </div>
           <div class="doc-figs">
-            <div class="doc-fig"><span>Summa ex moms</span><b class="sm">${kr(summ.exVat)}</b></div>
+            <div class="doc-fig"><span>Summa exkl. moms</span><b class="sm">${kr(summ.exVat)}</b></div>
             <div class="doc-fig${hasRot ? ' is-struck' : ''}"><span>Totalt inkl. moms</span><b>${kr(summ.totalInclVat)}</b></div>
             ${hasRot ? `<div class="doc-fig is-pay"><span>Kunden betalar</span><b>${kr(summ.customerPays)}</b><small>efter ${esc(String((inv.taxReduction||{}).type||'RUT/ROT').toUpperCase())}-avdrag</small></div>` : ''}
             ${inv.dueDate ? `<div class="doc-fig${overdue ? ' is-late' : ''}"><span>Förfallodatum</span><b class="sm">${fmtDate(inv.dueDate)}</b>${overdue ? '<small>Förfallodatum passerat</small>' : ''}</div>` : ''}
@@ -1115,25 +1127,26 @@ const InvoiceDetailPage = {
             <div class="card-header"><h3>Faktureras till</h3>
               ${(Auth.can('invoice_create') && InvoiceService.canEditDraft(inv)) ? `<button class="btn bxs bs" onclick="InvoiceDetailPage.openEditMeta()">${ic('pencil',11)} Redigera</button>` : ''}
             </div>
-            <div class="card-body">
-              <div class="dr"><span class="dk">Kund</span><span class="dv">${esc(cuName)}</span></div>
-              ${cu ? `<div class="dr"><span class="dk">Adress</span><span class="dv">${addr || '—'}</span></div>` : ''}
-              ${cu && cu.orgNr ? `<div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(cu.orgNr)}</span></div>` : ''}
-              ${inv.offerId ? `<div class="dr"><span class="dk">Från offert</span>
-                <a class="dv link" href="javascript:void(0)" data-nav="pg-offer-detail" data-id="${esc(inv.offerId)}" onclick="InvoiceDetailPage._nav(this)">${esc(inv.offerId)}${off?' (v'+esc(off.versionNumber)+')':''}</a></div>` : ''}
-              ${inv.customerReference ? `<div class="dr"><span class="dk">Er referens</span><span class="dv">${esc(inv.customerReference)}</span></div>` : ''}
-              ${inv.ocr ? `<div class="dr"><span class="dk">OCR</span><span class="dv" style="font-family:monospace;font-weight:700;">${esc(inv.ocr)}</span></div>` : ''}
-            </div>
+            <dl class="card-body invd-facts">
+              <div><dt>Kund</dt><dd>${esc(cuName)}</dd></div>
+              ${cu ? `<div><dt>Adress</dt><dd>${addr || '—'}</dd></div>` : ''}
+              ${cu && cu.orgNr ? `<div><dt>Org.nr</dt><dd>${esc(cu.orgNr)}</dd></div>` : ''}
+              ${inv.offerId ? `<div><dt>Från offert</dt><dd><a class="link" href="javascript:void(0)" data-nav="pg-offer-detail" data-id="${esc(inv.offerId)}" onclick="InvoiceDetailPage._nav(this)">${esc(inv.offerId)}${off?' (v'+esc(off.versionNumber)+')':''}</a></dd></div>` : ''}
+              ${inv.customerReference ? `<div><dt>Er referens</dt><dd>${esc(inv.customerReference)}</dd></div>` : ''}
+              ${inv.ocr ? `<div><dt>OCR</dt><dd class="is-mono">${esc(inv.ocr)}</dd></div>` : ''}
+            </dl>
           </div>
 
           <div class="card">
             <div class="card-header"><h3>Datum och villkor</h3></div>
             <div class="card-body">
-              <div class="dr"><span class="dk">Fakturadatum</span><span class="dv">${fmtDate(inv.createdAt)}</span></div>
-              <div class="dr"><span class="dk">Förfallodatum</span><span class="dv"${overdue ? ' style="color:var(--rd);font-weight:700;"' : ''}>${inv.dueDate ? fmtDate(inv.dueDate) : '—'}${overdue ? ' (passerat)' : ''}</span></div>
-              <div class="dr"><span class="dk">Betalningsvillkor</span><span class="dv">${esc(inv.paymentTerms || 30)} dagar</span></div>
-              <div class="dr"><span class="dk">Skickad</span><span class="dv">${inv.sentAt ? fmtDate(inv.sentAt) : '—'}</span></div>
-              <div class="dr"><span class="dk"${inv.paidAt ? ' style="color:var(--gr);"' : ''}>Betald</span><span class="dv"${inv.paidAt ? ' style="color:var(--gr);font-weight:700;"' : ''}>${inv.paidAt ? fmtDate(inv.paidAt) : '—'}</span></div>
+              <dl class="invd-facts">
+                <div><dt>Fakturadatum</dt><dd>${fmtDate(inv.createdAt)}</dd></div>
+                <div><dt>Förfallodatum</dt><dd${overdue ? ' class="is-late"' : ''}>${inv.dueDate ? fmtDate(inv.dueDate) : '—'}${overdue ? ' (passerat)' : ''}</dd></div>
+                <div><dt>Betalningsvillkor</dt><dd>${esc(inv.paymentTerms || 30)} dagar</dd></div>
+                <div><dt>Skickad</dt><dd>${inv.sentAt ? fmtDate(inv.sentAt) : '—'}</dd></div>
+                <div><dt>Betald</dt><dd${inv.paidAt ? ' class="is-ok"' : ''}>${inv.paidAt ? fmtDate(inv.paidAt) : '—'}</dd></div>
+              </dl>
               <p class="invt-note">Fakturadatum är datumet då underlaget skapades — samma datum som skrivs ut på PDF:en.</p>
             </div>
           </div>
@@ -1152,7 +1165,7 @@ const InvoiceDetailPage = {
             ${this._internEkonomi(inv)}
           </details>` : ''}
         </div>
-      </div>`;
+      </div></div>`;
   },
 
   /* Navigering från länkar i detaljvyn — målet läses från data-attribut. */
@@ -1291,7 +1304,7 @@ const InvoiceDetailPage = {
   /* V3 6B: raderna visas EX moms med momssatsen i egen kolumn — samma
      värden som InvoiceService.calcSummary() summerar (antal × à-pris).
      Tidigare visades radbeloppet inkl. moms utan etikett (t.ex. "1 tim ×
-     430 kr" och 537,50 kr) medan summan visades ex moms. */
+     430 kr" och 537,50 kr) medan summan visades exkl. moms. */
   _renderLines(inv) {
     const lines = inv.lines || [];
     const canEdit = InvoiceService.canEditLines(inv) && Auth.can('invoice_create');
@@ -1314,21 +1327,21 @@ const InvoiceDetailPage = {
         </div>`;
       }
       const qty = Number(l.qty) || 0, price = Number(l.unitPrice) || 0;
-      const ex = qty * price;
+      const ex = Math.round(qty * price * 100) / 100; /* visas i hela ören */
       const rate = InvoiceService.normalizeVatRate(l.vatRate);
       return `<div class="invl-row${ex ? '' : ' is-zero'}" data-line-id="${esc(l.id)}" data-vat="${rate}">
           <div class="invl-desc"><b>${esc(l.description)}</b>${badge}</div>
           <div class="invl-c invl-qty"><span class="invl-k">Antal</span><span>${fmt(qty)} ${esc(l.unit || '')}</span></div>
-          <div class="invl-c invl-price"><span class="invl-k">À-pris ex moms</span><span>${kr(price)}</span></div>
+          <div class="invl-c invl-price"><span class="invl-k">À-pris exkl. moms</span><span>${kr(price)}</span></div>
           <div class="invl-c invl-vat"><span class="invl-k">Moms</span><span>${fmt(rate)} %</span></div>
-          <div class="invl-c invl-amt"><span class="invl-k">Belopp ex moms</span><span class="invl-amt-v">${kr(ex)}</span></div>
+          <div class="invl-c invl-amt"><span class="invl-k">Belopp exkl. moms</span><span class="invl-amt-v">${kr(ex)}</span></div>
           ${acts(l)}
         </div>`;
     }).join('');
-    return `<div class="invl" role="table" aria-label="Fakturarader">
-      <div class="invl-head" role="row"><span>Beskrivning</span><span>Antal</span><span>À-pris ex moms</span><span>Moms</span><span>Belopp ex moms</span><span></span></div>
+    return `<div class="invl-scroll"><div class="invl" role="table" aria-label="Fakturarader">
+      <div class="invl-head" role="row"><span>Beskrivning</span><span>Antal</span><span>À-pris exkl. moms</span><span>Moms</span><span>Belopp exkl. moms</span><span></span></div>
       ${rows}
-    </div>`;
+    </div></div>`;
   },
 
   /* Momsen per sats, härledd ur samma rader och samma rabattkvot som
@@ -1360,7 +1373,7 @@ const InvoiceDetailPage = {
           ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
-          <div class="dr"><span class="dk">Fakturerat ex moms</span><span class="dv">${fkr(tb.revenue.value)}</span></div>
+          <div class="dr"><span class="dk">Fakturerat exkl. moms</span><span class="dv">${fkr(tb.revenue.value)}</span></div>
           ${tb.material.buyEx > 0 ? `<div class="dr"><span class="dk">Material inköp</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>` : ''}
           ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)} <span style="font-size:10px;color:var(--mt);">(${TimeService.fmtDuration(tb.labor.minutes)} × ${fmt(tb.labor.rate)} kr/h)</span></span></div>` : ''}
           <div class="dr"><span class="dk">Total kostnad</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
@@ -1428,7 +1441,7 @@ const InvoiceDetailPage = {
           <div class="fg"><label>Antal timmar</label>
             <input type="number" id="il-qty-tid" value="${curType==='tid'?curQty:1}" min="0" step="0.25"
               oninput="InvoiceDetailPage._calcLineTotals()"></div>
-          <div class="fg"><label>Timpris ex moms (kr)</label>
+          <div class="fg"><label>Timpris exkl. moms (kr)</label>
             <input type="number" id="il-price-tid" value="${curType==='tid'?curPrice:0}" min="0"
               oninput="InvoiceDetailPage._calcLineTotals()"></div>
         </div>
@@ -1451,7 +1464,7 @@ const InvoiceDetailPage = {
               oninput="InvoiceDetailPage._calcLineTotals()"></div>
           <div class="fg"><label>Enhet</label>
             <select id="il-unit-mat" onchange="InvoiceDetailPage._unitChanged('mat')">${unitsHtml(curType==='mat'?curUnit:'st')}</select></div>
-          <div class="fg"><label>Á-pris ex moms (kr)</label>
+          <div class="fg"><label>À-pris exkl. moms (kr)</label>
             <input type="number" id="il-price-mat" value="${curType==='mat'?curPrice:0}" min="0"
               oninput="InvoiceDetailPage._calcLineTotals()"></div>
         </div>
@@ -1469,7 +1482,7 @@ const InvoiceDetailPage = {
               oninput="InvoiceDetailPage._calcLineTotals()"></div>
           <div class="fg"><label>Enhet</label>
             <select id="il-unit-ovr" onchange="InvoiceDetailPage._unitChanged('ovr')">${unitsHtml(curType==='ovr'?curUnit:'st')}</select></div>
-          <div class="fg"><label>Á-pris ex moms (kr)</label>
+          <div class="fg"><label>À-pris exkl. moms (kr)</label>
             <input type="number" id="il-price-ovr" value="${curType==='ovr'?curPrice:0}" min="0"
               oninput="InvoiceDetailPage._calcLineTotals()"></div>
         </div>
@@ -1481,7 +1494,7 @@ const InvoiceDetailPage = {
       <div id="il-fast" style="${vis('fast')}">
         <div class="fg"><label>Beskrivning</label>
           <input id="il-desc-fast" value="${curType==='fast'?esc(curDesc):''}" placeholder="T.ex. Avtalat pris, Årsservice…"></div>
-        <div class="fg"><label>Fast pris ex moms (kr)</label>
+        <div class="fg"><label>Fast pris exkl. moms (kr)</label>
           <input type="number" id="il-price-fast" value="${curType==='fast'?curPrice:0}" min="0"
             oninput="InvoiceDetailPage._calcLineTotals()"></div>
         <div class="fg"><label>Momssats</label>
@@ -1496,9 +1509,9 @@ const InvoiceDetailPage = {
 
       <!-- Live-kalkyl -->
       <div id="il-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;font-size:12px;margin-top:6px;display:none;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa ex moms</span><strong id="il-ex">0 kr</strong></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Summa exkl. moms</span><strong id="il-ex">0 kr</strong></div>
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms</span><strong id="il-moms">0 kr</strong></div>
-        <div style="display:flex;justify-content:space-between;font-weight:800;color:var(--navy);"><span>Summa inkl moms</span><span id="il-inkl">0 kr</span></div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;color:var(--navy);"><span>Summa inkl. moms</span><span id="il-inkl">0 kr</span></div>
       </div>`;
   },
 
@@ -1866,20 +1879,29 @@ const InvoiceDetailPage = {
     const kr = (n) => InvoicesPage._kr(n);
     const vb = this._vatBreakdown(inv, s);
     const oneRate = vb.length === 1 ? vb[0].rate : null;
+    const r2 = (v) => Math.round(v * 100) / 100;
+    const rowsShown = r2((inv.lines || []).filter(l => l.source !== 'Fritext').reduce((a, l) => a + r2((Number(l.qty) || 0) * (Number(l.unitPrice) || 0)), 0));
+    const rowsTarget = hasDiscount ? r2(s.linesEx) : s.exVat;
+    const rowRound = r2(rowsTarget - rowsShown);
+    const vatRound = vb.length > 1 ? r2(s.vat - vb.reduce((a, v) => a + v.vat, 0)) : 0;
+    const signed = (v) => (v < 0 ? '− ' : '+ ') + kr(Math.abs(v));
+    const roundRow = rowRound ? `<div class="invt-r is-sub" data-t="round"><span>Öresavrundning (radbeloppen visas i hela ören)</span><span>${signed(rowRound)}</span></div>` : '';
     return `${this._renderOfferTaxNotice(inv)}
       <div class="invt" id="inv-totals">
+        ${roundRow}
         ${hasDiscount ? `
-        <div class="invt-r" data-t="lines"><span>Summa rader ex moms</span><span>${kr(s.linesEx)}</span></div>
+        <div class="invt-r" data-t="lines"><span>Summa rader exkl. moms</span><span>${kr(rowsTarget)}</span></div>
         <div class="invt-r is-disc" data-t="disc"><span>${ic('tag',11)} Rabatt${disc.type==='percent'?' '+esc(disc.value)+' %':''}</span><span>− ${kr(s.discAmt)}</span></div>
-        <div class="invt-r is-strong" data-t="ex"><span>Summa ex moms efter rabatt</span><span>${kr(s.exVat)}</span></div>` : `
-        <div class="invt-r is-strong" data-t="ex"><span>Summa ex moms</span><span>${kr(s.exVat)}</span></div>`}
+        <div class="invt-r is-strong" data-t="ex"><span>Summa exkl. moms efter rabatt</span><span>${kr(s.exVat)}</span></div>` : `
+        <div class="invt-r is-strong" data-t="ex"><span>Summa exkl. moms</span><span>${kr(s.exVat)}</span></div>`}
         <div class="invt-r" data-t="vat"><span>Moms${oneRate !== null ? ' ' + fmt(oneRate) + ' %' : ''}</span><span>${kr(s.vat)}</span></div>
         ${vb.length > 1 ? vb.map(v => `<div class="invt-r is-sub" data-t="vat-part" data-rate="${v.rate}"><span>varav ${fmt(v.rate)} % av ${kr(v.base)}${hasDiscount ? ' (efter rabatt)' : ''}</span><span>${kr(v.vat)}</span></div>`).join('') : ''}
+        ${vatRound ? `<div class="invt-r is-sub" data-t="vat-round"><span>varav öresavrundning</span><span>${signed(vatRound)}</span></div>` : ''}
         <div class="invt-r ${hasRot ? 'is-strong' : 'is-total'}" data-t="total"><span>Totalt inkl. moms</span><span>${kr(s.totalInclVat)}</span></div>
         ${hasRot ? `
         <div class="invt-r is-rot" data-t="rot"><span>${ic('percent',11)} ${esc(String(tr.type).toUpperCase())}-avdrag${tr.note?' ('+esc(tr.note)+')':''}</span><span>− ${kr(s.trAmount)}</span></div>
         <div class="invt-r is-pay" data-t="pay"><span>Kunden betalar</span><span>${kr(s.customerPays)}</span></div>` : ''}
-        <p class="invt-note">Radbeloppen ovan är ex moms. Momsen läggs på per momssats${hasDiscount ? ' efter rabatten' : ''}.</p>
+        <p class="invt-note">Radbeloppen ovan är exkl. moms. Momsen läggs på per momssats${hasDiscount ? ' efter rabatten' : ''} och räknas på radernas exakta belopp.</p>
         ${(Auth.can('invoice_create') && InvoiceService.canEditDraft(inv)) ? `
         <div class="invt-tools">
           <button class="btn bxs bs" onclick="InvoiceDetailPage.openDiscount()" title="Sätt rabatt">${ic('tag',11)} Rabatt</button>
@@ -1980,7 +2002,7 @@ const InvoiceDetailPage = {
             <option value="rut"  ${tr.type==='rut' ?'selected':''}>RUT-avdrag (50 %)</option>
           </select></div>
         <div id="tr-fields" style="${tr.type==='none'?'display:none':''}">
-          <div class="fg"><label>Underlag – berättigat arbete ex moms (kr)</label>
+          <div class="fg"><label>Underlag – berättigat arbete exkl. moms (kr)</label>
             <input type="number" id="tr-basis" value="${tr.basis||0}" min="0" step="100"
               oninput="InvoiceDetailPage._trCalc()"></div>
           <div style="font-size:11px;color:var(--mt);margin:-4px 0 8px;">Avdraget räknas på arbetskostnaden inkl. moms (25 %), samma regel som i offerten.</div>
@@ -2019,8 +2041,8 @@ const InvoiceDetailPage = {
     const rate   = type === 'rut' ? 0.50 : 0.30;
     /* E2E ECO-01 (2026-11-23): RUT/ROT räknas på arbetskostnaden INKL.
        moms — samma regel som offerten (OffersPage._calcLineRutAmount:
-       underlag ex moms + moms 25 % på underlaget, × 30 %/50 %). Tidigare
-       räknades procenten på underlaget ex moms, så fakturan gav ett ~20 %
+       underlag exkl. moms + moms 25 % på underlaget, × 30 %/50 %). Tidigare
+       räknades procenten på underlaget exkl. moms, så fakturan gav ett ~20 %
        lägre avdrag än offerten för samma arbete (791,35 kr: 237 i st.f. 297). */
     const inclVat = basis + Math.round(basis * 25 / 100);
     amtEl.value  = Math.round(inclVat * rate);
@@ -2064,7 +2086,7 @@ const InvoiceDetailPage = {
     const ocr     = inv.ocr || inv.id.replace(/\D/g,'').padStart(6,'0');
 
     const linesHtml = (inv.lines||[]).map(l => {
-      /* Radbelopp ex moms med öre — samma värde som summeras i calcSummary()
+      /* Radbelopp exkl. moms med öre — samma värde som summeras i calcSummary()
          (tidigare avrundat till hela kronor, så raderna inte gick att stämma av mot summan). */
       const ex = (Number(l.qty)||0)*(Number(l.unitPrice)||0);
       const k2 = (n) => Number(n||0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2163,9 +2185,9 @@ ${refs.length ? '<div class="refs">' + refs.join(' &nbsp;·&nbsp; ') + '</div>' 
     <th>Beskrivning</th>
     <th class="r" style="width:48px">Antal</th>
     <th style="width:38px">Enhet</th>
-    <th class="r" style="width:78px">À-pris ex moms</th>
+    <th class="r" style="width:78px">À-pris exkl. moms</th>
     <th class="r" style="width:38px">Moms</th>
-    <th class="r" style="width:82px">Belopp ex moms</th>
+    <th class="r" style="width:82px">Belopp exkl. moms</th>
   </tr></thead>
   <tbody>${linesHtml}</tbody>
 </table>
@@ -2174,7 +2196,7 @@ ${refs.length ? '<div class="refs">' + refs.join(' &nbsp;·&nbsp; ') + '</div>' 
   ${hasDiscount ? `<div class="trow"><span>Radernas summa</span><span>${fmt(s.linesEx)} kr</span></div>
   <div class="trow tgreen"><span>Rabatt (${disc.type==='percent'?disc.value+'%':'fast belopp'})</span><span>− ${fmt(s.discAmt)} kr</span></div>
   <div class="tdiv"></div>` : ''}
-  <div class="trow"><span>Summa ex. moms</span><span>${fmt(s.exVat)} kr</span></div>
+  <div class="trow"><span>Summa exkl. moms</span><span>${fmt(s.exVat)} kr</span></div>
   <div class="trow"><span>Moms</span><span>${fmt(s.vat)} kr</span></div>
   <div class="tdiv"></div>
   <div class="tfinal"><span>Totalt inkl. moms</span><span>${fmt(s.totalInclVat)} kr</span></div>

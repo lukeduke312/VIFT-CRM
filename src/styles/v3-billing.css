@@ -4,6 +4,7 @@
 
 /* ═════════════════════ 6A · Faktureringskön ═════════════════════ */
 
+.inv-page { max-width: 1440px; min-width: 0; }
 .bqv { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .bqv * { min-width: 0; }
 
@@ -15,8 +16,8 @@
 .bqv-head-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .bqv-head-break { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
 .bqv-head-break > div { display: flex; flex-direction: column; gap: 2px; }
-.bqv-head-break dt { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.bqv-head-break dd { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bqv-head-break dt { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.bqv-head-break dd { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .bqv-head-iss {
   margin-left: auto; display: inline-flex; align-items: center; gap: 8px; text-align: left;
   min-height: 40px; padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer;
@@ -119,7 +120,7 @@
 .bqv-why { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .bqv-why span { font-size: 11.5px; font-weight: 650; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 999px; padding: 1px 8px; }
 
-.bqv-more { align-self: center; min-height: 40px; margin-top: 4px; }
+.bqv-more { display: flex; min-height: 40px; margin: 10px auto 0; }
 
 /* Kräver åtgärd: ett kort per post med orsak och direkt åtgärd */
 .bqv-issues { display: flex; flex-direction: column; gap: 8px; }
@@ -232,7 +233,8 @@ body:has(#pg-invoices.active #bq-list) #_selbar { display: none !important; }
 .invd-check b { color: var(--info); display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 .invd-check ul { margin: 0; padding-left: 18px; }
 
-/* Rader: beskrivning | antal | à-pris ex moms | moms | belopp ex moms */
+/* Rader: beskrivning | antal | à-pris exkl. moms | moms | belopp exkl. moms */
+.invl-scroll { overflow-x: auto; container-type: inline-size; }
 .invl { display: flex; flex-direction: column; }
 .invl-head, .invl-row { display: grid; grid-template-columns: minmax(0, 1fr) 82px 110px 64px 118px 72px; align-items: center; gap: 4px 10px; padding: 10px 14px; }
 .invl-head { padding-top: 8px; padding-bottom: 8px; font-size: 11px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); }
@@ -261,18 +263,40 @@ body:has(#pg-invoices.active #bq-list) #_selbar { display: none !important; }
 .invt-note { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
 .invt-tools { display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
 
+.invd-facts { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.invd-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.invd-facts dt { flex: 0 0 auto; font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.invd-facts dd { margin: 0; font-size: 14px; color: var(--ink); text-align: right; overflow-wrap: anywhere; min-width: 0; }
+.invd-facts dd.is-late { color: var(--danger); font-weight: 700; }
+.invd-facts dd.is-ok { color: var(--ok); font-weight: 700; }
+.invd-facts dd.is-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
+.invd-facts a.link { color: var(--accent-ink); cursor: pointer; }
 .invd-note { margin: 0; }
 .invd-note-k { display: block; font-size: 11px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
 .invd-aos .dr .dv { white-space: normal; text-align: right; }
 
-@media (max-width: 767px) {
+@container (max-width: 600px) {
   .invl-head { display: none; }
-  .invl-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 10px 12px; }
+  .invl-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; padding: 10px 12px; }
   .invl-row > .invl-desc { grid-column: 1 / -1; }
-  .invl-row > .invl-c { display: flex; justify-content: space-between; gap: 6px; text-align: left !important; }
-  .invl-k { display: inline; color: var(--muted); font-size: 12px; }
-  .invl-row > .invl-amt { grid-column: 1 / -1; border-top: 1px dashed var(--line); padding-top: 5px; margin-top: 2px; }
+  .invl-row > .invl-c { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left !important; white-space: normal; }
+  .invl-k { display: block; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; }
+  .invl-row > .invl-amt { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px; }
+  .invl-row > .invl-amt .invl-k { font-size: 12px; }
   .invl-row > .invl-act { grid-column: 1 / -1; justify-content: flex-start; }
   .invl-row.is-info { grid-template-columns: minmax(0, 1fr); }
-  .invl-act .btn { min-width: 40px; min-height: 40px; justify-content: center; }
 }
+@media (max-width: 767px) {
+  .invl-act .btn { min-width: 40px; min-height: 40px; justify-content: center; }
+  /* Långa underlagsnummer kortas med … i stället för att trycka statusväljaren utanför kortet. */
+  .inv-hero .doc-no { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .inv-hero .doc-status { flex-shrink: 0; }
+}
+
+/* Fakturaunderlag-listan: ikon och text på samma rad, belopp märkt inkl. moms. */
+.invlist-i { display: inline-flex; align-items: center; gap: 4px; }
+.invlist-i.is-link { color: var(--accent-ink); }
+.invlist-meta { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
+.invlist-amt { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.invlist-amt b { font-size: 13px; font-weight: 750; color: var(--ink); }
+.invlist-amt small { font-size: 10.5px; color: var(--muted); }
