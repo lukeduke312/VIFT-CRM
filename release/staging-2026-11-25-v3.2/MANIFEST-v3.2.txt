@@ -1,0 +1,7 @@
+VIFT CRM STAGING-uppdatering 2026-11-25 v3.2: Admin-flikarna visade rå SVG-kod (regression från XSS-rättningen i v3.1). Källa: VIFT-CRM gren claude/vift-v3-major-redesign f0fdc4e + STAGING-överlägg (oförändrade).
+Prövat mot riktig STAGING före uppladdning (lokalt serverat paket): A1 Admin alla flikar dator+mobil, X1 lagrad XSS 4 roller; simulerat RENDER-01, XSS-01, VAT-01.
+Uppladdning: src/ först, index.html SIST. Ladda INTE upp något annat.
+2 filer.
+SHA-256 per fil (tools/verify-staging-deploy.sh <denna fil>):
+f18365b6e6d0561ca47d6133cafba61f96220d35f0aa694f4f545353e7b29c37  index.html
+abf40b3a98c428ddf839c33ab8cade2179c9fac594a2c6a4b285addc10cf6d38  src/pages/PageShells.js
