@@ -227,9 +227,17 @@ const AOTimeSyncService = {
   async supportsLogOps() {
     if (this._logOps !== null) return this._logOps;
     const r = await this._call({ action: 'append_log', aoId: '', entry: null, idempotencyKey: this._uuid() });
-    if (r.error === 'unknown_action' || r.httpStatus === 404) { this._logOps = false; return false; }
-    if (r.httpStatus === 400) { this._logOps = true; return true; }
-    return false;
+    if (r.error === 'unknown_action' || r.httpStatus === 404) { this._logOps = false; this._rememberLogOps(false); return false; }
+    if (r.httpStatus === 400) { this._logOps = true; this._rememberLogOps(true); return true; }
+    /* 2026-11-24 (riktig STAGING, E2E F5): osäkert svar (t.ex. offline).
+       Tidigare valdes då alltid den gamla vägen (patch_ao med hela loggen),
+       som köades och nekades efter återanslutning. Nu används det senast
+       BEKRÄFTADE svaret i denna webbläsare; aldrig bekräftat = gamla vägen. */
+    return this._rememberedLogOps() === true;
+  },
+  _rememberLogOps(v) { try { localStorage.setItem('vift-logops-supported', v ? '1' : '0'); } catch (e) {} },
+  _rememberedLogOps() {
+    try { const v = localStorage.getItem('vift-logops-supported'); return v === '1' ? true : v === '0' ? false : null; } catch (e) { return null; }
   },
   appendLog(aoId, entry, opts) {
     return this.enqueue('ao', aoId, { action: 'append_log', aoId: aoId, entry: entry }, opts);
@@ -819,7 +827,19 @@ const AOTimeSyncService = {
       AOTimeSyncService.resumePending().catch(function () {});
     } catch (e) {}
   }
-  window.addEventListener('online', function () { setTimeout(kick, 500); });
+  /* Sondera stödet för atomiska loggposter tidigt, medan nätet finns, så
+     att en loggpost som skapas offline köas på rätt väg (E2E F5). */
+  function probe() {
+    try {
+      if (AOTimeSyncService._logOps !== null) return;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if (typeof Auth === 'undefined' || !Auth.getAccessToken || !Auth.getAccessToken()) return;
+      AOTimeSyncService.supportsLogOps().catch(function () {});
+    } catch (e) {}
+  }
+  setTimeout(probe, 3000);
+  setInterval(probe, 60000);
+  window.addEventListener('online', function () { setTimeout(kick, 500); setTimeout(probe, 800); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });
   setInterval(kick, 30000);
 })();

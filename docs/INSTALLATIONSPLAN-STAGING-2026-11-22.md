@@ -813,6 +813,47 @@ Alla nya databasfunktioner är `SECURITY DEFINER` med `search_path=public`, och 
 
 **Rollback per steg:** enligt §6.8, med sparade versioner i `supabase/backup/staging-ef-fore-installation/`.
 
+### 6.10 Fullt STAGING-mandat: GO-8c, GO-8d, GO-9 och V3-integration (2026-11-24)
+
+**Backend:**
+- **GO-8c** `offer-public-pdf` v1. Logotypen (samma PNG, SHA-256 `34eb4481…`) ligger i den privata bucketen `vift-branding` och läses med service role. Annars är källan oförändrad. Test: 9/9. Token A ger bara offert A. Återkallad, utgången, saknad och kort token nekas. Interna fält syns inte. Logotypen är inbäddad.
+- **GO-8d** projektdokument:
+  - bucket `project-documents` (privat);
+  - 3 RPC:er;
+  - RESTRICTIVE-policyer mot direkt skrivning;
+  - `project-document-url` v1 och `project-document-upload` v1.
+
+  Test: 13/13. Beloppsbehörighet, fel projekt, vitlistning, privat bucket och radering.
+- **`offer-attachment-url`:** installerad v11 tillåter redan `apikey` (preflight 200). Det var repots källa som var äldre; den är nu synkad med v11.
+- **Test-PDF:n** i `offer-attachments` är borttagen. Det gjordes via den tillfälliga funktionen `vift-admin-storage`, som nu är avaktiverad (svarar 410).
+
+**Publicerad klient:** `verify-staging-deploy.sh MANIFEST-v2.txt` ger 47/47 identiska. V2 är alltså publicerad på staging-crm.viftfast.se.
+
+**GO-9, riktig STAGING i webbläsare (e2e-real):**
+
+| Flöde | Publicerad V2 | V2 med rättningar (lokalt paket) | V3-integration (lokalt paket) |
+|---|---|---|---|
+| R0, 6 roller | grön | — | grön |
+| F2 checklista, mobil | grön | — | grön |
+| F3 stämpling, mobil → dator | **fel** | grön | grön |
+| F4 samtidiga loggposter | grön | grön | grön |
+| F5 nätavbrott | **fel** | grön | grön |
+
+**Rättade fel (klient):**
+- **F3:** in- och utstämplingens loggpost skickades som `patch_ao` med hela loggen. Fältrollen nekades, och appen visade "kunde inte bekräftas", trots att stämplingen var sparad. Dessutom fanns G5-risken.
+  - Nu används `appendLogEntry` (work-order-log-write).
+  - Samma ändring är gjord för uppföljning och prisreparation i AO-detaljen.
+- **F5:** offline valdes den gamla helloggsvägen, eftersom sonderingen av serverstöd var osäker. Posten köades och nekades efter återanslutning.
+  - Nu sparas det senast bekräftade svaret per webbläsare.
+  - Sonderingen görs tidigt, medan nätet finns.
+- **R0:** de tidigare tidsgränserna orsakades av testmiljöns proxy ("upstream request failed"), inte av appen. Testet laddar nu om sidan vid exakt det felet.
+
+Simulerad E2E efter rättningarna: V2 110/112 och V3 115/117, 0 misslyckade. Det som återstår är PERM-03, som kräver riktig server, och G5 i simulatorn som känt fel.
+
+**V3-integrationspaket:** `release/staging-2026-11-24-v3/MANIFEST-v3.txt` på V3-grenen, 21 filer: `src/` och `index.html`. STAGING-överlägget är oförändrat. Paketet är provat mot riktig STAGING enligt tabellen ovan.
+
+**Ej publicerat:** uppladdningen till Loopia kräver FTP och görs av Lucas med WinSCP. Därefter kör man `verify-staging-deploy.sh MANIFEST-v3.txt` och e2e-real mot webbplatsen.
+
 ## 7. LIVE senare
 
 LIVE (`hjplzjsbbowiyoyhdghc`, Loopia) kör en äldre klient och saknar sannolikt allt i §1 (ao-time-write, RPC:er, RESTRICTIVE-policyer, stamp_status, store-key-write, work-orders-list m.fl.). Denna klient kan **inte** gå till LIVE förrän samma backend är installerad där, i samma ordning som STAGING fick den, med backup före varje migration. Det kräver G4 (källorna i repot) och en egen LIVE-plan.

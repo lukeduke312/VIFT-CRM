@@ -1,0 +1,47 @@
+{
+  "verktyg": "e2e-real",
+  "runId": "E2E-AUTHZ-20261124163655-40ddc4",
+  "tid": "2026-11-24T16:39:29.361Z",
+  "results": [
+    {
+      "id": "R0 admin",
+      "ok": true,
+      "detail": "37 sidor öppnade, inga JS-fel"
+    },
+    {
+      "id": "R0",
+      "ok": false,
+      "detail": "avbröts: page.waitForSelector: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#login-user') to be visible\u001b[22m\n"
+    },
+    {
+      "id": "F3",
+      "ok": false,
+      "detail": "avbröts: ingen \"Instämplad\"-toast inom 30 s — {\"toasts\":[\"Stämplingen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.\"],\"stampActive\":true,\"stampAoId\":\"E2E-AUTHZ-20261124163655-40ddc4-STAMP\"}"
+    },
+    {
+      "id": "MILJÖ",
+      "ok": true,
+      "detail": "inga anrop till andra Supabase-projekt"
+    },
+    {
+      "id": "ÅTERSTÄLLNING",
+      "ok": true,
+      "detail": "efterkontrollerat: inga testposter kvar"
+    },
+    {
+      "id": "AFFÄRSPOSTER",
+      "ok": true,
+      "detail": "befintliga register-element, AO (inkl. updatedAt) och tidposter identiska med ögonblicksbilden före"
+    },
+    {
+      "id": "DATABASIDENTITET",
+      "ok": null,
+      "detail": "INTE fullständig (förväntat). Kvar som metadata: vift_lastChanged och store.updated_at för berörda nycklar (ändras vid varje skrivning, även borttagning) · idempotensposter på servern för ao-time-write-anropen · inloggningsposter i auth-schemat (session, refresh-token, last_sign_in_at) och Edge Function-loggar · WAL/backup-historik som innehåller testposterna · aktivitetsflöde: 0 nya poster under körningen (varav 0 nämner testkörningen) — tas inte bort"
+    }
+  ],
+  "niva": 2,
+  "projekt": "yyzljlqyzzcbxmcdbual",
+  "journal": "/home/user/vift-v2/tests/staging/rapport/E2E-AUTHZ-20261124163655-40ddc4.journal.json",
+  "kvar": [],
+  "efterkontroll": true
+}

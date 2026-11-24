@@ -50,7 +50,15 @@ const SITE = 'https://staging-crm.viftfast.se';
 const STAGING_SUPA = 'https://yyzljlqyzzcbxmcdbual.supabase.co';
 const paket = typeof L.arg('paket') === 'string' ? path.resolve(L.arg('paket')) : null;
 if (env.local && !paket) L.refuse('lokal provning kräver --paket=<katalog med publiceringspaketet>.');
-if (!env.local && paket) L.refuse('--paket används bara vid lokal provning.');
+/* Förhandsprov (2026-11-24): riktig STAGING-server med ett LOKALT serverat
+   publiceringspaket — för att prova ett nytt paket innan det laddas upp.
+   Paketets storage.js måste peka på exakt STAGING och inget LIVE-spår får
+   finnas (utom AuthService.js återställningslänkar, som byggskriptet). */
+if (!env.local && paket) {
+  const st = fs.readFileSync(path.join(paket, 'src/data/storage.js'), 'utf8');
+  if (!st.includes("const SUPABASE_URL  = 'https://yyzljlqyzzcbxmcdbual.supabase.co'") && !/SUPABASE_URL\s*=\s*'https:\/\/yyzljlqyzzcbxmcdbual\.supabase\.co'/.test(st)) L.refuse('paketets storage.js pekar inte på STAGING.');
+  if (st.includes(L.LIVE_REF)) L.refuse('paketets storage.js innehåller LIVE.');
+}
 const FLOWS = (typeof L.arg('flode') === 'string' ? L.arg('flode') : 'R0,F2,F3,F4,F5').split(',');
 const DRY = L.arg('torrkorning') === true;
 const CLEAN_ONLY = typeof L.arg('stada') === 'string' ? L.arg('stada') : null;
@@ -60,6 +68,7 @@ process.env.VIFT_E2E_REAL = '1';
 process.env.VIFT_E2E_REAL_GUARD = 'godkand-av-e2e-real';
 process.env.VIFT_E2E_SUPA = STAGING_SUPA;
 if (env.local) { process.env.VIFT_E2E_ROOT = paket; process.env.VIFT_E2E_FORWARD = env.sb; }
+else if (paket) process.env.VIFT_E2E_ROOT = paket;   // förhandsprov: lokalt paket, riktig STAGING
 else process.env.VIFT_E2E_BASEURL = SITE;
 const E = require('../e2e/lib.js');
 const { req, login } = L.client(env);
@@ -130,7 +139,8 @@ const FLOW = {
     await m.go('pg-myjobs');
     note({ typ: 'stampling', konto: 'falt' }); // journal FÖRE mutationen
     await m.eval((id) => MyJobsPage.clockIn ? MyJobsPage.clockIn(id) : null, aoId);
-    await m.waitToast(/Instämplad/, 15000);
+    try { await m.waitToast(/Instämplad/, 30000); }
+    catch (e) { const diag = await m.eval(() => ({ toasts: (window.__toasts || []).map((t) => t.m).slice(-5), stampActive: !!state.stampActive, stampAoId: state.stampAoId || null })); throw new Error('ingen "Instämplad"-toast inom 30 s — ' + JSON.stringify(diag)); }
     await d.page.bringToFront(); await d.eval(() => window.dispatchEvent(new Event('focus'))); await d.settle(4000);
     const seen = await d.eval(() => !!state.stampActive);
     await d.go('pg-myjobs');

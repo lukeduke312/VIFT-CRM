@@ -312,9 +312,13 @@ const MyJobsPage = {
         userName:  `${user.firstName} ${user.lastName}`.trim(),
         timestamp: new Date().toISOString()
       });
-      if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+      /* 2026-11-24 (riktig STAGING, E2E F3): loggposten skickas som EN post
+         (appendLogEntry → work-order-log-write, atomiskt). Tidigare patch_ao
+         med hela loggen nekades för fältroller och kunde skriva över en
+         annan enhets samtidiga post (G5). Utan serverstöd: samma väg som förut. */
+      if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService.appendLogEntry === 'function') {
         syncPending = true;
-        WorkOrderService._syncAO(ao, { log: ao.log }, {
+        WorkOrderService.appendLogEntry(ao.id, ao.log[ao.log.length - 1], {
           onSettled: function (r) {
             if (r && r.ok) {
               showToast('Instämplad');
@@ -408,9 +412,9 @@ const MyJobsPage = {
           userName:  entry.staffName,
           timestamp: new Date().toISOString()
         });
-        if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService._syncAO === 'function') {
+        if (typeof WorkOrderService !== 'undefined' && typeof WorkOrderService.appendLogEntry === 'function') {
           st.logRequired = true;
-          WorkOrderService._syncAO(ao, { log: ao.log }, {
+          WorkOrderService.appendLogEntry(ao.id, ao.log[ao.log.length - 1], {
             onSettled: function (r) {
               // Endast slutgiltiga svar räknas; transient = väntar vidare.
               if (r && (r.ok || r.final)) { st.log = r; evaluate(); }

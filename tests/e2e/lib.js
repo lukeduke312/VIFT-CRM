@@ -200,7 +200,20 @@ class Session {
       alias = process.env['VIFT_USER_' + String(alias).toUpperCase()] || alias;
       password = process.env.VIFT_PW;
       if (!this.page.url().startsWith(baseUrl)) await this.open();
-      await this.page.waitForSelector('#login-user', { state: 'visible', timeout: 20000 });
+      /* Testmiljöns utgående proxy svarar ibland "upstream request failed"
+         i stället för sidan (miljöfel, inte appen). Ladda om högst 3 gånger,
+         BARA vid exakt det felet. */
+      for (let i = 0; i < 3; i++) {
+        const t = await this.page.evaluate(() => (document.body && document.body.innerText || '').slice(0, 60)).catch(() => '');
+        if (!/upstream request failed/i.test(t)) break;
+        this.proxyRetries = (this.proxyRetries || 0) + 1;
+        await this.page.waitForTimeout(3000); await this.open();
+      }
+      try { await this.page.waitForSelector('#login-user', { state: 'visible', timeout: 20000 }); }
+      catch (e) {
+        const diag = await this.page.evaluate(() => ({ url: location.href, txt: (document.body && document.body.innerText || '').slice(0, 160), user: typeof state !== 'undefined' && state.currentUser ? state.currentUser.id : null })).catch(() => ({}));
+        throw new Error('inloggningsfältet syns inte inom 20 s — ' + JSON.stringify(diag));
+      }
       await this.page.fill('#login-user', alias);
       await this.page.fill('#login-pass', password || '');
       await this.page.click('#lp-login button.btn.bp');
