@@ -37,6 +37,9 @@ const ReportsPage = (function () {
   var _periodCustomFrom  = '';
   var _periodCustomTo    = '';
 
+  /* V3 2026-11-26 (F-15): periodetiketter i svensk form ("november 2026",
+     "Q4 2026", "senaste 12 månaderna") i stället för "nov 26 2026". Samma
+     from/to som tidigare — bara etiketten är ändrad (exporten får samma text). */
   function _periodRange() {
     var today = _today();
     var d = new Date();
@@ -46,7 +49,7 @@ const ReportsPage = (function () {
       var from = y + '-' + String(m + 1).padStart(2, '0') + '-01';
       var lastDay = new Date(y, m + 1, 0).getDate();
       var to = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
-      return { from: from, to: to, label: _monthLabel(from.slice(0, 7)) + ' ' + y };
+      return { from: from, to: to, label: _monthLong(from.slice(0, 7)) };
     }
     if (_periodPreset === 'prev-month') {
       var pm = m === 0 ? 11 : m - 1;
@@ -54,7 +57,7 @@ const ReportsPage = (function () {
       var from = py + '-' + String(pm + 1).padStart(2, '0') + '-01';
       var lastDay = new Date(py, pm + 1, 0).getDate();
       var to = py + '-' + String(pm + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
-      return { from: from, to: to, label: _monthLabel(from.slice(0, 7)) + ' ' + py };
+      return { from: from, to: to, label: _monthLong(from.slice(0, 7)) };
     }
     if (_periodPreset === 'quarter') {
       var q = Math.floor(m / 3);
@@ -65,19 +68,19 @@ const ReportsPage = (function () {
       return { from: qFrom, to: qTo, label: 'Q' + (q + 1) + ' ' + y };
     }
     if (_periodPreset === 'year') {
-      return { from: y + '-01-01', to: y + '-12-31', label: 'År ' + y };
+      return { from: y + '-01-01', to: y + '-12-31', label: 'år ' + y };
     }
     if (_periodPreset === '12months') {
       var d12 = new Date(); d12.setMonth(d12.getMonth() - 12);
-      return { from: d12.toISOString().slice(0, 10), to: today, label: 'Senaste 12 mån' };
+      return { from: d12.toISOString().slice(0, 10), to: today, label: 'senaste 12 månaderna' };
     }
     if (_periodPreset === 'custom' && _periodCustomFrom && _periodCustomTo) {
-      return { from: _periodCustomFrom, to: _periodCustomTo, label: _periodCustomFrom + ' – ' + _periodCustomTo };
+      return { from: _periodCustomFrom, to: _periodCustomTo, label: _fmtRange(_periodCustomFrom, _periodCustomTo) };
     }
     /* fallback = innevarande månad */
     var from = y + '-' + String(m + 1).padStart(2, '0') + '-01';
     var lastDay = new Date(y, m + 1, 0).getDate();
-    return { from: from, to: y + '-' + String(m + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0'), label: _monthLabel(from.slice(0, 7)) + ' ' + y };
+    return { from: from, to: y + '-' + String(m + 1).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0'), label: _monthLong(from.slice(0, 7)) };
   }
 
   function _inPeriod(dateStr, range) {
@@ -129,11 +132,56 @@ const ReportsPage = (function () {
     return tdy();
   }
 
+  var _MONL = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'];
+
+  /* "2026-11" → "nov. 2026" (stapeletiketter per månad, samma månadsform som fmtDate). */
   function _monthLabel(ym) {
     if (!ym || ym.length < 7) return ym || '—';
-    var months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    var d = new Date(parseInt(ym.slice(0, 4), 10), parseInt(ym.slice(5, 7), 10) - 1, 1);
+    return d.toLocaleDateString('sv-SE', { month: 'short', year: 'numeric' });
+  }
+  /* "2026-11" → "november 2026" (periodetikett). */
+  function _monthLong(ym) {
+    if (!ym || ym.length < 7) return ym || '—';
     var m = parseInt(ym.slice(5, 7), 10) - 1;
-    return months[m] + ' ' + ym.slice(2, 4);
+    return (_MONL[m] || '?') + ' ' + ym.slice(0, 4);
+  }
+  /* "2026-11-24" → "24 nov. 2026" — samma form som globala fmtDate()
+     (V3-komponentstandard §10); year:false → "24 nov.". */
+  function _fmtDate(iso, opts) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso || '—';
+    var d = new Date(parseInt(iso.slice(0, 4), 10), parseInt(iso.slice(5, 7), 10) - 1, parseInt(iso.slice(8, 10), 10));
+    return d.toLocaleDateString('sv-SE', opts && opts.year === false ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  /* Tidsstämpel → "24 nov 2026 14:30" i lokal tid (tidigare visades
+     UTC-klockslaget ur ISO-strängen som om det vore lokal tid). */
+  function _fmtTs(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    if (isNaN(d.getTime()) || String(ts).length <= 10) return _fmtDate(String(ts).slice(0, 10));
+    var ymd = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    return _fmtDate(ymd) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  /* Intervall i kort svensk form: "1–30 nov 2026", "1 okt – 31 dec 2026",
+     "24 nov 2025 – 24 nov 2026". */
+  function _fmtRange(from, to) {
+    if (!from || !to) return (from || '') + ' – ' + (to || '');
+    if (from.slice(0, 7) === to.slice(0, 7)) return parseInt(from.slice(8, 10), 10) + '–' + _fmtDate(to);
+    if (from.slice(0, 4) === to.slice(0, 4)) return _fmtDate(from, { year: false }) + ' – ' + _fmtDate(to);
+    return _fmtDate(from) + ' – ' + _fmtDate(to);
+  }
+  /* Tal i svensk form ("26,5"); dec = högst antal decimaler. */
+  function _fmtNum(n, dec) {
+    var v = Number(n) || 0;
+    return v.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: dec == null ? 1 : dec });
+  }
+  /* Timmar: decimaltimmar med komma och " h" — samma form som löneunderlaget. */
+  function _fmtH(h) { return _fmtNum(h, 1) + ' h'; }
+  function _fmtPct(n) { return n == null ? '–' : _fmtNum(n, 0) + ' %'; }
+  /* Säkert JS-strängargument i ett onclick-attribut (data-id:n). Attributet
+     escapas dessutom som helhet i _bar()/_kpi(). */
+  function _jsq(v) {
+    return "'" + String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/</g, '\\x3c') + "'";
   }
 
   function _cuName(id) {
@@ -184,38 +232,69 @@ const ReportsPage = (function () {
     return val ? Math.round(val).toLocaleString('sv-SE') + ' kr' : '0 kr';
   }
 
-  /* ── KPI-kort ────────────────────────────────────────────────────── */
-
-  function _kpi(icon, label, val, sub, nav) {
-    var clickStyle = nav ? 'cursor:pointer;' : '';
-    var clickAttr  = nav ? 'onclick="' + nav + '"' : '';
-    return '<div class="ibox" style="flex:1;min-width:130px;' + clickStyle + '" ' + clickAttr + '>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
-        '<span style="color:var(--acc);">' + _ic(icon, 18) + '</span>' +
-        '<span style="font-size:12px;color:var(--mt);">' + esc(label) + '</span>' +
-      '</div>' +
-      '<div style="font-size:26px;font-weight:900;color:var(--navy);">' + val + '</div>' +
-      (sub ? '<div style="font-size:11px;color:var(--mt);margin-top:2px;">' + esc(sub) + '</div>' : '') +
-    '</div>';
+  /* ── KPI-kort (V3, S-02) ─────────────────────────────────────────────
+     Samma nyckeltalskort i alla flikar och i löneunderlaget (.ar-kpi i
+     v3-admin.css): ikon, etikett, värde, förklaring — i den läsordningen.
+     Klickbara kort är knappar (tangentbord + fokusring) och leder till det
+     urval de räknar. tone: 'danger' | 'warn' färgar värdet när det kräver
+     åtgärd. Värde och etikett escapas; nav är statisk kod. */
+  function _kpi(icon, label, val, sub, nav, tone) {
+    var tag = nav ? 'button' : 'div';
+    var attrs = nav ? ' type="button" onclick="' + esc(nav) + '"' : '';
+    return '<' + tag + ' class="ar-kpi' + (nav ? ' is-link' : '') + (tone ? ' tone-' + tone : '') + '"' + attrs + '>' +
+      '<span class="ar-kpi-ico" aria-hidden="true">' + _ic(icon, 16) + '</span>' +
+      '<span class="ar-kpi-l">' + esc(label) + '</span>' +
+      '<span class="ar-kpi-n">' + esc(String(val)) + '</span>' +
+      (sub ? '<span class="ar-kpi-s">' + esc(sub) + '</span>' : '') +
+    '</' + tag + '>';
   }
+  function _kpis(html) { return '<div class="ar-kpis">' + html + '</div>'; }
 
-  /* ── Stapeldiagram ───────────────────────────────────────────────── */
+  /* ── Kort/panel ──────────────────────────────────────────────────── */
+  function _panel(icon, title, sub, body, cls) {
+    /* V3-komponentstandard §6: .card > .card-header > .card-body. */
+    return '<section class="card ar-card' + (cls ? ' ' + cls : '') + '">' +
+      '<div class="card-header ar-card-h"><div class="ar-card-ht">' +
+        '<h3>' + _ic(icon, 16) + '<span>' + esc(title) + '</span></h3>' +
+        (sub ? '<p>' + esc(sub) + '</p>' : '') +
+      '</div></div>' +
+      '<div class="card-body ar-card-b">' + body + '</div>' +
+    '</section>';
+  }
+  function _grid(html) { return '<div class="ar-grid">' + html + '</div>'; }
+  function _empty(msg) { return '<p class="ar-empty">' + esc(msg) + '</p>'; }
+  function _lead(html) { return '<p class="rep-lead">' + html + '</p>'; }
 
+  /* ── Stapeldiagram ───────────────────────────────────────────────────
+     En serie per kort: en färg (accent) för storlek; semantisk färg bara
+     där stapeln betyder status (AO-status, allvarlighet, beläggning,
+     försenat). Text i textfärg, aldrig i stapelns färg. Klickbara rader
+     är knappar med hela raden som träffyta. */
   function _bar(label, val, max, color, onClick) {
-    var pct = max > 0 ? Math.round((val / max) * 100) : 0;
-    var clickAttr  = onClick ? 'onclick="' + onClick + '"' : '';
-    var labelStyle = 'font-size:12px;' + (onClick ? 'cursor:pointer;color:var(--blue);text-decoration:underline dotted;' : '');
-    var barStyle   = 'height:8px;background:var(--br);border-radius:4px;overflow:hidden;' + (onClick ? 'cursor:pointer;' : '');
-    return '<div style="margin-bottom:6px;">' +
-      '<div style="display:flex;justify-content:space-between;margin-bottom:2px;">' +
-        '<span style="' + labelStyle + '" ' + clickAttr + '>' + esc(String(label)) + '</span>' +
-        '<span style="font-weight:700;font-size:11px;color:var(--mt);">' + val + '</span>' +
-      '</div>' +
-      '<div style="' + barStyle + '" ' + clickAttr + '>' +
-        '<div style="height:100%;width:' + pct + '%;background:' + (color || 'var(--acc)') + ';border-radius:4px;transition:width .3s;"></div>' +
-      '</div>' +
-    '</div>';
+    var num = typeof val === 'number' ? val : parseFloat(String(val).replace(/\s/g, '').replace(',', '.'));
+    var pct = max > 0 && isFinite(num) && num > 0 ? Math.max(1, Math.min(100, Math.round((num / max) * 100))) : 0;
+    var tag = onClick ? 'button' : 'div';
+    var attrs = onClick ? ' type="button" onclick="' + esc(onClick) + '"' : '';
+    return '<' + tag + ' class="rep-bar' + (onClick ? ' is-link' : '') + '"' + attrs + '>' +
+      '<span class="rep-bar-l">' + esc(String(label)) + (onClick ? _ic('chevron-right', 13) : '') + '</span>' +
+      '<span class="rep-bar-v">' + esc(String(val)) + '</span>' +
+      '<span class="rep-bar-t" aria-hidden="true"><i style="width:' + pct + '%;background:' + (color || 'var(--accent)') + ';"></i></span>' +
+    '</' + tag + '>';
   }
+  /* rows: [{key, val}] → staplar. o: {max, color, label(key,row), val(row), nav(key,row), empty} */
+  function _bars(rows, o) {
+    if (!rows || !rows.length) return _empty(o.empty || 'Inga data');
+    return rows.map(function (r) {
+      return _bar(o.label ? o.label(r.key, r) : r.key, o.val ? o.val(r) : r.val, o.max, o.color, o.nav ? o.nav(r.key, r) : null);
+    }).join('');
+  }
+  /* Navigering från staplar. ID:n kommer från data → _jsq + esc i _bar().
+     Fastighetslänkar gick tidigare till 'pg-property-detail', som inte är
+     en sida (gav "Du saknar behörighet"); fastighetskortet är pg-obj-detail. */
+  function _toCust(k)   { return k && k !== '—' ? 'Router.showPage(\'pg-crm-detail\',{customerId:' + _jsq(k) + '})' : null; }
+  function _toPropAO(k) { return k && k !== '—' ? 'Router.showPage(\'pg-ao\',{propertyId:' + _jsq(k) + '})' : null; }
+  function _toProp(k)   { return k && k !== '—' ? 'Router.showPage(\'pg-obj-detail\',{propId:' + _jsq(k) + '})' : null; }
+  function _toAO(k)     { return k ? 'Router.showPage(\'pg-ao-detail\',{aoId:' + _jsq(k) + '})' : null; }
 
   /* ── Datakvalitetsvarning ────────────────────────────────────────────
      issues: array av antingen strängar ELLER {msg: string, items: string[]}
@@ -225,60 +304,53 @@ const ReportsPage = (function () {
   function _qualityBanner(issues) {
     if (!issues || !issues.length) return '';
     var rows = issues.map(function (i) {
-      if (typeof i === 'string') {
-        return '<li style="margin:0 0 2px 14px;">' + esc(i) + '</li>';
-      }
+      if (typeof i === 'string') return '<li>' + esc(i) + '</li>';
       /* Strukturerad: {msg, items[]} → expanderbar detalj */
       var detail = '';
       if (i.items && i.items.length) {
-        var listItems = i.items.slice(0, 25).map(function (x) {
-          return '<li style="margin:0 0 1px 14px;font-size:10px;color:var(--mt);">' + esc(x) + '</li>';
-        }).join('');
-        if (i.items.length > 25) listItems += '<li style="margin:0 0 1px 14px;font-size:10px;color:var(--mt);">… och ' + (i.items.length - 25) + ' till</li>';
-        detail = '<details style="display:inline;">' +
-          '<summary style="cursor:pointer;list-style:none;color:var(--blue);text-decoration:underline dotted;font-size:10px;margin-left:6px;">Visa poster</summary>' +
-          '<ul style="margin:4px 0 0 0;padding:0;">' + listItems + '</ul>' +
-          '</details>';
+        var listItems = i.items.slice(0, 25).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('');
+        if (i.items.length > 25) listItems += '<li>… och ' + (i.items.length - 25) + ' till</li>';
+        detail = '<details class="rep-qd"><summary>Visa poster (' + i.items.length + ')</summary><ul>' + listItems + '</ul></details>';
       }
-      return '<li style="margin:0 0 4px 14px;">' + esc(i.msg) + detail + '</li>';
+      return '<li>' + esc(i.msg) + detail + '</li>';
     }).join('');
-    return '<div style="background:var(--or-bg,#fff8ec);border:1px solid var(--or,#f59e0b);border-radius:6px;padding:8px 12px;margin-bottom:12px;">' +
-      '<div style="font-size:11px;font-weight:700;color:var(--or,#f59e0b);margin-bottom:4px;">' + _ic('alert-triangle', 11) + ' Datakvalitet — poster som inte kunnat räknas fullt ut</div>' +
-      '<ul style="margin:0;padding:0;font-size:11px;color:var(--mt);">' + rows + '</ul>' +
+    return '<div class="ar-note is-warn" role="note">' + _ic('alert-triangle', 16) +
+      '<div><strong>Datakvalitet — poster som inte kunnat räknas fullt ut</strong><ul class="rep-ql">' + rows + '</ul></div>' +
     '</div>';
   }
 
-  /* ── Periodfilterrad ─────────────────────────────────────────────── */
-
+  /* ── Periodväljare (V3 segmenterad kontroll, F-01) ───────────────────
+     Tidigare: vald knapp hade vit text på --acc (ljusblå) = 1,1:1 och
+     syntes inte. Nu: .ar-seg med vald knapp i --ink på vit yta (>= 15:1),
+     aria-pressed för skärmläsare och vald period utskriven i klartext. */
   function _periodBar(range) {
     var presets = [
-      { key: 'month',      label: 'Denna mån'   },
-      { key: 'prev-month', label: 'Föreg. mån'  },
-      { key: 'quarter',    label: 'Kvartal'      },
-      { key: 'year',       label: 'I år'         },
-      { key: '12months',   label: 'Senaste 12 mån' },
-      { key: 'custom',     label: 'Eget intervall'  }
+      { key: 'month',      label: 'Denna månad'   },
+      { key: 'prev-month', label: 'Förra månaden' },
+      { key: 'quarter',    label: 'Kvartal'       },
+      { key: 'year',       label: 'I år'          },
+      { key: '12months',   label: '12 månader'    },
+      { key: 'custom',     label: 'Eget'          }
     ];
-    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;padding:8px 10px;background:var(--bg2,var(--br));border-radius:6px;">' +
-      '<span style="font-size:11px;color:var(--mt);white-space:nowrap;font-weight:600;">' + _ic('calendar', 11) + ' Period:</span>' +
-      '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
+    var html = '<div class="rep-period">' +
+      '<div class="ar-seg rep-seg" role="group" aria-label="Period">';
     presets.forEach(function (p) {
       var on = _periodPreset === p.key;
-      html += '<button class="btn bs bsm" style="padding:3px 9px;font-size:11px;' +
-        (on ? 'background:var(--acc);color:#fff;border-color:var(--acc);' : '') + '" ' +
+      html += '<button type="button" class="ar-seg-b' + (on ? ' is-on' : '') + '" aria-pressed="' + on + '" ' +
         'onclick="ReportsPage._setPeriod(\'' + p.key + '\')">' + p.label + '</button>';
     });
     html += '</div>';
     if (_periodPreset === 'custom') {
-      html += '<input type="date" value="' + esc(_periodCustomFrom) + '" ' +
-        'onchange="ReportsPage._setCustomFrom(this.value)" ' +
-        'style="font-size:11px;padding:3px 6px;border:1px solid var(--br);border-radius:4px;background:var(--bg);color:var(--tx);">';
-      html += '<span style="font-size:11px;color:var(--mt);">–</span>';
-      html += '<input type="date" value="' + esc(_periodCustomTo) + '" ' +
-        'onchange="ReportsPage._setCustomTo(this.value)" ' +
-        'style="font-size:11px;padding:3px 6px;border:1px solid var(--br);border-radius:4px;background:var(--bg);color:var(--tx);">';
+      html += '<div class="rep-custom">' +
+        '<label><span>Från</span><input type="date" value="' + esc(_periodCustomFrom) + '" onchange="ReportsPage._setCustomFrom(this.value)"></label>' +
+        '<label><span>Till</span><input type="date" value="' + esc(_periodCustomTo) + '" onchange="ReportsPage._setCustomTo(this.value)"></label>' +
+      '</div>';
     }
-    html += '<span style="font-size:11px;color:var(--mt);white-space:nowrap;margin-left:4px;">↳ <strong>' + esc(range.label) + '</strong> (' + range.from + ' – ' + range.to + ')</span>';
+    var custIncomplete = _periodPreset === 'custom' && !(_periodCustomFrom && _periodCustomTo);
+    html += '<p class="rep-range">' + _ic('calendar', 14) + '<span>' +
+      (custIncomplete ? 'Välj både från- och tilldatum — visar ' + esc(range.label) + ' tills vidare' :
+        'Visar <strong>' + esc(range.label) + '</strong>' + (range.label.indexOf('–') === -1 ? ' · ' + esc(_fmtRange(range.from, range.to)) : '')) +
+      '</span></p>';
     html += '</div>';
     return html;
   }
@@ -318,27 +390,25 @@ const ReportsPage = (function () {
     /* Status-fördelning */
     var statusGroups = _groupBy(active.filter(function (a) { return a.status !== 'fakturerad'; }), function (a) { return a.status; });
     var statusOrder  = ['pool', 'planerad', 'pågående', 'klar'];
-    var statusColors = { pool: 'var(--sky)', planerad: 'var(--blue)', pågående: 'var(--or)', klar: 'var(--gr)' };
+    var statusColors = { pool: 'var(--violet)', planerad: 'var(--cyan)', pågående: 'var(--warn)', klar: 'var(--ok)' };
     var maxStatus = Math.max.apply(null, statusOrder.map(function (s) { return (statusGroups[s] || []).length; }).concat([1]));
 
     return _periodBar(range) +
-    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('clipboard-list', 'Öppna AO',           oppna.length,             'aktiva, ej klara',               'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
-      _kpi('check-circle',  'Klara AO',             klara.length,             'ej fakturerade',                 'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
-      _kpi('alert-circle',  'Försenade',            forsen.length,            'passerat planerat datum',         'Router.showPage(\'pg-ao\',{filter:\'forsenad\'})') +
-      _kpi('receipt',       'Fakturerat ' + range.label, revPeriod ? _fmtKr(revPeriod) : '—', 'Utställda fakturor exkl. moms (ej utkast/makulerade)',      'ReportsPage._setTab(\'ekonomi\')') +
-      _kpi('alert-triangle','Klara ej fakturerade', klar_ej_fak.length + ' st', 'belopp beräknas ej utan prissättning', 'ReportsPage._setTab(\'ekonomi\')') +
-      _kpi('percent',       'Andel fakturerade AO', fakGrad + ' %',           faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat',  'ReportsPage._setTab(\'ekonomi\')') +
-      _kpi('clock',         'Tim ' + range.label,   Math.round(timmar) + ' h', 'registrerad tid · ' + range.label,  'ReportsPage._setTab(\'tid\')') +
-      _kpi('alert-triangle','Öppna avvikelser',     avvNoAO.length,           'utan arbetsorder',               'Router.showPage(\'pg-rondering\',{})') +
-    '</div>' +
-    '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('bar-chart-2', 14) + ' AO per status (alla aktiva)</div>' +
+    _kpis(
+      _kpi('clipboard-list', 'Öppna AO',            oppna.length,             'aktiva, ej klara',               'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
+      _kpi('check-circle',  'Klara AO',              klara.length,             'ej fakturerade',                 'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
+      _kpi('alert-circle',  'Försenade',             forsen.length,            'passerat planerat datum',        'Router.showPage(\'pg-ao\',{filter:\'forsenad\'})', forsen.length ? 'danger' : '') +
+      _kpi('receipt',       'Fakturerat i perioden', revPeriod ? _fmtKr(revPeriod) : '—', 'utställda fakturor exkl. moms (ej utkast/makulerade)', 'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('alert-triangle','Klara ej fakturerade',  klar_ej_fak.length + ' st', 'belopp beräknas ej utan prissättning', 'ReportsPage._setTab(\'ekonomi\')', klar_ej_fak.length ? 'warn' : '') +
+      _kpi('percent',       'Andel fakturerade AO',  _fmtPct(fakGrad),         faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat', 'ReportsPage._setTab(\'ekonomi\')') +
+      _kpi('clock',         'Registrerad tid',       _fmtH(timmar),            'tidposter i perioden',           'ReportsPage._setTab(\'tid\')') +
+      _kpi('alert-triangle','Öppna avvikelser',      avvNoAO.length,           'utan arbetsorder',               'Router.showPage(\'pg-rondering\',{})', avvNoAO.length ? 'warn' : '')
+    ) +
+    _panel('bar-chart-2', 'AO per status', 'Alla aktiva arbetsordrar som inte är fakturerade — oavsett period',
       statusOrder.map(function (s) {
         var cnt = (statusGroups[s] || []).length;
-        return _bar(s, cnt, maxStatus, statusColors[s], 'WorkOrdersPage.setFilter(\'' + s + '\');Router.showPage(\'pg-ao\',{})');
-      }).join('') +
-    '</div>';
+        return _bar(statusLabel(s), cnt, maxStatus, statusColors[s], 'WorkOrdersPage.setFilter(' + _jsq(s) + ');Router.showPage(\'pg-ao\',{})');
+      }).join(''));
   }
 
   function _arbetsordrar() {
@@ -394,41 +464,14 @@ const ReportsPage = (function () {
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
-    '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Visar AO med scheduledDate/skapad i perioden <strong>' + esc(range.label) + '</strong>. Försenade AO visas oavsett period.</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('users', 14) + ' AO per kund (top 10)</div>' +
-        (topCu.length ? topCu.map(function (r) {
-          return _bar(_cuName(r.key), r.val, maxCu, 'var(--blue)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' AO per fastighet (top 10)</div>' +
-        (topProp.length ? topProp.map(function (r) {
-          return _bar(_propName(r.key), r.val, maxProp, 'var(--sky)', 'Router.showPage(\'pg-ao\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('home', 14) + ' AO per objekt (top 8)</div>' +
-        (topObj.length ? topObj.map(function (r) {
-          return _bar(_objName(r.key), r.val, maxObj, 'var(--acc)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga objekt-kopplade AO i perioden</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('user', 14) + ' AO per personal (top 10)</div>' +
-        (topStaff.length ? topStaff.map(function (r) {
-          return _bar(_staffName(r.key), r.val, maxStaff, 'var(--or)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga AO i perioden</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('clock', 14) + ' Försenade AO per kund (alla perioder)</div>' +
-      (topLate.length ? topLate.map(function (r) {
-        return _bar(_cuName(r.key), r.val, maxLate, 'var(--rd)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-      }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga försenade AO</div>') +
-    '</div>';
+    _lead('Arbetsordrar med planerat datum (eller skapade) under <strong>' + esc(range.label) + '</strong>. Försenade AO visas oavsett period.') +
+    _grid(
+      _panel('users', 'AO per kund', 'Topp 10 i perioden', _bars(topCu, { max: maxCu, label: _cuName, nav: _toCust, empty: 'Inga AO i perioden' })) +
+      _panel('building-2', 'AO per fastighet', 'Topp 10 i perioden', _bars(topProp, { max: maxProp, label: _propName, nav: _toPropAO, empty: 'Inga AO i perioden' })) +
+      _panel('layers', 'AO per objekt', 'Topp 8 i perioden', _bars(topObj, { max: maxObj, label: _objName, empty: 'Inga objektkopplade AO i perioden' })) +
+      _panel('user', 'AO per personal', 'Topp 10 i perioden', _bars(topStaff, { max: maxStaff, label: _staffName, empty: 'Inga AO i perioden' }))
+    ) +
+    _panel('clock', 'Försenade AO per kund', 'Alla perioder', _bars(topLate, { max: maxLate, color: 'var(--danger)', label: _cuName, nav: _toCust, empty: 'Inga försenade AO' }));
   }
 
   function _tid() {
@@ -479,55 +522,41 @@ const ReportsPage = (function () {
     /* Beläggningsfärg: <60% grå, 60–85% grön, 85–100% orange, >100% röd */
     function _belColor(h) {
       var pct = (h / 160) * 100;
-      if (pct > 100) return 'var(--rd)';
-      if (pct >= 85)  return 'var(--or)';
-      if (pct >= 60)  return 'var(--gr)';
-      return 'var(--sky)';
+      if (pct > 100) return 'var(--danger)';
+      if (pct >= 85)  return 'var(--warn)';
+      if (pct >= 60)  return 'var(--ok)';
+      return 'var(--cyan)';
     }
+    var belLegend = '<ul class="rep-legend" aria-label="Färgförklaring">' +
+      '<li><i style="background:var(--cyan)"></i>under 60 % låg</li>' +
+      '<li><i style="background:var(--ok)"></i>60–85 % normal</li>' +
+      '<li><i style="background:var(--warn)"></i>85–100 % hög</li>' +
+      '<li><i style="background:var(--danger)"></i>över 100 % överbelastad</li></ul>';
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
-    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('clock',  'Tim ' + range.label, Math.round(totalHours) + ' h', 'registrerad tid i perioden') +
-      _kpi('users',  'Personal aktiv',     belaggning.length + ' st',     'med registrerad tid') +
-      _kpi('clipboard-list', 'AO med tid', Object.keys(byAO).length + ' st', 'arbetsordrar med tidspost') +
-    '</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clock', 14) + ' Timmar per personal — ' + range.label + '</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Registrerade timmar i perioden</div>' +
-        (topStaff.length ? topStaff.map(function (r) {
-          return _bar(_staffName(r.key), r.val + ' h', maxStaff, 'var(--blue)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga tidsregistreringar i perioden</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('activity', 14) + ' Beläggningsestimat — ' + range.label + '</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:6px;">Registrerade timmar vs. 160 h/mån (standardvärde). <strong>Obs: faktisk kapacitet varierar per person</strong> (sysselsättningsgrad, frånvaro, deltid saknas).</div>' +
-        '<div style="font-size:10px;color:var(--mt);margin-bottom:8px;">Färg: <span style="color:var(--sky);">■</span> &lt;60% låg · <span style="color:var(--gr);">■</span> 60–85% normal · <span style="color:var(--or);">■</span> 85–100% hög · <span style="color:var(--rd);">■</span> &gt;100% överbelastad</div>' +
+    _kpis(
+      _kpi('clock',  'Registrerad tid', _fmtH(totalHours), 'tidposter i perioden') +
+      _kpi('users',  'Personal aktiv',  belaggning.length + ' st', 'med registrerad tid') +
+      _kpi('clipboard-list', 'AO med tid', Object.keys(byAO).length + ' st', 'arbetsordrar med tidspost')
+    ) +
+    _grid(
+      _panel('clock', 'Timmar per personal', 'Registrerade timmar · ' + range.label,
+        _bars(topStaff, { max: maxStaff, label: _staffName, val: function (r) { return _fmtH(r.val); }, empty: 'Inga tidsregistreringar i perioden' })) +
+      _panel('activity', 'Beläggningsestimat', 'Registrerade timmar mot 160 h/mån (standardvärde) · ' + range.label,
+        '<p class="ar-help"><strong>Obs:</strong> faktisk kapacitet varierar per person (sysselsättningsgrad, frånvaro och deltid saknas i beräkningen).</p>' +
+        belLegend +
         (belaggning.length ? belaggning.map(function (r) {
           var pct160 = Math.round((r.hours / 160) * 100);
-          return _bar(_staffName(r.staffId), r.hours + ' h (' + pct160 + '%)', maxBel, _belColor(r.hours));
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga tidsregistreringar i perioden</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="g2" style="gap:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clipboard-list', 14) + ' Timmar per AO (top 8, totalt)</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Mest tidskrävande arbetsordrar</div>' +
-        (topAO.length ? topAO.map(function (r) {
-          var ao = (state.workOrders || []).find(function (a) { return a.id === r.key; });
-          var label = ao ? (r.key + ' – ' + (ao.title || '').slice(0, 22)) : r.key;
-          return _bar(label, r.val + ' h', maxAO, 'var(--acc)', 'Router.showPage(\'pg-ao-detail\',{aoId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen tiddata</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Timmar per fastighet — ' + range.label + '</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summerad tid via AO-koppling</div>' +
-        (topPropH.length ? topPropH.map(function (r) {
-          return _bar(_propName(r.key), r.val + ' h', maxPropH, 'var(--sky)', 'Router.showPage(\'pg-ao\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata i perioden</div>') +
-      '</div>' +
-    '</div>';
+          return _bar(_staffName(r.staffId), _fmtH(r.hours) + ' (' + _fmtPct(pct160) + ')', maxBel, _belColor(r.hours));
+        }).join('') : _empty('Inga tidsregistreringar i perioden'))) +
+      _panel('clipboard-list', 'Timmar per AO', 'Topp 8, alla perioder — mest tidskrävande arbetsordrar',
+        _bars(topAO, { max: maxAO, nav: _toAO, empty: 'Ingen tiddata',
+          label: function (k) { var ao = (state.workOrders || []).find(function (a) { return a.id === k; }); return ao ? (k + ' – ' + (ao.title || '').slice(0, 28)) : k; },
+          val: function (r) { return _fmtH(r.val); } })) +
+      _panel('building-2', 'Timmar per fastighet', 'Summerad tid via AO-koppling · ' + range.label,
+        _bars(topPropH, { max: maxPropH, label: _propName, nav: _toPropAO, val: function (r) { return _fmtH(r.val); }, empty: 'Ingen fastighetsdata i perioden' }))
+    );
   }
 
   function _avvikelser() {
@@ -586,52 +615,21 @@ const ReportsPage = (function () {
     var maxRecur  = topRecur.length   ? topRecur[0].val   : 1;
     var maxRProp  = topRecurProp.length ? topRecurProp[0].val : 1;
 
+    var sevLabel = function (k) { return k === 'ej angiven' ? 'Ej angiven' : cap(k); };
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
-    '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Öppna avvikelser visas för alla perioder. Feltyp, allvarlighetsgrad och återkommande filtreras på <strong>' + esc(range.label) + '</strong>.</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('building-2', 14) + ' Öppna avvikelser per fastighet (alla)</div>' +
-        (topProp.length ? topProp.map(function (r) {
-          return _bar(_propName(r.key), r.val, maxProp, 'var(--rd)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga öppna avvikelser</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('home', 14) + ' Öppna avvikelser per objekt (top 8)</div>' +
-        (topObj.length ? topObj.map(function (r) {
-          return _bar(_objName(r.key), r.val, maxObj, 'var(--or)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga objekt-kopplade avvikelser</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('alert-triangle', 14) + ' Per allvarlighetsgrad — ' + range.label + '</div>' +
-        sevOrder.map(function (s) { return _bar(s, (bySev[s] || []).length, maxSev, sevColors[s]); }).join('') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('tag', 14) + ' Avvikelser per feltyp — ' + range.label + '</div>' +
-        (topType.length ? topType.map(function (r) {
-          return _bar(r.key, r.val, maxType, 'var(--or)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga avvikelser i perioden</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="g2" style="gap:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('repeat', 14) + ' Återkommande mönster (> 1 förekomst)</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Alla perioder · grupperade via recurringKey</div>' +
-        (topRecur.length ? topRecur.map(function (r) {
-          var label = r.key.split('::').pop() || r.key;
-          return _bar(label, r.val, maxRecur, 'var(--rd)');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga återkommande mönster ännu</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Fastigheter med flest återkommande mönster</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Alla perioder · unika recurringKeys per fastighet</div>' +
-        (topRecurProp.length ? topRecurProp.map(function (r) {
-          return _bar(_propName(r.key), r.val + ' mönster', maxRProp, 'var(--rd)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
-      '</div>' +
-    '</div>';
+    _lead('Öppna avvikelser visas för alla perioder. Allvarlighetsgrad och feltyp gäller <strong>' + esc(range.label) + '</strong>.') +
+    _grid(
+      _panel('building-2', 'Öppna avvikelser per fastighet', 'Alla perioder', _bars(topProp, { max: maxProp, color: 'var(--danger)', label: _propName, nav: _toProp, empty: 'Inga öppna avvikelser' })) +
+      _panel('layers', 'Öppna avvikelser per objekt', 'Topp 8, alla perioder', _bars(topObj, { max: maxObj, color: 'var(--warn)', label: _objName, empty: 'Inga objektkopplade avvikelser' })) +
+      _panel('alert-triangle', 'Per allvarlighetsgrad', cap(range.label),
+        sevOrder.map(function (s) { return _bar(sevLabel(s), (bySev[s] || []).length, maxSev, sevColors[s]); }).join('')) +
+      _panel('tag', 'Avvikelser per feltyp', cap(range.label), _bars(topType, { max: maxType, label: function (k) { return k === '—' ? 'Ej angiven' : cap(k); }, empty: 'Inga avvikelser i perioden' })) +
+      _panel('repeat', 'Återkommande mönster', 'Mer än en förekomst · alla perioder',
+        _bars(topRecur, { max: maxRecur, color: 'var(--danger)', label: function (k) { return k.split('::').pop() || k; }, empty: 'Inga återkommande mönster ännu' })) +
+      _panel('building-2', 'Fastigheter med flest återkommande mönster', 'Unika mönster per fastighet · alla perioder',
+        _bars(topRecurProp, { max: maxRProp, color: 'var(--danger)', label: _propName, nav: _toProp, val: function (r) { return r.val + ' mönster'; }, empty: 'Inga data' }))
+    );
   }
 
   function _ekonomi() {
@@ -720,55 +718,40 @@ const ReportsPage = (function () {
     var noInvLink = fakInvs.filter(function (i) { return !_invAoIds(i).length && !i.propertyId; }).length;
     var qualIssues = [];
     if (noMatPrice) qualIssues.push(noMatPrice + ' materialposter saknar pris (räknas ej i materialkostnad)');
-    if (noInvLink)  qualIssues.push({ msg: noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)', items: fakInvs.filter(function(i){return !_invAoIds(i).length && !i.propertyId;}).map(function(i){ return (i.id||'?') + (_invDate(i) ? ' · ' + _invDate(i) : '') + ' · ' + _invAmount(i).toFixed(0) + ' kr'; }) });
+    if (noInvLink)  qualIssues.push({ msg: noInvLink + ' fakturor saknar AO-koppling (visas ej i fastighets-/objektsgraf)', items: fakInvs.filter(function(i){return !_invAoIds(i).length && !i.propertyId;}).map(function(i){ return (i.id||'?') + (_invDate(i) ? ' · ' + _fmtDate(_invDate(i)) : '') + ' · ' + _fmtKr(_invAmount(i)); }) });
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
-    /* Intäktsförklaring */
-    '<div style="background:var(--bg2,var(--br));border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--mt);">' +
-      '<strong>Intäktsdefinition:</strong> Fakturerat = utställda fakturor (ej utkast, ej makulerade) med fakturadatum (skickad) i perioden, belopp exkl. moms efter rabatt — samma beräkning som fakturavyn. ROT/RUT minskar vad kunden betalar, inte intäkten. ' +
-      'Klara ej fakturerade AO och pågående ordervärde visas som <em>antal</em> — belopp kräver summering av material + tid × timpris.<br>' +
-      '<strong>Andel fakturerade AO (antal-baserat):</strong> Antal AO med status "fakturerad" / (antal AO med status "klar" + "fakturerad"). ' +
-      'Inte ett värdebaserat mått — saknar prissättning per AO.' +
-    '</div>' +
-    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('trending-up',   'Fakturerat ' + range.label,    totalFak ? _fmtKr(totalFak) : '—',         'Källa: fakturor i perioden (ej makulerade)') +
-      _kpi('trending-up',   'Fakturerat totalt',            totalAllFak ? _fmtKr(totalAllFak) : '—',    'alla perioder') +
-      _kpi('percent',       'Andel fakturerade AO',   fakGrad + ' %',                              faktureradeCnt + ' av ' + allKlara.length + ' klara · obs: antal-baserat') +
-      _kpi('check-circle',  'Klara ej fakturerade',         klaraEjFak.length + ' AO',                  'belopp beräknas ej utan prissättning',      'Router.showPage(\'pg-ao\',{filter:\'klar\'})') +
-      _kpi('clock',         'Pågående ordrar',              pagaende.length + ' AO',                     'status pågående/planerad · inget belopp',   'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
-      _kpi('shopping-cart', 'Materialkostnad (totalt)',      matCost ? _fmtKr(matCost) : '—',            'alla AO, alla perioder') +
-      _kpi('trending-up',   'Bidrag före lönekostnad',      bidragForeLonel ? _fmtKr(bidragForeLonel) : '—', 'Fakturerat (period) − materialkostnad (totalt) · ej fullständigt TB') +
-    '</div>' +
-    '<div class="ibox" style="margin-bottom:12px;">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('calendar', 14) + ' Fakturerat per månad — senaste 12</div>' +
-      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Summa fakturabelopp per månad (ej makulerade)</div>' +
+    _kpis(
+      _kpi('trending-up',   'Fakturerat i perioden',    totalFak ? _fmtKr(totalFak) : '—',         'utställda fakturor exkl. moms (ej utkast/makulerade)') +
+      _kpi('trending-up',   'Fakturerat totalt',        totalAllFak ? _fmtKr(totalAllFak) : '—',    'exkl. moms, alla perioder') +
+      _kpi('percent',       'Andel fakturerade AO',     _fmtPct(fakGrad),                          faktureradeCnt + ' av ' + allKlara.length + ' klara · antal-baserat') +
+      _kpi('check-circle',  'Klara ej fakturerade',     klaraEjFak.length + ' AO',                  'belopp beräknas ej utan prissättning',      'Router.showPage(\'pg-ao\',{filter:\'klar\'})', klaraEjFak.length ? 'warn' : '') +
+      _kpi('clock',         'Pågående ordrar',          pagaende.length + ' AO',                    'status pågående/planerad · inget belopp',   'Router.showPage(\'pg-ao\',{filter:\'alla\'})') +
+      _kpi('package',       'Materialkostnad (totalt)', matCost ? _fmtKr(matCost) : '—',            'exkl. moms, alla AO och perioder') +
+      _kpi('trending-up',   'Bidrag före lönekostnad',  bidragForeLonel ? _fmtKr(bidragForeLonel) : '—', 'fakturerat (period) − materialkostnad (totalt) · ej fullständigt TB')
+    ) +
+    /* Intäktsdefinitionen — samma text som förut, nu ihopfälld under siffrorna. */
+    '<details class="ar-def">' +
+      '<summary>' + _ic('info', 15) + '<span>Så räknas siffrorna</span>' + _ic('chevron-down', 15) + '</summary>' +
+      '<div class="ar-def-b">' +
+        '<p><strong>Fakturerat</strong> = utställda fakturor (ej utkast, ej makulerade) med fakturadatum (skickad) i perioden, belopp exkl. moms efter rabatt — samma beräkning som fakturavyn. ROT/RUT minskar vad kunden betalar, inte intäkten.</p>' +
+        '<p>Klara ej fakturerade AO och pågående ordervärde visas som <em>antal</em> — belopp kräver summering av material + tid × timpris.</p>' +
+        '<p><strong>Andel fakturerade AO (antal-baserat)</strong> = antal AO med status "fakturerad" / (antal AO med status "klar" + "fakturerad"). Inte ett värdebaserat mått — saknar prissättning per AO.</p>' +
+      '</div>' +
+    '</details>' +
+    _panel('calendar', 'Fakturerat per månad', 'Senaste 12 månaderna · summa fakturabelopp exkl. moms (ej utkast/makulerade)',
       months12.map(function (m) {
-        return _bar(m.label, m.val ? _fmtKr(m.val) : '0 kr', maxMonthRev, 'var(--blue)');
-      }).join('') +
-    '</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('users', 14) + ' Fakturerat per kund — ' + range.label + '</div>' +
-        (topCuRev.length ? topCuRev.map(function (r) {
-          return _bar(_cuName(r.key), _fmtKr(r.val), maxCuRev, 'var(--gr)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga fakturor i perioden</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Fakturerat per fastighet — ' + range.label + '</div>' +
-        '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Via AO-koppling på faktura</div>' +
-        (topPropRev.length ? topPropRev.map(function (r) {
-          return _bar(_propName(r.key), _fmtKr(r.val), maxPropRev, 'var(--sky)', 'Router.showPage(\'pg-ao\',{propertyId:\'' + r.key + '\'})');
-        }).join('') : '<div style="font-size:12px;color:var(--mt);">Ingen fastighetsdata (fakturor saknar AO-koppling)</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('alert-circle', 14) + ' Klara AO ej fakturerade — per kund</div>' +
-      '<div style="font-size:11px;color:var(--mt);margin-bottom:10px;">Visar antal AO — belopp kräver summering av material och tid × timpris</div>' +
-      (topEjFak.length ? topEjFak.map(function (r) {
-        return _bar(_cuName(r.key), r.val + ' AO', maxEjFak, 'var(--or)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-      }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga klara ofakturerade AO</div>') +
-    '</div>';
+        return _bar(m.label, m.val ? _fmtKr(m.val) : '0 kr', maxMonthRev);
+      }).join('')) +
+    _grid(
+      _panel('users', 'Fakturerat per kund', 'Exkl. moms · ' + range.label,
+        _bars(topCuRev, { max: maxCuRev, label: _cuName, nav: _toCust, val: function (r) { return _fmtKr(r.val); }, empty: 'Inga fakturor i perioden' })) +
+      _panel('building-2', 'Fakturerat per fastighet', 'Exkl. moms, via AO-koppling på faktura · ' + range.label,
+        _bars(topPropRev, { max: maxPropRev, label: _propName, nav: _toPropAO, val: function (r) { return _fmtKr(r.val); }, empty: 'Ingen fastighetsdata (fakturor saknar AO-koppling)' }))
+    ) +
+    _panel('alert-circle', 'Klara AO ej fakturerade — per kund', 'Antal AO — belopp kräver summering av material och tid × timpris',
+      _bars(topEjFak, { max: maxEjFak, color: 'var(--warn)', label: _cuName, nav: _toCust, val: function (r) { return r.val + ' AO'; }, empty: 'Inga klara ofakturerade AO' }));
   }
 
   function _material() {
@@ -800,7 +783,7 @@ const ReportsPage = (function () {
 
     if (allMats.length === 0) {
       return _periodBar(range) + _qualityBanner(qualIssues) +
-        '<div class="ibox"><p style="font-size:13px;color:var(--mt);">Inga material har registrerats på arbetsordrar i perioden ' + esc(range.label) + '.</p></div>';
+        '<div class="empty">' + _ic('package', 32) + '<h3>Inget material i perioden</h3><p>Inga prissatta material har registrerats på arbetsordrar under ' + esc(range.label) + '. Välj en längre period ovan.</p></div>';
     }
 
     var totalMatCost = allMats.reduce(function (s, m) { return s + m.price; }, 0);
@@ -834,32 +817,24 @@ const ReportsPage = (function () {
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
-    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('shopping-cart', 'Material ' + range.label,  _fmtKr(totalMatCost), 'AO i perioden med prissatta material') +
-      _kpi('layers',        'Unika artiklar',            Object.keys(byArt).length + ' st',  'distinkta artikelnamn') +
-      _kpi('clipboard-list','AO med material',           aoCosts.length + ' st',             'i perioden, minst en artikel') +
-    '</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('clipboard-list', 14) + ' Material per AO (top 10) — ' + range.label + '</div>' +
+    _kpis(
+      _kpi('package',       'Materialkostnad',  _fmtKr(totalMatCost),               'exkl. moms, AO i perioden med prissatta material') +
+      _kpi('layers',        'Unika artiklar',   Object.keys(byArt).length + ' st',  'distinkta artikelnamn') +
+      _kpi('clipboard-list','AO med material',  aoCosts.length + ' st',             'i perioden, minst en artikel')
+    ) +
+    _grid(
+      _panel('clipboard-list', 'Material per AO', 'Topp 10, exkl. moms · ' + range.label,
         topAO.map(function (r) {
-          var label = r.aoId + (r.ao && r.ao.title ? ' – ' + r.ao.title.slice(0, 20) : '');
-          return _bar(label, _fmtKr(r.cost), maxAOCost, 'var(--blue)', 'Router.showPage(\'pg-ao-detail\',{aoId:\'' + r.aoId + '\'})');
-        }).join('') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('tag', 14) + ' Vanligaste artiklar (top 10)</div>' +
+          var label = r.aoId + (r.ao && r.ao.title ? ' – ' + r.ao.title.slice(0, 28) : '');
+          return _bar(label, _fmtKr(r.cost), maxAOCost, '', _toAO(r.aoId));
+        }).join('')) +
+      _panel('tag', 'Vanligaste artiklar', 'Topp 10 efter kostnad exkl. moms · ' + range.label,
         topArt.map(function (r) {
-          return _bar(r.key, _fmtKr(r.val) + ' (' + Math.round(r.qty * 10) / 10 + ' st)', maxArtCost, 'var(--acc)');
-        }).join('') +
-      '</div>' +
-    '</div>' +
-    '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('users', 14) + ' Material per kund (top 8) — ' + range.label + '</div>' +
-      (topCuMat.length ? topCuMat.map(function (r) {
-        return _bar(_cuName(r.key), _fmtKr(r.val), maxCuMat, 'var(--sky)', 'Router.showPage(\'pg-crm-detail\',{customerId:\'' + r.key + '\'})');
-      }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga data</div>') +
-    '</div>';
+          return _bar(r.key, _fmtKr(r.val) + ' (' + _fmtNum(r.qty, 1) + ' st)', maxArtCost);
+        }).join(''))
+    ) +
+    _panel('users', 'Material per kund', 'Topp 8, exkl. moms · ' + range.label,
+      _bars(topCuMat, { max: maxCuMat, label: _cuName, nav: _toCust, val: function (r) { return _fmtKr(r.val); }, empty: 'Inga data' }));
   }
 
   function _serviceIntervall() {
@@ -888,41 +863,36 @@ const ReportsPage = (function () {
 
     function _siRow(si) {
       var diff  = si.nextDate ? Math.round((new Date(si.nextDate) - new Date(today)) / 86400000) : null;
+      var dagar = function (n) { return n + (n === 1 ? ' dag' : ' dagar'); };
       var badge = diff == null ? '' :
-        diff < 0  ? '<span class="bdg bdg-red" style="font-size:9px;">' + Math.abs(diff) + ' dagar sedan</span>'
-        : diff === 0 ? '<span class="bdg bdg-orange" style="font-size:9px;">Idag</span>'
-        :              '<span class="bdg bdg-grey" style="font-size:9px;">Om ' + diff + ' d</span>';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--br);gap:6px;">' +
-        '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:12px;font-weight:600;">' + esc(si.name || si._propName) + '</div>' +
-          '<div style="font-size:11px;color:var(--mt);">' + esc(si._propName) + (si.nextDate ? ' · ' + si.nextDate : '') + '</div>' +
-        '</div>' + badge +
-      '</div>';
+        diff < 0  ? '<span class="bdg bdg-red">' + dagar(Math.abs(diff)) + ' sedan</span>'
+        : diff === 0 ? '<span class="bdg bdg-orange">Idag</span>'
+        :              '<span class="bdg bdg-grey">Om ' + dagar(diff) + '</span>';
+      var nav = _toProp(si._propId);
+      return '<button type="button" class="rep-li" onclick="' + esc(nav) + '">' +
+        '<span class="rep-li-m">' +
+          '<span class="rep-li-t">' + esc(si.name || si._propName) + '</span>' +
+          '<span class="rep-li-s">' + esc(si._propName) + (si.nextDate ? ' · ' + esc(_fmtDate(si.nextDate)) : '') + '</span>' +
+        '</span>' + badge +
+      '</button>';
     }
 
     return _periodBar(range) +
     _qualityBanner(qualIssues) +
-    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('alert-circle', 'Förfallna',  overdue.length + ' st', 'passerat datum, ej klara') +
+    _lead('Serviceintervall visas oavsett vald period — förfallna och de 20 närmast kommande.') +
+    _kpis(
+      _kpi('alert-circle', 'Förfallna',  overdue.length + ' st', 'passerat datum, ej klara', null, overdue.length ? 'danger' : '') +
       _kpi('calendar',     'Kommande',   coming.length  + ' st', 'schemalagda framöver') +
-      _kpi('wrench',       'Totalt',     allSI.length   + ' st', 'aktiva serviceintervall') +
-    '</div>' +
-    '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--rd);">' + _ic('alert-circle', 14) + ' Förfallna serviceintervall (' + overdue.length + ')</div>' +
-        (overdue.length ? overdue.slice(0, 15).map(_siRow).join('') : '<div style="font-size:12px;color:var(--mt);">Inga förfallna intervall</div>') +
-      '</div>' +
-      '<div class="ibox">' +
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('calendar', 14) + ' Kommande serviceintervall</div>' +
-        (coming.length ? coming.map(_siRow).join('') : '<div style="font-size:12px;color:var(--mt);">Inga schemalagda intervall</div>') +
-      '</div>' +
-    '</div>' +
-    '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + _ic('building-2', 14) + ' Förfallna per fastighet (top 8)</div>' +
-      (topOverProp.length ? topOverProp.map(function (r) {
-        return _bar(_propName(r.key), r.val + ' st', maxOverProp, 'var(--rd)', 'Router.showPage(\'pg-property-detail\',{propertyId:\'' + r.key + '\'})');
-      }).join('') : '<div style="font-size:12px;color:var(--mt);">Inga förfallna</div>') +
-    '</div>';
+      _kpi('wrench',       'Totalt',     allSI.length   + ' st', 'aktiva serviceintervall')
+    ) +
+    _grid(
+      _panel('alert-circle', 'Förfallna serviceintervall', overdue.length + ' st' + (overdue.length > 15 ? ' · visar 15' : ''),
+        overdue.length ? '<div class="rep-list">' + overdue.slice(0, 15).map(_siRow).join('') + '</div>' : _empty('Inga förfallna intervall')) +
+      _panel('calendar', 'Kommande serviceintervall', 'Närmast först',
+        coming.length ? '<div class="rep-list">' + coming.map(_siRow).join('') + '</div>' : _empty('Inga schemalagda intervall'))
+    ) +
+    _panel('building-2', 'Förfallna per fastighet', 'Topp 8',
+      _bars(topOverProp, { max: maxOverProp, color: 'var(--danger)', label: _propName, nav: _toProp, val: function (r) { return r.val + ' st'; }, empty: 'Inga förfallna' }));
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -999,12 +969,12 @@ const ReportsPage = (function () {
 
     /* ── Statusfördelning (stapeldiagram) ── */
     var statusGroups = [
-      { label: 'Utkast',          key: 'utkast',          color: 'var(--mt)'   },
-      { label: 'Skickad',         key: 'skickad',         color: 'var(--ac)'   },
-      { label: 'Öppnad av kund',  key: '_opened',         color: '#6c8ebf'     },
-      { label: 'Ändring begärd',  key: 'ändring-begärd',  color: 'var(--or)'   },
-      { label: 'Godkänd',         key: 'godkänd',         color: 'var(--gr)'   },
-      { label: 'Nekad',           key: 'nekad',           color: 'var(--rd)'   }
+      { label: 'Utkast',          key: 'utkast',          color: 'var(--neutral)' },
+      { label: 'Skickad',         key: 'skickad',         color: 'var(--info)'    },
+      { label: 'Öppnad av kund',  key: '_opened',         color: 'var(--cyan)'    },
+      { label: 'Ändring begärd',  key: 'ändring-begärd',  color: 'var(--warn)'    },
+      { label: 'Godkänd',         key: 'godkänd',         color: 'var(--ok)'      },
+      { label: 'Nekad',           key: 'nekad',           color: 'var(--danger)'  }
     ];
     var statusCounts = {};
     offers.forEach(function (o) {
@@ -1051,69 +1021,54 @@ const ReportsPage = (function () {
       qualIssues.push('Vissa offerter saknar datum och kan ha missats i periodfilter');
 
     /* ── HTML ── */
-    var pct = function (n) { return n == null ? '–' : n + '%'; };
-
-    var kpiRow = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
+    var kpiRow = _kpis(
       _kpi('file-text',       'Totalt',          total + ' st',            'offerter i perioden') +
       _kpi('send',            'Skickade',         sent + ' st',             'med publik länk') +
-      _kpi('eye',             'Öppningsgrad',     pct(openRate),            'av skickade öppnade av kund') +
-      _kpi('check-circle',    'Godkännandegrad',  pct(approveRate),         'av öppnade godkändes') +
-      _kpi('trending-up',     'Konvertering',     pct(convRate),            'skickad → godkänd') +
-      _kpi('clock',           'Svarstid',         avgDays != null ? avgDays.toFixed(1) + ' dagar' : '–', 'genomsnitt öppnad → svar') +
-    '</div>';
+      _kpi('eye',             'Öppningsgrad',     _fmtPct(openRate),        'av skickade öppnade av kund') +
+      _kpi('check-circle',    'Godkännandegrad',  _fmtPct(approveRate),     'av öppnade godkändes') +
+      _kpi('trending-up',     'Konvertering',     _fmtPct(convRate),        'skickad → godkänd') +
+      _kpi('clock',           'Svarstid',         avgDays != null ? _fmtNum(avgDays, 1) + ' dagar' : '–', 'genomsnitt öppnad → svar')
+    );
 
-    var valueRow = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">' +
-      _kpi('dollar-sign',     'Engångsvärde ex moms',            fmt(oneTimeValue),           'totalt engångsvärde i perioden (efter rabatt)') +
-      _kpi('check-square',    'Godkänt engångsvärde ex moms',    fmt(approvedOneTimeValue),   'godkända offerters engångsdel (efter rabatt)') +
-      _kpi('repeat',          'Återkommande värde / mån ex moms',fmt(recurringValue),         'summa av alla offerters kr/mån (aldrig blandat med engångsvärdet)') +
-      _kpi('repeat',          'Godkänt återkommande / mån ex moms', fmt(approvedRecurringValue), 'godkända offerters kr/mån') +
+    var valueRow = _kpis(
+      _kpi('dollar-sign',     'Engångsvärde',                 _fmtKr(oneTimeValue),                    'exkl. moms, efter rabatt — alla offerter i perioden') +
+      _kpi('check-square',    'Godkänt engångsvärde',         _fmtKr(approvedOneTimeValue),            'exkl. moms, efter rabatt — godkända offerter') +
+      _kpi('repeat',          'Återkommande värde',           _fmtKr(recurringValue) + '/mån',         'exkl. moms — summa kr/mån, aldrig blandat med engångsvärdet') +
+      _kpi('repeat',          'Godkänt återkommande',         _fmtKr(approvedRecurringValue) + '/mån', 'exkl. moms — godkända offerters kr/mån') +
       _kpi('clock',           'Inväntar svar',    pending + ' st',          'skickade utan slutgiltigt svar') +
-      _kpi('alert-circle',    'Ändring begärd',   changeReq + ' st',        'kund begärt ändring') +
-    '</div>';
+      _kpi('alert-circle',    'Ändring begärd',   changeReq + ' st',        'kund begärt ändring', null, changeReq ? 'warn' : '')
+    );
 
     /* Statusfördelning */
-    var statusBars = '<div class="ibox" style="margin-bottom:12px;">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:10px;">' + _ic('bar-chart-2', 14) + ' Statusfördelning</div>' +
-      statusGroups.map(function (g) {
-        var cnt = statusCounts[g.key] || 0;
-        if (!cnt) return '';
-        var pctW = Math.round(cnt / maxStatus * 100);
-        return '<div style="margin-bottom:6px;">' +
-          '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;">' +
-            '<span>' + g.label + '</span>' +
-            '<span style="font-weight:600;">' + cnt + ' st</span>' +
-          '</div>' +
-          '<div style="background:var(--br);border-radius:3px;height:10px;">' +
-            '<div style="background:' + g.color + ';width:' + pctW + '%;height:10px;border-radius:3px;transition:width .3s;"></div>' +
-          '</div>' +
-        '</div>';
-      }).join('') +
-    '</div>';
+    var statusRows = statusGroups.filter(function (g) { return statusCounts[g.key]; });
+    var statusBars = _panel('bar-chart-2', 'Statusfördelning', 'Offerter i perioden per status',
+      statusRows.length ? statusRows.map(function (g) {
+        return _bar(g.label, (statusCounts[g.key] || 0) + ' st', maxStatus, g.color);
+      }).join('') : _empty('Inga offerter i perioden'));
 
-    /* Top kunder */
-    var custTable = '<div class="ibox">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">' + _ic('users', 14) + ' Topp kunder</div>' +
-      (topCustomers.length
-        ? '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+    /* Top kunder — V3-tabell; under 640 px blir varje rad ett kort
+       (etikett från data-label) så att tabellen aldrig är bredare än kortet (F-05). */
+    var custTable = _panel('users', 'Topp kunder', 'Flest offerter i perioden · värden exkl. moms',
+      topCustomers.length
+        ? '<div class="ar-scroll"><table class="ar-tbl rep-cust">' +
             '<thead><tr>' +
-              '<th style="text-align:left;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Kund</th>' +
-              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Offerter</th>' +
-              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkända</th>' +
-              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkänt engångsvärde</th>' +
-              '<th style="text-align:right;padding:4px 6px;font-weight:600;border-bottom:1px solid var(--br);">Godkänt återkommande/mån</th>' +
+              '<th scope="col">Kund</th>' +
+              '<th scope="col" class="c-num">Offerter</th>' +
+              '<th scope="col" class="c-num">Godkända</th>' +
+              '<th scope="col" class="c-num">Godkänt engångsvärde</th>' +
+              '<th scope="col" class="c-num">Godkänt återkommande</th>' +
             '</tr></thead><tbody>' +
             topCustomers.map(function (c) {
               return '<tr>' +
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);">' + esc(c.name) + '</td>' +
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;">' + c.total + '</td>' +
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;">' + c.approved + '</td>' +
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;font-variant-numeric:tabular-nums;">' + fmt(c.value) + '</td>' +
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--br);text-align:right;font-variant-numeric:tabular-nums;">' + (c.recurringValue ? fmt(c.recurringValue) + ' kr/mån' : '–') + '</td>' +
+                '<td class="c-main" data-label="Kund">' + esc(c.name) + '</td>' +
+                '<td class="c-num" data-label="Offerter">' + c.total + '</td>' +
+                '<td class="c-num" data-label="Godkända">' + c.approved + '</td>' +
+                '<td class="c-num" data-label="Godkänt engångsvärde">' + esc(_fmtKr(c.value)) + '</td>' +
+                '<td class="c-num" data-label="Godkänt återkommande">' + (c.recurringValue ? esc(_fmtKr(c.recurringValue)) + '/mån' : '–') + '</td>' +
               '</tr>';
             }).join('') +
-          '</tbody></table>'
-        : '<div style="font-size:12px;color:var(--mt);">Inga offerter i perioden</div>') +
-    '</div>';
+          '</tbody></table></div>'
+        : _empty('Inga offerter i perioden'));
 
     /* Senaste händelser från offerEvents */
     var recentEvents = events
@@ -1133,35 +1088,31 @@ const ReportsPage = (function () {
       renewed:          'Länk förnyad'
     };
     var _evColor = {
-      opened: 'var(--ac)', approved: 'var(--gr)', change_requested: 'var(--or)',
-      declined: 'var(--rd)', revoked: 'var(--mt)', renewed: 'var(--ac)'
+      opened: 'var(--info)', approved: 'var(--ok)', change_requested: 'var(--warn)',
+      declined: 'var(--danger)', revoked: 'var(--neutral)', renewed: 'var(--info)'
     };
 
-    var eventsFeed = '<div class="ibox" style="margin-bottom:12px;">' +
-      '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">' + _ic('activity', 14) + ' Senaste kundhändelser</div>' +
-      (recentEvents.length
-        ? recentEvents.map(function (e) {
+    var eventsFeed = _panel('activity', 'Senaste kundhändelser', 'Högst 10, nyast först',
+      recentEvents.length
+        ? '<ul class="rep-feed">' + recentEvents.map(function (e) {
             var off = offers.find(function (o) { return o.id === e.offerId; });
             var title = off ? (off.title || e.offerId) : e.offerId;
-            return '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--br);">' +
-              '<span style="width:8px;height:8px;border-radius:50%;background:' + (_evColor[e.type] || 'var(--mt)') + ';flex-shrink:0;margin-top:4px;"></span>' +
-              '<div style="flex:1;min-width:0;">' +
-                '<div style="font-size:12px;font-weight:600;">' + (_evLabel[e.type] || e.type) + '</div>' +
-                '<div style="font-size:11px;color:var(--mt);">' + esc(title) + (e.byCustomer ? ' · ' + esc(e.byCustomer) : '') + ' · ' + (e.ts || '').slice(0, 16).replace('T', ' ') + '</div>' +
-              '</div>' +
-            '</div>';
-          }).join('')
-        : '<div style="font-size:12px;color:var(--mt);">Inga kundhändelser i perioden</div>') +
-    '</div>';
+            return '<li>' +
+              '<i class="rep-dot" style="background:' + (_evColor[e.type] || 'var(--neutral)') + '" aria-hidden="true"></i>' +
+              '<span class="rep-li-m">' +
+                '<span class="rep-li-t">' + esc(_evLabel[e.type] || e.type) + '</span>' +
+                '<span class="rep-li-s">' + esc(title) + (e.byCustomer ? ' · ' + esc(e.byCustomer) : '') + ' · ' + esc(_fmtTs(e.ts)) + '</span>' +
+              '</span>' +
+            '</li>';
+          }).join('') + '</ul>'
+        : _empty('Inga kundhändelser i perioden'));
 
     return _periodBar(range) +
       _qualityBanner(qualIssues) +
       kpiRow +
+      '<h4 class="ar-subh">Värde</h4>' +
       valueRow +
-      '<div class="g2" style="gap:12px;margin-bottom:12px;">' +
-        statusBars +
-        eventsFeed +
-      '</div>' +
+      _grid(statusBars + eventsFeed) +
       custTable;
   }
 
@@ -1169,30 +1120,47 @@ const ReportsPage = (function () {
      RENDER
   ══════════════════════════════════════════════════════════════════ */
 
+  /* V3 2026-11-26: rapportflikar som segmenterad kontroll (.ftabs) på dator
+     och rullista under 640 px — ingen flik ligger dold eller radbryts till
+     fyra rader. Sidrubriken finns i toppraden (ingen egen h1, S-03).
+     Etiketten escapas, ikonen är betrodd ic()-markup. */
+  var _TABS = [
+    { key: 'oversikt',         icon: 'layout-dashboard', label: 'Översikt'         },
+    { key: 'arbetsordrar',     icon: 'clipboard-list',   label: 'Arbetsordrar'     },
+    { key: 'tid',              icon: 'clock',            label: 'Tid & personal'   },
+    { key: 'avvikelser',       icon: 'alert-triangle',   label: 'Avvikelser'       },
+    { key: 'ekonomi',          icon: 'trending-up',      label: 'Ekonomi'          },
+    { key: 'material',         icon: 'package',          label: 'Material'         },
+    { key: 'serviceintervall', icon: 'wrench',           label: 'Serviceintervall' },
+    { key: 'offerter',         icon: 'file-text',        label: 'Offerter'         }
+  ];
+
   function render() {
     var el = document.getElementById('pg-reports-content');
     if (!el) return;
 
-    var tabs = [
-      { key: 'oversikt',         label: _ic('layout-dashboard', 12) + ' Översikt'          },
-      { key: 'arbetsordrar',     label: _ic('clipboard-list', 12)   + ' Arbetsordrar'      },
-      { key: 'tid',              label: _ic('clock', 12)             + ' Tid & personal'   },
-      { key: 'avvikelser',       label: _ic('alert-triangle', 12)    + ' Avvikelser'        },
-      { key: 'ekonomi',          label: _ic('trending-up', 12)       + ' Ekonomi'           },
-      { key: 'material',         label: _ic('package', 12)           + ' Material'          },
-      { key: 'serviceintervall', label: _ic('wrench', 12)            + ' Serviceintervall'  },
-      { key: 'offerter',         label: _ic('file-text', 12)         + ' Offerter'           }
-    ];
-
-    var tabBar = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
-      '<div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">' +
-      tabs.map(function (t) {
-        return '<button class="ft ' + (_tab === t.key ? 'on' : '') + '" onclick="ReportsPage._setTab(\'' + t.key + '\')">' + t.label + '</button>';
+    var tabBar = '<div class="rep-top">' +
+      '<div class="ftabs rep-views" role="group" aria-label="Rapporter">' +
+      _TABS.map(function (t) {
+        var on = _tab === t.key;
+        return '<button type="button" aria-pressed="' + on + '" class="ft' + (on ? ' on' : '') + '" onclick="ReportsPage._setTab(\'' + t.key + '\')">' + _ic(t.icon, 14) + '<span>' + esc(t.label) + '</span></button>';
       }).join('') +
       '</div>' +
-      '<button class="btn bs bsm" id="rep-export-btn" onclick="ReportsPage._exportAll(this)" title="Exportera som XLSX (respekterar vald period)">' +
-        _ic('download', 13) + ' Exportera' +
+      '<label class="rep-view-sel"><span class="sr-only">Välj rapport</span>' +
+        '<select class="ar-select" onchange="ReportsPage._setTab(this.value)">' +
+          _TABS.map(function (t) { return '<option value="' + t.key + '"' + (_tab === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>'; }).join('') +
+        '</select>' +
+      '</label>' +
+      '<button type="button" class="btn bs bsm rep-export ar-desk" id="rep-export-btn" onclick="ReportsPage._exportAll(this)" title="Exportera som XLSX (respekterar vald period)">' +
+        _ic('download', 14) + '<span>Exportera</span>' +
       '</button>' +
+      /* Mobil: sekundära åtgärder i "⋮" (V3-komponentstandard §1/§3). */
+      '<div class="ao-overflow-wrap ar-mob">' +
+        '<button type="button" class="ibtn ar-more" id="rep-more-btn" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="true" aria-expanded="false" onclick="aoToggleOverflow(\'rep-more-menu\',this)">' + _ic('more-vertical', 18) + '</button>' +
+        '<div class="ao-overflow-menu" id="rep-more-menu" role="menu">' +
+          '<button type="button" class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ReportsPage._exportAll(document.getElementById(\'rep-more-btn\'))">' + _ic('download', 14) + '<span>Exportera rapport</span></button>' +
+        '</div>' +
+      '</div>' +
     '</div>';
 
     var content = '';
@@ -1205,7 +1173,7 @@ const ReportsPage = (function () {
     else if (_tab === 'serviceintervall') content = _serviceIntervall();
     else if (_tab === 'offerter')         content = _offerter();
 
-    el.innerHTML = tabBar + content;
+    el.innerHTML = '<div class="rep">' + tabBar + content + '</div>';
   }
 
   /* ── Publika metoder ──────────────────────────────────────────── */

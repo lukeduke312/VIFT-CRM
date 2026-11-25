@@ -9294,355 +9294,407 @@ const AdminPage = {
   _titleQ: '',
   _tab: 'foretag',
 
+  /* V3 2026-11-26 (F-07, S-01): tio avsnitt i sex grupper. Dator (≥ 900 px):
+     grupperad sidomeny till vänster om innehållet. Mobil/surfplatta: en
+     rullista med samma grupper överst — inget avsnitt ligger dolt utanför
+     skärmen (tidigare syntes 5 av 10 flikar på 390 px). Knapparna behåller
+     klassen .admin-tab och onclick "AdminPage._tab='…'" (E2E ADMIN-01,
+     ROLE-02, RENDER-01). Ikonen är betrodd statisk ic()-markup (fältet
+     icon), etiketten escapas (QA 2026-11-25, A1/RENDER-01). */
+  _NAV: [
+    { group: 'Företag & profil', items: [
+      { key: 'foretag',        label: 'Företag & varumärke', icon: 'building-2' } ] },
+    { group: 'Ekonomi & priser', items: [
+      { key: 'ekonomi',        label: 'Ekonomi',             icon: 'trending-up' },
+      { key: 'priser',         label: 'Priser & tjänster',   icon: 'package' } ] },
+    { group: 'Personal & behörighet', items: [
+      { key: 'personal',       label: 'Personal & roller',   icon: 'users' } ] },
+    { group: 'Fastighetskort', items: [
+      { key: 'fastighetskort', label: 'Kategorier & fält',   icon: 'layers' },
+      { key: 'ansvariga',      label: 'Ansvariga',           icon: 'user-check' },
+      { key: 'avvikelse',      label: 'Avvikelser',          icon: 'alert-triangle' } ] },
+    { group: 'Notiser & e-post', items: [
+      { key: 'notiser',        label: 'Mobilnotiser',        icon: 'bell' },
+      { key: 'epost',          label: 'E-post-mallar',       icon: 'mail' } ] },
+    { group: 'System', items: [
+      { key: 'system',         label: 'Data & import',       icon: 'server' },
+      /* Sist och skilt från användarinställningarna: push-diagnostik och
+         rensning av lokal cache (QA-tillägg 2026-11-26). */
+      { key: 'teknik',         label: 'Teknik & underhåll',  icon: 'wrench' } ] }
+  ],
+
+  /* Förvalda varumärkesfärger. Alla primärfärger klarar vit text (≥ 4,5:1),
+     eftersom V3 ritar sidomeny, primärknappar och aktiva filter med vit
+     text på primärfärgen. Första posten är standard. */
+  _PRESETS: {
+    primaryColor: [
+      { hex: '#0f3763', name: 'VIFT marinblå (standard)' },
+      { hex: '#1a4b8c', name: 'Mörkblå' },
+      { hex: '#134e4a', name: 'Petrol' },
+      { hex: '#14532d', name: 'Skogsgrön' },
+      { hex: '#7f1d1d', name: 'Vinröd' },
+      { hex: '#1f2937', name: 'Grafit' }
+    ],
+    secondaryColor: [
+      { hex: '#1d75d8', name: 'VIFT blå (standard)' },
+      { hex: '#0e7490', name: 'Turkos' },
+      { hex: '#15803d', name: 'Grön' },
+      { hex: '#b45309', name: 'Bärnsten' },
+      { hex: '#6d28d9', name: 'Lila' },
+      { hex: '#475569', name: 'Skiffergrå' }
+    ]
+  },
+
+  _go(key) {
+    if (!key) return;
+    this._tab = key;
+    this.render();
+    const c = document.getElementById('content-scroll');
+    if (c && c.scrollTop > 0) c.scrollTop = 0;
+  },
+
+  /* Ändringar på den här enheten som servern ännu inte bekräftat:
+     AO/tid-kön (AOTimeSyncService, vift_outbox), journalförda osparade
+     ändringar (state.js, vift_persistJournal:*), pågående sparningar
+     (DataSync) och aktivitetsloggens kö (ActivityService). */
+  _localUnsynced() {
+    const parts = [];
+    const add = (label, fn) => { try { const n = Number(fn()) || 0; if (n > 0) parts.push({ label, n }); } catch (e) {} };
+    add('arbetsorder-/tidsändringar i kö', () => typeof AOTimeSyncService !== 'undefined' && AOTimeSyncService.pendingCount ? AOTimeSyncService.pendingCount() : 0);
+    add('osparade registerändringar', () => typeof _vfJournalPendingCount === 'function' ? _vfJournalPendingCount() : 0);
+    add('sparningar pågår', () => typeof DataSync !== 'undefined' ? (DataSync._pendingWrites || 0) : 0);
+    add('aktivitetsposter i kö', () => typeof ActivityService !== 'undefined' && Array.isArray(ActivityService._outbox) ? ActivityService._outbox.length : 0);
+    return parts;
+  },
+
+  /* "Rensa lokal cache på den här enheten" (tidigare "Återställ demodata",
+     som också körde localStorage.clear() — serverns data har aldrig
+     påverkats). Behåller inloggningen och uppladdade logotyper (de finns
+     bara lokalt). Finns det osparade ändringar krävs två tydliga
+     bekräftelser som visar antalet. Bara admin_manage (eller 'all'). */
+  _clearLocalCache() {
+    if (!Auth.require('admin_manage')) return;
+    const pending = this._localUnsynced();
+    const total = pending.reduce((a, p) => a + p.n, 0);
+    if (total > 0) {
+      const list = pending.map(p => '• ' + p.n + ' ' + p.label).join('\n');
+      if (!confirm('VARNING: ' + total + ' ändring' + (total === 1 ? '' : 'ar') + ' på den här enheten är INTE sparade på servern:\n' + list + '\n\nRensar du nu försvinner de för gott. Vill du fortsätta?')) return;
+      if (!confirm('Bekräfta igen: radera ' + total + ' osparade ändring' + (total === 1 ? '' : 'ar') + ' och rensa den lokala cachen?')) return;
+    } else if (!confirm('Rensa lokal cache på den här enheten?\n\nServerns data påverkas inte. Sidan laddas om och data hämtas på nytt från servern. Du förblir inloggad.')) {
+      return;
+    }
+    const keep = [(Auth && Auth.SESSION_KEY) || 'vift_auth_v2', BrandingService._LS_LIGHT, BrandingService._LS_DARK];
+    const saved = {};
+    keep.forEach(k => { try { const v = localStorage.getItem(k); if (v !== null) saved[k] = v; } catch (e) {} });
+    try { localStorage.clear(); } catch (e) {}
+    Object.keys(saved).forEach(k => { try { localStorage.setItem(k, saved[k]); } catch (e) {} });
+    location.reload();
+  },
+
+  _navHtml() {
+    const cur = this._tab;
+    const sel = `<label class="adm-nav-sel"><span class="sr-only">Välj avsnitt</span>
+      <select id="adm-nav-select" class="ar-select" onchange="AdminPage._go(this.value)">
+        ${this._NAV.map(g => `<optgroup label="${esc(g.group)}">${g.items.map(t => `<option value="${t.key}"${t.key === cur ? ' selected' : ''}>${esc(t.label)}</option>`).join('')}</optgroup>`).join('')}
+      </select></label>`;
+    const list = `<div class="adm-nav-list">${this._NAV.map(g => `
+      <div class="adm-nav-g">
+        <div class="adm-nav-gl">${esc(g.group)}</div>
+        ${g.items.map(t => `<button type="button" class="admin-tab adm-nav-i${t.key === cur ? ' is-on' : ''}"${t.key === cur ? ' aria-current="page"' : ''} onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.icon ? ic(t.icon, 16) : ''}<span>${esc(t.label)}</span></button>`).join('')}
+      </div>`).join('')}</div>`;
+    return `<nav class="adm-nav" aria-label="Admininställningar">${sel}${list}</nav>`;
+  },
+
+  /* Avsnittets rubrik (h2 — toppraden har sidans h1). actions = betrodd markup. */
+  _head(title, desc, actions) {
+    return `<div class="adm-head"><div class="adm-head-t"><h2>${esc(title)}</h2>${desc ? `<p>${esc(desc)}</p>` : ''}</div>${actions ? `<div class="adm-head-a">${actions}</div>` : ''}</div>`;
+  },
+
+  /* V3-kort. subHtml/actions/body = betrodd markup (data escapas av anroparen). */
+  _card(icon, title, body, o) {
+    o = o || {};
+    /* V3-komponentstandard §6: .card > .card-header (h3 + åtgärd) > .card-body. */
+    return `<section class="card ar-card${o.cls ? ' ' + o.cls : ''}"${o.id ? ` id="${o.id}"` : ''}>
+      <div class="card-header ar-card-h"><div class="ar-card-ht"><h3>${icon ? ic(icon, 16) : ''}<span>${esc(title)}</span></h3>${o.subHtml ? `<p>${o.subHtml}</p>` : ''}</div>${o.actions ? `<div class="ar-card-a">${o.actions}</div>` : ''}</div>
+      <div class="card-body ar-card-b${o.flush ? ' is-flush' : ''}">${body}</div>
+    </section>`;
+  },
+
+  _activeBadge(on) { return `<span class="bdg ${on ? 'bdg-green' : 'bdg-grey'}">${on ? 'Aktiv' : 'Inaktiv'}</span>`; },
+
+  /* Ikonknapp i listrader: synlig etikett via title, skärmläsare via aria-label.
+     Id skickas via data-id (aldrig inklistrat i JS-koden). */
+  _ibtn(icon, label, handler, id, o) {
+    o = o || {};
+    return `<button type="button" class="ibtn${o.danger ? ' is-danger' : ''}" title="${esc(o.title || label)}" aria-label="${esc(label)}"${id != null ? ` data-id="${esc(id)}"` : ''}${o.disabled ? ' disabled' : ''} onclick="${handler}">${ic(icon, 15)}</button>`;
+  },
+
+  /* ── Färghjälp ── */
+  _normHex(v) {
+    let s = String(v || '').trim().toLowerCase();
+    if (s && s[0] !== '#') s = '#' + s;
+    if (/^#[0-9a-f]{3}$/.test(s)) s = '#' + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+    return /^#[0-9a-f]{6}$/.test(s) ? s : '';
+  },
+  _contrastWhite(hex) {
+    const h = this._normHex(hex);
+    if (!h) return 0;
+    const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const L = 0.2126 * lin(parseInt(h.slice(1, 3), 16)) + 0.7152 * lin(parseInt(h.slice(3, 5), 16)) + 0.0722 * lin(parseInt(h.slice(5, 7), 16));
+    return 1.05 / (L + 0.05);
+  },
+  /* Bara en upplysning — ändrar inga färger (automatisk textfärg är backlog). */
+  _contrastMsg(hex, field) {
+    const r = this._contrastWhite(hex);
+    const txt = r.toLocaleString('sv-SE', { maximumFractionDigits: 1 }) + ':1';
+    if (r >= 4.5) return `<span class="adm-c-ok">${ic('check', 14)}<span>Vit text på färgen: ${txt} — läsbart</span></span>`;
+    const where = field === 'primaryColor' ? 'Sidomenyn, primärknappar och aktiva filter' : 'Äldre vyer med färgtoning';
+    return `<span class="adm-c-warn">${ic('alert-triangle', 14)}<span>Låg kontrast: vit text på färgen ger ${txt} (minst 4,5:1 behövs). ${where} blir svårlästa — välj en mörkare färg.</span></span>`;
+  },
+
+  _colorField(field, label, help) {
+    const s = state.settings || {};
+    const presets = this._PRESETS[field];
+    const def = presets[0].hex;
+    const cur = this._normHex(s[field]) || def;
+    const lc = label.toLowerCase();
+    return `<div class="adm-color" id="adm-color-${field}">
+      <div class="adm-color-h"><span class="adm-color-l">${esc(label)}</span><span class="adm-color-d">${esc(help)}</span></div>
+      <div class="adm-color-row">
+        <input type="color" class="adm-color-in" value="${cur}" aria-label="Välj ${esc(lc)}"
+          oninput="AdminPage._onColorInput(this.value,'${field}')"
+          onchange="AdminPage._saveColor(this.value,'${field}')">
+        <input type="text" class="adm-hex" value="${cur}" maxlength="7" spellcheck="false" autocomplete="off" aria-label="HEX-kod för ${esc(lc)}"
+          oninput="AdminPage._onHexInput(this,'${field}')"
+          onchange="AdminPage._onHexCommit(this,'${field}')"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+        <button type="button" class="btn bghost bsm adm-color-reset"${cur === def ? ' hidden' : ''} onclick="AdminPage._applyPreset('${field}','${def}')">${ic('rotate-ccw', 14)}<span>Standard</span></button>
+      </div>
+      <div class="adm-presets" role="group" aria-label="Förvalda färger, ${esc(lc)}">
+        ${presets.map(p => `<button type="button" class="adm-preset" data-hex="${p.hex}" style="--sw:${p.hex}" title="${esc(p.name)} ${p.hex}" aria-label="${esc(p.name)}" aria-pressed="${p.hex === cur}" onclick="AdminPage._applyPreset('${field}','${p.hex}')"></button>`).join('')}
+      </div>
+      <p class="adm-color-msg" id="adm-color-msg-${field}" aria-live="polite">${this._contrastMsg(cur, field)}</p>
+    </div>`;
+  },
+
+  /* Titellistan (Personal & roller). Sökningen ritar bara om listan och
+     räknaren — aldrig sökfältet — så att fokus och markör behålls
+     (V3-komponentstandard §5; tidigare ritades hela sidan om per tangent). */
+  _titleRowsHtml() {
+    const allTitles = state.titles || [];
+    const q = (this._titleQ || '').trim().toLowerCase();
+    const titles = q ? allTitles.filter(t => typeof t === 'object' && t.name && t.name.toLowerCase().includes(q)) : allTitles;
+    if (allTitles.length === 0) return `<p class="ar-empty">Inga titlar registrerade.</p>`;
+    if (titles.length === 0) return `<p class="ar-empty">Ingen titel matchar "${esc(this._titleQ)}".</p>`;
+    return titles.map(t => {
+      const origIdx = allTitles.findIndex(x => x.id === t.id);
+      const usageCount = (state.staff||[]).filter(st => st.title === t.name).length;
+      return `<div class="adm-row${t.active ? '' : ' is-off'}">
+        <div class="adm-row-m">
+          <div class="adm-row-t"><span class="adm-row-n">${esc(t.name)}</span>${this._activeBadge(t.active)}</div>
+          ${t.description ? `<div class="adm-row-s">${esc(t.description)}</div>` : ''}
+          <div class="adm-row-x">${usageCount > 0
+            ? `<button type="button" class="adm-link" onclick="AdminPage._showTitleStaffIdx(${origIdx})">${usageCount} ${usageCount === 1 ? 'person' : 'personer'}${ic('chevron-right',13)}</button>`
+            : '<span class="adm-muted">Ej använd</span>'}</div>
+        </div>
+        <div class="adm-row-a">
+          ${this._ibtn('pencil', 'Redigera ' + t.name, `AdminPage.openEditTitle(${origIdx})`, null, { title: 'Redigera' })}
+          ${this._ibtn(t.active ? 'eye-off' : 'eye', (t.active ? 'Inaktivera ' : 'Aktivera ') + t.name, `AdminPage.toggleTitleActive(${origIdx})`, null, { title: t.active ? 'Inaktivera' : 'Aktivera' })}
+          ${this._ibtn('trash', 'Ta bort ' + t.name, `AdminPage.removeTitle(${origIdx})`, null, { danger: true, title: usageCount > 0 ? `Används av ${usageCount} person(er)` : 'Ta bort' })}
+        </div>
+      </div>`;
+    }).join('');
+  },
+  _titleCountText() {
+    const all = (state.titles || []).length;
+    const q = (this._titleQ || '').trim().toLowerCase();
+    const n = q ? (state.titles || []).filter(t => t && t.name && t.name.toLowerCase().includes(q)).length : all;
+    return `Visar ${n} av ${all}`;
+  },
+  _onTitleSearch(v) {
+    this._titleQ = v;
+    clearTimeout(this._titleT);
+    this._titleT = setTimeout(() => {
+      const list = document.getElementById('adm-title-list');
+      const cnt = document.getElementById('adm-title-count');
+      if (list) list.innerHTML = this._titleRowsHtml();
+      if (cnt) cnt.textContent = this._titleCountText();
+    }, 150);
+  },
+
   render() {
     const el = document.getElementById('pg-admin-content');
     if (!el) return;
-    const previousTabScroll = el.querySelector('.admin-tabs')?.scrollLeft || 0;
     if (!Auth.require('admin_manage')) {
       el.innerHTML = `<div class="empty">${ic('lock',32)}<h3>Behörighet saknas</h3><p>Du har inte tillgång till systeminställningar.</p></div>`;
       return;
     }
     const s = state.settings || {};
-    const allTitles = state.titles || [];
-    const titles = this._titleQ
-      ? allTitles.filter(t => typeof t === 'object' && t.name && t.name.toLowerCase().includes(this._titleQ.toLowerCase()))
-      : allTitles;
-
-    /* QA 2026-11-25: ikon (betrodd, statisk ic()-markup) och text hålls isär —
-       texten escapas, ikonen renderas som HTML. Tidigare låg ic() i label och
-       escapades bort till rå SVG-text efter XSS-rättningen (QA-P0-3). */
-    const tabDefs = [
-      { key: 'foretag',        label: 'Företag'                          },
-      { key: 'ekonomi',        label: 'Ekonomi'                          },
-      { key: 'personal',       label: 'Personal'                         },
-      { key: 'priser',         label: 'Priser'                           },
-      { key: 'system',         label: 'System'                           },
-      { key: 'fastighetskort', label: 'Fastighetskort', icon: 'building-2'     },
-      { key: 'ansvariga',      label: 'Ansvariga',      icon: 'user-check'     },
-      { key: 'avvikelse',      label: 'Avvikelser',     icon: 'alert-triangle' },
-      { key: 'notiser',        label: 'Notiser',        icon: 'bell'           },
-      { key: 'epost',          label: 'E-post-mallar',  icon: 'mail'           }
-    ];
-    const tabBar = `<div class="admin-tabs">
-      ${tabDefs.map(t => `<button class="btn bsm admin-tab ${this._tab===t.key?'bp':'bs'}" onclick="AdminPage._tab='${t.key}';AdminPage.render()">${t.icon ? ic(t.icon,12) + ' ' : ''}${esc(t.label)}</button>`).join('')}
-    </div>`;
+    const known = this._NAV.some(g => g.items.some(t => t.key === this._tab));
+    if (!known) this._tab = 'foretag';
 
     const sections = {};
+    /* Faktarutor (V3-komponentstandard §6): dl > div > dt + dd. Värden escapas. */
+    const fact = (k, v, o) => `<div class="adm-fact${o && o.wide ? ' is-wide' : ''}"><dt>${esc(k)}</dt><dd>${v ? esc(v) : '<span class="adm-none">—</span>'}</dd></div>`;
 
-    sections.foretag = `
-      <div class="admin-section-group" style="margin-bottom:14px;">
-        <div class="admin-section-header">
-          <div class="admin-section-icon" style="background:#eff6ff;color:var(--blue);">${ic('building-2',18)}</div>
-          <div>
-            <div class="admin-section-title">Företagsinformation & Branding</div>
-            <div class="admin-section-desc">Företagsuppgifter, logotype och varumärkesfärger</div>
-          </div>
-        </div>
-
-        <!-- Uppgifter -->
-        <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:800;color:var(--navy);">Uppgifter</div>
-            <button class="btn bs bxs" onclick="AdminPage.openEditCompany()">${ic('pencil',13)} Redigera</button>
-          </div>
-          <div class="dr"><span class="dk">Företag</span><span class="dv">${esc(s.companyName || '—')}</span></div>
-          <div class="dr"><span class="dk">Slogan</span><span class="dv">${s.slogan || '—'}</span></div>
-          <div class="dr"><span class="dk">Telefon</span><span class="dv">${s.companyPhone || '—'}</span></div>
-          <div class="dr"><span class="dk">E-post</span><span class="dv">${s.companyEmail || '—'}</span></div>
-          <div class="dr"><span class="dk">Adress</span><span class="dv">${s.companyAddress || '—'}</span></div>
-          <div class="dr"><span class="dk">Org.nr</span><span class="dv">${esc(s.orgNr || '—')}</span></div>
-          <div class="dr"><span class="dk">Moms-nr</span><span class="dv">${s.vatNr || '—'}</span></div>
-        </div>
-
-        <!-- Branding & Logga — inside group -->
-        <div>
-
-          <!-- Logo ljus bakgrund -->
-          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--br);">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;margin-bottom:2px;">Logga — ljus bakgrund</div>
-              <div style="font-size:11px;color:var(--mt);margin-bottom:8px;">PDF, utskrift, e-post</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <label class="btn bs bxs" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:11px;">
-                  ${ic('upload',11)} Ladda upp SVG/PNG/JPG
-                  <input type="file" style="display:none;" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-                    onchange="AdminPage._uploadLogo(this,'logoLight')">
-                </label>
-                ${s.logoLight ? `<button class="btn bd bxs" style="font-size:11px;" onclick="AdminPage._clearLogo('logoLight')">${ic('x',10)} Rensa</button>` : ''}
-                ${s.logoLight ? `<span style="font-size:10px;color:var(--gn);align-self:center;">${ic('check',10)} Uppladdad</span>` : `<span style="font-size:10px;color:var(--mt);align-self:center;">Använder standardlogga</span>`}
-              </div>
-            </div>
-            <div style="width:130px;height:52px;border:1px solid var(--br);border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px;flex-shrink:0;">
-              <img id="admin-preview-light" src="${BrandingService.logoLight()}" alt="Logo"
-                style="max-width:100%;max-height:100%;object-fit:contain;"
-                onerror="this.style.opacity='.2'">
-            </div>
-          </div>
-
-          <!-- Logo mörk bakgrund -->
-          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--br);">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;margin-bottom:2px;">Logga — mörk bakgrund</div>
-              <div style="font-size:11px;color:var(--mt);margin-bottom:8px;">Sidebar, offertdetalj, hero</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <label class="btn bs bxs" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:11px;">
-                  ${ic('upload',11)} Ladda upp SVG/PNG/JPG
-                  <input type="file" style="display:none;" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-                    onchange="AdminPage._uploadLogo(this,'logoDark')">
-                </label>
-                ${s.logoDark ? `<button class="btn bd bxs" style="font-size:11px;" onclick="AdminPage._clearLogo('logoDark')">${ic('x',10)} Rensa</button>` : ''}
-                ${s.logoDark ? `<span style="font-size:10px;color:var(--gn);align-self:center;">${ic('check',10)} Uppladdad</span>` : `<span style="font-size:10px;color:var(--mt);align-self:center;">Använder ljus logga eller standard</span>`}
-              </div>
-            </div>
-            <div style="width:130px;height:52px;border:1px solid var(--navy);border-radius:8px;background:var(--navy);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px;flex-shrink:0;">
-              <img id="admin-preview-dark" src="${BrandingService.logoDark()}" alt="Logo"
-                style="max-width:100%;max-height:100%;object-fit:contain;"
-                onerror="this.style.opacity='.2'">
-            </div>
-          </div>
-
-          <!-- Förhandsvisning sidebar -->
-          <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
-            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Förhandsvisning sidebar</div>
-            <div style="background:var(--navy);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:10px;max-width:260px;">
-              <img src="${BrandingService.logoDark()}" style="height:30px;width:auto;max-width:120px;object-fit:contain;border-radius:5px;"
-                onerror="this.style.display='none'">
-              <span style="font-size:10px;color:rgba(255,255,255,.4);">VIFT System</span>
-            </div>
-          </div>
-
-          <!-- Färger -->
-          <div style="padding:14px 16px;">
-            <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Varumärkesfärger</div>
-            <div style="display:flex;gap:20px;flex-wrap:wrap;">
-              <div>
-                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Primär</div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <input type="color" value="${s.primaryColor||'#0f3763'}"
-                    style="width:36px;height:28px;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px;"
-                    oninput="AdminPage._previewColor(this.value,'primaryColor');this.nextElementSibling.textContent=this.value"
-                    onchange="AdminPage._saveColor(this.value,'primaryColor')">
-                  <span style="font-size:11px;color:var(--mt);font-family:monospace;">${s.primaryColor||'#0f3763'}</span>
-                </div>
-              </div>
-              <div>
-                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Sekundär</div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <input type="color" value="${s.secondaryColor||'#1d75d8'}"
-                    style="width:36px;height:28px;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px;"
-                    oninput="AdminPage._previewColor(this.value,'secondaryColor');this.nextElementSibling.textContent=this.value"
-                    onchange="AdminPage._saveColor(this.value,'secondaryColor')">
-                  <span style="font-size:11px;color:var(--mt);font-family:monospace;">${s.secondaryColor||'#1d75d8'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>`;
-
-    sections.ekonomi = `
-      <div class="admin-section-group" style="margin-bottom:14px;">
-        <div class="admin-section-header">
-          <div class="admin-section-icon" style="background:#f0fdf4;color:var(--gr);">${ic('trending-up',18)}</div>
-          <div>
-            <div class="admin-section-title">Ekonomi</div>
-            <div class="admin-section-desc">Intern timkostnad och lönsamhetsparametrar</div>
-          </div>
-          <button class="btn bs bxs" style="margin-left:auto;flex-shrink:0;" onclick="AdminPage.openEditEkonomi()">${ic('pencil',13)} Redigera</button>
-        </div>
-        <div style="padding:14px 16px;">
-          <div class="dr">
-            <span class="dk">Intern timkostnad</span>
-            <span class="dv">${fmt((s.internalHourlyCost || 250))} kr/h ex moms</span>
-          </div>
-          <p style="font-size:11px;color:var(--mt);margin-top:6px;line-height:1.5;">Används för att beräkna täckningsbidrag. Visas aldrig för kund.</p>
-        </div>
-      </div>`;
-
-    sections.personal = `
-      <div class="admin-section-group" style="margin-bottom:14px;">
-        <div class="admin-section-header">
-          <div class="admin-section-icon" style="background:#faf5ff;color:var(--pu);">${ic('users',18)}</div>
-          <div style="flex:1;min-width:0;">
-            <div class="admin-section-title">Personal & Roller</div>
-            <div class="admin-section-desc">Titlar/yrkesroller, behörighetsroller och personalregister</div>
-          </div>
-          <button class="btn bs bxs" style="flex-shrink:0;" onclick="Router.showPage('pg-staff')">${ic('arrow-right',13)} Personal</button>
-        </div>
-
-        <!-- Titlar -->
-        <div style="border-bottom:1px solid var(--br);">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--bg);">
-            <div style="font-size:12px;font-weight:800;color:var(--navy);">Titlar / yrkesroller</div>
-            <button class="btn bp bxs" onclick="AdminPage.openAddTitle()">${ic('plus',13)} Lägg till</button>
-          </div>
-          <div style="padding:6px 16px 4px;">
-            <div class="swrap">
-              <span class="sico">${ic('search',14)}</span>
-              <input type="search" placeholder="Sök titel…" value="${esc(this._titleQ)}"
-                oninput="AdminPage._titleQ=this.value;AdminPage.render()" style="font-size:12px;">
-            </div>
-          </div>
-          <div style="padding:4px 16px 4px;">
-            ${allTitles.length === 0
-              ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga titlar registrerade</p>'
-              : titles.length === 0
-                ? `<p style="font-size:12px;color:var(--mt);padding:6px 0;">Ingen titel matchar "${this._titleQ}"</p>`
-                : titles.map(t => {
-                    const origIdx = allTitles.findIndex(x => x.id === t.id);
-                    const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
-                    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);">
-                      <div style="flex:1;min-width:0;">
-                        <div style="display:flex;align-items:center;gap:6px;">
-                          <span style="font-size:13px;font-weight:600;">${esc(t.name)}</span>
-                          <span class="bdg ${t.active?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active?'Aktiv':'Inaktiv'}</span>
-                        </div>
-                        ${t.description ? `<div style="font-size:11px;color:var(--mt);">${esc(t.description)}</div>` : ''}
-                        ${usageCount > 0
-                          ? `<div style="font-size:10px;color:var(--sky);cursor:pointer;" onclick="AdminPage.showTitleStaff('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
-                              ${usageCount} person${usageCount===1?'':'er'} – Visa ${ic('arrow-right',9)}
-                            </div>`
-                          : '<div style="font-size:10px;color:var(--mt);">Ej använd</div>'}
-                      </div>
-                      <button class="btn bxs bs" onclick="AdminPage.openEditTitle(${origIdx})">${ic('pencil',11)}</button>
-                      <button class="btn bxs ${t.active?'bw':'bsu'}" onclick="AdminPage.toggleTitleActive(${origIdx})"
-                        style="font-size:10px;">${t.active?ic('eye-off',11):ic('eye',11)}</button>
-                      <button class="btn bxs bd" onclick="AdminPage.removeTitle(${origIdx})"
-                        ${usageCount>0?`title="Används av ${usageCount} person(er)"`:''}>${ic('trash',11)}</button>
-                    </div>`;
-                  }).join('')
-            }
-          </div>
-        </div>
-
-        <!-- Roller -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--bg);">
-            <div style="font-size:12px;font-weight:800;color:var(--navy);">Roller & behörigheter</div>
-            <button class="btn bp bxs" onclick="AdminPage.openAddRole()">${ic('plus',13)} Ny roll</button>
-          </div>
-          <div style="padding:4px 16px 4px;">
-            ${(state.roles||[]).length === 0
-              ? '<p style="font-size:12px;color:var(--mt);padding:6px 0;">Inga roller definierade</p>'
-              : (state.roles||[]).map(r => {
-                  const permCount  = (r.permissions||[]).length;
-                  const staffCount = (state.staff||[]).filter(s=>s.role===r.id).length;
-                  const isActive   = r.active !== false;
-                  return `<div style="padding:9px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:8px;${isActive?'':'opacity:.65'}">
-                    <div style="flex:1;min-width:0;">
-                      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">
-                        <span style="font-size:13px;font-weight:700;">${esc(r.label)}</span>
-                        <span class="bdg ${isActive?'bdg-green':'bdg-grey'}" style="font-size:9px;">${isActive?'Aktiv':'Inaktiv'}</span>
-                        ${r.isBuiltin?`<span class="bdg bdg-grey" style="font-size:9px;">Inbyggd</span>`:''}
-                        ${staffCount>0?`<span class="bdg bdg-blue" style="font-size:9px;cursor:pointer;" onclick="AdminPage.showRoleStaff('${r.id}')">${staffCount} pers.</span>`:''}
-                      </div>
-                      ${r.description?`<div style="font-size:11px;color:var(--mt);">${esc(r.description)}</div>`:''}
-                      <div style="font-size:10px;color:var(--sky);margin-top:2px;">${permCount===0?'Inga behörigheter':permCount+' behörighet'+(permCount===1?'':'er')+(r.permissions&&r.permissions.includes('all')?' (superadmin)':'')}</div>
-                    </div>
-                    <div style="display:flex;gap:4px;flex-shrink:0;">
-                      <button class="btn bxs bs" onclick="AdminPage.openEditRole('${r.id}')">${ic('pencil',11)}</button>
-                      <button class="btn bxs ${isActive?'bw':'bsu'}" onclick="AdminPage.toggleRoleActive('${r.id}')"
-                        title="${isActive?'Inaktivera':'Aktivera'}" style="font-size:10px;">${isActive?ic('eye-off',11):ic('eye',11)}</button>
-                      ${!r.isBuiltin?`<button class="btn bxs bd" onclick="AdminPage.removeRole('${r.id}')">${ic('trash',11)}</button>`:''}
-                    </div>
-                  </div>`;
-                }).join('')
-            }
+    /* ── Företag & varumärke ───────────────────────────── */
+    const logoBlock = (field, title, use, bgCls, statusOn, statusOff) => {
+      /* Uppladdade loggor ligger i egna localStorage-nycklar (BrandingService),
+         inte i settings — tidigare visades därför alltid "standardlogga". */
+      let has = !!s[field];
+      try { has = has || !!localStorage.getItem(field === 'logoLight' ? BrandingService._LS_LIGHT : BrandingService._LS_DARK); } catch (e) {}
+      const src = field === 'logoLight' ? BrandingService.logoLight() : BrandingService.logoDark();
+      const fid = 'adm-file-' + field;
+      return `<div class="adm-logo">
+        <div class="adm-logo-prev ${bgCls}"><img id="${field === 'logoLight' ? 'admin-preview-light' : 'admin-preview-dark'}" src="${esc(src)}" alt="${esc(title)}" onerror="this.style.opacity='.2'"></div>
+        <div class="adm-logo-m">
+          <div class="adm-logo-t">${esc(title)} ${has ? `<span class="bdg bdg-green">${ic('check',11)}${esc(statusOn)}</span>` : `<span class="bdg bdg-grey">${esc(statusOff)}</span>`}</div>
+          <div class="adm-logo-s">${esc(use)}</div>
+          <div class="adm-logo-a">
+            <input type="file" id="${fid}" class="adm-file sr-only" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg" onchange="AdminPage._uploadLogo(this,'${field}')">
+            <label for="${fid}" class="btn bs bsm">${ic('upload',14)}<span>Ladda upp</span></label>
+            ${has ? `<button type="button" class="btn bghost bsm" onclick="AdminPage._clearLogo('${field}')">${ic('x',14)}<span>Återställ</span></button>` : ''}
           </div>
         </div>
       </div>`;
-
-    sections.priser = `
-      <div class="admin-section-group" style="margin-bottom:14px;">
-        <div class="admin-section-header">
-          <div class="admin-section-icon" style="background:#fff7ed;color:var(--or);">${ic('package',18)}</div>
-          <div>
-            <div class="admin-section-title">Priser & Tjänster</div>
-            <div class="admin-section-desc">Offerttjänstemallar, artiklar och prisgrupper</div>
-          </div>
-        </div>
-
-        <!-- Tjänstemallar -->
-        <div style="border-bottom:1px solid var(--br);">
-          <div style="padding:10px 16px;border-bottom:1px solid var(--bg);">
-            <div style="font-size:12px;font-weight:800;color:var(--navy);">Offert-tjänstemallar</div>
-            <div style="font-size:11px;color:var(--mt);margin-top:2px;">Inbyggda kalkylatormallar. Definierar prismodell, RUT/ROT-typ och fält.</div>
-          </div>
-          <div style="padding:4px 16px 4px;">
-            ${OffersPage._T.map(t=>`<div style="padding:7px 0;border-bottom:1px solid var(--bg);display:flex;align-items:center;gap:8px;">
-              <span style="background:var(--acc);border-radius:var(--rx);padding:5px;color:var(--acc-text);flex-shrink:0;">${ic(t.icon,13)}</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;">${esc(t.name)}</div>
-                <div style="font-size:10px;color:var(--mt);">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${_normVat(t.vatRate)} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
+    };
+    const prim = this._normHex(s.primaryColor) || '#0f3763';
+    sections.foretag =
+      this._head('Företag & varumärke', 'Uppgifter, logotyper och färger som används i appen, offerter, PDF och e-post.') +
+      this._card('building-2', 'Företagsuppgifter',
+        `<dl class="adm-facts">
+          ${fact('Företag', s.companyName, { wide: true })}${fact('Org.nr', s.orgNr)}
+          ${fact('Slogan', s.slogan, { wide: true })}${fact('Moms-nr', s.vatNr)}
+          ${fact('Telefon', s.companyPhone)}${fact('E-post', s.companyEmail)}${fact('Webbsida', s.website)}
+          ${fact('Adress', s.companyAddress, { wide: true })}
+        </dl>`,
+        { actions: `<button type="button" class="btn bs bsm" onclick="AdminPage.openEditCompany()">${ic('pencil',14)}<span>Redigera</span></button>` }) +
+      this._card('image', 'Logotyper',
+        `<div class="adm-logos">
+          ${logoBlock('logoLight', 'Ljus bakgrund', 'PDF, utskrift och e-post. SVG, PNG eller JPG, högst 3 MB.', 'is-light', 'Uppladdad', 'Standardlogga')}
+          ${logoBlock('logoDark', 'Mörk bakgrund', 'Sidomeny, offertdetalj och sidhuvuden. Saknas den används den ljusa.', 'is-dark', 'Uppladdad', 'Ljus logga eller standard')}
+        </div>`) +
+      this._card('sliders', 'Varumärkesfärger',
+        `<div class="adm-colors">
+          ${this._colorField('primaryColor', 'Primärfärg', 'Sidomeny, primärknappar, aktiva filter och räknare')}
+          ${this._colorField('secondaryColor', 'Sekundärfärg', 'Toning i äldre vyer (V3-gränssnittet använder primärfärgen)')}
+          <div class="adm-brand-prev" aria-label="Förhandsvisning av färgerna">
+            <div class="adm-prev-l">Förhandsvisning</div>
+            <div class="adm-prev-row">
+              <div class="adm-prev-side">
+                <img src="${esc(BrandingService.logoForBg ? BrandingService.logoForBg(prim) : BrandingService.logoDark())}" alt="" onerror="this.style.display='none'">
+                <span class="adm-prev-ni is-on">${ic('layout-dashboard',14)}<span>Dashboard</span></span>
+                <span class="adm-prev-ni">${ic('clipboard-list',14)}<span>Arbetsorder</span></span>
               </div>
-              <span class="bdg bdg-green" style="font-size:9px;">Aktiv</span>
-            </div>`).join('')}
+              <div class="adm-prev-ui">
+                <span class="btn bp bsm adm-prev-btn">${ic('plus',14)}<span>Primärknapp</span></span>
+                <span class="chip on adm-prev-chip">Aktivt filter<span class="chip-n">4</span></span>
+                <span class="adm-prev-badge"><span>Räknare</span><span class="aol-badge">3</span></span>
+              </div>
+            </div>
           </div>
-        </div>
+        </div>`,
+        { subHtml: 'Klicka på en förvald färg, välj fritt i färgrutan eller skriv en HEX-kod. Förhandsvisningen uppdateras direkt; färgen sparas när du släpper valet.' });
 
-        <!-- Register shortcuts -->
-        <div style="padding:14px 16px;">
-          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:10px;">Register</div>
-          <div class="dr">
-            <span class="dk">${ic('zap',13)} Offerttjänster</span>
-            <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-service-templates')">${(state.serviceTemplates||[]).filter(s=>s.active!==false).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
-          </div>
-          <div class="dr">
-            <span class="dk">${ic('package',13)} Artiklar</span>
-            <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-articles')">${(state.articles||[]).filter(a=>a.active!==false).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
-          </div>
-          <div class="dr">
-            <span class="dk">${ic('dollar-sign',13)} Prisgrupper</span>
-            <span class="dv"><button class="btn bs bxs" onclick="Router.showPage('pg-pricegroups')">${(state.priceGroups||[]).filter(p=>p.active).length} aktiva – Hantera ${ic('arrow-right',12)}</button></span>
-          </div>
-        </div>
-      </div>`;
+    /* ── Ekonomi ───────────────────────────────────────── */
+    sections.ekonomi =
+      this._head('Ekonomi', 'Interna parametrar för lönsamhetsberäkningar.') +
+      this._card('trending-up', 'Intern timkostnad',
+        `<div class="adm-figure"><b>${esc(fmt(s.internalHourlyCost || 250))} kr/h</b><span>exkl. moms</span></div>
+         <p class="ar-help">Används för att beräkna täckningsbidrag. Visas aldrig för kund i PDF eller e-post.</p>`,
+        { actions: `<button type="button" class="btn bs bsm" onclick="AdminPage.openEditEkonomi()">${ic('pencil',14)}<span>Redigera</span></button>` }) +
+      /* QA-tillägg 2026-11-26: tre olika timvärden blandades ihop (löneunderlaget
+         kallade timmar × prisgruppens försäljningspris för "lönekostnad"). */
+      this._card('info', 'Tre olika timvärden',
+        `<dl class="adm-facts is-stack">
+          <div class="adm-fact"><dt>Intern timkostnad</dt><dd>${esc(fmt(s.internalHourlyCost || 250))} kr/h exkl. moms — inställningen ovan. Används för täckningsbidrag och för "Intern kostnad (uppskattad)" i löneunderlaget.</dd></div>
+          <div class="adm-fact"><dt>Försäljningspris</dt><dd>Prisgruppens timpris exkl. moms (t.ex. ${esc(((state.priceGroups || []).filter(p => p.active && p.hourRate > 0).map(p => p.id + ' ' + fmt(p.hourRate) + ' kr/h').slice(0, 4).join(', ')) || '—')}). Kopieras till varje tidpost och ger löneunderlagets "Debiterbart värde".</dd></div>
+          <div class="adm-fact"><dt>Lönekostnad</dt><dd>Lön/timlön inklusive sociala avgifter. Finns inte i systemet i dag — personalregistret saknar lönedata.</dd></div>
+        </dl>`,
+        { actions: `<button type="button" class="btn bghost bsm" onclick="Router.showPage('pg-pricegroups')">${ic('dollar-sign',14)}<span>Prisgrupper</span>${ic('chevron-right',14)}</button>` });
 
-    sections.system = `
-      <div class="admin-section-group" style="margin-bottom:14px;">
-        <div class="admin-section-header">
-          <div class="admin-section-icon" style="background:#f1f5f9;color:var(--mt);">${ic('settings',18)}</div>
-          <div>
-            <div class="admin-section-title">System</div>
-            <div class="admin-section-desc">Dataöversikt och systemåterställning</div>
-          </div>
-        </div>
+    /* ── Personal & roller ─────────────────────────────── */
+    const titleRows = this._titleRowsHtml();
+    const roleRows = (state.roles||[]).length === 0
+      ? `<p class="ar-empty">Inga roller definierade.</p>`
+      : (state.roles||[]).map(r => {
+          const permCount  = (r.permissions||[]).length;
+          const staffCount = (state.staff||[]).filter(st => st.role === r.id).length;
+          const isActive   = r.active !== false;
+          return `<div class="adm-row${isActive ? '' : ' is-off'}">
+            <div class="adm-row-m">
+              <div class="adm-row-t"><span class="adm-row-n">${esc(r.label)}</span>${this._activeBadge(isActive)}${r.isBuiltin ? '<span class="bdg bdg-grey">Inbyggd</span>' : ''}</div>
+              ${r.description ? `<div class="adm-row-s">${esc(r.description)}</div>` : ''}
+              <div class="adm-row-x">
+                <span class="adm-muted">${permCount === 0 ? 'Inga behörigheter' : permCount + ' behörighet' + (permCount === 1 ? '' : 'er') + (r.permissions && r.permissions.includes('all') ? ' (superadmin)' : '')}</span>
+                ${staffCount > 0 ? `<button type="button" class="adm-link" data-id="${esc(r.id)}" onclick="AdminPage.showRoleStaff(this.dataset.id)">${staffCount} ${staffCount === 1 ? 'person' : 'personer'}${ic('chevron-right',13)}</button>` : ''}
+              </div>
+            </div>
+            <div class="adm-row-a">
+              ${this._ibtn('pencil', 'Redigera ' + r.label, 'AdminPage.openEditRole(this.dataset.id)', r.id, { title: 'Redigera behörigheter' })}
+              ${this._ibtn(isActive ? 'eye-off' : 'eye', (isActive ? 'Inaktivera ' : 'Aktivera ') + r.label, 'AdminPage.toggleRoleActive(this.dataset.id)', r.id, { title: isActive ? 'Inaktivera' : 'Aktivera' })}
+              ${!r.isBuiltin ? this._ibtn('trash', 'Ta bort ' + r.label, 'AdminPage.removeRole(this.dataset.id)', r.id, { danger: true, title: 'Ta bort' }) : ''}
+            </div>
+          </div>`;
+        }).join('');
+    sections.personal =
+      this._head('Personal & roller', 'Behörighetsroller styr vad varje person får se och göra. Titlar är yrkesroller som visas på personalkortet.',
+        `<button type="button" class="btn bs bsm" onclick="Router.showPage('pg-staff')">${ic('users',14)}<span>Personalregistret</span>${ic('chevron-right',14)}</button>`) +
+      this._card('shield-check', 'Roller & behörigheter', `<div class="adm-list">${roleRows}</div>`,
+        { flush: true, actions: `<button type="button" class="btn bs bsm" onclick="AdminPage.openAddRole()">${ic('plus',14)}<span>Ny roll</span></button>` }) +
+      this._card('tag', 'Titlar / yrkesroller',
+        `<div class="adm-search-row"><div class="adm-search swrap"><span class="sico" aria-hidden="true">${ic('search',14)}</span>
+          <input type="search" placeholder="Sök titel" value="${esc(this._titleQ)}" aria-label="Sök titel"
+            oninput="AdminPage._onTitleSearch(this.value)"></div>
+          <span class="adm-count" id="adm-title-count" aria-live="polite">${this._titleCountText()}</span></div>
+         <div class="adm-list" id="adm-title-list">${titleRows}</div>`,
+        { flush: true, actions: `<button type="button" class="btn bs bsm" onclick="AdminPage.openAddTitle()">${ic('plus',14)}<span>Lägg till</span></button>` });
 
-        <!-- Systemöversikt -->
-        <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
-          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:10px;">Dataöversikt</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
-            <div class="dr"><span class="dk">Kunder</span><span class="dv">${(state.customers||[]).length} st</span></div>
-            <div class="dr"><span class="dk">Arbetsorder</span><span class="dv">${(state.workOrders||[]).length} st</span></div>
-            <div class="dr"><span class="dk">Offerter</span><span class="dv">${(state.offers||[]).length} st</span></div>
-            <div class="dr"><span class="dk">Fakturor</span><span class="dv">${(state.invoices||[]).length} st</span></div>
-            <div class="dr"><span class="dk">Återkommande</span><span class="dv">${(state.recurringOrders||[]).length} st</span></div>
-            <div class="dr"><span class="dk">Tidsposter</span><span class="dv">${(state.timeEntries||[]).length} st</span></div>
-          </div>
-        </div>
+    /* ── Priser & tjänster ─────────────────────────────── */
+    const regRow = (icon, name, desc, n, page) => `<button type="button" class="adm-link-row" onclick="Router.showPage('${page}')">
+        <span class="adm-link-ico">${ic(icon,16)}</span>
+        <span class="adm-row-m"><span class="adm-row-n">${esc(name)}</span><span class="adm-row-s">${esc(desc)}</span></span>
+        <span class="adm-link-n">${n} aktiva</span>${ic('chevron-right',16)}
+      </button>`;
+    sections.priser =
+      this._head('Priser & tjänster', 'Register för offerttjänster, artiklar och prisgrupper.') +
+      this._card('package', 'Register',
+        `<div class="adm-list">
+          ${regRow('zap', 'Offerttjänster', 'Tjänster och prismodeller i offertkalkylatorn', (state.serviceTemplates||[]).filter(x=>x.active!==false).length, 'pg-service-templates')}
+          ${regRow('package', 'Artiklar', 'Material och artiklar med priser', (state.articles||[]).filter(a=>a.active!==false).length, 'pg-articles')}
+          ${regRow('dollar-sign', 'Prisgrupper', 'Timpriser per kund- eller arbetstyp', (state.priceGroups||[]).filter(p=>p.active).length, 'pg-pricegroups')}
+        </div>`, { flush: true }) +
+      this._card('layers', 'Inbyggda kalkylatormallar',
+        `<div class="adm-list">${OffersPage._T.map(t => `<div class="adm-row">
+            <span class="adm-row-ico">${ic(t.icon,15)}</span>
+            <div class="adm-row-m">
+              <div class="adm-row-t"><span class="adm-row-n">${esc(t.name)}</span><span class="bdg bdg-green">Aktiv</span></div>
+              <div class="adm-row-s">${t.defaultReduction==='rut'?'RUT 50 %':t.defaultReduction==='rot'?'ROT 30 %':'Ingen reduktion'} · Moms ${esc(_normVat(t.vatRate))} % · ${t.fields.filter(f=>!f.isRut&&!f.isRot).length} fält</div>
+            </div>
+          </div>`).join('')}</div>`,
+        { flush: true, subHtml: 'Definierar prismodell, RUT/ROT-typ och fält. Kan inte redigeras här.' });
 
-        <!-- Import & Export -->
-        <div style="padding:14px 16px;border-bottom:1px solid var(--br);">
-          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px;">Import &amp; Export</div>
-          <p style="font-size:12px;color:var(--mt);margin-bottom:10px;line-height:1.5;">
-            Importera kunder från CSV eller XLSX. Exportera register. Historik och ångra via importloggen.
-          </p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',13)} Importera kunder</button>
-            <button class="btn bs bsm" onclick="Router.showPage('pg-import-log',{})">${ic('clock',13)} Importlogg (${(state.importLogs||[]).length})</button>
-          </div>
-        </div>
+    /* ── Data & system ─────────────────────────────────── */
+    const stat = (label, n) => `<div class="adm-stat"><span>${esc(label)}</span><b>${esc(fmt(n))}</b></div>`;
+    sections.system =
+      this._head('Data & import', 'Översikt över registren samt import och export.') +
+      this._card('server', 'Dataöversikt',
+        `<div class="adm-stats">
+          ${stat('Kunder', (state.customers||[]).length)}${stat('Arbetsorder', (state.workOrders||[]).length)}
+          ${stat('Offerter', (state.offers||[]).length)}${stat('Fakturor', (state.invoices||[]).length)}
+          ${stat('Återkommande', (state.recurringOrders||[]).length)}${stat('Tidsposter', (state.timeEntries||[]).length)}
+        </div>`) +
+      this._card('upload', 'Import & export',
+        `<p class="ar-help">Importera kunder från CSV eller XLSX. Historik och ångra finns i importloggen.</p>
+         <div class="adm-actions">
+           <button type="button" class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',14)}<span>Importera kunder</span></button>
+           <button type="button" class="btn bs bsm" onclick="Router.showPage('pg-import-log',{})">${ic('history',14)}<span>Importlogg (${(state.importLogs||[]).length})</span></button>
+         </div>`) +
+      this._card('wrench', 'Teknik & underhåll',
+        `<p class="ar-help">Push-diagnostik och rensning av lokal cache på den här enheten finns i ett eget avsnitt.</p>
+         <div class="adm-actions"><button type="button" class="btn bs bsm" onclick="AdminPage._go('teknik')">${ic('wrench',14)}<span>Teknisk information och underhåll</span>${ic('chevron-right',14)}</button></div>`);
 
-        <!-- Återställning -->
-        <div style="padding:14px 16px;">
-          <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px;">Demodata & återställning</div>
-          <p style="font-size:12px;color:var(--mt);margin-bottom:10px;line-height:1.5;">Rensa localStorage och ladda om demodata. Återställer allt till startläget.</p>
-          <button class="btn bd bsm" onclick="if(confirm('Rensa all data och återgå till demodata?')){localStorage.clear();location.reload();}">${ic('trash',13)} Återställ demodata</button>
-        </div>
-      </div>`;
-
-    /* ── Notiser-fliken (tillgänglig för alla inloggade) ───── */
+    /* ── Mobilnotiser ──────────────────────────────────── */
     const push    = typeof PushService !== 'undefined' ? PushService : null;
     const pSupp   = push ? push.isSupported() : false;
     const pState  = push ? push.permissionState() : 'unsupported';
@@ -9654,36 +9706,28 @@ const AdminPage = {
     const statusBadge = () => {
       if (!pSupp)                   return '<span class="bdg bdg-grey">Ej stödd</span>';
       if (pIOS && !pSA)             return '<span class="bdg bdg-grey">Kräver hemskärmsapp</span>';
-      if (!pKey)                    return '<span class="bdg" style="background:#fef9c3;color:#854d0e;">VAPID saknas</span>';
+      if (!pKey)                    return '<span class="bdg bdg-orange">VAPID saknas</span>';
       if (pState === 'denied')      return '<span class="bdg bdg-red">Blockerad</span>';
       if (pState === 'granted')     return '<span class="bdg bdg-green">Aktiv</span>';
       return '<span class="bdg bdg-grey">Ej aktiverad</span>';
     };
-
-    const iosNote = pIOS && !pSA ? `
-      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;">
-        ${ic('smartphone',14)} <strong>iPhone kräver hemskärmsapp</strong><br>
-        Pushnotiser fungerar bara när CRM är installerat via Safari → Dela → Lägg till på hemskärmen.<br>
-        Öppna appen därifrån och kom sedan hit för att aktivera notiser.
-      </div>` : '';
-
-    const deniedNote = pState === 'denied' ? `
-      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;">
-        ${ic('x-circle',14)} <strong>Notiser blockerade av systemet</strong><br>
-        Du har nekat notisbehörighet. Gå till ${pIOS ? 'iPhone-inställningar → VIFT CRM → Notiser' : 'webbläsarens webbplatsinställningar'} och tillåt notiser.
-      </div>` : '';
-
-    const vapidNote = !pKey ? `
-      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.8;">
-        ${ic('key',14)} <strong>VAPID-nyckel saknas — notiser kan inte aktiveras</strong><br>
-        <code>window.VIFT_CONFIG.vapidPublicKey</code> är tom i <code>config.js</code> på servern.<br><br>
-        <strong>Åtgärda i 4 steg:</strong><br>
-        1. Generera nyckelpar: <code>npx web-push generate-vapid-keys --json</code><br>
-        2. Kopiera <code>publicKey</code>-värdet (börjar med B…)<br>
-        3. Redigera <code>config.js</code> på Loopia: <code>vapidPublicKey: 'B...'</code><br>
-        4. Ladda upp filen och ladda om sidan<br><br>
-        <button class="btn bs bsm" onclick="location.reload()" style="margin-right:8px;">${ic('refresh-cw',12)} Ladda om sidan</button>
-        <span style="font-size:11px;opacity:.7;">Klicka efter att config.js uppdaterats på servern</span>
+    const note = (tone, icon, title, body) => `<div class="ar-note is-${tone}" role="note">${ic(icon,16)}<div><strong>${title}</strong><p>${body}</p></div></div>`;
+    const iosNote = pIOS && !pSA ? note('warn', 'phone', 'iPhone kräver hemskärmsapp',
+      'Pushnotiser fungerar bara när CRM är installerat via Safari → Dela → Lägg till på hemskärmen. Öppna appen därifrån och kom sedan hit för att aktivera notiser.') : '';
+    const deniedNote = pState === 'denied' ? note('danger', 'x-circle', 'Notiser blockerade av systemet',
+      `Du har nekat notisbehörighet. Gå till ${pIOS ? 'iPhone-inställningar → VIFT CRM → Notiser' : 'webbläsarens webbplatsinställningar'} och tillåt notiser.`) : '';
+    const vapidNote = !pKey ? note('warn', 'key', 'VAPID-nyckel saknas — notiser kan inte aktiveras',
+      'Servern saknar den publika nyckeln för push. Åtgärden beskrivs under Teknik & underhåll.') : '';
+    const vapidSteps = !pKey ? `<div class="adm-tech-steps">
+        <strong>Åtgärda VAPID-nyckeln i 4 steg</strong>
+        <p><code>window.VIFT_CONFIG.vapidPublicKey</code> är tom i <code>config.js</code> på servern.</p>
+        <ol>
+          <li>Generera nyckelpar: <code>npx web-push generate-vapid-keys --json</code></li>
+          <li>Kopiera <code>publicKey</code>-värdet (börjar med B…)</li>
+          <li>Redigera <code>config.js</code> på Loopia: <code>vapidPublicKey: 'B...'</code></li>
+          <li>Ladda upp filen och ladda om sidan</li>
+        </ol>
+        <button type="button" class="btn bs bsm" onclick="location.reload()">${ic('refresh-cw',14)}<span>Ladda om sidan</span></button>
       </div>` : '';
 
     const canAct = pSupp && (!pIOS || pSA) && pKey && pState !== 'denied';
@@ -9691,227 +9735,188 @@ const AdminPage = {
        och ingen server — bara Notification API + service worker. Ska alltså
        vara tillgänglig oberoende av `canAct` (som bland annat kräver VAPID). */
     const canLocalTest = 'serviceWorker' in navigator && 'Notification' in window;
+    const permTxt = pState === 'granted' ? 'Tillåten' : pState === 'denied' ? 'Blockerad' : pState === 'unsupported' ? 'Stöds inte' : 'Ej frågad';
+    const browser = (() => { const ua = navigator.userAgent;
+      return /CriOS/i.test(ua) ? 'Chrome (iOS)' : /FxiOS/i.test(ua) ? 'Firefox (iOS)' :
+             /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' : /Chrome/i.test(ua) ? 'Chrome' : 'Okänd webbläsare'; })();
+    const device = (pIOS ? 'iOS' : (navigator.platform || navigator.userAgent.split(' ').pop())) + ' · ' + browser;
+    const reasonTxt =
+      pReason === 'no-vapid-key'       ? 'VAPID-nyckel saknas i config.js — se Teknik & underhåll' :
+      pReason === 'ios-not-standalone' ? 'Öppna appen från hemskärmen, inte i Safari' :
+      pReason === 'permission-denied'  ? 'Behörighet blockerad — ändra i systeminställningarna' :
+      pReason === 'unsupported'        ? 'Push API stöds ej i den här webbläsaren/OS-versionen' :
+      'Kan ej aktivera just nu';
 
-    sections.notiser = `
-      <div class="card">
-        <div class="card-header" style="gap:10px;">
-          <div>${ic('bell',16)} Mobilnotiser</div>
-          <span id="push-status-badge">${statusBadge()}</span>
-        </div>
-        <div class="card-body" style="padding:14px 16px;">
+    sections.notiser =
+      this._head('Mobilnotiser', 'Pushnotiser när en arbetsorder tilldelas dig eller vid viktiga händelser — även när appen är stängd.', `<span id="push-status-badge">${statusBadge()}</span>`) +
+      this._card('phone', 'Den här enheten',
+        `<!-- V42 §5: fylls i asynkront av _refreshPushStatus() efter render —
+             visar reparationsläge om browsern har en lokal subscription
+             som saknas/är revokad på servern. -->
+         <div id="push-server-note"></div>
+         ${iosNote}${deniedNote}${vapidNote}
+         <dl class="adm-facts">
+           ${fact('Behörighet', permTxt)}${fact('Appläge', pSA ? 'Hemskärmsapp' : 'Webbläsare')}
+         </dl>
+         <div class="adm-actions">
+           ${canAct ? `
+             <button type="button" class="btn bp bsm" onclick="AdminPage._activatePush()">${ic('bell',14)}<span>Aktivera notiser</span></button>
+             <button type="button" class="btn bs bsm" onclick="AdminPage._testPush()">${ic('send',14)}<span>Skicka testnotis</span></button>
+             <button type="button" class="btn bs bsm" onclick="AdminPage._deactivatePush()">${ic('x-circle',14)}<span>Stäng av</span></button>
+           ` : `
+             <button type="button" class="btn bp bsm" disabled>${ic('bell',14)}<span>Aktivera notiser</span></button>
+             <span class="adm-muted">${esc(reasonTxt)}</span>
+           `}
+           ${canLocalTest ? `<button type="button" class="btn bs bsm" onclick="AdminPage._testLocalNotification()">${ic('phone',14)}<span>Testa lokal iPhone-notis</span></button>` : ''}
+         </div>
+         <div id="push-status-msg" class="adm-msg" aria-live="polite"></div>
+         <!-- V44 §7: fylls i av _renderPushTestDiagBox() efter Skicka testnotis
+              (provider/HTTP/endpoint-suffix för DEN HÄR enheten) — ihopfällt. -->
+         <details class="ar-def adm-test-det">
+           <summary>${ic('info',15)}<span>Detaljer om senaste testnotis</span>${ic('chevron-down',15)}</summary>
+           <div class="ar-def-b"><div id="push-test-result-box"><p class="ar-help">Visas efter "Skicka testnotis".</p></div></div>
+         </details>`,
+        { actions: `<button type="button" class="btn bghost bsm" onclick="AdminPage._go('teknik')">${ic('wrench',14)}<span>Teknisk information</span></button>` });
 
-          <!-- V42 §5: fylls i asynkront av _refreshPushStatus() efter render —
-               visar reparationsläge om browsern har en lokal subscription
-               som saknas/är revokad på servern. -->
-          <div id="push-server-note"></div>
+    /* ── Teknik & underhåll (sist, skild från användarinställningar) ──
+       QA-tillägg 2026-11-26: push-diagnostiken och rensningen av lokal
+       cache samlas här. Diagnostiken visar bara den här enhetens status och
+       endpoint-suffix — aldrig nycklar (utöver om den publika VAPID-nyckeln
+       är konfigurerad), JWT eller andra användares endpoints. */
+    const unsynced = this._localUnsynced();
+    const unsyncedN = unsynced.reduce((a, p) => a + p.n, 0);
+    sections.teknik =
+      this._head('Teknisk information och underhåll', 'För felsökning och support. Påverkar bara den här enheten — inte andra användare eller serverns data.') +
+      this._card('bell', 'Push-diagnostik för den här enheten',
+        `<dl class="adm-facts">
+           ${fact('Push API', pSupp ? 'Stödd' : 'Saknas')}${fact('Publik VAPID-nyckel', pKey ? 'Konfigurerad' : 'Saknas')}
+           ${fact('Behörighet', permTxt)}${fact('Enhet', device)}
+         </dl>
+         <!-- V44 §2: fylls i asynkront av _refreshPushDiagBox() — PWA/push-
+              diagnostik (permission/standalone/service worker/subscription),
+              visar ALDRIG nycklar/JWT/hela endpointen. -->
+         <div id="push-diag-box" class="adm-diag">Läser diagnostik…</div>
+         ${vapidSteps}
+         <p class="ar-help"><strong>Gammal version?</strong> Öppna webbläsarens inställningar → Rensa webbplatsdata för crm.viftfast.se → Ladda om. iOS 16.4+ krävs på iPhone.</p>`) +
+      this._card('trash', 'Rensa lokal cache på den här enheten',
+        `<p class="ar-help">Tar bort den data som appen sparat i den här webbläsaren (kopior av register, köer, lokala vyinställningar som dashboardlayout och sparade filter) och laddar om sidan. Allt hämtas sedan på nytt från servern.</p>
+         <ul class="adm-bullets">
+           <li><strong>Serverns data påverkas inte</strong> — inga kunder, arbetsordrar eller tider raderas.</li>
+           <li>Du <strong>förblir inloggad</strong> och uppladdade logotyper (som bara finns på den här enheten) behålls.</li>
+           <li>Ändringar som ännu inte nått servern försvinner. Därför kontrolleras kön först.</li>
+         </ul>
+         <div id="adm-unsynced">${unsyncedN > 0
+           ? `<div class="ar-note is-danger" role="note">${ic('alert-triangle',16)}<div><strong>${unsyncedN} ändring${unsyncedN === 1 ? '' : 'ar'} på den här enheten är inte sparade på servern</strong><p>${unsynced.map(p => esc(p.n + ' ' + p.label)).join(' · ')}. Vänta tills de skickats (kräver nätverk) innan du rensar.</p></div></div>`
+           : `<div class="ar-note is-info" role="note">${ic('check',16)}<div><strong>Inga osparade ändringar i kön</strong><p>Allt på den här enheten är bekräftat av servern.</p></div></div>`}</div>
+         <div class="adm-actions"><button type="button" class="btn bd bsm" onclick="AdminPage._clearLocalCache()">${ic('trash',14)}<span>Rensa lokal cache på den här enheten</span></button></div>`,
+        { cls: 'is-danger' });
 
-          <!-- V44 §2: fylls i asynkront av _refreshPushDiagBox() — PWA/push-
-               diagnostik (permission/standalone/service worker/subscription),
-               visar ALDRIG nycklar/JWT/hela endpointen. -->
-          <div id="push-diag-box" style="font-size:11px;color:var(--mt);background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.7;">Läser diagnostik…</div>
-
-          ${iosNote}${deniedNote}${vapidNote}
-
-          <!-- Info-rutor -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
-            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Push API</div>
-              <div style="font-size:12px;font-weight:700;">${pSupp ? '✓ Stödd' : '✗ Saknas'}</div>
-            </div>
-            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Appläge</div>
-              <div style="font-size:12px;font-weight:700;">${pSA ? '✓ Hemskärmsapp' : '○ Browser'}</div>
-            </div>
-            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Behörighet</div>
-              <div style="font-size:12px;font-weight:700;">${
-                pState === 'granted' ? '✓ Tillåten'
-                : pState === 'denied' ? '✗ Blockerad'
-                : '— Ej frågad'}</div>
-            </div>
-            <div style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-              <div style="font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;margin-bottom:3px;">VAPID-nyckel</div>
-              <div style="font-size:12px;font-weight:700;">${pKey ? '✓ Konfigurerad' : '✗ Saknas'}</div>
-            </div>
-          </div>
-
-          <!-- Åtgärder -->
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
-            ${canAct ? `
-              <button class="btn bp bsm" onclick="AdminPage._activatePush()">
-                ${ic('bell',13)} Aktivera notiser
-              </button>
-              <button class="btn bs bsm" onclick="AdminPage._testPush()">
-                ${ic('send',13)} Skicka testnotis
-              </button>
-              <button class="btn bd bsm" onclick="AdminPage._deactivatePush()">
-                ${ic('bell-off',13)} Stäng av
-              </button>
-            ` : `
-              <button class="btn bp bsm" disabled style="opacity:.4;cursor:not-allowed;">
-                ${ic('bell',13)} Aktivera notiser
-              </button>
-              <span style="font-size:11px;color:var(--mt);">${
-                pReason === 'no-vapid-key'       ? 'VAPID-nyckel saknas i config.js — se instruktion ovan' :
-                pReason === 'ios-not-standalone' ? 'Öppna appen från hemskärmen, inte i Safari' :
-                pReason === 'permission-denied'  ? 'Behörighet blockerad — ändra i systeminställningarna' :
-                pReason === 'unsupported'        ? 'Push API stöds ej i den här browsern/OS-versionen' :
-                'Kan ej aktivera just nu'
-              }</span>
-            `}
-            ${canLocalTest ? `
-              <button class="btn bs bsm" onclick="AdminPage._testLocalNotification()">
-                ${ic('smartphone',13)} Testa lokal iPhone-notis
-              </button>
-            ` : ''}
-          </div>
-
-          <div id="push-status-msg" style="font-size:12px;margin-bottom:12px;"></div>
-          <!-- V44 §7: fylls i av _renderPushTestDiagBox() efter Skicka testnotis —
-               Server (provider/HTTP/APNs-ID/endpoint-suffix) + Push-event
-               (mottaget/ej mottaget hos service workern). -->
-          <div id="push-test-result-box"></div>
-
-          <!-- Enhetsinformation -->
-          <div style="font-size:11px;color:var(--mt);">
-            ${pIOS ? 'iOS' : navigator.platform || navigator.userAgent.split(' ').pop()} · ${
-              (() => { const ua = navigator.userAgent;
-                return /CriOS/i.test(ua) ? 'Chrome (iOS)' :
-                       /FxiOS/i.test(ua) ? 'Firefox (iOS)' :
-                       /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' :
-                       /Chrome/i.test(ua) ? 'Chrome' : 'Okänd browser'; })()
-            }
-          </div>
-
-          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--br);font-size:11px;color:var(--mt);line-height:1.8;">
-            ${ic('info',11)} Pushnotiser skickas när en AO tilldelas dig eller vid viktiga händelser.
-            Notisen visas även när appen är stängd. iOS 16.4+ krävs på iPhone.<br>
-            ${ic('refresh-cw',10)} <strong>Gammal version?</strong> Öppna webbläsarens inställningar → Rensa webbplatsdata för crm.viftfast.se → Ladda om.
-          </div>
-        </div>
-      </div>`;
-
+    /* ── Fastighetskort: kategorier & fält ─────────────── */
     const propCats = (state.propertyCategories || []).sort((a,b) => (a.order||99)-(b.order||99));
-    sections.fastighetskort = `
-      <div class="admin-section-group">
-        <div class="admin-section-header">
-          <div class="admin-section-icon" style="background:#eff6ff;color:var(--blue);">${ic('building-2',18)}</div>
-          <div>
-            <div class="admin-section-title">Fastighetskortets kategorier</div>
-            <div class="admin-section-desc">Tekniska systemkategorier som visas i fastighetskort</div>
-          </div>
-        </div>
-        <div style="padding:8px 16px 4px;display:flex;justify-content:flex-end;">
-          <button class="btn bp bxs" onclick="AdminPage.openAddCategory()">${ic('plus',13)} Ny kategori</button>
-        </div>
-        ${propCats.length === 0
-          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga kategorier. Ladda om sidan för att läsa in standardkategorier.</div>`
-          : propCats.map(cat => {
-            const activeFields = (cat.fields||[]).filter(f=>f.active!==false).length;
-            const totalFields  = (cat.fields||[]).length;
-            return `
-            <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--br);">
-              <span style="color:var(--mt);flex-shrink:0;">${ic(cat.icon||'folder',16)}</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:700;color:var(--navy);">${esc(cat.label)}</div>
-                <div style="font-size:10px;color:var(--mt);">slug: ${esc(cat.slug)} · ${activeFields}/${totalFields} fält aktiva</div>
-              </div>
-              <span class="bdg ${cat.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${cat.active!==false?'Aktiv':'Inaktiv'}</span>
-              <button class="btn bxs bs" style="font-size:11px;" onclick="AdminPage.openManageFields('${cat.id}')">${ic('list',12)} Fält</button>
-              <button class="btn bxs bs" onclick="AdminPage.openEditCategory('${cat.id}')">${ic('pencil',12)}</button>
-            </div>`;
-          }).join('')}
-      </div>`;
+    sections.fastighetskort =
+      this._head('Kategorier & fält', 'Tekniska systemkategorier och deras fält i fastighetskortet.',
+        `<button type="button" class="btn bp bsm" onclick="AdminPage.openAddCategory()">${ic('plus',14)}<span>Ny kategori</span></button>`) +
+      this._card('layers', 'Kategorier',
+        propCats.length === 0
+          ? `<p class="ar-empty">Inga kategorier. Ladda om sidan för att läsa in standardkategorier.</p>`
+          : `<div class="adm-list">${propCats.map(cat => {
+              const activeFields = (cat.fields||[]).filter(f=>f.active!==false).length;
+              const totalFields  = (cat.fields||[]).length;
+              const on = cat.active !== false;
+              return `<div class="adm-row${on ? '' : ' is-off'}">
+                <span class="adm-row-ico">${ic(cat.icon||'folder',16)}</span>
+                <div class="adm-row-m">
+                  <div class="adm-row-t"><span class="adm-row-n">${esc(cat.label)}</span>${this._activeBadge(on)}</div>
+                  <div class="adm-row-s">${activeFields} av ${totalFields} fält aktiva · <span class="adm-mono">${esc(cat.slug)}</span></div>
+                </div>
+                <div class="adm-row-a">
+                  <button type="button" class="btn bs bsm" data-id="${esc(cat.id)}" onclick="AdminPage.openManageFields(this.dataset.id)">${ic('list',14)}<span>Fält</span></button>
+                  ${this._ibtn('pencil', 'Redigera ' + cat.label, 'AdminPage.openEditCategory(this.dataset.id)', cat.id, { title: 'Redigera kategori' })}
+                </div>
+              </div>`;
+            }).join('')}</div>`,
+        { flush: propCats.length > 0 });
 
     /* ── Ansvariga: titelregister (Leverans D) ──────────── */
     const propRoles = state.propertyRoles || [];
-    sections.ansvariga = `
-      <div class="admin-section-group">
-        <div class="admin-section-header">
-          <div>
-            <div class="admin-section-title">${ic('user-check',16)} Titelregister — ansvariga per fastighet</div>
-            <div class="admin-section-desc">Roller som kan kopplas till personal och kontakter per fastighet/objekt</div>
-          </div>
-          <button class="btn bp bxs" onclick="AdminPage.openAddPropRole()">${ic('plus',13)} Ny titel</button>
-        </div>
-        ${propRoles.length === 0
-          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga titlar. Lägg till t.ex. Ansvarig förvaltare, Fastighetsskötare, Felanmälningskontakt.</div>`
-          : propRoles.map(r => `
-            <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--br);">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:700;">${esc(r.name)}</div>
-                <div style="font-size:10px;color:var(--mt);">${r.scope==='property'?'Fastighet':r.scope==='object'?'Objekt':'Fastighet & objekt'}${r.isInternal?'':' · Extern'}${r.onlyOnePrimary?' · Max 1 primär':''}</div>
-              </div>
-              <span class="bdg ${r.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${r.active!==false?'Aktiv':'Inaktiv'}</span>
-              <button class="btn bxs bs" onclick="AdminPage.openEditPropRole('${r.id}')">${ic('pencil',11)}</button>
-              <button class="btn bxs ${r.active!==false?'bw':'bsu'}" onclick="AdminPage.togglePropRole('${r.id}')">${r.active!==false?ic('eye-off',11)+' Inaktivera':ic('eye',11)+' Aktivera'}</button>
-            </div>`).join('')}
-      </div>`;
+    const scopeTxt = (r) => r.scope === 'property' ? 'Fastighet' : r.scope === 'object' ? 'Objekt' : 'Fastighet & objekt';
+    sections.ansvariga =
+      this._head('Ansvariga per fastighet', 'Titlar som kan kopplas till personal och kontakter per fastighet eller objekt.',
+        `<button type="button" class="btn bp bsm" onclick="AdminPage.openAddPropRole()">${ic('plus',14)}<span>Ny titel</span></button>`) +
+      this._card('user-check', 'Titelregister',
+        propRoles.length === 0
+          ? `<p class="ar-empty">Inga titlar. Lägg till t.ex. Ansvarig förvaltare, Fastighetsskötare eller Felanmälningskontakt.</p>`
+          : `<div class="adm-list">${propRoles.map(r => {
+              const on = r.active !== false;
+              return `<div class="adm-row${on ? '' : ' is-off'}">
+                <div class="adm-row-m">
+                  <div class="adm-row-t"><span class="adm-row-n">${esc(r.name)}</span>${this._activeBadge(on)}</div>
+                  <div class="adm-row-s">${scopeTxt(r)}${r.isInternal ? '' : ' · Extern'}${r.onlyOnePrimary ? ' · Max 1 primär' : ''}</div>
+                </div>
+                <div class="adm-row-a">
+                  ${this._ibtn('pencil', 'Redigera ' + r.name, 'AdminPage.openEditPropRole(this.dataset.id)', r.id, { title: 'Redigera' })}
+                  ${this._ibtn(on ? 'eye-off' : 'eye', (on ? 'Inaktivera ' : 'Aktivera ') + r.name, 'AdminPage.togglePropRole(this.dataset.id)', r.id, { title: on ? 'Inaktivera' : 'Aktivera' })}
+                </div>
+              </div>`;
+            }).join('')}</div>`,
+        { flush: propRoles.length > 0 });
 
     /* ── Avvikelsekategorier (Fas 4B) ──────────────────── */
     const devCats = state.deviationCategories || [];
-    sections.avvikelse = `
-      <div class="admin-section-group">
-        <div class="admin-section-header">
-          <div>
-            <div class="admin-section-title">${ic('alert-triangle',16)} Avvikelsekategorier</div>
-            <div class="admin-section-desc">Kategorier för strukturerade anmärkningar från ronderingar</div>
-          </div>
-          <button class="btn bp bxs" onclick="AdminPage.openAddDevCat()">${ic('plus',13)} Ny kategori</button>
-        </div>
-        ${devCats.length === 0
-          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga avvikelsekategorier ännu. Skapa din första kategori.</div>`
-          : devCats.map((c, idx) => `
-            <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--br);">
-              <span style="color:${c.color||'var(--acc)'};flex-shrink:0;">${ic(c.icon||'alert-triangle',16)}</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:700;">${esc(c.name)}</div>
-              </div>
-              <span class="bdg ${c.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${c.active!==false?'Aktiv':'Inaktiv'}</span>
-              <button class="btn bxs bs" onclick="AdminPage.openEditDevCat('${c.id}')">${ic('pencil',11)}</button>
-              <button class="btn bxs ${c.active!==false?'bw':'bsu'}" onclick="AdminPage.toggleDevCat('${c.id}')">${c.active!==false?ic('eye-off',11)+' Inaktivera':ic('eye',11)+' Aktivera'}</button>
-            </div>`).join('')}
-      </div>`;
+    const safeColor = (c) => /^#[0-9a-f]{3,8}$/i.test(c || '') ? c : 'var(--muted)';
+    sections.avvikelse =
+      this._head('Avvikelsekategorier', 'Kategorier för strukturerade anmärkningar från ronderingar.',
+        `<button type="button" class="btn bp bsm" onclick="AdminPage.openAddDevCat()">${ic('plus',14)}<span>Ny kategori</span></button>`) +
+      this._card('alert-triangle', 'Kategorier',
+        devCats.length === 0
+          ? `<p class="ar-empty">Inga avvikelsekategorier ännu. Skapa din första kategori.</p>`
+          : `<div class="adm-list">${devCats.map(c => {
+              const on = c.active !== false;
+              return `<div class="adm-row${on ? '' : ' is-off'}">
+                <span class="adm-row-ico" style="color:${safeColor(c.color)}">${ic(c.icon||'alert-triangle',16)}</span>
+                <div class="adm-row-m"><div class="adm-row-t"><span class="adm-row-n">${esc(c.name)}</span>${this._activeBadge(on)}</div></div>
+                <div class="adm-row-a">
+                  ${this._ibtn('pencil', 'Redigera ' + c.name, 'AdminPage.openEditDevCat(this.dataset.id)', c.id, { title: 'Redigera' })}
+                  ${this._ibtn(on ? 'eye-off' : 'eye', (on ? 'Inaktivera ' : 'Aktivera ') + c.name, 'AdminPage.toggleDevCat(this.dataset.id)', c.id, { title: on ? 'Inaktivera' : 'Aktivera' })}
+                </div>
+              </div>`;
+            }).join('')}</div>`,
+        { flush: devCats.length > 0 });
 
     /* ── Punkt 80: E-post-mallar ───────────────────────────── */
     const tmpls = (state.emailTemplates || []).sort((a,b)=>(a.sortOrder||99)-(b.sortOrder||99));
-    sections.epost = `
-      <div class="admin-section-group">
-        <div class="admin-section-header">
-          <div>
-            <div class="admin-section-title">${ic('mail',16)} E-post-mallar</div>
-            <div class="admin-section-desc">Mallar för offertutskick, påminnelser och bekräftelser. Variabler: {{firstName}}, {{offerId}}, {{validUntil}}, {{viftPhone}} m.fl.</div>
-          </div>
-          <button class="btn bp bxs" onclick="AdminPage.openEditEmailTemplate(null)">${ic('plus',13)} Ny mall</button>
-        </div>
-        ${tmpls.length === 0
-          ? `<div style="padding:16px;font-size:12px;color:var(--mt);">Inga e-post-mallar. Skapa din första mall.</div>`
-          : tmpls.map(t => `
-            <div style="display:flex;align-items:start;gap:8px;padding:12px 16px;border-top:1px solid var(--br);">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;">${esc(t.name||'Namnlös mall')}</div>
-                <div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc(t.subject||'')}</div>
-                <div style="font-size:11px;color:var(--mt);margin-top:4px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc((t.body||'').slice(0,120))}</div>
-              </div>
-              <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
-                <span class="bdg ${t.active!==false?'bdg-green':'bdg-grey'}" style="font-size:9px;">${t.active!==false?'Aktiv':'Inaktiv'}</span>
-                <button class="btn bxs bs" onclick="AdminPage.openEditEmailTemplate('${esc(t.id)}')">${ic('pencil',11)}</button>
-                <button class="btn bxs ${t.active!==false?'bw':'bsu'}" onclick="AdminPage.toggleEmailTemplate('${esc(t.id)}')">${t.active!==false?ic('eye-off',11)+' Inaktivera':ic('eye',11)+' Aktivera'}</button>
-              </div>
-            </div>`).join('')}
-      </div>`;
+    const typeLbl = { send_offer: 'Skicka offert', reminder: 'Påminnelse offert', approved: 'Tack för godkännande', followup: 'Uppföljning', declined: 'Tack för återkoppling', new_ao: 'Ny arbetsorder (intern)', 'övrigt': 'Övrigt' };
+    sections.epost =
+      this._head('E-post-mallar', 'Mallar för offertutskick, påminnelser och bekräftelser.',
+        `<button type="button" class="btn bp bsm" onclick="AdminPage.openEditEmailTemplate(null)">${ic('plus',14)}<span>Ny mall</span></button>`) +
+      this._card('mail', 'Mallar',
+        tmpls.length === 0
+          ? `<p class="ar-empty">Inga e-post-mallar. Skapa din första mall.</p>`
+          : `<div class="adm-list">${tmpls.map(t => {
+              const on = t.active !== false;
+              return `<div class="adm-row${on ? '' : ' is-off'}">
+                <div class="adm-row-m">
+                  <div class="adm-row-t"><span class="adm-row-n">${esc(t.name||'Namnlös mall')}</span>${t.type && typeLbl[t.type] ? `<span class="cat-tag">${esc(typeLbl[t.type])}</span>` : ''}${this._activeBadge(on)}</div>
+                  ${t.subject ? `<div class="adm-row-s"><b>Ämne:</b> ${esc(t.subject)}</div>` : ''}
+                  <div class="adm-row-s adm-clamp">${esc((t.body||'').slice(0,160))}</div>
+                </div>
+                <div class="adm-row-a">
+                  ${this._ibtn('pencil', 'Redigera ' + (t.name || 'mall'), 'AdminPage.openEditEmailTemplate(this.dataset.id)', t.id, { title: 'Redigera' })}
+                  ${this._ibtn(on ? 'eye-off' : 'eye', (on ? 'Inaktivera ' : 'Aktivera ') + (t.name || 'mall'), 'AdminPage.toggleEmailTemplate(this.dataset.id)', t.id, { title: on ? 'Inaktivera' : 'Aktivera' })}
+                </div>
+              </div>`;
+            }).join('')}</div>`,
+        { flush: tmpls.length > 0, subHtml: 'Variabler: <code>{{firstName}}</code> <code>{{offerId}}</code> <code>{{validUntil}}</code> <code>{{viftPhone}}</code> m.fl.' });
 
-    el.innerHTML = tabBar + (sections[this._tab] || sections.foretag);
-
-    const adminTabs = el.querySelector('.admin-tabs');
-    if (adminTabs) adminTabs.scrollLeft = previousTabScroll;
+    el.innerHTML = `<div class="adm">${this._navHtml()}<div class="adm-main" id="adm-main" data-tab="${this._tab}">${sections[this._tab] || sections.foretag}</div></div>`;
 
     /* V42 §5: statusBadge() ovan speglar bara browser-permission (synkront,
        tillgängligt vid render-tid). Serverregistreringen kan bara kollas
        async (nätverksanrop) — patchas in i DOM:et separat, utan att göra
        hela render() async. Fire-and-forget; om användaren hunnit byta
        flik innan svaret kommer skippas patchningen tyst (se _refreshPushStatus). */
-    if (this._tab === 'notiser') { this._refreshPushStatus(); this._refreshPushDiagBox(); }
+    if (this._tab === 'notiser') this._refreshPushStatus();
+    if (this._tab === 'teknik') this._refreshPushDiagBox();
   },
 
   /* V44 §2: hämtar PWA/push-diagnostik (permission/standalone/service worker/
@@ -9926,62 +9931,64 @@ const AdminPage = {
     const el = document.getElementById('push-diag-box');
     if (!el) return; /* användaren bytte flik under tiden */
 
+    /* V3 2026-11-26 (F-21): samma diagnostik som förut, men bara inne i
+       den ihopfällda "Teknisk information" — som en lugn faktalista. */
+    const yn = (v) => v ? 'Ja' : 'Nej';
+    const row = (k, v) => `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`;
     el.innerHTML = `
-      <strong>PWA/push-diagnostik</strong><br>
-      Notification.permission: <b>${esc(d.permission)}</b><br>
-      Standalone (display-mode): <b>${d.standalone ? 'Ja' : 'Nej'}</b><br>
-      Service worker: registrerad ${d.serviceWorker.registered ? '✓' : '✗'} ·
-      aktiv ${d.serviceWorker.active ? '✓' : '✗'} · state: <b>${esc(d.serviceWorker.state || '—')}</b><br>
-      scriptURL: <code style="font-size:10px;">${esc(d.serviceWorker.scriptURL || '—')}</code><br>
-      registration.pushManager: <b>${d.hasPushManagerOnRegistration ? 'Ja' : 'Nej'}</b><br>
-      Browser-subscription: <b>${d.browserSubscription.exists ? 'Ja' : 'Nej'}</b>${
-        d.browserSubscription.exists
-          ? ' · …' + esc(d.browserSubscription.endpointSuffix || '') + ' (' + esc(d.browserSubscription.providerHost || '?') + ')'
-          : ''
-      }<br>
-      window.pushManager: <b>${d.windowPushManager.exists ? 'Ja' : 'Nej'}</b>${
-        d.windowPushManager.exists
-          ? ' · matchar SW-subscription: ' + (d.windowPushManager.matchesSwSubscription === null ? 'okänt' : (d.windowPushManager.matchesSwSubscription ? 'Ja' : 'Nej'))
-          : ''
-      }
-    `;
+      <div class="adm-diag-h">PWA/push-diagnostik</div>
+      <div class="kv adm-kv adm-kv-sm">
+        ${row('Notification.permission', esc(d.permission))}
+        ${row('Standalone (display-mode)', yn(d.standalone))}
+        ${row('Service worker', 'registrerad ' + yn(d.serviceWorker.registered).toLowerCase() + ' · aktiv ' + yn(d.serviceWorker.active).toLowerCase() + ' · state ' + esc(d.serviceWorker.state || '—'))}
+        ${row('scriptURL', `<code>${esc(d.serviceWorker.scriptURL || '—')}</code>`)}
+        ${row('registration.pushManager', yn(d.hasPushManagerOnRegistration))}
+        ${row('Browser-subscription', yn(d.browserSubscription.exists) + (d.browserSubscription.exists
+          ? ' · …' + esc(d.browserSubscription.endpointSuffix || '') + ' (' + esc(d.browserSubscription.providerHost || '?') + ')' : ''))}
+        ${row('window.pushManager', yn(d.windowPushManager.exists) + (d.windowPushManager.exists
+          ? ' · matchar SW-subscription: ' + (d.windowPushManager.matchesSwSubscription === null ? 'okänt' : yn(d.windowPushManager.matchesSwSubscription)) : ''))}
+      </div>`;
+  },
+
+  /* Statusrad under knapparna (ok/err/info). text escapas alltid. */
+  _pushMsg(kind, text) {
+    const msg = document.getElementById('push-status-msg');
+    if (!msg) return;
+    msg.innerHTML = text ? `<span class="adm-msg-${kind}">${esc(text)}</span>` : '';
   },
 
   /* V44 §1: kör lokalt notistest — anropar bara PushService, ingen server/push. */
   async _testLocalNotification() {
-    const msg = document.getElementById('push-status-msg');
-    if (msg) msg.textContent = 'Skapar lokal testnotis…';
+    this._pushMsg('info', 'Skapar lokal testnotis…');
     try {
       await PushService.showLocalTestNotification();
-      if (msg) msg.innerHTML = '<span style="color:var(--gr);">Lokal test skickad till Notifications API.</span>';
+      this._pushMsg('ok', 'Lokal test skickad till Notifications API.');
     } catch(e) {
-      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Lokal notis kunde inte skapas: ' + esc(e.message) + '</span>';
+      this._pushMsg('err', 'Lokal notis kunde inte skapas: ' + (e && e.message));
     }
   },
 
   /* V44 §7: rik diagnostikruta efter "Skicka testnotis" — Server (provider/
      HTTP/APNs-ID/endpoint-suffix) + Push-event (mottaget hos service workern,
-     se _pollPushDiagReceived). */
+     se _pollPushDiagReceived). Ligger under "Teknisk information". */
   _renderPushTestDiagBox(result, sentAt) {
     const el = document.getElementById('push-test-result-box');
     if (!el) return;
     const diag = result && result.diagnostics;
-    const serverHtml = diag ? `
-      <div><strong>Server:</strong></div>
-      <div>Provider: ${esc(diag.provider || '—')}</div>
-      <div>HTTP: ${diag.statusCode != null ? diag.statusCode : '—'}</div>
-      <div>APNs-ID: ${esc(diag.apnsId || '—')}</div>
-      <div>Endpoint: …${esc(diag.endpointSuffix || '—')}</div>
-      ${diag.body ? `<div>Svar: ${esc(diag.body)}</div>` : ''}
-    ` : `<div><strong>Server:</strong> ingen riktad diagnostik tillgänglig för det här svaret (t.ex. ingen aktuell enhets-endpoint kunde skickas).</div>`;
+    const row = (k, v) => `<div class="dr"><span class="dk">${k}</span><span class="dv">${v}</span></div>`;
+    const serverHtml = diag
+      ? row('Provider', esc(diag.provider || '—')) + row('HTTP', diag.statusCode != null ? esc(diag.statusCode) : '—') +
+        row('APNs-ID', esc(diag.apnsId || '—')) + row('Endpoint', '…' + esc(diag.endpointSuffix || '—')) +
+        (diag.body ? row('Svar', esc(diag.body)) : '')
+      : row('Server', 'ingen riktad diagnostik tillgänglig för det här svaret (t.ex. ingen aktuell enhets-endpoint kunde skickas)');
 
     el.innerHTML = `
-      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-top:2px;margin-bottom:12px;font-size:12px;line-height:1.8;">
+      <div class="adm-diag-h">Senaste testnotis</div>
+      <div class="kv adm-kv adm-kv-sm">
         ${serverHtml}
-        <div style="margin-top:6px;"><strong>Enhet:</strong></div>
-        <div>Permission: ${esc(PushService.permissionState())}</div>
-        <div>Standalone: ${PushService.isStandalone() ? 'Ja' : 'Nej'}</div>
-        <div style="margin-top:6px;"><strong>Push-event:</strong> <span id="push-diag-received-status">Väntar…</span></div>
+        ${row('Permission', esc(PushService.permissionState()))}
+        ${row('Standalone', PushService.isStandalone() ? 'Ja' : 'Nej')}
+        ${row('Push-event', '<span id="push-diag-received-status">Väntar…</span>')}
       </div>`;
 
     this._pollPushDiagReceived(sentAt, 0);
@@ -9994,11 +10001,11 @@ const AdminPage = {
     if (!statusEl) return; /* boxen borta — sluta polla */
     const receivedAt = (typeof PushService !== 'undefined') ? PushService._diag.lastPushReceivedAt : null;
     if (receivedAt && receivedAt >= sentAt) {
-      statusEl.textContent = '✓ Mottaget (' + new Date(receivedAt).toLocaleTimeString('sv-SE') + ')';
+      statusEl.textContent = 'Mottaget (' + new Date(receivedAt).toLocaleTimeString('sv-SE') + ')';
       return;
     }
     if (attempt >= 16) {
-      statusEl.textContent = 'Ej mottaget (efter 8s)';
+      statusEl.textContent = 'Ej mottaget (efter 8 s)';
       return;
     }
     setTimeout(() => this._pollPushDiagReceived(sentAt, attempt + 1), 500);
@@ -10018,16 +10025,16 @@ const AdminPage = {
     if (!badgeEl && !noteEl) return; /* användaren bytte flik under tiden */
 
     if (status.browserSubscribed && status.serverRegistered) {
-      if (badgeEl) badgeEl.innerHTML = '<span class="bdg bdg-green">✓ Aktiv på den här enheten</span>';
+      if (badgeEl) badgeEl.innerHTML = `<span class="bdg bdg-green">${ic('check',11)}Aktiv på den här enheten</span>`;
       if (noteEl) noteEl.innerHTML = '';
     } else if (status.browserSubscribed && !status.serverRegistered) {
-      if (badgeEl) badgeEl.innerHTML = '<span class="bdg" style="background:#fef9c3;color:#854d0e;">⚠ Behöver repareras</span>';
+      if (badgeEl) badgeEl.innerHTML = `<span class="bdg bdg-orange">${ic('alert-triangle',11)}Behöver repareras</span>`;
       if (noteEl) noteEl.innerHTML = `
-        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;line-height:1.6;">
-          ${ic('alert-triangle',13)} <strong>Prenumerationen behöver repareras</strong><br>
-          Den här enheten har en lokal notisprenumeration, men den saknas (eller har gått ut) på servern — inga notiser kommer fram just nu.
-          Klicka <strong>Aktivera notiser</strong> igen för att reparera. Ingen data rensas och du behöver inte tillåta notiser på nytt.
-        </div>`;
+        <div class="ar-note is-warn" role="note">${ic('alert-triangle',16)}<div>
+          <strong>Prenumerationen behöver repareras</strong>
+          <p>Den här enheten har en lokal notisprenumeration, men den saknas (eller har gått ut) på servern — inga notiser kommer fram just nu.
+          Klicka <strong>Aktivera notiser</strong> igen för att reparera. Ingen data rensas och du behöver inte tillåta notiser på nytt.</p>
+        </div></div>`;
     }
     /* browserSubscribed=false: den ursprungliga permission-baserade badgen
        (Ej aktiverad / Blockerad / VAPID saknas m.fl.) är redan korrekt —
@@ -10132,7 +10139,7 @@ const AdminPage = {
   _devCatForm(cat) {
     const isEdit = !!cat;
     Modal.open({
-      title: isEdit ? 'Redigera avvikelsekategori' : 'Ny avvikelsekategori',
+      title: (isEdit ? ic('pencil',14) + ' Redigera' : ic('plus',14) + ' Ny') + ' avvikelsekategori',
       body: `
         <div class="fg"><label>Namn *</label>
           <input type="text" id="dc-name" value="${cat ? esc(cat.name) : ''}" placeholder="T.ex. Säkerhet, Skada, Slitage..."></div>
@@ -10187,7 +10194,7 @@ const AdminPage = {
   _propRoleForm(role) {
     const isEdit = !!role;
     Modal.open({
-      title: isEdit ? 'Redigera titel' : 'Ny ansvarstitel',
+      title: isEdit ? ic('pencil',14) + ' Redigera titel' : ic('plus',14) + ' Ny ansvarstitel',
       body: `
         <div class="fg"><label>Namn *</label>
           <input type="text" id="pr-name" value="${role ? esc(role.name) : ''}" placeholder="T.ex. Ansvarig förvaltare...">
@@ -10577,29 +10584,28 @@ const AdminPage = {
   },
 
   async _activatePush() {
-    const msg = document.getElementById('push-status-msg');
-    if (msg) msg.textContent = 'Aktiverar…';
+    this._pushMsg('info', 'Aktiverar…');
     try {
       await PushService.subscribe();
-      if (msg) msg.innerHTML = '<span style="color:var(--gr);">✓ Notiser aktiverade på den här enheten!</span>';
+      /* Rendera först så att beskedet inte skrivs över av den nya vyn. */
       AdminPage.render();
+      this._pushMsg('ok', 'Notiser aktiverade på den här enheten.');
     } catch(e) {
-      const text = e.message === 'permission-denied'
+      const text = e && e.message === 'permission-denied'
         ? 'Du nekade notisbehörighet. Tillåt i webbläsar-/systeminställningarna och försök igen.'
-        : 'Fel: ' + e.message;
-      if (msg) msg.innerHTML = '<span style="color:var(--rd);">' + text + '</span>';
+        : 'Fel: ' + (e && e.message);
+      this._pushMsg('err', text);
     }
   },
 
   async _testPush() {
-    const msg     = document.getElementById('push-status-msg');
     const diagBox = document.getElementById('push-test-result-box');
     const ok  = await PushService.isSubscribed();
     if (!ok) {
-      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Aktivera notiser först.</span>';
+      this._pushMsg('err', 'Aktivera notiser först.');
       return;
     }
-    if (msg) msg.textContent = 'Skickar testnotis…';
+    this._pushMsg('info', 'Skickar testnotis…');
     if (diagBox) diagBox.innerHTML = '';
     /* V44 §6/§7: tidsstämpel INNAN sändningen — Push-event-pollningen räknar
        bara diagnostikmeddelanden mottagna EFTER denna tidpunkt som "detta
@@ -10613,32 +10619,32 @@ const AdminPage = {
          registrerad enhet). Ett HTTP-OK-svar är INTE detsamma som att en
          notis faktiskt skickades — måste kontrollera response-body,
          annars visas falsk grön success trots att inget nått mobilen. */
+      const more = ' Detaljer under "Detaljer om senaste testnotis".';
       if (sent > 0) {
-        if (msg) msg.innerHTML = '<span style="color:var(--gr);">✓ Testnotis skickad till ' + sent + ' enhet' + (sent === 1 ? '' : 'er') + '.</span>';
+        this._pushMsg('ok', 'Testnotis skickad till ' + sent + ' enhet' + (sent === 1 ? '' : 'er') + '.' + more);
       } else if (revoked > 0) {
-        if (msg) msg.innerHTML = '<span style="color:var(--rd);">En gammal push-prenumeration hade gått ut och har avregistrerats. Aktivera notiser på nytt.</span>';
+        this._pushMsg('err', 'En gammal push-prenumeration hade gått ut och har avregistrerats. Aktivera notiser på nytt.');
       } else {
-        const extra = result && result.message ? ' (' + esc(String(result.message)) + ')' : '';
-        if (msg) msg.innerHTML = '<span style="color:var(--rd);">Ingen registrerad mobilenhet hittades. Aktivera notiser på nytt.' + extra + '</span>';
+        const extra = result && result.message ? ' (' + String(result.message) + ')' : '';
+        this._pushMsg('err', 'Ingen registrerad mobilenhet hittades. Aktivera notiser på nytt.' + extra);
       }
       this._refreshPushStatus();
       /* V44 §7: rik diagnostikruta (Server/Enhet/Push-event) — inte bara
-         toast-meddelandet ovan. */
+         beskedet ovan. */
       this._renderPushTestDiagBox(result, sentAt);
     } catch(e) {
-      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Fel: ' + e.message + '</span>';
+      this._pushMsg('err', 'Fel: ' + (e && e.message));
     }
   },
 
   async _deactivatePush() {
-    const msg = document.getElementById('push-status-msg');
-    if (msg) msg.textContent = 'Stänger av…';
+    this._pushMsg('info', 'Stänger av…');
     try {
       await PushService.unsubscribe();
-      if (msg) msg.innerHTML = '<span style="color:var(--mt);">Notiser avstängda på den här enheten.</span>';
       AdminPage.render();
+      this._pushMsg('info', 'Notiser avstängda på den här enheten.');
     } catch(e) {
-      if (msg) msg.innerHTML = '<span style="color:var(--rd);">Fel: ' + e.message + '</span>';
+      this._pushMsg('err', 'Fel: ' + (e && e.message));
     }
   },
 
@@ -10646,19 +10652,19 @@ const AdminPage = {
     if (!Auth.require('admin_manage')) return;
     const s = state.settings || {};
     Modal.open({
-      title: 'Företagsinformation',
+      title: ic('building-2',15) + ' Företagsinformation',
       body: `
         <div class="fg"><label>Företagsnamn</label><input id="co-name" value="${esc(s.companyName||'')}"></div>
-        <div class="fg"><label>Slogan / verksamhetsbeskrivning</label><input id="co-slogan" value="${s.slogan||''}" placeholder="Fastighetsservice & Förvaltning"></div>
+        <div class="fg"><label>Slogan / verksamhetsbeskrivning</label><input id="co-slogan" value="${esc(s.slogan||'')}" placeholder="Fastighetsservice & Förvaltning"></div>
         <div class="g2">
-          <div class="fg"><label>Telefon</label><input id="co-phone" value="${s.companyPhone||''}" type="tel"></div>
-          <div class="fg"><label>E-post</label><input id="co-email" value="${s.companyEmail||''}" type="email"></div>
+          <div class="fg"><label>Telefon</label><input id="co-phone" value="${esc(s.companyPhone||'')}" type="tel"></div>
+          <div class="fg"><label>E-post</label><input id="co-email" value="${esc(s.companyEmail||'')}" type="email"></div>
         </div>
-        <div class="fg"><label>Adress</label><input id="co-addr" value="${s.companyAddress||''}"></div>
-        <div class="fg"><label>Webbsida</label><input id="co-web" value="${s.website||''}" type="url" placeholder="https://"></div>
+        <div class="fg"><label>Adress</label><input id="co-addr" value="${esc(s.companyAddress||'')}"></div>
+        <div class="fg"><label>Webbsida</label><input id="co-web" value="${esc(s.website||'')}" type="url" placeholder="https://"></div>
         <div class="g2">
           <div class="fg"><label>Org.nr</label><input id="co-orgnr" value="${esc(s.orgNr||'')}"></div>
-          <div class="fg"><label>Moms-nr</label><input id="co-vatnr" value="${s.vatNr||''}"></div>
+          <div class="fg"><label>Moms-nr</label><input id="co-vatnr" value="${esc(s.vatNr||'')}"></div>
         </div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => {
@@ -10728,7 +10734,10 @@ const AdminPage = {
      varje input-händelse (en skrivning per steg när man drar i väljaren —
      23 skrivningar på 15 s observerade i STAGING). Nu: förhandsvisning
      medan man drar (bara CSS-variabler, ingen skrivning), EN sparning när
-     valet är klart (change), och ingen sparning om värdet är oförändrat. */
+     valet är klart (change), och ingen sparning om värdet är oförändrat.
+     V3 2026-11-26: samma kedja för förvalda färger och HEX-fältet —
+     förhandsvisning utan skrivning, exakt en sparning per valt värde
+     (via BrandingService.update, som slår ihop med övriga inställningar). */
   _previewColor(value, field) {
     if (!/^#[0-9a-fA-F]{3,6}$/.test(value || '')) return;
     const v = field === 'primaryColor' ? 'primary' : 'secondary';
@@ -10739,8 +10748,70 @@ const AdminPage = {
   },
 
   _saveColor(value, field) {
-    if ((state.settings || {})[field] === value) return;
-    BrandingService.update({ [field]: value });
+    const v = this._normHex(value);
+    if (!v) return;
+    this._syncColorUI(field, v);
+    if ((state.settings || {})[field] === v) return;
+    BrandingService.update({ [field]: v });
+  },
+
+  /* Färgrutan (input): förhandsvisa + synka HEX-fält, förval och kontrasttext. */
+  _onColorInput(value, field) {
+    this._previewColor(value, field);
+    this._syncColorUI(field, value);
+  },
+
+  /* HEX-fältet medan man skriver: förhandsvisa bara giltiga koder, skriv inget. */
+  _onHexInput(el, field) {
+    const v = this._normHex(el.value);
+    el.classList.remove('is-bad');
+    if (!v) return;
+    this._previewColor(v, field);
+    this._syncColorUI(field, v);
+  },
+
+  /* HEX-fältet klart (change/Enter): ogiltig kod → felmarkering och tillbaka
+     till sparad färg, ingen skrivning; giltig → en sparning. */
+  _onHexCommit(el, field) {
+    const v = this._normHex(el.value);
+    if (!v) {
+      el.classList.add('is-bad');
+      el.setAttribute('aria-invalid', 'true');
+      try { BrandingService.applyColors(); } catch (e) {}
+      const saved = this._normHex((state.settings || {})[field]) || this._PRESETS[field][0].hex;
+      this._syncColorUI(field, saved, { keepHex: true });
+      const msg = document.getElementById('adm-color-msg-' + field);
+      if (msg) msg.innerHTML = `<span class="adm-c-warn">${ic('alert-triangle', 14)}<span>Ogiltig färgkod — ange sex hexadecimala tecken, t.ex. #0f3763.</span></span>`;
+      return;
+    }
+    el.classList.remove('is-bad');
+    el.removeAttribute('aria-invalid');
+    el.value = v;
+    this._previewColor(v, field);
+    this._saveColor(v, field);
+  },
+
+  /* Förvald färg (eller Standard): förhandsvisa och spara en gång. */
+  _applyPreset(field, hex) {
+    const v = this._normHex(hex);
+    if (!v) return;
+    this._previewColor(v, field);
+    this._saveColor(v, field);
+  },
+
+  _syncColorUI(field, hex, o) {
+    const root = document.getElementById('adm-color-' + field);
+    const v = this._normHex(hex);
+    if (!root || !v) return;
+    const pick = root.querySelector('.adm-color-in');
+    if (pick && pick.value !== v) pick.value = v;
+    const hexEl = root.querySelector('.adm-hex');
+    if (hexEl && !(o && o.keepHex) && document.activeElement !== hexEl) { hexEl.value = v; hexEl.classList.remove('is-bad'); }
+    root.querySelectorAll('.adm-preset').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.hex === v)));
+    const reset = root.querySelector('.adm-color-reset');
+    if (reset) reset.hidden = v === this._PRESETS[field][0].hex;
+    const msg = document.getElementById('adm-color-msg-' + field);
+    if (msg) msg.innerHTML = this._contrastMsg(v, field);
   },
 
   showRoleStaff(roleId) {
@@ -10748,12 +10819,12 @@ const AdminPage = {
     const staffList = (state.staff||[]).filter(s => s.role === roleId);
     if (!staffList.length) { showToast('Ingen personal med denna roll'); return; }
     Modal.open({
-      title: `Personal med roll: ${role ? role.label : roleId}`,
+      title: `${ic('users',15)} Personal med roll: ${esc(role ? role.label : roleId)}`,
       body: staffList.map(s => `
-        <div class="crow">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${esc(s.firstName)} ${esc(s.lastName)}</div>
-            <div style="font-size:11px;color:var(--mt);">${esc(s.title||'')} ${s.email?'· '+esc(s.email):''}</div>
+        <div class="crow adm-crow">
+          <div class="adm-row-m">
+            <div class="adm-row-n">${esc(s.firstName)} ${esc(s.lastName)}</div>
+            <div class="adm-row-s">${esc(s.title||'')} ${s.email?'· '+esc(s.email):''}</div>
           </div>
           <span class="bdg ${s.active?'bdg-green':'bdg-grey'}">${s.active?'Aktiv':'Inaktiv'}</span>
         </div>`).join(''),
@@ -10776,16 +10847,22 @@ const AdminPage = {
     confirmPersist('roles', r.id, { ok: r.active ? 'Roll aktiverad' : 'Roll inaktiverad', fail: 'Rolländringen kunde inte sparas — behörigheterna är oförändrade', onChange: () => AdminPage.render() });
   },
 
+  /* Listraden skickar titelns index (aldrig namnet inklistrat i onclick). */
+  _showTitleStaffIdx(idx) {
+    const t = (state.titles || [])[idx];
+    if (t && t.name) this.showTitleStaff(t.name);
+  },
+
   showTitleStaff(title) {
     const staffWithTitle = (state.staff||[]).filter(s => s.title === title);
     if (!staffWithTitle.length) { showToast('Ingen personal med denna titel'); return; }
     Modal.open({
-      title: `Personal med titel: ${title}`,
+      title: `${ic('users',15)} Personal med titel: ${esc(title)}`,
       body: staffWithTitle.map(s => `
-        <div class="crow" onclick="Modal.close();Router.showPage('pg-staff')">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;">${esc(s.firstName)} ${esc(s.lastName)}</div>
-            <div style="font-size:11px;color:var(--mt);">${s.email||''}</div>
+        <div class="crow adm-crow" onclick="Modal.close();Router.showPage('pg-staff')">
+          <div class="adm-row-m">
+            <div class="adm-row-n">${esc(s.firstName)} ${esc(s.lastName)}</div>
+            <div class="adm-row-s">${esc(s.email||'')}</div>
           </div>
           <span class="bdg ${s.active?'bdg-green':'bdg-grey'}">${s.active?'Aktiv':'Inaktiv'}</span>
         </div>`).join(''),
@@ -10796,7 +10873,7 @@ const AdminPage = {
   openAddTitle() {
     if (!Auth.require('admin_manage')) return;
     Modal.open({
-      title: 'Lägg till titel',
+      title: ic('plus',14) + ' Lägg till titel',
       body: `
         <div class="fg"><label>Titel / yrkesroll <span style="color:var(--rd)">*</span></label>
           <input id="adm-title" placeholder="T.ex. Låssmed, VVS-tekniker…"
@@ -10828,7 +10905,7 @@ const AdminPage = {
     const t = (state.titles||[])[idx];
     if (!t) return;
     Modal.open({
-      title: 'Redigera titel',
+      title: ic('pencil',14) + ' Redigera titel',
       body: `
         <div class="fg"><label>Titel / yrkesroll <span style="color:var(--rd)">*</span></label>
           <input id="adm-edit-title" value="${esc(t.name)}"
@@ -10886,7 +10963,7 @@ const AdminPage = {
   openAddRole() {
     if (!Auth.require('admin_manage')) return;
     Modal.open({
-      title: 'Ny anpassad roll',
+      title: ic('shield-check',15) + ' Ny anpassad roll',
       body: `
         <div class="fg"><label>Roll-ID (unik nyckel) <span style="color:var(--rd)">*</span></label>
           <input id="role-id" placeholder="t.ex. konsult, vikarie, tekniker2…" autocomplete="off"
@@ -11008,7 +11085,7 @@ const AdminPage = {
     }).join('');
 
     Modal.open({
-      title: `Redigera roll: ${esc(r.label)}`,
+      title: `${ic('shield-check',15)} Redigera roll: ${esc(r.label)}`,
       wide: true,
       body: `
         <div class="fg"><label>Visningsnamn</label>
