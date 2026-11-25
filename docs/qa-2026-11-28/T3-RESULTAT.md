@@ -430,7 +430,378 @@ T3-0 installerar **ingenting** i STAGING eller LIVE.
 
 ## T3-B – AO-kärna och arbetspool
 
-*(Fylls i av T3-B.)*
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den
+lokala STAGING-replikan). Ingenting är installerat eller verifierat i STAGING. LIVE är inte kontaktad.
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Poolregel (SÄK-3, SÄK-16, AP-A, K-03, Q3) | Utlämning = egen tilldelad AO (inte arkiverad/borttagen) eller **öppen pool** (status `pool`, `poolOpen` ≠ false, ingen personal, inte arkiverad/borttagen) med `ao_pool_take`. Öppen pool lämnas ut i begränsad projektion. Samma regel i `work-orders-list`, `canViewWorkOrder`, SQL-funktionerna och fake-backend. Öppen pool ger ingen skrivrätt. Ingen breddning (L6-bevis per användare och AO). |
+| "Ta jobbet" (SÄK-4, AP-F) | Ny RPC `work_order_pool_take` under radlås. Exakt en vinner (N=2 ×20 via EF, N=10 ×5 via egna anslutningar); förloraren får 409 `already_assigned` utan mutation. Servern sätter personal, `poolOpen:false`, status, aktör, tid och logg. |
+| Start och klar (SÄK-5, D-03) | Egen tilldelad och giltig AO, kontrollerat i `work_order_patch` under lås. 403 `not_assigned`, 409 `ao_locked`, 409 `invalid_source_status`. Servern sätter `completedBy`/`completedAt` (`ignoredFields`). |
+| F21 (SÄK-15, D-07, punkt 269) | `patch_ao` avvisar faktureringsfält för alla roller (403 `invoice_path_required`). Ny väg `invoice-write` `aoBilling` → `work_order_billing_set`. Flödet kö → underlag → status → borttaget utkast/makulering verifierat. |
+| Tid och stämpling (SÄK-11, AP-B, D-11 delvis) | Tilldelning under lås i `time_entry_create`, `time_entry_patch` och `store_write_stamp_status`. `hourRate` sätts av servern ur prisgruppen. Legitim utstämpling bevaras. Sommartid, midnatt, nätavbrott och samtidighet prövade. |
+| Material, checklista, logg, bilder | Tilldelning (eller arbetsledare) och skydd för låsta AO. Fältet kan bara ändra egna materialrader (`not_own_row`); full radvis D-19 är T4-B. |
+| Idempotens (SÄK-12, F17) | Nyckeln binds till aktör, operation och innehåll (409 `idempotency_key_conflict`, ingen mutation; samma nyckel + innehåll återspelas). |
+| AO-nummer (punkt 245) | Max+1 under radlåset, kontroll mot befintliga nummer, ingen avkortning över AO-999, ingen unik index, ingen omnumrering. 10 samtidiga skapanden ger unika nummer. |
+| Datum (Q1, punkt 250) | `dueDate` för nya serviceintervall-AO (klient och `service-monitor`) och återkommande. Med personal skrivs förfallodagen inte till `scheduledDate`. Befintliga data orörda. |
+| Klient | Personaldialogen (AP-FEL-1, AP-G), "Ta bort datum", "Släpp till öppen pool", "Ta jobbet" via RPC med 409-hantering, felkoder med begripliga texter, instämplingslista, `?v=` höjt. |
+| Paritet (SÄK-17) | Fake-backend följer T3-B-reglerna. 54 scenarier: 52 lika, 2 kända (KEY-01, AUTH-02, utanför T3-B). AO-04, AO-05, AO-13, AO-19 och CHK-LEGACY borttagna ur listan över kända avvikelser. |
+| STAGING-verktyg | `authz-read.js`, `c5-read.js`, `authz-mutation.js` skärpta (felkod, `reason`, oförändrad test-AO). **Inte körda mot STAGING.** |
+| Rollback | `supabase/rollback/T3-B/rollback_t3b.sql`: installera → rollback (= STAGING-facit, ingen data ändrad) → installera, lokalt prövat. |
+
+### 1. Serverändringar (vift-v2, `supabase/`)
+
+**Nya migrationer** (klass "ny" i MIG-1, version efter 20261124211128, i `MIGRATIONSORDNING.txt`). Varje fil
+har en STOP-kontroll mot md5 av den STAGING-version den ersätter (och repokedjans version med andra
+kommentarer), och en andra körning stoppas.
+
+| Fil | Innehåll |
+|---|---|
+| `20261128000001_t3b_ao_regler_och_pool.sql` | Regelfunktionerna `_vift_*` (bara `service_role`). `work_order_patch` med **ny signatur** (`p_caller_staff_id`, `p_caller_perms`); den gamla 4-argumentsversionen tas bort. Ny `work_order_pool_take`, ny `work_order_billing_set`. `work_order_checklist_set_state`, `work_order_log_append/remove` (samma signatur): poolgrenen borttagen, `forbidden:not_assigned`, `ao_locked` för icke-ledare. |
+| `20261128000002_t3b_tid_och_stampling.sql` | `time_entry_create` med **ny signatur** (`p_caller_staff_id`, `p_caller_auth_id`, `p_caller_perms`); den gamla tas bort. `time_entry_patch` och `store_write_stamp_status` (samma signatur) med tilldelningskontroll. `_vift_auth_staff`. |
+| `20261128000003_t3b_ao_nummer.sql` | `work_order_create` (samma signatur): AO-nummer enligt punkt 245; status `pool` + personal ger `poolOpen:false`. |
+
+**Övergångsregel** (testplanen §4.6, `_vift_ao_eff_perms` i SQL, `effectiveAoPerms` i `_shared/vift-auth.ts`,
+`WorkOrderService.aoCan` i klienten, `effAoPerms` i fake-backend och STAGING-verktygen): en roll som inte har
+någon av `ao_start_own`, `ao_complete_own`, `ao_pool_take` och som har `ao_complete` men varken `ao_view_all`
+eller `ao_edit` behandlas som om den hade alla tre. Så fort en roll får någon av de nya behörigheterna gäller
+rollens egen lista exakt. Regeln smalnar av dagens rätt (bara egna AO och bara öppen pool) och tas bort när
+standardrollerna har de nya behörigheterna (T3-E). `ao_edit` får också ta jobb (arbetsledaren kan redan tilldela).
+
+**Regler i `work_order_patch`** (allt på den radlåsta raden, även idempotensen):
+- `ao_edit`/`all`: fri patch utom faktureringsfält. Får en pool-AO personal sätts `poolOpen:false`.
+- Fält, bara materialpatch: `ao_material`, tilldelad, olåst AO, bara egna rader (`addedBy` sätts av servern).
+- Fält, `{status:'pågående'}`: `ao_start_own`, tilldelad, olåst, källstatus `nytt`/`planerad`/`pool`.
+- Fält, `{status:'klar'}` (+ `completedAt`/`completedBy` som ignoreras): `ao_complete_own` på egen tilldelad AO,
+  eller `ao_complete` + `ao_view_all`. Källstatus `nytt`/`planerad`/`pool`/`pågående`.
+- Fält, v3.4-formen av "Ta jobbet" (`{staff, status:'planerad', log}`): samma regel som `work_order_pool_take`.
+- Allt annat från fältet: 403 `forbidden`/`field_not_allowed`.
+
+**Felkoder** (BEHORIGHETSMATRIS §4): `forbidden`/`not_assigned`, `forbidden`/`pool_not_open`,
+`forbidden`/`invoice_path_required`, `forbidden`/`not_own_row`, `forbidden`/`field_not_allowed` (ny),
+`forbidden`/`invoice_not_linked` (ny), 409 `already_assigned`, `ao_locked`, `invalid_source_status`,
+`idempotency_key_conflict`. Avslag utan specifik orsak (behörighet saknas) har ingen `reason`.
+
+**Edge Functions:** `work-orders-list` (poolregel, projektion, inga arkiverade/borttagna för icke-ledare),
+`ao-time-write` (regler flyttade till RPC:n; ny åtgärd `take_from_pool`; `create_time` skickar identitet och
+behörigheter; `patch_time` ignorerar fältets `hourRate`), `store-key-write` (`stamp-status.ts`: felkoder),
+`work-order-checklist-resolve`, `work-order-log-write`, `work-order-image-upload/-delete` (skrivrätt =
+tilldelad eller arbetsledare, `ao_locked`), `work-order-image-url` (bilder kräver tilldelning, K-03),
+`invoice-write` (`aoBilling`), `service-monitor` (`dueDate`), `_shared/vift-auth.ts` (gemensamma regler,
+`aoRuleError`).
+
+**Stämpling när AO:n ändras under ett pågående pass** (punkt 261, T3-B-uppdraget): ny instämpling kräver
+tilldelning. Utstämpling av ett pass som **startades legitimt** tillåts alltid: `time_entry_create` godtar
+posten om anroparens egen `stamp_status` är aktiv med samma `ao_id` och samma `ts` som postens `startTs`.
+Då kan AO:n ha omfördelats, klarmarkerats eller fakturerats under passet utan att det utförda arbetet
+försvinner. Ingen annan väg ger tid utan tilldelning. Pass som startades före installationen räknas som
+legitima (de kontrollerades inte vid instämplingen). En utstämpling efter fakturering blir en ny okrävd
+källa i fakturakön (fakturamotorns befintliga dubbelriktade regel).
+
+**Fakturaflödet:** `invoice-write` `aoBilling` kräver `invoice_create`.
+- `invoiced`: underlaget ska finnas, inte vara makulerat och hänvisa till AO:n.
+- `restore`: backar bara motorsatta markeringar, till serverns sparade `billingPreviousStatus`.
+- Låsordning som `invoice_set_status`: fakturor före AO.
+- Klientens `BillingQueueService` använder vägen.
+
+### 2. Klientändringar (VIFT-CRM)
+
+- `WorkOrderService`:
+  - `updateStaff` ändrar bara personal, ansvarig och logg och returnerar faktiska tillägg och borttagningar;
+  - nya `releaseToPool`, `removeSchedule`, `aoCan`, `isOpenPool` och `serverErrorText`;
+  - `takeFromPool` är asynkron via `take_from_pool`.
+- `WorkOrderDetailPage`:
+  - personaldialogen utan poolruta;
+  - notiser efter serverbekräftelse;
+  - menyåtgärderna "Ta bort datum" och "Släpp till öppen pool" (bekräftelse som namnger personalen);
+  - Klarmarkera och Starta enligt `ao_complete_own`/`ao_start_own`.
+- `MyJobsPage`: bara öppen pool med `ao_pool_take`, Starta enligt `ao_start_own`, "Ta jobbet" väntar på servern och hanterar 409.
+- `TimePage`: instämplingslistan visar egna tilldelade AO; med `ao_edit` alla aktiva.
+- `BillingQueueService`: `aoBilling` i stället för `patch_ao`.
+- `ServiceIntervalService` och `RecurringOrderService`: `dueDate`.
+- `TimeService`: `idempotency_key_conflict` vid utstämpling = redan registrerad.
+- `AOTimeSyncService` (minimalt, för T3-A:s sammanslagning):
+  - `reason` skickas vidare;
+  - fyra nya slutgiltiga felkoder;
+  - fält utan bekräftat loggstöd väljer den atomiska loggvägen.
+- `PageShells` (rolleditorns katalog) och `seedData` (demorollen `personal`): de tre nya behörigheterna.
+- `index.html`: `?v=` höjt för alla 11 ändrade filer.
+- `tools/build-staging-package.sh`: konflikter i `index.html` som bara gäller `?v=` löses med HEAD.
+
+### 3. Fake-backend och STAGING-verktyg
+
+- `tests/e2e/fake-backend.js` speglar T3-B-reglerna:
+  - poolregel, projektion och `accessCode` (C-5);
+  - `patch_ao` som `work_order_patch`;
+  - `take_from_pool`;
+  - tid, stämpling, checklista, logg och bilder;
+  - serverpris;
+  - idempotens bunden till aktör och innehåll;
+  - `aoBilling`;
+  - ingen autostart i `checklistLegacy`;
+  - `logOps` som standard (work-order-log-write är installerad).
+- vift-v2:s kopia är synkad.
+- STAGING-verktygen i `vift-v2/tests/staging`:
+  - `lib.matchSvar` (status, error, reason; 5xx godkänns aldrig) och `lib.effAoPerms`;
+  - `authz-read` R1/R1b: bara egna och öppen pool, i projektion;
+  - `c5-read`: projektionen;
+  - `authz-mutation`: G9 skärpt (403, admin med `invoice_path_required`), samt tagning, start, klar, tid,
+    stämpling, logg och checklista på en märkt test-AO i öppen pool. Felkod, `reason` och oförändrad
+    test-AO kontrolleras. Förväntan beräknas från kontots faktiska roll.
+- Verktygen är provade lokalt mot fake-backend (`staging_tools.test.js`), **inte mot STAGING**.
+- VIFT-CRM:s äldre kopior i `tests/staging/` är inte skärpta; vift-v2:s gäller.
+
+### 4. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 26/26 testfiler gröna, 790 godkända kontroller, 0 fel.**
+Webbläsartesterna i `browser/` hoppades över med SKIP_BROWSER=1, som i T3-0, och räknas inte som godkända.
+`staging_e2e_real` kör Playwright och ingår i de 26 filerna.
+
+Nya:
+- `t3b_ao_karna` **171/0**: SÄK-3/-4/-5/-11/-12/-15/-16, poolprojektion, L6 ingen breddning, tagning,
+  start/klar, faktureringsväg och fakturaflöde, tid/stämpling (sommartid, midnatt, nätavbrott),
+  checklista/logg/material/bilder, AO-nummer, offert → AO, import, återkommande, `service-monitor`.
+  Samtidighet med egna anslutningar:
+  - tagning N=2 ×20 och N=10 ×5;
+  - borttagning mot klarmarkering ×20;
+  - instämpling ×10 och utstämpling ×10;
+  - AO-nummer ×10.
+- `t3b_rollback` **12/0**: installera → rollback (= STAGING, ingen data ändrad) → installera; STOP vid omkörning.
+
+Ändrade och gröna:
+- `baslinje_sakerhet` 38/0 (historisk källa fb71f26, 34 brister bevisade);
+- `replica_build` 30/0 (STAGING-baslinjen + kontroll av T3-B-deltat: 3 nya migrationer, 26 registrerade objekt, inga nya funktioner för anon/authenticated);
+- `ef_smoke` 39/0;
+- `rekonstruerade_rpc_sql` 40/0 (STAGING-kedjan);
+- `migrationsmappning` 18/0 (48 filer i migrations/, 3 "ny");
+- `migrationskedja` 2/0 (119 identiska, 32 förklarade = 6 tidigare kända + 26 registrerade T3-B-objekt, 0 oförklarade);
+- `staging_tools` 44/0;
+- `staging_e2e_real` 26/0 (T3-B-klientpaketet).
+
+Övriga oförändrat gröna, bland dem:
+- de fyra PostgreSQL-testerna (checklist_progress_sql 32/0, server_rpcs_sql 17/0, offer_attachment_upload 43/0, staging_backup_export 12/0);
+- `ao_time_write_paths` 34/0;
+- `cloud_stamping` 28/0;
+- `service_intervals` 38/0.
+
+**VIFT-CRM `tests/run-all.sh`: 21/21 testfiler gröna** (20 Node-testfiler med 495 godkända kontroller och 0 fel, plus
+`browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade.
+- `sim_parity` 55/0: 54 scenarier, 52 lika och 2 kända avvikelser (KEY-01, AUTH-02);
+- `staging_e2e_real` 26/0 (T3-B-klientpaketet);
+- `staging_tools` 40/0;
+- `v3_ui_logic` 35/0.
+
+**E2E (Playwright mot den simulerade servern):**
+- Riktad körning för AO, AOD, AOL, TIME, TE, CHK, FALT, BILL, FLOW, PERM, LOG, IMG, SVC, IMP, ECO, INV, SI, RON och T3B:
+  - första körningen: 80 godkända, 17 fel, 1 blockerad (PERM-03, sedan tidigare), 1 känt fel (AO-07, G5);
+  - felen hade tre orsaker:
+    - standardvärlden saknade work-order-log-write, så fältets loggposter gick via `patch_ao`, som servern nekar;
+    - D-03 ger Klarmarkera med `ao_complete_own`, vilket de äldre förväntningarna i AOD-01/07/08/09 inte räknade med;
+    - en väntan på modalen i T3B-02;
+  - efter rättning: 39/0 och AOD-09 1/0;
+  - AO-07 (G5) reproduceras inte längre med den atomiska loggvägen (AO-07B visar samma sak).
+- **Hela e2e-sviten en gång, efter rättningarna: 222 godkända, 0 fel, 1 blockerad (PERM-03, sedan tidigare: per-nyckel-regeln för generiska nycklar kan inte modelleras), 0 kända fel, av 223 (1 611 s).**
+
+Inga tester har försvagats.
+- Pooltesterna (14, 04, 33) är skärpta: begränsad ser ingen pool, pool med personal, arkiverad och borttagen
+  pool syns inte, projektionen kontrolleras och tagningen sker via `take_from_pool`.
+- 06 kräver nu att AO:n faktiskt markeras fakturerad. Tidigare noterades bara ett avslag.
+- 27 kräver Klarmarkera med `ao_complete_own` och ingen Klarmarkera utan behörigheten.
+
+### 5. Baslinjefynd, vända
+
+`baslinje_sakerhet.test.js` körs nu som **historisk referens** mot källan i commit `fb71f26` (före T3-B,
+STAGING-ekvivalent), utläst med `git archive`. Där bevisas fortfarande alla 34 brister (38/0). De rättade
+raderna prövas i `t3b_ao_karna.test.js`:
+
+| Baslinje (T3-0) | Godkänt säkerhetstest (T3-B) |
+|---|---|
+| SÄK-3: P2/P3 lämnas ut; P1 med kontakter/logg/priser; begränsad ser pool | SEC-POOL-01/02/03/04, L6 ingen breddning, L7 bild-URL 403 `not_assigned` |
+| SÄK-16: P5/P6 lämnas ut | SEC-POOL-02 (även egna arkiverade/borttagna döljs) |
+| SÄK-3: checklista på P2, logg på P1 muterar | W1–W5/SEC-POOL-11/12: 403 `not_assigned`, KS oförändrad, ingen fil |
+| SÄK-4: tagning av P2 godtas; samtidig tagning båda 200; RPC utan regel | SEC-POOL-06 409 `already_assigned`; SEC-POOL-09 ×20 + N=10 ×5 exakt en; RPC nekar `field_not_allowed` |
+| SÄK-5: klar på fakturerad/annans/avbruten AO, egen completedBy | SEC-AO-05/06/07 (`not_assigned`/`ao_locked`), SEC-AO-08 `ignoredFields`, SEC-AO-14 ×20 |
+| SÄK-15: `ao_edit` sätter fakturerad + invoiceId | SEC-AO-15 403 `invoice_path_required` (chef, admin, backa, rensa, billingPreviousStatus) |
+| SÄK-12: annan patch med samma nyckel godtas | SEC-AO-20 409 `idempotency_key_conflict` (annat innehåll och annan aktör), RPC direkt |
+| SÄK-11: tid på ej tilldelad/fakturerad AO; klientens hourRate; stämpling utan kontroll | SEC-TID-02/03 `not_assigned`, `ao_locked`, `not_found`; SEC-B2-03 serverpris + `ignoredFields` |
+
+Kvar som baslinjefynd: SÄK-2 (T3-D), SÄK-8 och SÄK-13 (T3-C) och GRANTS utan R-E.
+
+### 6. SÄK och D efter T3-B
+
+- **Lokalt åtgärdade:**
+  - SÄK-3, -4, -5, -11 (tilldelningen samt serverpriset), -12, -15, -16;
+  - SÄK-17 för T3-B:s resurser;
+  - D-03, D-07, AP-B, AP-F;
+  - AP-A (säkerhetsdelen), AP-G (personaldialogen);
+  - K-03, Q3;
+  - punkt 245;
+  - punkt 269 (samordnat med D-07).
+- **Delvis:**
+  - punkt 250: `dueDate` och atomisk AO-skapelse; kvar: atomisk skrivning av `vift_properties` och cron-beslut;
+  - punkt 261: servern; kvar: klienttest i webbläsare över omställningen;
+  - punkt 270: funktionell verifiering av kö → underlag → status; åtgärdsorsakerna oförändrade;
+  - D-11: serverpris; kvar till T4-B: tillåtna prisgrupper och belopp dolda för fältet;
+  - D-19: egna rader; kvar till T4-B: radvisa RPC:er;
+  - Q1: `dueDate` för nya AO; befintliga orörda.
+- **Öppna:** SÄK-1, -2, -6, -7, -8, -9, -10, -13, -14.
+- **AO-etappen:**
+  - notis till arbetsledare när ett jobb tas (AP-D);
+  - kategorier och räknare i alla vyer (AP-C);
+  - kalenderrutor;
+  - `ao_plan_own` (AP-E);
+  - `nextStep` per kategori.
+
+### 7. Installationsplan och rollback (STAGING-paketet T3-B, beskrivs, körs inte)
+
+**Förutsättningar:**
+- separat GO;
+- T3-A installerad först eller samtidigt (testplanen §6), och T3-A:s och T3-B:s ändringar i
+  `AOTimeSyncService.js`, `PageShells.js`, `InvoiceService.js` och `index.html` sammanslagna;
+- backup enligt testplanen §8: backupschema för `store`, `op_idempotency` och `function_definitions` med
+  md5, extern kopia verifierad (`tools/staging-backup-export.js --provata-lokalt`), EF-backup av
+  `ao-time-write`, `work-orders-list`, `store-key-write`, `work-order-checklist-resolve`,
+  `work-order-log-write`, `work-order-image-*`, `invoice-write` och `service-monitor`.
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | `schema_migrations` lika med `migrationsmappning.json` (41 rader). md5 av `pg_get_functiondef` för de åtta funktioner som ersätts ska matcha facit (samma värden som i STOP-kontrollerna). |
+| 2. Databas | `20261128000001`, `…02`, `…03`, en i taget, i den ordningen, var och en i egen transaktion. Ingen `db push`, ingen `migration repair` (MIG-1). |
+| 3. Edge Functions, direkt efter steg 2 | `ao-time-write` och `store-key-write` först (de anropar de nya signaturerna), sedan `work-orders-list`, `work-order-checklist-resolve`, `work-order-log-write`, `work-order-image-upload`, `-delete`, `-url`, `invoice-write`, `service-monitor`. `_shared/vift-auth.ts` följer med varje bunt. |
+| 4. Klient | Paketet byggs med `tools/build-staging-package.sh` från HEAD (med T3-A sammanslagen) och publiceras på STAGING. `?v=` är höjt för alla ändrade filer. Service Worker är network-first med cache-busting, så nya filer hämtas vid nästa laddning. |
+| 5. Storage | Ingen ändring (bucket `workorder-images` oförändrad; bara EF-kontrollen före uppladdning ändras). |
+| 6. Efterkontroll (läsande, GO) | md5 av de nya funktionerna = `tests/local/t3-andringar.json`; `authz-read.js` och `c5-read.js` (nivå 1); därefter `authz-mutation.js` (nivå 2, märkta test-AO, inga massprov) med separat GO. |
+
+**Fönstret mellan steg 2 och 3:**
+- `ao-time-write` (gammal) anropar `work_order_patch`/`time_entry_create` med de gamla signaturerna. De
+  finns inte längre, så svaret blir 500 `write_failed`.
+- Klientens utkorg behandlar 500 som tillfälligt och sänder om, så ingen data går förlorad.
+- Stämpling, checklista och logg fungerar under fönstret, med de nya kontrollerna i SQL.
+- Fönstret ska vara minuter: lugn tid, steg 3 direkt efter steg 2.
+
+**v3.4-klient (Service Worker-cache) mot ny server, tills sidan laddats om:**
+
+| Åtgärd i v3.4 | Ny server svarar | Följd |
+|---|---|---|
+| AO-lista för fält | Färre AO; öppen pool projicerad | Poolkort utan kund och kontakt; ingen data ändras |
+| "Ta jobbet" (`patch_ao` i v3.4-form) | 200 (atomiskt) eller 409 `already_assigned` | v3.4 känner inte koden: posten ligger kvar i utkorgen som osäker tills omladdning; ingen dubbeltagning |
+| Personaldialogen med poolrutan (arbetsledare) | 200 (`ao_edit`) | AP-FEL-1 kvarstår i v3.4 tills omladdning; inget nytt fel |
+| Faktureringsstatus via `patch_ao` | 403 `forbidden`/`invoice_path_required` | v3.4 backar lokalt och visar "faktureringsstatusen kunde inte sparas"; underlaget påverkas inte; ny klient sätter statusen vid nästa avstämning |
+| Klar/Start på egen AO | 200 | Oförändrat |
+| Klar/tid/stämpling på annans eller låst AO | 403 `forbidden` (+ `reason`) / 409 `ao_locked` | v3.4 visar generiskt fel; `ao_locked` är tillfälligt i v3.4 (ligger kvar i utkorgen) |
+| Fältets loggpost via `patch_ao` (v3.4 utan bekräftat loggstöd) | 403 `field_not_allowed` | Nekades redan av den installerade servern för fältroller |
+| Samma nyckel med annat innehåll | 409 `idempotency_key_conflict` | Ligger kvar i v3.4:s utkorg; ny klient behandlar koden som slutgiltig |
+
+**Rollback** (data skrivs aldrig över):
+1. `supabase/rollback/T3-B/rollback_t3b.sql` (genererad ur STAGING-facit):
+   - tar bort de nya signaturerna och funktionerna;
+   - återställer de åtta ersatta funktionerna **exakt** till STAGING-definitionerna, med samma rättigheter;
+   - rör ingen tabell, ingen rad och ingen sekvens.
+2. Föregående EF-versioner ur EF-backupen.
+3. Föregående klientpaket (`staging-release` `90fa360`).
+
+Data som skapats efter installationen ligger kvar och tolereras av den äldre koden (`t3b_rollback.test.js`):
+- tagningar och `poolOpen:false`;
+- `addedBy`;
+- `billingPreviousStatus`;
+- `'_fp'` i `op_idempotency.result`;
+- tidposter med serverpris;
+- den framflyttade AO-nummersekvensen.
+
+Ingen backup återläses över verksamhetsdata. Data återläses bara vid ett separat beslut om ett datafel.
+
+### 8. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | §4 |
+| Negativa tester ger rätt felkod och ingen mutation | Ja | `expectReject` (status, error, reason, KS) i alla negativa fall; STAGING-verktygen med `matchSvar` |
+| Inga nya oförklarade säkerhetsavvikelser | Ja | Paritet 52/54 lika, 2 kända utanför T3-B; schemat 0 oförklarade (T3-B-objekten md5-registrerade) |
+| Samtidighetskritiska kontroller under transaktionslås | Ja | Tagning, start/klar, tilldelning för tid/stämpling, faktureringsstatus, AO-nummer och idempotens under `FOR UPDATE`/`FOR SHARE` i RPC:n. EF-kontrollerna är bara första lager. Bild-EF:erna kontrollerar i EF (Storage är inte transaktionell); bildreferensen skrivs via loggen under lås. |
+| Berörda affärsflöden fungerar | Ja | Offert → AO, fakturakö → underlag → status, import, serviceintervall (`service-monitor`), återkommande, stämpling, checklista (lokalt, server + e2e) |
+| Avgränsade commits och rollback | Ja | Två commits per repo, se nedan; rollback prövad lokalt |
+| Masterplanen visar faktisk nivå | Ja | SÄK-3/4/5/11/12/15/16/17, 245, 250, 261, 269, 270, AP-FEL-1, D-03, D-07: "Lokalt verifierad" eller "Delvis" |
+
+### 9. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno.
+- Fältroller i STAGING utan `ao_complete` förlorar öppen pool tills de får `ao_pool_take`.
+  - Följer av testplanens övergångsregel.
+  - De kunde inte ta jobb tidigare heller.
+  - STAGING:s rolldata är inte läst.
+- `work_order_create` binder bara nyckeln till operationen, inte till innehållet. `service-monitor` skickar
+  nya tidsstämplar vid omkörning med samma deterministiska nyckel, och en innehållsbindning skulle ge
+  konflikter. Den som skapar måste ändå ha `ao_create`.
+- Bildradering av andras bilder kan inte avgöras ur filvägen (T4).
+- Följande ligger i AO-etappen:
+  - notis vid tagning;
+  - kalenderruta för tilldelade AO utan datum;
+  - räknare.
+- STAGING-paketet som är installerat i dag (`staging-release`) ger F3/F5 AVVIK mot T3-B-reglerna.
+  - Orsak: paketet skriver fältets loggposter via `patch_ao`.
+  - Det nekar även den installerade servern för fältroller.
+  - `staging_e2e_real` provar därför T3-B-klientpaketet.
+- vift-v2:s äldre klientkopia och dess e2e-specar är inte anpassade.
+- VIFT-CRM:s kopior av STAGING-verktygen är äldre än vift-v2:s.
+
+**Beslut som behövs (förslag i parentes):**
+1. Tid på låst AO (fakturerad, avbruten, arkiverad, borttagen) nekas även för arbetsledare och lönehandläggare.
+   Undantaget är legitim utstämpling. (Godta.)
+2. Material, checklista och logg på en **klar** AO är tillåtna för den tilldelade, för dokumentation i
+   efterhand. Fakturerad AO är låst. (Godta.)
+3. `aoBilling` `restore` kontrollerar inte att underlaget slutat hänvisa till AO:n. Fakturamotorns regel
+   backar också när nya okrävda källor tillkommer. (Godta; behörigheten är `invoice_create`.)
+4. `ao_edit` får ta jobb ur poolen. (Godta, eftersom arbetsledaren redan kan tilldela.)
+5. Demorollen `personal` i klientens seed har fått de tre nya behörigheterna. STAGING:s rollregister är orört (T3-E).
+
+### Ändrade filer
+
+**vift-v2** (gren `claude/vift-system-restructure-8fUme`):
+- nya:
+  - `supabase/migrations/20261128000001_t3b_ao_regler_och_pool.sql`, `…02_t3b_tid_och_stampling.sql`,
+    `…03_t3b_ao_nummer.sql`;
+  - `supabase/rollback/T3-B/rollback_t3b.sql`;
+  - `tests/t3b_ao_karna.test.js`, `tests/t3b_rollback.test.js`;
+  - `tests/local/t3-andringar.{js,json}`, `tests/local/t3b-rollback.js`;
+- ändrade:
+  - `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`;
+  - `supabase/functions/{_shared/vift-auth.ts, ao-time-write, work-orders-list, store-key-write/stamp-status.ts,
+    work-order-checklist-resolve, work-order-log-write, work-order-image-upload, work-order-image-delete,
+    work-order-image-url, invoice-write, service-monitor}`;
+  - tester:
+    - `baslinje_sakerhet` (historisk källa);
+    - `replica_build`, `ef_smoke`, `rekonstruerade_rpc_sql`;
+    - `staging_tools`, `staging_e2e_real`;
+    - `tests/local/{jamfor-schema.js, migrationsmappning.js, lib/replik.js, lib/ef.js, lib/paritet.js}`;
+    - `tests/e2e/fake-backend.js`;
+    - `tests/staging/{lib,authz-read,authz-mutation,c5-read}.js`.
+
+**VIFT-CRM** (gren `claude/vift-v3-major-redesign`):
+- ändrade:
+  - `index.html`;
+  - `src/services/{WorkOrderService,AOTimeSyncService,TimeService,BillingQueueService,ServiceIntervalService,RecurringOrderService}.js`;
+  - `src/pages/{WorkOrderDetailPage,MyJobsPage,TimePage,PageShells}.js`;
+  - `src/data/seedData.js`;
+  - `tools/build-staging-package.sh`;
+  - `tests/e2e/fake-backend.js`, `tests/e2e/paritet-kanda-avvikelser.json`;
+  - `tests/e2e/specs/{04_workorders,06_economy,14_permissions,27_aodetail,33_falt_pages}.js`;
+  - `tests/staging_e2e_real.test.js`;
+  - detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`;
+- ny: `tests/e2e/specs/37_t3b_ao_karna.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `9ef3164` T3-B server: AO-kärnan och arbetspoolen (SÄK-3/4/5/11/12/15/16, punkt 245/250), nya migrationer, EF och rollback
+- `a43da44` T3-B tester: säkerhetstester (vända baslinjefynd), samtidighet, rollback, T3-facit, paritet och skärpta STAGING-verktyg
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `e33029e` T3-B klient: personaldialog (AP-FEL-1), Ta jobbet via take_from_pool, faktureringsstatus via invoice-write, felkoder
+- `a699246` T3-B tester: fake-backend följer T3-B-reglerna (paritet), skärpta e2e-tester, nya T3B-01–05
+- dokumentcommit (detta avsnitt, MASTERPLAN, BEHORIGHETSMATRIS): se `git log` efter `a699246`
 
 ## T3-C – roller och superadmin
 
