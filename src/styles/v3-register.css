@@ -1,1 +1,229 @@
-/* V3 nattkörning 2026-11-26 — register. Ägs av ett eget arbetsblock; laddas efter system.css. */
+/* V3 nattkörning 2026-11-26 — register. Ägs av ett eget arbetsblock; laddas efter system.css.
+   Kunder, Fastigheter, Artiklar, Prisgrupper, Personal, Offerttjänster och Uppgifter
+   delar ett mönster (docs/V3-KOMPONENTSTANDARD.md §1–§7):
+     .rg            sidans innehåll, begränsad bredd på breda skärmar (F-23)
+     .rg-bar        sök till vänster · "⋮" sekundära åtgärder · EN primär åtgärd
+     .rg-filters    .ftabs (status/vy) och .chip (typ/kategori/snabbval) i separata grupper
+     .rg-wrap       tabell i kort med egen rullbehållare (.dt-wrap > .dt-scroll > .dtab.rg-tbl)
+     .rg-count      "Visar X av Y" · Rensa filter · Välj alla
+   Tabellen blir ett kort per rad när innehållet är smalare än 640 px (container query). */
+
+.rg { --rg-max: 1440px; display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: var(--rg-max); min-width: 0; container: rg / inline-size; }
+
+/* F-02 lokalt: ikoner (ic()) ska aldrig hamna på egen rad i registervyerna. */
+.rg svg { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
+
+/* ── Verktygsrad ─────────────────────────────────────────────────── */
+.rg-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rg-search { flex: 1 1 280px; min-width: 0; max-width: 560px; }
+.rg-search input { width: 100%; }
+.rg-bar-r { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
+.rg-new { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rg-bar-more .rg-more { width: var(--ctl-h-sm); height: var(--ctl-h-sm); border: 1px solid var(--line-2); background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink-2); }
+.rg-bar-more .rg-more:hover { background: var(--surface-2); }
+
+/* ── Filter: flikar (status/vy) och chips (typ/kategori/snabbval) ── */
+.rg-filters { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.rg-filters .ftabs { margin: 0; flex: 0 0 auto; display: inline-flex; overflow: visible; flex-wrap: nowrap; }
+.rg-filters .ft { flex: 0 0 auto; }
+.rg-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.rg-chips-sep { width: 1px; height: 22px; background: var(--line-2); margin: 0 4px; flex: 0 0 auto; }
+.rg-chips .chip svg { width: 13px; height: 13px; }
+
+/* ── Tabell i kort ───────────────────────────────────────────────── */
+.rg-wrap { min-width: 0; }
+.rg-count { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12.5px; color: var(--muted); font-weight: 500; min-height: 42px; }
+.rg-count-t { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rg-clear { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-ink); }
+.rg-count .rg-selall { margin-left: auto; width: auto !important; order: 0 !important; }
+.rg-selall .sel-all-label { font-size: 12.5px !important; color: var(--muted) !important; }
+.rg-wrap:not(:has(.rg-tbl)) .rg-count { border-bottom: none; }
+
+.rg-tbl { table-layout: fixed; }
+.rg-tbl th { text-transform: uppercase; font-size: 11px; letter-spacing: .05em; }
+.rg-tbl th.c-num, .rg-tbl td.c-num { text-align: right; font-variant-numeric: tabular-nums; }
+.rg-tbl td { height: auto; min-height: var(--row-h); padding-top: 9px; padding-bottom: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rg-tbl tbody tr:focus-visible { outline: none; }
+.rg-tbl tbody tr:focus-visible td { background: var(--accent-soft); }
+.rg-tbl tbody tr.selected td { background: var(--accent-soft); }
+.rg-tbl .rg-w-sel { width: 44px; }
+.rg-tbl td.rg-c-sel { padding-right: 0; }
+.rg-tbl .rg-w-xs { width: 92px; }
+.rg-tbl .rg-w-s  { width: 124px; }
+.rg-tbl .rg-w-m  { width: 16%; }
+.rg-tbl .rg-w-l  { width: 22%; }
+.rg-tbl .rg-w-end { width: 56px; }
+.rg-tbl .rg-w-end2 { width: 92px; }
+.rg-tbl td.rg-c-end { text-align: right; overflow: visible; }
+.rg-tbl td.rg-c-end > * { vertical-align: middle; }
+.rg-c-main { min-width: 0; }
+.rg-title { font-size: 13.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Långa namn: högst två rader (samma början ska ändå gå att skilja åt), sedan "…". */
+.rg-tbl .rg-title { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+.rg-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.rg-msub { display: none; }
+.rg-none { color: var(--faint); }
+.rg-l2 { display: block; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.rg-m-only { display: none !important; }
+.rg-open { color: var(--faint); }
+.rg-open:hover { color: var(--ink); }
+.rg-menu { display: inline-flex; vertical-align: middle; }
+.rg-menu .ao-overflow-menu { min-width: 200px; }
+.rg-menu .ao-overflow-menu-item { min-height: 40px; font-weight: 500; color: var(--ink-2); }
+.rg-menu .ao-overflow-menu-item svg { color: var(--muted); }
+.rg-menu .ao-overflow-menu-item--red, .rg-menu .ao-overflow-menu-item--red svg { color: var(--danger); }
+.rg-menu .ao-overflow-menu-item:focus-visible { outline: none; background: var(--hover); box-shadow: inset 0 0 0 2px rgba(31,111,214,.35); }
+.rg-num { font-variant-numeric: tabular-nums; }
+.rg-nw { white-space: nowrap; }
+.rg-tbl .rg-w-p { width: 164px; }
+.rg-price { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rg-ok { color: var(--ok); font-weight: 600; }
+.rg-warn { color: var(--warn); font-weight: 600; }
+.rg-bad { color: var(--danger); font-weight: 600; }
+.rg-row--off .rg-title { color: var(--muted); }
+.rg-row--done .rg-title { color: var(--muted); text-decoration: line-through; font-weight: 500; }
+
+/* Person/ikon + text i samma cell (Personal, Offerttjänster, Ansvarig) */
+.rg-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rg-person-t { min-width: 0; flex: 1 1 auto; }
+.rg-person .av { flex-shrink: 0; }
+.rg-person-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rg-svc-ico { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--brand); color: #fff; flex-shrink: 0; }
+.rg-svc-ico.is-off { background: var(--neutral-bg); color: var(--neutral); }
+
+/* Uppgifter: klarmarkering, kopplingar och metarad */
+.rg-check-wrap { display: inline-flex; }
+.rg-check { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: -6px; border: none; border-radius: 50%; background: transparent; color: var(--faint); cursor: pointer; }
+.rg-check:hover:not(:disabled) { color: var(--ok); background: var(--ok-bg); }
+.rg-check.is-done { color: var(--ok); }
+.rg-check:disabled { cursor: not-allowed; opacity: .45; }
+.rg-check:focus-visible { outline: none; box-shadow: var(--focus); }
+.rg-task-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rg-task-l1 .rg-title { flex: 0 1 auto; min-width: 0; }
+.rg-task-l1 .bdg { flex-shrink: 0; height: 20px; font-size: 11px; }
+.rg-rel { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 3px; min-width: 0; }
+.rg-link { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 0; border: none; background: none; font: inherit; font-size: 12px; font-weight: 500; color: var(--accent-ink); cursor: pointer; text-align: left; }
+.rg-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rg-link:hover span { text-decoration: underline; }
+.rg-link:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
+.rg-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--ink-2); }
+.rg-meta > span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.rg-meta svg { color: var(--faint); }
+.rg-msub.rg-meta { display: none; }
+.rg-when { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rg-when.is-late { color: var(--danger); font-weight: 600; }
+.rg-when.is-today { color: var(--warn); font-weight: 600; }
+.rg-when.is-late svg, .rg-when.is-today svg { color: currentColor; }
+
+/* Kolumner döljs efter INNEHÅLLETS bredd (container query), inte fönstrets —
+   på 1 024 px med sidomeny är innehållet bara ca 720 px brett. */
+@container rg (max-width: 1299px) { .rg-tbl .rg-h-xl { display: none; } }
+@container rg (max-width: 999px)  { .rg-tbl .rg-h-lg { display: none; } }
+@container rg (max-width: 899px)  { .rg-tbl .rg-h-md { display: none; } }
+
+/* Tomläge i registren: samma kort som listan. */
+.rg-empty { padding: 40px 20px; }
+.rg-empty .btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Mobil (< 640 px): sök på egen rad, primär åtgärd i full bredd, filter under ── */
+@media (max-width: 639px) {
+  .rg { gap: 10px; }
+  .rg-bar { gap: 8px; }
+  .rg-search { flex: 1 1 100%; max-width: none; }
+  .rg-bar-r { flex: 1 1 100%; margin-left: 0; }
+  .rg-bar-r .rg-new { flex: 1 1 auto; justify-content: center; min-height: 40px; order: 0; }
+  .rg-bar-r .rg-bar-more { order: 1; }
+  .rg-bar-more .rg-more { width: 40px; height: 40px; }
+  .rg-search input { font-size: 16px; height: 40px; }
+
+  .rg-filters { gap: 8px; }
+  .rg-filters .ftabs { display: flex; width: 100%; flex-wrap: wrap !important; }
+  .rg-filters .ftabs .ft { flex: 1 1 0 !important; min-width: 0 !important; justify-content: center; min-height: 36px; white-space: nowrap; }
+  .rg-chips { width: 100%; }
+  .rg-chips-sep { display: none; }
+}
+
+/* ── Smalt innehåll (< 640 px): ett kort per rad i stället för en smal tabell ── */
+@container rg (max-width: 639px) {
+  .rg-wrap { background: transparent; border: none; box-shadow: none; border-radius: 0; overflow: visible; }
+  .rg-wrap .dt-scroll { overflow: visible; }
+  .rg-count { background: transparent; border: none; padding: 0 2px 6px; min-height: 0; flex-wrap: wrap; }
+  .rg-tbl, .rg-tbl tbody { display: block; background: transparent; table-layout: auto; }
+  .rg-tbl thead { display: none; }
+  .rg-tbl tbody tr.rg-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    padding: 10px 8px 10px 12px;
+    margin-bottom: 6px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-1);
+  }
+  .rg-tbl--nosel tbody tr.rg-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .rg-tbl tbody tr.rg-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .rg-tbl td { display: block; height: auto; min-height: 0; padding: 0; border: none; background: transparent !important; white-space: normal; overflow: visible; }
+  .rg-tbl td.rg-c-x { display: none; }
+  .rg-tbl td.rg-c-sel { align-self: start; padding-top: 2px; }
+  .rg-tbl td.rg-c-end { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: nowrap; }
+  .rg-tbl .rg-title { font-size: 14px; line-height: 1.3; }
+  .rg-msub { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; line-height: 1.35; }
+  .rg-m-only { display: inline-flex !important; }
+  .rg-d-only { display: none !important; }
+  .rg-open, .rg-menu .rg-more { width: 40px; height: 40px; }
+  .rg-tbl .bdg { white-space: nowrap; }
+  .rg-tbl .rg-sub { white-space: normal; overflow-wrap: anywhere; }
+  .rg-task-l1 { flex-wrap: wrap; row-gap: 4px; }
+  .rg-task-l1 .rg-title { flex: 1 1 100%; }
+  .rg-meta.rg-msub { display: flex; font-size: 12px; color: var(--muted); }
+  .rg-rel { margin-top: 4px; }
+  .rg-link { min-height: 28px; }
+  .rg-check { width: 40px; height: 40px; }
+  .rg-tasks td.rg-c-sel { align-self: start; padding-top: 0; }
+  .rg-tbl .rg-person { align-items: flex-start; }
+}
+/* Webbläsare utan container queries: samma kort under 640 px fönsterbredd. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 639px) {
+    .rg-wrap { background: transparent; border: none; box-shadow: none; border-radius: 0; overflow: visible; }
+    .rg-wrap .dt-scroll { overflow: visible; }
+    .rg-count { background: transparent; border: none; padding: 0 2px 6px; min-height: 0; flex-wrap: wrap; }
+    .rg-tbl, .rg-tbl tbody { display: block; background: transparent; table-layout: auto; }
+    .rg-tbl thead { display: none; }
+    .rg-tbl tbody tr.rg-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 10px;
+      padding: 10px 8px 10px 12px;
+      margin-bottom: 6px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-1);
+    }
+    .rg-tbl--nosel tbody tr.rg-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .rg-tbl tbody tr.rg-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .rg-tbl td { display: block; height: auto; min-height: 0; padding: 0; border: none; background: transparent !important; white-space: normal; overflow: visible; }
+    .rg-tbl td.rg-c-x { display: none; }
+    .rg-tbl td.rg-c-sel { align-self: start; padding-top: 2px; }
+    .rg-tbl td.rg-c-end { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: nowrap; }
+    .rg-tbl .rg-title { font-size: 14px; line-height: 1.3; }
+    .rg-msub { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; line-height: 1.35; }
+    .rg-m-only { display: inline-flex !important; }
+    .rg-d-only { display: none !important; }
+    .rg-open, .rg-menu .rg-more { width: 40px; height: 40px; }
+    .rg-tbl .bdg { white-space: nowrap; }
+    .rg-tbl .rg-sub { white-space: normal; overflow-wrap: anywhere; }
+    .rg-task-l1 { flex-wrap: wrap; row-gap: 4px; }
+    .rg-task-l1 .rg-title { flex: 1 1 100%; }
+    .rg-meta.rg-msub { display: flex; font-size: 12px; color: var(--muted); }
+    .rg-rel { margin-top: 4px; }
+    .rg-link { min-height: 28px; }
+    .rg-check { width: 40px; height: 40px; }
+    .rg-tasks td.rg-c-sel { align-self: start; padding-top: 0; }
+    .rg-tbl .rg-person { align-items: flex-start; }
+  }
+}

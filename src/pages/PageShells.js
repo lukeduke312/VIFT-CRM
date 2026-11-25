@@ -7870,31 +7870,20 @@ const PropertiesPage = {
   render() {
     const el = document.getElementById('pg-objects-content');
     if (!el) return;
-    el.innerHTML = `
-      <div class="ao-toolbar" style="margin-bottom:6px;">
-        <div class="swrap">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="prop-search" placeholder="Sök fastighet…" value="${esc(this._q)}"
-            oninput="PropertiesPage._q=this.value;PropertiesPage.renderList()">
-        </div>
-        <div class="ao-toolbar-right">
-          ${Auth.can('customer_manage') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('property',this)">${ic('download',14)} Exportera</button>
-          <div class="ao-overflow-wrap">
-            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-prop" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-prop',this)">${ic('more-vertical',14)}</button>
-            <div class="ao-overflow-menu" id="ao-ovf-prop" role="menu">
-              ${Auth.can('customer_manage') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'property'})">${ic('upload',13)} Importera</button>` : ''}
-              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('property',this)">${ic('download',13)} Exportera</button>
-            </div>
-          </div>
-          <button class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)} Ny fastighet</button>
-        </div>
-      </div>
-      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <div class="ftabs" id="prop-filter-tabs" style="margin-bottom:0;flex:1;"></div>
-        <div class="ao-selall-cell" id="prop-sel-all"></div>
-      </div>
-      <div id="prop-list"></div>`;
+    const canManage = Auth.can('customer_manage');
+    el.innerHTML = `<div class="rg" data-rg="objects">
+      ${RegisterUi.bar({
+        id: 'prop-search', placeholder: 'Sök fastighet, adress, ort…', label: 'Sök fastighet (namn, adress, ort, nummer)', value: this._q,
+        oninput: "PropertiesPage._q=this.value;RegisterUi.later('prop',function(){PropertiesPage.renderList()})",
+        menu: [
+          canManage ? { label: 'Importera', icon: 'upload', onclick: "Router.showPage('pg-import-wizard',{type:'property'})" } : null,
+          { label: 'Exportera', icon: 'download', onclick: "ImportExportService.showExportMenu('property',this)" }
+        ],
+        primary: { label: 'Ny fastighet', onclick: 'PropertiesPage.openCreate()' }
+      })}
+      <div class="rg-filters"><div class="ftabs rg-seg" id="prop-filter-tabs" role="group" aria-label="Status"></div></div>
+      <div id="prop-list" class="rg-listwrap"></div>
+    </div>`;
     this.renderList();
   },
 
@@ -7904,11 +7893,12 @@ const PropertiesPage = {
     const allProps = state.properties || [];
     const aktiva    = allProps.filter(p => p.status !== 'inaktiv');
     const arkiverade = allProps.filter(p => p.status === 'inaktiv');
-    let props = this._filter === 'arkiverade' ? arkiverade : aktiva;
+    const base = this._filter === 'arkiverade' ? arkiverade : aktiva;
+    let props = base;
     if (this._q) {
       const q = this._q.toLowerCase();
       props = props.filter(p =>
-        p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.city||'').toLowerCase().includes(q)
+        (p.name||'').toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.city||'').toLowerCase().includes(q)
         || displayNumberOf(p).toLowerCase().includes(q) // display number (2026-11-12)
       );
     }
@@ -7930,34 +7920,68 @@ const PropertiesPage = {
     const selMode = SelectionModel.count() > 0;
 
     const tabsEl = document.getElementById('prop-filter-tabs');
-    if (tabsEl) tabsEl.innerHTML = `
-      <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="PropertiesPage._filter='aktiva';PropertiesPage.renderList()">Aktiva (${aktiva.length})</button>
-      <button class="ft ${this._filter==='arkiverade'?'on':''}" onclick="PropertiesPage._filter='arkiverade';PropertiesPage.renderList()">Arkiverade (${arkiverade.length})</button>`;
-    const selAllEl = document.getElementById('prop-sel-all');
-    if (selAllEl) selAllEl.innerHTML = props.length > 0 ? SelectionModel.selectAllHtml(visibleIds) : '';
+    if (tabsEl) tabsEl.innerHTML = [['aktiva', 'Aktiva', aktiva.length], ['arkiverade', 'Arkiverade', arkiverade.length]].map(([k, l, n]) =>
+      `<button type="button" class="ft ${this._filter===k?'on':''}" aria-pressed="${this._filter===k}" onclick="PropertiesPage._filter='${k}';PropertiesPage.renderList()">${l}<span class="ft-n">${n}</span></button>`).join('');
 
-    listEl.innerHTML = props.length === 0
-      ? `<div class="empty">${ic('building-2',36)}<h3>Inga fastigheter</h3></div>`
-      : props.map(p => {
-          const cu = getCu(p.customerId);
-          const cuName = cu ? CustomerService.displayName(cu) : '—';
-          const aos = (state.workOrders||[]).filter(a => a.propertyId === p.id).length;
-          const selected = SelectionModel.isSelected(p.id);
-          return `
-            <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${p.id}"
-              onclick="SelectionModel.rowClick('${p.id}', function(){ PropertiesPage.openDetail('${p.id}'); })">
-              <div class="item-row">
-                ${SelectionModel.checkboxHtml(p.id, p.name)}
-                <div style="flex:1;min-width:0;">
-                  <div class="item-title">${esc(p.name)}</div>
-                  <div class="item-sub">${esc([p.address, p.city].filter(Boolean).join(', '))}${cuName!=='—'?' · '+esc(cuName):''}</div>
-                  ${p.type||p.area ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc([p.type,p.area?p.area+' m²':null].filter(Boolean).join(' · '))}</div>` : ''}
-                </div>
-                ${aos > 0 ? `<span class="bdg bdg-sky" style="align-self:flex-start;">${aos} AO</span>` : ''}
-                <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna fastighet" onclick="event.stopPropagation();PropertiesPage.openDetail('${p.id}')">${ic('chevron-right',16)}</button>
-              </div>
-            </div>`;
-        }).join('');
+    const clear = this._q ? "PropertiesPage._q='';var i=document.getElementById('prop-search');if(i)i.value='';PropertiesPage.renderList()" : '';
+    const head = RegisterUi.count(props.length, base.length, 'fastighet', 'fastigheter', { clear, selAll: props.length ? SelectionModel.selectAllHtml(visibleIds) : '' });
+    if (props.length === 0) {
+      listEl.innerHTML = (this._q
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: 'Inga fastigheter matchar sökningen.', action: `<button type="button" class="btn bs bsm" onclick="${clear}">Rensa sökning</button>` })
+        : this._filter === 'arkiverade'
+          ? RegisterUi.empty({ icon: 'archive', title: 'Inga arkiverade fastigheter', text: 'Arkiverade fastigheter visas här och kan återaktiveras.' })
+          : RegisterUi.empty({ icon: 'building-2', title: 'Inga fastigheter ännu', text: 'Lägg upp den första fastigheten för att koppla arbetsorder, objekt och serviceintervall.',
+              action: `<button type="button" class="btn bp bsm" onclick="PropertiesPage.openCreate()">${ic('plus',14)}<span>Ny fastighet</span></button>` }));
+      return;
+    }
+    /* Antal objekt och öppna AO per fastighet — räknas EN gång per rendering
+       (samma definition av "öppen" som kundregistret: CustomerService.getActiveAOs). */
+    const nObj = {}, nAO = {};
+    (state.propertyObjects || []).forEach(o => { if (o && o.propertyId) nObj[o.propertyId] = (nObj[o.propertyId] || 0) + 1; });
+    (state.workOrders || []).forEach(a => { if (a && a.propertyId && !['klar','fakturerad','avbruten'].includes(a.status)) nAO[a.propertyId] = (nAO[a.propertyId] || 0) + 1; });
+    const rows = props.map(p => {
+      const cu = getCu(p.customerId);
+      const cuName = cu ? CustomerService.displayName(cu) : '';
+      const a = RegisterUi.arg(p.id);
+      const addr = [p.address, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      const kind = [p.type, p.area ? fmt(p.area) + ' m²' : null].filter(Boolean).join(' · ');
+      const aos = nAO[p.id] || 0, objs = nObj[p.id] || 0;
+      const selected = SelectionModel.isSelected(p.id);
+      return `<tr class="rg-row${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${esc(p.id)}" tabindex="0"
+          onclick="SelectionModel.rowClick(${a}, function(){ PropertiesPage.openDetail(${a}); })"
+          onkeydown="if(event.key==='Enter'&&event.target===this){PropertiesPage.openDetail(${a})}">
+        <td class="rg-c-sel">${SelectionModel.checkboxHtml(p.id, p.name)}</td>
+        <td class="rg-c-main">
+          <div class="rg-title" title="${esc(p.name)}">${esc(p.name || '—')}</div>
+          <div class="rg-sub">${esc(displayNumberOf(p))}${p.status === 'inaktiv' ? ' · Arkiverad' : ''}</div>
+          <div class="rg-msub">${esc(addr || 'Adress saknas')}${cuName ? ' · ' + esc(cuName) : ''}</div>
+        </td>
+        <td class="rg-c-x" title="${esc(addr)}">${p.address ? esc(p.address) : '<span class="rg-none">Adress saknas</span>'}${(p.zip || p.city) ? `<span class="rg-l2">${esc([p.zip, p.city].filter(Boolean).join(' '))}</span>` : ''}</td>
+        <td class="rg-c-x" title="${esc(cuName)}">${cuName ? esc(cuName) : '<span class="rg-none">Ingen kund</span>'}</td>
+        <td class="rg-c-x rg-h-lg" title="${esc(kind)}">${p.type ? esc(p.type) : '<span class="rg-none">—</span>'}${p.area ? `<span class="rg-l2">${esc(fmt(p.area))} m²</span>` : ''}</td>
+        <td class="rg-c-x c-num rg-h-md">${objs || '<span class="rg-none">0</span>'}</td>
+        <td class="rg-c-x c-num">${aos ? `<span class="bdg bdg-blue">${aos}</span>` : '<span class="rg-none">0</span>'}</td>
+        <td class="rg-c-end">
+          ${aos ? `<span class="bdg bdg-blue rg-m-only">${aos} AO</span>` : ''}
+          ${RegisterUi.openBtn(`PropertiesPage.openDetail(${a})`, 'Öppna ' + (p.name || 'fastighet'))}
+        </td>
+      </tr>`;
+    }).join('');
+    listEl.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl${selMode?' sel-mode':''}">
+        <thead><tr>
+          <th class="rg-w-sel"><span class="sr-only">Markera</span></th>
+          <th>Fastighet</th>
+          <th class="rg-w-l">Adress</th>
+          <th class="rg-w-m">Kund</th>
+          <th class="rg-w-m rg-h-lg">Typ och yta</th>
+          <th class="rg-w-xs c-num rg-h-md">Objekt</th>
+          <th class="rg-w-xs c-num">Öppna AO</th>
+          <th class="rg-w-end"><span class="sr-only">Öppna</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
   },
 
   /* Bulk arkivera/återaktivera — samma fält som PropertyDetailPage.toggleStatus()
@@ -8104,9 +8128,123 @@ const PropertiesPage = {
   }
 };
 
+/* ── Register: gemensamma byggstenar (V3, 2026-11-26) ──────────────
+ * Används av Kunder (CustomersPage.js), Fastigheter, Artiklar,
+ * Prisgrupper, Personal, Offerttjänster och Uppgifter så att samma sak
+ * ser ut och beter sig likadant (docs/V3-KOMPONENTSTANDARD.md §1–§7):
+ * verktygsrad med sök till vänster, "⋮" för sekundära åtgärder och EN
+ * primär åtgärd; räknarrad "Visar X av Y"; tomlägen; ⋮-meny per rad.
+ * Rena HTML-hjälpare utan skrivningar. All data går genom esc(); id:n
+ * till inline-anrop går genom arg() (JSON + esc, kan inte bryta sig ut
+ * ur attributet). Stilar: src/styles/v3-register.css. */
+const RegisterUi = {
+  _timers: {},
+
+  /** Id/värde som JS-strängliteral, säker inuti ett onclick="…"-attribut. */
+  arg(v) { return esc(JSON.stringify(String(v == null ? '' : v))); },
+
+  /** Säkert DOM-id av ett post-id (för menyer per rad). */
+  domId(prefix, v) { return prefix + '-' + String(v == null ? '' : v).replace(/[^A-Za-z0-9_-]/g, '_'); },
+
+  plural(n, one, many) { return n === 1 ? one : many; },
+
+  /** Sökningen renderar bara om listan (fältet behåller fokus), 150 ms fördröjning. */
+  later(key, fn) {
+    clearTimeout(this._timers[key]);
+    this._timers[key] = setTimeout(fn, 150);
+  },
+
+  /** Verktygsrad: sök | ⋮ (Importera/Exportera m.m.) | en primär åtgärd. */
+  bar(o) {
+    const items = (o.menu || []).filter(Boolean);
+    return `<div class="rg-bar">
+      <div class="swrap rg-search">
+        <span class="sico" aria-hidden="true">${ic('search',16)}</span>
+        <input type="search" id="${o.id}" placeholder="${esc(o.placeholder)}" aria-label="${esc(o.label || o.placeholder)}"
+          value="${esc(o.value || '')}" autocomplete="off" oninput="${o.oninput}">
+      </div>
+      <div class="rg-bar-r">
+        ${items.length ? this.menu(o.id + '-ovf', 'Fler åtgärder', items, 'rg-bar-more') : ''}
+        ${o.primary ? `<button type="button" class="btn bp bsm rg-new" onclick="${o.primary.onclick}">${ic('plus',15)}<span>${esc(o.primary.label)}</span></button>` : ''}
+      </div>
+    </div>`;
+  },
+
+  /** "⋮"-meny (mönstret aoToggleOverflow/.ao-overflow-wrap). items: {label, icon, onclick, danger, sep}.
+      Destruktiva poster läggs sist, avskilda och i röd text (anroparen ansvarar för bekräftelse). */
+  menu(menuId, ariaLabel, items, cls) {
+    items = (items || []).filter(Boolean);
+    if (!items.length) return '';
+    return `<div class="ao-overflow-wrap rg-menu${cls ? ' ' + cls : ''}" onclick="event.stopPropagation()">
+      <button type="button" class="ibtn rg-more" aria-label="${esc(ariaLabel)}" title="${esc(ariaLabel)}" aria-haspopup="menu" aria-expanded="false"
+        onclick="RegisterUi.toggleMenu('${menuId}',this)">${ic('more-vertical',16)}</button>
+      <div class="ao-overflow-menu rg-menu-list" id="${menuId}" role="menu">
+        ${items.map(it => `${it.sep ? '<div class="ao-overflow-divider" role="separator"></div>' : ''}<button type="button" class="ao-overflow-menu-item${it.danger ? ' ao-overflow-menu-item--red' : ''}" role="menuitem" onclick="aoCloseOverflow();${it.onclick}">${ic(it.icon,14)}<span>${esc(it.label)}</span></button>`).join('')}
+      </div>
+    </div>`;
+  },
+
+  /* Menyn läggs fast (position:fixed) intill knappen så att den aldrig
+     klipps av tabellens rullbehållare; öppnas uppåt om det inte finns
+     plats nedåt (bottenmenyn på mobil räknas bort). */
+  toggleMenu(menuId, btn) {
+    aoToggleOverflow(menuId, btn);
+    const m = document.getElementById(menuId);
+    if (!m || !btn) return;
+    if (!m.classList.contains('open')) return;
+    const r = btn.getBoundingClientRect();
+    m.style.position = 'fixed';
+    m.style.left = 'auto';
+    m.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    m.style.top = (r.bottom + 4) + 'px';
+    const nav = document.getElementById('mobile-bottom-nav');
+    const navH = nav && nav.getBoundingClientRect().height > 0 && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().height : 0;
+    const floor = window.innerHeight - navH - 8;
+    const h = m.offsetHeight;
+    if (r.bottom + 4 + h > floor && r.top - 4 - h > 8) m.style.top = (r.top - 4 - h) + 'px';
+    if (!this._scrollBound) {
+      this._scrollBound = true;
+      const close = () => { if (document.querySelector('.rg-menu-list.open')) aoCloseOverflow(); };
+      const sc = document.getElementById('content-scroll');
+      if (sc) sc.addEventListener('scroll', close, { passive: true });
+      window.addEventListener('resize', close);
+    }
+    const first = m.querySelector('[role=menuitem]');
+    if (first) first.focus({ preventScroll: true });
+  },
+
+  /** Räknarrad: "Visar X av Y <substantiv>" + ev. "Rensa filter" + "Välj alla". */
+  count(shown, total, nounOne, nounMany, o) {
+    o = o || {};
+    const noun = this.plural(total, nounOne, nounMany);
+    const txt = shown === total ? `${total} ${noun}` : `Visar ${shown} av ${total} ${noun}`;
+    return `<div class="rg-count">
+      <span class="rg-count-t" aria-live="polite">${esc(txt)}</span>
+      ${o.clear ? `<button type="button" class="btn bghost bxs rg-clear" onclick="${o.clear}">${ic('x',12)}<span>Rensa filter</span></button>` : ''}
+      ${o.selAll ? `<span class="ao-selall-cell rg-selall">${o.selAll}</span>` : ''}
+    </div>`;
+  },
+
+  /** Tomläge: ikon, rubrik, en mening och en åtgärd om sådan finns. */
+  empty(o) {
+    return `<div class="empty rg-empty">${ic(o.icon || 'search',32)}<h3>${esc(o.title)}</h3>${o.text ? `<p>${esc(o.text)}</p>` : ''}${o.action || ''}</div>`;
+  },
+
+  /** Statusmärke för registerposter (punkt + text). */
+  status(on, onLabel, offLabel) {
+    return `<span class="bdg st ${on ? 'bdg-green' : 'bdg-grey'}"><span class="st-dot"></span>${esc(on ? onLabel : offLabel)}</span>`;
+  },
+
+  /** Öppna-knapp (chevron) längst till höger i raden. */
+  openBtn(onclick, label, cls) {
+    return `<button type="button" class="ibtn rg-open${cls ? ' ' + cls : ''}" title="${esc(label)}" aria-label="${esc(label)}" onclick="event.stopPropagation();${onclick}">${ic('chevron-right',16)}</button>`;
+  }
+};
+
 /* ── Artiklar ─────────────────────────── */
 const ArticlesPage = {
-  _filter: 'alla',
+  _filter: 'alla',   // kategori ('alla' | kategorinyckel)
+  _status: 'alla',   // V3 register: 'alla' | 'aktiva' | 'inaktiva' (standard 'alla' = samma urval som förut)
   _q: '',
 
   /* V30 §1: samma tvåfas-uppdelning som PropertiesPage (se kommentar där)
@@ -8118,22 +8256,25 @@ const ArticlesPage = {
   render() {
     const el = document.getElementById('pg-articles-content');
     if (!el) return;
-    el.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px;">
-        <div class="swrap" style="flex:1 1 180px;">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="art-search" placeholder="Sök artikel, artnr…" value="${esc(this._q)}"
-            oninput="ArticlesPage._q=this.value;ArticlesPage.renderList()">
-        </div>
-        ${Auth.can('article_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'article'})">${ic('upload',14)} Importera</button>` : ''}
-        <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('article',this)">${ic('download',14)} Exportera</button>
-        <button class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)} Ny artikel</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:4px;">
-        <div class="ftabs" id="art-filter-tabs" style="margin-bottom:0;flex:1 1 auto;"></div>
-        <div id="art-sel-all"></div>
-      </div>
-      <div id="art-list"></div>`;
+    el.innerHTML = `<div class="rg" data-rg="articles">
+      ${RegisterUi.bar({
+        id: 'art-search', placeholder: 'Sök benämning eller art.nr…', label: 'Sök artikel', value: this._q,
+        oninput: "ArticlesPage._q=this.value;RegisterUi.later('art',function(){ArticlesPage.renderList()})",
+        menu: [
+          Auth.can('article_manage') ? { label: 'Importera', icon: 'upload', onclick: "Router.showPage('pg-import-wizard',{type:'article'})" } : null,
+          { label: 'Exportera', icon: 'download', onclick: "ImportExportService.showExportMenu('article',this)" }
+        ],
+        primary: { label: 'Ny artikel', onclick: 'ArticlesPage.openCreate()' }
+      })}
+      <div class="rg-filters" id="art-filters"></div>
+      <div id="art-list" class="rg-listwrap"></div>
+    </div>`;
+    this.renderList();
+  },
+
+  _clearFilters() {
+    this._q = ''; this._filter = 'alla';
+    const i = document.getElementById('art-search'); if (i) i.value = '';
     this.renderList();
   },
 
@@ -8142,12 +8283,19 @@ const ArticlesPage = {
     if (!listEl) return;
     const cats = ['alla','kemikalier','material','forbruk','arbete','kostnad'];
     const catLabels = this._catLabels;
-    let arts = state.articles || [];
-    if (this._filter !== 'alla') arts = arts.filter(a => a.category === this._filter);
+    const all = state.articles || [];
+    const isActive = a => a.active !== false; // saknat fält = aktiv (som _bulkSetActive)
+    const nStatus = { alla: all.length, aktiva: all.filter(isActive).length };
+    nStatus.inaktiva = all.length - nStatus.aktiva;
+    const statusBase = this._status === 'aktiva' ? all.filter(isActive) : this._status === 'inaktiva' ? all.filter(a => !isActive(a)) : all;
+    let searched = statusBase;
     if (this._q) {
       const q = this._q.toLowerCase();
-      arts = arts.filter(a => a.name.toLowerCase().includes(q) || (a.articleNumber||'').includes(q));
+      searched = searched.filter(a => (a.name||'').toLowerCase().includes(q) || String(a.articleNumber||'').toLowerCase().includes(q));
     }
+    const nCat = {};
+    searched.forEach(a => { nCat[a.category] = (nCat[a.category] || 0) + 1; });
+    const arts = this._filter !== 'alla' ? searched.filter(a => a.category === this._filter) : searched;
     const artActions = [
       { id: 'export', label: 'Exportera', icon: 'download', type: 'export' },
       { id: 'activate', label: 'Aktivera', icon: 'eye', permission: 'article_manage', type: 'confirm',
@@ -8163,40 +8311,82 @@ const ArticlesPage = {
     const artVisibleIds = arts.map(a => a.id);
     const selMode = SelectionModel.count() > 0;
 
-    const tabsEl = document.getElementById('art-filter-tabs');
-    if (tabsEl) tabsEl.innerHTML = cats.map(c=>`<button class="ft ${this._filter===c?'on':''}" onclick="ArticlesPage._filter='${c}';ArticlesPage.renderList()">${catLabels[c]}</button>`).join('');
-    const selAllEl = document.getElementById('art-sel-all');
-    if (selAllEl) selAllEl.innerHTML = arts.length > 0 ? SelectionModel.selectAllHtml(artVisibleIds) : '';
+    const fEl = document.getElementById('art-filters');
+    if (fEl) fEl.innerHTML = `
+      <div class="ftabs rg-seg" role="group" aria-label="Status">
+        ${[['alla','Alla'],['aktiva','Aktiva'],['inaktiva','Inaktiva']].map(([k,l]) =>
+          `<button type="button" class="ft ${this._status===k?'on':''}" aria-pressed="${this._status===k}" onclick="ArticlesPage._status='${k}';ArticlesPage.renderList()">${l}<span class="ft-n">${nStatus[k]}</span></button>`).join('')}
+      </div>
+      <div class="rg-chips" role="group" aria-label="Kategori">
+        ${cats.map(c => UiKit.chip(c === 'alla' ? 'Alla kategorier' : catLabels[c], `ArticlesPage._filter='${c}';ArticlesPage.renderList()`, { on: this._filter === c, n: c === 'alla' ? searched.length : (nCat[c] || 0) })).join('')}
+      </div>`;
 
-    listEl.innerHTML = arts.length === 0
-      ? `<div class="empty">${ic('package',32)}<h3>Inga artiklar</h3></div>`
-      : arts.map(a => {
-          const margin = a.buyPrice > 0 && a.sellPrice > 0
-            ? Math.round((1 - a.buyPrice / a.sellPrice) * 100)
-            : null;
-          const selected = SelectionModel.isSelected(a.id);
-          return `
-        <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${a.id}"
-          onclick="SelectionModel.rowClick('${a.id}', function(){ ArticlesPage.openEdit('${a.id}'); })">
-          <div class="item-row">
-            ${SelectionModel.checkboxHtml(a.id, a.name)}
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-                ${a.active===false?`<span style="width:6px;height:6px;border-radius:50%;background:var(--mt);flex-shrink:0;display:inline-block;"></span>`:''}
-                <span class="item-title" style="margin:0;">${a.articleNumber ? `<span style="font-size:11px;color:var(--mt);font-weight:600;">${esc(a.articleNumber)} – </span>` : ''}${esc(a.name)}</span>
-              </div>
-              <div class="item-sub">
-                ${fmt(a.sellPrice)} kr/${a.unit} inkl ${_normVat(a.vatRate)}% moms
-                ${margin !== null ? `· <span style="color:${margin>=30?'var(--gr)':margin>=10?'var(--or)':'var(--rd)'};">${margin}% marginal</span>` : ''}
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
-              <span class="bdg ${catLabels[a.category]?'bdg-sky':'bdg-grey'}" style="font-size:9px;">${catLabels[a.category]||a.category||'—'}</span>
-              ${a.active===false?`<span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>`:''}
-            </div>
-            <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna artikel" onclick="event.stopPropagation();ArticlesPage.openEdit('${a.id}')">${ic('chevron-right',16)}</button>
-          </div>
-        </div>`;}).join('');
+    const filtered = !!this._q || this._filter !== 'alla';
+    const head = RegisterUi.count(arts.length, statusBase.length, 'artikel', 'artiklar', {
+      clear: filtered ? 'ArticlesPage._clearFilters()' : '',
+      selAll: arts.length ? SelectionModel.selectAllHtml(artVisibleIds) : ''
+    });
+    if (arts.length === 0) {
+      listEl.innerHTML = filtered
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: this._q ? 'Inga artiklar matchar sökningen.' : 'Inga artiklar i vald kategori.',
+            action: `<button type="button" class="btn bs bsm" onclick="ArticlesPage._clearFilters()">Rensa filter</button>` })
+        : this._status === 'inaktiva'
+          ? RegisterUi.empty({ icon: 'eye-off', title: 'Inga inaktiva artiklar', text: 'Inaktiverade artiklar visas här och kan aktiveras igen.' })
+          : RegisterUi.empty({ icon: 'package', title: 'Inga artiklar ännu', text: 'Lägg upp artiklar för material och arbete — eller importera en prislista.',
+              action: Auth.can('article_manage') ? `<button type="button" class="btn bp bsm" onclick="ArticlesPage.openCreate()">${ic('plus',14)}<span>Ny artikel</span></button>` : '' });
+      return;
+    }
+
+    const rows = arts.map(a => {
+      const margin = a.buyPrice > 0 && a.sellPrice > 0
+        ? Math.round((1 - a.buyPrice / a.sellPrice) * 100)
+        : null;
+      const mCls = margin === null ? '' : margin >= 30 ? 'rg-ok' : margin >= 10 ? 'rg-warn' : 'rg-bad';
+      const id = RegisterUi.arg(a.id);
+      const cat = catLabels[a.category] || a.category || '';
+      const unit = a.unit || 'st';
+      const vat = _normVat(a.vatRate);
+      const selected = SelectionModel.isSelected(a.id);
+      /* Priset i registret är exkl. moms (fältet "Försäljningspris ex moms";
+         ProfitabilityService räknar sellPrice som exkl.) — tidigare stod
+         felaktigt "inkl 25% moms" i listan. */
+      return `<tr class="rg-row${selMode?' sel-mode':''}${selected?' selected':''}${isActive(a)?'':' rg-row--off'}" data-sel-row-id="${esc(a.id)}" tabindex="0"
+          onclick="SelectionModel.rowClick(${id}, function(){ ArticlesPage.openEdit(${id}); })"
+          onkeydown="if(event.key==='Enter'&&event.target===this){ArticlesPage.openEdit(${id})}">
+        <td class="rg-c-sel">${SelectionModel.checkboxHtml(a.id, a.name)}</td>
+        <td class="rg-c-x rg-num">${a.articleNumber ? esc(a.articleNumber) : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-main">
+          <div class="rg-title" title="${esc(a.name)}">${esc(a.name || '—')}</div>
+          <div class="rg-msub">${a.articleNumber ? 'Art.nr ' + esc(a.articleNumber) + ' · ' : ''}${esc(cat || 'Ingen kategori')}</div>
+          <div class="rg-msub"><span class="rg-nw">${fmt(a.sellPrice)} kr/${esc(unit)} exkl. moms</span> · <span class="rg-nw">${vat} % moms</span>${margin !== null ? ` · <span class="rg-nw ${mCls}">${margin} % marginal</span>` : ''}</div>
+        </td>
+        <td class="rg-c-x rg-h-md">${cat ? `<span class="bdg ${catLabels[a.category] ? 'bdg-sky' : 'bdg-grey'}">${esc(cat)}</span>` : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-x rg-h-md">${esc(unit)}</td>
+        <td class="rg-c-x c-num"><span class="rg-price">${fmt(a.sellPrice)} kr</span><span class="rg-l2">per ${esc(unit)} · ${vat} % moms</span></td>
+        <td class="rg-c-x c-num rg-h-lg">${margin !== null ? `<span class="${mCls}">${margin} %</span>` : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-x">${RegisterUi.status(isActive(a), 'Aktiv', 'Inaktiv')}</td>
+        <td class="rg-c-end">
+          ${isActive(a) ? '' : `<span class="bdg bdg-grey rg-m-only">Inaktiv</span>`}
+          ${RegisterUi.openBtn(`ArticlesPage.openEdit(${id})`, 'Öppna ' + (a.name || 'artikel'))}
+        </td>
+      </tr>`;
+    }).join('');
+    listEl.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl${selMode?' sel-mode':''}">
+        <thead><tr>
+          <th class="rg-w-sel"><span class="sr-only">Markera</span></th>
+          <th class="rg-w-xs">Art.nr</th>
+          <th>Benämning</th>
+          <th class="rg-w-m rg-h-md">Kategori</th>
+          <th class="rg-w-xs rg-h-md">Enhet</th>
+          <th class="rg-w-p c-num">Pris exkl. moms</th>
+          <th class="rg-w-xs c-num rg-h-lg">Marginal</th>
+          <th class="rg-w-xs">Status</th>
+          <th class="rg-w-end"><span class="sr-only">Öppna</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
   },
 
   _formHtml(a) {
@@ -8204,14 +8394,14 @@ const ArticlesPage = {
     return `
       <div class="g2">
         <div class="fg"><label>Artikelnummer</label>
-          <input id="art-num" value="${a?a.articleNumber||'':''}" placeholder="T.ex. 1001"></div>
+          <input id="art-num" value="${a?esc(a.articleNumber||''):''}" placeholder="T.ex. 1001"></div>
         <div class="fg"><label>Kategori</label>
           <select id="art-cat">
             ${Object.entries(catLabels).map(([v,l])=>`<option value="${v}" ${a&&a.category===v?'selected':''}>${l}</option>`).join('')}
           </select></div>
       </div>
       <div class="fg"><label>Benämning <span style="color:var(--rd)">*</span></label>
-        <input id="art-name" value="${a?a.name||'':''}" placeholder="T.ex. Fogmassa Sikaflex 291i"></div>
+        <input id="art-name" value="${a?esc(a.name||''):''}" placeholder="T.ex. Fogmassa Sikaflex 291i"></div>
       <div class="g2">
         <div class="fg"><label>Enhet</label>
           <select id="art-unit">${unitsHtml(a?a.unit:'st')}</select></div>
@@ -8256,7 +8446,7 @@ const ArticlesPage = {
     const a = (state.articles||[]).find(x=>x.id===artId);
     if (!a) return;
     Modal.open({
-      title: a.name,
+      title: esc(a.name),
       wide: true,
       body: this._formHtml(a),
       buttons: [
@@ -8336,82 +8526,146 @@ const ArticlesPage = {
 /* ── Prisgrupper ──────────────────────── */
 const PriceGroupsPage = {
   _tab: 'grupper',
+  _q: '',
 
+  /* V3 register (2026-11-26): flikarna Prisgrupper/Prisprofiler är en
+     .ftabs-vyväxlare; sidrubriken upprepas inte (den står i toppraden);
+     verktygsraden har sök, "⋮" och EN primär åtgärd som följer fliken. */
   render() {
     const el = document.getElementById('pg-pricegroups-content');
     if (!el) return;
-    const tab = this._tab || 'grupper';
-    el.innerHTML = `
-      <div class="ftabs" style="margin-bottom:8px;">
-        <button class="ft ${tab==='grupper'?'on':''}" onclick="PriceGroupsPage._tab='grupper';PriceGroupsPage.render()">Prisgrupper</button>
-        <button class="ft ${tab==='profiler'?'on':''}" onclick="PriceGroupsPage._tab='profiler';PriceGroupsPage.render()">Prisprofiler</button>
+    const tab = this._tab === 'profiler' ? 'profiler' : 'grupper';
+    const nG = (state.priceGroups || []).length, nP = (state.priceProfiles || []).length;
+    el.innerHTML = `<div class="rg" data-rg="pricegroups">
+      ${RegisterUi.bar({
+        id: 'pg-search', placeholder: tab === 'grupper' ? 'Sök prisgrupp…' : 'Sök prisprofil…', label: tab === 'grupper' ? 'Sök prisgrupp' : 'Sök prisprofil', value: this._q,
+        oninput: "PriceGroupsPage._q=this.value;RegisterUi.later('pg',function(){PriceGroupsPage._renderTab()})",
+        menu: tab === 'grupper' ? [
+          Auth.can('article_manage') ? { label: 'Importera', icon: 'upload', onclick: "Router.showPage('pg-import-wizard',{type:'priceGroup'})" } : null,
+          { label: 'Exportera', icon: 'download', onclick: "ImportExportService.showExportMenu('priceGroup',this)" }
+        ] : [],
+        primary: tab === 'grupper'
+          ? { label: 'Ny prisgrupp', onclick: 'PriceGroupsPage.openCreate()' }
+          : { label: 'Ny prisprofil', onclick: 'PriceGroupsPage.openCreateProfile()' }
+      })}
+      <div class="rg-filters">
+        <div class="ftabs rg-seg" role="tablist" aria-label="Vy">
+          <button type="button" class="ft ${tab==='grupper'?'on':''}" role="tab" aria-selected="${tab==='grupper'}" onclick="PriceGroupsPage._tab='grupper';PriceGroupsPage.render()">Prisgrupper<span class="ft-n">${nG}</span></button>
+          <button type="button" class="ft ${tab==='profiler'?'on':''}" role="tab" aria-selected="${tab==='profiler'}" onclick="PriceGroupsPage._tab='profiler';PriceGroupsPage.render()">Prisprofiler<span class="ft-n">${nP}</span></button>
+        </div>
       </div>
-      <div id="pg-pricegroups-tab-body"></div>`;
-    if (tab === 'grupper') this._renderGrupper();
-    else this._renderProfiler();
+      <div id="pg-pricegroups-tab-body" class="rg-listwrap"></div>
+    </div>`;
+    this._renderTab();
+  },
+
+  _renderTab() {
+    if (this._tab === 'profiler') this._renderProfiler(); else this._renderGrupper();
+  },
+
+  _clearSearch() {
+    this._q = '';
+    const i = document.getElementById('pg-search'); if (i) i.value = '';
+    this._renderTab();
+  },
+
+  _match(...vals) {
+    const q = (this._q || '').toLowerCase();
+    return !q || vals.some(v => String(v || '').toLowerCase().includes(q));
   },
 
   _renderGrupper() {
     const el = document.getElementById('pg-pricegroups-tab-body');
     if (!el) return;
-    const pgs = state.priceGroups || [];
-    el.innerHTML =
-      `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
-         <h3 style="flex:1;font-size:14px;font-weight:700;">Prisgrupper</h3>
-         ${Auth.can('article_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'priceGroup'})">${ic('upload',14)} Importera</button>` : ''}
-         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('priceGroup',this)">${ic('download',14)} Exportera</button>
-         <button class="btn bp bsm" onclick="PriceGroupsPage.openCreate()">${ic('plus',14)} Ny prisgrupp</button>
-       </div>` +
-      (pgs.length === 0
-        ? `<div class="empty">${ic('dollar-sign',36)}<h3>Inga prisgrupper</h3></div>`
-        : pgs.map(pg => `
-          <div class="list-item" onclick="PriceGroupsPage.openEdit('${pg.id}')">
-            <div class="item-row">
-              <div style="flex:1;min-width:0;">
-                <div class="item-title">${esc(pg.name)}</div>
-                ${pg.description ? `<div class="item-sub">${esc(pg.description)}</div>` : ''}
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
-                <span style="font-size:14px;font-weight:800;color:var(--navy);">${fmt(pg.hourRate)} <span style="font-size:10px;font-weight:500;color:var(--mt);">kr/tim</span></span>
-                <span class="bdg ${pg.active ? 'bdg-green' : 'bdg-grey'}" style="font-size:9px;">${pg.active ? 'Aktiv' : 'Inaktiv'}</span>
-              </div>
-            </div>
-          </div>`).join(''));
+    const all = state.priceGroups || [];
+    const pgs = all.filter(pg => this._match(pg.name, pg.description));
+    const head = RegisterUi.count(pgs.length, all.length, 'prisgrupp', 'prisgrupper', { clear: this._q ? 'PriceGroupsPage._clearSearch()' : '' });
+    if (!pgs.length) {
+      el.innerHTML = this._q
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: 'Inga prisgrupper matchar sökningen.', action: `<button type="button" class="btn bs bsm" onclick="PriceGroupsPage._clearSearch()">Rensa sökning</button>` })
+        : RegisterUi.empty({ icon: 'dollar-sign', title: 'Inga prisgrupper ännu', text: 'Prisgrupper anger timpriset (exkl. moms) för olika slags arbete, t.ex. Standard, Jour och Övertid.',
+            action: Auth.can('article_manage') ? `<button type="button" class="btn bp bsm" onclick="PriceGroupsPage.openCreate()">${ic('plus',14)}<span>Ny prisgrupp</span></button>` : '' });
+      return;
+    }
+    el.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl rg-tbl--nosel">
+        <thead><tr>
+          <th>Prisgrupp</th>
+          <th class="rg-w-p c-num">Timpris exkl. moms</th>
+          <th class="rg-w-xs">Status</th>
+          <th class="rg-w-end"><span class="sr-only">Öppna</span></th>
+        </tr></thead>
+        <tbody>${pgs.map(pg => {
+          const id = RegisterUi.arg(pg.id);
+          return `<tr class="rg-row${pg.active ? '' : ' rg-row--off'}" tabindex="0" onclick="PriceGroupsPage.openEdit(${id})"
+              onkeydown="if(event.key==='Enter'&&event.target===this){PriceGroupsPage.openEdit(${id})}">
+            <td class="rg-c-main">
+              <div class="rg-title" title="${esc(pg.name)}">${esc(pg.name || '—')}</div>
+              ${pg.description ? `<div class="rg-sub" title="${esc(pg.description)}">${esc(pg.description)}</div>` : ''}
+              <div class="rg-msub">${fmt(pg.hourRate)} kr/tim exkl. moms</div>
+            </td>
+            <td class="rg-c-x c-num"><span class="rg-price">${fmt(pg.hourRate)} kr/tim</span></td>
+            <td class="rg-c-x">${RegisterUi.status(!!pg.active, 'Aktiv', 'Inaktiv')}</td>
+            <td class="rg-c-end">
+              ${pg.active ? '' : `<span class="bdg bdg-grey rg-m-only">Inaktiv</span>`}
+              ${RegisterUi.openBtn(`PriceGroupsPage.openEdit(${id})`, 'Öppna ' + (pg.name || 'prisgrupp'))}
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>`;
   },
 
   _renderProfiler() {
     const el = document.getElementById('pg-pricegroups-tab-body');
     if (!el) return;
-    const pps = (state.priceProfiles || []).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+    const all = (state.priceProfiles || []).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
     const pgs = state.priceGroups || [];
-    const pgName = id => { const g = pgs.find(x=>x.id===id); return g ? g.name : (id||'—'); };
-    el.innerHTML =
-      `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
-         <h3 style="flex:1;font-size:14px;font-weight:700;">Prisprofiler</h3>
-         <button class="btn bp bsm" onclick="PriceGroupsPage.openCreateProfile()">${ic('plus',14)} Ny profil</button>
-       </div>` +
-      (pps.length === 0
-        ? `<div class="empty">${ic('users',36)}<h3>Inga prisprofiler</h3></div>`
-        : pps.map(pp => `
-          <div class="list-item">
-            <div class="item-row">
-              <div style="flex:1;min-width:0;">
-                <div class="item-title" style="font-weight:700;">${esc(pp.name)}</div>
-                <div class="item-sub">${pgName(pp.defaultPriceGroupId)}${pp.notes ? ' · ' + esc(pp.notes) : ''}</div>
-              </div>
-              <button class="btn bs bxs" onclick="PriceGroupsPage.openEditProfile('${pp.id}')">${ic('pencil',13)}</button>
-            </div>
-          </div>`).join(''));
+    const pgName = id => { const g = pgs.find(x=>x.id===id); return g ? g.name : (id||''); };
+    const pps = all.filter(pp => this._match(pp.name, pp.notes, pgName(pp.defaultPriceGroupId)));
+    const head = RegisterUi.count(pps.length, all.length, 'prisprofil', 'prisprofiler', { clear: this._q ? 'PriceGroupsPage._clearSearch()' : '' });
+    if (!pps.length) {
+      el.innerHTML = this._q
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: 'Inga prisprofiler matchar sökningen.', action: `<button type="button" class="btn bs bsm" onclick="PriceGroupsPage._clearSearch()">Rensa sökning</button>` })
+        : RegisterUi.empty({ icon: 'users', title: 'Inga prisprofiler ännu', text: 'En prisprofil kopplar en kundgrupp (t.ex. BRF eller privatkund) till en standardprisgrupp.',
+            action: Auth.can('article_manage') ? `<button type="button" class="btn bp bsm" onclick="PriceGroupsPage.openCreateProfile()">${ic('plus',14)}<span>Ny prisprofil</span></button>` : '' });
+      return;
+    }
+    el.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl rg-tbl--nosel">
+        <thead><tr>
+          <th>Prisprofil</th>
+          <th class="rg-w-l">Standardprisgrupp</th>
+          <th class="rg-w-end"><span class="sr-only">Redigera</span></th>
+        </tr></thead>
+        <tbody>${pps.map(pp => {
+          const id = RegisterUi.arg(pp.id);
+          const g = pgName(pp.defaultPriceGroupId);
+          return `<tr class="rg-row" tabindex="0" onclick="PriceGroupsPage.openEditProfile(${id})"
+              onkeydown="if(event.key==='Enter'&&event.target===this){PriceGroupsPage.openEditProfile(${id})}">
+            <td class="rg-c-main">
+              <div class="rg-title" title="${esc(pp.name)}">${esc(pp.name || '—')}</div>
+              ${pp.notes ? `<div class="rg-sub" title="${esc(pp.notes)}">${esc(pp.notes)}</div>` : ''}
+              <div class="rg-msub">Standardprisgrupp: ${g ? esc(g) : 'ingen'}</div>
+            </td>
+            <td class="rg-c-x" title="${esc(g)}">${g ? esc(g) : '<span class="rg-none">Ingen</span>'}</td>
+            <td class="rg-c-end">
+              <button type="button" class="ibtn rg-open" title="Redigera ${esc(pp.name || 'prisprofil')}" aria-label="Redigera ${esc(pp.name || 'prisprofil')}" onclick="event.stopPropagation();PriceGroupsPage.openEditProfile(${id})">${ic('pencil',15)}</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>`;
   },
 
   _formHtml(pg) {
     return `
       <div class="fg"><label>Namn <span style="color:var(--rd)">*</span></label>
-        <input id="pg-name" value="${pg?pg.name||'':''}" placeholder="T.ex. Standard, Jour, Övertid"></div>
+        <input id="pg-name" value="${pg?esc(pg.name||''):''}" placeholder="T.ex. Standard, Jour, Övertid"></div>
       <div class="fg"><label>Timpris ex moms (kr/tim)</label>
-        <input type="number" id="pg-rate" value="${pg?pg.hourRate||0:0}" min="0"></div>
+        <input type="number" id="pg-rate" value="${pg?esc(pg.hourRate||0):0}" min="0"></div>
       <div class="fg"><label>Beskrivning</label>
-        <input id="pg-desc" value="${pg?pg.description||'':''}" placeholder="Valfri beskrivning"></div>`;
+        <input id="pg-desc" value="${pg?esc(pg.description||''):''}" placeholder="Valfri beskrivning"></div>`;
   },
 
   _profileFormHtml(pp) {
@@ -8422,7 +8676,7 @@ const PriceGroupsPage = {
       <div class="fg"><label>Standard prisgrupp</label>
         <select id="pp-pg">
           <option value="">— Ingen —</option>
-          ${pgs.map(g=>`<option value="${g.id}" ${pp&&pp.defaultPriceGroupId===g.id?'selected':''}>${esc(g.name)} (${fmt(g.hourRate)} kr/tim)</option>`).join('')}
+          ${pgs.map(g=>`<option value="${esc(g.id)}" ${pp&&pp.defaultPriceGroupId===g.id?'selected':''}>${esc(g.name)} (${fmt(g.hourRate)} kr/tim)</option>`).join('')}
         </select></div>
       <div class="fg"><label>Anteckningar</label>
         <textarea id="pp-notes" rows="2">${pp?esc(pp.notes||''):''}</textarea></div>`;
@@ -8445,7 +8699,7 @@ const PriceGroupsPage = {
     const pg = (state.priceGroups||[]).find(x=>x.id===pgId);
     if (!pg) return;
     Modal.open({
-      title: pg.name,
+      title: esc(pg.name),
       body: this._formHtml(pg),
       buttons: [
         { label: pg.active ? `${ic('eye-off',13)} Inaktivera` : `${ic('eye',13)} Aktivera`, cls: 'btn bw',
@@ -8473,7 +8727,7 @@ const PriceGroupsPage = {
     const pp = (state.priceProfiles||[]).find(x=>x.id===ppId);
     if (!pp) return;
     Modal.open({
-      title: pp.name,
+      title: esc(pp.name),
       body: this._profileFormHtml(pp),
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => PriceGroupsPage._saveProfile(ppId) },
@@ -8533,9 +8787,40 @@ const PriceGroupsPage = {
 /* ── Personal ─────────────────────────── */
 const StaffPage = {
   _filter: 'aktiva',
+  _q: '',
 
+  /* V3 register (2026-11-26): tvåfasrendering som övriga register (sökfältet
+     byts aldrig ut). F-19: "Inaktivera" stod som knapp på varje rad och
+     pressade ihop namnen — åtgärden finns nu i radens "⋮"-meny (sist, röd,
+     med bekräftelse) och som förut i redigeringsdialogen. */
   render() {
     const el = document.getElementById('pg-staff-content');
+    if (!el) return;
+    const canManage = Auth.can('staff_manage');
+    el.innerHTML = `<div class="rg" data-rg="staff">
+      ${RegisterUi.bar({
+        id: 'staff-search', placeholder: 'Sök namn, titel, roll, telefon…', label: 'Sök personal (namn, titel, roll, telefon, e-post)', value: this._q,
+        oninput: "StaffPage._q=this.value;RegisterUi.later('staff',function(){StaffPage.renderList()})",
+        menu: [
+          canManage ? { label: 'Importera', icon: 'upload', onclick: "Router.showPage('pg-import-wizard',{type:'staff'})" } : null,
+          { label: 'Exportera', icon: 'download', onclick: "ImportExportService.showExportMenu('staff',this)" }
+        ],
+        primary: canManage ? { label: 'Ny personal', onclick: 'StaffPage.openCreate()' } : null
+      })}
+      <div class="rg-filters" id="staff-filters"></div>
+      <div id="staff-list" class="rg-listwrap"></div>
+    </div>`;
+    this.renderList();
+  },
+
+  _clearSearch() {
+    this._q = '';
+    const i = document.getElementById('staff-search'); if (i) i.value = '';
+    this.renderList();
+  },
+
+  renderList() {
+    const el = document.getElementById('staff-list');
     if (!el) return;
     /* SPRINT1 §15: bara export i bulk. StaffPage._toggleActive() saknar
        skydd mot att inaktivera sig själv eller den sista superadmin-
@@ -8546,53 +8831,103 @@ const StaffPage = {
     SelectionModel.init('staff', { stateKey: 'staff', actions: [
       { id: 'export', label: 'Exportera', icon: 'download', type: 'export' }
     ] });
+    const canManage = Auth.can('staff_manage');
     const all     = state.staff || [];
     const aktiva  = all.filter(s => s.active);
     const inaktiva = all.filter(s => !s.active);
-    const list    = this._filter === 'aktiva' ? aktiva : inaktiva;
-    const visibleIds = list.map(s => s.id);
-    const selMode = SelectionModel.count() > 0;
+    const base    = this._filter === 'aktiva' ? aktiva : inaktiva;
     const roleColor = (rid) => ({ admin:'bdg-red', chef:'bdg-orange', personal:'bdg-blue' }[rid] || 'bdg-grey');
     const roleLabel = (rid) => { const r = (state.roles||[]).find(x=>x.id===rid); return r ? r.label : (rid || '—'); };
+    let list = base;
+    if (this._q) {
+      const q = this._q.toLowerCase();
+      list = list.filter(s => [s.firstName, s.lastName, (s.firstName||'') + ' ' + (s.lastName||''), s.title, s.phone, s.email, s.username, roleLabel(s.role)]
+        .some(v => String(v || '').toLowerCase().includes(q)));
+    }
+    const visibleIds = list.map(s => s.id);
+    const selMode = SelectionModel.count() > 0;
 
-    el.innerHTML =
-      `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px;">
-         <div class="ftabs" style="flex:1 1 auto;margin-bottom:0;">
-           <button class="ft ${this._filter==='aktiva'?'on':''}" onclick="StaffPage._filter='aktiva';StaffPage.render()">Aktiva (${aktiva.length})</button>
-           <button class="ft ${this._filter==='inaktiva'?'on':''}" onclick="StaffPage._filter='inaktiva';StaffPage.render()">Inaktiva (${inaktiva.length})</button>
-         </div>
-         ${SelectionModel.selectAllHtml(visibleIds)}
-         ${Auth.can('staff_manage') ? `<button class="btn bs bsm" onclick="Router.showPage('pg-import-wizard',{type:'staff'})">${ic('upload',14)} Importera</button>` : ''}
-         <button class="btn bs bsm" onclick="ImportExportService.showExportMenu('staff',this)">${ic('download',14)} Exportera</button>
-         <button class="btn bp bsm" onclick="StaffPage.openCreate()">${ic('plus',14)} Ny personal</button>
-       </div>` +
-      (list.length === 0
-        ? `<div class="empty">${ic('users',32)}<h3>Inga ${this._filter} medarbetare</h3></div>`
-        : list.map(s => {
-            const selected = SelectionModel.isSelected(s.id);
-            return `
-          <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${s.id}"
-            onclick="SelectionModel.rowClick('${s.id}', function(){ StaffPage.openEdit('${s.id}'); })">
-            <div class="item-row">
-              ${SelectionModel.checkboxHtml(s.id, s.firstName + ' ' + s.lastName)}
-              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-                <div style="width:38px;height:38px;border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc-text);flex-shrink:0;">${(s.firstName||'?').charAt(0)}${(s.lastName||'').charAt(0)}</div>
-                <div>
-                  <div class="item-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
-                  <div class="item-sub">${esc(s.title||'—')}${s.phone?' · '+esc(s.phone):''}</div>
-                </div>
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-                <span class="bdg ${roleColor(s.role)}">${roleLabel(s.role)}</span>
-                <button class="btn bxs ${s.active?'bw':'bsu'}" style="font-size:10px;padding:3px 8px;margin-top:2px;"
-                  onclick="event.stopPropagation();StaffPage._toggleActive('${s.id}')">
-                  ${s.active?ic('user-x',11)+' Inaktivera':ic('user-check',11)+' Aktivera'}
-                </button>
-              </div>
-              <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna personal" onclick="event.stopPropagation();StaffPage.openEdit('${s.id}')">${ic('chevron-right',16)}</button>
-            </div>
-          </div>`;}).join('')
-      );
+    const fEl = document.getElementById('staff-filters');
+    if (fEl) fEl.innerHTML = `<div class="ftabs rg-seg" role="group" aria-label="Status">
+      ${[['aktiva','Aktiva',aktiva.length],['inaktiva','Inaktiva',inaktiva.length]].map(([k,l,n]) =>
+        `<button type="button" class="ft ${this._filter===k?'on':''}" aria-pressed="${this._filter===k}" onclick="StaffPage._filter='${k}';StaffPage.renderList()">${l}<span class="ft-n">${n}</span></button>`).join('')}
+    </div>`;
+
+    const head = RegisterUi.count(list.length, base.length, 'person', 'personer', {
+      clear: this._q ? 'StaffPage._clearSearch()' : '',
+      selAll: list.length ? SelectionModel.selectAllHtml(visibleIds) : ''
+    });
+    if (list.length === 0) {
+      el.innerHTML = this._q
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: 'Ingen personal matchar sökningen.', action: `<button type="button" class="btn bs bsm" onclick="StaffPage._clearSearch()">Rensa sökning</button>` })
+        : this._filter === 'inaktiva'
+          ? RegisterUi.empty({ icon: 'user-x', title: 'Ingen inaktiv personal', text: 'Personer som inaktiveras visas här och kan aktiveras igen.' })
+          : RegisterUi.empty({ icon: 'users', title: 'Ingen aktiv personal', text: 'Lägg upp personal för att kunna tilldela arbetsorder och registrera tid.',
+              action: canManage ? `<button type="button" class="btn bp bsm" onclick="StaffPage.openCreate()">${ic('plus',14)}<span>Ny personal</span></button>` : '' });
+      return;
+    }
+    const rows = list.map(s => {
+      const id = RegisterUi.arg(s.id);
+      const name = ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || s.username || '—';
+      const selected = SelectionModel.isSelected(s.id);
+      const role = roleLabel(s.role);
+      const menu = canManage ? RegisterUi.menu(RegisterUi.domId('stm', s.id), 'Fler åtgärder för ' + name, [
+        { label: 'Redigera', icon: 'pencil', onclick: `StaffPage.openEdit(${id})` },
+        s.active
+          ? { label: 'Inaktivera', icon: 'user-x', danger: true, sep: true, onclick: `StaffPage._confirmToggle(${id})` }
+          : { label: 'Aktivera', icon: 'user-check', sep: true, onclick: `StaffPage._toggleActive(${id})` }
+      ]) : '';
+      return `<tr class="rg-row${selMode?' sel-mode':''}${selected?' selected':''}${s.active?'':' rg-row--off'}" data-sel-row-id="${esc(s.id)}"${canManage ? ' tabindex="0"' : ''}
+          onclick="SelectionModel.rowClick(${id}, ${canManage ? `function(){ StaffPage.openEdit(${id}); }` : 'null'})"
+          ${canManage ? `onkeydown="if(event.key==='Enter'&&event.target===this){StaffPage.openEdit(${id})}"` : ''}>
+        <td class="rg-c-sel">${SelectionModel.checkboxHtml(s.id, name)}</td>
+        <td class="rg-c-main">
+          <div class="rg-person">${UiKit.avatar(s, 32)}<div class="rg-person-t">
+            <div class="rg-title" title="${esc(name)}">${esc(name)}</div>
+            <div class="rg-msub">${esc([s.title, role].filter(Boolean).join(' · '))}</div>
+            ${s.phone ? `<div class="rg-msub">${esc(s.phone)}</div>` : ''}
+          </div></div>
+        </td>
+        <td class="rg-c-x rg-h-md" title="${esc(s.title || '')}">${s.title ? esc(s.title) : '<span class="rg-none">Ingen titel</span>'}</td>
+        <td class="rg-c-x"><span class="bdg ${roleColor(s.role)}" title="${esc(role)}">${esc(role)}</span></td>
+        <td class="rg-c-x rg-num">${s.phone ? esc(s.phone) : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-x rg-h-xl" title="${esc(s.email || '')}">${s.email ? esc(s.email) : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-x">${RegisterUi.status(!!s.active, 'Aktiv', 'Inaktiv')}</td>
+        <td class="rg-c-end">${menu}${canManage ? RegisterUi.openBtn(`StaffPage.openEdit(${id})`, 'Öppna ' + name, menu ? 'rg-d-only' : '') : ''}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl${selMode?' sel-mode':''}">
+        <thead><tr>
+          <th class="rg-w-sel"><span class="sr-only">Markera</span></th>
+          <th>Namn</th>
+          <th class="rg-w-m rg-h-md">Titel</th>
+          <th class="rg-w-m">Roll</th>
+          <th class="rg-w-s">Telefon</th>
+          <th class="rg-w-l rg-h-xl">E-post</th>
+          <th class="rg-w-xs">Status</th>
+          <th class="rg-w-end2"><span class="sr-only">Åtgärder</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  },
+
+  /* Inaktivering från radens meny kräver bekräftelse (V3-KOMPONENTSTANDARD §3).
+     Själva ändringen är oförändrad: _toggleActive(). */
+  _confirmToggle(staffId) {
+    if (!Auth.require('staff_manage')) return;
+    const s = (state.staff || []).find(x => x.id === staffId);
+    if (!s) return;
+    const name = ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || s.username || 'personen';
+    Modal.open({
+      title: `${ic('user-x',16)} Inaktivera ${esc(name)}?`,
+      body: `<p style="font-size:14px;line-height:1.5;color:var(--ink-2);margin:0;">${esc(name)} flyttas till fliken Inaktiva. Du kan aktivera personen igen när som helst.</p>`,
+      buttons: [
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: `${ic('user-x',14)} Inaktivera`, cls: 'btn bd', onClick: () => StaffPage._toggleActive(staffId) }
+      ]
+    });
   },
 
   _formHtml(s) {
@@ -8608,9 +8943,9 @@ const StaffPage = {
     return `
       <div class="g2">
         <div class="fg"><label>Förnamn <span style="color:var(--rd)">*</span></label>
-          <input id="sf-first" value="${s?s.firstName:''}" placeholder="Förnamn" autocomplete="off"></div>
+          <input id="sf-first" value="${s?esc(s.firstName):''}" placeholder="Förnamn" autocomplete="off"></div>
         <div class="fg"><label>Efternamn <span style="color:var(--rd)">*</span></label>
-          <input id="sf-last" value="${s?s.lastName:''}" placeholder="Efternamn" autocomplete="off"></div>
+          <input id="sf-last" value="${s?esc(s.lastName):''}" placeholder="Efternamn" autocomplete="off"></div>
       </div>
       <div class="fg"><label>Titel / yrkesroll</label>
         ${activeTitles.length > 0 ? `
@@ -8624,24 +8959,24 @@ const StaffPage = {
               ${ic('list',13)} Välj titel
             </button>
           </div>
-          <input type="hidden" id="sf-title" value="${s?s.title||'':''}">
+          <input type="hidden" id="sf-title" value="${s?esc(s.title||''):''}">
           ${s && s.title && !activeTitles.some(t => t.name === s.title)
             ? `<div class="nbox" style="margin-top:4px;font-size:11px;">⚠ "${esc(s.title)}" finns inte bland aktiva titlar</div>`
             : ''}` :
           `<div class="nbox" style="font-size:12px;">Inga aktiva titlar. <button type="button" class="btn bghost bxs" style="margin-left:4px;" onclick="Modal.close();Router.showPage('pg-admin')">Gå till Admin ${ic('arrow-right',10)}</button></div>
-          <input type="hidden" id="sf-title" value="${s?s.title||'':''}">`
+          <input type="hidden" id="sf-title" value="${s?esc(s.title||''):''}">`
         }</div>
       <div class="g2">
         <div class="fg"><label>Telefon</label>
-          <input id="sf-phone" value="${s?s.phone||'':''}" placeholder="070-XXX XX XX" type="tel"></div>
+          <input id="sf-phone" value="${s?esc(s.phone||''):''}" placeholder="070-XXX XX XX" type="tel"></div>
         <div class="fg"><label>E-post</label>
-          <input id="sf-email" value="${s?s.email||'':''}" placeholder="namn@vift.se" type="email"></div>
+          <input id="sf-email" value="${s?esc(s.email||''):''}" placeholder="namn@vift.se" type="email"></div>
       </div>
       <div style="border-top:1px solid var(--br);margin:4px 0;"></div>
       <div class="fg"><label>Användarnamn <span style="color:var(--rd)">*</span></label>
-        <input id="sf-uname" value="${s?s.username||'':''}" placeholder="användarnamn" autocomplete="off"></div>
+        <input id="sf-uname" value="${s?esc(s.username||''):''}" placeholder="användarnamn" autocomplete="off"></div>
       <div class="fg"><label>Roll / behörighet</label>
-        <input type="hidden" id="sf-role" value="${s?s.role||'personal':'personal'}">
+        <input type="hidden" id="sf-role" value="${s?esc(s.role||'personal'):'personal'}">
         <div style="display:flex;flex-direction:column;gap:5px;margin-top:4px;">
           ${displayRoles.map(r => {
             const isSel = s ? s.role === r.id : r.id === 'personal';
@@ -8690,7 +9025,7 @@ const StaffPage = {
     return filtered.map(t => {
       const isSel = cur === t.name;
       const usageCount = (state.staff||[]).filter(s => s.title === t.name).length;
-      return `<div class="crow" onclick="StaffPage._selectTitleFromPicker('${t.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"
+      return `<div class="crow" onclick="StaffPage._selectTitleFromPicker(${RegisterUi.arg(t.name)})"
         style="${isSel?'background:var(--navy10,#eef2ff);':''};cursor:pointer;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;">${esc(t.name)}</div>
@@ -8708,7 +9043,7 @@ const StaffPage = {
     const display = document.getElementById('sf-title-display');
     if (display) {
       display.innerHTML = title
-        ? `<span class="chip on">${title}</span>`
+        ? `<span class="chip on">${esc(title)}</span>`
         : '<span style="font-size:12px;color:var(--mt);">Ingen titel vald</span>';
     }
     Modal.close();
@@ -8749,7 +9084,7 @@ const StaffPage = {
     const s = (state.staff||[]).find(x => x.id === staffId);
     if (!s) return;
     Modal.open({
-      title: `${s.firstName} ${s.lastName}`,
+      title: `${esc(s.firstName)} ${esc(s.lastName)}`,
       wide: true,
       body: this._formHtml(s),
       buttons: [
@@ -8818,11 +9153,16 @@ const StaffPage = {
   },
 
   _toggleActive(staffId) {
+    /* V3 register: samma behörighet som redigeringen (openEdit) — anropet
+       nås nu från radmenyn och ska inte kunna köras utan staff_manage. */
+    if (!Auth.require('staff_manage')) return;
     const idx = (state.staff||[]).findIndex(s => s.id === staffId);
     if (idx < 0) return;
     state.staff[idx] = { ...state.staff[idx], active: !state.staff[idx].active, updatedAt: new Date().toISOString() };
     persist(); Modal.close();
-    showToast(state.staff[idx].active ? 'Aktiverad' : 'Inaktiverad');
+    const nm = ((state.staff[idx].firstName || '') + ' ' + (state.staff[idx].lastName || '')).trim();
+    const word = state.staff[idx].active ? 'aktiverad' : 'inaktiverad';
+    showToast(nm ? nm + ' ' + word : word.charAt(0).toUpperCase() + word.slice(1));
     this.render();
   }
 };
@@ -8837,59 +9177,117 @@ const ServiceTemplatesPage = {
   _testFields: {},
   _testReduction: 'ingen',
 
+  /* V3 register (2026-11-26): sidrubriken upprepas inte (toppraden visar
+     den); tvåfasrendering — sökningen byter aldrig ut sökfältet (förut
+     renderades hela sidan om på varje tangenttryck och fältet tappade
+     fokus). F-20: de fyra ikonknapparna per rad (Testkalkyl, Duplicera,
+     Aktivera/Inaktivera, Redigera) ligger i radens "⋮"-meny med text;
+     klick på raden öppnar redigeringen. Inga funktioner har tagits bort. */
   render() {
     const el = document.getElementById('pg-service-templates-content');
     if (!el) return;
+    el.innerHTML = `<div class="rg" data-rg="services">
+      ${RegisterUi.bar({
+        id: 'svc-search', placeholder: 'Sök tjänst eller kategori…', label: 'Sök offerttjänst', value: this._q,
+        oninput: "ServiceTemplatesPage._q=this.value;RegisterUi.later('svc',function(){ServiceTemplatesPage.renderList()})",
+        primary: { label: 'Ny tjänst', onclick: 'ServiceTemplatesPage.openCreate()' }
+      })}
+      <div class="rg-filters" id="svc-filters"></div>
+      <div id="svc-list" class="rg-listwrap"></div>
+    </div>`;
+    this.renderList();
+  },
+
+  _clearSearch() {
+    this._q = '';
+    const i = document.getElementById('svc-search'); if (i) i.value = '';
+    this.renderList();
+  },
+
+  renderList() {
+    const el = document.getElementById('svc-list');
+    if (!el) return;
     const all = ServiceTemplateService.getAll().slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
-    const filtered = all.filter(s => {
-      if (this._filter === 'aktiva'   && s.active === false) return false;
-      if (this._filter === 'inaktiva' && s.active !== false) return false;
-      const q = (this._q||'').toLowerCase();
-      if (q && !s.name.toLowerCase().includes(q) && !(s.category||'').toLowerCase().includes(q)) return false;
-      return true;
-    });
     const nAktiva   = all.filter(s=>s.active!==false).length;
     const nInaktiva = all.filter(s=>s.active===false).length;
-    el.innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('zap',15)} Offerttjänster & Prismodeller</h3>
-          <button class="btn bp bsm" onclick="ServiceTemplatesPage.openCreate()">${ic('plus',13)} Ny tjänst</button>
-        </div>
-        <div style="display:flex;gap:7px;align-items:center;padding:10px 16px 6px;">
-          <div class="swrap" style="flex:1;">
-            <span class="sico">${ic('search',14)}</span>
-            <input type="search" placeholder="Sök tjänst eller kategori…" value="${(this._q||'').replace(/"/g,'&quot;')}"
-              oninput="ServiceTemplatesPage._q=this.value;ServiceTemplatesPage.render()">
-          </div>
-        </div>
-        <div class="ftabs" style="padding:0 16px 8px;">
-          ${[['alla','Alla',all.length],['aktiva','Aktiva',nAktiva],['inaktiva','Inaktiva',nInaktiva]].map(([v,l,n])=>
-            `<button class="ft ${this._filter===v?'on':''}" onclick="ServiceTemplatesPage._filter='${v}';ServiceTemplatesPage.render()">${l} <span style="background:rgba(0,0,0,.1);border-radius:9px;padding:0 5px;font-size:9px;">${n}</span></button>`
-          ).join('')}
-        </div>
-        <div class="card-body" style="padding:0;">
-          ${filtered.length === 0
-            ? `<div style="padding:24px;text-align:center;color:var(--mt);font-size:13px;">Inga tjänster hittades</div>`
-            : filtered.map((s,i) => `
-              <div class="crow" style="padding:10px 16px;border-bottom:1px solid var(--br);${s.active===false?'opacity:.6':''}">
-                <div style="width:36px;height:36px;border-radius:8px;background:${s.active===false?'var(--br)':'var(--navy)'};display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;margin-right:10px;">
-                  ${ic(s.icon||'zap',16)}
-                </div>
-                <div style="flex:1;min-width:0;">
-                  <div style="font-size:13px;font-weight:700;color:var(--navy);">${esc(s.name)}${s.active===false?' <span class="bdg bdg-grey" style="font-size:9px;">Inaktiv</span>':''}</div>
-                  <div style="font-size:11px;color:var(--mt);">${s.category||'—'} · ${ServiceTemplateService.modelLabel(s.pricingModel)} · Min ${fmt(s.minChargeExVat||0)} kr</div>
-                </div>
-                <div style="display:flex;gap:4px;flex-shrink:0;">
-                  <button class="btn bs bxs" title="Testkalkyl" onclick="ServiceTemplatesPage.openTest('${s.id}')">${ic('calculator',13)}</button>
-                  <button class="btn bs bxs" title="Duplicera" onclick="ServiceTemplatesPage.duplicate('${s.id}')">${ic('copy',13)}</button>
-                  <button class="btn ${s.active===false?'bsu':'bw'} bxs" title="${s.active===false?'Aktivera':'Inaktivera'}" onclick="ServiceTemplatesPage.toggleActive('${s.id}')">${ic(s.active===false?'eye':'eye-off',13)}</button>
-                  <button class="btn bs bxs" onclick="ServiceTemplatesPage.openEdit('${s.id}')">${ic('pencil',13)}</button>
-                </div>
-              </div>`).join('')
-          }
-        </div>
-      </div>`;
+    const base = all.filter(s => !(this._filter === 'aktiva' && s.active === false) && !(this._filter === 'inaktiva' && s.active !== false));
+    const q = (this._q||'').toLowerCase();
+    const filtered = q ? base.filter(s => (s.name||'').toLowerCase().includes(q) || (s.category||'').toLowerCase().includes(q)) : base;
+
+    const fEl = document.getElementById('svc-filters');
+    if (fEl) fEl.innerHTML = `<div class="ftabs rg-seg" role="group" aria-label="Status">
+      ${[['alla','Alla',all.length],['aktiva','Aktiva',nAktiva],['inaktiva','Inaktiva',nInaktiva]].map(([v,l,n]) =>
+        `<button type="button" class="ft ${this._filter===v?'on':''}" aria-pressed="${this._filter===v}" onclick="ServiceTemplatesPage._filter='${v}';ServiceTemplatesPage.renderList()">${l}<span class="ft-n">${n}</span></button>`).join('')}
+    </div>`;
+
+    const head = RegisterUi.count(filtered.length, base.length, 'tjänst', 'tjänster', { clear: q ? 'ServiceTemplatesPage._clearSearch()' : '' });
+    if (filtered.length === 0) {
+      el.innerHTML = q
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: 'Inga tjänster matchar sökningen.', action: `<button type="button" class="btn bs bsm" onclick="ServiceTemplatesPage._clearSearch()">Rensa sökning</button>` })
+        : this._filter === 'inaktiva'
+          ? RegisterUi.empty({ icon: 'eye-off', title: 'Inga inaktiva tjänster', text: 'Inaktiverade tjänster visas inte i offertguiden men finns kvar här.' })
+          : RegisterUi.empty({ icon: 'zap', title: 'Inga offerttjänster ännu', text: 'En offerttjänst är en mall med prismodell och offerttexter som används i offertguiden.',
+              action: `<button type="button" class="btn bp bsm" onclick="ServiceTemplatesPage.openCreate()">${ic('plus',14)}<span>Ny tjänst</span></button>` });
+      return;
+    }
+    const rows = filtered.map(s => {
+      const id = RegisterUi.arg(s.id);
+      const on = s.active !== false;
+      const model = ServiceTemplateService.modelLabel(s.pricingModel);
+      const min = `${fmt(s.minChargeExVat||0)} kr`;
+      const menu = RegisterUi.menu(RegisterUi.domId('svcm', s.id), 'Fler åtgärder för ' + (s.name || 'tjänsten'), [
+        { label: 'Redigera', icon: 'pencil', onclick: `ServiceTemplatesPage.openEdit(${id})` },
+        { label: 'Testkalkyl', icon: 'calculator', onclick: `ServiceTemplatesPage.openTest(${id})` },
+        { label: 'Duplicera', icon: 'copy', onclick: `ServiceTemplatesPage.duplicate(${id})` },
+        on
+          ? { label: 'Inaktivera', icon: 'eye-off', danger: true, sep: true, onclick: `ServiceTemplatesPage._confirmDeactivate(${id})` }
+          : { label: 'Aktivera', icon: 'eye', sep: true, onclick: `ServiceTemplatesPage.toggleActive(${id})` }
+      ]);
+      return `<tr class="rg-row${on ? '' : ' rg-row--off'}" tabindex="0" onclick="ServiceTemplatesPage.openEdit(${id})"
+          onkeydown="if(event.key==='Enter'&&event.target===this){ServiceTemplatesPage.openEdit(${id})}">
+        <td class="rg-c-main">
+          <div class="rg-person"><span class="rg-svc-ico${on ? '' : ' is-off'}" aria-hidden="true">${ic(s.icon||'zap',16)}</span><div class="rg-person-t">
+            <div class="rg-title" title="${esc(s.name)}">${esc(s.name || '—')}</div>
+            <div class="rg-sub">${esc(s.category || 'Ingen kategori')}</div>
+            <div class="rg-msub">${esc(model)} · min ${min} exkl. moms</div>
+          </div></div>
+        </td>
+        <td class="rg-c-x" title="${esc(model)}">${esc(model)}</td>
+        <td class="rg-c-x c-num"><span class="rg-price">${min}</span></td>
+        <td class="rg-c-x">${RegisterUi.status(on, 'Aktiv', 'Inaktiv')}</td>
+        <td class="rg-c-end">
+          ${on ? '' : `<span class="bdg bdg-grey rg-m-only">Inaktiv</span>`}
+          ${menu}${RegisterUi.openBtn(`ServiceTemplatesPage.openEdit(${id})`, 'Redigera ' + (s.name || 'tjänst'), 'rg-d-only')}
+        </td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl rg-tbl--nosel">
+        <thead><tr>
+          <th>Tjänst</th>
+          <th class="rg-w-l">Prismodell</th>
+          <th class="rg-w-p c-num">Minsta debitering exkl. moms</th>
+          <th class="rg-w-xs">Status</th>
+          <th class="rg-w-end2"><span class="sr-only">Åtgärder</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  },
+
+  /* Inaktivering från radens meny kräver bekräftelse (V3-KOMPONENTSTANDARD §3).
+     Själva ändringen är oförändrad: toggleActive(). */
+  _confirmDeactivate(id) {
+    const svc = ServiceTemplateService.get(id);
+    if (!svc) return;
+    Modal.open({
+      title: `${ic('eye-off',16)} Inaktivera ${esc(svc.name || 'tjänsten')}?`,
+      body: `<p style="font-size:14px;line-height:1.5;color:var(--ink-2);margin:0;">Tjänsten visas inte längre i offertguiden. Du kan aktivera den igen när som helst.</p>`,
+      buttons: [
+        { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() },
+        { label: `${ic('eye-off',14)} Inaktivera`, cls: 'btn bd', onClick: () => { Modal.close(); ServiceTemplatesPage.toggleActive(id); } }
+      ]
+    });
   },
 
   openCreate() {
@@ -8910,7 +9308,7 @@ const ServiceTemplatesPage = {
     this._testFields  = {};
     this._testReduction = svc.defaultReduction || 'ingen';
     Modal.open({
-      title: `${ic('settings',14)} Redigera: ${svc.name}`,
+      title: `${ic('settings',14)} Redigera: ${esc(svc.name)}`,
       body: this._editBody(svc),
       wide: true,
       buttons: [
@@ -11146,10 +11544,38 @@ const ActivitiesPage = {
     return Auth.can('ao_edit') || Auth.can('admin_manage');
   },
 
+  /* V3 register (2026-11-26): tvåfasrendering som övriga register —
+     render() bygger verktygsrad (sök + EN primär åtgärd) och tomma
+     behållare, renderList() fyller filter, räknare och tabell, så att
+     sökfältet behåller fokus. Sidrubriken "Uppgifter" upprepas inte (den
+     står i toppraden, S-03). Filtren är V3-chips i två grupper (öppna
+     snabbval / klart och kopplingar) i stället för mörka piller (S-01).
+     Urvalen och behörighetsreglerna per uppgift är oförändrade. */
   render(params = {}) {
     const el = document.getElementById('pg-activities-content');
     if (!el) return;
     if (params.filter) this._filter = params.filter;
+    el.innerHTML = `<div class="rg" data-rg="tasks">
+      ${RegisterUi.bar({
+        id: 'act-search', placeholder: 'Sök uppgift, ansvarig, kund, AO…', label: 'Sök uppgift (titel, notering, ansvarig, kund, fastighet, AO)', value: this._search,
+        oninput: "ActivitiesPage._search=this.value;RegisterUi.later('act',function(){ActivitiesPage.renderList()})",
+        primary: { label: 'Ny uppgift', onclick: 'ActivitiesPage.openCreate()' }
+      })}
+      <div class="rg-filters" id="act-filters"></div>
+      <div id="act-list" class="rg-listwrap"></div>
+    </div>`;
+    this.renderList();
+  },
+
+  _clearFilters() {
+    this._filter = 'alla'; this._search = '';
+    const i = document.getElementById('act-search'); if (i) i.value = '';
+    this.renderList();
+  },
+
+  renderList() {
+    const el = document.getElementById('act-list');
+    if (!el) return;
 
     const today = tdy();
     const acts  = state.activities || [];
@@ -11170,139 +11596,136 @@ const ActivitiesPage = {
     const aoLinked     = acts.filter(a => a.relatedType === 'workOrder');
 
     const filter = this._filter;
-    let filtered;
-    if (filter === 'mina')           filtered = mine;
-    else if (filter === 'idag')      filtered = dueToday;
-    else if (filter === 'försenade') filtered = overdue;
-    else if (filter === 'kommande')  filtered = upcoming;
-    else if (filter === 'klara')     filtered = done;
-    else if (filter === 'offerter')  filtered = offerLinked;
-    else if (filter === 'ao')        filtered = aoLinked;
-    else                             filtered = openAll; // 'alla' = alla öppna
+    let base;
+    if (filter === 'mina')           base = mine;
+    else if (filter === 'idag')      base = dueToday;
+    else if (filter === 'försenade') base = overdue;
+    else if (filter === 'kommande')  base = upcoming;
+    else if (filter === 'klara')     base = done;
+    else if (filter === 'offerter')  base = offerLinked;
+    else if (filter === 'ao')        base = aoLinked;
+    else                             base = openAll; // 'alla' = alla öppna
 
-    if (this._search) filtered = ActivitiesService.search(filtered, this._search);
-
+    let filtered = this._search ? ActivitiesService.search(base, this._search) : base;
     filtered = (filter === 'klara') ? ActivitiesService.sortCompleted(filtered) : ActivitiesService.sortOpen(filtered);
 
-    const _tab = (key, label, cnt) =>
-      `<button class="filter-panel-chip ${filter===key?'on':''}" data-filter="${key}" onclick="ActivitiesPage.setFilter('${key}')">${esc(label)}${cnt>0?` (${cnt})`:''}</button>`;
+    const chip = (key, label, cnt, o) => UiKit.chip(label, `ActivitiesPage.setFilter('${key}')`, Object.assign({ on: filter === key, n: cnt }, o || {}));
+    const fEl = document.getElementById('act-filters');
+    if (fEl) fEl.innerHTML = `
+      <div class="rg-chips" role="group" aria-label="Öppna uppgifter">
+        ${chip('alla', 'Alla öppna', openAll.length)}
+        ${user ? chip('mina', 'Mina', mine.length, { icon: 'user' }) : ''}
+        ${chip('försenade', 'Försenade', overdue.length, { icon: 'clock', tone: overdue.length ? 'danger' : '' })}
+        ${chip('idag', 'Idag', dueToday.length, { icon: 'calendar' })}
+        ${chip('kommande', 'Kommande', upcoming.length)}
+      </div>
+      <span class="rg-chips-sep" aria-hidden="true"></span>
+      <div class="rg-chips" role="group" aria-label="Klart och kopplingar">
+        ${chip('klara', 'Klart', done.length, { icon: 'check' })}
+        ${chip('offerter', 'Offerter', offerLinked.length, { icon: 'file-text' })}
+        ${chip('ao', 'Arbetsorder', aoLinked.length, { icon: 'clipboard-list' })}
+      </div>`;
 
+    const lnk = (icon, label, onclick) => `<button type="button" class="rg-link" onclick="event.stopPropagation();${onclick}">${ic(icon,12)}<span>${esc(label)}</span></button>`;
     const _relationHtml = (act) => {
       const parts = [];
       /* V53A R1 §6 — visa den KANONISKT upplösta kunden (offertens egen
          kund för en offert-länkad uppgift), inte ett ev. motsägelsefullt
          eget customerId-fält. */
       const resolvedCu = ActivitiesService.resolveCustomer(act);
-      if (resolvedCu) {
-        parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-crm-detail',{customerId:'${resolvedCu.id}'})">${ic('user',10)} ${esc(CustomerService.displayName(resolvedCu))}</span>`);
-      }
+      if (resolvedCu) parts.push(lnk('user', CustomerService.displayName(resolvedCu), `Router.showPage('pg-crm-detail',{customerId:${RegisterUi.arg(resolvedCu.id)}})`));
       if (act.propertyId) {
         const prop = getObj(act.propertyId);
-        if (prop) parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-obj-detail',{propId:'${act.propertyId}'})">${ic('building-2',10)} ${esc(prop.name || prop.address || prop.id)}</span>`);
+        if (prop) parts.push(lnk('building-2', prop.name || prop.address || prop.id, `Router.showPage('pg-obj-detail',{propId:${RegisterUi.arg(act.propertyId)}})`));
       }
       if (act.relatedType === 'offer' && act.relatedId) {
         const off = getOff(act.relatedId);
-        if (off) parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-offer-detail',{offerId:'${act.relatedId}'})">${ic('file-text',10)} Offert ${esc(act.relatedId)}</span>`);
+        if (off) parts.push(lnk('file-text', 'Offert ' + act.relatedId, `Router.showPage('pg-offer-detail',{offerId:${RegisterUi.arg(act.relatedId)}})`));
       } else if (act.relatedType === 'workOrder' && act.relatedId) {
         const ao = getAO(act.relatedId);
-        parts.push(`<span style="color:var(--sky);cursor:pointer;" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${act.relatedId}'})">${ic('clipboard-list',10)} ${esc(act.relatedId)}${ao?' – '+esc(ao.title):''}</span>`);
+        parts.push(lnk('clipboard-list', act.relatedId + (ao ? ' – ' + ao.title : ''), `Router.showPage('pg-ao-detail',{aoId:${RegisterUi.arg(act.relatedId)}})`));
       }
-      return parts.join(' &nbsp;·&nbsp; ');
+      return parts.join('');
     };
 
-    const _row = (act) => {
+    const filteredSet = filter !== 'alla' || !!this._search;
+    const head = RegisterUi.count(filtered.length, base.length, 'uppgift', 'uppgifter', { clear: filteredSet ? 'ActivitiesPage._clearFilters()' : '' });
+    if (filtered.length === 0) {
+      el.innerHTML = acts.length === 0
+        ? RegisterUi.empty({ icon: 'check-square', title: 'Inga uppgifter ännu', text: 'Skapa den första uppgiften — allt från "att göra" till uppföljningar och inköp.',
+            action: `<button type="button" class="btn bp bsm" onclick="ActivitiesPage.openCreate()">${ic('plus',14)}<span>Ny uppgift</span></button>` })
+        : filter === 'klara' && !this._search
+          ? RegisterUi.empty({ icon: 'check-circle', title: 'Inga klara uppgifter än', text: 'Uppgifter som markeras klara visas här.' })
+          : RegisterUi.empty({ icon: 'search', title: 'Inga uppgifter matchar filtret', text: 'Prova ett annat filter eller rensa sökningen.',
+              action: `<button type="button" class="btn bs bsm" onclick="ActivitiesPage._clearFilters()">Rensa filter</button>` });
+      return;
+    }
+
+    const rows = filtered.map(act => {
       const isOverdue = act.status === 'open' && act.dueDate && act.dueDate < today;
       const isToday   = act.status === 'open' && act.dueDate === today;
       const isDone    = act.status === 'done';
       const staff     = act.assignedTo ? getStaff(act.assignedTo) : null;
       const staffName = staff ? `${staff.firstName} ${staff.lastName}` : 'Ej tilldelad';
       const relHtml   = _relationHtml(act);
-      /* V53A R1 §1/§2 — kryssrutan togglar bara komplett/återöppna om
+      const id        = RegisterUi.arg(act.id);
+      const title     = act.title || ActivitiesService.typeLabel(act.type);
+      /* V53A R1 §1/§2 — klarmarkeringen togglar bara komplett/återöppna om
          användaren faktiskt har rätt till det (egen tilldelad uppgift,
-         eller ao_edit/ao_view_all). Annars visas den bara som ett
-         icke-klickbart statusmärke — INTE bara stilistiskt "dold", knappen
-         har helt enkelt inget onclick alls, och toggleComplete() själv
-         nekar ändå om den ändå anropas (se dess kommentar). */
+         eller ao_edit/ao_view_all). Annars är knappen inaktiverad och har
+         inget anrop alls — och toggleComplete() själv nekar ändå om den
+         ändå anropas (se dess kommentar). */
       const canComplete = this._canCompleteTask(act);
-
-      const dateColor = isDone ? 'var(--mt)' : isOverdue ? 'var(--rd)' : isToday ? 'var(--or)' : 'var(--mt)';
+      const canEdit     = this._canEditTask(act);
+      const dateCls = isDone ? '' : isOverdue ? ' is-late' : isToday ? ' is-today' : '';
       const dateLabel = isDone
-        ? `Klar ${act.completedAt ? fmtDate(act.completedAt) : ''}`
+        ? `Klar ${act.completedAt ? fmtDate(act.completedAt) : ''}`.trim()
         : (act.dueDate ? `${fmtDate(act.dueDate)}${act.dueTime?' kl '+act.dueTime:''}` : 'Inget förfallodatum');
-
-      return `<div class="card task-row${isDone?' task-row--done':''}" onclick="ActivitiesPage.openEdit('${act.id}')">
-        <div class="task-row-body">
-          <span class="task-row-check${canComplete?'':' task-row-check--disabled'}" ${canComplete?`onclick="event.stopPropagation();ActivitiesPage.toggleComplete('${act.id}')"`:'onclick="event.stopPropagation()"'} title="${canComplete?(isDone?'Återöppna':'Markera klar'):'Du saknar behörighet för denna uppgift'}">
-            <input type="checkbox" ${isDone?'checked':''} readonly>
-          </span>
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span class="task-row-title${isDone?' task-row-title--done':''}">${esc(act.title || ActivitiesService.typeLabel(act.type))}</span>
-              ${isOverdue?`<span class="bdg bdg-red" style="font-size:9px;">Försenad</span>`:''}
-              ${isToday?`<span class="bdg bdg-orange" style="font-size:9px;">Idag</span>`:''}
-              ${(act.priority==='akut'||act.priority==='hög')&&!isDone?`<span class="bdg ${act.priority==='akut'?'bdg-red':'bdg-orange'}" style="font-size:9px;">${ActivitiesService.priorityLabel(act.priority)}</span>`:''}
-            </div>
-            ${relHtml ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${relHtml}</div>` : ''}
-            <div style="font-size:11px;color:var(--mt);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap;">
-              <span>${ic(ActivitiesService.typeIcon(act.type),10)} ${esc(ActivitiesService.typeLabel(act.type))}</span>
-              <span>${ic('user',10)} ${esc(staffName)}</span>
-              <span style="color:${dateColor};font-weight:600;">${ic('calendar',10)} ${esc(dateLabel)}</span>
-            </div>
-          </div>
-        </div>
-      </div>`;
-    };
-
-    const emptyHtml = acts.length === 0
-      ? `<div class="empty">${ic('check-square',32)}<h3>Inga uppgifter ännu</h3><p>Skapa den första uppgiften — allt från "att göra" till uppföljningar och inköp.</p>
-           <button class="btn bp" style="margin-top:12px;" onclick="ActivitiesPage.openCreate()">${ic('plus',14)} Ny uppgift</button></div>`
-      : filter === 'klara' && filtered.length === 0
-        ? `<div class="empty">${ic('check-circle',32)}<h3>Inga klara uppgifter än</h3></div>`
-        : `<div class="empty">${ic('search',32)}<h3>Inga uppgifter matchar filtret</h3><p>Prova en annan flik eller rensa sökningen.</p></div>`;
-
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-        <div>
-          <h2 style="font-size:16px;font-weight:800;color:var(--navy);margin:0;">Uppgifter</h2>
-          <div style="font-size:12px;color:var(--mt);margin-top:2px;">
-            ${openAll.length} öppna &nbsp;·&nbsp; <span style="color:${overdue.length?'var(--rd)':'var(--mt)'};font-weight:${overdue.length?'700':'400'};">${overdue.length} försenade</span> &nbsp;·&nbsp; ${dueToday.length} idag
-          </div>
-        </div>
-        <button class="btn bp bsm" onclick="ActivitiesPage.openCreate()">${ic('plus',14)} Ny uppgift</button>
-      </div>
-
-      <div class="fg" style="margin-bottom:8px;">
-        <input id="act-search" placeholder="Sök titel, notering, ansvarig, kund, fastighet, AO…" value="${esc(this._search)}" oninput="ActivitiesPage.setSearch(this.value)" autocomplete="off">
-      </div>
-
-      <div class="filter-chips-row" style="margin-bottom:10px;">
-        ${_tab('alla','Alla öppna', openAll.length)}
-        ${_tab('mina','Mina', mine.length)}
-        ${_tab('försenade','Försenade', overdue.length)}
-        ${_tab('idag','Idag', dueToday.length)}
-        ${_tab('kommande','Kommande', upcoming.length)}
-        ${_tab('klara','Klart', done.length)}
-        ${_tab('offerter','Offerter', offerLinked.length)}
-        ${_tab('ao','Arbetsorder', aoLinked.length)}
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${filtered.length === 0 ? emptyHtml : filtered.map(_row).join('')}
-      </div>`;
+      const checkLabel = canComplete ? (isDone ? 'Återöppna' : 'Markera klar') : 'Du saknar behörighet för denna uppgift';
+      const badges = [
+        isOverdue ? `<span class="bdg bdg-red">Försenad</span>` : '',
+        isToday ? `<span class="bdg bdg-orange">Idag</span>` : '',
+        (act.priority==='akut'||act.priority==='hög') && !isDone ? `<span class="bdg ${act.priority==='akut'?'bdg-red':'bdg-orange'}">${esc(ActivitiesService.priorityLabel(act.priority))}</span>` : ''
+      ].join('');
+      return `<tr class="rg-row${isDone ? ' rg-row--done' : ''}" tabindex="0" onclick="ActivitiesPage.openEdit(${id})"
+          onkeydown="if(event.key==='Enter'&&event.target===this){ActivitiesPage.openEdit(${id})}">
+        <td class="rg-c-sel"><span class="rg-check-wrap" onclick="event.stopPropagation()"><button type="button" class="rg-check${isDone ? ' is-done' : ''}" role="checkbox" aria-checked="${isDone}"
+            aria-label="${esc(checkLabel + ': ' + title)}" title="${esc(checkLabel)}" ${canComplete ? `onclick="ActivitiesPage.toggleComplete(${id})"` : 'disabled'}>${ic(isDone ? 'check-circle' : 'circle', 20)}</button></span></td>
+        <td class="rg-c-main">
+          <div class="rg-task-l1"><span class="rg-title" title="${esc(title)}">${esc(title)}</span>${badges}</div>
+          ${relHtml ? `<div class="rg-rel">${relHtml}</div>` : ''}
+          <div class="rg-msub rg-meta"><span>${ic(ActivitiesService.typeIcon(act.type),12)}${esc(ActivitiesService.typeLabel(act.type))}</span><span>${ic('user',12)}${esc(staffName)}</span><span class="rg-when${dateCls}">${ic('calendar',12)}${esc(dateLabel)}</span></div>
+        </td>
+        <td class="rg-c-x rg-h-md"><span class="rg-meta"><span>${ic(ActivitiesService.typeIcon(act.type),13)}${esc(ActivitiesService.typeLabel(act.type))}</span></span></td>
+        <td class="rg-c-x" title="${esc(staffName)}">${staff ? `<span class="rg-person">${UiKit.avatar(staff, 22)}<span class="rg-person-n">${esc(staffName)}</span></span>` : '<span class="rg-none">Ej tilldelad</span>'}</td>
+        <td class="rg-c-x"><span class="rg-when${dateCls}">${esc(dateLabel)}</span></td>
+        <td class="rg-c-end">${canEdit ? RegisterUi.openBtn(`ActivitiesPage.openEdit(${id})`, 'Öppna ' + title) : ''}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl rg-tasks">
+        <thead><tr>
+          <th class="rg-w-sel"><span class="sr-only">Klar</span></th>
+          <th>Uppgift</th>
+          <th class="rg-w-s rg-h-md">Typ</th>
+          <th class="rg-w-m">Ansvarig</th>
+          <th class="rg-w-m">Förfaller</th>
+          <th class="rg-w-end"><span class="sr-only">Öppna</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
   },
 
   setFilter(key) {
     this._filter = key;
-    this.render();
+    this.renderList();
   },
 
   setSearch(q) {
     this._search = q || '';
-    // Behåll fokus/markörläge i sökfältet — bygg om bara listan, inte hela DOM:en, hade varit trevligt,
-    // men denna sidas render() är redan billig (ren in-memory-filtrering) så en enkel omrendering räcker.
-    this.render();
-    const input = document.getElementById('act-search');
-    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    // Tvåfasrendering: bara listan byggs om, sökfältet behåller fokus och markörläge.
+    this.renderList();
   },
 
   toggleComplete(id) {
