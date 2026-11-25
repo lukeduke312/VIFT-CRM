@@ -24,6 +24,8 @@
  *        replayed:true (stale:false) means this exact write was already
  *        applied (idempotent retry) — safe, no-op, not an error.
  *     -> 403 forbidden | 400 missing_fields
+ *     -> T3-B: 403 {error:'forbidden', reason:'not_assigned'} | 409 ao_locked | 404 not_found
+ *        när aoId inte är anroparens tilldelade, olåsta AO (AP-B)
  *
  * Identity for BOTH actions is `auth.user.id` (checkViftAuth()'s
  * `ViftAuthOk.user.id`) — never read from `body`, never trusted from the
@@ -69,7 +71,16 @@ export async function handleSetStampStatus(
     p_auth_user_id: authUserId, p_active: active, p_ts: ts, p_ao_id: aoId, p_expected_revision: expectedRevision,
   })
   if (error) {
-    console.error('[store-key-write] store_write_stamp_status RPC-fel:', error.message)
+    /* T3-B (AP-B, F23): instämpling med aoId kräver tilldelning (eller ao_edit) och
+       en olåst AO. Kontrollen görs i store_write_stamp_status under lås; här tolkas
+       felen enligt felkodskatalogen (BEHORIGHETSMATRIS §4). */
+    const msg = String(error.message || '')
+    const m = /\bforbidden:([a-z_]+)/.exec(msg)
+    if (m) return json({ error: 'forbidden', reason: m[1] }, 403)
+    if (/\bforbidden\b/.test(msg)) return json({ error: 'forbidden' }, 403)
+    if (msg.includes('ao_locked')) return json({ error: 'ao_locked' }, 409)
+    if (msg.includes('not_found')) return json({ error: 'not_found' }, 404)
+    console.error('[store-key-write] store_write_stamp_status RPC-fel:', msg)
     return json({ error: 'write_failed' }, 500)
   }
   const d = data || {}

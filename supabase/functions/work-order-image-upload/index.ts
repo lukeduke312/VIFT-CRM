@@ -28,7 +28,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm, canViewWorkOrder } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, canWriteWorkOrder, isLockedWorkOrder } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -104,9 +104,15 @@ serve(async (req: Request) => {
      måste även få SE denna specifika arbetsorder (ao_view_all, eller
      ao_view_own + tilldelad/pool). Samma funktion som work-order-image-
      url redan använder för läsvägen, tillämpad här för skrivvägen. */
-  if (!canViewWorkOrder(ao as { staff?: unknown; status?: unknown }, perms, callerStaffId)) {
-    return json({ error: 'forbidden' }, 403)
+  /* T3-B (AP-B, SÄK-3): skrivrätt = tilldelad eller arbetsledare (ao_view_all).
+     Öppen pool ger ingen skrivrätt före tilldelning; låst AO ger 409 ao_locked för
+     den som inte är arbetsledare. Kontrollen ligger i EF eftersom själva filen inte
+     ändrar AO-posten; bildreferensen skrivs i AO-loggen via work_order_log_append,
+     som gör samma kontroll under radlås. */
+  if (!canWriteWorkOrder(ao, perms, callerStaffId)) {
+    return json({ error: 'forbidden', reason: 'not_assigned' }, 403)
   }
+  if (!hasPerm(perms, 'ao_view_all') && isLockedWorkOrder(ao)) return json({ error: 'ao_locked' }, 409)
 
   const file = fileField as File
   if (file.size === 0) return json({ error: 'empty_file' }, 400)

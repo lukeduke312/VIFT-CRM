@@ -34,7 +34,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, canViewWorkOrder, isPathUnderAo } from '../_shared/vift-auth.ts'
+import { checkViftAuth, canViewWorkOrderContent, isPathUnderAo } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL           = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -90,8 +90,10 @@ serve(async (req: Request) => {
   if (!ao) return json({ error: 'not_found' }, 404)
 
   const callerStaffId = String((staffMember as Record<string, unknown>)?.id ?? '')
-  if (!canViewWorkOrder(ao as { staff?: unknown; status?: unknown }, perms, callerStaffId)) {
-    return json({ error: 'forbidden' }, 403)
+  /* T3-B (K-03, Q3): öppen pool lämnas ut utan bilder; bild-URL kräver tilldelning
+     eller ao_view_all. */
+  if (!canViewWorkOrderContent(ao, perms, callerStaffId)) {
+    return json({ error: 'forbidden', reason: 'not_assigned' }, 403)
   }
 
   const { data: items, error: signErr } = await supabase.storage

@@ -5,8 +5,16 @@
  * Den ENDA läsvägen för `vift_workOrders` (direkt authenticated SELECT på
  * nyckeln blockeras av 20261030000001_workorders_read_lockdown.sql).
  *   ao_view_all / all  -> alla AO
- *   ao_view_own        -> AO där anroparen finns i ao.staff, eller status 'pool'
+ *   ao_view_own        -> egna tilldelade AO (inte arkiverade/borttagna) och, med
+ *                         ao_pool_take (övergångsregel: äldre roll med ao_complete),
+ *                         öppen pool i BEGRÄNSAD projektion (K-03)
  *   annars             -> tom lista (fail-closed)
+ *
+ * T3-B (2026-11-28, SÄK-3, SÄK-16, AP-A, K-03): tidigare lämnades varje AO med
+ * status 'pool' ut fullständigt till alla med ao_view_own, även tilldelade,
+ * arkiverade och borttagna. Nu: canViewWorkOrder() i _shared/vift-auth.ts (strikt
+ * delmängd av den gamla regeln, ARBETSPOOL-UTREDNING §5.4) och poolProjection()
+ * för öppen pool som anroparen inte är tilldelad.
  *
  * C-5 (2026-11-25): portkod (accessCode) lämnas bara ut till roller med
  * objects_sensitive (samma regel som klientens visning) eller ao_edit (som kan
@@ -23,7 +31,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, canViewWorkOrder, isAssigned, isOpenPool, poolProjection } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -85,10 +93,11 @@ serve(async (req: Request) => {
 
   const sm = staffMember as Record<string, unknown>
   const myStaffId = String(sm?.id ?? '')
-  const filtered = all.filter(ao => {
-    const staff = Array.isArray(ao.staff) ? ao.staff as unknown[] : []
-    return staff.includes(myStaffId) || ao.status === 'pool'
-  })
+  const out: Record<string, unknown>[] = []
+  for (const ao of all) {
+    if (!ao || typeof ao !== 'object' || !canViewWorkOrder(ao, perms, myStaffId)) continue
+    out.push(!isAssigned(ao, myStaffId) && isOpenPool(ao) ? poolProjection(ao) : ao)
+  }
 
-  return json({ workOrders: redact(filtered, perms) })
+  return json({ workOrders: redact(out, perms) })
 })

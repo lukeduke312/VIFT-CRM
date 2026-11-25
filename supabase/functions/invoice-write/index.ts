@@ -20,13 +20,19 @@
  * Auth: checkViftAuth() + invoice_create (same permission the client
  * already required for every one of these operations).
  *
+ * T3-B (2026-11-28, D-07, punkt 269/G9): ny åtgärd `aoBilling` — den ENDA vägen
+ * att sätta eller backa en AO:s faktureringsstatus (status 'fakturerad', invoiceId,
+ * billingPreviousStatus). patch_ao avvisar de fälten för alla roller
+ * (403 forbidden/invoice_path_required). RPC:n work_order_billing_set kontrollerar
+ * under lås att underlaget finns, inte är makulerat och hänvisar till AO:n.
+ *
  * POST /functions/v1/invoice-write
  * body: { action: '...', ...fields }
  */
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'  // pinned 2026-11-12 = version bundled in deployed v6
-import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, aoRuleError } from '../_shared/vift-auth.ts'
 import { handleApproveStaleOverride, guardSendAgainstStalePrice, stripClientStaleOverrides } from './stale-override.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
@@ -246,6 +252,23 @@ serve(async (req: Request) => {
     })
     const err = mapRpcError(error); if (err) return err
     return json({ invoice: (data || {}).invoice, serverSignature: (data || {}).serverSignature })
+  }
+
+  if (action === 'aoBilling') {
+    const aoId = String(body.aoId ?? '').trim()
+    const mode = String(body.mode ?? '')
+    const invoiceId = String(body.invoiceId ?? '').trim()
+    if (!aoId || (mode !== 'invoiced' && mode !== 'restore') || (mode === 'invoiced' && !invoiceId)) return json({ error: 'missing_fields' }, 400)
+    const { data, error } = await supabase.rpc('work_order_billing_set', {
+      p_ao_id: aoId, p_invoice_id: invoiceId, p_mode: mode, p_actor_id: callerStaffId
+    })
+    if (error) {
+      const regel = aoRuleError(error.message)
+      if (regel) return json(regel.body, regel.status)
+      const err = mapRpcError(error); if (err) return err
+    }
+    const r = (data || {}) as Record<string, unknown>
+    return json({ workOrder: r.workOrder, noop: r.noop === true, serverSignature: r.serverSignature })
   }
 
   if (action === 'appendChecked') {

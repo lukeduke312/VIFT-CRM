@@ -473,9 +473,19 @@ function buildNotifBody(si: ServiceInterval, prop: Property, daysLeft: number): 
  * MEDVETET (inte borttagen) ifall en framtida återgång till den gamla
  * vägen skulle behöva den, men anropas inte längre någonstans.
  */
+/* T3-B (2026-11-28, Q1, AP-A, punkt 250): serviceintervallets förfallodag skrivs till
+   ett eget fält `dueDate`. Den skrivs ALDRIG till `scheduledDate` på en AO som har
+   personal (en tilldelad serviceuppdrag ska inte se bokad ut i Idag/Försenade).
+   Utan personal (öppen pool) skrivs den även till `scheduledDate` som förut, så att
+   v3.4-klientens kalender ("ej schemalagda") och listor visar förfallodagen; på en
+   pool-AO har scheduledDate alltid tolkats som förfallodag. Med personal: status
+   'pool' + poolOpen:false = tilldelad pool (D-24), aldrig öppen pool. Befintliga AO
+   skrivs inte om. AO:n skapas fortfarande ENDAST via den atomiska work_order_create. */
 function buildWorkOrder(si: ServiceInterval, prop: Property): Omit<WorkOrder, 'id'> {
   const now   = new Date().toISOString()
   const title = si.aoTitle || si.title
+  const staff = Array.isArray(si.aoStaff) ? si.aoStaff : []
+  const due   = si.nextDue || ''
 
   return {
     title,
@@ -487,8 +497,10 @@ function buildWorkOrder(si: ServiceInterval, prop: Property): Omit<WorkOrder, 'i
     propertyId:       prop.id,
     propertyName:     prop.name        || '',
     address:          prop.address     || '',
-    scheduledDate:    si.nextDue       || '',
-    staff:            si.aoStaff       || [],
+    scheduledDate:    staff.length ? '' : due,
+    dueDate:          due,
+    staff,
+    ...(staff.length ? { poolOpen: false } : {}),
     source:           'service_interval',
     sourceIntervalId: si.id,
     /* Idempotensmarkering — klienten ignorerar auto-push för dessa */

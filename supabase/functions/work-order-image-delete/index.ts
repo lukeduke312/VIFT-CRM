@@ -29,7 +29,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm, canViewWorkOrder, isPathUnderAo } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, canWriteWorkOrder, isLockedWorkOrder, isPathUnderAo } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -87,9 +87,12 @@ serve(async (req: Request) => {
   if (!ao) return json({ error: 'not_found' }, 404)
 
   const callerStaffId = String((staffMember as Record<string, unknown>)?.id ?? '')
-  if (!canViewWorkOrder(ao as { staff?: unknown; status?: unknown }, perms, callerStaffId)) {
-    return json({ error: 'forbidden' }, 403)
+  /* T3-B (AP-B, SÄK-3): som work-order-image-upload. Radering av andras bilder
+     (D-19-analog) kräver ägarinformation som filvägen saknar; det hanteras i T4. */
+  if (!canWriteWorkOrder(ao, perms, callerStaffId)) {
+    return json({ error: 'forbidden', reason: 'not_assigned' }, 403)
   }
+  if (!hasPerm(perms, 'ao_view_all') && isLockedWorkOrder(ao)) return json({ error: 'ao_locked' }, 409)
 
   const { error: delErr } = await supabase.storage.from(BUCKET).remove([path])
   if (delErr) {

@@ -22,7 +22,7 @@
   "objektLikaAB": 41,
   "repoFilerPerKlass": {
    "installerad": 37,
-   "ny": 0,
+   "ny": 3,
    "rekonstruerad": 5,
    "kandidat": 3,
    "stagingOnly": 2,
@@ -1790,6 +1790,30 @@
     "20260720000001",
     "20260928000001"
    ]
+  },
+  {
+   "fil": "migrations/20261128000001_t3b_ao_regler_och_pool.sql",
+   "md5": "fe8ea61e34d0438832d89e2cef923715",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000002_t3b_tid_och_stampling.sql",
+   "md5": "9e2db220677067d5646eb06362a5b3f8",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000003_t3b_ao_nummer.sql",
+   "md5": "f7207839d0515c5c4236223a3a82e47b",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
   },
   {
    "fil": "staging-only/migrations/20261117085418_vift_staging_preinstall_snapshot_20261117.sql",

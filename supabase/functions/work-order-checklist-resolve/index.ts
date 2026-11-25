@@ -39,7 +39,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'  // samma låsning som installerad v1 (2026-11-12)
-import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, aoRuleError } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -152,6 +152,9 @@ serve(async (req: Request) => {
     const msg = String(rpcErr.message || '')
     // Ordning: specifika koder före de generella delsträngarna.
     if (msg.includes('forbidden_other'))  return json({ error: 'forbidden_other' }, 403)
+    // T3-B: 403 forbidden/not_assigned (öppen pool ger ingen skrivrätt), 409 ao_locked.
+    const regel = aoRuleError(msg)
+    if (regel) return json(regel.body, regel.status)
     if (msg.includes('forbidden'))        return json({ error: 'forbidden' }, 403)
     if (msg.includes('item_not_found'))   return json({ error: 'item_not_found' }, 404)
     if (msg.includes('not_found'))        return json({ error: 'not_found' }, 404)

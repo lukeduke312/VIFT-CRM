@@ -24,8 +24,16 @@
  * RPC itself (public.op_idempotency), not just in this function, so it
  * holds even across retries that hit a different EF instance/region.
  *
+ * T3-B (2026-11-28): patch_ao:s regelkontroll (start/klar för egen tilldelad AO,
+ * källstatus, låsta AO, faktureringsfält, fältets materialrader, tagning) ligger nu
+ * i RPC:n work_order_patch under radlås; EF:en skickar anroparens staff-id och
+ * behörigheter (ur checkViftAuth). Ny åtgärd take_from_pool (work_order_pool_take,
+ * SÄK-4). create_time skickar identitet + behörigheter till time_entry_create, som
+ * kontrollerar tilldelning under lås och sätter timpriset (SÄK-11, AP-B). Regelfel
+ * har formen {error, reason} enligt felkodskatalogen (BEHORIGHETSMATRIS §4).
+ *
  * POST /functions/v1/ao-time-write
- * body: { action: 'create_ao'|'patch_ao'|'delete_ao'
+ * body: { action: 'create_ao'|'patch_ao'|'take_from_pool'|'delete_ao'
  *               |'create_time'|'patch_time'|'delete_time',
  *         idempotencyKey: string (required, client-generated UUID),
  *         ...action-specific fields, see per-branch validation below }
@@ -35,7 +43,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm, canViewWorkOrder } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, effectiveAoPerms, aoRuleError } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -59,13 +67,8 @@ function json(body: unknown, status = 200): Response {
    (WorkOrderService/TimeService), upprätthållna HÄR eftersom detta nu är
    den enda skrivvägen för dessa nycklar. */
 const AO_SERVER_OWNED_FIELDS = ['id', 'createdAt', 'updatedAt', 'deleted', 'deletedAt']
-/* P0-FIX (samlad slutgranskning, "patch_ao / ao_complete"): de ENDA
-   fälten en anropare med ao_complete (men inte ao_edit/all) får sätta
-   via patch_ao — exakt de fält WorkOrderService.setStatus()/
-   markComplete() genererar för övergången till 'klar', inga fler. Se
-   patch_ao-grenen nedan för hur `status` själv dessutom begränsas till
-   värdet 'klar' specifikt (inte bara att nyckeln 'status' är tillåten). */
-const AO_COMPLETE_ONLY_FIELDS = ['status', 'completedAt', 'completedBy', 'updatedAt']
+/* T3-B: fältlistan för ao_complete (tidigare AO_COMPLETE_ONLY_FIELDS) och
+   övriga patch_ao-regler ligger nu i work_order_patch (RPC, under radlås). */
 const TIME_OWNERSHIP_FIELDS  = ['staffId', 'staffName', 'registeredById', 'registeredByName']
 const TIME_ATTEST_FIELDS     = ['attested', 'attestedAt', 'attestedBy']
 const TIME_SERVER_OWNED_FIELDS = ['id', 'createdAt']
@@ -111,6 +114,8 @@ serve(async (req: Request) => {
 
   function rpcErrorToResponse(rpcErr: { message?: string } | null) {
     const msg = String(rpcErr?.message || '')
+    const regel = aoRuleError(msg)
+    if (regel) return json(regel.body, regel.status)
     if (msg.includes('not_found'))        return json({ error: 'not_found' }, 404)
     if (msg.includes('stale_write'))      return json({ error: 'stale_write' }, 409)
     if (msg.includes('attested_locked'))  return json({ error: 'attested_locked' }, 409)
@@ -160,117 +165,46 @@ serve(async (req: Request) => {
     }
 
     case 'patch_ao': {
-      if (!hasPerm(perms, 'ao_edit') && !hasPerm(perms, 'ao_complete') && !hasPerm(perms, 'ao_material') && !hasPerm(perms, 'all')) {
+      /* T3-B: snabbt första lager. Själva regelkontrollen (vilka fält, vilken
+         övergång, tilldelning, låsta AO, faktureringsfält, materialrader och
+         tagning) görs i work_order_patch under radlåset — aldrig här på en
+         ögonblicksbild utanför låset (SÄK-4/SÄK-5, testplanen §4.2). */
+      const eff = effectiveAoPerms(perms)
+      if (!['ao_edit', 'ao_complete', 'ao_material', 'ao_start_own', 'ao_complete_own', 'ao_pool_take'].some((x) => hasPerm(eff, x))) {
         return json({ error: 'forbidden' }, 403)
       }
       const aoId = String(body.aoId ?? '').trim()
       const patch = body.patch
-      if (!aoId || !patch || typeof patch !== 'object') return json({ error: 'missing_fields' }, 400)
+      if (!aoId || !patch || typeof patch !== 'object' || Array.isArray(patch)) return json({ error: 'missing_fields' }, 400)
       const safePatch = stripFields(patch as Record<string, unknown>, AO_SERVER_OWNED_FIELDS)
-
-      /* P0-FIX (samlad slutgranskning, 2026-10-28, "patch_ao / ao_complete"):
-         en anropare med ENDAST `ao_complete` (ingen `ao_edit`/`all`) kunde
-         tidigare patcha GODTYCKLIGT fält på en AO — kund, pris, personal,
-         m.m. — eftersom behörighetskontrollen ovan bara avgjorde OM
-         anropet fick ske alls, aldrig VILKA fält patchen fick röra.
-         `ao_complete` är klient-sidigt (se WorkOrderDetailPage.markComplete()
-         /WorkOrderService.setStatus()/markComplete()) ENDAST använt för att
-         sätta `status:'klar'` (plus de fält den övergången genererar:
-         `completedAt`/`completedBy`/`updatedAt`) — ALDRIG för någon annan
-         statusövergång eller något administrativt fält. Begränsas nu HÄR,
-         server-sidigt, till exakt det: en anropare UTAN `ao_edit`/`all`
-         får ENDAST skicka fält ur `AO_COMPLETE_ONLY_FIELDS`, och om
-         `status` ingår måste det vara exakt `'klar'`. En BLANDAD patch
-         (ett tillåtet fält + ett otillåtet) nekas i sin HELHET — ingen
-         tyst delvis-strippning som skulle kunna dölja för klienten att
-         något inte sparades. `ao_edit`/`all`-innehavare är helt
-         opåverkade (oförändrat beteende, samma som innan denna fix). */
-      const callerHasEdit = hasPerm(perms, 'ao_edit') || hasPerm(perms, 'all')
-      /* QA-FIX 2026-11-24 (V3-sluttest, fynd QA-P0-1): fältroller med
-         `ao_material` men utan `ao_edit` (t.ex. e2e_falt) fick 403 på VARJE
-         materialrad — klienten (WorkOrderDetailPage.openAddMaterial(), gated
-         på ao_material) skickar `{ materials, updatedAt }` via patch_ao, men
-         den här grenen tillät bara AO_COMPLETE_ONLY_FIELDS, så servern
-         avvisade raden (verifierat i STAGING, affärsflöde F6.16). Nu: en anropare UTAN
-         ao_edit men MED ao_material får patcha EXAKT `materials`(+updatedAt)
-         — inget annat fält, inte i samma patch som status — och bara på en
-         AO hen får se (canViewWorkOrder: ao_view_all, eller tilldelad/pool)
-         som inte är fakturerad, borttagen eller arkiverad. */
-      const isMaterialOnlyPatch = Object.keys(safePatch).length > 0 &&
-        Object.keys(safePatch).every(k => k === 'materials' || k === 'updatedAt') && 'materials' in safePatch
-      if (!callerHasEdit && isMaterialOnlyPatch && hasPerm(perms, 'ao_material')) {
-        if (!Array.isArray(safePatch.materials) || (safePatch.materials as unknown[]).length > 500 ||
-            (safePatch.materials as unknown[]).some(m => !m || typeof m !== 'object' || Array.isArray(m))) {
-          return json({ error: 'missing_fields' }, 400)
-        }
-        const { data: woRow } = await supabase.from('store').select('value').eq('key', 'vift_workOrders').maybeSingle()
-        const wos = Array.isArray(woRow?.value) ? woRow!.value as Record<string, unknown>[] : []
-        const target = wos.find(w => w.id === aoId)
-        if (!target) return json({ error: 'not_found' }, 404)
-        if (!canViewWorkOrder(target, perms, callerStaffId)) return json({ error: 'forbidden' }, 403)
-        if (target.deleted || target.archived || target.invoiceId || target.status === 'fakturerad') {
-          return json({ error: 'forbidden' }, 403)
-        }
-      } else if (!callerHasEdit && !hasPerm(perms, 'ao_complete')) {
-        return json({ error: 'forbidden' }, 403)
-      } else if (!callerHasEdit && (safePatch.status === 'pågående' || (safePatch.status === 'planerad' && 'staff' in safePatch))) {
-        /* QA-FIX 2026-11-24 (QA-P1-2): fältets två avsedda övergångar som
-           tidigare alltid nekades (knapparna "Starta" i Mina jobb och
-           "Ta jobbet" i arbetspoolen, MyJobsPage.startJob()/
-           WorkOrderService.takeFromPool()):
-             A. Starta: EXAKT { status:'pågående' } på en AO där anroparen
-                redan är tilldelad och status är 'nytt', 'planerad' eller 'pool'.
-             B. Ta från poolen: EXAKT { staff, status:'planerad', log } på
-                en AO med status 'pool', där nya staff = gamla staff + bara
-                anroparen själv, och nya log innehåller ALLA befintliga
-                loggposter (id) plus högst EN ny post av typen
-                'taken_from_pool' — så att ingen samtidig loggpost kan
-                försvinna (G5).
-           Allt annat nekas som förut. */
-        const { data: woRow } = await supabase.from('store').select('value').eq('key', 'vift_workOrders').maybeSingle()
-        const wos = Array.isArray(woRow?.value) ? woRow!.value as Record<string, unknown>[] : []
-        const target = wos.find(w => w.id === aoId)
-        if (!target) return json({ error: 'not_found' }, 404)
-        if (target.deleted || target.archived || !callerStaffId) return json({ error: 'forbidden' }, 403)
-        const keys = Object.keys(safePatch)
-        const curStaff = Array.isArray(target.staff) ? (target.staff as unknown[]).map(String) : []
-        if (safePatch.status === 'pågående') {
-          const okA = keys.every(k => k === 'status') && curStaff.includes(callerStaffId) &&
-            (target.status === 'nytt' || target.status === 'planerad' || target.status === 'pool')
-          if (!okA) return json({ error: 'forbidden' }, 403)
-        } else {
-          const newStaff = Array.isArray(safePatch.staff) ? (safePatch.staff as unknown[]).map(String) : null
-          const expStaff = curStaff.includes(callerStaffId) ? curStaff : curStaff.concat([callerStaffId])
-          const sameStaff = !!newStaff && newStaff.length === expStaff.length && expStaff.every(s => newStaff.includes(s))
-          const curLog = Array.isArray(target.log) ? target.log as Record<string, unknown>[] : []
-          const newLog = Array.isArray(safePatch.log) ? safePatch.log as Record<string, unknown>[] : null
-          let logOk = !('log' in safePatch)
-          if (newLog) {
-            const newIds = new Set(newLog.map(e => String(e && e.id)))
-            const keepsAll = curLog.every(e => newIds.has(String(e && e.id)))
-            const curIds = new Set(curLog.map(e => String(e && e.id)))
-            const added = newLog.filter(e => !curIds.has(String(e && e.id)))
-            logOk = keepsAll && added.length <= 1 && added.every(e => e && typeof e === 'object' && e.type === 'taken_from_pool')
-          }
-          const okB = keys.every(k => k === 'staff' || k === 'status' || k === 'log') &&
-            target.status === 'pool' && sameStaff && logOk && canViewWorkOrder(target, perms, callerStaffId)
-          if (!okB) return json({ error: 'forbidden' }, 403)
-        }
-      } else if (!callerHasEdit) {
-        const patchKeys = Object.keys(safePatch)
-        const hasDisallowedField = patchKeys.some(k => !AO_COMPLETE_ONLY_FIELDS.includes(k))
-        const statusIsCompleteOnly = !('status' in safePatch) || safePatch.status === 'klar'
-        if (hasDisallowedField || !statusIsCompleteOnly) {
-          return json({ error: 'forbidden' }, 403)
-        }
-      }
-
       const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : null
       const { data, error } = await supabase.rpc('work_order_patch', {
-        p_ao_id: aoId, p_patch: safePatch, p_idempotency_key: idempotencyKey, p_expected_updated_at: expectedUpdatedAt
+        p_ao_id: aoId, p_patch: safePatch, p_idempotency_key: idempotencyKey, p_expected_updated_at: expectedUpdatedAt,
+        p_caller_staff_id: callerStaffId, p_caller_perms: perms
       })
       if (error) return rpcErrorToResponse(error)
       return json({ action, ...(data as Record<string, unknown>) })
+    }
+
+    /* T3-B (SÄK-4, AP-F): "Ta jobbet" ur öppen pool. Klienten skickar bara aoId och
+       idempotensnyckel; servern sätter personal, status, poolOpen, aktör, tid och logg
+       under radlås. Exakt en vinner; förloraren får 409 already_assigned utan mutation.
+       Behörighet ao_pool_take (övergångsregel: äldre roll med ao_complete), eller
+       ao_edit. Kopplas inte till ao_time. */
+    case 'take_from_pool': {
+      const eff = effectiveAoPerms(perms)
+      if (!(hasPerm(eff, 'ao_pool_take') || hasPerm(eff, 'ao_edit')) || !(hasPerm(eff, 'ao_view_own') || hasPerm(eff, 'ao_view_all'))) {
+        return json({ error: 'forbidden' }, 403)
+      }
+      const aoId = String(body.aoId ?? '').trim()
+      if (!aoId) return json({ error: 'missing_fields' }, 400)
+      const entryId = typeof body.entryId === 'string' ? body.entryId.slice(0, 120) : ''
+      const ignored = Object.keys(body).filter((k) => !['action', 'aoId', 'idempotencyKey', 'entryId'].includes(k))
+      const { data, error } = await supabase.rpc('work_order_pool_take', {
+        p_ao_id: aoId, p_caller_staff_id: callerStaffId, p_caller_perms: perms, p_idempotency_key: idempotencyKey, p_entry_id: entryId
+      })
+      if (error) return rpcErrorToResponse(error)
+      return json({ action, ...(data as Record<string, unknown>), ...(ignored.length ? { ignoredFields: ignored } : {}) })
     }
 
     case 'delete_ao': {
@@ -346,7 +280,12 @@ serve(async (req: Request) => {
         safeEntry.registeredByName = ''
       }
 
-      const { data, error } = await supabase.rpc('time_entry_create', { p_entry: safeEntry, p_idempotency_key: idempotencyKey, p_client_id: clientEntryId })
+      /* T3-B: tilldelning, låst AO, legitim utstämpling och timpris avgörs i
+         time_entry_create under AO-låset (SÄK-11, AP-B, D-11). */
+      const { data, error } = await supabase.rpc('time_entry_create', {
+        p_entry: safeEntry, p_idempotency_key: idempotencyKey, p_client_id: clientEntryId,
+        p_caller_staff_id: callerStaffId, p_caller_auth_id: auth.user.id, p_caller_perms: perms
+      })
       if (error) {
         if (String(error.message || '').includes('id_collision')) return json({ error: 'id_collision' }, 409)
         return rpcErrorToResponse(error)
@@ -360,6 +299,22 @@ serve(async (req: Request) => {
       if (!entryId || !patch || typeof patch !== 'object') return json({ error: 'missing_fields' }, 400)
       let safePatch = stripFields(patch as Record<string, unknown>, TIME_SERVER_OWNED_FIELDS)
       safePatch = stripFields(safePatch, TIME_ATTEST_FIELDS) /* attest ENDAST via PayrollPage-flödet, aldrig denna generiska väg */
+      /* T3-B (D-11, delvis): fältklienten sätter aldrig timpriset. Utan
+         payroll_manage/invoice_create/ao_edit ignoreras hourRate/priceGroupName;
+         byter patchen prisgrupp sätts priset av servern från vift_priceGroups.
+         Befintliga posters pris ändras inte annars (historiska priser). */
+      const ignoredTime: string[] = []
+      const canSetPrice = canPayroll || hasPerm(perms, 'invoice_create') || hasPerm(perms, 'ao_edit')
+      if (!canSetPrice) {
+        for (const f of ['hourRate', 'priceGroupName']) if (f in safePatch) { ignoredTime.push(f); delete safePatch[f] }
+        if (typeof safePatch.priceGroupId === 'string' && safePatch.priceGroupId) {
+          const { data: pgRow } = await supabase.from('store').select('value').eq('key', 'vift_priceGroups').maybeSingle()
+          const pgs = Array.isArray(pgRow?.value) ? pgRow!.value as Record<string, unknown>[] : []
+          const pg = pgs.find((x) => x && x.id === safePatch.priceGroupId)
+          safePatch.hourRate = pg && Number.isFinite(Number(pg.hourRate)) ? Number(pg.hourRate) : 0
+          if (pg) safePatch.priceGroupName = String(pg.name ?? '')
+        }
+      }
       const touchesOwnership = TIME_OWNERSHIP_FIELDS.some(f => Object.prototype.hasOwnProperty.call(safePatch, f))
       if (touchesOwnership && !canPayroll) return json({ error: 'forbidden' }, 403)
       if (!canOwnTime && !canPayroll) return json({ error: 'forbidden' }, 403)
@@ -377,7 +332,7 @@ serve(async (req: Request) => {
         p_caller_staff_id: callerStaffId, p_caller_can_manage_others: canPayroll
       })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...(data as Record<string, unknown>), ...(ignoredTime.length ? { ignoredFields: ignoredTime } : {}) })
     }
 
     case 'delete_time': {

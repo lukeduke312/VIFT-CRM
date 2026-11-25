@@ -62,3 +62,8 @@ REKONSTRUKTION  migrations/20261127000001_rekonstruerad_store_skyddstrigger.sql
 REKONSTRUKTION  migrations/20261127000002_rekonstruerad_time_entry_rpc.sql
 REKONSTRUKTION  migrations/20261127000003_rekonstruerad_store_restrictive_policyer.sql
 REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.sql
+# ── T3-B (2026-11-28): NYA – EJ INSTALLERADE I STAGING (klass "ny" i MIG-1). Version efter 20261124211128.
+# Installeras i STAGING först efter separat GO, en i taget, med STOP-kontroll (se docs T3-RESULTAT.md, T3-B).
+20261128000001  migrations/20261128000001_t3b_ao_regler_och_pool.sql
+20261128000002  migrations/20261128000002_t3b_tid_och_stampling.sql
+20261128000003  migrations/20261128000003_t3b_ao_nummer.sql
