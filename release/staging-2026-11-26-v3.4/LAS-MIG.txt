@@ -1,0 +1,55 @@
+VIFT CRM – uppdateringspaket V3.4 för STAGING (staging-crm.viftfast.se)
+Nattkörningen UI/UX 2026-11-26
+=====================================================================
+
+ENDAST STAGING. Ladda aldrig upp detta till crm.viftfast.se (LIVE).
+
+Innehåll
+  webbplats/                    40 filer som ska till STAGING-webbplatsens rotmapp
+     index.html
+     src/...                    39 filer, varav 10 nya CSS-filer i src/styles/
+  MANIFEST-v3.4.txt             SHA-256 för varje fil. Ska INTE laddas upp.
+  aterstallning-v3.3/           Återställning: de 30 filer som ändras, så som de
+                                ligger publicerade i dag (kontrollerat 30/30
+                                identiska med STAGING före paketet).
+                                Ska INTE laddas upp, utom vid återställning.
+  LAS-MIG.txt                   Denna fil. Ska INTE laddas upp.
+
+Ingen serverändring ingår. Databasen och Edge Functions är oförändrade.
+
+Så här gör du i WinSCP
+  1. Logga in och öppna STAGING-webbplatsens rotmapp, alltså den mapp där
+     index.html för staging-crm.viftfast.se redan ligger tillsammans med
+     mappen src/ och filen config.js.
+  2. Ladda upp mappen webbplats/src/ så att filerna hamnar i den befintliga
+     src/-mappen. Skriv över befintliga filer och skapa de nya. Ladda alltså
+     upp INNEHÅLLET i webbplats/, inte själva mappen "webbplats".
+  3. Ladda upp webbplats/index.html SIST och skriv över den befintliga.
+  4. Använd binärt överföringsläge om WinSCP frågar (inte "text").
+  5. Ladda inte upp något annat. config.js, src/data/storage.js och
+     src/services/AuthService.js ingår inte och ska ligga kvar orörda.
+
+Kontroll efteråt
+  https://staging-crm.viftfast.se/src/styles/v3-offers.css ska visa CSS-kod,
+  inte "404 Not Found". Säg till Claude, så verifieras alla 40 filer mot
+  MANIFEST-v3.4.txt (tools/verify-staging-deploy.sh). Ladda om sidan hårt
+  (Ctrl+Shift+R), eller logga ut och in, så att den nya versionen hämtas.
+
+Om något går fel: återställning
+  1. Ladda upp innehållet i aterstallning-v3.3/webbplats/src/ till src/
+     (skriv över).
+  2. Ladda upp aterstallning-v3.3/webbplats/index.html SIST.
+  3. De 10 nya CSS-filerna kan ligga kvar. Den gamla index.html använder dem inte.
+  Verifiera med aterstallning-v3.3/MANIFEST-aterstallning-v3.3.txt.
+
+Att känna till efter uppladdningen
+  - Dashboardlayouten är personlig per användare och enhet. Tidigare sparade
+    layouter läses fortfarande.
+  - Kartan visar nu varför jobb saknas på kartan. I STAGING har inga aktiva
+    jobb sparade koordinater. Om Mapbox nekar staging-domänen (401/403 i
+    DevTools → Network, filtrera på api.mapbox.com) behöver domänen läggas
+    till för token i Mapbox-kontot.
+  - Admin → Teknik & underhåll: "Rensa lokal cache på den här enheten"
+    ersätter "Återställ demodata". Den rör aldrig serverns data.
+  - Löneunderlaget visar "Debiterbart värde" (timmar × prisgruppens
+    timpris), inte lönekostnad. Beräkningen är oförändrad.

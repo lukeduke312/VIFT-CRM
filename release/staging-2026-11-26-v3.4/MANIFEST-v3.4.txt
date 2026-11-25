@@ -1,0 +1,45 @@
+VIFT CRM STAGING-uppdatering 2026-11-26 v3.4 (nattkörningen UI/UX): dashboard, AO-lista, AO-detalj, fakturering, offerter, serviceintervall, register, fältsidor, admin/rapporter/löneunderlag, övriga sidor + rättningar (AO-importens id-dubbletter, synk som ritade om offertguiden, stämplingsomritning, XSS i mallar). Källa: VIFT-CRM gren claude/vift-v3-major-redesign e08ea75 + STAGING-överlägg (oförändrade).
+Prövat mot riktig STAGING före uppladdning (lokalt serverat paket): R0 sex roller utan JS-fel, X1 lagrad XSS 4 roller, A1 Admin dator+mobil, F2–F5, F6 hela affärsflödet, F7 nekad, F8 ändring begärd; C-5 26/26. Simulerat: 216/218 (0 misslyckade).
+Uppladdning: src/ först, index.html SIST. Ladda INTE upp något annat.
+40 filer (varav 10 nya CSS-filer i src/styles/).
+SHA-256 per fil (tools/verify-staging-deploy.sh <denna fil>):
+35425649b148b7eaaa859417577d879f63003d8e22d69d74909d04b65c003c26  index.html
+866b62bcb8bcce1d3dd98f96c6388ae1b3f0750127a13e2cf0b9507d6517ec8e  src/data/DashboardConfig.js
+ee8c0829c415f785e0bcf2dbeab2d2e0100f62e9893d55afd89c6f37bd8c281c  src/data/state.js
+4e2d6dce06bbb9974eb9be68e6f217ecba9f238b0a2ce00bdce8b1504797692d  src/pages/CalendarPage.js
+99227c86991984a5afcfdaa0d7c0287de6f1b12f680511df681cc831fd7fdcf4  src/pages/ContractsPage.js
+0701668ee37fd6a7e37a1adc064cebdcf44ec341b822e3a3aeefcef2a29b435c  src/pages/CustomersPage.js
+29ba69d7f9d5e6cb315302679572d81bc8ef7f53d127d52cfba078ec6ebb9d80  src/pages/Dashboard.js
+791ff010bbb8c7d73d13a566bebe7d7d325370a44ffcc47c3312ac56211fb9b4  src/pages/ExportCenterPage.js
+6509ae9825cecdfe076b9fc7097dcc9b038276810c189d1438bee117d60333d5  src/pages/ImportLogPage.js
+f292c4db1c4a77303bb591c690b192a56a3f1c5707e401dbcea258dca8006a67  src/pages/ImportWizardPage.js
+49ec99f021ca3e5524a3c53b5c593b0819342e64308ab8a01954e04d85c4ddad  src/pages/InvoicesPage.js
+6763cf40cf5ab6a3a6d569198261665c969567d0568f4a09e3f2411f39f8749f  src/pages/MyJobsPage.js
+78a7a2c74908ae8ada6bc42cf51ae9c05d7b3075205dc0a24412887daab94d0f  src/pages/OperationsPage.js
+260303e025d3cd4eca7d19504ea6b9d8631e63f81f948417b814d90982238c0e  src/pages/PageShells.js
+cdb95fec590cbe1f852eba6fd71f0d2b437a5ff531010e8eea244b26f382eb7a  src/pages/PayrollPage.js
+1e16ad8954d031fddf9fa790b772b50739eb96803d1e867d736e67084f2d42d9  src/pages/ProjectDetailPage.js
+d11a13f80f79ee440fc91046854c9fbdbd8980a8ab9fb964d7841442d91c1610  src/pages/ProjectsPage.js
+c6b0652337cbc36ecaea267c9af6030e10224249cdc3983b276cd03145227db1  src/pages/PropertyDetailPage.js
+e8d9182e74a7be8edd8bbb32d0332ffdb06fbfa8e545e1929ea975d0798a5918  src/pages/PropertyObjectPage.js
+e2c572af48b1a4cc01c56cc99b951df988f0a00d4925eb7e750e262baf03ae7a  src/pages/RecurringPage.js
+da85b6cf2b082307cfd76c2b5219c209352359ac1d74b16a756a98d58805eb13  src/pages/ReportsPage.js
+0277428b2d44b021634dd05efe0dad3369659ecbe7940c044dcb8ae92e8372af  src/pages/RonderingPage.js
+7e7642d810ff61dc4958e4bded0d59038dd31c4b3f879b0581cf3663866c6550  src/pages/RonderingUtforandePage.js
+83d54845023cd6d57e87ddd980361076a2837544b45239c0e0dbcb5fabca5b0d  src/pages/RonderingWizardPage.js
+a64b8628b6386206da6d5a9a368db1b03e47908e32133c947d4e2877d184b5e5  src/pages/ServiceIntervalsPage.js
+e00c6c5b4671e834b0f4ed2ea3450080afaf6f20a4d4011551726d2509349c8a  src/pages/TimePage.js
+70642ca9da101560ae26a813651c595c07703de54ff303b41ad11a2dd88b3ab7  src/pages/WorkOrderDetailPage.js
+8f6c9be5634905e4a5f8fdf93bb1087f86ce7d837a9e4e387bfbb9c1c807e4db  src/pages/WorkOrdersPage.js
+b41ecb4cd5864d66ebda205595b0f1ebf54f193a70f4320a029a419224bcd4e6  src/services/TimeService.js
+e54318cdb138d7d833763401a281288e8894b1dda20ca77b8021dae043427323  src/styles/components.css
+fbdbafd54289b83f0a6011913992485085222080b0d18c63123f15bdc6cead92  src/styles/v3-admin.css
+f280a00f71f0345aee83b972b458fa89ba2ecbdae8b02138134e05f689ce10e8  src/styles/v3-aodetail.css
+1032924f0329b9d84c88d078ffb8d299471cc3f7c790e05dc8b435bbd35c4a10  src/styles/v3-aolist.css
+492c968a23e3c06edd11d1f4dee33f8496f0eb25d5537b42e033a23eabee60da  src/styles/v3-billing.css
+3723401d848eedb81c9c553f85fb7d52f8f11dfb9c6f56f4b30f367b1cd256f6  src/styles/v3-dashboard.css
+3ab8a1370fae42770bfb4b27270605ee9beebdb95616da2c5b85fa9ad76a56dc  src/styles/v3-falt.css
+ad0d08224b023b800b7714d852822091a8eef4b0aa66a0947c9988f6783c3862  src/styles/v3-misc.css
+05d2f59d7e995e18bc255d9af42b66c3e88f30c8244c42a1103494ca89087e7a  src/styles/v3-offers.css
+4abc8e5f346a72cfe5982041f730485cf75fdf6fa014578b255a2b941ea10e19  src/styles/v3-register.css
+67dbb9c8d5c36dba2bbd93b8afbdb468dc1d0ac04fc529eadd0761a033aace49  src/styles/v3-service.css
