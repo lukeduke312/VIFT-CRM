@@ -689,11 +689,11 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 
 | Fynd | SÄK | Allvar | Bekräftelse och kodreferens | Paket (testplanen) |
 |---|---|---|---|---|
-| F1: `ao_complete`-grenen kontrollerar inte tilldelning eller status | SÄK-5 | **P1** | EF `ao-time-write/index.ts:259-265`. `work_order_patch` (`schema/functions.sql`) kontrollerar bara att posten finns, idempotens och `p_expected_updated_at`. Patchen slås ihop med `v_ao \|\| p_patch` utan regelkontroll. | T3-B |
+| F1: `ao_complete`-grenen kontrollerar inte tilldelning eller status | SÄK-5 | **P1** | EF `ao-time-write/index.ts:259-265`. `work_order_patch` (`schema/functions.sql`) kontrollerar bara att posten finns, idempotens och `p_expected_updated_at`. Patchen slås ihop med `v_ao \|\| p_patch` utan regelkontroll. | T3-B · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
 | F2: hel materiallista, priser från klienten, okänt = 0 | SÄK-6 | P1 | `ao-time-write/index.ts:199-213`; `WorkOrderDetailPage.js:2053`, `:2248` | T4-B |
 | F3: ingen tilldelningsväg för åtkomstinformation, dubbel lagring. Skrivare utan `objects_sensitive` får fältet (informationsläckage). | SÄK-7 | **P1** (läckaget), P2 (vägen) | STAGING `get-sensitive-fields` v9 är **nyare** än repot (fail-closed audit, låst supabase-js) och `set-sensitive-fields` v9 använder RPC `sensitive_fields_write`. Repot uppdateras från inventeringen före ändring. Projektionen i `vift_store_full_access` ger skrivare fullt värde. | T4-A, T4-C |
-| F4: poolregeln och "Ta jobbet" | SÄK-3, SÄK-4 | P1 | `work-orders-list/index.ts:88-91`, `_shared/vift-auth.ts:121-131`, SQL-urval i `work_order_checklist_resolve`/`_set_state`/`work_order_log_*`, `fake-backend.js:122-127`. Gren B läser utanför låset. | T3-B |
-| F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C |
+| F4: poolregeln och "Ta jobbet" | SÄK-3, SÄK-4 | P1 | `work-orders-list/index.ts:88-91`, `_shared/vift-auth.ts:121-131`, SQL-urval i `work_order_checklist_resolve`/`_set_state`/`work_order_log_*`, `fake-backend.js:122-127`. Gren B läser utanför låset. | T3-B · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
 | F6: cache kvar efter utloggning | SÄK-9 | **P1** | `AuthService.js:628-650`, `state.js:983` | T3-A |
 | F7: reservroll `personal` | SÄK-10 | Blockerar `personal` | `AuthService.js:379` | T3-A |
 | F8: uppgiftsregler klient mot server | (SÄK-2) | P2 | `PageShells.js:11861-11869`, `activities-policy.ts` | T3-D |
@@ -702,14 +702,16 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F11: `appendActivity` tillåter alla typer och referenser | – | P2 | `activity-log.ts` | T3-D |
 | F12: snabbexport utan spärr | (SÄK-1) | P2 | `ImportExportConfigs.js` `showExportMenu` | T4-F |
 | F13: `ProfitabilityService` använder 250 kr/h som standard | – | P3 | `ProfitabilityService.js:10` | T4-B |
-| F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) |
-| F17: `work_order_patch` returnerar sparat resultat vid återanvänd idempotensnyckel, oavsett payload | – | P3 | `schema/functions.sql` | T3-B |
-| F18: direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged`, okända nycklar) för alla aktiva | – | P2 | `schema/policies.sql` `store_active_write_safe` + `staging_generic_keys_no_direct_*` (gäller bara affärsnycklar) | T3-C |
+| F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| F17: `work_order_patch` returnerar sparat resultat vid återanvänd idempotensnyckel, oavsett payload | – | P3 | `schema/functions.sql` | T3-B · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| F18: direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged`, okända nycklar) för alla aktiva | – | P2 | `schema/policies.sql` `store_active_write_safe` + `staging_generic_keys_no_direct_*` (gäller bara affärsnycklar) | T3-C · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
 | F19: `rondering-pass-write` kräver `ao_view_all` för allt, ingen kontroll per pass | (Ö3) | P2 | `inventering/.../functions/rondering-pass-write/rondering-pass-write/index.ts:82` | T4-D |
-| F21: `ao_edit` kan sätta `status:'fakturerad'`/`invoiceId` via `patch_ao` | – | **P1** (D-07) | `ao-time-write/index.ts` (ingen fältbegränsning för `callerHasEdit`) + `work_order_patch` | T3-B |
-| F23: stämpling kontrollerar inte AO-tilldelning | (AP-B) | P1 | `store-key-write/stamp-status.ts:56-70` (bara `ao_time`) | T3-B |
+| F21: `ao_edit` kan sätta `status:'fakturerad'`/`invoiceId` via `patch_ao` | – | **P1** (D-07) | `ao-time-write/index.ts` (ingen fältbegränsning för `callerHasEdit`) + `work_order_patch` | T3-B · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| F23: stämpling kontrollerar inte AO-tilldelning | (AP-B) | P1 | `store-key-write/stamp-status.ts:56-70` (bara `ao_time`) | T3-B · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
 | O1: Exportcenter, personnummer förvalt | SÄK-1 | P2 | `ImportExportConfigs.js:49/60`, `ExportCenterPage.js:123/135-142/189` | T4-F |
-| O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D |
+| O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+
+**Nuläge 2026-11-28 (T3-0, lokalt):** bristerna F1, F4, F5, F16, F17, F18, F21, F23 och O2 är bevisade i oförändrad kod mot den lokala STAGING-replikan (`vift-v2/tests/baslinje_sakerhet.test.js`, 34 BASLINJE-rader; tabell i `docs/qa-2026-11-28/T3-RESULTAT.md` §7). Utan R-E skulle dessutom anon kunna köra `provision_vift_user` (bevisat lokalt). Ingen rad är åtgärdad. Testverktygen för felkod + `reason` + KS finns (`vift-v2/tests/local/lib/kontroll.js`). SEC-SIM-01: paritetsramverket finns (`VIFT-CRM/tests/sim_parity.test.js`, 7 kända avvikelser).
 
 **Inaktuella hänvisningar som rättats:**
 - "G4 – källa saknas" gäller **inte** längre `work_order_create`, `work_order_patch`, `time_entry_*`, `invoice-write`, `rondering-pass-write`, `store_business_key_*`, `_staging_business_key_required_perm` eller `store_read_all_with_hashes`. Alla finns i inventeringen.
