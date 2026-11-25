@@ -1,5 +1,13 @@
 # VIFT CRM – Statusrapport för masterplanen (2026-11-26)
 
+> **UNDERLAG, ERSATT SOM STATUSLISTA (2026-11-26).** Status, beslut och backlog följs **endast** i `docs/MASTERPLAN.md`. Där finns:
+> - statusförklaringen med nivåerna Byggd · Simulerat testad · Verifierad i STAGING · Verifierad i LIVE;
+> - punkterna 211–271;
+> - riskregistret R-01–R-18;
+> - avsnitten "Säkerhetsomgången", "Beslut 2026-11-26" och "Backlog – senare UX-etapp".
+>
+> Denna fil behålls oförändrad som beläggsunderlag för statusgranskningen. Dess fyra kategorier ("Färdig och verifierad" m.fl.) och siffror gäller bara punkt 1–210 och E2b vid granskningstillfället. De konkurrerar inte med masterplanen. Vid avvikelse gäller `docs/MASTERPLAN.md`.
+
 **Typ:** endast läsning och dokumentation. Ingen kod, databas, git push eller Supabase-/webbanrop har gjorts för rapporten.
 
 **Källor:**
