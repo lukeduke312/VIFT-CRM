@@ -13,8 +13,8 @@ const ImportLogPage = (function () {
     if (!el) return;
 
     if (typeof Auth !== 'undefined' && !Auth.can('admin_manage')) {
-      el.innerHTML = '<div class="empty-state" style="padding:60px 20px;text-align:center;">' +
-        ic('lock', 32) + '<h3 style="margin-top:12px">Åtkomst nekad</h3>' +
+      el.innerHTML = '<div class="empty mx-empty">' +
+        ic('lock', 28) + '<h3>Åtkomst nekad</h3>' +
         '<p>Importloggen kräver administratörsbehörighet.</p></div>';
       return;
     }
@@ -22,72 +22,91 @@ const ImportLogPage = (function () {
     el.innerHTML = _html();
   }
 
+  /* V3 2026-11-26: sidtiteln står i toppraden (ingen egen h2 med ikon på
+     egen rad); verktygsrad med antal och "Ny import", importer som
+     listrader med status, statistik och åtgärder; riktigt tomläge. */
+  function _when(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d)) return '—';
+    var ds = (typeof UiKit !== 'undefined') ? UiKit.localDate(d) : iso.slice(0, 10);
+    return (typeof fmtDate === 'function' ? fmtDate(ds) : ds) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function _typeLabel(type) {
+    var cfg = (typeof ImportExportService !== 'undefined' && ImportExportService.getConfig) ? ImportExportService.getConfig(type) : null;
+    var fixed = { customer: 'Kunder', property: 'Fastigheter', object: 'Objekt', article: 'Artiklar', staff: 'Personal' };
+    return (cfg && cfg.label) || fixed[type] || type || '—';
+  }
+
   function _html() {
     var logs = (state.importLogs || []).slice().sort(function (a, b) {
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
 
-    var typeLabels = { customer: 'Kunder', property: 'Fastigheter', object: 'Objekt', article: 'Artiklar', staff: 'Personal' };
-
     var headerHtml =
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
-        '<div>' +
-          '<h2 style="margin:0 0 4px">' + ic('clock', 20) + ' Importlogg</h2>' +
-          '<p style="margin:0;color:var(--text-muted);font-size:13px">' + logs.length + ' importer totalt</p>' +
+      '<div class="mx-bar">' +
+        '<span class="mx-count" role="status"><b>' + logs.length + '</b> ' + (logs.length === 1 ? 'import' : 'importer') + ' totalt</span>' +
+        '<div class="mx-bar-r">' +
+          '<button class="btn bp bsm" onclick="Router.showPage(\'pg-import-wizard\',{type:\'customer\'})">' +
+            ic('upload', 14) + ' Ny import' +
+          '</button>' +
         '</div>' +
-        '<button class="btn btn-ghost" onclick="Router.showPage(\'pg-import-wizard\',{type:\'customer\'})">' +
-          ic('upload', 14) + ' Ny import' +
-        '</button>' +
       '</div>';
 
     if (logs.length === 0) {
-      return headerHtml +
-        '<div style="text-align:center;padding:60px 20px;color:var(--text-muted)">' +
-          ic('inbox', 36) + '<p style="margin-top:12px">Inga importer genomförda ännu.</p>' +
-        '</div>';
+      return '<div class="mx-page">' + headerHtml +
+        '<div class="empty mx-empty">' +
+          ic('inbox', 28) + '<h3>Inga importer ännu</h3><p>Här visas varje import med resultat och möjlighet att ångra.</p>' +
+          '<button class="btn bs bsm" onclick="Router.showPage(\'pg-import-wizard\',{type:\'customer\'})">' + ic('upload', 14) + ' Importera kunder</button>' +
+        '</div></div>';
     }
 
     var rows = logs.map(function (log) {
-      var date    = log.createdAt ? new Date(log.createdAt).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '—';
-      var type    = typeLabels[log.type] || log.type;
       var undone  = log.undone;
       var performer = log.performedBy ? (getStaff(log.performedBy) || {}).name || log.performedBy : '—';
+      var st = log.performedBy ? getStaff(log.performedBy) : null;
+      if (st && st.firstName) performer = (st.firstName + ' ' + (st.lastName || '')).trim();
 
-      return '<div class="imp-log-row' + (undone ? ' imp-log-undone' : '') + '">' +
-        '<div class="imp-log-meta">' +
-          '<span class="imp-log-date">' + date + '</span>' +
-          '<span class="imp-log-type bdg bdg-sky">' + type + '</span>' +
-          '<span class="imp-log-filename">' + esc(log.filename || '—') + '</span>' +
-          '<span class="imp-log-user">' + esc(performer) + '</span>' +
-          (undone ? '<span class="bdg bdg-grey">Ångrad</span>' : '') +
+      return '<div class="list-item mx-li imp-log-row' + (undone ? ' imp-log-undone' : '') + '">' +
+        '<div class="mx-li-main">' +
+          '<div class="list-item-v2-title mx-li-title">' + ic('file-text', 14) + ' ' + esc(log.filename || '—') + '</div>' +
+          '<div class="list-item-v2-meta mx-li-meta imp-log-meta">' +
+            '<span class="imp-log-date">' + esc(_when(log.createdAt)) + '</span>' +
+            '<span><span class="mx-sep">·</span>' + esc(_typeLabel(log.type)) + '</span>' +
+            '<span class="imp-log-user"><span class="mx-sep">·</span>' + ic('user', 12) + ' ' + esc(performer) + '</span>' +
+          '</div>' +
+          '<div class="imp-log-stats">' +
+            _statBadge(log.createdCount, 'skapade', 'bdg-green') +
+            _statBadge(log.updatedCount, 'uppdaterade', 'bdg-blue') +
+            _statBadge(log.skippedCount, 'hoppade', 'bdg-grey') +
+            (log.errorCount > 0 ? _statBadge(log.errorCount, 'fel', 'bdg-red') : '') +
+          '</div>' +
         '</div>' +
-        '<div class="imp-log-stats">' +
-          _statBadge(log.createdCount, 'Skapade', 'bdg-green') +
-          _statBadge(log.updatedCount, 'Uppdaterade', 'bdg-sky') +
-          _statBadge(log.skippedCount, 'Hoppade', 'bdg-grey') +
-          (log.errorCount > 0 ? _statBadge(log.errorCount, 'Fel', 'bdg-red') : '') +
-        '</div>' +
-        '<div class="imp-log-actions">' +
-          (log.errors && log.errors.length
-            ? '<button class="btn btn-ghost btn-sm" onclick="ImportLogPage._showErrors(\'' + log.id + '\')">' +
-                ic('alert-circle', 12) + ' Visa fel' +
-              '</button>'
-            : '') +
-          (!undone
-            ? '<button class="btn btn-ghost btn-sm" onclick="ImportLogPage._confirmUndo(\'' + log.id + '\')">' +
-                ic('rotate-ccw', 12) + ' Ångra' +
-              '</button>'
-            : '') +
+        '<div class="mx-li-side">' +
+          '<div class="mx-li-badges">' + (undone ? '<span class="bdg st bdg-grey"><span class="st-dot"></span>Ångrad</span>' : '<span class="bdg st bdg-green"><span class="st-dot"></span>Genomförd</span>') + '</div>' +
+          '<div class="imp-log-actions">' +
+            (log.errors && log.errors.length
+              ? '<button class="btn bghost bsm" onclick="ImportLogPage._showErrors(\'' + esc(log.id) + '\')">' +
+                  ic('alert-circle', 13) + ' Visa fel' +
+                '</button>'
+              : '') +
+            (!undone
+              ? '<button class="btn bd bsm" onclick="ImportLogPage._confirmUndo(\'' + esc(log.id) + '\')">' +
+                  ic('rotate-ccw', 13) + ' Ångra' +
+                '</button>'
+              : '') +
+          '</div>' +
         '</div>' +
       '</div>';
     }).join('');
 
-    return headerHtml + '<div class="imp-log-list">' + rows + '</div>';
+    return '<div class="mx-page">' + headerHtml + '<div class="mx-li-list imp-log-list">' + rows + '</div></div>';
   }
 
   function _statBadge(n, label, cls) {
     if (!n) return '';
-    return '<span class="bdg ' + cls + '" title="' + label + '">' + n + ' ' + label + '</span>';
+    return '<span class="bdg ' + cls + '">' + Number(n).toLocaleString('sv-SE') + ' ' + esc(label) + '</span>';
   }
 
   function _confirmUndo(logId) {
@@ -121,7 +140,7 @@ const ImportLogPage = (function () {
           '<tbody>' +
           (log.errors || []).map(function (e) {
             return '<tr>' +
-              '<td style="padding:5px 8px;border-bottom:1px solid var(--br)">' + (e.row || '—') + '</td>' +
+              '<td style="padding:5px 8px;border-bottom:1px solid var(--br)">' + esc(String(e.row || '—')) + '</td>' +
               '<td style="padding:5px 8px;border-bottom:1px solid var(--br)">' + esc(e.field || '') + '</td>' +
               '<td style="padding:5px 8px;border-bottom:1px solid var(--br)">' + esc(e.message || '') + '</td>' +
             '</tr>';
@@ -129,7 +148,7 @@ const ImportLogPage = (function () {
           '</tbody>' +
         '</table>' +
       '</div>',
-      buttons: [{ label: 'Stäng', cls: 'btn btn-ghost', onClick: function () { Modal.close(); } }]
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: function () { Modal.close(); } }]
     });
   }
 

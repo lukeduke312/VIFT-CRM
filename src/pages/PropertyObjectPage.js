@@ -15,7 +15,7 @@ const PropertyObjectPage = {
     this.objId = id;
     const obj = id ? getPropObj(id) : null;
     if (!obj) {
-      el.innerHTML = `<div class="empty">${ic('layout',36)}<h3>Objekt ej hittat</h3></div>`;
+      el.innerHTML = `<div class="empty">${ic('layers',36)}<h3>Objekt ej hittat</h3></div>`;
       return;
     }
     this._renderFull(el, obj);
@@ -29,7 +29,8 @@ const PropertyObjectPage = {
     const cuName   = cu  ? CustomerService.displayName(cu) : '—';
     const typeLbl  = POS ? POS.typeLabel(obj.type)   : obj.type;
     const statLbl  = POS ? POS.statusLabel(obj.status) : obj.status;
-    const badgeCls = POS ? POS.statusBadgeClass(obj.status) : 'badge-gray';
+    /* Tjänsten ger äldre klassnamn (badge-*); V3-märket heter bdg-*. */
+    const badgeCls = (POS ? POS.statusBadgeClass(obj.status) : 'badge-gray').replace(/^badge-/, 'bdg-').replace('bdg-gray', 'bdg-grey');
     // Fix: 'properties_manage' existerar ej — korrekt permission är 'customer_manage'
     const canManage = Auth.can('customer_manage');
 
@@ -50,55 +51,36 @@ const PropertyObjectPage = {
     const tenantContacts = (obj.contacts || []).filter(function(c) { return c.active !== false && c.name; });
 
     el.innerHTML = `
-      <!-- Action panel -->
-      <div class="ao-action-panel">
-        <div class="ao-action-panel-left">
-          <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(PropertyObjectService.displayNumber(obj))}</span>
-        </div>
-        <div class="ao-action-panel-badges">
-          <span class="bdg ${badgeCls}" style="font-size:10px;">${statLbl}</span>
-          <span class="bdg bdg-blue" style="font-size:10px;">${typeLbl}</span>
-          ${openAOs.length > 0 ? `<span class="bdg bdg-orange" style="font-size:10px;">${openAOs.length} öppna AO</span>` : ''}
-        </div>
-        <div class="ao-action-panel-btns">
-          ${Auth.can('ao_create') ? `<button class="btn bp bxs" onclick="PropertyObjectPage.openCreateAO()">${ic('plus',13)} Ny AO</button>` : ''}
-          ${canManage ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEditObject('${obj.id}'); Router.back();">${ic('pencil',13)} Redigera</button>` : ''}
-        </div>
-      </div>
+      <!-- V3 2026-11-26 (F-10): gemensamt detaljhuvud + faktarad. Namnet
+           visas en gång (rubriken), fastighet/kund/mått i faktaraden. -->
+      ${MxUi.detailHead({
+        back: 'Router.back()',
+        title: esc(obj.name || typeLbl),
+        sub: `<span class="mx-dh-no">${esc(PropertyObjectService.displayNumber(obj))}</span>${obj.objectNumber && obj.objectNumber !== PropertyObjectService.displayNumber(obj) ? `<span class="mx-sep">·</span><span>${esc(obj.objectNumber)}</span>` : ''}<span class="mx-sep">·</span><span>${esc(typeLbl)}</span>`,
+        badges: `<span class="bdg st ${badgeCls}"><span class="st-dot"></span>${esc(statLbl)}</span>${openAOs.length > 0 ? `<span class="bdg bdg-orange">${openAOs.length} öppna AO</span>` : ''}`,
+        primary: Auth.can('ao_create') ? { label: 'Ny AO', icon: 'plus', onclick: 'PropertyObjectPage.openCreateAO()' } : null,
+        menuId: 'propobj-head-menu',
+        actions: [
+          canManage ? { label: 'Redigera', icon: 'pencil', onclick: `PropertyDetailPage.openEditObject('${esc(obj.id)}'); Router.back();`, inline: true } : null,
+          prop ? { label: 'Till fastigheten', icon: 'building-2', onclick: `Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}',tab:'objects'})` } : null
+        ]
+      })}
 
-      <!-- Huvud-info -->
-      <div class="card" style="margin-bottom:8px;">
-        <div class="card-body" style="padding:16px;">
-          <div style="display:flex;align-items:flex-start;gap:12px;">
-            <div style="flex-shrink:0;width:52px;height:52px;border-radius:12px;background:rgba(14,165,233,.1);display:flex;align-items:center;justify-content:center;">
-              ${ic('layout', 26)}
-            </div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:18px;font-weight:900;color:var(--navy);line-height:1.2;">${esc(obj.name || typeLbl)}</div>
-              <div style="font-size:12px;color:var(--mt);margin-top:2px;">${obj.objectNumber ? `<strong>${esc(obj.objectNumber)}</strong> · ` : ''}${typeLbl}</div>
-              ${prop ? `<div style="font-size:12px;margin-top:4px;">
-                <span style="color:var(--mt);">Fastighet: </span>
-                <span style="color:var(--sky);cursor:pointer;font-weight:600;" onclick="Router.showPage('pg-obj-detail',{propId:'${prop.id}',tab:'objects'})">${esc(propName)}</span>
-              </div>` : ''}
-              ${cu ? `<div style="font-size:12px;margin-top:2px;">
-                <span style="color:var(--mt);">Kund: </span>
-                <span style="color:var(--sky);cursor:pointer;font-weight:600;" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</span>
-              </div>` : ''}
-            </div>
-          </div>
-          <!-- Tekniska detaljer -->
-          <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;padding-top:12px;border-top:1px solid var(--bg);">
-            ${obj.floor     ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Våning</div><div style="font-size:14px;font-weight:800;">${esc(obj.floor)}</div></div>` : ''}
-            ${obj.entrance  ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Entré</div><div style="font-size:14px;font-weight:800;">${esc(obj.entrance)}</div></div>` : ''}
-            ${obj.stairwell ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Trapphus</div><div style="font-size:14px;font-weight:800;">${esc(obj.stairwell)}</div></div>` : ''}
-            ${obj.area      ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Yta</div><div style="font-size:14px;font-weight:800;">${fmt(obj.area)} m²</div></div>` : ''}
-            ${obj.apartmentNumber ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Lgh-nr</div><div style="font-size:14px;font-weight:800;">${esc(obj.apartmentNumber)}</div></div>` : ''}
-          </div>
-          ${obj.description ? `<div style="font-size:12px;color:var(--mt);margin-top:10px;padding-top:10px;border-top:1px solid var(--bg);">${esc(obj.description)}</div>` : ''}
+      <section class="mx-pf" aria-label="Objektfakta">
+        <div class="mx-pf-who">
+          ${prop ? `<div class="mx-pf-line">${ic('building-2',14)}<span class="mx-pf-muted">Fastighet</span><a class="mx-dh-link" onclick="Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}',tab:'objects'})">${esc(propName)}</a></div>` : ''}
+          ${cu ? `<div class="mx-pf-line">${ic('users',14)}<span class="mx-pf-muted">Kund</span><a class="mx-dh-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${esc(cu.id)}'})">${esc(cuName)}</a></div>` : ''}
+          ${obj.address ? `<div class="mx-pf-line mx-pf-muted">${ic('map-pin',14)} ${esc([obj.address, [obj.postalCode, obj.city].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</div>` : ''}
         </div>
-      </div>
-
+        <dl class="mx-pf-figs">
+          ${obj.floor     ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Våning</dt><dd class="mx-pf-v">${esc(obj.floor)}</dd></div>` : ''}
+          ${obj.entrance  ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Entré</dt><dd class="mx-pf-v">${esc(obj.entrance)}</dd></div>` : ''}
+          ${obj.stairwell ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Trapphus</dt><dd class="mx-pf-v">${esc(obj.stairwell)}</dd></div>` : ''}
+          ${obj.area      ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Yta</dt><dd class="mx-pf-v">${fmt(obj.area)} m²</dd></div>` : ''}
+          ${obj.apartmentNumber ? `<div class="mx-pf-fig"><dt class="mx-pf-l">Lgh-nr</dt><dd class="mx-pf-v">${esc(obj.apartmentNumber)}</dd></div>` : ''}
+        </dl>
+        ${obj.description ? `<div class="mx-pf-desc">${esc(obj.description)}</div>` : ''}
+      </section>
       <!-- Tillträdeskod / nyckelinfo — hämtas via EF (objects_sensitive krävs) -->
       <div id="sensitive-obj-${obj.id}">
         ${Auth.can('objects_sensitive')
@@ -114,7 +96,7 @@ const PropertyObjectPage = {
       <div class="card" style="margin-bottom:8px;">
         <div class="card-header">
           <h3>${ic('users',14)} Hyresgäster & kontakter (${tenantContacts.length})</h3>
-          ${canManage ? `<button class="btn bp bxs" onclick="PropertyObjectPage._addTenantContact()">${ic('plus',13)} Lägg till</button>` : ''}
+          ${canManage ? `<button class="btn bs bxs" onclick="PropertyObjectPage._addTenantContact()">${ic('plus',13)} Lägg till</button>` : ''}
         </div>
         <div class="card-body" style="padding-top:6px;" id="propobj-tenant-contacts-body">
           ${tenantContacts.length === 0
@@ -170,7 +152,7 @@ const PropertyObjectPage = {
         return `<div class="card" style="margin-bottom:8px;">
           <div class="card-header">
             <h3>${ic('user-check',14)} Ansvariga (${pcs.length})</h3>
-            ${canManage ? `<button class="btn bp bxs" onclick="PropertyObjectPage._addContact()">${ic('plus',13)} Lägg till</button>` : ''}
+            ${canManage ? `<button class="btn bs bxs" onclick="PropertyObjectPage._addContact()">${ic('plus',13)} Lägg till</button>` : ''}
           </div>
           <div class="card-body" style="padding-top:6px;" id="propobj-contacts-body">
             ${rows || '<div style="font-size:12px;color:var(--mt);padding:6px 0;">Inga ansvariga kopplade till objektet.</div>'}
@@ -182,7 +164,7 @@ const PropertyObjectPage = {
       <div class="card" style="margin-bottom:8px;">
         <div class="card-header">
           <h3>${ic('calendar-check',14)} Serviceintervall (${siList.length})</h3>
-          ${canManage && prop ? `<button class="btn bp bxs" onclick="Router.showPage('pg-obj-detail',{propId:'${prop.id}',tab:'service',newSiObjectId:'${obj.id}'})">${ic('plus',13)} Nytt SI</button>` : ''}
+          ${canManage && prop ? `<button class="btn bs bxs" onclick="Router.showPage('pg-obj-detail',{propId:'${prop.id}',tab:'service',newSiObjectId:'${obj.id}'})">${ic('plus',13)} Nytt SI</button>` : ''}
         </div>
         <div class="card-body" style="padding-top:6px;">
           ${siList.length === 0
@@ -199,7 +181,7 @@ const PropertyObjectPage = {
                     <div style="font-size:11px;color:var(--mt);">Nästa: ${si.nextDue ? fmtDate(si.nextDue) : '—'}${staff ? ' · ' + esc(staff.firstName + ' ' + (staff.lastName||'')) : ''}</div>
                     ${si.lastDone ? `<div style="font-size:11px;color:var(--mt);">Senast: ${fmtDate(si.lastDone)}</div>` : ''}
                   </div>
-                  <span style="font-size:10px;padding:2px 7px;border-radius:8px;border:1px solid ${clr};color:${clr};flex-shrink:0;">${lbl}</span>
+                  <span style="font-size:10px;padding:2px 7px;border-radius:8px;border:1px solid ${clr};color:${clr};flex-shrink:0;">${esc(lbl)}</span>
                   ${canManage && prop ? `<button class="btn bs bxs" style="font-size:10px;padding:3px 7px;" onclick="Router.showPage('pg-obj-detail',{propId:'${prop.id}',tab:'service',editSiId:'${si.id}'})">${ic('pencil',11)}</button>` : ''}
                 </div>`;
               }).join('')
@@ -225,7 +207,7 @@ const PropertyObjectPage = {
                     <div style="font-size:11px;color:var(--mt);">${fmtDate(a.date || a.createdAt)}${a.category ? ' · ' + esc(a.category) : ''}</div>
                     ${a.workOrderId ? `<div style="font-size:11px;color:var(--sky);">${ic('clipboard',9)} AO: ${esc(a.workOrderId)}</div>` : ''}
                   </div>
-                  <span style="font-size:10px;padding:2px 7px;border-radius:8px;border:1px solid ${clr};color:${clr};flex-shrink:0;">${lbl}</span>
+                  <span style="font-size:10px;padding:2px 7px;border-radius:8px;border:1px solid ${clr};color:${clr};flex-shrink:0;">${esc(lbl)}</span>
                 </div>`;
               }).join('') +
               (avvList.length > 20 ? `<div style="font-size:12px;color:var(--mt);padding-top:8px;text-align:center;">+${avvList.length-20} fler avvikelser</div>` : '')
@@ -237,19 +219,19 @@ const PropertyObjectPage = {
       <div class="card" style="margin-bottom:8px;">
         <div class="card-header">
           <h3>${ic('clipboard-list',14)} Arbetsorder (${allAOs.length})</h3>
-          ${Auth.can('ao_create') ? `<button class="btn bp bxs" onclick="PropertyObjectPage.openCreateAO()">${ic('plus',13)} Ny AO</button>` : ''}
+          ${Auth.can('ao_create') ? `<button class="btn bs bxs" onclick="PropertyObjectPage.openCreateAO()">${ic('plus',13)} Ny AO</button>` : ''}
         </div>
         <div class="card-body" style="padding-top:6px;">
           ${allAOs.length === 0
             ? `<div style="font-size:12px;color:var(--mt);padding:6px 0;">Inga arbetsordrar kopplade till detta objekt.</div>`
             : allAOs.slice(0,10).map(function(ao) {
                 return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg);cursor:pointer;"
-                  onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+                  onclick="Router.showPage('pg-ao-detail',{aoId:'${esc(ao.id)}'})">
                   <div style="flex:1;min-width:0;">
                     <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ao.title || ao.id)}</div>
-                    <div style="font-size:11px;color:var(--mt);">${ao.id} · ${fmtDate(ao.createdAt)}</div>
+                    <div style="font-size:11px;color:var(--mt);">${esc(ao.id)} · ${esc(fmtDate(ao.createdAt))}</div>
                   </div>
-                  <span class="bdg bdg-${ao.status==='klar'||ao.status==='fakturerad'?'green':ao.status==='avbruten'?'gray':'blue'}" style="font-size:10px;flex-shrink:0;">${ao.status}</span>
+                  ${sbdg(ao.status)}
                 </div>`;
               }).join('') +
               (allAOs.length > 10 ? `<div style="font-size:12px;color:var(--mt);padding-top:8px;text-align:center;">+${allAOs.length-10} fler AO:er</div>` : '')
@@ -261,7 +243,7 @@ const PropertyObjectPage = {
       <div class="card" style="margin-bottom:8px;" id="propobj-images-card">
         <div class="card-header">
           <h3>${ic('image',14)} Bilder & dokument</h3>
-          ${canManage ? `<button class="btn bp bxs" id="propobj-img-upload-btn" onclick="PropertyObjectPage._openImageUpload()">${ic('upload',13)} Ladda upp</button>` : ''}
+          ${canManage ? `<button class="btn bs bxs" id="propobj-img-upload-btn" onclick="PropertyObjectPage._openImageUpload()">${ic('upload',13)} Ladda upp</button>` : ''}
         </div>
         <div class="card-body" style="padding-top:6px;" id="propobj-images-body">
           <div style="font-size:12px;color:var(--mt);padding:6px 0;">${ic('loader',12)} Laddar bilder…</div>
@@ -272,7 +254,7 @@ const PropertyObjectPage = {
       ${equipment.length > 0 ? `
       <div class="card" style="margin-bottom:8px;">
         <div class="card-header">
-          <h3>${ic('tool',14)} Utrustning (${equipment.length})</h3>
+          <h3>${ic('wrench',14)} Utrustning (${equipment.length})</h3>
         </div>
         <div class="card-body" style="padding-top:6px;">
           ${equipment.map(function(eq) {
@@ -362,7 +344,7 @@ const PropertyObjectPage = {
             }
             return `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--br);border-radius:8px;cursor:pointer;font-size:12px;"
               onclick="window.open('${esc(r.signedUrl)}','_blank')" title="${esc(r.storage_path)}">
-              ${ic('file',13)} ${esc(r.title || r.storage_path.split('/').pop())}
+              ${ic('file-text',13)} ${esc(r.title || r.storage_path.split('/').pop())}
               ${canManage ? `<button class="btn" style="margin-left:6px;padding:1px 5px;font-size:9px;color:var(--rd);border:none;cursor:pointer;"
                 onclick="event.stopPropagation();PropertyObjectPage._deleteImage('${r.id}','${esc(r.storage_path)}')">${ic('trash-2',9)}</button>` : ''}
             </div>`;

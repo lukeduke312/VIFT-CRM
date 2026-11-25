@@ -22,6 +22,26 @@ const PropertyDetailPage = {
     this._renderFull(el, p);
   },
 
+  /* V3 2026-11-26 — flikgrupper. Elva smala flikar blev åtta grupper så
+     att allt får plats och syns (F-06). Varje grupp visar en eller flera
+     paneler (#prop-tab-<panel>); switchTab() tar både gruppnyckel och de
+     äldre panelnycklarna ('ansvariga', 'recurring', 'notes'). */
+  _TAB_GROUPS: [
+    { key: 'overview',  label: 'Översikt',              panels: ['overview'] },
+    { key: 'contact',   label: 'Kontakter & åtkomst',   short: 'Kontakter', panels: ['contact', 'ansvariga'] },
+    { key: 'tech',      label: 'Teknik & besiktning',   short: 'Teknik',    panels: ['tech'] },
+    { key: 'service',   label: 'Service',               panels: ['service'] },
+    { key: 'ao',        label: 'Arbetsorder',           panels: ['ao', 'recurring'] },
+    { key: 'rondering', label: 'Rondering',             panels: ['rondering'] },
+    { key: 'objects',   label: 'Objekt',                panels: ['objects'] },
+    { key: 'images',    label: 'Bilder & anteckningar', panels: ['images', 'notes'] }
+  ],
+
+  _groupOf(tab) {
+    const g = this._TAB_GROUPS.find(x => x.key === tab || x.panels.includes(tab));
+    return g ? g.key : 'overview';
+  },
+
   _renderFull(el, p) {
     const cu      = getCu(p.customerId);
     const cuName  = cu ? CustomerService.displayName(cu) : '—';
@@ -34,10 +54,10 @@ const PropertyDetailPage = {
     const notes   = p.notes || [];
     const tech    = p.technicalSystems || {};
     const insp    = p.inspections || {};
-    const images  = p.images || [];
     const siList  = p.serviceIntervals || [];
     const objList = (typeof PropertyObjectService !== 'undefined') ? PropertyObjectService.getByProperty(p.id) : [];
-    const overdueInsp = Object.values(insp).filter(v => v.nextDate && v.nextDate < tdy()).length;
+    const ansv    = (typeof PropertyContactService !== 'undefined') ? PropertyContactService.getForProperty(p.id) : [];
+    const overdueInsp = Object.values(insp).filter(v => v && v.nextDate && v.nextDate < tdy()).length;
     const overdueServices = (typeof ServiceIntervalService !== 'undefined')
       ? siList.filter(si => ServiceIntervalService.getStatus(si) === 'overdue').length : 0;
     const approachingServices = (typeof ServiceIntervalService !== 'undefined')
@@ -46,159 +66,105 @@ const PropertyDetailPage = {
     const cityLine = [p.zip, p.city].filter(Boolean).join(' ');
     const fullAddr = [addrLine, cityLine].filter(Boolean).join(', ');
     const mapsUrl  = fullAddr ? `https://maps.google.com/?q=${encodeURIComponent(fullAddr)}` : '';
+    const canManage = Auth.can('customer_manage');
+    const group = this._groupOf(this.activeTab);
 
-    const headerCardHtml = `
-      <div class="card" style="margin-bottom:8px;">
-        <div class="card-body" style="padding:14px;">
-          <div style="display:flex;align-items:flex-start;gap:12px;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:18px;font-weight:900;color:var(--navy);line-height:1.2;margin-bottom:4px;">${esc(p.name)}</div>
-              ${addrLine ? `<div style="font-size:12px;color:var(--mt);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
-                <a href="${mapsUrl}" target="_blank" rel="noopener"
-                  style="color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-color:rgba(0,0,0,.3);">${esc(addrLine)}${cityLine ? ', ' + esc(cityLine) : ''}</a>
-                <a href="${mapsUrl}" target="_blank" rel="noopener"
-                  class="btn bs bxs" style="font-size:10px;padding:2px 8px;line-height:1.8;">${ic('navigation',11)} Navigera</a>
-              </div>` : ''}
-              ${cu ? `<div style="font-size:12px;margin-top:4px;">
-                <span style="color:var(--mt);">Ägare: </span>
-                <span style="color:var(--sky);cursor:pointer;font-weight:600;"
-                  onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</span>
-              </div>` : ''}
-              ${p.group ? `<div style="font-size:12px;color:var(--mt);">Koncern: ${p.group}</div>` : ''}
-              ${p.operationalArea ? `<div style="font-size:12px;color:var(--mt);">Driftområde: ${p.operationalArea}</div>` : ''}
-            </div>
-            <div style="text-align:right;flex-shrink:0;">
-              <div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Öppna AO</div>
-              <div style="font-size:28px;font-weight:900;color:${openAos>0?'var(--navy)':'var(--mt)'};">${openAos}</div>
-            </div>
-          </div>
-          ${(p.area||p.boa||p.apartments||p.floors) ? `
-          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--bg);">
-            ${p.area    ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Total yta</div><div style="font-size:14px;font-weight:800;">${fmt(p.area)} m²</div></div>` : ''}
-            ${p.boa     ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">BOA</div><div style="font-size:14px;font-weight:800;">${fmt(p.boa)} m²</div></div>` : ''}
-            ${p.loa     ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">LOA</div><div style="font-size:14px;font-weight:800;">${fmt(p.loa)} m²</div></div>` : ''}
-            ${p.apartments ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Lägenheter</div><div style="font-size:14px;font-weight:800;">${p.apartments} st</div></div>` : ''}
-            ${p.floors  ? `<div><div style="font-size:9px;color:var(--mt);font-weight:700;text-transform:uppercase;">Våningar</div><div style="font-size:14px;font-weight:800;">${p.floors}</div></div>` : ''}
-          </div>` : ''}
+    /* ── Huvud: tillbaka, namn, nummer/typ, status, primär åtgärd ── */
+    const badges = [
+      p.status !== 'inaktiv' ? `<span class="bdg st bdg-green"><span class="st-dot"></span>Aktiv</span>` : `<span class="bdg st bdg-grey"><span class="st-dot"></span>Inaktiv</span>`,
+      overdueInsp > 0 ? `<button type="button" class="bdg bdg-red mx-bdg-btn" onclick="PropertyDetailPage.switchTab('tech')">${ic('alert-triangle',11)} ${overdueInsp} ${overdueInsp === 1 ? 'försenad besiktning' : 'försenade besiktningar'}</button>` : '',
+      overdueServices > 0 ? `<button type="button" class="bdg bdg-red mx-bdg-btn" onclick="PropertyDetailPage.switchTab('service')">${ic('wrench',11)} ${overdueServices} service förfallen</button>` : '',
+      approachingServices > 0 && overdueServices === 0 ? `<button type="button" class="bdg bdg-orange mx-bdg-btn" onclick="PropertyDetailPage.switchTab('service')">${ic('wrench',11)} ${approachingServices} service snart</button>` : ''
+    ].join('');
+    const sub = [
+      `<span class="mx-dh-no">${esc(displayNumberOf(p))}</span>`,
+      p.objectNumber ? `<span>${esc(p.objectNumber)}</span>` : '',
+      p.type ? `<span>${esc(p.type)}</span>` : ''
+    ].filter(Boolean).join('<span class="mx-sep">·</span>');
+    const head = MxUi.detailHead({
+      back: 'Router.back()',
+      title: esc(p.name || displayNumberOf(p) || 'Fastighet'),
+      sub, badges,
+      primary: Auth.can('ao_create') ? { label: 'Ny AO', icon: 'plus', onclick: 'PropertyDetailPage.openCreateAO()' } : null,
+      menuId: 'prop-head-menu',
+      actions: [
+        canManage ? { label: 'Redigera', icon: 'pencil', onclick: 'PropertyDetailPage.openEdit()', inline: true } : null,
+        Auth.canViewPage('pg-activities') ? { label: 'Ny uppgift', icon: 'check-square', onclick: `ActivitiesPage.openCreate({customerId:'${esc(p.customerId||'')}',propertyId:'${esc(p.id)}'})`, inline: true } : null,
+        canManage ? { label: 'Kopiera fastighet', icon: 'copy', onclick: 'PropertyDetailPage.openCopyProperty()' } : null,
+        canManage ? (p.status === 'inaktiv'
+          ? { label: 'Aktivera fastigheten', icon: 'check-circle', onclick: 'PropertyDetailPage.toggleStatus()' }
+          : { label: 'Inaktivera fastigheten', icon: 'eye-off', onclick: 'PropertyDetailPage.toggleStatus()', destructive: true }) : null
+      ].filter(Boolean)
+    });
+
+    /* ── Fakta: adress, ägare och nyckeltal — en gång, inte tre ── */
+    /* extra=true: visas inte på mobil (finns redan i Grundinformation/flikraden) */
+    const fig = (label, value, onclick, extra) => value === '' || value == null ? '' :
+      `<div class="mx-pf-fig${extra ? ' mx-pf-x' : ''}"><dt class="mx-pf-l">${label}</dt><dd class="mx-pf-v">${onclick ? `<button type="button" class="mx-pf-figbtn" onclick="${onclick}" aria-label="${label}: visa">${value}</button>` : value}</dd></div>`;
+    const figs = [
+      fig('Öppna AO', `<b class="${openAos > 0 ? 'is-on' : ''}">${openAos}</b>`, `PropertyDetailPage.switchTab('ao')`),
+      p.area ? fig('Total yta', `${fmt(p.area)} m²`) : '',
+      p.boa ? fig('BOA', `${fmt(p.boa)} m²`) : '',
+      p.loa ? fig('LOA', `${fmt(p.loa)} m²`) : '',
+      p.apartments ? fig('Lägenheter', `${esc(String(p.apartments))} st`) : '',
+      p.floors ? fig('Våningar', esc(String(p.floors))) : '',
+      p.buildYear ? fig('Byggår', esc(String(p.buildYear)), null, true) : '',
+      objList.length ? fig('Objekt', String(objList.length), `PropertyDetailPage.switchTab('objects')`, true) : ''
+    ].join('');
+    const factsHtml = `
+      <section class="mx-pf" aria-label="Fastighetsfakta">
+        <div class="mx-pf-who">
+          ${fullAddr ? `<div class="mx-pf-line">${ic('map-pin',14)}<a href="${esc(mapsUrl)}" target="_blank" rel="noopener" class="mx-pf-addr">${esc(fullAddr)}</a>
+            <a href="${esc(mapsUrl)}" target="_blank" rel="noopener" class="btn bs bxs mx-pf-nav">${ic('navigation',12)} Navigera</a></div>` : `<div class="mx-pf-line mx-pf-muted">${ic('map-pin',14)} Ingen adress registrerad</div>`}
+          ${cu ? `<div class="mx-pf-line">${ic('building-2',14)}<span class="mx-pf-muted">Ägare</span><a class="mx-dh-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${esc(cu.id)}'})">${esc(cuName)}</a></div>` : ''}
+          ${p.group ? `<div class="mx-pf-line mx-pf-muted">${ic('layers',14)} Koncern: ${esc(p.group)}</div>` : ''}
+          ${p.operationalArea ? `<div class="mx-pf-line mx-pf-muted">${ic('map-pin',14)} Driftområde: ${esc(p.operationalArea)}</div>` : ''}
+        </div>
+        <dl class="mx-pf-figs">${figs}</dl>
+      </section>`;
+
+    /* ── Flikar: alla grupper syns (radbryts vid behov), tydlig aktiv flik ── */
+    const tabCount = {
+      contact: contacts.length + ansv.length,
+      service: siList.length,
+      ao: aos.length,
+      objects: objList.length
+    };
+    const tabsHtml = `
+      <div class="ftabs mx-ptabs" id="prop-tabs" role="tablist" aria-label="Fastighetskortets delar">
+        ${this._TAB_GROUPS.map(g => {
+          const n = tabCount[g.key];
+          const alert = (g.key === 'service' && overdueServices > 0) || (g.key === 'tech' && overdueInsp > 0);
+          return `<button class="ft ${group === g.key ? 'on' : ''}" role="tab" data-tab="${g.key}" aria-selected="${group === g.key ? 'true' : 'false'}" onclick="PropertyDetailPage.switchTab('${g.key}')">${g.short ? `<span class="mx-tl">${esc(g.label)}</span><span class="mx-ts">${esc(g.short)}</span>` : esc(g.label)}${n ? `<span class="ft-n">${n}</span>` : ''}${alert ? `<span class="si-tab-alert" title="Kräver åtgärd">!</span>` : ''}</button>`;
+        }).join('')}
+      </div>`;
+
+    const shown = (panel) => this._groupOf(panel) === group ? '' : 'style="display:none"';
+    const panelsHtml = `
+      <div class="mx-ppanels" data-group="${group}">
+        <div id="prop-tab-overview"  class="mx-ppanel" ${shown('overview')}>${this._renderOverview(p, insp, siList)}</div>
+        <div class="mx-pgrid mx-pgrid-contact">
+          <div id="prop-tab-contact"   class="mx-ppanel" ${shown('contact')}>${this._renderContactTab(p, contacts)}</div>
+          <div id="prop-tab-ansvariga" class="mx-ppanel" ${shown('ansvariga')}>${this._renderAnsvarigaTab(p)}</div>
+        </div>
+        <div id="prop-tab-tech"      class="mx-ppanel" ${shown('tech')}>${this._renderTechTab(tech, insp)}</div>
+        <div id="prop-tab-service"   class="mx-ppanel" ${shown('service')}>${this._renderServiceTab(p)}</div>
+        <div id="prop-tab-ao"        class="mx-ppanel" ${shown('ao')}>${this._renderAOTab(aos)}</div>
+        <div id="prop-tab-recurring" class="mx-ppanel" ${shown('recurring')}>${this._renderRecurringTab(recs)}</div>
+        <div id="prop-tab-rondering" class="mx-ppanel" ${shown('rondering')}><div id="tab-rondering">${group==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
+        <div id="prop-tab-objects"   class="mx-ppanel" ${shown('objects')}>${this._renderObjectsTab(p)}</div>
+        <div class="mx-pgrid mx-pgrid-media">
+          <div id="prop-tab-images"  class="mx-ppanel" ${shown('images')}>${this._renderImagesTab(p)}</div>
+          <div id="prop-tab-notes"   class="mx-ppanel" ${shown('notes')}>${this._renderNotesTab(notes)}</div>
         </div>
       </div>`;
 
-    const snabbHtml = `
-      <div class="card" style="margin-bottom:8px;">
-        <div class="card-body" style="padding:10px 14px;">
-          <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);margin-bottom:8px;">Snabböversikt</div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <div style="display:flex;justify-content:space-between;font-size:12px;">
-              <span style="color:var(--mt);">Öppna AO</span>
-              <strong style="color:${openAos>0?'var(--navy)':'var(--mt)'};">${openAos}</strong>
-            </div>
-            ${cu ? `<div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;">
-              <span style="color:var(--mt);">Kund</span>
-              <span style="color:var(--sky);cursor:pointer;font-weight:600;text-align:right;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</span>
-            </div>` : ''}
-            ${p.type ? `<div style="display:flex;justify-content:space-between;font-size:12px;">
-              <span style="color:var(--mt);">Typ</span><span>${p.type}</span>
-            </div>` : ''}
-            <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;">
-              <span style="color:var(--mt);">Status</span>
-              ${p.status!=='inaktiv'?`<span class="bdg bdg-green">Aktiv</span>`:`<span class="bdg bdg-grey">Inaktiv</span>`}
-            </div>
-            ${addrLine ? `<div style="font-size:11px;color:var(--mt);margin-top:2px;">${esc(addrLine)}${cityLine?', '+esc(cityLine):''}</div>` : ''}
-          </div>
-        </div>
-      </div>`;
-
-    const tabsAndContentHtml = `
-      <!-- Flikar -->
-      <div class="ftabs" id="prop-tabs" style="margin-bottom:8px;">
-        <button class="ft ${this.activeTab==='overview'  ?'on':''}" onclick="PropertyDetailPage.switchTab('overview')">Översikt</button>
-        <button class="ft ${this.activeTab==='contact'   ?'on':''}" onclick="PropertyDetailPage.switchTab('contact')">Kontakt${contacts.length?` (${contacts.length})`:''}</button>
-        <button class="ft ${this.activeTab==='ansvariga' ?'on':''}" onclick="PropertyDetailPage.switchTab('ansvariga')">${ic('user-check',11)} Ansvariga</button>
-        <button class="ft ${this.activeTab==='tech'      ?'on':''}" onclick="PropertyDetailPage.switchTab('tech')">Teknisk info</button>
-        <button class="ft ${this.activeTab==='service'   ?'on':''}" onclick="PropertyDetailPage.switchTab('service')">Service${siList.length?` (${siList.length})`:''}${overdueServices>0?` <span class="si-tab-alert">!</span>`:''}</button>
-        <button class="ft ${this.activeTab==='ao'        ?'on':''}" onclick="PropertyDetailPage.switchTab('ao')">Arbetsorder${aos.length?` (${aos.length})`:''}</button>
-        <button class="ft ${this.activeTab==='recurring' ?'on':''}" onclick="PropertyDetailPage.switchTab('recurring')">Återkommande${recs.length?` (${recs.length})`:''}</button>
-        <button class="ft ${this.activeTab==='rondering'  ?'on':''}" onclick="PropertyDetailPage.switchTab('rondering')">Rondering</button>
-        <button class="ft ${this.activeTab==='objects'   ?'on':''}" onclick="PropertyDetailPage.switchTab('objects')">Objekt${objList.length?` (${objList.length})`:''}</button>
-        <button class="ft ${this.activeTab==='images'    ?'on':''}" onclick="PropertyDetailPage.switchTab('images')">Bilder${images.length?` (${images.length})`:''}</button>
-        <button class="ft ${this.activeTab==='notes'     ?'on':''}" onclick="PropertyDetailPage.switchTab('notes')">Anteckningar${notes.length?` (${notes.length})`:''}</button>
-      </div>
-
-      <div id="prop-tab-overview"   ${this.activeTab!=='overview'   ?'style="display:none"':''}>${this._renderOverview(p, insp, siList)}</div>
-      <div id="prop-tab-contact"    ${this.activeTab!=='contact'    ?'style="display:none"':''}>${this._renderContactTab(p, contacts)}</div>
-      <div id="prop-tab-ansvariga"  ${this.activeTab!=='ansvariga'  ?'style="display:none"':''}>${this._renderAnsvarigaTab(p)}</div>
-      <div id="prop-tab-tech"       ${this.activeTab!=='tech'       ?'style="display:none"':''}>${this._renderTechTab(tech, insp)}</div>
-      <div id="prop-tab-service"    ${this.activeTab!=='service'    ?'style="display:none"':''}>${this._renderServiceTab(p)}</div>
-      <div id="prop-tab-ao"         ${this.activeTab!=='ao'         ?'style="display:none"':''}>${this._renderAOTab(aos)}</div>
-      <div id="prop-tab-recurring"  ${this.activeTab!=='recurring'  ?'style="display:none"':''}>${this._renderRecurringTab(recs)}</div>
-      <div id="prop-tab-rondering"  ${this.activeTab!=='rondering'  ?'style="display:none"':''}><div id="tab-rondering">${this.activeTab==='rondering'?this._renderRonderingTabContent(p):''}</div></div>
-      <div id="prop-tab-objects"    ${this.activeTab!=='objects'    ?'style="display:none"':''}>${this._renderObjectsTab(p)}</div>
-      <div id="prop-tab-images"     ${this.activeTab!=='images'     ?'style="display:none"':''}>${this._renderImagesTab(p)}</div>
-      <div id="prop-tab-notes"      ${this.activeTab!=='notes'      ?'style="display:none"':''}>${this._renderNotesTab(notes)}</div>`;
-
-    el.innerHTML = `
-      <!-- Action panel -->
-      <div class="ao-action-panel">
-        <div class="ao-action-panel-left">
-          <button class="btn bs bsm ao-back-btn" onclick="Router.back()">${ic('arrow-left',14)} Tillbaka</button>
-          <span class="ao-action-panel-title"><span class="apt-name">${esc(p.name || '')}</span> <span class="apt-num">${esc(displayNumberOf(p))}${p.objectNumber?' · '+esc(p.objectNumber):''}</span></span>
-        </div>
-        <div class="ao-action-panel-badges">
-          ${p.status!=='inaktiv'
-            ? `<span class="bdg bdg-green">Aktiv</span>`
-            : `<span class="bdg bdg-grey">Inaktiv</span>`}
-          ${p.type ? `<span class="bdg bdg-blue" style="font-size:10px;">${p.type}</span>` : ''}
-          ${overdueInsp > 0 ? `<span class="bdg bdg-red">${overdueInsp} försenade besikt.</span>` : ''}
-          ${overdueServices > 0 ? `<span class="bdg bdg-red">${overdueServices} service förfallen</span>` : ''}
-          ${approachingServices > 0 && overdueServices === 0 ? `<span class="bdg bdg-orange">${approachingServices} service snart</span>` : ''}
-        </div>
-        <div class="ao-action-panel-btns">
-          ${Auth.can('ao_create')
-            ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openCreateAO()">${ic('plus',13)} Ny AO</button>`
-            : ''}
-          ${Auth.can('customer_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)} Redigera</button>`
-            : ''}
-          ${Auth.can('customer_manage')
-            ? `<button class="btn ${p.status==='inaktiv'?'bsu':'bs'} bxs" onclick="PropertyDetailPage.toggleStatus()">${p.status==='inaktiv'?ic('check-circle',13)+' Aktivera':ic('eye-off',13)+' Inaktivera'}</button>`
-            : ''}
-          ${Auth.canViewPage('pg-activities')
-            ? `<button class="btn bs bxs" onclick="ActivitiesPage.openCreate({customerId:'${p.customerId||''}',propertyId:'${p.id}'})">${ic('check-square',13)} Ny uppgift</button>`
-            : ''}
-          ${Auth.can('customer_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openFlerAtgarder('${p.id}')">${ic('more-vertical',13)}</button>`
-            : ''}
-        </div>
-      </div>
-
-      <!-- Mobile quick-info banner (hidden on desktop via CSS) -->
-      <div class="prop-mobile-quick">
-        <span class="prop-mobile-quick-name">${esc(p.name)}</span>
-        <span class="prop-mobile-quick-ao${openAos>0?' prop-mobile-quick-ao--active':''}">${openAos} AO</span>
-        ${p.status!=='inaktiv'?`<span class="bdg bdg-green" style="font-size:10px;">Aktiv</span>`:`<span class="bdg bdg-grey" style="font-size:10px;">Inaktiv</span>`}
-      </div>
-
-      <!-- Fastighetshuvud (inline — visas på mobil, döljs på desktop) -->
-      <div class="prop-inline-header">
-        ${headerCardHtml}
-      </div>
-
-      <!-- Desktop two-column layout -->
-      <div class="prop-layout">
-        <div class="prop-layout-left">
-          ${tabsAndContentHtml}
-        </div>
-        <div class="prop-layout-right">
-          ${headerCardHtml}
-          ${snabbHtml}
-        </div>
-      </div>
-    `;
+    el.innerHTML = `<div class="mx-prop">${head}${factsHtml}${tabsHtml}${panelsHtml}</div>`;
+    if (group === 'rondering') { const r = document.getElementById('tab-rondering'); if (r) r.dataset.loaded = '1'; }
     /* Auto-load images if images tab is active */
-    if (this.activeTab === 'images') this._loadImages(p.id);
+    if (group === 'images') this._loadImages(p.id);
     /* Ladda känsliga fält om contact-fliken är aktiv och användaren har behörighet */
-    if (this.activeTab === 'contact' && Auth.can('objects_sensitive')) {
+    if (group === 'contact' && Auth.can('objects_sensitive')) {
       this._loadSensitiveProperty(p.id);
     }
   },
@@ -226,16 +192,22 @@ const PropertyDetailPage = {
 
   switchTab(tab) {
     this.activeTab = tab;
-    const tabs = ['overview','contact','ansvariga','tech','service','ao','recurring','rondering','objects','images','notes'];
-    tabs.forEach(t => {
+    const group = this._groupOf(tab);
+    const panels = (this._TAB_GROUPS.find(g => g.key === group) || { panels: ['overview'] }).panels;
+    const all = ['overview','contact','ansvariga','tech','service','ao','recurring','rondering','objects','images','notes'];
+    all.forEach(t => {
       const el = document.getElementById(`prop-tab-${t}`);
-      if (el) el.style.display = t === tab ? '' : 'none';
+      if (el) el.style.display = panels.includes(t) ? '' : 'none';
     });
-    document.querySelectorAll('#prop-tabs .ft').forEach((btn, i) => {
-      btn.classList.toggle('on', i === tabs.indexOf(tab));
+    document.querySelectorAll('#prop-tabs .ft').forEach(btn => {
+      const on = btn.dataset.tab === group;
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    const wrap = document.querySelector('#pg-obj-detail .mx-ppanels');
+    if (wrap) wrap.dataset.group = group;
     // Lazy-render rondering tab
-    if (tab === 'rondering') {
+    if (group === 'rondering') {
       const el = document.getElementById('tab-rondering');
       if (el && !el.dataset.loaded) {
         const p = getObj(this.propId);
@@ -244,17 +216,26 @@ const PropertyDetailPage = {
       }
     }
     // Load images from Supabase when switching to images tab
-    if (tab === 'images') {
+    if (group === 'images') {
       this._loadImages(this.propId);
     }
     // Ladda känsliga fält när contact-fliken aktiveras
-    if (tab === 'contact' && Auth.can('objects_sensitive')) {
+    if (group === 'contact' && Auth.can('objects_sensitive')) {
       this._loadSensitiveProperty(this.propId);
+    }
+    // Underpanel (t.ex. 'ansvariga' eller 'notes'): visa den direkt på smal skärm.
+    if (tab !== group && window.matchMedia && window.matchMedia('(max-width: 1023px)').matches) {
+      const sub = document.getElementById(`prop-tab-${tab}`);
+      if (sub && sub.scrollIntoView) sub.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
   },
 
   /* ── Tab: Översikt ─────────────────────────────────────── */
 
+  /* V3 2026-11-26: Översikten samlar det viktigaste från varje del —
+     varningar först, sedan grundinformation, öppna arbetsorder, ansvariga
+     och kontakter samt service/besiktningar — med länk till fliken med
+     alla detaljer. Ingen ny data; samma källor som flikarna. */
   _renderOverview(p, insp, siList) {
     siList = siList || p.serviceIntervals || [];
     const staff = state.staff || [];
@@ -262,6 +243,7 @@ const PropertyDetailPage = {
     const techObj = p.technician     ? staff.find(s => s.id === p.technician)     : null;
     const mgrName = mgrObj ? `${mgrObj.firstName} ${mgrObj.lastName}`.trim() : (p.propertyManager || '');
     const techName = techObj ? `${techObj.firstName} ${techObj.lastName}`.trim() : (p.technician || '');
+    const canManage = Auth.can('customer_manage');
 
     const rows = [
       p.objectNumber     ? ['Objektnummer',        p.objectNumber]                              : null,
@@ -278,7 +260,7 @@ const PropertyDetailPage = {
       p.lotArea          ? ['Tomtarea',             fmt(p.lotArea) + ' m²']                    : null,
     ].filter(Boolean);
 
-    const overdueInsp = Object.entries(insp).filter(([,v]) => v.nextDate && v.nextDate < tdy());
+    const overdueInsp = Object.entries(insp).filter(([,v]) => v && v.nextDate && v.nextDate < tdy());
     const inspTypes = { ovk:'OVK', sba:'SBA', hiss:'Hissbesiktning', el:'Elbesiktning', pbe:'PBE-kontroll' };
 
     // Service interval alerts for overview
@@ -288,22 +270,55 @@ const PropertyDetailPage = {
       return st === 'overdue' || st === 'due_soon' || st === 'approaching';
     }).sort((a,b) => (SIS.daysUntil(a.nextDue)||999) - (SIS.daysUntil(b.nextDue)||999)) : [];
 
+    const more = (label, tab) => `<button type="button" class="btn bghost bxs mx-more" onclick="PropertyDetailPage.switchTab('${tab}')">${label} ${ic('arrow-right',12)}</button>`;
+
+    /* Öppna arbetsorder (högst fyra, närmast planerade först) */
+    const openAos = (state.workOrders || [])
+      .filter(a => a.propertyId === p.id && !a.deleted && !['klar','fakturerad','avbruten'].includes(a.status))
+      .sort((a,b) => (a.scheduledDate || '9999').localeCompare(b.scheduledDate || '9999'));
+    const aoRows = openAos.slice(0, 4).map(ao => `
+      <button type="button" class="mx-ov-row" onclick="Router.showPage('pg-ao-detail',{aoId:'${esc(ao.id)}'})">
+        <span class="mx-ov-main"><span class="mx-ov-t">${esc(ao.title || ao.id)}</span>
+          <span class="mx-ov-s">${esc(ao.id)}${ao.scheduledDate ? ' · ' + esc(fmtDate(ao.scheduledDate)) : ''}</span></span>
+        ${sbdg(ao.status)}
+      </button>`).join('');
+
+    /* Ansvariga och kontaktpersoner (sammanfattning) */
+    const ansv = (typeof PropertyContactService !== 'undefined') ? PropertyContactService.getForProperty(p.id) : [];
+    const contacts = p.contacts || [];
+    const people = ansv.slice(0, 4).map(c => `
+      <div class="mx-ov-person"><span class="mx-ov-pn">${esc(c.personNameSnapshot || '—')}</span><span class="mx-ov-pr">${esc(c.roleNameSnapshot || 'Ansvarig')}${c.isPrimary ? ' · Primär' : ''}</span></div>`).join('') +
+      contacts.slice(0, Math.max(0, 4 - Math.min(ansv.length, 4))).map(c => `
+      <div class="mx-ov-person"><span class="mx-ov-pn">${esc(c.name || '—')}</span><span class="mx-ov-pr">${esc(c.role || 'Kontaktperson')}${c.phone ? ` · <a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ''}</span></div>`).join('');
+
+    /* Service och besiktningar: de närmaste */
+    const nextSIs = SIS ? siList.filter(si => si.active !== false && si.nextDue)
+      .sort((a,b) => (a.nextDue || '').localeCompare(b.nextDue || '')).slice(0, 3) : [];
+    const nextInsp = Object.entries(insp).filter(([,v]) => v && v.nextDate)
+      .sort((a,b) => a[1].nextDate.localeCompare(b[1].nextDate)).slice(0, 3);
+    const svcRows = nextSIs.map(si => `
+      <div class="mx-ov-kv"><span>${esc(si.title)}<small>${esc(fmtDate(si.nextDue))}</small></span>${SIS.statusBadge(si)}</div>`).join('') +
+      nextInsp.map(([k,v]) => {
+        const late = v.nextDate < tdy();
+        return `<div class="mx-ov-kv"><span>${esc(inspTypes[k] || k.toUpperCase())}<small>${late ? 'Försenad sedan ' : 'Nästa: '}${esc(fmtDate(v.nextDate))}</small></span>${late ? '<span class="bdg bdg-red">Försenad</span>' : (v.status === 'godkänd' ? '<span class="bdg bdg-green">Godkänd</span>' : '')}</div>`;
+      }).join('');
+
     return `
       ${overdueInsp.length > 0 ? `
-      <div class="card" style="border-left:3px solid var(--rd);">
+      <div class="card mx-ov-alert">
         <div class="card-header"><h3>${ic('alert-triangle',14)} Försenade besiktningar</h3></div>
         <div class="card-body kv">
           ${overdueInsp.map(([k,v]) =>
-            `<div class="dr"><span class="dk">${inspTypes[k]||k}</span>
-             <span class="dv" style="color:var(--rd);">Försenad sedan ${fmtDate(v.nextDate)}</span></div>`
+            `<div class="dr"><span class="dk">${esc(inspTypes[k]||k)}</span>
+             <span class="dv mx-late">Försenad sedan ${esc(fmtDate(v.nextDate))}</span></div>`
           ).join('')}
-          <button class="btn bs bsm" style="margin-top:8px;" onclick="PropertyDetailPage.switchTab('tech');PropertyDetailPage.openEditInsp()">Uppdatera besiktningar</button>
+          ${canManage ? `<button class="btn bs bsm" style="margin-top:8px;align-self:flex-start;" onclick="PropertyDetailPage.switchTab('tech');PropertyDetailPage.openEditInsp()">Uppdatera besiktningar</button>` : ''}
         </div>
       </div>` : ''}
 
       ${alertSIs.length > 0 ? `
-      <div class="card" style="border-left:3px solid var(--rd);">
-        <div class="card-header"><h3>${ic('tool',14)} Serviceintervall kräver åtgärd</h3></div>
+      <div class="card mx-ov-alert">
+        <div class="card-header"><h3>${ic('wrench',14)} Serviceintervall kräver åtgärd</h3></div>
         <div class="card-body">
           ${alertSIs.map(si => `
             <div class="dr" style="align-items:center;">
@@ -314,24 +329,56 @@ const PropertyDetailPage = {
         </div>
       </div>` : ''}
 
-      <div class="card">
-        <div class="card-header">
-          <h3>${ic('info',14)} Grundinformation</h3>
-          ${Auth.can('customer_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
-            : ''}
+      <div class="mx-ov-grid">
+        <div class="card">
+          <div class="card-header">
+            <h3>${ic('info',14)} Grundinformation</h3>
+            ${canManage
+              ? `<button class="btn bghost bxs" aria-label="Redigera grundinformation" title="Redigera" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
+              : ''}
+          </div>
+          <div class="card-body kv">
+            ${rows.length === 0
+              ? `<p class="mx-muted">Ingen utökad information registrerad.
+                 ${canManage ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">Redigera</button>` : ''}</p>`
+              : rows.map(([k,v]) =>
+                  `<div class="dr"><span class="dk">${k}</span><span class="dv">${esc(v)}</span></div>`
+                ).join('')}
+            ${p.note ? `<div class="nbox mx-ov-note">${ic('eye',12)} ${esc(p.note)}</div>` : ''}
+          </div>
         </div>
-        <div class="card-body kv">
-          ${rows.length === 0
-            ? `<p style="font-size:12px;color:var(--mt);">Ingen utökad information registrerad.
-               ${Auth.can('customer_manage') ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">Redigera</button>` : ''}</p>`
-            : rows.map(([k,v]) =>
-                `<div class="dr"><span class="dk">${k}</span><span class="dv">${esc(v)}</span></div>`
-              ).join('')}
+
+        <div class="card">
+          <div class="card-header">
+            <h3>${ic('clipboard-list',14)} Öppna arbetsorder <span class="ft-n">${openAos.length}</span></h3>
+            ${more('Alla', 'ao')}
+          </div>
+          <div class="card-body mx-ov-list">
+            ${aoRows || `<p class="mx-muted">Inga öppna arbetsorder.</p>`}
+            ${openAos.length > 4 ? `<p class="mx-muted">+ ${openAos.length - 4} till</p>` : ''}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>${ic('user-check',14)} Ansvariga och kontakter</h3>
+            ${more('Alla', 'contact')}
+          </div>
+          <div class="card-body mx-ov-list">
+            ${people || `<p class="mx-muted">Inga ansvariga eller kontaktpersoner registrerade.</p>`}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>${ic('calendar-check',14)} Service och besiktningar</h3>
+            ${more('Alla', 'service')}
+          </div>
+          <div class="card-body mx-ov-list">
+            ${svcRows || `<p class="mx-muted">Inga planerade serviceintervall eller besiktningar.</p>`}
+          </div>
         </div>
       </div>
-
-      ${p.note ? `<div class="nbox">${ic('eye',12)} ${esc(p.note)}</div>` : ''}
     `;
   },
 
@@ -346,8 +393,18 @@ const PropertyDetailPage = {
     const p = this.propId ? getObj(this.propId) : null;
     if (p) {
       const el = document.getElementById('prop-tab-objects');
-      if (el) el.innerHTML = this._renderObjectsTab(p);
+      if (el) { el.innerHTML = this._renderObjectsTab(p); this._refocus('prop-obj-search', f); }
     }
+  },
+
+  /* Sökfältet ritas om vid varje tangent — behåll fokus och markör så att
+     man kan skriva vidare (tidigare tappades fokus efter första tecknet). */
+  _refocus(id, f) {
+    if (!f || f.search === undefined) return;
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    inp.focus();
+    try { const n = inp.value.length; inp.setSelectionRange(n, n); } catch (e) {}
   },
 
   _renderObjectsTab(p) {
@@ -371,16 +428,16 @@ const PropertyDetailPage = {
           <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="PropertyDetailPage._objFApply({status:this.value})">
             ${statusOptions.map(s => `<option value="${s.key}" ${f.status===s.key?'selected':''}>${esc(s.label)}</option>`).join('')}
           </select>
-          <input type="text" class="fi" placeholder="Sök objekt…" value="${esc(f.search||'')}"
-            style="font-size:12px;padding:5px 10px;height:32px;min-width:120px;"
-            oninput="PropertyDetailPage._objFApply({search:this.value})">
+          <label class="mx-isearch">${ic('search',13)}<span class="sr-only">Sök objekt</span>
+            <input type="search" class="fi" id="prop-obj-search" placeholder="Sök objekt…" value="${esc(f.search||'')}"
+              oninput="PropertyDetailPage._objFApply({search:this.value})"></label>
         </div>
         ${canManage ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
       </div>`;
 
     const itemsHtml = objects.length === 0
       ? `<div class="empty" style="padding:24px 0;">
-           ${ic('layout',28)}
+           ${ic('layers',28)}
            <p style="font-size:12px;color:var(--mt);margin-top:6px;">${all.length === 0 ? 'Inga objekt tillagda ännu.' : 'Inga objekt matchar filtret.'}</p>
            ${all.length === 0 && canManage ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
          </div>`
@@ -420,8 +477,8 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('layout',14)} Objekt (${all.length})</h3>
-          ${canManage ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
+          <h3>${ic('layers',14)} Objekt <span class="ft-n">${all.length}</span></h3>
+          ${canManage ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddObject('${p.id}')">${ic('plus',13)} Lägg till objekt</button>` : ''}
         </div>
         <div class="card-body" style="padding-top:8px;">
           ${all.length > 0 ? filterBar : ''}
@@ -758,7 +815,7 @@ const PropertyDetailPage = {
     const p = propId ? getObj(propId) : null;
     if (p) {
       const el = document.getElementById('prop-tab-service');
-      if (el) el.innerHTML = this._renderServiceTab(p);
+      if (el) { el.innerHTML = this._renderServiceTab(p); this._refocus('prop-si-search', f); }
     }
   },
 
@@ -803,9 +860,9 @@ const PropertyDetailPage = {
           ].map(([k,l,n]) => `<button class="si-fchip ${f.status===k?'on':''}" onclick="PropertyDetailPage._siFApply({status:'${k}'})">${l}${n>0?` <span class="si-fchip-cnt">${n}</span>`:''}</button>`).join('')}
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" class="fi" placeholder="${ic('search',11)} Sök…" value="${esc(f.search||'')}"
-            style="font-size:12px;padding:5px 10px;height:32px;min-width:120px;max-width:180px;"
-            oninput="PropertyDetailPage._siFApply({search:this.value})">
+          <label class="mx-isearch">${ic('search',13)}<span class="sr-only">Sök serviceintervall</span>
+            <input type="search" class="fi" id="prop-si-search" placeholder="Sök…" value="${esc(f.search||'')}"
+              oninput="PropertyDetailPage._siFApply({search:this.value})"></label>
           <select class="fi" style="font-size:12px;padding:5px 8px;height:32px;" onchange="PropertyDetailPage._siFApply({sort:this.value})">
             <option value="nextDue" ${f.sort==='nextDue'?'selected':''}>Sorterat efter förfall</option>
             <option value="name"    ${f.sort==='name'   ?'selected':''}>Sorterat efter namn</option>
@@ -815,7 +872,7 @@ const PropertyDetailPage = {
 
     const itemsHtml = siList.length === 0
       ? `<div class="empty" style="padding:24px 0;">
-           ${ic('tool',28)}
+           ${ic('wrench',28)}
            <p style="font-size:12px;color:var(--mt);margin-top:6px;">${all.length === 0 ? 'Inga serviceintervall tillagda ännu.' : 'Inga intervall matchar filtret.'}</p>
            ${all.length === 0 && canManage ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openAddInterval('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
          </div>`
@@ -838,7 +895,7 @@ const PropertyDetailPage = {
                   <div class="si-card-meta">
                     ${cat ? `<span>${esc(cat.label)}</span>` : ''}
                     <span>${SIS.intervalLabel(si)}</span>
-                    ${respName ? `<span>${ic('user',10)} ${respName}</span>` : ''}
+                    ${respName ? `<span>${ic('user',10)} ${esc(respName)}</span>` : ''}
                     ${si.supplier ? `<span>${ic('package',10)} ${esc(si.supplier)}</span>` : ''}
                   </div>
                 </div>
@@ -864,7 +921,7 @@ const PropertyDetailPage = {
                 ${canMark && si.active ? `<button class="btn bp bsm" onclick="PropertyDetailPage.openMarkDone('${p.id}','${si.id}')">${ic('check-circle',13)} Markera utförd</button>` : ''}
                 ${(si.history||[]).length > 0 ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openSIHistory('${p.id}','${si.id}')">${ic('clock',13)} Historik (${si.history.length})</button>` : ''}
                 ${canManage ? `<button class="btn bghost bsm" onclick="PropertyDetailPage.openEditInterval('${p.id}','${si.id}')">${ic('pencil',13)}</button>` : ''}
-                ${canManage ? `<button class="btn bghost bsm" title="${si.active?'Pausa':'Återuppta'}" onclick="PropertyDetailPage.toggleSIPaused('${p.id}','${si.id}')">${ic(si.active?'pause':'play',13)}</button>` : ''}
+                ${canManage ? `<button class="btn bghost bsm" title="${si.active?'Pausa':'Återuppta'}" onclick="PropertyDetailPage.toggleSIPaused('${p.id}','${si.id}')">${ic(si.active?'pause-circle':'play-circle',13)}</button>` : ''}
                 ${canManage ? `<button class="btn bd bsm" onclick="PropertyDetailPage.deleteInterval('${p.id}','${si.id}')">${ic('trash-2',13)}</button>` : ''}
               </div>
             </div>`;
@@ -873,8 +930,8 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('tool',14)} Serviceintervall</h3>
-          ${canManage ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddInterval('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
+          <h3>${ic('wrench',14)} Serviceintervall <span class="ft-n">${all.length}</span></h3>
+          ${canManage ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddInterval('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
         </div>
         <div class="card-body" style="padding-top:8px;">
           ${all.length > 0 ? filterBar : ''}
@@ -1291,7 +1348,7 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('user-check',14)} Ansvariga & kontakter</h3>
+          <h3>${ic('user-check',14)} Ansvariga <span class="ft-n">${contacts.length}</span></h3>
           ${canEdit ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddPropContact('${p.id}')">${ic('plus',13)} Lägg till</button>` : ''}
         </div>
         <div class="card-body">
@@ -1360,13 +1417,13 @@ const PropertyDetailPage = {
       PropertyContactService.add(data);
     }
     Modal.close();
-    this.render({ propertyId });
+    this.render({ propId: propertyId });
   },
 
   removePropContact(id, propertyId) {
     if (!confirm('Ta bort denna koppling?')) return;
     PropertyContactService.remove(id);
-    this.render({ propertyId });
+    this.render({ propId: propertyId });
   },
 
   /* ── Tab: Kontakt & åtkomst ────────────────────────────── */
@@ -1375,9 +1432,9 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('users',14)} Kontaktpersoner</h3>
+          <h3>${ic('users',14)} Kontaktpersoner <span class="ft-n">${contacts.length}</span></h3>
           ${Auth.can('customer_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddContact()">${ic('plus',13)}</button>`
+            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddContact()">${ic('plus',13)} Lägg till</button>`
             : ''}
         </div>
         <div class="card-body" id="prop-contacts">
@@ -1389,7 +1446,7 @@ const PropertyDetailPage = {
         <div class="card-header">
           <h3>${ic('key',14)} Åtkomst & nycklar</h3>
           ${Auth.can('customer_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
+            ? `<button class="btn bghost bxs" aria-label="Redigera åtkomst och nycklar" title="Redigera" onclick="PropertyDetailPage.openEdit()">${ic('pencil',13)}</button>`
             : ''}
         </div>
         <div class="card-body">
@@ -1411,8 +1468,8 @@ const PropertyDetailPage = {
           <div style="font-size:13px;font-weight:700;">${esc(c.name||'—')}</div>
           ${c.role ? `<div style="font-size:11px;color:var(--mt);">${esc(c.role)}</div>` : ''}
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
-            ${c.phone ? `<a href="tel:${c.phone}" style="font-size:11px;color:var(--sky);">${ic('phone',10)} ${c.phone}</a>` : ''}
-            ${c.email ? `<a href="mailto:${c.email}" style="font-size:11px;color:var(--sky);">${ic('mail',10)} ${c.email}</a>` : ''}
+            ${c.phone ? `<a href="tel:${esc(c.phone)}" class="mx-link-sm">${ic('phone',12)} ${esc(c.phone)}</a>` : ''}
+            ${c.email ? `<a href="mailto:${esc(c.email)}" class="mx-link-sm">${ic('mail',12)} ${esc(c.email)}</a>` : ''}
           </div>
         </div>
         ${Auth.can('customer_manage') ? `
@@ -1806,20 +1863,19 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('clipboard-list',14)} Arbetsorder</h3>
-          <span class="bdg bdg-blue">${aos.length}</span>
+          <h3>${ic('clipboard-list',14)} Arbetsorder <span class="ft-n">${aos.length}</span></h3>
           ${Auth.can('ao_create')
-            ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openCreateAO()" style="margin-left:4px;">${ic('plus',13)} Ny AO</button>`
+            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openCreateAO()">${ic('plus',13)} Ny AO</button>`
             : ''}
         </div>
         <div class="card-body">
           ${aos.length === 0
             ? `<div class="empty" style="padding:16px 0;">${ic('clipboard-list',28)}<p style="font-size:12px;color:var(--mt);">Inga arbetsorder kopplade till denna fastighet</p></div>`
             : aos.map(ao => `
-              <div class="crow" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
+              <div class="crow" role="button" tabindex="0" onclick="Router.showPage('pg-ao-detail',{aoId:'${esc(ao.id)}'})" onkeydown="if(event.key==='Enter')this.click()">
                 <div style="flex:1;min-width:0;">
-                  <div class="crow-title"><span style="font-size:10px;font-weight:700;color:var(--mt);margin-right:4px;">${ao.id}</span>${esc(ao.title)}</div>
-                  <div class="crow-sub">${fmtDate(ao.scheduledDate||ao.createdAt)}</div>
+                  <div class="crow-title">${esc(ao.title)}</div>
+                  <div class="crow-sub">${esc(ao.id)} · ${esc(fmtDate(ao.scheduledDate||ao.createdAt))}</div>
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0;">${sbdg(ao.status)}${pbdg(ao.priority)}</div>
               </div>`).join('')}
@@ -1834,8 +1890,7 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('repeat',14)} Återkommande ärenden</h3>
-          <span class="bdg bdg-${recs.length>0?'blue':'grey'}">${recs.length}</span>
+          <h3>${ic('repeat',14)} Återkommande ärenden <span class="ft-n">${recs.length}</span></h3>
         </div>
         <div class="card-body">
           ${recs.length === 0
@@ -1844,9 +1899,9 @@ const PropertyDetailPage = {
               <div class="crow" onclick="Router.showPage('pg-recurring')">
                 <div style="flex:1;min-width:0;">
                   <div class="crow-title">${esc(r.title)}</div>
-                  <div class="crow-sub">${r.frequencyLabel||r.frequency||''}</div>
+                  <div class="crow-sub">${esc(r.frequencyLabel||r.frequency||'')}</div>
                 </div>
-                <span class="bdg bdg-${r.active!==false?'green':'grey'}" style="font-size:9px;">${r.active!==false?'Aktiv':'Pausad'}</span>
+                <span class="bdg st bdg-${r.active!==false?'green':'grey'}"><span class="st-dot"></span>${r.active!==false?'Aktiv':'Pausad'}</span>
               </div>`).join('')}
         </div>
       </div>
@@ -1861,7 +1916,7 @@ const PropertyDetailPage = {
         <div class="card-header">
           <h3>${ic('image',14)} Bilder</h3>
           ${Auth.can('customer_manage')
-            ? `<button class="btn bp bxs" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till</button>`
+            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddImage()">${ic('plus',13)} Lägg till</button>`
             : ''}
         </div>
         <div class="card-body" id="prop-images-container">
@@ -1878,8 +1933,8 @@ const PropertyDetailPage = {
       const images = await PropertyImageService.list(propId);
       this._cachedImages = images;
       /* Update tab counter */
-      const tabBtn = document.querySelector('#prop-tabs .ft:nth-child(7)');
-      if (tabBtn) tabBtn.textContent = images.length ? `Bilder (${images.length})` : 'Bilder';
+      /* (Tidigare skrev detta över flik nr 7 — "Återkommande" — med
+         "Bilder (N)". Antalet visas nu i kortets rubrik.) */
       /* Update card header count */
       const h3 = card?.querySelector('h3');
       if (h3) h3.innerHTML = `${ic('image',14)} Bilder${images.length ? ` (${images.length})` : ''}`;
@@ -1901,17 +1956,17 @@ const PropertyDetailPage = {
               <div style="border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;background:#fff;"
                 onclick="PropertyDetailPage.viewImage(${i})">
                 <div style="position:relative;">
-                  <img src="${img.signedUrl}" alt="${esc(img.title||'')}"
+                  <img src="${esc(img.signedUrl)}" alt="${esc(img.title||'')}"
                     loading="lazy"
                     style="width:100%;height:90px;object-fit:cover;display:block;">
-                  ${img.category ? `<span class="img-cat-badge">${img.category}</span>` : ''}
+                  ${img.category ? `<span class="img-cat-badge">${esc(img.category)}</span>` : ''}
                 </div>
                 <div style="padding:5px 7px;font-size:10px;font-weight:700;color:var(--navy);
                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(img.title||'Bild')}</div>
               </div>`).join('')}
           </div>`;
     } catch(e) {
-      container.innerHTML = `<div class="ibox" style="color:var(--rd);">${ic('alert-circle',13)} Kunde inte ladda bilder: ${e.message}</div>`;
+      container.innerHTML = `<div class="ibox" style="color:var(--rd);">${ic('alert-circle',13)} Kunde inte ladda bilder: ${esc(e.message)}</div>`;
     }
   },
 
@@ -1941,7 +1996,7 @@ const PropertyDetailPage = {
     const passStatusBadge = function(s) {
       const cls = {planerat:'bdg-blue',pågående:'bdg-orange',slutfört:'bdg-green',har_avvikelser:'bdg-red'}[s]||'bdg-grey';
       const lbl = {planerat:'Planerat',pågående:'Pågående',slutfört:'Slutfört',har_avvikelser:'Har anmärkningar'}[s]||s;
-      return `<span class="bdg ${cls}">${lbl}</span>`;
+      return `<span class="bdg ${cls}">${esc(lbl)}</span>`;
     };
 
     // KPI-rad: senaste 30 dagar
@@ -1950,25 +2005,16 @@ const PropertyDetailPage = {
     const totalAO  = avvikelser.filter(function(a){ return a.workOrderId; }).length;
 
     return `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div style="font-weight:700;font-size:14px;">Ronderingshistorik</div>
-        <button class="btn bp bsm" onclick="RonderingPage.openNewRonderingFromProperty('${p.customerId}','${p.id}')">+ Ny rondering</button>
+      <div class="mx-sec-head">
+        <h3 class="mx-sec-h">${ic('clipboard-check',14)} Ronderingshistorik</h3>
+        <button class="btn bp bsm" onclick="RonderingPage.openNewRonderingFromProperty('${esc(p.customerId||'')}','${esc(p.id)}')">${ic('plus',13)} Ny rondering</button>
       </div>
 
       ${ronderingar.length > 0 ? `
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;text-align:center;">
-        <div style="background:#eff6ff;border-radius:8px;padding:8px 4px;">
-          <div style="font-size:18px;font-weight:900;color:#1d4ed8;">${passes.length}</div>
-          <div style="font-size:10px;color:#1d4ed8;">Tillfällen</div>
-        </div>
-        <div style="background:#fef2f2;border-radius:8px;padding:8px 4px;">
-          <div style="font-size:18px;font-weight:900;color:#991b1b;">${totalAnm}</div>
-          <div style="font-size:10px;color:#991b1b;">Öppna anm.</div>
-        </div>
-        <div style="background:#f0fdf4;border-radius:8px;padding:8px 4px;">
-          <div style="font-size:18px;font-weight:900;color:#166534;">${totalAO}</div>
-          <div style="font-size:10px;color:#166534;">AO skapade</div>
-        </div>
+      <div class="mx-kpis mx-kpis-3" style="margin-bottom:12px;">
+        <div class="mx-kpi"><span class="mx-kpi-n">${passes.length}</span><span class="mx-kpi-l">Tillfällen</span></div>
+        <div class="mx-kpi ${totalAnm ? 'tone-danger' : ''}"><span class="mx-kpi-n">${totalAnm}</span><span class="mx-kpi-l">Öppna anmärkningar</span></div>
+        <div class="mx-kpi ${totalAO ? 'tone-ok' : ''}"><span class="mx-kpi-n">${totalAO}</span><span class="mx-kpi-l">AO skapade</span></div>
       </div>` : ''}
 
       ${passes.length === 0
@@ -1994,14 +2040,14 @@ const PropertyDetailPage = {
                     <div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ronName)}</div>
                     <div style="font-size:11px;color:var(--mt);display:flex;gap:6px;flex-wrap:wrap;margin-top:1px;">
                       ${pass.scheduledDate?`<span>${fmtDate(pass.scheduledDate)}</span>`:''}
-                      ${staffNames?`<span>${ic('user',10)} ${staffNames}</span>`:''}
+                      ${staffNames?`<span>${ic('user',11)} ${esc(staffNames)}</span>`:''}
                       ${stats&&stats.total>0?`<span>${ic('check-circle',10)} ${stats.checked}/${stats.total}</span>`:''}
-                      ${stats&&stats.anmärkningar>0?`<span style="color:#dc2626;">${ic('alert-triangle',10)} ${stats.anmärkningar}</span>`:''}
+                      ${stats&&stats.anmärkningar>0?`<span style="color:var(--danger);">${ic('alert-triangle',11)} ${stats.anmärkningar}</span>`:''}
                       ${isLegacy?`<span style="color:var(--mt);">(historisk)</span>`:''}
                     </div>
                     ${stats&&stats.total>0&&pass.status!=='planerat'?`
-                      <div style="background:#e5e7eb;border-radius:3px;height:3px;margin-top:4px;overflow:hidden;">
-                        <div style="background:${stats.anmärkningar>0?'#dc2626':'#16a34a'};width:${pct}%;height:3px;border-radius:3px;"></div>
+                      <div style="background:var(--line);border-radius:3px;height:3px;margin-top:4px;overflow:hidden;">
+                        <div style="background:${stats.anmärkningar>0?'var(--danger)':'var(--ok)'};width:${pct}%;height:3px;border-radius:3px;"></div>
                       </div>`:''}
                   </div>
                   ${passStatusBadge(pass.status)}
@@ -2040,9 +2086,9 @@ const PropertyDetailPage = {
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('file-text',14)} Anteckningar</h3>
+          <h3>${ic('file-text',14)} Anteckningar <span class="ft-n">${notes.length}</span></h3>
           ${Auth.can('customer_manage')
-            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddNote()">${ic('plus',13)}</button>`
+            ? `<button class="btn bs bxs" onclick="PropertyDetailPage.openAddNote()">${ic('plus',13)} Lägg till</button>`
             : ''}
         </div>
         <div class="card-body" id="prop-notes">
@@ -2057,7 +2103,7 @@ const PropertyDetailPage = {
     return [...notes].reverse().map(n => `
       <div style="padding:8px 0;border-bottom:1px solid var(--bg);">
         <div style="font-size:12px;line-height:1.5;color:var(--tx);white-space:pre-wrap;">${esc(n.text)}</div>
-        <div style="font-size:10px;color:var(--mt);margin-top:4px;">${n.createdBy||'Okänd'} · ${relDate(n.createdAt)}</div>
+        <div style="font-size:10px;color:var(--mt);margin-top:4px;">${esc(n.createdBy||'Okänd')} · ${esc(relDate(n.createdAt))}</div>
       </div>`).join('');
   },
 
@@ -2736,11 +2782,11 @@ const PropertyDetailPage = {
       title: esc(img.title || 'Bild'),
       body: `
         <div style="text-align:center;">
-          <img src="${img.signedUrl}" alt="${esc(img.title||'')}"
+          <img src="${esc(img.signedUrl)}" alt="${esc(img.title||'')}"
             style="max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain;">
           ${img.description  ? `<p style="font-size:13px;margin-top:10px;">${esc(img.description)}</p>` : ''}
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
-            ${img.category    ? `<span style="font-size:11px;color:var(--mt);">${ic('tag',10)} ${img.category}</span>` : ''}
+            ${img.category    ? `<span style="font-size:11px;color:var(--mt);">${ic('tag',10)} ${esc(img.category)}</span>` : ''}
             ${img.tech_section? `<span style="font-size:11px;color:var(--mt);">${ic('settings',10)} ${img.tech_section}</span>` : ''}
           </div>
         </div>`,
@@ -2957,5 +3003,52 @@ const PropertyDetailPage = {
     /* G12: öppna kopian först när servern bekräftat den. */
     return confirmPersist('properties', copy.id, { ok: 'Fastighet kopierad', fail: 'Kopian kunde inte sparas',
       onSaved: () => setTimeout(() => Router.showPage('pg-obj-detail', { propId: copy.id }), 300) });
+  }
+};
+
+
+/**
+ * MxUi — gemensamt sidhuvud för detaljsidorna i arbetsblock "övriga sidor"
+ * (Fastighetskort, Objekt, Kundkort, Projektkort). V3 2026-11-26, F-10.
+ * Tillbaka + rubrik (+ nummer/status) på en rad, en primär åtgärd synlig,
+ * övriga åtgärder i "⋮" (på dator visas åtgärder märkta inline som knappar).
+ * Stilar: src/styles/v3-misc.css (.mx-dh-*). Menyn använder den delade
+ * aoToggleOverflow/aoCloseOverflow (state.js: Escape, klick utanför).
+ *
+ * o.title och o.sub/o.badges ska vara färdig, escapad HTML. primary/actions[].onclick är
+ * betrodd JS-sträng för onclick (byggd av anroparen med esc() på data).
+ */
+const MxUi = {
+  detailHead(o) {
+    const acts = (o.actions || []).filter(Boolean);
+    const menuId = o.menuId || 'mx-dh-menu';
+    const inline = acts.filter(a => a.inline).map(a =>
+      `<button type="button" class="btn bs bsm mx-only-d" onclick="${a.onclick}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
+    /* Komponentstandard §3: destruktiva poster sist, avskilda och röda
+       (bekräftelsen ligger i respektive åtgärd). */
+    const ordered = acts.filter(a => !a.destructive).concat(acts.filter(a => a.destructive));
+    const firstDestr = ordered.findIndex(a => a.destructive);
+    const items = ordered.map((a, i) =>
+      (i > 0 && i === firstDestr ? '<div class="ao-overflow-divider" role="separator"></div>' : '') +
+      `<button type="button" class="ao-overflow-menu-item${a.destructive ? ' ao-overflow-menu-item--red' : ''}${a.inline ? ' mx-only-m' : ''}" role="menuitem" onclick="aoCloseOverflow();${a.onclick}">${ic(a.icon, 14)} ${esc(a.label)}</button>`).join('');
+    const onlyInline = acts.length > 0 && acts.every(a => a.inline);
+    const more = acts.length ? `
+      <div class="ao-overflow-wrap mx-dh-more-wrap${onlyInline ? ' mx-hide-d' : ''}">
+        <button type="button" class="ibtn mx-dh-more" id="${menuId}-btn" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('${menuId}',this)">${ic('more-horizontal', 16)}</button>
+        <div class="ao-overflow-menu" id="${menuId}" role="menu">${items}</div>
+      </div>` : '';
+    const p = o.primary;
+    const primary = p ? `<button type="button" class="btn ${p.cls || 'bp'} bsm mx-dh-primary" onclick="${p.onclick}">${ic(p.icon || 'plus', 14)} ${esc(p.label)}</button>` : '';
+    const badges = o.badges || '';
+    return `
+      <header class="mx-dh${badges ? '' : ' no-row2'}">
+        <button type="button" class="btn bs bsm mx-dh-back" onclick="${o.back || 'Router.back()'}" aria-label="Tillbaka">${ic('arrow-left', 15)}<span class="mx-dh-back-l">Tillbaka</span></button>
+        <div class="mx-dh-tt">
+          <h2 class="mx-dh-title">${o.title}</h2>
+          ${o.sub ? `<div class="mx-dh-sub">${o.sub}</div>` : ''}
+        </div>
+        <div class="mx-dh-badges">${badges}</div>
+        <div class="mx-dh-acts">${inline}${primary}${more}</div>
+      </header>`;
   }
 };

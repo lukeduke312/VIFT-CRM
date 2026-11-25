@@ -90,9 +90,21 @@ module.exports = [
     },
   },
   {
-    id: 'UI-PROP-01', module: 'Designstandard', name: 'Fastighetskortets åtgärdsrad: namnet visas på dator; på mobil kapas ingen rubrik (bara numret visas, namnet står redan i kortet)',
+    /* 2026-11-26 (V3 övriga sidor, F-10): sidhuvudet är nu det gemensamma
+       detaljhuvudet (.mx-dh) med namnet som rubrik på alla bredder. Den
+       tidigare mobilregeln "bara numret i åtgärdsraden, namnet står i
+       kortet" ersätts av: namnet står i rubriken, kapas inte, numret syns
+       intill — och namnet upprepas inte längre i snabbrad och kort
+       (tidigare tre gånger på mobil). */
+    id: 'UI-PROP-01', module: 'Designstandard', name: 'Fastighetskortets huvud: namnet är rubrik och kapas inte på dator eller mobil, numret syns, och namnet upprepas inte i sidan',
     async run(t) {
-      const probe = () => { const el = document.querySelector('#pg-obj-detail .ao-action-panel-title'); if (!el) return null; const n = el.querySelector('.apt-name'); return { nameShown: !!(n && n.offsetWidth > 0), clipped: el.scrollWidth > el.clientWidth + 1, text: el.innerText }; };
+      const probe = () => {
+        const el = document.querySelector('#pg-obj-detail .mx-dh-title'); if (!el) return null;
+        const sub = document.querySelector('#pg-obj-detail .mx-dh-sub');
+        const p = getObj(PropertyDetailPage.propId);
+        const vis = [...document.querySelectorAll('#pg-obj-detail-content *')].filter((e) => e.offsetParent && e.children.length === 0 && (e.textContent || '').trim() === p.name);
+        return { text: el.innerText, name: p.name, num: displayNumberOf(p), sub: sub ? sub.innerText : '', clipped: el.scrollWidth > el.clientWidth + 1, nameCount: vis.length };
+      };
       for (const vp of ['laptop', 'iphone']) {
         const s = await t.world.session({ viewport: vp });
         await s.login('admin');
@@ -101,9 +113,11 @@ module.exports = [
         await s.settle(300);
         const r = await s.eval(probe);
         t.note(vp + ': ' + JSON.stringify(r));
-        t.assert(r, vp + ': åtgärdsraden har en rubrik');
+        t.assert(r, vp + ': huvudet har en rubrik');
+        t.assert(r.text === r.name, vp + ': rubriken är fastighetens namn (' + r.text + ')');
         t.assert(!r.clipped, vp + ': rubriken kapas inte (' + r.text + ')');
-        t.assert(vp === 'laptop' ? r.nameShown : !r.nameShown, vp + ': namnet ' + (vp === 'laptop' ? 'visas' : 'döljs i den smala raden'));
+        t.assert(r.sub.includes(r.num), vp + ': numret visas under rubriken (' + r.sub + ')');
+        t.assert(r.nameCount === 1, vp + ': namnet visas en gång i sidan (' + r.nameCount + ')');
       }
     },
   },

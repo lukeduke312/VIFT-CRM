@@ -37,7 +37,8 @@ const ContractsPage = (function() {
     if (!c) return id||'—';
     return c.name || (c.firstName + ' ' + (c.lastName||'')).trim() || id;
   }
-  function _fmtDate(d)  { if (!d) return '—'; try { return new Date(d+'T12:00:00').toLocaleDateString('sv-SE'); } catch(e){ return d; } }
+  /* Svensk datumform som i resten av appen ("26 nov. 2026"). */
+  function _fmtDate(d)  { if (!d) return '—'; try { return fmtDate(d); } catch(e){ return d; } }
   function _fmtMoney(n) { return new Intl.NumberFormat('sv-SE', { style:'currency', currency:'SEK', maximumFractionDigits:0 }).format(n||0); }
 
   function _filtered() {
@@ -55,57 +56,93 @@ const ContractsPage = (function() {
   }
 
   /* ── Render ─────────────────────────────────────────────── */
+  /* V3 2026-11-26: verktygsrad (sök + Nytt avtal), nyckeltal, status som
+     chips och typ som filter, tabell i kort på dator och kort per rad på
+     mobil, riktigt tomläge. Sidtiteln står i toppraden. Sökningen ritar
+     bara om resultatet (fältet behåller fokus). */
   function render(params) {
     const el = document.getElementById('pg-contracts-content');
     if (!el) return;
 
     if (params && params.contractId) { _openDetail(params.contractId); return; }
 
-    const list = _filtered().sort((a,b)=>((b.createdAt||'')>(a.createdAt||''))?1:-1);
-
-    /* KPI */
-    const all    = state.contracts || [];
-    const active = all.filter(c=>c.status==='aktiv');
-    const totalArr = active.reduce((s,c)=>s+(_annualValue(c)),0);
-
-    /* Statusfilterknappar */
-    const statusBtns = [{ key:'', label:'Alla' }].concat(CONTRACT_STATUSES).map(function(s) {
-      const active_cls = _filter.status === s.key ? 'bp' : 'bs';
-      return `<button class="btn ${active_cls}" style="font-size:11px;" onclick="ContractsPage._setFilter('status','${esc(s.key)}')">${esc(s.label)}</button>`;
-    }).join('');
-
     const typeOpts = [{ key:'', label:'Alla typer' }].concat(CONTRACT_TYPES)
       .map(t=>`<option value="${esc(t.key)}"${_filter.type===t.key?' selected':''}>${esc(t.label)}</option>`).join('');
 
-    const rows = list.length === 0
-      ? `<div style="text-align:center;padding:32px;color:var(--mt);font-size:13px;">Inga avtal matchar filtret.</div>`
-      : list.map(_rowHtml).join('');
-
     el.innerHTML = `
-    <div class="page-header">
-      <div>
-        <h1 style="font-size:20px;font-weight:700;margin:0;">Kontrakt</h1>
-        <div style="font-size:12px;color:var(--mt);margin-top:2px;">${list.length} avtal</div>
+    <div class="mx-page mx-con">
+      <div class="mx-bar">
+        <label class="mx-search">${ic('search',15)}
+          <input type="search" id="con-search" aria-label="Sök avtal" placeholder="Sök avtal eller kund…" value="${esc(_filter.search)}"
+            oninput="ContractsPage._onSearch(this.value)">
+        </label>
+        <div class="mx-bar-r">
+          <button class="btn bp bsm" onclick="ContractsPage._openForm(null)">${ic('plus',14)} Nytt avtal</button>
+        </div>
       </div>
-      <button class="btn bp" onclick="ContractsPage._openForm(null)">${ic('plus',12)} Nytt avtal</button>
-    </div>
+      <div class="mx-kpis" id="con-kpis"></div>
+      <div class="mx-chiprow"><div class="mx-chips" id="con-chips" role="group" aria-label="Status"></div></div>
+      <div class="mx-filters" role="group" aria-label="Filter">
+        <select aria-label="Avtalstyp" onchange="ContractsPage._setFilter('type',this.value)">${typeOpts}</select>
+        <span id="con-clear"></span>
+      </div>
+      <div id="con-results"></div>
+    </div>`;
+    _renderResults();
+  }
 
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
-      <div style="display:flex;gap:4px;flex-wrap:wrap;">${statusBtns}</div>
-      <select onchange="ContractsPage._setFilter('type',this.value)" style="font-size:12px;padding:5px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);">${typeOpts}</select>
-      <input type="search" placeholder="Sök avtal…" value="${esc(_filter.search)}"
-        oninput="ContractsPage._setFilter('search',this.value)"
-        style="flex:1;min-width:140px;font-size:12px;padding:5px 10px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);">
-    </div>
+  let _searchT = null;
+  function _onSearch(v) {
+    clearTimeout(_searchT);
+    _searchT = setTimeout(function () { _filter.search = v; _renderResults(); }, 150);
+  }
 
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-      <div class="stat-card"><div class="stat-num">${active.length}</div><div class="stat-lbl">Aktiva avtal</div></div>
-      <div class="stat-card"><div class="stat-num">${_fmtMoney(totalArr)}</div><div class="stat-lbl">Årstotal (aktiva)</div></div>
-      <div class="stat-card"><div class="stat-num">${all.filter(c=>c.status==='utkast').length}</div><div class="stat-lbl">Utkast</div></div>
-      <div class="stat-card"><div class="stat-num">${all.filter(c=>c.status==='avslutad').length}</div><div class="stat-lbl">Avslutade</div></div>
-    </div>
+  function _renderResults() {
+    const all    = (state.contracts || []).filter(c => !c.deleted);
+    const active = all.filter(c=>c.status==='aktiv');
+    const totalArr = active.reduce((s,c)=>s+(_annualValue(c)),0);
+    const list = _filtered().sort((a,b)=>((b.createdAt||'')>(a.createdAt||''))?1:-1);
 
-    <div style="display:flex;flex-direction:column;gap:8px;">${rows}</div>`;
+    const kpis = document.getElementById('con-kpis');
+    if (kpis) kpis.innerHTML = `
+      <div class="mx-kpi tone-ok"><span class="mx-kpi-n">${active.length}</span><span class="mx-kpi-l">Aktiva avtal</span></div>
+      <div class="mx-kpi"><span class="mx-kpi-n">${esc(_fmtMoney(totalArr))}</span><span class="mx-kpi-l">Årsvärde (aktiva)</span></div>
+      <div class="mx-kpi"><span class="mx-kpi-n">${all.filter(c=>c.status==='utkast').length}</span><span class="mx-kpi-l">Utkast</span></div>
+      <div class="mx-kpi"><span class="mx-kpi-n">${all.filter(c=>c.status==='avslutad').length}</span><span class="mx-kpi-l">Avslutade</span></div>`;
+
+    /* Statuschips: antalet per status (oberoende av övriga filter), Alla = totalt. */
+    const chips = document.getElementById('con-chips');
+    if (chips) chips.innerHTML = [{ key:'', label:'Alla' }].concat(CONTRACT_STATUSES).map(s =>
+      UiKit.chip(s.label, `ContractsPage._setFilter('status','${esc(s.key)}')`, { on: _filter.status === s.key, n: s.key ? all.filter(c => c.status === s.key).length : all.length })
+    ).join('');
+
+    const any = !!(_filter.status || _filter.type || _filter.search);
+    const clr = document.getElementById('con-clear');
+    if (clr) clr.innerHTML = any ? `<button class="btn bghost bsm" onclick="ContractsPage._clearFilters()">${ic('x',13)} Rensa filter</button>` : '';
+
+    const res = document.getElementById('con-results');
+    if (!res) return;
+    if (!list.length) {
+      res.innerHTML = all.length
+        ? `<div class="empty mx-empty">${ic('search',26)}<h3>Inga avtal matchar filtret</h3><p>Ändra sökningen eller rensa filtren.</p><button class="btn bs bsm" onclick="ContractsPage._clearFilters()">${ic('x',13)} Rensa filter</button></div>`
+        : `<div class="empty mx-empty">${ic('file-check',28)}<h3>Inga avtal ännu</h3><p>Registrera serviceavtal, ronderingsavtal och andra löpande avtal med kund, period och belopp.</p><button class="btn bs bsm" onclick="ContractsPage._openForm(null)">${ic('plus',14)} Registrera första avtalet</button></div>`;
+      return;
+    }
+    res.innerHTML = `
+      <div class="mx-list-head"><span class="mx-count" role="status">Visar <b>${list.length}</b> av ${all.length} avtal</span></div>
+      <div class="dt-wrap mx-ctab-wrap"><div class="dt-scroll">
+        <table class="dtab mx-ctab">
+          <thead><tr>
+            <th>Avtal</th><th>Kund</th><th>Status</th><th>Period</th><th class="c-num">Belopp</th><th class="c-num">Årsvärde</th><th class="c-shrink"><span class="sr-only">Åtgärder</span></th>
+          </tr></thead>
+          <tbody>${list.map(_rowHtml).join('')}</tbody>
+        </table>
+      </div></div>`;
+  }
+
+  function _clearFilters() {
+    _filter = { status: '', type: '', search: '' };
+    render();
   }
 
   function _annualValue(c) {
@@ -114,28 +151,25 @@ const ContractsPage = (function() {
     return amt * (factor[c.period||'månad'] || 12);
   }
 
+  function _statusBadge(s) {
+    const cls = { utkast: 'bdg-grey', aktiv: 'bdg-green', pausad: 'bdg-orange', avslutad: 'bdg-red' }[s] || 'bdg-grey';
+    return `<span class="bdg st ${cls}"><span class="st-dot"></span>${esc(_statusMeta(s).label)}</span>`;
+  }
+
   function _rowHtml(c) {
-    const sm = _statusMeta(c.status);
     const tm = _typeMeta(c.type);
     const periLabel = PERIODS.find(p=>p.key===(c.period||'månad'))?.label || '/mån';
-    const endLabel  = c.tillsvidare ? 'Tillsvidare' : (c.endDate ? 'Avslutas ' + _fmtDate(c.endDate) : '—');
-    return `<div class="card" style="cursor:pointer;" onclick="ContractsPage._openDetail('${esc(c.id)}')">
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px;">
-            <span style="font-size:13px;font-weight:600;">${esc(c.title||'Namnlöst avtal')}</span>
-            <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${sm.color}22;color:${sm.color};border:1px solid ${sm.color}44;">${esc(sm.label)}</span>
-            <span style="font-size:10px;color:var(--mt);padding:2px 6px;border:1px solid var(--br);border-radius:8px;">${esc(tm.label)}</span>
-          </div>
-          <div style="font-size:11px;color:var(--mt);">${esc(_cuName(c.customerId))} · ${esc(endLabel)}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">${_fmtMoney(c.amount||0)}<span style="font-size:10px;font-weight:400;color:var(--mt);">${esc(periLabel)}</span></div>
-          <div style="font-size:10px;color:var(--mt);">År: ${_fmtMoney(_annualValue(c))}</div>
-        </div>
-        <div onclick="event.stopPropagation();ContractsPage._openForm('${esc(c.id)}')" class="btn bs" style="font-size:11px;padding:4px 10px;">${ic('edit-2',10)}</div>
-      </div>
-    </div>`;
+    const endLabel  = c.tillsvidare ? 'Tillsvidare' : (c.endDate ? 't.o.m. ' + _fmtDate(c.endDate) : '—');
+    const startLabel = c.startDate ? 'Från ' + _fmtDate(c.startDate) : '';
+    return `<tr class="mx-ctr" tabindex="0" onclick="ContractsPage._openDetail('${esc(c.id)}')" onkeydown="if(event.key==='Enter')this.click()">
+      <td class="mx-c-main"><div class="mx-c-title">${esc(c.title||'Namnlöst avtal')}</div><div class="mx-c-sub">${esc(c.id)} · ${esc(tm.label)}</div></td>
+      <td class="mx-c-cu">${esc(_cuName(c.customerId))}</td>
+      <td class="mx-c-st">${_statusBadge(c.status)}</td>
+      <td class="mx-c-per"><div>${esc(endLabel)}</div>${startLabel ? `<div class="mx-c-sub">${esc(startLabel)}</div>` : ''}</td>
+      <td class="c-num mx-c-amt">${esc(_fmtMoney(c.amount||0))}<span class="mx-c-per-u">${esc(periLabel)}</span></td>
+      <td class="c-num mx-c-yr"><span class="mx-c-yr-l">År: </span>${esc(_fmtMoney(_annualValue(c)))}</td>
+      <td class="c-shrink mx-c-act"><button type="button" class="ibtn" aria-label="Redigera avtal" title="Redigera" onclick="event.stopPropagation();ContractsPage._openForm('${esc(c.id)}')">${ic('pencil',14)}</button></td>
+    </tr>`;
   }
 
   /* ── Detaljvy ─────────────────────────────────────────────── */
@@ -147,24 +181,21 @@ const ContractsPage = (function() {
     const periLabel = PERIODS.find(p=>p.key===(c.period||'månad'))?.label || '/mån';
     Modal.open({
       title: esc(c.title||'Avtalsdetalj'),
-      body: `<div style="display:flex;flex-direction:column;gap:12px;font-size:13px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <span style="padding:3px 10px;border-radius:10px;background:${sm.color}22;color:${sm.color};border:1px solid ${sm.color}44;font-size:12px;">${esc(sm.label)}</span>
-          <span style="padding:3px 10px;border-radius:10px;border:1px solid var(--br);font-size:12px;color:var(--mt);">${esc(tm.label)}</span>
+      body: `<div class="mx-cdet">
+        <div class="mx-cdet-b">${_statusBadge(c.status)}<span class="bdg bdg-grey">${esc(tm.label)}</span><span class="mx-cdet-no">${esc(c.id)}</span></div>
+        <div class="kv">
+          <div class="dr"><span class="dk">Kund</span><span class="dv">${esc(_cuName(c.customerId))}</span></div>
+          ${c.propertyId?`<div class="dr"><span class="dk">Fastighet</span><span class="dv">${esc((getObj&&getObj(c.propertyId)||{name:c.propertyId}).name||c.propertyId)}</span></div>`:''}
+          <div class="dr"><span class="dk">Startdatum</span><span class="dv">${esc(_fmtDate(c.startDate))}</span></div>
+          <div class="dr"><span class="dk">Slutdatum</span><span class="dv">${c.tillsvidare?'Tillsvidare':esc(_fmtDate(c.endDate))}</span></div>
+          ${c.tillsvidare?`<div class="dr"><span class="dk">Uppsägningstid</span><span class="dv">${esc(String(c.noticePeriod||3))} månader</span></div>`:''}
+          <div class="dr"><span class="dk">Belopp</span><span class="dv">${esc(_fmtMoney(c.amount||0))} ${esc(periLabel)} (${esc(_fmtMoney(_annualValue(c)))} / år)</span></div>
+          <div class="dr"><span class="dk">Auto-förnyelse</span><span class="dv">${c.autoRenew?'Ja':'Nej'}</span></div>
+          ${c.note?`<div class="dr"><span class="dk">Notering</span><span class="dv" style="white-space:pre-wrap;">${esc(c.note)}</span></div>`:''}
         </div>
-        <table style="border-collapse:collapse;width:100%;font-size:12px;">
-          <tr><td style="color:var(--mt);padding:3px 0;width:40%;">Kund</td><td>${esc(_cuName(c.customerId))}</td></tr>
-          ${c.propertyId?`<tr><td style="color:var(--mt);padding:3px 0;">Fastighet</td><td>${esc((getObj&&getObj(c.propertyId)||{name:c.propertyId}).name||c.propertyId)}</td></tr>`:''}
-          <tr><td style="color:var(--mt);padding:3px 0;">Startdatum</td><td>${esc(_fmtDate(c.startDate))}</td></tr>
-          <tr><td style="color:var(--mt);padding:3px 0;">Slutdatum</td><td>${c.tillsvidare?'Tillsvidare':esc(_fmtDate(c.endDate))}</td></tr>
-          ${c.tillsvidare?`<tr><td style="color:var(--mt);padding:3px 0;">Uppsägningstid</td><td>${c.noticePeriod||3} månader</td></tr>`:''}
-          <tr><td style="color:var(--mt);padding:3px 0;">Belopp</td><td>${_fmtMoney(c.amount||0)} ${esc(periLabel)} (${_fmtMoney(_annualValue(c))} / år)</td></tr>
-          <tr><td style="color:var(--mt);padding:3px 0;">Auto-förnyelse</td><td>${c.autoRenew?'Ja':'Nej'}</td></tr>
-          ${c.note?`<tr><td style="color:var(--mt);padding:3px 0;">Notering</td><td style="white-space:pre-wrap;">${esc(c.note)}</td></tr>`:''}
-        </table>
       </div>`,
       buttons: [
-        { label: ic('edit-2',11) + ' Redigera', cls:'btn bp', onClick: () => { Modal.close(); _openForm(contractId); } },
+        { label: ic('pencil',13) + ' Redigera', cls:'btn bp', onClick: () => { Modal.close(); _openForm(contractId); } },
         { label: 'Stäng', cls:'btn bs', onClick: () => Modal.close() }
       ]
     });
@@ -184,7 +215,7 @@ const ContractsPage = (function() {
     ).map(x=>`<option value="${x.id}"${(c?.propertyId||'')===x.id?' selected':''}>${esc(x.name)}</option>`).join('');
 
     Modal.open({
-      title: (isNew ? ic('plus',13) : ic('edit-2',13)) + ' ' + (isNew ? 'Nytt avtal' : 'Redigera avtal'),
+      title: (isNew ? ic('plus',14) : ic('pencil',14)) + ' ' + (isNew ? 'Nytt avtal' : 'Redigera avtal'),
       body: `<div style="display:flex;flex-direction:column;gap:12px;">
         <div class="fg"><label>Titel *</label><input class="form-control" id="co-title" value="${esc(c?.title||'')}" placeholder="Avtalsnamn"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -271,8 +302,8 @@ const ContractsPage = (function() {
   /* ── Filter ───────────────────────────────────────────────── */
   function _setFilter(key, val) {
     _filter[key] = val;
-    render();
+    if (document.getElementById('con-results')) _renderResults(); else render();
   }
 
-  return { render, _openForm, _openDetail, _setFilter };
+  return { render, _openForm, _openDetail, _setFilter, _onSearch, _clearFilters };
 })();

@@ -40,14 +40,10 @@ const ProjectDetailPage = {
 
     if (!p) {
       el.innerHTML = `
-        <div class="ao-action-panel">
-          <div class="ao-action-panel-left">
-            <button class="btn bs bsm ao-back-btn" onclick="Router.showPage('pg-projects',{})">${ic('arrow-left', 14)} Tillbaka</button>
-          </div>
-        </div>
-        <div class="empty" style="padding:48px 0;gap:8px;">
-          ${ic('alert-circle', 24)}
-          <p style="font-size:13px;color:var(--mt);">Projektet kunde inte hittas. Det kan ha tagits bort, eller så är länken felaktig.</p>
+        <div class="empty mx-empty">
+          ${ic('alert-circle', 26)}
+          <h3>Projektet hittades inte</h3>
+          <p>Det kan ha tagits bort, eller så är länken felaktig.</p>
           <button class="btn bp bsm" onclick="Router.showPage('pg-projects',{})">${ic('arrow-left', 12)} Till Projekt</button>
         </div>`;
       return;
@@ -72,48 +68,42 @@ const ProjectDetailPage = {
     this._canTasks = canTasks; this._canTime = canTime; this._canFinance = canFinance;
     const tasks = canTasks ? ProjectService.getActivities(p.id) : [];
 
+    /* V3 2026-11-26 (F-10): gemensamt detaljhuvud — namnet som rubrik,
+       status som märke, Ny arbetsorder som primär åtgärd och övrigt i ⋮.
+       Faktaraden under ersätter kortet som upprepade namnet. */
+    const head = MxUi.detailHead({
+      back: "Router.showPage('pg-projects',{})",
+      title: esc(p.name || 'Namnlöst projekt'),
+      sub: `<span class="mx-dh-no">${esc(p.id)}</span>${(p.startDate || p.endDate) ? `<span class="mx-sep">·</span><span>${p.startDate ? esc(fmtDate(p.startDate)) : '?'} – ${p.endDate ? esc(fmtDate(p.endDate)) : '?'}</span>` : ''}`,
+      badges: ProjectsPage._statusBadge(p.status) + (p.archived ? `<span class="bdg bdg-grey">${ic('archive', 11)} Arkiverad</span>` : ''),
+      primary: canAoCreate ? { label: 'Ny arbetsorder', icon: 'plus', onclick: 'ProjectDetailPage.newWorkOrder()' } : null,
+      menuId: 'pd-head-menu',
+      actions: [
+        canTasks ? { label: 'Ny uppgift', icon: 'check-square', onclick: 'ProjectDetailPage.newTask()', inline: true } : null,
+        { label: 'Redigera', icon: 'pencil', onclick: `ProjectsPage.openEdit('${esc(p.id)}')`, inline: true },
+        canAoEdit ? { label: 'Koppla arbetsorder', icon: 'link', onclick: 'ProjectDetailPage.openLinkWorkOrder()' } : null,
+        canOffer ? { label: 'Koppla offert', icon: 'link', onclick: 'ProjectDetailPage.openLinkOffer()' } : null,
+        p.archived
+          ? { label: 'Återställ', icon: 'rotate-ccw', onclick: `ProjectsPage.unarchive('${esc(p.id)}')` }
+          : { label: 'Arkivera', icon: 'archive', onclick: `Modal.confirm('Arkivera projektet? Det flyttas till Arkiverade och kan återställas.', () => ProjectsPage.archive('${esc(p.id)}'))`, destructive: true }
+      ]
+    });
+
     el.innerHTML = `
-      <div class="ao-action-panel">
-        <div class="ao-action-panel-left">
-          <button class="btn bs bsm ao-back-btn" onclick="Router.showPage('pg-projects',{})">${ic('arrow-left', 14)} Tillbaka</button>
-          <span style="font-size:11px;font-weight:700;color:var(--mt);">${esc(p.id)}</span>
-        </div>
-        <div class="ao-action-panel-badges">
-          <span style="font-size:11px;padding:3px 10px;border-radius:10px;background:${sm.color}22;color:${sm.color};border:1px solid ${sm.color}44;">${esc(sm.label)}</span>
-          ${p.archived ? `<span class="bdg bdg-grey">${ic('archive', 10)} Arkiverad</span>` : ''}
-        </div>
-        <div class="ao-action-panel-btns">
-          ${canAoCreate ? `<button class="btn bs bxs" onclick="ProjectDetailPage.newWorkOrder()">${ic('plus', 13)} Ny arbetsorder</button>` : ''}
-          ${canTasks ? `<button class="btn bs bxs" onclick="ProjectDetailPage.newTask()">${ic('plus', 13)} Ny uppgift</button>` : ''}
-          <button class="btn bs bxs" onclick="ProjectsPage.openEdit('${esc(p.id)}')">${ic('pencil', 13)} Redigera</button>
-          <div class="dd-wrap" style="position:relative;display:inline-block;">
-            <button class="btn bs bxs" onclick="ProjectDetailPage._toggleMenu(event)">${ic('more-vertical', 13)}</button>
-            <div id="pd-action-menu" class="dd-menu" style="display:none;position:absolute;right:0;top:100%;z-index:40;background:var(--card);border:1px solid var(--br);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:200px;">
-              ${canAoEdit ? `<button class="dd-item" onclick="ProjectDetailPage._toggleMenu();ProjectDetailPage.openLinkWorkOrder()" style="display:block;width:100%;text-align:left;padding:9px 12px;font-size:12px;border:0;background:none;cursor:pointer;">${ic('link', 12)} Koppla arbetsorder</button>` : ''}
-              ${canOffer ? `<button class="dd-item" onclick="ProjectDetailPage._toggleMenu();ProjectDetailPage.openLinkOffer()" style="display:block;width:100%;text-align:left;padding:9px 12px;font-size:12px;border:0;background:none;cursor:pointer;">${ic('link', 12)} Koppla offert</button>` : ''}
-              ${p.archived
-                ? `<button class="dd-item" onclick="ProjectDetailPage._toggleMenu();ProjectsPage.unarchive('${esc(p.id)}')" style="display:block;width:100%;text-align:left;padding:9px 12px;font-size:12px;border:0;background:none;cursor:pointer;">${ic('rotate-ccw', 12)} Återställ</button>`
-                : `<button class="dd-item" onclick="ProjectDetailPage._toggleMenu();ProjectsPage.archive('${esc(p.id)}')" style="display:block;width:100%;text-align:left;padding:9px 12px;font-size:12px;border:0;background:none;cursor:pointer;">${ic('archive', 12)} Arkivera</button>`}
-            </div>
-          </div>
-        </div>
-      </div>
+      ${head}
 
-      <div class="card" style="margin-top:12px;">
-        <div class="card-body" style="padding:14px 16px;">
-          <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;">
-            <h3 class="ch3" style="margin:0;">${ic('folder', 15)} ${esc(p.name || 'Namnlöst projekt')}</h3>
-            <div style="font-size:12px;color:var(--mt);">
-              ${cu ? `<a href="javascript:void(0)" onclick="Router.showPage('pg-crm-detail',{customerId:'${esc(cu.id)}'})" style="color:var(--sky);">${esc(CustomerService.displayName(cu))}</a>` : '—'}
-              ${prop ? ` · <a href="javascript:void(0)" onclick="Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}'})" style="color:var(--sky);">${esc(prop.name || prop.address || prop.id)}</a>` : ''}
-              ${resp ? ` · Ansvarig: ${esc((resp.firstName + ' ' + resp.lastName).trim())}` : ''}
-              ${(p.startDate || p.endDate) ? ` · ${p.startDate ? esc(fmtDate(p.startDate)) : '?'}–${p.endDate ? esc(fmtDate(p.endDate)) : '?'}` : ''}
-            </div>
-          </div>
+      <section class="mx-pf" aria-label="Projektfakta">
+        <div class="mx-pf-who">
+          <div class="mx-pf-line">${ic('users', 14)}<span class="mx-pf-muted">Kund</span>${cu ? `<a class="mx-dh-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${esc(cu.id)}'})">${esc(CustomerService.displayName(cu))}</a>` : '<span>—</span>'}</div>
+          ${prop ? `<div class="mx-pf-line">${ic('building-2', 14)}<span class="mx-pf-muted">Fastighet</span><a class="mx-dh-link" onclick="Router.showPage('pg-obj-detail',{propId:'${esc(prop.id)}'})">${esc(prop.name || prop.address || prop.id)}</a></div>` : ''}
         </div>
-      </div>
-
-      <div class="ftabs" id="pd-tabs" style="margin-top:10px;margin-bottom:8px;">
+        <dl class="mx-pf-figs">
+          <div class="mx-pf-fig"><dt class="mx-pf-l">Ansvarig</dt><dd class="mx-pf-v mx-pf-v-sm">${resp ? esc((resp.firstName + ' ' + resp.lastName).trim()) : '—'}</dd></div>
+          <div class="mx-pf-fig"><dt class="mx-pf-l">Arbetsorder</dt><dd class="mx-pf-v"><button type="button" class="mx-pf-figbtn" aria-label="Arbetsorder: visa" onclick="ProjectDetailPage.switchTab('ao')">${workOrders.length}</button></dd></div>
+          <div class="mx-pf-fig"><dt class="mx-pf-l">Offerter</dt><dd class="mx-pf-v"><button type="button" class="mx-pf-figbtn" aria-label="Offerter: visa" onclick="ProjectDetailPage.switchTab('offers')">${offers.length}</button></dd></div>
+        </dl>
+      </section>
+      <div class="ftabs mx-pdtabs" id="pd-tabs" role="tablist">
         <button class="ft ${this.activeTab==='overview' ?'on':''}" onclick="ProjectDetailPage.switchTab('overview')">Översikt</button>
         <button class="ft ${this.activeTab==='ao'        ?'on':''}" onclick="ProjectDetailPage.switchTab('ao')">Arbetsorder${workOrders.length?` (${workOrders.length})`:''}</button>
         ${canTime ? `<button class="ft ${this.activeTab==='time' ?'on':''}" onclick="ProjectDetailPage.switchTab('time')">Tid</button>` : ''}
@@ -315,10 +305,9 @@ const ProjectDetailPage = {
       if (ao.propertyId && !seen.has(ao.propertyId)) { seen.add(ao.propertyId); const prop = getObj(ao.propertyId); if (prop) properties.push(prop); }
     });
     const statuses = Array.from(new Set(workOrders.map(a => a.status))).sort();
-    const chip = (key, label) => `<button class="btn ${st.scope===key?'bp':'bs'} bxs" onclick="ProjectDetailPage.setAOFilterScope('${key}')">${label}</button>`;
     return `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;">
-        ${chip('all','Alla')}${chip('open','Öppna')}${chip('done','Klara')}
+      <div class="mx-pd-filter">
+        <span class="mx-chips" id="pd-ao-chips" role="group" aria-label="Urval">${this._aoChipsHtml()}</span>
         ${statuses.length > 1 ? `
         <select id="ao-filter-status" onchange="ProjectDetailPage.setAOFilterField('status', this.value)" style="font-size:12px;padding:5px 8px;">
           <option value="">Alla statusar</option>
@@ -333,8 +322,17 @@ const ProjectDetailPage = {
     `;
   },
 
+  /* V3: snabbfilter som .chip (komponentstandard §4); markeringen följer valet. */
+  _aoChipsHtml() {
+    const st = this._aoFilterState;
+    return [['all','Alla'],['open','Öppna'],['done','Klara']].map(([k, l]) =>
+      UiKit.chip(l, `ProjectDetailPage.setAOFilterScope('${k}')`, { on: st.scope === k })).join('');
+  },
+
   setAOFilterScope(scope) {
     this._aoFilterState.scope = scope;
+    const c = document.getElementById('pd-ao-chips');
+    if (c) c.innerHTML = this._aoChipsHtml();
     this._refreshAOResults();
   },
   setAOFilterField(field, value) {
@@ -745,39 +743,34 @@ const ProjectDetailPage = {
   _documentFilterState: { type: '', search: '' },
 
   _renderDocumentsTab(p, canFinance) {
-    const chip = (key, label) => `<button class="btn ${this._documentFilterState.type===key?'bp':'bs'} bxs" onclick="ProjectDetailPage.setDocumentFilter('${key}')">${label}</button>`;
     return `
       <div class="card">
         <div class="card-header">
-          <h3>${ic('file-text',14)} Dokument</h3>
-          <span class="bdg bdg-blue">${ProjectService.getDocuments(p.id).length}</span>
-          <div style="margin-left:auto;">
-            <button class="btn bp bxs" onclick="ProjectDetailPage.openUploadDocument()">${ic('plus',13)} Ladda upp dokument</button>
-          </div>
+          <h3>${ic('file-text',14)} Dokument <span class="ft-n">${ProjectService.getDocuments(p.id).length}</span></h3>
+          <button class="btn bp bsm" onclick="ProjectDetailPage.openUploadDocument()">${ic('upload',13)} Ladda upp dokument</button>
         </div>
         <div class="card-body">
-          <div class="fg" style="margin-bottom:8px;">
+          <label class="mx-isearch mx-isearch-wide">${ic('search',13)}<span class="sr-only">Sök dokument</span>
             <input type="search" id="doc-search" placeholder="Sök dokument / leverantör…" value="${esc(this._documentFilterState.search)}"
-              oninput="ProjectDetailPage.setDocumentSearch(this.value)"
-              style="width:100%;font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--bg);color:var(--tx);">
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
-            ${chip('', 'Alla')}
-            ${chip('ue_offert', 'UE-offerter')}
-            ${chip('avtal', 'Avtal')}
-            ${chip('leverantorsfaktura', 'Fakturor')}
-            ${chip('ritning', 'Ritningar')}
-            ${chip('protokoll', 'Protokoll')}
-            ${chip('ovrigt', 'Övrigt')}
-          </div>
+              oninput="ProjectDetailPage.setDocumentSearch(this.value)">
+          </label>
+          <div class="mx-chips" id="pd-doc-chips" role="group" aria-label="Dokumenttyp" style="margin:10px 0 12px;">${this._docChipsHtml()}</div>
           <div id="pd-doc-results">${this._renderDocumentResults(p, canFinance)}</div>
         </div>
       </div>
     `;
   },
 
+  _docChipsHtml() {
+    const cur = this._documentFilterState.type;
+    return [['', 'Alla'], ['ue_offert', 'UE-offerter'], ['avtal', 'Avtal'], ['leverantorsfaktura', 'Fakturor'], ['ritning', 'Ritningar'], ['protokoll', 'Protokoll'], ['ovrigt', 'Övrigt']]
+      .map(([k, l]) => UiKit.chip(l, `ProjectDetailPage.setDocumentFilter('${k}')`, { on: cur === k })).join('');
+  },
+
   setDocumentFilter(type) {
     this._documentFilterState.type = type;
+    const c = document.getElementById('pd-doc-chips');
+    if (c) c.innerHTML = this._docChipsHtml();
     this._refreshDocumentResults();
   },
   setDocumentSearch(val) {
