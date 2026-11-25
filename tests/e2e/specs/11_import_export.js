@@ -113,4 +113,36 @@ module.exports = [
       t.assert(/BRF Solgläntan/.test(out.customer), 'kundexporten innehåller kunderna');
     },
   },
+  {
+    /* QA 2026-11-26: newId() läste alla siffror i ett id som ett tal. Fanns ett
+       AO med UUID-id fick varje importerad AO samma id ("AO-3.77…e+21") —
+       riktiga id-dubbletter. Rättat: importen använder samma kollisionssäkra
+       id som appen (WorkOrderService._newAoId). Simulerad server. */
+    id: 'IMP-03', module: 'Import och export', name: 'AO-import när ett AO med UUID-id finns: varje importerad AO får ett eget, giltigt id (inga dubbletter)',
+    async run(t) {
+      const aos = t.fake.get('workOrders');
+      aos.push(Object.assign({}, aos[0], { id: 'AO-3f2a1b4c-9e21-4d7a-8b1e-77aa00112233', displayNumber: 'AO-900', title: 'Befintlig AO med UUID-id' }));
+      t.fake.set('workOrders', aos);
+      const s = await t.world.session({ viewport: 'desktop' });
+      await s.login('admin');
+      const before = await s.eval(() => state.workOrders.map((a) => a.id));
+      const csv = ['Titel;Beskrivning;Status', 'Import-AO ett;Test;nytt', 'Import-AO två;Test;nytt', 'Import-AO tre;Test;nytt'].join('\r\n');
+      await s.go('pg-import-wizard', { type: 'workOrder' });
+      await s.page.setInputFiles('#imp-file-input', { name: 'ao-e2e.csv', mimeType: 'text/csv', buffer: Buffer.from('﻿' + csv, 'utf8') });
+      await s.page.waitForSelector('#imp-btn-next:not([disabled])', { timeout: 5000 });
+      await s.page.click('#imp-btn-next'); await s.settle(400);
+      for (let i = 0; i < 4; i++) {
+        if (await s.eval(() => !!document.querySelector('.imp-result'))) break;
+        await s.page.locator('#imp-footer .btn-primary').click(); await s.settle(500);
+      }
+      await s.page.waitForSelector('.imp-result', { timeout: 8000 });
+      const created = await s.eval((b) => state.workOrders.filter((a) => !b.includes(a.id)).map((a) => ({ id: a.id, title: a.title })), before);
+      const ids = created.map((c) => c.id);
+      t.note('skapade: ' + ids.join(', '));
+      t.assert(created.length === 3, 'tre AO skapade (' + created.length + ')');
+      t.assert(new Set(ids).size === 3, 'alla id unika (' + ids.join(', ') + ')');
+      t.assert(ids.every((x) => /^AO-[0-9a-z-]{8,}$/i.test(x) && !/e\+/i.test(x)), 'giltiga id utan exponentform (' + ids.join(', ') + ')');
+      t.assert(ids.every((x) => !before.includes(x)), 'inga krockar med befintliga AO');
+    },
+  },
 ];

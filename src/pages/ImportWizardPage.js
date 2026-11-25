@@ -29,6 +29,20 @@ const ImportWizardPage = (function () {
   var _lastSaveOk      = true;   // E2E IMP-02: bekräftade servern importen?
   var _entityType      = 'customer';
   var _caps            = null;   // checkCapabilities() result
+
+  /* QA 2026-11-26: id för en importerad rad. newId() läser alla siffror i
+     ett id som ett tal; finns ett UUID-id i registret blir talet för stort
+     (t.ex. "AO-3.77…e+21") och varje importerad rad får SAMMA id. AO och
+     tidposter får därför samma kollisionssäkra id som när de skapas i
+     appen. Övriga register behåller löpnummer, men faller tillbaka på ett
+     säkert id om löpnumret blir trasigt eller redan finns. */
+  function _importNewId(arr, cfg) {
+    if (cfg.stateKey === 'workOrders' && typeof WorkOrderService !== 'undefined' && WorkOrderService._newAoId) return WorkOrderService._newAoId();
+    if (cfg.stateKey === 'timeEntries' && typeof TimeService !== 'undefined' && TimeService._newTimeEntryId) return TimeService._newTimeEntryId();
+    var id = newId(arr, cfg.idPrefix);
+    var broken = !/^[A-Za-z]+-\d+$/.test(id) || (arr || []).some(function (x) { return x && x.id === id; });
+    return broken ? newSafeId(cfg.idPrefix, arr) : id;
+  }
   var _validationTime  = null;   // ISO timestamp när steg 4 kördes (för konfliktsdetektering)
 
   /* Vilken permission som krävs för att importera respektive register.
@@ -813,7 +827,7 @@ const ImportWizardPage = (function () {
 
       function _createNew(baseObj) {
         var now  = new Date().toISOString();
-        var extras = { id: newId(arr, cfg.idPrefix), createdAt: now, updatedAt: now };
+        var extras = { id: _importNewId(arr, cfg), createdAt: now, updatedAt: now };
         /* 2026-11-12 (display-number round): newId() reads the digits of
            every id as one number, so once a K3 UUID id exists in
            customers/properties/propertyObjects it returns the SAME
