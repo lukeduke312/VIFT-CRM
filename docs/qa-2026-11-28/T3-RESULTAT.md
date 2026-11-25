@@ -6,6 +6,296 @@ Ingenting är installerat eller verifierat i STAGING. LIVE är inte kontaktad.
 
 ---
 
+## Samlad T3-leverans (2026-11-28)
+
+Hela T3 (T3-0 till T3-E) är genomfört i tur och ordning, lokalt och i repo. Verifieringsnivån är genomgående **lokalt verifierad**: PostgreSQL 16.15, Edge Functions körda i Node, webbläsartester mot den simulerade servern.
+- **STAGING:** inget installerat, inga skrivande tester, inga nya testkonton, rollregistret orört. Läsande SELECT gjordes två gånger: roll-id med behörigheter, och antal aktiv personal per roll-id.
+- **LIVE** är inte kontaktad.
+- Detaljer finns i paketavsnitten nedan. Det här avsnittet är leveransen enligt BESLUT-2026-11-28: åtta punkter och kontrollen mot hela masterplanen.
+
+### 1. Resultat per paket
+
+| Paket | Lokalt åtgärdat och verifierat | Delvis eller kvar | E2E efter paketet |
+|---|---|---|---|
+| T3-0 Grund | KÄLLA-1, MIG-1, lokal STAGING-replik, testverktyg (felkod, `reason`, kontrollsumma), körbara EF-tester, baslinje (34 brister bevisade), paritetsramverk | PG17/Deno (miljön) | – |
+| T3-A Klientskydd | SÄK-10 (ingen reservroll), SÄK-9 (utloggning, kontobyte, cache, flikar, indragna behörigheter) | Punkt 265 delvis | 235/0/1 efter sammanslagningen med T3-B. Det blockerade fallet var PERM-03, som avblockerades i T3-C |
+| T3-B AO-kärna | SÄK-3, -4, -5, -11 (tilldelning, serverpris), -12, -15, -16; D-03, D-07, AP-B, AP-F; punkt 245 och 269 | 250, 261 (klientdelen), 270, AP-A/AP-G/D-24 (vyer i AO-etappen), D-11/D-19 (T4-B) | (ingår i raden ovan) |
+| T3-C Roller och superadmin | SÄK-8, SÄK-13 (F18), D-21, D-25, Ö5, Ö6/PERM-03 | 243 i STAGING; 247 (Prisgrupper) | 243/0/0 |
+| T3-D Informationsåtkomst | SÄK-2, B3, B4, Ö7, D-12, D-14, D-15, D-22 | D-13 (personnummer, T4-A) | 247/0/0 |
+| T3-E Standardroller | D-02, D-26, Ö2, M9; ej verkställda behörigheter verkningslösa; nytt fynd i T3-D-koden rättat | D-04 (tilläggen verkställs i T4); införandet i STAGING kräver GO | 254/0/0 |
+
+**Kontrollpunkterna mellan paketen** är uppfyllda för varje paket, med belägg i respektive avsnitt:
+- tester gröna;
+- negativa tester med exakt felkod och oförändrad kontrollsumma;
+- inga oförklarade avvikelser;
+- lås i RPC:n;
+- affärsflödena fungerar;
+- avgränsade commits med prövad rollback;
+- masterplanen visar faktisk nivå.
+
+### 2. Ändrade filer och commits
+
+Fullständiga fillistor finns under "Ändrade filer" i varje paketavsnitt. Alla commits är pushade till grenarna:
+- vift-v2: `claude/vift-system-restructure-8fUme`;
+- VIFT-CRM: `claude/vift-v3-major-redesign`.
+
+| Paket | vift-v2 (server) | VIFT-CRM (klient, tester, dokument) |
+|---|---|---|
+| T3-0 | `fd576b5`, `fb71f26` | `1d806f9`, `f5f4326` + dokument |
+| T3-A | – | `4b43ee9`, `63e94a4`, `77b8e1a` |
+| T3-B | `9ef3164`, `a43da44` | `e33029e`, `a699246` + dokument, sammanslagning `68e9cac` |
+| T3-C | `c4a9dbb`, `f0e7e44` | `4bef83c`, `7310411`, `25e64c4`, `8ce8379` |
+| T3-D | `8d1eb14`, `5bc9a97` | `1a2edfe`, `ff60cb0`, `fdaa09b`, `5b114e6` |
+| T3-E | `11ce9de`, `bd9553e` | `823d086`, `90f5f8f`, `2ccae81`, `d72181a` |
+| VK-1 (registrering) | – | `d72b744` |
+| Samlad leverans | – | denna commit (T3-RESULTAT, MASTERPLAN) |
+
+### 3. Tester
+
+**Slutläge (agentens fulla körning efter T3-E, lokalt):**
+
+| Svit | Resultat | Överhoppat (räknas inte som godkänt) |
+|---|---|---|
+| vift-v2 `run-all` (SKIP_BROWSER=1) | 34/34 testfiler, 1 403 kontroller, 0 fel | Webbläsartesterna i `vift-v2/tests/browser/` |
+| VIFT-CRM `run-all` (med PGHOST) | 23/23 testfiler, 643 kontroller, 0 fel | Inga |
+| VIFT-CRM e2e, hela sviten | 254 godkända, 0 fel, 0 blockerade av 254 | Inga |
+| Paritet faktisk server mot simulerad (`sim_parity`) | 147 scenarier: 145 lika, 2 kända avvikelser utanför T3 (KEY-01, AUTH-02) | – |
+
+**Min egen omkörning efter granskningen av T3-E** (samma lokala kluster): vift-v2 `t3b_ao_karna` 171/0, `t3c_roller` 145/0, `t3d_informationsatkomst` 111/0, `t3e_standard_roles` 94/0, `t3e_installation` 59/0 (steg 4: varje skillnad mot e2e-rollen förklarad av en beslutad behörighet), `t3e_rollback` 15/0; VIFT-CRM `run-all` 23/23 testfiler gröna, varav `rollnamn_guard` 17/0. Hela e2e-sviten kördes inte om av mig (agentens körning 254/0/0 efter samma commit).
+
+**Inte körda, och därför inte godkända:**
+- PG17: STAGING kör 17.6, lokalt finns bara 16.15.
+- Deno: Edge Functions körs i Node med shim.
+- Skrivande tester i STAGING: förbjudna i denna omgång.
+
+Ingen säkerhetsregel beskrivs som verifierad i STAGING.
+
+**Ändrade äldre tester:** varje ändring är förklarad och granskad i paketavsnitten. Inget negativt fall har tagits bort:
+- T3-D ändrade tre spec-filer, med strängare kontroller.
+- T3-E ändrade sju förväntningar till matrisen §2. Portkodsfallen prövas nu med en egen roll utan `objects_sensitive`.
+
+### 4. Säkerhetsfynd: åtgärdade och öppna
+
+**Lokalt åtgärdade och verifierade** (baslinjen bevisad i oförändrad kod och vänd till godkända tester; ingen är installerad i STAGING):
+- SÄK-2, -3, -4, -5, -8, -11 (tilldelning och serverpris), -12, -13, -15, -16 (servern).
+- SÄK-9 och SÄK-10 (klienten).
+- Nytt fynd i T3-E, i T3-D-koden: en ännu inte verkställd behörighet gjorde en extern roll intern och gav arbetskontakter till 13 kollegor. Fyndet är bevisat som baslinje och rättat i `20261128000008`.
+
+**Öppna, med ansvarig etapp:**
+
+| Fynd | Etapp |
+|---|---|
+| SÄK-1 (export, personnummer förvalt) | T4-F |
+| SÄK-6 (material och priser från klienten) | T4-B |
+| SÄK-7: `customer_manage` utan `objects_sensitive` får portkoder i registret (P1) | T4-A |
+| SÄK-7: tilldelningsvägen (P2) | T4-C |
+| SÄK-14 (rondering per pass) | T4-D |
+| SÄK-17: C-5-projektionen av övriga nycklar är inte modellerad i fake-backend | T4 (följer respektive paket) |
+| Tom eller okänd roll får fortfarande C-5:s projicerade inställningar, prisgrupper (med timpris) och återkommande ärenden | T4-A/T4-B |
+| Återkommande ärenden, rondering, avvikelser, inspektioner och projekt filtreras inte per post | T4-D respektive AO-etappen |
+| REST UPDATE/DELETE på rader som RESTRICTIVE-policyer döljer ger 0 rader i stället för 42501 (ingen mutation sker) | Senare serverpaket; låg risk |
+| Direkt SQL i SQL Editor går förbi superadmininvarianten | Driftrutin; ingen kodrättning möjlig |
+| Övergångsvägen utan identitet i `vift_store_project` | Städas när övergångsregeln tas bort (T3-E steg 3) |
+| v3.4-klientens rolleditor tappar okända behörigheter vid Spara | Hanteras med installationsordningen: klientpaketet före T3-E:s data |
+| Fönstret mellan DB och EF i T3-B, T3-C och T3-D: gamla EF mot nya signaturer ger 500, och utkorgen sänder om | Installationsplanen (kort fönster) |
+
+### 5. Migrationsmappning (MIG-1)
+
+- **Mappningen gäller:** de 13 migrationer som redan är installerade med andra versionsnummer följer `vift-v2/supabase/MIGRATIONSMAPPNING.md` och `migrationsmappning.json`.
+- **Förbjudet:** `migration repair` och `db push`.
+- **T3:s nya migrationer** är alla av klassen "ny – ej installerad i STAGING". De ligger efter `20261124211128` i `MIGRATIONSORDNING.txt`.
+
+| Version | Fil | Paket | EF som ska installeras direkt efter | Rollback |
+|---|---|---|---|---|
+| 20261128000001 | `t3b_ao_regler_och_pool` | T3-B | `ao-time-write`, `store-key-write`, sedan `work-orders-list`, `work-order-checklist-resolve`, `work-order-log-write`, `work-order-image-upload`/`-delete`/`-url`, `invoice-write`, `service-monitor` | `rollback/T3-B/rollback_t3b.sql` |
+| 20261128000002 | `t3b_tid_och_stampling` | T3-B | (samma bunt) | (samma) |
+| 20261128000003 | `t3b_ao_nummer` | T3-B | – | (samma) |
+| 20261128000004 | `t3c_roller_och_superadmin` | T3-C | `store-key-write` | `rollback/T3-C/rollback_t3c.sql` |
+| 20261128000005 | `t3c_direkt_rest_vitlista` | T3-C | – | (samma) |
+| 20261128000006 | `t3d_urval_per_post` | T3-D | `store-key-write`, `invoice-write` | `rollback/T3-D/` |
+| 20261128000007 | `t3d_aktivitetslogg` | T3-D | (samma bunt) | (samma) |
+| 20261128000008 | `t3e_ej_verkstallda_behorigheter` | T3-E | Inga | `rollback/T3-E/rollback_t3e.sql` |
+
+Varje migration har en STOP-kontroll: md5 för föregående pakets funktionsdefinitioner, och "redan installerad".
+
+**Utanför kedjan:**
+- `supabase/manual/t3e_standardroller/` A–D: manuella dataskript, körs efter separat GO.
+- `supabase/staging-only/`: `e2e-test-cleanup` och e2e-migrationerna. De följer aldrig med till LIVE, och kedjeskriptet stoppar om de hamnar i den aktiva kedjan.
+
+### 6. Masterplan och behörighetsmatris
+
+- **MASTERPLAN.md:**
+  - Statusräkningen är omräknad för 1–274 och E2b (280 punkter) och id utanför serien är räknade på nytt.
+  - Status för AP-A, AP-B, AP-F, AP-G och D-24 är rättad efter T3-B. Den hade inte följt med.
+  - Paketraderna för T3-B och T3-C är uppdaterade.
+  - Varje paket har uppdaterat sina SÄK- och D-rader och punkterna.
+  - VK-1 är registrerat som punkterna 272–274, utan implementation och utan ändrad arbetsordning:
+    - 272: hänsyn i T4-A/B;
+    - 273: AO-etappen;
+    - 274: faktureringsdelen av AO-etappen, samordnad med 270 och T4-E.
+- **BEHORIGHETSMATRIS.md:** varje paket har uppdaterat nuläget per regel till faktisk nivå.
+
+### 7. Installation och rollback per STAGING-paket
+
+Ingenting av detta körs nu. Varje paket kräver separat GO och installeras i ordningen **T3-A → T3-B → T3-C → T3-D → T3-E**. Detaljerade planer finns i paketavsnitten (T3-A §7, T3-B §7, T3-C §8, T3-D §8, T3-E §11).
+
+**Gemensamt för varje paket:**
+1. Läsande förkontroll: `schema_migrations` jämförs med mappningen plus tidigare T3-paket, och md5 av de funktioner som STOP-kontrollerna läser.
+2. Backup enligt testplanen §8: backupschema och JSON-kopia med sha256 av berörda nycklar.
+3. Databas: en migration i taget, i egen transaktion.
+4. EF direkt efter databasen.
+5. Klientpaket med `tools/build-staging-package.sh` från HEAD, med höjda `?v=`. Service Worker är network-first, så nya filer hämtas vid nästa laddning.
+6. Storage: ingen ändring i något T3-paket.
+7. Läsande efterkontroll (V1–V5) med befintliga testkonton och märkta testposter.
+
+| Paket | Databas | EF | Klient | Data | Rollback (i omvänd ordning) |
+|---|---|---|---|---|---|
+| T3-A | – | – | Ja | – | Föregående klientpaket |
+| T3-B | 0001–0003 | 10 funktioner, se §5 | Ja | – | Föregående EF-versioner, sedan `rollback_t3b.sql`, sedan föregående klient |
+| T3-C | 0004–0005 | `store-key-write` | Ja | – | Samma mönster med `rollback_t3c.sql` |
+| T3-D | 0006–0007 | `store-key-write`, `invoice-write` | Ja | – | Samma mönster med T3-D-rollbacken |
+| T3-E | 0008 | – | Ja, **före** data | B (standardroller) och D (per roll), separat GO för varje | C per journalrad (expectedHash), sedan `rollback_t3e.sql`, sedan föregående klient |
+
+**Rollback skriver aldrig över nyare verksamhetsdata:**
+- Rollback-SQL:en återställer bara funktioner, policyer och grants, aldrig data. Den är prövad lokalt mot exakt STAGING-facit (`t3*_rollback`).
+- Det enda dataskriptet är T3-E:s C. Det stoppar om rollregistret ändrats efter journalraden och rör aldrig personalregistret.
+- AO, tidposter, fakturaunderlag och aktivitetslogg som skapats efter installationen ligger kvar.
+- EF-rollback innebär att föregående installerade version installeras igen, ur STAGING-ögonblicksbilden `vift-v2/supabase/inventering/staging-2026-11-26/` eller närmast föregående paket.
+
+**Gammal och ny klient (Service Worker, RESTRICTIVE):**
+- En v3.4-klient mot ny server får aldrig bredare åtkomst. Den kan få nya felkoder, som visas som generellt fel: `not_assigned`, `already_assigned`, `ao_locked`, `invoice_path_required`, `privilege_escalation`, `superadmin_required`, `last_superadmin`, `direct_write_blocked`, `not_own`, `type_not_allowed` och `ref_not_visible`.
+- T3-C:s nya RESTRICTIVE-vitlista släpper fortfarande igenom v3.4:s enda direkta skrivning (`vift_notifications`). Klientens `vift_lastChanged` sparas aldrig.
+- T3-E: v3.4-rolleditorn får inte användas på standardrollerna. Därför installeras klientpaketet före skript B.
+- Tabeller per paket: T3-A §6, T3-B §7, T3-C §8, T3-D §8, T3-E §11.
+
+**Indragna behörigheter** slår igenom i befintliga sessioner, andra flikar och cacher:
+- Servern läser behörigheterna vid varje anrop: `checkViftAuth`, omläsning under låset i RPC:erna och `vift_caller_perms` i RLS.
+- Klienten tillämpar ändringen vid poll och vid 403, och via `BroadcastChannel` till andra flikar.
+- Utloggning rensar alla `vift_*`-nycklar.
+- Testat lokalt i SEC-PERM-01 (T3-A), T3C-06 och T3E-07. Kvar är webbläsarprov i STAGING (V1 och V5).
+
+### 8. GO/NO-GO
+
+| Steg | Bedömning |
+|---|---|
+| Lokal T3 (T3-0–T3-E) | **Klar.** Alla kontrollpunkter uppfyllda |
+| Installation i STAGING av T3-A, T3-B, T3-C, T3-D och T3-E | **NO-GO tills separat GO per paket**, i ordningen ovan, med backup, rollback och märkta testposter. Underlaget är klart. Före T3-B krävs beslut om "beslut som behövs" T3-B 1–4 nedan. |
+| T3-E:s dataskript (B, D) i STAGING | **NO-GO** tills T3-A–T3-D är installerade och separat GO finns för rollregistret. D kräver GO per roll |
+| Testkonton för standardrollerna i STAGING (D-26) | **NO-GO** tills separat godkännande |
+| PG17-körning av kedjan och SQL-testerna | Kvarstår som releasevillkor. **GO** så snart en PG17-miljö finns |
+| Lokal utveckling av T4 (T4-A + T4-B samordnat, därefter T4-C–T4-F) | **GO** i tur och ordning. VK-1-hänsynen (punkt 272) gäller T4-A/B. Inga ej verkställda behörigheter aktiveras förrän paketets serverkontroller finns |
+| Datamigrering (portkoder, `inv.note`, `pool`-status, bilder G7/152) | **NO-GO** |
+| LIVE | **NO-GO** |
+
+**Tre separata godkännanden inför LIVE** (BESLUT-2026-11-28). Inget av dem är givet, och ett tekniskt säkerhetsgodkännande är inte ett releasegodkännande.
+
+| Godkännande | Underlag som krävs | Läge |
+|---|---|---|
+| 1. Teknisk säkerhet och dataintegritet | Alla T3/T4-paket installerade och verifierade i STAGING (V1–V11). SÄK-1–17 och BLOCKER-1/2 stängda. PG17. LIVE-plan (241) med mappning och backup | Ej påbörjat (lokalt underlag klart för T3) |
+| 2. Funktionell kvalitet i verksamhetskritiska flöden | Offert till AO, pool/Ta jobbet, stämpling (261), fakturakö och underlag (270, 269), import, serviceintervall (250), återkommande, checklista i STAGING | Ej påbörjat |
+| 3. Praktisk användbarhet på dator och mobil per roll | Manuell genomgång med testkonton per standardroll (D-26) på dator och mobil | Ej påbörjat |
+
+### Kontroll mot hela masterplanen (tillägget i BESLUT-2026-11-28)
+
+| Punkt | Läge efter T3 | Kvar och var |
+|---|---|---|
+| 250 `service-monitor` | Förfallodatum i `dueDate`; AO skapas bara via atomiska `work_order_create` (lokalt, Node) | Atomisk skrivning av `vift_properties`, cron-beslut. Uttryckligt beroende före LIVE (241) |
+| 269/G9 med D-07 | `klar` ↔ `fakturerad` bara via `invoice-write` `aoBilling` under lås. `patch_ao` avvisar faktureringsfält för alla roller | Verifiering i STAGING (V2) |
+| 245 AO-nummer | Nästa nummer = max(sekvens, högsta befintliga + 1) under lås. Ingen unik index och ingen omnumrering; historiska dubbletter orörda | Off-by-one i den historiska backfill-migrationen rättas inte för LIVE (LIVE-planen) |
+| 270 Faktureringskön | Kö → underlag → AO-status → backning, funktionellt prövat lokalt | Åtgärdsorsakerna (attest, dubbletter, fel kund). Funktionell verifieringspunkt före LIVE (godkännande 2) |
+| 261 Stämpling | Sommartid, över midnatt, nätavbrott (omsänd utstämpling), omfördelning under pågående pass (legitim utstämpling tillåts) och samtidiga försök: prövat på servern | Klienttest i webbläsare över sommartidsomställningen |
+| 247 / G12-rester | Personal Inaktivera/Aktivera (T3-C) och Ta jobbet (T3-B) väntar på servern och rullas tillbaka vid avslag | Prisgrupper aktivera/inaktivera (T4-B, prisgrupperna) |
+| G7 / 152 bildmigrering | Orörd. Ingen historisk bildmigrering | Ingår i releasebedömningen (241). Kräver egen plan och GO |
+| T3-E utan förtida aktivering | 10 ej verkställda behörigheter, bevisat verkningslösa per behörighet | T4-paketen tar bort dem ur `_vift_ej_verkstallda()` när kontrollerna finns |
+| Indragna behörigheter, gammal och ny klient, installation och rollback | §7 ovan | Webbläsarprov i STAGING |
+
+### Spårbarhet: SÄK, BLOCKER och R
+
+Metoder: [T] lokalt automatiskt test, [S] STAGING-verifiering (V-steg), [M] manuellt eller beslut.
+
+| Id | Ansvarig etapp | Verifieringsmetod | Status |
+|---|---|---|---|
+| SÄK-1 | T4-F | [T] serverexport och EXP-tester; [S] V10 | Registrerad, ej påbörjad |
+| SÄK-2 | T3-D | [T] `t3d_informationsatkomst`, T3D-01/02; [S] V4 | Lokalt verifierad |
+| SÄK-3 | T3-B | [T] `t3b_ao_karna`; [S] V2 | Lokalt verifierad |
+| SÄK-4 | T3-B | [T] samtidighet ×20/×5, 409 `already_assigned`; [S] V2 | Lokalt verifierad |
+| SÄK-5 | T3-B | [T] `t3b_ao_karna`; [S] V2 | Lokalt verifierad |
+| SÄK-6 | T4-B | [T] radvisa material-RPC:er; [S] V6 | Registrerad, ej påbörjad |
+| SÄK-7 | T4-A (läckage), T4-C (tilldelningsvägen) | [T] SEC-CUST-03 och SEC-B5; [S] V6/V7 | Registrerad, ej påbörjad |
+| SÄK-8 | T3-C | [T] `t3c_roller`, ×50 samtidighet; [S] V3 | Lokalt verifierad (P1 inför LIVE) |
+| SÄK-9 | T3-A | [T] `client_security`, 36_client_security; [S] V1 | Lokalt åtgärdad (P1 inför LIVE) |
+| SÄK-10 | T3-A (före T3-E) | [T] T3E-06, SEC-CUST-23; [S] V1 | Lokalt åtgärdad |
+| SÄK-11 | T3-B (tilldelning), T4-B (pris) | [T] `t3b_ao_karna`; [S] V2/V6 | Lokalt verifierad (tilldelningen) |
+| SÄK-12 | T3-B | [T] 409 `idempotency_key_conflict`; [S] V2 | Lokalt verifierad |
+| SÄK-13 | T3-C | [T] F18, 42501 `direct_write_blocked`; [S] V3 | Lokalt verifierad |
+| SÄK-14 | T4-D | [T] SEC-ROND; [S] V8 | Registrerad, ej påbörjad |
+| SÄK-15 | T3-B | [T] fakturaflödet; [S] V2 | Lokalt verifierad |
+| SÄK-16 | T3-B | [T] `work-orders-list`; [S] V2 | Lokalt verifierad |
+| SÄK-17 | T3-0 → varje paket | [T] `sim_parity`, `paritet_fake_kopia` | Lokalt verifierad för T3; C-5-projektionen kvar |
+| BLOCKER-1 (lönedata) | Klar i STAGING (punkt 216); LIVE-planen (241) | [S] authz-read, `time-entries-list` och RESTRICTIVE-policy | Verifierad i STAGING; inte i LIVE |
+| BLOCKER-2 (skrivning per nyckel) | T3-C (243, Ö6, F18); STAGING-delen V3 | [T] PERM-03 mot serverns `KEY_PERMISSIONS`; [S] 36/36 skapa ny post | Lokalt verifierad; STAGING-delen kvar (243 Delvis) |
+| R-01 Underhållsplanering | Framtidsmodul | [M] produktbeslut | Ej påbörjad |
+| R-02 Klickbara rapportunderlag (129) | UX-etappen | [T] e2e | Delvis byggd |
+| R-03 Rapporternas testlista (77) | Funktionell STAGING-verifiering | [S] godkännande 2 | Simulerat testad |
+| R-04 Ansvariga och kontakter (83–92) | STAGING-flöde | [S] riktig push | Byggd / simulerat testad |
+| R-05 E7 (124–128) | STAGING-flöde | [S] rate-limit-test | Byggd; 128 delvis |
+| R-06 F4-registermatrisen | T4-F / exportfiler | [M] riktiga exportfiler | Delvis byggd / ej påbörjad |
+| R-07 Platshållare (132, 133) | Specifikation | [M] | Ej påbörjad |
+| R-08 Solar/Ahlsell, CSV-pris (153) | Efter T4-B | [M] avtal | Ej påbörjad |
+| R-09 Kostnad och spårbarhet (150, 152, 200) | T4-B; 152 egen plan | [M] plan och GO | Ej påbörjad |
+| R-10 Uppskjutet (79, 82) | – | – | Uppskjuten |
+| R-11 `service-monitor` (250) | Före LIVE | [T] lokalt; [S] installationsplan §3, cron-beslut | Delvis lokalt verifierad |
+| R-12 G11 (246) | UX-etappen | [M] beslut | Ej påbörjad |
+| R-13 G1/G4 (242) | T3-0 (klar lokalt) | [T] kedja och md5; [S] efter GO | Byggd + lokalt verifierad |
+| R-14 LIVE-plan (241) | Efter alla T3/T4 i STAGING | [M] tre godkännanden | Ej påbörjad |
+| R-15 Saknade funktioner (251–259) | Produktbeslut | [M] | Ej påbörjad |
+| R-16 UI-rester (184, 260) | UX-etappen | [T] e2e | Delvis byggd / ej påbörjad |
+| R-17 Sommartid (261) | T3-B (server); klient kvar | [T] server; webbläsartest | Lokalt verifierad på servern |
+| R-18 Testkonton och QA-LOAD (262, 263) | Efter sista STAGING-test; T3-E steg 4 | [M] beslut, backup | Ej påbörjad |
+
+D-, AP-, B- och Ö-beslutens status per id finns i MASTERPLAN.md, med ansvarig etapp i respektive rad. Sammanställning: 18 lokalt verifierade, 5 delvis, 26 beslutade men ej byggda (T4 och AO-etappen).
+
+### Beslut som behövs (samlat)
+
+I varje fall är det mest restriktiva valet som inte bryter ett flöde genomfört. Förslaget står inom parentes.
+
+**T3-B:**
+1. Tid på en låst AO (klar eller fakturerad) nekas även för arbetsledare och lönehandläggare. Legitim utstämpling är undantagen. (Godta.)
+2. Material, checklista och logg tillåts för den tilldelade på en AO som är klar men inte fakturerad. (Godta.)
+3. `aoBilling` `restore` kontrollerar inte att fakturaunderlaget slutat referera AO:n. (Skärp i T4-E.)
+4. Arbetsledare (`ao_edit`) får ta jobb ur poolen. (Godta.)
+
+**T3-C:**
+1. `vift_lastChanged` står kvar på REST-vitlistan. Servern sätter värdet. (Godta.)
+2. Utan `all` kan man inte ändra sin egen roll alls. (Godta.)
+3. `staff_manage` tilldelar bara roller inom de egna behörigheterna. (Godta.)
+4. Klienten låser personalposter vars roll den inloggade inte ser. (Godta.)
+5. `staff_manage` ser de roller den får tilldela. (Godta.)
+6. TASK-01: avgjord i T3-D (D-15).
+
+**T3-D:**
+1. AO-kopplade uppgifter syns bara för den tilldelade. (Godta.)
+2. Vem som är intern kollega avgörs av behörigheterna. (Godta. En uttrycklig `staff_contacts_view` avgörs i T4.)
+3. Roller med `ao_create`, `recurring_manage` eller `reports_view` ser hela kundregistret utan skyddade fält. (Godta.)
+4. Utan `objects_sensitive` syns ingen portkod i kundposten, och REST-läsning av kunder kräver behörigheten. (Godta.)
+5. Ronderingshändelser kräver `ao_view_all` tills T4-D. (Godta.)
+6. Hela aktivitetsloggen visas för alla med `ao_view_all`. (Separat beslut om avsmalning för egna roller.)
+
+**T3-E:**
+1. Standardrollerna innehåller redan de tio ej verkställda behörigheterna. (Godta.)
+2. B stoppar om aktiv personal redan har ett nytt roll-id. (Godta.)
+3. Steg D ändrar två egna testroller i STAGING. (GO per roll, eller vänta tills de avvecklas i punkt 262.)
+4. `staff_contacts_view` införs inte nu. (T4.)
+5. `chef` saknar `reports_view` enligt matrisen. (Godta matrisen eller ändra den.)
+6. Rolleditorn bevarar behörigheter utanför katalogen. (Godta.)
+7. Övergångsregeln tas bort först när ingen roll beror på den i STAGING och LIVE. (Godta.)
+
+**Övrigt:**
+- **CLAUDE.md:** raderna 207, 222–238 och 286 i klientrepot beskriver `supabase/` och `supabase db push` som om servern låg i klientrepot. Efter KÄLLA-1 finns servern bara i vift-v2, och MIG-1 förbjuder `db push` mot STAGING. CLAUDE.md är inte ändrad. (Uppdatera med ditt godkännande.)
+- **Faktureringsetapp för VK-1:** punkt 274 ligger som faktureringsdelen av AO-etappen. En egen faktureringsetapp vore en ändring av arbetsordningen. (Ditt beslut.)
+
+---
+
 ## T3-0 – grunden (KÄLLA-1, MIG-1, replik, testverktyg, baslinje, paritet)
 
 ### Sammanfattning
