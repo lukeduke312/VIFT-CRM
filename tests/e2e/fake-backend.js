@@ -6,7 +6,7 @@
  *   store-key-write, ao-time-write, work-orders-list, time-entries-list,
  *   invoice-write, rondering-pass-write, work-order-checklist-resolve,
  *   work-order-image-*, offer-*, get/set-sensitive-fields, send-push,
- *   project-document-*.
+ *   project-document-*, e2e-test-cleanup (STAGING-only testverktyg).
  *
  * VIKTIGT: kontrakten är härledda ur klientkoden och — där källan finns i
  * repot — ur Edge Function-källan. Behörighetsreglerna är en MODELL (samma
@@ -243,6 +243,9 @@ class FakeSupabase {
         case 'work-order-image-upload': return this.imageUpload(body, perms, me, headers);
         case 'work-order-image-url': return this.imageUrl(body, perms, me);
         case 'work-order-image-delete': return this.imageDelete(body, perms, me);
+        // STAGING-only testverktyg (supabase/staging-only/functions/e2e-test-cleanup), modellerat
+        // så att e2e-real.js städsteg kan provas lokalt. Finns aldrig i LIVE.
+        case 'e2e-test-cleanup': return this.e2eTestCleanup(body, perms);
         case 'get-sensitive-fields': {
           if (!this.has(perms, 'objects_sensitive')) return DEFINITE(403, 'forbidden');
           return { status: 200, body: Object.assign({ accessCode: '', keyInformation: '', accessInformation: '' }, this.sensitive.get((body && (body.objectId || body.propertyId))) || {}) };
@@ -702,6 +705,46 @@ class FakeSupabase {
     if (!String(b.path).startsWith(b.aoId + '/')) return DEFINITE(400, 'invalid_path');
     this.files.delete(b.path);
     return { status: 200, body: { ok: true } };
+  }
+
+  /* ── e2e-test-cleanup (STAGING-only, T3-0 2026-11-28) ──────────
+     Modell av vift-v2 supabase/staging-only/functions/e2e-test-cleanup/index.ts och
+     RPC:n e2e_purge_offer_artifacts: kräver 'all'; offerten/AO:n måste finnas och ha
+     en titel som börjar med "[E2E-TEST]" (annars 403 not_test_offer/not_test_ao utan
+     ändring); bara poster och filer under just den offertens/AO:ns egen mapp rörs.
+     Spärren "bara i STAGING-projektet" (410 utanför) modelleras inte: den simulerade
+     servern är alltid en testmiljö. */
+  e2eTestCleanup(b, perms) {
+    if (!this.has(perms, 'all')) return DEFINITE(403, 'forbidden');
+    b = b || {};
+    const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{2,120}$/;
+    if (b.action === 'purgeOffer') {
+      const offerId = String(b.offerId == null ? '' : b.offerId);
+      if (!ID.test(offerId)) return DEFINITE(400, 'invalid_id');
+      const off = (this.get('offers') || []).find((o) => o.id === offerId);
+      if (!off || !String(off.title || '').startsWith('[E2E-TEST]')) return DEFINITE(403, 'not_test_offer');
+      const atts = this.get('offerAttachments') || [];
+      const evts = this.get('offerEvents') || [];
+      const mine = atts.filter((a) => a.offerId === offerId);
+      const prefix = 'offer-attachments/' + offerId + '/';
+      let filesRemoved = 0;
+      mine.forEach((a) => { const p = String(a.storagePath || ''); if (p.startsWith(prefix) && !p.includes('..') && this.files.delete(p)) filesRemoved++; });
+      const nEvt = evts.filter((e) => e.offerId === offerId).length;
+      if (mine.length) this.set('offerAttachments', atts.filter((a) => a.offerId !== offerId));
+      if (nEvt) this.set('offerEvents', evts.filter((e) => e.offerId !== offerId));
+      if (mine.length || nEvt) this.touch();
+      return { status: 200, body: { ok: true, attachments: mine.length, events: nEvt, filesRemoved } };
+    }
+    if (b.action === 'purgeAoImages') {
+      const aoId = String(b.aoId == null ? '' : b.aoId);
+      if (!ID.test(aoId)) return DEFINITE(400, 'invalid_id');
+      const ao = (this.get('workOrders') || []).find((a) => a.id === aoId);
+      if (!ao || !String(ao.title || '').startsWith('[E2E-TEST]')) return DEFINITE(403, 'not_test_ao');
+      const paths = [...this.files.keys()].filter((p) => p.startsWith(aoId + '/'));
+      paths.forEach((p) => this.files.delete(p));
+      return { status: 200, body: { ok: true, filesRemoved: paths.length } };
+    }
+    return DEFINITE(400, 'unknown_action');
   }
 
   /* ── Publika offerter (efter repots EF:er) ───────────────── */
