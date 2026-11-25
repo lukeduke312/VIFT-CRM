@@ -36,6 +36,12 @@
  *       in 20261108000001_staging_review_fixes.sql. `write` (whole-value
  *       replace) remains for object-shaped keys (settings).
  *
+ * T3-C (2026-11-28, SÄK-8/D-25/D-21): vift_staff och vift_roles valideras i RPC:n
+ *   (store_business_key_write/_merge_write → _vift_authz_check under det gemensamma låset):
+ *   403 {error:'forbidden', reason:'privilege_escalation'|'superadmin_required'},
+ *   409 {error:'last_superadmin'}. Läsningarna skickar p_caller_staff_id så att
+ *   vift_roles/vift_staff projiceras per anropare (egen roll; andras role/permissions bort).
+ *
  * POST /functions/v1/store-key-write
  * body: { action: 'write', key, value, expectedHash } |
  *       { action: 'writeMerge', key, upserts, removals } |
@@ -142,6 +148,11 @@ function mapRpcError(error: { message?: string } | null): Response | null {
   // real data decision, not a stale_write-style simple retry.
   if (msg.includes('duplicate_id_in_store')) return json({ error: 'duplicate_id_in_store' }, 409)
   if (msg.includes('missing_fields')) return json({ error: 'missing_fields' }, 400)
+  /* T3-C (SÄK-8, D-25, BEHORIGHETSMATRIS §4): regelfel från _vift_authz_check i
+     store_business_key_write/_merge_write (personal- och rollregistret, under låset). */
+  const regel = /\bforbidden:([a-z_]+)/.exec(msg)
+  if (regel) return json({ error: 'forbidden', reason: regel[1] }, 403)
+  if (msg.includes('last_superadmin')) return json({ error: 'last_superadmin' }, 409)
   if (msg.includes('forbidden')) return json({ error: 'forbidden' }, 403)
   console.error('[store-key-write] RPC-fel:', msg)
   return json({ error: 'write_failed' }, 500)
@@ -188,7 +199,8 @@ serve(async (req: Request) => {
        SQL-regel (vift_store_project) som RLS-policyn store_read_by_role och
        readAllWithHashes. Hash avser det fullständiga servervärdet. */
     const d = (data || { value: null, hash: null }) as Record<string, unknown>
-    const proj = await supabase.rpc('vift_store_project', { p_key: key, p_value: d.value ?? null, p_perms: perms })
+    /* T3-C (D-21, D-14): projektionen av vift_staff/vift_roles beror på anroparens identitet. */
+    const proj = await supabase.rpc('vift_store_project', { p_key: key, p_value: d.value ?? null, p_perms: perms, p_caller_staff_id: callerStaffId })
     if (proj.error) { console.error('[store-key-write] readWithHash projektion:', proj.error.message); return json({ error: 'read_failed' }, 500) }
     return json({ ...d, value: proj.data ?? null })
   }
@@ -292,6 +304,8 @@ serve(async (req: Request) => {
     const { data, error } = await supabase.rpc('store_read_all_with_hashes_projected', {
       p_business_keys: businessFullKeys,
       p_perms: perms,
+      /* T3-C (D-21, D-14): egen roll och egen personalpost avgörs av identiteten. */
+      p_caller_staff_id: callerStaffId,
     })
     if (error) { console.error('[store-key-write] readAllWithHashes RPC-fel:', error.message); return json({ error: 'read_failed' }, 500) }
     const raw = (data && data.data) || {}

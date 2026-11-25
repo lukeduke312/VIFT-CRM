@@ -22,7 +22,7 @@
   "objektLikaAB": 41,
   "repoFilerPerKlass": {
    "installerad": 37,
-   "ny": 3,
+   "ny": 5,
    "rekonstruerad": 5,
    "kandidat": 3,
    "stagingOnly": 2,
@@ -1810,6 +1810,22 @@
   {
    "fil": "migrations/20261128000003_t3b_ao_nummer.sql",
    "md5": "f7207839d0515c5c4236223a3a82e47b",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000004_t3c_roller_och_superadmin.sql",
+   "md5": "a7fd4b4447e424bab3755972b9f74cca",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000005_t3c_direkt_rest_vitlista.sql",
+   "md5": "de7afa01674e86dad9cd92c806726956",
    "stagingVersioner": [],
    "klass": "ny – ej installerad i STAGING",
    "klassKod": "ny",
