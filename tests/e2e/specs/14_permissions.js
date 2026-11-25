@@ -1,10 +1,10 @@
 'use strict';
 /*
  * Behörigheter vid direkta serveranrop (inte bara dolda knappar).
- * kind 'contract': kontrollerar den SIMULERADE serverns modell av EF-
- * kontrakten. Modellen bygger på klientens dokumenterade kontrakt; de
- * riktiga EF-källorna (ao-time-write, store-key-write m.fl.) finns inte i
- * repot (gap G4). Samtliga måste upprepas mot STAGING med testkonton.
+ * kind 'contract': kontrollerar den SIMULERADE serverns EF-kontrakt. Efter KÄLLA-1 finns
+ * EF-källorna i vift-v2/supabase; fake-backend följer dem (paritet, tests/sim_parity.test.js).
+ * PERM-03 läser per-nyckel-regeln direkt ur store-key-write-källan. Samtliga ska ändå
+ * upprepas mot STAGING med testkonton (D-26, efter separat GO).
  */
 async function call(s, fn, body) {
   return s.eval(async ([f, b]) => {
@@ -86,8 +86,65 @@ module.exports = [
   },
   {
     id: 'PERM-03', kind: 'contract', module: 'Användarroller och behörigheter',
-    name: 'Generiska nycklar (kunder, offerter, säljchanser, att göra) per roll vid direktanrop mot store-key-write',
-    blocked: 'Kan inte verifieras mot simulerad backend: store-key-write:s per-nyckel-behörighet för generiska nycklar är okänd (källan finns inte i repot, G4; BLOCKER-2 i PROJECT_STATUS). Den simulerade servern tillåter alla inloggade här — det vore att testa en antagen modell. Måste köras mot STAGING: fältarbetare försöker writeMerge på vift_offers (prisändring), vift_customers och vift_activities (annans uppgift).',
+    /* T3-C (2026-11-28, BLOCKER-2/G4): avblockerat. Per-nyckel-regeln läses ur den FAKTISKA
+       serverkällan (KÄLLA-1: vift-v2 store-key-write/index.ts, KEY_PERMISSIONS, via
+       tests/e2e/server-key-perms.js) — ingen antagen modell — och uppgiftsregeln är serverns
+       egen activities-policy.ts (transpilerad). Felkoden är serverns: hasPerm saknas →
+       RPC 'forbidden' → 403 {error:'forbidden'} utan reason. */
+    world: { backend: { keyPerms: require('../server-key-perms.js'), activitiesPolicy: true, activityAppend: true } },
+    name: 'Generiska nycklar (kunder, offerter, säljchanser, inställningar, att göra) per roll vid direktanrop mot store-key-write: serverns KEY_PERMISSIONS, exakt felkod och oförändrad data',
+    async run(t) {
+      const acts = t.fake.get('activities') || [];
+      acts.push({ id: 'ACT-PERM03', type: 'task', title: 'Annans uppgift', assignedTo: 'ST-004', createdBy: 'ST-001', status: 'open', dueDate: new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString() });
+      t.fake.set('activities', acts);
+      const NYCKLAR = ['offers', 'customers', 'activities', 'salesOpps', 'settings', 'articles'];
+      const ks = () => JSON.stringify(NYCKLAR.map((k) => t.fake.get(k)));
+      const direkt = (s) => s.eval(async () => {
+        const call = async (body) => {
+          const r = await fetch(SUPABASE_URL + '/functions/v1/store-key-write', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          let d = {}; try { d = await r.json(); } catch (e) {}
+          return { status: r.status, error: d.error, reason: d.reason };
+        };
+        const las = async (key) => { const r = await fetch(SUPABASE_URL + '/functions/v1/store-key-write', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'readWithHash', key }) }); return r.json(); };
+        const merge = async (key, patch) => { const cur = (await las(key)).value || []; const el = cur[0]; return call({ action: 'writeMerge', key, upserts: [{ id: el.id, previous: el, data: Object.assign({}, el, patch) }], removals: [] }); };
+        const annan = ((await las('vift_activities')).value || []).find((a) => a.id === 'ACT-PERM03');
+        const inst = await las('vift_settings');
+        return {
+          offers_price: await merge('vift_offers', { total: 1, lines: [] }),
+          customers: await merge('vift_customers', { name: 'Ändrad via direktanrop' }),
+          activities_other: annan ? await call({ action: 'writeMerge', key: 'vift_activities', upserts: [{ id: annan.id, previous: annan, data: Object.assign({}, annan, { status: 'done' }) }], removals: [] }) : { status: 0 },
+          salesOpps: await merge('vift_salesOpps', { title: 'Ändrad' }),
+          settings_write: await call({ action: 'write', key: 'vift_settings', value: Object.assign({}, inst.value, { companyName: 'Kapat AB' }), expectedHash: inst.hash }),
+          articles: await merge('vift_articles', { sellPrice: 1 }),
+        };
+      });
+      const NEKAT = (r) => r.status === 403 && r.error === 'forbidden' && r.reason === undefined;
+      // Fältarbetare (personal): saknar alla nycklarnas skrivbehörighet.
+      const f = await t.world.session({ viewport: 'laptop' });
+      await f.login('falt');
+      let fore = ks();
+      let res = await direkt(f);
+      t.note('fält: ' + JSON.stringify(res));
+      t.assert(Object.values(res).every(NEKAT), 'fält: alla sex direktanrop nekas med exakt 403 forbidden (ingen reason), som serverns hasPerm/KEY_PERMISSIONS: ' + JSON.stringify(res));
+      t.assert(ks() === fore, 'fält: offerter, kunder, uppgifter, säljchanser, inställningar och artiklar är oförändrade (kontrollsumma)');
+      // Ekonomi: inte customer_manage/offer_manage/sales_manage/admin_manage/article_manage.
+      const e = await t.world.session({ viewport: 'laptop' });
+      await e.login('ekonomi');
+      fore = ks();
+      res = await direkt(e);
+      t.assert(Object.values(res).every(NEKAT) && ks() === fore, 'ekonomi: samma sex direktanrop nekas med 403 forbidden, ingen mutation: ' + JSON.stringify(res));
+      // Arbetsledare (chef): customer_manage, offer_manage, sales_manage men inte admin_manage/article_manage.
+      const c = await t.world.session({ viewport: 'laptop' });
+      await c.login('chef');
+      const forSettings = JSON.stringify(t.fake.get('settings')), forArticles = JSON.stringify(t.fake.get('articles'));
+      res = await direkt(c);
+      t.note('arbetsledare: ' + JSON.stringify(res));
+      t.assert(res.customers.status === 200 && res.offers_price.status === 200 && res.salesOpps.status === 200, 'arbetsledare: kunder, offerter och säljchanser godtas (customer_manage, offer_manage, sales_manage)');
+      t.assert(NEKAT(res.settings_write) && NEKAT(res.articles), 'arbetsledare: inställningar (admin_manage) och artiklar (article_manage) nekas med 403 forbidden');
+      t.assert(res.activities_other.status === 200, 'arbetsledare: annans uppgift godtas — serverns activities-policy.ts ger ao_edit + ao_view_all full rätt (activitiesFullAccess)');
+      t.assert(JSON.stringify(t.fake.get('settings')) === forSettings && JSON.stringify(t.fake.get('articles')) === forArticles, 'arbetsledare: inställningar och artiklar oförändrade');
+      t.assert((t.fake.get('customers') || [])[0].name === 'Ändrad via direktanrop', 'arbetsledarens kundändring sparad på servern');
+    },
   },
   {
     id: 'PERM-04', module: 'Användarroller och behörigheter', name: 'Sidåtkomst per roll (6 roller × alla sidor): otillåten sida nekas med besked, tillåten sida öppnas utan fel',

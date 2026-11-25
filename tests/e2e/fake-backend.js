@@ -88,6 +88,108 @@ function billingTouched(ao, patch) {
 const REGEL = (status, error, reason) => DEFINITE(status, error, reason ? { reason } : undefined);
 const nowText = () => new Date().toISOString();
 
+/* ── T3-C (2026-11-28): roller och superadmin — PARITET med den faktiska servern ──
+   Speglar vift-v2 supabase/migrations/20261128000004 (_vift_authz_check, projektionen i
+   vift_store_project) och 20261128000005 (vitlista för direkt REST-skrivning, F18).
+   "Superadmin" = behörigheten 'all', aldrig roll-id. Ändras en regel i servern ska den
+   ändras här i samma ändring (SEC-SIM-01, tests/sim_parity.test.js). */
+const recActive = (e) => !!e && typeof e === 'object' && !['false', '0', '', 'null', 'undefined'].includes(String(e.active));
+function rolePerms(roles, id) {
+  const r = (Array.isArray(roles) ? roles : []).find((x) => x && typeof x === 'object' && x.id === id);
+  return r && Array.isArray(r.permissions) ? r.permissions.map(String) : [];
+}
+const regGet = (arr, id) => (Array.isArray(arr) ? arr : []).find((e) => e && typeof e === 'object' && String(e.id) === String(id)) || null;
+const lc = (v) => String(v == null ? '' : v).toLowerCase();
+const jsonEq = (a, b) => { const n = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, kk) => { o[kk] = x[kk]; return o; }, {}) : x)); return n(a) === n(b); };
+function regBad(arr) {
+  const a = Array.isArray(arr) ? arr : [];
+  const ids = a.filter((e) => e && typeof e === 'object' && e.id != null && String(e.id) !== '').map((e) => String(e.id));
+  return a.filter((e) => !e || typeof e !== 'object' || e.id == null || String(e.id) === '').length + (ids.length - new Set(ids).size);
+}
+/* identiteter = aktiva inloggningar (app_users.active) → första aktiva personalposten med e-posten → roll. */
+function identityPerms(staff, roles, users) {
+  const out = {};
+  Object.values(users || {}).filter((u) => u && u.active && u.email).forEach((u) => {
+    const st = (Array.isArray(staff) ? staff : []).find((e) => recActive(e) && e.email && lc(e.email) === lc(u.email));
+    out[u.email] = st ? rolePerms(roles, st.role) : [];
+  });
+  return out;
+}
+const superCount = (staff, roles, users) => Object.values(identityPerms(staff, roles, users)).filter((p) => p.includes('all')).length;
+const beyond = (nw, old, caller) => (nw || []).some((x) => !(old || []).includes(x) && !(caller || []).includes(x));
+/* Returnerar null (godkänt) eller ett felsvar enligt felkodskatalogen. */
+function t3cAuthzCheck(key, s0, r0, s1, r1, actorId, users) {
+  if (key !== 'vift_staff' && key !== 'vift_roles') return null;
+  const actor = (Array.isArray(s0) ? s0 : []).find((e) => recActive(e) && String(e.id) === String(actorId));
+  if (!actor || !Object.values(users || {}).some((u) => u && u.active && lc(u.email) === lc(actor.email))) return DEFINITE(403, 'forbidden');
+  const P = rolePerms(r0, actor.role);
+  if (!(P.includes('all') || P.includes(key === 'vift_staff' ? 'staff_manage' : 'admin_manage'))) return DEFINITE(403, 'forbidden');
+  if (key === 'vift_staff' && regBad(s1) > regBad(s0)) return DEFINITE(400, 'invalid_element');
+  if (key === 'vift_roles' && regBad(r1) > regBad(r0)) return DEFINITE(400, 'invalid_element');
+  if (!P.includes('all')) {
+    if (key === 'vift_staff') {
+      const n = regGet(s1, actorId);
+      if (!n || n.role !== actor.role) return REGEL(403, 'forbidden', 'privilege_escalation');
+    } else {
+      const o = regGet(r0, actor.role), n = regGet(r1, actor.role);
+      if (!o !== !n || (o && JSON.stringify(rolePerms(r0, actor.role).slice().sort()) !== JSON.stringify(rolePerms(r1, actor.role).slice().sort()))) return REGEL(403, 'forbidden', 'privilege_escalation');
+    }
+    const ids = (a, b) => [...new Set([].concat(a || [], b || []).filter((e) => e && typeof e === 'object' && e.id != null && String(e.id) !== '').map((e) => String(e.id)))];
+    if (key === 'vift_roles') {
+      for (const id of ids(r0, r1)) {
+        const o = regGet(r0, id), n = regGet(r1, id);
+        if (jsonEq(o, n)) continue;
+        const op = o ? rolePerms(r0, id) : [], np = n ? rolePerms(r1, id) : [];
+        if (op.includes('all') || np.includes('all')) return REGEL(403, 'forbidden', 'superadmin_required');
+        if (beyond(np, op, P)) return REGEL(403, 'forbidden', 'privilege_escalation');
+      }
+    } else {
+      for (const id of ids(s0, s1)) {
+        const o = regGet(s0, id), n = regGet(s1, id);
+        if (jsonEq(o, n)) continue;
+        const auth = !o || !n || o.role !== n.role || lc(o.email) !== lc(n.email) || recActive(o) !== recActive(n);
+        if (!auth) continue;
+        const op = o ? rolePerms(r1, o.role) : [], np = n ? rolePerms(r1, n.role) : [];
+        if (op.includes('all') || np.includes('all')) return REGEL(403, 'forbidden', 'superadmin_required');
+        const grant = !!n && recActive(n) && (!o || !recActive(o) || o.role !== n.role || lc(o.email) !== lc(n.email));
+        if (grant && beyond(np, [], P)) return REGEL(403, 'forbidden', 'privilege_escalation');
+      }
+    }
+    const i0 = identityPerms(s0, r0, users), i1 = identityPerms(s1, r1, users);
+    for (const e of Object.keys(i0)) {
+      if (i0[e].includes('all') !== (i1[e] || []).includes('all')) return REGEL(403, 'forbidden', 'superadmin_required');
+      if (beyond(i1[e] || [], i0[e], P)) return REGEL(403, 'forbidden', 'privilege_escalation');
+    }
+  }
+  if (superCount(s0, r0, users) >= 1 && superCount(s1, r1, users) === 0) return DEFINITE(409, 'last_superadmin');
+  return null;
+}
+/* Projektion (D-21, D-14): samma regel som vift_store_full_access + vift_store_project. */
+function projectStaffRoles(key, value, perms, me, staffNow) {
+  const p = Array.isArray(perms) ? perms : [];
+  const has = (x) => p.includes('all') || p.includes(x);
+  if (!Array.isArray(value)) return value;
+  if (key === 'vift_staff') {
+    if (has('staff_manage') || has('admin_manage')) return value;
+    return value.map((e) => {
+      if (!e || typeof e !== 'object') return e;
+      if (me && String(e.id) === String(me.id)) return e;
+      const c = Object.assign({}, e); delete c.permissions;
+      if (!p.includes('staff_view')) delete c.role;
+      return c;
+    });
+  }
+  if (key === 'vift_roles') {
+    if (has('admin_manage')) return value;
+    const own = me ? ((staffNow || []).find((e) => recActive(e) && String(e.id) === String(me.id)) || {}).role : null;
+    return value.filter((e) => e && typeof e === 'object' && ((own != null && e.id === own)
+      || (p.includes('staff_manage') && Array.isArray(e.permissions) && !e.permissions.includes('all') && e.permissions.every((x) => p.includes(x)))));
+  }
+  return value;
+}
+const REST_ALLOW = ['vift_notifications', 'vift_lastChanged'];
+const directBlocked = (key) => DEFINITE(403, 'direct_write_blocked', { code: '42501', message: 'direct_write_blocked', key });
+
 /* Serverns egna TypeScript-moduler (store-key-write) transpileras en gång
    per process och används här — samma regel i E2E som i enhetstesterna. */
 let _edgeMods = null;
@@ -262,15 +364,23 @@ class FakeSupabase {
       if (method === 'GET') {
         const key = (u.searchParams.get('key') || '').replace(/^eq\./, '');
         const LOCKED = ['vift_workOrders', 'vift_timeEntries'];
-        if (key) return { status: 200, body: LOCKED.includes(key) || !this.store.has(key) ? [] : [{ value: clone(this.store.get(key)) }] };
-        return { status: 200, body: [...this.store.entries()].filter(([k]) => !LOCKED.includes(k)).map(([k, v]) => ({ key: k, value: clone(v) })) };
+        /* T3-C (D-21): vift_staff bara för staff_manage/admin_manage, vift_roles bara för admin_manage (RLS store_read_by_role). */
+        const rp = this.permsFor(session.email);
+        const restHidden = (k) => LOCKED.includes(k) || (k === 'vift_staff' && !(this.has(rp, 'staff_manage') || this.has(rp, 'admin_manage'))) || (k === 'vift_roles' && !this.has(rp, 'admin_manage'));
+        if (key) return { status: 200, body: restHidden(key) || !this.store.has(key) ? [] : [{ value: clone(this.store.get(key)) }] };
+        return { status: 200, body: [...this.store.entries()].filter(([k]) => !restHidden(k)).map(([k, v]) => ({ key: k, value: clone(v) })) };
       }
-      // Direkt skrivning (Storage.set/setAll/setRemoteStrict). STAGING blockerar
-      // affärsnycklar och AO/tid (RESTRICTIVE); andra nycklar tillåts.
+      /* Direkt skrivning (Storage.setRemoteStrict m.fl.). T3-C (F18): bara vitlistan
+         vift_notifications och vift_lastChanged (värdet sätts av servern); DELETE och allt
+         annat nekas med 42501 direct_write_blocked (vift-v2 20261128000005). */
+      if (method === 'DELETE') return directBlocked((u.searchParams.get('key') || '').replace(/^eq\./, ''));
       const rows = Array.isArray(body) ? body : [body];
-      const blocked = rows.filter((r) => ['vift_workOrders', 'vift_timeEntries'].includes(r.key) || this.isBusinessKey(r.key));
-      if (blocked.length) return DEFINITE(403, 'new row violates row-level security policy', { code: '42501', keys: blocked.map((r) => r.key) });
-      rows.forEach((r) => this.store.set(r.key, clone(r.value)));
+      const blocked = rows.filter((r) => !r || !REST_ALLOW.includes(r.key));
+      if (blocked.length) return directBlocked(blocked.map((r) => r && r.key).join(','));
+      rows.forEach((r) => {
+        if (r.key === 'vift_lastChanged') this.touch();
+        else this.store.set(r.key, clone(r.value));
+      });
       return { status: 201, body: '' };
     }
     if (p === '/rest/v1/push_subscriptions') {
@@ -381,7 +491,7 @@ class FakeSupabase {
     if (this.opts.keyPerms) { const req = this.opts.keyPerms[fullKey]; return !!req && this.has(perms, req); }
     const k = fullKey.replace(/^vift_/, '');
     if (k === 'roles' || k === 'settings') return this.has(perms, 'admin_manage');
-    if (k === 'staff') return this.has(perms, 'staff_manage') || this.has(perms, 'admin_manage');
+    if (k === 'staff') return this.has(perms, 'staff_manage'); // T3-C: som servern (KEY_PERMISSIONS), admin_manage räcker inte
     if (k === 'articles' || k === 'priceGroups' || k === 'priceProfiles') return this.has(perms, 'article_manage') || this.has(perms, 'admin_manage');
     return true;
   }
@@ -393,13 +503,13 @@ class FakeSupabase {
         (body.keys || []).concat(['vift_lastChanged']).forEach((fk) => {
           if (READ_LOCKED.includes(fk) || !this.store.has(fk)) return;
           const v = clone(this.store.get(fk));
-          data[fk.replace(/^vift_/, '')] = v; hashes[fk] = sha(v);
+          data[fk.replace(/^vift_/, '')] = projectStaffRoles(fk, v, perms, me, this.get('staff')); hashes[fk] = sha(v);
         });
         return { status: 200, body: { data, hashes } };
       }
       case 'readWithHash': {
         if (READ_LOCKED.includes(body.key)) return DEFINITE(403, 'forbidden');
-        const v = clone(this.store.get(body.key)); return { status: 200, body: { value: v, hash: sha(v) } };
+        const v = clone(this.store.get(body.key)); return { status: 200, body: { value: projectStaffRoles(body.key, v, perms, me, this.get('staff')), hash: sha(v) } };
       }
       case 'readHashes': {
         const hashes = {}; (body.keys || []).forEach((fk) => { if (!READ_LOCKED.includes(fk)) hashes[fk] = sha(this.store.get(fk)); });
@@ -411,6 +521,11 @@ class FakeSupabase {
         if (!this.canWriteKey(body.key, perms)) return DEFINITE(403, 'forbidden');
         const cur = this.store.get(body.key);
         if (body.expectedHash != null && body.expectedHash !== sha(cur)) return { status: 409, body: { error: 'conflict', current: clone(cur), hash: sha(cur) } };
+        {
+          const s0 = this.get('staff'), r0 = this.get('roles');
+          const deny = t3cAuthzCheck(body.key, s0, r0, body.key === 'vift_staff' ? body.value : s0, body.key === 'vift_roles' ? body.value : r0, me && me.id, this.users);
+          if (deny) return deny;
+        }
         this.store.set(body.key, clone(body.value)); this.touch();
         return { status: 200, body: { ok: true, hash: sha(body.value), current: clone(body.value) } };
       }
@@ -445,6 +560,11 @@ class FakeSupabase {
           if (!same(arr[i], r.previous)) { conflicts.push({ id: r.id, current: clone(arr[i]) }); return; }
           arr.splice(i, 1);
         });
+        {
+          const s0 = this.get('staff'), r0 = this.get('roles');
+          const deny = t3cAuthzCheck(body.key, s0, r0, body.key === 'vift_staff' ? arr : s0, body.key === 'vift_roles' ? arr : r0, me && me.id, this.users);
+          if (deny) return deny;
+        }
         this.store.set(body.key, arr); this.touch();
         return { status: 200, body: { current: clone(arr), conflicts, hash: sha(arr) } };
       }

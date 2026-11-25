@@ -42,6 +42,22 @@ for f in src/data/storage.js src/services/AuthService.js index.html; do
       while ((m = re.exec(s))) { n++; if (utanV(m[1]) !== utanV(m[2])) ok = false; }
       process.exit(ok && n > 0 ? 0 : 1);' "$W/$f"; then
       cp "$T/cur" "$W/$f"; echo "index.html: konflikterna gällde bara ?v= — HEAD:s version används"
+    # T3-C (2026-11-28): storage.js — den publicerade STAGING-versionen har kod som HEAD
+    # också har ändrat (skrivtidsgränsen) intill T3-A:s rader, så trevägssammanslagningen ger
+    # konflikt fast STAGING-överlägget bara är de två raderna SUPABASE_URL/SUPABASE_AKEY.
+    # Då används HEAD:s fil med exakt de två publicerade raderna; allt annat måste vara
+    # identiskt med HEAD (kontrolleras), annars avbrott.
+    elif [ "$f" = src/data/storage.js ]; then
+      u=$(grep -m1 "^const SUPABASE_URL *=" "$T/oth"); a=$(grep -m1 "^const SUPABASE_AKEY *=" "$T/oth")
+      [ -n "$u" ] && [ -n "$a" ] || { echo "KONFLIKT i $f och inga överläggsrader — avbryter"; exit 1; }
+      U="$u" A="$a" node -e '
+        const fs = require("fs"); const s = fs.readFileSync(process.argv[1], "utf8").split("\n");
+        const ut = s.map((l) => /^const SUPABASE_URL *=/.test(l) ? process.env.U : /^const SUPABASE_AKEY *=/.test(l) ? process.env.A : l);
+        const diff = ut.filter((l, i) => l !== s[i]).length;
+        if (diff > 2) process.exit(1);
+        fs.writeFileSync(process.argv[2], ut.join("\n"));' "$T/cur" "$W/$f" \
+        || { echo "KONFLIKT i $f — avbryter"; exit 1; }
+      echo "storage.js: HEAD:s version med STAGING-överläggets två rader (SUPABASE_URL/SUPABASE_AKEY)"
     else echo "KONFLIKT i $f — avbryter"; exit 1; fi
   fi
 done
