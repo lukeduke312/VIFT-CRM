@@ -1,279 +1,354 @@
 /**
- * MyJobsPage — Mina jobb (Fas 4A)
- * Tekniker-vy: tilldelade AO, arbetspool, stämpling
+ * MyJobsPage — Mina jobb (Fas 4A, omarbetad QA 2026-11-26)
+ * Tekniker-vy: tilldelade AO, arbetspool, stämpling.
+ *
+ * Struktur (fältpersonalens dag): stämplingsstatus överst (när man är
+ * instämplad), sedan tre vyer i en segmentkontroll — Idag (nästa jobb
+ * först, därefter försenade, resten av dagen, pågående sedan tidigare och
+ * tilldelade utan datum), Kommande (per dag) och Arbetspool ("Ta jobbet").
+ * "Stämpla in" (tid) och "Starta jobb" (status) är separata knappar med
+ * olika ikon och förklaring. Åtgärdsfunktionerna längre ned (clockIn,
+ * clockOut, startJob, takeFromPool) och deras serverbekräftelser är
+ * oförändrade.
  */
 const MyJobsPage = {
 
   _catFilter: null,
+  _view: 'idag',
+  _tick: null,
 
   setCatFilter(slug) {
     this._catFilter = (slug && slug !== this._catFilter) ? slug : null;
     this.render();
   },
 
+  setView(v) {
+    if (!['idag', 'kommande', 'pool'].includes(v)) return;
+    this._view = v;
+    this.render();
+  },
+
+  _prio(ao) { return ({ akut: 0, hög: 1, normal: 2, låg: 3 })[ao.priority] ?? 2; },
+
+  /* Svensk decimal i timmar (komponentstandard §10): 90 min → "1,5 h". */
+  _h(min) {
+    const h = Math.round((Number(min) || 0) / 60 * 100) / 100;
+    return h.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' h';
+  },
+
+  /* Grupperingen — samma urval som tidigare, men utan dubbletter: en
+     pågående AO med passerat datum visas bara som försenad, och en
+     pågående AO med framtida datum bara under "Pågående" (inte även i
+     Kommande). */
+  _groups(myId, today) {
+    const all   = (state.workOrders || []).filter(ao => !ao.archived && !ao.deleted);
+    const mine  = ao => (ao.staff || []).includes(myId);
+    const alive = ao => !['klar', 'fakturerad', 'avbruten'].includes(ao.status);
+    const byTime = (a, b) => (a.scheduledStart || '99:99').localeCompare(b.scheduledStart || '99:99');
+    const byPrio = (a, b) => this._prio(a) - this._prio(b);
+    const today_ = all.filter(ao => mine(ao) && ao.scheduledDate === today && alive(ao)).sort(byTime);
+    const overdue = all.filter(ao => mine(ao) && ao.scheduledDate && ao.scheduledDate < today && alive(ao))
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || byTime(a, b));
+    const ongoing = all.filter(ao => mine(ao) && ao.status === 'pågående' && ao.scheduledDate !== today && !(ao.scheduledDate && ao.scheduledDate < today));
+    const unscheduled = all.filter(ao => mine(ao) && !ao.scheduledDate && alive(ao) && ao.status !== 'pågående').sort(byPrio);
+    const upcoming = all.filter(ao => mine(ao) && ao.scheduledDate > today && alive(ao) && ao.status !== 'pågående')
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || byTime(a, b));
+    const pool = all.filter(ao => ao.status === 'pool').sort(byPrio);
+    return { today: today_, overdue, ongoing, unscheduled, upcoming, pool };
+  },
+
   render() {
     const el = document.getElementById('pg-myjobs-content');
     if (!el) return;
+    clearInterval(this._tick);
     const user = Auth.getUser();
     if (!user) { el.innerHTML = '<div class="empty"><p>Inte inloggad</p></div>'; return; }
 
     const myId  = user.id;
     const today = tdy();
-    const all   = (state.workOrders || []).filter(ao => !ao.archived && !ao.deleted);
-    const mine  = ao => (ao.staff || []).includes(myId);
-    const alive = ao => !['klar','fakturerad','avbruten'].includes(ao.status);
-
-    const todayJobs = all.filter(ao => mine(ao) && ao.scheduledDate === today && alive(ao))
-      .sort((a,b) => (a.scheduledStart||'99:99').localeCompare(b.scheduledStart||'99:99'));
-
-    const ongoing = all.filter(ao => mine(ao) && ao.status === 'pågående' && ao.scheduledDate !== today);
-
-    const overdue = all.filter(ao => mine(ao) && ao.scheduledDate && ao.scheduledDate < today && alive(ao))
-      .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate));
-
-    const pool = all.filter(ao => ao.status === 'pool')
-      .sort((a,b) => ({akut:0,hög:1,normal:2,låg:3}[a.priority]||2) - ({akut:0,hög:1,normal:2,låg:3}[b.priority]||2));
-
-    const upcoming = all.filter(ao => mine(ao) && ao.scheduledDate > today && alive(ao))
-      .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate))
-      .slice(0, 8);
-
-    const unscheduled = all.filter(ao => mine(ao) && !ao.scheduledDate && alive(ao) && ao.status !== 'pågående')
-      .sort((a,b) => ({akut:0,hög:1,normal:2,låg:3}[a.priority]||2) - ({akut:0,hög:1,normal:2,låg:3}[b.priority]||2));
-
+    const g     = this._groups(myId, today);
+    const canTime   = Auth.can('ao_time');
     const isStamped = !!state.stampActive;
     const stampAoId = state.stampAoId || null;
     const stampAo   = isStamped && stampAoId ? getAO(stampAoId) : null;
 
-    // Category filter chips — only show categories present in user's jobs
-    const myAllJobs = [...todayJobs, ...unscheduled, ...ongoing, ...overdue, ...upcoming];
-    const usedCats  = new Set(myAllJobs.map(ao => ao.category || 'ovrigt'));
+    // Kategorifilter — bara kategorier som finns bland användarens egna jobb (inte poolen).
+    const myAll = [...g.today, ...g.overdue, ...g.ongoing, ...g.unscheduled, ...g.upcoming];
     const cf = this._catFilter;
-    let catChipsHtml = '';
-    if (usedCats.size > 1) {
-      const chips = [`<button class="qf-chip ${!cf?'on':''}" onclick="MyJobsPage.setCatFilter(null)">${ic('list',10)} Alla</button>`];
+    const catOk = ao => !cf || (ao.category || 'ovrigt') === cf;
+    const f = {
+      today: g.today.filter(catOk), overdue: g.overdue.filter(catOk), ongoing: g.ongoing.filter(catOk),
+      unscheduled: g.unscheduled.filter(catOk), upcoming: g.upcoming.filter(catOk)
+    };
+
+    /* Nästa jobb: det instämplade jobbet, annars dagens pågående, dagens akuta, dagens
+       första enligt tid, sedan försenade, pågående och odaterade. */
+    let hero = null, heroMode = 'next';
+    if (stampAo && catOk(stampAo)) { hero = stampAo; heroMode = 'on'; }
+    else {
+      hero = f.today.find(ao => ao.status === 'pågående') || f.today.find(ao => ao.priority === 'akut') || f.today[0]
+        || f.overdue[0] || f.ongoing[0] || f.unscheduled[0] || null;
+    }
+    const heroId = hero ? hero.id : null;
+    const notHero = ao => ao.id !== heroId;
+
+    const view = this._view;
+    const idagIds = new Set([...f.today, ...f.overdue, ...f.ongoing, ...f.unscheduled].map(a => a.id));
+    if (hero) idagIds.add(hero.id);
+    const nIdag = idagIds.size;
+    const tabs = [
+      ['idag', 'Idag', nIdag, 'calendar'],
+      ['kommande', 'Kommande', f.upcoming.length, 'calendar-check'],
+      ['pool', 'Arbetspool', g.pool.length, 'inbox']
+    ];
+    const tabsHtml = `<div class="ftabs mj-views" role="tablist" aria-label="Visa">
+      ${tabs.map(([k, l, n, icn]) => `<button type="button" class="ft${view === k ? ' on' : ''}" role="tab" aria-selected="${view === k}" onclick="MyJobsPage.setView('${k}')">${ic(icn, 14)}<span>${l}</span><span class="ft-n">${n}</span></button>`).join('')}
+    </div>`;
+
+    let chipsHtml = '';
+    const usedCats = new Set(myAll.map(ao => ao.category || 'ovrigt'));
+    if (usedCats.size > 1 && view !== 'pool') {
+      const chips = [UiKit.chip('Alla', 'MyJobsPage.setCatFilter(null)', { on: !cf })];
       AO_CATEGORIES.forEach(c => {
         if (!usedCats.has(c.slug)) return;
-        chips.push(`<button class="qf-chip ${cf===c.slug?'on':''}" onclick="MyJobsPage.setCatFilter('${c.slug}')" style="${cf===c.slug?`background:${c.color}20;border-color:${c.color}60;color:${c.color};`:''}">
-          ${ic(c.icon,10)} ${c.label}
-        </button>`);
+        chips.push(UiKit.chip(c.label, `MyJobsPage.setCatFilter('${c.slug}')`, { on: cf === c.slug, n: myAll.filter(ao => (ao.category || 'ovrigt') === c.slug).length }));
       });
-      catChipsHtml = `<div class="qf-row" style="margin-bottom:12px;">${chips.join('')}</div>`;
+      /* Dator: chips. Mobil: en rullista (många kategorier tog annars tre rader). */
+      const opts = [`<option value="">Alla kategorier (${myAll.length})</option>`].concat(AO_CATEGORIES.filter(c => usedCats.has(c.slug))
+        .map(c => `<option value="${esc(c.slug)}"${cf === c.slug ? ' selected' : ''}>${esc(c.label)} (${myAll.filter(ao => (ao.category || 'ovrigt') === c.slug).length})</option>`));
+      chipsHtml = `<div class="mj-chips" role="group" aria-label="Kategori">${chips.join('')}${cf ? `<button type="button" class="btn bghost bsm" onclick="MyJobsPage.setCatFilter(null)">${ic('x', 13)} Rensa filter</button>` : ''}</div>
+        <label class="mj-catsel"><span class="sr-only">Kategori</span><select aria-label="Kategori" onchange="MyJobsPage.setCatFilter(this.value || null)">${opts.join('')}</select></label>`;
     }
 
-    // Apply category filter to each section
-    const catFilter = ao => !cf || (ao.category || 'ovrigt') === cf;
-    const filteredToday       = todayJobs.filter(catFilter);
-    const filteredUnscheduled = unscheduled.filter(catFilter);
-    const filteredOngoing     = ongoing.filter(catFilter);
-    const filteredOverdue     = overdue.filter(catFilter);
-    const filteredUpcoming    = upcoming.filter(catFilter);
+    let body = '';
+    if (view === 'idag') body = this._viewToday(f, g, hero, heroMode, notHero, today, canTime, isStamped, stampAoId);
+    else if (view === 'kommande') body = this._viewUpcoming(f.upcoming, today, cf);
+    else body = this._viewPool(g.pool);
 
-    let html = catChipsHtml;
+    el.innerHTML = `<div class="mj">
+      ${isStamped && canTime ? this._stampBar(stampAo) : ''}
+      <div class="mj-bar">${tabsHtml}</div>
+      ${chipsHtml}
+      ${body}
+    </div>`;
 
-    // ── Stamp banner — V23: kräver ao_time (aktiv stämplingskontroll/action) ──
-    if (isStamped && Auth.can('ao_time')) {
-      const elapsed = TimeService.elapsedStr(state.stampTimestamp);
-      const timeStr = state.stampTimestamp
-        ? new Date(state.stampTimestamp).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})
-        : '';
-      html += `
-        <div style="background:linear-gradient(135deg,var(--gr),#15803d);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
-          <div style="width:42px;height:42px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ic('clock',20)}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:15px;font-weight:800;margin-bottom:2px;">${ic('check-circle',13)} Incheckad — ${elapsed}</div>
-            <div style="font-size:12px;opacity:.85;">Sedan ${timeStr}${stampAo?' · '+esc(stampAo.title):''}</div>
-          </div>
-          <button onclick="MyJobsPage.clockOut()"
-            style="background:rgba(255,255,255,.2);color:#fff;border:1.5px solid rgba(255,255,255,.35);border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;">
-            ${ic('log-out',13)} Stämpla ut
-          </button>
-        </div>`;
+    if (isStamped && canTime) {
+      this._tick = setInterval(() => {
+        const e = document.getElementById('mj-elapsed');
+        if (!e || !state.stampActive) { clearInterval(this._tick); return; }
+        e.textContent = TimeService.elapsedStr(state.stampTimestamp);
+      }, 30000);
     }
-
-    // ── Mina jobb idag ───────────────────────────────────────────────────────
-    html += this._sectionHtml(
-      `${ic('calendar',14)} Mina jobb idag`,
-      filteredToday,
-      cf ? 'Inga jobb idag i denna kategori' : 'Inga planerade jobb idag',
-      'var(--sky)', false,
-      ao => this._jobCard(ao, myId, isStamped, stampAoId),
-      `<button class="btn bghost bfull bsm" style="margin-top:8px;" onclick="Router.showPage('pg-ao',{filter:'idag'})">${ic('list',11)} Se alla ordrar idag</button>`
-    );
-
-    // ── Tilldelade utan datum ─────────────────────────────────────────────────
-    if (filteredUnscheduled.length) {
-      html += this._sectionHtml(
-        `${ic('clipboard',14)} Tilldelade — ej schemalagda`,
-        filteredUnscheduled, null, 'var(--mt)', false,
-        ao => this._jobCard(ao, myId, isStamped, stampAoId)
-      );
-    }
-
-    // ── Pågående ─────────────────────────────────────────────────────────────
-    if (filteredOngoing.length) {
-      html += this._sectionHtml(
-        `${ic('play-circle',14)} Pågående jobb`,
-        filteredOngoing, null, 'var(--orange)', false,
-        ao => this._jobCard(ao, myId, isStamped, stampAoId)
-      );
-    }
-
-    // ── Försenade ────────────────────────────────────────────────────────────
-    if (filteredOverdue.length) {
-      html += this._sectionHtml(
-        `${ic('alert-triangle',14)} Försenade jobb`,
-        filteredOverdue, null, 'var(--rd)', true,
-        ao => this._jobCard(ao, myId, isStamped, stampAoId)
-      );
-    }
-
-    // ── Arbetspool ───────────────────────────────────────────────────────────
-    html += this._sectionHtml(
-      `${ic('inbox',14)} Arbetspool`,
-      pool,
-      'Arbetspoolen är tom',
-      'var(--pu)', false,
-      ao => this._poolCard(ao)
-    );
-
-    // ── Kommande jobb ────────────────────────────────────────────────────────
-    if (filteredUpcoming.length) {
-      html += this._sectionHtml(
-        `${ic('calendar',14)} Kommande jobb`,
-        filteredUpcoming, null, 'var(--mt)', false,
-        ao => this._jobCard(ao, myId, false, null, true)
-      );
-    }
-
-    el.innerHTML = html;
   },
 
-  /* ── Sektions-wrapper ─────────────────────────────────────────────────── */
-  _sectionHtml(title, items, emptyMsg, borderColor, warn, cardFn, extra='') {
-    const hasItems = items.length > 0;
-    const accentColor = warn ? 'var(--rd)' : borderColor;
-    return `
-      <div class="surface-section">
-        <div class="surface-section-header">
-          <div class="surface-section-header-title" style="color:${accentColor};font-size:12px;font-weight:700;">
-            <span style="width:3px;height:14px;background:${accentColor};border-radius:2px;display:inline-block;flex-shrink:0;"></span>
-            ${title}
-            ${hasItems ? `<span class="bdg ${warn?'bdg-red':'bdg-grey'}" style="margin-left:2px;">${items.length}</span>` : ''}
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;">
-          ${!hasItems && emptyMsg
-            ? `<div class="empty" style="padding:16px 0;gap:4px;">${ic('check-circle',22)}<p style="font-size:11px;text-align:center;">${emptyMsg}</p></div>`
-            : items.map(cardFn).join('')}
-          ${extra}
-        </div>
+  /* ── Stämplingsstatus (en enda aktiv markering i vyn) ─────────────── */
+  _stampBar(stampAo) {
+    const since = state.stampTimestamp
+      ? new Date(state.stampTimestamp).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '';
+    const what = stampAo
+      ? `<span class="mj-stamp-ao">${esc(WorkOrderService.displayNumberOrPending(stampAo))} · ${esc(stampAo.title)}</span>`
+      : `<span class="mj-stamp-ao">Utan arbetsorder</span>`;
+    return `<section class="mj-stamp" aria-label="Stämpling">
+      <span class="mj-stamp-ico" aria-hidden="true">${ic('clock', 20)}</span>
+      <div class="mj-stamp-txt">
+        <div class="mj-stamp-h">Instämplad · <span id="mj-elapsed">${esc(TimeService.elapsedStr(state.stampTimestamp))}</span></div>
+        <div class="mj-stamp-s">${since ? 'Sedan ' + esc(since) + ' · ' : ''}${what}</div>
+      </div>
+      <div class="mj-stamp-act">
+        ${stampAo ? `<button type="button" class="btn bs" data-ao="${esc(stampAo.id)}" onclick="Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">${ic('arrow-right', 15)} Öppna jobbet</button>` : ''}
+        <button type="button" class="btn bp" onclick="MyJobsPage.clockOut()">${ic('log-out', 15)} Stämpla ut</button>
+      </div>
+    </section>`;
+  },
+
+  /* ── Vy: Idag ─────────────────────────────────────────────────────── */
+  _viewToday(f, g, hero, heroMode, notHero, today, canTime, isStamped, stampAoId) {
+    const card = ao => this._jobCard(ao, { canTime, isStamped, stampAoId, today });
+    const dateStr = new Date().toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+    let html = '';
+    if (hero) {
+      html += `<section class="mj-sec mj-sec-hero" aria-label="${heroMode === 'on' ? 'Pågår nu' : 'Nästa jobb'}">
+        ${this._jobCard(hero, { canTime, isStamped, stampAoId, today, hero: heroMode })}
+      </section>`;
+    }
+    const overdue = f.overdue.filter(notHero);
+    if (overdue.length) html += this._section('Försenade', overdue.length, 'danger', overdue.map(card).join(''));
+    const rest = f.today.filter(notHero);
+    const allToday = f.today.length;
+    if (rest.length) {
+      html += this._section(hero && allToday > rest.length ? 'Resten av dagen' : 'Idag', rest.length, '', rest.map(card).join(''),
+        `<button type="button" class="btn bghost bsm" onclick="Router.showPage('pg-ao',{filter:'idag'})">${ic('list', 13)} Alla ordrar idag</button>`,
+        cap(dateStr));
+    } else if (!allToday) {
+      const poolN = g.pool.length;
+      html += `<div class="empty mj-empty">${ic('calendar', 26)}<h3>Inga jobb planerade idag</h3>
+        <p>${this._catFilter ? 'Inga jobb idag i den valda kategorin.' : 'Du har inga arbetsorder med dagens datum.'}</p>
+        ${poolN ? `<button type="button" class="btn bs" onclick="MyJobsPage.setView('pool')">${ic('inbox', 15)} Visa arbetspoolen (${poolN})</button>` : ''}
       </div>`;
+    }
+    const ongoing = f.ongoing.filter(notHero);
+    if (ongoing.length) html += this._section('Pågående sedan tidigare', ongoing.length, 'warn', ongoing.map(card).join(''));
+    const uns = f.unscheduled.filter(notHero);
+    if (uns.length) html += this._section('Tilldelade utan datum', uns.length, '', uns.map(card).join(''));
+    return html;
   },
 
-  /* ── AO-kort v2 ──────────────────────────────────────────────────────── */
-  _jobCard(ao, myId, isStamped, stampAoId, compact=false) {
-    const cu       = getCu(ao.customerId);
-    const cuName   = cu ? CustomerService.displayName(cu) : '—';
-    /* R2.6 §12 (oberoende reproducerad blockerare) — TIDIGARE villkorades
-       adressraden på `ao.address`, vilket dolde en giltig fallback-adress
-       (länkad fastighet/kund) för en legacy-AO utan egen adress, trots att
-       AddressService.displayAddress() korrekt kunde lösa den. Villkora nu
-       på det RESOLVERADE resultatet istället. */
-    const workAddr = AddressService.displayAddress(ao);
-    const chkOk    = (ao.checklist||[]).filter(c => c.done).length;
-    const chkProg  = WorkOrderService.checklistCounts(ao.checklist || []).prog;
-    const chkAvv   = (ao.checklist||[]).filter(c => c.avvikelse==='avvikelse').length;
-    const chkTotal = (ao.checklist||[]).length;
-    const active   = isStamped && stampAoId === ao.id;
-    const isLate   = WorkOrderService.isOverdue(ao);
-    const prioClass = ({akut:'p-akut',hög:'p-hog',normal:'p-normal',låg:'p-lag'}[ao.priority]||'p-lag');
+  /* ── Vy: Kommande (grupperat per dag) ─────────────────────────────── */
+  _viewUpcoming(list, today, cf) {
+    if (!list.length) {
+      return `<div class="empty mj-empty">${ic('calendar-check', 26)}<h3>Inga kommande jobb</h3>
+        <p>${cf ? 'Inga kommande jobb i den valda kategorin.' : 'Jobb som planeras in åt dig visas här, dag för dag.'}</p></div>`;
+    }
+    const MAX = 40;
+    const shown = list.slice(0, MAX);
+    const days = [];
+    shown.forEach(ao => {
+      let d = days.find(x => x.date === ao.scheduledDate);
+      if (!d) { d = { date: ao.scheduledDate, aos: [] }; days.push(d); }
+      d.aos.push(ao);
+    });
+    return days.map(d => this._section(cap(UiKit.dayLabel(d.date, today)), d.aos.length, '',
+      d.aos.map(ao => this._jobCard(ao, { compact: true, today })).join(''), '', fmtDate(d.date))).join('') +
+      (list.length > MAX ? `<p class="mj-more">Visar ${MAX} av ${list.length} kommande jobb. <button type="button" class="btn bghost bsm" onclick="Router.showPage('pg-ao')">${ic('list', 13)} Alla arbetsordrar</button></p>` : '');
+  },
 
+  /* ── Vy: Arbetspool ───────────────────────────────────────────────── */
+  _viewPool(pool) {
+    if (!pool.length) {
+      return `<div class="empty mj-empty">${ic('inbox', 26)}<h3>Arbetspoolen är tom</h3>
+        <p>Jobb som läggs i poolen kan tas av vem som helst i teamet. De visas här.</p></div>`;
+    }
+    return this._section('Lediga jobb att ta', pool.length, '', pool.map(ao => this._poolCard(ao)).join(''));
+  },
+
+  /* ── Sektion med rubrik och kortrutnät ────────────────────────────── */
+  _section(title, n, tone, inner, action, sub) {
+    return `<section class="mj-sec${tone ? ' tone-' + tone : ''}">
+      <div class="mj-sec-h">
+        <h3>${esc(title)} <span class="bdg ${tone === 'danger' ? 'bdg-red' : tone === 'warn' ? 'bdg-orange' : 'bdg-grey'}">${n}</span>${sub ? `<span class="mj-sec-sub">${esc(sub)}</span>` : ''}</h3>
+        ${action || ''}
+      </div>
+      <div class="mj-grid">${inner}</div>
+    </section>`;
+  },
+
+  _subLabel(s) {
+    const m = { inväntar_material: ['package', 'Inväntar material'], inväntar_kund: ['bell', 'Inväntar kund'], pausad: ['pause-circle', 'Pausad'],
+      behöver_återbesök: ['rotate-ccw', 'Behöver återbesök'], blockerad: ['alert-circle', 'Blockerad'] };
+    const x = m[s];
+    return x ? `${ic(x[0], 13)}<span>${x[1]}</span>` : `<span>${esc(s)}</span>`;
+  },
+
+  /* ── AO-kort ──────────────────────────────────────────────────────── */
+  _jobCard(ao, o) {
+    o = o || {};
+    const today    = o.today || tdy();
+    const cu       = getCu(ao.customerId);
+    const cuName   = cu ? CustomerService.displayName(cu) : '';
+    /* R2.6 §12 — adressraden villkoras på det RESOLVERADE resultatet
+       (AddressService.displayAddress), så att en legacy-AO utan egen adress
+       fortfarande visar fastighetens/kundens adress. */
+    const workAddr = AddressService.displayAddress(ao);
+    const cl       = ao.checklist || [];
+    const chkTotal = cl.length;
+    const chkOk    = cl.filter(c => c.done).length;
+    const chkProg  = chkTotal ? WorkOrderService.checklistCounts(cl).prog : 0;
+    const chkAvv   = cl.filter(c => c.avvikelse === 'avvikelse').length;
+    const isOn     = !!(o.isStamped && o.stampAoId === ao.id) || o.hero === 'on';
+    const isLate   = WorkOrderService.isOverdue(ao);
+    const prioCls  = ({ akut: 'p-akut', hög: 'p-hog' })[ao.priority] || '';
     const timeEntries = TimeService.getByAO(ao.id);
     const actualMins  = TimeService.totalMinutes(timeEntries);
     const estMins     = Math.round((ao.estimatedHours || 0) * 60);
     const timePct     = estMins > 0 ? Math.round(actualMins / estMins * 100) : null;
     const timeOver    = timePct !== null && timePct > 115;
+    const aoAttr      = `data-ao="${esc(ao.id)}"`;
 
-    const chkHtml = chkTotal > 0
-      ? `<span class="ao-item-progress ${chkOk===chkTotal&&!chkAvv?'done':chkAvv>0?'has-dev':''}">${chkOk}/${chkTotal} ${ic('check',10)}</span>${chkProg ? ` <span class="chk-st chk-st-prog">${chkProg} pågår</span>` : ''}`
-      : '';
+    // När: klockslag idag, annars dag (+ klockslag).
+    let when = '';
+    if (ao.scheduledDate === today) when = ao.scheduledStart ? esc(ao.scheduledStart) + (ao.scheduledEnd ? '–' + esc(ao.scheduledEnd) : '') : 'Idag, ingen tid';
+    else if (ao.scheduledDate) when = esc(cap(UiKit.dayLabel(ao.scheduledDate, today))) + (ao.scheduledStart ? ' kl. ' + esc(ao.scheduledStart) : '');
+    else when = 'Inget datum';
 
-    const subLbls = {inväntar_material:'⏳ Inväntar material',inväntar_kund:'🔔 Inväntar kund',pausad:'⏸ Pausad',behöver_återbesök:'🔄 Återbesök',blockerad:'🚫 Blockerad'};
+    const label = o.hero === 'on' ? `<span class="mj-label is-on">${ic('clock', 13)}<span>Pågår nu</span></span>`
+      : o.hero === 'next' ? `<span class="mj-label">${ic('arrow-right', 13)}<span>Nästa jobb</span></span>` : '';
 
-    let primaryBtn = '';
-    let secondaryBtns = '';
-    if (!compact) {
-      if (active && Auth.can('ao_time')) {
-        primaryBtn = `<button class="btn bfull" style="background:#f0fdf4;color:var(--gr);border:1.5px solid var(--gr);font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockOut()">${ic('log-out',14)} Stämpla ut</button>`;
-      } else if (!isStamped && Auth.can('ao_time')) {
-        primaryBtn = `<button class="btn bp bfull" style="font-size:13px;padding:10px;" onclick="event.stopPropagation();MyJobsPage.clockIn('${ao.id}')">${ic('log-in',14)} Stämpla in</button>`;
-      }
-      /* V3: vägbeskrivning och samtal direkt från kortet — färre klick i fält. */
+    const meta = [];
+    if (cuName) meta.push(`<li>${ic('user', 13)}<span>${esc(cuName)}</span></li>`);
+    if (workAddr) meta.push(`<li class="mj-addr">${ic('map-pin', 13)}<span>${esc(workAddr)}</span></li>`);
+    if (o.hero && ao.contactPerson) meta.push(`<li>${ic('phone', 13)}<span>${esc(ao.contactPerson)}${ao.phone ? ' · ' + esc(ao.phone) : ''}</span></li>`);
+    if (ao.substatus) meta.push(`<li class="mj-warn">${this._subLabel(ao.substatus)}</li>`);
+    if (chkTotal) meta.push(`<li class="${chkAvv ? 'mj-warn' : ''}">${ic('check-square', 13)}<span>Checklista ${chkOk} av ${chkTotal}${chkProg ? ' · ' + chkProg + ' pågår' : ''}${chkAvv ? ' · ' + chkAvv + ' avvikelse' + (chkAvv > 1 ? 'r' : '') : ''}</span></li>`);
+    if (estMins > 0 || actualMins > 0) meta.push(`<li class="${timeOver ? 'mj-danger' : ''}">${ic('clock', 13)}<span>${estMins > 0 ? 'Plan ' + this._h(estMins) : ''}${estMins > 0 && actualMins > 0 ? ' · ' : ''}${actualMins > 0 ? 'Registrerat ' + this._h(actualMins) + (timePct !== null ? ' (' + timePct + ' %)' : '') : ''}</span></li>`);
+    const desc = o.hero && ao.description ? `<p class="mj-desc">${esc(ao.description)}</p>` : '';
+
+    let actions = '';
+    if (o.compact) {
+      actions = `<div class="mj-acts"><button type="button" class="btn bghost bsm" ${aoAttr} onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">${ic('arrow-right', 13)} Öppna</button></div>`;
+    } else {
       const mapsUrl = workAddr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(workAddr) : '';
-      /* V3 omgång 2: vägbeskrivning, ring, starta och öppna i EN rad — tidigare två rader. */
-      secondaryBtns = `<div class="job-card-v2-row">` +
-        (mapsUrl ? `<a class="btn bs bsm" href="${mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Vägbeskrivning">${ic('navigation',13)} Karta</a>` : '') +
-        (ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}" onclick="event.stopPropagation()" title="Ring kontaktperson">${ic('phone',13)} Ring</a>` : '') +
-        (['nytt','pool','planerad'].includes(ao.status)
-          ? `<button class="btn bs bsm" onclick="event.stopPropagation();MyJobsPage.startJob('${ao.id}')">${ic('play',12)} Starta</button>`
-          : '') +
-        `<button class="btn bghost bsm" onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',12)} Öppna</button>` +
+      const canStart = ['nytt', 'pool', 'planerad'].includes(ao.status);
+      let stampBtn = '';
+      if (o.canTime && !o.isStamped) {
+        stampBtn = `<button type="button" class="btn ${o.hero ? 'bp' : 'bs'}" ${aoAttr} title="Stämpla in – tiden börjar räknas på det här jobbet" onclick="event.stopPropagation();MyJobsPage.clockIn(this.dataset.ao)">${ic('log-in', 15)} Stämpla in</button>`;
+      } else if (o.canTime && isOn && o.hero !== 'on') {
+        stampBtn = `<button type="button" class="btn bs" onclick="event.stopPropagation();MyJobsPage.clockOut()">${ic('log-out', 15)} Stämpla ut</button>`;
+      }
+      const startBtn = canStart
+        ? `<button type="button" class="btn bs" ${aoAttr} title="Starta jobb – ändrar status till Pågående (registrerar ingen tid)" onclick="event.stopPropagation();MyJobsPage.startJob(this.dataset.ao)">${ic('play', 14)} Starta jobb</button>` : '';
+      const row1 = stampBtn || startBtn ? `<div class="mj-acts mj-acts-main">${stampBtn}${startBtn}</div>` : '';
+      const row2 = `<div class="mj-acts mj-acts-nav">` +
+        (mapsUrl ? `<a class="btn bs bsm" href="${esc(mapsUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Vägbeskrivning i kartappen">${ic('navigation', 14)} Karta</a>` : '') +
+        (ao.phone ? `<a class="btn bs bsm" href="tel:${esc(String(ao.phone).replace(/[^\d+]/g, ''))}" onclick="event.stopPropagation()" title="Ring kontaktperson">${ic('phone', 14)} Ring</a>` : '') +
+        `<button type="button" class="btn bghost bsm" ${aoAttr} onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">${ic('arrow-right', 14)} Öppna</button>` +
         `</div>`;
+      const hint = o.hero === 'next' && o.canTime && !o.isStamped && canStart
+        ? `<p class="mj-hint">${ic('info', 13)}<span><b>Stämpla in</b> mäter din tid. <b>Starta jobb</b> ändrar bara status till Pågående.</span></p>` : '';
+      actions = `<div class="mj-card-f" onclick="event.stopPropagation()">${row1}${row2}${hint}</div>`;
     }
 
-    return `
-      <div class="job-card-v2 ${prioClass}${active?' active':''}${isLate&&!active?' late':''}" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-        <div class="job-card-v2-top">
-          <div style="flex:1;min-width:0;">
-            <div class="job-card-v2-id">${WorkOrderService.displayNumberOrPending(ao)}${active?' · '+ic('clock',11)+' Aktiv stämpling':''}</div>
-            <div class="job-card-v2-title">${esc(ao.title)}</div>
-          </div>
-          <div class="job-card-v2-badges">${sbdg(ao.status)}${ao.priority!=='normal'?pbdg(ao.priority):''}</div>
-        </div>
-        <div class="job-card-v2-meta">
-          ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} <span>${esc(cuName)}</span></div>` : ''}
-          ${workAddr        ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} <span>${esc(workAddr)}</span></div>` : ''}
-          ${ao.scheduledDate ? `<div class="job-card-v2-meta-row" style="color:${isLate?'var(--rd)':'var(--mt)'};">${ic('calendar',11)} <span>${isLate?'Försenad — ':''}${esc(UiKit.dayLabel(ao.scheduledDate))}${ao.scheduledStart?' kl. '+esc(ao.scheduledStart):''}</span></div>` : ''}
-          ${ao.substatus ? `<div class="job-card-v2-meta-row" style="color:var(--or);">${subLbls[ao.substatus]||ao.substatus}</div>` : ''}
-          ${chkTotal>0 ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkHtml}</div>` : ''}
-          ${estMins>0 ? `<div class="job-card-v2-meta-row" style="color:${timeOver?'var(--rd)':'var(--mt)'};">${ic('clock',11)} Plan: ${TimeService.fmtDuration(estMins)}${actualMins>0?' · Utfört: '+TimeService.fmtDuration(actualMins)+(timePct!==null?' ('+timePct+'%)':''):''}</div>` : ''}
-          ${ao.category ? `<div class="job-card-v2-meta-row">${catBadge(ao.category)}</div>` : ''}
-        </div>
-        ${!compact ? `<div class="job-card-v2-actions" onclick="event.stopPropagation()">
-          ${primaryBtn}
-          ${secondaryBtns}
-        </div>` : `<div onclick="event.stopPropagation()"><button class="btn bghost bsm bfull" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('arrow-right',11)} Öppna</button></div>`}
-      </div>`;
+    return `<article class="mj-card${o.hero ? ' mj-hero' : ''}${o.compact ? ' is-compact' : ''}${isOn ? ' is-on' : ''}${isLate && !isOn ? ' is-late' : ''}${prioCls ? ' ' + prioCls : ''}" ${aoAttr} onclick="Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">
+      <div class="mj-card-top">
+        <div class="mj-card-when${isLate ? ' is-late' : ''}">${ic(isLate ? 'alert-triangle' : 'clock', 13)}<span>${isLate ? 'Försenad · ' : ''}${when}</span></div>
+        <div class="mj-card-badges">${sbdg(ao.status)}${['akut', 'hög', 'låg'].includes(ao.priority) ? pbdg(ao.priority) : ''}</div>
+      </div>
+      ${label}
+      <h3 class="mj-title"><span class="mj-id">${esc(WorkOrderService.displayNumberOrPending(ao))}</span> ${esc(ao.title)}</h3>
+      ${meta.length ? `<ul class="mj-meta">${meta.join('')}</ul>` : ''}
+      ${desc}
+      ${ao.category ? `<div class="mj-cat">${catBadge(ao.category)}</div>` : ''}
+      ${actions}
+    </article>`;
   },
 
-  /* ── Pool-kort v2 ──────────────────────────────────────────────────────── */
+  /* ── Pool-kort ────────────────────────────────────────────────────── */
   _poolCard(ao) {
     const cu       = getCu(ao.customerId);
-    const cuName   = cu ? CustomerService.displayName(cu) : '—';
-    const chkTotal = (ao.checklist||[]).length;
+    const cuName   = cu ? CustomerService.displayName(cu) : '';
+    const chkTotal = (ao.checklist || []).length;
     const workAddr = AddressService.displayAddress(ao);
-
-    return `
-      <div class="job-card-v2" style="border-left-color:var(--pu);" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">
-        <div class="job-card-v2-top">
-          <div style="flex:1;min-width:0;">
-            <div class="job-card-v2-id">${ao.id}</div>
-            <div class="job-card-v2-title">${esc(ao.title)}</div>
-          </div>
-          <div class="job-card-v2-badges">${pbdg(ao.priority)}</div>
+    const aoAttr   = `data-ao="${esc(ao.id)}"`;
+    const desc = ao.description ? String(ao.description) : '';
+    return `<article class="mj-card is-pool${ao.priority === 'akut' ? ' p-akut' : ao.priority === 'hög' ? ' p-hog' : ''}" ${aoAttr} onclick="Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">
+      <div class="mj-card-top">
+        <div class="mj-card-when">${ic('calendar', 13)}<span>${ao.scheduledDate ? esc(cap(UiKit.dayLabel(ao.scheduledDate))) + (ao.scheduledStart ? ' kl. ' + esc(ao.scheduledStart) : '') : 'Inget datum'}</span></div>
+        <div class="mj-card-badges">${['akut', 'hög', 'låg'].includes(ao.priority) ? pbdg(ao.priority) : ''}</div>
+      </div>
+      <h3 class="mj-title"><span class="mj-id">${esc(WorkOrderService.displayNumberOrPending(ao))}</span> ${esc(ao.title)}</h3>
+      <ul class="mj-meta">
+        ${cuName ? `<li>${ic('user', 13)}<span>${esc(cuName)}</span></li>` : ''}
+        ${workAddr ? `<li class="mj-addr">${ic('map-pin', 13)}<span>${esc(workAddr)}</span></li>` : ''}
+        ${chkTotal ? `<li>${ic('check-square', 13)}<span>${chkTotal} checkpunkt${chkTotal !== 1 ? 'er' : ''}</span></li>` : ''}
+      </ul>
+      ${desc ? `<p class="mj-desc">${esc(desc.slice(0, 140))}${desc.length > 140 ? '…' : ''}</p>` : ''}
+      ${ao.category ? `<div class="mj-cat">${catBadge(ao.category)}</div>` : ''}
+      <div class="mj-card-f" onclick="event.stopPropagation()">
+        <div class="mj-acts mj-acts-main">
+          <button type="button" class="btn bs" ${aoAttr} onclick="MyJobsPage.takeFromPool(this.dataset.ao)">${ic('user-plus', 15)} Ta jobbet</button>
+          <button type="button" class="btn bghost" ${aoAttr} onclick="Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">${ic('arrow-right', 14)} Öppna</button>
         </div>
-        <div class="job-card-v2-meta">
-          ${cuName !== '—' ? `<div class="job-card-v2-meta-row">${ic('user',11)} ${esc(cuName)}</div>` : ''}
-          ${workAddr        ? `<div class="job-card-v2-meta-row">${ic('map-pin',11)} ${esc(workAddr)}</div>` : ''}
-          ${ao.description ? `<div class="job-card-v2-meta-row" style="color:var(--mt);">${esc(ao.description.slice(0,80))}${ao.description.length>80?'…':''}</div>` : ''}
-          ${chkTotal       ? `<div class="job-card-v2-meta-row">${ic('check-square',11)} ${chkTotal} checkpunkt${chkTotal!==1?'er':''}</div>` : ''}
-        </div>
-        <div class="job-card-v2-actions" onclick="event.stopPropagation()" style="justify-content:flex-end;">
-          <button class="btn bghost bsm" onclick="Router.showPage('pg-ao-detail',{aoId:'${ao.id}'})">${ic('external-link',12)} Öppna</button>
-          <button class="btn bsu bsm" onclick="MyJobsPage.takeFromPool('${ao.id}')">${ic('user-plus',13)} Ta jobbet</button>
-        </div>
-      </div>`;
+      </div>
+    </article>`;
   },
 
   /* ── Åtgärder ─────────────────────────────────────────────────────────── */
