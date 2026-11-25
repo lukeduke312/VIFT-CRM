@@ -372,7 +372,7 @@ module.exports = [
         t.assert(pay.length >= 5, vp + ': en tabell per person (' + pay.length + ')');
         const bad = rep.concat(pay).filter((x) => x.w > x.cw + 1 || x.right > x.vw + 1 || x.sw > x.cl + 2);
         t.assert(bad.length === 0, vp + ': ingen tabell bredare än sitt kort/fönstret: ' + JSON.stringify(bad));
-        const card = await s.eval(() => { const tr = document.querySelector('.page.active .pay-table tbody tr'); const th = document.querySelector('.page.active .pay-table thead'); return { disp: getComputedStyle(tr).display, head: getComputedStyle(th).display }; });
+        const card = await s.eval(() => { const tr = document.querySelector('.page.active .pay-tbl tbody tr'); const th = document.querySelector('.page.active .pay-tbl thead'); return { disp: getComputedStyle(tr).display, head: getComputedStyle(th).display }; });
         t.assert(card.disp === 'grid' && card.head === 'none', vp + ': löneraderna visas som kort på mobil');
         const longName = await s.eval(() => { const h = [...document.querySelectorAll('.page.active .pay-who-t h3')].find((x) => /Wennerström/.test(x.textContent)); if (!h) return null; const r = h.getBoundingClientRect(); return { right: Math.round(r.right), vw: document.documentElement.clientWidth }; });
         t.assert(longName && longName.right <= longName.vw, vp + ': långt namn ryms (' + JSON.stringify(longName) + ')');
@@ -383,15 +383,15 @@ module.exports = [
       await d.eval((p) => PayrollPage._navMonth(p.year, p.month), pm);
       await d.settle(250);
       const st = await d.eval(() => {
-        const td = document.querySelector('.page.active .pay-table tbody td');
-        const th = document.querySelector('.page.active .pay-table thead th');
-        const rows = [...document.querySelectorAll('.page.active .pay-table tbody tr')];
+        const td = document.querySelector('.page.active .pay-tbl tbody td');
+        const th = document.querySelector('.page.active .pay-tbl thead th');
+        const rows = [...document.querySelectorAll('.page.active .pay-tbl tbody tr')];
         const bg = rows.slice(0, 2).map((r) => getComputedStyle(r.querySelector('td')).backgroundColor);
         /* Värde och kommentar får inte flyta ihop (F-04): mellanrum mellan cellernas text. */
-        const cost = document.querySelector('.page.active .pay-table tbody td.c-cost'), note = document.querySelector('.page.active .pay-table tbody td.c-note');
+        const cost = document.querySelector('.page.active .pay-tbl tbody td.c-cost'), note = document.querySelector('.page.active .pay-tbl tbody td.c-note');
         const range = document.createRange(); range.selectNodeContents(cost); const cr = range.getBoundingClientRect();
         range.selectNodeContents(note); const nr = range.getBoundingClientRect();
-        return { padL: parseFloat(getComputedStyle(td).paddingLeft), padR: parseFloat(getComputedStyle(td).paddingRight), padT: parseFloat(getComputedStyle(td).paddingTop), sticky: getComputedStyle(th).position, upper: getComputedStyle(th).textTransform, zebra: bg[0] !== bg[1], gap: Math.round(nr.left - cr.right), h1: document.querySelectorAll('#pg-payroll-content h1, #pg-payroll-content h2').length, numAlign: getComputedStyle(document.querySelector('.page.active .pay-table td.c-hrs')).textAlign };
+        return { padL: parseFloat(getComputedStyle(td).paddingLeft), padR: parseFloat(getComputedStyle(td).paddingRight), padT: parseFloat(getComputedStyle(td).paddingTop), sticky: getComputedStyle(th).position, upper: getComputedStyle(th).textTransform, zebra: bg[0] !== bg[1], gap: Math.round(nr.left - cr.right), h1: document.querySelectorAll('#pg-payroll-content h1, #pg-payroll-content h2').length, numAlign: getComputedStyle(document.querySelector('.page.active .pay-tbl td.c-hrs')).textAlign };
       });
       t.assert(st.padL >= 12 && st.padR >= 12 && st.padT >= 8, 'dator: cellutfyllnad minst 8 × 12 px (' + st.padT + '/' + st.padL + ')');
       t.assert(st.sticky === 'sticky' && st.upper === 'uppercase', 'dator: fast rubrikrad i versaler (' + st.sticky + ', ' + st.upper + ')');
@@ -424,8 +424,8 @@ module.exports = [
         const pg = document.querySelector('#pg-payroll-content');
         const kpis = {};
         pg.querySelectorAll('.ar-kpi').forEach((k) => { kpis[k.querySelector('.ar-kpi-l').textContent.trim()] = k.querySelector('.ar-kpi-n').textContent.replace(/[  ]/g, ' ').trim(); });
-        const rows = [...pg.querySelectorAll('.pay-table tbody tr')].map((tr) => ({ id: tr.querySelector('input[data-id]').dataset.id, hrs: tr.querySelector('td.c-hrs').textContent.trim(), val: tr.querySelector('.pay-val').textContent.replace(/[  ]/g, ' ').trim(), rate: tr.querySelector('.pay-rate').textContent.replace(/[  ]/g, ' ').trim() }));
-        return { kpis, rows, heads: [...pg.querySelectorAll('.pay-table thead th')].map((h) => h.textContent.trim()), text: pg.innerText, all: pg.textContent, summary: (pg.querySelector('.pay-def summary') || {}).textContent || '' };
+        const rows = [...pg.querySelectorAll('.pay-tbl tbody tr')].map((tr) => ({ id: tr.querySelector('input[data-id]').dataset.id, hrs: tr.querySelector('td.c-hrs').textContent.trim(), val: tr.querySelector('.pay-val').textContent.replace(/[  ]/g, ' ').trim(), rate: tr.querySelector('.pay-rate').textContent.replace(/[  ]/g, ' ').trim() }));
+        return { kpis, rows, heads: [...pg.querySelectorAll('.pay-tbl thead th')].map((h) => h.textContent.trim()), text: pg.innerText, all: pg.textContent, summary: (pg.querySelector('.pay-def summary') || {}).textContent || '' };
       });
       t.note('nyckeltal: ' + JSON.stringify(r.kpis));
       t.assert(seeded.every((x) => inMonth.some((e) => e.id === x.id)) && r.rows.length === inMonth.length, 'alla ' + inMonth.length + ' poster i månaden visas (' + r.rows.length + ')');
@@ -447,12 +447,12 @@ module.exports = [
       t.assert(!noIhc, 'utan internalHourlyCost visas ingen intern kostnad (inget påhittat standardvärde)');
       t.assert(JSON.stringify((t.fake.get('timeEntries') || []).map((e) => [e.id, e.minutes, e.hourRate])) === minutesBefore, 'lagrade minuter och timpriser oförändrade');
       /* Kryssruta → server */
-      const id = await s.eval(() => document.querySelector('.page.active .pay-table tbody input[type=checkbox]:not(:checked)').dataset.id);
-      await s.page.locator('.page.active .pay-table tbody input[data-id="' + id + '"]').check();
+      const id = await s.eval(() => document.querySelector('.page.active .pay-tbl tbody input[type=checkbox]:not(:checked)').dataset.id);
+      await s.page.locator('.page.active .pay-tbl tbody input[data-id="' + id + '"]').check();
       for (let i = 0; i < 40 && !((t.fake.get('timeEntries') || []).find((e) => e.id === id) || {}).attested; i++) await s.settle(100);
       t.assert(t.fake.get('timeEntries').find((e) => e.id === id).attested === true, 'kryssrutan attesterar på servern');
       await s.settle(300);
-      t.assert(await s.eval((x) => { const i = document.querySelector('.page.active .pay-table input[data-id="' + x + '"]'); return i.checked && /Attesterad/.test(i.closest('label').textContent); }, id), 'raden visar Attesterad efter serverns svar');
+      t.assert(await s.eval((x) => { const i = document.querySelector('.page.active .pay-tbl input[data-id="' + x + '"]'); return i.checked && /Attesterad/.test(i.closest('label').textContent); }, id), 'raden visar Attesterad efter serverns svar');
       /* Attestera alla för första personen som har oattesterade poster */
       const sid = await s.eval(() => document.querySelector('.page.active .pay-card [data-id][onclick*="_attestAll"]').dataset.id);
       await s.clearToasts();

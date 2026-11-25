@@ -1050,7 +1050,7 @@ const ReportsPage = (function () {
        (etikett från data-label) så att tabellen aldrig är bredare än kortet (F-05). */
     var custTable = _panel('users', 'Topp kunder', 'Flest offerter i perioden · värden exkl. moms',
       topCustomers.length
-        ? '<div class="ar-scroll"><table class="ar-table rep-cust">' +
+        ? '<div class="ar-scroll"><table class="ar-tbl rep-cust">' +
             '<thead><tr>' +
               '<th scope="col">Kund</th>' +
               '<th scope="col" class="c-num">Offerter</th>' +

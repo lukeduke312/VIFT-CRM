@@ -6,7 +6,7 @@
  *
  * V3 2026-11-26 (QA F-04, S-02, S-03, S-05, S-10): sidan följer designsystemet
  * — verktygsrad i stället för en egen h1 (titeln finns i toppraden), samma
- * nyckeltalskort som Rapporter (.ar-kpi), en riktig tabell (.ar-table: rubrik,
+ * nyckeltalskort som Rapporter (.ar-kpi), en riktig tabell (.ar-tbl: rubrik,
  * cellutfyllnad, zebra/hover, fast rubrikrad) som blir kort under 640 px.
  * Timmar visas som decimaltimmar i svensk form: "26,5 h" (komma, högst två
  * decimaler, inga avslutande nollor). De lagrade värdena (minuter) och
@@ -236,7 +236,7 @@ const PayrollPage = (function() {
         </div>
       </div>
       <div class="ar-scroll pay-scroll">
-      <table class="ar-table pay-table">
+      <table class="ar-tbl pay-tbl">
         <thead>
           <tr>
             <th scope="col" class="c-date">Datum</th>

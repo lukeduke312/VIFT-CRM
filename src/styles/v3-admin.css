@@ -152,19 +152,19 @@ button.ar-kpi:focus-visible { outline: none; box-shadow: var(--focus); }
 }
 
 /* Tabell (F-04/F-05): rubrikrad, cellutfyllnad, zebra, hover, fast rubrik. */
-.ar-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; color: var(--ink-2); }
-.ar-table th, .ar-table td { padding: 10px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
-.ar-table thead th {
+.ar-tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; color: var(--ink-2); }
+.ar-tbl th, .ar-tbl td { padding: 10px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+.ar-tbl thead th {
   position: sticky; top: 0; z-index: 1;
   background: var(--surface-2); color: var(--muted);
   font-size: 11.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap;
   padding-top: 9px; padding-bottom: 9px;
 }
-.ar-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }
-.ar-table tbody tr:hover td { background: var(--hover); }
-.ar-table .c-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ar-table tfoot th, .ar-table tfoot td { border-bottom: none; border-top: 2px solid var(--line); font-weight: 650; color: var(--ink); background: transparent; }
-.ar-table tbody tr:last-child td { border-bottom: none; }
+.ar-tbl tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }
+.ar-tbl tbody tr:hover td { background: var(--hover); }
+.ar-tbl .c-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ar-tbl tfoot th, .ar-tbl tfoot td { border-bottom: none; border-top: 2px solid var(--line); font-weight: 650; color: var(--ink); background: transparent; }
+.ar-tbl tbody tr:last-child td { border-bottom: none; }
 
 /* ═══════════════════════════════════════════════════════════════════
    RAPPORTER (rep-)
@@ -275,19 +275,19 @@ button.rep-li:focus-visible { outline: none; box-shadow: var(--focus); border-ra
 .pay-sum b { font-weight: 650; color: var(--ink); }
 .pay-sum-l { font-size: 12px; color: var(--muted); }
 
-.pay-table { table-layout: fixed; }
-.pay-table th:first-child, .pay-table td:first-child { padding-left: 18px; }
-.pay-table th:last-child, .pay-table td:last-child { padding-right: 18px; }
-.pay-table .c-date { width: 118px; white-space: nowrap; }
-.pay-table .c-time { width: 112px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pay-table .c-hrs  { width: 86px; }
-.pay-table .c-cost { width: 132px; }
-.pay-table th.c-cost { white-space: normal; line-height: 1.25; }
+.pay-tbl { table-layout: fixed; }
+.pay-tbl th:first-child, .pay-tbl td:first-child { padding-left: 18px; }
+.pay-tbl th:last-child, .pay-tbl td:last-child { padding-right: 18px; }
+.pay-tbl .c-date { width: 118px; white-space: nowrap; }
+.pay-tbl .c-time { width: 112px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pay-tbl .c-hrs  { width: 86px; }
+.pay-tbl .c-cost { width: 132px; }
+.pay-tbl th.c-cost { white-space: normal; line-height: 1.25; }
 .pay-val { display: block; }
 .pay-rate { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 400; color: var(--muted); }
-.pay-table .c-att  { width: 156px; }
+.pay-tbl .c-att  { width: 156px; }
 .pay-att-l { white-space: nowrap; }
-.pay-table td.c-hrs { font-weight: 650; color: var(--ink); }
+.pay-tbl td.c-hrs { font-weight: 650; color: var(--ink); }
 .pay-ao, .pay-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.4; }
 .pay-ao { color: var(--ink); font-weight: 500; }
 .pay-note { color: var(--muted); font-size: 12.5px; }
@@ -296,23 +296,23 @@ button.rep-li:focus-visible { outline: none; box-shadow: var(--focus); border-ra
 .pay-att input { width: 18px; height: 18px; margin: 0; cursor: pointer; flex-shrink: 0; }
 .pay-att input:disabled { cursor: not-allowed; }
 .pay-att input:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
-.pay-table tr.is-attested .pay-att { color: var(--ok); font-weight: 600; }
-.pay-table tfoot .c-sum-l { color: var(--muted); font-weight: 600; text-align: left; }
+.pay-tbl tr.is-attested .pay-att { color: var(--ok); font-weight: 600; }
+.pay-tbl tfoot .c-sum-l { color: var(--muted); font-weight: 600; text-align: left; }
 
 /* ═══════════════════════════════════════════════════════════════════
    MOBIL: tabeller blir kort (ingen tabell bredare än sitt kort, F-05)
    ═══════════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
-  .ar-table, .ar-table tbody, .ar-table tfoot { display: block; width: 100%; }
-  .ar-table thead { display: none; }
-  .ar-table tr { display: grid; min-width: 0; }
-  .ar-table th, .ar-table td { display: block; padding: 0; border: none; height: auto; min-width: 0; width: auto !important; }
-  .ar-table tbody tr { padding: 11px 16px; border-bottom: 1px solid var(--line); gap: 3px 12px; }
-  .ar-table tbody tr:last-child { border-bottom: none; }
-  .ar-table tbody tr:nth-child(even) td, .ar-table tbody tr:hover td { background: transparent; }
-  .ar-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }
-  .ar-table tfoot tr { padding: 10px 16px; border-top: 2px solid var(--line); gap: 12px; }
-  .ar-table tfoot th, .ar-table tfoot td { border-top: none; }
+  .ar-tbl, .ar-tbl tbody, .ar-tbl tfoot { display: block; width: 100%; }
+  .ar-tbl thead { display: none; }
+  .ar-tbl tr { display: grid; min-width: 0; }
+  .ar-tbl th, .ar-tbl td { display: block; padding: 0; border: none; height: auto; min-width: 0; width: auto !important; }
+  .ar-tbl tbody tr { padding: 11px 16px; border-bottom: 1px solid var(--line); gap: 3px 12px; }
+  .ar-tbl tbody tr:last-child { border-bottom: none; }
+  .ar-tbl tbody tr:nth-child(even) td, .ar-tbl tbody tr:hover td { background: transparent; }
+  .ar-tbl tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); }
+  .ar-tbl tfoot tr { padding: 10px 16px; border-top: 2px solid var(--line); gap: 12px; }
+  .ar-tbl tfoot th, .ar-tbl tfoot td { border-top: none; }
 
   /* Rapporter → Topp kunder: kundnamn som rubrik, övriga som etikett/värde. */
   .ar-card-b > .ar-scroll { margin: -14px -18px -16px; }
@@ -323,25 +323,25 @@ button.rep-li:focus-visible { outline: none; box-shadow: var(--focus); border-ra
   .rep-cust th:first-child, .rep-cust td:first-child, .rep-cust th:last-child, .rep-cust td:last-child { padding-left: 0; padding-right: 0; }
 
   /* Löneunderlag: datum + timmar, arbetsorder, tid + kostnad, kommentar, attest. */
-  .pay-table { table-layout: auto; }
-  .pay-table tbody tr {
+  .pay-tbl { table-layout: auto; }
+  .pay-tbl tbody tr {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "date hrs" "ao ao" "time cost" "note note" "att att";
   }
-  .pay-table tbody td.c-date { grid-area: date; font-weight: 650; color: var(--ink); }
-  .pay-table tbody td.c-hrs  { grid-area: hrs; text-align: right; }
-  .pay-table tbody td.c-ao   { grid-area: ao; }
-  .pay-table tbody td.c-time { grid-area: time; color: var(--muted); font-size: 12.5px; }
-  .pay-table tbody td.c-cost { grid-area: cost; text-align: right; color: var(--muted); font-size: 12.5px; }
-  .pay-table tbody td.c-note { grid-area: note; }
-  .pay-table tbody td.c-note:has(.pay-none) { display: none; }
-  .pay-table tbody td.c-att  { grid-area: att; margin-top: 4px; }
-  .pay-table th:first-child, .pay-table td:first-child, .pay-table th:last-child, .pay-table td:last-child { padding-left: 0; padding-right: 0; }
+  .pay-tbl tbody td.c-date { grid-area: date; font-weight: 650; color: var(--ink); }
+  .pay-tbl tbody td.c-hrs  { grid-area: hrs; text-align: right; }
+  .pay-tbl tbody td.c-ao   { grid-area: ao; }
+  .pay-tbl tbody td.c-time { grid-area: time; color: var(--muted); font-size: 12.5px; }
+  .pay-tbl tbody td.c-cost { grid-area: cost; text-align: right; color: var(--muted); font-size: 12.5px; }
+  .pay-tbl tbody td.c-note { grid-area: note; }
+  .pay-tbl tbody td.c-note:has(.pay-none) { display: none; }
+  .pay-tbl tbody td.c-att  { grid-area: att; margin-top: 4px; }
+  .pay-tbl th:first-child, .pay-tbl td:first-child, .pay-tbl th:last-child, .pay-tbl td:last-child { padding-left: 0; padding-right: 0; }
   .pay-att { min-height: 40px; }
   .pay-att input { width: 22px; height: 22px; }
-  .pay-table tfoot tr { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .pay-table tfoot .c-sum-pad { display: none; }
-  .pay-table tfoot .c-num { text-align: right; }
+  .pay-tbl tfoot tr { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .pay-tbl tfoot .c-sum-pad { display: none; }
+  .pay-tbl tfoot .c-num { text-align: right; }
 
   .pay-bar { flex-direction: column; align-items: stretch; }
   .pay-period { justify-content: space-between; }
@@ -565,9 +565,9 @@ button.rep-li:focus-visible { outline: none; box-shadow: var(--focus); border-ra
 .ar-card > .card-body.ar-card-b.is-flush { padding: 0; }
 
 /* Tabeller: rubrikrad i versaler (§7), egen rullyta på dator. */
-.ar-table thead th { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+.ar-tbl thead th { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
 .ar-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.ar-scroll > .ar-table { min-width: 100%; }
+.ar-scroll > .ar-tbl { min-width: 100%; }
 /* Löneunderlag ≥ 1200 px: tabellen ryms alltid — ingen rullyta, så att
    rubrikraden kan ligga fast när man rullar sidan. */
 @media (min-width: 1200px) { .pay-scroll { overflow: visible; } }
