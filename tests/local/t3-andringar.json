@@ -1,11 +1,23 @@
 {
- "beskrivning": "T3-B och T3-C (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
+ "beskrivning": "T3-B, T3-C och T3-D (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
  "objekt": {
   "funktion:_store_direct_write_guard()": {
    "paket": "T3-C",
    "andring": "NY",
    "md5": "33b3da1ed510ccda462d5560ba8a1a70|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "F18: direkt REST-skrivning bara för vitlistan (vift_notifications, vift_lastChanged med servervärde); DELETE nekas; 42501 direct_write_blocked."
+  },
+  "funktion:_vift_activity_ao_type(p_type text)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "04e0432017733189e34ec6f069b9fec0|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "AO-händelser i aktivitetsloggen som fältet får läsa för egna AO (B4)."
+  },
+  "funktion:_vift_activity_type_perms(p_type text)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "370ff214893623adc8ee2450cf105dd4|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Händelsetyper per behörighet i appendActivity (D-22, speglas i activity-log.ts TYPE_PERMS)."
   },
   "funktion:_vift_ao_assigned(p_ao jsonb, p_staff_id text)": {
    "paket": "T3-B",
@@ -18,6 +30,12 @@
    "andring": "NY",
    "md5": "8a5925d9cae565a8d605ec1f1b6f951f|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Faktureringsfält i patch_ao (D-07/F21)."
+  },
+  "funktion:_vift_ao_content_visible(p_ao jsonb, p_perms text[], p_staff_id text)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "f8d1d7eaa81e6c81cc94a83848df6c92|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Innehåll (historik, logg, kund/fastighet/kontakt, offertreferens): synlig och inte via öppen pool (Q3, K-03)."
   },
   "funktion:_vift_ao_eff_perms(p_perms text[])": {
    "paket": "T3-B",
@@ -61,6 +79,12 @@
    "md5": "09f03c032a611bd3c99848a8f5d5b5b4|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Atomisk tagningsregel ur öppen pool (används under radlås)."
   },
+  "funktion:_vift_ao_visible(p_ao jsonb, p_perms text[], p_staff_id text)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "d79accd4a349412499bc859307374090|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-B:s poolregel i SQL (canViewWorkOrder): ao_view_all, eller ao_view_own + tilldelad / öppen pool med ao_pool_take."
+  },
   "funktion:_vift_auth_staff(p_auth uuid)": {
    "paket": "T3-B",
    "andring": "NY",
@@ -91,17 +115,35 @@
    "md5": "384c6cefc7ef28e928f624c7581c7cc8|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Behörigheter per aktiv inloggningsidentitet (app_users.active, e-post → första aktiva personalpost → roll)."
   },
+  "funktion:_vift_kund_las(p_perms text[])": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "544fb3879b652e355c585a4433cc8415|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Roller som får läsa hela kund-/fastighetsregistret (skyddade fält borttagna); övriga urval per uppdrag (D-13)."
+  },
   "funktion:_vift_perms_beyond(p_new text[], p_old text[], p_caller text[])": {
    "paket": "T3-C",
    "andring": "NY",
    "md5": "3bb1e2258fe75e339a575bc184be2506|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Hjälpfunktion: behörigheter utöver tidigare och anroparens."
   },
+  "funktion:_vift_post_refs(p_perms text[], p_staff_id text)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "4865c0ea2f5a39ef0f6f89c6fcb57b0b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Urvalsmängden per anropare: AO med innehåll och refererade kunder, fastigheter, objekt, offerter och personal."
+  },
   "funktion:_vift_rec_active(p_rec jsonb)": {
    "paket": "T3-C",
    "andring": "NY",
    "md5": "a343c1094dccb416b803e7b8c57ab5b3|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Hjälpfunktion: personalpost aktiv (samma tolkning som vift_caller_perms)."
+  },
+  "funktion:_vift_ref_visible(p_field text, p_id text, p_perms text[], p_refs jsonb)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "5ee684a845138f06e0003c7fd16cc203|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Referens i appendActivity måste gå att se för anroparen (D-22, ref_not_visible)."
   },
   "funktion:_vift_reg_bad_count(p_arr jsonb)": {
    "paket": "T3-C",
@@ -127,6 +169,12 @@
    "md5": "cc905f9f53d53bb3c49dc93f66327b72|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Hjälpfunktion: aktiv personalpost."
   },
+  "funktion:_vift_staff_external(p_perms text[])": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "8206ed62e26cf1d6a3e91754573655b4|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Extern användare (bara D-04:s tilläggsbehörigheter): bara namn och titel för personal på egna AO (D-14, SEC-B3-04)."
+  },
   "funktion:_vift_staff_name(p_staff_id text)": {
    "paket": "T3-B",
    "andring": "NY",
@@ -144,6 +192,24 @@
    "andring": "NY",
    "md5": "1563ec79c6789566a8ca4372dabe47f4|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Gemensamt lås för vift_staff + vift_roles + app_users i fast ordning (rådgivande lås, roles, staff)."
+  },
+  "funktion:_vift_task_ao(p_task jsonb)": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "e82aa3acacbee99ebe298ed0fc456809|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Uppgiftens AO-koppling (relatedType workOrder + relatedId, annars workOrderId)."
+  },
+  "funktion:activity_log_append(p_entry jsonb, p_max integer)": {
+   "paket": "T3-D",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "T3-D: ny signatur med anroparens id och behörigheter; typ (type_not_allowed) och referenser (ref_not_visible) under lås; servern sätter aktör och tid (D-22). Den gamla 2-argumentsversionen ersatt."
+  },
+  "funktion:activity_log_append(p_entry jsonb, p_max integer, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T3-D",
+   "andring": "NY",
+   "md5": "5260e1282e808019194234228bb7384b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D: ny signatur med anroparens id och behörigheter; typ (type_not_allowed) och referenser (ref_not_visible) under lås; servern sätter aktör och tid (D-22). Den gamla 2-argumentsversionen ersatt."
   },
   "funktion:deactivate_vift_user(p_user_id uuid)": {
    "paket": "T3-C",
@@ -206,10 +272,12 @@
    "beskrivning": "Byte av aoId kräver tilldelning och olåst AO."
   },
   "funktion:vift_store_full_access(p_key text, p_perms text[])": {
-   "paket": "T3-C",
+   "paket": "T3-D",
    "andring": "ÄNDRAD",
-   "md5": "d578292e9c8a7c0305553faf41d3ed24|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "vift_staff bara staff_manage/admin_manage, vift_roles bara admin_manage (REST-läsning stängd för övriga, D-21)."
+   "md5": "92676359cc8ac79b7fa8b767904a646a|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-C + T3-D: vift_activityLog bara ao_view_all/admin_manage, vift_activities bara admin_manage eller ao_edit+ao_view_all (D-15), vift_properties kräver objects_sensitive, vift_propertyContacts som kunder (REST-läsning stängd för övriga).",
+   "aven": "T3-C",
+   "md5_t3c": "d578292e9c8a7c0305553faf41d3ed24|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[])": {
    "paket": "T3-C",
@@ -218,10 +286,12 @@
    "beskrivning": "Ny parameter p_caller_staff_id: egen roll ur vift_roles, andras permissions/role bort ur vift_staff (D-21, D-14). Den gamla 3-argumentsversionen ersatt."
   },
   "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)": {
-   "paket": "T3-C",
+   "paket": "T3-D",
    "andring": "NY",
-   "md5": "c46ec751ad2054788c0c9e92f19ace7e|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "Ny parameter p_caller_staff_id: egen roll ur vift_roles, andras permissions/role bort ur vift_staff (D-21, D-14). Den gamla 3-argumentsversionen ersatt."
+   "md5": "64bd544627cf094bebffe6500aa63be8|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-C + T3-D: urval per post för aktivitetslogg, uppgifter, offertreferens, kunder/fastigheter/objekt/kontakter och personalens kontaktuppgifter; portkoder och nyckelinformation aldrig (D-12–D-15, B4, K-04).",
+   "aven": "T3-C",
+   "md5_t3c": "c46ec751ad2054788c0c9e92f19ace7e|postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:work_order_billing_set(p_ao_id text, p_invoice_id text, p_mode text, p_actor_id text)": {
    "paket": "T3-B",

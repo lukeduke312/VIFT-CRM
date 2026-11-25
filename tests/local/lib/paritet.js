@@ -129,6 +129,46 @@ function projStaff(svar, egen) {
   const andra = l.filter((x) => x.id !== egen);
   return [l.length, 'egen:' + Object.keys(l.find((x) => x.id === egen) || {}).includes('role'), 'andraRole:' + andra.some((x) => 'role' in x), 'andraPerms:' + andra.some((x) => 'permissions' in x)].join('|');
 }
+/* ── T3-D (2026-11-28): urval per post och aktivitetsloggen. Körs i T3-D-världen (lib/t3d-data.js)
+   med serverns KEY_PERMISSIONS i den simulerade servern (som PERM-03). ── */
+const { t3dVarld } = require('./t3d-data');
+const T3D_OPTS = () => ({ keyPerms: serverKeyPerms() });
+const lasT3d = (key) => ({ action: 'readAllWithHashes', keys: ['vift_' + key] });
+const idsAv = (svar, key) => ((((svar.body || {}).data || {})[key]) || []).map((x) => x.id).sort().join(',');
+const faltAv = (svar, key) => [...new Set(((((svar.body || {}).data || {})[key]) || []).flatMap((x) => Object.keys(x)))].sort().join(',');
+const app = (id, type, refs) => ({ action: 'appendActivity', entry: Object.assign({ id: 'ACT-PAR-' + id, type, description: 'paritet' }, refs || {}) });
+const taskMW = (d, upd, rem) => ({ action: 'writeMerge', key: 'vift_activities',
+  upserts: (upd || []).map((x) => ({ id: x.id, data: x, previous: d.store.vift_activities.find((e) => e.id === x.id) || null })),
+  removals: (rem || []).map((id) => ({ id, previous: d.store.vift_activities.find((e) => e.id === id) })) });
+const taskMed = (d, id, patch) => Object.assign({}, d.store.vift_activities.find((e) => e.id === id), patch);
+const T3D_SCEN = [
+  ...['falt', 'falt2', 'begransad', 'ekonomi', 'chef', 'saljare', 'tom'].flatMap((anv) => [
+    { id: 'B4-' + anv, sec: 'SEC-B4-01/02/03 (' + anv + ')', anv, ef: 'store-key-write', body: lasT3d('activityLog'), utfall: (las, svar) => idsAv(svar, 'activityLog') },
+    { id: 'TASK-' + anv, sec: 'SEC-TASK-04 / D-15 (' + anv + ')', anv, ef: 'store-key-write', body: lasT3d('activities'), utfall: (las, svar) => idsAv(svar, 'activities') },
+    { id: 'KUND-' + anv, sec: 'SEC-KUND-01 (' + anv + ')', anv, ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts'] },
+      utfall: (las, svar) => ['customers', 'properties', 'propertyObjects', 'propertyContacts'].map((k) => idsAv(svar, k) + '/' + faltAv(svar, k).split(',').filter((f) => /accessCode|keyInfo|doorCode|keyInformation|personnr|keyReceipt|alarmInformation|accessInformation/.test(f)).join('+')).join('|') },
+    { id: 'B3-' + anv, sec: 'SEC-B3-01..04 (' + anv + ')', anv, ef: 'store-key-write', body: lasT3d('staff'), utfall: (las, svar, d) => idsAv(svar, 'staff').split(',').length + '|' + [...new Set((((svar.body || {}).data || {}).staff || []).filter((x) => x.id !== d.U[anv].staffId).flatMap((x) => Object.keys(x)))].sort().join(',') },
+  ]),
+  ...['falt', 'begransad'].map((anv) => ({ id: 'OFF-' + anv, sec: 'SEC-OFF-01/02 (' + anv + ')', anv, ef: 'store-key-write', body: lasT3d('offers'), utfall: (las, svar) => idsAv(svar, 'offers') + '|' + faltAv(svar, 'offers') })),
+  { id: 'B4-05', sec: 'SEC-B4-05 (type_not_allowed)', anv: 'falt', ef: 'store-key-write', body: app('000005', 'invoice_created', { workOrderId: 'AO-A1' }), utfall: (las) => (las('vift_activityLog') || []).length },
+  { id: 'B4-06', sec: 'SEC-B4-06 (ref_not_visible)', anv: 'falt', ef: 'store-key-write', body: app('000006', 'work_order_status', { workOrderId: 'AO-A8' }), utfall: (las) => (las('vift_activityLog') || []).length },
+  { id: 'B4-06p', sec: 'SEC-B4-06 / Q3 (öppen pool)', anv: 'falt', ef: 'store-key-write', body: app('000007', 'work_order_status', { workOrderId: 'AO-P1' }), utfall: (las) => (las('vift_activityLog') || []).length },
+  { id: 'B4-06k', sec: 'D-22 (annans kund)', anv: 'falt', ef: 'store-key-write', body: app('000008', 'work_order_status', { workOrderId: 'AO-A1', customerId: 'CU-R3' }), utfall: (las) => (las('vift_activityLog') || []).length },
+  { id: 'B4-OK', sec: 'D-22 (+, egen AO)', anv: 'falt', ef: 'store-key-write', body: app('000009', 'work_order_status', { workOrderId: 'AO-A1', customerId: 'CU-R1', offerId: 'OFF-R1' }), utfall: (las, svar, d) => { const e = (las('vift_activityLog') || [])[0] || {}; return [e.id, e.userId === d.U.falt.staffId, e.source].join('|'); } },
+  { id: 'B4-EK', sec: 'D-22 (ekonomi, kundtyp)', anv: 'ekonomi', ef: 'store-key-write', body: app('000010', 'customer_updated', { customerId: 'CU-R1' }), utfall: (las) => (las('vift_activityLog') || []).length },
+  { id: 'B4-04', sec: 'SEC-B4-04 (append_only)', anv: 'admin', ef: 'store-key-write', body: { action: 'writeMerge', key: 'vift_activityLog', upserts: [], removals: [] }, utfall: (las) => (las('vift_activityLog') || []).length },
+  { id: 'TASK-01', sec: 'SEC-TASK-01 (+, egen uppgift)', anv: 'falt', ef: 'store-key-write', body: (d) => taskMW(d, [{ id: 'ACT-PAR-EGEN', title: 'Egen', status: 'open', createdBy: d.U.falt.staffId, assignedTo: d.U.falt.staffId }]), utfall: (las, svar) => idsAv({ body: { data: { a: (svar.body || {}).current } } }, 'a') },
+  { id: 'TASK-02', sec: 'SEC-TASK-02 (not_own)', anv: 'falt', ef: 'store-key-write', body: (d) => taskMW(d, [{ id: 'ACT-PAR-ANNAN', title: 'Till Frida', status: 'open', createdBy: d.U.falt.staffId, assignedTo: d.U.falt2.staffId }]), utfall: (las) => (las('vift_activities') || []).length },
+  { id: 'TASK-03', sec: 'SEC-TASK-03 (field_title)', anv: 'falt', ef: 'store-key-write', body: (d) => taskMW(d, [taskMed(d, 'TASK-R1', { title: 'Ny' })]), utfall: (las) => (las('vift_activities') || []).find((t) => t.id === 'TASK-R1').title },
+  { id: 'TASK-03b', sec: 'D-15 (synlig via AO, inte egen)', anv: 'falt', ef: 'store-key-write', body: (d) => taskMW(d, [taskMed(d, 'TASK-D1', { status: 'done' })]), utfall: (las) => (las('vift_activities') || []).find((t) => t.id === 'TASK-D1').status },
+  { id: 'TASK-05', sec: 'SEC-TASK-05 / SEC-CUST-21 (ekonomi, not_own)', anv: 'ekonomi', ef: 'store-key-write', body: (d) => taskMW(d, [taskMed(d, 'TASK-R1', { title: 'x' })]), utfall: (las) => (las('vift_activities') || []).find((t) => t.id === 'TASK-R1').title },
+  { id: 'TASK-06', sec: 'SEC-TASK-06 (+, arbetsledare)', anv: 'chef', ef: 'store-key-write', body: (d) => taskMW(d, [taskMed(d, 'TASK-R1', { title: 'Ändrad av AL' })]), utfall: (las) => (las('vift_activities') || []).find((t) => t.id === 'TASK-R1').title },
+  { id: 'TASK-DEL', sec: 'D-15 (radera annans)', anv: 'falt', ef: 'store-key-write', body: (d) => taskMW(d, [], ['TASK-R1']), utfall: (las) => (las('vift_activities') || []).length },
+  ...['vift_activities', 'vift_activityLog', 'vift_customers', 'vift_properties', 'vift_propertyContacts', 'vift_offers'].flatMap((key) => ['falt', 'ekonomi'].map((anv) => (
+    { id: 'REST-' + anv + '-' + key.slice(5), sec: 'SEC-KUND-02 / SEC-B4-02 (R, ' + anv + ')', anv, restLas: key, utfall: (las, svar) => svar.rader }))),
+].map((sc) => Object.assign({ varld: t3dVarld, fakeOpts: T3D_OPTS }, sc));
+SCENARIER.push(...T3D_SCEN);
+
 /* Samma världsinställning som tests/staging_e2e_real.test.js (STAGING-lik simulerad server). */
 const FAKE_STD = { logOps: true, activityAppend: true, activitiesPolicy: true };
 const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write'];
@@ -138,6 +178,11 @@ function svarAv(s) { const b = s.body || {}; return { status: s.status, error: b
    Storage.setRemoteStrict). Jämförs: status, PostgreSQL-kod och om felet är direct_write_blocked. */
 function restSvarReplik(x) { return x.ok ? { status: 201, error: null, reason: null } : { status: x.status, error: x.code, reason: /direct_write_blocked/.test(x.message) ? 'direct_write_blocked' : null }; }
 function restSvarFake(x) { const b = x.body || {}; if (x.status < 300) return { status: 201, error: null, reason: null }; return { status: x.status, error: b.code || null, reason: /direct_write_blocked/.test(JSON.stringify(b)) ? 'direct_write_blocked' : null }; }
+
+/* T3-D: REST-läsning (GET /rest/v1/store?key=eq.X). Jämförs: status och antal rader (RLS döljer raden). */
+function restLasReplik(x) { return x.ok ? { status: 200, error: null, reason: null, rader: x.rows.length } : { status: x.status, error: x.code, reason: null, rader: 0 }; }
+function restLasFake(x) { return x.status === 200 ? { status: 200, error: null, reason: null, rader: Array.isArray(x.body) ? x.body.length : 0 } : { status: x.status, error: (x.body || {}).error || null, reason: null, rader: 0 }; }
+const omitRader = (x) => { const o = Object.assign({}, x); delete o.rader; return o; };
 
 async function korParitet(opts) {
   opts = opts || {};
@@ -151,13 +196,16 @@ async function korParitet(opts) {
     const aterstall = () => psql(r.db, `begin; delete from public.store; insert into public.store select * from public._paritet_bas; delete from public.op_idempotency; insert into public.op_idempotency select * from public._paritet_idem; delete from public.stamp_status; commit;`);
     for (const sc of SCENARIER) {
       const d = data();
+      if (sc.varld) sc.varld(d.store, d);
       const body = typeof sc.body === 'function' ? sc.body(d) : sc.body;
       // ── replik ──
       aterstall();
+      if (sc.varld) psql(r.db, Object.entries(d.store).map(([k, v]) => `insert into public.store(key, value) values (${lit(k)}, ${jlit(v)}) on conflict (key) do update set value = excluded.value;`).join('\n'));
       if (sc.fore) await ef.anropa(sc.ef, { user: d.U[sc.foreAnv || sc.anv], body: sc.fore });
       const rs = sc.rest
         ? restSvarReplik(asUser(r.db, d.U[sc.anv], `insert into public.store(key, value) values (${lit(sc.rest.key)}, ${jlit(sc.rest.value)}) on conflict (key) do update set value = excluded.value`))
-        : await ef.anropa(sc.ef, { user: d.U[sc.anv], body });
+        : sc.restLas ? restLasReplik(asUser(r.db, d.U[sc.anv], `select key, value from public.store where key = ${lit(sc.restLas)}`))
+          : await ef.anropa(sc.ef, { user: d.U[sc.anv], body });
       const rUtfall = sc.utfall((k) => val(r.db, k), rs, d);
       // ── fake ──
       const fake = new FakeSupabase(Object.assign({}, FAKE_STD, (typeof sc.fakeOpts === 'function' ? sc.fakeOpts() : sc.fakeOpts) || {}));
@@ -170,10 +218,11 @@ async function korParitet(opts) {
       if (sc.fore) await anropaFake(sc.fore, tokFor(sc.foreAnv || sc.anv));
       const fs_ = sc.rest
         ? restSvarFake(await fake.handle('POST', 'http://fake.lokal/rest/v1/store', { authorization: 'Bearer ' + tok, prefer: 'resolution=merge-duplicates' }, JSON.stringify([{ key: sc.rest.key, value: sc.rest.value }])))
-        : await anropaFake(body);
+        : sc.restLas ? restLasFake(await fake.handle('GET', 'http://fake.lokal/rest/v1/store?key=eq.' + encodeURIComponent(sc.restLas) + '&select=value', { authorization: 'Bearer ' + tok }, ''))
+          : await anropaFake(body);
       let fUtfall; try { fUtfall = sc.utfall((k) => { const v = fake.store.get(k); return v === undefined ? null : clone(v); }, fs_, d); } catch (e) { fUtfall = 'fel: ' + e.message; }
-      const R = Object.assign(sc.rest ? rs : svarAv(rs), { utfall: rUtfall }), F = Object.assign(sc.rest ? fs_ : svarAv(fs_), { utfall: fUtfall });
-      ut.push({ id: sc.id, sec: sc.sec, anv: sc.anv, ef: sc.ef || 'rest/v1/store', replik: R, fake: F, lika: JSON.stringify(R) === JSON.stringify(F) });
+      const R = Object.assign(sc.rest || sc.restLas ? omitRader(rs) : svarAv(rs), { utfall: rUtfall }), F = Object.assign(sc.rest || sc.restLas ? omitRader(fs_) : svarAv(fs_), { utfall: fUtfall });
+      ut.push({ id: sc.id, sec: sc.sec, anv: sc.anv, ef: sc.ef || (sc.restLas ? 'rest/v1/store (GET)' : 'rest/v1/store'), replik: R, fake: F, lika: JSON.stringify(R) === JSON.stringify(F) });
     }
   } finally { r.stang(); }
   return ut;

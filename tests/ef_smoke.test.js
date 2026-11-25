@@ -71,8 +71,8 @@ const EF = ['ao-time-write', 'work-orders-list', 'store-key-write', 'time-entrie
 
   // ── store-key-write ──
   s = await ef.anropa('store-key-write', { user: U.falt, body: { action: 'readAllWithHashes', keys: ['vift_customers', 'vift_staff', 'vift_settings', 'vift_offers'] } });
-  ok(s.status === 200 && Array.isArray(s.body.data.staff) && s.body.data.customers.length === 3 && s.body.data.customers.every((c) => !('personnr' in c)) && !('orgNr' in s.body.data.customers.find((c) => c.type === 'privat'))
-    && !('bankgiro' in s.body.data.settings) && !('internalHourlyCost' in s.body.data.settings) && s.body.data.offers.every((o) => !('publicToken' in o) && !('lines' in o)), 'readAllWithHashes (fält): projicerat enligt C-5 — kunder utan personnr, inget bankgiro/internt timpris, offerter bara som stubbar', JSON.stringify(s.body.data.customers).slice(0, 300));
+  ok(s.status === 200 && Array.isArray(s.body.data.staff) && s.body.data.customers.map((c) => c.id).join() === 'CU-R1' && s.body.data.customers.every((c) => !('personnr' in c)) && !('orgNr' in s.body.data.customers.find((c) => c.type === 'privat'))
+    && !('bankgiro' in s.body.data.settings) && !('internalHourlyCost' in s.body.data.settings) && s.body.data.offers.every((o) => !('publicToken' in o) && !('lines' in o)), 'readAllWithHashes (fält): projicerat enligt C-5 och T3-D — bara kunden för egna AO (D-13), utan personnr, inget bankgiro/internt timpris, offerter bara som referens', JSON.stringify(s.body.data.customers).slice(0, 300));
   s = await ef.anropa('store-key-write', { user: U.chef, body: { action: 'readWithHash', key: 'vift_customers' } });
   ok(s.status === 200 && s.body.value.length === 3 && typeof s.body.hash === 'string', 'readWithHash vift_customers (chef, customer_manage): fullt värde + hash');
   const ny = { id: 'CU-SMOKE', type: 'foretag', name: 'Smoke AB', orgNr: '556000-0001', active: true };

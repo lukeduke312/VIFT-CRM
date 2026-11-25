@@ -1,6 +1,6 @@
 'use strict';
 /*
- * T3-B (2026-11-28): facit för de NYA, ännu inte installerade migrationerna.
+ * T3-B (2026-11-28): facit för de NYA, ännu inte installerade migrationerna (T3-B, T3-C, T3-D).
  *
  *   node tests/local/t3-andringar.js           verifierar tests/local/t3-andringar.json
  *   node tests/local/t3-andringar.js --skriv   skriver om filen från en ny lokal kedja
@@ -75,6 +75,27 @@ const T3C = {
   'public.store.store_direct_write_allowlist_update': 'F18: RESTRICTIVE UPDATE, vitlista i RLS (WITH CHECK).',
   'store.protect_direct_write_allowlist': 'F18: trigger som verkställer vitlistan för authenticated/anon (BEFORE INSERT/UPDATE/DELETE).',
 };
+/* T3-D (2026-11-28): urval per post (SÄK-2, B4, Ö7, D-12–D-15) och aktivitetsloggen (D-22).
+   Objekt som T3-C redan ändrat och T3-D ändrar igen registreras med paket T3-D (slutläget). */
+const T3D = {
+  _vift_ao_visible: 'T3-B:s poolregel i SQL (canViewWorkOrder): ao_view_all, eller ao_view_own + tilldelad / öppen pool med ao_pool_take.',
+  _vift_ao_content_visible: 'Innehåll (historik, logg, kund/fastighet/kontakt, offertreferens): synlig och inte via öppen pool (Q3, K-03).',
+  _vift_post_refs: 'Urvalsmängden per anropare: AO med innehåll och refererade kunder, fastigheter, objekt, offerter och personal.',
+  _vift_kund_las: 'Roller som får läsa hela kund-/fastighetsregistret (skyddade fält borttagna); övriga urval per uppdrag (D-13).',
+  _vift_staff_external: 'Extern användare (bara D-04:s tilläggsbehörigheter): bara namn och titel för personal på egna AO (D-14, SEC-B3-04).',
+  _vift_task_ao: 'Uppgiftens AO-koppling (relatedType workOrder + relatedId, annars workOrderId).',
+  _vift_activity_ao_type: 'AO-händelser i aktivitetsloggen som fältet får läsa för egna AO (B4).',
+  _vift_activity_type_perms: 'Händelsetyper per behörighet i appendActivity (D-22, speglas i activity-log.ts TYPE_PERMS).',
+  _vift_ref_visible: 'Referens i appendActivity måste gå att se för anroparen (D-22, ref_not_visible).',
+  vift_store_full_access: 'T3-C + T3-D: vift_activityLog bara ao_view_all/admin_manage, vift_activities bara admin_manage eller ao_edit+ao_view_all (D-15), vift_properties kräver objects_sensitive, vift_propertyContacts som kunder (REST-läsning stängd för övriga).',
+  vift_store_project: 'T3-C + T3-D: urval per post för aktivitetslogg, uppgifter, offertreferens, kunder/fastigheter/objekt/kontakter och personalens kontaktuppgifter; portkoder och nyckelinformation aldrig (D-12–D-15, B4, K-04).',
+  activity_log_append: 'T3-D: ny signatur med anroparens id och behörigheter; typ (type_not_allowed) och referenser (ref_not_visible) under lås; servern sätter aktör och tid (D-22). Den gamla 2-argumentsversionen ersatt.',
+};
+/* Den gamla 3-argumentsversionen av vift_store_project togs bort av T3-C (inte T3-D). */
+const T3D_EJ = new Set(['vift_store_project(p_key text, p_value jsonb, p_perms text[])']);
+/* Objekt som T3-C ändrade och T3-D ändrar igen: registreras som T3-D (md5 = slutläget) med
+   aven:'T3-C', så att T3-C:s rollbacktest räknar dem till T3-C:s objekt. */
+const T3D_AVEN_T3C = new Set(['vift_store_full_access(p_key text, p_perms text[])', 'vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)']);
 const ws = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
 
 const r = byggReplik({ data: false, schemakontroll: false });
@@ -97,17 +118,35 @@ try {
   for (const x of rap.filter((y) => y.kategori === 'OFÖRKLARAD')) {
     const k = x.typ + ':' + x.key;
     const namn = x.key.replace(/\(.*$/, '');
+    const dd = T3D_EJ.has(x.key) ? null : (T3D[namn] || T3D[x.key]);
     const c = T3C[namn] || T3C[x.key];
     objekt[k] = {
-      paket: c ? 'T3-C' : 'T3-B',
+      paket: dd ? 'T3-D' : c ? 'T3-C' : 'T3-B',
       andring: x.status === 'EXTRA LOKALT' ? 'NY' : x.status === 'SAKNAS LOKALT' ? 'BORTTAGEN (ersatt av ny signatur)' : 'ÄNDRAD',
       md5: defMd5(x.typ, x.key),
-      beskrivning: c || BESKRIVNING[namn] || '(beskrivning saknas)',
+      beskrivning: dd || c || BESKRIVNING[namn] || '(beskrivning saknas)',
     };
+    if (dd && T3D_AVEN_T3C.has(x.key)) objekt[k].aven = 'T3-C';
+  }
+  /* T3-D: md5 i T3-C-läget (kedjan utan T3-D) för objekt som båda paketen ändrar. */
+  const aven = Object.keys(objekt).filter((k) => objekt[k].aven === 'T3-C');
+  if (aven.length) {
+    const t3dRel = fs.readFileSync(path.join(r.rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
+      .filter((p) => /^\d{14}$/.test(p[0]) && /_t3d_/.test(p[1] || '')).map((p) => p[1]);
+    const rc = byggReplik({ data: false, schemakontroll: false, utelamna: t3dRel });
+    try {
+      const lokC = q(rc.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, pg_get_functiondef(p.oid) as def, coalesce(p.proacl::text,'NULL') as acl
+        from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prokind in ('f','p')`);
+      for (const k of aven) {
+        const key = k.replace(/^funktion:/, '');
+        const f = lokC.find((y) => y.name + '(' + y.args + ')' === key);
+        objekt[k].md5_t3c = f ? md5(f.def) + '|' + aclSet(f.acl) : 'saknas';
+      }
+    } finally { rc.stang(); }
   }
   const sorterat = Object.fromEntries(Object.keys(objekt).sort().map((k) => [k, objekt[k]]));
   if (process.argv.includes('--skriv')) {
-    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T3-B och T3-C (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
+    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T3-B, T3-C och T3-D (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
     console.log('Skrev ' + FIL + ': ' + Object.keys(sorterat).length + ' objekt');
     const utan = Object.entries(sorterat).filter(([, v]) => v.beskrivning === '(beskrivning saknas)');
     if (utan.length) { console.log('FAIL beskrivning saknas: ' + utan.map(([k]) => k).join(', ')); process.exitCode = 1; }

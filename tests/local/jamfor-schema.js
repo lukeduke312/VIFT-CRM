@@ -87,6 +87,9 @@ const add = (typ, key, status, detalj) => {
   if (!k && t && status !== 'IDENTISK' && status !== 'SAMMA KOD') {
     const nu = lokalDef(typ, key);
     if (t.md5 === nu) k = t.paket + ' (' + t.andring + ', ej installerad i STAGING): ' + t.beskrivning;
+    /* T3-D: ett objekt som T3-C ändrade och T3-D ändrar igen godtas i T3-C-läget BARA när
+       T3_LAGE=T3-C uttryckligen anges (efter en T3-D-rollback eller före T3-D-installationen). */
+    else if (process.env.T3_LAGE === 'T3-C' && t.md5_t3c && t.md5_t3c === nu) k = 'T3-C (läge före T3-D, ej installerad i STAGING): ' + t.beskrivning;
     else detalj = (detalj ? detalj + '; ' : '') + 'registrerad som ' + t.paket + '-ändring men md5/ACL avviker (' + nu + ' ≠ ' + t.md5 + ')';
   }
   const forklarad = status !== 'IDENTISK' && (!!k || status === 'SAMMA KOD');

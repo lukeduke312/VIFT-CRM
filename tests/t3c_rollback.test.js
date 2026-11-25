@@ -3,7 +3,7 @@
  * T3-C (2026-11-28): installation → rollback → ny installation, lokalt (testplanen T3-C,
  * "Rollback: föregående funktionsdefinitioner och policyer. Data ändras inte av paketet.").
  *
- *  1. Repliken med hela repokedjan (STAGING + T3-B + T3-C) och syntetiska data, plus data som
+ *  1. Repliken med repokedjan utan T3-D (STAGING + T3-B + T3-C) och syntetiska data, plus data som
  *     T3-C-koden skapar (personal- och rollskrivningar under låset, en inaktiverad användare,
  *     en notis och ett servervärde i vift_lastChanged via REST).
  *  2. supabase/rollback/T3-C/rollback_t3c.sql: schemat blir STAGING + registrerade T3-B-ändringar
@@ -13,7 +13,7 @@
  *     två argument, STAGING:s REST-regler).
  *  4. Ny installation av de två T3-C-migrationerna (STOP-kontrollerna godtar STAGING-versionen)
  *     → schemat = STAGING + registrerade T3-ändringar; en andra körning stoppas.
- *  5. Rollback i omvänd ordning (T3-C, sedan T3-B) ger exakt STAGING-facit.
+ *  5. Rollback i omvänd ordning (T3-D, T3-C, sedan T3-B) ger exakt STAGING-facit.
  * Inget körs mot Supabase.
  */
 const path = require('path');
@@ -32,10 +32,14 @@ const jamfor = (db, ignorera) => {
   catch (e) { return { kod: e.status || 1, ut: String(e.stdout || '') }; }
 };
 const oforklarade = (r) => Number((/(\d+) oförklarade/.exec(r.ut) || [])[1]);
-const t3c = Object.entries(JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't3-andringar.json'), 'utf8')).objekt).filter(([, v]) => v.paket === 'T3-C').map(([k]) => k);
+const t3c = Object.entries(JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't3-andringar.json'), 'utf8')).objekt).filter(([, v]) => v.paket === 'T3-C' || v.aven === 'T3-C').map(([k]) => k);
+// T3-D (2026-11-28) installeras efter T3-C och rullas tillbaka före den (tests/t3d_rollback.test.js).
+// Här prövas T3-C för sig: kedjan utan T3-D-migrationerna. Steg 4 installerar T3-D igen ovanpå,
+// så att schemat kan jämföras med alla registrerade T3-ändringar (T3-D ändrar två T3-C-objekt).
+const T3D = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3d_/.test(p[1] || '')).map((p) => p[1]);
 
 ok(fs.readFileSync(t3cRb.UT, 'utf8') === t3cRb.sql(), 'rollback_t3c.sql är aktuell (genererad ur STAGING-facit av tests/local/t3c-rollback.js)');
-const r = byggReplik({});
+const r = byggReplik({ utelamna: T3D, schemakontroll: false });
 const db = r.db;
 const U = r.U;
 try {
@@ -76,6 +80,8 @@ try {
   let fel = null;
   try { nya.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
   ok(!fel && nya.length === 2, 'ny installation efter rollback: de 2 T3-C-migrationerna går igenom (STOP-kontrollerna godtar STAGING-versionen)', fel);
+  try { T3D.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
+  ok(!fel && T3D.length === 2, 'T3-D (installeras efter T3-C) går igenom ovanpå den nya T3-C-installationen', fel);
   const efterNy = jamfor(db, false);
   ok(oforklarade(efterNy) === 0 && !/OBS: T3-ändringar som inte syns/.test(efterNy.ut), 'ny installation: schemat = STAGING + alla registrerade T3-ändringar (0 oförklarade)');
   let stop = null;
@@ -85,12 +91,13 @@ try {
   try { psqlFile(db, path.join(rot, nya[1])); } catch (e) { stop = e.message; }
   ok(stop && /T3-C STOP/.test(stop), 'STOP-kontroll: en andra körning av 20261128000005 avbryts', stop);
 
-  // 5. Omvänd ordning: T3-C och sedan T3-B → exakt STAGING.
+  // 5. Omvänd ordning: T3-D, T3-C och sedan T3-B → exakt STAGING.
   const fore2 = ksTa(db, KS);
+  psqlFile(db, path.join(rot, 'rollback', 'T3-D', 'rollback_t3d.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-C', 'rollback_t3c.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-B', 'rollback_t3b.sql'));
   const staging = jamfor(db, true);
-  ok(oforklarade(staging) === 0, 'rollback T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit (0 oförklarade utan T3-ändringar)', staging.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
-  ok(ksDiff(fore2, ksTa(db, KS)).length === 0, 'rollback T3-C + T3-B: ingen data ändrad');
+  ok(oforklarade(staging) === 0, 'rollback T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit (0 oförklarade utan T3-ändringar)', staging.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
+  ok(ksDiff(fore2, ksTa(db, KS)).length === 0, 'rollback T3-D + T3-C + T3-B: ingen data ändrad');
 } finally { r.stang(); }
 avsluta();
