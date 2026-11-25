@@ -1,14 +1,14 @@
 {
   "summary": {
-    "when": "2026-11-25T08:19:28.578Z",
+    "when": "2026-11-25T14:49:31.514Z",
     "target": "simulerad backend (FakeSupabase)",
     "browser": "Chromium (Playwright)",
-    "total": 218,
-    "passed": 216,
+    "total": 231,
+    "passed": 229,
     "failed": 0,
     "blocked": 1,
     "known": 1,
-    "durationMs": 1588338
+    "durationMs": 1656172
   },
   "results": [
     {
@@ -18,12 +18,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 942,
+      "ms": 988,
       "notes": [
         "Laddade 15 AO och 7 kunder"
       ],
       "metrics": {
-        "inloggning → app laddad (ms)": 892
+        "inloggning → app laddad (ms)": 936
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -38,7 +38,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 383,
+      "ms": 387,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -56,7 +56,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 858,
+      "ms": 930,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -72,7 +72,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1486,
+      "ms": 1426,
       "notes": [
         "ekonomi såg 6 poster, fältarbetaren 3"
       ],
@@ -90,14 +90,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1138,
+      "ms": 1186,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 7
     },
     {
       "id": "AUTH-06",
@@ -106,14 +106,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 923,
+      "ms": 948,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 5
+      "requests": 3
     },
     {
       "id": "PAGES-01",
@@ -122,14 +122,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14490,
+      "ms": 14674,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid per sida (ms)": 364,
-        "långsammaste sida (ms)": 391
+        "medel renderingstid per sida (ms)": 366,
+        "långsammaste sida (ms)": 393
       },
       "consoleErrors": [],
       "netErrors": [
@@ -147,7 +147,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8723,
+      "ms": 9113,
       "notes": [
         "23 menyval klickade"
       ],
@@ -167,13 +167,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14618,
+      "ms": 14885,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (desktop, ms)": 364
+        "medel renderingstid (desktop, ms)": 366
       },
       "consoleErrors": [],
       "netErrors": [
@@ -191,13 +191,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14556,
+      "ms": 14655,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (laptop, ms)": 363
+        "medel renderingstid (laptop, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
@@ -215,7 +215,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14580,
+      "ms": 14592,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -239,13 +239,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14505,
+      "ms": 14660,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (iphone, ms)": 363
+        "medel renderingstid (iphone, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
@@ -263,13 +263,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14508,
+      "ms": 14567,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (android, ms)": 363
+        "medel renderingstid (android, ms)": 365
       },
       "consoleErrors": [],
       "netErrors": [
@@ -287,12 +287,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3452,
+      "ms": 3642,
       "notes": [
         "besked: Kund skapad"
       ],
       "metrics": {
-        "spara ny kund → bekräftelse (ms)": 340
+        "spara ny kund → bekräftelse (ms)": 347
       },
       "consoleErrors": [],
       "netErrors": [
@@ -310,7 +310,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2140,
+      "ms": 2216,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -326,7 +326,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2482,
+      "ms": 2887,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -344,7 +344,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2439,
+      "ms": 2617,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -360,7 +360,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1753,
+      "ms": 1743,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -376,7 +376,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2516,
+      "ms": 2801,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -394,7 +394,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2972,
+      "ms": 3054,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -415,7 +415,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2792,
+      "ms": 2990,
       "notes": [
         "objektformulär: new-obj-type, new-obj-num, new-obj-name, new-obj-entrance, new-obj-stairwell, new-obj-floor, new-obj-area, new-obj-status, new-obj-access"
       ],
@@ -438,7 +438,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2656,
+      "ms": 2826,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -454,7 +454,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8712,
+      "ms": 9496,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -474,7 +474,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4989,
+      "ms": 5379,
       "notes": [
         "serverkontrollen är modellerad — måste upprepas mot riktig STAGING"
       ],
@@ -497,12 +497,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2219,
+      "ms": 2256,
       "notes": [
         "besked: AO-(sparas…) skapad"
       ],
       "metrics": {
-        "skapa AO → serverbekräftad (ms)": 1369
+        "skapa AO → serverbekräftad (ms)": 1348
       },
       "consoleErrors": [],
       "netErrors": [
@@ -519,7 +519,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4137,
+      "ms": 4263,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -538,7 +538,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2919,
+      "ms": 2853,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -558,7 +558,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1609,
+      "ms": 1684,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -581,7 +581,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3338,
+      "ms": 3437,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -607,7 +607,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4170,
+      "ms": 4139,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -627,7 +627,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2781,
+      "ms": 2888,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -647,7 +647,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5978,
+      "ms": 6087,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -668,7 +668,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3156,
+      "ms": 3386,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -688,7 +688,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2830,
+      "ms": 2995,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -708,7 +708,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1678,
+      "ms": 1916,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -728,7 +728,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1717,
+      "ms": 1738,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -751,7 +751,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3250,
+      "ms": 3688,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -771,7 +771,7 @@
       "kind": "ui",
       "status": "known",
       "error": "Kontroll misslyckades: båda loggposterna borde finnas kvar — loggen skickas som hel array (G5)",
-      "ms": 5156,
+      "ms": 5324,
       "notes": [
         "A kvar: false, B kvar: true"
       ],
@@ -796,7 +796,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3862,
+      "ms": 3840,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -817,9 +817,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3119,
+      "ms": 3279,
       "notes": [
-        "id: LOG-1795000000000-567f9fd1, LOG-1795000000000-06973456"
+        "id: LOG-1795000000000-70af56bb, LOG-1795000000000-1360f0b0"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -840,7 +840,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3388,
+      "ms": 3378,
       "notes": [],
       "metrics": {
         "patch_ao per loggpost": 1
@@ -862,7 +862,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2212,
+      "ms": 2374,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -882,7 +882,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1768,
+      "ms": 1764,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -902,7 +902,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2969,
+      "ms": 3088,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -916,7 +916,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 19
     },
     {
       "id": "AO-08",
@@ -925,7 +925,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 850,
+      "ms": 940,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -943,7 +943,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2966,
+      "ms": 3074,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -963,7 +963,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2611,
+      "ms": 2678,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -984,7 +984,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5118,
+      "ms": 5205,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1005,11 +1005,11 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2387,
+      "ms": 2393,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
-        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-9cbf75ee-1408-407e-8b37-2ef10fe57ba6 : forbidden"
+        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-06f67a90-a0dc-4fd4-9526-9592152dffd3 : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1026,7 +1026,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1343,
+      "ms": 1383,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1044,7 +1044,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9016,
+      "ms": 9098,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1055,7 +1055,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 29
+      "requests": 30
     },
     {
       "id": "TIME-06",
@@ -1064,7 +1064,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 870,
+      "ms": 881,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1080,7 +1080,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2739,
+      "ms": 2767,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1098,7 +1098,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4487,
+      "ms": 4577,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1118,16 +1118,16 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 18574,
+      "ms": 18951,
       "notes": [
         "offertguide: 3952 / 988 / 4940 kr; OfferCalc: 3952 / 988 / 4940",
         "AO prismodell fast, fast pris 3952",
-        "underlag: [{\"id\":\"fixed:AO-0613bde7-48dc-46e7-9a9a-1ed7269dac2d\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"fixed:AO-321320e9-b5c4-424d-8154-20426feec13e\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
         "faktura: ex 3952, moms 988, totalt 4940"
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-0613bde7-48dc-46e7-9a9a-1ed7269dac2d : forbidden"
+        "[WorkOrderService] Serverskrivning avvisad för AO-321320e9-b5c4-424d-8154-20426feec13e : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1139,7 +1139,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 46
+      "requests": 47
     },
     {
       "id": "OFF-03",
@@ -1148,7 +1148,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3617,
+      "ms": 3660,
       "notes": [
         "guide 1890 / 473 / 2363; OfferCalc 2100 − 210 = 1890, moms 473, totalt 2363"
       ],
@@ -1168,7 +1168,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10893,
+      "ms": 10799,
       "notes": [
         "toasts vid serverfel: Sparar… / Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1181,7 +1181,7 @@
       "netErrors": [
         "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "GET /functions/v1/offer-token-validate?t=5168101ce1063950a25aca8db2cb3e93a34dde242a2c0db4541178901a43e69a → 403 {\"error\":\"revoked\"}"
+        "GET /functions/v1/offer-token-validate?t=b81a869a3047336233fd5630d578d831e51226bca0fde72cb7272ae6a34f83f3 → 403 {\"error\":\"revoked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1194,7 +1194,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 976,
+      "ms": 995,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1213,7 +1213,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1263,
+      "ms": 1295,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1231,7 +1231,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 864,
+      "ms": 938,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1249,7 +1249,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9358,
+      "ms": 9427,
       "notes": [
         "5 offerter kontrollerade"
       ],
@@ -1269,17 +1269,17 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11296,
+      "ms": 11370,
       "notes": [
-        "underlag: [{\"id\":\"time:TID-df67edbf-9003-40dd-9646-696e0eea974d\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc:M1795593462037\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"time:TID-782e610c-5943-456d-97de-647b506a2913\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-584598bf-4581-4735-bb4a-fd1f961fdcb5:M1795616804546\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
         "ROT auto i fakturan: 297 kr; offertens regel: 297 kr",
-        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
+        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-584598bf-4581-4735-bb4a-fd1f961fdcb5: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
         "faktura: ex 891.34, moms 222.84, totalt 1114.18, ROT 297, kunden betalar 817.1800000000001",
         "OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen \"fakturerad\" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk."
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc : forbidden"
+        "[WorkOrderService] Serverskrivning avvisad för AO-584598bf-4581-4735-bb4a-fd1f961fdcb5 : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1290,7 +1290,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 28
+      "requests": 29
     },
     {
       "id": "SVC-01",
@@ -1299,7 +1299,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11979,
+      "ms": 12090,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1318,7 +1318,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6872,
+      "ms": 6784,
       "notes": [
         "toasts: Sparar… / Utförandet kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1343,7 +1343,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6199,
+      "ms": 6241,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1361,7 +1361,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5494,
+      "ms": 5687,
       "notes": [
         "toasts: Sparar… / Rollen \"Tekniker / Personal\" kunde inte sparas — behörigheterna är OFÖRÄNDRADE — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1386,7 +1386,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4814,
+      "ms": 4915,
       "notes": [
         "toasts: Sparar… / Ändringen för Sofia Lindgren kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1411,7 +1411,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7051,
+      "ms": 7172,
       "notes": [
         "toasts: Sparat / Varning: servern bekräftade inte den senaste ändringen (artiklar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1436,7 +1436,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 12336,
+      "ms": 12356,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1458,7 +1458,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4240,
+      "ms": 4250,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1478,7 +1478,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5246,
+      "ms": 5317,
       "notes": [
         "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (ronderingar). Den kan vara osparad — kontrollera och försök igen. / Ronderingen kunde inte skapas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1515,9 +1515,9 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8766,
+      "ms": 8674,
       "notes": [
-        "AO för tillfället: AO-72ad6ced-dfa7-4e24-85db-ba09c7bd2833 2026-11-25"
+        "AO för tillfället: AO-dbdd420b-74b1-4fe4-a225-a12d44954440 2026-11-25"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -1537,7 +1537,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6828,
+      "ms": 6759,
       "notes": [
         "toasts: Sparar… / Ändringen kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1573,7 +1573,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6694,
+      "ms": 6586,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1592,7 +1592,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8671,
+      "ms": 8593,
       "notes": [
         "serverns per-nyckel-behörighet för activities kan inte verifieras i simulerad backend (G4) — upprepa mot STAGING"
       ],
@@ -1613,7 +1613,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7086,
+      "ms": 7055,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1633,7 +1633,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6552,
+      "ms": 6595,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1651,7 +1651,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7155,
+      "ms": 7240,
       "notes": [
         "toasts: Varning: servern bekräftade inte den senaste ändringen (kunder, importloggar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1683,7 +1683,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4592,
+      "ms": 4654,
       "notes": [
         "property: ﻿Namn;Fastighetsbeteckning;Adress;Postnummer;Ort;Objektnummer;Fastighetstyp;Byggnadsår;Antal lägenheter;Total yta (m²);Förvaltningsform;Driftområde;Status;Antec",
         "propertyObject: ﻿Namn;Objektnummer;Typ (lagenhet/lokal/etc.);Adress;Postnummer;Ort;Port/Entré;Trapphus;Våning;Yta (m²);Status;Beskrivning\r",
@@ -1706,9 +1706,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3893,
+      "ms": 3924,
       "notes": [
-        "skapade: AO-e32f2582-464c-4685-b40d-8616776223a5, AO-11f42f59-0f70-425a-a4d2-eb08ff14814e, AO-50998cc1-254b-418c-b2f5-aac08dfef4bc"
+        "skapade: AO-db3af143-27c6-4203-a5cc-1c20cfd4a6c3, AO-d402c282-f2f5-4242-9342-eb5736f36012, AO-860c6d04-48eb-41e9-bf5b-b607f14f8358"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -1726,7 +1726,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4109,
+      "ms": 4205,
       "notes": [
         "förväntat fakturerat (exkl. moms): 17975"
       ],
@@ -1746,7 +1746,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7583,
+      "ms": 7598,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1766,7 +1766,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3006,
+      "ms": 3011,
       "notes": [
         "simulerade push-utskick: 0 (inga riktiga utskick — send-push registreras bara)"
       ],
@@ -1784,7 +1784,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3574,
+      "ms": 3587,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1810,7 +1810,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5491,
+      "ms": 5731,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1832,12 +1832,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10659,
+      "ms": 10687,
       "notes": [
-        "besked efter 9321 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
+        "besked efter 9336 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {
-        "feedback_ms": 9319
+        "feedback_ms": 9333
       },
       "consoleErrors": [
         "[persist] merge-skrivning avvisad för vift_customers: network_error",
@@ -1859,7 +1859,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8505,
+      "ms": 8611,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1882,7 +1882,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1466,
+      "ms": 1519,
       "notes": [
         "offline-start: {\"hasLogin\":true,\"hasApp\":true,\"router\":true}"
       ],
@@ -1891,7 +1891,7 @@
       "netErrors": [],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 8
+      "requests": 9
     },
     {
       "id": "PERM-01",
@@ -1900,7 +1900,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 867,
+      "ms": 884,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1922,7 +1922,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2529,
+      "ms": 2626,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1951,7 +1951,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15827,
+      "ms": 16036,
       "notes": [
         "admin: 26 tillåtna, 0 nekade",
         "chef: 20 tillåtna, 6 nekade",
@@ -1980,24 +1980,24 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 39923,
+      "ms": 41099,
       "notes": [
         "observation: pollningen var pausad så länge sökfältet hade fokus",
-        "mätvärden: {\"inloggning_till_klar_ms\":932,\"anrop_vid_start\":5,\"ao_lista_ms\":168,\"ao_rader\":151,\"ao_detalj_ms\":32,\"kundlista_ms\":775,\"dashboard_ms\":146,\"rapport_tid_ms\":83,\"loneunderlag_ms\":1083,\"kalender_ms\":231}"
+        "mätvärden: {\"inloggning_till_klar_ms\":1087,\"anrop_vid_start\":5,\"ao_lista_ms\":271,\"ao_rader\":151,\"ao_detalj_ms\":31,\"kundlista_ms\":942,\"dashboard_ms\":226,\"rapport_tid_ms\":133,\"loneunderlag_ms\":1594,\"kalender_ms\":162}"
       ],
       "metrics": {
-        "inloggning_till_klar_ms": 932,
+        "inloggning_till_klar_ms": 1087,
         "anrop_vid_start": 5,
-        "ao_lista_ms": 168,
+        "ao_lista_ms": 271,
         "ao_rader": 151,
-        "ao_detalj_ms": 32,
-        "kundlista_ms": 775,
-        "dashboard_ms": 146,
-        "rapport_tid_ms": 83,
-        "loneunderlag_ms": 1083,
-        "kalender_ms": 231,
-        "kundsokning_ms": 258,
-        "sparning_kund_till_ack_ms": 37,
+        "ao_detalj_ms": 31,
+        "kundlista_ms": 942,
+        "dashboard_ms": 226,
+        "rapport_tid_ms": 133,
+        "loneunderlag_ms": 1594,
+        "kalender_ms": 162,
+        "kundsokning_ms": 395,
+        "sparning_kund_till_ack_ms": 32,
         "anrop_i_vila_35s": 5,
         "js_heap_mb": 17
       },
@@ -2016,7 +2016,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4028,
+      "ms": 4188,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2034,7 +2034,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2436,
+      "ms": 2540,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2052,7 +2052,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 21685,
+      "ms": 22003,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -2087,7 +2087,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2821,
+      "ms": 2818,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2103,7 +2103,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6062,
+      "ms": 6075,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2122,7 +2122,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4863,
+      "ms": 4970,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2140,7 +2140,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2068,
+      "ms": 2107,
       "notes": [
         "räknare: 13 aktiva jobb · 2 platser på kartan · 10 saknar koordinater"
       ],
@@ -2158,7 +2158,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1731,
+      "ms": 1755,
       "notes": [
         "händelser: 4"
       ],
@@ -2176,7 +2176,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3322,
+      "ms": 3356,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2194,17 +2194,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3111,
+      "ms": 3226,
       "notes": [
         "laptop: {\"text\":\"Solgläntan Hus A\",\"name\":\"Solgläntan Hus A\",\"num\":\"OBJ-001\",\"sub\":\"OBJ-001\\n·\\nFlerbostadshus\",\"clipped\":false,\"nameCount\":1}",
         "iphone: {\"text\":\"Solgläntan Hus A\",\"name\":\"Solgläntan Hus A\",\"num\":\"OBJ-001\",\"sub\":\"OBJ-001·Flerbostadshus\",\"clipped\":false,\"nameCount\":1}"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 10
+      "requests": 11
     },
     {
       "id": "UI-BDG-01",
@@ -2213,7 +2215,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3357,
+      "ms": 3420,
       "notes": [
         "laptop: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}",
         "iphone: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}"
@@ -2234,7 +2236,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2813,
+      "ms": 2943,
       "notes": [
         "badge: \n        2 av 4 klara2 kvar\n        \n          \n        \n        2 utförda2 ej påbörjade\n      "
       ],
@@ -2254,7 +2256,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4055,
+      "ms": 4091,
       "notes": [
         "badge A: \n        1 av 4 klara3 kvar\n        \n          \n        \n        1 utförd2 pågår1 ej påbörjad\n      "
       ],
@@ -2277,7 +2279,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4031,
+      "ms": 4145,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2300,7 +2302,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1409,
+      "ms": 1459,
       "notes": [
         "efter synk: utford (servern: utförd)"
       ],
@@ -2321,7 +2323,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2140,
+      "ms": 2199,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2340,7 +2342,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2550,
+      "ms": 2585,
       "notes": [
         "iphone: {\"scroll\":false,\"minBtn\":36,\"below\":true,\"right\":false,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}",
         "laptop: {\"scroll\":false,\"minBtn\":24,\"below\":false,\"right\":true,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}"
@@ -2362,7 +2364,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2535,
+      "ms": 2502,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2380,7 +2382,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22651,
+      "ms": 22460,
       "notes": [
         "aktivitetslogg-skrivningar nekade av servern: 3; toasts: [\"\",\"\",\"\"]"
       ],
@@ -2408,7 +2410,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 13
+      "requests": 17
     },
     {
       "id": "TASK-02",
@@ -2417,7 +2419,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3304,
+      "ms": 3294,
       "notes": [
         "direktanrop: {\"complete_other\":403,\"forge_new\":403,\"delete_other\":403,\"full_write\":403}"
       ],
@@ -2441,7 +2443,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5151,
+      "ms": 5186,
       "notes": [
         "poster: [[\"time_entry_created\",\"ST-004\",\"klientrapport\"],[\"work_order_updated\",\"ST-004\",\"klientrapport\"]]"
       ],
@@ -2465,7 +2467,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2181,
+      "ms": 2023,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2485,7 +2487,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8493,
+      "ms": 8601,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2509,7 +2511,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8828,
+      "ms": 8943,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2530,7 +2532,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3639,
+      "ms": 3630,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2548,7 +2550,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3663,
+      "ms": 3726,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2566,7 +2568,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 32235,
+      "ms": 32596,
       "notes": [
         "admin: 48 sidvisningar",
         "falt: 18 sidvisningar",
@@ -2594,7 +2596,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7599,
+      "ms": 7662,
       "notes": [
         "OFF-VAT25: AO skapad",
         "OFF-VAT12: nekad med förklaring",
@@ -2619,7 +2621,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 45620,
+      "ms": 45709,
       "notes": [
         "admin: 49 sidvisningar"
       ],
@@ -2645,7 +2647,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 38904,
+      "ms": 39165,
       "notes": [
         "chef: 43 sidvisningar"
       ],
@@ -2671,7 +2673,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 20738,
+      "ms": 20846,
       "notes": [
         "ekonomi: 29 sidvisningar"
       ],
@@ -2693,7 +2695,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 13769,
+      "ms": 13922,
       "notes": [
         "falt: 19 sidvisningar"
       ],
@@ -2714,7 +2716,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4768,
+      "ms": 4705,
       "notes": [
         "skrivningar: drag 0, efter change 1, efter oförändrad change 1; förhandsvisning #aabbcc; sparat #aabbcc"
       ],
@@ -2734,7 +2736,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3287,
+      "ms": 3327,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2752,7 +2754,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5921,
+      "ms": 5950,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2770,7 +2772,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4235,
+      "ms": 4305,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2788,7 +2790,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7722,
+      "ms": 7895,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2806,7 +2808,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3938,
+      "ms": 3995,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2822,7 +2824,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3137,
+      "ms": 3217,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2840,7 +2842,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 16780,
+      "ms": 16939,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2856,7 +2858,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6373,
+      "ms": 6400,
       "notes": [
         "A (GL blockerat): 10 aktiva jobb · 0 med koordinater · 10 saknar koordinater | Kartan kunde inte laddas Kartbiblioteket (Mapbox GL) gick inte att nå. Det beror inte på jobbens adresser — listan fungerar som vanligt. 0 av 10 jobb har koordinater. Visa jobb utan plats (10) | 10 av 10 aktiva jobb visas inte på kartan Geokodning saknas: 4 inte geokodade ännu Adressen behöver kompletteras: 6 adress saknar ort/postnummer Visa vilka",
         "B (GL ok, geokodning 403): Inga av de 10 aktiva jobben har koordinater 2 inte geokodade ännu · 2 geokodning misslyckades · 6 adress saknar ort/postnummer. Adresserna behöver geokodas. Visa jobb utan plats (10) | sökningar: 1",
@@ -2879,7 +2881,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2542,
+      "ms": 2527,
       "notes": [
         "status: {\"nocity\":7,\"notfound\":1,\"geocoded\":40,\"skipped\":5,\"noaddr\":1,\"coords\":1} sökningar: 40 | 55 aktiva jobb · 40 platser på kartan · 14 saknar koordinater | 14 av 55 aktiva jobb visas inte på kartan Geokodning saknas: 5 inte geokodade ännu Adressen behöver kompletteras: 7 adress saknar ort/postnummer 1 saknar adress 1 adressen hittades inte Visa vilka"
       ],
@@ -2897,7 +2899,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3567,
+      "ms": 3531,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2915,7 +2917,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6409,
+      "ms": 6562,
       "notes": [
         "d25_390: {\"odRows\":3,\"odCount\":\"40\",\"odH\":274,\"odGo\":true,\"poolVis\":3,\"poolFirst\":\"Akut\",\"poolMore\":true,\"poolCount\":\"33 väntar\",\"mapRows\":25,\"mapMore\":\"Visa alla 190 aktiva jobb \",\"wrapped\":0,\"truncated\":7,\"bad\":false}",
         "d25_1366: {\"odRows\":3,\"odCount\":\"40\",\"odH\":241,\"odGo\":true,\"poolVis\":4,\"poolFirst\":\"Akut\",\"poolMore\":true,\"poolCount\":\"33 väntar\",\"mapRows\":25,\"mapMore\":\"Visa alla 190 aktiva jobb \",\"wrapped\":0,\"truncated\":23,\"bad\":false}",
@@ -2935,7 +2937,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5040,
+      "ms": 5206,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2953,7 +2955,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4225,
+      "ms": 4264,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2971,7 +2973,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8932,
+      "ms": 8998,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2991,7 +2993,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3412,
+      "ms": 3472,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3009,7 +3011,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4071,
+      "ms": 4242,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3027,43 +3029,43 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4463,
+      "ms": 5132,
       "notes": [
-        "mätvärden (ms, lokal headless Chromium, simulerad server): {\"10\":{\"rendering_ms\":23,\"rader\":9,\"statusbyte_ms\":8,\"statusbyte_tillbaka_ms\":23,\"snabbval_ms\":12,\"snabbval_av_ms\":22,\"sokning_ms\":142,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":16,\"visa_alla_ms\":16,\"rader_visa_alla\":9},\"100\":{\"rendering_ms\":65,\"rader\":84,\"statusbyte_ms\":17,\"statusbyte_tillbaka_ms\":42,\"snabbval_ms\":19,\"snabbval_av_ms\":63,\"sokning_ms\":145,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":23,\"visa_alla_ms\":47,\"rader_visa_alla\":84},\"1000\":{\"rendering_ms\":86,\"rader\":150,\"statusbyte_ms\":81,\"statusbyte_tillbaka_ms\":107,\"snabbval_ms\":78,\"snabbval_av_ms\":75,\"sokning_ms\":187,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":73,\"visa_alla_ms\":402,\"rader_visa_alla\":834}}"
+        "mätvärden (ms, lokal headless Chromium, simulerad server): {\"10\":{\"rendering_ms\":26,\"rader\":9,\"statusbyte_ms\":11,\"statusbyte_tillbaka_ms\":21,\"snabbval_ms\":14,\"snabbval_av_ms\":17,\"sokning_ms\":138,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":17,\"visa_alla_ms\":16,\"rader_visa_alla\":9},\"100\":{\"rendering_ms\":70,\"rader\":84,\"statusbyte_ms\":17,\"statusbyte_tillbaka_ms\":50,\"snabbval_ms\":27,\"snabbval_av_ms\":50,\"sokning_ms\":164,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":39,\"visa_alla_ms\":88,\"rader_visa_alla\":84},\"1000\":{\"rendering_ms\":131,\"rader\":150,\"statusbyte_ms\":116,\"statusbyte_tillbaka_ms\":121,\"snabbval_ms\":106,\"snabbval_av_ms\":110,\"sokning_ms\":213,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":64,\"visa_alla_ms\":541,\"rader_visa_alla\":834}}"
       ],
       "metrics": {
-        "10 AO: rendering_ms": 23,
+        "10 AO: rendering_ms": 26,
         "10 AO: rader": 9,
-        "10 AO: statusbyte_ms": 8,
-        "10 AO: statusbyte_tillbaka_ms": 23,
-        "10 AO: snabbval_ms": 12,
-        "10 AO: snabbval_av_ms": 22,
-        "10 AO: sokning_ms": 142,
+        "10 AO: statusbyte_ms": 11,
+        "10 AO: statusbyte_tillbaka_ms": 21,
+        "10 AO: snabbval_ms": 14,
+        "10 AO: snabbval_av_ms": 17,
+        "10 AO: sokning_ms": 138,
         "10 AO: sokning_renderingar": 1,
-        "10 AO: sokning_enbart_rendering_ms": 16,
+        "10 AO: sokning_enbart_rendering_ms": 17,
         "10 AO: visa_alla_ms": 16,
         "10 AO: rader_visa_alla": 9,
-        "100 AO: rendering_ms": 65,
+        "100 AO: rendering_ms": 70,
         "100 AO: rader": 84,
         "100 AO: statusbyte_ms": 17,
-        "100 AO: statusbyte_tillbaka_ms": 42,
-        "100 AO: snabbval_ms": 19,
-        "100 AO: snabbval_av_ms": 63,
-        "100 AO: sokning_ms": 145,
+        "100 AO: statusbyte_tillbaka_ms": 50,
+        "100 AO: snabbval_ms": 27,
+        "100 AO: snabbval_av_ms": 50,
+        "100 AO: sokning_ms": 164,
         "100 AO: sokning_renderingar": 1,
-        "100 AO: sokning_enbart_rendering_ms": 23,
-        "100 AO: visa_alla_ms": 47,
+        "100 AO: sokning_enbart_rendering_ms": 39,
+        "100 AO: visa_alla_ms": 88,
         "100 AO: rader_visa_alla": 84,
-        "1000 AO: rendering_ms": 86,
+        "1000 AO: rendering_ms": 131,
         "1000 AO: rader": 150,
-        "1000 AO: statusbyte_ms": 81,
-        "1000 AO: statusbyte_tillbaka_ms": 107,
-        "1000 AO: snabbval_ms": 78,
-        "1000 AO: snabbval_av_ms": 75,
-        "1000 AO: sokning_ms": 187,
+        "1000 AO: statusbyte_ms": 116,
+        "1000 AO: statusbyte_tillbaka_ms": 121,
+        "1000 AO: snabbval_ms": 106,
+        "1000 AO: snabbval_av_ms": 110,
+        "1000 AO: sokning_ms": 213,
         "1000 AO: sokning_renderingar": 1,
-        "1000 AO: sokning_enbart_rendering_ms": 73,
-        "1000 AO: visa_alla_ms": 402,
+        "1000 AO: sokning_enbart_rendering_ms": 64,
+        "1000 AO: visa_alla_ms": 541,
         "1000 AO: rader_visa_alla": 834
       },
       "consoleErrors": [],
@@ -3079,7 +3081,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 34033,
+      "ms": 34791,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3102,10 +3104,10 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2706,
+      "ms": 2829,
       "notes": [],
       "metrics": {
-        "klick → AO-detalj (ms)": 62
+        "klick → AO-detalj (ms)": 67
       },
       "consoleErrors": [],
       "netErrors": [
@@ -3122,7 +3124,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 13147,
+      "ms": 13485,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3145,7 +3147,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 11903,
+      "ms": 12168,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3170,7 +3172,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 23887,
+      "ms": 24426,
       "notes": [
         "155 tidigare åtgärder kontrollerade"
       ],
@@ -3199,7 +3201,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2348,
+      "ms": 2352,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3218,7 +3220,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 7693,
+      "ms": 7705,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3239,7 +3241,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 11570,
+      "ms": 11842,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3265,7 +3267,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 30301,
+      "ms": 31229,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3292,7 +3294,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22243,
+      "ms": 22455,
       "notes": [
         "iphone: 4 roller × 8 ordrar granskade"
       ],
@@ -3321,7 +3323,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22227,
+      "ms": 22577,
       "notes": [
         "laptop: 4 roller × 8 ordrar granskade"
       ],
@@ -3350,7 +3352,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6566,
+      "ms": 6796,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3372,7 +3374,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2492,
+      "ms": 2515,
       "notes": [
         "kö: 19 kandidater, 2 kräver åtgärd, total 61937.5 kr exkl. moms"
       ],
@@ -3390,7 +3392,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4822,
+      "ms": 4919,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3408,7 +3410,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4032,
+      "ms": 4212,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3426,7 +3428,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4989,
+      "ms": 5115,
       "notes": [
         "valt: 3 underlag valda · 2 kunder → 2 fakturautkast EXKL. MOMS 5 850,00 kr MOMS 1 462,50 kr INKL. MOMS 7 312,50 kr Avmarkera Skapa fakturautkast"
       ],
@@ -3448,7 +3450,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4890,
+      "ms": 4972,
       "notes": [
         "INV-QA-MIX (laptop): rader 1660 = ex 1660, moms 275 (25%:215, 12%:60, 0%:0), totalt 1935",
         "INV-QA-DISC: rader 1660 − rabatt 166 = 1494, moms 247.5, totalt 1741.5",
@@ -3468,22 +3470,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5281,
+      "ms": 5396,
       "notes": [
-        "10: {\"cands\":27,\"median\":1.1,\"groups\":7,\"more\":false,\"selMs\":11,\"deselMs\":3,\"selected\":27,\"expMs\":11,\"rowsShown\":27,\"after\":0}",
-        "100: {\"cands\":117,\"median\":3.9,\"groups\":25,\"more\":false,\"selMs\":17,\"deselMs\":4,\"selected\":117,\"expMs\":29,\"rowsShown\":117,\"after\":0}",
-        "1000: {\"cands\":1017,\"median\":9.1,\"groups\":30,\"more\":true,\"selMs\":23,\"deselMs\":5,\"selected\":1017,\"expMs\":65,\"rowsShown\":282,\"after\":0}"
+        "10: {\"cands\":27,\"median\":1.7,\"groups\":7,\"more\":false,\"selMs\":12,\"deselMs\":2,\"selected\":27,\"expMs\":10,\"rowsShown\":27,\"after\":0}",
+        "100: {\"cands\":117,\"median\":4.9,\"groups\":25,\"more\":false,\"selMs\":20,\"deselMs\":5,\"selected\":117,\"expMs\":38,\"rowsShown\":117,\"after\":0}",
+        "1000: {\"cands\":1017,\"median\":10.3,\"groups\":30,\"more\":true,\"selMs\":22,\"deselMs\":4,\"selected\":1017,\"expMs\":64,\"rowsShown\":282,\"after\":0}"
       ],
       "metrics": {
-        "10 kandidater: kompakt rendering (median ms)": 1.1,
-        "10 kandidater: Välj alla / avmarkera (ms)": "11 / 3",
-        "10 kandidater: Visa alla rader (ms, 27 rader)": 11,
-        "100 kandidater: kompakt rendering (median ms)": 3.9,
-        "100 kandidater: Välj alla / avmarkera (ms)": "17 / 4",
-        "100 kandidater: Visa alla rader (ms, 117 rader)": 29,
-        "1000 kandidater: kompakt rendering (median ms)": 9.1,
-        "1000 kandidater: Välj alla / avmarkera (ms)": "23 / 5",
-        "1000 kandidater: Visa alla rader (ms, 282 rader)": 65
+        "10 kandidater: kompakt rendering (median ms)": 1.7,
+        "10 kandidater: Välj alla / avmarkera (ms)": "12 / 2",
+        "10 kandidater: Visa alla rader (ms, 27 rader)": 10,
+        "100 kandidater: kompakt rendering (median ms)": 4.9,
+        "100 kandidater: Välj alla / avmarkera (ms)": "20 / 5",
+        "100 kandidater: Visa alla rader (ms, 117 rader)": 38,
+        "1000 kandidater: kompakt rendering (median ms)": 10.3,
+        "1000 kandidater: Välj alla / avmarkera (ms)": "22 / 4",
+        "1000 kandidater: Visa alla rader (ms, 282 rader)": 64
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -3498,7 +3500,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 18728,
+      "ms": 19017,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3518,7 +3520,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3608,
+      "ms": 3649,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3536,7 +3538,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4983,
+      "ms": 4984,
       "notes": [
         "laptop INV-QA-DEC: rader 1521.28 + avrundning 0.01 = 1521.29, moms 367.32, totalt 1888.61",
         "laptop INV-QA-DEC25: rader 1421.28 + avrundning 0.01 = 1421.29, moms 355.32, totalt 1776.61",
@@ -3556,7 +3558,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 3939,
+      "ms": 3988,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -3571,7 +3573,7 @@
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 13
     },
     {
       "id": "BILL-11",
@@ -3580,7 +3582,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7173,
+      "ms": 7261,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3598,7 +3600,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9191,
+      "ms": 9234,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3617,7 +3619,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10440,
+      "ms": 10454,
       "notes": [
         "skrivningar av vift_settings: 3 för 3 sparade ändringar"
       ],
@@ -3638,7 +3640,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4811,
+      "ms": 4940,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3656,7 +3658,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5802,
+      "ms": 5809,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3675,7 +3677,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2961,
+      "ms": 2855,
       "notes": [
         "nyckeltal: {\"Totalt\":\"108,42 h\",\"Debiterbart värde\":\"54 995 kr\",\"Intern kostnad (uppskattad)\":\"27 104 kr\",\"Tidposter\":\"27\",\"Attesterat\":\"33,67 h\"}"
       ],
@@ -3693,7 +3695,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 16330,
+      "ms": 16402,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3711,7 +3713,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2713,
+      "ms": 2969,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3727,7 +3729,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5320,
+      "ms": 5338,
       "notes": [
         "mx360 {\"w\":340,\"right\":350,\"vw\":360,\"stepsRight\":350,\"nSteps\":1,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":44,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}",
         "mx390 {\"w\":370,\"right\":380,\"vw\":390,\"stepsRight\":380,\"nSteps\":1,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":44,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}",
@@ -3750,7 +3752,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10161,
+      "ms": 10195,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3776,7 +3778,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8050,
+      "ms": 8094,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3799,7 +3801,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5288,
+      "ms": 5316,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3818,7 +3820,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7802,
+      "ms": 7936,
       "notes": [
         "mx390 pg-obj-detail {\"h\":118}",
         "mx390 pg-propobj-detail {\"h\":108}",
@@ -3850,7 +3852,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6960,
+      "ms": 6984,
       "notes": [
         "mx360 {\"days\":7,\"n\":5,\"minW\":228}",
         "mx390 {\"days\":7,\"n\":5,\"minW\":258}"
@@ -3872,17 +3874,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6358,
+      "ms": 6336,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 11
     },
     {
       "id": "MISC-ICON-01",
@@ -3891,7 +3892,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 17747,
+      "ms": 17795,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3914,7 +3915,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8874,
+      "ms": 8814,
       "notes": [
         "mx360 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":340}",
         "mx390 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":370}",
@@ -3939,7 +3940,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 11173,
+      "ms": 11255,
       "notes": [
         "mx360 {\"rows\":114,\"rowDisplay\":\"grid\",\"headShown\":false,\"w\":340,\"count\":\"Visar 114 av 114 avtal\"}",
         "mx390 {\"rows\":114,\"rowDisplay\":\"grid\",\"headShown\":false,\"w\":370,\"count\":\"Visar 114 av 114 avtal\"}",
@@ -3964,7 +3965,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4906,
+      "ms": 4948,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3982,7 +3983,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7387,
+      "ms": 7450,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4003,7 +4004,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7145,
+      "ms": 7122,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4022,7 +4023,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1852,
+      "ms": 1793,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4038,7 +4039,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8313,
+      "ms": 8179,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4056,7 +4057,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5828,
+      "ms": 5817,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4074,7 +4075,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5514,
+      "ms": 5652,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4092,7 +4093,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 25249,
+      "ms": 25406,
       "notes": [
         "utkast: Skicka offert + 5 menyposter",
         "skickad: Boka uppföljning + 9 menyposter",
@@ -4121,7 +4122,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10306,
+      "ms": 10246,
       "notes": [
         "15 offerter kontrollerade"
       ],
@@ -4141,7 +4142,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8700,
+      "ms": 8602,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4161,7 +4162,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3815,
+      "ms": 3842,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4179,7 +4180,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 37672,
+      "ms": 38310,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4202,7 +4203,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5704,
+      "ms": 5808,
       "notes": [
         "under sparning: {\"t\":\"Sparar…\",\"d\":true}"
       ],
@@ -4222,7 +4223,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1904,
+      "ms": 2026,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4240,7 +4241,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2072,
+      "ms": 2168,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4259,7 +4260,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1202,
+      "ms": 1444,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4277,7 +4278,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3865,
+      "ms": 4015,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4296,16 +4297,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3100,
+      "ms": 3238,
       "notes": [
         "väntat {\"today\":21,\"ongoing\":5,\"overdue\":4,\"urgent\":4,\"noStaff\":4,\"bill\":4,\"notes\":1} visat {\"today\":21,\"ongoing\":5,\"overdue\":4,\"urgent\":4,\"noStaff\":4,\"bill\":4}"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 5
+      "requests": 6
     },
     {
       "id": "FALT-06",
@@ -4314,7 +4317,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5024,
+      "ms": 5258,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4332,7 +4335,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5418,
+      "ms": 5665,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4351,7 +4354,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 27240,
+      "ms": 28846,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4370,7 +4373,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8034,
+      "ms": 8205,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4390,7 +4393,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1770,
+      "ms": 1859,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4409,7 +4412,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3824,
+      "ms": 4090,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4427,7 +4430,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4777,
+      "ms": 4951,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4445,7 +4448,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3486,
+      "ms": 3743,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4463,7 +4466,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7547,
+      "ms": 7745,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4481,7 +4484,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2622,
+      "ms": 2836,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4497,7 +4500,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4282,
+      "ms": 4403,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4515,7 +4518,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6205,
+      "ms": 6562,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4534,7 +4537,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15059,
+      "ms": 15567,
       "notes": [
         "360 px: 7 sidor kontrollerade",
         "390 px: 7 sidor kontrollerade",
@@ -4558,7 +4561,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15476,
+      "ms": 15785,
       "notes": [
         "1024 px: 7 sidor kontrollerade",
         "1366 px: 7 sidor kontrollerade",
@@ -4582,7 +4585,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7527,
+      "ms": 7689,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4600,7 +4603,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15741,
+      "ms": 15791,
       "notes": [
         "66 flik-/filterlägen kontrollerade"
       ],
@@ -4621,7 +4624,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4622,
+      "ms": 4670,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4631,6 +4634,250 @@
       "unmodeled": [],
       "screenshots": [],
       "requests": 14
+    },
+    {
+      "id": "SEC-NORM-01",
+      "module": "Säkerhet",
+      "name": "Normalläge: inloggning, sparad ändring, utloggning utan osynkat (ingen varning), ny inloggning fungerar",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 1504,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "SEC-CACHE-01",
+      "module": "Säkerhet",
+      "name": "SÄK-9: ADM → utloggning → FÄ på samma profil: inga vift_*-affärsnycklar, inget sessionStorage, tomt minne",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3094,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "SEC-CACHE-02",
+      "module": "Säkerhet",
+      "name": "SÄK-9: nätavbrott vid inläsning efter kontobyte — degraderad inläsning visar aldrig föregående användares cache",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1848,
+      "notes": [
+        "FÄ vid nätfel: {\"user\":null,\"app\":false,\"cus\":0}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "SEC-CACHE-04",
+      "module": "Säkerhet",
+      "name": "SÄK-9 (positivt): samma användare vid nätfel efter omladdning får sin egen cache; inga skrivningar tillåts",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2775,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[persist] BLOCKERAD: senaste läsningen var degraderad (fallback), ingen bulk-skrivning tillåten."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "SEC-CACHE-03",
+      "module": "Säkerhet",
+      "name": "SÄK-9: utloggning och kontobyte i annan flik slår igenom — fliken tömmer minnet, visar inloggning och kan inte skriva",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3915,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[persist] BLOCKERAD: ingen giltig session/åtkomst för den identitet som gjorde ändringen."
+      ],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 20
+    },
+    {
+      "id": "SEC-TAB-02",
+      "module": "Säkerhet",
+      "name": "SÄK-9: kontobyte i annan flik innan storage-händelsen hunnit fram — skrivningen med gammal identitet stoppas ändå",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2661,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[persist] BLOCKERAD: ingen giltig session/åtkomst för den identitet som gjorde ändringen."
+      ],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "SEC-SESS-01",
+      "module": "Säkerhet",
+      "name": "SÄK-9: sessionen upphör (JWT ogiltig, förnyelse nekas) — fail-closed, data skyddas, osparad ändring finns kvar för ägaren",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5535,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[Auth] Session expired — re-login required",
+        "[persist] merge-skrivning avvisad för vift_customers: auth_expired",
+        "[persist] skrivning avvisad för vift_settings: auth_expired",
+        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 401 {\"error\":\"jwt_expired\"}",
+        "POST /auth/v1/token?grant_type=refresh_token → 400 {\"error\":\"invalid_grant\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "SEC-OUTBOX-01",
+      "module": "Säkerhet",
+      "name": "SÄK-9: utloggning med osynkad utkorg varnar (Synka nu / Logga ut ändå / Avbryt); nästa användare skickar inte och ser inte posten; ägaren får den skickad",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 9208,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/work-order-log-write → 503 {\"error\":\"http_503\"}",
+        "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 21
+    },
+    {
+      "id": "SEC-OUTBOX-02",
+      "module": "Säkerhet",
+      "name": "Uppgradering från v3.4: gamla utkorgsnycklar migreras till ägarnycklad form; post utan känd ägare behålls, varnas och skickas aldrig automatiskt",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4498,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 13
+    },
+    {
+      "id": "SEC-ROLL-10",
+      "module": "Säkerhet",
+      "name": "SÄK-10: inloggning utan personalpost ger ingen reservroll — sidan \"Ditt konto saknar behörighet\", ingen meny, inga sidor, ingen data",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 487,
+      "notes": [
+        "accessState=no_staff"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 3
+    },
+    {
+      "id": "SEC-CUST-23",
+      "module": "Säkerhet",
+      "name": "SÄK-10: personalpost med okänt roll-id ger inga behörigheter (fail-closed), ingen app och ingen data",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 479,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 2
+    },
+    {
+      "id": "SEC-PERM-01",
+      "module": "Säkerhet",
+      "name": "Indragen behörighet slår igenom i öppen session (synk) och i annan flik utan egen synk: otillåten sida lämnas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2073,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "SEC-PERM-02",
+      "module": "Säkerhet",
+      "name": "Personalpost inaktiveras under pågående session: servern svarar 403 → klienten tar bort åtkomsten direkt (sidan \"saknar behörighet\")",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2797,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "GET /rest/v1/store?key=eq.vift_lastChanged&select=value → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
     }
   ]
 }

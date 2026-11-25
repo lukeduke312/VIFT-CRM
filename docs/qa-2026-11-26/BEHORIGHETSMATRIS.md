@@ -25,7 +25,7 @@ Testplan och paketordning: `SAKERHETSPROVNING-TESTPLAN.md`.
    - Servern och klienten frågar alltid efter en behörighet (`hasPerm`/`Auth.can`), aldrig efter `role === 'chef'` eller liknande.
    - Rollnamn får bara styra förval i gränssnittet, till exempel dashboardlayout och förvald roll för ny personal.
    - Ställen där rollnamn i dag används som förval och därför ska granskas:
-     - `AuthService.js:379` (reservroll, SÄK-10);
+     - `AuthService.js:379` (reservroll, SÄK-10) — **borttagen i T3-A (lokalt verifierad 2026-11-28)**: ingen reservroll;
      - `DashboardConfig.js:334`, `Dashboard.js:56/558/664` (layoutförval);
      - `ImportExportConfigs.js:520-522` (importmappning);
      - `PageShells.js:9184/9303` (reservlista i personaldialogen).
@@ -261,7 +261,7 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R58 | Export av personnummer | Aktivt val *(export_personal_data + personal_data_view)*, loggas | – | – (om inte tilldelat) | – | – | **EF (ny serverexport)** + logg. Klientspärren är bara presentation. | D-18, D-13 | **SÄK-1:** förvalt ikryssat |
 | R59 | Export av portkod och nyckelinformation | Inte i normal export. Bara serverexport *(objects_sensitive + export_data)* med aktivt val och logg. | | | | | EF + logg | D-18 | Klientval med `objects_sensitive` |
 | R60 | Export av lösenord, token, autentiseringsuppgifter, hemliga nycklar | Aldrig | | | | | EXP (konfiguration) + PROJ | D-18 | `sensitiveFields` för personal. Token tas bort av PROJ. |
-| R61 | Lokal cache efter utloggning eller kontobyte | – | – | – | – | – | CACHE: alla `vift_*`-affärsnycklar rensas. Degraderad inläsning använder aldrig en annan användares cache. | – | **SÄK-9 (P1):** bara AO och tid rensas |
+| R61 | Lokal cache efter utloggning eller kontobyte | – | – | – | – | – | CACHE: alla `vift_*`-affärsnycklar rensas. Degraderad inläsning använder aldrig en annan användares cache. | – | **SÄK-9 lokalt åtgärdad (T3-A, 2026-11-28):** all användarspecifik cache rensas (uttrycklig behållningslista), cachen har en ägare (miljö + e-post), utkorgar ägarnycklade. Ej installerad i STAGING. |
 | R62 | Direkt REST-skrivning till `store` | – för affärsnycklar | | | | | RLS `staging_generic_keys_no_direct_*`, `store_*_no_direct_*`, TRG | – | Nycklar utan affärsregel (t.ex. `vift_lastChanged`, okända nycklar) kan skrivas av alla aktiva via `store_active_write_safe` (F18) |
 | R63 | Direkt anrop av SECURITY DEFINER-RPC (`/rest/v1/rpc/...`) | – | – | – | – | – | Grants: EXECUTE bara för service_role. Undantag: `vift_caller_perms` och `vift_store_full_access` (RLS-hjälp). | – | Som målet enligt inventeringen §6 |
 
@@ -503,7 +503,7 @@ Testdata, alla [E2E-TEST]:
 | SEC-ROLL-07 | + | ADM | Inaktivera ADM2 när ADM finns kvar | E,P | L | 200 |
 | SEC-ROLL-08 | + | Egen superadminroll med annat id än `admin` | Allt som ADM får | E | L | Fungerar (ingen hårdkodning på roll-id) |
 | SEC-ROLL-09 | − | Roll med id `admin` **utan** `all` | Superadminåtgärder | E,P,K | L,W | Nekas. Klienten visar inga superadminval. |
-| SEC-ROLL-10 | − | Inloggning utan personalpost | Klientens meny | K,C | W | Ingen fältbehörighet (SÄK-10). Servern svarar 403 `Forbidden`. |
+| SEC-ROLL-10 | − | Inloggning utan personalpost | Klientens meny | K,C | W | Ingen fältbehörighet (SÄK-10). Servern svarar 403 `Forbidden`. **Lokalt grön (T3-A, `36_client_security`).** |
 
 ### 5.8 Aktivitetslogg och uppgifter (R44–R47)
 
@@ -577,9 +577,9 @@ Testdata, alla [E2E-TEST]:
 | SEC-EXP-06 | − | alla | Lösenord, token, `publicToken`, autentiseringsuppgifter | X | W | Finns aldrig |
 | SEC-EXP-07 | − | ADM | Normal export av objekt och AO | X | W | Ingen portkod och ingen nyckelinformation |
 | SEC-EXP-08 | − | FÄ | Snabbexport av AO via konsolen | X,C | W | Bara egna AO. Inga prisfält, ingen portkod. |
-| SEC-CACHE-01 | − | ADM → utloggning → FÄ på samma profil | `localStorage` | C | W | Inga `vift_*`-affärsnycklar från ADM (fältnamnskontroll). **SÄK-9.** |
-| SEC-CACHE-02 | − | FÄ, nätet avstängt vid inloggning | Degraderad inläsning | C | W | Ingen data från föregående användare |
-| SEC-CACHE-03 | − | Kontobyte i annan flik | Lyssnaren för flikbyte | C | W | Samma rensning |
+| SEC-CACHE-01 | − | ADM → utloggning → FÄ på samma profil | `localStorage` | C | W | Inga `vift_*`-affärsnycklar från ADM (fältnamnskontroll). **SÄK-9.** Lokalt grön (T3-A). |
+| SEC-CACHE-02 | − | FÄ, nätet avstängt vid inloggning | Degraderad inläsning | C | W | Ingen data från föregående användare. Lokalt grön (T3-A). |
+| SEC-CACHE-03 | − | Kontobyte i annan flik | Lyssnaren för flikbyte | C | W | Samma rensning. Lokalt grön (T3-A). |
 | SEC-REST-01 | − | FÄ | REST INSERT/UPDATE/DELETE för affärsnycklar (alla 28), AO, tid, fakturor, `offerAttachments`, `ronderingspass`, `projectDocuments` | R | L | `42501` eller `direct_write_blocked`. KS oförändrad. |
 | SEC-REST-02 | − | FÄ | REST INSERT av okänd nyckel `vift_e2e_<runId>` och UPDATE av `vift_lastChanged` | R | L | Nekas efter T3 (F18). I dag tillåtet, vilket dokumenteras i baslinjen. |
 | SEC-REST-03 | − | FÄ | REST `rpc/work_order_patch`, `rpc/store_business_key_write`, `rpc/sensitive_fields_write`, `rpc/time_entry_create` | R | L | `42501` (EXECUTE saknas) |
@@ -614,7 +614,7 @@ Varje rad är en **egen roll** = standardroll minus en enskild behörighet, elle
 | SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) |
 | SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) |
 | SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. |
-| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed) |
+| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). |
 
 ---
 
@@ -694,8 +694,8 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F3: ingen tilldelningsväg för åtkomstinformation, dubbel lagring. Skrivare utan `objects_sensitive` får fältet (informationsläckage). | SÄK-7 | **P1** (läckaget), P2 (vägen) | STAGING `get-sensitive-fields` v9 är **nyare** än repot (fail-closed audit, låst supabase-js) och `set-sensitive-fields` v9 använder RPC `sensitive_fields_write`. Repot uppdateras från inventeringen före ändring. Projektionen i `vift_store_full_access` ger skrivare fullt värde. | T4-A, T4-C |
 | F4: poolregeln och "Ta jobbet" | SÄK-3, SÄK-4 | P1 | `work-orders-list/index.ts:88-91`, `_shared/vift-auth.ts:121-131`, SQL-urval i `work_order_checklist_resolve`/`_set_state`/`work_order_log_*`, `fake-backend.js:122-127`. Gren B läser utanför låset. | T3-B |
 | F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C |
-| F6: cache kvar efter utloggning | SÄK-9 | **P1** | `AuthService.js:628-650`, `state.js:983` | T3-A |
-| F7: reservroll `personal` | SÄK-10 | Blockerar `personal` | `AuthService.js:379` | T3-A |
+| F6: cache kvar efter utloggning | SÄK-9 | **P1** | `AuthService.js:628-650`, `state.js:983` — lokalt åtgärdad 2026-11-28 | T3-A |
+| F7: reservroll `personal` | SÄK-10 | Blockerar `personal` | `AuthService.js:379` — lokalt åtgärdad 2026-11-28 | T3-A |
 | F8: uppgiftsregler klient mot server | (SÄK-2) | P2 | `PageShells.js:11861-11869`, `activities-policy.ts` | T3-D |
 | F9: offertstubbar för alla offerter | – | P2 | `vift_store_project` (`schema/functions.sql`) | T3-D |
 | F10: e-post krävs för inloggningen | – | Krav | `AuthService.js:366-372` | T3-D |
