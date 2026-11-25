@@ -30,12 +30,17 @@ async function check(s, where, hits) {
   if (r.length) hits.push(where + ' → ' + r.join(' | '));
 }
 
-module.exports = [{
+/* 2026-11-26 (register): testet delas per roll i två delar med EXAKT samma
+   kontroller — fler flikar/filterchips i registren (Kunder, Artiklar,
+   Uppgifter, Prisgrupper) gjorde att alla fyra roller i ett test passerade
+   svitens gemensamma gräns på 90 s (85 s redan före ändringen). */
+const RENDER = {
   id: 'RENDER-01', module: 'Säkerhet', kind: 'ui',
-  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin, arbetsledare, ekonomi, fält)',
+  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin, arbetsledare; ekonomi och fält i RENDER-01B)',
+  roles: [['admin', 'laptop'], ['chef', 'laptop']],
   async run(t) {
     const hits = [];
-    for (const [role, vp] of [['admin', 'laptop'], ['chef', 'laptop'], ['ekonomi', 'laptop'], ['falt', 'iphone']]) {
+    for (const [role, vp] of this.roles) {
       const s = await t.world.session({ viewport: vp });
       await s.login(role);
       const pages = await s.eval(() => Object.keys(Auth.PAGE_PERMISSIONS || {}).filter((p) => Auth.canViewPage(p)));
@@ -79,4 +84,9 @@ module.exports = [{
     }
     t.assert(hits.length === 0, 'markup visas som text: ' + hits.join(' ;; '));
   }
-}];
+};
+module.exports = [RENDER, Object.assign({}, RENDER, {
+  id: 'RENDER-01B',
+  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, detaljsidor och vanliga dialoger (ekonomi, fält) — fortsättning på RENDER-01',
+  roles: [['ekonomi', 'laptop'], ['falt', 'iphone']],
+})];
