@@ -381,13 +381,14 @@ module.exports = [
     },
   },
   {
-    id: 'AO-08', module: 'Användarroller och behörigheter', name: 'Begränsad användare: servern levererar bara egna/pool-AO; direkt patch av annan AO → 403',
+    id: 'AO-08', module: 'Användarroller och behörigheter', name: 'Begränsad användare: servern levererar bara egna AO (ingen öppen pool, D-04); direkt patch av annan AO → 403',
     async run(t) {
       const s = await t.world.session();
       await s.login('begransad');
       const ids = await s.eval(() => state.workOrders.map((a) => ({ id: a.id, staff: a.staff, status: a.status })));
-      const bad = ids.filter((a) => !(a.staff || []).includes('ST-005') && a.status !== 'pool');
-      t.assert(bad.length === 0, 'inga andras AO i klientens data (' + bad.map((a) => a.id).join() + ')');
+      // T3-B (SÄK-3, D-04): skärpt — begränsad (bara ao_view_own) får inte heller öppen pool.
+      const bad = ids.filter((a) => !(a.staff || []).includes('ST-005'));
+      t.assert(bad.length === 0, 'inga andras AO och ingen pool i klientens data (' + bad.map((a) => a.id).join() + ')');
       const r = await s.eval(() => AOTimeSyncService._call({ action: 'patch_ao', aoId: 'AO-007', patch: { title: 'HACK' }, idempotencyKey: 'x-' + Date.now() }));
       t.assert(r.ok === false && r.httpStatus === 403, 'direktanrop nekas: ' + JSON.stringify(r));
       t.assert(t.fake.get('workOrders').find((a) => a.id === 'AO-007').title !== 'HACK', 'servern oförändrad');

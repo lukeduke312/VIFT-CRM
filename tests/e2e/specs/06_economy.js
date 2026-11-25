@@ -366,6 +366,13 @@ module.exports = [
       await e.settle(1500);
       const inv = t.fake.get('invoices').find((i) => (i.lines || []).some((l) => (l.sourceRefs || []).some((r) => r.workOrderId === aoId)));
       t.assert(inv, 'fakturautkast på servern');
+      /* T3-B (D-07, punkt 269/270): AO:ns faktureringsstatus sätts via invoice-write (aoBilling,
+         invoice_create) — inte via patch_ao, som nu nekas för alla roller. Ekonomirollen (utan
+         AO-behörighet) får därför statusen satt; tidigare nekades den (se den borttagna OBS-noten). */
+      for (let i = 0; i < 40; i++) { const a = t.fake.get('workOrders').find((x) => x.id === aoId); if (a && a.status === 'fakturerad') break; await e.settle(100); }
+      const aoSrv = t.fake.get('workOrders').find((x) => x.id === aoId);
+      t.assert(aoSrv && aoSrv.status === 'fakturerad' && aoSrv.invoiceId === inv.id && aoSrv.billingPreviousStatus != null, 'AO markerad fakturerad på servern via faktureringsvägen: ' + JSON.stringify(aoSrv && { st: aoSrv.status, inv: aoSrv.invoiceId, prev: aoSrv.billingPreviousStatus }));
+      t.assert(t.fake.calls.some((c) => c.action === 'invoice-write:aoBilling' && c.aoId === aoId && c.status === 200), 'faktureringsstatusen gick via invoice-write aoBilling');
       // Rabatt 10 % och ROT via fakturavyn
       await e.go('pg-inv-detail', { invoiceId: inv.id });
       await e.eval(() => InvoiceDetailPage.openTaxReduction());
@@ -386,7 +393,7 @@ module.exports = [
       t.assert(sum.exVat === 891.34 && sum.vat === 222.84 && Math.abs(sum.totalInclVat - 1114.18) < 0.001, 'ex 891,34 / moms 222,84 / totalt 1 114,18 (öre)');
       t.assert(sum.customerPays > 0 && Math.abs(sum.customerPays - (1114.18 - offerRule)) < 0.001, 'kunden betalar totalt − ROT');
       const billingRejected = (await e.toasts()).some((m) => /faktureringsstatusen kunde inte sparas/.test(m));
-      if (billingRejected) t.note('OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen "fakturerad" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk.');
+      t.assert(!billingRejected, 'T3-B: ingen nekad faktureringsstatus (aoBilling med invoice_create)');
     },
   },
 ];

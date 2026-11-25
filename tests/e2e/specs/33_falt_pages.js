@@ -156,9 +156,11 @@ module.exports = [
         const ongoing = all.filter((a) => mine(a) && a.status === 'pågående' && a.scheduledDate !== t0 && !(a.scheduledDate && a.scheduledDate < t0));
         const uns = all.filter((a) => mine(a) && !a.scheduledDate && alive(a) && a.status !== 'pågående');
         const upcoming = all.filter((a) => mine(a) && a.scheduledDate > t0 && alive(a) && a.status !== 'pågående');
-        const pool = all.filter((a) => a.status === 'pool');
+        // T3-B (AP-A): fliken Arbetspool = ÖPPEN pool (status pool, poolOpen ≠ false, ingen personal), aldrig egna.
+        const open = (a) => a.status === 'pool' && a.poolOpen !== false && !(a.staff || []).length;
+        const pool = all.filter((a) => open(a) && !mine(a));
         return { idag: new Set([...today, ...overdue, ...ongoing, ...uns].map((a) => a.id)).size, today: today.length, overdue: overdue.length, uns: uns.length,
-          upcoming: upcoming.length, pool: pool.length, poolIds: pool.map((a) => a.id), others: all.filter((a) => !mine(a) && a.status !== 'pool').map((a) => a.id) };
+          upcoming: upcoming.length, pool: pool.length, poolIds: pool.map((a) => a.id), others: all.filter((a) => !mine(a) && !open(a)).map((a) => a.id) };
       });
       const tabs = await s.eval(() => [...document.querySelectorAll('.mj-views .ft')].map((b) => ({ t: b.textContent.replace(/\d+/g, '').trim(), n: +b.querySelector('.ft-n').textContent, on: b.classList.contains('on') })));
       t.assert(tabs.length === 3 && tabs[0].on && tabs[0].t === 'Idag' && tabs[1].t === 'Kommande' && tabs[2].t === 'Arbetspool', 'tre vyer, Idag vald: ' + JSON.stringify(tabs));
@@ -191,7 +193,10 @@ module.exports = [
       await s.waitToast(/Du är nu tilldelad/, 6000);
       for (let i = 0; i < 40; i++) { const a = t.fake.get('workOrders').find((x) => x.id === takeId); if (a && a.status === 'planerad') break; await s.settle(100); }
       const srv = t.fake.get('workOrders').find((x) => x.id === takeId);
-      t.assert(srv && srv.status === 'planerad' && (srv.staff || []).includes('ST-004'), 'tagen från poolen på servern: ' + JSON.stringify(srv && { st: srv.status, staff: srv.staff }));
+      t.assert(srv && srv.status === 'planerad' && JSON.stringify(srv.staff) === '["ST-004"]' && srv.poolOpen === false && (srv.log || []).filter((l) => l.type === 'taken_from_pool').length === 1,
+        'tagen från poolen på servern (T3-B take_from_pool): ' + JSON.stringify(srv && { st: srv.status, staff: srv.staff, poolOpen: srv.poolOpen }));
+      t.assert(t.fake.calls.some((c) => c.action === 'ao-time-write:take_from_pool' && c.aoId === takeId) && !t.fake.calls.some((c) => c.action === 'ao-time-write:patch_ao' && c.aoId === takeId),
+        'SÄK-4: tagningen gick via take_from_pool (atomisk RPC), inte via patch_ao');
       t.assert(!(await s.eval((id) => !!document.querySelector('.page.active .mj-card[data-ao="' + id + '"]'), takeId)), 'jobbet försvann ur poolvyn');
     },
   },

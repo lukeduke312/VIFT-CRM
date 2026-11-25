@@ -124,7 +124,8 @@ function seedRich(t) {
 
 /* Förväntad primär åtgärd per roll och status (befintliga funktioner och behörigheter). */
 const RICH_PRIMARY = {
-  falt2:   { nytt: 'own', planerad: 'own', 'pågående': null, pausad: null, klar: null, fakturerad: null, avbruten: null, saknas: 'own' },
+  /* T3-B (D-03): standardrollen personal har ao_complete_own → Klarmarkera på egen pågående/pausad AO. */
+  falt2:   { nytt: 'own', planerad: 'own', 'pågående': 'complete', pausad: 'complete', klar: null, fakturerad: null, avbruten: null, saknas: 'own' },
   chef:    { nytt: 'start', planerad: 'start', 'pågående': 'complete', pausad: 'complete', klar: 'invoice', fakturerad: null, avbruten: 'reactivate', saknas: 'start' },
   ekonomi: { nytt: null, planerad: null, 'pågående': null, pausad: null, klar: 'invoice', fakturerad: null, avbruten: null, saknas: null },
   admin:   { nytt: 'start', planerad: 'start', 'pågående': 'complete', pausad: 'complete', klar: 'invoice', fakturerad: null, avbruten: 'reactivate', saknas: 'start' },
@@ -231,7 +232,7 @@ const collectActs = (s) => s.eval(() => {
   }));
   return { d: pick(document.querySelector('.page.active .ao-acts-desktop')), m: pick(document.querySelector('.page.active .ao-acts-mobile')) };
 });
-const perms = (s) => s.eval(() => ({ ao_edit: Auth.can('ao_edit'), ao_complete: Auth.can('ao_complete'), invoice_create: Auth.can('invoice_create'), activities: Auth.canViewPage('pg-activities'), myjobs: Auth.canViewPage('pg-myjobs') }));
+const perms = (s) => s.eval(() => ({ ao_edit: Auth.can('ao_edit'), ao_complete: Auth.can('ao_complete'), ao_complete_own: WorkOrderService.aoCan('ao_complete_own'), ao_start_own: WorkOrderService.aoCan('ao_start_own'), invoice_create: Auth.can('invoice_create'), activities: Auth.canViewPage('pg-activities'), myjobs: Auth.canViewPage('pg-myjobs') }));
 const primaryOf = (s) => s.eval(() => {
   const d = document.querySelectorAll('.page.active .ao-acts-desktop .aod-primary');
   const m = document.querySelectorAll('.page.active .ao-acts-mobile .aod-primary');
@@ -273,8 +274,9 @@ module.exports = [
         chef:    { 'AO-T1': ['start', "WorkOrderDetailPage.setStatus('pågående')"], 'AO-T2': ['complete', 'WorkOrderDetailPage.markComplete()'], 'AO-T3': ['invoice', "InvoicesPage.createFromAO('AO-T3')"] },
         ekonomi: { 'AO-T1': null, 'AO-T2': null, 'AO-T3': ['invoice', "InvoicesPage.createFromAO('AO-T3')"] },
         /* Fält saknar ao_edit/ao_complete: på sin egen planerade order får hen samma
-           Starta som Mina jobb (MyJobsPage.startJob-vägen), inget annat. */
-        falt2:   { 'AO-T1': ['start', 'WorkOrderDetailPage.startOwnJob()'], 'AO-T2': null, 'AO-T3': null },
+           Starta som Mina jobb (MyJobsPage.startJob-vägen, kräver ao_start_own). T3-B (D-03):
+           med ao_complete_own får hen Klarmarkera på sin egen pågående order. Inget annat. */
+        falt2:   { 'AO-T1': ['start', 'WorkOrderDetailPage.startOwnJob()'], 'AO-T2': ['complete', 'WorkOrderDetailPage.markComplete()'], 'AO-T3': null },
       };
       // Stämplingsraden: bara med ao_time och bara på ej avslutade ordrar.
       const stamp = { admin: [true, true, false], chef: [false, false, false], ekonomi: [false, false, false], falt2: [true, true, false] };
@@ -353,9 +355,12 @@ module.exports = [
           // Inga nya statusövergångar: varje setStatus-anrop i nya raden fanns i den gamla.
           const oldFns = new Set(old.map((x) => x[1]));
           const extra = now.d.concat(now.m).filter((x) => /setStatus|markComplete|_restoreFrom|createFromAO|openReactivateModal|startOwnJob/.test(x.fn) && !oldFns.has(x.fn));
-          /* Enda tillägget: Starta för den som är tilldelad utan ao_edit — samma villkor som Mina jobb visar Starta. */
+          /* Tillägg: Starta för den som är tilldelad utan ao_edit — samma villkor som Mina jobb visar Starta
+             (T3-B: kräver ao_start_own) — och, enligt D-03 (T3-B), Klarmarkera för den som har
+             ao_complete_own och är tilldelad en pågående AO. Inga andra nya status-/faktureringsanrop. */
           const mine = (ao.staff || []).includes(STAFF[role]);
-          const okOwn = (x) => x.fn === 'WorkOrderDetailPage.startOwnJob()' && !p.ao_edit && p.myjobs && mine && !ao.archived && !ao.deleted && ['nytt', 'pool', 'planerad'].includes(ao.status);
+          const okOwn = (x) => (x.fn === 'WorkOrderDetailPage.startOwnJob()' && !p.ao_edit && p.ao_start_own && p.myjobs && mine && !ao.archived && !ao.deleted && ['nytt', 'pool', 'planerad'].includes(ao.status))
+            || (x.fn === 'WorkOrderDetailPage.markComplete()' && !p.ao_complete && p.ao_complete_own && mine && ao.status === 'pågående');
           t.assert(extra.every(okOwn), role + ' ' + id + ': inga nya status-/faktureringsanrop utöver Mina jobb-starten ' + JSON.stringify(extra.filter((x) => !okOwn(x))));
           // Nåbart på skärmen: synliga knappar inom fönstret, menyposterna inom fönstret.
           const vis = await s.eval(() => {
@@ -609,7 +614,7 @@ module.exports = [
     async run(t) { await richMatrix(t, 'laptop'); },
   },
   {
-    id: 'AOD-09', kind: 'workflow', module: 'Arbetsordrar', name: 'Fältflöde på mobil 390 px utan att något klipps: öppna jobbet från Mina jobb → Starta arbete → Stämpla in → bocka av checklista → lägg till material och bild → Stämpla ut → (med ao_complete i rollen) Klarmarkera',
+    id: 'AOD-09', kind: 'workflow', module: 'Arbetsordrar', name: 'Fältflöde på mobil 390 px utan att något klipps: öppna jobbet från Mina jobb → Starta arbete → Stämpla in → bocka av checklista → lägg till material och bild → Stämpla ut → Klarmarkera (ao_complete_own, D-03; utan den ingen Klarmarkera)',
     async run(t) {
       seedRich(t);
       const AO = 'AO-RF';
@@ -688,10 +693,17 @@ module.exports = [
       await s.waitToast(/Utloggad — tid sparad/, 8000);
       await s.settle(600);
       t.assert(t.fake.get('timeEntries').filter((e) => e.aoId === AO).length === n0 + 1, 'exakt en ny tidpost efter utstämpling');
-      // 7. Slutför: rollen "personal" saknar ao_complete i dag → ingen Klarmarkera (rollen styr, inte sidan).
-      t.assert(!(await s.eval(() => !!document.querySelector('.page.active [data-act="complete"]'))), 'utan ao_complete: ingen Klarmarkera (oförändrad behörighet)');
-      // Med ao_complete i rollen (rollerna är data): Klarmarkera blir primär och slutför ordern på servern.
-      const roles = t.fake.get('roles'); roles.find((r) => r.id === 'personal').permissions.push('ao_complete'); t.fake.set('roles', roles);
+      // 7. Slutför (T3-B, D-03): standardrollen personal har ao_complete_own → Klarmarkera på egen pågående AO.
+      t.assert(await s.eval(() => !!document.querySelector('.page.active [data-act="complete"]')), 'med ao_complete_own: Klarmarkera finns på egen pågående AO');
+      // Egen roll utan ao_complete_own (SEC-CUST-10): ingen Klarmarkera — rollen styr, inte sidan.
+      const roles = t.fake.get('roles'); const pers = roles.find((r) => r.id === 'personal'); const orig = pers.permissions.slice();
+      pers.permissions = orig.filter((x) => x !== 'ao_complete_own'); t.fake.set('roles', roles);
+      const s3 = await t.world.session({ viewport: 'iphone' });
+      await s3.login('falt2');
+      await openAO(s3, AO);
+      t.assert(!(await s3.eval(() => !!document.querySelector('.page.active [data-act="complete"]'))), 'utan ao_complete_own: ingen Klarmarkera');
+      await s3.context.close();
+      pers.permissions = orig; t.fake.set('roles', roles);
       const s2 = await t.world.session({ viewport: 'iphone' });
       await s2.login('falt2');
       await openAO(s2, AO);
@@ -700,7 +712,8 @@ module.exports = [
       await done.click();
       await s2.clickModalButton(/Klarmarkera ändå|Ja|OK|Bekräfta/);
       await s2.waitToast(/Order markerad klar/, 8000);
-      t.assert(t.fake.get('workOrders').find((a) => a.id === AO).status === 'klar', 'servern: klar');
+      const klarAo = t.fake.get('workOrders').find((a) => a.id === AO);
+      t.assert(klarAo.status === 'klar' && klarAo.completedBy === 'ST-004', 'servern: klar, completedBy satt av servern till fält2 (D-03): ' + klarAo.completedBy);
       const li2 = await s2.layoutIssues();
       t.assert(li2.length === 0, 'klar: inget klipps ' + JSON.stringify(li2));
     },
