@@ -139,7 +139,9 @@ module.exports = [
       await e.settle(400);
       const cands = await e.eval(() => BillingQueueService.getCandidates().filter((c) => c.workOrderId === 'AO-ROT').map((c) => c.id));
       t.assert(cands.length >= 1, 'AO:n finns i faktureringskön');
-      for (const c of cands) await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c + '\')"]').check();
+      // V3 6A: kön är ihopfälld som standard — fäll ut alla rader och kryssa underlagen som en användare.
+      await e.page.locator('#bq-expand-all').click(); await e.settle(300);
+      for (const c of cands) await e.page.locator('#bq-list input._sel-cb[data-sel-id="' + c + '"]').check();
       await e.eval((ids) => InvoicesPage._openCreateConfirm(ids), cands);
       await e.clickModalButton(/Skapa fakturautkast/);
       await e.settle(1500);
