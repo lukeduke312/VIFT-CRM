@@ -16,7 +16,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'vift-policy-'));
-const SRC = path.join(__dirname, '..', 'supabase', 'functions', 'store-key-write');
+const SRC = require('./lib/serverkalla').serverPath('functions', 'store-key-write'); // KÄLLA-1: vift-v2/supabase
 try {
   execFileSync('tsc', ['--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--strict', '--skipLibCheck', path.join(SRC, 'activities-policy.ts'), path.join(SRC, 'activity-log.ts')], { stdio: 'pipe' });
 } catch (e) { console.log('FAIL tsc: ' + String(e.stdout || e.message)); console.log('RESULT: 0 passed, 1 failed'); process.exit(1); }

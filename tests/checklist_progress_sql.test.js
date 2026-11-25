@@ -33,7 +33,7 @@ psql('postgres', 'create database ' + DB);
 const cleanup = () => { try { psql('postgres', 'drop database if exists ' + DB + ' with (force)'); } catch (e) {} };
 process.on('exit', cleanup);
 
-const MIG = path.join(__dirname, '..', 'supabase', 'migrations');
+const MIG = require('./lib/serverkalla').serverPath('migrations'); // KÄLLA-1: vift-v2/supabase
 psql(DB, `do $$ begin
   if not exists (select 1 from pg_roles where rolname='anon') then create role anon; end if;
   if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated; end if;

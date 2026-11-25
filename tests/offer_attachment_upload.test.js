@@ -1,7 +1,8 @@
 'use strict';
 /*
  * offer-attachment-upload: PATCH utan regression mot den INSTALLERADE
- * STAGING-versionen v12 (supabase/backup/staging-ef-fore-installation/).
+ * STAGING-versionen v12 (supabase/backup/staging-ef-fore-installation/ i den
+ * auktoritativa serverkällan vift-v2/supabase, KÄLLA-1).
  *
  * Del 1 (statisk): varje rad i v12 finns kvar, i samma ordning, i repots
  *   källa. Enda tillåtna ändring av en befintlig rad är CORS-metoderna
@@ -22,9 +23,10 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 
 const ROOT = path.join(__dirname, '..');
-const V12 = path.join(ROOT, 'supabase/backup/staging-ef-fore-installation/offer-attachment-upload-v12/functions/offer-attachment-upload/index.ts');
-const SRC = path.join(ROOT, 'supabase/functions/offer-attachment-upload/index.ts');
-const MIG = path.join(ROOT, 'supabase/migrations/20261125000001_offer_attachment_patch.sql');
+const { serverPath } = require('./lib/serverkalla'); // KÄLLA-1: vift-v2/supabase
+const V12 = serverPath('backup/staging-ef-fore-installation/offer-attachment-upload-v12/functions/offer-attachment-upload/index.ts');
+const SRC = serverPath('functions/offer-attachment-upload/index.ts');
+const MIG = serverPath('migrations/20261125000001_offer_attachment_patch.sql');
 const FIX = path.join(__dirname, 'fixtures/staging_offer_rpcs_installed.sql');
 
 // ── Del 1: statisk jämförelse mot v12 ───────────────────────────────
