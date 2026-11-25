@@ -76,6 +76,8 @@ Källorna är QA-rapporterna 2026-11-24–26 (`docs/qa-2026-11-24/`, `docs/qa-20
 
 **Id utanför nummerserien (2026-11-27):** 49 beslut med status Beslutad, ej byggd (D-01–D-26, AP-A–AP-G, B1–B5, Ö1–Ö10, B-FAKT-1); 17 säkerhetsfynd SÄK-1–SÄK-17 (Registrerad, ej påbörjad; 11 av dem P1, varav SÄK-8 och SÄK-9 P1 inför LIVE); 14 öppna frågor (Beslut krävs); 12 paket T3-0–T4-F (lokal GO, STAGING NO-GO, LIVE NO-GO).
 
+**Uppdatering 2026-11-28 (VK-1):** nya numrerade punkter **272–274** (verksamhetskravet debitering per tillfälle och enhet, status Beslutad, ej påbörjad). Statusräkningen ovan avser 1–271 och E2b och räknas om i den samlade T3-leveransen.
+
 <details><summary>Statusräkning 2026-11-26 (historik)</summary>
 
 **Statusräkning 2026-11-26** (numrerade punkter 1–271 och E2b-1–E2b-6):
@@ -807,6 +809,9 @@ Inget här är byggt om inte annat anges.
 | 269 | **G9:** serverregel så att ekonomi kan sätta `klar` ↔ `fakturerad` (bara `status`, `invoiceId`, `billingPreviousStatus`) | **Lokalt verifierad** (T3-B, 2026-11-28, samordnat med D-07): `invoice-write` `aoBilling` med `invoice_create` sätter `klar` ↔ `fakturerad` (status, `invoiceId`, `billingPreviousStatus`); ingen generell statusändring kringgår vägen · *tidigare: **Ej påbörjad** · [S] i dag nekas ekonomi (403)* | Beslut; `ao-time-write` (242) | `STAGING-VERIFIERING-G6-G9-G13.md` |
 | 270 | **Faktureringskön:** attest spärrar inte fakturering; "redan fakturerad", dubbletter och "fel kund" saknas som åtgärdsorsaker; AO med äldre fakturor utan källreferenser döljs ur kön | **Delvis lokalt verifierad** (T3-B, 2026-11-28): kö → underlag (`appendChecked`) → AO-status (`aoBilling`) och backning vid borttaget utkast/makulering funktionellt prövade lokalt; åtgärdsorsakerna (attest, dubbletter, fel kund) är oförändrade · *tidigare: **Ej påbörjad*** | Beslut | `FAKTURERING.md` |
 | 271 | **`WorkOrderService` anropar `WorkOrdersPage.onSyncStatusChanged`, som inte finns.** "AO-(sparas…)" står kvar till nästa omritning. | **Ej påbörjad** | AO-etappen | `AO-LISTA.md` §8 |
+| 272 | **VK-1 (beslutat verksamhetskrav 2026-11-28): debitering per tillfälle och enhet – arkitekturhänsyn.** Pris- och faktureringsarkitekturen i T4-A/B får inte begränsa VK-1: insatsregistreringar som egen radtyp på AO, oberoende av tid och material; servern sätter enhetspris och moms (inte klienten); fältvisa belopp skyddas av `cost_view`; historiska priser bevaras per registrering; faktureringsstatus per rad. Se avsnittet "Verksamhetskrav VK-1". | **Beslutad, ej påbörjad** (bara hänsyn i T4-A/B, ingen implementation där) | T4-A + T4-B; D-09–D-11; SÄK-6, SÄK-11 | `BESLUT-2026-11-28.md` tillägg VK-1 |
+| 273 | **VK-1a: registrering av utförda insatser på AO** (tjänst/insats, utförandedatum obligatoriskt, klockslag vid behov, antal, debiteringsenhet, utförd av, kommentar, bilder; flera per dag och över flera dagar). Mobil registrering för fältpersonal utan att se eller ändra belopp. Tjänste-/insatskatalog med enheter (tillfälle, st, m², lpm m.fl.) och prisnivåer generell/kund/fastighet/avtal. | **Beslutad, ej påbörjad** | AO-etappen; 272 (T4-A/B); T3-B (tilldelning); T4-A (`cost_view`) | `BESLUT-2026-11-28.md` tillägg VK-1 |
+| 274 | **VK-1b: fakturering av insatser.** Fakturaunderlag individuellt per utförandedatum eller grupperat per tjänst och period, spårbart till varje registrering; delfakturering utan att AO:n avslutas; atomiskt skydd mot dubbelfakturering (per registrering under lås i RPC, samma mönster som `invoice-write`/`aoBilling`, D-07); tid används internt för uppföljning och lönsamhet utan att kunden dubbeldebiteras. | **Beslutad, ej påbörjad** | Faktureringsdelen av AO-etappen (samordnas med 270 och T4-E/M8); 273; D-07, 269 | `BESLUT-2026-11-28.md` tillägg VK-1 |
 
 ### Riskregister R-01–R-18
 
@@ -910,6 +915,8 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 | V11 | Alla | Slutregression: `tests/run-all.sh`, lokala sviter mot replikan, `e2e-real.js`, kontrollsummor och städning med kod 0 |
 
 **Utanför T3/T4 (AO-etappen):** `ao_plan_own` (AP-E), räknare (AP-C), notiser utöver "inga falska tilldelningsnotiser" (AP-D), avveckling av status `pool` (AP-G), kategorierna i alla vyer, AO-nummergeneratorn (245) och UX-etappen.
+
+**Hänsyn i T4-A + T4-B (VK-1, punkt 272, registrerat 2026-11-28):** pris- och faktureringsarkitekturen ska ge plats för insatsregistreringar debiterade per tillfälle och enhet (punkt 273–274). Ingen implementation av VK-1 i T4 och ingen ändring av arbetsordningen.
 
 ## Beslut 2026-11-26 (fastställda 2026-11-27)
 
@@ -1050,6 +1057,45 @@ Steg 1 och 2 kräver inga affärsbeslut. Beslut AP-A, AP-E och AP-F krävs innan
 | OR-2 | Repots regel att `ändring-begärd` räknas som besvarad saknas i `offer_respond_commit`; en EF-förkontroll skulle bryta requestId-reprisen | Kräver ny RPC-migration; beslut | Som OR-1 | Som OR-1 |
 | MIG-1 | 13 migrationer har andra versionsnummer i repot än i STAGING (t.ex. `20261124000001` mot `20261124145958`). En `supabase db push` mot STAGING skulle se dem som nya. | **Beslutad, lokalt genomförd** (BESLUT-2026-11-28 MIG-1; T3-0): verifierbar mappning `vift-v2/supabase/MIGRATIONSMAPPNING.md` + `migrationsmappning.json` (`tests/local/migrationsmappning.js`) och installationsunderlag `INSTALLATIONSUNDERLAG-MIGRATIONER.md`; ingen repair/db push. Rättelse: 11 repo-filer (för 10 versioner + policydelen 20261124210747) har andra nummer, inte 13. *Tidigare förslag: `supabase migration repair` eller en mappning; mot tom LIVE fungerar filnamnsordningen (verifierat lokalt)* | Före varje push mot STAGING; 241 | `G1-G4-DEL2-RESULTAT.md` §10.10 |
 | KÄLLA-1 | Hantering av VIFT-CRM:s inaktuella `supabase/`-spegel | **Beslutad, lokalt genomförd** (BESLUT-2026-11-28 KÄLLA-1, alternativ A; T3-0): spegeln borttagen (`git rm`, historiken kvar), `supabase/README.md` med remote/gren/commit, testerna via `VIFT_SERVER_ROOT`, kontroll `tests/serverkalla_guard.test.js`. *Tidigare förslag: A: ta bort katalogen ur klientgrenen (eller ersätt med README) och lägg till en kontroll som fallerar om den fylls; B: döp om till `supabase-spegel/` och synka bara med skript och sha256* | Före T3-0 avslutas | `vift-v2/supabase/AUKTORITATIV-KALLA.md` |
+
+## Verksamhetskrav VK-1 — Debitering per tillfälle och enhet (beslutat 2026-11-28)
+
+**Status:** Beslutat verksamhetskrav. **Ej påbörjad.** Ingen implementation nu och ingen ändring av arbetsordningen. Ordagrann lydelse finns i `docs/qa-2026-11-28/BESLUT-2026-11-28.md` (tillägg VK-1).
+
+**Behov:** VIFT ska kunna registrera och debitera enskilda utförda insatser på en arbetsorder, oberoende av tidrapportering och materialregistrering. Exempel på samma AO: maskinskottning 1 403 kr/tillfälle, handskottning 1 250 kr/tillfälle, saltning/halkbekämpning 980 kr/tillfälle.
+
+**Varje registrering innehåller:**
+- tjänst eller insats;
+- utförandedatum (obligatoriskt) och klockslag vid behov;
+- antal och debiteringsenhet (tillfälle, styck, kvadratmeter, löpmeter och andra relevanta enheter);
+- utförd av;
+- avtalat enhetspris och momssats;
+- kommentar och eventuell bilddokumentation;
+- faktureringsstatus och koppling till fakturaunderlag.
+
+Flera insatser ska kunna registreras samma dag och över flera dagar på samma AO, och samma insats ska kunna upprepas vid olika datum.
+
+**Krav:**
+- **Prissättning:** generell, kundspecifik, fastighetsspecifik eller avtalsspecifik. Historiska registrerade priser bevaras.
+- **Fältpersonal:** registrerar enkelt från mobilen utan att se eller ändra ekonomiska belopp.
+- **Tid:** tidrapporteringen kan samtidigt användas för intern uppföljning och lönsamhetsberäkning utan att kunden dubbeldebiteras.
+- **Fakturaunderlag:** redovisar insatser individuellt med utförandedatum eller grupperat per tjänst och period, med spårbarhet till varje enskild registrering.
+- **Delfakturering:** utförda insatser kan faktureras utan att hela AO:n avslutas.
+- **Dubbelfakturering:** atomiskt skydd.
+
+**Placering i planen:**
+
+| Punkt | Del | Etapp | Beroenden |
+|---|---|---|---|
+| 272 | Arkitekturhänsyn: pris- och faktureringsarkitekturen får inte begränsa VK-1 | Hänsyn i T4-A + T4-B (ingen implementation där) | D-09–D-11, SÄK-6, SÄK-11 |
+| 273 | VK-1a: registrering av insatser på AO, katalog med enheter och prisnivåer, mobil registrering utan belopp | AO-etappen | 272, T3-B (tilldelning), T4-A (`cost_view`) |
+| 274 | VK-1b: fakturering av insatser, individuellt eller grupperat, delfakturering, atomiskt skydd mot dubbelfakturering | Faktureringsdelen av AO-etappen, samordnad med 270 och T4-E (M8) | 273, D-07, 269 |
+
+**Att beakta (från befintliga beslut och säkerhetsregler, inte nya beslut):**
+- Enhetspris och moms sätts av servern utifrån gällande prisnivå vid registreringen, inte av klienten (samma princip som SÄK-6 och SÄK-11).
+- Fältroller registrerar bara på AO de är tilldelade (AP-B, T3-B). Belopp visas bara med `cost_view` (B1/B5, T4-A).
+- Faktureringsstatus per registrering sätts bara via faktureringsvägen, under radlås i RPC och med idempotens bunden till innehåll (D-07, SÄK-12, `aoBilling`).
+- Testfall ska omfatta samtidig delfakturering av samma registrering (exakt en vinner), prisändring efter registrering (historiskt pris oförändrat) och att tid och insatser på samma AO inte ger dubbel debitering.
 
 ## Backlog – senare UX-etapp
 
