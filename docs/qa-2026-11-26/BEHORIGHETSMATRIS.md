@@ -219,25 +219,25 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R31 | Faktura: intern kommentar | S | S | S | – | – | Nytt fält `internalNote`. PDF (klient `InvoicesPage.js:2223` och offer/invoice-PDF på servern) tar **aldrig** med det. | D-20 | `inv.note` skrivs ut |
 | R32 | Faktura: kundsynlig kommentar | S | S | S | – | – | Nytt fält `customerNote`. Äldre `note` skrivs **inte** ut utan uttrycklig klassificering. | D-20 | – |
 | R33 | Offerter: fullständiga (belopp, rader) | S | S *(offer_manage)* | Lp (utan token och interna fält) | – | – | RLS + PROJ | D-12 | Som målet |
-| R34 | Offerter: referens till tilldelad AO | L | L | L | Lp: bara id, titel, status för offert kopplad till egen AO | Lp samma | PROJ (urval per post) | D-12 | Stubb för **alla** offerter (F9) |
+| R34 | Offerter: referens till tilldelad AO | L | L | L | Lp: bara id, titel, status för offert kopplad till egen AO | Lp samma | PROJ (urval per post) | D-12 | **Lokalt verifierad (T3-D):** bara offerter kopplade till AO som anroparen ser med innehåll (AO:ns `offerId` eller offertens `workOrderId`), fälten id, titel, status och workOrderId; REST tom lista. Ej installerad i STAGING. · *tidigare: Stubb för **alla** offerter (F9)* |
 | R35 | Offerttoken, godkännande, intern anteckning | S | S *(offer_manage)* | – | – | – | RLS + PROJ. Publik väg: `offer-token-validate`/`offer-respond`. | D-12 | Som målet |
-| R36 | Kunder, fastigheter, objekt, kontakter | S | S | L | Lp: bara de som hör till egna AO, och begränsat för öppen pool | Lp: bara egna AO | PROJ (urval per post med samma regel som `work-orders-list`) | D-13 | Fält läser hela registret |
+| R36 | Kunder, fastigheter, objekt, kontakter | S | S | L | Lp: bara de som hör till egna AO, och begränsat för öppen pool | Lp: bara egna AO | PROJ (urval per post med samma regel som `work-orders-list`) | D-13 | **Lokalt verifierad (T3-D):** fält och begränsad får bara poster som hör till AO de ser med innehåll (öppen pool ger inga; adressen finns i poolprojektionen); portkoder och nyckelinformation aldrig i projektionen för roller utan `objects_sensitive` (skrivaren `customer_manage` undantagen, SÄK-7/T4-A); REST tom lista. Ej installerad i STAGING. · *tidigare: Fält läser hela registret* |
 | R37 | Personnummer, org.nr för privatperson | S | (K-02) | L *(personal_data_view)* | – | – | PROJ + RLS. Skrivning: fältvis sammanslagning. EXP. | D-13 | `customer_manage`/`invoice_*`/`offer_manage`/`sales_manage`/`ao_view_all` |
 
 ### 3.4 Personal, roller, logg, uppgifter (D-14, D-15, D-21, D-22, D-25)
 
 | # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R38 | Personal: namn, titel, arbetstelefon, arbets-e-post (interna kollegor) | S | L | L | L | Lp: namn och titel för personal på egna AO | PROJ | D-14 | Alla läser hela posten |
+| R38 | Personal: namn, titel, arbetstelefon, arbets-e-post (interna kollegor) | S | L | L | L | Lp: namn och titel för personal på egna AO | PROJ | D-14 | **Lokalt verifierad (T3-D):** andra än en själv: namn, titel och (för interna) arbetstelefon och arbets-e-post; externa (bara D-04:s tilläggsbehörigheter) bara namn och titel för personal på egna AO; timpris, personnummer, användarnamn m.m. lämnas inte ut. Ej installerad i STAGING. · *tidigare: Alla läser hela posten* |
 | R39 | Egen personalpost (inkl. e-post för inloggning) | L | L | L | L | L | PROJ (egen post fullständig). KLIENT `Auth._resolveUser`. | D-14 | Som målet |
-| R40 | Andras `role`/`permissions` och skyddade personaluppgifter | S | L *(staff_view)*, utan `permissions` | – | – | – | PROJ | D-14, D-21 | **Lokalt verifierad (T3-C):** andras `permissions` bort för alla utom `staff_manage`/`admin_manage`; andras `role` bara med `staff_view`; REST döljer raden. Skyddade personaluppgifter (telefon, timpris) är T3-D/T4-A. · *tidigare: Alla läser* |
+| R40 | Andras `role`/`permissions` och skyddade personaluppgifter | S | L *(staff_view)*, utan `permissions` | – | – | – | PROJ | D-14, D-21 | **Lokalt verifierad (T3-C):** andras `permissions` bort för alla utom `staff_manage`/`admin_manage`; andras `role` bara med `staff_view`; REST döljer raden. Skyddade personaluppgifter: **lokalt verifierad (T3-D)** — timpris m.m. lämnas inte ut till den som inte hanterar registret; arbetstelefon bara till interna kollegor. · *tidigare: Alla läser* |
 | R41 | Rollregister: egen effektiv behörighet | L | L | L | L | L | PROJ `vift_roles` (egen roll) | D-21 | **Lokalt verifierad (T3-C):** egen roll via store-key-write. · *tidigare: Alla läser alla roller* |
 | R42 | Rollregister: andras roller | S | – | – | – | – | PROJ + RLS *(admin_manage)* | D-21 | **Lokalt verifierad (T3-C):** bara `admin_manage` (och `all`); `staff_manage` får de roller den får tilldela. · *tidigare: Alla läser* |
 | R43 | Personal: skriva `role`/`active`, och roller: skriva `permissions` | S (superadmin) | – | – | – | – | RPC under gemensamt lås: eskaleringsregeln och invarianten "≥1 aktiv `all`" | D-25 | **Lokalt verifierad (T3-C):** SÄK-8 åtgärdad lokalt (eskaleringsregel + invariant under gemensamt lås). Ej installerad i STAGING. · *tidigare: **SÄK-8 (P1):** `staff_manage` kan ge sig själv admin. Inget skydd för sista superadmin.* |
-| R44 | Aktivitetslogg: läsa | L | L | L | Lp: händelser på egna AO | Lp: egna AO | PROJ per post (samma urval som rättad `work-orders-list`). RLS nekar direkt REST för roller utan full åtkomst. | B4, D-22 | Alla läser alla |
-| R45 | Aktivitetslogg: rapportera | `appendActivity` | inom behörighet | inom behörighet | Typer och referenser för egna AO | samma | EF `store-key-write` `appendActivity` (typlista per behörighet, referens kontrolleras), RPC `activity_log_append` | D-22 | Alla typer och referenser tillåtna (F11) |
-| R46 | Uppgifter: egna och tilldelade | S | S | S | S | S | EF `activities-policy.ts` (skrivning), PROJ per post (läsning) | D-15, Ö7 | Skrivning som målet, läsning av alla |
-| R47 | Uppgifter: andras | S | S *(ao_edit + ao_view_all, eller admin_manage)* | – (`ao_view_all` räcker inte) | – | – | EF + PROJ + KLIENT med samma regel | D-15 | **SÄK-2 (P1):** fält läser alla. Klient och server följer olika regler (F8). |
+| R44 | Aktivitetslogg: läsa | L | L | L | Lp: händelser på egna AO | Lp: egna AO | PROJ per post (samma urval som rättad `work-orders-list`). RLS nekar direkt REST för roller utan full åtkomst. | B4, D-22 | **Lokalt verifierad (T3-D):** hela loggen med `ao_view_all` (eller `admin_manage`); övriga AO-händelser för AO de ser med innehåll (inte öppen pool, Q3), inga offert-, faktura-, kund- eller säljposter; REST tom lista; även i `invoice-write`-svaret. Ej installerad i STAGING. · *tidigare: Alla läser alla* |
+| R45 | Aktivitetslogg: rapportera | `appendActivity` | inom behörighet | inom behörighet | Typer och referenser för egna AO | samma | EF `store-key-write` `appendActivity` (typlista per behörighet, referens kontrolleras), RPC `activity_log_append` | D-22 | **Lokalt verifierad (T3-D):** typ per behörighet (403 `type_not_allowed`) och referenser mot det anroparen ser (403 `ref_not_visible`) i RPC:n, AO-raden under lås; servern sätter aktör och tid. Ej installerad i STAGING. · *tidigare: Alla typer och referenser tillåtna (F11)* |
+| R46 | Uppgifter: egna och tilldelade | S | S | S | S | S | EF `activities-policy.ts` (skrivning), PROJ per post (läsning) | D-15, Ö7 | **Lokalt verifierad (T3-D):** läsning = egna, tilldelade och uppgifter på AO där man är tilldelad; skrivning som tidigare med orsak (`not_own`, `field_<fält>`). Ej installerad i STAGING. · *tidigare: Skrivning som målet, läsning av alla* |
+| R47 | Uppgifter: andras | S | S *(ao_edit + ao_view_all, eller admin_manage)* | – (`ao_view_all` räcker inte) | – | – | EF + PROJ + KLIENT med samma regel | D-15 | **Lokalt verifierad (T3-D):** SÄK-2 åtgärdad lokalt — andras uppgifter bara med `admin_manage` eller `ao_edit` + `ao_view_all` i läsning, skrivning och klient (F8). Ej installerad i STAGING. · *tidigare: **SÄK-2 (P1):** fält läser alla. Klient och server följer olika regler (F8).* |
 
 ### 3.5 Portkoder, ronderingar, inställningar (D-05, D-16, D-17, D-23)
 
@@ -295,7 +295,7 @@ Ett generiskt fel (500, `write_failed`, nätverksfel, `forbidden` utan `reason` 
 | PostgREST, `P0001` med `direct_write_blocked` | – | TRG `_protect_critical_store_keys` |
 | PostgREST 403, kod `42501`, meddelande `direct_write_blocked` | – | T3-C (F18): TRG `protect_direct_write_allowlist` + RESTRICTIVE `store_direct_write_allowlist_*` — direkt REST-skrivning utanför vitlistan. UPDATE/DELETE av en rad som en RLS-policy döljer ger i stället 0 rader (PostgreSQL). |
 
-**Nya koder som införs i T3/T4.** Felet bär alltid `error` + `reason`, så att testet kan skilja orsakerna åt. Den interna regelorsaken i `activities-policy.ts` (t.ex. `not_own`) returneras i dag inte till klienten. Det ändras.
+**Nya koder som införs i T3/T4.** Felet bär alltid `error` + `reason`, så att testet kan skilja orsakerna åt. Den interna regelorsaken i `activities-policy.ts` (t.ex. `not_own`) returneras i dag inte till klienten. Det ändras. *(T3-D, lokalt: `not_own`, `field_<fält>`, `type_not_allowed` och `ref_not_visible` returneras nu.)*
 
 | Status | `error` / `reason` | Används för |
 |---|---|---|
@@ -470,14 +470,14 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
 |---|---|---|---|---|---|---|
-| SEC-OFF-01 | − | FÄ, BE | `offers` | R,E,S | L,SG | Bara offerter kopplade till egen AO, med id, titel och status. Övriga saknas. |
-| SEC-OFF-02 | − | FÄ | `offers[].lines`, belopp, token | E | L,SG | Saknas |
+| SEC-OFF-01 | − | FÄ, BE | `offers` | R,E,S | L,SG | Bara offerter kopplade till egen AO, med id, titel och status. Övriga saknas. **Lokalt grön (T3-D, `t3d_informationsatkomst` E, R; S paritet OFF-falt/OFF-begransad, REST; K e2e T3D-03).** |
+| SEC-OFF-02 | − | FÄ | `offers[].lines`, belopp, token | E | L,SG | Saknas **Lokalt grön (T3-D, `t3d_informationsatkomst` E; K e2e T3D-03).** |
 | SEC-OFF-03 | − | EK | `publicToken`, `customerApproval`, `lockedSnapshotJSON`, `internalNote` | R,E | L,SG | Saknas |
 | SEC-OFF-04 | − | FÄ, EK | `writeMerge vift_offers` (testoffert) | E | L,SG | 403 `forbidden` |
 | SEC-OFF-05 | − | FÄ | `offer-pdf`, `send-offer-email`, `offer-attachment-url` | E | L | 403 `forbidden` |
 | SEC-OFF-06 | − | oinloggad | `offer-respond` med ogiltig eller utgången token | E | L | 4xx enligt EF. Offert-KS oförändrad. |
-| SEC-KUND-01 | − | FÄ | `customers`, `properties`, `propertyObjects`, `propertyContacts` | E,S | L,SG | Bara poster kopplade till egna AO, och begränsat för öppen pool |
-| SEC-KUND-02 | − | FÄ, BE | REST `vift_customers` | R | L,SG | Tom lista |
+| SEC-KUND-01 | − | FÄ | `customers`, `properties`, `propertyObjects`, `propertyContacts` | E,S | L,SG | Bara poster kopplade till egna AO, och begränsat för öppen pool **Lokalt grön (T3-D, `t3d_informationsatkomst` E för fält, FÄ2, begränsad och egna roller; S paritet KUND-*).** |
+| SEC-KUND-02 | − | FÄ, BE | REST `vift_customers` | R | L,SG | Tom lista **Lokalt grön (T3-D, `t3d_informationsatkomst` R för fält, begränsad och tom roll; S paritet REST-*).** |
 | SEC-KUND-03 | − | Egen roll med `ao_view_all` + `sales_manage` utan `personal_data_view` | `customers[].personnr`, `orgNr` för privatperson | R,E,X | L,SG | Saknas i alla vägar (D-13) |
 | SEC-KUND-04 | + | EK | Samma | E | L,SG | Finns |
 | SEC-KUND-05 | − | AL utan `personal_data_view` | Spara testkund utan `personnr` | E,P | L | Lagrat `personnr` oförändrat (fältvis sammanslagning) |
@@ -489,10 +489,10 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
 |---|---|---|---|---|---|---|
-| SEC-B3-01 | + | FÄ | Kollegors namn, titel och arbetskontakt | E | L,SG | Finns **Lokalt grön (T3-C, `t3c_roller`, E).** |
+| SEC-B3-01 | + | FÄ | Kollegors namn, titel och arbetskontakt | E | L,SG | Finns **Lokalt grön (T3-C, `t3c_roller`, E).** **T3-D:** bara namn, titel och arbetskontakt (inga skyddade personaluppgifter), `t3d_informationsatkomst` E, S paritet B3-falt. |
 | SEC-B3-02 | + | FÄ | Egen post med e-post. Inloggning löser rätt användare. | E,K | L,W | Ja **Lokalt grön (T3-C: `t3c_roller` E, e2e T3C-04 K).** |
 | SEC-B3-03 | − | FÄ, EK | Andras `permissions` och `role` | R,E,S | L,SG | Saknas **Lokalt grön (T3-C: R tom lista, E projektion, S paritet B3-03/03e).** AL (staff_view) får andras `role` men inte `permissions` (R40). |
-| SEC-B3-04 | − | BE | Kontaktuppgifter till personal som inte finns på egna AO | E | L,SG | Saknas |
+| SEC-B3-04 | − | BE | Kontaktuppgifter till personal som inte finns på egna AO | E | L,SG | Saknas **Lokalt grön (T3-D, `t3d_informationsatkomst` E; S paritet B3-begransad).** |
 | SEC-B3-05 | − | FÄ, AL | `vift_roles`: andras roller | R,E | L,SG | Bara egen effektiv roll **Lokalt grön (T3-C: R tom lista, E bara egen roll, även readWithHash).** Med `staff_manage` även de roller man får tilldela. |
 | SEC-B3-06 | + | Egen roll med `admin_manage` | `vift_roles` | E | L | Alla roller **Lokalt grön (T3-C, E och R).** |
 | SEC-ROLL-01 | − | Egen roll med `staff_manage` | Sätta egen `role:'admin'` | E,P | L | 403 `privilege_escalation` **Lokalt grön (T3-C: E, P, S; klient T3C-01).** |
@@ -512,19 +512,19 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
 |---|---|---|---|---|---|---|
-| SEC-B4-01 | + | AL, EK, ADM | `activityLog` | E | L,SG | Alla poster |
-| SEC-B4-02 | − | FÄ | `activityLog` | R,E,S | L,SG | Bara poster med `workOrderId` för egna AO. Inga offert-, faktura-, kund- eller personalposter. REST: tom lista. |
-| SEC-B4-03 | − | FÄ | Poster om AO i **tilldelad pool** för FÄ2 | E | L,SG | Saknas (bygger på rättad poolregel) |
-| SEC-B4-04 | − | alla | `write`/`writeMerge vift_activityLog` | E | L | 403 `append_only` |
-| SEC-B4-05 | − | FÄ | `appendActivity` med typ `invoice_created` | E | L | 403 `type_not_allowed`. Logg-KS oförändrad. |
-| SEC-B4-06 | − | FÄ | `appendActivity` med `workOrderId` för en ej tilldelad AO | E | L | 403 `ref_not_visible` |
-| SEC-B4-07 | − | FÄ | UI: dashboardens senaste händelser och AO-historik | K | W | Bara egna. Klientrapporterade poster märks inte som revisionshistorik (D-22). |
-| SEC-TASK-01 | + | FÄ | Skapa egen uppgift, klarmarkera tilldelad, radera egen | E | L,SG | 200 |
-| SEC-TASK-02 | − | FÄ | Skapa uppgift tilldelad FÄ2 | E | L,SG | 403 `not_own` (i dag `forbidden` utan orsak). KS oförändrad. |
-| SEC-TASK-03 | − | FÄ | Ändra titel på tilldelad uppgift skapad av AL | E | L,SG | 403 `forbidden`/`field_title` |
-| SEC-TASK-04 | − | FÄ | `activities`: FÄ2:s och offertkopplade uppgifter | R,E,S,K | L,SG,W | Saknas. **SÄK-2.** |
-| SEC-TASK-05 | − | EK | Ändra annans uppgift | E,K | L,W | 403 `not_own`. Klienten visar ingen redigeringsknapp (D-15). |
-| SEC-TASK-06 | + | AL | Ändra FÄ:s uppgift | E | L,SG | 200 |
+| SEC-B4-01 | + | AL, EK, ADM | `activityLog` | E | L,SG | Alla poster **Lokalt grön (T3-D, `t3d_informationsatkomst` E).** |
+| SEC-B4-02 | − | FÄ | `activityLog` | R,E,S | L,SG | Bara poster med `workOrderId` för egna AO. Inga offert-, faktura-, kund- eller personalposter. REST: tom lista. **Lokalt grön (T3-D, `t3d_informationsatkomst` E, R; S paritet B4-*, REST-*).** |
+| SEC-B4-03 | − | FÄ | Poster om AO i **tilldelad pool** för FÄ2 | E | L,SG | Saknas (bygger på rättad poolregel) **Lokalt grön (T3-D, `t3d_informationsatkomst` E; S paritet B4-falt).** |
+| SEC-B4-04 | − | alla | `write`/`writeMerge vift_activityLog` | E | L | 403 `append_only` **Lokalt grön (T3-D, `t3d_informationsatkomst` E, även admin, och R via F18-vitlistan; S paritet B4-04).** |
+| SEC-B4-05 | − | FÄ | `appendActivity` med typ `invoice_created` | E | L | 403 `type_not_allowed`. Logg-KS oförändrad. **Lokalt grön (T3-D, `t3d_informationsatkomst` E och P; S paritet B4-05; K e2e T3D-04).** |
+| SEC-B4-06 | − | FÄ | `appendActivity` med `workOrderId` för en ej tilldelad AO | E | L | 403 `ref_not_visible` **Lokalt grön (T3-D, `t3d_informationsatkomst` E och P, även öppen pool, annans kund/offert/faktura; samtidighet ×20 under lås; S paritet B4-06*; K e2e T3D-04).** |
+| SEC-B4-07 | − | FÄ | UI: dashboardens senaste händelser och AO-historik | K | W | Bara egna. Klientrapporterade poster märks inte som revisionshistorik (D-22). **Lokalt grön (T3-D, e2e T3D-01/03: dashboard och AO-historik visar bara egna, märkta "inte en revisionslogg"/"klientrapport").** |
+| SEC-TASK-01 | + | FÄ | Skapa egen uppgift, klarmarkera tilldelad, radera egen | E | L,SG | 200 **Lokalt grön (T3-D, `t3d_informationsatkomst` E; S paritet TASK-01; K e2e T3D-01).** |
+| SEC-TASK-02 | − | FÄ | Skapa uppgift tilldelad FÄ2 | E | L,SG | 403 `not_own` (i dag `forbidden` utan orsak). KS oförändrad. **Lokalt grön (T3-D, `t3d_informationsatkomst` E 403 `not_own`; S paritet TASK-02; K e2e T3D-01).** |
+| SEC-TASK-03 | − | FÄ | Ändra titel på tilldelad uppgift skapad av AL | E | L,SG | 403 `forbidden`/`field_title` **Lokalt grön (T3-D, `t3d_informationsatkomst` E 403 `field_title`; S paritet TASK-03).** |
+| SEC-TASK-04 | − | FÄ | `activities`: FÄ2:s och offertkopplade uppgifter | R,E,S,K | L,SG,W | Saknas. **SÄK-2.** **Lokalt grön (T3-D, `t3d_informationsatkomst` R, E; S paritet TASK-*; K e2e T3D-01). SÄK-2 åtgärdad lokalt.** |
+| SEC-TASK-05 | − | EK | Ändra annans uppgift | E,K | L,W | 403 `not_own`. Klienten visar ingen redigeringsknapp (D-15). **Lokalt grön (T3-D, `t3d_informationsatkomst` E 403 `not_own`; S paritet TASK-05; K e2e T3D-02: ingen redigeringsknapp).** |
+| SEC-TASK-06 | + | AL | Ändra FÄ:s uppgift | E | L,SG | 200 **Lokalt grön (T3-D, `t3d_informationsatkomst` E; S paritet TASK-06; K e2e T3D-02).** |
 
 ### 5.9 Portkoder (R48–R51)
 
@@ -613,7 +613,7 @@ Varje rad är en **egen roll** = standardroll minus en enskild behörighet, elle
 | SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 **Lokalt grön (T3-C).** |
 | SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 **Lokalt grön (T3-C)** för `all` och `bankgiro_edit` som tillägg i en roll; SEC-INST-03 är T4. |
 | SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) |
-| SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) |
+| SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) **Lokalt grön (T3-D: ekonomi och egen roll säljare, E och S).** |
 | SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. **Lokalt grön (T3-C):** store-key-write, work-orders-list, time-entries-list, ao-time-write, invoice-write. |
 | SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). **Lokalt grön (T3-C)** i samma EF:er; klienten sedan T3-A. |
 
@@ -697,10 +697,10 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C · nuläge 2026-11-28: **lokalt verifierad** (T3-C: `vift-v2/tests/t3c_roller.test.js`; baslinjen T3-0 vänd), ej installerad i STAGING |
 | F6: cache kvar efter utloggning | SÄK-9 | **P1** | `AuthService.js:628-650`, `state.js:983` — lokalt åtgärdad 2026-11-28 | T3-A |
 | F7: reservroll `personal` | SÄK-10 | Blockerar `personal` | `AuthService.js:379` — lokalt åtgärdad 2026-11-28 | T3-A |
-| F8: uppgiftsregler klient mot server | (SÄK-2) | P2 | `PageShells.js:11861-11869`, `activities-policy.ts` | T3-D |
-| F9: offertstubbar för alla offerter | – | P2 | `vift_store_project` (`schema/functions.sql`) | T3-D |
-| F10: e-post krävs för inloggningen | – | Krav | `AuthService.js:366-372` | T3-D |
-| F11: `appendActivity` tillåter alla typer och referenser | – | P2 | `activity-log.ts` | T3-D |
+| F8: uppgiftsregler klient mot server | (SÄK-2) | P2 | `PageShells.js:11861-11869`, `activities-policy.ts` | T3-D · nuläge 2026-11-28: **lokalt verifierad** (T3-D: klienten använder serverns regel, `ActivitiesService.canEdit/canComplete/canDelete`; e2e T3D-01/02), ej installerad i STAGING |
+| F9: offertstubbar för alla offerter | – | P2 | `vift_store_project` (`schema/functions.sql`) | T3-D · nuläge 2026-11-28: **lokalt verifierad** (T3-D: bara offerter kopplade till egna AO), ej installerad i STAGING |
+| F10: e-post krävs för inloggningen | – | Krav | `AuthService.js:366-372` | T3-D · nuläge 2026-11-28: **uppfyllt lokalt** (T3-C/T3-D: den egna personalposten lämnas oförändrad, med e-post) |
+| F11: `appendActivity` tillåter alla typer och referenser | – | P2 | `activity-log.ts` | T3-D · nuläge 2026-11-28: **lokalt verifierad** (T3-D: `type_not_allowed`/`ref_not_visible` i RPC:n), ej installerad i STAGING |
 | F12: snabbexport utan spärr | (SÄK-1) | P2 | `ImportExportConfigs.js` `showExportMenu` | T4-F |
 | F13: `ProfitabilityService` använder 250 kr/h som standard | – | P3 | `ProfitabilityService.js:10` | T4-B |
 | F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
@@ -710,9 +710,11 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F21: `ao_edit` kan sätta `status:'fakturerad'`/`invoiceId` via `patch_ao` | – | **P1** (D-07) | `ao-time-write/index.ts` (ingen fältbegränsning för `callerHasEdit`) + `work_order_patch` | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
 | F23: stämpling kontrollerar inte AO-tilldelning | (AP-B) | P1 | `store-key-write/stamp-status.ts:56-70` (bara `ao_time`) | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
 | O1: Exportcenter, personnummer förvalt | SÄK-1 | P2 | `ImportExportConfigs.js:49/60`, `ExportCenterPage.js:123/135-142/189` | T4-F |
-| O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D · nuläge 2026-11-28: **lokalt verifierad** (T3-D; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3d_informationsatkomst.test.js`), ej installerad i STAGING |
 
 **Nuläge 2026-11-28 (T3-B, lokalt):** F1 (SÄK-5), F4 (SÄK-3/4), F16/F23 (SÄK-11, tilldelningsdelen samt serverpris), F17 (SÄK-12) och F21 (SÄK-15) är rättade i `vift-v2` (migrationerna `20261128000001–03`, ändrade EF) och **lokalt verifierade** (`vift-v2/tests/t3b_ao_karna.test.js`, `t3b_rollback.test.js`, paritet `VIFT-CRM/tests/sim_parity.test.js`). R02–R08, R10 och R26 följer målet lokalt. Övergångsregeln (§4.6 i testplanen) gäller tills T3-E. Inget är installerat i STAGING; kolumnen "Nu (STAGING)" beskriver fortfarande STAGING. Kvar till T4: radvisa materialrader (D-19 fullt), prisgruppsbehörighet (`price_group_not_allowed`), AO-ekonomi i projektionen för fält (R12).
+
+**Nuläge 2026-11-28 (T3-D, lokalt):** O2/SÄK-2, F8, F9 och F11 är åtgärdade och lokalt verifierade (`vift-v2/tests/t3d_informationsatkomst.test.js`, `t3d_rollback.test.js`; paritet 141 scenarier, 139 lika, 2 kända utanför T3-D). R34, R36, R38, R40 (skyddade personaluppgifter), R44–R47 följer målet lokalt. Inget är installerat i STAGING.
 
 **Nuläge 2026-11-28 (T3-C, lokalt):** F5 och F18 är åtgärdade och lokalt verifierade (`vift-v2/tests/t3c_roller.test.js`, `t3c_rollback.test.js`; paritet 85 scenarier, 83 lika, 2 kända utanför T3-C). Inget är installerat i STAGING.
 

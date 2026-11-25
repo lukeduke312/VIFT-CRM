@@ -1336,7 +1336,262 @@ Data som skapats efter installationen ligger kvar och är giltig för den äldre
 
 ## T3-D – informationsåtkomst
 
-*(Fylls i av T3-D.)*
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den
+lokala STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat
+eller verifierat i STAGING. LIVE är inte kontaktad. Inga läsningar mot STAGING behövdes.
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Urval per post (SÄK-2, B4, Ö7, D-12–D-15) | `vift_store_project` (samma signatur som T3-C) väljer per post för roller utan full åtkomst: aktivitetslogg, uppgifter, offertreferenser, kunder, fastigheter, objekt, kontakter och personalens kontaktuppgifter. AO-synligheten är **T3-B:s poolregel**, nu också som SQL-funktion (`_vift_ao_visible` = `canViewWorkOrder`, byggd på T3-B:s `_vift_has`/`_vift_ao_assigned`/`_vift_ao_eff_perms`/`_vift_ao_open_pool`); innehåll kräver dessutom tilldelning eller `ao_view_all` (`_vift_ao_content_visible` = `canViewWorkOrderContent`), så öppen pool ger ingen historik, inga kunder och inga kontakter (Q3, K-03). Ingen ny parallell regel. |
+| Alla vägar | REST: RLS `store_read_by_role` (via `vift_store_full_access`) ger tom lista för roller utan full åtkomst. EF: `readAllWithHashes`, `readWithHash`, **och svaren från `writeMerge`** (`current` och konflikternas `serverValue`) och `invoice-write` (`activityLog`) projiceras. `work-orders-list` oförändrad (T3-B). Klientens tillstånd, lokala cache och export bygger på serverns svar och innehåller därför bara urvalet (e2e T3D-01/03). |
+| `appendActivity` (D-22, F11) | `activity_log_append` får ny signatur med anroparens id och behörigheter. Typ per behörighet → 403 `forbidden`/`type_not_allowed`; varje referens mot det anroparen får se → 403 `forbidden`/`ref_not_visible`, kontrollerat i RPC:n med AO-raden under `FOR SHARE`. Servern sätter aktör och tid och märker posten `klientrapport`. Append-only som tidigare (403 `append_only`; REST nekas av F18-vitlistan). |
+| Uppgifter (D-15, F8, T3-C:s beslut 6) | TASK-01-regeln granskad: arbetsledare = `ao_edit` + `ao_view_all` (eller `admin_manage`) får ändra andras; `ao_view_all` ensamt räcker inte. Det är exakt D-15 och matrisens R47 (SEC-TASK-06, SEC-CUST-21), så regeln behålls. Avslag ger nu orsak (`not_own`, `field_<fält>`). Klienten (Uppgifter-sidan, dashboarden, offertens och AO:ns uppföljningar) följer samma regel. |
+| Känsliga fält (K-04, K-05, D-05) | Portkoder och nyckelinformation (`doorCode`, `keyInformation`, `accessInformation`, `keyReceipt`, `alarmInformation`, `accessCode`, `keyInfo`) lämnas aldrig ut via projektionen till roller utan `objects_sensitive` — nu även fastigheternas och kundernas fält, som tidigare läckte till alla (fastigheter) respektive till kundregistrets läsare (kunder). `inv.note` når inte roller utan fakturaläsning. Ingen datamigrering. |
+| Ingen breddning | För alla 13 aktiva syntetiska användare (5 standardroller, 6 egna roller, okänd roll, egen faktureringsroll) och varje nyckel/svar är utlämningen efter T3-D en delmängd av utlämningen med T3-C-koden (`f0e7e44`, utläst med `git archive`) på samma data. |
+| Paritet (SEC-SIM-01) | Fake-backend följer T3-D-reglerna (båda repona). 141 scenarier: 139 lika, 2 kända (KEY-01, AUTH-02, oförändrade, utanför T3). 56 nya T3-D-scenarier, alla lika, inklusive REST-läsning (ramverket kör nu även GET). |
+| Rollback | `supabase/rollback/T3-D/rollback_t3d.sql` (genererad ur kedjan utan T3-D). Installera → rollback → installera prövat lokalt, och T3-D + T3-C + T3-B i omvänd ordning = exakt STAGING-facit. Ingen data ändras. |
+
+### 1. Inventering före ändringen
+
+**Klientens läsningar** (nuvarande klient och v3.4, `git grep`):
+- Affärsnycklarna läses bara via `Storage.getAllWithHashes` → `store-key-write` `readAllWithHashes` (`initState`, `DataSync._poll`, `Auth.refreshAuthorization`) och `readWithHash` (konflikt/omsynk). `Storage.getAll` (REST) anropas inte; direkt REST-läsning används bara för `vift_lastChanged`, `vift_notifications` och `vift_ronderingspass`.
+- `writeMerge`-svarets `current` blir klientens nya tillstånd och baslinje (`state.js` `_doPersist`): **en EF-väg som lämnade ut hela registret** (t.ex. alla uppgifter till en fältanvändare som klarmarkerat sin egen). Projiceras nu.
+- `invoice-write` (`setStatus`, `draftDelete`) returnerar hela `activityLog`, som `InvoiceService._applyActivityLog` lägger i tillståndet. Projiceras nu (`approveStaleOverride` kräver `admin_manage` = full åtkomst).
+- `work-order-checklist-resolve` returnerar inte längre loggen (protokoll 2, T3-B).
+- Uppgifter: `ActivitiesPage` (`_canEditTask` = `ao_edit` ∨ `ao_view_all` ∨ tilldelad — avvek från servern, F8), dashboardens widgetar "Aktiviteter & uppföljningar" och "Mina uppgifter", offertens uppföljningsdialog och AO:ns uppföljning. AO-koppling uttrycks som `relatedType:'workOrder'` + `relatedId` (äldre poster kan ha `workOrderId`; båda stöds).
+- Aktivitetslogg: dashboardens "Senaste händelser" (`getRecent`) och AO-detaljens tidslinje (`getByWorkOrder`, statushändelser).
+- `ActivitiesService.create` använde `newId` (högsta + 1 i den lokala listan). Med urval per post kan det krocka med en dold uppgifts id → konflikt i stället för ny uppgift. Byts till `newSafeId` (samma som AO och tidposter).
+- `initState` har en heuristik som behandlar "kunder och offerter tomma samtidigt" som en degraderad läsning (blockerar skrivningar) om personalen liknar demodata. Med urval per post är tomma listor ett äkta svar för fält; heuristiken gäller nu bara den som får läsa hela kundregistret.
+- `staff[].hourlyRate`, `personnr`, `username` för andra än en själv används inte av klienten (bara personalsidan, `staff_manage`).
+
+**Klientens skrivningar av aktivitetslogg** (`ActivityService.log`, 40 anropsplatser): typerna och behörigheterna ligger i tabellen i §2. Fältets typer: `work_order_status`, `work_order_assigned`, `material_added`/`_removed`, `time_entry_created` — alla med `workOrderId` för egen AO.
+
+### 2. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000006_t3d_urval_per_post.sql` | Regelfunktionerna `_vift_ao_visible`, `_vift_ao_content_visible`, `_vift_post_refs`, `_vift_kund_las`, `_vift_staff_external`, `_vift_task_ao`, `_vift_activity_ao_type` (bara service_role). `vift_store_full_access` och `vift_store_project` med **samma signatur**. STOP-kontroll: T3-B och T3-C installerade, md5 för de två ersatta funktionerna = T3-C-versionen, andra körning stoppas. |
+| `migrations/20261128000007_t3d_aktivitetslogg.sql` | `_vift_activity_type_perms`, `_vift_ref_visible`; `activity_log_append` med **ny signatur** (`p_caller_staff_id`, `p_caller_perms`), den gamla 2-argumentsversionen tas bort. STOP: md5 = STAGING-versionen, 0006 installerad, andra körning stoppas. |
+| `functions/store-key-write/index.ts` | `appendActivity` skickar id och behörigheter och mappar `forbidden:<reason>` → 403; typen prövas först i EF:en (`typeAllowed`). `writeMerge` för `vift_activities`: avslagsorsak ur `activitiesRefusal`. Svaret från `writeMerge` projiceras (`projectWriteResult`). |
+| `functions/store-key-write/activity-log.ts` | `TYPE_PERMS`/`typeAllowed` (speglar `_vift_activity_type_perms`; testet jämför dem för alla 37 typer). |
+| `functions/store-key-write/activities-policy.ts` | `activitiesRefusal`: `new_not_own`/`assign_other`/`remove_not_own`/`not_own` → `not_own`; `field_*`, `immutable_*`, `completed_by_other` behålls. |
+| `functions/invoice-write/index.ts` | `activityLog` i svaren projiceras (`projectActivityLog`). |
+| `rollback/T3-D/rollback_t3d.sql` | Genererad av `tests/local/t3d-rollback.js`. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | De två filerna, klass "ny", efter T3-C (repo-filer: 37 installerade, 7 nya). |
+
+**Urvalet per nyckel** (roller utan full åtkomst; full åtkomst = skrivrätten enligt `KEY_PERMISSIONS`, `all` eller tabellen):
+
+| Nyckel | Full åtkomst (hela värdet, REST läsbar) | Övriga |
+|---|---|---|
+| `vift_activityLog` | `ao_view_all`, `admin_manage` | AO-händelser (`work_order_*`, `staff_assigned`, `material_*`, `time_entry_created`, `note`) med `workOrderId` för AO som anroparen ser med innehåll; inga poster med offert-, faktura- eller säljreferens |
+| `vift_activities` | `admin_manage`, eller `ao_edit` + `ao_view_all` | Skapade av eller tilldelade anroparen, och uppgifter kopplade till AO där anroparen är **tilldelad** |
+| `vift_offers` | `offer_manage` | Interna roller (C-5:s lista): alla, utan token/interna fält (oförändrat). Övriga: offerter kopplade till AO som anroparen ser med innehåll, fälten id, titel, status, workOrderId |
+| `vift_customers` | `customer_manage`, eller kundregistrets läsare (C-5) **med** `objects_sensitive` | Kundregistrets läsare (C-5): alla, utan portkod/nyckelinformation (personnummer kvar, som tidigare). Roller som skapar AO/återkommande/rapporter: alla utan personnummer och portkod. Övriga: kunder för AO som anroparen ser med innehåll |
+| `vift_properties` | `customer_manage`, eller kundregistrets läsare med `objects_sensitive` | Som kunder (utan `accessCode`/`keyInfo`) |
+| `vift_propertyObjects` | `customer_manage`, `objects_sensitive` | Som kunder (utan de sju skyddade fälten) |
+| `vift_propertyContacts` | `customer_manage`, kundregistrets läsare | Kontakter för AO:ns fastighet (fastighetsnivå eller AO:ns objekt) |
+| `vift_staff` | `staff_manage`, `admin_manage` (T3-C) | Egen post oförändrad. Andra: id, namn, titel, aktiv, färg/initialer; `role` med `staff_view`; arbetstelefon/arbets-e-post för interna. Externa (bara D-04:s tilläggsbehörigheter) ser bara personal på egna AO, utan kontaktuppgifter |
+
+Utan identitet (bara en store-key-write äldre än T3-C) ger de nya per-post-nycklarna tom lista; T3-C:s övergångsväg för personal och roller finns kvar.
+
+**Typer per behörighet** (`_vift_activity_type_perms`, någon av; `all` får alla):
+
+| Typer | Kräver |
+|---|---|
+| `work_order_status`, `work_order_updated`, `work_order_assigned`, `material_added`, `material_removed`, `time_entry_created`, `note` | `ao_view_own` eller `ao_view_all` |
+| `work_order_created` | `ao_create` |
+| `staff_assigned`, `work_order_archived/restored/deleted/permanent_delete` | `ao_edit` |
+| `invoice_created`, `invoice_stale_override_approved` | `invoice_create` |
+| `customer_*`, `property_object_*`, `contract_created`, `project_created` | `customer_manage` |
+| `offer_created`, `offer_sent`, `offer_status` | `offer_manage` |
+| `sales_opportunity_won/lost` | `sales_manage` |
+| `recurring_order_created` | `recurring_manage` |
+| `rondering_*`, `point_ok`, `point_ej_aktuell`, `deviation_*`, `ao_from_deviation` | `ao_view_all` (rondering är `ao_view_all`-styrd tills T4-D) |
+
+**Referenser** (`_vift_ref_visible`): `workOrderId` — `ao_view_all` (även en AO som ännu inte nått servern) eller AO som anroparen ser med innehåll (inte öppen pool, inte arkiverad/borttagen); `customerId`/`propertyId` — kundregistrets läsare eller urvalet; `offerId` — interna offertroller eller urvalet; `invoiceId`, `salesOpportunityId`, `inspectionId`, `ronderingId`, `deviationId` — full åtkomst till respektive nyckel.
+
+**Låsordning:** `activity_log_append` tar `vift_workOrders` (FOR SHARE) → `vift_activityLog` (FOR UPDATE) → `vift_lastChanged`, samma ordning som fakturavägarna (fakturor → AO → logg). Ingen väg tar loggen före AO. T3-C:s lås rörs inte.
+
+### 3. Klientändringar (VIFT-CRM)
+
+- `ActivitiesService`: `canManageAll`, `canEdit`, `canComplete`, `canDelete`, `assignableStaff` (serverns regel); `create` med `newSafeId`.
+- `PageShells`: Uppgifter-sidan använder regeln (redigera = full rätt eller egen; klarmarkera = full rätt eller tilldelad; ta bort = full rätt eller egen); ansvarigväljaren och offertens uppföljningsdialog erbjuder bara en själv utan full rätt; `_save` stoppar annat med begripligt besked.
+- `Dashboard`: Klar-knappen i "Aktiviteter & uppföljningar" bara där servern tillåter; "Senaste händelser" märkt "Rapporterade av användarna — inte en revisionslogg" (D-22, SEC-B4-07).
+- `WorkOrderDetailPage`: tidslinjens poster ur aktivitetsloggen märkta "klientrapport".
+- `state.js`: heuristiken för degraderad läsning gäller bara den som får läsa hela kundregistret.
+- `index.html`: `?v=` höjt för `state.js`, `ActivitiesService.js`, `Dashboard.js`, `WorkOrderDetailPage.js`, `PageShells.js`. Ingen redesign.
+
+### 4. Fake-backend och paritet
+
+- `tests/e2e/fake-backend.js` (båda repona, synkade): `t3dFull` (= `vift_store_full_access` för de projicerade nycklarna), `t3dRefs` (= `_vift_post_refs`), `t3dProject` (= `vift_store_project` för personal, roller, logg, uppgifter, offerter, kunder, fastigheter, objekt, kontakter), REST GET döljer samma nycklar, `appendActivity` med typ och referenser, uppgiftsavslag med orsak, projicerade `writeMerge`- och `invoice-write`-svar. Serverns `KEY_PERMISSIONS`, `typeAllowed`, `activitiesWriteAllowed` och `activitiesRefusal` läses ur källan.
+- `vift-v2/tests/local/lib/paritet.js`: 56 nya scenarier i T3-D-världen (`lib/t3d-data.js`, samma data för replik och fake): B4/TASK/KUND/B3 per roll (fält, FÄ2, begränsad, ekonomi, arbetsledare, säljare, tom), OFF, B4-04/05/06, TASK-01..06 och radering, REST-läsning (fält, ekonomi) för sex nycklar. Ramverket har nu `varld` (gemensam testvärld) och `restLas` (GET).
+- `VIFT-CRM/tests/sim_parity.test.js` 142/0 (141 scenarier, 139 lika, 2 kända); ny `vift-v2/tests/paritet_fake_kopia.test.js` 142/0 för vift-v2:s kopia.
+- C-5-projektionen av övriga nycklar (inställningar, fakturor, återkommande m.fl.) är fortfarande inte modellerad i fake (känd begränsning sedan T3-0, inget T3-D-scenario berörs).
+
+### 5. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 31/31 testfiler gröna, 1 227 godkända kontroller, 0 fel.**
+Webbläsartesterna i `browser/` hoppades över med SKIP_BROWSER=1, som i T3-0–T3-C. De räknas inte som godkända. `staging_e2e_real` kör Playwright och ingår.
+
+Nya:
+- `t3d_informationsatkomst` **111/0** (testgruppen `projection_per_post`):
+  - baslinjefynden SÄK-2 vända (E och R);
+  - exakt urval av id i sju nycklar för 13 användare: admin, arbetsledare, ekonomi, fält, FÄ2, begränsad och egna roller (chef_utan_faktura, säljare, faktureringsroll, adminhanterare, personalansvarig, tom, okänd roll), plus `readWithHash`;
+  - exakta fält: offertreferens, kund/fastighet/objekt utan portkod och personnummer, personal (SEC-B3-01..04, R40);
+  - SEC-B4-01/02/03, Q3 (öppen pool), egen arkiverad AO, `work-orders-list` oförändrad;
+  - REST (R) per roll för nio nycklar;
+  - ingen breddning mot T3-C-koden (`f0e7e44`) för alla användare och nycklar, och `work-orders-list` identisk;
+  - känsliga fält (K-04, K-05) i alla svar per roll, `property_sensitive_access` stängd för REST;
+  - `appendActivity`: 18 negativa fall med exakt felkod och KS (typ, AO, öppen pool, tilldelad pool, arkiverad, påhittad, annans kund/offert/faktura/säljchans, begränsad, ogiltig typ/referens), 8 positiva, servern sätter aktör och tid, idempotens, append-only (E, R), RPC-kontrollerna direkt (P), TS-tabellen = SQL-tabellen för alla 37 typer;
+  - samtidighet: append under en pågående omfördelning ×20 → alltid `ref_not_visible`, ingen mutation;
+  - uppgifter SEC-TASK-01..06, SEC-CUST-21, egna roller, projicerat `writeMerge`-svar och dold konflikt;
+  - `invoice-write`: projicerad logg för egen faktureringsroll, hel logg för arbetsledare;
+  - grants: inga nya funktioner för anon/authenticated.
+- `t3d_rollback` **18/0**: installera → rollback (= STAGING + T3-B + T3-C, ingen data ändrad, äldre kod fungerar) → installera; STOP vid omkörning; T3-D + T3-C + T3-B i omvänd ordning = STAGING-facit.
+- `paritet_fake_kopia` **142/0**: vift-v2:s kopia av fake-backend, 141 scenarier, 139 lika, 2 kända.
+
+Ändrade och gröna:
+- `replica_build` 32/0 (7 nya migrationer; 59 registrerade T3-objekt varav 13 T3-D, 2 av dem ändrade även av T3-C);
+- `t3c_rollback` 19/0 (kedjan utan T3-D; efter ny installation även T3-D; omvänd ordning T3-D + T3-C + T3-B);
+- `t3b_rollback` 12/0 (kedjan utan T3-C och T3-D);
+- `ef_smoke` 39/0 (fältets kunder = kunderna för egna AO, D-13 — avsiktlig ändring, inte försvagad);
+- `migrationsmappning` 18/0, `migrationskedja` 2/0 (112 identiska, 64 förklarade, 0 oförklarade);
+- `t3c_roller` 145/0 och `t3b_ao_karna` 171/0 oförändrade;
+- `baslinje_sakerhet` 38/0 (historisk källa fb71f26, oförändrad).
+
+**VIFT-CRM `tests/run-all.sh`: 22/22 testfiler gröna** (21 Node-testfiler med 620 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade.
+- `sim_parity` 142/0 (141 scenarier, 139 lika, 2 kända);
+- `staging_e2e_real` 26/0.
+
+**E2E (Playwright mot den simulerade servern):**
+- Nya T3D-01–04 (`tests/e2e/specs/39_t3d_informationsatkomst.js`): 4/0.
+- Riktad körning (ACT, DASH, FALT, AOD, TASK, PERM, STG, LOG, AUTH, K, SEC, T3B, T3C, SYNC, MYJOBS, REG, CUS, PROP, OBJ, POBJ, OFF, NOTIF, TIME, CHK, SW): **115 godkända, 3 fel av 118**. De tre felen (PERM-03, TASK-02, REG-UI-07) läste annans uppgift eller offert ur fältets klienttillstånd för att göra ett direktanrop; T3-D lämnar inte längre ut dem. Testerna använder nu serverns faktiska post (som en angripare som känner värdet), så nekandet prövas lika hårt, och de kontrollerar dessutom att posten **inte** når klienten. PERM-03 förväntar nu `reason: 'not_own'` för annans uppgift (felkodskatalogen); övriga nycklar fortfarande 403 utan reason. Efter ändringen: 3/0.
+- **Hela e2e-sviten en gång, efter alla ändringar: 247 godkända, 0 fel, 0 blockerade, 0 kända fel, av 247 (1 698 s).** Baslinjen efter T3-C var 243 av 243; skillnaden är de 4 nya T3D-01–04.
+
+Inga negativa tester har försvagats.
+
+### 6. Baslinjefynd, vända
+
+`baslinje_sakerhet.test.js` körs oförändrad som historisk referens mot fb71f26 (38/0, SÄK-2 bevisas där). Vända i `t3d_informationsatkomst.test.js`:
+
+| Baslinje (T3-0) | Godkänt säkerhetstest (T3-D) |
+|---|---|
+| SÄK-2: readAllWithHashes ger fält andras uppgifter (TASK-R2, TASK-R3) | SEC-TASK-04 (E): inga av TASK-R2/R3/D3/D4; exakt urval per roll |
+| SÄK-2: readAllWithHashes ger fält hela aktivitetsloggen (LOG-R2 om AO-A8) | SEC-B4-02/03 (E): bara AO-händelser för egna AO; Q3 öppen pool ingen logg |
+| SÄK-2: REST: fält läser `vift_activities` med alla poster | SEC-TASK-04/SEC-B4-02 (R): tom lista |
+| Observation T3-0: `vift_staff` med telefon och `hourlyRate` till fält | SEC-B3-01/04: bara namn, titel, arbetskontakt; externa bara namn och titel för personal på egna AO |
+
+Kvar som baslinjefynd: GRANTS utan R-E (R-E finns i repot).
+
+### 7. SÄK och D efter T3-D
+
+- **Lokalt åtgärdade:** SÄK-2 (O2), F8, F9, F11; B3, B4, Ö7; D-12, D-14, D-15, D-22; SÄK-17 för T3-D:s resurser; K-04/K-05 i store-projektionen och EF-svaren (export i T4-F).
+- **Delvis:** D-13 (urval per uppdrag klart; `personal_data_view` för personnummer är T4-A, SEC-KUND-03..06); SÄK-7 (portkoder bort för alla läsare utan `objects_sensitive`; skrivaren `customer_manage` utan `objects_sensitive` får dem fortfarande — kräver fältvis sammanslagning, T4-A).
+- **Öppna:** SÄK-1, -6, -7 (skrivardelen), -9 (installation), -10 (installation), -14.
+- **Inte berörda:** D-23 (radering och känsliga uppgifter) ligger i T4-A/T4-C; T3-D ändrar ingen radering och ingen post i `property_sensitive_access`. AP-A–AP-G: T3-B:s poolregel återanvänds oförändrad (ingen ny kategori, ingen statusändring).
+
+### 8. Installationsplan och rollback (STAGING-paketet T3-D, beskrivs, körs inte)
+
+**Förutsättningar:** separat GO; T3-A, T3-B och T3-C installerade först (`MIGRATIONSORDNING.txt`; klientpaketet bygger på HEAD med T3-A–T3-D).
+
+**Backup** (testplanen §8 + T3-D): backupschemat för `store`, `op_idempotency` och `function_definitions` med md5; **lägg till** `vift_store_full_access`, `vift_store_project`, `activity_log_append` och `pg_policies` för `store`; JSON-kopia med sha256 av `vift_activityLog` och `vift_activities` (de enda nycklarna T3-D-koden skriver i, och bara via de vanliga vägarna); extern kopia verifierad (`tools/staging-backup-export.js --provata-lokalt`); EF-backup av `store-key-write` och `invoice-write`.
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | `schema_migrations` = `migrationsmappning.json` + T3-B + T3-C. md5 av `pg_get_functiondef` för `vift_store_full_access`, `vift_store_project` (T3-C-versionen) och `activity_log_append(jsonb,integer)` (STAGING) = STOP-värdena. Läsande antal per typ i `vift_activityLog` (för att se hur stor del av historiken som är i det äldre formatet). |
+| 2. Databas | `20261128000006`, sedan `…07`, var och en i egen transaktion. Ingen `db push`, ingen `migration repair`. |
+| 3. Edge Functions, direkt efter steg 2 | `store-key-write` (med `_shared/vift-auth.ts`, `activity-log.ts`, `activities-policy.ts`, `stamp-status.ts`) och `invoice-write`. |
+| 4. Klient | `tools/build-staging-package.sh` från HEAD, publiceras på STAGING. `?v=` höjt; Service Worker är network-first, nya filer hämtas vid nästa laddning. |
+| 5. Storage | Ingen ändring. |
+| 6. Efterkontroll (läsande, V4 i testplanen) | md5 av de nya funktionerna = `tests/local/t3-andringar.json`. Läsande per roll med befintliga testkonton: SEC-B4-01..03, SEC-TASK-04, SEC-OFF-01, SEC-KUND-01/02 (readAllWithHashes och REST). SEC-TASK-01..03/05/06 bara på märkta testuppgifter efter separat GO. **Ingen `appendActivity` i STAGING** (append-only). |
+
+**Fönstret mellan steg 2 och 3** (T3-C:s store-key-write mot T3-D-databasen):
+- Läsningar: T3-C:s EF skickar redan identiteten, så urvalet per post gäller direkt.
+- `appendActivity`: den gamla EF:en anropar 2-argumentsversionen, som inte finns → 500 `append_failed`. Klientens utkorg behandlar 5xx som tillfälligt och sänder om efter steg 3; ingen händelse går förlorad.
+- `writeMerge`-svar och `invoice-write`-svar är oprojicerade i fönstret (som före T3-D). Fönstret ska vara minuter.
+
+**v3.4-klient (Service Worker-cache) mot ny server, tills sidan laddats om:**
+
+| Åtgärd i v3.4 | Ny server svarar | Följd |
+|---|---|---|
+| Inläsning och synk | Projicerade värden | v3.4 cachar bara urvalet (servern lämnar inte ut mer); ingen breddning |
+| Fältets Uppgifter | Egna, tilldelade och AO-kopplade | v3.4 visar redigeringsknapp för tilldelade/AO-kopplade (gammal klientregel); ändring av annat än status/datum → 403 `forbidden` + `not_own`/`field_<fält>`, v3.4 rullar tillbaka med generiskt fel |
+| Ny uppgift i v3.4 (`newId`) | Konflikt om id:t redan finns som dold uppgift | Uppgiften skapas inte, v3.4 visar konfliktvarning; ingen data skrivs över; löses av omladdning (ny klient använder `newSafeId`) |
+| `appendActivity` med otillåten typ/referens | 403 `forbidden` + `type_not_allowed`/`ref_not_visible` | v3.4 tar bort posten ur utkorgen (4xx) med konsolvarning; ingen omsändningsloop |
+| Fält utan egna AO: kunder och offerter tomma | 200 med tomma listor | v3.4:s heuristik kan klassa läsningen som degraderad **om** personalens id liknar demodatan; då spärras generiska skrivningar (t.ex. uppgifter) tills omladdning. Ingen data ändras. |
+| REST-läsning | – | v3.4 läser inga affärsnycklar via REST |
+
+**Rollback** (ingen data skrivs över):
+1. Föregående `store-key-write` och `invoice-write` (T3-C-versionerna) ur EF-backupen, **först** (den nya EF:en anropar 4-argumentsversionen).
+2. `supabase/rollback/T3-D/rollback_t3d.sql`: återskapar `activity_log_append(jsonb,integer)` exakt (STAGING), återställer `vift_store_full_access` och `vift_store_project` exakt till T3-C-versionen med samma rättigheter, tar bort T3-D:s nio hjälpfunktioner. Rör ingen tabell och ingen rad.
+3. Föregående klientpaket.
+4. Vid behov därefter T3-C- och T3-B-rollbacken (omvänd ordning, prövat lokalt = STAGING-facit).
+
+Data som skapats efter installationen (aktivitetsposter med servermärkning, uppgifter med `newSafeId`-id) ligger kvar och fungerar med den äldre koden (`t3d_rollback.test.js`). JSON-kopiorna återläses bara vid ett separat beslut om ett datafel.
+
+### 9. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | §5 (`projection_per_post` = `t3d_informationsatkomst`, `sim_parity`, SEC-B4-05/06 lokalt) |
+| Negativa tester ger rätt felkod och ingen mutation | Ja | `expectReject` (status, error, reason, KS) i alla negativa EF-fall; RPC-fall med felmeddelande och KS; e2e med kontrollsumma. Undantag, dokumenterat: konflikt i `writeMerge` (RPC:n skriver tillbaka samma värde och flyttar `updated_at`); där jämförs värdets md5 |
+| Inga nya oförklarade säkerhetsavvikelser | Ja | Paritet 139/141 lika, 2 kända utanför T3; schemat 0 oförklarade (13 T3-D-objekt md5-registrerade) |
+| Samtidighetskritiska kontroller under transaktionslås | Ja | Referenskontrollen i `activity_log_append` under `FOR SHARE` på AO-raden (×20 mot en pågående omfördelning); uppgiftsregeln prövas mot `previous`, som RPC:n jämför med serverns element under radlås (TASK-01-designen) |
+| Berörda affärsflöden fungerar | Ja | Fakturaflödet (`invoice-write` för arbetsledare oförändrat), uppgifter, stämpling, AO-detalj, Mina jobb, dashboard; run-all och e2e gröna |
+| Avgränsade commits och rollback | Ja | Två commits per repo plus dokument och e2e-rapport; rollback prövad lokalt |
+| Masterplanen visar faktisk nivå | Ja | SÄK-2, B3, B4, Ö7, D-12, D-14, D-15, D-22: "Lokalt verifierad"; D-13: "Delvis"; SÄK-17 uppdaterad |
+
+### 10. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno (releasevillkor).
+- Skrivaren `customer_manage` utan `objects_sensitive` får fortfarande portkoder i kund-, fastighets- och objektposterna (SÄK-7). Att ta bort dem kräver fältvis sammanslagning vid skrivning (T4-A); annars tappar skrivningen fälten eller ger konflikt.
+- Återkommande ärenden, ronderingar, avvikelser, inspektioner och projekt projiceras inte per post (utanför T3-D:s lista). Återkommande ärenden lämnas ut utan `accessCode` (C-5).
+- Äldre aktivitetsposter i ett annat format (t.ex. `refId` i stället för `workOrderId`) visas inte för fält. Inga data skrivs om.
+- En legitim utstämpling efter omfördelning (T3-B) sparar tidposten, men händelsen `time_entry_created` nekas med `ref_not_visible` (AO:n syns inte längre). Ingen tid går förlorad.
+- `readHashes` och hasharna i `readAllWithHashes` avser hela servervärdet (som C-5/T3-C): en fältanvändare kan se *att* något dolt ändrats, inte vad.
+- Fake-backend modellerar inte C-5 för övriga nycklar (sedan T3-0).
+- Inga nya STAGING-läsverktyg för V4 är byggda; efterkontrollen beskrivs i §8.
+
+**Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
+1. Uppgifter kopplade till en AO syns för den som är **tilldelad** AO:n, inte för alla med `ao_view_all`. Ekonomi ser alltså bara sina egna uppgifter (R47). (Godta.)
+2. "Intern kollega" (arbetskontakt till kollegor, R38) avgörs på behörigheter: den som har någon behörighet utöver D-04:s tilläggslista (`dashboard_view`, `ao_view_own`, `ao_time`, `ao_checklist`, `ao_start_own`, `ao_complete_own`, `objects_access_assigned`, `rondering_utfor`) är intern. (Godta nu; inför gärna en uttrycklig behörighet, t.ex. `staff_contacts_view`, i T3-E.)
+3. Hela kundregistret (utan skyddade fält) får, utöver C-5:s läsare, roller med `ao_create`, `recurring_manage` eller `reports_view` (de behöver välja kund). Egna roller med bara `staff_manage`, `admin_manage` eller `article_manage` får inte längre kundregistret. (Godta.)
+4. Kundregistrets läsare (C-5: `invoice_view`, `ao_view_all` m.fl.) behåller personnummer som tidigare men förlorar kundpostens portkod/nyckelinformation utan `objects_sensitive`; REST-läsningen av kunder kräver därför `objects_sensitive`. (Godta; personnummer hanteras i T4-A.)
+5. Händelsetyperna för rondering kräver `ao_view_all` tills T4-D inför `rondering_utfor` med serverkontroll. (Godta.)
+6. Hela aktivitetsloggen följer `ao_view_all` (även egna roller som säljare). (Godta; smalna av i T3-E om säljare inte ska se AO-historik.)
+
+### Ändrade filer
+
+**vift-v2** (gren `claude/vift-system-restructure-8fUme`):
+- nya:
+  - `supabase/migrations/20261128000006_t3d_urval_per_post.sql`, `…07_t3d_aktivitetslogg.sql`;
+  - `supabase/rollback/T3-D/rollback_t3d.sql`;
+  - `tests/t3d_informationsatkomst.test.js`, `tests/t3d_rollback.test.js`, `tests/paritet_fake_kopia.test.js`, `tests/local/t3d-rollback.js`, `tests/local/lib/t3d-data.js`;
+- ändrade:
+  - `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`;
+  - `supabase/functions/store-key-write/{index,activity-log,activities-policy}.ts`, `supabase/functions/invoice-write/index.ts`;
+  - `tests/{replica_build,ef_smoke,t3b_rollback,t3c_rollback}.test.js`, `tests/local/{jamfor-schema.js, t3-andringar.js, t3-andringar.json, lib/paritet.js}`, `tests/e2e/fake-backend.js`.
+
+**VIFT-CRM** (gren `claude/vift-v3-major-redesign`):
+- ändrade:
+  - `index.html`, `src/data/state.js`, `src/services/ActivitiesService.js`, `src/pages/{PageShells,Dashboard,WorkOrderDetailPage}.js`;
+  - `tests/e2e/fake-backend.js`, `tests/e2e/specs/{14_permissions,19_staging_rules,34_registers_ui}.js`;
+  - detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`;
+- ny: `tests/e2e/specs/39_t3d_informationsatkomst.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `8d1eb14` T3-D server: urval per post (SÄK-2, B4, Ö7, D-12–D-15) och aktivitetsloggen (D-22), nya migrationer, EF och rollback
+- `5bc9a97` T3-D tester: urval per post och aktivitetslogg (vända baslinjefynd SÄK-2), ingen breddning mot T3-C, samtidighet, rollback, T3-facit, paritet och fake-backend
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad; ovanpå huvudsessionens `d72b744`, VK-1-raderna orörda):
+- `1a2edfe` T3-D klient: Uppgifter och dashboard följer serverns uppgiftsregel (D-15, F8), aktivitetsloggen märkt som klientrapport (D-22), inga id-krockar med dolda uppgifter, ingen falsk degraderad läsning vid urval per post
+- `ff60cb0` T3-D tester: fake-backend följer T3-D-reglerna (paritet 139/141), nya T3D-01–04, PERM-03/TASK-02/REG-UI-07 anpassade till urval per post
+- dokumentcommit och e2e-rapport: se `git log` efter `ff60cb0`
 
 ## T3-E – standardroller
 
