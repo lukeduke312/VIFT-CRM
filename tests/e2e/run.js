@@ -58,7 +58,7 @@ async function main() {
     try {
       await Promise.race([
         t.run(ctx),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout efter ' + TIMEOUT + ' ms')), TIMEOUT)),
+        new Promise((_, rej) => { const lim = Math.max(TIMEOUT, t.timeout || 0); setTimeout(() => rej(new Error('Timeout efter ' + lim + ' ms')), lim); }),
       ]);
       // Ej fångade JS-fel underkänner alltid testet.
       const pageErrors = world.sessions.flatMap((s) => s.pageErrors);

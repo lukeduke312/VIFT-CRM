@@ -32,6 +32,8 @@ async function check(s, where, hits) {
 
 module.exports = [{
   id: 'RENDER-01', module: 'Säkerhet', kind: 'ui',
+  /* Går igenom alla sidor, flikar och dialoger för fyra roller — tar 85–95 s under last. */
+  timeout: 240000,
   name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin, arbetsledare, ekonomi, fält)',
   async run(t) {
     const hits = [];
