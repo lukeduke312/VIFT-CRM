@@ -11709,8 +11709,43 @@ const AdminPage = {
     { id:'payroll_manage',     label:'Attestera och korrigera löneunderlag' },
     { id:'recurring_manage',   label:'Hantera återkommande ärenden' },
     { id:'sales_manage',       label:'Hantera säljchanser' },
-    { id:'objects_sensitive',  label:'Visa känsliga fält (portkod, nyckel, larm)' }
+    { id:'objects_sensitive',  label:'Visa känsliga fält (portkod, nyckel, larm)' },
+    /* T3-E (M9, BEHORIGHETSMATRIS §1.1): hela katalogen. Behörigheter i _PERM_EJ_VERKSTALLD
+       finns i standardrollerna men ger ingen åtkomst förrän serverkontrollen finns. */
+    { id:'ao_view_own',        label:'Se egna arbetsorder' },
+    { id:'ao_edit',            label:'Redigera arbetsorder' },
+    { id:'ao_time',            label:'Registrera tid' },
+    { id:'ao_material',        label:'Registrera material' },
+    { id:'ao_checklist',       label:'Hantera checklista' },
+    { id:'ao_plan_own',        label:'Planera egen tilldelad arbetsorder' },
+    { id:'rondering_utfor',    label:'Utföra egna tilldelade ronderingspass' },
+    { id:'objects_access_assigned', label:'Åtkomstinformation för egen tilldelad aktiv arbetsorder' },
+    { id:'customer_view',      label:'Visa kunder' },
+    { id:'personal_data_view', label:'Se personnummer' },
+    { id:'cost_view',          label:'Se intern ekonomi' },
+    { id:'cost_edit',          label:'Sätta inköpspris' },
+    { id:'time_view_all',      label:'Se all personals arbetstid' },
+    { id:'bankgiro_edit',      label:'Ändra bankgiro' },
+    { id:'export_data',        label:'Exportera register' },
+    { id:'export_personal_data', label:'Exportera personnummer' }
   ],
+
+  /* T3-E (tillägget i BESLUT-2026-11-28): behörigheter vars serverkontroller ännu inte finns.
+     Samma lista som serverns _vift_ej_verkstallda() (vift-v2 20261128000008); testet
+     tests/rollnamn_guard.test.js jämför dem. De visas i rolleditorn märkta med paketet och
+     ger ingen åtkomst — ingen vy eller knapp i klienten använder dem. */
+  _PERM_EJ_VERKSTALLD: {
+    'ao_plan_own':             'AO-etappen',
+    'cost_view':               'T4-A/T4-B',
+    'cost_edit':               'T4-A/T4-B',
+    'time_view_all':           'T4-B',
+    'bankgiro_edit':           'T4-A',
+    'personal_data_view':      'T4-A',
+    'objects_access_assigned': 'T4-C',
+    'rondering_utfor':         'T4-D',
+    'export_data':             'T4-F',
+    'export_personal_data':    'T4-F',
+  },
 
   _PERM_LABELS: {
     'all':               'Superadmin – full åtkomst',
@@ -11740,18 +11775,31 @@ const AdminPage = {
     'payroll_view':      'Visa löneunderlag och exportera lönedata',
     'payroll_manage':    'Attestera, korrigera och bulkattestera tidposter',
     'objects_sensitive': 'Visa känsliga objektfält (portkod, nyckel, larm)',
+    /* T3-E: nya behörigheter enligt BEHORIGHETSMATRIS §1.1. */
+    'customer_view':           'Visa kunder (utan att ändra)',
+    'ao_plan_own':             'Planera egna tilldelade arbetsordrar (datum; inte personal, status eller ekonomi)',
+    'rondering_utfor':         'Se och utföra ronderingspass som är tilldelade en själv',
+    'objects_access_assigned': 'Åtkomstinformation (portkod, nyckel, tillträde) för egen tilldelad aktiv arbetsorder eller rondering, loggad',
+    'personal_data_view':      'Se personnummer och motsvarande uppgifter (t.ex. ROT/RUT)',
+    'cost_view':               'Se intern ekonomi: inköpspris, intern timkostnad, marginal och TB (inte lön)',
+    'cost_edit':               'Sätta och komplettera inköpspris (artiklar och materialrader med okänt pris)',
+    'time_view_all':           'Se all personals arbetade och registrerade tid (utan attest och lön)',
+    'bankgiro_edit':           'Ändra bankgiro och betalningsuppgifter',
+    'export_data':             'Exportera register som rollen får läsa (snabbexport och Exportcenter)',
+    'export_personal_data':    'Exportera personnummer (aktivt val, loggas på servern)',
   },
 
   _PERM_GROUPS: [
     { label: 'Superadmin',         perms: ['all'] },
     { label: 'Dashboard',          perms: ['dashboard_view'] },
-    { label: 'Arbetsorder',        perms: ['ao_view_all','ao_view_own','ao_create','ao_edit','ao_complete','ao_start_own','ao_complete_own','ao_pool_take','ao_time','ao_material','ao_checklist'] },
-    { label: 'Kunder & Offerter',  perms: ['customer_manage','offer_manage'] },
+    { label: 'Arbetsorder',        perms: ['ao_view_all','ao_view_own','ao_create','ao_edit','ao_complete','ao_start_own','ao_complete_own','ao_pool_take','ao_plan_own','ao_time','ao_material','ao_checklist','rondering_utfor'] },
+    { label: 'Kunder & Offerter',  perms: ['customer_manage','customer_view','offer_manage','personal_data_view'] },
     { label: 'Fakturering',        perms: ['invoice_view','invoice_create'] },
-    { label: 'Personal & Admin',   perms: ['staff_view','staff_manage','admin_manage','article_manage'] },
-    { label: 'Löner',              perms: ['payroll_view','payroll_manage'] },
-    { label: 'Övrigt',             perms: ['recurring_manage','sales_manage','reports_view'] },
-    { label: 'Säkerhet & Åtkomst', perms: ['objects_sensitive'] }
+    { label: 'Intern ekonomi',     perms: ['cost_view','cost_edit'] },
+    { label: 'Personal & Admin',   perms: ['staff_view','staff_manage','admin_manage','article_manage','bankgiro_edit'] },
+    { label: 'Tid & Löner',        perms: ['time_view_all','payroll_view','payroll_manage'] },
+    { label: 'Övrigt',             perms: ['recurring_manage','sales_manage','reports_view','export_data','export_personal_data'] },
+    { label: 'Säkerhet & Åtkomst', perms: ['objects_sensitive','objects_access_assigned'] }
   ],
 
   openEditRole(roleId) {
@@ -11770,13 +11818,21 @@ const AdminPage = {
       : (superRole ? 'Bara en superadministratör kan ändra en roll med "Alla behörigheter".' : 'Du kan inte ändra behörigheterna i din egen roll.');
     const permDisabled = (pid) => !canEdit || (!superA && !perms.includes(pid) && (pid === 'all' || !ownPerms.includes(pid)));
 
-    const groupsHtml = this._PERM_GROUPS.map((g, gi) => {
+    /* T3-E: behörigheter i rollen som inte finns i katalogen visas i en egen grupp, så att de
+       varken försvinner tyst vid Spara (tidigare sparades bara katalogens kryssrutor) eller
+       döljs för den som granskar rollen. */
+    const kanda = new Set(this._PERM_GROUPS.flatMap(g => g.perms));
+    const okanda = perms.filter(pid => !kanda.has(pid));
+    const groups = this._PERM_GROUPS.concat(okanda.length ? [{ label: 'Övriga behörigheter i rollen', perms: okanda, extra: true }] : []);
+    const ejV = this._PERM_EJ_VERKSTALLD || {};
+    const groupsHtml = groups.map((g, gi) => {
       const groupCheckedCount = g.perms.filter(pid => perms.includes(pid)).length;
       const rows = g.perms.map(pid => `
         <label style="display:flex;align-items:center;gap:8px;padding:6px 0 6px 12px;border-bottom:1px solid var(--bg);cursor:${permDisabled(pid)?'not-allowed':'pointer'};${permDisabled(pid)?'opacity:.55;':''}">
-          <input type="checkbox" name="role-perm" value="${pid}" ${perms.includes(pid)?'checked':''} ${permDisabled(pid)?'disabled':''}
+          <input type="checkbox" name="role-perm" value="${esc(pid)}" ${perms.includes(pid)?'checked':''} ${permDisabled(pid)?'disabled':''}
             style="width:15px;height:15px;flex-shrink:0;" onchange="AdminPage._onPermChange(this)">
-          <span style="font-size:12px;">${permMap[pid]||pid}</span>
+          <span style="font-size:12px;">${esc(permMap[pid]||pid)}</span>
+          ${ejV[pid] ? `<span class="bdg bdg-grey" data-ej-verkstalld="${esc(pid)}" title="Ger ingen åtkomst förrän serverkontrollen finns" style="font-size:9px;">verkställs i ${esc(ejV[pid])}</span>` : ''}
         </label>`).join('');
       return `
         <div style="margin-top:8px;border:1px solid var(--br);border-radius:var(--rs);overflow:hidden;">
@@ -11785,8 +11841,8 @@ const AdminPage = {
               <span style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${esc(g.label)}</span>
               <span class="bdg bdg-${groupCheckedCount>0?'sky':'grey'}" style="font-size:9px;">${groupCheckedCount}/${g.perms.length}</span>
             </div>
-            <button type="button" class="btn bghost bxs" style="font-size:10px;padding:2px 7px;"
-              onclick="AdminPage._togglePermGroup(${gi})">Markera alla</button>
+            ${g.extra ? '' : `<button type="button" class="btn bghost bxs" style="font-size:10px;padding:2px 7px;"
+              onclick="AdminPage._togglePermGroup(${gi})">Markera alla</button>`}
           </div>
           ${rows}
         </div>`;

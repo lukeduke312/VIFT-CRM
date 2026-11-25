@@ -1358,28 +1358,35 @@ const SeedData = {
     { id:'TIT-015', name:'Systemadministratör',description:'Administrerar IT-system och CRM.',                       active:true, createdAt:'2024-01-01T00:00:00.000Z', updatedAt:'2024-01-01T00:00:00.000Z' }
   ],
 
+  /* T3-E (M9, D-02): demorollerna = de fem standardrollerna, exakt som vift-v2
+     supabase/manual/t3e_standardroller/standardroller.json (BEHORIGHETSMATRIS §2). Testet
+     tests/rollnamn_guard.test.js jämför dem. Behörigheter som verkställs i T4 (t.ex. cost_view)
+     ger ingen åtkomst förrän serverkontrollen finns. */
   roles: [
     {
       id: 'admin', label: 'Admin', isBuiltin: true, active: true,
-      description: 'Full tillgång till alla funktioner och inställningar.',
+      description: 'Superadministratör: alla behörigheter.',
       permissions: ['all']
     },
     {
-      id: 'chef', label: 'Chef / Projektledare', isBuiltin: true, active: true,
-      description: 'Kan hantera arbetsorder, kunder, offerter och se rapporter. Kan ej ändra systeminställningar.',
-      permissions: ['dashboard_view','ao_view_all','ao_create','ao_edit','ao_complete','customer_manage','offer_manage','invoice_view','invoice_create','staff_view','reports_view','sales_manage','recurring_manage']
-    },
-    {
-      id: 'personal', label: 'Tekniker / Personal', isBuiltin: true, active: true,
-      description: 'Kan se egna tilldelade arbetsorder och pool. Kan registrera tid och material.',
-      /* T3-B (D-03, AP-F): de smala fältbehörigheterna som servern nu kontrollerar
-         (standardrollen personal, BEHORIGHETSMATRIS §2). */
-      permissions: ['dashboard_view','ao_view_own','ao_start_own','ao_complete_own','ao_pool_take','ao_time','ao_material','ao_checklist']
+      id: 'chef', label: 'Arbetsledare', isBuiltin: true, active: true,
+      description: 'Arbetsledare: arbetsorder, planering, kunder, offerter, fakturaunderlag, intern ekonomi och personalens arbetstid (utan lön och personnummer).',
+      permissions: ['dashboard_view','ao_view_all','ao_view_own','ao_pool_take','ao_start_own','ao_complete_own','ao_plan_own','ao_create','ao_edit','ao_complete','ao_time','ao_material','ao_checklist','rondering_utfor','objects_sensitive','customer_manage','offer_manage','sales_manage','recurring_manage','invoice_view','invoice_create','cost_view','cost_edit','time_view_all','staff_view','export_data']
     },
     {
       id: 'ekonomi', label: 'Ekonomi', isBuiltin: true, active: true,
-      description: 'Hanterar fakturering, rapporter och löneunderlag. Kan inte hantera personal eller systeminställningar.',
-      permissions: ['dashboard_view','ao_view_all','invoice_view','invoice_create','reports_view','payroll_view','payroll_manage']
+      description: 'Ekonomi: fakturaunderlag, rapporter, löneunderlag och attest, intern ekonomi och personnummer för ROT/RUT.',
+      permissions: ['dashboard_view','ao_view_all','customer_view','personal_data_view','invoice_view','invoice_create','reports_view','cost_view','cost_edit','payroll_view','payroll_manage','export_data']
+    },
+    {
+      id: 'personal', label: 'Personal', isBuiltin: true, active: true,
+      description: 'Fältpersonal: egna tilldelade arbetsorder, öppen pool, start och klarmarkering av egna, tid, material och checklista.',
+      permissions: ['dashboard_view','ao_view_own','ao_pool_take','ao_start_own','ao_complete_own','ao_plan_own','ao_time','ao_material','ao_checklist','rondering_utfor','objects_access_assigned']
+    },
+    {
+      id: 'begransad', label: 'Begränsad', isBuiltin: true, active: true,
+      description: 'Begränsad/extern: bara egna tilldelade arbetsorder, ingen öppen pool och inga ekonomiska uppgifter. Tid, checklista, start, klarmarkering, rondering och åtkomstinformation kan läggas till separat (D-04).',
+      permissions: ['dashboard_view','ao_view_own']
     }
   ],
 
