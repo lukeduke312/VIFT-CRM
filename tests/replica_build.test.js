@@ -101,16 +101,18 @@ const t3 = require('./local/t3-andringar.json').objekt;
 const rt = byggReplik({ data: false });
 try {
   const nya = rt.steg.filter((x) => x.ny).map((x) => x.rel);
-  ok(nya.length === 7 && nya.slice(0, 3).every((x) => /^migrations\/20261128\d{6}_t3b_/.test(x)) && nya.slice(3, 5).every((x) => /^migrations\/20261128\d{6}_t3c_/.test(x))
-    && nya.slice(5).every((x) => /^migrations\/20261128\d{6}_t3d_/.test(x)),
-    'repokedjan: 3 nya T3-B-, 2 nya T3-C- och 2 nya T3-D-migrationer efter STAGING:s senaste version, i den ordningen (' + nya.join(', ') + ')');
+  ok(nya.length === 8 && nya.slice(0, 3).every((x) => /^migrations\/20261128\d{6}_t3b_/.test(x)) && nya.slice(3, 5).every((x) => /^migrations\/20261128\d{6}_t3c_/.test(x))
+    && nya.slice(5, 7).every((x) => /^migrations\/20261128\d{6}_t3d_/.test(x)) && /^migrations\/20261128000008_t3e_/.test(nya[7]),
+    'repokedjan: 3 nya T3-B-, 2 nya T3-C-, 2 nya T3-D- och 1 ny T3-E-migration efter STAGING:s senaste version, i den ordningen (' + nya.join(', ') + ')');
   ok(rt.rapport.oforklarade === 0, `repokedjan med T3-B och T3-C mot STAGING-facit: ${rt.rapport.identiska} identiska, ${rt.rapport.forklarade} förklarade, 0 oförklarade`);
-  const t3Forklarade = (rt.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-[BCD] /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
-  ok(JSON.stringify(t3Forklarade) === JSON.stringify(Object.keys(t3).sort()), `varje T3-B/T3-C/T3-D-objekt (${Object.keys(t3).length}) syns i kedjan med registrerad md5 (funktioner, policyer och triggers), och inga andra avvikelser`, t3Forklarade.length);
+  const t3Forklarade = (rt.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-[BCDE] /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
+  ok(JSON.stringify(t3Forklarade) === JSON.stringify(Object.keys(t3).sort()), `varje T3-B/T3-C/T3-D/T3-E-objekt (${Object.keys(t3).length}) syns i kedjan med registrerad md5 (funktioner, policyer och triggers), och inga andra avvikelser`, t3Forklarade.length);
   ok(Object.values(t3).filter((v) => v.paket === 'T3-C' || v.aven === 'T3-C').length === 22, 'T3-C: 22 registrerade objekt (19 funktioner varav 2 ersatta signaturer, 2 policyer, 1 trigger; 2 av dem ändras igen av T3-D)');
-  ok(Object.values(t3).filter((v) => v.paket === 'T3-D').length === 13 && Object.values(t3).filter((v) => v.aven === 'T3-C').length === 2,
-    'T3-D: 13 registrerade objekt (9 nya hjälpfunktioner, activity_log_append ersatt av ny signatur, vift_store_full_access och vift_store_project ändrade igen)');
+  ok(Object.values(t3).filter((v) => v.paket === 'T3-D' || v.aven === 'T3-D').length === 13 && Object.values(t3).filter((v) => v.aven === 'T3-C').length === 2,
+    'T3-D: 13 registrerade objekt (9 nya hjälpfunktioner, activity_log_append ersatt av ny signatur, vift_store_full_access och vift_store_project ändrade igen; _vift_staff_external ändras igen av T3-E)');
+  ok(Object.values(t3).filter((v) => v.paket === 'T3-E').length === 2 && t3['funktion:_vift_ej_verkstallda()'] && t3['funktion:_vift_staff_external(p_perms text[])'].aven === 'T3-D',
+    'T3-E: 2 registrerade objekt (_vift_ej_verkstallda ny, _vift_staff_external ändrad igen; inga data, rollregistret orört)');
   const t3sec = q(rt.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_%' or p.proname in ('work_order_pool_take','work_order_billing_set','_store_direct_write_guard','vift_store_project','store_read_all_with_hashes_projected','store_business_key_write','store_business_key_merge_write','deactivate_vift_user','provision_vift_user','activity_log_append')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
-  ok(t3sec.length === 0, 'T3-B/T3-C/T3-D: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role)', t3sec);
+  ok(t3sec.length === 0, 'T3-B/T3-C/T3-D/T3-E: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role)', t3sec);
 } finally { rt.stang(); }
 avsluta();

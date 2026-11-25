@@ -90,6 +90,8 @@ const add = (typ, key, status, detalj) => {
     /* T3-D: ett objekt som T3-C ändrade och T3-D ändrar igen godtas i T3-C-läget BARA när
        T3_LAGE=T3-C uttryckligen anges (efter en T3-D-rollback eller före T3-D-installationen). */
     else if (process.env.T3_LAGE === 'T3-C' && t.md5_t3c && t.md5_t3c === nu) k = 'T3-C (läge före T3-D, ej installerad i STAGING): ' + t.beskrivning;
+    /* T3-E: på samma sätt T3-D-läget (före T3-E eller efter en T3-E-rollback) med T3_LAGE=T3-D. */
+    else if (process.env.T3_LAGE === 'T3-D' && t.md5_t3d && t.md5_t3d === nu) k = 'T3-D (läge före T3-E, ej installerad i STAGING): ' + t.beskrivning;
     else detalj = (detalj ? detalj + '; ' : '') + 'registrerad som ' + t.paket + '-ändring men md5/ACL avviker (' + nu + ' ≠ ' + t.md5 + ')';
   }
   const forklarad = status !== 'IDENTISK' && (!!k || status === 'SAMMA KOD');

@@ -1,5 +1,5 @@
 {
- "beskrivning": "T3-B, T3-C och T3-D (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
+ "beskrivning": "T3-B, T3-C, T3-D och T3-E (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
  "objekt": {
   "funktion:_store_direct_write_guard()": {
    "paket": "T3-C",
@@ -97,6 +97,12 @@
    "md5": "75ecb1729b86a5070ca3d513609b6467|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Eskaleringsregeln (privilege_escalation, superadmin_required) och invarianten last_superadmin under låset (SÄK-8, D-25)."
   },
+  "funktion:_vift_ej_verkstallda()": {
+   "paket": "T3-E",
+   "andring": "NY",
+   "md5": "7ef7b3f8e5d2b33dc5fa05b2e0175e3f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Register över behörigheter vars serverkontroller ännu inte finns (T4/AO-etappen); de räknas inte i någon regel."
+  },
   "funktion:_vift_has(p_perms text[], p_perm text)": {
    "paket": "T3-B",
    "andring": "NY",
@@ -170,10 +176,12 @@
    "beskrivning": "Hjälpfunktion: aktiv personalpost."
   },
   "funktion:_vift_staff_external(p_perms text[])": {
-   "paket": "T3-D",
+   "paket": "T3-E",
    "andring": "NY",
-   "md5": "8206ed62e26cf1d6a3e91754573655b4|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "Extern användare (bara D-04:s tilläggsbehörigheter): bara namn och titel för personal på egna AO (D-14, SEC-B3-04)."
+   "md5": "1dcbb63d9f309652e6ccbdbce7b356c4|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T3-E: extern användare (bara D-04:s tilläggsbehörigheter); ej verkställda behörigheter räknas inte (ingen breddning, T3-E).",
+   "aven": "T3-D",
+   "md5_t3d": "8206ed62e26cf1d6a3e91754573655b4|postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:_vift_staff_name(p_staff_id text)": {
    "paket": "T3-B",

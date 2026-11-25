@@ -200,7 +200,11 @@ const T3D_OFFER_INTERN = ['customer_manage', 'sales_manage', 'invoice_view', 'in
 const T3D_SENS = ['doorCode', 'keyInformation', 'accessInformation', 'keyReceipt', 'alarmInformation', 'accessCode', 'keyInfo'];
 const T3D_STAFF_FIELDS = ['id', 'firstName', 'lastName', 'name', 'title', 'active', 'color', 'initials'];
 const T3D_OFFER_REF = ['id', 'title', 'status', 'workOrderId'];
-const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'];
+/* T3-E (20261128000008): ej verkställda behörigheter (= _vift_ej_verkstallda()) räknas inte när
+   servern avgör intern/extern — de ger ingen åtkomst förrän T4. */
+const T3E_EJ_VERKSTALLDA = ['ao_plan_own', 'cost_view', 'cost_edit', 'time_view_all', 'bankgiro_edit', 'personal_data_view',
+  'objects_access_assigned', 'rondering_utfor', 'export_data', 'export_personal_data'];
+const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'].concat(T3E_EJ_VERKSTALLDA);
 const T3D_AO_LOG = ['work_order_created', 'work_order_updated', 'work_order_status', 'work_order_assigned', 'work_order_archived', 'work_order_restored',
   'work_order_deleted', 'work_order_permanent_delete', 'staff_assigned', 'material_added', 'material_removed', 'time_entry_created', 'note'];
 const T3D_KEYS = ['vift_staff', 'vift_roles', 'vift_activityLog', 'vift_activities', 'vift_offers', 'vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts'];
@@ -268,7 +272,10 @@ class FakeSupabase {
       const u = Object.values(TEST_USERS).find((t) => t.staffId === s.id);
       if (u) { s.email = u.email; s.role = u.role; s.active = true; }
     });
-    seed.roles.push({ id: 'begransad', label: 'Begränsad', isBuiltin: false, active: true, description: 'Endast egna AO, utan tid/material/checklista (E2E-testroll).', permissions: ['dashboard_view', 'ao_view_own'] });
+    /* T3-E: seedens roller är de fem standardrollerna (inklusive begransad), exakt som
+       vift-v2 supabase/manual/t3e_standardroller/standardroller.json (D-26: testkontona = standardrollerna). */
+    /* En äldre seed (vift-v2:s klientkopia) saknar begransad: lägg då till standarddefinitionen. */
+    if (!seed.roles.some((r) => r.id === 'begransad')) seed.roles.push({ id: 'begransad', label: 'Begränsad', isBuiltin: false, active: true, description: 'Endast egna AO, utan tid/material/checklista (E2E-testroll).', permissions: ['dashboard_view', 'ao_view_own'] });
     const keys = ['settings', 'staff', 'customers', 'properties', 'priceGroups', 'priceProfiles', 'emailTemplates', 'offers',
       'recurringOrders', 'invoices', 'activityLog', 'contracts', 'inspections', 'ronderingsmallar', 'ronderingar',
       'avvikelser', 'ronderingspass', 'titles', 'roles', 'articles', 'serviceTemplates', 'propertyCategories'];
@@ -1290,4 +1297,4 @@ class FakeSupabase {
   }
 }
 
-module.exports = { FakeSupabase, TEST_USERS, PASSWORD };
+module.exports = { FakeSupabase, TEST_USERS, PASSWORD, T3E_EJ_VERKSTALLDA };

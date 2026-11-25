@@ -32,8 +32,8 @@ const oforklarade = (r) => Number((/(\d+) oförklarade/.exec(r.ut) || [])[1]);
 
 // T3-C (2026-11-28) installeras efter T3-B och rullas tillbaka före den (omvänd ordning, se
 // tests/t3c_rollback.test.js). Här prövas T3-B för sig: kedjan utan T3-C-migrationerna.
-// T3-D (2026-11-28) installeras efter T3-C och rullas tillbaka före den; utesluts också.
-const T3C = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3[cd]_/.test(p[1] || '')).map((p) => p[1]);
+// T3-D och T3-E (2026-11-28) installeras efter T3-C och rullas tillbaka före den; utesluts också.
+const T3C = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3[cde]_/.test(p[1] || '')).map((p) => p[1]);
 const r = byggReplik({ utelamna: T3C });
 const db = r.db;
 try {

@@ -36,7 +36,8 @@ const t3c = Object.entries(JSON.parse(fs.readFileSync(path.join(__dirname, 'loca
 // T3-D (2026-11-28) installeras efter T3-C och rullas tillbaka före den (tests/t3d_rollback.test.js).
 // Här prövas T3-C för sig: kedjan utan T3-D-migrationerna. Steg 4 installerar T3-D igen ovanpå,
 // så att schemat kan jämföras med alla registrerade T3-ändringar (T3-D ändrar två T3-C-objekt).
-const T3D = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3d_/.test(p[1] || '')).map((p) => p[1]);
+// T3-E (2026-11-28) bygger på T3-D och utesluts/installeras tillsammans med den.
+const T3D = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3[de]_/.test(p[1] || '')).map((p) => p[1]);
 
 ok(fs.readFileSync(t3cRb.UT, 'utf8') === t3cRb.sql(), 'rollback_t3c.sql är aktuell (genererad ur STAGING-facit av tests/local/t3c-rollback.js)');
 const r = byggReplik({ utelamna: T3D, schemakontroll: false });
@@ -81,7 +82,7 @@ try {
   try { nya.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
   ok(!fel && nya.length === 2, 'ny installation efter rollback: de 2 T3-C-migrationerna går igenom (STOP-kontrollerna godtar STAGING-versionen)', fel);
   try { T3D.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
-  ok(!fel && T3D.length === 2, 'T3-D (installeras efter T3-C) går igenom ovanpå den nya T3-C-installationen', fel);
+  ok(!fel && T3D.length === 3, 'T3-D och T3-E (installeras efter T3-C) går igenom ovanpå den nya T3-C-installationen', fel);
   const efterNy = jamfor(db, false);
   ok(oforklarade(efterNy) === 0 && !/OBS: T3-ändringar som inte syns/.test(efterNy.ut), 'ny installation: schemat = STAGING + alla registrerade T3-ändringar (0 oförklarade)');
   let stop = null;
@@ -91,13 +92,14 @@ try {
   try { psqlFile(db, path.join(rot, nya[1])); } catch (e) { stop = e.message; }
   ok(stop && /T3-C STOP/.test(stop), 'STOP-kontroll: en andra körning av 20261128000005 avbryts', stop);
 
-  // 5. Omvänd ordning: T3-D, T3-C och sedan T3-B → exakt STAGING.
+  // 5. Omvänd ordning: T3-E, T3-D, T3-C och sedan T3-B → exakt STAGING.
   const fore2 = ksTa(db, KS);
+  psqlFile(db, path.join(rot, 'rollback', 'T3-E', 'rollback_t3e.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-D', 'rollback_t3d.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-C', 'rollback_t3c.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-B', 'rollback_t3b.sql'));
   const staging = jamfor(db, true);
-  ok(oforklarade(staging) === 0, 'rollback T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit (0 oförklarade utan T3-ändringar)', staging.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
+  ok(oforklarade(staging) === 0, 'rollback T3-E + T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit (0 oförklarade utan T3-ändringar)', staging.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
   ok(ksDiff(fore2, ksTa(db, KS)).length === 0, 'rollback T3-D + T3-C + T3-B: ingen data ändrad');
 } finally { r.stang(); }
 avsluta();

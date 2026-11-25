@@ -41,7 +41,7 @@ function lasForeDefinitioner() {
   const { q } = require('./lib/db');
   const rot = serverRot();
   const t3d = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
-    .filter((p) => /^\d{14}$/.test(p[0]) && /_t3d_/.test(p[1] || '')).map((p) => p[1]);
+    .filter((p) => /^\d{14}$/.test(p[0]) && /_t3[de]_/.test(p[1] || '')).map((p) => p[1]); // T3-E bygger på T3-D
   const r = byggReplik({ utelamna: t3d, data: false, schemakontroll: false });
   try {
     const ut = {};

@@ -35,7 +35,8 @@ const jamfor = (db, env) => {
 };
 const oforklarade = (r) => Number((/(\d+) oförklarade/.exec(r.ut) || [])[1]);
 const registret = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 't3-andringar.json'), 'utf8')).objekt;
-const t3dEgna = Object.entries(registret).filter(([, v]) => v.paket === 'T3-D' && !v.aven).map(([k]) => k);
+// T3-E ändrar _vift_staff_external igen (paket T3-E, aven T3-D); den räknas fortfarande till T3-D:s objekt.
+const t3dEgna = Object.entries(registret).filter(([, v]) => (v.paket === 'T3-D' && !v.aven) || v.aven === 'T3-D').map(([k]) => k);
 
 ok(fs.readFileSync(t3dRb.UT, 'utf8') === t3dRb.sql(), 'rollback_t3d.sql är aktuell (genererad ur kedjan utan T3-D av tests/local/t3d-rollback.js)');
 const r = byggReplik({});
@@ -55,7 +56,8 @@ try {
   const KS = { keys: ['vift_activityLog', 'vift_activities', 'vift_customers', 'vift_properties', 'vift_propertyContacts', 'vift_offers', 'vift_staff', 'vift_workOrders'], tables: ['app_users', 'property_sensitive_access', 'op_idempotency'] };
   const fore = ksTa(db, KS);
 
-  // 2. Rollback T3-D.
+  // 2. Rollback T3-D (i omvänd installationsordning: T3-E först, den bygger på T3-D).
+  psqlFile(db, path.join(rot, 'rollback', 'T3-E', 'rollback_t3e.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-D', 'rollback_t3d.sql'));
   const efterRb = jamfor(db, { T3_LAGE: 'T3-C' });
   ok(oforklarade(efterRb) === 0, 'rollback T3-D: schemat = STAGING + registrerade T3-B- och T3-C-ändringar (0 oförklarade, T3-C-läget)', efterRb.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
@@ -74,27 +76,28 @@ try {
   ok(!x.error && x.data.data.vift_activities.length === val(db, 'vift_activities').length && x.data.data.vift_customers.length === 3, 'T3-C:s projektion gäller igen (inget urval per post: fält får alla uppgifter och kunder, som före T3-D)', x.error);
 
   // 4. Ny installation ovanpå.
-  const nya = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3d_/.test(p[1] || '')).map((p) => p[1]);
+  const nya = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3[de]_/.test(p[1] || '')).map((p) => p[1]);
   let fel = null;
   try { nya.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
-  ok(!fel && nya.length === 2, 'ny installation efter rollback: de 2 T3-D-migrationerna går igenom (STOP-kontrollerna godtar T3-C-versionen)', fel);
+  ok(!fel && nya.length === 3, 'ny installation efter rollback: de 2 T3-D-migrationerna och T3-E-migrationen går igenom (STOP-kontrollerna godtar T3-C- respektive T3-D-versionen)', fel);
   const efterNy = jamfor(db, {});
   ok(oforklarade(efterNy) === 0 && !/OBS: T3-ändringar som inte syns/.test(efterNy.ut), 'ny installation: schemat = STAGING + alla registrerade T3-ändringar (0 oförklarade)');
   for (const rel of nya) {
     let stop = null;
     try { psqlFile(db, path.join(rot, rel)); } catch (e) { stop = e.message; }
-    ok(stop && /T3-D STOP/.test(stop), 'STOP-kontroll: en andra körning av ' + path.basename(rel) + ' avbryts', stop);
+    ok(stop && /T3-[DE] STOP/.test(stop), 'STOP-kontroll: en andra körning av ' + path.basename(rel) + ' avbryts', stop);
   }
   x = rpc(db, 'store_read_all_with_hashes_projected', { p_business_keys: ['vift_activities'], p_perms: pPerms, p_caller_staff_id: F });
   ok(!x.error && x.data.data.vift_activities.map((t) => t.id).sort().join() === 'TASK-D1,TASK-D2,TASK-R1', 'efter ny installation: urvalet per post gäller igen', x.error || x.data.data.vift_activities.map((t) => t.id));
 
   // 5. Omvänd ordning: T3-D, T3-C och T3-B → exakt STAGING.
   const fore2 = ksTa(db, KS);
+  psqlFile(db, path.join(rot, 'rollback', 'T3-E', 'rollback_t3e.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-D', 'rollback_t3d.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-C', 'rollback_t3c.sql'));
   psqlFile(db, path.join(rot, 'rollback', 'T3-B', 'rollback_t3b.sql'));
   const staging = jamfor(db, { T3_IGNORERA: '1' });
-  ok(oforklarade(staging) === 0, 'rollback T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit (0 oförklarade utan T3-ändringar)', staging.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
+  ok(oforklarade(staging) === 0, 'rollback T3-E + T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit (0 oförklarade utan T3-ändringar)', staging.ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
   ok(ksDiff(fore2, ksTa(db, KS)).length === 0, 'rollback T3-D + T3-C + T3-B: ingen data ändrad');
 } finally { r.stang(); }
 avsluta();

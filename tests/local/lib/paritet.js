@@ -169,6 +169,17 @@ const T3D_SCEN = [
 ].map((sc) => Object.assign({ varld: t3dVarld, fakeOpts: T3D_OPTS }, sc));
 SCENARIER.push(...T3D_SCEN);
 
+/* ── T3-E (2026-11-28): ej verkställda behörigheter är verkningslösa (20261128000008). En roll som
+   får dem ska få exakt samma urval som utan dem — även i den simulerade servern. ── */
+const T3E_EJV = ['ao_plan_own', 'cost_view', 'cost_edit', 'time_view_all', 'bankgiro_edit', 'personal_data_view', 'objects_access_assigned', 'rondering_utfor', 'export_data', 'export_personal_data'];
+const t3eVarld = (store, d) => { t3dVarld(store, d); store.vift_roles = store.vift_roles.map((x) => (['begransad', 'tom'].includes(x.id) ? Object.assign({}, x, { permissions: x.permissions.concat(T3E_EJV) }) : x)); return store; };
+const T3E_SCEN = ['begransad', 'tom'].flatMap((anv) => [
+  { id: 'E-B3-' + anv, sec: 'T3-E ej verkställda (' + anv + ' + alla): personal', anv, ef: 'store-key-write', body: lasT3d('staff'), utfall: (las, svar, d) => idsAv(svar, 'staff').split(',').length + '|' + [...new Set((((svar.body || {}).data || {}).staff || []).filter((x) => x.id !== d.U[anv].staffId).flatMap((x) => Object.keys(x)))].sort().join(',') },
+  { id: 'E-KUND-' + anv, sec: 'T3-E ej verkställda (' + anv + ' + alla): kunder', anv, ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_customers', 'vift_properties', 'vift_propertyObjects'] }, utfall: (las, svar) => ['customers', 'properties', 'propertyObjects'].map((k) => idsAv(svar, k)).join('|') },
+  { id: 'E-WOL-' + anv, sec: 'T3-E ej verkställda (' + anv + ' + alla): work-orders-list', anv, ef: 'work-orders-list', body: {}, utfall: (las, svar) => (((svar.body || {}).workOrders) || []).map((x) => x.id).sort().join(',') },
+]).map((sc) => Object.assign({ varld: t3eVarld, fakeOpts: T3D_OPTS }, sc));
+SCENARIER.push(...T3E_SCEN);
+
 /* Samma världsinställning som tests/staging_e2e_real.test.js (STAGING-lik simulerad server). */
 const FAKE_STD = { logOps: true, activityAppend: true, activitiesPolicy: true };
 const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write'];

@@ -102,6 +102,9 @@ function skapaKlient(db, h) {
     if (d === 'jsonb' || d === 'json') return jlit(v);
     if (v === null || v === undefined) return 'null';
     if (typeof v === 'boolean' || typeof v === 'number') return String(v);
+    /* T3-E: text[]-kolumner (t.ex. sensitive_access_audit.fields) med en JS-lista — tidigare blev
+       en tom lista '' (ogiltig literal), så nekade läsningar i get-sensitive-fields fick ingen revisionsrad. */
+    if (d === 'ARRAY' && Array.isArray(v)) return 'array[' + v.map((x) => lit(x)).join(',') + ']::text[]';
     return lit(v) + (d ? '::' + (d === 'timestamp with time zone' ? 'timestamptz' : d === 'ARRAY' ? 'text[]' : d) : '');
   };
   const pgErr = (e) => ({ message: e.message, code: e.code, details: e.detail, hint: e.hint });

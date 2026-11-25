@@ -1,6 +1,6 @@
 'use strict';
 /*
- * T3-B (2026-11-28): facit för de NYA, ännu inte installerade migrationerna (T3-B, T3-C, T3-D).
+ * T3-B (2026-11-28): facit för de NYA, ännu inte installerade migrationerna (T3-B, T3-C, T3-D, T3-E).
  *
  *   node tests/local/t3-andringar.js           verifierar tests/local/t3-andringar.json
  *   node tests/local/t3-andringar.js --skriv   skriver om filen från en ny lokal kedja
@@ -91,6 +91,14 @@ const T3D = {
   vift_store_project: 'T3-C + T3-D: urval per post för aktivitetslogg, uppgifter, offertreferens, kunder/fastigheter/objekt/kontakter och personalens kontaktuppgifter; portkoder och nyckelinformation aldrig (D-12–D-15, B4, K-04).',
   activity_log_append: 'T3-D: ny signatur med anroparens id och behörigheter; typ (type_not_allowed) och referenser (ref_not_visible) under lås; servern sätter aktör och tid (D-22). Den gamla 2-argumentsversionen ersatt.',
 };
+/* T3-E (2026-11-28): ej verkställda behörigheter är verkningslösa (tillägget i BESLUT-2026-11-28).
+   _vift_staff_external ändrades av T3-D och ändras igen av T3-E: registreras som T3-E (slutläget)
+   med aven:'T3-D' och md5_t3d (T3-D-läget). */
+const T3E = {
+  _vift_ej_verkstallda: 'Register över behörigheter vars serverkontroller ännu inte finns (T4/AO-etappen); de räknas inte i någon regel.',
+  _vift_staff_external: 'T3-D + T3-E: extern användare (bara D-04:s tilläggsbehörigheter); ej verkställda behörigheter räknas inte (ingen breddning, T3-E).',
+};
+const T3E_AVEN_T3D = new Set(['_vift_staff_external(p_perms text[])']);
 /* Den gamla 3-argumentsversionen av vift_store_project togs bort av T3-C (inte T3-D). */
 const T3D_EJ = new Set(['vift_store_project(p_key text, p_value jsonb, p_perms text[])']);
 /* Objekt som T3-C ändrade och T3-D ändrar igen: registreras som T3-D (md5 = slutläget) med
@@ -118,21 +126,38 @@ try {
   for (const x of rap.filter((y) => y.kategori === 'OFÖRKLARAD')) {
     const k = x.typ + ':' + x.key;
     const namn = x.key.replace(/\(.*$/, '');
-    const dd = T3D_EJ.has(x.key) ? null : (T3D[namn] || T3D[x.key]);
+    const ee = T3E[namn] || T3E[x.key];
+    const dd = ee ? null : T3D_EJ.has(x.key) ? null : (T3D[namn] || T3D[x.key]);
     const c = T3C[namn] || T3C[x.key];
     objekt[k] = {
-      paket: dd ? 'T3-D' : c ? 'T3-C' : 'T3-B',
+      paket: ee ? 'T3-E' : dd ? 'T3-D' : c ? 'T3-C' : 'T3-B',
       andring: x.status === 'EXTRA LOKALT' ? 'NY' : x.status === 'SAKNAS LOKALT' ? 'BORTTAGEN (ersatt av ny signatur)' : 'ÄNDRAD',
       md5: defMd5(x.typ, x.key),
-      beskrivning: dd || c || BESKRIVNING[namn] || '(beskrivning saknas)',
+      beskrivning: ee || dd || c || BESKRIVNING[namn] || '(beskrivning saknas)',
     };
     if (dd && T3D_AVEN_T3C.has(x.key)) objekt[k].aven = 'T3-C';
+    if (ee && T3E_AVEN_T3D.has(x.key)) objekt[k].aven = 'T3-D';
   }
-  /* T3-D: md5 i T3-C-läget (kedjan utan T3-D) för objekt som båda paketen ändrar. */
+  /* T3-D: md5 i T3-C-läget (kedjan utan T3-D och T3-E) för objekt som båda paketen ändrar. */
+  const paketRel = (re) => fs.readFileSync(path.join(r.rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
+    .filter((p) => /^\d{14}$/.test(p[0]) && re.test(p[1] || '')).map((p) => p[1]);
+  /* T3-E: md5 i T3-D-läget (kedjan utan T3-E) för objekt som T3-D och T3-E båda ändrar. */
+  const avenD = Object.keys(objekt).filter((k) => objekt[k].aven === 'T3-D');
+  if (avenD.length) {
+    const rd = byggReplik({ data: false, schemakontroll: false, utelamna: paketRel(/_t3e_/) });
+    try {
+      const lokD = q(rd.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, pg_get_functiondef(p.oid) as def, coalesce(p.proacl::text,'NULL') as acl
+        from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prokind in ('f','p')`);
+      for (const k of avenD) {
+        const key = k.replace(/^funktion:/, '');
+        const f = lokD.find((y) => y.name + '(' + y.args + ')' === key);
+        objekt[k].md5_t3d = f ? md5(f.def) + '|' + aclSet(f.acl) : 'saknas';
+      }
+    } finally { rd.stang(); }
+  }
   const aven = Object.keys(objekt).filter((k) => objekt[k].aven === 'T3-C');
   if (aven.length) {
-    const t3dRel = fs.readFileSync(path.join(r.rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/))
-      .filter((p) => /^\d{14}$/.test(p[0]) && /_t3d_/.test(p[1] || '')).map((p) => p[1]);
+    const t3dRel = paketRel(/_t3[de]_/);
     const rc = byggReplik({ data: false, schemakontroll: false, utelamna: t3dRel });
     try {
       const lokC = q(rc.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, pg_get_functiondef(p.oid) as def, coalesce(p.proacl::text,'NULL') as acl
@@ -146,7 +171,7 @@ try {
   }
   const sorterat = Object.fromEntries(Object.keys(objekt).sort().map((k) => [k, objekt[k]]));
   if (process.argv.includes('--skriv')) {
-    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T3-B, T3-C och T3-D (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
+    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T3-B, T3-C, T3-D och T3-E (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
     console.log('Skrev ' + FIL + ': ' + Object.keys(sorterat).length + ' objekt');
     const utan = Object.entries(sorterat).filter(([, v]) => v.beskrivning === '(beskrivning saknas)');
     if (utan.length) { console.log('FAIL beskrivning saknas: ' + utan.map(([k]) => k).join(', ')); process.exitCode = 1; }
