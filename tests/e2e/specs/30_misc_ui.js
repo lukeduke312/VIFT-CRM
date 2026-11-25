@@ -467,7 +467,7 @@ const tests = [
     },
   },
   {
-    id: 'MISC-DATA-02', module: 'Kundregister', name: 'Kontrakt (110 avtal) och Importlogg (15 importer): tabell på dator, kort per rad på 360/390, statuschip filtrerar med rätt antal, ingen sidscroll, begränsad bredd på 1920',
+    id: 'MISC-DATA-02', module: 'Kundregister', name: 'Kontrakt (114 avtal) och Importlogg (15 importer): tabell på dator, kort per rad på 360/390, statuschip filtrerar med rätt antal, ingen sidscroll, begränsad bredd på 1920',
     async run(t) {
       t.__seedFn = seedRealistic;
       for (const vp of ['mx360', 'mx390', 'mx1366', 'mx1920']) {
