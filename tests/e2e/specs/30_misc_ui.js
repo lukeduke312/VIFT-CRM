@@ -285,6 +285,10 @@ const tests = [
   {
     id: 'MISC-PROP-03', module: 'Fastighetsregister', name: 'Fastighetskortet: portkod/nyckelinfo visas för admin (objects_sensitive), aldrig för arbetsledare utan behörighet; fältarbetare nekas sidan',
     async run(t) {
+      /* T3-E: standardrollen chef har objects_sensitive (D-05, BEHORIGHETSMATRIS §2). Fallet
+         "arbetsledare utan portkodsbehörighet" prövas med en egen roll där just den behörigheten
+         är borttagen (D-26, §5.13 SEC-CUST-03) — samma negativa kontroll som tidigare. */
+      { const rr = t.fake.get('roles'); const ch = rr.find((r) => r.id === 'chef'); ch.permissions = ch.permissions.filter((p) => p !== 'objects_sensitive'); t.fake.set('roles', rr); }
       const a = await open(t, 'mx1366', 'admin', 'pg-obj-detail', { propId: 'OBJ-001' });
       await a.eval(() => PropertyDetailPage._saveSensitiveFields({ propertyId: 'OBJ-001', accessCode: '4711', keyInformation: 'Nyckel i tub E2E' }));
       await a.settle(400);

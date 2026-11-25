@@ -41,6 +41,10 @@ module.exports = [
   {
     id: 'PERM-02', kind: 'contract', module: 'Användarroller och behörigheter', name: 'Arbetsledare (utan lön/portkod) och begränsad AO-användare: servern nekar det rollen saknar',
     async run(t) {
+      /* T3-E: standardrollen chef har objects_sensitive (D-05, BEHORIGHETSMATRIS §2). Fallet
+         "arbetsledare utan portkodsbehörighet" prövas med en egen roll där just den behörigheten
+         är borttagen (D-26, §5.13 SEC-CUST-03) — samma negativa kontroll som tidigare. */
+      { const rr = t.fake.get('roles'); const ch = rr.find((r) => r.id === 'chef'); ch.permissions = ch.permissions.filter((p) => p !== 'objects_sensitive'); t.fake.set('roles', rr); }
       const c = await t.world.session();
       await c.login('chef'); // ST-003, saknar payroll_view och objects_sensitive
       const te = await call(c, 'time-entries-list', {});

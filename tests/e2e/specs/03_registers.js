@@ -90,8 +90,15 @@ module.exports = [
     },
   },
   {
-    id: 'PROP-01', module: 'Fastighetsregister', name: 'Ny fastighet utan objects_sensitive: portkodsfält visas inte, ingen portkod i registret',
+    id: 'PROP-01', module: 'Fastighetsregister', name: 'Ny fastighet utan objects_sensitive (egen roll chef − objects_sensitive, SEC-CUST-03): portkodsfält visas inte, ingen portkod i registret',
     async run(t) {
+      /* T3-E: standardrollen chef har objects_sensitive (D-05, BEHORIGHETSMATRIS §2). Fallet
+         "utan objects_sensitive" prövas därför med en egen roll där just den behörigheten är
+         borttagen (D-26, §5.13 SEC-CUST-03) — samma negativa kontroll som tidigare. */
+      const roles = t.fake.get('roles');
+      const chef = roles.find((r) => r.id === 'chef');
+      chef.permissions = chef.permissions.filter((p) => p !== 'objects_sensitive');
+      t.fake.set('roles', roles);
       const s = await t.world.session();
       await s.login('chef');
       await openCreate(s, 'pg-objects', 'Ny fastighet');
@@ -191,7 +198,10 @@ module.exports = [
       const expect = {
         falt: { see: ['pg-myjobs', 'pg-tid'], deny: ['pg-admin', 'pg-payroll', 'pg-invoices', 'pg-staff', 'pg-crm'] },
         chef: { see: ['pg-crm', 'pg-ao', 'pg-offer'], deny: ['pg-admin', 'pg-payroll', 'pg-articles'] },
-        ekonomi: { see: ['pg-payroll', 'pg-invoices'], deny: ['pg-admin', 'pg-crm', 'pg-staff'] },
+        /* T3-E: standardrollen ekonomi har customer_view (BEHORIGHETSMATRIS §2) och ser därför
+           kundregistret (läsning); kundändring nekas fortfarande (T3E-03). Objekt, personal och
+           admin nekas som tidigare. */
+        ekonomi: { see: ['pg-payroll', 'pg-invoices', 'pg-crm'], deny: ['pg-admin', 'pg-objects', 'pg-staff'] },
         begransad: { see: ['pg-ao'], deny: ['pg-tid', 'pg-crm', 'pg-payroll', 'pg-rondering'] },
       };
       for (const [alias, e] of Object.entries(expect)) {

@@ -279,7 +279,9 @@ module.exports = [
         falt2:   { 'AO-T1': ['start', 'WorkOrderDetailPage.startOwnJob()'], 'AO-T2': ['complete', 'WorkOrderDetailPage.markComplete()'], 'AO-T3': null },
       };
       // Stämplingsraden: bara med ao_time och bara på ej avslutade ordrar.
-      const stamp = { admin: [true, true, false], chef: [false, false, false], ekonomi: [false, false, false], falt2: [true, true, false] };
+      /* T3-E: standardrollen chef har ao_time (BEHORIGHETSMATRIS §2) och får därför stämplingsraden
+         på ej avslutade ordrar; ekonomi saknar ao_time och får den inte. */
+      const stamp = { admin: [true, true, false], chef: [true, true, false], ekonomi: [false, false, false], falt2: [true, true, false] };
       for (const role of Object.keys(expect)) {
         const s = await t.world.session({ viewport: 'laptop' });
         await s.login(role);

@@ -30,7 +30,8 @@ module.exports = [
       t.assert(rolePerms(t, 'personal').includes('ao_material'), 'servern oförändrad');
       t.assert(await a.eval(() => state.roles.find((r) => r.id === 'personal').permissions.includes('ao_material')), 'klienten rullade tillbaka');
       const banner = await a.text('#vf-unsaved-banner');
-      t.assert(/Roller personal — Tekniker/.test(banner), 'bannern namnger den osparade rolländringen: ' + banner.slice(0, 160));
+      /* T3-E: standardrollen personal har etiketten "Personal" (standardroller.json). */
+      t.assert(/Roller personal — Personal/.test(banner), 'bannern namnger den osparade rolländringen: ' + banner.slice(0, 160));
       // Användaren väljer "Återuppta" när servern fungerar igen
       t.fake.clearFaults();
       await a.clearToasts();
