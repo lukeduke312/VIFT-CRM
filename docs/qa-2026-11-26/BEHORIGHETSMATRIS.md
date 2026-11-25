@@ -230,10 +230,10 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 |---|---|---|---|---|---|---|---|---|---|
 | R38 | Personal: namn, titel, arbetstelefon, arbets-e-post (interna kollegor) | S | L | L | L | Lp: namn och titel för personal på egna AO | PROJ | D-14 | Alla läser hela posten |
 | R39 | Egen personalpost (inkl. e-post för inloggning) | L | L | L | L | L | PROJ (egen post fullständig). KLIENT `Auth._resolveUser`. | D-14 | Som målet |
-| R40 | Andras `role`/`permissions` och skyddade personaluppgifter | S | L *(staff_view)*, utan `permissions` | – | – | – | PROJ | D-14, D-21 | Alla läser |
-| R41 | Rollregister: egen effektiv behörighet | L | L | L | L | L | PROJ `vift_roles` (egen roll) | D-21 | Alla läser alla roller |
-| R42 | Rollregister: andras roller | S | – | – | – | – | PROJ + RLS *(admin_manage)* | D-21 | Alla läser |
-| R43 | Personal: skriva `role`/`active`, och roller: skriva `permissions` | S (superadmin) | – | – | – | – | RPC under gemensamt lås: eskaleringsregeln och invarianten "≥1 aktiv `all`" | D-25 | **SÄK-8 (P1):** `staff_manage` kan ge sig själv admin. Inget skydd för sista superadmin. |
+| R40 | Andras `role`/`permissions` och skyddade personaluppgifter | S | L *(staff_view)*, utan `permissions` | – | – | – | PROJ | D-14, D-21 | **Lokalt verifierad (T3-C):** andras `permissions` bort för alla utom `staff_manage`/`admin_manage`; andras `role` bara med `staff_view`; REST döljer raden. Skyddade personaluppgifter (telefon, timpris) är T3-D/T4-A. · *tidigare: Alla läser* |
+| R41 | Rollregister: egen effektiv behörighet | L | L | L | L | L | PROJ `vift_roles` (egen roll) | D-21 | **Lokalt verifierad (T3-C):** egen roll via store-key-write. · *tidigare: Alla läser alla roller* |
+| R42 | Rollregister: andras roller | S | – | – | – | – | PROJ + RLS *(admin_manage)* | D-21 | **Lokalt verifierad (T3-C):** bara `admin_manage` (och `all`); `staff_manage` får de roller den får tilldela. · *tidigare: Alla läser* |
+| R43 | Personal: skriva `role`/`active`, och roller: skriva `permissions` | S (superadmin) | – | – | – | – | RPC under gemensamt lås: eskaleringsregeln och invarianten "≥1 aktiv `all`" | D-25 | **Lokalt verifierad (T3-C):** SÄK-8 åtgärdad lokalt (eskaleringsregel + invariant under gemensamt lås). Ej installerad i STAGING. · *tidigare: **SÄK-8 (P1):** `staff_manage` kan ge sig själv admin. Inget skydd för sista superadmin.* |
 | R44 | Aktivitetslogg: läsa | L | L | L | Lp: händelser på egna AO | Lp: egna AO | PROJ per post (samma urval som rättad `work-orders-list`). RLS nekar direkt REST för roller utan full åtkomst. | B4, D-22 | Alla läser alla |
 | R45 | Aktivitetslogg: rapportera | `appendActivity` | inom behörighet | inom behörighet | Typer och referenser för egna AO | samma | EF `store-key-write` `appendActivity` (typlista per behörighet, referens kontrolleras), RPC `activity_log_append` | D-22 | Alla typer och referenser tillåtna (F11) |
 | R46 | Uppgifter: egna och tilldelade | S | S | S | S | S | EF `activities-policy.ts` (skrivning), PROJ per post (läsning) | D-15, Ö7 | Skrivning som målet, läsning av alla |
@@ -262,7 +262,7 @@ Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i 
 | R59 | Export av portkod och nyckelinformation | Inte i normal export. Bara serverexport *(objects_sensitive + export_data)* med aktivt val och logg. | | | | | EF + logg | D-18 | Klientval med `objects_sensitive` |
 | R60 | Export av lösenord, token, autentiseringsuppgifter, hemliga nycklar | Aldrig | | | | | EXP (konfiguration) + PROJ | D-18 | `sensitiveFields` för personal. Token tas bort av PROJ. |
 | R61 | Lokal cache efter utloggning eller kontobyte | – | – | – | – | – | CACHE: alla `vift_*`-affärsnycklar rensas. Degraderad inläsning använder aldrig en annan användares cache. | – | **SÄK-9 lokalt åtgärdad (T3-A, 2026-11-28):** all användarspecifik cache rensas (uttrycklig behållningslista), cachen har en ägare (miljö + e-post), utkorgar ägarnycklade. Ej installerad i STAGING. |
-| R62 | Direkt REST-skrivning till `store` | – för affärsnycklar | | | | | RLS `staging_generic_keys_no_direct_*`, `store_*_no_direct_*`, TRG | – | Nycklar utan affärsregel (t.ex. `vift_lastChanged`, okända nycklar) kan skrivas av alla aktiva via `store_active_write_safe` (F18) |
+| R62 | Direkt REST-skrivning till `store` | – för affärsnycklar | | | | | RLS `staging_generic_keys_no_direct_*`, `store_*_no_direct_*`, TRG | – | **Lokalt verifierad (T3-C, F18):** vitlista `vift_notifications` + `vift_lastChanged` (servervärde); allt annat 42501 `direct_write_blocked`. · *tidigare: Nycklar utan affärsregel (t.ex. `vift_lastChanged`, okända nycklar) kan skrivas av alla aktiva via `store_active_write_safe` (F18)* |
 | R63 | Direkt anrop av SECURITY DEFINER-RPC (`/rest/v1/rpc/...`) | – | – | – | – | – | Grants: EXECUTE bara för service_role. Undantag: `vift_caller_perms` och `vift_store_full_access` (RLS-hjälp). | – | Som målet enligt inventeringen §6 |
 
 ---
@@ -293,6 +293,7 @@ Ett generiskt fel (500, `write_failed`, nätverksfel, `forbidden` utan `reason` 
 | 410 | `disabled` | Avaktiverad EF |
 | PostgREST 401/403, kod `42501` | – | RLS eller grant nekar (skrivning). SELECT som nekas ger **tom lista** med 200. |
 | PostgREST, `P0001` med `direct_write_blocked` | – | TRG `_protect_critical_store_keys` |
+| PostgREST 403, kod `42501`, meddelande `direct_write_blocked` | – | T3-C (F18): TRG `protect_direct_write_allowlist` + RESTRICTIVE `store_direct_write_allowlist_*` — direkt REST-skrivning utanför vitlistan. UPDATE/DELETE av en rad som en RLS-policy döljer ger i stället 0 rader (PostgreSQL). |
 
 **Nya koder som införs i T3/T4.** Felet bär alltid `error` + `reason`, så att testet kan skilja orsakerna åt. Den interna regelorsaken i `activities-policy.ts` (t.ex. `not_own`) returneras i dag inte till klienten. Det ändras.
 
@@ -488,21 +489,21 @@ Testdata, alla [E2E-TEST]:
 
 | ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
 |---|---|---|---|---|---|---|
-| SEC-B3-01 | + | FÄ | Kollegors namn, titel och arbetskontakt | E | L,SG | Finns |
-| SEC-B3-02 | + | FÄ | Egen post med e-post. Inloggning löser rätt användare. | E,K | L,W | Ja |
-| SEC-B3-03 | − | FÄ, EK | Andras `permissions` och `role` | R,E,S | L,SG | Saknas |
+| SEC-B3-01 | + | FÄ | Kollegors namn, titel och arbetskontakt | E | L,SG | Finns **Lokalt grön (T3-C, `t3c_roller`, E).** |
+| SEC-B3-02 | + | FÄ | Egen post med e-post. Inloggning löser rätt användare. | E,K | L,W | Ja **Lokalt grön (T3-C: `t3c_roller` E, e2e T3C-04 K).** |
+| SEC-B3-03 | − | FÄ, EK | Andras `permissions` och `role` | R,E,S | L,SG | Saknas **Lokalt grön (T3-C: R tom lista, E projektion, S paritet B3-03/03e).** AL (staff_view) får andras `role` men inte `permissions` (R40). |
 | SEC-B3-04 | − | BE | Kontaktuppgifter till personal som inte finns på egna AO | E | L,SG | Saknas |
-| SEC-B3-05 | − | FÄ, AL | `vift_roles`: andras roller | R,E | L,SG | Bara egen effektiv roll |
-| SEC-B3-06 | + | Egen roll med `admin_manage` | `vift_roles` | E | L | Alla roller |
-| SEC-ROLL-01 | − | Egen roll med `staff_manage` | Sätta egen `role:'admin'` | E,P | L | 403 `privilege_escalation` |
-| SEC-ROLL-02 | − | Egen roll med `staff_manage` | Ge annan en roll med `all` eller med behörighet utöver anroparens | E,P | L | 403 `privilege_escalation` / `superadmin_required` |
-| SEC-ROLL-03 | − | Egen roll med `admin_manage` (utan `all`) | Lägga till `all` i en roll, eller lägga till behörighet i egen roll | E,P | L | 403 `superadmin_required` / `privilege_escalation` |
-| SEC-ROLL-04 | − | ADM (ensam aktiv `all`) | Inaktivera sig själv / byta egen roll / ta bort `all` från rollen / radera rollen | E,P | L | 409 `last_superadmin` |
-| SEC-ROLL-05 | − | ADM + ADM2 | Samtidigt inaktivera varandra (50 upprepningar) | P | L | Aldrig 0 aktiva med `all`. Exakt en lyckas. |
-| SEC-ROLL-06 | − | ADM + ADM2 | Samtidigt: en ändrar rollens behörigheter, en byter roll på sista superadmin | P | L | Invarianten håller (gemensamt lås för `vift_staff` + `vift_roles`) |
-| SEC-ROLL-07 | + | ADM | Inaktivera ADM2 när ADM finns kvar | E,P | L | 200 |
-| SEC-ROLL-08 | + | Egen superadminroll med annat id än `admin` | Allt som ADM får | E | L | Fungerar (ingen hårdkodning på roll-id) |
-| SEC-ROLL-09 | − | Roll med id `admin` **utan** `all` | Superadminåtgärder | E,P,K | L,W | Nekas. Klienten visar inga superadminval. |
+| SEC-B3-05 | − | FÄ, AL | `vift_roles`: andras roller | R,E | L,SG | Bara egen effektiv roll **Lokalt grön (T3-C: R tom lista, E bara egen roll, även readWithHash).** Med `staff_manage` även de roller man får tilldela. |
+| SEC-B3-06 | + | Egen roll med `admin_manage` | `vift_roles` | E | L | Alla roller **Lokalt grön (T3-C, E och R).** |
+| SEC-ROLL-01 | − | Egen roll med `staff_manage` | Sätta egen `role:'admin'` | E,P | L | 403 `privilege_escalation` **Lokalt grön (T3-C: E, P, S; klient T3C-01).** |
+| SEC-ROLL-02 | − | Egen roll med `staff_manage` | Ge annan en roll med `all` eller med behörighet utöver anroparens | E,P | L | 403 `privilege_escalation` / `superadmin_required` **Lokalt grön (T3-C: E, P, S; även nyskapad post, inaktivering/e-postbyte av superadmin och e-postkapning).** |
+| SEC-ROLL-03 | − | Egen roll med `admin_manage` (utan `all`) | Lägga till `all` i en roll, eller lägga till behörighet i egen roll | E,P | L | 403 `superadmin_required` / `privilege_escalation` **Lokalt grön (T3-C: E, P, S; klient T3C-02).** |
+| SEC-ROLL-04 | − | ADM (ensam aktiv `all`) | Inaktivera sig själv / byta egen roll / ta bort `all` från rollen / radera rollen | E,P | L | 409 `last_superadmin` **Lokalt grön (T3-C: E (merge och hel skrivning), P (`deactivate_vift_user`, RPC), S; klient T3C-03).** |
+| SEC-ROLL-05 | − | ADM + ADM2 | Samtidigt inaktivera varandra (50 upprepningar) | P | L | Aldrig 0 aktiva med `all`. Exakt en lyckas. **Lokalt grön (T3-C: 50 × `deactivate_vift_user` med egna anslutningar och 50 × via store-key-write med barriär).** |
+| SEC-ROLL-06 | − | ADM + ADM2 | Samtidigt: en ändrar rollens behörigheter, en byter roll på sista superadmin | P | L | Invarianten håller (gemensamt lås för `vift_staff` + `vift_roles`) **Lokalt grön (T3-C: 50 × E med barriär och 50 × P mot `deactivate_vift_user`).** |
+| SEC-ROLL-07 | + | ADM | Inaktivera ADM2 när ADM finns kvar | E,P | L | 200 **Lokalt grön (T3-C: E, P, S).** |
+| SEC-ROLL-08 | + | Egen superadminroll med annat id än `admin` | Allt som ADM får | E | L | Fungerar (ingen hårdkodning på roll-id) **Lokalt grön (T3-C: E; klient T3C-05).** |
+| SEC-ROLL-09 | − | Roll med id `admin` **utan** `all` | Superadminåtgärder | E,P,K | L,W | Nekas. Klienten visar inga superadminval. **Lokalt grön (T3-C: E; klient T3C-05).** |
 | SEC-ROLL-10 | − | Inloggning utan personalpost | Klientens meny | K,C | W | Ingen fältbehörighet (SÄK-10). Servern svarar 403 `Forbidden`. **Lokalt grön (T3-A, `36_client_security`).** |
 
 ### 5.8 Aktivitetslogg och uppgifter (R44–R47)
@@ -580,10 +581,10 @@ Testdata, alla [E2E-TEST]:
 | SEC-CACHE-01 | − | ADM → utloggning → FÄ på samma profil | `localStorage` | C | W | Inga `vift_*`-affärsnycklar från ADM (fältnamnskontroll). **SÄK-9.** Lokalt grön (T3-A). |
 | SEC-CACHE-02 | − | FÄ, nätet avstängt vid inloggning | Degraderad inläsning | C | W | Ingen data från föregående användare. Lokalt grön (T3-A). |
 | SEC-CACHE-03 | − | Kontobyte i annan flik | Lyssnaren för flikbyte | C | W | Samma rensning. Lokalt grön (T3-A). |
-| SEC-REST-01 | − | FÄ | REST INSERT/UPDATE/DELETE för affärsnycklar (alla 28), AO, tid, fakturor, `offerAttachments`, `ronderingspass`, `projectDocuments` | R | L | `42501` eller `direct_write_blocked`. KS oförändrad. |
-| SEC-REST-02 | − | FÄ | REST INSERT av okänd nyckel `vift_e2e_<runId>` och UPDATE av `vift_lastChanged` | R | L | Nekas efter T3 (F18). I dag tillåtet, vilket dokumenteras i baslinjen. |
-| SEC-REST-03 | − | FÄ | REST `rpc/work_order_patch`, `rpc/store_business_key_write`, `rpc/sensitive_fields_write`, `rpc/time_entry_create` | R | L | `42501` (EXECUTE saknas) |
-| SEC-REST-04 | + | FÄ | REST `rpc/vift_caller_perms` | R | L | Bara egna behörigheter |
+| SEC-REST-01 | − | FÄ | REST INSERT/UPDATE/DELETE för affärsnycklar (alla 28), AO, tid, fakturor, `offerAttachments`, `ronderingspass`, `projectDocuments` | R | L | `42501` eller `direct_write_blocked`. KS oförändrad. **Lokalt grön (T3-C):** upsert (INSERT … ON CONFLICT) av alla 28 + 6 nycklar → 42501 `direct_write_blocked` (AO/tid/fakturor: P0001 från befintlig trigger); UPDATE/DELETE av rader som befintliga RESTRICTIVE-policyer döljer ger 0 rader (PostgreSQL rapporterar inget fel för dolda rader); KS oförändrad. |
+| SEC-REST-02 | − | FÄ | REST INSERT av okänd nyckel `vift_e2e_<runId>` och UPDATE av `vift_lastChanged` | R | L | Nekas efter T3 (F18). I dag tillåtet, vilket dokumenteras i baslinjen. **Lokalt grön (T3-C):** okänd nyckel 42501 (INSERT, UPDATE, DELETE). **Avvikelse (Beslut som behövs):** `vift_lastChanged` står kvar på vitlistan för klientens notisväg, men värdet sätts av servern (klientens värde sparas aldrig); DELETE nekas. |
+| SEC-REST-03 | − | FÄ | REST `rpc/work_order_patch`, `rpc/store_business_key_write`, `rpc/sensitive_fields_write`, `rpc/time_entry_create` | R | L | `42501` (EXECUTE saknas) **Lokalt grön (T3-C):** även T3-B:s nya signaturer, `work_order_pool_take`, `work_order_billing_set` och T3-C-funktionerna; bara de två RLS-hjälparna är körbara för authenticated. |
+| SEC-REST-04 | + | FÄ | REST `rpc/vift_caller_perms` | R | L | Bara egna behörigheter **Lokalt grön (T3-C).** |
 | SEC-SIM-01 | + | – | Hela SEC-AO, SEC-POOL, SEC-B1, SEC-TASK och SEC-B4 mot `fake-backend.js` | S | L | Samma utfall och felkoder som den lokala replikan (paritet). Avvikelse = fel i den simulerade servern. |
 
 ### 5.13 Egna anpassade roller (D-26)
@@ -609,12 +610,12 @@ Varje rad är en **egen roll** = standardroll minus en enskild behörighet, elle
 | SEC-CUST-15 | `personal` − `rondering_utfor` | Eget pass | 403 `forbidden` |
 | SEC-CUST-16 | `begransad` + `ao_time` | Tid på egen AO / på öppen pool | 200 / 403 `not_assigned` |
 | SEC-CUST-17 | `begransad` + `objects_access_assigned` | Åtkomstinformation för egen AO | 200 + `allowed`-rad |
-| SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 |
-| SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 |
+| SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 **Lokalt grön (T3-C).** |
+| SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 **Lokalt grön (T3-C)** för `all` och `bankgiro_edit` som tillägg i en roll; SEC-INST-03 är T4. |
 | SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) |
 | SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) |
-| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. |
-| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). |
+| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. **Lokalt grön (T3-C):** store-key-write, work-orders-list, time-entries-list, ao-time-write, invoice-write. |
+| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). **Lokalt grön (T3-C)** i samma EF:er; klienten sedan T3-A. |
 
 ---
 
@@ -693,7 +694,7 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F2: hel materiallista, priser från klienten, okänt = 0 | SÄK-6 | P1 | `ao-time-write/index.ts:199-213`; `WorkOrderDetailPage.js:2053`, `:2248` | T4-B |
 | F3: ingen tilldelningsväg för åtkomstinformation, dubbel lagring. Skrivare utan `objects_sensitive` får fältet (informationsläckage). | SÄK-7 | **P1** (läckaget), P2 (vägen) | STAGING `get-sensitive-fields` v9 är **nyare** än repot (fail-closed audit, låst supabase-js) och `set-sensitive-fields` v9 använder RPC `sensitive_fields_write`. Repot uppdateras från inventeringen före ändring. Projektionen i `vift_store_full_access` ger skrivare fullt värde. | T4-A, T4-C |
 | F4: poolregeln och "Ta jobbet" | SÄK-3, SÄK-4 | P1 | `work-orders-list/index.ts:88-91`, `_shared/vift-auth.ts:121-131`, SQL-urval i `work_order_checklist_resolve`/`_set_state`/`work_order_log_*`, `fake-backend.js:122-127`. Gren B läser utanför låset. | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
-| F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C · nuläge 2026-11-28: **lokalt verifierad** (T3-C: `vift-v2/tests/t3c_roller.test.js`; baslinjen T3-0 vänd), ej installerad i STAGING |
 | F6: cache kvar efter utloggning | SÄK-9 | **P1** | `AuthService.js:628-650`, `state.js:983` — lokalt åtgärdad 2026-11-28 | T3-A |
 | F7: reservroll `personal` | SÄK-10 | Blockerar `personal` | `AuthService.js:379` — lokalt åtgärdad 2026-11-28 | T3-A |
 | F8: uppgiftsregler klient mot server | (SÄK-2) | P2 | `PageShells.js:11861-11869`, `activities-policy.ts` | T3-D |
@@ -704,7 +705,7 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | F13: `ProfitabilityService` använder 250 kr/h som standard | – | P3 | `ProfitabilityService.js:10` | T4-B |
 | F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
 | F17: `work_order_patch` returnerar sparat resultat vid återanvänd idempotensnyckel, oavsett payload | – | P3 | `schema/functions.sql` | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
-| F18: direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged`, okända nycklar) för alla aktiva | – | P2 | `schema/policies.sql` `store_active_write_safe` + `staging_generic_keys_no_direct_*` (gäller bara affärsnycklar) | T3-C · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
+| F18: direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged`, okända nycklar) för alla aktiva | – | P2 | `schema/policies.sql` `store_active_write_safe` + `staging_generic_keys_no_direct_*` (gäller bara affärsnycklar) | T3-C · nuläge 2026-11-28: **lokalt verifierad** (T3-C: vitlista i RLS + trigger; `vift_lastChanged` med servervärde, se T3-RESULTAT), ej installerad i STAGING |
 | F19: `rondering-pass-write` kräver `ao_view_all` för allt, ingen kontroll per pass | (Ö3) | P2 | `inventering/.../functions/rondering-pass-write/rondering-pass-write/index.ts:82` | T4-D |
 | F21: `ao_edit` kan sätta `status:'fakturerad'`/`invoiceId` via `patch_ao` | – | **P1** (D-07) | `ao-time-write/index.ts` (ingen fältbegränsning för `callerHasEdit`) + `work_order_patch` | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
 | F23: stämpling kontrollerar inte AO-tilldelning | (AP-B) | P1 | `store-key-write/stamp-status.ts:56-70` (bara `ao_time`) | T3-B · nuläge 2026-11-28: **lokalt verifierad** (T3-B; baslinjen T3-0 vänd till godkända tester i `vift-v2/tests/t3b_ao_karna.test.js`), ej installerad i STAGING |
@@ -712,6 +713,8 @@ Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 | O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D · nuläge 2026-11-28: **baslinje bevisad lokalt** (T3-0), ej åtgärdad |
 
 **Nuläge 2026-11-28 (T3-B, lokalt):** F1 (SÄK-5), F4 (SÄK-3/4), F16/F23 (SÄK-11, tilldelningsdelen samt serverpris), F17 (SÄK-12) och F21 (SÄK-15) är rättade i `vift-v2` (migrationerna `20261128000001–03`, ändrade EF) och **lokalt verifierade** (`vift-v2/tests/t3b_ao_karna.test.js`, `t3b_rollback.test.js`, paritet `VIFT-CRM/tests/sim_parity.test.js`). R02–R08, R10 och R26 följer målet lokalt. Övergångsregeln (§4.6 i testplanen) gäller tills T3-E. Inget är installerat i STAGING; kolumnen "Nu (STAGING)" beskriver fortfarande STAGING. Kvar till T4: radvisa materialrader (D-19 fullt), prisgruppsbehörighet (`price_group_not_allowed`), AO-ekonomi i projektionen för fält (R12).
+
+**Nuläge 2026-11-28 (T3-C, lokalt):** F5 och F18 är åtgärdade och lokalt verifierade (`vift-v2/tests/t3c_roller.test.js`, `t3c_rollback.test.js`; paritet 85 scenarier, 83 lika, 2 kända utanför T3-C). Inget är installerat i STAGING.
 
 **Nuläge 2026-11-28 (T3-0, lokalt):** bristerna F1, F4, F5, F16, F17, F18, F21, F23 och O2 är bevisade i oförändrad kod mot den lokala STAGING-replikan (`vift-v2/tests/baslinje_sakerhet.test.js`, 34 BASLINJE-rader; tabell i `docs/qa-2026-11-28/T3-RESULTAT.md` §7). Utan R-E skulle dessutom anon kunna köra `provision_vift_user` (bevisat lokalt). Ingen rad är åtgärdad. Testverktygen för felkod + `reason` + KS finns (`vift-v2/tests/local/lib/kontroll.js`). SEC-SIM-01: paritetsramverket finns (`VIFT-CRM/tests/sim_parity.test.js`, 7 kända avvikelser).
 

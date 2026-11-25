@@ -1052,7 +1052,287 @@ Ingen backup återläses över verksamhetsdata. Data återläses bara vid ett se
 
 ## T3-C – roller och superadmin
 
-*(Fylls i av T3-C.)*
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den
+lokala STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat
+eller verifierat i STAGING. LIVE är inte kontaktad. Inga läsningar mot STAGING behövdes.
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Eskalering (SÄK-8, D-25) | `store_business_key_write`/`_merge_write` (samma signatur) kör `_vift_authz_check` på det slutliga värdet för `vift_staff` och `vift_roles`, i samma transaktion som skrivningen. 403 `forbidden`/`privilege_escalation`: egen roll ändras, eller någon (post, roll eller inloggad identitet) får behörighet utöver anroparens. 403 `forbidden`/`superadmin_required`: `all`, eller en roll eller post med `all`, tilldelas, ändras eller tas bort av någon utan `all`. `admin_manage` är inte superadmin. Superadmin avgörs bara av `all`, aldrig av roll-id eller namn (SEC-ROLL-08/09). |
+| Invarianten "minst en aktiv användare med `all`" | 409 `last_superadmin` i personal- och rollregistret och i `deactivate_vift_user`/`provision_vift_user`. Kontrolleras under ett gemensamt lås (rådgivande lås → `vift_roles` → `vift_staff` → `app_users`). Anroparens behörigheter läses om under låset. SEC-ROLL-05/06: 50 upprepningar vardera, både med egna anslutningar och via EF med barriär. Exakt en vinner, aldrig 0 superadmins. Ingen deadlock mot T3-B:s lås (10 blandade upprepningar). |
+| Projektion (D-21, D-14) | Utan `admin_manage` bara den egna effektiva rollen ur `vift_roles` (med `staff_manage` även de roller man får tilldela). Utan `staff_manage`/`admin_manage` tas andras `permissions` bort ur `vift_staff`, och andras `role` utan `staff_view`. REST-läsning av registren stängd för övriga (samma mönster som C-5, `vift_store_full_access`). Hash avser hela servervärdet. |
+| F18 / SÄK-13 | Uttrycklig vitlista i RLS (RESTRICTIVE INSERT/UPDATE) och trigger: `vift_notifications` (befintligt innehållsskydd) och `vift_lastChanged` (värdet sätts av servern). DELETE och allt annat: 42501 `direct_write_blocked`. Klientens enda direkta skrivning (`persistNotifs`) fungerar oförändrad. |
+| RPC-grants (SEC-REST-03/04) | Alla EF-RPC:er, även T3-B:s nya signaturer och T3-C:s funktioner, har EXECUTE bara för `service_role`. Bara de två RLS-hjälparna (`vift_caller_perms`, `vift_store_full_access`) är körbara för authenticated. |
+| Befintliga sessioner | Servern läser behörigheterna vid varje anrop (EF: `checkViftAuth`; RPC: omläsning under låset; RLS: `vift_caller_perms`). Testat på server och i webbläsare: T3C-06, där admin drar in en behörighet i rolleditorn och den redan inloggade fliken nekas vid nästa serveranrop och lämnar sidan. |
+| Klient | Rolleditorn och personalsidan erbjuder bara val som servern godtar. De tre felkoderna visas som begripliga meddelanden, och ändringen rullas tillbaka. Personal Inaktivera/Aktivera väntar på serverns bekräftelse (punkt 247). Dagens drift fungerar med projicerat rollregister. `?v=` höjt för fem filer. |
+| Fake-backend och paritet | Fake följer T3-C-reglerna. 85 scenarier: 83 lika, 2 kända (KEY-01, AUTH-02, utanför T3-C). 31 nya T3-C-scenarier, inklusive REST och BLOCKER-2. |
+| PERM-03 (BLOCKER-2) | Avblockerat. Körs mot serverns `KEY_PERMISSIONS`, utläst ur `store-key-write`-källan (ingen kopia och ingen modell), med exakt felkod och kontrollsumma. |
+| Rollback | `supabase/rollback/T3-C/rollback_t3c.sql` (genererad ur STAGING-facit). Installera → rollback → installera är prövat lokalt, och även rollback T3-C + T3-B i omvänd ordning (= exakt STAGING-facit). Ingen data ändras. |
+
+### 1. Inventering före ändringen
+
+**Hur klienten läser personal och roller** (nuvarande klient och v3.4):
+- `initState`, `DataSync._poll` och `Auth.refreshAuthorization` använder `Storage.getAllWithHashes` → `store-key-write` `readAllWithHashes` (EF, projicerad).
+- `readWithHash` används vid konflikt och omsynk.
+- Direkt REST-läsning (`/rest/v1/store`) används bara för `vift_lastChanged`, `vift_notifications` och `vift_ronderingspass`.
+- `Storage.getAll` (REST) anropas inte.
+- Därför kunde REST-läsningen av `vift_staff`/`vift_roles` stängas utan att någon klient påverkas.
+
+**Var klienten använder andras roller:**
+- Personalsidans rollmärke och AO:ns personaldialog (bara visning; faller tillbaka på roll-id).
+- Rolleditorn och användningsräknaren (`admin_manage`, får hela registret).
+- `OperationsPage` "lediga i fält" (`ao_time` i andras roll). Fick en reserv: utan synlig roll räknas den som är tilldelad någon AO.
+- `Auth._resolveUser` och `Auth.can` använder bara den egna posten och rollen.
+- Fältet `vift_staff[].permissions` läses aldrig av klienten.
+
+**Klientens direkta REST-skrivningar till `store`** (nuvarande och v3.4, `git grep` på a2549e0):
+- Bara `persistNotifs` → `Storage.setRemoteStrict([['notifications', …], ['lastChanged', now]])`, en upsert med två rader.
+- `Storage.set`, `Storage.setAll` och `Storage.remove` finns men anropas inte.
+- Alla 28 affärsnycklar går via `store-key-write`.
+- AO, tid, fakturor, bilagor, rondering och projektdokument har egna EF:er.
+- `push_subscriptions` och fastighetsbilder är andra tabeller.
+- Alla Edge Functions skriver som service_role och påverkas inte.
+
+**Befintliga policyer** (som STAGING-facit):
+- `store_active_write_safe` lät alla aktiva skriva nycklar utan affärsregel.
+- `store_admin_write_protected` lät `app_users.is_admin` skriva roller, personal och inställningar, men det blockerades redan av `staging_generic_keys_no_direct_*`.
+
+### 2. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000004_t3c_roller_och_superadmin.sql` | Regelfunktionerna `_vift_rec_active`, `_vift_role_perms`, `_vift_identity_perms`, `_vift_superadmin_count`, `_vift_superadmin_lock`, `_vift_reg_bad_count`, `_vift_reg_get`, `_vift_perms_beyond`, `_vift_authz_check` (bara service_role). `store_business_key_write`, `store_business_key_merge_write`, `deactivate_vift_user`, `provision_vift_user` och `vift_store_full_access` med samma signatur. `vift_store_project` och `store_read_all_with_hashes_projected` med ny parameter `p_caller_staff_id` (default null, de gamla signaturerna borttagna). STOP-kontroll mot md5 för de sju ersatta funktionerna (STAGING-facit eller repokedjans version). |
+| `migrations/20261128000005_t3c_direkt_rest_vitlista.sql` | Triggerfunktionen `_store_direct_write_guard`, triggern `protect_direct_write_allowlist`, policyerna `store_direct_write_allowlist_insert`/`_update`. STOP om de finns, eller om 0004 saknas. |
+| `functions/store-key-write/index.ts` | `forbidden:<reason>` → 403 `{error:'forbidden', reason}`; `last_superadmin` → 409. `p_caller_staff_id` till projektionen. |
+| `rollback/T3-C/rollback_t3c.sql` | Genererad av `tests/local/t3c-rollback.js` ur STAGING-facit. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | De två filerna, klass "ny", efter T3-B. |
+
+**Regeln i `_vift_authz_check`** (anroparen utan `all`, i den här ordningen; superadmin hoppar till steg 5):
+0. Anroparen omläst under låset: första aktiva personalposten med id:t (`p_actor_id` från EF), en aktiv app_users-rad för dess e-post, och rollens behörigheter. Annars, eller om `staff_manage`/`admin_manage` saknas, 403 `forbidden`. Nya element utan id eller med dubbla id ger 400 `invalid_element`.
+1. **Egen roll:** rollbyte i den egna personalposten, eller ändrade behörigheter i den egna rollen → `privilege_escalation` (SEC-ROLL-01 förväntar `privilege_escalation` även för `role:'admin'`).
+2. **Rollregistret:** en ändrad roll som har `all` före eller efter → `superadmin_required`. Tillagda behörigheter som anroparen saknar → `privilege_escalation`.
+3. **Personalregistret:** poster där roll, e-post eller aktiv-status ändras, eller som läggs till eller tas bort. En post vars roll har `all` → `superadmin_required`. En post som blir aktiv med ny roll eller ny e-post och vars roll ligger utöver anroparens → `privilege_escalation`. Inaktivering och telefonändringar är tillåtna.
+4. **Inloggade identiteter** (app_users.active → första aktiva personalpost med e-posten → roll; samma regel som `checkViftAuth`): ingen får vinna eller förlora `all` (`superadmin_required`) och ingen får behörighet utöver anroparens (`privilege_escalation`). Fångar e-postkapning och dubbla e-postadresser.
+5. **Invarianten** (alla, även superadmin): ≥1 aktiv identitet med `all` före och 0 efter → 409 `last_superadmin`.
+
+### 3. Klientändringar (VIFT-CRM)
+
+- `AuthService`:
+  - `isSuperadmin()` (behörigheten `all` i den egna rollen);
+  - `rolePerms`, `canAssignRole`, `canManageStaffAuth`, `canEditRolePerms` (samma regler som servern).
+- `PageShells`, personalsidan:
+  - rollvalet visar bara tilldelningsbara roller;
+  - egen roll, superadministratörer och poster vars roll inte syns (projektionen) är låsta med förklaring;
+  - e-posten är låst när posten ligger utöver ens behörigheter;
+  - Inaktivera/Aktivera visas bara när servern tillåter det och sparas med `commitElementChange` (serverbekräftat, tillbakarullning; punkt 247).
+- `PageShells`, rolleditorn:
+  - "Alla behörigheter" och behörigheter man saknar är spärrade (borttagning tillåten);
+  - egen roll och roller med `all` är låsta;
+  - roller med `all` har ingen Spara-knapp för icke-superadmin;
+  - `toggleRoleActive`/`removeRole` stoppas med förklaring.
+- `state.js`/`storage.js`:
+  - `reason` följer med avslag;
+  - `persistRefusalText` ger begripliga texter för `privilege_escalation`, `superadmin_required` och `last_superadmin` i `commitElementChange` och `confirmPersist`.
+- `OperationsPage`: reserv för "fältpersonal" när rollen inte syns.
+- `index.html`: `?v=` höjt för `storage.js`, `state.js`, `AuthService.js`, `PageShells.js` och `OperationsPage.js`.
+- `tools/build-staging-package.sh`: efter T3-A:s sammanslagning gav trevägssammanslagningen av `storage.js` konflikt (STAGING:s publicerade fil har skrivtidsgränsen intill T3-A:s rad). Det fångades av vift-v2 `staging_e2e_real`. Nu används HEAD:s fil med exakt de två överläggsraderna `SUPABASE_URL`/`SUPABASE_AKEY`, kontrollerat (fler skillnader än två rader ger avbrott).
+
+### 4. Fake-backend, paritet och PERM-03
+
+- `tests/e2e/fake-backend.js` (båda repona, synkade):
+  - `t3cAuthzCheck` (samma steg som `_vift_authz_check`);
+  - projektion av registren i `readAllWithHashes`/`readWithHash` och REST GET;
+  - REST-vitlistan (F18, DELETE nekas);
+  - `vift_staff` kräver `staff_manage` som servern (tidigare räckte `admin_manage` i fake).
+- Paritet (`vift-v2/tests/local/lib/paritet.js`, `VIFT-CRM/tests/sim_parity.test.js`): 31 nya scenarier, alla lika.
+  - ROLL-02a–d, ROLL-03a–e, ROLL-04a–c, ROLL-07.
+  - B3-03/03e/03c, B3-05/05c/05p/05r, B3-06, CUST-22/23.
+  - KEY-02–04 (BLOCKER-2) och REST-01/01b/02/02b/02c (F18; ramverket kör nu även REST-scenarier).
+  - ROLL-01 nekas nu i båda.
+  - Totalt 85 scenarier: 83 lika och 2 kända (KEY-01, AUTH-02; oförändrade, utanför T3-C).
+- **PERM-03 (BLOCKER-2) avblockerat:**
+  - `tests/e2e/server-key-perms.js` läser `KEY_PERMISSIONS` direkt ur `vift-v2/supabase/functions/store-key-write/index.ts` (KÄLLA-1, via `tests/lib/serverkalla.js`).
+  - PERM-03 kör i en värld med den tabellen och serverns egen `activities-policy.ts`.
+  - Fält och ekonomi: sex direktanrop (offertpris, kund, annans uppgift, säljchans, hel skrivning av `vift_settings`, artikel) → exakt 403 `forbidden` utan `reason`, och kontrollsumman är oförändrad.
+  - Arbetsledare: kund, offert och säljchans godtas; inställningar och artiklar nekas. Annans uppgift godtas, eftersom serverns TASK-01-regel ger `ao_edit` + `ao_view_all` full rätt.
+  - Samma utfall i paritetsscenarierna KEY-02–04, mot den faktiska servern.
+- Testerna T3C-01–07 (`tests/e2e/specs/38_t3c_roller.js`): personalsidan och rolleditorn för egna roller med bara `staff_manage` respektive bara `admin_manage`, sista superadmin, projektionen i webbläsaren, egen superadminroll med annat id och `admin` utan `all`, indragen behörighet i öppen flik, och F18 från klienten.
+
+### 5. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 28/28 testfiler gröna, 954 godkända kontroller, 0 fel.**
+Webbläsartesterna i `browser/` hoppades över med SKIP_BROWSER=1, som i T3-0 och T3-B. De räknas inte som godkända. `staging_e2e_real` kör Playwright och ingår.
+
+Nya:
+- `t3c_roller` **145/0**:
+  - SEC-ROLL-01–09 i vägarna E (writeMerge och hel skrivning) och P (RPC direkt);
+  - SEC-B3-01/02/03/05/06 (R och E), SEC-REST-01–04, SEC-CUST-18/19/22/23;
+  - egna roller (D-26: chef + staff_manage, chef − staff_view, adminhanterare, personalansvarig, tom, okänd roll);
+  - e-postkapning, dubbla id, behörigheter lästa vid varje anrop (EF och RPC under låset);
+  - deactivate/provision;
+  - samtidighet: SEC-ROLL-05 ×50 (P) och ×50 (E), SEC-ROLL-06 ×50 (E) och ×50 (P), låsordning mot T3-B ×10;
+  - affärsflöden: ny personal, rolländring, egen roll skapad och borttagen, inställningar.
+- `t3c_rollback` **18/0**: installera → rollback (= STAGING + T3-B, ingen data ändrad, äldre kod fungerar) → installera; STOP vid omkörning; T3-C + T3-B i omvänd ordning = STAGING-facit.
+
+Ändrade och gröna:
+- `replica_build` 31/0 (5 nya migrationer; 48 registrerade T3-objekt varav 22 T3-C, policyer och triggers md5-kontrollerade);
+- `ef_smoke` 39/0;
+- `t3b_rollback` 12/0 (T3-B prövas för sig, kedjan utan T3-C);
+- `migrationsmappning` 18/0;
+- `migrationskedja` 2/0 (113 identiska, 53 förklarade, 0 oförklarade);
+- `staging_e2e_real` 26/0 (efter rättningen av paketbyggaren).
+- `baslinje_sakerhet` 38/0 (historisk källa fb71f26, oförändrad).
+
+**VIFT-CRM `tests/run-all.sh`: 22/22 testfiler gröna** (21 Node-testfiler med 564 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade.
+- `sim_parity` 86/0 (85 scenarier, 83 lika, 2 kända);
+- `staging_e2e_real` 26/0.
+
+**E2E (Playwright mot den simulerade servern):**
+- Riktad körning (AUTH, ADMIN, ROLE, STAFF, PERM, STG, TASK, ACT, ARP, REG, SR, SEC, K, ST, T3C, NOTIF, DASH, T3B): **76 godkända, 0 fel, 0 blockerade av 76**.
+  - Under arbetet föll T3C-01/02/06 på testfel: modaler som stängs asynkront, och fel värld i T3C-06. De rättades i testet.
+  - PERM-03: första körningen hade fel förväntan på arbetsledarens uppgift. Serverns `activities-policy.ts` ger full rätt, och testet följer nu servern.
+- **Hela e2e-sviten en gång, efter alla ändringar: 243 godkända, 0 fel, 0 blockerade, 0 kända fel, av 243 (1 684 s).** Baslinjen efter T3-A+T3-B (68e9cac) var 235 godkända och 1 blockerad (PERM-03) av 236. Skillnaden är de 7 nya T3C-01–07 och PERM-03, som nu körs i stället för att vara blockerat.
+
+Inga negativa tester har försvagats. PERM-03 har gått från blockerad till körd mot serverns faktiska regel.
+
+### 6. Baslinjefynd, vända
+
+`baslinje_sakerhet.test.js` körs fortfarande som historisk referens mot fb71f26. Där bevisas SÄK-8 och SÄK-13. Vända i `t3c_roller.test.js`:
+
+| Baslinje (T3-0) | Godkänt säkerhetstest (T3-C) |
+|---|---|
+| SÄK-8: personalansvarig ger sig själv `admin` (writeMerge) och får sedan alla AO | SEC-ROLL-01 (E, P, hel skrivning) 403 `privilege_escalation`, KS (vift_staff, vift_roles, app_users) oförändrad; personalansvarig ser fortfarande inga AO |
+| SÄK-8: den enda superadministratören tar bort sin egen `all` | SEC-ROLL-04 409 `last_superadmin` (inaktivera, byta roll, byta e-post, ta bort `all`, radera rollen, hel skrivning, `deactivate_vift_user`, RPC) |
+| SÄK-13: begränsad skapar och raderar okänd nyckel och skriver `vift_lastChanged` | SEC-REST-02: skapa/uppdatera/radera okänd nyckel 403 42501 `direct_write_blocked`; `vift_lastChanged` får bara servervärde, radering nekas |
+
+Kvar som baslinjefynd: SÄK-2 (T3-D) och GRANTS utan R-E.
+
+### 7. SÄK och D efter T3-C
+
+- **Lokalt åtgärdade:**
+  - SÄK-8 (F5), SÄK-13 (F18);
+  - D-25, D-21 (rollregistret), Ö5, Ö6/BLOCKER-2 (PERM-03 lokalt);
+  - punkt 247 (personalens Inaktivera).
+- **Delvis:**
+  - D-14: andras `role`/`permissions`. Kvar till T3-D/T4-A: urval av kontaktuppgifter per AO (SEC-B3-04) och skyddade personaluppgifter (`hourlyRate` m.m.).
+  - Punkt 243: STAGING-delen (märkta poster) återstår.
+- **Öppna:** SÄK-1, -2, -6, -7, -9 (installation), -10 (installation), -14.
+
+### 8. Installationsplan och rollback (STAGING-paketet T3-C, beskrivs, körs inte)
+
+**Förutsättningar:**
+- separat GO;
+- T3-A och T3-B installerade först (ordningen i `MIGRATIONSORDNING.txt`; klientpaketet bygger på HEAD med T3-A+T3-B+T3-C).
+
+**Backup** (testplanen §8 + T3-C):
+- backupschemat för `store`, `op_idempotency` och `function_definitions` (`supabase/manual/staging_backup_och_kontroll_2026-11-24.sql`); **lägg till** de sju ersatta funktionerna, `pg_policies` för `store` och `pg_trigger` för `store`;
+- JSON-kopia av `vift_staff` och `vift_roles` med sha256, och export av `app_users` (user_id, active, is_admin) med md5;
+- extern kopia verifierad (`tools/staging-backup-export.js --provata-lokalt`);
+- EF-backup av `store-key-write`.
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | `schema_migrations` = `migrationsmappning.json` + T3-B. md5 av `pg_get_functiondef` för de sju funktionerna = STOP-värdena. Läsande räkning av aktiva användare med `all` (samma SQL som `_vift_superadmin_count`, som SELECT): ska vara ≥1, annars stoppa och utred. Inga dubbla id i `vift_staff`/`vift_roles` (befintliga dubbletter blockerar inget, men noteras). |
+| 2. Databas | `20261128000004`, sedan `…05`, var och en i egen transaktion. Ingen `db push`, ingen `migration repair`. |
+| 3. Edge Function, direkt efter steg 2 | `store-key-write` (med `_shared/vift-auth.ts` och T3-B:s `stamp-status.ts`). |
+| 4. Klient | `tools/build-staging-package.sh` från HEAD, publiceras på STAGING. `?v=` är höjt. Service Worker är network-first, så nya filer hämtas vid nästa laddning. |
+| 5. Storage | Ingen ändring. |
+| 6. Efterkontroll (läsande, V3 i testplanen) | md5 av de nya funktionerna, policyerna och triggern = `tests/local/t3-andringar.json`. SEC-B3-03/05 (projektion) med läsande anrop som fält, ekonomi och arbetsledare. SEC-REST-03 (`has_function_privilege`). Inga skrivningar i roll- eller personalregistret i STAGING; invarianten verifieras bara lokalt. |
+
+**Fönstret mellan steg 2 och 3** (gammal `store-key-write` mot ny databas):
+- Läsningar anropar projektionen utan identitet, och övergångsvägen gäller: rollregistret oförändrat och `permissions` borttaget ur personalregistret. Inloggning och behörigheter fungerar.
+- Eskaleringsförsök nekas av RPC:n men visas som 403 `forbidden` utan `reason`.
+- `last_superadmin` blir 500 `write_failed`. Klienten behåller ändringen som osäker; den skickas inte som lyckad.
+- Fönstret ska vara minuter.
+
+**v3.4-klient (Service Worker-cache) mot ny server, tills sidan laddats om:**
+
+| Åtgärd i v3.4 | Ny server svarar | Följd |
+|---|---|---|
+| Inloggning, `Auth.can`, meny | Projicerat register med egen roll | Fungerar; ingen felaktig åtkomst |
+| Personalsidan/AO-personaldialogen (icke-admin) | Andras `role` saknas (utan `staff_view`) och roller utan `admin_manage` | Rollmärken visar roll-id eller tomt; inga beslut påverkas |
+| Dagens drift (arbetsledare, ekonomi) | Rollregistret projicerat | Listan "lediga" kan bli tom i v3.4 (reserven finns bara i ny klient) |
+| Eskalering via personal-/rolleditorn | 403 `forbidden` + `reason` | v3.4 rullar tillbaka och visar "Servern avvisade ändringen — försök igen" (generiskt, ingen ändring) |
+| Sista superadmin | 409 `last_superadmin` | v3.4 klassar 409 som avslag, rullar tillbaka och visar generiskt fel |
+| Personal Inaktivera (v3.4: `persist()` utan bekräftelse) | 403/409 | v3.4 visar först "inaktiverad", sedan skyddsnätets varning "kunde inte sparas"; servern oförändrad och nästa synk återställer |
+| Notiser (`persistNotifs`) | 201 (vitlistan; `vift_lastChanged` får servervärde) | Oförändrat |
+| Annan direkt REST-skrivning | – (v3.4 gör ingen) | – |
+
+**Rollback** (ingen data skrivs över):
+1. Föregående `store-key-write` ur EF-backupen, **först**. Den gamla EF:en fungerar mot den nya databasen (default-parametern).
+2. `supabase/rollback/T3-C/rollback_t3c.sql`:
+   - tar bort vitlistan;
+   - återställer de sju funktionerna **exakt** till STAGING-definitionerna med samma rättigheter;
+   - återskapar de gamla signaturerna;
+   - tar bort T3-C:s nya funktioner;
+   - rör ingen tabell och ingen rad.
+3. Föregående klientpaket.
+4. Vid behov därefter T3-B-rollbacken (omvänd ordning, prövat lokalt).
+
+Data som skapats efter installationen ligger kvar och är giltig för den äldre koden: personal- och rolländringar, inaktiveringar, notiser och `vift_lastChanged`-värden (`t3c_rollback.test.js`). JSON-kopian av registren återläses bara vid ett separat beslut om ett datafel, aldrig automatiskt.
+
+### 9. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | §5 (`roles_superadmin` = `t3c_roller`, inklusive 50 upprepningar av SEC-ROLL-05/06) |
+| Negativa tester ger rätt felkod och ingen mutation | Ja | `expectReject` (status, error, reason, KS för vift_staff, vift_roles, app_users) i alla negativa EF-fall; RPC-fall med felmeddelande och KS; e2e med kontrollsumma. Undantag, dokumenterat: REST UPDATE/DELETE av rader som RLS döljer ger 0 rader (PostgreSQL), med oförändrad KS |
+| Inga nya oförklarade säkerhetsavvikelser | Ja | Paritet 83/85 lika, 2 kända utanför T3-C; schemat 0 oförklarade (22 T3-C-objekt md5-registrerade) |
+| Samtidighetskritiska kontroller under transaktionslås | Ja | Eskalering och invariant under det gemensamma låset i RPC:n, med omläsning av anroparen; deactivate/provision under samma lås; fast låsordning utan cykel mot T3-B |
+| Berörda affärsflöden fungerar | Ja | Personal- och rollhantering för superadmin, notiser, alla EF-skrivvägar oförändrade; vift-v2 och VIFT-CRM run-all gröna; e2e |
+| Avgränsade commits och rollback | Ja | Två commits per repo plus dokument och e2e-rapport; rollback prövad lokalt |
+| Masterplanen visar faktisk nivå | Ja | SÄK-8, SÄK-13, D-21, D-25, Ö5, Ö6, punkt 21, 243, 247: "Lokalt verifierad" eller "Delvis" |
+
+### 10. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno (releasevillkor).
+- Direkta SQL-ändringar av `app_users` eller registren som `postgres`/service_role (SQL Editor) går förbi kontrollen. Bara RPC:erna och EF:en kontrolleras. Rekommendation: använd alltid `deactivate_vift_user`/`provision_vift_user`.
+- REST UPDATE/DELETE av rader som befintliga RESTRICTIVE-policyer döljer ger 0 rader i stället för 42501. Upsert, som klienten använder, ger alltid 42501.
+- Rollens `active` påverkar inte behörigheterna i servern (som tidigare, samma som `checkViftAuth`).
+- Notiser: vem som helst aktiv kan lägga till en notis åt vem som helst (befintligt innehållsskydd; T3-D/T4).
+- Övergångsvägen i `vift_store_project` (null-identitet) finns kvar för det äldre EF-fönstret och tas bort i en senare städning.
+- vift-v2:s äldre klientkopia och VIFT-CRM:s kopior av STAGING-verktygen är inte anpassade. Inga nya STAGING-läsverktyg för V3 är byggda; efterkontrollen beskrivs i §8.
+
+**Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
+1. `vift_lastChanged` står kvar på REST-vitlistan, men med servervärde. Matrisen sa "nekas". Att neka den skulle bryta notiserna för v3.4 och nuvarande klient, eftersom raden skickas i samma upsert. (Godta nu. Ge `persistNotifs` en EF-väg, eller låt triggern `store_bump_lastchanged` även gälla `vift_notifications`, och ta bort raden ur vitlistan när ingen v3.4 finns kvar.)
+2. Utan `all` får man inte ändra sin egen roll alls, varken byta roll eller ändra den egna rollens behörigheter, inte heller sänka dem. (Godta.)
+3. En roll med `staff_manage` kan bara tilldela roller inom sina egna behörigheter och kan inte återaktivera personer med bredare roll. En ren personalansvarig kan alltså inte skapa fältpersonal. (Godta; personalansvariga som ska tilldela fältroller behöver de behörigheterna eller superadmin.)
+4. I klienten är personalposter vars roll inte syns för den inloggade, alltså utan `admin_manage`, låsta för roll, e-post och status, trots att servern tillåter vissa ändringar, till exempel inaktivering. (Godta; restriktivt, servern avgör ändå.)
+5. `staff_manage` får, utöver den egna rollen, de roller den får tilldela ur `vift_roles`, för att personalformuläret ska fungera. Det är en avvikelse från "bara egen roll" för användare utan `admin_manage`. (Godta.)
+6. Arbetsledare (`ao_edit` + `ao_view_all`) får ändra andras uppgifter enligt serverns befintliga TASK-01-regel. Hör till D-15/T3-D. (Avgörs i T3-D.)
+
+### Ändrade filer
+
+**vift-v2** (gren `claude/vift-system-restructure-8fUme`):
+- nya:
+  - `supabase/migrations/20261128000004_t3c_roller_och_superadmin.sql`, `…05_t3c_direkt_rest_vitlista.sql`;
+  - `supabase/rollback/T3-C/rollback_t3c.sql`;
+  - `tests/t3c_roller.test.js`, `tests/t3c_rollback.test.js`, `tests/local/t3c-rollback.js`;
+- ändrade:
+  - `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`, `functions/store-key-write/index.ts`;
+  - `tests/{replica_build,ef_smoke,t3b_rollback}.test.js`, `tests/local/{jamfor-schema.js, t3-andringar.js, t3-andringar.json, lib/paritet.js}`, `tests/e2e/fake-backend.js`.
+
+**VIFT-CRM** (gren `claude/vift-v3-major-redesign`):
+- ändrade:
+  - `index.html`, `src/data/{state,storage}.js`, `src/services/AuthService.js`, `src/pages/{PageShells,OperationsPage}.js`;
+  - `tools/build-staging-package.sh`;
+  - `tests/e2e/fake-backend.js`, `tests/e2e/paritet-kanda-avvikelser.json`, `tests/e2e/specs/14_permissions.js`;
+  - detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`;
+- nya: `tests/e2e/server-key-perms.js`, `tests/e2e/specs/38_t3c_roller.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `c4a9dbb` T3-C server: roller och superadmin (SÄK-8, D-25), projektion av roll- och personalregistret (D-21, D-14) och vitlista för direkt REST-skrivning (F18/SÄK-13)
+- `f0e7e44` T3-C tester: säkerhetstester (vända baslinjefynd SÄK-8/SÄK-13), samtidighet SEC-ROLL-05/06 ×50, rollback, T3-facit, paritet och fake-backend
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `4bef83c` T3-C klient: rolleditorn och personalsidan erbjuder bara serverns tillåtna val, begripliga felkoder, projicerat rollregister
+- `7310411` T3-C tester: fake-backend följer T3-C-reglerna (paritet), PERM-03 avblockerat mot serverns KEY_PERMISSIONS, nya T3C-01–07, paketbyggaren klarar storage.js efter T3-A
+- dokumentcommit och e2e-rapport: se `git log` efter `7310411`
 
 ## T3-D – informationsåtkomst
 
