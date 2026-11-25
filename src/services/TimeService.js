@@ -166,7 +166,7 @@ const TimeService = {
       const ae = doc && doc.activeElement;
       const busy = !!doc && ((doc.body && doc.body.classList.contains('modal-open')) || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)));
       if (!busy && typeof Router !== 'undefined' && typeof Router.refreshCurrent === 'function' &&
-          ['pg-time', 'pg-myjobs', 'pg-ao-detail', 'pg-dashboard'].indexOf(Router.currentPage) !== -1) {
+          ['pg-tid', 'pg-myjobs', 'pg-ao-detail', 'pg-dash'].indexOf(Router.currentPage) !== -1) {
         Router.refreshCurrent();
       }
       return true;

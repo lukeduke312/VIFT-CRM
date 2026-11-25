@@ -191,4 +191,25 @@ module.exports = [
       } else t.note('ingen Starta-knapp (redan startad)');
     },
   },
+  {
+    /* QA 2026-11-26: efter stämpling på en annan enhet ritades bara sidor med
+       id 'pg-time'/'pg-dashboard' om — de finns inte (rätt: 'pg-tid'/'pg-dash'),
+       så Tid & stämpla visade fortfarande "Inte instämplad". Simulerad server. */
+    id: 'TIME-08', module: 'Tidregistrering och instämpling', name: 'Stämpling på annan enhet: Tid & stämpla (pg-tid) ritas om och visar "Instämplad" efter synk',
+    async run(t) {
+      const desk = await t.world.session({ viewport: 'laptop' }); await desk.login('falt2');
+      const mob = await t.world.session({ viewport: 'iphone' }); await mob.login('falt2');
+      await desk.go('pg-tid'); await desk.settle(300);
+      const before = await desk.eval(() => document.querySelector('.page.active').innerText);
+      t.assert(/Inte instämplad/.test(before), 'Tid & stämpla visar först "Inte instämplad"');
+      await clockInMyJobs(mob);
+      await desk.eval(() => { document.activeElement && document.activeElement.blur(); });
+      await desk.eval(() => TimeService.refreshStampFromServer());
+      await desk.page.waitForFunction(() => state.stampActive === true, null, { timeout: 5000 });
+      await desk.settle(400);
+      const after = await desk.eval(() => document.querySelector('.page.active').innerText);
+      t.assert(/Instämplad ·/.test(after) && !/Inte instämplad/.test(after), 'Tid & stämpla visar "Instämplad" utan omladdning');
+      await clockOutMyJobs(mob); await mob.settle(800);
+    },
+  },
 ];
