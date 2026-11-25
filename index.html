@@ -128,6 +128,15 @@
       <button class="btn bp bfull" style="margin-top:12px;padding:12px;" onclick="App.saveNewPassword()">Spara nytt lösenord</button>
     </div>
 
+    <!-- Panel 4 (T3-A, SÄK-10): inloggad men utan behörighet i VIFT -->
+    <div id="noaccess-screen" style="display:none;" role="alert">
+      <h2 style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;text-align:center;">Ingen behörighet</h2>
+      <p id="noaccess-msg" style="font-size:14px;line-height:1.5;color:var(--tx);text-align:center;margin-bottom:6px;"></p>
+      <p id="noaccess-who" style="font-size:12px;color:var(--mt);text-align:center;margin-bottom:12px;"></p>
+      <button id="noaccess-retry" class="btn bs bfull" style="margin-top:4px;padding:10px;" onclick="location.reload()">Försök igen</button>
+      <button class="btn bp bfull" style="margin-top:8px;padding:12px;" onclick="Auth.logout()">Logga ut</button>
+    </div>
+
   </div>
 </div>
 
@@ -393,31 +402,31 @@
 <script src="config.js?v=4"></script>
 
 <!-- 1. Data-lager -->
-<script src="src/data/storage.js?v=22"></script>
+<script src="src/data/storage.js?v=23"></script>
 <script src="src/data/schema.js?v=29"></script>
 <script src="src/data/seedData.js?v=27"></script>
-<script src="src/data/state.js?v=78"></script>
+<script src="src/data/state.js?v=79"></script>
 <script src="src/data/DashboardConfig.js?v=14"></script>
 <!-- QA FIX-ROUND 2026-11-12 (I2): the one offer calculation, shared with public-offer.html -->
 <script src="src/shared/OfferCalc.js?v=2"></script>
 
 <!-- 2. Services -->
 <script src="src/services/BrandingService.js?v=8"></script>
-<script src="src/services/ActivityService.js?v=6"></script>
+<script src="src/services/ActivityService.js?v=7"></script>
 <script src="src/services/SalesService.js?v=4"></script>
-<script src="src/services/AuthService.js?v=23"></script>
+<script src="src/services/AuthService.js?v=24"></script>
 <script src="src/services/CustomerService.js?v=8"></script>
 <script src="src/services/WorkOrderService.js?v=32"></script>
 <script src="src/services/TimeService.js?v=24"></script>
-<script src="src/services/AOTimeSyncService.js?v=12"></script>
-<script src="src/services/TimeEntriesReadService.js?v=2"></script>
-<script src="src/services/WorkOrdersReadService.js?v=2"></script>
-<script src="src/services/InvoiceService.js?v=19"></script>
+<script src="src/services/AOTimeSyncService.js?v=13"></script>
+<script src="src/services/TimeEntriesReadService.js?v=3"></script>
+<script src="src/services/WorkOrdersReadService.js?v=3"></script>
+<script src="src/services/InvoiceService.js?v=20"></script>
 <script src="src/services/BillingQueueService.js?v=11"></script>
 <script src="src/services/ProfitabilityService.js?v=3"></script>
 <script src="src/services/RecurringOrderService.js?v=8"></script>
 <script src="src/services/RonderingService.js?v=8"></script>
-<script src="src/services/RonderingSyncService.js?v=1"></script>
+<script src="src/services/RonderingSyncService.js?v=2"></script>
 <script src="src/services/ActivitiesService.js?v=5"></script>
 <script src="src/services/ServiceTemplateService.js?v=5"></script>
 <script src="src/services/UserPrefsService.js?v=7"></script>
@@ -446,12 +455,12 @@
 <script src="src/components/CustomSelect.js?v=1"></script>
 <script src="src/components/CustomerPicker.js?v=7"></script>
 <script src="src/components/Modal.js?v=11"></script>
-<script src="src/components/Sidebar.js?v=33"></script>
+<script src="src/components/Sidebar.js?v=34"></script>
 <script src="src/components/MobileShell.js?v=7"></script>
 <script src="src/components/GlobalSearch.js?v=4"></script>
 
 <!-- 4. Pages -->
-<script src="src/pages/Router.js?v=32"></script>
+<script src="src/pages/Router.js?v=33"></script>
 <script src="src/pages/Dashboard.js?v=61"></script>
 <script src="src/pages/CustomersPage.js?v=44"></script>
 <script src="src/pages/WorkOrdersPage.js?v=74"></script>
@@ -467,7 +476,7 @@
 <script src="src/pages/PropertyDetailPage.js?v=39"></script>
 <script src="src/pages/ServiceIntervalsPage.js?v=3"></script>
 <script src="src/pages/PropertyObjectPage.js?v=7"></script>
-<script src="src/pages/PageShells.js?v=192"></script>
+<script src="src/pages/PageShells.js?v=193"></script>
 <script src="src/pages/RonderingPage.js?v=12"></script>
 <script src="src/pages/OperationsPage.js?v=12"></script>
 <script src="src/pages/ReportsPage.js?v=13"></script>
@@ -606,6 +615,9 @@ const App = {
         await initState();
         Auth._resolveUser();
         if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
+        /* T3-A (SÄK-10): ingen reservroll — utan åtkomst visas bara
+           no-access-sidan (ingen meny, inga sidor, ingen data). */
+        if (!Auth.hasAccess()) { Auth._denyAccess(); return; }
         this.showApp();
         return;
       }
@@ -619,7 +631,7 @@ const App = {
   /* ── Panel-hjälpare ──────────────────────────── */
 
   _loginPanel(id) {
-    ['lp-login','lp-forgot','lp-setpass'].forEach(p => {
+    ['lp-login','lp-forgot','lp-setpass','noaccess-screen'].forEach(p => {
       const el = document.getElementById(p);
       if (el) el.style.display = (p === id) ? '' : 'none';
     });
@@ -647,6 +659,26 @@ const App = {
     setTimeout(() => { const e = document.getElementById('new-pass'); if(e) e.focus(); }, 80);
   },
 
+  /* T3-A (SÄK-10): inloggad men utan fungerande roll, eller behörigheten
+     indragen/kunde inte verifieras. Appen (meny, sidor) visas inte. */
+  showNoAccess(kind) {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    const msg = document.getElementById('noaccess-msg');
+    const who = document.getElementById('noaccess-who');
+    const retry = document.getElementById('noaccess-retry');
+    const unverified = kind === 'unverified';
+    if (msg) msg.textContent = unverified
+      ? 'Behörigheten kunde inte kontrolleras eftersom servern inte gick att nå. Försök igen när du har anslutning.'
+      : 'Ditt konto saknar behörighet i VIFT – kontakta administratören.';
+    const email = (Auth._access && Auth._access.email) || (Auth.getUserEmail && Auth.getUserEmail()) || '';
+    if (who) who.textContent = email ? 'Inloggad som ' + email : '';
+    if (retry) retry.style.display = unverified ? '' : 'none';
+    this._loginPanel('noaccess-screen');
+    const btn = document.querySelector('#lp-login button.btn.bp');
+    if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
+  },
+
   showLogin() {
     /* V29 §5: samma JS-session kan leva vidare från utloggning till nästa
        inloggning (SPA, ingen sidladdning) — en kvarliggande bulk-markering
@@ -657,6 +689,8 @@ const App = {
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
     this._loginPanel('lp-login');
+    const _lb = document.querySelector('#lp-login button.btn.bp');
+    if (_lb) { _lb.disabled = false; _lb.textContent = 'Logga in'; }
     BrandingService.applyToLogin();
     setTimeout(() => this._focusLoginIfIdle(), 100);
   },
@@ -757,6 +791,17 @@ const App = {
 
     /* Installerad app: erbjud push-onboarding efter att app/session/routing är redo. */
     setTimeout(() => this._maybeOfferPushOnboarding(), 1200);
+    /* T3-A: osynkade poster från en äldre klientversion vars ägare inte kan
+       fastställas skickas aldrig automatiskt — användaren informeras. */
+    setTimeout(() => this._warnLegacyUnowned(), 1500);
+  },
+
+  _warnLegacyUnowned() {
+    try {
+      const n = (typeof AOTimeSyncService !== 'undefined' && AOTimeSyncService.legacyUnownedCount) ? AOTimeSyncService.legacyUnownedCount() : 0;
+      if (!n) return;
+      showToast(n + ' osynkad' + (n === 1 ? '' : 'e') + ' ändring' + (n === 1 ? '' : 'ar') + ' från en äldre version av VIFT på den här enheten saknar känd ägare och skickas inte automatiskt. Kontakta administratören.', 9000);
+    } catch (e) {}
   },
 
   async _maybeOfferPushOnboarding() {
@@ -845,6 +890,13 @@ const App = {
 
     await initState();
     Auth._resolveUser();
+    /* T3-A (SÄK-10): utan åtkomst visas bara no-access-sidan. */
+    if (!Auth.hasAccess()) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Logga in'; }
+      document.getElementById('login-pass').value = '';
+      Auth._denyAccess();
+      return;
+    }
 
     /* P0-INCIDENT-FIX (2026-11): borttaget. Den engångsmigrering som detta
        villkor skyddade (lösenordsstrippning ur store-blobben) är redan körd

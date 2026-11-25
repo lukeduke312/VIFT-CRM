@@ -113,7 +113,7 @@ const WorkOrdersReadService = {
       : entries;
     state.workOrders = merged;
     this._appliedSeq = mySeq;
-    try { localStorage.setItem('vift_workOrders', JSON.stringify(merged)); } catch (e) {}
+    try { Storage._writeCache('vift_workOrders', JSON.stringify(merged)); } catch (e) {}
     return true;
   }
 };

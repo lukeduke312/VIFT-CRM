@@ -265,7 +265,17 @@ function _vfApplyFieldDelta(current, base, mine) {
 var _VF_JOURNAL_KEY = 'vift_persistJournal';
 var _VF_JOURNAL_EXCLUDED = { activityLog: true, settings: true };
 function _vfJournalUser() {
-  try { return (typeof Auth !== 'undefined' && Auth._session && Auth._session.user_email) || ''; } catch (e) { return ''; }
+  try {
+    if (typeof Auth !== 'undefined' && typeof Auth.ownerIdentity === 'function') {
+      const id = Auth.ownerIdentity();
+      return id ? id.email : '';
+    }
+    return (typeof Auth !== 'undefined' && Auth._session && Auth._session.user_email) || '';
+  } catch (e) { return ''; }
+}
+/* T3-A: journalen nycklas med miljö (Supabase-projektets ref) + e-post. */
+function _vfJournalEnv() {
+  try { return (typeof Storage !== 'undefined' && Storage.envRef) ? Storage.envRef() : ''; } catch (e) { return ''; }
 }
 /* E2E RES-04 (2026-11-23): journalen lagras per inloggning. Tidigare låg
    den under EN nyckel och kastades när en annan användare loggade in på
@@ -276,12 +286,24 @@ function _vfJournalUser() {
    En äldre gemensam journal flyttas till ägarens nyckel när ägaren läser. */
 function _vfJournalStorageKey(user) {
   const u = user === undefined ? _vfJournalUser() : user;
-  return u ? _VF_JOURNAL_KEY + ':' + String(u).toLowerCase() : _VF_JOURNAL_KEY;
+  return u ? _VF_JOURNAL_KEY + '::' + _vfJournalEnv() + '::' + String(u).toLowerCase() : _VF_JOURNAL_KEY;
 }
 function _vfJournalRead() {
   const me = _vfJournalUser();
   try {
     let raw = localStorage.getItem(_vfJournalStorageKey(me));
+    /* T3-A uppgradering: v3.4 lagrade journalen under
+       'vift_persistJournal:<e-post>' (ägaren given av nyckeln; samma
+       ursprung = samma miljö) → flyttas till den nya nyckeln. */
+    if (!raw && me) {
+      const v34Key = _VF_JOURNAL_KEY + ':' + String(me).toLowerCase();
+      const v34 = localStorage.getItem(v34Key);
+      if (v34) {
+        raw = v34;
+        localStorage.setItem(_vfJournalStorageKey(me), v34);
+        localStorage.removeItem(v34Key);
+      }
+    }
     if (!raw && me) {
       const legacy = localStorage.getItem(_VF_JOURNAL_KEY);
       const lj = legacy ? JSON.parse(legacy) : null;
@@ -294,7 +316,7 @@ function _vfJournalRead() {
     const j = raw ? JSON.parse(raw) : null;
     if (j && typeof j === 'object' && j.keys && typeof j.keys === 'object') return j;
   } catch (e) {}
-  return { v: 1, user: me, keys: {} };
+  return { v: 1, user: me, env: _vfJournalEnv(), keys: {} };
 }
 function _vfJournalWrite(j) {
   try {
@@ -750,10 +772,16 @@ function _vfRefreshHeldBanner() {
    baselines are authoritative). Returns {reapplied, landed, conflicts}. */
 function _vfReplayPersistJournal() {
   const res = { reapplied: 0, landed: 0, conflicts: {}, held: 0 };
+  /* T3-A: spelas bara upp under ägarens egen, aktuella session. */
+  if (typeof Auth !== 'undefined' && typeof Auth.identity === 'function' && !Auth.identity()) return res;
   const j = _vfJournalRead();
   const keys = Object.keys(j.keys || {});
   if (!keys.length) return res;
   const me = _vfJournalUser();
+  if (j.env && j.env !== _vfJournalEnv()) {
+    console.warn('[persist-journal] Osparade ändringar tillhör en annan miljö — spelas INTE upp här.');
+    return res;
+  }
   if (j.user && me && String(j.user).toLowerCase() !== String(me).toLowerCase()) {
     /* Kan bara hända med en äldre gemensam journal: lämna den orörd åt sin
        ägare (se _vfJournalRead), spela aldrig upp den i fel namn. */
@@ -801,6 +829,53 @@ function _vfReplayPersistJournal() {
   });
   _vfJournalWrite(j);
   return res;
+}
+
+/* ── T3-A (SÄK-9/SÄK-10): töm allt användarspecifikt i minnet ─────────
+   Vid utloggning, kontobyte (även i annan flik), utgången session och när
+   åtkomst saknas/dras in. Alla dataregister blir tomma, baslinjer och
+   konfliktutkast nollställs, och `_degradedLoad` sätts så att ingen
+   bulk-skrivning (persist) kan skicka det tömda läget som om det vore
+   auktoritativt innan nästa riktiga initState(). Utkorgar/journaler i
+   localStorage rörs inte. */
+function _vfResetClientState() {
+  const DATA = ['customers', 'workOrders', 'offers', 'invoices', 'staff', 'roles', 'properties', 'contracts', 'inspections',
+    'timeEntries', 'articles', 'priceGroups', 'priceProfiles', 'titles', 'recurringOrders', 'salesOpportunities', 'activityLog',
+    'ronderingsmallar', 'ronderingar', 'avvikelser', 'activities', 'serviceTemplates', 'emailTemplates', 'notifications',
+    'propertyCategories', 'ronderingspass', 'propertyObjects', 'importLogs', 'propertyRoles', 'propertyContacts',
+    'deviationCategories', 'offerEvents', 'offerAttachments', 'projects', 'projectDocuments'];
+  DATA.forEach(function(k) { state[k] = []; });
+  state.settings = {};
+  state.currentUser = null;
+  state.currentAO = null; state.currentOffer = null; state.currentInvoice = null; state.currentProperty = null; state.currentCustomer = null;
+  state.stampActive = false; state.stampTimestamp = null; state.stampAoId = null;
+  state._keyHash = {}; state._keySnapshot = {}; state._keyConflict = {}; state._keyConflictDraft = {}; state._keyElementConflictDraft = {};
+  state._degradedLoad = true;
+  state._wiped = true;
+  try { _vfIdx = {}; } catch (e) {}
+  try { if (typeof _vfLastPersistFailure !== 'undefined') _vfLastPersistFailure = {}; } catch (e) {}
+  /* Okända/framtida register (arrays/objekt på state som inte är meta) töms också. */
+  Object.keys(state).forEach(function(k) {
+    if (k.charAt(0) === '_' || DATA.indexOf(k) !== -1) return;
+    if (Array.isArray(state[k])) state[k] = [];
+  });
+}
+
+/* T3-A: personal + roller från en omläsning (Auth.refreshAuthorization).
+   Data, hash och baslinje uppdateras tillsammans (som DataSync._poll), och
+   en nyckel i olöst konflikt rörs inte. */
+function _vfApplyAuthzSnapshot(data, hashes) {
+  if (!state._keyConflict['staff'] && Array.isArray(data.staff)) {
+    state.staff = data.staff.map(function(s) { const c = Object.assign({}, s); delete c.password; delete c.passwordHash; return c; });
+    state._keyHash['staff'] = Object.prototype.hasOwnProperty.call(hashes, 'vift_staff') ? hashes['vift_staff'] : null;
+    state._keySnapshot['staff'] = JSON.stringify(state.staff);
+  }
+  if (!state._keyConflict['roles'] && Array.isArray(data.roles)) {
+    state.roles = data.roles;
+    state._keyHash['roles'] = Object.prototype.hasOwnProperty.call(hashes, 'vift_roles') ? hashes['vift_roles'] : null;
+    state._keySnapshot['roles'] = JSON.stringify(data.roles);
+  }
+  if (Array.isArray(data.staff) && Array.isArray(data.roles)) { state._authzSource = 'server'; state._loadForbidden = false; }
 }
 
 /* M4 fallback/belt-and-braces: anything not yet confirmed by the server
@@ -958,6 +1033,12 @@ async function initState() {
   let d = {};
   let _combinedHashes = null;
   state._degradedLoad = false;
+  /* T3-A: var personal/roller kommer ifrån avgör om identiteten kan
+     fastställas (Auth._resolveUser): 'server' | 'cache' (egen cache) | 'seed'. */
+  state._loadForbidden = false;
+  state._authzSource = null;
+  state._wiped = false;
+  let _fromServer = false;
   try {
     /* 8-sekunders timeout — om Supabase är långsam/offline faller vi tillbaka
      * på localStorage direkt utan att hänga på "Laddar data".
@@ -974,13 +1055,24 @@ async function initState() {
        below, unchanged, still VIFT_BUSINESS_KEYS-only), but both need their
        current value in `d` for the state assignments further down. */
     const fullBusinessKeys = VIFT_BUSINESS_KEYS.concat(VIFT_READONLY_EXTRA_KEYS).map(function(k) { return 'vift_' + k; });
-    const _combined = await Promise.race([Storage.getAllWithHashes(fullBusinessKeys), timeout]);
+    const _combined = await Promise.race([Storage.getAllWithHashes(fullBusinessKeys, { authzProbe: true }), timeout]);
     if (!_combined.ok) throw new Error(_combined.error || 'getAllWithHashes_failed');
     d = _combined.data;
     _combinedHashes = _combined.hashes;
+    _fromServer = true;
   } catch(e) {
+    /* T3-A (SÄK-10): servern nekar användaren (403, t.ex. ingen aktiv
+       personalpost) → ingen reservdata alls, inte ens egen cache. */
+    if (/\b403\b/.test(String(e && e.message || ''))) {
+      console.warn('[initState] Servern nekade inläsningen (403) — ingen åtkomst, ingen cache används.');
+      state._loadForbidden = true;
+      d = {};
+    } else {
     console.warn('[initState] Supabase ej tillgänglig, använder localStorage:', e.message);
+    /* T3-A (SÄK-9): Storage._localAll() returnerar bara cache som tillhör
+       den inloggade användaren i denna miljö (annars tomt). */
     d = Storage._localAll();
+    }
     /* P0-INCIDENT-FIX (2026-11): en degraderad läsning (timeout/nätverksfel/
        401/403 → localStorage-fallback) får ALDRIG tillåta en efterföljande
        persist() att skriva tillbaka det ofullständiga/seedade resultatet som
@@ -1099,6 +1191,22 @@ async function initState() {
     delete clean.passwordHash;
     return clean;
   });
+
+  /* T3-A (SÄK-10): identiteten får bara fastställas mot personal och roller
+     från servern eller användarens EGEN cache — aldrig mot SeedData. */
+  if (!state._loadForbidden && Array.isArray(d['staff']) && Array.isArray(d['roles'])) state._authzSource = _fromServer ? 'server' : 'cache';
+  else state._authzSource = 'seed';
+  /* Avgör åtkomsten INNAN något annat görs med datan (baslinjer, uppspelning
+     av osparade ändringar, stämpling, migreringar, utkorg). Utan åtkomst
+     töms allt direkt och inget skickas. */
+  if (typeof Auth !== 'undefined' && typeof Auth._resolveUser === 'function' && typeof Auth.accessState === 'function') {
+    Auth._resolveUser();
+    if (Auth.accessState() !== 'ok') {
+      console.warn('[initState] Ingen åtkomst (' + Auth.accessState() + ') — data töms, inget skickas.');
+      _vfResetClientState();
+      return;
+    }
+  }
 
 
   // Rensa AO:er vars 14-dagarsfönster gått ut
@@ -1564,7 +1672,10 @@ function persist(opts) {
      R1.2 ordering invariant): a derived `.then()` here would let the
      next queued _doPersist() start before the caller's own continuation
      (e.g. a rollback) — exactly the bug R1.2 fixed. */
-  const task = _persistQueue.then(function() { return _doPersistDetailed(); })
+  /* T3-A: ändringen hör till den identitet som var inloggad när den gjordes.
+     Har identiteten bytts innan kön hunnit hit skickas den inte. */
+  const _owner = (typeof Auth !== 'undefined' && typeof Auth.ownerKey === 'function') ? Auth.ownerKey() : undefined;
+  const task = _persistQueue.then(function() { return _doPersistDetailed(_owner); })
     .then(function(detail) { _vfWarnUnconfirmed(detail, opts); return _vfPersistResultFor(detail, opts); });
   /* V48B3B0 R1.2 (kritisk fix): EN och SAMMA promise (`safeTask`) används
      nu för både _persistQueue OCH returvärdet till callern — tidigare
@@ -1606,7 +1717,17 @@ async function _doPersist() {
   return !!(d && d.ok);
 }
 
-async function _doPersistDetailed() {
+async function _doPersistDetailed(_owner) {
+  /* T3-A (SÄK-9): ingen skrivning utan giltig, aktuell session med åtkomst,
+     och aldrig under en annan identitet än den som gjorde ändringen. */
+  if (typeof Auth !== 'undefined' && typeof Auth.hasAccess === 'function') {
+    const _blocked = !Auth.hasAccess() || (_owner !== undefined && Auth.ownerKey() !== _owner) ||
+      (typeof Auth.assertSessionCurrent === 'function' && !Auth.assertSessionCurrent());
+    if (_blocked || state._wiped) {
+      console.error('[persist] BLOCKERAD: ingen giltig session/åtkomst för den identitet som gjorde ändringen.');
+      return { ok: false, error: true, authBlocked: true, results: {}, failedKeys: [] };
+    }
+  }
   /* P0-INCIDENT-FIX (2026-11): blockera varje bred/generisk skrivning om
      senaste läsningen var degraderad (timeout/nätverksfel/fallback till
      localStorage). En tom/ofullständig lokal kopia får aldrig skrivas
@@ -1664,7 +1785,7 @@ async function _doPersistDetailed() {
          (servern nekar den: append-only). */
       if (_shortKey === 'activityLog' && typeof ActivityService !== 'undefined' && ActivityService._append === true) { state._keySnapshot.activityLog = _snapshot; continue; }
       const _fullKey = 'vift_' + _shortKey;
-      try { localStorage.setItem(Storage.prefix + _shortKey, _snapshot); } catch(e) {}
+      try { Storage._writeCache(Storage.prefix + _shortKey, _snapshot); } catch(e) {}
 
       /* ISSUE #1 FIX (2026-11-08, blocker e): array-shaped keys (every
          generic key except the single-object `settings`) go through an
@@ -2466,7 +2587,7 @@ const LiveSync = {
       const noteEl = document.getElementById('pass-exec-note');
       const unsavedNote = noteEl ? noteEl.value : null;
       state.ronderingspass = remote;
-      try { localStorage.setItem('vift_ronderingspass', JSON.stringify(remote)); } catch(e2) {}
+      try { Storage._writeCache('vift_ronderingspass', JSON.stringify(remote)); } catch(e2) {}
       // Återställ osparad anteckning på det nya in-memory PASS-objektet
       if (unsavedNote !== null) {
         const np = getPass(LiveSync._passId);
@@ -2550,6 +2671,11 @@ const DataSync = {
     /* R1: starta aldrig en ny pollcykel medan en lokal write pågår/köad. */
     if (DataSync._pendingWrites > 0) return;
     const startGeneration = DataSync._localWriteGeneration;
+    /* T3-A: en poll som startade för en identitet appliceras aldrig efter
+       att identiteten bytts/upphört under en await. */
+    const _pollOwner = (typeof Auth !== 'undefined' && Auth.ownerKey) ? Auth.ownerKey() : null;
+    const _sameOwner = function() { return typeof Auth === 'undefined' || !Auth.ownerKey || (Auth.hasAccess() && Auth.ownerKey() === _pollOwner); };
+    if (!_sameOwner()) return;
 
     try {
       const sig = await Storage.get('lastChanged');
@@ -2586,6 +2712,7 @@ const DataSync = {
       }
       const remote = _pollCombined.data || {};
       const pollHashes = _pollCombined.hashes || {};
+      if (!_sameOwner()) return;
 
       /* R1 (DEL 6, absolut krav): kontrollera IGEN efter den andra
          await-gränsen — detta är exakt det fönster som orsakade den
@@ -2685,9 +2812,16 @@ const DataSync = {
         if (v !== undefined && v !== null) state[_vfBusinessStateKey(shortKey)] = v;
       });
 
-      /* Uppdatera localStorage-cache */
+      /* T3-A: personal/roller kan ha ändrats — behörigheterna tillämpas
+         direkt (otillåten sida lämnas; utan åtkomst töms allt). */
+      if (typeof Auth !== 'undefined' && typeof Auth.applyAuthorizationChange === 'function') {
+        Auth.applyAuthorizationChange('sync');
+        if (!_sameOwner()) return;
+      }
+
+      /* Uppdatera localStorage-cache (bara cachens ägare, se Storage._writeCache) */
       Object.entries(remote).forEach(function(entry) {
-        try { localStorage.setItem('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
+        try { Storage._writeCache('vift_' + entry[0], JSON.stringify(entry[1])); } catch(e) {}
       });
 
       /* Display-number clash repair (see newShortNumber()); before the

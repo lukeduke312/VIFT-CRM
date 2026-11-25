@@ -9391,7 +9391,8 @@ const StaffPage = {
         if (!isSelf) return;
         // Redigerar sig själv — uppdatera currentUser och re-rendera sidebar direkt
         state.currentUser = { ..._cu, firstName: data.firstName, lastName: data.lastName, role: data.role, username: data.username, title: data.title };
-        Auth._resolveUser();
+        /* T3-A: samma väg som indragna behörigheter (otillåten sida lämnas). */
+        if (Auth.applyAuthorizationChange) Auth.applyAuthorizationChange('local'); else Auth._resolveUser();
         Sidebar.render();
       },
       ok: isSelf ? 'Sparat — dina behörigheter uppdaterade omedelbart' : 'Sparat — ' + changedName + ' ser nya behörigheter vid nästa inloggning',
@@ -10029,6 +10030,16 @@ const AdminPage = {
       return;
     }
     const keep = [(Auth && Auth.SESSION_KEY) || 'vift_auth_v2', BrandingService._LS_LIGHT, BrandingService._LS_DARK];
+    /* T3-A: utkorgar/journaler som tillhör ANDRA användare (eller saknar
+       känd ägare, från en äldre version) på enheten behålls — de räknas inte
+       i varningen ovan (bara egna) och får aldrig försvinna här. */
+    try {
+      const id = Auth.ownerIdentity ? Auth.ownerIdentity() : null;
+      const mine = id ? '::' + id.env + '::' + id.email : null;
+      Object.keys(localStorage).forEach(k => {
+        if (/^vift_(outbox|settleIntents|persistJournal|activityOutbox)/.test(k) && (!mine || !k.endsWith(mine))) keep.push(k);
+      });
+    } catch (e) {}
     const saved = {};
     keep.forEach(k => { try { const v = localStorage.getItem(k); if (v !== null) saved[k] = v; } catch (e) {} });
     try { localStorage.clear(); } catch (e) {}
@@ -11790,7 +11801,7 @@ const AdminPage = {
       if (i < 0) return false;
       state.roles[i] = { ...state.roles[i], label, description, permissions: checked };
     }, {
-      onChange: () => { AdminPage.render(); Auth._resolveUser(); Sidebar.render(); },
+      onChange: () => { AdminPage.render(); if (Auth.applyAuthorizationChange) Auth.applyAuthorizationChange('local'); else Auth._resolveUser(); Sidebar.render(); },
       ok: 'Roll uppdaterad — behörigheter träder i kraft direkt',
       fail: 'Rollen "' + label + '" kunde inte sparas — behörigheterna är OFÖRÄNDRADE'
     });
