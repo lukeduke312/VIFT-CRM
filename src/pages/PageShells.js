@@ -9120,10 +9120,9 @@ const StaffPage = {
       const role = roleLabel(s.role);
       const menu = canManage ? RegisterUi.menu(RegisterUi.domId('stm', s.id), 'Fler åtgärder för ' + name, [
         { label: 'Redigera', icon: 'pencil', onclick: `StaffPage.openEdit(${id})` },
-        s.active
+      ].concat(!StaffPage._canToggle(s) ? [] : [s.active
           ? { label: 'Inaktivera', icon: 'user-x', danger: true, sep: true, onclick: `StaffPage._confirmToggle(${id})` }
-          : { label: 'Aktivera', icon: 'user-check', sep: true, onclick: `StaffPage._toggleActive(${id})` }
-      ]) : '';
+          : { label: 'Aktivera', icon: 'user-check', sep: true, onclick: `StaffPage._toggleActive(${id})` }])) : '';
       return `<tr class="rg-row${selMode?' sel-mode':''}${selected?' selected':''}${s.active?'':' rg-row--off'}" data-sel-row-id="${esc(s.id)}"${canManage ? ' tabindex="0"' : ''}
           onclick="SelectionModel.rowClick(${id}, ${canManage ? `function(){ StaffPage.openEdit(${id}); }` : 'null'})"
           ${canManage ? `onkeydown="if(event.key==='Enter'&&event.target===this){StaffPage.openEdit(${id})}"` : ''}>
@@ -9185,7 +9184,18 @@ const StaffPage = {
       { id:'chef',     label:'Chef / Projektledare', description:'', active:true },
       { id:'admin',    label:'Admin', description:'', active:true }
     ];
-    const displayRoles = activeRoles.length ? activeRoles : fallbackRoles;
+    /* T3-C (SÄK-8, D-25): bara roller som servern låter den inloggade tilldela
+       (superadmin: alla; annars roller utan "Alla behörigheter" inom de egna).
+       Egen roll och superadministratörers poster kan bara en superadmin ändra. */
+    const canAuth = s ? Auth.canManageStaffAuth(s) : true;
+    const roleLocked = !!s && !canAuth;
+    const assignable = (activeRoles.length ? activeRoles : fallbackRoles).filter(r => Auth.canAssignRole(r.id) || (s && s.role === r.id));
+    let displayRoles = roleLocked ? allRoles.filter(r => s && r.id === s.role) : assignable;
+    /* Nuvarande roll som inte syns i det projicerade rollregistret visas som den är (låst). */
+    if (s && s.role && !displayRoles.some(r => r.id === s.role)) displayRoles = [{ id: s.role, label: s.role + ' (nuvarande roll)', description: '' }].concat(roleLocked ? [] : displayRoles);
+    const defRole = s ? (s.role || '') : ((displayRoles.find(r => r.id === 'personal') || displayRoles[0] || {}).id || '');
+    const emailLocked = !!s && (!canAuth || (s.active && !Auth.canAssignRole(s.role)));
+    this._roleChoices = displayRoles.map(r => r.id);
     const activeTitles = (state.titles||[]).filter(t => t.active !== false);
     return `
       <div class="g2">
@@ -9217,16 +9227,18 @@ const StaffPage = {
         <div class="fg"><label>Telefon</label>
           <input id="sf-phone" value="${s?esc(s.phone||''):''}" placeholder="070-XXX XX XX" type="tel"></div>
         <div class="fg"><label>E-post</label>
-          <input id="sf-email" value="${s?esc(s.email||''):''}" placeholder="namn@vift.se" type="email"></div>
+          <input id="sf-email" value="${s?esc(s.email||''):''}" placeholder="namn@vift.se" type="email"${emailLocked ? ' disabled title="E-posten styr inloggningen. Bara den som får tilldela personens roll kan ändra den."' : ''}></div>
       </div>
       <div style="border-top:1px solid var(--br);margin:4px 0;"></div>
       <div class="fg"><label>Användarnamn <span style="color:var(--rd)">*</span></label>
         <input id="sf-uname" value="${s?esc(s.username||''):''}" placeholder="användarnamn" autocomplete="off"></div>
       <div class="fg"><label>Roll / behörighet</label>
-        <input type="hidden" id="sf-role" value="${s?esc(s.role||'personal'):'personal'}">
+        <input type="hidden" id="sf-role" value="${esc(defRole)}">
+        ${roleLocked ? `<div class="nbox" id="sf-role-lock" style="font-size:11px;margin-top:4px;">${ic('lock',11)} ${s && Auth.getUser() && Auth.getUser().id === s.id ? 'Du kan inte ändra din egen roll.' : (Auth.rolePerms(s.role).includes('all') ? 'Bara en superadministratör kan ändra roll, e-post eller status för en superadministratör.' : 'Personens roll ligger utanför dina behörigheter — bara en superadministratör eller den som har rollens behörigheter kan ändra roll, e-post eller status.')}</div>` : ''}
+        ${!roleLocked && displayRoles.length === 0 ? `<div class="nbox" style="font-size:11px;margin-top:4px;">Det finns ingen roll som du får tilldela.</div>` : ''}
         <div style="display:flex;flex-direction:column;gap:5px;margin-top:4px;">
           ${displayRoles.map(r => {
-            const isSel = s ? s.role === r.id : r.id === 'personal';
+            const isSel = r.id === defRole;
             return `<div onclick="StaffPage._selectRole('${r.id}')" id="sf-role-opt-${r.id}"
               style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid ${isSel?'var(--sky)':'var(--br)'};border-radius:var(--rs);cursor:pointer;transition:border-color .1s;">
               <div id="sf-role-dot-${r.id}" style="width:16px;height:16px;border-radius:50%;border:2px solid ${isSel?'var(--navy)':'var(--br)'};background:${isSel?'var(--navy)':'transparent'};flex-shrink:0;transition:all .1s;"></div>
@@ -9297,6 +9309,8 @@ const StaffPage = {
   },
 
   _selectRole(roleId) {
+    /* T3-C: bara de val som visas i formuläret (servern nekar ändå övriga). */
+    if (Array.isArray(this._roleChoices) && !this._roleChoices.includes(roleId)) return;
     document.getElementById('sf-role').value = roleId;
     const roles = (state.roles && state.roles.length
       ? state.roles.filter(r => r.active !== false)
@@ -9335,9 +9349,10 @@ const StaffPage = {
       wide: true,
       body: this._formHtml(s),
       buttons: [
-        { label: s.active ? `${ic('user-x',13)} Inaktivera` : `${ic('user-check',13)} Aktivera`,
+        /* T3-C: inaktivering/aktivering bara när servern tillåter det. */
+        ...(this._canToggle(s) ? [{ label: s.active ? `${ic('user-x',13)} Inaktivera` : `${ic('user-check',13)} Aktivera`,
           cls: s.active ? 'btn bw' : 'btn bsu',
-          onClick: () => StaffPage._toggleActive(staffId) },
+          onClick: () => StaffPage._toggleActive(staffId) }] : []),
         { label: 'Spara', cls: 'btn bp', onClick: () => StaffPage._save(staffId) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -9400,18 +9415,33 @@ const StaffPage = {
     });
   },
 
+  /* T3-C (SÄK-8, D-25): samma regel som servern — superadministratörer bara av
+     superadmin, aldrig sig själv utan superadmin, och aktivering bara med en roll
+     som den inloggade får tilldela. */
+  _canToggle(s) {
+    if (!s || !Auth.can('staff_manage') || !Auth.canManageStaffAuth(s)) return false;
+    return s.active ? true : Auth.canAssignRole(s.role);
+  },
+
   _toggleActive(staffId) {
     /* V3 register: samma behörighet som redigeringen (openEdit) — anropet
        nås nu från radmenyn och ska inte kunna köras utan staff_manage. */
     if (!Auth.require('staff_manage')) return;
     const idx = (state.staff||[]).findIndex(s => s.id === staffId);
     if (idx < 0) return;
-    state.staff[idx] = { ...state.staff[idx], active: !state.staff[idx].active, updatedAt: new Date().toISOString() };
-    persist(); Modal.close();
-    const nm = ((state.staff[idx].firstName || '') + ' ' + (state.staff[idx].lastName || '')).trim();
-    const word = state.staff[idx].active ? 'aktiverad' : 'inaktiverad';
-    showToast(nm ? nm + ' ' + word : word.charAt(0).toUpperCase() + word.slice(1));
-    this.render();
+    const s0 = state.staff[idx];
+    if (!this._canToggle(s0)) { showToast(persistRefusalText('forbidden', Auth.rolePerms(s0.role).includes('all') ? 'superadmin_required' : 'privilege_escalation'), 6000); return; }
+    const nm = ((s0.firstName || '') + ' ' + (s0.lastName || '')).trim();
+    const word = s0.active ? 'inaktiverad' : 'aktiverad';
+    Modal.close();
+    /* T3-C: "inaktiverad" visas först när servern bekräftat; vid avslag rullas ändringen tillbaka
+       och serverns skäl visas (t.ex. sista superadministratören). */
+    return commitElementChange('staff', staffId, () => {
+      const i = (state.staff||[]).findIndex(s => s.id === staffId);
+      if (i < 0) return false;
+      state.staff[i] = { ...state.staff[i], active: !state.staff[i].active, updatedAt: new Date().toISOString() };
+    }, { onChange: () => this.render(), ok: nm ? nm + ' ' + word : word.charAt(0).toUpperCase() + word.slice(1),
+         fail: (nm || 'Personen') + ' kunde inte ' + (word === 'inaktiverad' ? 'inaktiveras' : 'aktiveras') });
   }
 };
 
@@ -11491,6 +11521,10 @@ const AdminPage = {
   toggleRoleActive(roleId) {
     const r = (state.roles||[]).find(x => x.id === roleId);
     if (!r) return;
+    /* T3-C: roller med "Alla behörigheter" och den egna rollen hanteras bara av superadmin. */
+    if (!Auth.isSuperadmin() && ((r.permissions||[]).includes('all') || (Auth.getUser() && Auth.getUser().role === roleId))) {
+      showToast(persistRefusalText('forbidden', (r.permissions||[]).includes('all') ? 'superadmin_required' : 'privilege_escalation'), 6000); return;
+    }
     // Guard: don't deactivate the last active admin-level role
     if (r.active !== false) {
       const activeAdmins = (state.roles||[]).filter(x => x.active !== false && (x.permissions||[]).includes('all'));
@@ -11724,12 +11758,22 @@ const AdminPage = {
     if (!r) return;
     const perms = r.permissions || [];
     const permMap = this._PERM_LABELS || {};
+    /* T3-C (SÄK-8, D-25): erbjud bara det servern godtar. Utan superadmin: inga roller med
+       "Alla behörigheter", inte den egna rollen, och inga behörigheter man saknar själv
+       (borttagning är tillåten). */
+    const superA = Auth.isSuperadmin();
+    const ownPerms = Auth._getPermsForUser(Auth.getUser());
+    const canEdit = Auth.canEditRolePerms(roleId);
+    const superRole = perms.includes('all');
+    const lockNote = canEdit ? (superA ? '' : 'Du kan bara ge behörigheter som du själv har. "Alla behörigheter" kan bara en superadministratör tilldela.')
+      : (superRole ? 'Bara en superadministratör kan ändra en roll med "Alla behörigheter".' : 'Du kan inte ändra behörigheterna i din egen roll.');
+    const permDisabled = (pid) => !canEdit || (!superA && !perms.includes(pid) && (pid === 'all' || !ownPerms.includes(pid)));
 
     const groupsHtml = this._PERM_GROUPS.map((g, gi) => {
       const groupCheckedCount = g.perms.filter(pid => perms.includes(pid)).length;
       const rows = g.perms.map(pid => `
-        <label style="display:flex;align-items:center;gap:8px;padding:6px 0 6px 12px;border-bottom:1px solid var(--bg);cursor:pointer;">
-          <input type="checkbox" name="role-perm" value="${pid}" ${perms.includes(pid)?'checked':''}
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 0 6px 12px;border-bottom:1px solid var(--bg);cursor:${permDisabled(pid)?'not-allowed':'pointer'};${permDisabled(pid)?'opacity:.55;':''}">
+          <input type="checkbox" name="role-perm" value="${pid}" ${perms.includes(pid)?'checked':''} ${permDisabled(pid)?'disabled':''}
             style="width:15px;height:15px;flex-shrink:0;" onchange="AdminPage._onPermChange(this)">
           <span style="font-size:12px;">${permMap[pid]||pid}</span>
         </label>`).join('');
@@ -11757,10 +11801,11 @@ const AdminPage = {
           <input id="role-edit-desc" value="${esc(r.description||'')}" placeholder="Kort beskrivning…"></div>
         <div style="margin-top:4px;">
           <div style="font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Behörigheter</div>
+          ${lockNote ? `<div class="nbox" id="role-edit-lock" style="font-size:11px;margin:4px 0;">${ic('lock',11)} ${esc(lockNote)}</div>` : ''}
           ${groupsHtml}
         </div>`,
       buttons: [
-        { label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditRole(roleId) },
+        ...((superRole && !superA) ? [] : [{ label: 'Spara', cls: 'btn bp', onClick: () => AdminPage._saveEditRole(roleId) }]),
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
     });
@@ -11770,7 +11815,7 @@ const AdminPage = {
     const group = this._PERM_GROUPS[groupIdx];
     if (!group) return;
     const cbs = document.querySelectorAll('input[name="role-perm"]');
-    const groupCbs = Array.from(cbs).filter(cb => group.perms.includes(cb.value));
+    const groupCbs = Array.from(cbs).filter(cb => group.perms.includes(cb.value) && !cb.disabled);
     const allChecked = groupCbs.every(cb => cb.checked);
     groupCbs.forEach(cb => {
       cb.checked = !allChecked;
@@ -11780,7 +11825,7 @@ const AdminPage = {
 
   _onPermChange(checkbox) {
     if (checkbox.value === 'all' && checkbox.checked) {
-      document.querySelectorAll('input[name="role-perm"]').forEach(cb => { cb.checked = cb.value === 'all'; });
+      document.querySelectorAll('input[name="role-perm"]').forEach(cb => { if (!cb.disabled) cb.checked = cb.value === 'all'; });
     } else if (checkbox.value !== 'all' && checkbox.checked) {
       const allCb = document.querySelector('input[name="role-perm"][value="all"]');
       if (allCb) allCb.checked = false;
@@ -11808,6 +11853,10 @@ const AdminPage = {
   },
 
   removeRole(roleId) {
+    const _r = (state.roles||[]).find(x => x.id === roleId);
+    if (_r && !Auth.isSuperadmin() && ((_r.permissions||[]).includes('all') || (Auth.getUser() && Auth.getUser().role === roleId))) {
+      showToast(persistRefusalText('forbidden', (_r.permissions||[]).includes('all') ? 'superadmin_required' : 'privilege_escalation'), 6000); return;
+    }
     const usageCount = (state.staff||[]).filter(s => s.role === roleId).length;
     if (usageCount > 0) { showToast(`Kan inte ta bort – används av ${usageCount} person${usageCount===1?'':'er'}`); return; }
     if (!confirm('Ta bort rollen?')) return;

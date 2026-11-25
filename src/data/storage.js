@@ -729,7 +729,8 @@ const Storage = {
       const data = await res.json().catch(function() { return {}; });
       if (!res.ok) {
         console.error('[Storage.writeBusinessKey] avvisad för ' + key + ':', data && data.error);
-        return { ok: false, error: (data && data.error) || ('http_' + res.status) };
+        /* T3-C: reason (privilege_escalation, superadmin_required) och status följer med. */
+        return { ok: false, error: (data && data.error) || ('http_' + res.status), reason: (data && data.reason) || null, status: res.status };
       }
       return { ok: true, data };
     } catch (e) {
@@ -765,7 +766,7 @@ const Storage = {
         console.error('[Storage.writeBusinessKeyMerge] avvisad för ' + key + ':', data && data.error);
         /* N1 (2026-11-12): `status` lets the caller tell a definite 4xx
            rejection (nothing committed) from an uncertain 5xx. Additive. */
-        return { ok: false, error: (data && data.error) || ('http_' + res.status), status: res.status };
+        return { ok: false, error: (data && data.error) || ('http_' + res.status), reason: (data && data.reason) || null, status: res.status };
       }
       return { ok: true, data };
     } catch (e) {

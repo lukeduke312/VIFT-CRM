@@ -549,6 +549,55 @@ const Auth = {
     return role && Array.isArray(role.permissions) ? role.permissions : [];
   },
 
+  /* ── T3-C (SÄK-8, D-25): samma regler som servern (_vift_authz_check) ──
+     Superadmin avgörs bara av behörigheten 'all' i den egna rollen, aldrig av
+     roll-id eller rollnamn. Klienten erbjuder bara val som servern godtar;
+     servern är ändå den som avgör (403 privilege_escalation/superadmin_required,
+     409 last_superadmin). */
+  isSuperadmin() {
+    if (!this.hasAccess()) return false;
+    return this._getPermsForUser(this.getUser()).includes('all');
+  },
+
+  /* Behörigheterna i en roll ur rollregistret (tom lista om rollen saknas). */
+  rolePerms(roleId) {
+    const r = (state.roles || []).find(x => x && x.id === roleId);
+    return r && Array.isArray(r.permissions) ? r.permissions : [];
+  },
+
+  /* Får den inloggade ge någon rollen? Superadmin: alla. Annars bara roller utan 'all'
+     vars behörigheter den inloggade själv har. */
+  canAssignRole(roleId) {
+    if (!this.hasAccess()) return false;
+    if (this.isSuperadmin()) return true;
+    const own = this._getPermsForUser(this.getUser());
+    const p = this.rolePerms(roleId);
+    if (!(state.roles || []).some(x => x && x.id === roleId)) return false;
+    return !p.includes('all') && p.every(x => own.includes(x));
+  },
+
+  /* Får den inloggade ändra roll, e-post eller aktiv-status på personalposten? */
+  canManageStaffAuth(staff) {
+    if (!staff || !this.hasAccess()) return false;
+    if (this.isSuperadmin()) return true;
+    /* Rollen syns inte i det projicerade rollregistret (D-21): den kan ha 'all' eller
+       behörigheter utöver ens egna — erbjud inget som servern kan neka. */
+    if (!(state.roles || []).some(x => x && x.id === staff.role && Array.isArray(x.permissions))) return false;
+    if (this.rolePerms(staff.role).includes('all')) return false;
+    const me = this.getUser();
+    if (me && me.id === staff.id) return false;
+    return true;
+  },
+
+  /* Får den inloggade ändra rollens behörigheter (inte egen roll, inte roller med 'all')? */
+  canEditRolePerms(roleId) {
+    if (!this.hasAccess() || !this.can('admin_manage')) return false;
+    if (this.isSuperadmin()) return true;
+    const me = this.getUser();
+    if (me && me.role === roleId) return false;
+    return !this.rolePerms(roleId).includes('all');
+  },
+
   /* ── T3-A: indragna behörigheter i öppen session ──────────
      Anropas efter att personal/roller uppdaterats (DataSync-poll,
      omläsning efter 403, meddelande från en annan flik). Löser om

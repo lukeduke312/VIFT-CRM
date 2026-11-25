@@ -496,7 +496,7 @@ async function settlePersistFailure(shortKey, elementId) {
   if (f.kind === 'rejected') {
     _vfJournalForget(shortKey, id); // (A)
     _vfRefreshHeldBanner();
-    return { fate: 'rejected', error: f.error };
+    return { fate: 'rejected', error: f.error, reason: f.reason || null };
   }
   return _vfVerifyJournaledElement(shortKey, id); // (B) -> landed | not-landed | diverged | unknown
 }
@@ -574,6 +574,15 @@ async function resumeHeldPersist(shortKey, elementId) {
    For a create whose id is assigned inside mutate(), pass `null` as
    elementId and return the new element (or its id) from mutate(). */
 var _vfCommitBusy = {};
+/* T3-C (SÄK-8, D-25): begripliga meddelanden för serverns avslag i personal- och
+   rollregistret (BEHORIGHETSMATRIS §4). null = inget särskilt meddelande. */
+function persistRefusalText(error, reason) {
+  if (error === 'last_superadmin') return 'Ändringen nekades: det måste alltid finnas minst en aktiv superadministratör (behörigheten "Alla behörigheter"). Ge först någon annan aktiv användare den behörigheten.';
+  if (error === 'forbidden' && reason === 'superadmin_required') return 'Ändringen nekades: bara en superadministratör får tilldela, ändra eller ta bort behörigheten "Alla behörigheter" eller roller och personer som har den.';
+  if (error === 'forbidden' && reason === 'privilege_escalation') return 'Ändringen nekades: du kan inte ge dig själv eller någon annan behörigheter som du inte själv har, och inte ändra din egen roll.';
+  return null;
+}
+
 async function commitElementChange(shortKey, elementId, mutate, msgs) {
   msgs = msgs || {};
   let id = elementId === null || elementId === undefined ? null : String(elementId);
@@ -613,10 +622,11 @@ async function commitElementChange(shortKey, elementId, mutate, msgs) {
         state[stateKey] = a;
         try { if (typeof Storage !== 'undefined' && Storage.setLocal) Storage.setLocal(shortKey, a); } catch (e) {}
         changed();
-        say((msgs.fail || 'Ändringen kunde inte sparas') + (fate === 'not-landed' || fate === 'unknown'
+        const _refusal = fate === 'rejected' ? persistRefusalText(n1.error, n1.reason) : null;
+        say(_refusal || ((msgs.fail || 'Ändringen kunde inte sparas') + (fate === 'not-landed' || fate === 'unknown'
           ? ' — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst.'
-          : '. Servern avvisade ändringen — försök igen.'), 8000);
-        return { ok: false, fate: fate };
+          : '. Servern avvisade ändringen — försök igen.')), 8000);
+        return { ok: false, fate: fate, error: n1.error, reason: n1.reason };
       }
     }
     if (typeof msgs.onSaved === 'function') { try { msgs.onSaved(); } catch (e) { console.warn('[commit] onSaved:', e); } }
@@ -680,10 +690,11 @@ async function confirmPersist(shortKey, elementId, msgs) {
     }
     if (typeof Sidebar !== 'undefined' && Sidebar.updateBadges) { try { Sidebar.updateBadges(); } catch (e) {} }
     changed();
-    say((msgs.fail || 'Ändringen kunde inte sparas') + (n1.fate === 'not-landed' || n1.fate === 'unknown'
+    const _refusal = n1.fate === 'rejected' ? persistRefusalText(n1.error, n1.reason) : null;
+    say(_refusal || ((msgs.fail || 'Ändringen kunde inte sparas') + (n1.fate === 'not-landed' || n1.fate === 'unknown'
       ? ' — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst.'
-      : '. Servern avvisade ändringen — försök igen.'), 8000);
-    return { ok: false, fate: n1.fate };
+      : '. Servern avvisade ändringen — försök igen.')), 8000);
+    return { ok: false, fate: n1.fate, error: n1.error, reason: n1.reason };
   })();
   _vfConfirmBusy[busyKey] = run;
   try { return await run; } finally { delete _vfConfirmBusy[busyKey]; }
@@ -1855,7 +1866,7 @@ async function _doPersistDetailed(_owner) {
              the awaiting caller before the next queued cycle starts (R1.2
              ordering invariant). Does not change any return value. */
           _vfLastPersistFailure[_shortKey] = {
-            kind: _vfClassifyWriteFailure(_mergeWrite), error: _mergeWrite.error || null,
+            kind: _vfClassifyWriteFailure(_mergeWrite), error: _mergeWrite.error || null, reason: _mergeWrite.reason || null,
             status: (typeof _mergeWrite.status === 'number') ? _mergeWrite.status : null,
             ids: Object.assign({}, _sentIds)
           };

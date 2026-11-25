@@ -141,7 +141,11 @@ const OperationsPage = {
     const activeStaff = (state.staff || []).filter(s => s.active);
     if (activeStaff.length === 0) return '';
     const roleOf = s => (state.roles || []).find(r => r.id === s.role);
-    const isField = s => { const r = roleOf(s); const p = r && Array.isArray(r.permissions) ? r.permissions : []; return p.includes('ao_time') || p.includes('all'); };
+    /* T3-C (D-21, D-14): utan admin_manage får klienten bara sin egen roll (och utan
+       staff_view inte andras role). När rollen inte är känd räknas den som fältpersonal
+       som är tilldelad någon arbetsorder. */
+    const assignedSomewhere = new Set(); S.all.forEach(ao => (ao.staff || []).forEach(id => assignedSomewhere.add(id)));
+    const isField = s => { const r = roleOf(s); if (!r || !Array.isArray(r.permissions)) return assignedSomewhere.has(s.id); const p = r.permissions; return p.includes('ao_time') || p.includes('all'); };
     const rows = activeStaff.map(s => {
       const mine    = S.all.filter(ao => (ao.staff || []).includes(s.id) && S.alive(ao));
       const todays  = mine.filter(ao => ao.scheduledDate === today).sort((a, b) => (a.scheduledStart || '99').localeCompare(b.scheduledStart || '99'));
