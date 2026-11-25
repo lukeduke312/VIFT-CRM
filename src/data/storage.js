@@ -56,6 +56,90 @@ const Storage = {
     return SUPABASE_URL + '/functions/v1';
   },
 
+  /* ── T3-A (SÄK-9/F6): användarspecifik lokal cache ─────────────────
+     Miljö = Supabase-projektets ref, härledd ur denna deployments egen
+     SUPABASE_URL (ingen ref skrivs in i koden). Används i ägarnycklarna
+     för cache, utkorgar och journaler. */
+  envRef() {
+    const url = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? String(SUPABASE_URL) : '';
+    const m = /^https?:\/\/([a-z0-9-]+)\.supabase\.(co|in)\b/i.exec(url);
+    if (m) return m[1].toLowerCase();
+    return url.replace(/^https?:\/\//, '').replace(/[^a-z0-9.-]/gi, '_').toLowerCase() || 'okand-miljo';
+  },
+
+  /* Cachens ägare: '<miljö>|<e-post>' för den inloggning vars data
+     `vift_<nyckel>`-cachen innehåller. Cachen får bara läsas (degraderad
+     inläsning, Storage.get-reserv) och skrivas av samma ägare. */
+  CACHE_OWNER_KEY: 'vift_cacheOwner',
+  cacheOwner() {
+    try { return localStorage.getItem(this.CACHE_OWNER_KEY) || null; } catch (e) { return null; }
+  },
+  _currentOwnerKey() {
+    try { return (typeof Auth !== 'undefined' && typeof Auth.ownerKey === 'function') ? Auth.ownerKey() : null; } catch (e) { return null; }
+  },
+  /* Testmiljöer (vm-sandlådor i tests/*.test.js) laddar storage.js utan
+     den riktiga AuthService — då finns ingen identitetsmodell och cachen
+     beter sig som tidigare. I webbläsaren finns Auth.ownerKey alltid. */
+  _hasIdentityModel() {
+    return typeof Auth !== 'undefined' && typeof Auth.ownerKey === 'function';
+  },
+  _cacheUsable() {
+    if (!this._hasIdentityModel()) return true;
+    const me = this._currentOwnerKey();
+    return !!me && this.cacheOwner() === me;
+  },
+
+  /* Nycklar som INTE är användarspecifik cache och därför behålls vid
+     utloggning/kontobyte. Uttrycklig lista — allt annat med prefixet
+     `vift_` räknas som cache och rensas (fail-closed för framtida nycklar).
+       - vift_auth_v2: sessionen (tas bort separat av AuthService)
+       - utkorgar/journaler/intents: osynkat arbete, ägarnycklat, rensas
+         aldrig tyst (skickas bara under rätt ägare)
+       - vift_pendingStampClear_*: en serverrensning som är skyldig ägaren
+       - vift_logo_light/dark: företagets logotyp (ingen användardata)
+       - vift_prefs_<id>, vift_push_onboarding_dismissed_<id>: UI-val per
+         användar-id (accentfärg, täthet, notisfråga), ingen verksamhetsdata
+       - vift_cacheOwner: ägarmarkören (tas bort vid rensning) */
+  _KEEP_RE: /^vift_(auth_v2$|outbox|settleIntents|persistJournal|activityOutbox|pendingStampClear|logo_light$|logo_dark$|prefs_|push_onboarding_dismissed_|cacheOwner$)/,
+  _isKeptKey(k) { return this._KEEP_RE.test(k); },
+  _allLocalKeys() {
+    try {
+      if (typeof localStorage.length === 'number' && typeof localStorage.key === 'function') {
+        const out = [];
+        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k != null) out.push(k); }
+        return out;
+      }
+      return Object.keys(localStorage);
+    } catch (e) { return []; }
+  },
+  /* Rensar all användarspecifik cache (localStorage `vift_*` utom
+     _KEEP_RE, samt sessionStorage). Rör aldrig utkorgar/journaler. */
+  purgeUserCache() {
+    const keys = this._allLocalKeys().filter((k) => k.startsWith(this.prefix) && !this._isKeptKey(k));
+    keys.forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+    try { localStorage.removeItem(this.CACHE_OWNER_KEY); } catch (e) {}
+    try { if (typeof sessionStorage !== 'undefined') sessionStorage.clear(); } catch (e) {}
+    return keys.length;
+  },
+  /* Anropas när en session etableras (inloggning, återställd session):
+     tillhör cachen någon annan (eller saknar ägare, t.ex. från v3.4) rensas
+     den först, sedan blir den aktuella inloggningen ägare. */
+  claimCache(ownerKey) {
+    if (!ownerKey) return false;
+    if (this.cacheOwner() !== ownerKey) {
+      const n = this.purgeUserCache();
+      if (n) console.warn('[Storage] lokal cache tillhörde en annan inloggning (eller saknade ägare) — ' + n + ' nycklar rensade');
+    }
+    try { localStorage.setItem(this.CACHE_OWNER_KEY, ownerKey); } catch (e) {}
+    return true;
+  },
+  /* Lokal cacheskrivning, bara för cachens ägare (en flik med inaktuell
+     identitet kan annars skriva in sina data i nästa användares cache). */
+  _writeCache(fullKey, raw) {
+    if (!this._cacheUsable()) return false;
+    try { localStorage.setItem(fullKey, raw); return true; } catch (e) { return false; }
+  },
+
   /* Sätt true när auth-fel är oåterkalleligt — återställs vid nästa lyckade anrop */
   _authFailed: false,
 
@@ -95,6 +179,15 @@ const Storage = {
 
     /* Steg 1: Proaktiv token-refresh */
     if (typeof Auth !== 'undefined' && Auth.refreshIfNeeded) {
+      /* T3-A: en flik utan session (utloggad, eller ogiltigförklarad av en
+         annan flik) skickar ingenting och rör INTE den delade sessionen —
+         tidigare kunde ett sent anrop här via _signalAuthFailure() ta bort
+         en ANNAN fliks nya, giltiga session. */
+      if (this._hasIdentityModel() && !Auth._session) {
+        const err0 = new Error('AUTH_EXPIRED');
+        err0.isAuthExpired = true;
+        throw err0;
+      }
       const ok = await Auth.refreshIfNeeded();
       if (!ok) {
         this._signalAuthFailure();
@@ -103,6 +196,12 @@ const Storage = {
         throw err;
       }
     }
+    /* T3-A: identitetskontroll precis före sändning — den delade sessionen
+       kan ha bytts (utloggning/kontobyte i en annan flik) utan att denna
+       flik ännu fått storage-händelsen. Då skickas ingenting med den gamla
+       identiteten. `opts.ownerKey` (utkorgen): posten skickas bara om den
+       aktuella sessionen är postens ägare. */
+    this._assertIdentity(opts);
 
     /* Bygg fetch-options med färska headers (anropas om vid retry) */
     const buildOpts = () => {
@@ -155,6 +254,7 @@ const Storage = {
         err.isAuthExpired = true;
         throw err;
       }
+      this._assertIdentity(opts);
       res = await doFetch(); /* retry med färsk token, samma timeoutMs */
       if (res.status === 401) {
         this._signalAuthFailure();
@@ -164,9 +264,30 @@ const Storage = {
       }
     }
 
+    /* T3-A: 403 kan betyda att behörigheten dragits in (roll ändrad,
+       personalpost inaktiverad). Klienten läser då om personal och roller
+       och tar bort åtkomst direkt (Auth.onServerForbidden, debouncad). */
+    if (res.status === 403 && typeof Auth !== 'undefined' && typeof Auth.onServerForbidden === 'function' && !opts.authzProbe) {
+      try { Auth.onServerForbidden(url); } catch (e) {}
+    }
+
     /* Steg 5: Lyckad anrop — återställ felstatus så re-login fungerar */
     this._authFailed = false;
     return res;
+  },
+
+  _assertIdentity(opts) {
+    if (!this._hasIdentityModel()) return;
+    if (typeof Auth.assertSessionCurrent === 'function' && !Auth.assertSessionCurrent()) {
+      const err = new Error('AUTH_EXPIRED');
+      err.isAuthExpired = true;
+      throw err;
+    }
+    if (opts && opts.ownerKey && Auth.ownerKey() !== opts.ownerKey) {
+      const err2 = new Error('OWNER_MISMATCH');
+      err2.isOwnerMismatch = true;
+      throw err2;
+    }
   },
 
   /*
@@ -186,6 +307,11 @@ const Storage = {
     }
     if (typeof App !== 'undefined' && App.showLogin) {
       try { App.showLogin(); } catch(e) {}
+      /* T3-A: tydligt besked i stället för en tyst utloggning. */
+      try {
+        const el = (typeof document !== 'undefined') ? document.getElementById('login-err') : null;
+        if (el) { el.textContent = 'Din session har upphört — logga in igen. Osynkade ändringar finns kvar på enheten för ditt konto.'; el.style.display = 'block'; }
+      } catch(e) {}
     }
   },
 
@@ -205,7 +331,10 @@ const Storage = {
   /* localStorage-fallback: returnera alla kända nycklar som objekt */
   _localAll() {
     const out = {};
-    Object.keys(localStorage)
+    /* T3-A: degraderad inläsning får bara använda cache som tillhör den
+       inloggade användaren i denna miljö — aldrig en annan användares. */
+    if (!this._cacheUsable()) return out;
+    this._allLocalKeys()
       .filter(k => k.startsWith(this.prefix) && k !== this.prefix + 'auth_v2')
       .forEach(k => {
         try { out[k.slice(this.prefix.length)] = JSON.parse(localStorage.getItem(k)); } catch(e) {}
@@ -227,7 +356,7 @@ const Storage = {
      (offline-first-designen är avsiktligt bevarad). */
   async setAll(pairs) {
     pairs.forEach(([key, value]) => {
-      try { localStorage.setItem(this.prefix + key, JSON.stringify(value)); } catch(e) {}
+      try { this._writeCache(this.prefix + key, JSON.stringify(value)); } catch(e) {}
     });
     const body = pairs.map(([key, value]) => ({ key: this.prefix + key, value }));
     const aoEntry = pairs.find(function(p) { return p[0] === 'workOrders'; });
@@ -261,7 +390,7 @@ const Storage = {
      offline-reload (initState() → Storage._localAll()) kunna återuppliva
      en mutation som callern redan rullat tillbaka i minnet. */
   setLocal(key, value) {
-    try { localStorage.setItem(this.prefix + key, JSON.stringify(value)); } catch(e) {}
+    try { this._writeCache(this.prefix + key, JSON.stringify(value)); } catch(e) {}
   },
 
   /* Enstaka get */
@@ -275,7 +404,8 @@ const Storage = {
       const rows = await res.json();
       return rows.length ? rows[0].value : null;
     } catch(e) {
-      if (e.isAuthExpired) return null;
+      if (e.isAuthExpired || e.isOwnerMismatch) return null;
+      if (!this._cacheUsable()) return null;
       try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : null; } catch(e2) { return null; }
     }
   },
@@ -307,7 +437,7 @@ const Storage = {
       throw new Error('HTTP ' + res.status + ': ' + txt.substring(0, 200));
     }
     pairs.forEach(function([key, value]) {
-      try { localStorage.setItem(Storage.prefix + key, JSON.stringify(value)); } catch(_) {}
+      try { Storage._writeCache(Storage.prefix + key, JSON.stringify(value)); } catch(_) {}
     });
     return true;
   },
@@ -315,7 +445,7 @@ const Storage = {
   /* Enstaka set */
   set(key, value) {
     const k = this.prefix + key;
-    try { localStorage.setItem(k, JSON.stringify(value)); } catch(e) {}
+    try { this._writeCache(k, JSON.stringify(value)); } catch(e) {}
     /* P2-1 (fix round 2026-11-16): public.store.value is `jsonb NOT NULL`
        (see CLAUDE.md schema). PostgREST's write path for this upsert
        (jsonb_populate_record under `Prefer: resolution=merge-duplicates`)
@@ -372,7 +502,7 @@ const Storage = {
 
   /* clear() rensar bara localStorage-cache — inte Supabase */
   clear() {
-    Object.keys(localStorage)
+    this._allLocalKeys()
       .filter(k => k.startsWith(this.prefix) && k !== this.prefix + 'auth_v2')
       .forEach(k => { try { localStorage.removeItem(k); } catch(e) {} });
   },
@@ -574,11 +704,12 @@ const Storage = {
     }
   },
 
-  async getAllWithHashes(businessFullKeys) {
+  async getAllWithHashes(businessFullKeys, opts) {
     try {
       const res = await this._authFetch(this._functionsBase() + '/store-key-write', {
         body: JSON.stringify({ action: 'readAllWithHashes', keys: businessFullKeys }),
-        extraHeaders: { 'apikey': SUPABASE_AKEY }
+        extraHeaders: { 'apikey': SUPABASE_AKEY },
+        authzProbe: !!(opts && opts.authzProbe)
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();

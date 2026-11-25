@@ -124,7 +124,12 @@ const Auth = {
 
   /* ── JWT ──────────────────────────────────────────────── */
 
+  /* T3-A: ger aldrig en token om den delade sessionen bytts till en annan
+     användare (eller loggats ut) i en annan flik — gäller även tjänster som
+     anropar fetch direkt med denna token (bilder, rondering, fakturor, push). */
   getAccessToken() {
+    if (!this._session) return null;
+    if (!this.assertSessionCurrent()) return null;
     return this._session ? this._session.access_token : null;
   },
 
@@ -157,23 +162,33 @@ const Auth = {
     try {
       const saved = localStorage.getItem(this.SESSION_KEY);
       if (!saved) {
-        if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
-        if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+        this._noSessionAtStart();
         return false;
       }
       const s = JSON.parse(saved);
       if (!s || !s.access_token || !s.refresh_token) {
-        if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
-        if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+        this._noSessionAtStart();
         return false;
       }
-      this._session = s;
+      this._adoptSession(s, { save: false });
+      /* T3-A: cachen får bara användas av sin ägare. En cache utan ägare
+         (lämnad av v3.4) eller med en annan ägare rensas innan något läses. */
+      if (typeof Storage !== 'undefined' && Storage.claimCache) Storage.claimCache(this.ownerKey());
       return true;
     } catch(e) {
-      if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
-      if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+      this._noSessionAtStart();
       return false;
     }
+  },
+
+  /* T3-A (SÄK-9): ingen giltig session vid start (utloggad, utgången,
+     raderad eller korrupt session) → ingen användarspecifik cache får
+     finnas kvar. Rensar hela cachen (inte bara tid/AO som tidigare);
+     utkorgar och journaler behålls ägarnycklade (Storage._KEEP_RE). */
+  _noSessionAtStart() {
+    if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+    if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+    if (typeof Storage !== 'undefined' && Storage.purgeUserCache) Storage.purgeUserCache();
   },
 
   /* ── Token refresh (async, single-flight) ─────────────── */
@@ -243,17 +258,14 @@ const Auth = {
     if (shared && shared.refresh_token && shared.access_token && local &&
         shared.user_email && shared.user_email === local.user_email) {
       /* Another tab refreshed this same account first. Do not delete it. */
-      this._session = shared;
+      this._adoptSession(shared, { save: false });
       return { current: false, loggedIn: true };
     }
 
     /* Logout/account replacement happened elsewhere: invalidate only THIS
-       tab. Never write back to the shared key from this branch. */
-    this._session = null;
-    if (typeof state !== 'undefined') state.currentUser = null;
-    if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
-    if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
-    if (typeof App !== 'undefined' && App.showLogin) App.showLogin();
+       tab. Never write back to the shared key from this branch.
+       T3-A: tömmer även fliken (minne, DOM, utkorg i minnet). */
+    this._onIdentityLost(shared ? 'switch' : 'logout');
     return { current: false, loggedIn: false };
   },
 
@@ -285,7 +297,8 @@ const Auth = {
       this._session.refresh_token = d.refresh_token;
       this._session.expires_at = Date.now() + (d.expires_in * 1000);
       this._session.user_email = d.user?.email || this._session.user_email;
-      this._saveSession();
+      if (d.user && d.user.id) this._session.user_id = d.user.id;
+      this._adoptSession(this._session);
       console.log('[Auth] Access token refreshed');
       return true;
     } catch(e) {
@@ -329,13 +342,20 @@ const Auth = {
          inloggning). */
       if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
       if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
-      this._session = {
+      /* T3-A (SÄK-9): ny inloggning i denna flik — föregående användares
+         data i minnet, DOM och utkorg i minnet tas bort innan den nya
+         sessionen sätts. Den delade cachen rensas av claimCache() nedan om
+         den tillhör någon annan (eller saknar ägare). Ägarnycklade
+         utkorgar/journaler rörs inte. */
+      this._endClientSession({ purgeShared: false });
+      this._adoptSession({
         access_token:  data.access_token,
         refresh_token: data.refresh_token,
         expires_at:    Date.now() + (data.expires_in * 1000),
-        user_email:    data.user?.email || email.toLowerCase().trim()
-      };
-      this._saveSession();
+        user_email:    data.user?.email || email.toLowerCase().trim(),
+        user_id:       (data.user && data.user.id) || null
+      });
+      if (typeof Storage !== 'undefined' && Storage.claimCache) Storage.claimCache(this.ownerKey());
       return { ok: true };
     } catch(e) {
       return { ok: false, error: 'Kunde inte ansluta till servern. Kontrollera din uppkoppling.' };
@@ -344,9 +364,65 @@ const Auth = {
 
   /* ── Logout ───────────────────────────────────────────── */
 
+  /* T3-A: utloggning från gränssnittet. Finns osynkade ändringar för den
+     inloggade användaren visas en tydlig varning med valen "Synka nu",
+     "Logga ut ändå" (ändringarna ligger kvar på enheten, ägarnycklade, och
+     skickas när samma användare loggar in igen — aldrig av någon annan)
+     och "Avbryt". Inget rensas tyst. */
+  requestLogout() {
+    const pending = this.unsyncedSummary();
+    if (!pending.total || typeof Modal === 'undefined') { this.logout(); return; }
+    const esc_ = (typeof esc === 'function') ? esc : function (x) { return String(x); };
+    const list = pending.parts.map(function (p) { return '<li>' + p.n + ' ' + esc_(p.label) + '</li>'; }).join('');
+    const self = this;
+    Modal.open({
+      title: 'Osynkade ändringar',
+      body: '<div style="font-size:14px;line-height:1.5;color:var(--tx);">' +
+        '<p><b>' + pending.total + ' osynkad' + (pending.total === 1 ? '' : 'e') + ' ändring' + (pending.total === 1 ? '' : 'ar') + '</b> på den här enheten har inte bekräftats av servern:</p>' +
+        '<ul style="margin:8px 0 8px 18px;">' + list + '</ul>' +
+        '<p>Välj <b>Synka nu</b> för att försöka skicka dem innan du loggar ut. Loggar du ut ändå ligger de kvar på enheten för ditt konto och skickas när du loggar in igen här — de skickas aldrig i någon annans namn.</p></div>',
+      buttons: [
+        { label: 'Synka nu', cls: 'btn bp', onClick: function () { Modal.close(); self._syncBeforeLogout(); } },
+        { label: 'Logga ut ändå', cls: 'btn bd', onClick: function () { Modal.close(); self.logout(); } },
+        { label: 'Avbryt', cls: 'btn bs', onClick: function () { Modal.close(); } }
+      ]
+    });
+  },
+
+  async _syncBeforeLogout() {
+    if (typeof showToast === 'function') showToast('Synkar osynkade ändringar…', 2500);
+    try {
+      const jobs = [];
+      if (typeof AOTimeSyncService !== 'undefined' && AOTimeSyncService.syncAllNow) jobs.push(AOTimeSyncService.syncAllNow());
+      if (typeof ActivityService !== 'undefined' && ActivityService.flush) jobs.push(ActivityService.flush());
+      if (typeof persist === 'function' && typeof _vfJournalPendingCount === 'function' && _vfJournalPendingCount() > 0) jobs.push(persist());
+      await Promise.all(jobs.map(function (j) { return Promise.resolve(j).catch(function () {}); }));
+    } catch (e) {}
+    if (!this._session) return;
+    const left = this.unsyncedSummary();
+    if (!left.total) {
+      if (typeof showToast === 'function') showToast('Allt är synkat — du loggas ut.', 2500);
+      this.logout();
+      return;
+    }
+    if (typeof showToast === 'function') showToast('Kunde inte synka allt (' + left.total + ' kvar). Ändringarna finns kvar på enheten.', 5000);
+    this.requestLogout();
+  },
+
+  /* Osynkat för den inloggade användaren (bara egna, ägarnycklade poster). */
+  unsyncedSummary() {
+    const parts = [];
+    const add = function (label, fn) { try { const n = Number(fn()) || 0; if (n > 0) parts.push({ label: label, n: n }); } catch (e) {} };
+    add('arbetsorder-/tidsändringar i kö', function () { return typeof AOTimeSyncService !== 'undefined' ? AOTimeSyncService.pendingCount() : 0; });
+    add('osparade registerändringar', function () { return typeof _vfJournalPendingCount === 'function' ? _vfJournalPendingCount() : 0; });
+    add('sparningar pågår', function () { return typeof DataSync !== 'undefined' ? (DataSync._pendingWrites || 0) : 0; });
+    add('aktivitetsposter i kö', function () { return typeof ActivityService !== 'undefined' && ActivityService.pendingCount ? ActivityService.pendingCount() : 0; });
+    return { parts: parts, total: parts.reduce(function (a, p) { return a + p.n; }, 0) };
+  },
+
   logout() {
     const token = this._session ? this._session.access_token : null;
-    this._clearSession();
+    this._clearSession({ explicit: true });
     state.currentUser = null;
     App.showLogin();
     /* Fire-and-forget: ogiltigförklara JWT hos Supabase */
@@ -363,22 +439,46 @@ const Auth = {
   /*
    * Kör efter initState(). Matchar auth-emailen mot state.staff[].email.
    * Sätter state.currentUser baserat på staff-posten (roll, behörigheter, namn).
+   *
+   * T3-A (SÄK-10/F7): ingen reservroll. Tidigare fick en inloggad användare
+   * utan matchande, aktiv personalpost rollen 'personal' (och därmed den
+   * rollens behörigheter, eller SeedData:s). Nu fail-closed:
+   *   - servern nekade inläsningen (403)       → 'no_staff'
+   *   - ingen aktiv personalpost med e-posten  → 'no_staff'
+   *   - personalpostens roll-id finns inte i
+   *     state.roles (eller saknar behörighetslista) → 'no_role'
+   *   - personal/roller kommer inte från servern
+   *     eller användarens egen cache (bara SeedData,
+   *     t.ex. nätfel utan egen cache)           → 'unverified'
+   * I alla dessa fall är state.currentUser null: inga behörigheter, inga
+   * sidor, ingen meny och ingen data (App.showNoAccess). Inga beslut fattas
+   * på rollnamn — bara på om rollen finns och vilka behörigheter den har.
+   * Samma matchningsregel som servern (_shared/vift-auth.ts: aktiv personal
+   * med samma e-post, rollens permissions-lista).
    */
+  _access: { state: 'none', email: null },
+
   _resolveUser() {
+    /* Redan avvisad och tömd i denna inläsning (initState) — behåll beslutet. */
+    if (state._wiped && this._access && this._access.state !== 'none' && this._access.state !== 'ok') { state.currentUser = null; return; }
     const email = this._session ? this._session.user_email : null;
-    if (!email) { state.currentUser = null; return; }
+    if (!email) { state.currentUser = null; this._access = { state: 'none', email: null }; return; }
+    const deny = (why) => { state.currentUser = null; this._access = { state: why, email: email }; this._lastAuthzFp = this._authzFingerprint(); };
+
+    if (state._loadForbidden) return deny('no_staff');
+    if (state._authzSource !== 'server' && state._authzSource !== 'cache') return deny('unverified');
 
     const staff = (state.staff || []).find(s =>
-      s.active && s.email && s.email.toLowerCase() === email.toLowerCase()
+      s && s.active && s.email && String(s.email).toLowerCase() === String(email).toLowerCase()
     );
-
     if (!staff) {
-      console.warn('[Auth] Ingen aktiv staff-post hittad för e-post:', email);
-      state.currentUser = {
-        id: 'unknown', firstName: email.split('@')[0], lastName: '',
-        role: 'personal', username: email, title: ''
-      };
-      return;
+      console.warn('[Auth] Ingen aktiv personalpost för den inloggade användaren — ingen behörighet (SÄK-10).');
+      return deny('no_staff');
+    }
+    const role = (state.roles || []).find(r => r && r.id === staff.role);
+    if (!role || !Array.isArray(role.permissions)) {
+      console.warn('[Auth] Personalpostens roll finns inte i rollregistret — ingen behörighet (SÄK-10).');
+      return deny('no_role');
     }
 
     state.currentUser = {
@@ -387,14 +487,24 @@ const Auth = {
       lastName:  staff.lastName,
       role:      staff.role,
       username:  staff.username || staff.email,
+      email:     String(staff.email).toLowerCase(),
       title:     staff.title   || ''
     };
+    this._access = { state: 'ok', email: email };
+    this._lastAuthzFp = this._authzFingerprint();
+  },
+
+  /* 'ok' | 'no_staff' | 'no_role' | 'unverified' | 'none' */
+  accessState() { return this._access ? this._access.state : 'none'; },
+
+  hasAccess() {
+    return !!(this._session && this._session.access_token && state.currentUser && this.accessState() === 'ok');
   },
 
   /* ── Getters ──────────────────────────────────────────── */
 
   isLoggedIn() {
-    return !!(this._session && this._session.access_token && state.currentUser);
+    return this.hasAccess();
   },
 
   getUser() {
@@ -404,21 +514,24 @@ const Auth = {
   /* ── Behörighetskontroll ──────────────────────────────── */
 
   can(permission) {
-    const user = this.getUser();
-    if (!user) return false;
-    const perms = this._getPermsForUser(user);
+    if (!this.hasAccess()) return false;
+    const perms = this._getPermsForUser(this.getUser());
     return perms.includes('all') || perms.includes(permission);
   },
 
   canAny(permissions) {
+    if (!this.hasAccess()) return false;
     if (!permissions || permissions.length === 0) return true;
     return permissions.some(p => this.can(p));
   },
 
+  /* T3-A: fail-closed — en sida som saknas i PAGE_PERMISSIONS visas inte
+     (tidigare: alla inloggade). Alla sidor i index.html/Router finns i
+     tabellen. */
   canViewPage(pageId) {
     if (!this.isLoggedIn()) return false;
     const required = this.PAGE_PERMISSIONS[pageId];
-    if (required === undefined) return true;
+    if (required === undefined) return false;
     return this.canAny(required);
   },
 
@@ -428,11 +541,93 @@ const Auth = {
     return false;
   },
 
+  /* Behörigheter kommer bara från rollregistret (servern gör likadant).
+     Ingen reserv via user.permissions eller rollnamn. */
   _getPermsForUser(user) {
     if (!user) return [];
-    const role = (state.roles || []).find(r => r.id === user.role);
-    if (role) return role.permissions || [];
-    return user.permissions || [];
+    const role = (state.roles || []).find(r => r && r.id === user.role);
+    return role && Array.isArray(role.permissions) ? role.permissions : [];
+  },
+
+  /* ── T3-A: indragna behörigheter i öppen session ──────────
+     Anropas efter att personal/roller uppdaterats (DataSync-poll,
+     omläsning efter 403, meddelande från en annan flik). Löser om
+     användaren; saknas åtkomst nu tas allt bort (no-access-sidan), annars
+     lämnas en sida som inte längre är tillåten och menyn ritas om. */
+  _authzFingerprint() {
+    const u = state.currentUser;
+    return JSON.stringify([this.accessState(), u ? u.id : null, u ? u.role : null, u ? this._getPermsForUser(u).slice().sort() : null]);
+  },
+
+  _lastAuthzFp: null,
+  applyAuthorizationChange(reason) {
+    if (!this._session) return false;
+    const before = this._lastAuthzFp;
+    this._resolveUser();
+    if (this.accessState() !== 'ok') {
+      this._denyAccess();
+      if (reason !== 'broadcast') this._broadcast({ type: 'authz' });
+      return true;
+    }
+    const changed = before !== this._lastAuthzFp;
+    const page = (typeof Router !== 'undefined') ? Router.currentPage : null;
+    const pageDenied = !!page && !this.canViewPage(page);
+    if (!changed && !pageDenied) return false;
+    if (changed) {
+      console.warn('[Auth] Behörigheterna har ändrats (' + reason + ') — tillämpas direkt.');
+      try { if (typeof Sidebar !== 'undefined' && Sidebar.render) Sidebar.render(); } catch (e) {}
+      try { if (typeof MobileShell !== 'undefined' && MobileShell.renderBottomNav) MobileShell.renderBottomNav(); } catch (e) {}
+    }
+    if (pageDenied) {
+      try { if (typeof Modal !== 'undefined') Modal.closeAll(); } catch (e) {}
+      if (typeof showToast === 'function') showToast('Dina behörigheter har ändrats — du har inte längre tillgång till den sidan.', 6000);
+      try { Router.showPage('pg-dash', {}, { replace: true }); } catch (e) {}
+    }
+    if (changed && reason !== 'broadcast') this._broadcast({ type: 'authz' });
+    return true;
+  },
+
+  /* Läser om personal och roller från servern (samma atomiska läsväg som
+     initState). 403 = servern nekar användaren helt (t.ex. inaktiverad
+     personalpost) → ingen åtkomst. Nätfel ändrar ingenting. */
+  _authzRefreshing: null,
+  refreshAuthorization(reason) {
+    if (!this._session || typeof Storage === 'undefined' || !Storage.getAllWithHashes) return Promise.resolve(false);
+    if (this._authzRefreshing) return this._authzRefreshing;
+    const self = this;
+    const owner = this.ownerKey();
+    const p = (async function () {
+      const r = await Storage.getAllWithHashes(['vift_staff', 'vift_roles'], { authzProbe: true });
+      if (!self._session || self.ownerKey() !== owner) return false;
+      if (!r.ok) {
+        if (/\b403\b/.test(String(r.error || ''))) { state._loadForbidden = true; return self.applyAuthorizationChange(reason); }
+        return false;
+      }
+      if (typeof _vfApplyAuthzSnapshot === 'function') _vfApplyAuthzSnapshot(r.data || {}, r.hashes || {});
+      return self.applyAuthorizationChange(reason);
+    })().catch(function (e) { console.warn('[Auth] omläsning av behörigheter misslyckades:', e); return false; })
+      .finally(function () { if (self._authzRefreshing === p) self._authzRefreshing = null; });
+    this._authzRefreshing = p;
+    return p;
+  },
+
+  /* Storage._authFetch anropar detta vid HTTP 403 (debouncat). */
+  _forbiddenTimer: null,
+  onServerForbidden() {
+    if (!this._session || this._forbiddenTimer) return;
+    const self = this;
+    this._forbiddenTimer = setTimeout(function () { self._forbiddenTimer = null; self.refreshAuthorization('server_403'); }, 300);
+  },
+
+  /* Ingen åtkomst (SÄK-10, eller indragen i öppen session): ta bort all
+     data ur minnet, DOM och lokal cache, och visa no-access-sidan.
+     Sessionen ligger kvar så att användaren kan logga ut. */
+  _denyAccess() {
+    const access = this._access && this._access.state !== 'ok' && this._access.state !== 'none' ? this._access : { state: 'no_staff', email: null };
+    this._endClientSession({ purgeShared: true });
+    this._access = access;
+    state.currentUser = null;
+    if (typeof App !== 'undefined' && App.showNoAccess) { try { App.showNoAccess(access.state); } catch (e) {} }
   },
 
   /* ── Lösenordsåterställning ──────────────────────────── */
@@ -459,13 +654,12 @@ const Auth = {
         if (eq > 0) params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
       });
       if (params.access_token && params.type) {
-        this._session = {
+        this._adoptSession({
           access_token:  params.access_token,
           refresh_token: params.refresh_token || '',
           expires_at:    params.expires_in ? Date.now() + Number(params.expires_in) * 1000 : Date.now() + 3600000,
           user_email:    params.email || ''
-        };
-        this._saveSession();
+        });
         try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch(e) {}
         return params.type;
       }
@@ -515,13 +709,13 @@ const Auth = {
         return { ok: false, error: d.msg || d.error_description || d.error || 'Ogiltig återställningslänk. Begär en ny länk.' };
       }
       const d = await res.json();
-      this._session = {
+      this._adoptSession({
         access_token:  d.access_token,
         refresh_token: d.refresh_token || '',
         expires_at:    d.expires_in ? Date.now() + Number(d.expires_in) * 1000 : Date.now() + 3600000,
-        user_email:    (d.user && d.user.email) || ''
-      };
-      this._saveSession();
+        user_email:    (d.user && d.user.email) || '',
+        user_id:       (d.user && d.user.id) || null
+      });
       if (codeVerifier) sessionStorage.removeItem('vift_pkce_verifier');
       return { ok: true };
     } catch(e) {
@@ -622,124 +816,191 @@ const Auth = {
   /* ── Intern helpers ───────────────────────────────────── */
 
   _saveSession() {
-    try { localStorage.setItem(this.SESSION_KEY, JSON.stringify(this._session)); } catch(e) {}
+    try { localStorage.setItem(this.SESSION_KEY, JSON.stringify(this._session)); this._sessionShared = true; }
+    catch(e) { this._sessionShared = false; }
   },
 
-  _clearSession() {
+  _sharedSession() {
+    try { const raw = localStorage.getItem(this.SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  },
+
+  /* ── T3-A: identitet (användare + miljö) ──────────────────
+     Ägare för cache, utkorgar och journaler = miljö (Supabase-projektets
+     ref) + inloggningens e-post (normaliserad); auth-uid sparas i posterna
+     när det är känt och kontrolleras då också. `_lastIdentity` är den
+     senaste giltiga identiteten i denna flik — en åtgärd som köas efter
+     att sessionen just upphört hamnar därför i rätt ägares utkorg. */
+  _lastIdentity: null,
+  _sessionShared: false,
+
+  envRef() {
+    return (typeof Storage !== 'undefined' && Storage.envRef) ? Storage.envRef() : 'okand-miljo';
+  },
+  identity() {
+    const s = this._session;
+    if (!s || !s.user_email) return null;
+    return { email: String(s.user_email).toLowerCase(), uid: s.user_id || null, env: this.envRef() };
+  },
+  ownerIdentity() { return this.identity() || this._lastIdentity; },
+  ownerKey(id) {
+    if (id === undefined) id = this.identity();
+    return id ? id.env + '|' + id.email : null;
+  },
+  /* Får den aktuella sessionen skicka posten? (utkorg, journal, intents) */
+  ownsEntry(entry) {
+    const id = this.identity();
+    if (!id || !entry || !entry.owner) return false;
+    if (String(entry.owner).toLowerCase() !== id.email) return false;
+    if (entry.env && entry.env !== id.env) return false;
+    if (entry.ownerUid && id.uid && entry.ownerUid !== id.uid) return false;
+    return true;
+  },
+
+  _adoptSession(s, opts) {
+    this._session = s;
+    const id = this.identity();
+    if (id) this._lastIdentity = id;
+    if (!opts || opts.save !== false) this._saveSession();
+    else this._sessionShared = true;
+  },
+
+  /* Stämmer denna fliks session fortfarande med den delade (localStorage)?
+     Samma användare med roterade token (annan flik förnyade) antas. Annan
+     användare eller ingen delad session = denna fliks identitet är
+     inaktuell: fliken töms och inget får skickas. */
+  assertSessionCurrent() {
+    if (!this._session) return false;
+    if (!this._sessionShared) return true;
+    const shared = this._sharedSession();
+    const mine = String(this._session.user_email || '').toLowerCase();
+    if (shared && shared.access_token && String(shared.user_email || '').toLowerCase() === mine) {
+      if (shared.access_token !== this._session.access_token || shared.refresh_token !== this._session.refresh_token) this._adoptSession(shared, { save: false });
+      return true;
+    }
+    this._onIdentityLost(shared ? 'switch' : 'logout');
+    return false;
+  },
+
+  /* Tar bort sessionen. Den DELADE sessionsnyckeln tas bara bort om den
+     fortfarande är denna fliks session (samma token, eller vid uttrycklig
+     utloggning samma användare) — en annan fliks nya inloggning rörs aldrig. */
+  _clearSession(opts) {
+    const mine = this._session;
     this._session = null;
     /* V26: inget manuellt _refreshPromise-nollställande behövs här längre —
-       se motiveringen i login(). Om en refresh fortfarande pågår för den nu
-       utloggade sessionen städar dess egen .finally() (identitetsskyddad)
-       upp sig själv när den landar; ingen ny refresh kan starta för att
-       refreshIfNeeded()/forceRefresh() redan kräver en icke-null _session. */
-    try { localStorage.removeItem(this.SESSION_KEY); } catch(e) {}
-    /* BLOCKER-1 SLUTFÖRANDE (krav 1 — känsliga tidposter får inte ligga
-       kvar efter utloggning): körs vid VARJE väg som når _clearSession()
-       — explicit logout() OCH en misslyckad token-refresh — rensar
-       `vift_timeEntries` ur localStorage/state OCH epok-ogiltigförklarar
-       ett ev. fortfarande pågående fetchAndApply()-anrop I DENNA FLIK
-       (krav 4). ANDRA, samtidigt öppna flikar nollställs via
-       `_installCrossTabSessionListener()` nedan — se dess kommentar
-       för varför det MÅSTE ogiltigförklara `_session` där, inte bara
-       cachen (oberoende granskning, fel 2, ANDRA rapporterade
-       bristen). Rör ALDRIG `vift_outbox`/`vift_settleIntents`
-       (krav 5) — se TimeEntriesReadService.js. */
-    if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
-    if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+       se motiveringen i login(). */
+    let removedShared = false;
+    try {
+      const shared = this._sharedSession();
+      if (!shared) removedShared = true;
+      else if (mine && (shared.refresh_token === mine.refresh_token || shared.access_token === mine.access_token ||
+               (opts && opts.explicit && String(shared.user_email || '').toLowerCase() === String(mine.user_email || '').toLowerCase()))) {
+        localStorage.removeItem(this.SESSION_KEY);
+        removedShared = true;
+      }
+    } catch(e) {}
+    /* BLOCKER-1/T3-A: varje väg hit (utloggning, misslyckad förnyelse,
+       utgången session) tömmer fliken; den delade cachen rensas när den
+       delade sessionen faktiskt är borta. Utkorgar/journaler behålls. */
+    this._endClientSession({ purgeShared: removedShared });
   },
 
-  /* BLOCKER-1 SLUTFÖRANDE (oberoende granskning, fel 2, ANDRA
-     rapporterade bristen — verkligt reproducerad): den FÖRSTA
-     rättelsens cross-tab-lyssnare (då i TimeEntriesReadService.js)
-     rensade bara cachen/epoken i andra flikar, men lämnade DEN flikens
-     `Auth._session` orörd — fliken "trodde" sig alltså fortfarande
-     inloggad, och ett HELT NYTT `fetchAndApply()`-anrop (inte bara ett
-     redan i-flykt) kunde då fortfarande lyckas och återskapa
-     `vift_timeEntries` efter att en ANNAN flik loggat ut, ELLER
-     återanvända FÖREGÅENDE användares data efter att en annan flik
-     loggat in som en NY användare. Flyttad hit (AuthService.js äger
-     redan hela sessionslivscykeln) och korrigerad:
+  /* Denna fliks identitet gäller inte längre (utloggning eller kontobyte i
+     en annan flik, upptäckt via storage-händelse eller före en sändning).
+     Skriver aldrig till den delade sessionen. */
+  _onIdentityLost(reason) {
+    if (!this._session && !state.currentUser) { this._endClientSession({ purgeShared: false }); return; }
+    console.warn('[Auth] Sessionen ändrades i en annan flik (' + reason + ') — fliken töms och visar inloggning.');
+    this._session = null;
+    this._endClientSession({ purgeShared: false });
+    if (typeof App !== 'undefined' && App.showLogin) { try { App.showLogin(); } catch (e) {} }
+  },
 
-     - `newEmail === oldEmail` (SAMMA användare) betyder en NORMAL
-       token-refresh i en annan flik (`_doRefresh()`s `_saveSession()`
-       skriver om exakt samma nyckel) — INGEN invalidering görs, annars
-       hade en helt vanlig, bakgrunds-refresh i en flik tvingat ALLA
-       andra flikar att logga ut i onödan.
+  /* Tömmer allt användarspecifikt i DENNA flik: minne (state, index,
+     baslinjer), pågående läsningar, utkorg i minnet, synk, dialoger och
+     renderade sidor/meny. purgeShared: rensa även localStorage-cachen och
+     sessionStorage (utkorgar/journaler behålls). */
+  _endClientSession(opts) {
+    this._access = { state: 'none', email: null };
+    if (typeof DataSync !== 'undefined' && DataSync.stop) { try { DataSync.stop(); DataSync._lastSig = null; } catch (e) {} }
+    if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
+    if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
+    if (typeof ActivityService !== 'undefined' && ActivityService.resetForAccountChange) { try { ActivityService.resetForAccountChange(); } catch (e) {} }
+    if (typeof AOTimeSyncService !== 'undefined' && AOTimeSyncService.resetForAccountChange) { try { AOTimeSyncService.resetForAccountChange(); } catch (e) {} }
+    if (typeof SelectionModel !== 'undefined' && SelectionModel.clearAll) { try { SelectionModel.clearAll(); } catch (e) {} }
+    if (typeof _vfResetClientState === 'function') { try { _vfResetClientState(); } catch (e) { console.warn('[Auth] kunde inte tömma state:', e); } }
+    else if (typeof state !== 'undefined') state.currentUser = null;
+    this._clearRenderedApp();
+    if (opts && opts.purgeShared && typeof Storage !== 'undefined' && Storage.purgeUserCache) Storage.purgeUserCache();
+  },
 
-       RONDA 4-KORRIGERING (fel 1, verkligt reproducerad): att bara
-       IGNORERA en samma-användare-refresh räckte INTE — DENNA fliks
-       `_session` behöll då sin GAMLA, redan roterade `refresh_token`
-       (Supabase roterar `refresh_token` vid varje förnyelse). Nästa
-       gång DENNA flik själv försökte förnya sin (nu ogiltiga) token
-       och fick ett 401, anropade den `_clearSession()` — vilket tog
-       bort den ANDRA flikens NYARE, fullt giltiga session från den
-       DELADE `localStorage`, och den händelsen loggade i sin tur ut
-       ÄVEN den andra, egentligen helt oskyldiga fliken. Fixat genom
-       att ANTA (kopiera in) den nya sessionen i DENNA flik också vid
-       en samma-användare-händelse — ingen flik använder då längre en
-       redan inaktuell `refresh_token`.
-     - Annars (riktig utloggning, `newValue===null`, ELLER ett genuint
-       kontobyte, annan `user_email`): DENNA flikens `_session`
-       nollställs OCH `App.showLogin()` visas — matchar exakt vad
-       `logout()` redan gör för den flik som själv initierar
-       utloggningen.
-     - Skriver ALDRIG till `localStorage` själv härifrån (anropar
-       INTE `_clearSession()`/`removeItem` rakt av) — vid ett
-       kontobyte innehåller `vift_auth_v2` redan den ANDRA flikens
-       NYA, giltiga session; om DENNA flik då tog bort den nyckeln
-       hade den fliken själv blivit utloggad direkt efter sin egen,
-       just lyckade inloggning (en förstörande återkopplingsloop).
-     - RONDA 4-KORRIGERING (fel 2, verkligt reproducerad): nollställer
-       nu även `state.currentUser` vid en riktig utloggning/kontobyte
-       — tidigare lämnades den gamla användaridentiteten kvar i minnet
-       trots att `_session` redan var nollställd. Rör ALDRIG
-       `vift_outbox`/`vift_settleIntents` (osynkroniserad AO-/
-       tiddata) — `state.currentUser` är bara en referens till VEM som
-       är inloggad, ingen arbetsdata. */
+  _clearRenderedApp() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    try { if (typeof Modal !== 'undefined' && Modal.closeAll) Modal.closeAll(); } catch (e) {}
+    try { document.querySelectorAll('#modal-root .modal-overlay').forEach(function (el) { el.remove(); }); document.body.classList.remove('modal-open'); } catch (e) {}
+    try { document.querySelectorAll('#content-scroll .page .con').forEach(function (el) { el.innerHTML = ''; }); } catch (e) {}
+    ['bottom-nav', 'mobile-bottom-nav', 'mobile-more-sheet', 'mobile-clock-status', 'gsearch-dropdown-results'].forEach(function (id) {
+      try { const el = document.getElementById(id); if (el) el.innerHTML = ''; } catch (e) {}
+    });
+    try { const gi = document.getElementById('gsearch-topbar-input'); if (gi) gi.value = ''; } catch (e) {}
+    try { const b = document.getElementById('persist-recovery-banner'); if (b) b.remove(); } catch (e) {}
+    try {
+      if (typeof Router !== 'undefined') { Router.currentPage = null; Router.currentParams = {}; Router.history = []; }
+    } catch (e) {}
+  },
+
+  /* ── Flikar: storage-händelse (sessionen) + BroadcastChannel (behörigheter) ── */
+  _channel: null,
+  _broadcast(msg) {
+    try {
+      const m = Object.assign({ owner: this.ownerKey(), at: Date.now() }, msg);
+      if (this._channel) this._channel.postMessage(m);
+      else localStorage.setItem('vift_authzPing', JSON.stringify(m));
+    } catch (e) {}
+  },
+  _onBroadcast(m) {
+    if (!m || !this._session || m.owner !== this.ownerKey()) return;
+    if (m.type === 'authz') this.refreshAuthorization('broadcast');
+  },
+
+  /* BLOCKER-1 SLUTFÖRANDE / RONDA 4 (se versionshistoriken för bakgrunden):
+     - samma användare (normal token-förnyelse i en annan flik) → anta den
+       nya sessionen i denna flik också (ingen flik använder en redan
+       roterad refresh_token);
+     - annars (utloggning, newValue null, eller annan user_email) → denna
+       fliks session nollställs och inloggningen visas;
+     - skriver ALDRIG till localStorage själv härifrån (vid kontobyte
+       innehåller vift_auth_v2 redan den andra flikens nya session);
+     - jämförelsen görs mot DENNA fliks egen session (en redan utloggad
+       flik gör ingenting när en annan flik loggar in).
+     T3-A: fliken töms nu helt (minne, DOM, utkorg i minnet, synk) — inte
+     bara tid/AO — och behörighetsändringar i en flik når andra flikar för
+     samma användare via BroadcastChannel ('vift-auth'). */
   _installCrossTabSessionListener() {
     if (this._crossTabListenerInstalled) return;
     this._crossTabListenerInstalled = true;
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const self = this;
     window.addEventListener('storage', function (ev) {
-      if (!ev || ev.key !== self.SESSION_KEY) return;
-      /* RONDA 4-KORRIGERING (fel 1, uppföljning — verkligt reproducerad
-         mot egna tester): jämförelsen användes tidigare mot
-         `ev.oldValue` — den DELADE localStorage-nyckelns FÖREGÅENDE
-         värde, som inte nödvändigtvis har något att göra med DENNA
-         flikens EGEN kännedom. Om denna flik redan var utloggad
-         (`self._session === null`, t.ex. har aldrig loggat in än) men
-         en ANNAN flik loggade in för FÖRSTA gången (`ev.oldValue` då
-         `null`), tolkades det felaktigt som ett kontobyte och
-         `App.showLogin()` anropades i onödan i denna, redan utloggade
-         flik. Jämför nu istället mot DENNA flikens egen, aktuella
-         `self._session`s e-post — den enda relevanta referenspunkten
-         för om NÅGOT behöver ogiltigförklaras HÄR. Har denna flik
-         redan ingen session, finns inget att invalidera eller anta —
-         ingen åtgärd. */
+      if (!ev) return;
+      if (ev.key === 'vift_authzPing' && ev.newValue) { try { self._onBroadcast(JSON.parse(ev.newValue)); } catch (e) {} return; }
+      if (ev.key !== self.SESSION_KEY && ev.key !== null) return;
       const selfEmail = self._session ? self._session.user_email : null;
       if (selfEmail === null) return;
-      let newSession = null, newEmail = null;
-      try {
-        // Events can be queued behind a newer login/logout. Use the CURRENT
-        // shared session rather than the potentially stale event payload.
-        const currentRaw = localStorage.getItem(self.SESSION_KEY);
-        newSession = currentRaw ? JSON.parse(currentRaw) : null;
-        newEmail = newSession ? newSession.user_email : null;
-      } catch (e) {}
+      const newSession = self._sharedSession();
+      const newEmail = newSession ? newSession.user_email : null;
       if (newEmail !== null && newEmail === selfEmail) {
-        /* RONDA 4-KORRIGERING (fel 1): samma användare — anta
-           (kopiera in) den NYA sessionen i denna flik också, se
-           motiveringen ovan. */
-        self._session = newSession;
+        self._adoptSession(newSession, { save: false });
         return;
       }
-      self._session = null;
-      if (typeof state !== 'undefined') state.currentUser = null; // RONDA 4-KORRIGERING (fel 2)
-      if (typeof TimeEntriesReadService !== 'undefined') TimeEntriesReadService.resetForAccountChange();
-      if (typeof WorkOrdersReadService !== 'undefined') WorkOrdersReadService.resetForAccountChange(); // SÄKERHETSFYND V7
-      if (typeof App !== 'undefined' && App.showLogin) App.showLogin();
+      self._onIdentityLost(newSession ? 'switch' : 'logout');
     });
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        this._channel = new BroadcastChannel('vift-auth');
+        this._channel.onmessage = function (ev) { try { self._onBroadcast(ev && ev.data); } catch (e) {} };
+      }
+    } catch (e) { this._channel = null; }
   }
 };
 

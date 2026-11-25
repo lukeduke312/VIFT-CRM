@@ -66,22 +66,51 @@ const ActivityService = {
   _append: null,          // null = okänt, true = servern stöder appendActivity, false = äldre server
   _outbox: [],
   _flushing: false,
+  /* T3-A (SÄK-9): utkorgen i minnet hör till EN ägare (miljö + e-post,
+     `_outboxOwner`) och lagras under en ägarnycklad nyckel. Tidigare
+     användes state.currentUser.email, som aldrig sattes — kön fanns bara
+     i minnet och kunde efter ett kontobyte i samma flik skickas med nästa
+     användares session. Nu: vid kontobyte sparas kön under sin ägare och
+     töms ur minnet; den skickas bara när ägaren är inloggad. Posterna
+     själva skickas oförändrade (ägaren ligger i nyckeln, inte i posten). */
+  _outboxOwner: null,
+  _ownerId() {
+    try { return (typeof Auth !== 'undefined' && Auth.ownerIdentity) ? Auth.ownerIdentity() : null; } catch (e) { return null; }
+  },
+  _keyFor(id) { return id && id.email ? 'vift_activityOutbox::' + id.env + '::' + id.email : null; },
+  _ownerTag(id) { return id && id.email ? id.env + '|' + id.email : null; },
   _outboxKey() {
-    const u = (typeof state !== 'undefined' && state.currentUser && state.currentUser.email) || '';
-    return u ? 'vift_activityOutbox:' + u : null;
+    const id = this._ownerId();
+    if (this._outboxOwner && this._ownerTag(id) !== this._outboxOwner) this.resetForAccountChange();
+    if (id && !this._outboxOwner) this._outboxOwner = this._ownerTag(id);
+    return this._keyFor(id);
   },
   _saveOutbox() {
     const k = this._outboxKey(); if (!k) return;
-    try { localStorage.setItem(k, JSON.stringify(this._outbox.slice(-200))); } catch (e) {}
+    try { if (this._outbox.length) localStorage.setItem(k, JSON.stringify(this._outbox.slice(-200))); else localStorage.removeItem(k); } catch (e) {}
   },
   _loadOutbox() {
     const k = this._outboxKey(); if (!k) return;
     try { const v = JSON.parse(localStorage.getItem(k) || '[]'); if (Array.isArray(v)) v.forEach((e) => { if (e && e.id && !this._outbox.some((x) => x.id === e.id)) this._outbox.push(e); }); } catch (e) {}
   },
-  async _call(body) {
+  resetForAccountChange() {
+    if (this._outboxOwner && this._outbox.length) {
+      const parts = this._outboxOwner.split('|');
+      const k = this._keyFor({ env: parts[0], email: parts.slice(1).join('|') });
+      try { if (k) localStorage.setItem(k, JSON.stringify(this._outbox.slice(-200))); } catch (e) {}
+    }
+    this._outbox = [];
+    this._outboxOwner = null;
+  },
+  pendingCount() {
+    const k = this._outboxKey(); if (!k) return this._outbox.length;
+    this._loadOutbox();
+    return this._outbox.length;
+  },
+  async _call(body, ownerKey) {
     if (typeof Storage === 'undefined' || !Storage._authFetch || typeof Storage._functionsBase !== 'function') return { status: 0 };
     try {
-      const res = await Storage._authFetch(Storage._functionsBase() + '/store-key-write', { body: JSON.stringify(body), timeoutMs: Storage.WRITE_TIMEOUT_MS });
+      const res = await Storage._authFetch(Storage._functionsBase() + '/store-key-write', { body: JSON.stringify(body), timeoutMs: Storage.WRITE_TIMEOUT_MS, ownerKey: ownerKey || undefined });
       let data = {}; try { data = await res.json(); } catch (e) {}
       return { status: res.status, data };
     } catch (e) { return { status: 0 }; }
@@ -102,6 +131,7 @@ const ActivityService = {
   async _send(entry, legacyPersist) {
     const sup = await this.supportsAppend();
     if (!sup) { if (this._append === false && legacyPersist) persist(); else if (this._append === null && legacyPersist) persist(); return; }
+    this._outboxKey(); // byter ägare (sparar och tömmer) om inloggningen ändrats
     this._outbox.push(entry); this._saveOutbox(); this._markSynced();
     return this.flush();
   },
@@ -110,12 +140,17 @@ const ActivityService = {
      avslag (4xx) tas bort — det blir inte bättre av omsändning. */
   async flush() {
     if (this._flushing || this._append !== true) return;
+    /* T3-A: bara ägarens egen, aktuella session skickar kön. */
+    const me = (typeof Auth !== 'undefined' && Auth.ownerKey) ? Auth.ownerKey() : null;
+    if (typeof Auth !== 'undefined' && Auth.ownerKey && (!me || (typeof Auth.hasAccess === 'function' && !Auth.hasAccess()))) return;
     this._flushing = true;
     try {
       this._loadOutbox();
+      if (me && this._outboxOwner !== me) return;
       while (this._outbox.length) {
         const e = this._outbox[0];
-        const r = await this._call({ action: 'appendActivity', entry: e });
+        const r = await this._call({ action: 'appendActivity', entry: e }, me);
+        if (me && this._outboxOwner !== me) break;
         if (r.status === 0 || r.status >= 500) break;
         this._outbox.shift(); this._saveOutbox();
         if (r.status >= 400) console.warn('[ActivityService] aktivitet avvisad av servern:', r.data && r.data.error, e.type);

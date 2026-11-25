@@ -165,7 +165,7 @@ const Sidebar = {
              <p style="font-size:13px;color:var(--mt);">Inloggad: ${state.currentUser ? state.currentUser.username : '—'}</p>`,
       buttons: [
         { label: `${ic('settings',14)} Mina inställningar`, cls: 'btn bs bfull', onClick: () => { Modal.close(); Sidebar.showSettings(); } },
-        { label: 'Logga ut', cls: 'btn bd bfull', onClick: () => { Modal.close(); Auth.logout(); } },
+        { label: 'Logga ut', cls: 'btn bd bfull', onClick: () => { Modal.close(); Auth.requestLogout(); } },
         { label: 'Avbryt',   cls: 'btn bs',        onClick: () => Modal.close() }
       ]
     });

@@ -216,7 +216,7 @@ const TimeEntriesReadService = {
       : entries;
     state.timeEntries = merged;
     this._appliedSeq = mySeq;
-    try { localStorage.setItem('vift_timeEntries', JSON.stringify(merged)); } catch (e) {}
+    try { Storage._writeCache('vift_timeEntries', JSON.stringify(merged)); } catch (e) {}
     return true;
   }
 };

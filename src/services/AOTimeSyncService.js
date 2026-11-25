@@ -49,16 +49,130 @@ const AOTimeSyncService = {
   _flushing:   false,
   _available:  null, /* null = unknown yet, probed lazily */
 
-  /* ── Outbox persistence (localStorage, survives reload/crash) ────── */
-  _readOutbox() {
+  /* ── Outbox persistence (localStorage, survives reload/crash) ──────
+     T3-A (SÄK-9): utkorgen och intents lagras PER ÄGARE OCH MILJÖ:
+     'vift_outbox::<Supabase-projektets ref>::<e-post>'. En användare ser,
+     räknar och skickar bara sina egna poster; föregående användares poster
+     ligger kvar isolerade tills rätt användare loggar in. Varje post bär
+     dessutom owner/ownerUid/env och skickas bara om den aktuella sessionen
+     är ägaren (Auth.ownsEntry + ägarkontroll i Storage._authFetch).
+     Den gamla gemensamma nyckeln 'vift_outbox' (v3.4 och äldre) migreras
+     till ägarnycklad form när ägaren står i posten; poster utan ägare
+     ligger kvar där, skickas aldrig automatiskt och visas som en varning.
+     Utan identitetsmodell (vm-sandlådor i tests/*.test.js utan riktig
+     AuthService) används den gamla nyckeln som förut. */
+  _hasIdentityModel() {
+    return typeof Auth !== 'undefined' && typeof Auth.ownerIdentity === 'function' && typeof Auth.ownsEntry === 'function';
+  },
+  _ident() {
     try {
-      const raw = localStorage.getItem(this._OUTBOX_KEY);
+      if (typeof Auth === 'undefined') return null;
+      if (typeof Auth.ownerIdentity === 'function') return Auth.ownerIdentity();
+      const e = Auth.getUserEmail && Auth.getUserEmail();
+      return e ? { email: String(e).toLowerCase(), uid: null, env: (typeof Storage !== 'undefined' && Storage.envRef) ? Storage.envRef() : '' } : null;
+    } catch (e) { return null; }
+  },
+  _bucketKey(base, id) {
+    if (id === undefined) id = this._ident();
+    if (!id || !id.email) return base;
+    return base + '::' + id.env + '::' + id.email;
+  },
+  _readArr(key) {
+    try {
+      const raw = localStorage.getItem(key);
       const arr = raw ? JSON.parse(raw) : [];
       return Array.isArray(arr) ? arr : [];
     } catch (e) { return []; }
   },
+  _writeArr(key, arr) {
+    try {
+      if (!arr.length && key.indexOf('::') !== -1) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(arr));
+    } catch (e) {}
+  },
+  _readOutbox() {
+    this._migrateLegacy();
+    return this._readArr(this._bucketKey(this._OUTBOX_KEY));
+  },
   _writeOutbox(arr) {
-    try { localStorage.setItem(this._OUTBOX_KEY, JSON.stringify(arr)); } catch (e) {}
+    this._writeArr(this._bucketKey(this._OUTBOX_KEY), arr);
+  },
+
+  /* v3.4 → ägarnycklad form. Idempotent; körs när en identitet finns. */
+  _legacyMigratedFor: null,
+  _migrateLegacy() {
+    if (!this._hasIdentityModel()) return;
+    const id = this._ident();
+    if (!id || !id.email) return;
+    const tag = id.env + '|' + id.email;
+    if (this._legacyMigratedFor === tag) return;
+    this._legacyMigratedFor = tag;
+    try {
+      const legacy = this._readArr(this._OUTBOX_KEY);
+      const intents = this._readArr(this._INTENT_KEY);
+      if (!legacy.length && !intents.length) return;
+      const ownerOfIdem = {};
+      const keep = [];
+      const moved = {};
+      legacy.forEach((e) => {
+        if (e && e.owner) {
+          const owner = String(e.owner).toLowerCase();
+          ownerOfIdem[e.id] = owner;
+          (moved[owner] = moved[owner] || []).push(Object.assign({}, e, { owner: owner, env: e.env || id.env }));
+        } else keep.push(e);
+      });
+      Object.keys(moved).forEach((owner) => {
+        const key = this._bucketKey(this._OUTBOX_KEY, { email: owner, env: id.env });
+        const cur = this._readArr(key);
+        moved[owner].forEach((e) => { if (!cur.some((x) => x.id === e.id)) cur.push(e); });
+        this._writeArr(key, cur);
+      });
+      this._writeArr(this._OUTBOX_KEY, keep);
+      const keepI = [];
+      const movedI = {};
+      intents.forEach((it) => {
+        const owner = it && (it.owner ? String(it.owner).toLowerCase() : ownerOfIdem[it.idemKey]);
+        if (owner) (movedI[owner] = movedI[owner] || []).push(Object.assign({}, it, { owner: owner, env: it.env || id.env }));
+        else keepI.push(it);
+      });
+      Object.keys(movedI).forEach((owner) => {
+        const key = this._bucketKey(this._INTENT_KEY, { email: owner, env: id.env });
+        const cur = this._readArr(key);
+        movedI[owner].forEach((it) => { if (!cur.some((x) => x.idemKey === it.idemKey)) cur.push(it); });
+        this._writeArr(key, cur);
+      });
+      this._writeArr(this._INTENT_KEY, keepI);
+      const n = Object.keys(moved).reduce((a, k) => a + moved[k].length, 0);
+      if (n) console.warn('[AOTimeSyncService] ' + n + ' utkorgspost(er) från en äldre version flyttade till ägarnycklad utkorg.');
+      if (keep.length || keepI.length) console.warn('[AOTimeSyncService] ' + (keep.length + keepI.length) + ' post(er) från en äldre version saknar ägare — behålls, skickas inte automatiskt.');
+    } catch (e) { console.warn('[AOTimeSyncService] migrering av äldre utkorg misslyckades (inget raderat):', e); }
+  },
+  /* Poster/intents från en äldre version vars ägare inte kan fastställas. */
+  legacyUnownedCount() {
+    if (!this._hasIdentityModel()) return 0;
+    this._migrateLegacy();
+    return this._readArr(this._OUTBOX_KEY).length + this._readArr(this._INTENT_KEY).filter(function (it) { return it && !it.applied; }).length;
+  },
+
+  /* Ny inloggning/utloggning i denna flik: inga UI-återanrop eller
+     avslagsbesked från föregående användare följer med. Utkorgarna i
+     localStorage rörs inte. */
+  resetForAccountChange() {
+    this._settleCallbacks = {};
+    this._rejections = [];
+    this._legacyMigratedFor = null;
+  },
+
+  /* "Synka nu" före utloggning: skicka alla egna poster, även de som nått
+     taket för automatiska försök. */
+  async syncAllNow() {
+    const box = this._readOutbox();
+    for (let i = 0; i < box.length; i++) {
+      const still = this._readOutbox().find(function (it) { return it.id === box[i].id; });
+      if (!still) continue;
+      try { await this._sendInOrder(still); } catch (e) {}
+    }
+    return this.pendingCount();
   },
 
   /* ── UUID (idempotency key) — crypto.randomUUID with a safe fallback ── */
@@ -76,9 +190,15 @@ const AOTimeSyncService = {
      avvisad och togs bort — A:s arbetstid försvann. Poster utan ägare
      (skapade före denna ändring) behandlas som förut. */
   _owner() {
-    try { return String((typeof Auth !== 'undefined' && Auth.getUserEmail && Auth.getUserEmail()) || '').toLowerCase(); } catch (e) { return ''; }
+    const id = this._ident();
+    return id && id.email ? id.email : '';
   },
-  _isMine(entry) { return !entry || !entry.owner || entry.owner === this._owner(); },
+  /* Läsväg: hör posten till den här användaren? Sändväg: se _sendOne. */
+  _isMine(entry) {
+    if (!entry) return true;
+    if (!this._hasIdentityModel()) return !entry.owner || entry.owner === this._owner();
+    return !!entry.owner && String(entry.owner).toLowerCase() === this._owner();
+  },
 
   /* ── Is a given AO/time-entry id currently unconfirmed (still in the
        outbox, not yet ACKed by the server)? Read paths (invoicing,
@@ -163,7 +283,7 @@ const AOTimeSyncService = {
   /* ── Low-level: call the Edge Function (reuses Storage._authFetch's
        JWT-refresh behavior for consistency with every other Supabase
        call in this codebase). Returns {ok:true, data} or {ok:false, error, httpStatus}. */
-  async _call(payload) {
+  async _call(payload, callOpts) {
     if (typeof Storage === 'undefined' || !Storage._authFetch) {
       return { ok: false, error: 'storage_unavailable' };
     }
@@ -180,13 +300,13 @@ const AOTimeSyncService = {
          EF + radlåst RPC); allt annat oförändrat till ao-time-write. Även
          utkorgens omsändningar följer samma regel. */
       const fn = (payload && (payload.action === 'append_log' || payload.action === 'remove_log')) ? this._LOG_FN_NAME : this._FN_NAME;
-      const res = await Storage._authFetch(base + '/' + fn, { body: JSON.stringify(payload), timeoutMs: Storage.WRITE_TIMEOUT_MS });
+      const res = await Storage._authFetch(base + '/' + fn, { body: JSON.stringify(payload), timeoutMs: Storage.WRITE_TIMEOUT_MS, ownerKey: callOpts && callOpts.ownerKey });
       let data = null;
       try { data = await res.json(); } catch (e) {}
       if (!res.ok) return { ok: false, error: (data && data.error) || ('http_' + res.status), httpStatus: res.status };
       return { ok: true, data: data || {} };
     } catch (e) {
-      return { ok: false, error: e.isAuthExpired ? 'auth_expired' : ('network: ' + (e.message || e)) };
+      return { ok: false, error: e.isAuthExpired ? 'auth_expired' : (e.isOwnerMismatch ? 'owner_mismatch' : ('network: ' + (e.message || e))) };
     }
   },
 
@@ -335,14 +455,11 @@ const AOTimeSyncService = {
   },
 
   _readIntents() {
-    try {
-      const raw = localStorage.getItem(this._INTENT_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
-    } catch (e) { return []; }
+    this._migrateLegacy();
+    return this._readArr(this._bucketKey(this._INTENT_KEY));
   },
   _writeIntents(arr) {
-    try { localStorage.setItem(this._INTENT_KEY, JSON.stringify(arr)); } catch (e) {}
+    this._writeArr(this._bucketKey(this._INTENT_KEY), arr);
   },
 
   /* Any kind+refId with a NOT-YET-APPLIED intent record — covers BOTH
@@ -369,7 +486,9 @@ const AOTimeSyncService = {
   _recordIntent(idempotencyKey, intent) {
     const arr = this._readIntents();
     if (arr.some(function(it) { return it.idemKey === idempotencyKey; })) return; // already recorded (e.g. a resend with the same key)
-    arr.push({ idemKey: idempotencyKey, intent, settled: false, settleResult: null, applied: false, createdAt: new Date().toISOString() });
+    const id = this._ident();
+    arr.push({ idemKey: idempotencyKey, intent, settled: false, settleResult: null, applied: false, createdAt: new Date().toISOString(),
+      owner: id ? id.email : '', env: id ? id.env : '' });
     this._writeIntents(arr);
   },
 
@@ -473,10 +592,24 @@ const AOTimeSyncService = {
     opts = opts || {};
     const idempotencyKey = payload.idempotencyKey || this._uuid();
     payload = Object.assign({}, payload, { idempotencyKey });
+    /* T3-A (SÄK-9): en flik utan giltig, aktuell session med åtkomst
+       (utloggad, utgången, ogiltigförklarad av en annan flik) köar ingenting
+       — annars skulle en åtgärd gjord efter utloggningen senare skickas i
+       den gamla identitetens namn. Besked i stället för tyst kö. */
+    if (this._hasIdentityModel() && (!Auth.identity() || (typeof Auth.hasAccess === 'function' && !Auth.hasAccess()) ||
+        (typeof Auth.assertSessionCurrent === 'function' && !Auth.assertSessionCurrent()))) {
+      const rejected = { ok: false, error: 'auth_expired', final: true, entry: { id: idempotencyKey, entityType, localRefId, payload } };
+      if (typeof showToast === 'function') showToast('Du är inte inloggad — ändringen sparades inte. Logga in och försök igen.', 6000);
+      if (opts.onSettled) { try { opts.onSettled(rejected); } catch (e) {} }
+      return rejected;
+    }
+    const _id = this._ident();
     const entry = {
       id: idempotencyKey,
       entityType, localRefId, payload,
       owner: this._owner(),
+      ownerUid: (_id && _id.uid) || null,
+      env: (_id && _id.env) || '',
       attempts: 0,
       createdAt: new Date().toISOString()
     };
@@ -582,8 +715,16 @@ const AOTimeSyncService = {
   _MAX_AUTO_RETRY_ATTEMPTS: 8,
 
   async _sendOne(entry) {
+    /* T3-A: bara ägarens egen, aktuella session får skicka posten. En post
+       som tillhör någon annan (eller när sessionen upphört) ligger kvar,
+       oförändrad, och räknas inte som ett försök. */
+    let ownerKey;
+    if (this._hasIdentityModel()) {
+      if (!Auth.ownsEntry(entry)) return { ok: false, error: 'owner_mismatch', entry, final: false };
+      ownerKey = Auth.ownerKey();
+    }
     entry.attempts = (entry.attempts || 0) + 1;
-    const r = await this._call(entry.payload);
+    const r = await this._call(entry.payload, { ownerKey: ownerKey });
     if (r.ok) {
       this._removeFromOutbox(entry.id);
       const result = { ok: true, data: r.data, entry };

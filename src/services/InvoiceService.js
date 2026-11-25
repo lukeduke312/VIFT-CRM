@@ -106,18 +106,18 @@ const InvoiceService = {
     const idx = state.invoices.findIndex(i => i.id === inv.id);
     if (idx >= 0) state.invoices[idx] = inv;
     else state.invoices.unshift(inv);
-    try { localStorage.setItem('vift_invoices', JSON.stringify(state.invoices)); } catch (e) {}
+    try { Storage._writeCache('vift_invoices', JSON.stringify(state.invoices)); } catch (e) {}
   },
 
   _removeLocally(invId) {
     state.invoices = (state.invoices || []).filter(i => i.id !== invId);
-    try { localStorage.setItem('vift_invoices', JSON.stringify(state.invoices)); } catch (e) {}
+    try { Storage._writeCache('vift_invoices', JSON.stringify(state.invoices)); } catch (e) {}
   },
 
   _applyActivityLog(log) {
     if (Array.isArray(log)) {
       state.activityLog = log;
-      try { localStorage.setItem('vift_activityLog', JSON.stringify(state.activityLog)); } catch (e) {}
+      try { Storage._writeCache('vift_activityLog', JSON.stringify(state.activityLog)); } catch (e) {}
     }
   },
 
@@ -804,8 +804,8 @@ const InvoiceService = {
     if (idx >= 0) state.invoices[idx] = r.invoice;
     if (Array.isArray(r.activityLog)) state.activityLog = r.activityLog;
     try {
-      localStorage.setItem('vift_invoices', JSON.stringify(state.invoices));
-      localStorage.setItem('vift_activityLog', JSON.stringify(state.activityLog));
+      Storage._writeCache('vift_invoices', JSON.stringify(state.invoices));
+      Storage._writeCache('vift_activityLog', JSON.stringify(state.activityLog));
     } catch (e) {}
 
     const reactivating = prevStatus === 'makulerad' && status === 'utkast';

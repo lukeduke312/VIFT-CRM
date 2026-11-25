@@ -70,7 +70,7 @@ const RonderingSyncService = {
     const idx = state.ronderingspass.findIndex(function(p) { return p.id === pass.id; });
     if (idx >= 0) state.ronderingspass[idx] = pass;
     else state.ronderingspass.push(pass);
-    try { localStorage.setItem('vift_ronderingspass', JSON.stringify(state.ronderingspass)); } catch (e) {}
+    try { Storage._writeCache('vift_ronderingspass', JSON.stringify(state.ronderingspass)); } catch (e) {}
   },
 
   async pointPatch(passId, categoryId, pointId, status, comment, deviationId, workOrderId) {

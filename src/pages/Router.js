@@ -230,6 +230,9 @@ const Router = {
     this._goingBack = false;
 
     // ── Behörighetskontroll ──────────────────────────────────
+    /* T3-A (SÄK-10): utan inloggning med fungerande roll renderas ingenting
+       alls (inte heller dashboarden med "Ingen behörighet"). */
+    if (!Auth.isLoggedIn()) return;
     if (!Auth.canViewPage(pageId)) {
       // V29 §6: access-denied skickar alltid till Dashboard, oavsett vilken
       // sida som begärdes — så en kvarliggande markering ska behandlas som
