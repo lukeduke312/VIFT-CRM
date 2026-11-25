@@ -80,12 +80,57 @@ const CustomersPage = {
     return true;
   },
 
+  /* V3 register (2026-11-26): status (Aktiva/Inaktiva) är en egen flikgrupp
+     och kundtyp en chipgrupp (V3-KOMPONENTSTANDARD §4). Tidigare låg
+     "Inaktiva" som en sjätte "typ"; urvalen är desamma (Aktiva + Alla =
+     tidigare "Alla", Inaktiva + Alla = tidigare "Inaktiva") och typ kan nu
+     även kombineras med Inaktiva. Äldre anrop som sätter
+     _typeFilter='inaktiva' tolkas som statusen Inaktiva. */
+  _status: 'aktiva', // 'aktiva' | 'inaktiva'
+
+  _normFilters() {
+    if (this._typeFilter === 'inaktiva') { this._status = 'inaktiva'; this._typeFilter = 'alla'; }
+    if (this._status !== 'inaktiva') this._status = 'aktiva';
+    if (!this._typeFilter) this._typeFilter = 'alla';
+  },
+
   render() {
     const el = document.getElementById('pg-crm-content');
     if (!el) return;
+    this._normFilters();
+    const canManage = Auth.can('customer_manage');
+    el.innerHTML = `<div class="rg" data-rg="crm">
+      ${RegisterUi.bar({
+        id: 'crm-search', placeholder: 'Sök kund, org.nr, telefon, ort…', label: 'Sök kund (namn, kundnr, org.nr, telefon, e-post, ort)', value: this.q,
+        oninput: "CustomersPage.q=this.value;RegisterUi.later('crm',function(){CustomersPage.renderList()})",
+        menu: [
+          canManage ? { label: 'Importera', icon: 'upload', onclick: "Router.showPage('pg-import-wizard',{type:'customer'})" } : null,
+          { label: 'Exportera', icon: 'download', onclick: "ImportExportService.showExportMenu('customer',this)" }
+        ],
+        primary: canManage ? { label: 'Ny kund', onclick: 'CustomersPage.openCreate()' } : null
+      })}
+      <div class="rg-filters" id="crm-filters"></div>
+      <div id="crm-list" class="rg-listwrap"></div>
+    </div>`;
+    this.renderList();
+  },
+
+  _setStatus(s) { this._status = s === 'inaktiva' ? 'inaktiva' : 'aktiva'; this.renderList(); },
+  _setType(t) { this._typeFilter = t || 'alla'; this.renderList(); },
+  _clearFilters() {
+    this.q = ''; this._typeFilter = 'alla';
+    const i = document.getElementById('crm-search'); if (i) i.value = '';
+    this.renderList();
+  },
+
+  renderList() {
+    const el = document.getElementById('crm-list');
+    if (!el) return;
+    this._normFilters();
+    const inactiveView = this._status === 'inaktiva';
     const custActions = [
       { id: 'export', label: 'Exportera', icon: 'download', type: 'export' },
-      this._typeFilter === 'inaktiva'
+      inactiveView
         ? { id: 'reactivate', label: 'Återaktivera', icon: 'rotate-ccw', permission: 'customer_manage', type: 'confirm',
             confirmTitle: n => `Återaktivera ${n} kund${n===1?'':'er'}?`,
             confirmButtonLabel: n => `Återaktivera ${n}`,
@@ -98,103 +143,107 @@ const CustomersPage = {
     ];
     SelectionModel.init('customer', { stateKey: 'customers', actions: custActions });
 
-    const TYPE_TABS = [
-      { key:'alla',            label:'Alla' },
+    const all = state.customers || [];
+    const nAct = all.filter(c => !c.inactive).length;
+    const nInact = all.length - nAct;
+    const statusBase = all.filter(c => inactiveView ? c.inactive : !c.inactive);
+    const searched = this.q ? CustomerService.search(this.q).filter(c => inactiveView ? c.inactive : !c.inactive) : statusBase;
+    /* V49A1: jämför NORMALISERAT värde, inte rått c.type — annars
+       försvinner en legacy-kund (type='company' e.dyl.) tyst ur
+       Företag-filtret trots att typeLabel() redan visar "Företag" för
+       den överallt annars. Se RAPPORT-V49A1.md §12. */
+    const TYPES = [
+      { key:'alla',            label:'Alla typer' },
       { key:'foretag',         label:'Företag' },
       { key:'brf',             label:'BRF' },
-      { key:'fastighetsagare', label:'Fastighetsäg.' },
-      { key:'privat',          label:'Privat' },
-      { key:'inaktiva',        label:'Inaktiva' }
+      { key:'fastighetsagare', label:'Fastighetsägare' },
+      { key:'privat',          label:'Privat' }
     ];
-
-    el.innerHTML = `
-      <div class="ao-toolbar" style="margin-bottom:6px;">
-        <div class="swrap">
-          <span class="sico">${ic('search',16)}</span>
-          <input type="search" id="crm-search" placeholder="Sök kund, telefon, e-post…"
-            value="${esc(this.q)}"
-            oninput="CustomersPage.q=this.value;CustomersPage.renderList()">
-        </div>
-        <div class="ao-toolbar-right">
-          ${Auth.can('customer_manage') ? `<button class="btn bs bsm ao-import-btn" onclick="Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',14)} Importera</button>` : ''}
-          <button class="btn bs bsm ao-export-btn" onclick="ImportExportService.showExportMenu('customer',this)">${ic('download',14)} Exportera</button>
-          <div class="ao-overflow-wrap">
-            <button class="btn bs bsm ao-overflow-btn" id="ao-ovf-btn-crm" aria-label="Fler alternativ" aria-haspopup="menu" aria-expanded="false" onclick="aoToggleOverflow('ao-ovf-crm',this)">${ic('more-vertical',14)}</button>
-            <div class="ao-overflow-menu" id="ao-ovf-crm" role="menu">
-              ${Auth.can('customer_manage') ? `<button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();Router.showPage('pg-import-wizard',{type:'customer'})">${ic('upload',13)} Importera</button>` : ''}
-              <button class="ao-overflow-menu-item" role="menuitem" onclick="aoCloseOverflow();ImportExportService.showExportMenu('customer',this)">${ic('download',13)} Exportera</button>
-            </div>
-          </div>
-          ${Auth.can('customer_manage') ? `<button class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)} Ny kund</button>` : ''}
-        </div>
-      </div>
-      <div class="ao-tabs-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <div class="ftabs ao-status-tabs" style="flex:1;margin-bottom:0;">
-          ${TYPE_TABS.map(t =>
-            `<button class="ft ${this._typeFilter===t.key?'on':''}"
-              onclick="CustomersPage._typeFilter='${t.key}';CustomersPage.renderList()">${esc(t.label)}</button>`
-          ).join('')}
-        </div>
-        <div class="ao-selall-cell" id="crm-sel-all"></div>
-      </div>
-      <div id="crm-list"></div>`;
-    this.renderList();
-  },
-
-  renderList() {
-    const el = document.getElementById('crm-list');
-    if (!el) return;
-    let list = CustomerService.search(this.q);
-
-    if (this._typeFilter === 'inaktiva') {
-      list = list.filter(c => c.inactive);
-    } else if (this._typeFilter && this._typeFilter !== 'alla') {
-      /* V49A1: jämför NORMALISERAT värde, inte rått c.type — annars
-         försvinner en legacy-kund (type='company' e.dyl.) tyst ur
-         Företag-fliken trots att typeLabel() redan visar "Företag" för
-         den överallt annars. Se RAPPORT-V49A1.md §12. */
-      list = list.filter(c => CustomerService.normalizeType(c.type) === this._typeFilter && !c.inactive);
-    } else {
-      list = list.filter(c => !c.inactive);
-    }
+    const nType = {};
+    searched.forEach(c => { const k = CustomerService.normalizeType(c.type); nType[k] = (nType[k] || 0) + 1; });
+    let list = this._typeFilter !== 'alla' ? searched.filter(c => CustomerService.normalizeType(c.type) === this._typeFilter) : searched;
     // Sortering
     list = list.slice().sort((a, b) => {
       const na = CustomerService.displayName(a), nb = CustomerService.displayName(b);
       return na.localeCompare(nb, 'sv');
     });
+
+    const fEl = document.getElementById('crm-filters');
+    if (fEl) fEl.innerHTML = `
+      <div class="ftabs rg-seg" role="group" aria-label="Status">
+        ${[['aktiva','Aktiva',nAct],['inaktiva','Inaktiva',nInact]].map(([k,l,n]) =>
+          `<button type="button" class="ft ${this._status===k?'on':''}" aria-pressed="${this._status===k}" onclick="CustomersPage._setStatus('${k}')">${l}<span class="ft-n">${n}</span></button>`).join('')}
+      </div>
+      <div class="rg-chips" role="group" aria-label="Kundtyp">
+        ${TYPES.map(t => UiKit.chip(t.label, `CustomersPage._setType('${t.key}')`, { on: this._typeFilter === t.key, n: t.key === 'alla' ? searched.length : (nType[t.key] || 0) })).join('')}
+      </div>`;
+
     const visibleIds = list.map(c => c.id);
-    const selAll = document.getElementById('crm-sel-all');
-    if (selAll) selAll.innerHTML = SelectionModel.selectAllHtml(visibleIds);
+    const filtered = !!this.q || this._typeFilter !== 'alla';
+    const head = RegisterUi.count(list.length, statusBase.length, 'kund', 'kunder', {
+      clear: filtered ? 'CustomersPage._clearFilters()' : '',
+      selAll: list.length ? SelectionModel.selectAllHtml(visibleIds) : ''
+    });
 
     if (list.length === 0) {
-      el.innerHTML = `<div class="empty"><span class="empty-ico">${ic('users',36)}</span><h3>Inga kunder</h3>
-        <p>${this.q ? 'Inga träffar för sökning' : 'Skapa din första kund'}</p>
-        ${this.q ? `<button class="btn bs bsm" style="margin-top:8px;" onclick="CustomersPage.q='';document.getElementById('crm-search').value='';CustomersPage.renderList()">Rensa sökning</button>` : ''}
-      </div>`;
+      el.innerHTML = filtered
+        ? RegisterUi.empty({ icon: 'search', title: 'Inga träffar', text: this.q ? 'Inga kunder matchar sökningen.' : 'Inga kunder av vald typ.',
+            action: `<button type="button" class="btn bs bsm" onclick="CustomersPage._clearFilters()">Rensa filter</button>` })
+        : inactiveView
+          ? RegisterUi.empty({ icon: 'archive', title: 'Inga inaktiva kunder', text: 'Kunder som arkiveras visas här och kan återaktiveras.' })
+          : RegisterUi.empty({ icon: 'users', title: 'Inga kunder ännu', text: 'Skapa din första kund — eller importera kundregistret.',
+              action: Auth.can('customer_manage') ? `<button type="button" class="btn bp bsm" onclick="CustomersPage.openCreate()">${ic('plus',14)}<span>Ny kund</span></button>` : '' });
       return;
     }
+    /* Antal fastigheter och öppna AO per kund — räknas EN gång per
+       rendering (samma definition som CustomerService.getActiveAOs). */
+    const nProps = {}, nAO = {};
+    (state.properties || []).forEach(p => { if (p && p.customerId && p.status !== 'inaktiv') nProps[p.customerId] = (nProps[p.customerId] || 0) + 1; });
+    (state.workOrders || []).forEach(a => { if (a && a.customerId && !['klar','fakturerad','avbruten'].includes(a.status)) nAO[a.customerId] = (nAO[a.customerId] || 0) + 1; });
     const selMode = SelectionModel.count() > 0;
-    el.innerHTML = list.map(cu => {
+    const rows = list.map(cu => {
       const name = CustomerService.displayName(cu);
-      const aos  = CustomerService.getActiveAOs(cu.id).length;
+      const a = RegisterUi.arg(cu.id);
+      const isPriv = CustomerService.normalizeType(cu.type) === 'privat';
+      const contact = cu.contactPerson || ((cu.contacts || [])[0] || {}).name || '';
+      const reach = [cu.phone, cu.email].filter(Boolean).join(' · ');
+      const aos = nAO[cu.id] || 0, props = nProps[cu.id] || 0;
       const selected = SelectionModel.isSelected(cu.id);
-      return `
-        <div class="list-item${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${cu.id}"
-          onclick="SelectionModel.rowClick('${cu.id}', function(){ CustomersPage.openDetail('${cu.id}'); })">
-          <div class="item-row">
-            ${SelectionModel.checkboxHtml(cu.id, name)}
-            <div style="flex:1;min-width:0;">
-              <div class="item-title">${esc(name)}</div>
-              <div class="item-sub">${CustomerService.typeLabel(cu.type)}${cu.phone?' · '+esc(cu.phone):''}${cu.city?' · '+esc(cu.city):''}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              ${aos > 0 ? `<span class="bdg bdg-blue">${aos} AO</span>` : ''}
-              <span class="bdg bdg-grey">${esc(CustomerService.displayNumber(cu))}</span>
-            </div>
-            <button type="button" class="row-open-btn" title="Öppna" aria-label="Öppna kund" onclick="event.stopPropagation();CustomersPage.openDetail('${cu.id}')">${ic('chevron-right',16)}</button>
-          </div>
-        </div>`;
+      return `<tr class="rg-row${selMode?' sel-mode':''}${selected?' selected':''}" data-sel-row-id="${esc(cu.id)}" tabindex="0"
+          onclick="SelectionModel.rowClick(${a}, function(){ CustomersPage.openDetail(${a}); })"
+          onkeydown="if(event.key==='Enter'&&event.target===this){CustomersPage.openDetail(${a})}">
+        <td class="rg-c-sel">${SelectionModel.checkboxHtml(cu.id, name)}</td>
+        <td class="rg-c-main">
+          <div class="rg-title" title="${esc(name)}">${esc(name)}</div>
+          <div class="rg-sub">${esc(CustomerService.typeLabel(cu.type))} · ${esc(CustomerService.displayNumber(cu))}${cu.inactive ? ' · Inaktiv' : ''}</div>
+          <div class="rg-msub">${esc([cu.phone, cu.city].filter(Boolean).join(' · ') || 'Telefon och ort saknas')}</div>
+        </td>
+        <td class="rg-c-x rg-num rg-h-md">${!isPriv && cu.orgNr ? esc(cu.orgNr) : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-x" title="${esc([contact, reach].filter(Boolean).join(' — '))}">${contact ? esc(contact) : '<span class="rg-none">Ingen kontakt</span>'}${reach ? `<span class="rg-l2">${esc(reach)}</span>` : ''}</td>
+        <td class="rg-c-x rg-h-lg" title="${esc(cu.city || '')}">${cu.city ? esc(cu.city) : '<span class="rg-none">—</span>'}</td>
+        <td class="rg-c-x c-num">${props || '<span class="rg-none">0</span>'}</td>
+        <td class="rg-c-x c-num">${aos ? `<span class="bdg bdg-blue">${aos}</span>` : '<span class="rg-none">0</span>'}</td>
+        <td class="rg-c-end">
+          ${aos ? `<span class="bdg bdg-blue rg-m-only">${aos} AO</span>` : ''}
+          ${RegisterUi.openBtn(`CustomersPage.openDetail(${a})`, 'Öppna ' + name)}
+        </td>
+      </tr>`;
     }).join('');
+    el.innerHTML = `<div class="dt-wrap rg-wrap">${head}
+      <div class="dt-scroll"><table class="dtab rg-tbl${selMode?' sel-mode':''}">
+        <thead><tr>
+          <th class="rg-w-sel"><span class="sr-only">Markera</span></th>
+          <th>Kund</th>
+          <th class="rg-w-s rg-h-md">Org.nr</th>
+          <th class="rg-w-l">Kontakt</th>
+          <th class="rg-w-m rg-h-lg">Ort</th>
+          <th class="rg-w-xs c-num">Fastigheter</th>
+          <th class="rg-w-xs c-num">Öppna AO</th>
+          <th class="rg-w-end"><span class="sr-only">Öppna</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
   },
 
   /* Bulk arkivera/återaktivera — samma fält som CustomerDetailPage.toggleInactive()
