@@ -1,14 +1,14 @@
 {
   "summary": {
-    "when": "2026-11-25T08:19:28.578Z",
+    "when": "2026-11-25T16:23:19.470Z",
     "target": "simulerad backend (FakeSupabase)",
     "browser": "Chromium (Playwright)",
-    "total": 218,
-    "passed": 216,
+    "total": 223,
+    "passed": 222,
     "failed": 0,
     "blocked": 1,
-    "known": 1,
-    "durationMs": 1588338
+    "known": 0,
+    "durationMs": 1611345
   },
   "results": [
     {
@@ -18,12 +18,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 942,
+      "ms": 1000,
       "notes": [
         "Laddade 15 AO och 7 kunder"
       ],
       "metrics": {
-        "inloggning → app laddad (ms)": 892
+        "inloggning → app laddad (ms)": 953
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -38,7 +38,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 383,
+      "ms": 424,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -56,7 +56,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 858,
+      "ms": 839,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -72,7 +72,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1486,
+      "ms": 1453,
       "notes": [
         "ekonomi såg 6 poster, fältarbetaren 3"
       ],
@@ -90,7 +90,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1138,
+      "ms": 1149,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -106,7 +106,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 923,
+      "ms": 976,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -122,19 +122,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14490,
+      "ms": 14527,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid per sida (ms)": 364,
-        "långsammaste sida (ms)": 391
+        "medel renderingstid per sida (ms)": 365,
+        "långsammaste sida (ms)": 397
       },
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -147,14 +147,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8723,
+      "ms": 8790,
       "notes": [
         "23 menyval klickade"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -167,7 +167,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14618,
+      "ms": 14593,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -178,7 +178,7 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -191,18 +191,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14556,
+      "ms": 14623,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (laptop, ms)": 363
+        "medel renderingstid (laptop, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -215,18 +215,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14580,
+      "ms": 14569,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (tablet, ms)": 364
+        "medel renderingstid (tablet, ms)": 363
       },
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -239,18 +239,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14505,
+      "ms": 14596,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (iphone, ms)": 363
+        "medel renderingstid (iphone, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -263,18 +263,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14508,
+      "ms": 14583,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (android, ms)": 363
+        "medel renderingstid (android, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -287,17 +287,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3452,
+      "ms": 3403,
       "notes": [
         "besked: Kund skapad"
       ],
       "metrics": {
-        "spara ny kund → bekräftelse (ms)": 340
+        "spara ny kund → bekräftelse (ms)": 284
       },
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -310,7 +310,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2140,
+      "ms": 2171,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -326,7 +326,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2482,
+      "ms": 2567,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -344,7 +344,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2439,
+      "ms": 2585,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -360,7 +360,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1753,
+      "ms": 1699,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -376,7 +376,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2516,
+      "ms": 2575,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -394,7 +394,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2972,
+      "ms": 3007,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -415,7 +415,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2792,
+      "ms": 2855,
       "notes": [
         "objektformulär: new-obj-type, new-obj-num, new-obj-name, new-obj-entrance, new-obj-stairwell, new-obj-floor, new-obj-area, new-obj-status, new-obj-access"
       ],
@@ -438,7 +438,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2656,
+      "ms": 2725,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -454,14 +454,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8712,
+      "ms": 8927,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -474,7 +474,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4989,
+      "ms": 5034,
       "notes": [
         "serverkontrollen är modellerad — måste upprepas mot riktig STAGING"
       ],
@@ -483,7 +483,7 @@
         "[Storage.writeBusinessKeyMerge] avvisad för vift_articles: forbidden"
       ],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
@@ -497,12 +497,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2219,
+      "ms": 2195,
       "notes": [
         "besked: AO-(sparas…) skapad"
       ],
       "metrics": {
-        "skapa AO → serverbekräftad (ms)": 1369
+        "skapa AO → serverbekräftad (ms)": 1269
       },
       "consoleErrors": [],
       "netErrors": [
@@ -519,13 +519,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4137,
+      "ms": 4127,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -538,18 +538,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2919,
+      "ms": 2761,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 8
     },
     {
       "id": "LOG-02",
@@ -558,21 +557,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1609,
+      "ms": 1630,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 11
+      "requests": 8
     },
     {
       "id": "LOG-03",
@@ -581,24 +577,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3338,
+      "ms": 3353,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [
-        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
-        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
-        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
-        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
-        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
-        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 9
+      "requests": 8
     },
     {
       "id": "LOG-04",
@@ -607,18 +596,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4170,
+      "ms": 4320,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 9
     },
     {
       "id": "LOG-05",
@@ -627,18 +615,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2781,
+      "ms": 2957,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 12
+      "requests": 9
     },
     {
       "id": "CHK-01",
@@ -647,15 +634,15 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5978,
+      "ms": 5949,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -668,13 +655,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3156,
+      "ms": 3153,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -688,13 +675,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2830,
+      "ms": 2817,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -708,13 +695,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1678,
+      "ms": 1734,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -728,7 +715,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1717,
+      "ms": 1753,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -736,7 +723,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
       ],
@@ -751,13 +738,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3250,
+      "ms": 3302,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -769,25 +756,24 @@
       "module": "Arbetsordrar",
       "name": "Samtidiga loggposter från två enheter på samma AO (känt gap G5)",
       "kind": "ui",
-      "status": "known",
-      "error": "Kontroll misslyckades: båda loggposterna borde finnas kvar — loggen skickas som hel array (G5)",
-      "ms": 5156,
+      "status": "passed",
+      "error": null,
+      "ms": 5304,
       "notes": [
-        "A kvar: false, B kvar: true"
+        "A kvar: true, B kvar: true",
+        "Känt fel G5 reproduceras inte längre — kontrollera och stäng"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 22
+      "requests": 16
     },
     {
       "id": "AO-07B",
@@ -796,7 +782,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3862,
+      "ms": 3855,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -817,9 +803,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3119,
+      "ms": 3203,
       "notes": [
-        "id: LOG-1795000000000-567f9fd1, LOG-1795000000000-06973456"
+        "id: LOG-1795000000000-efb9d697, LOG-1795000000000-0d63dc37"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -840,7 +826,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3388,
+      "ms": 3437,
       "notes": [],
       "metrics": {
         "patch_ao per loggpost": 1
@@ -848,12 +834,11 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 13
+      "requests": 9
     },
     {
       "id": "IMG-01",
@@ -862,18 +847,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2212,
+      "ms": 2357,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 13
+      "requests": 10
     },
     {
       "id": "IMG-02",
@@ -882,13 +866,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1768,
+      "ms": 1694,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-image-upload → 400 {\"error\":\"invalid_file_type\"}"
       ],
       "unmodeled": [],
@@ -902,30 +886,27 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2969,
+      "ms": 3311,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 18
+      "requests": 13
     },
     {
       "id": "AO-08",
       "module": "Användarroller och behörigheter",
-      "name": "Begränsad användare: servern levererar bara egna/pool-AO; direkt patch av annan AO → 403",
+      "name": "Begränsad användare: servern levererar bara egna AO (ingen öppen pool, D-04); direkt patch av annan AO → 403",
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 850,
+      "ms": 851,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -943,18 +924,18 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2966,
+      "ms": 3023,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/ao-time-write → 409 {\"error\":\"attested_locked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 24
+      "requests": 21
     },
     {
       "id": "TIME-02",
@@ -963,19 +944,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2611,
+      "ms": 2585,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 26
+      "requests": 21
     },
     {
       "id": "TIME-03",
@@ -984,19 +964,20 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5118,
+      "ms": 5033,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/ao-time-write → 409 {\"error\":\"idempotency_key_conflict\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 30
+      "requests": 26
     },
     {
       "id": "TIME-04",
@@ -1005,11 +986,11 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2387,
+      "ms": 2424,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
-        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-9cbf75ee-1408-407e-8b37-2ef10fe57ba6 : forbidden"
+        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-1e6ab410-9d0f-4dfc-a128-f4c854c02fbd : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1026,7 +1007,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1343,
+      "ms": 1395,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1044,18 +1025,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9016,
+      "ms": 9009,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/ao-time-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 29
+      "requests": 26
     },
     {
       "id": "TIME-06",
@@ -1064,7 +1045,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 870,
+      "ms": 881,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1080,7 +1061,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2739,
+      "ms": 2771,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1098,18 +1079,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4487,
+      "ms": 4451,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 23
+      "requests": 20
     },
     {
       "id": "FLOW-01",
@@ -1118,24 +1099,21 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 18574,
+      "ms": 18646,
       "notes": [
         "offertguide: 3952 / 988 / 4940 kr; OfferCalc: 3952 / 988 / 4940",
         "AO prismodell fast, fast pris 3952",
-        "underlag: [{\"id\":\"fixed:AO-0613bde7-48dc-46e7-9a9a-1ed7269dac2d\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"fixed:AO-5165114c-bc2c-4f30-b29a-fe844ccbdfc0\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
         "faktura: ex 3952, moms 988, totalt 4940"
       ],
       "metrics": {},
-      "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-0613bde7-48dc-46e7-9a9a-1ed7269dac2d : forbidden"
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1148,14 +1126,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3617,
+      "ms": 3615,
       "notes": [
         "guide 1890 / 473 / 2363; OfferCalc 2100 − 210 = 1890, moms 473, totalt 2363"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1168,7 +1146,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10893,
+      "ms": 10958,
       "notes": [
         "toasts vid serverfel: Sparar… / Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1179,9 +1157,9 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "GET /functions/v1/offer-token-validate?t=5168101ce1063950a25aca8db2cb3e93a34dde242a2c0db4541178901a43e69a → 403 {\"error\":\"revoked\"}"
+        "GET /functions/v1/offer-token-validate?t=dd34bef988441ae8224f4909659c3eb56c43efb51cdbe6ec8de7c7d5a9de1aae → 403 {\"error\":\"revoked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1194,7 +1172,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 976,
+      "ms": 984,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1213,7 +1191,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1263,
+      "ms": 1319,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1231,7 +1209,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 864,
+      "ms": 916,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1249,14 +1227,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9358,
+      "ms": 9380,
       "notes": [
         "5 offerter kontrollerade"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1269,24 +1247,20 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11296,
+      "ms": 11407,
       "notes": [
-        "underlag: [{\"id\":\"time:TID-df67edbf-9003-40dd-9646-696e0eea974d\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc:M1795593462037\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"time:TID-54af5865-97a0-472a-be5d-6883dfe3cdb9\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-fcf15e60-d536-4de3-a09d-abf878f368dc:M1795622472283\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
         "ROT auto i fakturan: 297 kr; offertens regel: 297 kr",
-        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
-        "faktura: ex 891.34, moms 222.84, totalt 1114.18, ROT 297, kunden betalar 817.1800000000001",
-        "OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen \"fakturerad\" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk."
+        "toasts efter ROT: FU-9001 skapat. | anrop: invoice-write:appendChecked=200,invoice-write:aoBilling=200,invoice-write:taxReductionSet=200",
+        "faktura: ex 891.34, moms 222.84, totalt 1114.18, ROT 297, kunden betalar 817.1800000000001"
       ],
       "metrics": {},
-      "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc : forbidden"
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1299,13 +1273,13 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11979,
+      "ms": 11941,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1318,7 +1292,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6872,
+      "ms": 6846,
       "notes": [
         "toasts: Sparar… / Utförandet kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1329,12 +1303,12 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 17
     },
     {
       "id": "SVC-03",
@@ -1343,12 +1317,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6199,
+      "ms": 6302,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1361,7 +1335,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5494,
+      "ms": 5560,
       "notes": [
         "toasts: Sparar… / Rollen \"Tekniker / Personal\" kunde inte sparas — behörigheterna är OFÖRÄNDRADE — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1373,7 +1347,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1386,7 +1360,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4814,
+      "ms": 4779,
       "notes": [
         "toasts: Sparar… / Ändringen för Sofia Lindgren kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1398,7 +1372,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1411,7 +1385,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7051,
+      "ms": 7032,
       "notes": [
         "toasts: Sparat / Varning: servern bekräftade inte den senaste ändringen (artiklar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1422,7 +1396,7 @@
         "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
       ],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
@@ -1436,16 +1410,16 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 12336,
+      "ms": 12356,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1458,13 +1432,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4240,
+      "ms": 4180,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/rondering-pass-write → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/rondering-pass-write → 503 {\"error\":\"http_503\"}"
       ],
       "unmodeled": [],
@@ -1478,7 +1452,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5246,
+      "ms": 5244,
       "notes": [
         "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (ronderingar). Den kan vara osparad — kontrollera och försök igen. / Ronderingen kunde inte skapas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1502,7 +1476,7 @@
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1515,15 +1489,15 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8766,
+      "ms": 8763,
       "notes": [
-        "AO för tillfället: AO-72ad6ced-dfa7-4e24-85db-ba09c7bd2833 2026-11-25"
+        "AO för tillfället: AO-b229d1bc-5c26-42ed-89bd-43a5097deaa4 2026-11-25"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"not_found\"}"
       ],
       "unmodeled": [],
@@ -1537,7 +1511,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6828,
+      "ms": 6937,
       "notes": [
         "toasts: Sparar… / Ändringen kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1556,7 +1530,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
@@ -1573,12 +1547,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6694,
+      "ms": 6447,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -1592,15 +1566,15 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8671,
+      "ms": 8679,
       "notes": [
         "serverns per-nyckel-behörighet för activities kan inte verifieras i simulerad backend (G4) — upprepa mot STAGING"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1613,13 +1587,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7086,
+      "ms": 7259,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -1633,12 +1607,12 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6552,
+      "ms": 6650,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1651,7 +1625,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7155,
+      "ms": 7121,
       "notes": [
         "toasts: Varning: servern bekräftade inte den senaste ändringen (kunder, importloggar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1670,7 +1644,7 @@
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1683,7 +1657,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4592,
+      "ms": 4635,
       "notes": [
         "property: ﻿Namn;Fastighetsbeteckning;Adress;Postnummer;Ort;Objektnummer;Fastighetstyp;Byggnadsår;Antal lägenheter;Total yta (m²);Förvaltningsform;Driftområde;Status;Antec",
         "propertyObject: ﻿Namn;Objektnummer;Typ (lagenhet/lokal/etc.);Adress;Postnummer;Ort;Port/Entré;Trapphus;Våning;Yta (m²);Status;Beskrivning\r",
@@ -1693,7 +1667,7 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1706,14 +1680,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3893,
+      "ms": 3862,
       "notes": [
-        "skapade: AO-e32f2582-464c-4685-b40d-8616776223a5, AO-11f42f59-0f70-425a-a4d2-eb08ff14814e, AO-50998cc1-254b-418c-b2f5-aac08dfef4bc"
+        "skapade: AO-0eb02ccd-a2bf-40a4-a033-f4162eea3e9f, AO-04de94de-93c0-4235-af74-6f325a145f12, AO-77e01716-32fa-4d3e-85dd-b27bcc53ef83"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1726,14 +1700,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4109,
+      "ms": 4173,
       "notes": [
         "förväntat fakturerat (exkl. moms): 17975"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1746,14 +1720,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7583,
+      "ms": 7601,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1766,7 +1740,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3006,
+      "ms": 3047,
       "notes": [
         "simulerade push-utskick: 0 (inga riktiga utskick — send-push registreras bara)"
       ],
@@ -1784,20 +1758,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3574,
+      "ms": 3552,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [
-        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
-        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
-        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
-        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde).",
-        "[persist] merge-skrivning avvisad för vift_activityLog: network_error",
-        "[persist] Server-write misslyckades — DataSync._lastSig lämnas oförändrat (senast bekräftade värde)."
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1810,20 +1777,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5491,
+      "ms": 5649,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 20
+      "requests": 16
     },
     {
       "id": "RES-03",
@@ -1832,12 +1798,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10659,
+      "ms": 10708,
       "notes": [
-        "besked efter 9321 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
+        "besked efter 9337 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {
-        "feedback_ms": 9319
+        "feedback_ms": 9335
       },
       "consoleErrors": [
         "[persist] merge-skrivning avvisad för vift_customers: network_error",
@@ -1846,7 +1812,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1859,7 +1825,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8505,
+      "ms": 8602,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1869,7 +1835,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1882,7 +1848,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1466,
+      "ms": 1571,
       "notes": [
         "offline-start: {\"hasLogin\":true,\"hasApp\":true,\"router\":true}"
       ],
@@ -1900,12 +1866,12 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 867,
+      "ms": 941,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\",\"reason\":\"field_not_allowed\"}",
         "POST /functions/v1/invoice-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/get-sensitive-fields → 403 {\"error\":\"forbidden\"}",
@@ -1922,19 +1888,22 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2529,
+      "ms": 3512,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/get-sensitive-fields → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 409 {\"error\":\"already_assigned\"}",
         "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 21
+      "requests": 30
     },
     {
       "id": "PERM-03",
@@ -1951,7 +1920,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15827,
+      "ms": 15864,
       "notes": [
         "admin: 26 tillåtna, 0 nekade",
         "chef: 20 tillåtna, 6 nekade",
@@ -1963,11 +1932,11 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1980,30 +1949,30 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 39923,
+      "ms": 40181,
       "notes": [
         "observation: pollningen var pausad så länge sökfältet hade fokus",
-        "mätvärden: {\"inloggning_till_klar_ms\":932,\"anrop_vid_start\":5,\"ao_lista_ms\":168,\"ao_rader\":151,\"ao_detalj_ms\":32,\"kundlista_ms\":775,\"dashboard_ms\":146,\"rapport_tid_ms\":83,\"loneunderlag_ms\":1083,\"kalender_ms\":231}"
+        "mätvärden: {\"inloggning_till_klar_ms\":993,\"anrop_vid_start\":5,\"ao_lista_ms\":162,\"ao_rader\":151,\"ao_detalj_ms\":33,\"kundlista_ms\":836,\"dashboard_ms\":136,\"rapport_tid_ms\":79,\"loneunderlag_ms\":1033,\"kalender_ms\":172}"
       ],
       "metrics": {
-        "inloggning_till_klar_ms": 932,
+        "inloggning_till_klar_ms": 993,
         "anrop_vid_start": 5,
-        "ao_lista_ms": 168,
+        "ao_lista_ms": 162,
         "ao_rader": 151,
-        "ao_detalj_ms": 32,
-        "kundlista_ms": 775,
-        "dashboard_ms": 146,
-        "rapport_tid_ms": 83,
-        "loneunderlag_ms": 1083,
-        "kalender_ms": 231,
-        "kundsokning_ms": 258,
-        "sparning_kund_till_ack_ms": 37,
+        "ao_detalj_ms": 33,
+        "kundlista_ms": 836,
+        "dashboard_ms": 136,
+        "rapport_tid_ms": 79,
+        "loneunderlag_ms": 1033,
+        "kalender_ms": 172,
+        "kundsokning_ms": 343,
+        "sparning_kund_till_ack_ms": 90,
         "anrop_i_vila_35s": 5,
         "js_heap_mb": 17
       },
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2016,12 +1985,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4028,
+      "ms": 4048,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2034,7 +2003,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2436,
+      "ms": 2674,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2052,7 +2021,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 21685,
+      "ms": 21864,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -2069,7 +2038,7 @@
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
@@ -2087,7 +2056,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2821,
+      "ms": 2907,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2103,13 +2072,13 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6062,
+      "ms": 6119,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2122,12 +2091,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4863,
+      "ms": 4870,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2140,7 +2109,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2068,
+      "ms": 2083,
       "notes": [
         "räknare: 13 aktiva jobb · 2 platser på kartan · 10 saknar koordinater"
       ],
@@ -2158,7 +2127,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1731,
+      "ms": 1650,
       "notes": [
         "händelser: 4"
       ],
@@ -2176,12 +2145,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3322,
+      "ms": 3363,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2194,7 +2163,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3111,
+      "ms": 3164,
       "notes": [
         "laptop: {\"text\":\"Solgläntan Hus A\",\"name\":\"Solgläntan Hus A\",\"num\":\"OBJ-001\",\"sub\":\"OBJ-001\\n·\\nFlerbostadshus\",\"clipped\":false,\"nameCount\":1}",
         "iphone: {\"text\":\"Solgläntan Hus A\",\"name\":\"Solgläntan Hus A\",\"num\":\"OBJ-001\",\"sub\":\"OBJ-001·Flerbostadshus\",\"clipped\":false,\"nameCount\":1}"
@@ -2213,7 +2182,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3357,
+      "ms": 3319,
       "notes": [
         "laptop: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}",
         "iphone: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}"
@@ -2221,7 +2190,7 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2234,7 +2203,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2813,
+      "ms": 2947,
       "notes": [
         "badge: \n        2 av 4 klara2 kvar\n        \n          \n        \n        2 utförda2 ej påbörjade\n      "
       ],
@@ -2254,7 +2223,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4055,
+      "ms": 4018,
       "notes": [
         "badge A: \n        1 av 4 klara3 kvar\n        \n          \n        \n        1 utförd2 pågår1 ej påbörjad\n      "
       ],
@@ -2262,9 +2231,9 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2277,7 +2246,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4031,
+      "ms": 3869,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2285,7 +2254,7 @@
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden_other\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden_other\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
@@ -2300,7 +2269,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1409,
+      "ms": 1358,
       "notes": [
         "efter synk: utford (servern: utförd)"
       ],
@@ -2321,7 +2290,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2140,
+      "ms": 2102,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2340,7 +2309,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2550,
+      "ms": 2509,
       "notes": [
         "iphone: {\"scroll\":false,\"minBtn\":36,\"below\":true,\"right\":false,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}",
         "laptop: {\"scroll\":false,\"minBtn\":24,\"below\":false,\"right\":true,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}"
@@ -2362,7 +2331,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2535,
+      "ms": 2434,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2380,7 +2349,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22651,
+      "ms": 22464,
       "notes": [
         "aktivitetslogg-skrivningar nekade av servern: 3; toasts: [\"\",\"\",\"\"]"
       ],
@@ -2400,7 +2369,7 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
@@ -2417,14 +2386,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3304,
+      "ms": 3286,
       "notes": [
         "direktanrop: {\"complete_other\":403,\"forge_new\":403,\"delete_other\":403,\"full_write\":403}"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\"}",
@@ -2441,7 +2410,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5151,
+      "ms": 5170,
       "notes": [
         "poster: [[\"time_entry_created\",\"ST-004\",\"klientrapport\"],[\"work_order_updated\",\"ST-004\",\"klientrapport\"]]"
       ],
@@ -2450,7 +2419,7 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"invalid_entry\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"invalid_entry\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"invalid_type\"}",
         "POST /functions/v1/store-key-write → 403 {\"error\":\"append_only\"}"
       ],
@@ -2465,7 +2434,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2181,
+      "ms": 2102,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2485,17 +2454,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8493,
+      "ms": 8396,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
@@ -2509,15 +2478,15 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8828,
+      "ms": 8762,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2530,12 +2499,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3639,
+      "ms": 3578,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2548,12 +2517,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3663,
+      "ms": 3664,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2566,7 +2535,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 32235,
+      "ms": 32506,
       "notes": [
         "admin: 48 sidvisningar",
         "falt: 18 sidvisningar",
@@ -2575,11 +2544,11 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
       ],
@@ -2594,7 +2563,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7599,
+      "ms": 7562,
       "notes": [
         "OFF-VAT25: AO skapad",
         "OFF-VAT12: nekad med förklaring",
@@ -2606,7 +2575,7 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2619,14 +2588,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 45620,
+      "ms": 45684,
       "notes": [
         "admin: 49 sidvisningar"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-002&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
@@ -2645,14 +2614,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 38904,
+      "ms": 38999,
       "notes": [
         "chef: 43 sidvisningar"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-002&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
@@ -2671,14 +2640,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 20738,
+      "ms": 20772,
       "notes": [
         "ekonomi: 29 sidvisningar"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
       ],
@@ -2693,14 +2662,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 13769,
+      "ms": 13832,
       "notes": [
         "falt: 19 sidvisningar"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
@@ -2714,14 +2683,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4768,
+      "ms": 4705,
       "notes": [
         "skrivningar: drag 0, efter change 1, efter oförändrad change 1; förhandsvisning #aabbcc; sparat #aabbcc"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2734,12 +2703,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3287,
+      "ms": 3298,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2752,12 +2721,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5921,
+      "ms": 5987,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2770,12 +2739,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4235,
+      "ms": 4315,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2788,12 +2757,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7722,
+      "ms": 7767,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2806,7 +2775,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3938,
+      "ms": 4010,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2822,12 +2791,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3137,
+      "ms": 3219,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2840,7 +2809,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 16780,
+      "ms": 16789,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2856,7 +2825,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6373,
+      "ms": 6315,
       "notes": [
         "A (GL blockerat): 10 aktiva jobb · 0 med koordinater · 10 saknar koordinater | Kartan kunde inte laddas Kartbiblioteket (Mapbox GL) gick inte att nå. Det beror inte på jobbens adresser — listan fungerar som vanligt. 0 av 10 jobb har koordinater. Visa jobb utan plats (10) | 10 av 10 aktiva jobb visas inte på kartan Geokodning saknas: 4 inte geokodade ännu Adressen behöver kompletteras: 6 adress saknar ort/postnummer Visa vilka",
         "B (GL ok, geokodning 403): Inga av de 10 aktiva jobben har koordinater 2 inte geokodade ännu · 2 geokodning misslyckades · 6 adress saknar ort/postnummer. Adresserna behöver geokodas. Visa jobb utan plats (10) | sökningar: 1",
@@ -2865,8 +2834,8 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2879,7 +2848,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2542,
+      "ms": 2625,
       "notes": [
         "status: {\"nocity\":7,\"notfound\":1,\"geocoded\":40,\"skipped\":5,\"noaddr\":1,\"coords\":1} sökningar: 40 | 55 aktiva jobb · 40 platser på kartan · 14 saknar koordinater | 14 av 55 aktiva jobb visas inte på kartan Geokodning saknas: 5 inte geokodade ännu Adressen behöver kompletteras: 7 adress saknar ort/postnummer 1 saknar adress 1 adressen hittades inte Visa vilka"
       ],
@@ -2897,12 +2866,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3567,
+      "ms": 3496,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2915,11 +2884,11 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6409,
+      "ms": 6478,
       "notes": [
         "d25_390: {\"odRows\":3,\"odCount\":\"40\",\"odH\":274,\"odGo\":true,\"poolVis\":3,\"poolFirst\":\"Akut\",\"poolMore\":true,\"poolCount\":\"33 väntar\",\"mapRows\":25,\"mapMore\":\"Visa alla 190 aktiva jobb \",\"wrapped\":0,\"truncated\":7,\"bad\":false}",
         "d25_1366: {\"odRows\":3,\"odCount\":\"40\",\"odH\":241,\"odGo\":true,\"poolVis\":4,\"poolFirst\":\"Akut\",\"poolMore\":true,\"poolCount\":\"33 väntar\",\"mapRows\":25,\"mapMore\":\"Visa alla 190 aktiva jobb \",\"wrapped\":0,\"truncated\":23,\"bad\":false}",
-        "begränsad: tomlägen [\"Inga öppna uppgifter\"]"
+        "begränsad: tomlägen [\"Inga öppna uppgifter\",\"Arbetspoolen är tom — inga jobb väntar på att tilldelas\"]"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -2935,12 +2904,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5040,
+      "ms": 5140,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2953,12 +2922,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4225,
+      "ms": 4273,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2971,14 +2940,14 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8932,
+      "ms": 9035,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -2991,12 +2960,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3412,
+      "ms": 3471,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3009,12 +2978,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4071,
+      "ms": 4154,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3027,43 +2996,43 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4463,
+      "ms": 4882,
       "notes": [
-        "mätvärden (ms, lokal headless Chromium, simulerad server): {\"10\":{\"rendering_ms\":23,\"rader\":9,\"statusbyte_ms\":8,\"statusbyte_tillbaka_ms\":23,\"snabbval_ms\":12,\"snabbval_av_ms\":22,\"sokning_ms\":142,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":16,\"visa_alla_ms\":16,\"rader_visa_alla\":9},\"100\":{\"rendering_ms\":65,\"rader\":84,\"statusbyte_ms\":17,\"statusbyte_tillbaka_ms\":42,\"snabbval_ms\":19,\"snabbval_av_ms\":63,\"sokning_ms\":145,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":23,\"visa_alla_ms\":47,\"rader_visa_alla\":84},\"1000\":{\"rendering_ms\":86,\"rader\":150,\"statusbyte_ms\":81,\"statusbyte_tillbaka_ms\":107,\"snabbval_ms\":78,\"snabbval_av_ms\":75,\"sokning_ms\":187,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":73,\"visa_alla_ms\":402,\"rader_visa_alla\":834}}"
+        "mätvärden (ms, lokal headless Chromium, simulerad server): {\"10\":{\"rendering_ms\":23,\"rader\":9,\"statusbyte_ms\":7,\"statusbyte_tillbaka_ms\":26,\"snabbval_ms\":10,\"snabbval_av_ms\":26,\"sokning_ms\":139,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":16,\"visa_alla_ms\":16,\"rader_visa_alla\":9},\"100\":{\"rendering_ms\":73,\"rader\":84,\"statusbyte_ms\":18,\"statusbyte_tillbaka_ms\":50,\"snabbval_ms\":24,\"snabbval_av_ms\":68,\"sokning_ms\":148,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":26,\"visa_alla_ms\":59,\"rader_visa_alla\":84},\"1000\":{\"rendering_ms\":101,\"rader\":150,\"statusbyte_ms\":107,\"statusbyte_tillbaka_ms\":88,\"snabbval_ms\":82,\"snabbval_av_ms\":83,\"sokning_ms\":225,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":98,\"visa_alla_ms\":421,\"rader_visa_alla\":834}}"
       ],
       "metrics": {
         "10 AO: rendering_ms": 23,
         "10 AO: rader": 9,
-        "10 AO: statusbyte_ms": 8,
-        "10 AO: statusbyte_tillbaka_ms": 23,
-        "10 AO: snabbval_ms": 12,
-        "10 AO: snabbval_av_ms": 22,
-        "10 AO: sokning_ms": 142,
+        "10 AO: statusbyte_ms": 7,
+        "10 AO: statusbyte_tillbaka_ms": 26,
+        "10 AO: snabbval_ms": 10,
+        "10 AO: snabbval_av_ms": 26,
+        "10 AO: sokning_ms": 139,
         "10 AO: sokning_renderingar": 1,
         "10 AO: sokning_enbart_rendering_ms": 16,
         "10 AO: visa_alla_ms": 16,
         "10 AO: rader_visa_alla": 9,
-        "100 AO: rendering_ms": 65,
+        "100 AO: rendering_ms": 73,
         "100 AO: rader": 84,
-        "100 AO: statusbyte_ms": 17,
-        "100 AO: statusbyte_tillbaka_ms": 42,
-        "100 AO: snabbval_ms": 19,
-        "100 AO: snabbval_av_ms": 63,
-        "100 AO: sokning_ms": 145,
+        "100 AO: statusbyte_ms": 18,
+        "100 AO: statusbyte_tillbaka_ms": 50,
+        "100 AO: snabbval_ms": 24,
+        "100 AO: snabbval_av_ms": 68,
+        "100 AO: sokning_ms": 148,
         "100 AO: sokning_renderingar": 1,
-        "100 AO: sokning_enbart_rendering_ms": 23,
-        "100 AO: visa_alla_ms": 47,
+        "100 AO: sokning_enbart_rendering_ms": 26,
+        "100 AO: visa_alla_ms": 59,
         "100 AO: rader_visa_alla": 84,
-        "1000 AO: rendering_ms": 86,
+        "1000 AO: rendering_ms": 101,
         "1000 AO: rader": 150,
-        "1000 AO: statusbyte_ms": 81,
-        "1000 AO: statusbyte_tillbaka_ms": 107,
-        "1000 AO: snabbval_ms": 78,
-        "1000 AO: snabbval_av_ms": 75,
-        "1000 AO: sokning_ms": 187,
+        "1000 AO: statusbyte_ms": 107,
+        "1000 AO: statusbyte_tillbaka_ms": 88,
+        "1000 AO: snabbval_ms": 82,
+        "1000 AO: snabbval_av_ms": 83,
+        "1000 AO: sokning_ms": 225,
         "1000 AO: sokning_renderingar": 1,
-        "1000 AO: sokning_enbart_rendering_ms": 73,
-        "1000 AO: visa_alla_ms": 402,
+        "1000 AO: sokning_enbart_rendering_ms": 98,
+        "1000 AO: visa_alla_ms": 421,
         "1000 AO: rader_visa_alla": 834
       },
       "consoleErrors": [],
@@ -3079,17 +3048,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 34033,
+      "ms": 34802,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3102,10 +3071,10 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2706,
+      "ms": 2806,
       "notes": [],
       "metrics": {
-        "klick → AO-detalj (ms)": 62
+        "klick → AO-detalj (ms)": 76
       },
       "consoleErrors": [],
       "netErrors": [
@@ -3122,16 +3091,16 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 13147,
+      "ms": 13274,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
@@ -3145,7 +3114,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 11903,
+      "ms": 11955,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3170,7 +3139,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 23887,
+      "ms": 23992,
       "notes": [
         "155 tidigare åtgärder kontrollerade"
       ],
@@ -3178,9 +3147,9 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
@@ -3199,7 +3168,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2348,
+      "ms": 2382,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3218,14 +3187,14 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 7693,
+      "ms": 7697,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
@@ -3239,7 +3208,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 11570,
+      "ms": 11694,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3248,7 +3217,7 @@
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
@@ -3265,7 +3234,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 30301,
+      "ms": 30605,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3292,7 +3261,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22243,
+      "ms": 22361,
       "notes": [
         "iphone: 4 roller × 8 ordrar granskade"
       ],
@@ -3300,14 +3269,14 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
@@ -3321,7 +3290,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22227,
+      "ms": 22349,
       "notes": [
         "laptop: 4 roller × 8 ordrar granskade"
       ],
@@ -3329,14 +3298,14 @@
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}",
         "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
@@ -3346,24 +3315,25 @@
     {
       "id": "AOD-09",
       "module": "Arbetsordrar",
-      "name": "Fältflöde på mobil 390 px utan att något klipps: öppna jobbet från Mina jobb → Starta arbete → Stämpla in → bocka av checklista → lägg till material och bild → Stämpla ut → (med ao_complete i rollen) Klarmarkera",
+      "name": "Fältflöde på mobil 390 px utan att något klipps: öppna jobbet från Mina jobb → Starta arbete → Stämpla in → bocka av checklista → lägg till material och bild → Stämpla ut → Klarmarkera (ao_complete_own, D-03; utan den ingen Klarmarkera)",
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6566,
+      "ms": 8139,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 32
+      "requests": 37
     },
     {
       "id": "BILL-01",
@@ -3372,7 +3342,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2492,
+      "ms": 2530,
       "notes": [
         "kö: 19 kandidater, 2 kräver åtgärd, total 61937.5 kr exkl. moms"
       ],
@@ -3390,12 +3360,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4822,
+      "ms": 4813,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3408,7 +3378,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4032,
+      "ms": 4122,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3426,7 +3396,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4989,
+      "ms": 5008,
       "notes": [
         "valt: 3 underlag valda · 2 kunder → 2 fakturautkast EXKL. MOMS 5 850,00 kr MOMS 1 462,50 kr INKL. MOMS 7 312,50 kr Avmarkera Skapa fakturautkast"
       ],
@@ -3435,7 +3405,7 @@
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3448,7 +3418,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4890,
+      "ms": 4913,
       "notes": [
         "INV-QA-MIX (laptop): rader 1660 = ex 1660, moms 275 (25%:215, 12%:60, 0%:0), totalt 1935",
         "INV-QA-DISC: rader 1660 − rabatt 166 = 1494, moms 247.5, totalt 1741.5",
@@ -3468,22 +3438,22 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5281,
+      "ms": 5319,
       "notes": [
-        "10: {\"cands\":27,\"median\":1.1,\"groups\":7,\"more\":false,\"selMs\":11,\"deselMs\":3,\"selected\":27,\"expMs\":11,\"rowsShown\":27,\"after\":0}",
-        "100: {\"cands\":117,\"median\":3.9,\"groups\":25,\"more\":false,\"selMs\":17,\"deselMs\":4,\"selected\":117,\"expMs\":29,\"rowsShown\":117,\"after\":0}",
-        "1000: {\"cands\":1017,\"median\":9.1,\"groups\":30,\"more\":true,\"selMs\":23,\"deselMs\":5,\"selected\":1017,\"expMs\":65,\"rowsShown\":282,\"after\":0}"
+        "10: {\"cands\":27,\"median\":1.1,\"groups\":7,\"more\":false,\"selMs\":11,\"deselMs\":2,\"selected\":27,\"expMs\":8,\"rowsShown\":27,\"after\":0}",
+        "100: {\"cands\":117,\"median\":4.9,\"groups\":25,\"more\":false,\"selMs\":21,\"deselMs\":5,\"selected\":117,\"expMs\":37,\"rowsShown\":117,\"after\":0}",
+        "1000: {\"cands\":1017,\"median\":6.9,\"groups\":30,\"more\":true,\"selMs\":19,\"deselMs\":4,\"selected\":1017,\"expMs\":47,\"rowsShown\":282,\"after\":0}"
       ],
       "metrics": {
         "10 kandidater: kompakt rendering (median ms)": 1.1,
-        "10 kandidater: Välj alla / avmarkera (ms)": "11 / 3",
-        "10 kandidater: Visa alla rader (ms, 27 rader)": 11,
-        "100 kandidater: kompakt rendering (median ms)": 3.9,
-        "100 kandidater: Välj alla / avmarkera (ms)": "17 / 4",
-        "100 kandidater: Visa alla rader (ms, 117 rader)": 29,
-        "1000 kandidater: kompakt rendering (median ms)": 9.1,
-        "1000 kandidater: Välj alla / avmarkera (ms)": "23 / 5",
-        "1000 kandidater: Visa alla rader (ms, 282 rader)": 65
+        "10 kandidater: Välj alla / avmarkera (ms)": "11 / 2",
+        "10 kandidater: Visa alla rader (ms, 27 rader)": 8,
+        "100 kandidater: kompakt rendering (median ms)": 4.9,
+        "100 kandidater: Välj alla / avmarkera (ms)": "21 / 5",
+        "100 kandidater: Visa alla rader (ms, 117 rader)": 37,
+        "1000 kandidater: kompakt rendering (median ms)": 6.9,
+        "1000 kandidater: Välj alla / avmarkera (ms)": "19 / 4",
+        "1000 kandidater: Visa alla rader (ms, 282 rader)": 47
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -3498,14 +3468,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 18728,
+      "ms": 18850,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3518,12 +3488,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3608,
+      "ms": 3635,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3536,7 +3506,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4983,
+      "ms": 4988,
       "notes": [
         "laptop INV-QA-DEC: rader 1521.28 + avrundning 0.01 = 1521.29, moms 367.32, totalt 1888.61",
         "laptop INV-QA-DEC25: rader 1421.28 + avrundning 0.01 = 1421.29, moms 355.32, totalt 1776.61",
@@ -3556,18 +3526,13 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 3939,
+      "ms": 3912,
       "notes": [],
       "metrics": {},
-      "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-012 : forbidden",
-        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
-      ],
+      "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3580,12 +3545,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7173,
+      "ms": 7243,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 403 {\"error\":\"forbidden\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3598,13 +3563,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9191,
+      "ms": 9284,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3617,15 +3582,15 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10440,
+      "ms": 10336,
       "notes": [
         "skrivningar av vift_settings: 3 för 3 sparade ändringar"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3638,12 +3603,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4811,
+      "ms": 4759,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3656,13 +3621,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5802,
+      "ms": 5801,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3675,7 +3640,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2961,
+      "ms": 2868,
       "notes": [
         "nyckeltal: {\"Totalt\":\"108,42 h\",\"Debiterbart värde\":\"54 995 kr\",\"Intern kostnad (uppskattad)\":\"27 104 kr\",\"Tidposter\":\"27\",\"Attesterat\":\"33,67 h\"}"
       ],
@@ -3693,12 +3658,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 16330,
+      "ms": 16352,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3711,7 +3676,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2713,
+      "ms": 2653,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -3727,7 +3692,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5320,
+      "ms": 5124,
       "notes": [
         "mx360 {\"w\":340,\"right\":350,\"vw\":360,\"stepsRight\":350,\"nSteps\":1,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":44,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}",
         "mx390 {\"w\":370,\"right\":380,\"vw\":390,\"stepsRight\":380,\"nSteps\":1,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":44,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}",
@@ -3736,8 +3701,8 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3750,16 +3715,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10161,
+      "ms": 10137,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
       ],
@@ -3776,14 +3741,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8050,
+      "ms": 8180,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
       ],
       "unmodeled": [
@@ -3799,13 +3764,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5288,
+      "ms": 5403,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3818,7 +3783,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7802,
+      "ms": 7875,
       "notes": [
         "mx390 pg-obj-detail {\"h\":118}",
         "mx390 pg-propobj-detail {\"h\":108}",
@@ -3833,9 +3798,9 @@
       "consoleErrors": [],
       "netErrors": [
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [
         "GET /rest/v1/property_images"
@@ -3850,7 +3815,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6960,
+      "ms": 6916,
       "notes": [
         "mx360 {\"days\":7,\"n\":5,\"minW\":228}",
         "mx390 {\"days\":7,\"n\":5,\"minW\":258}"
@@ -3858,8 +3823,8 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3872,13 +3837,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6358,
+      "ms": 6394,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3891,14 +3856,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 17747,
+      "ms": 17761,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
       ],
       "unmodeled": [
@@ -3914,7 +3879,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8874,
+      "ms": 9025,
       "notes": [
         "mx360 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":340}",
         "mx390 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":370}",
@@ -3924,9 +3889,9 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3939,7 +3904,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 11173,
+      "ms": 11334,
       "notes": [
         "mx360 {\"rows\":114,\"rowDisplay\":\"grid\",\"headShown\":false,\"w\":340,\"count\":\"Visar 114 av 114 avtal\"}",
         "mx390 {\"rows\":114,\"rowDisplay\":\"grid\",\"headShown\":false,\"w\":370,\"count\":\"Visar 114 av 114 avtal\"}",
@@ -3949,9 +3914,9 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3964,12 +3929,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4906,
+      "ms": 4873,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -3982,14 +3947,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7387,
+      "ms": 7337,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
       "unmodeled": [],
@@ -4003,13 +3968,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7145,
+      "ms": 7111,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4022,7 +3987,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1852,
+      "ms": 1771,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4038,12 +4003,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8313,
+      "ms": 8275,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4056,12 +4021,12 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5828,
+      "ms": 5839,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4074,12 +4039,12 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5514,
+      "ms": 5689,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4092,7 +4057,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 25249,
+      "ms": 25295,
       "notes": [
         "utkast: Skicka offert + 5 menyposter",
         "skickad: Boka uppföljning + 9 menyposter",
@@ -4107,8 +4072,8 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4121,14 +4086,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10306,
+      "ms": 10265,
       "notes": [
         "15 offerter kontrollerade"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4141,12 +4106,12 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8700,
+      "ms": 8678,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
         "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
       ],
@@ -4161,12 +4126,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3815,
+      "ms": 3831,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4179,17 +4144,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 37672,
+      "ms": 37701,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4202,14 +4167,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5704,
+      "ms": 5671,
       "notes": [
         "under sparning: {\"t\":\"Sparar…\",\"d\":true}"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4222,7 +4187,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1904,
+      "ms": 1968,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4240,17 +4205,17 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2072,
+      "ms": 2091,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 13
     },
     {
       "id": "FALT-03",
@@ -4259,7 +4224,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1202,
+      "ms": 1278,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4277,13 +4242,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3865,
+      "ms": 3919,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4296,16 +4261,18 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3100,
+      "ms": 3232,
       "notes": [
         "väntat {\"today\":21,\"ongoing\":5,\"overdue\":4,\"urgent\":4,\"noStaff\":4,\"bill\":4,\"notes\":1} visat {\"today\":21,\"ongoing\":5,\"overdue\":4,\"urgent\":4,\"noStaff\":4,\"bill\":4}"
       ],
       "metrics": {},
       "consoleErrors": [],
-      "netErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
+      ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 5
+      "requests": 6
     },
     {
       "id": "FALT-06",
@@ -4314,12 +4281,12 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5024,
+      "ms": 5115,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4332,17 +4299,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5418,
+      "ms": 5525,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 13
     },
     {
       "id": "FALT-08",
@@ -4351,17 +4317,16 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 27240,
+      "ms": 28070,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 66
+      "requests": 63
     },
     {
       "id": "FALT-09",
@@ -4370,18 +4335,17 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8034,
+      "ms": 8206,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 17
+      "requests": 14
     },
     {
       "id": "FALT-10",
@@ -4390,17 +4354,17 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1770,
+      "ms": 1902,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 16
+      "requests": 13
     },
     {
       "id": "REG-UI-01",
@@ -4409,12 +4373,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3824,
+      "ms": 3927,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4427,12 +4391,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4777,
+      "ms": 4857,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4445,12 +4409,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3486,
+      "ms": 3593,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4463,12 +4427,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7547,
+      "ms": 7524,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4481,7 +4445,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2622,
+      "ms": 2670,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -4497,12 +4461,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4282,
+      "ms": 4345,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4515,13 +4479,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6205,
+      "ms": 6318,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4534,7 +4498,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15059,
+      "ms": 15270,
       "notes": [
         "360 px: 7 sidor kontrollerade",
         "390 px: 7 sidor kontrollerade",
@@ -4543,9 +4507,9 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4558,7 +4522,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15476,
+      "ms": 15567,
       "notes": [
         "1024 px: 7 sidor kontrollerade",
         "1366 px: 7 sidor kontrollerade",
@@ -4567,9 +4531,9 @@
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4582,12 +4546,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7527,
+      "ms": 7470,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4600,15 +4564,15 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 15741,
+      "ms": 15802,
       "notes": [
         "66 flik-/filterlägen kontrollerade"
       ],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -4621,16 +4585,109 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4622,
+      "ms": 4681,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
-        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
       "requests": 14
+    },
+    {
+      "id": "T3B-01",
+      "module": "Arbetsordrar",
+      "name": "AP-FEL-1: personaldialogen på en pool-AO — ingen poolruta; bara personal och ansvarig ändras; status och datum oförändrade; notis bara till faktiskt tillagd personal efter serverbekräftelse; borttagning ger ingen notis och AO:n återvänder inte till öppen pool",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 3483,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 400 {\"error\":\"missing_fields\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 21
+    },
+    {
+      "id": "T3B-02",
+      "module": "Arbetsordrar",
+      "name": "AP-G: \"Ta bort datum\" rensar bara datumet; \"Släpp till öppen pool\" kräver bekräftelse, tar bort personal och datum och sätter öppen pool",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 2492,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "T3B-03",
+      "module": "Mina jobb",
+      "name": "SÄK-4: \"Ta jobbet\" när någon annan hunnit först → besked \"redan tagits\", ingen lokal tilldelning, servern orörd, listan omläst",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 2097,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/ao-time-write → 409 {\"error\":\"already_assigned\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "T3B-04",
+      "module": "Användarroller och behörigheter",
+      "name": "D-07/F21: arbetsledare kan inte sätta status fakturerad via AO-ändring — servern nekar (invoice_path_required) och klienten backar och säger det",
+      "kind": "contract",
+      "status": "passed",
+      "error": null,
+      "ms": 1242,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\",\"reason\":\"invoice_path_required\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "T3B-05",
+      "module": "Tidregistrering och instämpling",
+      "name": "AP-B: instämplingslistan visar bara egna tilldelade AO; instämpling på annans AO nekas av servern med not_assigned och ingen stämpling sparas",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 1242,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 403 {\"error\":\"forbidden\",\"reason\":\"not_assigned\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
     }
   ]
 }
