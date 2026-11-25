@@ -6009,7 +6009,8 @@ const OfferDetailPage = {
     // followup / reminder → rich activity-creation modal
     if (type === 'followup' || type === 'reminder') {
       const tomorrow = _ds(1);
-      const staffOpts = (state.staff || []).filter(s => s.active !== false)
+      /* T3-D (D-15): utan full rätt bara mig själv som ansvarig (servern: 403 not_own). */
+      const staffOpts = ActivitiesService.assignableStaff()
         .map(s => `<option value="${s.id}"${state.currentUser && s.id === state.currentUser.id ? ' selected' : ''}>${esc(s.firstName)} ${esc(s.lastName)}</option>`).join('');
       const actType = type === 'followup' ? 'followup' : 'call';
       Modal.open({
@@ -11921,18 +11922,20 @@ const ActivitiesPage = {
        TA BORT   — kräver en HÖJD behörighet (ao_edit eller admin_manage)
                     — ren ao_view_own räcker ALDRIG för permanent radering,
                     oavsett ägarskap. */
+  /* T3-D (2026-11-28, D-15, F8): reglerna ovan följde inte servern (ao_view_all gav
+     redigering av andras uppgifter; ta bort krävde ao_edit). Nu används serverns regel
+     (ActivitiesService.canEdit/canComplete/canDelete, samma som activities-policy.ts). */
   _isOwnTask(act) {
-    const user = Auth.getUser();
-    return !!(user && act && act.assignedTo === user.id);
+    return ActivitiesService.isAssignedToMe(act);
   },
   _canEditTask(act) {
-    return Auth.can('ao_edit') || Auth.can('ao_view_all') || this._isOwnTask(act);
+    return ActivitiesService.canEdit(act);
   },
   _canCompleteTask(act) {
-    return Auth.can('ao_edit') || Auth.can('ao_view_all') || this._isOwnTask(act);
+    return ActivitiesService.canComplete(act);
   },
   _canDeleteTask(act) {
-    return Auth.can('ao_edit') || Auth.can('admin_manage');
+    return ActivitiesService.canDelete(act);
   },
 
   /* V3 register (2026-11-26): tvåfasrendering som övriga register —
@@ -12232,8 +12235,10 @@ const ActivitiesPage = {
   },
 
   _staffOptionsHtml(selectedId) {
-    const activeStaff = (state.staff || []).filter(s => s.active);
-    let html = `<option value="">— Ej tilldelad —</option>`;
+    /* T3-D (D-15): utan full rätt får en uppgift bara ha mig själv som ansvarig. */
+    const full = ActivitiesService.canManageAll();
+    const activeStaff = ActivitiesService.assignableStaff();
+    let html = full ? `<option value="">— Ej tilldelad —</option>` : '';
     html += activeStaff.map(s => `<option value="${s.id}" ${selectedId===s.id?'selected':''}>${esc((s.firstName+' '+s.lastName).trim())}</option>`).join('');
     return html;
   },
@@ -12492,11 +12497,15 @@ const ActivitiesPage = {
     const oldDueDate = isEdit && existing ? existing.dueDate : null;
     const oldDueTime = isEdit && existing ? (existing.dueTime || '') : null;
 
+    /* T3-D (D-15): servern godtar bara uppgifter åt mig själv utan full rätt (403 not_own). */
+    const _assignee = document.getElementById('act-assignee')?.value || null;
+    if (!ActivitiesService.canManageAll() && _assignee !== ActivitiesService._me()) { showToast('Du kan bara skapa och ändra uppgifter där du själv är ansvarig'); return; }
+
     const data = {
       title,
       type:        document.getElementById('act-type')?.value || 'followup',
       priority:    document.getElementById('act-priority')?.value || 'normal',
-      assignedTo:  document.getElementById('act-assignee')?.value || null,
+      assignedTo:  _assignee,
       dueDate:     dueDateVal,
       /* V53A R2 — Förfallotid är valfri och rörs ALDRIG förutom av
          användarens egen inmatning i detta fält: ett tomt fält sparas

@@ -1120,6 +1120,20 @@ async function initState() {
       var _allCriticalEmpty = _criticalKeys.every(function(k) {
         return Array.isArray(d[k]) && d[k].length === 0;
       });
+      /* T3-D (2026-11-28, D-12/D-13): servern lämnar ut kunder och offerter per uppdrag till
+         fält och begränsad roll. Tomma listor är då ett äkta svar (inga egna AO), inte ett
+         tecken på en degraderad läsning. Heuristiken gäller bara den som får läsa hela
+         kundregistret (samma behörigheter som servern, _vift_kund_las). Behörigheterna tas ur
+         serverns egen, projicerade personal- och rollpost för den inloggade e-posten. */
+      if (_allCriticalEmpty) {
+        var _me = (typeof Auth !== 'undefined' && Auth.getUserEmail) ? String(Auth.getUserEmail() || '').toLowerCase() : '';
+        var _meStaff = (Array.isArray(d['staff']) ? d['staff'] : []).find(function(s) { return s && s.active && s.email && String(s.email).toLowerCase() === _me; });
+        var _meRole = _meStaff ? (Array.isArray(d['roles']) ? d['roles'] : []).find(function(r) { return r && r.id === _meStaff.role; }) : null;
+        var _mePerms = _meRole && Array.isArray(_meRole.permissions) ? _meRole.permissions : null;
+        var _readsAll = !_mePerms || ['all', 'customer_manage', 'invoice_view', 'invoice_create', 'offer_manage', 'sales_manage', 'ao_view_all', 'ao_create', 'recurring_manage', 'reports_view']
+          .some(function(p) { return _mePerms.indexOf(p) !== -1; });
+        if (!_readsAll) _allCriticalEmpty = false;
+      }
       if (_allCriticalEmpty) {
         var _respStaffIds = (Array.isArray(d['staff']) ? d['staff'] : []).map(function(s) { return s && s.id; }).filter(Boolean).slice().sort();
         var _seedStaffIds = (typeof SeedData !== 'undefined' && Array.isArray(SeedData.staff) ? SeedData.staff : []).map(function(s) { return s && s.id; }).filter(Boolean).slice().sort();

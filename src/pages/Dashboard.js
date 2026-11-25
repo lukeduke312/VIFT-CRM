@@ -2078,9 +2078,12 @@ const Dashboard = {
   /* ── Widget: Senaste händelser ─────────────────────────────────────── */
   _widgetActivity() {
     const acts = ActivityService.getRecent(8);
+    /* T3-D (D-22, SEC-B4-07): servern lämnar bara ut händelser användaren får se (fältet:
+       egna AO). Händelserna är klientrapporterade och presenteras inte som revisionshistorik. */
     return `<div class="card">
       ${this._head('activity', 'Senaste händelser')}
       <div class="card-body">
+        <div class="act-src-note" style="font-size:11px;color:var(--mt);margin:0 0 6px;">Rapporterade av användarna — inte en revisionslogg.</div>
         ${ActivityService.renderList(acts)}
       </div>
     </div>`;
@@ -2133,7 +2136,7 @@ const Dashboard = {
                 <div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.note || ActivitiesService.typeLabel(a.type))}</div>
                 <div style="font-size:10px;color:${isOverdue?'var(--rd)':'var(--mt)'};">${isOverdue?'Försenad — ':''} ${fmtDate(a.dueDate)}</div>
               </div>
-              <button class="btn bxs bsu" style="font-size:9px;padding:3px 8px;" onclick="event.stopPropagation();ActivitiesService.complete('${a.id}');Dashboard.render();">${ic('check',10)} Klar</button>
+              ${ActivitiesService.canComplete(a) ? `<button class="btn bxs bsu" style="font-size:9px;padding:3px 8px;" onclick="event.stopPropagation();ActivitiesService.complete('${a.id}');Dashboard.render();">${ic('check',10)} Klar</button>` : ''}
             </div>`;
           }).join('')}
         </div>` : ''}

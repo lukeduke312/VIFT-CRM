@@ -1659,9 +1659,11 @@ const WorkOrderDetailPage = {
     (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', imagePath:l.imagePath||'', followUpDate:l.followUpDate||'', id:l.id }));
     TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${WorkOrderDetailPage._h(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
     (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
+    /* T3-D (D-22): aktivitetsloggens poster är klientrapporterade (servern har bara verifierat
+       vem och när) och märks så — de presenteras inte som revisionshistorik. */
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
       if (a.type==='status_change'||a.type==='work_order_status'||a.type==='created')
-        events.push({ type:a.type, ts:a.timestamp||'', who:'', text:a.description||'' });
+        events.push({ type:a.type, ts:a.timestamp||'', who:'', text:a.description||'', klientrapport:true });
     });
 
     if (!events.length) return this._empty('history', 'Ingen historik ännu', 'Anteckningar, bilder, tid, material och statusändringar visas här.', '');
@@ -1713,6 +1715,7 @@ const WorkOrderDetailPage = {
           <div style="flex:1;min-width:0;padding:2px 0 ${isLast?'4':'16'}px 10px;">
             <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:${ev.text||ev.imageData?'3':'0'}px;">
               <span style="font-size:10px;font-weight:800;color:${ti.col};text-transform:uppercase;letter-spacing:.4px;">${ti.lbl}</span>
+              ${ev.klientrapport?`<span class="aod-klientrapport" style="font-size:10px;color:var(--mt);" title="Rapporterad av användarens app — inte en revisionslogg">klientrapport</span>`:''}
               ${ts?`<span style="font-size:10px;color:var(--mt);">${ts}</span>`:''}
               ${ev.who?`<span style="font-size:10px;color:var(--mt);display:inline-flex;align-items:center;gap:3px;">${ic('user',9)} ${esc(ev.who)}</span>`:''}
             </div>

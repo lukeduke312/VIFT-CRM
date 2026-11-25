@@ -39,9 +39,45 @@ const ActivitiesService = {
   PRIORITIES: ['låg', 'normal', 'hög', 'akut'],
   _PRIORITY_RANK: { akut: 0, hög: 1, normal: 2, låg: 3 },
 
+  /* ── T3-D (2026-11-28, D-15, F8): samma regel i klienten som i servern ──────
+     Servern (vift-v2 store-key-write/activities-policy.ts + urvalet per post i
+     vift_store_project) avgör; klienten visar bara de val servern godtar.
+       HELA REGISTRET  admin_manage, eller ao_edit OCH ao_view_all (arbetsledare).
+                       ao_view_all ensamt räcker INTE (D-15, ekonomi).
+       EGEN            skapad av mig OCH tilldelad mig: redigera allt, ta bort.
+       TILLDELAD       tilldelad mig (skapad av någon annan): klarmarkera, återöppna,
+                       flytta datum — inte titel, ansvarig eller annat.
+       NY              bara åt mig själv (utan full rätt).
+     En uppgift som syns för att den hör till en AO jag är tilldelad (men varken är
+     egen eller tilldelad mig) är bara läsbar. Servern svarar annars 403 not_own. */
+  _me() {
+    const u = (typeof Auth !== 'undefined' && Auth.getUser) ? Auth.getUser() : null;
+    return u && u.id ? u.id : null;
+  },
+  canManageAll() {
+    if (typeof Auth === 'undefined' || !Auth.can) return false;
+    return Auth.can('admin_manage') || (Auth.can('ao_edit') && Auth.can('ao_view_all'));
+  },
+  isOwn(act) { const me = this._me(); return !!(me && act && act.createdBy === me && act.assignedTo === me); },
+  isAssignedToMe(act) { const me = this._me(); return !!(me && act && act.assignedTo === me); },
+  canEdit(act) { return !!act && (this.canManageAll() || this.isOwn(act)); },
+  canComplete(act) { return !!act && (this.canManageAll() || this.isAssignedToMe(act)); },
+  canDelete(act) { return !!act && (this.canManageAll() || this.isOwn(act)); },
+  /* Vilka får jag sätta som ansvarig? Utan full rätt bara mig själv. */
+  assignableStaff() {
+    const active = (state.staff || []).filter(s => s && s.active !== false);
+    if (this.canManageAll()) return active;
+    const me = this._me();
+    return active.filter(s => s.id === me);
+  },
+
   create(data) {
     if (!state.activities) state.activities = [];
-    const id = newId(state.activities, 'ACT');
+    /* T3-D: id som inte kan krocka med uppgifter som servern inte lämnar ut till mig
+       (urval per post) — "högsta + 1" ur den egna, projicerade listan kan träffa en dold
+       uppgifts id och ge en konflikt i stället för en ny uppgift. Samma slumpade id som AO
+       och tidposter (newSafeId). Befintliga id skrivs inte om. */
+    const id = newSafeId('ACT', state.activities);
     const user = state.currentUser;
     const act = Object.assign({
       id,
