@@ -58,7 +58,34 @@ Källorna är QA-rapporterna 2026-11-24–26 (`docs/qa-2026-11-24/`, `docs/qa-20
 
 **LIVE** har **inget** av arbetet efter 2026-11-22. Det gäller både klient (v2, V3–V3.4) och serverändringar: C-5, `ao-time-write` v5, lastChanged-triggern, GO-5–GO-8, `time-entries-list` med flera. Fas 0–2 finns i LIVE:s äldre klient (`2b01cea` enligt brief), men vilken version av varje punkt LIVE har är inte inventerat.
 
-**Statusräkning (uppdaterad 2026-11-27)** (numrerade punkter 1–271 och E2b-1–E2b-6):
+**Statusräkning (uppdaterad 2026-11-28, samlad T3-leverans)** (numrerade punkter 1–274 och E2b-1–E2b-6; räknat med skript ur statuscellernas första nivå):
+
+| Nivå/läge | Antal |
+|---|---|
+| Verifierad i LIVE | 0 |
+| Verifierad i STAGING | 109 |
+| Lokalt verifierad | 5 |
+| Simulerat testad | 69 |
+| Byggd | 51 |
+| Delvis byggd (inkl. delvis lokalt verifierad) | 14 |
+| Ej påbörjad | 27 |
+| Beslutad, ej påbörjad | 3 |
+| Uppskjuten | 2 |
+| **Summa** | **280** |
+
+- "Lokalt verifierad": 242 (Byggd + lokalt verifierad), 244, 245, 261 (servern; klienttest kvar) och 269. Ingen av dem är verifierad i STAGING.
+- "Delvis byggd" omfattar de tio från 2026-11-27 samt 247, 250, 265 och 270 (delvis lokalt verifierade i T3-A–T3-C).
+- Jämfört med 2026-11-27: 245, 247, 250, 261, 265, 269 och 270 har lämnat Ej påbörjad; 272–274 (VK-1) är nya med Beslutad, ej påbörjad.
+
+**Id utanför nummerserien (2026-11-28, efter T3):**
+- 49 beslut (D-01–D-26, AP-A–AP-G, B1–B5, Ö1–Ö10, B-FAKT-1): 18 Lokalt verifierad (D-02, D-03, D-07, D-12, D-14, D-15, D-21, D-22, D-25, D-26, B3, B4, Ö2, Ö5, Ö6, Ö7, AP-B, AP-F), 5 Delvis (D-04, D-13, D-24, AP-A, AP-G), 26 Beslutad, ej byggd.
+- 17 säkerhetsfynd: 12 lokalt åtgärdade eller verifierade (SÄK-2, -3, -4, -5, -8, -9, -10, -11 tilldelningsdelen, -12, -13, -15, -16), SÄK-17 lokalt verifierad för T3-paketens resurser, 4 öppna (SÄK-1 T4-F, SÄK-6 T4-B, SÄK-7 T4-A/T4-C, SÄK-14 T4-D). Inget är installerat eller verifierat i STAGING.
+- Paketen T3-0–T3-E: lokalt genomförda; STAGING NO-GO tills separat GO per paket; LIVE NO-GO. T4-A–T4-F: Lokal GO.
+- Spårbarhet per SÄK, BLOCKER och R-punkt: `docs/qa-2026-11-28/T3-RESULTAT.md`, avsnittet "Samlad T3-leverans".
+
+<details><summary>Statusräkning 2026-11-27 (historik)</summary>
+
+**Statusräkning 2026-11-27** (numrerade punkter 1–271 och E2b-1–E2b-6):
 
 | Nivå/läge | Antal |
 |---|---|
@@ -76,7 +103,9 @@ Källorna är QA-rapporterna 2026-11-24–26 (`docs/qa-2026-11-24/`, `docs/qa-20
 
 **Id utanför nummerserien (2026-11-27):** 49 beslut med status Beslutad, ej byggd (D-01–D-26, AP-A–AP-G, B1–B5, Ö1–Ö10, B-FAKT-1); 17 säkerhetsfynd SÄK-1–SÄK-17 (Registrerad, ej påbörjad; 11 av dem P1, varav SÄK-8 och SÄK-9 P1 inför LIVE); 14 öppna frågor (Beslut krävs); 12 paket T3-0–T4-F (lokal GO, STAGING NO-GO, LIVE NO-GO).
 
-**Uppdatering 2026-11-28 (VK-1):** nya numrerade punkter **272–274** (verksamhetskravet debitering per tillfälle och enhet, status Beslutad, ej påbörjad). Statusräkningen ovan avser 1–271 och E2b och räknas om i den samlade T3-leveransen.
+**Uppdatering 2026-11-28 (VK-1):** nya numrerade punkter **272–274** (verksamhetskravet debitering per tillfälle och enhet, status Beslutad, ej påbörjad). Omräknad i den samlade T3-leveransen (ovan).
+
+</details>
 
 <details><summary>Statusräkning 2026-11-26 (historik)</summary>
 
@@ -890,8 +919,8 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 |---|---|---|---|---|
 | T3-0 | Grund: versionerade migrationer för de 13 funktionerna och cutover-policyerna, EF-synk, lokal STAGING-replik, testverktyg som kontrollerar felkod, `reason` och kontrollsumma | 242, 244, SÄK-17 | Inventeringen (klar) | **Lokalt genomförd 2026-11-28** (`docs/qa-2026-11-28/T3-RESULTAT.md`): replik, testverktyg, EF-smoke, baslinje (34 brister), paritet, KÄLLA-1, MIG-1. Kvar: PG17/Deno (miljö), skärpning av STAGING-verktygen (flyttad till T3-B). STAGING: inget installerat |
 | T3-A | Klientskydd: reservrollen fail-closed, rensning av alla `vift_*`-nycklar vid utloggning | SÄK-10, SÄK-9, 265 | Inga; installeras före T3-E | Lokal GO · **2026-11-28: lokalt verifierad** (36_client_security 13/13, client_security.test.js 38/38); STAGING NO-GO tills installerad |
-| T3-B | AO-kärna och arbetspool: regelkontroll i `work_order_patch` under lås, poolregeln, "Ta jobbet" atomiskt (409 `already_assigned`), tid och stämpling mot tilldelning, nya AO-behörigheter | SÄK-5, SÄK-3, SÄK-4, SÄK-15 (F21), SÄK-11 (F16/F23), SÄK-12 (F17), SÄK-16; D-03, D-07, D-24, AP-A, AP-B, AP-F, AP-G | T3-0 | Lokal GO efter T3-0 |
-| T3-C | Superadmin, roller och direkta vägar: eskaleringsregel, invarianten "≥1 aktiv `all`" under lås | SÄK-8, SÄK-13 (F18), 243; D-25, D-21; Ö5 | T3-0 (T3-B rekommenderas först) | Lokal GO efter T3-0 |
+| T3-B | AO-kärna och arbetspool: regelkontroll i `work_order_patch` under lås, poolregeln, "Ta jobbet" atomiskt (409 `already_assigned`), tid och stämpling mot tilldelning, nya AO-behörigheter | SÄK-5, SÄK-3, SÄK-4, SÄK-15 (F21), SÄK-11 (F16/F23), SÄK-12 (F17), SÄK-16; D-03, D-07, D-24, AP-A, AP-B, AP-F, AP-G | T3-0 | Lokal GO efter T3-0 · **Lokalt genomförd 2026-11-28** (`T3-RESULTAT.md`, T3-B); ej installerad i STAGING |
+| T3-C | Superadmin, roller och direkta vägar: eskaleringsregel, invarianten "≥1 aktiv `all`" under lås | SÄK-8, SÄK-13 (F18), 243; D-25, D-21; Ö5 | T3-0 (T3-B rekommenderas först) | Lokal GO efter T3-0 · **Lokalt genomförd 2026-11-28** (`T3-RESULTAT.md`, T3-C); ej installerad i STAGING |
 | T3-D | Urval per post: aktivitetslogg, uppgifter, offertreferens, kunder/fastigheter per uppdrag, personal | SÄK-2; B4, Ö7, D-12–D-15, D-22 | **T3-B installerat först** | Lokal GO efter T3-B · **Lokalt genomförd 2026-11-28** (`T3-RESULTAT.md`, T3-D); ej installerad i STAGING |
 | T3-E | Standardroller (M9) | D-02, D-26, Ö2 | **T3-A installerat**; T3-B–D; K-01, K-02 | Lokal GO (replik) · **Lokalt genomförd 2026-11-28** (`T3-RESULTAT.md`, T3-E): standardrollerna som manuellt skript (A–D, STOP, journal, rollback med expectedHash), migration `20261128000008` (ej verkställda behörigheter verkningslösa), testgruppen `standard_roles`, införandeplan per STAGING-roll; STAGING NO-GO tills T3-A–D installerade, testkonton godkända och separat GO för rollregistret |
 | T4-A + T4-B | Samordnat B1 + B5: skyddade fält med fältvis sammanslagning, `cost_view`; material, priser och tid radvis, okänt ≠ 0, `cost_edit`, `time_view_all` | SÄK-7 (läckage), SÄK-6, SÄK-11 (pris); B1, B5, D-01, D-05, D-06, D-09–D-11, D-13, D-17, D-19 | T3-B, T3-C, T3-E; K-03 | Lokal GO efter T3-B/C |
@@ -916,7 +945,7 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 | V10 | T4-F | SEC-EXP-03..05 |
 | V11 | Alla | Slutregression: `tests/run-all.sh`, lokala sviter mot replikan, `e2e-real.js`, kontrollsummor och städning med kod 0 |
 
-**Utanför T3/T4 (AO-etappen):** `ao_plan_own` (AP-E), räknare (AP-C), notiser utöver "inga falska tilldelningsnotiser" (AP-D), avveckling av status `pool` (AP-G), kategorierna i alla vyer, AO-nummergeneratorn (245) och UX-etappen.
+**Utanför T3/T4 (AO-etappen):** `ao_plan_own` (AP-E), räknare (AP-C), notiser utöver "inga falska tilldelningsnotiser" (AP-D), avveckling av status `pool` (AP-G), kategorierna i alla vyer och UX-etappen. AO-nummergeneratorn (245) är lokalt genomförd i T3-B (2026-11-28).
 
 **Hänsyn i T4-A + T4-B (VK-1, punkt 272, registrerat 2026-11-28):** pris- och faktureringsarkitekturen ska ge plats för insatsregistreringar debiterade per tillfälle och enhet (punkt 273–274). Ingen implementation av VK-1 i T4 och ingen ändring av arbetsordningen.
 
@@ -955,7 +984,7 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 | D-21 | Rollregister: egen effektiv behörighet; andras listor kräver särskild rättighet | **Lokalt verifierad** (T3-C, 2026-11-28): utan `admin_manage` bara den egna rollen ur `vift_roles` (med `staff_manage` även de roller man får tilldela); REST-läsning av registret stängd för övriga · *tidigare: **Beslutad, ej byggd*** | T3-C, T3-D |
 | D-22 | Aktivitetslogg: typer och referenser per behörighet; servern sätter identitet och tid; klientrapporterat är inte revisionshistorik | **Lokalt verifierad** (T3-D, 2026-11-28): `activity_log_append` med anroparens id och behörigheter: 403 `type_not_allowed`/`ref_not_visible` under lås, aktör och tid satta av servern, märkt `klientrapport`; klienten märker posterna som inte revisionslogg · *tidigare: **Beslutad, ej byggd*** | T3-D |
 | D-23 | Radering och känsliga uppgifter: atomiskt med överordnad post; revision utan portkod; skilj arkivering, mjuk och permanent radering | **Beslutad, ej byggd** | T4-C |
-| D-24 | Arbetspool: följ AP-A–AP-G; tilldelad men oplanerad AO är giltig i poolen | **Beslutad, ej byggd** | T3-B, AO-etappen |
+| D-24 | Arbetspool: följ AP-A–AP-G; tilldelad men oplanerad AO är giltig i poolen | **Delvis** (T3-B, 2026-11-28, lokalt verifierad): serverregeln (AP-A säkerhetsdel, AP-B, AP-F); vyerna, AP-C–AP-E och AP-G:s avveckling i AO-etappen · *tidigare: **Beslutad, ej byggd*** | T3-B, AO-etappen |
 | D-25 | Superadmin: `admin_manage` är inte superadmin; bara superadmin hanterar `all`; atomisk invariant "minst en aktiv superadmin" | **Lokalt verifierad** (T3-C, 2026-11-28): se SÄK-8 · *tidigare: **Beslutad, ej byggd*** | T3-C |
 | D-26 | Testkonton motsvarar standardrollerna, plus negativa fall för egna roller; skapas i STAGING först efter separat godkännande | **Lokalt verifierad** (T3-E, 2026-11-28): ett syntetiskt konto per standardroll och 23 egna roller (SEC-CUST-01..23) mot repliken, och e2e T3E-01..07 per standardroll mot den simulerade servern. Inga konton i STAGING (kräver separat GO); flytt av e2e-kontona till standardrollerna är steg 4 i införandeplanen · *tidigare: **Beslutad, ej byggd*** | T3-E; 262 |
 
@@ -1020,13 +1049,13 @@ Förfallodatum skiljs från utförandedatum med ett nytt fält `dueDate`; på be
 
 | Id | Fråga | Status |
 |---|---|---|
-| AP-A | Räknas en otilldelad, odaterad AO med status `nytt` (eller `planerad`) som öppen pool? Är en otilldelad pool-AO med datum öppen pool eller planerad? | **Beslutad, ej byggd** (2026-11-27): Öppen pool = uttryckligen tillgängliggjorda, aktiva, otilldelade uppdrag; tilldelad pool = personal utan planerat datum; planerad = faktiskt utförandedatum. Förfallodatum gör inte en AO schemalagd. Ingen breddning av utlämningen. · T3-B (serverregel), AO-etappen (vyer) · *tidigare: **Beslut krävs*** |
-| AP-B | Får fält stämpla på en AO de inte är tilldelade? | **Beslutad, ej byggd** (2026-11-27): Fält måste vara tilldelad AO innan tid och instämpling; öppet pooljobb tas först; ingen automatisk tilldelning via stämpling. · T3-B (SÄK-11) · *tidigare: **Beslut krävs*** |
+| AP-A | Räknas en otilldelad, odaterad AO med status `nytt` (eller `planerad`) som öppen pool? Är en otilldelad pool-AO med datum öppen pool eller planerad? | **Delvis** (T3-B, 2026-11-28, lokalt verifierad): säkerhetsdelen, poolregeln i server och fake-backend (se SÄK-3); vyerna och kategorierna kvar till AO-etappen · *tidigare: **Beslutad, ej byggd*** (2026-11-27): Öppen pool = uttryckligen tillgängliggjorda, aktiva, otilldelade uppdrag; tilldelad pool = personal utan planerat datum; planerad = faktiskt utförandedatum. Förfallodatum gör inte en AO schemalagd. Ingen breddning av utlämningen. · T3-B (serverregel), AO-etappen (vyer) · *tidigare: **Beslut krävs*** |
+| AP-B | Får fält stämpla på en AO de inte är tilldelade? | **Lokalt verifierad** (T3-B, 2026-11-28, se SÄK-11) · *tidigare: **Beslutad, ej byggd*** (2026-11-27): Fält måste vara tilldelad AO innan tid och instämpling; öppet pooljobb tas först; ingen automatisk tilldelning via stämpling. · T3-B (SÄK-11) · *tidigare: **Beslut krävs*** |
 | AP-C | Ska "Otilldelade" omfatta öppen pool? | **Beslutad, ej byggd** (2026-11-27): "Otilldelade" = aktiva AO utan personal; öppen pool är en delmängd; samma definitioner i alla vyer. · AO-etappen · *tidigare: **Beslut krävs*** |
 | AP-D | Vilka vägar ger notis (skapande med personal, när någon tar ett jobb, nytt i poolen)? | **Beslutad, ej byggd** (2026-11-27): Tilldelningsnotis när personal faktiskt tilldelats, först efter serverbekräftelse och utan dubbletter; arbetsledare kan få notis när någon tar ett jobb; notis om nytt pooljobb är konfigurerbar; ingen falsk notis vid avplanering. · AO-etappen (inga falska notiser i T3-B) · *tidigare: **Beslut krävs*** |
 | AP-E | Får tilldelad fältpersonal sätta datum själv? | **Beslutad, ej byggd** (2026-11-27): Tilldelad fältpersonal får planera egna oplanerade uppdrag med `ao_plan_own`; tydliga regler vid flera personer; ändrar inte andras tilldelning, ekonomi eller status. · **AO-etappen**, inte T3/T4; K-06, Q4 · *tidigare: **Beslut krävs*** |
-| AP-F | Vilken behörighet krävs för "Ta jobbet"? Hänger ihop med Ö2. | **Beslutad, ej byggd** (2026-11-27): Separat behörighet `ao_pool_take`, inte kopplad till `ao_complete` eller `ao_time`; atomisk tagning, exakt en lyckas. · T3-B (SÄK-4) · *tidigare: **Beslut krävs*** |
-| AP-G | Ska status `pool` avvecklas för nya AO på sikt? | **Beslutad, ej byggd** (2026-11-27): `pool` avvecklas inte förrän import, serviceintervall, kalender, behörigheter och notiser är verifierade; ingen omskrivning av historik; personaldialogen hanterar bara personal och ansvarig, "Ta bort datum" och "Släpp till öppen pool" är separata åtgärder. · AO-etappen (AP-FEL-1) · *tidigare: **Beslut krävs*** |
+| AP-F | Vilken behörighet krävs för "Ta jobbet"? Hänger ihop med Ö2. | **Lokalt verifierad** (T3-B, 2026-11-28, se SÄK-4 och D-03) · *tidigare: **Beslutad, ej byggd*** (2026-11-27): Separat behörighet `ao_pool_take`, inte kopplad till `ao_complete` eller `ao_time`; atomisk tagning, exakt en lyckas. · T3-B (SÄK-4) · *tidigare: **Beslut krävs*** |
+| AP-G | Ska status `pool` avvecklas för nya AO på sikt? | **Delvis** (T3-B, 2026-11-28, lokalt verifierad): personaldialogen hanterar bara personal och ansvarig (AP-FEL-1); `pool` finns kvar och ingen historik är omskriven; separata åtgärder och avvecklingen kvar till AO-etappen · *tidigare: **Beslutad, ej byggd*** (2026-11-27): `pool` avvecklas inte förrän import, serviceintervall, kalender, behörigheter och notiser är verifierade; ingen omskrivning av historik; personaldialogen hanterar bara personal och ansvarig, "Ta bort datum" och "Släpp till öppen pool" är separata åtgärder. · AO-etappen (AP-FEL-1) · *tidigare: **Beslut krävs*** |
 
 #### Rekommenderad ordning för arbetspoolen (förslag, ej beslutad)
 
