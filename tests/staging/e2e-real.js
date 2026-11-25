@@ -130,8 +130,11 @@ async function createOfferViaWizard(s, { title, customerId, lines }) {
     if (l.vat != null) await s.eval(([idx, v]) => { const sel = document.querySelectorAll('#off-lines select')[idx * 3 + 1]; if (sel) { sel.value = String(v); sel.dispatchEvent(new Event('change', { bubbles: true })); } }, [i, l.vat]);
   }
   await s.settle(400);
-  const pairs = await s.eval(() => { const lines = (document.getElementById('off-totals-bar') || document.body).innerText.split('\n').map((x) => x.trim()).filter(Boolean); const out = {}; for (let i = 0; i < lines.length - 1; i++) if (/^(Summa ex\. moms|Moms|Totalt inkl\. moms)$/.test(lines[i]) && !(lines[i] in out)) out[lines[i]] = lines[i + 1]; return out; });
+  const pairs = await s.eval(() => { const lines = (document.getElementById('off-totals-bar') || document.body).innerText.split('\n').map((x) => x.trim()).filter(Boolean); const out = {}; for (let i = 0; i < lines.length - 1; i++) if (/^(Summa ex\. moms|Summa exkl\. moms|Moms|Totalt inkl\. moms)$/.test(lines[i]) && !(lines[i] in out)) out[lines[i]] = lines[i + 1]; return out; });
   await s.page.locator('button:visible', { hasText: /Nästa: Villkor/ }).click();
+  /* V3.4 (2026-11-26): guiden har fyra steg — "Spara offert" finns i steg 4 (Granska). */
+  const granska = s.page.locator('button:visible', { hasText: /Nästa: Granska/ });
+  if (await granska.count()) await granska.first().click();
   await s.page.locator('button:visible', { hasText: /Spara offert/ }).click();
   await s.waitToast(/skapad/i, 15000);
   await s.settle(1500);
@@ -357,7 +360,12 @@ const FLOW = {
       const cands = await e.eval((aoId) => BillingQueueService.getCandidates().filter((c) => c.workOrderId === aoId).map((c) => ({ id: c.id, type: c.sourceType, amount: c.amount, sel: c.selectable, issues: c.issues })), ao.id);
       rep.add('F6.20a underlag i fakturakön', cands.length >= 1, JSON.stringify(cands).slice(0, 300));
       const sel = cands.filter((c) => c.sel);
-      for (const c of sel) await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c.id + '\')"]').check();
+      /* V3.4 (6A): kön är ihopfälld som standard — fäll ut alla rader och kryssa via data-sel-id (inline onchange finns inte längre). */
+      if (await e.page.locator('#bq-expand-all').count()) { await e.page.locator('#bq-expand-all').click(); await e.settle(400); }
+      for (const c of sel) {
+        const v34 = e.page.locator('#bq-list input._sel-cb[data-sel-id="' + c.id + '"]');
+        if (await v34.count()) await v34.check(); else await e.page.locator('input[onchange*="SelectionModel.toggle(\'' + c.id + '\')"]').check();
+      }
       await e.eval((ids2) => InvoicesPage._openCreateConfirm(ids2), sel.map((c) => c.id));
       await e.clickModalButton(/Skapa fakturautkast/); await e.settle(5000);
       const invs = (await readAll('vift_invoices')).filter((i) => (i.lines || []).some((l) => (l.sourceRefs || []).some((r) => r.workOrderId === ao.id)));
