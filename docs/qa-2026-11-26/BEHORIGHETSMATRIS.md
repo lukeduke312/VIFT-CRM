@@ -1,26 +1,52 @@
-# VIFT CRM – behörighetsmatris för nästa säkerhetsomgång
+# VIFT CRM – fastställd behörighetsmatris
 
-2026-11-26. Underlag för beslut och implementation. **Ingen kod, ingen databas och ingen Edge Function är ändrad.** Allt nedan bygger på källkod (klient i `VIFT-CRM`, server i `vift-v2/supabase`) och tidigare QA-dokument. LIVE är inte läst.
+**Status: FASTSTÄLLD 2026-11-27** enligt `docs/qa-2026-11-27/BESLUT-2026-11-27.md` (D-01–D-26, AP-A–AP-G, justeringar av säkerhetsplanen).
 
-**Utgångsdokument:**
-- `BEHORIGHETER-BESLUTSUNDERLAG.md` (B1–B5, Ö1–Ö10)
-- `SAKERHET-DEL10.md`
-- `KVARSTAENDE-PROBLEM.md`
-- `../qa-2026-11-25/C5-LASBEHORIGHET.md`
+- Beslutsdokumentet är det auktoritativa underlaget. Vid avvikelse gäller dess ordalydelse.
+- Den här matrisen ersätter förslagsversionen från 2026-11-26.
 
-Testplanen för omgången finns i `SAKERHETSPROVNING-TESTPLAN.md`.
+**Avgränsning:**
+- Bara dokumentation. Ingen kod, databas, Edge Function eller data är ändrad.
+- Serverhänvisningarna bygger på inventeringen av STAGING i `vift-v2/supabase/inventering/staging-2026-11-26/`:
+  - `INVENTERING.md`;
+  - `schema/functions.sql` (alla 64 funktioner, även `work_order_patch` och `time_entry_*`);
+  - `schema/policies.sql` (alla 51 policyer);
+  - `functions/<slug>/` (exakta EF-källor, även `invoice-write` och `rondering-pass-write`).
+- LIVE är inte läst.
 
-**Beslutad inriktning (användaren), sammanfattad:**
+Testplan och paketordning: `SAKERHETSPROVNING-TESTPLAN.md`.
 
-| Nr | Beslut |
-|---|---|
-| B1 | Inköpspriser, marginaler och intern ekonomi bara för särskilt behöriga roller. Fältet registrerar material utan att se inköpspris. Fritextmaterial ska gå. Okänt inköpspris är inte 0 kr: det markeras som okänt och kan kompletteras av en behörig roll. |
-| B2 | Försäljningspriser behålls där de behövs i arbetet. Reglerna samordnas med Ö4 (timpris i fältets tidposter och i stämpla-ut), så att försäljningspris, timpris och intern personalkostnad inte motsäger varandra. |
-| B3 | Fältet ser namn, titel och nödvändiga kontaktuppgifter. Inte andras behörigheter, inte skyddade personaluppgifter. |
-| B4 | Fältet ser bara händelser för egna eller tilldelade uppdrag. Inga ovidkommande offerter, fakturor eller ekonomiuppgifter. |
-| B5 | Portkod och nyckelinformation skyddas på servern. Servern slår ihop fält för fält, så att en användare aldrig kan skriva över ett skyddat fält som hen saknar rätt att ändra. |
-| Övrigt | Tilldelad fältpersonal får starta och klarmarkera egna tilldelade AO, men inte attestera, fakturera eller ändra skyddade ekonomifält. Egen smal behörighet för att utföra tilldelade ronderingar. Uppgifter filtreras på servern. Standardrollerna definieras korrekt. Sista superadmin skyddas. Intern kommentar hamnar aldrig på kundens faktura-PDF. |
-| Arbetspool | Öppen pool (otilldelad) kan tas av behörig fältpersonal. Tilldelad men oplanerad AO får inte tas eller ses av annan fältpersonal. Utreds parallellt. |
+---
+
+## 0. Grundprinciper (fastställda)
+
+1. **Standardrollerna är utgångspunkter.** Varje behörighet ska kunna tas bort från eller läggas till i en standardroll, i en egen roll eller för en enskild person via egen roll.
+2. **Inga säkerhetsbeslut på rollnamn eller roll-id.**
+   - Servern och klienten frågar alltid efter en behörighet (`hasPerm`/`Auth.can`), aldrig efter `role === 'chef'` eller liknande.
+   - Rollnamn får bara styra förval i gränssnittet, till exempel dashboardlayout och förvald roll för ny personal.
+   - Ställen där rollnamn i dag används som förval och därför ska granskas:
+     - `AuthService.js:379` (reservroll, SÄK-10);
+     - `DashboardConfig.js:334`, `Dashboard.js:56/558/664` (layoutförval);
+     - `ImportExportConfigs.js:520-522` (importmappning);
+     - `PageShells.js:9184/9303` (reservlista i personaldialogen).
+   - Serverpolicyn `store_admin_write_protected` använder flaggan `app_users.is_admin`, inte ett rollnamn. Den är PERMISSIVE och ändrar inte de RESTRICTIVE affärsnyckelreglerna.
+3. **Servern bestämmer.** Klientkontroller är presentation och räknas aldrig som skydd. Varje regel nedan har ett angivet verkställande lager.
+4. **Kontroller som påverkas av samtidighet görs i RPC:n under radlås** (`SELECT … FOR UPDATE` på berörd `store`-rad, eller `pg_advisory_xact_lock` när flera nycklar berörs). En kontroll i Edge Function före RPC-anropet räcker inte. Det gäller till exempel tilldelning och status i `work_order_patch`, "Ta jobbet", stämpling och tid på tilldelad AO, materialrader, superadmininvarianten och fältvis sammanslagning.
+5. **Okänt är aldrig 0.** Okända priser och kostnader markeras som okända och ger ofullständig kalkyl, aldrig ett påhittat värde.
+
+**Verkställande lager:**
+
+| Kod | Lager | Exempel |
+|---|---|---|
+| **RLS** | PostgreSQL-policy för direkt REST (`/rest/v1/store`, tabeller) | `store_read_by_role`, `store_*_no_direct_*`, `staging_generic_keys_no_direct_*` |
+| **PROJ** | Projektion innan data lämnar servern | `vift_store_project()`, redigering i `work-orders-list`/`time-entries-list` |
+| **EF** | Edge Function (behörighet, fältlista, identitet ur JWT) | `ao-time-write`, `store-key-write`, `invoice-write`, `get-sensitive-fields` |
+| **RPC** | SECURITY DEFINER-funktion som körs under lås. Här görs samtidighetskritiska kontroller. | `work_order_patch`, `store_business_key_merge_write`, `time_entry_create` |
+| **TRG** | Trigger på `store` | `_protect_critical_store_keys` |
+| **KLIENT** | Visning och dolda knappar (inget skydd) | `Auth.can`, `PAGE_PERMISSIONS` |
+| **CACHE** | Klientens `localStorage`/minne | `Auth._clearSession`, `Storage._localAll` |
+| **EXP** | Exportvägar | Exportcenter, snabbexport, serverexport |
+| **SIM** | Simulerad server (`tests/e2e/fake-backend.js`). Måste spegla samma regler, annars kan e2e-testerna inte bevisa något. | `canViewAO`, `patch_ao` |
 
 **Notation i matrisen:**
 
@@ -28,538 +54,665 @@ Testplanen för omgången finns i `SAKERHETSPROVNING-TESTPLAN.md`.
 |---|---|
 | **S** | Läsa och skriva (skapa, ändra, ta bort) |
 | **L** | Läsa hela posten |
-| **Lp** | Läsa projicerat: servern tar bort de skyddade fälten innan svaret skickas |
-| **egen** | Bara poster där användaren själv är tilldelad, skapare eller ägare (anges per rad) |
-| **–** | Ingen åtkomst. Servern lämnar inte ut något, och skrivning nekas. |
-| **(B)** | Kräver affärsbeslut, se avsnitt 4 |
-| ⚠ | Nuläget i STAGING avviker från målet |
-
-**Verkställande** anger *var* regeln måste sitta för att räknas som skydd:
-
-| Lager | Var | Kommentar |
-|---|---|---|
-| **RLS** | Policyn `store_read_by_role` och RLS på `store` | Gäller direkt REST |
-| **PROJ** | Funktionen `vift_store_project()` | Används av `readAllWithHashes` och `readWithHash` |
-| **EF** | Edge Function, med namn | Den enda skrivvägen eller läsvägen för nyckeln |
-| **RPC** | SQL-funktion som EF:en anropar under radlås | |
-| **KLIENT** | Bara presentation | **Räknas aldrig som skydd** |
+| **Lp** | Läsa projicerat (skyddade fält borttagna av servern) |
+| **egen** | Egen tilldelad eller ägd post |
+| **–** | Ingen åtkomst |
+| *(perm)* | Gäller bara med den behörigheten |
 
 ---
 
-## 1. Förslag på standardroller
+## 1. Behörighetskatalog
 
-### 1.1 Nya behörigheter som föreslås
+### 1.1 Nya behörigheter (fastställda)
 
-Fältrollens arbete kan inte uttryckas säkert med dagens behörigheter.
+| Behörighet | Betydelse | Beslut | Verkställs | Standard i |
+|---|---|---|---|---|
+| `cost_view` | Läsa inköpspris, intern timkostnad, marginal, TB och kostnadskalkyl. **Ger inte** individuella löneuppgifter. | D-01 | PROJ (`vift_articles.buyPrice`, `vift_settings.internalHourlyCost`, `materials[].buyPrice*`), EXP | admin*, chef, ekonomi |
+| `cost_edit` | Sätta och komplettera inköpspris (artikel och materialrad med okänt pris) | D-01, D-10 | EF + RPC (materialrad), `store-key-write` (`vift_articles`, fältvis) | admin*, chef, ekonomi |
+| `ao_start_own` | Starta egen tilldelad AO: `nytt`/`planerad`/`pool` → `pågående` | D-03 | RPC `work_order_patch` (ny transitionsgren under lås) | admin*, chef, personal |
+| `ao_complete_own` | Klarmarkera egen tilldelad giltig AO. Servern sätter `completedAt`/`completedBy`. | D-03 | RPC (under lås) | admin*, chef, personal |
+| `ao_pool_take` | Se och ta **öppen pool** (AP-A). Atomiskt, exakt en lyckas (AP-F). Kopplas inte till `ao_complete` eller `ao_time`. | D-03, AP-F | PROJ (`work-orders-list`) + RPC (tagning under lås) | admin*, chef, personal |
+| `ao_plan_own` | Sätta eller justera planerat datum på egen tilldelad AO. Rör inte personal, status eller ekonomi. | AP-E (**byggs i AO-etappen, inte i T3/T4**) | RPC | admin*, chef, personal (när den byggs) |
+| `rondering_utfor` | Se och utföra ronderingspass som är tilldelade en själv | Ö3, D-04 | EF `rondering-pass-write` + RPC `rondering_*` + PROJ `vift_ronderingspass` | admin*, chef, personal |
+| `objects_access_assigned` | Få nödvändig åtkomstinformation (portkod, nyckel, tillträde) för **egen tilldelad aktiv** AO eller rondering, via en smal och loggad serverväg | D-05, D-04 | EF `get-sensitive-fields` (ny gren) + `sensitive_access_audit` | admin*, personal (inte `begransad`; kan tilldelas separat) |
+| `export_data` | Exportera register som rollen får läsa. Samma regel i snabbexport och Exportcenter. | D-18 | EXP (klient) + PROJ. Skyddade fält bara via serverexport. | admin*, chef, ekonomi |
+| `export_personal_data` | Aktivt val att exportera personnummer och org.nr för privatperson. Loggas på servern. | D-18 | EF (ny serverexport) + logg | admin* (övriga bara uttryckligen) |
+| `personal_data_view` | Läsa personnummer och motsvarande uppgifter. Följer **inte** av `ao_view_all` eller `sales_manage`. | D-13 | PROJ + RLS + fältvis sammanslagning vid skrivning | admin*, ekonomi (ROT/RUT). Arbetsledare: se K-02. |
+| `time_view_all` | Läsa alla tidposter (arbetad och registrerad tid) utan attest och utan lönefält. Ersätter behovet av `payroll_*` för arbetsledare. | D-08 (utredning nedan) | EF `time-entries-list` (urval + projektion) | admin*, chef |
+| `bankgiro_edit` | Ändra bankgiro och betalningsuppgifter i `vift_settings` | D-17 | `store-key-write` + RPC (fältvis sammanslagning av settings) | admin* |
 
-**`ao_complete` är för bred.** Den styr i dag tre saker i `ao-time-write` (`patch_ao`):
-- klarmarkering;
-- "Starta";
-- "Ta jobbet".
+\* admin har `all`.
 
-Klarmarkeringen kontrolleras inte mot tilldelning (se F1 i avsnitt 5).
+**Superadmin (D-25):**
+- Superadmin = aktiv personal vars roll innehåller `all`.
+- `admin_manage` är **inte** superadmin.
+- Bara en anropare med `all` får lägga till eller ta bort `all` i en roll, eller tilldela personal en roll som innehåller `all`.
+- **Ingen eskalering:** den som har `staff_manage` eller `admin_manage` får bara tilldela och redigera roller vars behörigheter är en delmängd av de egna. Ingen får byta sin egen roll eller lägga till behörigheter i den egna rollen. Gäller i RPC under lås.
+- Invariant: minst en aktiv personal med `all`. Den kontrolleras atomiskt vid varje skrivning av `vift_staff` och `vift_roles`, med gemensamt transaktionslås.
 
-**`ao_view_own` styr både egna AO och hela poolen.** Det sker via `canViewWorkOrder()` i `_shared/vift-auth.ts` och via `work-orders-list`.
+**D-08, utredning av tidläsning:**
+- Dagens enda läsväg är `time-entries-list`. Där ser `payroll_view` alla tidposter och övriga bara sina egna.
+- `payroll_view` öppnar även Löneunderlag (`PAGE_PERMISSIONS['pg-payroll']`) och lönexporten. En separat `time_view_all` behövs därför för att arbetsledaren ska följa arbetstid utan löneåtkomst.
+- Tidposterna innehåller i dag inga individuella lönefält, bara tid, AO, kommentar och försäljningstimpris (`hourRate`).
+- `time_view_all` får tidposterna utan attestmöjlighet. `hourRate` lämnas bara ut med `cost_view`, `invoice_*` eller `payroll_view`.
+- Ett teamurval finns inte i datamodellen. `time_view_all` gäller därför all personal (se K-01).
 
-| Ny behörighet | Betydelse | Var den kontrolleras | Ersätter eller avgränsar |
-|---|---|---|---|
-| `ao_start_own` | Sätta egen tilldelad AO till `pågående` | `ao-time-write` `patch_ao`, gren A (finns, men villkoras i dag av `ao_complete`) | Del av `ao_complete` |
-| `ao_complete_own` | Sätta egen tilldelad AO till `klar` (bara från `nytt`, `planerad` eller `pågående`) | `ao-time-write` `patch_ao`: ny kontroll av tilldelning och källstatus | Del av `ao_complete` |
-| `ao_pool_take` | Se och ta **öppen** pool (`status = pool` och tom `staff`) | `work-orders-list` (urval), `ao-time-write` gren B, `canViewWorkOrder()` | Del av `ao_view_own` |
-| `rondering_utfor` | Se och utföra ronderingspass som är tilldelade en själv | `rondering-pass-write` (källa saknas, G4), läsprojektion av `vift_ronderingspass` | Ö3. Ersätter `ao_view_all` på utförandesidan |
-| `cost_view` | Se inköpspris, intern timkostnad, marginal och TB | PROJ: `vift_articles.buyPrice`, `vift_settings.internalHourlyCost`, `materials[].buyPrice` i `work-orders-list` | B1 |
-| `cost_edit` | Komplettera eller ändra inköpspris på materialrad och artikel | `ao-time-write` (materialväg), `store-key-write` (`vift_articles`) | B1, "okänt inköpspris" |
-| `export_personal_data` (B) | Exportera personnummer och org.nr för privatpersoner | KLIENT (Exportcenter), plus att servern bara lämnar ut till rätt roll (PROJ) | Observation O1 |
+### 1.2 Befintliga behörigheter: fastställd tolkning
 
-**Tolkning av befintlig `ao_complete` efter införandet:** "Klarmarkera **valfri** AO" för arbetsledare. Rollen ska ha `ao_view_all`, och servern ska kräva `ao_view_all` eller `ao_edit` för att `ao_complete` ska gälla andras AO.
+| Behörighet | Fastställd tolkning efter T3/T4 |
+|---|---|
+| `ao_view_own` | Läsa egna tilldelade AO. **Ger inte längre öppen pool.** Den kräver `ao_pool_take`. |
+| `ao_view_all` | Läsa alla AO. Ger **inte** personnummer (D-13), skrivrätt till andras uppgifter (D-15) eller `rondering_utfor`. Rondering administreras som i dag. |
+| `ao_complete` | Klarmarkera **valfri** AO som anroparen får se (arbetsledarbehörighet). Utan `ao_view_all`/`ao_edit` tolkas den under övergången som `ao_complete_own` (se SÄK-5). |
+| `ao_edit` | Redigera AO. Får **inte** sätta `status:'fakturerad'`, `invoiceId`, `invoicedAt` eller andra faktureringsfält via `patch_ao`. Det går bara genom `invoice-write` (D-07). |
+| `ao_material` | Skapa rader samt ändra och ta bort **egna** rader på egen tilldelad redigerbar AO (D-19). Andras rader kräver `ao_edit`. |
+| `ao_time` | Egen tid och stämpling, **bara på AO där anroparen är tilldelad** (AP-B). |
+| `objects_sensitive` | Full läsning och skrivning av skyddade objektfält i register och API. Standard för chef, men kan tas bort (D-05). Utan den: inga skyddade fält i någon väg, inte heller som skrivare. |
+| `customer_manage` / `customer_view` | Kunder, fastigheter och kontrakt. Ger inte personnummer (`personal_data_view` krävs, D-13). |
+| `invoice_view` / `invoice_create` | Fakturaunderlag. Standard även för chef (D-07). Skrivning bara via `invoice-write`. |
+| `payroll_view` / `payroll_manage` | Löneunderlag och lönexport, respektive attest. Standard för ekonomi och admin (D-08). |
+| `admin_manage` | Inställningar (utom bankgiro), titlar, mallar, importlogg, rollregister (inom eskaleringsregeln). Får läsa andras roll- och behörighetslistor (D-21). Är inte superadmin. |
+| `staff_view` / `staff_manage` | Personal. `staff_manage` får inte ändra egen roll eller tilldela roller utöver de egna behörigheterna (D-25). |
+| `article_manage` | Artiklar och prisgrupper. Skrivning av `buyPrice` kräver dessutom `cost_edit`. |
 
-**Migrering:** Befintliga roller som har `ao_complete` men saknar `ao_view_all` och `ao_edit` (STAGING:s fältroll) får i stället `ao_start_own`, `ao_complete_own` och `ao_pool_take`. Det kräver beslut D-03.
+---
 
-### 1.2 Standardroller
+## 2. Standardroller (fastställda utgångspunkter, D-02)
 
-Rollernas **id** föreslås följa det som klienten och personalregistret redan använder:
-- `admin`, `chef`, `personal` och `ekonomi` (seed, `PageShells.js` StaffPage, `Schema.staff().role = 'personal'`);
-- ny `begransad`.
+Id: `admin`, `chef` (etikett "Arbetsledare"), `ekonomi`, `personal`, `begransad`. Befintliga personalposter migreras inte.
 
-Etiketten för `chef` blir "Arbetsledare". Då behöver inga personalposter migreras (beslut D-02).
+**Förutsättningar för att införa rollen `personal` i rollregistret:**
+- SÄK-10 är rättad;
+- de nya behörigheterna är införda i servern (T3-paketen).
 
-| Behörighet | Administratör `admin` | Arbetsledare `chef` | Ekonomi `ekonomi` | Fält/personal `personal` | Begränsad/extern `begransad` |
+| Behörighet | `admin` | `chef` | `ekonomi` | `personal` | `begransad` |
 |---|---|---|---|---|---|
 | `all` | ✔ | | | | |
-| `dashboard_view` | (all) | ✔ | ✔ | ✔ | ✔ |
-| `ao_view_all` | (all) | ✔ | ✔ | | |
-| `ao_view_own` | (all) | ✔ | | ✔ | ✔ |
-| `ao_pool_take` (ny) | (all) | ✔ | | ✔ | (B) D-04 |
-| `ao_create`, `ao_edit` | (all) | ✔ | | | |
-| `ao_complete` (valfri AO) | (all) | ✔ | | | |
-| `ao_start_own`, `ao_complete_own` (nya) | (all) | ✔ | | ✔ | (B) D-04 |
-| `ao_time` | (all) | ✔ | | ✔ | (B) |
-| `ao_material` | (all) | ✔ | | ✔ | |
-| `ao_checklist` | (all) | ✔ | | ✔ | (B) |
-| `rondering_utfor` (ny) | (all) | ✔ | | ✔ | |
-| `customer_manage` | (all) | ✔ | | | |
-| `customer_view` | (all) | (ingår via manage) | ✔ (B) | | |
-| `offer_manage` | (all) | ✔ | | | |
-| `sales_manage` | (all) | ✔ | | | |
-| `recurring_manage` | (all) | ✔ (B, seed har den, underlaget inte) | | | |
-| `invoice_view` | (all) | (B) D-07 | ✔ | | |
-| `invoice_create` | (all) | (B) D-07 | ✔ | | |
-| `reports_view` | (all) | | ✔ | | |
-| `payroll_view` | (all) | | ✔ (B) D-08 | | |
-| `payroll_manage` | (all) | | ✔ (B) D-08 | | |
-| `cost_view` (ny) | (all) | (B) D-01 | ✔ | | |
-| `cost_edit` (ny) | (all) | (B) D-01 | ✔ (B) | | |
-| `staff_view` | (all) | ✔ | | | |
-| `staff_manage` | (all) | | | | |
-| `admin_manage` | (all) | | | | |
-| `article_manage` | (all) | | (B) | | |
-| `objects_sensitive` | (all) | (B) D-05 | | | |
-| `export_personal_data` (ny, B) | (all) | (B) | (B) | | |
+| `dashboard_view` | ✔ | ✔ | ✔ | ✔ | ✔ |
+| `ao_view_all` | ✔ | ✔ | ✔ | | |
+| `ao_view_own` | ✔ | ✔ | | ✔ | ✔ |
+| `ao_pool_take` | ✔ | ✔ | | ✔ | (separat, D-04) |
+| `ao_start_own`, `ao_complete_own` | ✔ | ✔ | | ✔ | (separat) |
+| `ao_plan_own` (AO-etappen) | ✔ | ✔ | | ✔ | |
+| `ao_create`, `ao_edit`, `ao_complete` | ✔ | ✔ | | | |
+| `ao_time` | ✔ | ✔ | | ✔ | (separat) |
+| `ao_material` | ✔ | ✔ | | ✔ | |
+| `ao_checklist` | ✔ | ✔ | | ✔ | (separat) |
+| `rondering_utfor` | ✔ | ✔ | | ✔ | (separat) |
+| `objects_access_assigned` | ✔ | (har `objects_sensitive`) | | ✔ | (separat) |
+| `objects_sensitive` | ✔ | ✔ (kan tas bort) | | | |
+| `customer_manage` | ✔ | ✔ | | | |
+| `customer_view` | ✔ | | ✔ | | |
+| `personal_data_view` | ✔ | K-02 | ✔ | | |
+| `offer_manage`, `sales_manage`, `recurring_manage` | ✔ | ✔ | | | |
+| `invoice_view`, `invoice_create` | ✔ | ✔ | ✔ | | |
+| `reports_view` | ✔ | | ✔ | | |
+| `cost_view`, `cost_edit` | ✔ | ✔ (kan tas bort) | ✔ | | |
+| `time_view_all` | ✔ | ✔ | (via `payroll_view`) | | |
+| `payroll_view`, `payroll_manage` | ✔ | | ✔ | | |
+| `staff_view` | ✔ | ✔ | | | |
+| `staff_manage`, `admin_manage`, `article_manage`, `bankgiro_edit` | ✔ | | | | |
+| `export_data` | ✔ | ✔ | ✔ | | |
+| `export_personal_data` | ✔ | | | | |
 
-**Krav på rollregistret** (P1 #8 i problemlistan):
-- Rollerna ovan ska finnas i `vift_roles` i STAGING och, efter beslut, i LIVE.
-- Klientens reserv i `Auth._resolveUser()` (`AuthService.js:379`) sätter roll `'personal'` när ingen personalpost matchar e-posten. **När `personal` finns i registret ger den reserven fältbehörigheter i klienten.** Servern nekar fortfarande (`checkViftAuth` → 403). Reserven måste därför bytas till ett roll-id som inte finns (t.ex. `'okand'`) **innan** `personal` definieras (F7).
+"(separat)" betyder att behörigheten **inte** ingår som standard men kan läggas till för en enskild person eller en egen roll (D-04).
 
 ---
 
-## 2. Behörighetsmatris
+## 3. Fastställd behörighetsmatris
 
-Kolumnerna Admin, Arbetsledare (AL), Ekonomi (EK), Fält (FÄ) och Begränsad (BE) anger **målet** enligt beslutad inriktning. "Nu" anger STAGING-läget enligt källkoden.
+Kolumnerna visar standardrollerna. Regeln följer alltid av **behörigheten** i parentes, inte av rollnamnet.
 
-### 2.1 Arbetsordrar och arbetspool
+### 3.1 Arbetsordrar och arbetspool (D-03, D-04, D-07, D-24, AP-A–AP-G)
 
-| # | Resurs/fält | Admin | AL | EK | FÄ | BE | Verkställs | Nu (STAGING) | Test |
+**Definitioner (AP-A).** Lagrad data ändras inte. Kategorin härleds vid läsning.
+
+| Kategori | Villkor |
+|---|---|
+| Aktiv | `!deleted && !archived && status ∉ {klar, fakturerad, avbruten}` |
+| Öppen pool | Aktiv, `status = 'pool'`, `staff` tom. Datum påverkar inte, så säkerhetsrättningen inte breddar dagens utlämning. En ny AO med `status = 'nytt'` utan personal och datum exponeras **inte** som pool. |
+| Tilldelad pool | Aktiv, `staff` ej tom, `scheduledDate` tom. Giltig, och kan ligga kvar i arbetspoolen (D-24). |
+| Planerad | `scheduledDate` satt. Förfallodatum (serviceintervall) räknas **inte** som `scheduledDate`. |
+
+| # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu (STAGING) |
 |---|---|---|---|---|---|---|---|---|---|
-| R01 | AO egna/tilldelade (`staff` innehåller användaren) | S | S | L | L egen | L egen | EF `work-orders-list` (urval), `ao-time-write` (skriv) | Som målet | SEC-AO-01…04 |
-| R02 | AO andras (ej tilldelade, ej pool) | S | S | L | – | – | EF `work-orders-list` + `canViewWorkOrder()` i alla AO-EF:er | Läsning som målet. ⚠ **Skrivning:** `patch_ao` med bara `ao_complete` kontrollerar inte tilldelning (F1) | SEC-AO-05…08 |
-| R03 | Öppen pool (`status=pool`, tom `staff`): se | L | L | L | L (`ao_pool_take`) | – (B) | EF `work-orders-list` | ⚠ Alla med `ao_view_own` ser hela poolen, även begränsad | SEC-POOL-01…03 |
-| R04 | Öppen pool: ta jobbet | S | S | – | S (`ao_pool_take`), bara sig själv | – | EF `ao-time-write` gren B | ⚠ Kräver i dag `ao_complete` (inte en poolbehörighet). Sig själv: som målet. | SEC-POOL-04…07 |
-| R05 | Tilldelad men oplanerad AO (tilldelad, inget datum, eller `status=pool` med `staff` satt) | S | S | L | L bara om tilldelad | L bara om tilldelad | EF `work-orders-list` (urval), `ao-time-write` gren B | ⚠ `status=pool` visas för **alla** med `ao_view_own` oavsett `staff` (`work-orders-list/index.ts:90`), och gren B låter en annan fältarbetare lägga till sig själv (`ao-time-write/index.ts:244-257`) (F4) | SEC-POOL-08…11 |
-| R06 | Starta egen AO (→ `pågående`) | S | S | – | S egen | (B) | EF `ao-time-write` gren A | Som målet för tilldelad. Villkoras av `ao_complete` (F15). | SEC-AO-09…11 |
-| R07 | Klarmarkera AO (→ `klar`) | S | S (valfri) | – | S egen (`ao_complete_own`) | (B) | EF `ao-time-write`. Kontroll av tilldelning och källstatus. | ⚠ Valfri AO, valfri källstatus, även `fakturerad` → `klar`; `completedBy` sätts fritt (F1) | SEC-AO-12…16 |
-| R08 | Attest, `fakturerad`, `invoiceId`, arkivera, radera | S | S (`ao_edit`) | (B) G9 | – | – | EF `ao-time-write` (`patch_ao`, `delete_ao`, `permanent_delete_ao`), `invoice-write` (källa saknas) | Fält och begränsad nekas (bara fältlistan `AO_COMPLETE_ONLY_FIELDS`). Ekonomi utan `ao_edit` nekas. | SEC-AO-17…20 |
-| R09 | AO-ekonomi: `priceType`, `fixedPrice`, `priceGroupId`, TB/täckning | S | S (pris), L (TB, B) | L | – (B) D-06 | – | Skriv: EF `ao-time-write` (`ao_edit`). Läs: ⚠ PROJ saknas | ⚠ `fixedPrice` och prisuppgifter skickas till tilldelad fältpersonal. Klienten döljer dem (`_pricingCard` kräver `invoice_*`/`reports_view`). | SEC-AO-21…23 |
-| R10 | AO portkod `accessCode` | L | L (B) D-05 | – | L egen tilldelad, via EF med revisionslogg (B) | – | EF `work-orders-list` (redigering) + `get-sensitive-fields` | Bara `objects_sensitive`/`ao_edit` får fältet. Fält får **inte** portkod alls: `get-sensitive-fields` kräver `objects_sensitive` och har ingen tilldelningsväg (F3). | SEC-B5-10…13 |
+| R01 | Egna tilldelade AO | S | S | L | L egen | L egen | PROJ `work-orders-list`; SIM | D-03 | Som målet |
+| R02 | Andras AO (ej öppen pool) | S | S | L | – | – | PROJ `work-orders-list`, `canViewWorkOrder` (EF), SQL-urval i `work_order_checklist_*`/`work_order_log_*` (RPC); SIM | D-24 | SÄK-3: `status=pool` lämnas ut oavsett `staff` |
+| R03 | Öppen pool: se (begränsad projektion, D-13) | L | L | L | Lp *(ao_pool_take)* | – | PROJ `work-orders-list` (poolprojektion); SIM | AP-A, D-04, D-13 | Alla med `ao_view_own` ser hela poolen med fullständig post |
+| R04 | Öppen pool: ta jobbet | S | S | – | S *(ao_pool_take)*, bara sig själv, atomiskt | – | RPC `work_order_patch` (ny transition under lås), 409 `already_assigned` | AP-F | SÄK-4: utan lås, tillåter AO med personal, kräver `ao_complete` |
+| R05 | Tilldelad pool: se och ta | S | S | L | L bara om tilldelad; tagning nekas | L bara om tilldelad | PROJ + RPC | D-24, AP-A | SÄK-3/4 |
+| R06 | Öppen pool, skriva **före** tilldelning: material, bilder, checklista, logg, tid, stämpling | S | S | – | – | – | RPC (`work_order_*`, `time_entry_create`, `store_write_stamp_status`), EF (`work-order-image-*`), `canViewWorkOrder` delas upp i `canView` och `canWrite` | Plan-justering, AP-B | `canViewWorkOrder` släpper igenom pool. Tid och stämpling kontrolleras inte alls (F16/F23). |
+| R07 | Starta egen | S | S | – | S *(ao_start_own)* | (separat) | RPC under lås: tilldelad, källstatus `nytt`/`planerad`/`pool`, inte arkiverad eller borttagen | D-03 | Gren A i EF före lås, villkoras av `ao_complete` |
+| R08 | Klarmarkera | S | S *(ao_complete)* valfri synlig | – | S *(ao_complete_own)* egen | (separat) | RPC under lås: tilldelad, källstatus `nytt`/`planerad`/`pool`/`pågående`. Servern sätter `completedAt`/`completedBy`. | D-03 | **SÄK-5 (P1):** valfri AO, även `fakturerad` → `klar` |
+| R09 | Planera egen (AO-etappen) | S | S | – | S *(ao_plan_own)* | – | RPC | AP-E | Finns inte |
+| R10 | Fakturering: `status:'fakturerad'`, `invoiceId`, `invoicedAt` | via `invoice-write` | via `invoice-write` | via `invoice-write` | – | – | EF `invoice-write` (`invoice_create`) + RPC `invoice_set_status`. `ao-time-write`/`work_order_patch` avvisar fälten för **alla** roller. | D-07 | `ao_edit` kan sätta `fakturerad` i `patch_ao` (F21) |
+| R11 | Ändra AO (fält, personal, pris), arkivera, mjuk och permanent radering | S | S *(ao_edit)* | – | – | – | EF + RPC | D-23 | Som målet |
+| R12 | AO-ekonomi: fastpris, prisbelopp, TB | S | S *(cost_view)* | L | – (debiteringskategori utan belopp) | – | PROJ `work-orders-list` | D-06 | `fixedPrice` m.m. skickas till fält, klienten döljer |
 
-### 2.2 Material och priser (B1, B2, Ö4)
+### 3.2 Material, priser och kostnader (D-01, D-06, D-09, D-10, D-11, D-19)
 
-| # | Resurs/fält | Admin | AL | EK | FÄ | BE | Verkställs | Nu (STAGING) | Test |
+| # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R11 | Registrera materialrad (artikel + antal, eller fritext) på egen AO | S | S | – | S egen | – | EF `ao-time-write` (materialväg). Servern slår upp pris från artikel-id. | Patchen ersätter hela `materials`-arrayen. Fält kan ändra och ta bort **andras** rader och deras priser. Pool-AO är tillåtna (F2). | SEC-B1-01…06 |
-| R12 | Materialrad inköpspris (`materials[].buyPrice`): läsa | L | (B) D-01 | L | – | – | PROJ i `work-orders-list` (ny) | ⚠ Skickas till fält. Klienten döljer i raden, men **artikelväljaren visar "Ink: … kr" för alla** (`WorkOrderDetailPage.js:2053`). | SEC-B1-07…09 |
-| R13 | Materialrad inköpspris: sätta eller komplettera okänt | S | (B) D-01 | S (`cost_edit`) | – | – | EF `ao-time-write`. Servern sätter `buyPrice` från artikel eller `null` + `buyPriceUnknown: true`. | ⚠ Klienten sätter `buyPrice: … \|\| 0` (`WorkOrderDetailPage.js:2248`), så okänt blir 0 kr. Fält kan skicka valfritt inköpspris. | SEC-B1-10…14 |
-| R14 | Materialrad försäljningspris (`sellPrice`): läsa | L | L | L | (B) D-09 | – | PROJ i `work-orders-list` | Skickas till fält. Klienten visar det bara med `invoice_*`/`reports_view`, utom i artikelväljaren. | SEC-B2-01…03 |
-| R15 | Materialrad försäljningspris: ändra | S | S | S (B) | – (servern sätter från artikeln; fritext: (B) D-10) | – | EF `ao-time-write` | ⚠ Fält kan sätta valfritt `sellPrice` | SEC-B2-04…05 |
-| R16 | Artikelregister `vift_articles.buyPrice` | S | (B) | L | – | – | PROJ + RLS (ny nyckelregel) | ⚠ Alla aktiva läser (`else true`, `20261125000003…:93`) | SEC-B1-15…18 |
-| R17 | Artikelregister: namn, enhet, försäljningspris | S | L | L | L (D-09) | – | PROJ | Alla aktiva läser | SEC-B1-19 |
-| R18 | Prisgrupper `vift_priceGroups.hourRate` (försäljning) | S | L | L | L (B2: behålls) eller – enligt D-11 | – | PROJ | Alla aktiva läser | SEC-B2-06…07 |
-| R19 | Timpris i tidpost (`timeEntries[].hourRate`, `priceGroupName`), Ö4 | L | L | L | – i egna tidposter och i stämpla-ut (D-11) | – | EF `time-entries-list` (projektion) + `ao-time-write` (servern sätter timpris) | ⚠ Fält ser timpris i egna tidposter, i stämpla-ut och i AO-detaljens tidrader (`WorkOrderDetailPage.js:1633`) | SEC-B2-08…11 |
-| R20 | Intern timkostnad `vift_settings.internalHourlyCost` | S | (B) D-01 | L (`cost_view`) | – | – | PROJ (`vift_settings`) | ⚠ Full läsning även för `ao_view_all`, `ao_edit` och `offer_manage`, alltså arbetsledare (`20261125000003…:89`) | SEC-INST-03…05 |
+| R13 | Ny materialrad (artikel + mängd, eller fritext + mängd, enhet, dokumentation) | S | S | – | S *(ao_material)* egen tilldelad redigerbar AO | – | Ny radvis RPC (`work_order_material_add`), servern sätter `id`, `addedBy`, `addedAt` och pris från artikel | D-10, D-19 | SÄK-6: hela listan ersätts, priser från klienten |
+| R14 | Ändra och ta bort **egen** materialrad | S | S | – | S egen rad på egen redigerbar AO | – | RPC `work_order_material_update/remove` under lås | D-19 | Hela listan |
+| R15 | Ändra och ta bort **annans** materialrad | S | S *(ao_edit)* | – | – | – | RPC | D-19 | Fält kan |
+| R16 | Inköpspris (`articles.buyPrice`, `materials[].buyPrice`): läsa | L | L *(cost_view)* | L | – | – | PROJ (store och `work-orders-list`), EXP | D-01 | Alla läser artiklar. Artikelväljaren visar "Ink:". |
+| R17 | Inköpspris: sätta och komplettera okänt | S | S *(cost_edit)* | S | – | – | RPC (materialrad), `store-key-write` (fältvis för artiklar) | D-01, D-10 | Klienten sätter `\|\| 0` |
+| R18 | Försäljningspris material: läsa | L | L | L | – (dolt konsekvent överallt) | – | PROJ (`articles.sellPrice`, `materials[].sellPrice`), KLIENT | D-09 | Skickas till fält, artikelväljaren visar |
+| R19 | Försäljningspris material: sätta | S | S | S | – (servern sätter från artikel; fritext = okänt) | – | RPC | D-09, D-10 | Klienten sätter |
+| R20 | Okänt pris → fakturaunderlag | – | Flagga och komplettera | Flagga och komplettera | – | – | RPC `invoice_*` / `_invoice_financial_check` stoppar eller flaggar. TB = ofullständig. | D-10 | Okänt = 0 kr |
+| R21 | Fastpris-AO: material | Ingår i fastpris om inte uttryckligen markerat som tillägg (av `ao_edit`/`invoice_create`) | | | | | RPC (fakturaunderlag) | D-10 | Ej definierat |
+| R22 | Prisgrupp: välja | S | S | S | Namn utan belopp, bara tillåtna grupper | – | EF `ao-time-write` + RPC `time_entry_create` validerar grupp och sätter `hourRate` | D-11 | Fält ser belopp, klienten skickar `hourRate` (F16) |
+| R23 | Timpris (`priceGroups.hourRate`, `timeEntries.hourRate`): läsa | L | L | L | – | – | PROJ (store, `time-entries-list`), KLIENT (stämpla ut, Tid-sidan, AO-detalj) | D-11 | Fält ser |
+| R24 | Historiskt bekräftat pris | Oförändrat vid prisliständring | | | | | RPC (ögonblicksbild i tidpost och materialrad) | D-11 | Ögonblicksbild finns för tidposter |
+| R25 | Intern timkostnad `settings.internalHourlyCost` | S | L *(cost_view)* | L | – | – | PROJ | D-01 | `ao_view_all`/`ao_edit`/`offer_manage` får fullt värde |
 
-### 2.3 Tid, fakturering, offerter, kunder
+### 3.3 Tid, fakturering, offerter, kunder (D-07, D-08, D-12, D-13, D-20)
 
-| # | Resurs/fält | Admin | AL | EK | FÄ | BE | Verkställs | Nu (STAGING) | Test |
+| # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R21 | Tidposter egna | S | S | (B) | S egen (ej attesterade) | (B) | EF `time-entries-list` + `ao-time-write` (RPC kontrollerar ägare) | Som målet. Tid på AO som användaren inte ser är inte prövat (F16). | SEC-TID-01…05 |
-| R22 | Tidposter andras, attest | S | (B) D-08 | S (`payroll_*`) | – | – | EF `time-entries-list` (`payroll_view`), `ao-time-write` `attest_time` (`payroll_manage`) | Som målet | SEC-TID-06…09 |
-| R23 | Fakturaunderlag `vift_invoices` | S | L (B) D-07 | S | – | – | RLS + PROJ. Skriv: EF `invoice-write` (källa saknas, G4). | L för `invoice_*`, `reports_view`, `ao_view_all` och `ao_edit`. Fält och begränsad: inget. | SEC-FAKT-01…05 |
-| R24 | Faktura: intern kommentar och kundsynlig kommentar | S | L | S | – | – | PDF-generering (klient `InvoicesPage.js:2223` och/eller server) | ⚠ `inv.note` skrivs ut på PDF:en. Det finns inget separat internt fält (P1 #3). | SEC-FAKT-06…08 |
-| R25 | Offerter, belopp och rader | S | S | Lp (utan token, interna fält) | – (D-12: i dag stubb för **alla** offerter) | – | RLS + PROJ | ⚠ Fält och begränsad får id, titel, status och kund för **alla** offerter (F9) | SEC-OFF-01…04 |
-| R26 | Offerttoken, kundgodkännande, låst kundversion, intern anteckning | S | S (`offer_manage`) | – | – | – | RLS + PROJ. Publik väg: `offer-token-validate`, `offer-respond`. | Som målet (C-5) | SEC-OFF-05…08 |
-| R27 | Kunder: namn, adress, kontakt | S | S | L | Lp egen (B) D-13 | Lp egen (B) | PROJ | Fält och begränsad läser **alla** kunder (utan personnummer) | SEC-KUND-01…03 |
-| R28 | Kunder: personnummer, org.nr för privatperson | S | L | L (ROT/RUT) | – | – | PROJ + RLS | Full läsning för `customer_manage`, `invoice_*`, `offer_manage`, `sales_manage` och `ao_view_all` | SEC-KUND-04…07 |
+| R26 | Egen tid och stämpling | S | S | S | S *(ao_time)* bara på tilldelad AO | (separat) | RPC `time_entry_create` + `store_write_stamp_status` under lås kontrollerar tilldelning | AP-B | Ingen AO-kontroll (F16/F23) |
+| R27 | Andras tid: läsa | L | L *(time_view_all)* | L *(payroll_view)* | – | – | EF `time-entries-list` | D-08 | Bara `payroll_view` |
+| R28 | Attest | S | – | S *(payroll_manage)* | – | – | EF + RPC `time_entry_set_attested` | D-08 | Som målet |
+| R29 | Löneunderlag och lönexport | L | – | L *(payroll_view)* | – | – | KLIENT + EF (`time-entries-list`) + EXP | D-08 | Som målet |
+| R30 | Fakturaunderlag | S | S *(invoice_*)* | S | – | – | RLS + PROJ (läsning), EF `invoice-write` (`invoice_create`) + RPC | D-07 | Som målet för läsning |
+| R31 | Faktura: intern kommentar | S | S | S | – | – | Nytt fält `internalNote`. PDF (klient `InvoicesPage.js:2223` och offer/invoice-PDF på servern) tar **aldrig** med det. | D-20 | `inv.note` skrivs ut |
+| R32 | Faktura: kundsynlig kommentar | S | S | S | – | – | Nytt fält `customerNote`. Äldre `note` skrivs **inte** ut utan uttrycklig klassificering. | D-20 | – |
+| R33 | Offerter: fullständiga (belopp, rader) | S | S *(offer_manage)* | Lp (utan token och interna fält) | – | – | RLS + PROJ | D-12 | Som målet |
+| R34 | Offerter: referens till tilldelad AO | L | L | L | Lp: bara id, titel, status för offert kopplad till egen AO | Lp samma | PROJ (urval per post) | D-12 | Stubb för **alla** offerter (F9) |
+| R35 | Offerttoken, godkännande, intern anteckning | S | S *(offer_manage)* | – | – | – | RLS + PROJ. Publik väg: `offer-token-validate`/`offer-respond`. | D-12 | Som målet |
+| R36 | Kunder, fastigheter, objekt, kontakter | S | S | L | Lp: bara de som hör till egna AO, och begränsat för öppen pool | Lp: bara egna AO | PROJ (urval per post med samma regel som `work-orders-list`) | D-13 | Fält läser hela registret |
+| R37 | Personnummer, org.nr för privatperson | S | (K-02) | L *(personal_data_view)* | – | – | PROJ + RLS. Skrivning: fältvis sammanslagning. EXP. | D-13 | `customer_manage`/`invoice_*`/`offer_manage`/`sales_manage`/`ao_view_all` |
 
-### 2.4 Personal, roller, logg, uppgifter
+### 3.4 Personal, roller, logg, uppgifter (D-14, D-15, D-21, D-22, D-25)
 
-| # | Resurs/fält | Admin | AL | EK | FÄ | BE | Verkställs | Nu (STAGING) | Test |
+| # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R29 | Personal: namn, titel, telefon | S | L | L | L | L (B) | PROJ | Alla läser | SEC-B3-01…02 |
-| R30 | Personal: e-post | S | L | L | L **bara egen post** + (B) D-14 | L egen | PROJ. Den egna posten måste behålla `email`, eftersom `Auth._resolveUser` matchar på den (F10). | Alla läser | SEC-B3-03…05 |
-| R31 | Personal: `permissions`, `role` (andras) | S | L (`staff_view`) | – | – (egen roll: L) | – | PROJ | ⚠ Alla läser | SEC-B3-06…08 |
-| R32 | Personal: skriva roll eller aktiv-flagga | S | – | – | – | – | EF `store-key-write` + ny fältregel för `role` och `active` (bara `all`/`admin_manage`) | ⚠ `staff_manage` kan sätta vilken roll som helst, även på sig själv: eskalering (F5) | SEC-ROLL-01…04 |
-| R33 | Roller `vift_roles` och sista superadmin | S (aldrig 0 aktiva med `all`) | L (egen) | L (egen) | L (egen) | L (egen) | EF `store-key-write`, invariant "≥1 aktiv personal med `all`" | ⚠ Inget skydd (P1 #4) | SEC-ROLL-05…10 |
-| R34 | Aktivitetslogg `vift_activityLog` | L | L | L | L egen/tilldelad AO | L egen/tilldelad AO | PROJ per post (samma urval som `work-orders-list`). Append via `store-key-write` `appendActivity`. | ⚠ Alla läser alla 500 poster (F-B4) | SEC-B4-01…08 |
-| R35 | Uppgifter `vift_activities`: egna (`assignedTo`/`createdBy` = jag) | S | S | S | S (regler i `activities-policy.ts`) | S | EF `store-key-write` (`activities-policy.ts`). Läs: PROJ per post (ny). | Skrivning som målet | SEC-TASK-01…06 |
-| R36 | Uppgifter andras | S | S | (B) D-15 | – | – | PROJ per post (ny) | ⚠ **Alla läser alla.** Fältets Uppgifter-sida visar andras (O2). | SEC-TASK-07…12 |
+| R38 | Personal: namn, titel, arbetstelefon, arbets-e-post (interna kollegor) | S | L | L | L | Lp: namn och titel för personal på egna AO | PROJ | D-14 | Alla läser hela posten |
+| R39 | Egen personalpost (inkl. e-post för inloggning) | L | L | L | L | L | PROJ (egen post fullständig). KLIENT `Auth._resolveUser`. | D-14 | Som målet |
+| R40 | Andras `role`/`permissions` och skyddade personaluppgifter | S | L *(staff_view)*, utan `permissions` | – | – | – | PROJ | D-14, D-21 | Alla läser |
+| R41 | Rollregister: egen effektiv behörighet | L | L | L | L | L | PROJ `vift_roles` (egen roll) | D-21 | Alla läser alla roller |
+| R42 | Rollregister: andras roller | S | – | – | – | – | PROJ + RLS *(admin_manage)* | D-21 | Alla läser |
+| R43 | Personal: skriva `role`/`active`, och roller: skriva `permissions` | S (superadmin) | – | – | – | – | RPC under gemensamt lås: eskaleringsregeln och invarianten "≥1 aktiv `all`" | D-25 | **SÄK-8 (P1):** `staff_manage` kan ge sig själv admin. Inget skydd för sista superadmin. |
+| R44 | Aktivitetslogg: läsa | L | L | L | Lp: händelser på egna AO | Lp: egna AO | PROJ per post (samma urval som rättad `work-orders-list`). RLS nekar direkt REST för roller utan full åtkomst. | B4, D-22 | Alla läser alla |
+| R45 | Aktivitetslogg: rapportera | `appendActivity` | inom behörighet | inom behörighet | Typer och referenser för egna AO | samma | EF `store-key-write` `appendActivity` (typlista per behörighet, referens kontrolleras), RPC `activity_log_append` | D-22 | Alla typer och referenser tillåtna (F11) |
+| R46 | Uppgifter: egna och tilldelade | S | S | S | S | S | EF `activities-policy.ts` (skrivning), PROJ per post (läsning) | D-15, Ö7 | Skrivning som målet, läsning av alla |
+| R47 | Uppgifter: andras | S | S *(ao_edit + ao_view_all, eller admin_manage)* | – (`ao_view_all` räcker inte) | – | – | EF + PROJ + KLIENT med samma regel | D-15 | **SÄK-2 (P1):** fält läser alla. Klient och server följer olika regler (F8). |
 
-### 2.5 Portkoder, ronderingar, inställningar, export
+### 3.5 Portkoder, ronderingar, inställningar (D-05, D-16, D-17, D-23)
 
-| # | Resurs/fält | Admin | AL | EK | FÄ | BE | Verkställs | Nu (STAGING) | Test |
+| # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
 |---|---|---|---|---|---|---|---|---|---|
-| R37 | Objekt: `doorCode`, `keyInformation`, `accessInformation` (`vift_propertyObjects`) | S | S (fält för fält) + L enligt D-05 | – | – | – | PROJ + RLS + **fältvis sammanslagning i `store-key-write`** (B5) | ⚠ Skrivare (`customer_manage`) får fullt värde. Klienten döljer. | SEC-B5-01…09 |
-| R38 | `property_sensitive_access` (tabell) | S | (B) D-05 | – | L egen tilldelad AO (B) | – | EF `get-sensitive-fields` / `set-sensitive-fields` + `sensitive_access_audit` | Bara `objects_sensitive`/`all`. Ingen tilldelningsväg (F3). **Två lagringsplatser** för samma uppgift (F3, D-16). | SEC-B5-10…16 |
-| R39 | `vift_recurringOrders.accessCode` | S | S (fält för fält) | – | – | – | PROJ + fältvis sammanslagning | Skrivare (`recurring_manage`) får fullt värde | SEC-B5-17…18 |
-| R40 | Ronderingspass tilldelade: se och utföra | S | S | – | S egen (`rondering_utfor`) | – | EF `rondering-pass-write` (källa saknas, G4) + PROJ `vift_ronderingspass` | ⚠ Sidorna kräver `ao_view_all`. Fält kan inte utföra. `vift_ronderingspass` läses av alla. | SEC-ROND-01…05 |
-| R41 | Ronderingar andra, mallar, scheman, avvikelser | S | S | L (B) | – | – | `store-key-write` (`ao_view_all`) + PROJ | Skriv kräver `ao_view_all`, läs: alla | SEC-ROND-06…08 |
-| R42 | `vift_settings`: bankgiro | S | (B) D-17 | L | – | – | PROJ + RLS. Skriv: `store-key-write` `write` (hel nyckel, `admin_manage`). | Full läsning för `admin_manage`, `invoice_*`, `reports_view`, `offer_manage`, `ao_view_all` och `ao_edit`. Hel nyckel skrivs på en gång (P1 #5). | SEC-INST-01…02, 06…10 |
-| R43 | `vift_settings`: övrigt (varumärke, villkor) | S | L | L | Lp | Lp | PROJ | Som målet | SEC-INST-11 |
-| R44 | Export: register | Alla | enligt läsrätt | enligt läsrätt | (B) D-18 | – | KLIENT (`EXPORT_PERMISSIONS`). Det verkliga skyddet är att servern bara lämnar ut det rollen får läsa. | Snabbexport på listsidor saknar egen spärr (F12) | SEC-EXP-01…05 |
-| R45 | Export: portkod, nyckelinfo, lösenord | Bara aktivt val | Bara aktivt val (B) D-05 | – | – | – | KLIENT `sensitiveFields` + PROJ | Av som standard, kräver `objects_sensitive` | SEC-EXP-06…08 |
-| R46 | Export: personnummer, org.nr för privatperson | Aktivt val (`export_personal_data`) | (B) | (B) | – | – | KLIENT + PROJ | ⚠ **Förvalt ikryssat** i Exportcenter och alltid med i snabbexport (O1) | SEC-EXP-09…13 |
-| R47 | Lokal cache (`localStorage vift_*`) efter utloggning eller kontobyte | – | – | – | – | – | KLIENT (`Auth._clearSession`) | ⚠ Bara tidposter och AO rensas. Övriga nycklar ligger kvar och används vid nätfel (F6). | SEC-CACHE-01…04 |
+| R48 | Skyddade objektfält i register (`propertyObjects.doorCode/keyInformation/accessInformation`, `recurringOrders.accessCode`, `workOrders.accessCode`) | S | S *(objects_sensitive)* | – | – | – | PROJ (även för skrivare), RLS, **fältvis sammanslagning** i `store_business_key_*`/`work_order_patch` | D-05, B5 | **SÄK-7 (P1, läckage):** skrivare utan `objects_sensitive` får fältet |
+| R49 | `property_sensitive_access` (sanningskälla) | S | S *(objects_sensitive)* | – | L *(objects_access_assigned)*: egen tilldelad aktiv AO eller rondering, loggat | (separat) | EF `get-/set-sensitive-fields` + RPC `sensitive_fields_write` + `sensitive_access_audit` | D-05, D-16 | Bara `objects_sensitive`/`all`, ingen tilldelningsväg |
+| R50 | Dubbel lagring av portkod (blob och tabell) | Jämförelserapport, ingen migrering | | | | | Förberedelse: läsande jämförelse. **Ingen datamigrering nu.** | D-16 | Dubbel lagring |
+| R51 | Radering av objekt med känsliga fält | S | S | – | – | – | RPC: atomisk borttagning av tabellraden vid permanent radering. Revisionsrad utan värde. Arkivering och mjuk radering behåller den. | D-23 | Ej hanterat |
+| R52 | Ronderingspass tilldelade: se och utföra | S | S | – | S *(rondering_utfor)* egna | (separat) | EF `rondering-pass-write` (ny gren per pass under lås i `rondering_*`-RPC) + PROJ | Ö3, D-04 | EF:en kräver `ao_view_all` för allt (F19) |
+| R53 | Ronderingar: mallar, schema, skapa pass, avvikelser | S | S *(ao_view_all)* | L | – | – | `store-key-write` + `rondering-pass-write` | Ö3 | Som målet för skrivning |
+| R54 | Inställningar: bankgiro (läsa) | L | L | L | – | – | PROJ | D-17 | Som målet (via intern-listan) |
+| R55 | Inställningar: bankgiro (ändra) | S *(bankgiro_edit)* | – | – | – | – | RPC fältvis sammanslagning av settings | D-17 | `admin_manage` skriver hela nyckeln |
+| R56 | Inställningar: övrigt | S *(admin_manage)* | L | L | Lp | Lp | RPC fältvis sammanslagning (konfliktsäker) | D-17 | Hela nyckeln skrivs, sista vinner vid 409-omförsök |
+
+### 3.6 Export, cache, direkta vägar (D-18)
+
+| # | Resurs/åtgärd | admin | chef | ekonomi | personal | begransad | Verkställs | Beslut | Nu |
+|---|---|---|---|---|---|---|---|---|---|
+| R57 | Export av register | S | *(export_data)* inom läsrätt | *(export_data)* | – | – | EXP (samma regel i snabbexport och Exportcenter) + PROJ | D-18 | Snabbexport saknar spärr (F12) |
+| R58 | Export av personnummer | Aktivt val *(export_personal_data + personal_data_view)*, loggas | – | – (om inte tilldelat) | – | – | **EF (ny serverexport)** + logg. Klientspärren är bara presentation. | D-18, D-13 | **SÄK-1:** förvalt ikryssat |
+| R59 | Export av portkod och nyckelinformation | Inte i normal export. Bara serverexport *(objects_sensitive + export_data)* med aktivt val och logg. | | | | | EF + logg | D-18 | Klientval med `objects_sensitive` |
+| R60 | Export av lösenord, token, autentiseringsuppgifter, hemliga nycklar | Aldrig | | | | | EXP (konfiguration) + PROJ | D-18 | `sensitiveFields` för personal. Token tas bort av PROJ. |
+| R61 | Lokal cache efter utloggning eller kontobyte | – | – | – | – | – | CACHE: alla `vift_*`-affärsnycklar rensas. Degraderad inläsning använder aldrig en annan användares cache. | – | **SÄK-9 (P1):** bara AO och tid rensas |
+| R62 | Direkt REST-skrivning till `store` | – för affärsnycklar | | | | | RLS `staging_generic_keys_no_direct_*`, `store_*_no_direct_*`, TRG | – | Nycklar utan affärsregel (t.ex. `vift_lastChanged`, okända nycklar) kan skrivas av alla aktiva via `store_active_write_safe` (F18) |
+| R63 | Direkt anrop av SECURITY DEFINER-RPC (`/rest/v1/rpc/...`) | – | – | – | – | – | Grants: EXECUTE bara för service_role. Undantag: `vift_caller_perms` och `vift_store_full_access` (RLS-hjälp). | – | Som målet enligt inventeringen §6 |
 
 ---
 
-## 3. Testfall per rad
+## 4. Felkodskatalog för negativa tester
 
-**ID-format:** `SEC-<grupp>-NN`. Kolumnen ± anger positivt (+, ska lyckas) eller negativt (−, ska nekas). L = läsning, S = skrivning, R = radering.
+Ett negativt test är **godkänt först när två villkor gäller:**
+1. Svaret har exakt den angivna statuskoden och felkoden (`error`, och `reason` där det anges).
+2. Kontrollsummorna (KS, §5.1) visar att ingen mutation skett.
 
-**Gemensamma villkor för alla skrivtester:**
-- Bara [E2E-TEST]-poster.
-- Journal, återställning och kontrollsummor enligt testplanen.
-- Ett negativt skrivtest är godkänt bara om servern svarar 401, 403, 400 `key_not_allowlisted` eller 409 med *samma* hash före och efter.
+Ett generiskt fel (500, `write_failed`, nätverksfel, `forbidden` utan `reason` där en `reason` krävs) är **underkänt**.
 
-**Roller:** ADM, AL, EK, FÄ, FÄ2 (andra fältkonto) och BE.
+**Befintliga koder** (källor: `ao-time-write`, `store-key-write`, `invoice-write`, `work-order-checklist-resolve`, RLS):
 
-### 3.1 Arbetsordrar (R01–R10)
+| Status | `error` | Betydelse |
+|---|---|---|
+| 401 | `unauthorized` / `Unauthorized` | JWT saknas eller är ogiltig |
+| 403 | `forbidden` | Behörighet saknas |
+| 403 | `Forbidden` | Inte aktiv användare (`checkViftAuth`) |
+| 403 | `forbidden_other` | Annans checklistpunkt eller loggpost |
+| 403 | `append_only` | `vift_activityLog` via `write`/`writeMerge` |
+| 400 | `key_not_allowlisted` | Nyckel utanför `KEY_PERMISSIONS` |
+| 400 | `invalid_element`, `missing_fields`, `invalid_json`, `comment_required`, `invalid_type`, `invalid_reference`, `invalid_id` | Ogiltig indata |
+| 400 | `forbidden_field` | `invoice-write`: otillåtet fält |
+| 404 | `not_found` | Post saknas |
+| 409 | `stale_write`, `missing_expected_hash`, `mass_wipe_blocked`, `duplicate_id_in_store`, `attested_locked`, `idempotency_key_conflict`, `id_collision` | Konflikt |
+| 429 | `rate_limited` | Gräns |
+| 410 | `disabled` | Avaktiverad EF |
+| PostgREST 401/403, kod `42501` | – | RLS eller grant nekar (skrivning). SELECT som nekas ger **tom lista** med 200. |
+| PostgREST, `P0001` med `direct_write_blocked` | – | TRG `_protect_critical_store_keys` |
 
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-AO-01 | + | FÄ | L | `work-orders-list` | Bara AO där FÄ är i `staff`, plus öppen pool om `ao_pool_take` |
-| SEC-AO-02 | − | BE | L | `work-orders-list` | Inga AO där BE inte är tilldelad, och ingen pool (D-04) |
-| SEC-AO-03 | − | FÄ | L | REST `GET store?key=eq.vift_workOrders` och `readWithHash vift_workOrders` | Tomt / `key_not_allowlisted`, inga data |
-| SEC-AO-04 | + | AL, EK | L | `work-orders-list` | Alla AO (antal = ADM) |
-| SEC-AO-05 | − | FÄ | S | `patch_ao` `{status:'klar'}` på test-AO där FÄ **inte** är tilldelad | 403 (i dag troligen 200, F1) |
-| SEC-AO-06 | − | FÄ | S | `patch_ao` `{materials}` på test-AO där FÄ inte är tilldelad | 403 |
-| SEC-AO-07 | − | FÄ | S | `create_time` med `aoId` för en AO FÄ inte ser | 403 (F16, i dag okänt) |
-| SEC-AO-08 | − | FÄ | L | `work-order-image-url`, `work-order-checklist-resolve` på andras AO | 403 |
-| SEC-AO-09 | + | FÄ | S | `patch_ao {status:'pågående'}` på egen test-AO (`planerad`) | 200, status `pågående` |
-| SEC-AO-10 | − | FÄ | S | Samma på AO där FÄ inte är tilldelad | 403 |
-| SEC-AO-11 | − | FÄ | S | `{status:'pågående', title:'x'}` på egen | 403, hela patchen nekas |
-| SEC-AO-12 | + | FÄ | S | `{status:'klar', completedAt, completedBy:FÄ}` på egen `pågående` | 200 |
-| SEC-AO-13 | − | FÄ | S | `{status:'klar'}` på egen AO med status `fakturerad` | 403 (i dag 200, F1) |
-| SEC-AO-14 | − | FÄ | S | `{status:'klar', completedBy:<annan>}` | 403 eller servern sätter `completedBy` = FÄ |
-| SEC-AO-15 | − | FÄ | S | `{status:'avbruten'}` / `{status:'fakturerad'}` på egen | 403 |
-| SEC-AO-16 | + | AL | S | `{status:'klar'}` på valfri test-AO | 200 |
-| SEC-AO-17 | − | EK | S | `{status:'fakturerad'}` (G9) | 403 om D-07 inte ger EK `ao_edit` |
-| SEC-AO-18 | − | FÄ, BE | S | `delete_ao`, `permanent_delete_ao` på egen test-AO | 403 |
-| SEC-AO-19 | − | FÄ | S | `{invoiceId:'X'}`, `{archived:true}` | 403 |
-| SEC-AO-20 | + | AL | S, R | `delete_ao` och sedan `permanent_delete_ao` på test-AO | 200 |
-| SEC-AO-21 | − | FÄ | L | `work-orders-list`: `fixedPrice`, `priceGroupId`, `materials[].buyPrice` i egen AO | Saknas efter beslut D-06 (i dag finns de) |
-| SEC-AO-22 | − | FÄ | S | `{fixedPrice:1}`, `{priceType:'fast'}` på egen | 403 |
-| SEC-AO-23 | + | EK | L | AO-ekonomi (pris, TB) | Finns |
+**Nya koder som införs i T3/T4.** Felet bär alltid `error` + `reason`, så att testet kan skilja orsakerna åt. Den interna regelorsaken i `activities-policy.ts` (t.ex. `not_own`) returneras i dag inte till klienten. Det ändras.
 
-### 3.2 Arbetspool (R03–R05)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-POOL-01 | + | FÄ | L | Test-AO med `status:pool`, `staff:[]` | Syns för FÄ och FÄ2 |
-| SEC-POOL-02 | − | BE | L | Samma | Syns inte (D-04) |
-| SEC-POOL-03 | − | EK | L | Samma | Syns (`ao_view_all`), men kan inte ta den (SEC-POOL-07) |
-| SEC-POOL-04 | + | FÄ | S | Ta jobbet (`staff:[FÄ]`, `status:'planerad'`, logg + `taken_from_pool`) | 200. Därefter syns AO:n inte för FÄ2. |
-| SEC-POOL-05 | − | FÄ | S | Ta jobbet med `staff:[FÄ2]` (lägga till annan) | 403 |
-| SEC-POOL-06 | − | FÄ, FÄ2 | S | Samtidigt "ta jobbet" på samma AO | Exakt en lyckas, den andra får 409 `stale_write` eller 403. `staff` innehåller en person. |
-| SEC-POOL-07 | − | EK, BE | S | Ta jobbet | 403 |
-| SEC-POOL-08 | − | FÄ2 | L | Test-AO tilldelad FÄ, utan datum, `status:'planerad'` | Syns inte för FÄ2 |
-| SEC-POOL-09 | − | FÄ2 | L | Test-AO `status:'pool'` med `staff:[FÄ]` (tilldelad pool) | Syns inte (i dag syns den, F4) |
-| SEC-POOL-10 | − | FÄ2 | S | Ta jobbet på AO enligt SEC-POOL-09 | 403 (i dag 200, F4) |
-| SEC-POOL-11 | − | FÄ2 | S | Material, bild och checklista på AO enligt SEC-POOL-09 | 403 (`canViewWorkOrder` släpper i dag igenom pool) |
-
-### 3.3 B1: inköpspris, material, marginal (R11–R17, R20)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-B1-01 | + | FÄ | S | Materialrad med artikel-id + antal på egen AO, utan priser i begäran | 200. Servern sätter `sellPrice` och `buyPrice` från artikeln. |
-| SEC-B1-02 | + | FÄ | S | Fritextrad (benämning, antal, enhet), inget pris | 200. `buyPrice` = null och `buyPriceUnknown: true` (aldrig 0). `sellPrice` enligt D-10. |
-| SEC-B1-03 | − | FÄ | S | Materialrad med `buyPrice: 1` i begäran | Fältet ignoreras eller avvisas. Lagrat värde = artikelns värde eller okänt. |
-| SEC-B1-04 | − | FÄ | S, R | Ta bort eller ändra **annans** materialrad på egen AO | Enligt D-19: 403, eller tillåtet med logg |
-| SEC-B1-05 | − | FÄ | S | Ersätta hela `materials` med tom lista på AO med fem rader | 403 eller 409. Ingen tyst massradering. |
-| SEC-B1-06 | − | FÄ | S | Material på fakturerad, arkiverad eller borttagen AO | 403 (finns i dag) |
-| SEC-B1-07 | − | FÄ, BE | L | `readAllWithHashes`: `articles[].buyPrice` | Fältet saknas |
-| SEC-B1-08 | − | FÄ | L | `work-orders-list`: `materials[].buyPrice` | Fältet saknas |
-| SEC-B1-09 | − | FÄ | L (UI) | Materialdialogens artikelväljare | Ingen "Ink:"-text och inget Ink-pris-fält |
-| SEC-B1-10 | + | EK (`cost_edit`) | S | Komplettera `buyPrice` på rad med `buyPriceUnknown` | 200. Flaggan tas bort. Logg. |
-| SEC-B1-11 | − | FÄ | S | Samma | 403 |
-| SEC-B1-12 | − | AL | S | Samma | Enligt D-01 |
-| SEC-B1-13 | + | EK | L | AO med okänt inköpspris: TB och marginal | Visas som "okänt" eller ofullständigt, **inte** med 0 kr i inköp |
-| SEC-B1-14 | + | EK | L | Rapport och fakturakö med okänt inköpspris | Raden markeras. Inga summor tolkas som 0. |
-| SEC-B1-15 | − | FÄ, BE | L | REST `GET store?key=eq.vift_articles` | Raden lämnas inte ut (RLS), eller bara via EF projicerat |
-| SEC-B1-16 | + | ADM | L | `vift_articles` | `buyPrice` finns |
-| SEC-B1-17 | − | AL | L | `vift_articles.buyPrice` | Enligt D-01 |
-| SEC-B1-18 | − | FÄ | S | `writeMerge vift_articles` (befintlig artikel, ändrat pris) | 403 |
-| SEC-B1-19 | + | FÄ | L | Artikelnamn, enhet (+ försäljningspris enligt D-09) | Finns |
-
-### 3.4 B2 och Ö4: försäljningspris och timpris (R14, R15, R18, R19)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-B2-01 | + | AL, EK | L | `materials[].sellPrice` | Finns |
-| SEC-B2-02 | ± | FÄ | L | `materials[].sellPrice` | Enligt D-09 |
-| SEC-B2-03 | ± | FÄ | L (UI) | Materialraden och artikelväljaren | Enligt D-09, och samma regel i båda vyerna |
-| SEC-B2-04 | − | FÄ | S | Materialrad med `sellPrice` ≠ artikelns | Servern använder artikelns pris |
-| SEC-B2-05 | + | AL | S | Justera `sellPrice` på rad | 200 |
-| SEC-B2-06 | ± | FÄ | L | `priceGroups[].hourRate` | Enligt D-11 |
-| SEC-B2-07 | − | FÄ | S | `writeMerge vift_priceGroups` | 403 |
-| SEC-B2-08 | ± | FÄ | L | `time-entries-list`: `hourRate`, `priceGroupName` i egna poster | Enligt D-11 (Ö4-förslaget: saknas) |
-| SEC-B2-09 | − | FÄ | S | `create_time` med `hourRate: 9999` | Servern sätter timpriset från AO:ns prisgrupp. Klientens värde ignoreras. |
-| SEC-B2-10 | ± | FÄ | L (UI) | Stämpla-ut-dialogen, Tid-sidans prisgruppsval, AO-detaljens tidrader | Samma regel som SEC-B2-08 i alla tre |
-| SEC-B2-11 | + | EK | L | Löneunderlag: "debiterbart värde" (timpris) skilt från intern kostnad | Etiketterna motsäger inte varandra |
-
-### 3.5 Tid och fakturering (R21–R24)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-TID-01 | + | FÄ | S | `create_time` på egen test-AO | 200. `staffId` = FÄ, satt av servern. |
-| SEC-TID-02 | − | FÄ | S | `create_time` med `staffId` = FÄ2 | 403 |
-| SEC-TID-03 | − | FÄ | S | `patch_time` på FÄ2:s testpost | 403 |
-| SEC-TID-04 | − | FÄ | S | `patch_time` på egen **attesterad** testpost | 409 `attested_locked` |
-| SEC-TID-05 | − | FÄ | S | `patch_time {attested:true}` | Attestfälten ignoreras |
-| SEC-TID-06 | − | FÄ, BE, AL | L | `time-entries-list` | Bara egna poster (AL enligt D-08) |
-| SEC-TID-07 | + | EK | L | `time-entries-list` | Alla (`payroll_view`) |
-| SEC-TID-08 | − | FÄ, AL | S | `attest_time` | 403 |
-| SEC-TID-09 | + | EK | S | `attest_time` på testpost, sedan återställ | 200 |
-| SEC-FAKT-01 | − | FÄ, BE | L | `readAllWithHashes` `invoices`, REST `vift_invoices` | Tomt eller inget |
-| SEC-FAKT-02 | + | EK | L | Samma | Finns |
-| SEC-FAKT-03 | ± | AL | L | Samma | Enligt D-07 |
-| SEC-FAKT-04 | − | alla | S | `writeMerge vift_invoices` | 400 `key_not_allowlisted` |
-| SEC-FAKT-05 | − | FÄ, AL | S | `invoice-write` (alla åtgärder) | 403. Källan saknas (G4), så testet kan inte konstrueras förrän källan finns. |
-| SEC-FAKT-06 | + | EK | S | Fakturaunderlag med intern kommentar "[E2E-TEST] INTERN" och kundkommentar "[E2E-TEST] KUND" → PDF | PDF:en innehåller KUND, **inte** INTERN |
-| SEC-FAKT-07 | − | – | – | Äldre underlag med bara `note` | Beslut D-20: tolkas som internt eller kundsynligt. Testet följer beslutet. |
-| SEC-FAKT-08 | − | FÄ | L | Intern kommentar i någon läsväg | Saknas |
-
-### 3.6 Offerter och kunder (R25–R28)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-OFF-01 | − | FÄ, BE | L | `offers` | Enligt D-12: bara offerter kopplade till egen AO, eller inga |
-| SEC-OFF-02 | − | FÄ, BE | L | `offers[].lines`, belopp | Saknas (finns i C-5) |
-| SEC-OFF-03 | + | EK | L | `offers[].lines` | Finns, utan `calculationNote`/`inputValues`/`priceRuleRef` |
-| SEC-OFF-04 | − | FÄ, EK | S | `writeMerge vift_offers` (befintlig testoffert) | 403 |
-| SEC-OFF-05 | − | EK, FÄ, BE | L | `publicToken`, `token*`, `customerApproval`, `lockedSnapshotJSON`, `internalNote` | Saknas (C-5) |
-| SEC-OFF-06 | − | FÄ | L | `offerEvents`, `offerAttachments`, `offer-attachment-url` | Tomt eller 403 |
-| SEC-OFF-07 | − | oinloggad | S | `offer-respond` med ogiltig eller utgången token | 4xx, ingen ändring |
-| SEC-OFF-08 | − | FÄ | S | `offer-pdf`, `send-offer-email` | 403 |
-| SEC-KUND-01 | ± | FÄ | L | `customers` | Enligt D-13 (alla utan personnummer, eller bara kunder på egna AO) |
-| SEC-KUND-02 | − | FÄ, EK | S | `writeMerge vift_customers` (befintlig testkund) | 403 |
-| SEC-KUND-03 | − | FÄ | R | `writeMerge` med `removals` (testkund) | 403 |
-| SEC-KUND-04 | − | FÄ, BE | L | `customers[].personnr` + `orgNr` för typen privat | Saknas |
-| SEC-KUND-05 | + | EK | L | Samma | Finns (ROT/RUT) |
-| SEC-KUND-06 | ± | AL (`sales_manage`/`ao_view_all`) | L | Samma | Enligt D-13 |
-| SEC-KUND-07 | − | FÄ | L | REST `vift_customers` | Raden lämnas inte ut |
-
-### 3.7 B3: personal och roller (R29–R33)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-B3-01 | + | FÄ | L | `staff[]`: förnamn, efternamn, titel, telefon | Finns |
-| SEC-B3-02 | + | FÄ | L (UI) | Tilldelningslistor, kontaktkort | Fungerar |
-| SEC-B3-03 | + | FÄ | L | Egen post innehåller `email`, och inloggningen löser rätt användare | Ja (F10) |
-| SEC-B3-04 | ± | FÄ | L | Andras `email` | Enligt D-14 |
-| SEC-B3-05 | − | BE | L | Andras telefon och e-post | Enligt D-14 |
-| SEC-B3-06 | − | FÄ, BE, EK | L | Andras `permissions` och `role` i `staff[]` | Saknas |
-| SEC-B3-07 | − | FÄ | L | `vift_roles` | Bara den egna rollen, eller alla roller utan behörighetslistor (D-21) |
-| SEC-B3-08 | − | FÄ | S | `writeMerge vift_staff` (ändra egen titel) | 403 |
-| SEC-ROLL-01 | − | roll med `staff_manage` utan `admin_manage` | S | Sätta egen `role:'admin'` | 403 (i dag tillåtet, F5) |
-| SEC-ROLL-02 | − | samma | S | Sätta annans roll till en roll med `all` | 403 |
-| SEC-ROLL-03 | + | ADM | S | Ändra testpersonalens roll mellan `personal` och `chef` | 200 |
-| SEC-ROLL-04 | − | AL | S | `writeMerge vift_staff` | 403 |
-| SEC-ROLL-05 | − | ADM (enda aktiva med `all` i testscenariot) | S | Inaktivera sig själv | 409 eller 403 `last_superadmin` |
-| SEC-ROLL-06 | − | ADM | S | Ta bort `all` från rollen `admin` när den är den enda rollen med `all` | Nekas |
-| SEC-ROLL-07 | − | ADM | R | Radera rollen `admin` | Nekas |
-| SEC-ROLL-08 | − | ADM | S | Byta egen roll till `chef` när ingen annan har `all` | Nekas |
-| SEC-ROLL-09 | + | ADM | S | Inaktivera **annan** admin när minst en aktiv admin finns kvar | 200 |
-| SEC-ROLL-10 | − | ADM, ADM2 | S | Två admins inaktiverar varandra samtidigt | Högst en lyckas. Minst en aktiv med `all` finns kvar. |
-
-> SEC-ROLL-05…10 kan **inte** köras säkert mot STAGING:s riktiga admin. De kräver en lokal Postgres- eller grenmiljö med egna testadmins (se testplanen, steg T2). Mot STAGING körs bara varianten där testkontot är den roll som prövas och en annan riktig admin finns kvar.
-
-### 3.8 B4 och Ö7: aktivitetslogg och uppgifter (R34–R36)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-B4-01 | + | AL, EK, ADM | L | `activityLog` | Alla poster |
-| SEC-B4-02 | + | FÄ | L | `activityLog` | Bara poster vars `workOrderId` är en AO som FÄ ser enligt `work-orders-list` |
-| SEC-B4-03 | − | FÄ | L | Poster med `offerId`/`invoiceId`/`salesOpportunityId` utan egen AO | Saknas |
-| SEC-B4-04 | − | FÄ | L | Poster utan `workOrderId` (kund, offert, personal) | Saknas |
-| SEC-B4-05 | − | FÄ, BE | L | REST `vift_activityLog` | Raden lämnas inte ut |
-| SEC-B4-06 | − | alla | S | `write`/`writeMerge vift_activityLog` | 403 `append_only` |
-| SEC-B4-07 | ± | FÄ | S | `appendActivity` med typen `invoice_created` och ett främmande `invoiceId` | Enligt D-22 (i dag 200, märkt `klientrapport`) |
-| SEC-B4-08 | + | FÄ | L (UI) | Dashboardens "Senaste händelser" och AO-detaljens historik | Bara egna, utan fel |
-| SEC-TASK-01 | + | FÄ | S | Skapa egen uppgift (`createdBy` = `assignedTo` = FÄ) | 200 |
-| SEC-TASK-02 | − | FÄ | S | Skapa uppgift med `assignedTo` = FÄ2 | 403 `new_not_own` |
-| SEC-TASK-03 | + | FÄ | S | Klarmarkera uppgift tilldelad FÄ, skapad av AL | 200. Bara fälten i `ASSIGNEE_FIELDS` ändras. |
-| SEC-TASK-04 | − | FÄ | S | Ändra titel på uppgift tilldelad FÄ, skapad av AL | 403 `field_title` |
-| SEC-TASK-05 | − | FÄ | R | Radera uppgift tilldelad FÄ, skapad av AL | 403 |
-| SEC-TASK-06 | + | FÄ | R | Radera egen uppgift | 200 |
-| SEC-TASK-07 | − | FÄ | L | `activities`: uppgift med `assignedTo` = FÄ2 och `createdBy` = AL | **Saknas** (i dag syns den, O2) |
-| SEC-TASK-08 | − | FÄ | L | Uppgift kopplad till offert (`relatedType: offer`) som inte är FÄ:s | Saknas |
-| SEC-TASK-09 | − | FÄ | S | Klarmarkera FÄ2:s uppgift | 403 `not_own` |
-| SEC-TASK-10 | + | AL (`ao_edit` + `ao_view_all`) | S | Ändra FÄ:s uppgift | 200 |
-| SEC-TASK-11 | ± | EK (`ao_view_all` utan `ao_edit`) | S | Ändra annans uppgift | Enligt D-15. Klient och server ska ge samma svar (F8). |
-| SEC-TASK-12 | − | FÄ | L (UI) | Uppgifter-sidan, filtren "Alla öppna", "Offerter" och "Arbetsorder" | Visar bara egna och tilldelade |
-
-### 3.9 B5: portkod och nyckelinfo (R10, R37–R39)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-B5-01 | − | AL utan `objects_sensitive` | L | `readAllWithHashes` `propertyObjects[].doorCode` | Saknas (i dag finns fältet, eftersom AL är skrivare) |
-| SEC-B5-02 | + | AL | S | `writeMerge vift_propertyObjects`: ändra namn på testobjekt **utan** `doorCode` i elementet | 200. Lagrat `doorCode`, `keyInformation` och `accessInformation` är oförändrade. |
-| SEC-B5-03 | − | AL utan `objects_sensitive` | S | Samma, men med `doorCode:''` | Fältet ignoreras eller ger 403. Lagrat värde är oförändrat. |
-| SEC-B5-04 | − | AL utan `objects_sensitive` | S | Samma, men med `doorCode:'1234'` | 403 eller ignoreras. Lagrat värde är oförändrat. |
-| SEC-B5-05 | − | AL utan `objects_sensitive` | R | Ta bort testobjekt | Enligt D-23. Den känsliga tabellraden får aldrig bli föräldralös utan logg. |
-| SEC-B5-06 | + | ADM | S | Ändra `doorCode` på testobjekt | 200. Logg i `sensitive_access_audit`. |
-| SEC-B5-07 | − | ADM + AL samtidigt | S | ADM ändrar `doorCode`, AL ändrar namn på samma objekt i samma sekund | Båda ändringarna finns kvar. Den ena får 409 och gör om, eller så slås fälten ihop. `doorCode` är ADM:s värde. |
-| SEC-B5-08 | − | AL (gammal klient), ADM | S | AL har läst objektet före ADM:s ändring av `doorCode` och sparar sedan namn | `doorCode` är fortfarande ADM:s nya värde, inte det gamla |
-| SEC-B5-09 | − | FÄ | S | `writeMerge vift_propertyObjects` | 403 |
-| SEC-B5-10 | − | FÄ | L | `work-orders-list` `accessCode` | Saknas |
-| SEC-B5-11 | ± | FÄ | L | `get-sensitive-fields` för objekt på **egen** tilldelad AO | Enligt D-05/D-16: 200 + revisionslogg (ny väg), eller 403 (i dag) |
-| SEC-B5-12 | − | FÄ | L | `get-sensitive-fields` för objekt på **annans** AO | 403 + logg `denied` |
-| SEC-B5-13 | + | ADM | L | `get-sensitive-fields` | 200, revisionsrad `allowed` med fälttyper, **utan värden** |
-| SEC-B5-14 | − | AL, EK, FÄ | S | `set-sensitive-fields` | 403 + logg `denied` |
-| SEC-B5-15 | − | FÄ | L | REST `property_sensitive_access`, `sensitive_access_audit` | Inga rader |
-| SEC-B5-16 | − | alla | S | Ändra eller radera rader i `sensitive_access_audit` | Nekas (bara `service_role` skriver, oföränderlig) |
-| SEC-B5-17 | − | AL utan `objects_sensitive` | L | `recurringOrders[].accessCode` | Saknas efter B5 |
-| SEC-B5-18 | + | AL | S | Ändra titel på återkommande testärende utan `accessCode` | Lagrat `accessCode` är oförändrat |
-
-### 3.10 Rondering (R40–R41)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-ROND-01 | + | FÄ (`rondering_utfor`) | L | Ronderingspass tilldelat FÄ | Syns, och sidan Utför rondering öppnas |
-| SEC-ROND-02 | − | FÄ | L | Pass tilldelat FÄ2 | Syns inte |
-| SEC-ROND-03 | + | FÄ | S | Klarmarkera punkt eller skapa avvikelse i eget testpass | 200 |
-| SEC-ROND-04 | − | FÄ | S | Samma i FÄ2:s pass | 403 |
-| SEC-ROND-05 | − | FÄ | S | Skapa pass, mall eller schema | 403 |
-| SEC-ROND-06 | − | FÄ, EK | S | `writeMerge vift_ronderingar`/`ronderingsmallar`/`avvikelser` | 403 |
-| SEC-ROND-07 | + | AL | S | Skapa och ta bort testmall | 200 |
-| SEC-ROND-08 | − | BE | L | `ronderingspass` | Tomt |
-
-### 3.11 Inställningar (R20, R42–R43): hela nyckeln och samtidighet
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-INST-01 | − | FÄ, BE | L | `settings.bankgiro` | Saknas |
-| SEC-INST-02 | ± | AL | L | `settings.bankgiro` | Enligt D-17 |
-| SEC-INST-03 | − | FÄ, BE | L | `settings.internalHourlyCost` | Saknas |
-| SEC-INST-04 | ± | AL | L | `settings.internalHourlyCost` | Enligt D-01 |
-| SEC-INST-05 | + | EK | L | Samma | Finns |
-| SEC-INST-06 | − | AL, EK, FÄ | S | `write vift_settings` med aktuell hash, oförändrat innehåll | 403 (kräver `admin_manage`) |
-| SEC-INST-07 | − | ADM | S | `write vift_settings` utan `expectedHash` | 409 `missing_expected_hash` |
-| SEC-INST-08 | − | ADM | S | `write` med inaktuell hash | 409 `stale_write` |
-| SEC-INST-09 | − | ADM + ADM2 | S | Samtidigt: ADM ändrar testnyckeln `e2eTestA`, ADM2 ändrar `e2eTestB` | Efter B5-mekanismen finns båda. I dag: en får 409 och ingenting skrivs över tyst. |
-| SEC-INST-10 | − | ADM | S | `write` av projicerat värde (utan `bankgiro`) | `bankgiro` är oförändrat (fältvis sammanslagning) |
-| SEC-INST-11 | + | FÄ | L | Varumärke, färger, villkor | Finns |
-
-> Skrivtest på `vift_settings` får bara ändra en **egen testnyckel** (`e2eTest_<runId>`) i objektet och ta bort den igen. Befintliga inställningar rörs aldrig. Se testplanen §4.
-
-### 3.12 Export och lokal cache (R44–R47)
-
-| ID | ± | Roll | Typ | Åtgärd | Förväntat |
-|---|---|---|---|---|---|
-| SEC-EXP-01 | + | ADM | L | Exportcenter: alla register finns | Ja |
-| SEC-EXP-02 | − | FÄ | L | Exportcenter | "Inga exporterbara register", eller enligt D-18 |
-| SEC-EXP-03 | − | FÄ | L | Snabbexport på AO-listan | Bara egna och tilldelade AO, utan `accessCode` och utan prisfält |
-| SEC-EXP-04 | − | FÄ | L | Snabbexport `materialRow` (via konsolen) | Inga `buyPrice`-värden (servern skickar dem inte) |
-| SEC-EXP-05 | + | EK | L | Export av tidposter | Alla (`payroll_view`) |
-| SEC-EXP-06 | − | AL utan `objects_sensitive` | L | Export av objekt: portkod | Kolumnen finns inte och värdena saknas (efter B5) |
-| SEC-EXP-07 | + | ADM | L | Export av objekt med "Inkludera känsliga fält" | Portkod finns. Utan kryss finns den inte. |
-| SEC-EXP-08 | − | alla | L | Export av personal: `password`/`passwordHash`/`permissions` | Finns aldrig |
-| SEC-EXP-09 | − | ADM | L (UI) | Exportcenter, register Kunder, startläge | Personnummer är **inte** ikryssat (O1) |
-| SEC-EXP-10 | − | ADM | L | Snabbexport av kunder (CSV/XLSX) | Personnummer finns inte, utan aktivt val |
-| SEC-EXP-11 | − | roll med `customer_view` utan full kundläsning | L | Snabbexport av kunder | Kolumnen Personnummer är tom eller saknas |
-| SEC-EXP-12 | ± | EK/AL med `sales_manage`/`ao_view_all` | L | Export av personnummer | Enligt D-13/D-18 |
-| SEC-EXP-13 | + | ADM | L | Export med aktivt val av personnummer | Finns. Exporten loggas (D-18). |
-| SEC-CACHE-01 | − | ADM loggar ut, FÄ loggar in på samma webbläsare | L | `localStorage` efter utloggning | Inga `vift_customers`/`vift_offers`/`vift_settings`/`vift_propertyObjects`/`vift_invoices` med ADM:s fullständiga värden (F6) |
-| SEC-CACHE-02 | − | FÄ, nätet avstängt efter inloggning | L | Degraderad inloggning (`state._degradedLoad`) | Ingen data från föregående användare |
-| SEC-CACHE-03 | + | FÄ loggar in igen | L | Normal inloggning efter rensning | Fungerar |
-| SEC-CACHE-04 | − | ADM byter konto i annan flik | L | Lyssnaren för flikbyte | Samma rensning som vid utloggning |
+| Status | `error` / `reason` | Används för |
+|---|---|---|
+| 403 | `forbidden` / `not_assigned` | Åtgärd på AO där anroparen inte är tilldelad (start, klar, material, tid, stämpling, bild, checklista, logg, åtkomstinformation) |
+| 403 | `forbidden` / `pool_not_open` | Tagning eller poolprojektion av AO som inte är öppen pool |
+| 409 | `already_assigned` | Tagning av AO som har personal (även när en samtidig tagning hann först) |
+| 409 | `invalid_source_status` | Start eller klarmarkering från otillåten status |
+| 409 | `ao_locked` | AO är `fakturerad`/`avbruten`/arkiverad/borttagen |
+| 403 | `forbidden` / `invoice_path_required` | Faktureringsfält i `patch_ao` |
+| 403 | `forbidden` / `not_own_row` | Annans materialrad |
+| 200 | `ignoredFields:[…]` | Serverägda fält (pris, identitet, tid) som skickats av klienten ignoreras och redovisas. Lagrat värde = serverns. |
+| 403 | `forbidden` / `field_protected` | Skrivning av skyddat fält utan rätt (portkod, personnummer, bankgiro, `buyPrice`) |
+| 403 | `forbidden` / `privilege_escalation` | Tilldela eller skapa roll med behörighet utöver anroparens, eller ändra egen roll |
+| 403 | `forbidden` / `superadmin_required` | Lägga till eller ta bort `all` utan `all` |
+| 409 | `last_superadmin` | Ändring som ger 0 aktiva med `all` |
+| 403 | `forbidden` / `not_own` | Uppgift som varken är egen eller tilldelad (D-15) |
+| 403 | `forbidden` / `type_not_allowed`, `ref_not_visible` | `appendActivity` (D-22) |
+| 403 | `forbidden` / `export_not_allowed`, `personal_data_not_allowed` | Serverexport (D-18) |
+| 403 | `forbidden` / `price_group_not_allowed` | Prisgrupp som fältet inte får välja (D-11) |
 
 ---
 
-## 4. Återstående affärsbeslut och motsägelser
+## 5. Testfall
 
-Dessa måste avgöras **innan** serverändringarna i nästa omgång skrivs. Varje punkt anger motsägelsen eller frågan, och ett förslag.
+### 5.1 Gemensamma regler
 
-| Nr | Fråga / motsägelse | Varför den måste avgöras | Förslag |
+**KS (kontrollsumma)** för varje berörd resurs, före och efter varje negativt anrop:
+- **Store-nyckel:** SHA-256 av kanoniskt JSON (sorterade nycklar) för hela värdet, plus serverns hash från `readAllWithHashes`/`readHashes`.
+- **AO och tid:** elementet plus `updatedAt` via `work-orders-list`/`time-entries-list` (ADM).
+- **Tabeller:** `property_sensitive_access`, `sensitive_access_audit`, `op_idempotency` och `stamp_status`: antal rader och hash. Lokalt hela tabellen. I STAGING bara de märkta testraderna.
+- **Lokalt även:** `vift_lastChanged` och `store.updated_at` ska vara oförändrade efter ett nekat anrop. I STAGING redovisas de som information, eftersom verkliga användare kan ändra dem samtidigt.
+
+**Godkänt utfall:**
+- **Negativt test (−):** rätt felkod och orsak enligt §4, och KS oförändrad. Undantag: en nekad åtkomst till känsliga fält *ska* ge exakt en revisionsrad `status='denied'` i `sensitive_access_audit`, och ingenting annat.
+- **Positivt test (+):** rätt svar, och KS visar bara den avsedda ändringen.
+
+**Vägar.** Varje rad prövas i de vägar som anges:
+
+| Kod | Väg |
+|---|---|
+| R | REST/RLS direkt |
+| E | Edge Function |
+| P | RPC, lokalt direkt och via EF |
+| K | Klient (UI) |
+| C | Cache |
+| X | Export |
+| S | Simulerad server |
+
+**Miljö:**
+
+| Kod | Miljö |
+|---|---|
+| L | Lokal PostgreSQL med STAGING-replik (§2 i testplanen) |
+| SG | STAGING, bara märkta testposter, med separat GO |
+| W | Webbläsare (Playwright) mot den simulerade servern eller mot STAGING |
+
+Destruktiva scenarier (hel nyckel, rollregister, inställningar, append-only-loggar) körs **bara i L**.
+
+**Roller:**
+- ADM, AL (`chef`), EK, FÄ, FÄ2 (`personal`), BE (`begransad`);
+- egna anpassade roller enligt §5.13.
+
+### 5.2 Arbetsordrar (R01–R12)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat (− = felkod + KS oförändrad) |
+|---|---|---|---|---|---|---|
+| SEC-AO-01 | + | FÄ | `work-orders-list` | E,S | L,SG | Bara egna + öppen pool (poolprojektion) |
+| SEC-AO-02 | − | BE | `work-orders-list` | E,S | L,SG | Ingen öppen pool och inga andras AO |
+| SEC-AO-03 | − | FÄ | REST `store?key=eq.vift_workOrders`, `readWithHash vift_workOrders` | R,E | L,SG | REST: 200 tom lista. EF: 400 `key_not_allowlisted`. Inga data. |
+| SEC-AO-04 | + | AL, EK | `work-orders-list` | E | L,SG | Alla AO. EK utan pris-/TB-fält om `cost_view` saknas. |
+| SEC-AO-05 | − | FÄ | `patch_ao {status:'klar'}` på ej tilldelad test-AO | E,P,S | L,SG | 403 `forbidden`/`not_assigned`, AO-KS oförändrad |
+| SEC-AO-06 | − | FÄ | Samma på egen AO med status `fakturerad` | E,P,S | L,SG | 409 `ao_locked` |
+| SEC-AO-07 | − | FÄ | Samma på egen AO med status `avbruten`, arkiverad, borttagen | E,P | L | 409 `ao_locked` |
+| SEC-AO-08 | − | FÄ | `{status:'klar', completedBy:FÄ2, completedAt:'2000-01-01'}` på egen AO | E,P | L,SG | 200 med `ignoredFields:['completedBy','completedAt']`. Lagrat `completedBy` = FÄ och servertid. |
+| SEC-AO-09 | + | FÄ | Klarmarkera egen AO med status `pågående` | E,P,S | L,SG | 200 |
+| SEC-AO-10 | + | FÄ | Starta egen AO med status `planerad` | E,P,S | L,SG | 200, `pågående` |
+| SEC-AO-11 | − | FÄ | Starta ej tilldelad AO | E,P | L,SG | 403 `not_assigned` |
+| SEC-AO-12 | − | FÄ | Starta egen AO med status `klar` | E,P | L | 409 `invalid_source_status` |
+| SEC-AO-13 | − | FÄ | `{status:'pågående', title:'x'}` | E | L,SG | 403 `forbidden` (otillåten fältkombination), KS oförändrad |
+| SEC-AO-14 | − | FÄ + AL | Samtidigt: AL tar bort FÄ från AO:n, FÄ klarmarkerar | P | L | Kontrollen sker under lås. Antingen lyckas AL:s ändring först och FÄ får 403 `not_assigned`, eller tvärtom. Aldrig "klar" av en person som inte är tilldelad. |
+| SEC-AO-15 | − | ADM, AL | `patch_ao {status:'fakturerad'}` / `{invoiceId:'X'}` | E,P,S | L,SG | 403 `invoice_path_required` |
+| SEC-AO-16 | + | AL | Fakturering via `invoice-write` (`appendChecked`, `setStatus`) av test-AO | E,P | L | 200. AO-status enligt fakturaflödet. |
+| SEC-AO-17 | − | FÄ, BE, EK | `delete_ao`, `permanent_delete_ao` | E | L,SG | 403 `forbidden` |
+| SEC-AO-18 | − | FÄ | `work-orders-list`: `fixedPrice`, prisbelopp, `materials[].buyPrice/sellPrice` | E,S | L,SG | Fälten saknas. Debiteringskategori finns. |
+| SEC-AO-19 | − | FÄ | `{fixedPrice:1}` på egen AO | E | L,SG | 403 `forbidden` |
+| SEC-AO-20 | − | FÄ | Återanvänd idempotensnyckel från en lyckad patch med annan patch | P | L | 409 `idempotency_key_conflict` (F17, i dag returneras det sparade resultatet) |
+
+### 5.3 Arbetspool (R03–R06, AP-A–AP-G)
+
+Testdata, alla [E2E-TEST]:
+
+| Id | `status` | `staff` | Datum | Övrigt |
+|---|---|---|---|---|
+| P1 | `pool` | `[]` | inget | |
+| P2 | `pool` | `[FÄ2]` | inget | |
+| P3 | `pool` | `[FÄ2]` | satt | |
+| P4 | `pool` | `[]` | satt | |
+| P5 | `pool` | `[]` | – | arkiverad |
+| N1 | `planerad` | `[FÄ]` | inget | |
+| N2 | `nytt` | `[]` | inget | |
+| SI1 | `pool` | `[]` | inget | förfallodatum satt |
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-POOL-01 | + | FÄ | Lista | E,S,K | L,SG,W | P1, P4 och SI1 (öppen pool). N1 (egen). |
+| SEC-POOL-02 | − | FÄ | Lista | E,S | L,SG | P2, P3, P5 och N2 syns **inte** |
+| SEC-POOL-03 | − | BE, och egen roll "personal utan `ao_pool_take`" | Lista | E,S | L,SG | Ingen öppen pool |
+| SEC-POOL-04 | − | FÄ | Poolpost P1: kundkontakt, telefon, e-post, `accessCode`, logg, material, checklista, bilder | E | L,SG | Saknas (poolprojektion, D-13) |
+| SEC-POOL-05 | + | FÄ | Ta P1 | E,P,S | L,SG | 200. `staff=[FÄ]`, en `taken_from_pool`-post. P1 försvinner från FÄ2:s pool. |
+| SEC-POOL-06 | − | FÄ | Ta P2 | E,P,S | L,SG | 409 `already_assigned` |
+| SEC-POOL-07 | − | FÄ | Ta N2 / P5 | E,P | L | 403 `pool_not_open` |
+| SEC-POOL-08 | − | FÄ | Ta P1 med `staff:[FÄ2]` | E,P | L,SG | 403 `forbidden` |
+| SEC-POOL-09 | − | FÄ + FÄ2 | Samtidig tagning av P1 (olika nycklar, 20 upprepningar) | P | L | Varje gång: exakt en 200 och en 409 `already_assigned`. Slutläge: en person och en loggpost. |
+| SEC-POOL-10 | − | EK, BE | Ta P1 | E | L,SG | 403 `forbidden` |
+| SEC-POOL-11 | − | FÄ | **Före** tagning av P1: material, bilduppladdning, checkliststeg, loggpost, `create_time`, `setStampStatus` med `aoId`=P1 | E,P,S | L,SG | 403 `not_assigned` för alla. KS för AO, tid och `stamp_status` oförändrad. |
+| SEC-POOL-12 | − | FÄ | Samma åtgärder på P2 | E,P | L,SG | 403 `not_assigned` |
+| SEC-POOL-13 | + | FÄ | Efter tagning av P1: samma åtgärder | E,P | L,SG | 200 |
+| SEC-POOL-14 | − | FÄ | Ta P1 som just tagits av FÄ2 (inaktuell klient) | E,P | L | 409 `already_assigned`. Klienten visar besked först efter serversvar (K). |
+| SEC-POOL-15 | + | AL | Tilldela FÄ på P1 via personaldialogen | K,E | W,L | Bara `staff`/`responsibleStaffId` ändras. Status och datum oförändrade. Notis bara till faktiskt tillagd personal (AP-D, AP-G). |
+
+### 5.4 Material och priser (R13–R25)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-B1-01 | + | FÄ | Materialrad med artikel och mängd på egen AO | E,P,S | L,SG | 200. Servern sätter `sellPrice`/`buyPrice` från artikeln och `addedBy` = FÄ. |
+| SEC-B1-02 | + | FÄ | Fritextrad med benämning, mängd, enhet och dokumentation | E,P | L,SG | 200. `buyPrice=null`, `buyPriceUnknown`, `sellPrice=null`, `sellPriceUnknown`. Aldrig 0. |
+| SEC-B1-03 | − | FÄ | Materialrad med `buyPrice:1`, `sellPrice:1` | E,P | L,SG | 200 `ignoredFields:['buyPrice','sellPrice']`. Lagrat = artikel eller okänt. |
+| SEC-B1-04 | + | FÄ | Ändra och ta bort egen rad | E,P | L,SG | 200 |
+| SEC-B1-05 | − | FÄ | Ändra och ta bort FÄ2:s eller AL:s rad på egen AO | E,P | L,SG | 403 `not_own_row`, AO-KS oförändrad |
+| SEC-B1-06 | − | FÄ | Gammal väg: `patch_ao {materials:[…]}` (hel lista) | E | L,SG | 403 `forbidden` (hel lista nekas för fältet, D-19) |
+| SEC-B1-07 | − | FÄ + AL | Samtidigt: FÄ lägger till, AL tar bort annan rad | P | L | Båda ändringarna finns kvar. Ingen rad försvinner tyst. |
+| SEC-B1-08 | − | FÄ | Rad på fakturerad, arkiverad eller borttagen AO | E,P | L | 409 `ao_locked` |
+| SEC-B1-09 | − | FÄ, BE | `articles[].buyPrice`, `articles[].sellPrice` | R,E,S | L,SG | REST: ingen rad. EF: fälten saknas. |
+| SEC-B1-10 | − | FÄ | Artikelväljare och materialrad | K | W | Inga belopp (inköp och försäljning) |
+| SEC-B1-11 | + | AL, EK | `buyPrice`, TB | E | L,SG | Finns |
+| SEC-B1-12 | − | Egen roll "chef utan `cost_view`" | Samma | E,K,X | L,W | Saknas i alla vägar, även export av `materialRow` |
+| SEC-B1-13 | + | EK | Komplettera okänt inköpspris | E,P | L,SG | 200. Flaggan tas bort. Logg. |
+| SEC-B1-14 | − | FÄ; egen roll "chef utan `cost_edit`" | Samma | E,P | L | 403 `field_protected` |
+| SEC-B1-15 | + | EK | Fakturaunderlag med okänt försäljningspris | P | L | Stoppat eller flaggat (`_invoice_financial_check`). Ingen summa 0. |
+| SEC-B1-16 | + | EK | Fastpris-AO med fältmaterial | P | L | Materialet debiteras inte separat om det inte uttryckligen är markerat som tillägg |
+| SEC-B1-17 | − | FÄ | `writeMerge vift_articles` (testartikel) | E | L,SG | 403 `forbidden` |
+| SEC-B2-01 | − | FÄ | `priceGroups[].hourRate`, `timeEntries[].hourRate` | R,E,S | L,SG | Saknas. Gruppnamn finns. |
+| SEC-B2-02 | − | FÄ | Stämpla ut, Tid-sidan, AO-detaljens tidrader | K | W | Inga belopp |
+| SEC-B2-03 | − | FÄ | `create_time` med `hourRate:9999` | E,P | L,SG | 200 `ignoredFields:['hourRate']`. Lagrat = prisgruppens timpris. |
+| SEC-B2-04 | − | FÄ | `create_time` med en prisgrupp som inte är tillåten för fält | E,P | L | 403 `price_group_not_allowed` |
+| SEC-B2-05 | + | ADM | Ändra prisgruppens timpris efter registrerad tid | E | L | Befintliga tidposters `hourRate` oförändrat |
+| SEC-B2-06 | − | FÄ, BE, egen roll "chef utan `cost_view`" | `settings.internalHourlyCost` | R,E | L,SG | Saknas |
+
+### 5.5 Tid, fakturering (R26–R32)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-TID-01 | + | FÄ | `create_time` på egen tilldelad AO | E,P | L,SG | 200, `staffId`=FÄ |
+| SEC-TID-02 | − | FÄ | `create_time` på ej tilldelad AO, öppen pool eller påhittat `aoId` | E,P,S | L,SG | 403 `not_assigned` (påhittat: 404 `not_found`). Tid-KS och AO-KS oförändrade. I dag läggs id:t även in i AO:ns `timeEntries` (F16). |
+| SEC-TID-03 | − | FÄ | `setStampStatus {active:true, aoId:<ej tilldelad>}` | E,P | L,SG | 403 `not_assigned`, `stamp_status`-KS oförändrad (F23) |
+| SEC-TID-04 | − | FÄ | `create_time` med `staffId`=FÄ2 | E | L,SG | 403 `forbidden` |
+| SEC-TID-05 | − | FÄ | `patch_time` på FÄ2:s post / egen attesterad post | E,P | L,SG | 403 `forbidden` / 409 `attested_locked` |
+| SEC-TID-06 | + | AL | `time-entries-list` | E | L,SG | Alla tidposter. Utan `hourRate` om `cost_view`/`invoice_*` saknas. |
+| SEC-TID-07 | − | AL | `attest_time` | E | L,SG | 403 `forbidden` |
+| SEC-TID-08 | − | AL | Sidan Löneunderlag och lönexport | K,X | W | Ej åtkomlig (`payroll_view` saknas) |
+| SEC-TID-09 | − | FÄ, BE | `time-entries-list` | E,S | L,SG | Bara egna |
+| SEC-FAKT-01 | − | FÄ, BE | `invoices` via REST, `readAllWithHashes` | R,E,S | L,SG | REST: tom lista. EF: tom array. |
+| SEC-FAKT-02 | + | AL, EK | Samma | R,E | L,SG | Finns |
+| SEC-FAKT-03 | − | FÄ, egen roll "chef utan `invoice_create`" | `invoice-write` (alla åtgärder) | E | L | 403 `forbidden` |
+| SEC-FAKT-04 | − | alla | `writeMerge vift_invoices` | E | L,SG | 400 `key_not_allowlisted` |
+| SEC-FAKT-05 | − | alla | REST PATCH `store?key=eq.vift_invoices` | R | L | `42501`. KS oförändrad. |
+| SEC-FAKT-06 | + | EK | Underlag med `internalNote` "INTERN-[runId]" och `customerNote` "KUND-[runId]" → kund-PDF | K/E | L,W | PDF:en innehåller KUND, **inte** INTERN |
+| SEC-FAKT-07 | − | EK | Äldre underlag med bara `note` → ny kund-PDF | K/E | L,W | `note` finns inte i PDF:en. Ingen data ändrad (D-20). |
+| SEC-FAKT-08 | + | EK | Ett redan utfärdat underlag | K | L | Historisk text och historiskt dokument oförändrade |
+
+### 5.6 Offerter, kunder (R33–R37)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-OFF-01 | − | FÄ, BE | `offers` | R,E,S | L,SG | Bara offerter kopplade till egen AO, med id, titel och status. Övriga saknas. |
+| SEC-OFF-02 | − | FÄ | `offers[].lines`, belopp, token | E | L,SG | Saknas |
+| SEC-OFF-03 | − | EK | `publicToken`, `customerApproval`, `lockedSnapshotJSON`, `internalNote` | R,E | L,SG | Saknas |
+| SEC-OFF-04 | − | FÄ, EK | `writeMerge vift_offers` (testoffert) | E | L,SG | 403 `forbidden` |
+| SEC-OFF-05 | − | FÄ | `offer-pdf`, `send-offer-email`, `offer-attachment-url` | E | L | 403 `forbidden` |
+| SEC-OFF-06 | − | oinloggad | `offer-respond` med ogiltig eller utgången token | E | L | 4xx enligt EF. Offert-KS oförändrad. |
+| SEC-KUND-01 | − | FÄ | `customers`, `properties`, `propertyObjects`, `propertyContacts` | E,S | L,SG | Bara poster kopplade till egna AO, och begränsat för öppen pool |
+| SEC-KUND-02 | − | FÄ, BE | REST `vift_customers` | R | L,SG | Tom lista |
+| SEC-KUND-03 | − | Egen roll med `ao_view_all` + `sales_manage` utan `personal_data_view` | `customers[].personnr`, `orgNr` för privatperson | R,E,X | L,SG | Saknas i alla vägar (D-13) |
+| SEC-KUND-04 | + | EK | Samma | E | L,SG | Finns |
+| SEC-KUND-05 | − | AL utan `personal_data_view` | Spara testkund utan `personnr` | E,P | L | Lagrat `personnr` oförändrat (fältvis sammanslagning) |
+| SEC-KUND-06 | − | AL utan `personal_data_view` | Spara testkund med `personnr:'X'` | E,P | L | 403 `field_protected` |
+
+### 5.7 Personal och roller (R38–R43, D-21, D-25)
+
+**Alla SEC-ROLL körs bara lokalt.** Rollregistret och personalregistret är destruktiva scenarier.
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-B3-01 | + | FÄ | Kollegors namn, titel och arbetskontakt | E | L,SG | Finns |
+| SEC-B3-02 | + | FÄ | Egen post med e-post. Inloggning löser rätt användare. | E,K | L,W | Ja |
+| SEC-B3-03 | − | FÄ, EK | Andras `permissions` och `role` | R,E,S | L,SG | Saknas |
+| SEC-B3-04 | − | BE | Kontaktuppgifter till personal som inte finns på egna AO | E | L,SG | Saknas |
+| SEC-B3-05 | − | FÄ, AL | `vift_roles`: andras roller | R,E | L,SG | Bara egen effektiv roll |
+| SEC-B3-06 | + | Egen roll med `admin_manage` | `vift_roles` | E | L | Alla roller |
+| SEC-ROLL-01 | − | Egen roll med `staff_manage` | Sätta egen `role:'admin'` | E,P | L | 403 `privilege_escalation` |
+| SEC-ROLL-02 | − | Egen roll med `staff_manage` | Ge annan en roll med `all` eller med behörighet utöver anroparens | E,P | L | 403 `privilege_escalation` / `superadmin_required` |
+| SEC-ROLL-03 | − | Egen roll med `admin_manage` (utan `all`) | Lägga till `all` i en roll, eller lägga till behörighet i egen roll | E,P | L | 403 `superadmin_required` / `privilege_escalation` |
+| SEC-ROLL-04 | − | ADM (ensam aktiv `all`) | Inaktivera sig själv / byta egen roll / ta bort `all` från rollen / radera rollen | E,P | L | 409 `last_superadmin` |
+| SEC-ROLL-05 | − | ADM + ADM2 | Samtidigt inaktivera varandra (50 upprepningar) | P | L | Aldrig 0 aktiva med `all`. Exakt en lyckas. |
+| SEC-ROLL-06 | − | ADM + ADM2 | Samtidigt: en ändrar rollens behörigheter, en byter roll på sista superadmin | P | L | Invarianten håller (gemensamt lås för `vift_staff` + `vift_roles`) |
+| SEC-ROLL-07 | + | ADM | Inaktivera ADM2 när ADM finns kvar | E,P | L | 200 |
+| SEC-ROLL-08 | + | Egen superadminroll med annat id än `admin` | Allt som ADM får | E | L | Fungerar (ingen hårdkodning på roll-id) |
+| SEC-ROLL-09 | − | Roll med id `admin` **utan** `all` | Superadminåtgärder | E,P,K | L,W | Nekas. Klienten visar inga superadminval. |
+| SEC-ROLL-10 | − | Inloggning utan personalpost | Klientens meny | K,C | W | Ingen fältbehörighet (SÄK-10). Servern svarar 403 `Forbidden`. |
+
+### 5.8 Aktivitetslogg och uppgifter (R44–R47)
+
+`appendActivity` är append-only och kapas vid 500 poster. Därför körs SEC-B4-05/06 bara lokalt.
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-B4-01 | + | AL, EK, ADM | `activityLog` | E | L,SG | Alla poster |
+| SEC-B4-02 | − | FÄ | `activityLog` | R,E,S | L,SG | Bara poster med `workOrderId` för egna AO. Inga offert-, faktura-, kund- eller personalposter. REST: tom lista. |
+| SEC-B4-03 | − | FÄ | Poster om AO i **tilldelad pool** för FÄ2 | E | L,SG | Saknas (bygger på rättad poolregel) |
+| SEC-B4-04 | − | alla | `write`/`writeMerge vift_activityLog` | E | L | 403 `append_only` |
+| SEC-B4-05 | − | FÄ | `appendActivity` med typ `invoice_created` | E | L | 403 `type_not_allowed`. Logg-KS oförändrad. |
+| SEC-B4-06 | − | FÄ | `appendActivity` med `workOrderId` för en ej tilldelad AO | E | L | 403 `ref_not_visible` |
+| SEC-B4-07 | − | FÄ | UI: dashboardens senaste händelser och AO-historik | K | W | Bara egna. Klientrapporterade poster märks inte som revisionshistorik (D-22). |
+| SEC-TASK-01 | + | FÄ | Skapa egen uppgift, klarmarkera tilldelad, radera egen | E | L,SG | 200 |
+| SEC-TASK-02 | − | FÄ | Skapa uppgift tilldelad FÄ2 | E | L,SG | 403 `not_own` (i dag `forbidden` utan orsak). KS oförändrad. |
+| SEC-TASK-03 | − | FÄ | Ändra titel på tilldelad uppgift skapad av AL | E | L,SG | 403 `forbidden`/`field_title` |
+| SEC-TASK-04 | − | FÄ | `activities`: FÄ2:s och offertkopplade uppgifter | R,E,S,K | L,SG,W | Saknas. **SÄK-2.** |
+| SEC-TASK-05 | − | EK | Ändra annans uppgift | E,K | L,W | 403 `not_own`. Klienten visar ingen redigeringsknapp (D-15). |
+| SEC-TASK-06 | + | AL | Ändra FÄ:s uppgift | E | L,SG | 200 |
+
+### 5.9 Portkoder (R48–R51)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-B5-01 | − | Egen roll "chef utan `objects_sensitive`" | `propertyObjects`, `recurringOrders`, `workOrders` → skyddade fält | R,E,S,X | L,SG | Saknas i alla vägar, även som skrivare. **SÄK-7.** |
+| SEC-B5-02 | + | Samma | Spara testobjekt utan skyddade fält | E,P | L,SG | 200. Skyddade fält oförändrade. |
+| SEC-B5-03 | − | Samma | Spara med `doorCode:''` / `'1234'` | E,P | L,SG | 403 `field_protected`. Objekt-KS oförändrad. |
+| SEC-B5-04 | − | ADM + AL samtidigt | ADM ändrar portkod, AL ändrar namn | P | L | Båda ändringarna kvar |
+| SEC-B5-05 | − | AL med inaktuell läsning | Sparar namn efter ADM:s portkodsändring | P | L | Portkoden är ADM:s nya värde |
+| SEC-B5-06 | + | FÄ | `get-sensitive-fields` för objekt på egen tilldelad aktiv AO | E | L,SG | 200, en revisionsrad `allowed` utan värden |
+| SEC-B5-07 | + | FÄ | Samma för tilldelad rondering | E | L | 200 + revisionsrad |
+| SEC-B5-08 | − | FÄ | Objekt på annans AO, öppen pool, klar AO | E | L,SG | 403 `not_assigned`. Exakt en revisionsrad `denied`, inget annat ändrat. |
+| SEC-B5-09 | − | BE (utan `objects_access_assigned`) | Egen AO | E | L,SG | 403 `forbidden`, en `denied`-rad |
+| SEC-B5-10 | − | AL, EK, FÄ | `set-sensitive-fields` | E,P | L | 403, en `denied`-rad |
+| SEC-B5-11 | − | alla | REST `property_sensitive_access`, ändra eller radera `sensitive_access_audit` | R | L,SG | Tom lista / `42501` |
+| SEC-B5-12 | + | ADM | Permanent radering av testobjekt | P | L | Tabellraden borttagen i samma transaktion. Revisionsrad utan portkod. Vid arkivering finns raden kvar (D-23). |
+| SEC-B5-13 | + | ADM (läsande, lokalt mot replik) | Jämförelse blob mot tabell | P | L | Rapport med antal: lika, olika, saknas. Inga värden, ingen ändring (D-16). |
+
+### 5.10 Rondering (R52–R53)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-ROND-01 | + | FÄ | Läsa och utföra eget testpass (`rondering_point_patch`, `rondering_pass_complete`) | E,P | L,SG | 200 |
+| SEC-ROND-02 | − | FÄ | Samma på FÄ2:s pass | E,P | L,SG | 403 `not_assigned`, pass-KS oförändrad |
+| SEC-ROND-03 | − | FÄ | `rondering_pass_create`, `rondering_passes_bulk_create`, mallar | E | L | 403 `forbidden` |
+| SEC-ROND-04 | − | BE, egen roll "personal utan `rondering_utfor`" | Eget pass | E | L,SG | 403 `forbidden` |
+| SEC-ROND-05 | − | alla | REST-skrivning `vift_ronderingspass` | R | L | `42501` |
+
+### 5.11 Inställningar (R54–R56), bara lokalt
+
+| ID | ± | Roll | Åtgärd | Förväntat |
+|---|---|---|---|---|
+| SEC-INST-01 | − | FÄ, BE | Läsa `bankgiro`, `internalHourlyCost` | Saknas |
+| SEC-INST-02 | + | AL, EK | Läsa `bankgiro` | Finns |
+| SEC-INST-03 | − | Egen roll med `admin_manage` utan `bankgiro_edit` | Ändra `bankgiro` | 403 `field_protected`. Settings-KS oförändrad. |
+| SEC-INST-04 | − | Samma | Spara annan inställning med projicerat värde utan `bankgiro` | 200. `bankgiro` oförändrat. |
+| SEC-INST-05 | − | ADM + ADM2 samtidigt | Olika fält | Båda finns kvar |
+| SEC-INST-06 | − | AL, EK, FÄ | `write vift_settings` | 403 `forbidden` |
+| SEC-INST-07 | − | ADM | `write` utan eller med inaktuell hash | 409 `missing_expected_hash` / `stale_write` |
+
+### 5.12 Export, cache, direkta vägar, simulerad server (R57–R63)
+
+| ID | ± | Roll | Åtgärd | Vägar | Miljö | Förväntat |
+|---|---|---|---|---|---|---|
+| SEC-EXP-01 | − | FÄ, BE, egen roll "chef utan `export_data`" | Exportcenter, snabbexport (alla listsidor), serverexport | K,X,E | W,L | Ingen export. Serverexport: 403 `export_not_allowed`. |
+| SEC-EXP-02 | + | AL | Export av AO, kunder, material | X | W | Bara fält och poster som AL får läsa |
+| SEC-EXP-03 | − | ADM | Kunder: startläge i Exportcenter och snabbexport | K,X | W | Personnummer är **inte** valt (SÄK-1) |
+| SEC-EXP-04 | − | Egen roll med `export_data` + `personal_data_view` utan `export_personal_data` | Välja personnummer / serverexport | K,X,E | W,L | Valet saknas. Serverexport: 403 `personal_data_not_allowed`. |
+| SEC-EXP-05 | + | ADM | Aktivt val av personnummer | E,X | L,W | Finns, och exporthändelsen loggas på servern |
+| SEC-EXP-06 | − | alla | Lösenord, token, `publicToken`, autentiseringsuppgifter | X | W | Finns aldrig |
+| SEC-EXP-07 | − | ADM | Normal export av objekt och AO | X | W | Ingen portkod och ingen nyckelinformation |
+| SEC-EXP-08 | − | FÄ | Snabbexport av AO via konsolen | X,C | W | Bara egna AO. Inga prisfält, ingen portkod. |
+| SEC-CACHE-01 | − | ADM → utloggning → FÄ på samma profil | `localStorage` | C | W | Inga `vift_*`-affärsnycklar från ADM (fältnamnskontroll). **SÄK-9.** |
+| SEC-CACHE-02 | − | FÄ, nätet avstängt vid inloggning | Degraderad inläsning | C | W | Ingen data från föregående användare |
+| SEC-CACHE-03 | − | Kontobyte i annan flik | Lyssnaren för flikbyte | C | W | Samma rensning |
+| SEC-REST-01 | − | FÄ | REST INSERT/UPDATE/DELETE för affärsnycklar (alla 28), AO, tid, fakturor, `offerAttachments`, `ronderingspass`, `projectDocuments` | R | L | `42501` eller `direct_write_blocked`. KS oförändrad. |
+| SEC-REST-02 | − | FÄ | REST INSERT av okänd nyckel `vift_e2e_<runId>` och UPDATE av `vift_lastChanged` | R | L | Nekas efter T3 (F18). I dag tillåtet, vilket dokumenteras i baslinjen. |
+| SEC-REST-03 | − | FÄ | REST `rpc/work_order_patch`, `rpc/store_business_key_write`, `rpc/sensitive_fields_write`, `rpc/time_entry_create` | R | L | `42501` (EXECUTE saknas) |
+| SEC-REST-04 | + | FÄ | REST `rpc/vift_caller_perms` | R | L | Bara egna behörigheter |
+| SEC-SIM-01 | + | – | Hela SEC-AO, SEC-POOL, SEC-B1, SEC-TASK och SEC-B4 mot `fake-backend.js` | S | L | Samma utfall och felkoder som den lokala replikan (paritet). Avvikelse = fel i den simulerade servern. |
+
+### 5.13 Egna anpassade roller (D-26)
+
+Varje rad är en **egen roll** = standardroll minus en enskild behörighet, eller en minimal roll. Den saknade behörigheten ska stängas i **alla** vägar.
+
+| ID | Egen roll | Prövas | Förväntat |
 |---|---|---|---|
-| **D-01** | **Är arbetsledaren "särskilt behörig" för inköpspris, marginal och intern timkostnad?** C-5 ger i dag full läsning av `vift_settings` (inkl. `internalHourlyCost`) till `ao_view_all`, `ao_edit` och `offer_manage`, alltså arbetsledare. Exportcenter ger `materialRow` med "Inpris" till `ao_view_all`. B1 säger "endast särskilt behöriga roller". | Avgör projektionen av `vift_settings`, `vift_articles`, `materials[].buyPrice` och exporten | Ny `cost_view`. Ekonomi och admin får den. Arbetsledaren bara om hen kalkylerar offerter. **Vem får komplettera okänt inköpspris?** Förslag: `cost_edit` = Ekonomi (+ admin), inte fält och inte automatiskt arbetsledare. |
-| **D-02** | Rollernas id: `chef` eller `arbetsledare`? | Befintliga personalposter har `role:'chef'`/`'personal'`. Nytt id kräver migrering av personalposter. | Behåll id `chef`, etikett "Arbetsledare". Inför `begransad`. |
-| **D-03** | Ska befintliga roller med `ao_complete` men utan `ao_view_all` och `ao_edit` (STAGING:s fältroll) migreras till `ao_start_own` + `ao_complete_own` + `ao_pool_take`? Ö2 är inte besvarad. | Den fältroll som finns i dag kan klarmarkera *valfri* AO (F1). Avgör också om fältet får klarmarkera alls (Ö2). | Ja, fältet får klarmarkera egna. Servern begränsar `ao_complete` för roller utan `ao_view_all` till egna AO redan i övergången. |
-| **D-04** | Ska Begränsad/extern se och ta öppen pool, starta och klarmarkera, och registrera tid och checklista? | I dag ser alla med `ao_view_own` hela poolen. Underlagets Begränsad-roll har bara `ao_view_own`. | Begränsad: bara egna tilldelade AO, ingen pool. Tid och checklista efter verksamhetens behov. |
-| **D-05** | **Ska arbetsledare utan `objects_sensitive` se portkod?** Ska fält se portkod för egen tilldelad AO? Underlaget säger att fält får portkod via `get-sensitive-fields`, men EF:en kräver `objects_sensitive` och har ingen tilldelningsväg (F3). | Avgör B5-projektionen och om `get-sensitive-fields` behöver en ny tilldelningsgren | AL utan `objects_sensitive`: nej, aldrig i data. Fält: ja, bara för AO där hen är tilldelad och status inte är `klar`/`fakturerad`, varje uttag loggat. Ny gren i `get-sensitive-fields` som kontrollerar mot `work-orders-list`-regeln. |
-| **D-06** | Ska tilldelad fältpersonal få AO:ns `fixedPrice`, prismodell och prisgrupp i data? C-5 lämnar dem medvetet ut. B4 säger "ingen ovidkommande ekonomi". | Avgör om `work-orders-list` ska projicera bort pris för fält | Projicera bort `fixedPrice`, `priceGroupId`, `materials[].buyPrice` och (beroende på D-09) `sellPrice` för roller utan `invoice_*`/`reports_view`/`ao_edit`/`cost_view`. |
-| **D-07** | Ska arbetsledaren läsa och skapa fakturaunderlag? Seedens `chef` har `invoice_view` och `invoice_create`. Underlagets Arbetsledare har det inte, men C-5 ger fakturaläsning till `ao_view_all`/`ao_edit`. Får ekonomi sätta AO till `fakturerad` (G9)? | Motsägelse mellan seed, underlag och C-5. Avgör SEC-FAKT-03 och SEC-AO-17. | Arbetsledare: läsa ja, skapa (B). Fakturering sker bara via `invoice-write`, aldrig via `patch_ao status`. |
-| **D-08** | Lönebehörighet: har Ekonomi `payroll_view`/`payroll_manage` (seed ja, underlag nej)? Ska arbetsledaren se sitt teams tidposter? | `time-entries-list` ger allt eller bara egna. Det finns inget teamurval. | Ekonomi: ja. Arbetsledare: bara egna, eller nytt teamurval (kräver serverstöd). |
-| **D-09** | **Ska fält se försäljningspris på material?** B2: "behåll försäljningspriser där operativt nödvändigt". Klienten döljer i dag priset för fält i materialraden men visar det i artikelväljaren. | Motsägelse inom klienten. Avgör PROJ för `articles.sellPrice` och `materials[].sellPrice`. | Nej, fältet behöver inte priset. Servern sätter det. Visas det ändå (t.ex. för att fält säljer på plats) ska det gälla **både** artikelväljaren och raden. |
-| **D-10** | Fritextmaterial: vem sätter försäljningspriset? Fält kan i dag ange valfritt `sellPrice`. | Okänt försäljningspris ger ett fakturaunderlag med fel belopp | Fritext från fält får `sellPrice` = okänt och flaggan "pris saknas". Fakturakön stoppar tills behörig sätter pris. Samma princip som okänt inköpspris. |
-| **D-11** | **Ö4 mot B2:** B2 säger att timpriser (försäljning) inte är känsliga. Ö4 föreslår att timpriset döljs i fältets egna tidposter och i stämpla-ut. Löneunderlaget visade tidigare timpris som "lönekostnad" (rättad etikett). | Utan beslut blir regeln olika i prisgruppsregistret, tidposten, stämpla-ut och AO-detaljen | **En regel:** fält ser *inte* timpris någonstans (inte i prisgruppsregistret, i tidposter, i stämpla-ut eller i AO-detaljen). Prisgrupp väljs av servern från AO. Försäljningstimpris är fortfarande "inte känsligt" i den meningen att det står på offerter till kund och inte kräver revisionslogg. Intern personalkostnad (`internalHourlyCost`) är alltid `cost_view`. Om fält ska välja prisgrupp själv (t.ex. jour) visas bara namnet. |
-| **D-12** | Ska fält och begränsad få offertstubbar? I dag får de id, titel, status och kund för **alla** offerter. | B4: "inga ovidkommande offerter" | Bara offerter med `workOrderId` som är en AO användaren ser. Annars tomt. |
-| **D-13** | Kundregistret för fält: alla kunder (utan personnummer) eller bara kunder på egna AO? Vilka interna roller får personnummer (i dag även `sales_manage` och `ao_view_all`)? | Dataminimering. Avgör exportfrågan (O1). | Fält: bara kunder och fastigheter på egna AO (samma urval). Personnummer: `customer_manage` och `invoice_*` (ROT/RUT). `sales_manage`/`ao_view_all` får inte personnummer. |
-| **D-14** | B3: vilka kontaktuppgifter är "nödvändiga"? Underlaget föreslår att `email` projiceras bort, men klienten kräver egen e-post (`Auth._resolveUser`, F10). | Projektion per post (egen post fullständig) | Fält: namn, titel och telefon för alla. Egen post fullständig. E-post till andra bara med `staff_view`. |
-| **D-15** | Uppgifter: får Ekonomi (`ao_view_all` utan `ao_edit`) ändra andras uppgifter? Klienten säger ja (`PageShells.js:11861`), servern nej (`activities-policy.ts`). | Motsägelse klient/server (F8) | Följ servern. Rätta klienten. |
-| **D-16** | Portkod finns på **två** platser: i store-bloben (`vift_propertyObjects.doorCode`, `workOrders.accessCode`, `recurringOrders.accessCode`) och i tabellen `property_sensitive_access`. Vilken är sanningskällan? | B5 blir dubbelt arbete, och en kopia kan läcka. CLAUDE.md beskriver tabellen som platsen för känsliga fält. | Tabellen är sanningskälla. Bloben töms (engångsmigrering med backup) eller fälten projiceras alltid bort. Kräver eget beslut och backup. |
-| **D-17** | Bankgiro: vilka roller? C-5 ger fullt värde till `offer_manage`/`ao_view_all`/`ao_edit`. | Bankgiro står på fakturor och syns där. Låg känslighet men ändringskritiskt. | Läsning för de interna rollerna är ok. Skrivning bara `admin_manage`, fält för fält (P1 #5). |
-| **D-18** | **Exportbehörighet:** Ska export kräva mer än läsrätt? Ska snabbexporten på listsidor följa samma `EXPORT_PERMISSIONS` som Exportcenter? Ska export av personnummer kräva ett aktivt val, egen behörighet och loggning? | O1, F12 | Ja till alla tre. Snabbexport och Exportcenter använder samma spärr. Personnummer räknas som känsligt fält (av som standard), med egen behörighet `export_personal_data`. Exporthändelsen skrivs i aktivitetsloggen. |
-| **D-19** | Får fältpersonal ändra eller ta bort *andras* materialrader på samma AO? | `materials` skrivs som hel array (F2) | Bara egna rader (`addedBy`). Andras rader kan bara arbetsledaren ändra. Kräver radvis materialväg på servern (`add_material`/`remove_material`), inte hel array. |
-| **D-20** | Intern kommentar på faktura: befintligt `inv.note` skrivs ut. Ska det fältet bli "kundsynlig kommentar" och ett nytt `internalNote` införas, eller tvärtom? | Historiska underlag har text i `note` som någon kan ha trott var intern | `note` = kundsynlig (oförändrat beteende). Nytt `internalNote` skrivs aldrig ut. Äldre underlag gås igenom manuellt före LIVE. |
-| **D-21** | Rollregistret `vift_roles`: läser alla alla roller med behörighetslistor? Klienten behöver den egna rollens behörigheter. | B3, "inte andras behörighetslistor" | Projicera `vift_roles` till den egna rollen för roller utan `staff_view`/`admin_manage`. |
-| **D-22** | `appendActivity`: får vem som helst rapportera vilken händelsetyp som helst (t.ex. `invoice_created` från fält)? | Med B4-filtrering kan förfalskade poster med ett främmande `workOrderId` nå andra | Tillåtna typer per behörighet (t.ex. `invoice_*` bara med `invoice_create`). Referenser kontrolleras mot `canViewWorkOrder`. |
-| **D-23** | Radering av objekt eller fastighet med känsliga fält: vad händer med raden i `property_sensitive_access`? | Föräldralösa portkoder | Raderas i samma transaktion, med revisionsrad. |
-| **D-24** | Arbetspoolens dataregel: är "tilldelad men oplanerad" `status=nytt/planerad` utan datum, eller `status=pool` med `staff` satt? Klienten tömmer `staff` när en AO flyttas till poolen (`WorkOrderService.updateStaff`), men import och `ao_edit` kan skapa `pool` med `staff`. | `work-orders-list` och gren B behandlar `status=pool` som öppen oavsett `staff` (F4) | Öppen pool = `status=pool` **och** tom `staff`. Servern behandlar `pool` med `staff` som tilldelad. `ao_edit` får inte spara `pool` med `staff`, eller sparar då `planerad`. |
-| **D-25** | Är `admin_manage` i praktiken superadmin? Den kan skriva `vift_roles` och ge sin egen roll `all`. | Påverkar skyddet för sista superadmin och eskaleringsskyddet | Bara `all` får lägga till eller ta bort `all` i en roll och tilldela en roll som har `all`. |
-| **D-26** | Testkonton: STAGING:s ekonomikonto (`qa_p2_avgransad`) har `customer_manage`/`offer_manage`, alltså inte den föreslagna Ekonomi-rollen. | G13-utfallet (36/36) speglar testkontots roll, inte standardrollen | Skapa testkonton med exakt standardrollerna (`e2e_*`) innan nästa körning. Avvecklas efteråt (Ö9). |
+| SEC-CUST-01 | `chef` − `cost_view` | Inköpspris och TB i EF, UI och export | Saknas (SEC-B1-12) |
+| SEC-CUST-02 | `chef` − `cost_edit` | Komplettera inköpspris | 403 `field_protected` |
+| SEC-CUST-03 | `chef` − `objects_sensitive` | Portkod i register, AO, export och som skrivare | Saknas (SEC-B5-01..03) |
+| SEC-CUST-04 | `chef` − `invoice_create` | `invoice-write` | 403 `forbidden` |
+| SEC-CUST-05 | `chef` − `time_view_all` | `time-entries-list` | Bara egna |
+| SEC-CUST-06 | `chef` − `export_data` | All export | SEC-EXP-01 |
+| SEC-CUST-07 | `ekonomi` − `payroll_manage` | `attest_time` | 403 `forbidden` |
+| SEC-CUST-08 | `ekonomi` − `personal_data_view` | Personnummer | Saknas |
+| SEC-CUST-09 | `personal` − `ao_pool_take` | Poolprojektion, tagning | Ingen pool. 403 `forbidden`. |
+| SEC-CUST-10 | `personal` − `ao_complete_own` | Klarmarkera egen | 403 `forbidden` |
+| SEC-CUST-11 | `personal` − `ao_start_own` | Starta egen | 403 `forbidden` |
+| SEC-CUST-12 | `personal` − `ao_time` | `create_time`, stämpling | 403 `forbidden` |
+| SEC-CUST-13 | `personal` − `ao_material` | Materialrad | 403 `forbidden` |
+| SEC-CUST-14 | `personal` − `objects_access_assigned` | `get-sensitive-fields` för egen AO | 403 + `denied`-rad |
+| SEC-CUST-15 | `personal` − `rondering_utfor` | Eget pass | 403 `forbidden` |
+| SEC-CUST-16 | `begransad` + `ao_time` | Tid på egen AO / på öppen pool | 200 / 403 `not_assigned` |
+| SEC-CUST-17 | `begransad` + `objects_access_assigned` | Åtkomstinformation för egen AO | 200 + `allowed`-rad |
+| SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 |
+| SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 |
+| SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) |
+| SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) |
+| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. |
+| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed) |
 
 ---
 
-## 5. Fynd i källkoden som påverkar matrisen
+## 6. Beslut (alla FASTSTÄLLDA 2026-11-27)
 
-De här fynden kom fram vid genomgången för det här dokumentet. Inget är ändrat. Allvarsgraden följer problemlistans skala.
+Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i matrisen.
 
-| Nr | Fynd | Kodreferens | Allvar |
-|---|---|---|---|
-| F1 | `patch_ao` för roll med `ao_complete` men utan `ao_edit` kontrollerar bara vilka fält som skickas, inte att anroparen är tilldelad eller ser AO:n, och inte AO:ns nuvarande status. En fältarbetare kan klarmarka *vilken AO som helst* via id, även `fakturerad` → `klar`. `completedBy` kan anges fritt. | `vift-v2/supabase/functions/ao-time-write/index.ts:259-265` (jämför gren A/B på rad 223-257 som kontrollerar tilldelning) | **P1** (integritet) |
-| F2 | Materialvägen för `ao_material` ersätter hela `materials`. Fält kan ändra pris och ta bort andras rader. `buyPrice`/`sellPrice` kommer från klienten. Pool-AO räknas som synlig. | `ao-time-write/index.ts:199-213`; `WorkOrderDetailPage.js:2053` (Ink-pris i artikelväljaren), `:2084`, `:2248` (`\|\| 0`) | **P1** (B1) |
-| F3 | `get-sensitive-fields` kräver `objects_sensitive`. Det finns ingen väg för "tilldelad AO". Portkoder ligger dessutom både i store-bloben och i tabellen. | `get-sensitive-fields/index.ts:87`; `20261125000003_store_read_by_role.sql` (projektion av `vift_propertyObjects`) | P2 (beslut D-05/D-16) |
-| F4 | Poolregeln är bara `status === 'pool'`, oavsett `staff`. "Ta jobbet" tillåter att man lägger till sig själv på en pool-AO som redan har personal. | `work-orders-list/index.ts:90`; `ao-time-write/index.ts:244-257`; `_shared/vift-auth.ts` `canViewWorkOrder` | P1 om pool med `staff` förekommer (D-24) |
-| F5 | `vift_staff` skrivs med `staff_manage` utan regel för fältet `role`. Den som har `staff_manage` kan ge sig själv rollen `admin`. Inget skydd för sista superadmin. | `store-key-write/index.ts:89` (KEY_PERMISSIONS), `:240-276` (`writeMerge` utan fältregel) | **P1** när någon roll har `staff_manage` utan `all` (ingen standardroll har det i dag) |
-| F6 | Utloggning rensar bara tidposter och AO ur `localStorage`. Kunder, offerter, inställningar, objekt och fakturor från föregående användare ligger kvar och används av `Storage._localAll()` vid degraderad inläsning. | `AuthService.js:628-650` (`_clearSession`); `state.js:983` | **P2** (delad surfplatta) |
-| F7 | Klientens reserv när ingen personalpost matchar: `role:'personal'`. När `personal` finns i registret får en okänd inloggning fältmenyer i klienten (servern nekar). | `AuthService.js:379` | P3, men måste rättas **före** P1 #8 |
-| F8 | Uppgifter: klientens regler (`ao_edit \|\| ao_view_all` för att ändra, `ao_edit \|\| admin_manage` för att radera) skiljer sig från serverns (`admin_manage \|\| (ao_edit && ao_view_all)`). | `PageShells.js:11861-11869`; `store-key-write/activities-policy.ts` `activitiesFullAccess` | P3 |
-| F9 | Fält och begränsad får stubbar (titel, kund, status) för alla offerter | `20261125000003_store_read_by_role.sql`, `vift_store_project`, grenen `offer_stub` | P2 (B4) |
-| F10 | B3-förslaget att projicera bort `email` bryter inloggningen, som matchar `state.staff[].email` i klienten | `AuthService.js:366-372` | Krav på implementationen |
-| F11 | `appendActivity` godtar alla tillåtna typer och referenser från alla aktiva användare | `store-key-write/activity-log.ts` (`TYPES`, `REF_FIELDS`) | P3 (D-22) |
-| F12 | `ImportExportService.showExportMenu()` har ingen egen behörighetsspärr. AO-snabbexport finns för `ao_view_own`, medan Exportcenter kräver `ao_view_all`. | `ImportExportConfigs.js` `showExportMenu`; `WorkOrdersPage.js:222`; `CustomersPage.js:108` | P3 (servern skyddar, inkonsekvent) |
-| F13 | `ProfitabilityService` använder 250 kr/h när `internalHourlyCost` saknas. Samma mönster som "okänt = ett påhittat värde". Används bara bakom ekonomibehörighet. | `ProfitabilityService.js:10` | P3 |
-| F14 | `canViewWorkOrder` (bilder, checklista, material) ger åtkomst till alla pool-AO för `ao_view_own` | `_shared/vift-auth.ts` | Följer D-04/D-24 |
-| F15 | Start och "Ta jobbet" kräver i dag `ao_complete`. Det blandar ihop tre olika rättigheter. | `ao-time-write/index.ts:163`, `:214-216` | Löses av nya behörigheter |
-| F16 | `create_time` kontrollerar inte i EF:en att anroparen ser AO:n. RPC-källan (`time_entry_create`) finns inte i något repo. | `ao-time-write/index.ts` `create_time` | Okänt, prövas (SEC-AO-07) |
-| G4 | Källor saknas för `_staging_business_key_required_perm`, `store_business_key_write`/`_merge_write`, `store_read_all_with_hashes`, `work_order_create`/`_patch`, `time_entry_*`, `invoice-write` och `rondering-pass-write`, i båda repona | Sökning i `VIFT-CRM` och `vift-v2` (bara anrop finns) | **Blockerar** lokala databastester av B5 och skrivregler |
+| Beslut | Status | Genomslag i matrisen |
+|---|---|---|
+| D-01 | **Fastställt** | `cost_view`/`cost_edit` standard för admin, chef och ekonomi, och kan tas bort. Ger inte löneuppgifter. R16, R17, R25. |
+| D-02 | **Fastställt** | Id `admin`/`chef`/`ekonomi`/`personal`/`begransad`, ingen migrering av personal. §2. |
+| D-03 | **Fastställt** | `ao_start_own`/`ao_complete_own`/`ao_pool_take`. Låsta statusar. Servern sätter identitet och tid. R07, R08, R04. |
+| D-04 | **Fastställt** | Begränsad: egna AO. Tilläggsbehörigheter separat. §2, SEC-CUST-16/17. |
+| D-05 | **Fastställt** | `objects_sensitive` standard för chef, kan tas bort. `objects_access_assigned` för fält, även vid rondering. R48, R49. |
+| D-06 | **Fastställt** | Ingen AO-ekonomi till fält. Debiteringskategori utan belopp. R12. |
+| D-07 | **Fastställt** | Chef får `invoice_*`. Fakturering bara via `invoice-write`. Faktureringsfält avvisas i `patch_ao` för alla. R10, R30. |
+| D-08 | **Fastställt** (utredning §1.1) | `time_view_all` för chef. `payroll_*` för ekonomi och admin. R27–R29. |
+| D-09 | **Fastställt** | Inga försäljningspriser för fält i någon vy. R18, R19. |
+| D-10 | **Fastställt** | Fritext. Okänt ≠ 0. Faktureringsstopp. Fastpris utan dubbeldebitering. R13, R20, R21. |
+| D-11 | **Fastställt** | Gruppnamn utan belopp. Servern validerar och sätter priset. Historik oförändrad. R22–R24. |
+| D-12 | **Fastställt** | Minimal offertreferens för tilldelad AO. R34. |
+| D-13 | **Fastställt** | Urval per uppdrag, begränsad poolprojektion, `personal_data_view`. R36, R37, R03. |
+| D-14 | **Fastställt** | Arbetskontakt för interna kollegor. Egen post fullständig. R38–R40. |
+| D-15 | **Fastställt** | `ao_view_all` räcker inte. Samma regel i klient och server. R47. |
+| D-16 | **Fastställt** | Tabellen är sanningskälla. Bara förberedelse, ingen migrering. R50. |
+| D-17 | **Fastställt** | Läsning för interna roller. Ändring kräver `bankgiro_edit`. Fältvis sammanslagning. R54–R56. |
+| D-18 | **Fastställt** | `export_data`, `export_personal_data`. Serverexport för skyddade fält. R57–R60. |
+| D-19 | **Fastställt** | Radvisa RPC:er. Egna rader. Hela listan nekas för fält. R13–R15. |
+| D-20 | **Fastställt** | `internalNote`/`customerNote`. Gammalt `note` skrivs inte ut. Ingen dataändring. R31, R32. |
+| D-21 | **Fastställt** | Egen effektiv behörighet. Andras kräver `admin_manage`. R41, R42. |
+| D-22 | **Fastställt** | Typer och referenser per behörighet. Servern sätter identitet och kontrollerar referensen. R45. |
+| D-23 | **Fastställt** | Atomisk borttagning vid permanent radering. Revision utan värde. R51. |
+| D-24 | **Fastställt** | AP-A–AP-G. Tilldelad pool är giltig. §3.1. |
+| D-25 | **Fastställt** | Superadmin = `all`. Eskaleringsregel. Atomisk invariant. R43. |
+| D-26 | **Fastställt** | Testkonton = standardroller, plus egna roller (§5.13). Skapas i STAGING först efter separat godkännande. |
+| AP-A | **Fastställt** | Kategoridefinitioner §3.1. Ingen breddning. |
+| AP-B | **Fastställt** | Tid och stämpling bara på tilldelad AO. R06, R26. |
+| AP-C | **Fastställt** | Gemensamma räknardefinitioner (AO-etappen, inte säkerhetsomgången) |
+| AP-D | **Fastställt** | Notiser först efter serverbekräftelse, inga falska tilldelningsnotiser (SEC-POOL-15; resten i AO-etappen) |
+| AP-E | **Fastställt** | `ao_plan_own` (AO-etappen) |
+| AP-F | **Fastställt** | `ao_pool_take`, atomisk tagning. R04. |
+| AP-G | **Fastställt** | `pool` avvecklas inte nu. Personaldialogen rör bara personal. |
 
-### Observationer från användartest
+**Motsägelser som tidigare listats och nu är lösta:**
 
-**O1 – Exportcenter visar Personnummer förvalt ikryssat.**
+| Motsägelse | Löst genom |
+|---|---|
+| Arbetsledaren och intern ekonomi | D-01 |
+| Seed, underlag och C-5 om fakturor | D-07 |
+| Ö4 mot B2 | D-11 |
+| Klient mot server för uppgifter | D-15 |
+| `email`-projektion mot inloggningen | D-14 |
+| Pool med personal | D-24/AP-A |
+| `admin_manage` som superadmin | D-25 |
 
-*Kod:*
-- `ImportExportConfigs.js:49`: kundregistret har `sensitiveFields: []`.
-- `ImportExportConfigs.js:60`: `personnr` är ett vanligt fält.
-- `ExportCenterPage.js:135-142`: `_initCols()` kryssar i alla fält som inte är känsliga.
-- `ExportCenterPage.js:123`: texten "Känsliga fält är av som standard" stämmer därför inte för personnummer.
-- `ExportCenterPage.js:189`: valet "Inkludera känsliga fält" gäller bara `objects_sensitive` (portkoder) och har inget med personnummer att göra.
-- Snabbexporten (`CustomersPage.js:108` → `buildExportRowsForType`, `ImportExportConfigs.js:1406`) tar alltid med personnummer.
+**Kvarstående förtydliganden** (inte motsägelser, kräver bekräftelse före respektive paket):
 
-*Exporteras personnummer för roller som inte borde få det?*
-- **Inte utöver läsrätten.** Servern (`vift_store_project`) tar bort `personnr` (och `orgNr` för privatpersoner) för alla roller utom `customer_manage`, `invoice_*`, `offer_manage`, `sales_manage`, `ao_view_all` och `all`. För övriga roller blir kolumnen tom.
-- Fält och begränsad når varken kundsidan eller kundexporten, och har inte värdet.
-- Roller med `sales_manage` eller `ao_view_all` (+ `customer_view`) får däremot ut personnummer i snabbexporten utan aktivt val. Om det är fel avgörs av D-13.
-- Undantag: lokal cache från föregående användare (F6).
+| Nr | Fråga | Förslag i matrisen |
+|---|---|---|
+| K-01 | `time_view_all`: all personal, eller ett framtida teamurval? | All personal, eftersom inget teamurval finns i datamodellen |
+| K-02 | Behöver arbetsledaren `personal_data_view` som standard för offerter med ROT/RUT? D-13 nämner ROT/RUT som exempel på verkligt behov, och arbetsledaren skapar offerter. | Inte standard. Läggs till per roll vid behov. Utan behörigheten kan arbetsledaren inte se eller ändra personnummer i offert och kund. |
+| K-03 | Exakt fältlista för poolprojektionen (D-13: "begränsad information för att bedöma om jobbet kan tas") | Titel, beskrivning, kategori, prioritet, gatuadress och ort, förfallodatum, uppskattad tid. Inte kundens kontaktuppgifter, portkod, logg, material, checklista, bilder eller pris. |
+| K-04 | Portkod i export (D-18: "ingår inte i normal export") | Bara via serverexport med `objects_sensitive` + `export_data`, aktivt val och logg |
+| K-05 | Klassificering av gamla `inv.note` (D-20) | Separat genomgång. Tills dess tas `note` aldrig med i ny kund-PDF. |
+| K-06 | Konfliktregler för `ao_plan_own` vid flerpersonsuppdrag (AP-E) | Avgörs i AO-etappen |
 
-*Klassificering:*
-- **P2, brist i dataminimering och standardval (privacy by default).** Inte en serverläcka.
-- Rättas genom att personnummer och org.nr för privatpersoner blir känsliga fält med egen spärr (D-18).
-- Rättningen ska testas med SEC-EXP-09…13.
+---
 
-**O2 – Fältrollens Uppgifter-sida visar uppgifter kopplade till andra användare.**
+## 7. Fynd och SÄK-koppling, uppdaterat efter serverinventeringen
 
-*Kod:*
-- `PageShells.js:11905` och `:11931`: `renderList()` utgår från hela `state.activities`. Standardfiltret "Alla öppna" visar alla öppna uppgifter, oavsett `assignedTo`/`createdBy`.
-- Servern lämnar ut hela `vift_activities` till alla aktiva:
-  - `vift_store_full_access` … `else true` (`20261125000003_store_read_by_role.sql:93`);
-  - `store-key-write` `READABLE_KEYS`.
-- `activities-policy.ts` reglerar bara **skrivning**.
-- Sidan är öppen för `ao_view_own` (`AuthService.js:118`).
+Källor: `vift-v2/supabase/inventering/staging-2026-11-26/`.
 
-*Klassificering:*
-- **Läckage, inte avsedd regel.** Den beslutade inriktningen (B4/Ö7) säger att uppgifter ska filtreras på servern efter behörighet och tilldelning.
-- Uppgifterna bär kund, fastighet och offert-/AO-referenser och fri text.
-- **P1** (före LIVE), åtgärd på servern (projektion per post).
-- Klientens filter är ingen rättning.
-- Testas med SEC-TASK-07…12.
+| Fynd | SÄK | Allvar | Bekräftelse och kodreferens | Paket (testplanen) |
+|---|---|---|---|---|
+| F1: `ao_complete`-grenen kontrollerar inte tilldelning eller status | SÄK-5 | **P1** | EF `ao-time-write/index.ts:259-265`. `work_order_patch` (`schema/functions.sql`) kontrollerar bara att posten finns, idempotens och `p_expected_updated_at`. Patchen slås ihop med `v_ao \|\| p_patch` utan regelkontroll. | T3-B |
+| F2: hel materiallista, priser från klienten, okänt = 0 | SÄK-6 | P1 | `ao-time-write/index.ts:199-213`; `WorkOrderDetailPage.js:2053`, `:2248` | T4-B |
+| F3: ingen tilldelningsväg för åtkomstinformation, dubbel lagring. Skrivare utan `objects_sensitive` får fältet (informationsläckage). | SÄK-7 | **P1** (läckaget), P2 (vägen) | STAGING `get-sensitive-fields` v9 är **nyare** än repot (fail-closed audit, låst supabase-js) och `set-sensitive-fields` v9 använder RPC `sensitive_fields_write`. Repot uppdateras från inventeringen före ändring. Projektionen i `vift_store_full_access` ger skrivare fullt värde. | T4-A, T4-C |
+| F4: poolregeln och "Ta jobbet" | SÄK-3, SÄK-4 | P1 | `work-orders-list/index.ts:88-91`, `_shared/vift-auth.ts:121-131`, SQL-urval i `work_order_checklist_resolve`/`_set_state`/`work_order_log_*`, `fake-backend.js:122-127`. Gren B läser utanför låset. | T3-B |
+| F5: eskalering via `staff_manage`, inget skydd för sista superadmin | SÄK-8 | **P1** | `store-key-write/index.ts:89`. `store_business_key_merge_write` har bara `p_caller_authorized`. | T3-C |
+| F6: cache kvar efter utloggning | SÄK-9 | **P1** | `AuthService.js:628-650`, `state.js:983` | T3-A |
+| F7: reservroll `personal` | SÄK-10 | Blockerar `personal` | `AuthService.js:379` | T3-A |
+| F8: uppgiftsregler klient mot server | (SÄK-2) | P2 | `PageShells.js:11861-11869`, `activities-policy.ts` | T3-D |
+| F9: offertstubbar för alla offerter | – | P2 | `vift_store_project` (`schema/functions.sql`) | T3-D |
+| F10: e-post krävs för inloggningen | – | Krav | `AuthService.js:366-372` | T3-D |
+| F11: `appendActivity` tillåter alla typer och referenser | – | P2 | `activity-log.ts` | T3-D |
+| F12: snabbexport utan spärr | (SÄK-1) | P2 | `ImportExportConfigs.js` `showExportMenu` | T4-F |
+| F13: `ProfitabilityService` använder 250 kr/h som standard | – | P3 | `ProfitabilityService.js:10` | T4-B |
+| F16: `time_entry_create` kontrollerar inte AO-tilldelning, tar `hourRate` från klienten och skriver in tidpostens id i målets `timeEntries` | (AP-B) | **P1** | `schema/functions.sql` `time_entry_create` (kroppen finns bara i ögonblicksbilden) | T3-B (tilldelning), T4-B (pris) |
+| F17: `work_order_patch` returnerar sparat resultat vid återanvänd idempotensnyckel, oavsett payload | – | P3 | `schema/functions.sql` | T3-B |
+| F18: direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged`, okända nycklar) för alla aktiva | – | P2 | `schema/policies.sql` `store_active_write_safe` + `staging_generic_keys_no_direct_*` (gäller bara affärsnycklar) | T3-C |
+| F19: `rondering-pass-write` kräver `ao_view_all` för allt, ingen kontroll per pass | (Ö3) | P2 | `inventering/.../functions/rondering-pass-write/rondering-pass-write/index.ts:82` | T4-D |
+| F21: `ao_edit` kan sätta `status:'fakturerad'`/`invoiceId` via `patch_ao` | – | **P1** (D-07) | `ao-time-write/index.ts` (ingen fältbegränsning för `callerHasEdit`) + `work_order_patch` | T3-B |
+| F23: stämpling kontrollerar inte AO-tilldelning | (AP-B) | P1 | `store-key-write/stamp-status.ts:56-70` (bara `ao_time`) | T3-B |
+| O1: Exportcenter, personnummer förvalt | SÄK-1 | P2 | `ImportExportConfigs.js:49/60`, `ExportCenterPage.js:123/135-142/189` | T4-F |
+| O2: fältets Uppgifter visar andras | SÄK-2 | **P1** | `PageShells.js:11905/11931`, `vift_store_full_access` `else true` | T3-D |
+
+**Inaktuella hänvisningar som rättats:**
+- "G4 – källa saknas" gäller **inte** längre `work_order_create`, `work_order_patch`, `time_entry_*`, `invoice-write`, `rondering-pass-write`, `store_business_key_*`, `_staging_business_key_required_perm` eller `store_read_all_with_hashes`. Alla finns i inventeringen.
+- Kvarstår: 13 funktioner (bland dem `time_entry_*`, `invoice_line_*`, `_protect_critical_store_keys`) och de RESTRICTIVE cutover-policyerna finns **bara** i ögonblicksbilden (`schema/functions.sql`, `schema/policies.sql`). De ska bli versionerade migrationer i repot (T3-0).
+- `invoice-write` och `rondering-pass-write` är återställda till `vift-v2/supabase/functions/`.
+- Fyra EF:er är nyare i STAGING än i repot: `get-sensitive-fields`, `set-sensitive-fields`, `offer-respond`, `offer-token-validate`. `send-offer-email` hör till samma grupp. Repot synkas från inventeringen innan de ändras.

@@ -1,534 +1,467 @@
-# VIFT CRM – test- och installationsplan för nästa säkerhetsomgång
+# VIFT CRM – säkerhets-, test- och installationsplan (korrigerad 2026-11-27)
 
-2026-11-26. Planen samlar allt som ska prövas och installeras i nästa säkerhetsomgång, i vilken ordning, och vad som krävs för GO.
+**Underlag:**
+- `docs/qa-2026-11-27/BESLUT-2026-11-27.md`, auktoritativt: D-01–D-26, AP-A–AP-G, justeringar av säkerhetsplanen;
+- `BEHORIGHETSMATRIS.md` (fastställd): R01–R63, felkodskatalog, testfall `SEC-*`, egna roller `SEC-CUST-*`, fynd F1–F23 med SÄK-koppling;
+- serverinventeringen `vift-v2/supabase/inventering/staging-2026-11-26/`.
 
-**Det här dokumentet kör ingenting.** Inga kommandon nedan är körda. Inga anrop har gjorts mot Supabase (varken STAGING eller LIVE).
-
-**Hör ihop med:**
-- `BEHORIGHETSMATRIS.md`: roller, målmatrisen R01–R47, testfallen `SEC-*`, besluten D-01…D-26 och fynden F1–F16;
-- `BEHORIGHETER-BESLUTSUNDERLAG.md`, `SAKERHET-DEL10.md`, `KVARSTAENDE-PROBLEM.md`;
-- `../qa-2026-11-25/C5-LASBEHORIGHET.md`.
+**Dokumentet kör ingenting.** Inga kommandon är körda i samband med det. Inga anrop är gjorda mot STAGING eller LIVE.
 
 ---
 
-## 1. Gränser som gäller hela omgången
+## 1. Gränser
 
-| Regel | Hur den upprätthålls |
+| Regel | Gäller |
 |---|---|
-| **LIVE körs aldrig.** Ingen läsning, inga skrivningar, inga tester. | `tests/staging/lib.js` `guard()` nekar LIVE:s projekt-ref och godtar bara det hashlåsta STAGING-projektet (eller `127.0.0.1` i lokalt testläge) |
-| Mutationstester bara mot **egna märkta testposter**: id börjar med körningens `runId` (`E2E-AUTHZ-<tid>-<slump>`), och text eller rubrik innehåller `[E2E-TEST]` | `authz-mutation.js` `testElement()`, `recovery.js` `isTest()` |
-| **Befintliga verksamhetsposter rörs aldrig**, inte ens med en skrivning som förväntas nekas | Se §5.2: "befintlig post" i testet = testpost som ADM skapat tidigare i samma körning |
-| Journal **före** varje mutation. Städning från journalen. "Återställt" påstås bara efter efterkontroll. | `recovery.js` (journal, högst 3 försök, efterkontroll) |
-| Ostädad körning blockerar nya körningar | Spärrfil `rapport/OSTADAT-<runId>.lock`, `assertNoOpenLocks()` |
-| Varje nivå 2-körning kräver uttryckligt GO, `--mutationstest`, `--bekrafta-projekt=<ref>`, `VIFT_MILJO=staging` och testkontomönster | `lib.js` `guard(2)`, `accounts()` |
-| Inga hemligheter, personnummer, portkoder eller lösenord i rapporter, chatt eller git | Rapporterna redovisar fältnamn och ja/nej, aldrig värden (mönstret i `c5-read.js`). Exportfiler raderas efter kontroll (§6.4). |
-| Serverändringar, migrationer och EF-installationer i STAGING kräver Lucas godkännande per steg. I LIVE ingår de inte i den här planen. | CLAUDE.md |
+| **LIVE** kontaktas eller ändras aldrig | Alla omgångar. `tests/staging/lib.js` `guard()` nekar LIVE och godtar bara det hashlåsta STAGING-projektet eller lokalt testläge. |
+| **Omgång T0–T2 (nu):** bara dokumentation, arbete i repot, rekonstruerade migrationer, samordning av källkod och lokal testning | Ingen installation i STAGING, inga skrivande STAGING-tester, ingen ändring av verksamhetsposter, ingen datamigrering, ingen UI/UX-omgång, ingen ombyggnad av rondering, inga framtidsmoduler |
+| **T3/T4** körs i första hand **lokalt** | Installation och verifiering i STAGING kräver separat GO per paket (§6, §8) |
+| **I STAGING** används bara isolerade märkta testposter (`[E2E-TEST]`, id med `runId`). Befintliga verksamhetsposter används **aldrig**, inte ens när anropet förväntas nekas. | `authz-mutation.js`/`recovery.js`: journal, spärrfil, efterkontroll |
+| **Destruktiva scenarier körs bara lokalt eller i isolerad miljö:** skrivning av hel nyckel, rollregister och personalroller, `vift_settings` och append-only-loggar (`appendActivity`, `sensitive_access_audit`) | Lokal STAGING-replik (§3.2) |
+| Inga hemligheter, personnummer, portkoder eller lösenord i rapporter, chatt eller git. Exportfiler raderas efter automatisk kontroll. | Alla tester |
 
 ---
 
-## 2. Nuläge: vad som är prövat och vad som inte är det
+## 2. Klassning och nuläge
 
-| Område | Prövat | Resultat | Inte prövat |
+### 2.1 SÄK-klassning (fastställd 2026-11-27)
+
+| SÄK | Fynd | Klass | Paket |
 |---|---|---|---|
-| C-5 läsbehörighet (`c5-read.js`) | REST, `readAllWithHashes`, `readWithHash` och `work-orders-list`-portkod för admin, chef, ekonomi, fält 1, fält 2 och begränsad | Grönt i STAGING 2026-11-25 | Artiklarnas `buyPrice`, `staff.permissions`, `activityLog`, `activities`, offertstubbar för fält (allt utanför C-5) |
-| AO- och tidläsning (`authz-read.js` R1–R4) | Urval per roll, REST-lås, `readWithHash` på AO | Grönt | Tilldelad pool (`status=pool` + `staff`), F4 |
-| PERM-03/G13 (`authz-mutation.js`) | **Bara "skapa ny post"** via `writeMerge`: 9 array-register × 4 roller | 36/36 som förväntat | Ändring och radering av befintlig post, hel nyckel (`write`), `vift_settings` (objekt), fältnivå, per-post-regler, 17 av de 28 nycklarna i `KEY_PERMISSIONS` |
-| G9 / G6 / checklista | Ekonomi → `fakturerad`; dubbel `create_time`; tre lägen och ägarkontroll | Se `vift-v2/docs/STAGING-VERIFIERING-G6-G9-G13.md` | `ao_complete` på annans AO (F1) |
-| Uppgifter (GO-6) | Skrivregler (`activities-policy.ts`), lokalt + STAGING | Grönt för skrivning | **Läsning** (O2) |
-| 4 PostgreSQL-tester | – | **Aldrig körda**: `HOPPAS ÖVER` i `tests/run-all.sh` | Allt (§3) |
-| Databasregler för B5, superadmin, `staff.role` | – | Finns inte än | – |
+| SÄK-5 | F1: `ao_complete` sätter `klar` på valfri AO, även `fakturerad`. `work_order_patch` saknar regelkontroller. | **P1** | T3-B |
+| SÄK-3 | F4: `status=pool` lämnas ut oavsett `staff` (EF, `canViewWorkOrder`, SQL-urval, simulerad server) | **P1** | T3-B |
+| SÄK-4 | F4: "Ta jobbet" på AO med personal, utan lås | **P1** | T3-B |
+| SÄK-2 | O2: fältets Uppgifter visar andras uppgifter | **P1** | T3-D |
+| SÄK-6 | F2: materialpriser från klienten, okänt = 0 | **P1** | T4-B |
+| SÄK-7 | F3: skrivare utan `objects_sensitive` får portkod i data. **Informationsläckaget = P1.** Den saknade tilldelningsvägen = P2. | **P1**/P2 | T4-A (läckage), T4-C (väg) |
+| SÄK-8 | F5: `staff_manage` kan ge sig själv admin, inget skydd för sista superadmin | **P1 inför LIVE** | T3-C |
+| SÄK-9 | F6: cache kvar efter utloggning, används vid degraderad inläsning | **P1 inför LIVE** | T3-A |
+| SÄK-10 | F7: reservrollen `personal` | **Blockerar standardrollen `personal`**. Rättas före standardrollerna. | T3-A |
+| SÄK-1 | O1: personnummer förvalt i export | P2 | T4-F |
+| – | F21: `ao_edit` kan sätta `fakturerad` i `patch_ao` (D-07) | **P1** | T3-B |
+| – | F16/F23: tid och stämpling utan tilldelningskontroll (AP-B) | **P1** | T3-B |
 
-**Kända luckor i underlaget:**
-- **G4 (serverkällor saknas)**, se F16 och G4 i matrisen:
-  - `_staging_business_key_required_perm`;
-  - `store_business_key_write` och `store_business_key_merge_write`;
-  - `store_read_all_with_hashes`;
-  - `work_order_create`/`_patch`/`_soft_delete`, `time_entry_*`;
-  - Edge Functions `invoice-write` och `rondering-pass-write`.
+### 2.2 Vad som är klart
 
-  Ingen av dem finns i något av repona. Bara anropen finns.
-- **Uppdelade repon:** `vift-v2` har 24 migrationer, bland dem C-5 (`20261125000003`) och `20261125000002`/`…04`, samt `ao-time-write` och `work-orders-list`. `VIFT-CRM` har 21 migrationer och saknar de tre senaste samt EF:erna `ao-time-write` och `work-orders-list`.
-- **Testkonton:** STAGING:s ekonomikonto har `customer_manage`/`offer_manage` och motsvarar inte standardrollen Ekonomi (D-26). Rollen `personal` saknas i STAGING:s rollregister (P1 #8).
+| Område | Läge |
+|---|---|
+| **De fyra PostgreSQL-testerna** | **Körda lokalt och gröna:** PostgreSQL 16 via `PGHOST=/var/tmp/vift-localpg`. `checklist_progress_sql` 32, `server_rpcs_sql` 17, `offer_attachment_upload` 43 (alla tre delarna, `tsc` tillgängligt), `staging_backup_export` 12. Totalt **104 godkända, 0 fel**. |
+| Serverkällor (G1/G4) | Inventerade läsande: 41 applicerade migrationer (38 md5-verifierade), 26 EF-källor exakta, `schema/functions.sql` (64 funktioner, även `work_order_patch` och `time_entry_*`), `schema/policies.sql` (51 policyer). `invoice-write` och `rondering-pass-write` är återställda till `vift-v2/supabase/functions/`. |
+| C-5 och tid/AO-läsning i STAGING | `c5-read.js` och `authz-read.js` gröna (2026-11-25/26) |
+| PERM-03/G13 | Bara "skapa ny post", 36/36. Resten görs lokalt (§3.3). |
+
+### 2.3 Vad som återstår före T3
+
+1. **13 funktioner och de RESTRICTIVE cutover-policyerna finns bara i ögonblicksbilden.** De ska bli versionerade migrationer i repot (T3-0).
+2. **Fem EF:er är nyare i STAGING än i repot:** `get-sensitive-fields`, `set-sensitive-fields`, `offer-respond`, `offer-token-validate`, `send-offer-email`. `send-push` är divergerad. Repot synkas före ändringar.
+3. **Migrationerna är uppdelade** mellan `vift-v2` och `VIFT-CRM`. De samlas i ett repo med fullständig ordning enligt `INVENTERING.md` §10.
+4. **Testverktygen ska kontrollera felkod, `reason` och kontrollsumma** (§4). I dag godkänner `authz-mutation.js` varje 401/403/`key_not_allowlisted` som "nekad".
+5. **Den simulerade servern** (`tests/e2e/fake-backend.js`) har samma poolläcka och saknar fältbegränsningen i `patch_ao`. Den ska spegla den rättade servern.
+6. Testkonton med exakt standardrollerna och egna roller (D-26) skapas i STAGING **först efter separat godkännande**. Lokalt skapas de fritt i replikan.
 
 ---
 
-## 3. De fyra PostgreSQL-testerna
+## 3. Lokal testmiljö (huvudspår för T3/T4)
 
-### 3.1 Vad de är och vad de prövar
+### 3.1 De fyra befintliga PostgreSQL-testerna
 
-Alla fyra ligger i `VIFT-CRM/tests/` och körs av `tests/run-all.sh`. Var och en börjar med `psql -d postgres -c 'select 1'`. Svarar ingen lokal server skriver testet `RESULT: … (HOPPAS ÖVER — ingen lokal PostgreSQL; INTE godkänt, inte kört)`. `run-all.sh` räknar det som **ÖVERHOPPAT, inte godkänt**.
+| Test | Prövar | Resultat |
+|---|---|---|
+| `tests/checklist_progress_sql.test.js` | Checklistans tre lägen (`work_order_checklist_set_state` och den äldre `_resolve`), ingen loggning i aktivitetsloggen, `vift_lastChanged` | 32/32 |
+| `tests/server_rpcs_sql.test.js` | `activity_log_append` (idempotens, kapning, `lastChanged`), `work_order_log_append`/`_remove` (samtidighet, grants) | 17/17 |
+| `tests/offer_attachment_upload.test.js` | Statisk jämförelse med v12, RPC:erna (md5 mot fixtur), EF-källan transpilerad med `tsc` och körd i Node | 43/43 |
+| `tests/staging_backup_export.test.js` | Backupverktyget: CSV-export, verifiering, återställning, kapad fil avvisas, LIVE-ref avvisas | 12/12 |
 
-| Testfil | Vad den prövar | Kräver | Isolering | Förväntat utfall |
-|---|---|---|---|---|
-| `checklist_progress_sql.test.js` (32 kontroller) | Checklistans tre lägen: RPC `work_order_checklist_set_state` och den äldre `work_order_checklist_resolve`, som delegerar. Kontrollerar att aktivitetsloggen inte skrivs, att `vift_lastChanged` uppdateras, ägarkontroller och pool-AO. | `psql`, lokal server, `supabase/migrations/20260917000001_…` och `20261123000002_…`. Skapar själv `anon`, `authenticated`, `service_role` och `public.store`. | Temporär databas `vift_chk_<pid>`, `drop … with (force)` vid avslut (kräver PostgreSQL ≥ 13) | `RESULT: 32 passed, 0 failed` (antalet kontroller kan variera med grenar) |
-| `server_rpcs_sql.test.js` (17) | `activity_log_append` (först i loggen, idempotent, kapas vid `p_max`, kräver id och typ, uppdaterar `vift_lastChanged`) och `work_order_log_append`/`_remove` (samtidighet, noop vid saknad post, att bara `service_role` har EXECUTE) | Migrationerna `20261124000001_…`, `20261124000002_…` | `vift_rpc_<pid>` | `RESULT: 17 passed, 0 failed` |
-| `offer_attachment_upload.test.js` (38) | Del 1 (statisk, körs alltid): repots `offer-attachment-upload` jämfört med installerade v12 rad för rad. Del 2: de installerade offert-RPC:erna (fixtur, md5-jämförd mot STAGING) + migrationen `20261125000001`: vitlista, `not_found`, behörighet (bara `service_role`), `SECURITY DEFINER`, samtidighet med `offer_attachment_append`. Del 3: EF-källan transpilerad med `tsc` och körd i Node mot samma databas (uppladdning, PATCH, DELETE, CORS). | Lokal server, **`tsc` i PATH** (annars räknas del 3 som FAIL), `tests/fixtures/staging_offer_rpcs_installed.sql`, `supabase/backup/staging-ef-fore-installation/offer-attachment-upload-v12/` | Egen temporär databas + `os.tmpdir()`-katalog | `RESULT: 38 passed, 0 failed` |
-| `staging_backup_export.test.js` (12) | `tools/staging-backup-export.js`: ett backupschema med svåra tecken (citat, `$`, radbrytning, åäö) exporteras som CSV på samma sätt som i SQL Editor, verifieras och återställs i tom databas (`--provata-lokalt`). Kapad export avvisas. LIVE-ref i `--fran-api` avvisas. | Lokal server, `psql --csv` | `vift_bx_<pid>` + temporär katalog | `RESULT: 12 passed, 0 failed` |
+**Körsätt:**
+- Lokal PostgreSQL 16 med Unix-socket `PGHOST=/var/tmp/vift-localpg`.
+- Varje test skapar och tar bort en egen temporär databas (`vift_*_<pid>`).
+- Ingen trafik till Supabase.
+- `tests/run-all.sh` ska visa PASS (inte SKIP) för alla fyra.
 
-**Om den femte filen:** `staging_e2e_real.test.js` hoppar också över, men av andra skäl: publiceringspaketet `/home/user/staging-release` eller Playwright saknas. Den kräver ingen PostgreSQL och ingår inte bland de fyra.
+**Versionsnot:** STAGING:s PostgreSQL-huvudversion är inte läst. Migrationen `20261017000001` testades lokalt mot 16 enligt sin kommentar.
 
-### 3.2 Alternativ A (rekommenderas): lokal PostgreSQL i container
+### 3.2 Lokal STAGING-replik (ny, byggs i T3-0)
 
-En lokal databas utan Supabase-anslutning. Inga verksamhetsdata och ingen trafik till STAGING eller LIVE.
+En engångsdatabas i samma lokala server som byggs **bara** från inventeringen och repots migrationer. Inga STAGING-data.
 
-**Förutsättningar:**
-- I sandlådan finns `psql`-klienten och `docker`-binären. Om Docker-daemonen körs är inte kontrollerat.
-- Containeravbildningen hämtas från ett containerregister. Om nätverket nekar registret krävs en miljöändring, som godkänns separat.
+1. **Roller och plattform:**
+   - `anon`, `authenticated`, `service_role`;
+   - minimalt `auth`-schema: `auth.users`, och `auth.uid()` som läser `request.jwt.claims` via `current_setting`;
+   - tabellen `app_users`.
+2. **Migrationer** i STAGING-ordning från `migrations-applicerade/` (41 filer, 3 tomma ersatta med SI-källan enligt `INVENTERING.md` §7.1).
+3. **Driftläget** läggs på från `schema/functions.sql` (de 13 funktionerna bara där) och `schema/policies.sql` (cutover-policyerna) och `schema/triggers.sql`.
+4. **Kontroll:** `md5(pg_get_functiondef(...))` för alla 64 funktioner och en jämförelse av policylistan mot inventeringen. Avvikelse stoppar paketet.
+5. **Syntetiska testdata:**
+   - personal och roller: standardrollerna + egna roller enligt `SEC-CUST`;
+   - AO enligt pooltestdata P1–P5, N1, N2, SI1;
+   - kunder med påhittade personnummer;
+   - objekt med testportkoder.
+6. **Anropare:**
+   - som `authenticated` med satt `request.jwt.claims` (REST/RLS-vägen, `SET ROLE authenticated`);
+   - som `service_role` (RPC);
+   - EF-källor transpilerade och körda i Node mot replikan med stubbad `serve`/`createClient`, samma mönster som `offer_attachment_upload` del 3. På så sätt prövas EF, RPC och RLS **tillsammans** lokalt.
+7. **Samtidighet:** parallella `psql`-processer (mönster i `server_rpcs_sql`) och upprepning 20–50 gånger per fall.
 
-**Steg (beskrivs, körs inte nu):**
+### 3.3 Lokala testsviter som byggs i T3/T4
 
-1. Starta en engångsserver med samma huvudversion som Supabase (15), bara på loopback:
+Varje svit täcker matrisens vägar R (REST), E (EF), P (RPC) och S (simulerad server). K, C och X (klient, cache, export) täcks med Playwright mot den simulerade servern.
 
-   ```bash
-   docker run --rm -d --name vift-pg \
-     -e POSTGRES_HOST_AUTH_METHOD=trust \
-     -p 127.0.0.1:55432:5432 postgres:15
-   ```
+| Svit | Testfall (matrisen) | Paket |
+|---|---|---|
+| `replica_build` (md5, policyer, grants, inga EXECUTE för anon/authenticated utom de två RLS-hjälparna) | SEC-REST-03/04 | T3-0 |
+| `ao_rules` | SEC-AO-*, SEC-POOL-*, SEC-TID-01..05 | T3-B |
+| `roles_superadmin` | SEC-ROLL-*, SEC-B3-05/06, SEC-REST-01/02, SEC-CUST-18/19/22/23 | T3-C |
+| `projection_per_post` | SEC-B4-*, SEC-TASK-*, SEC-OFF-01/02, SEC-KUND-01/02, SEC-B3-01..04 | T3-D |
+| `standard_roles` | Alla SEC-CUST mot den slutliga rolluppsättningen | T3-E |
+| `merge_protected` | SEC-B5-01..05, SEC-KUND-03..06, SEC-INST-*, SEC-B1-09/11/12/17, SEC-B2-06, SEC-AO-18 | T4-A |
+| `material_pricing` | SEC-B1-01..08, 13..16, SEC-B2-01..05, SEC-TID-06..09 | T4-B |
+| `access_info` | SEC-B5-06..13 | T4-C |
+| `rondering` | SEC-ROND-* | T4-D |
+| `invoice_notes` | SEC-FAKT-06..08 (+ SEC-FAKT-01..05) | T4-E |
+| `export` (Playwright + serverexport) | SEC-EXP-*, SEC-CUST-06 | T4-F |
+| `client_cache` (Playwright) | SEC-CACHE-*, SEC-ROLL-10 | T3-A |
+| `sim_parity` | SEC-SIM-01 | T3-B, T3-D, T4-B |
 
-   `trust` används bara för att containern lyssnar på 127.0.0.1 och tas bort efteråt.
+---
 
-2. Peka `psql` dit utan att ändra testerna. Testerna anropar `psql -d postgres`, och `psql` läser miljövariablerna:
+## 4. Regler som gäller alla paket
 
-   ```bash
-   export PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres
-   ```
+1. **Öppen pool ger ingen skrivrätt före tilldelning (AP-B, planjustering).**
+   - Material, bilder, checklista, AO-logg, tid och stämpling kräver att anroparen finns i `staff`.
+   - `canViewWorkOrder` delas upp i `canViewWorkOrder` (läsning, öppen pool ingår för `ao_pool_take`) och `canWriteWorkOrder` (bara tilldelad eller `ao_view_all`/`ao_edit`).
+   - SQL-urvalen i `work_order_checklist_*` och `work_order_log_*` får samma uppdelning.
+2. **Samtidighetskritiska kontroller görs under transaktionslås i RPC:n, inte före anropet.** Det gäller:
 
-3. Installera `tsc` för del 3 av `offer_attachment_upload`, t.ex. `npm i -g typescript` i sandlådan. Det påverkar inte repot (ingen `package.json`).
+   | Kontroll | Var |
+   |---|---|
+   | Tilldelning och källstatus för start och klar, låsta statusar, faktureringsfält | `work_order_patch` (SÄK-5, F21) |
+   | "Ta jobbet": öppen pool, `staff` tom, bara anroparen läggs till | `work_order_patch` (ny transitionsparameter, eller ny `work_order_take_from_pool`) |
+   | Tilldelning för tid och stämpling | `time_entry_create`, `store_write_stamp_status` |
+   | Ägarskap av materialrad | `work_order_material_*` |
+   | Eskaleringsregel och invarianten "≥1 aktiv `all`" | gemensamt `pg_advisory_xact_lock` för `vift_staff` + `vift_roles` |
+   | Fältvis sammanslagning av skyddade fält | `store_business_key_write`/`_merge_write` |
+   | Tilldelning för åtkomstinformation | läsning i samma transaktion som revisionsraden |
 
-4. Kör testerna en i taget och sedan hela sviten:
+   EF-kontroller får finnas kvar som ett snabbt första lager, men räknas inte som skydd.
+3. **Negativa tester** är godkända först när:
+   - svaret har rätt status, `error` och `reason` enligt felkodskatalogen;
+   - kontrollsummorna är oförändrade (matrisen §4–§5.1).
 
-   ```bash
-   node tests/checklist_progress_sql.test.js
-   node tests/server_rpcs_sql.test.js
-   node tests/offer_attachment_upload.test.js
-   node tests/staging_backup_export.test.js
-   bash tests/run-all.sh
-   ```
+   Ett generiskt fel är underkänt.
+4. **Alla vägar prövas:**
+   - REST/RLS;
+   - Edge Functions;
+   - RPC, direkt och via EF;
+   - klient;
+   - cache;
+   - export;
+   - simulerad server.
 
-5. Städa med `docker stop vift-pg`. `--rm` tar bort containern och all data.
+   En regel räknas som införd först när den gäller i varje väg där resursen kan nås.
+5. **Ingen breddning.** Ingen ändring får lämna ut mer data än i dag till någon roll (AP-A). Varje paket har en lokal "före/efter"-jämförelse av utlämnade fält per roll.
+6. **Övergångsregel för befintliga roller,** tills T3-E är installerat:
+   - en roll med `ao_complete` men utan `ao_view_all`/`ao_edit` behandlas som `ao_start_own` + `ao_complete_own` + `ao_pool_take`;
+   - en roll med `ao_view_own` + `ao_complete` får öppen pool.
 
-**Godkänt när:**
-- alla fyra visar `PASS` i `run-all.sh`;
-- `RESULT: N passed, 0 failed` utan `HOPPAS ÖVER`;
-- summaraden har inga "ÖVERHOPPADE".
+   Det **smalnar av** dagens rätt (bara egna AO och bara öppen pool) och bryter inte fältets arbete. Regeln tas bort när standardrollerna har de nya behörigheterna.
 
-**Vid FAIL:** Ingen serverändring görs förrän felet är förklarat. Felen gäller migrationsfiler som redan är installerade i STAGING, så ett FAIL kan betyda att repot och STAGING skiljer sig. Jämför då med funktionsdefinitionerna (§3.4).
+---
 
-**Rapportera** hur testerna kördes ("lokal PostgreSQL 15 i container, ej STAGING") och testfilernas exakta utdata. Ett lokalt grönt resultat är **inte** ett STAGING-bevis.
+## 5. Isolering och kontrollsummor i STAGING (senare omgång)
 
-### 3.3 Alternativ B: Supabase-gren av STAGING (kräver godkännande)
+| Moment | Krav |
+|---|---|
+| Testposter | Skapas av testkonto, märkta `[E2E-TEST]` + `runId`. "Befintlig post" i ett test = testpost som ADM skapat tidigare i samma körning. |
+| Förbjudet | Anrop mot verkliga poster, även negativa. Skrivning av hel nyckel, roll- och personalregistret, `vift_settings`, `appendActivity` och massanrop mot `sensitive_access_audit`. |
+| Journal | Före varje mutation. Städning från journalen. Efterkontroll. Spärrfil vid misslyckande (`recovery.js`). |
+| KS | Per nyckel: SHA-256 av kanoniskt JSON **utan testelement** + serverhash. AO och tid via listorna. Testraderna i tabellerna. Före och efter varje negativt anrop och efter städning. Verkliga poster ska vara oförändrade (annars kod 4 = NO-GO). |
+| Redovisas, återställs inte | `vift_lastChanged`, `store.updated_at`, `op_idempotency`, inloggningar, EF-loggar, revisionsrader (`denied`/`allowed`) för testobjekt |
+| Tid | Utanför arbetstid. Meddelas i förväg. |
+
+---
+
+## 6. Paketordning T3 och T4
+
+**Kontroll mot beslutsdokumentet:**
+
+| Krav | Uppfyllt genom |
+|---|---|
+| F7 (SÄK-10) före standardrollerna | T3-A före T3-E |
+| Poolens serverregel (SÄK-3/4, F4) före eller samtidigt med B4/Ö7 | T3-B före T3-D. Den tidigare ordningen, där B4/Ö7 låg före F1/F4/F15, är **struken**. |
+| B1 och B5 samordnas | T4-A och T4-B utvecklas, testas och installeras i samma serveromgång |
+| M8 finns i både installations- och verifieringsordningen | T4-E |
+| SÄK-8 och SÄK-9 är P1 inför LIVE | T3-C och T3-A |
+
+**Ordning:** T3-0 → T3-A → T3-B → T3-C → T3-D → T3-E → T4-A + T4-B (samordnat) → T4-C → T4-D → T4-E → T4-F.
+
+T3-A är bara klient och kan utvecklas parallellt med T3-B, men installeras först.
+
+| Paket | Tidigare M-id | Huvudinnehåll |
+|---|---|---|
+| T3-0 | – | Grund: migrationer, EF-synk, replik, testverktyg |
+| T3-A | M10 (del) | SÄK-10, SÄK-9 |
+| T3-B | M4, M5 (del) | SÄK-5, SÄK-3, SÄK-4, F21, F16/F23 (tilldelning), F17, nya AO-behörigheter |
+| T3-C | M3 (del) | SÄK-8, D-25, D-21, F18 |
+| T3-D | M1, M2 | SÄK-2, B4/Ö7, D-12–D-15, D-22 |
+| T3-E | M9 | Standardroller |
+| T4-A | M1, M3 (del), M5 | B5 + B1-projektion: SÄK-7 (läckage), D-05/06/13/17, `cost_view` |
+| T4-B | M4 (del), M5 | SÄK-6, D-09/10/11/19, `cost_edit`, `time_view_all` |
+| T4-C | M6 | `objects_access_assigned`, D-16 (förberedelse), D-23 |
+| T4-D | M7 | `rondering_utfor` |
+| T4-E | **M8** | D-20 faktura-PDF och kommentarer |
+| T4-F | M10 (del) | D-18 export, SÄK-1 |
+
+### T3-0 Grund (repo och lokal miljö)
 
 | | |
 |---|---|
-| Vad | En Supabase-gren (branch) skapas från STAGING-projektet. Migrationerna i repot körs mot en tom grendatabas. |
-| Kräver | **Uttryckligt godkännande av Lucas.** En gren skapar en ny, debiterad resurs under STAGING-projektets organisation. Den får aldrig skapas från eller kopplas till LIVE. |
-| Nackdelar | Grenen byggs från **repots** migrationshistorik, som är ofullständig (G4: kärn-RPC:erna saknas). Den motsvarar därför inte STAGING. Grenen har inga data och ger ingen fördel för de fyra testerna, som skapar egna data. Grenen måste tas bort efteråt (separat godkännande). |
-| När den är motiverad | När G4-källorna finns i repot och man vill pröva **hela** migrationskedjan, med Supabase:s egna roller, `auth`-schema och RLS, innan installation i STAGING |
-| Rekommendation | Använd **A** för de fyra testerna och de nya databastesterna (§3.4). Överväg B först i steg T4 (§7), när migrationshistoriken är komplett. |
+| **Innehåll** | (1) Versionerade migrationer i repot för de 13 funktionerna och cutover-policyerna, i den ordning som anges i `INVENTERING.md` §10. Bara rekonstruktion, inget nytt beteende. (2) Synk av de fem nyare EF:erna och send-push från inventeringen till repot. (3) Lokal STAGING-replik (§3.2). (4) Testverktyg: felkod + `reason` + KS per anrop, rapport per väg. Även `authz-mutation.js`/`c5-read.js`/`authz-read.js` uppdateras till de skärpta reglerna, t.ex. att `authz-read.js:62-63` inte längre ska godkänna pool med personal. (5) Den simulerade servern förbereds för paritetstester. |
+| **Beroenden** | Inventeringen (klar), D-26 för rolluppsättningen i replikan |
+| **Lokala tester** | `replica_build`: md5 för 64/64 funktioner, policylistan lika med inventeringen, grants. De fyra befintliga testerna gröna mot replikan. **Baslinje:** alla `SEC-*` körs mot den **oförändrade** replikan och avvikelserna dokumenteras (förväntat: SÄK-2–10, F16–F23, O1). |
+| **STAGING-verifiering** | Ingen skrivning. Endast vid separat GO: läsande jämförelse av funktionsdefinitioner (md5) och policyer mot replikan. |
+| **Backup** | Gäller inte STAGING. Repo-ändringarna görs i en gren. |
+| **Rollback** | Gren och commit (bara repo) |
+| **GO-kriterier** | Replikan identisk med inventeringen. Baslinjerapporten finns. De fyra testerna gröna. Inga hemligheter i nya filer. |
 
-### 3.4 Nya lokala databastester som omgången behöver
+### T3-A Klientskydd: SÄK-10 och SÄK-9
 
-De här testerna finns inte än. De skrivs i implementationsomgången och körs på samma sätt som i §3.2.
-
-**De flesta kräver G4-källorna.** Mönstret från `offer_attachment_upload` används:
-- de installerade funktionsdefinitionerna hämtas **läsande** från STAGING (`pg_get_functiondef`, som i `vift-v2/supabase/manual/staging_backup_och_kontroll_2026-11-24.sql` → `function_definitions`);
-- de checkas in som fixtur med md5;
-- testet kontrollerar att fixturen fortfarande motsvarar STAGING.
-
-Läsningen kräver GO.
-
-| Nytt test | Prövar | Testfall |
-|---|---|---|
-| `store_read_by_role_sql` | `vift_store_full_access`/`vift_store_project`/RLS `store_read_by_role` per roll och nyckel, inklusive de nya reglerna (artiklar, personal, roller, offertstubbar, kunder) | SEC-B1-07/15, SEC-B3-06/07, SEC-OFF-01, SEC-KUND-04/07 |
-| `store_merge_sensitive_sql` | Fältvis sammanslagning (B5) för `propertyObjects`, `recurringOrders`, `settings`, under radlås och med samtidiga skrivningar (två `psql` i bakgrunden, som i `server_rpcs_sql`) | SEC-B5-02…08, 17, 18; SEC-INST-09/10 |
-| `superadmin_invariant_sql` | Minst en aktiv personal med `all` efter varje skrivning av `vift_staff` eller `vift_roles`, även vid samtidiga skrivningar. Fältregel för `role`/`active`. | SEC-ROLL-01…10 |
-| `activity_projection_sql` | Urval per post för `activityLog` och `activities` (B4/Ö7) | SEC-B4-01…05, SEC-TASK-07/08 |
-| `pool_rule` (Node, mot EF-källan som i `offer_attachment_upload` del 3) | `work-orders-list` + `ao-time-write` gren A/B och klarmarkering, med stubbad `checkViftAuth` | SEC-AO-05…16, SEC-POOL-01…11 |
-| `material_pricing` (Node + SQL) | Servern sätter pris från artikel, `buyPriceUnknown`, radvis materialväg | SEC-B1-01…06, 10–14, SEC-B2-04/09 |
-
----
-
-## 4. Utökad PERM-03/G13: skrivning och radering per roll × register × post × fält
-
-### 4.1 Mål
-
-Ersätta "skapa ny post 36/36" med en heltäckande skrivmatris som avgör BLOCKER-2. Varje kombination ska ge exakt det svar målmatrisen säger, och resultatet redovisas i en tabell.
-
-Två körningar:
-- **Baslinje** mot nuvarande server, före ändringarna. Den dokumenterar dagens läge, och de förväntade avvikelserna är listade i §4.5.
-- **Efterkontroll** efter installation i STAGING.
-
-### 4.2 Dimensioner
-
-**Roller:** ADM, AL (`chef`), EK, FÄ, FÄ2 och BE, med testkonton som har **exakt standardrollerna** (D-26). Förväntan räknas om från kontots faktiska roll, som `authz-mutation.js` redan gör. Rollen skrivs i rapporten.
-
-**Register:**
-- alla 28 nycklar i `KEY_PERMISSIONS` (`store-key-write/index.ts:73-102`);
-- de 6 läsbara extranycklarna (`vift_invoices`, `vift_offerEvents`, `vift_offerAttachments`, `vift_notifications`, `vift_ronderingspass`, `vift_projectDocuments`), som alltid ska ge `key_not_allowlisted` vid skrivning;
-- `vift_workOrders`/`vift_timeEntries`, som ska nekas via `store-key-write` och bara gå via `ao-time-write`.
-
-**Operationer per register och roll:**
-
-| Op | Beskrivning | Hur den görs utan att röra verksamhetsdata |
-|---|---|---|
-| O1 Skapa | `writeMerge` med ny testpost, `previous:null` | Som i dag |
-| O2 Ändra befintlig | `writeMerge` med `previous` = testpostens lagrade värde och ett ändrat fält | Testposten skapas först av **ADM** (fas 1). För den prövade rollen är den en befintlig post. |
-| O3 Radera befintlig | `writeMerge` med `removals:[{id, previous}]` | ADM-skapad testpost |
-| O4 Fel `previous` | O2 med inaktuellt `previous` | Ska ge konflikt, aldrig skrivning |
-| O5 Radering utan `previous` | `removals:[{id}]` | Ska ge 400 `invalid_element` |
-| O6 Hel nyckel (`write`) | `write` med `expectedHash` | **Bara** med värdet = aktuellt servervärde + en testpost (array) eller + en testegenskap (objekt). Aldrig ett reducerat eller ändrat värde, så att även en felaktigt godkänd skrivning bara lägger till testdata. Aktuell hash krävs, så en samtidig verklig ändring ger 409 i stället för att skrivas över. |
-| O7 `write` utan hash | Samma som O6 utan `expectedHash` | Ska ge 409 `missing_expected_hash` |
-| O8 Fältnivå | Bara för register med skyddade fält (§6.1) | ADM-skapad testpost med skyddade fält satta till testvärden (`[E2E-TEST]-kod`) |
-
-**Per-post-regler** (egen/andras) prövas där de finns:
-- `vift_activities`: SEC-TASK-01…11;
-- `vift_staff`: egen post och annans post (SEC-ROLL);
-- framtida `vift_ronderingspass`.
-
-**Storlek:** ca 36 register × 6 roller × 5–8 operationer ≈ 1 100–1 700 anrop per körning. Körs med en paus mellan anropen (t.ex. 100–200 ms) och utanför arbetstid, så att DataSync hos riktiga användare inte påverkas onödigt. Varje lyckad skrivning uppdaterar `vift_lastChanged`, och alla klienter läser då om.
-
-### 4.3 `vift_settings` och andra objektformade nycklar
-
-- `vift_settings` skrivs bara som **hel nyckel** (`write`).
-- Testet lägger till egenskapen `e2eTest_<runId>` (teststräng) och tar bort den igen. Varje steg sker under `expectedHash`.
-- Ingen befintlig egenskap ändras någonsin. Varken bankgiro, färger eller villkor.
-- **Kontrollsumma:** SHA-256 av kanoniskt JSON (sorterade nycklar) för hela värdet **utan** `e2eTest_*`, före och efter. Dessutom ska serverns hash efter återställningen vara identisk med den före. `jsonb` normaliserar ordningen, så samma innehåll ger samma hash.
-- **Risk:** En verklig administratör som sparar inställningar under testfönstret får 409 och måste spara igen. Kör därför utanför arbetstid och meddela i förväg.
-- Negativa skrivtester (AL, EK, FÄ, BE) skickar exakt samma värde som O6. En felaktigt godkänd skrivning ändrar därför bara testegenskapen, och den städas från journalen.
-
-### 4.4 Rapport
-
-- Rapporten innehåller en tabell `register × roll × operation → förväntat / faktiskt / OK|AVVIK`. Avvikelser delas upp i:
-  - **"felaktigt tillåtet"**: säkerhetsfel, NO-GO;
-  - **"felaktigt nekat"**: funktionsfel.
-- Verktyget blir en ny fil (förslag: `vift-v2/tests/staging/authz-mutation-full.js`). Den återanvänder `lib.js` och `recovery.js` oförändrade och får samma spärrar och utgångskoder:
-  - 0 OK;
-  - 1 avvikelse;
-  - 2 spärr;
-  - 3 testposter kvar;
-  - 4 befintlig post ändrad;
-  - 5 avbruten.
-- Verktyget skrivs i implementationsomgången, inte nu.
-
-### 4.5 Förväntade avvikelser i baslinjen (nuvarande server)
-
-| Fynd | Förväntat i baslinjen | Ska efter omgången vara |
-|---|---|---|
-| F5 | Roll med `staff_manage` kan ändra `role` på egen personalpost (prövas bara om ett testkonto med en sådan roll finns; ingen standardroll har den) | Nekat |
-| F1 | FÄ kan sätta `klar` på test-AO där FÄ inte är tilldelad, och från `fakturerad` | Nekat |
-| F4 | FÄ2 kan ta en test-AO med `status:pool` och `staff:[FÄ]` | Nekat |
-| B5 | AL utan `objects_sensitive` får `doorCode` i data | Saknas, och skrivning bevarar fältet |
-| O2 | FÄ läser andras uppgifter | Saknas |
-| B1 | FÄ läser `articles[].buyPrice` och `materials[].buyPrice` | Saknas |
-
----
-
-## 5. Isolering, journal och kontrollsummor
-
-### 5.1 Testdata
-
-| Typ | Märkning | Skapas av | Tas bort av |
-|---|---|---|---|
-| Registerpost (array) | `id` = `<runId>-<register>-<roll>-<op>`, `name`/`title`/`text` = `[E2E-TEST] …`, `e2eTest: runId`, `active:false`, `deleted:true` där fälten finns | ADM eller den prövade rollen (O1) | `writeMerge removals` (ADM), från journalen |
-| Testegenskap i objekt (`vift_settings`) | `e2eTest_<runId>` | ADM | ADM `write` |
-| Test-AO | `id` = `<runId>-AO…`, `title` = `[E2E-TEST] …`, `e2eTest` | ADM `create_ao` | `delete_ao` + `permanent_delete_ao` |
-| Tidpost | `<runId>-T…`, kommentar `[E2E-TEST]` | FÄ/ADM | `delete_time` |
-| Uppgift | `<runId>-ACT…`, titel `[E2E-TEST]` | respektive roll | `writeMerge removals` |
-| Objekt med portkod | `<runId>-OBJ…`, `doorCode:'[E2E-TEST]-0000'` | ADM (+ `set-sensitive-fields` för tabellraden) | ADM, och tabellraden tas bort |
-| Kund (exporttest) | `<runId>-KU…`, påhittat personnummer i ett format som inte kan vara verkligt | ADM | ADM |
-
-### 5.2 "Befintliga poster" utan att röra verksamhetsdata
-
-För den prövade rollen är en post "befintlig" om den fanns **innan rollens anrop**. Testet skapar därför posterna med ADM i fas 1, prövar ändring och radering med varje roll i fas 2, och städar i fas 3.
-
-Verkliga poster används **aldrig** som mål, inte heller för negativa tester. En felaktigt godkänd skrivning mot en verklig post vore en verklig ändring.
-
-### 5.3 Kontrollsummor före och efter
-
-Utöver `recovery.js`, som jämför element för element och AO:ns `updatedAt`:
-
-1. **Före** (ögonblicksbild som ADM): per nyckel SHA-256 över kanoniskt JSON för värdet **utan testelement**, plus serverns hash från `readAllWithHashes`. Antal element per nyckel. AO och tidposter via `work-orders-list`/`time-entries-list`.
-2. **Efter** städning: samma beräkning. Kraven:
-   - kontrollsummorna utan testelement ska vara **identiska**;
-   - serverns hash ska vara identisk när inga testelement finns kvar;
-   - antalet element ska vara oförändrat.
-3. Skillnad i en verklig post ger **utgångskod 4** och NO-GO tills den är förklarad.
-4. Kontrollsummorna skrivs i rapporten (hashar och antal, aldrig värden).
-
-**Återställs inte, och redovisas:**
-- `vift_lastChanged`, `store.updated_at`;
-- `op_idempotency`;
-- inloggningar i `auth`;
-- EF-loggar;
-- poster som skrivs med `appendActivity` (se §6.3).
-
-### 5.4 Ordning inom en körning
-
-| Fas | Innehåll |
+| | |
 |---|---|
-| 0 | Spärrar → inloggning → ögonblicksbild före → kontroll att inga gamla testposter finns → plan skrivs ut (`--torrkorning` stannar här) |
-| 1 | ADM skapar testposter (journal före varje anrop) |
-| 2 | Rolltester (journal före varje anrop) |
-| 3 | Städning från journalen + sökning på `runId` |
-| 4 | Ögonblicksbild efter → kontrollsummor → rapport. Vid misslyckad efterkontroll: kod 3 + spärrfil. Kör `--stada=<runId>`. |
+| **Innehåll** | (1) `Auth._resolveUser`: reservrollen blir ett id som inte finns, så att fail-closed gäller. Rollnamn används inte som säkerhetsbeslut. (2) `Auth._clearSession` och flikbytet rensar **alla** `vift_*`-affärsnycklar (inte utkorg, `settleIntents` och nödvändiga användarnamnrymder). Degraderad inläsning (`state.js:983`) använder bara cache som tillhör samma användare (namnrymd per användare), annars ingen. (3) Versionshöjning `?v=N`. |
+| **Beroenden** | Inga. **Måste vara installerat före T3-E.** |
+| **Lokala tester** | `client_cache` (Playwright mot den simulerade servern): SEC-CACHE-01..03, SEC-ROLL-10, SEC-CUST-23. Regression: `tests/run-all.sh`. |
+| **STAGING-verifiering** | Webbläsartest med testkonton (läsande): SEC-CACHE-01..03 på publicerat STAGING-paket |
+| **Backup** | Föregående STAGING-klientpaket sparas |
+| **Rollback** | Publicera föregående paket |
+| **GO-kriterier** | SEC-CACHE och SEC-ROLL-10 gröna. Ingen förlust av osynkade ändringar (utkorgen orörd). |
 
----
+### T3-B AO-kärna och arbetspool: SÄK-5, SÄK-3, SÄK-4, F21, F16/F23, AP-B
 
-## 6. Särskilda områden
+| | |
+|---|---|
+| **Innehåll** | (1) **`work_order_patch`** (RPC, under lås) får regelkontroll per anroparprofil (EF skickar `p_caller_staff_id` och behörighetsflaggor): start och klar för egen tilldelad AO, källstatus, låsta statusar (`ao_locked`), `completedAt`/`completedBy` sätts av servern, faktureringsfält avvisas för **alla** (`invoice_path_required`, D-07/F21), idempotenskonflikt (F17). (2) **Ta jobbet** atomiskt i RPC: öppen pool, `staff` tom, bara anroparen läggs till, 409 `already_assigned`. Status enligt AP-G (ingen ny statussemantik nu). (3) **Poolregeln** "egen eller (`pool` och `staff` tom och aktiv)" i `work-orders-list`, `canViewWorkOrder`/`canWriteWorkOrder`, SQL-urvalen i `work_order_checklist_*` och `work_order_log_*` samt den simulerade servern. Poolprojektion enligt K-03. (4) **AP-B:** `time_entry_create` och `store_write_stamp_status` kräver tilldelning under lås. Ingen automatisk tilldelning. (5) Nya behörigheter `ao_start_own`, `ao_complete_own`, `ao_pool_take` med övergångsregeln (§4.6). (6) Klient: knapparna "Ta jobbet", "Starta" och "Klar" följer servern, och besked ges först efter serversvar. Personaldialogen rör bara personal (AP-G). |
+| **Beroenden** | T3-0. Beslut D-03, D-07, D-24, AP-A, AP-B, AP-F, AP-G (fastställda). |
+| **Lokala tester** | `ao_rules`, `sim_parity`. Samtidighet SEC-AO-14 och SEC-POOL-09 med minst 20 upprepningar. Jämförelse av utlämning före och efter per roll (ingen breddning). De fyra befintliga testerna (checklistan och loggen ändras). |
+| **STAGING-verifiering** | Märkta test-AO P1–P5, N1, N2 skapade av ADM. SEC-AO-01/05/06/09/10/11/15/17, SEC-POOL-01/02/05/06/08/10/11/12/13, SEC-TID-01..03. Bara icke-destruktiva anrop. **Inga** samtidighetsmassprov i STAGING. |
+| **Backup** | Backupschema för `store`, `op_idempotency` och `function_definitions` (`supabase/manual/staging_backup_och_kontroll_2026-11-24.sql`), extern kopia verifierad med `tools/staging-backup-export.js --provata-lokalt`. EF-backup av `ao-time-write`, `work-orders-list`, `store-key-write`, `work-order-*`. |
+| **Rollback** | `CREATE OR REPLACE` med föregående definitioner från `function_definitions` (prövat lokalt: installera, återställ, installera). Föregående EF-versioner. |
+| **GO-kriterier** | Alla T3-B-fall gröna lokalt i alla vägar. Paritet med den simulerade servern. Ingen breddning. Rollback prövad. Fältets flöden (starta, klar, ta jobbet) fungerar med övergångsregeln. |
 
-### 6.1 Skyddade fält vid samtidig redigering (B5, `vift_settings`)
+### T3-C Superadmin, roller och direkta vägar: SÄK-8, D-25, D-21, F18
 
-**Målet:** En roll utan läsrätt till ett fält kan inte ändra eller tömma det. Två samtidiga skrivare förlorar aldrig varandras ändringar tyst.
+| | |
+|---|---|
+| **Innehåll** | (1) Eskaleringsregeln och invarianten "≥1 aktiv `all`" i RPC under gemensamt lås för `vift_staff` och `vift_roles` (`store_business_key_write`/`_merge_write` får en nyckelspecifik validering). Gäller även `deactivate_vift_user`/`provision_vift_user`. (2) Bara `all` får hantera `all` (`superadmin_required`). (3) Projektion av `vift_roles` (egen effektiv roll, alla med `admin_manage`) och av `vift_staff.permissions`/`role` (D-21, D-14). (4) RLS: direkt REST-skrivning bara för en uttrycklig vitlista (F18). Klientens egna direkta skrivningar inventeras först så att inget slutar fungera. |
+| **Beroenden** | T3-0. T3-B rekommenderas först (samma RPC-familj och lås). |
+| **Lokala tester** | `roles_superadmin`, inklusive 50 upprepningar av SEC-ROLL-05/06. **Bara lokalt** (rollregistret är destruktivt). |
+| **STAGING-verifiering** | Bara läsande: SEC-B3-03/05 (projektion) och SEC-REST-03. **Inga skrivningar** i roll- eller personalregistret. Invarianten verifieras lokalt. |
+| **Backup** | Som T3-B, plus en JSON-kopia av `vift_staff` och `vift_roles` med hash |
+| **Rollback** | Föregående funktionsdefinitioner och policyer. Data ändras inte av paketet. |
+| **GO-kriterier** | Ingen eskaleringsväg i någon väg (R, E, P). Invarianten håller i alla samtidighetsprov. Den egna superadminrollen med annat id fungerar (SEC-ROLL-08). Klientens skrivvägar opåverkade. |
 
-| Scenario | Genomförande | Testfall |
+### T3-D Urval per post: SÄK-2, B4/Ö7, D-12–D-15, D-22
+
+| | |
+|---|---|
+| **Innehåll** | (1) Projektion per post för `vift_activityLog`, `vift_activities`, `vift_offers` (fältreferens), `vift_customers`/`properties`/`propertyObjects`/`propertyContacts` (urval per uppdrag) och `vift_staff` (D-14). Använder **den rättade poolregeln från T3-B** via samma delade funktion. `vift_store_project` får anroparens personal-id och synliga AO-id (ny signatur), och RLS nekar direkt REST för dessa nycklar för roller utan full åtkomst. (2) `appendActivity`: typer per behörighet och kontroll av referens (D-22). Felorsaker returneras (`not_own`, `type_not_allowed`, `ref_not_visible`). (3) Klienten följer serverns uppgiftsregel (D-15, F8). Uppgifter-sidan och dashboarden. |
+| **Beroenden** | **T3-B (poolregeln) måste vara installerat först.** T3-0. |
+| **Lokala tester** | `projection_per_post`, `sim_parity`. SEC-B4-05/06 (append-only) bara lokalt. |
+| **STAGING-verifiering** | Läsande per roll: SEC-B4-01..03, SEC-TASK-04, SEC-OFF-01, SEC-KUND-01/02, SEC-B3-01..04. Uppgifter: märkta testuppgifter (SEC-TASK-01..03/05/06). **Ingen `appendActivity`** i STAGING. |
+| **Backup** | Som T3-B |
+| **Rollback** | Föregående `vift_store_project`/`vift_store_full_access`/`store_read_all_with_hashes_projected` och `store-key-write` |
+| **GO-kriterier** | SÄK-2 stängd i REST, EF, klient och simulerad server. Fältets AO-historik och dashboard fungerar. Ingen breddning. |
+
+### T3-E Standardroller (M9)
+
+| | |
+|---|---|
+| **Innehåll** | (1) Rollregistret enligt matrisen §2: `admin`, `chef`, `ekonomi`, `personal`, `begransad` med de nya behörigheterna. Befintliga personalposter migreras inte (D-02). (2) Klientens behörighetslista i roll-editorn (`PageShells.js` ca 11660-11700) med nya behörigheter och beskrivningar. (3) Övergångsregeln (§4.6) tas bort när alla aktiva roller har de nya behörigheterna. |
+| **Beroenden** | **T3-A (SÄK-10) installerat.** T3-B, T3-C, T3-D installerade (behörigheterna verkställs). D-26: testkonton skapas i STAGING först efter separat godkännande. |
+| **Lokala tester** | `standard_roles`: hela SEC-CUST-01..23 och alla SEC-* per standardroll mot replikan med den slutliga rolluppsättningen. |
+| **STAGING-verifiering** | Dataändring i `vift_roles` (journal med före- och eftervärde och hash) **efter separat GO**. Därefter läsande verifiering per testkonto (`c5-read.js`, `authz-read.js` med ny förväntan). |
+| **Backup** | JSON-kopia av `vift_roles` och `vift_staff` med hash, plus backupschema |
+| **Rollback** | Skriv tillbaka förevärdet av `vift_roles` med hash (`write`, `expectedHash`) |
+| **GO-kriterier** | Alla SEC-CUST gröna lokalt. Ingen befintlig användare förlorar nödvändig åtkomst (jämförelse per aktiv personalpost, bara antal och behörigheter). |
+
+### T4-A och T4-B (samordnat B1 + B5): skyddade fält, kostnad, material, priser
+
+**Samordning.** T4-A och T4-B ändrar samma skrivvägar:
+- `store_business_key_*`;
+- `work_order_patch` och materialvägen;
+- `time_entry_create`;
+- projektionerna.
+
+De utvecklas i samma gren, testas tillsammans lokalt och installeras i **samma** serveromgång med full regression.
+
+| | **T4-A Skyddade fält och projektion för skrivare** | **T4-B Material, priser och tid** |
 |---|---|---|
-| Skrivare utan läsrätt sparar posten utan det skyddade fältet | AL (utan `objects_sensitive`) `writeMerge` på ADM:s testobjekt, `doorCode` saknas i `data` | SEC-B5-02 |
-| Skrivare försöker tömma eller sätta fältet | `doorCode:''` / `'1234'` | SEC-B5-03/04 |
-| Samtidig ändring | `Promise.all([ADM ändrar doorCode, AL ändrar namn])` med samma `previous` | SEC-B5-07 |
-| Inaktuell läsning | AL läser → ADM ändrar `doorCode` → AL sparar med gammalt `previous` | SEC-B5-08 |
-| Inställningar | ADM och ADM2 ändrar var sin testegenskap samtidigt | SEC-INST-09/10 |
-| AO-portkod | `ao_edit` sparar AO utan `accessCode` | Fältet bevaras (samma mekanism i `ao-time-write`) |
+| **Innehåll** | (1) Fältvis sammanslagning i `store_business_key_write`/`_merge_write` och `work_order_patch` för skyddade fält: portkodsfälten (`objects_sensitive`), `personnr`/`orgNr` (`personal_data_view`), `bankgiro` (`bankgiro_edit`), `buyPrice` i artiklar (`cost_edit`), konfliktsäker sammanslagning av inställningar (D-17, P1 #5). (2) C-5 regel 1 ("skrivare får hela värdet") ersätts av projektion även för skrivare. **Stänger informationsläckaget i SÄK-7.** (3) `cost_view`-projektion av `articles.buyPrice`, `settings.internalHourlyCost`, `materials[].buyPrice`. D-06-projektion av AO-ekonomi i `work-orders-list`. | (1) Radvisa RPC:er `work_order_material_add/update/remove` under lås. Servern sätter id, `addedBy` och pris från artikel. Fritext ger `*Unknown`. Egen rad mot andras (D-19). Hela listan nekas för fält. (2) `cost_edit` kompletterar okänt pris. `_invoice_financial_check` stoppar eller flaggar okänt försäljningspris. Fastpris utan dubbeldebitering (D-10). (3) `time_entry_create` sätter `hourRate` från tillåten prisgrupp (`price_group_not_allowed`). Historik oförändrad. `time-entries-list` projicerar `hourRate` (D-11). `time_view_all` (D-08). (4) Klient: inga belopp för fält i artikelväljare, materialrader, stämpla-ut, Tid och AO-detalj. Ingen `\|\| 0`. `ProfitabilityService` utan påhittat standardvärde (F13). |
+| **Beroenden** | T3-B, T3-C (samma RPC:er och lås), T3-E (roller med `cost_*`, `personal_data_view`, `bankgiro_edit`) | T4-A (samma omgång), T3-B (tilldelning i tid och material) |
+| **Lokala tester** | `merge_protected` (även samtidighet SEC-B5-04/05, SEC-INST-05), `sim_parity` | `material_pricing`, `sim_parity`. Fakturaunderlag med okänt pris i `invoice-write` lokalt. |
+| **STAGING-verifiering** | Märkta testobjekt, testkunder och testartiklar: SEC-B5-01..03, SEC-KUND-03/04, SEC-B1-09/11, SEC-AO-18. **Inga** skrivningar av `vift_settings` (SEC-INST bara lokalt). | Märkta test-AO och testartiklar: SEC-B1-01..05/08, SEC-B1-13, SEC-B2-01/03, SEC-TID-06. Fakturaflaggan med ett märkt testunderlag. |
+| **Backup** | Backupschema + extern kopia + EF-backup (`store-key-write`, `work-orders-list`, `ao-time-write`, `time-entries-list`, `invoice-write`) | Samma omgång |
+| **Rollback** | Föregående funktionsdefinitioner och EF-versioner. Materialrader skrivna med den nya vägen är kompatibla med den gamla läsningen (samma fält plus `*Unknown`, `addedBy`). | |
+| **GO-kriterier** | Inget skyddat fält når en roll utan behörighet i någon väg, även för skrivare. Samtidiga skrivningar tappar inget. Gammal klient i Service Worker-cachen förstör inga skyddade fält. | Okänt ≠ 0 överallt. Fältet ser inga belopp. Fakturaunderlag med okänt pris stoppas. Ingen dubbeldebitering vid fastpris. |
 
-**Bedömning efter varje scenario:** ADM läser testposten och jämför skyddade fält mot förväntat testvärde. Utfallet redovisas som ja/nej, aldrig som värde.
+### T4-C Åtkomstinformation till tilldelad personal (SÄK-7, vägen), D-16, D-23
 
-**Lokalt först:** Samtliga scenarier körs först i den lokala databasen (§3.4, `store_merge_sensitive_sql`), där riktig samtidighet kan styras.
+| | |
+|---|---|
+| **Innehåll** | (1) `get-sensitive-fields` (från STAGING v9 i inventeringen) får en gren för `objects_access_assigned`: bara objekt och fastighet på egen tilldelad **aktiv** AO eller tilldelad rondering. Kontrollen och revisionsraden görs i samma transaktion (RPC). `denied` och `allowed` loggas utan värden. (2) D-16, bara förberedelse: läsande jämförelserapport blob mot `property_sensitive_access` (antal lika, olika, saknas och AO-ögonblicksbilder). **Ingen migrering, ingen borttagning.** (3) D-23: permanent radering tar bort den känsliga raden atomiskt. Arkivering och mjuk radering behåller den. |
+| **Beroenden** | T3-B (tilldelningsregeln), T4-A (projektion), T4-D för rondering (eller gren som kan stängas av tills T4-D) |
+| **Lokala tester** | `access_info` |
+| **STAGING-verifiering** | Märkt testobjekt med testportkod och märkt test-AO: SEC-B5-06/08/09. Högst ett fåtal revisionsrader, redovisade. |
+| **Backup** | EF-backup av `get-sensitive-fields`/`set-sensitive-fields`. Backupschema inklusive `property_sensitive_access` (bara struktur och antal i rapporten). |
+| **Rollback** | Föregående EF-version |
+| **GO-kriterier** | Ingen åtkomst till andras eller inaktiva uppdrags uppgifter. Varje uttag loggas. Inga värden i loggen. |
 
-### 6.2 Materialpriser och marginaler (B1/B2/Ö4)
+### T4-D Rondering (`rondering_utfor`)
 
-- **Läsning:** FÄ/BE får aldrig `buyPrice` (artiklar, materialrader), `internalHourlyCost` eller TB. Försäljningspris och timpris följer D-09/D-11. Prövas via EF-svaren, **inte** via UI:t. UI kontrolleras separat i webbläsartestet (`e2e-real.js`, fältroll).
-- **Skrivning:** Servern sätter pris från artikel-id. Fritext ger okänt inköpspris (`null` + flagga, **aldrig 0**). Fält kan inte sätta pris och kan inte ändra eller ta bort andras rader (D-19).
-- **Komplettering:** Bara `cost_edit`. Fakturakön och rapporter visar okänt pris som okänt (SEC-B1-13/14).
-- **Testdata:** En test-AO tilldelad FÄ, två testartiklar (ADM skapar dem i `vift_articles`, med `[E2E-TEST]` och `active:false` så att de inte syns i riktiga materialdialoger) och en fritextrad.
-- **Testfall:** SEC-B1-01…19, SEC-B2-01…11.
+| | |
+|---|---|
+| **Innehåll** | `rondering-pass-write` (återställd källa): åtgärder per pass för `rondering_utfor` (`rondering_point_patch`, `rondering_pass_save_note`, `rondering_pass_auto_start`, `rondering_pass_complete`) med tilldelningskontroll under lås i RPC. Skapa pass, mallar och massskapande kräver fortsatt `ao_view_all`. Projektion av `vift_ronderingspass` per post. `PAGE_PERMISSIONS` för utförandesidan. **Ingen ombyggnad av rondering.** |
+| **Beroenden** | T3-E (behörigheten i rollerna), T3-D (urvalsfunktionen) |
+| **Lokala tester** | `rondering` |
+| **STAGING-verifiering** | Märkt testpass: SEC-ROND-01/02/04 |
+| **Backup / rollback** | EF-backup. Föregående `rondering_*`-definitioner. |
+| **GO-kriterier** | Fältet kan bara utföra egna pass. Arbetsledarens flöden är oförändrade. |
 
-### 6.3 Aktivitetslogg och uppgifter
+### T4-E Faktura-PDF och kommentarer (M8, D-20)
 
-**Observation O2 – fältrollens Uppgifter-sida visar andras uppgifter.** Klassificeras som **läckage (P1), inte avsedd regel**.
+| | |
+|---|---|
+| **Innehåll** | (1) Separata fält `internalNote` och `customerNote` i fakturaunderlaget (`invoice-write` `metaUpdate` och tillåtna fält). (2) Kund-PDF (`InvoicesPage.js:2223` och eventuell serverväg) tar **bara** med `customerNote`. Befintligt `note` tas inte med i ny kund-PDF utan uttrycklig klassificering (K-05). (3) Historiska texter och redan utfärdade dokument bevaras. **Ingen dataändring.** |
+| **Beroenden** | T3-0 (källan till `invoice-write`). Inget beroende av T4-A/B. Paketet kan tidigareläggas om det behövs. |
+| **Lokala tester** | `invoice_notes`: SEC-FAKT-06..08 med PDF-generering i Playwright mot den simulerade servern, och `invoice-write` mot replikan |
+| **STAGING-verifiering** | Märkt testunderlag med båda kommentarerna, PDF:en kontrolleras automatiskt och raderas (SEC-FAKT-06/07) |
+| **Backup / rollback** | EF-backup av `invoice-write`. Föregående klientpaket. |
+| **GO-kriterier** | Ingen intern text i någon kundsynlig PDF. Befintliga underlag oförändrade. |
 
-*Kodreferenser:*
-- `src/pages/PageShells.js:11905`: `const acts = state.activities || []`.
-- `src/pages/PageShells.js:11931`: standardfiltret "Alla öppna" visar alla öppna uppgifter oavsett `assignedTo`/`createdBy`.
-- Servern lämnar ut hela `vift_activities` till alla aktiva:
-  - `vift-v2/supabase/migrations/20261125000003_store_read_by_role.sql:93` (`else true`);
-  - `store-key-write` `READABLE_KEYS`.
-- `activities-policy.ts` gäller bara skrivning.
+### T4-F Export (D-18, SÄK-1, F12)
 
-*Varför det är läckage:* Den beslutade inriktningen (Ö7/B4) kräver att servern filtrerar uppgifter efter behörighet och tilldelning. Uppgifterna innehåller kund, fastighet, offert- och AO-koppling samt fri text.
+| | |
+|---|---|
+| **Innehåll** | (1) `export_data` styr både snabbexport (`showExportMenu`) och Exportcenter (samma regelfunktion). (2) Personnummer och org.nr för privatperson blir känsliga fält, av som standard. (3) Ny **serverexport** (EF) för skyddade fält (personnummer med `export_personal_data` + `personal_data_view`, portkod enligt K-04) med serverloggning. Klientkontrollen beskrivs inte som säkerhetsskydd. (4) Lösenord, token och autentiseringsuppgifter exporteras aldrig. |
+| **Beroenden** | T3-E (behörigheter), T4-A (projektion och `personal_data_view`) |
+| **Lokala tester** | `export`: SEC-EXP-01..08, SEC-CUST-06. Filer kontrolleras automatiskt och raderas. |
+| **STAGING-verifiering** | Märkt testkund med påhittat personnummer: SEC-EXP-03..05. Filer raderas direkt. |
+| **Backup / rollback** | Föregående klientpaket. Ny EF kan stängas av (410). |
+| **GO-kriterier** | Inget personnummer utan aktivt val, behörighet och serverlogg. Samma regel i båda exportvägarna. |
 
-**Test:**
-- SEC-TASK-07…12 och SEC-B4-01…08, via EF-svar per roll;
-- testuppgifter skapade av AL och tilldelade FÄ2, med `relatedType: offer` till en testoffert;
-- dessutom UI-kontroll av Uppgifter-sidan och dashboardens "Mina uppgifter" och "Senaste händelser" för FÄ.
+### Utanför T3/T4
 
-**Isoleringsvarning för `appendActivity`:**
-- Aktivitetsloggen är **append-only**. Testposter kan inte tas bort via klientvägen, och loggen kapas vid 500 poster (äldst först).
-- Loggen hade 179 poster 2026-11-26. Varje testpost tar alltså plats, och efter ca 320 poster börjar verkliga poster tryckas ut.
-- **Regel:**
-  - prövning av `appendActivity` (SEC-B4-07) och urvalet av loggposter görs i första hand **lokalt** (§3.4);
-  - i STAGING högst ett fåtal märkta poster (`description` börjar med `[E2E-TEST] <runId>`) med GO;
-  - antalet redovisas;
-  - inga massprov.
+Följande hör till AO-etappen:
+- `ao_plan_own` (AP-E);
+- räknare (AP-C);
+- notiser utöver "inga falska tilldelningsnotiser" (AP-D);
+- avveckling av status `pool` (AP-G);
+- UI/UX-omgången.
 
-### 6.4 Export och känsliga fält
-
-**Observation O1 – Exportcenter visar Personnummer förvalt ikryssat.** Klassificeras som **P2: brist i dataminimering och standardval. Ingen serverläcka utöver läsrätten.**
-
-*Kodreferenser:*
-- `src/services/ImportExportConfigs.js:49`: `sensitiveFields: []` för kunder.
-- `src/services/ImportExportConfigs.js:60`: `personnr` är ett vanligt fält.
-- `src/pages/ExportCenterPage.js:135-142`: `_initCols()` kryssar i alla icke-känsliga fält.
-- `ExportCenterPage.js:123`: texten "Känsliga fält är av som standard" stämmer inte.
-- `ExportCenterPage.js:189`: valet för känsliga fält bygger på `objects_sensitive` och gäller bara portkoder och nycklar.
-- Snabbexporten `CustomersPage.js:108` → `ImportExportConfigs.js:1406` (`buildExportRowsForType`) tar alltid med personnummer.
-
-*Exporteras personnummer för fel roller?*
-- Bara i den mån rollen redan får läsa det. Servern (`vift_store_project`) skickar `personnr` bara till `customer_manage`, `invoice_*`, `offer_manage`, `sales_manage`, `ao_view_all` och `all`.
-- För `customer_view` utan någon av dessa blir kolumnen tom.
-- Fält och begränsad når inte kundexporten.
-- Om `sales_manage`/`ao_view_all` alls ska ha personnummer avgörs av D-13.
-- Kvarstående risk: lokal cache från föregående användare på delad enhet (F6, §6.6).
-
-**Test:**
-- SEC-EXP-01…13 i webbläsare (Playwright, `e2e-real.js`-mönstret) per roll, med en **testkund** som har påhittat personnummer.
-- Exportfilen läses automatiskt i testet. Kontrollen gäller bara om kolumnrubriken finns och om testkundens värde förekommer.
-- Filen raderas direkt.
-- Exportfiler från STAGING sparas aldrig, checkas aldrig in och klistras aldrig in i chatt. De kan innehålla verkliga uppgifter.
-
-**Krav som ska prövas efter rättningen:**
-1. Personnummer och org.nr för privatperson räknas som känsliga fält, av som standard.
-2. Aktivt val kräver egen behörighet (D-18).
-3. Snabbexport och Exportcenter följer samma regel.
-4. Portkod, nyckelinfo och lösenord tas aldrig med automatiskt.
-
-### 6.5 Arbetspoolen
-
-Affärsregeln utreds parallellt. Testerna (SEC-POOL-01…11) är skrivna mot den beslutade inriktningen:
-- öppen pool (status `pool` och tom `staff`) kan tas av behörig fältpersonal;
-- tilldelad men oplanerad AO får varken ses eller tas av annan fältpersonal.
-
-**Dataregeln måste fastställas först (D-24),** eftersom dagens server behandlar varje `status:pool` som öppen (F4).
-
-**Testdata:** tre test-AO skapade av ADM:
-- öppen pool;
-- pool med `staff:[FÄ]`;
-- `planerad` utan datum med `staff:[FÄ]`.
-
-**Samtidighetsfallet** SEC-POOL-06 prövas med `Promise.all` för FÄ och FÄ2. Exakt en får lyckas.
-
-### 6.6 Lokal cache och delad enhet
-
-`Auth._clearSession()` (`src/services/AuthService.js:628-650`) rensar bara tidposter och AO. Övriga `vift_*` ligger kvar i `localStorage`, och vid degraderad inläsning används `Storage._localAll()` (`src/data/state.js:983`).
-
-**Test i webbläsare:**
-- SEC-CACHE-01…04: ADM loggar in, loggar ut, och FÄ loggar in på samma profil.
-- `localStorage` kontrolleras med avseende på fältnamn, inte värden.
-- Kontrollen görs även med nätet avstängt efter inloggningen.
+LIVE-planen är ett separat beslut (P1 #1).
 
 ---
 
-## 7. Ordning, förutsättningar och GO-punkter
+## 7. Verifieringsordning efter installation i STAGING
 
-| Steg | Innehåll | Förutsättning | GO | Rör STAGING? |
+Gäller en senare omgång, med separat GO per paket.
+
+| Steg | Efter paket | Verifiering (märkta poster, läsande där möjligt) |
+|---|---|---|
+| V1 | T3-A | SEC-CACHE-01..03, SEC-ROLL-10 (webbläsare) |
+| V2 | T3-B | §6 T3-B STAGING-lista, därefter `c5-read.js` + `authz-read.js` (ny förväntan) |
+| V3 | T3-C | SEC-B3-03/05, SEC-REST-03 (läsande) |
+| V4 | T3-D | SEC-B4-01..03, SEC-TASK-01..06, SEC-OFF-01, SEC-KUND-01/02 |
+| V5 | T3-E | Ny förväntan för `c5-read.js` och `authz-read.js` per standardroll. Testkonton enligt D-26 efter GO. |
+| V6 | T4-A + T4-B | Listorna i §6. Full regression `e2e-real.js` per roll. Manuell mobilkontroll av fältets materialflöde. |
+| V7 | T4-C | SEC-B5-06/08/09 |
+| V8 | T4-D | SEC-ROND-01/02/04 |
+| **V9** | **T4-E (M8)** | **SEC-FAKT-06/07:** kund-PDF utan intern kommentar, och äldre `note` inte med |
+| V10 | T4-F | SEC-EXP-03..05 |
+| V11 | Alla | Slutregression: `tests/run-all.sh`, alla lokala sviter mot replikan med installerad kod, `e2e-real.js`, kontrollsummor och städning med kod 0 |
+
+---
+
+## 8. Generella installationssteg (beskrivs, körs inte)
+
+1. **Backup före varje paket:**
+   - backupschema i databasen (`store`, `op_idempotency`, `function_definitions`);
+   - extern kopia verifierad med `--provata-lokalt`;
+   - EF-backup till `supabase/backup/ef-installerade-<datum>/<slug>-v<N>/`;
+   - för datapaket (T3-E): JSON med hash för berörd nyckel.
+2. **Migrationsfil per ändring** med återställnings-SQL i filhuvudet. Prövas lokalt i replikan: installera → återställ → installera.
+3. **Kompatibilitet:** varje serverändring ska fungera med gammal och ny klient (Service Worker-cache). Övergångsregeln enligt §4.6.
+4. **Installationsordning inom ett paket:**
+   1. migration;
+   2. EF;
+   3. läsande kontroll (`c5-read.js`, `authz-read.js`);
+   4. märkta tester;
+   5. klientpaket;
+   6. webbläsarverifiering.
+5. **Rollback utlöses av:**
+   - ett felaktigt tillåtet anrop;
+   - ett skyddat fält som når fel roll;
+   - kod 3 eller 4 i städningen;
+   - en funktionsregression i fältets flöden.
+
+   Åtgärd: föregående definitioner, EF-versioner och klientpaket. Data återställs från JSON eller backupschema bara för datapaket.
+6. **Inget från `STAGING-ONLY.md`** följer med till något paket avsett för LIVE: `e2e-test-cleanup`, `vift-admin-storage`, migrationerna `20261117085418`/`20261124211128`, backupscheman, testroller och testkonton.
+
+---
+
+## 9. GO/NO-GO-underlag för T3/T4
+
+### 9.1 Läge 2026-11-27 per paket
+
+| Paket | Lokal utveckling och test | Installation i STAGING | Underlag som finns | Det som saknas |
 |---|---|---|---|---|
-| **T0** | Affärsbeslut D-01…D-26 (minst D-01, D-03, D-05, D-09, D-11, D-13, D-16, D-18, D-24, D-25 före serverkod) | Matrisen | Lucas | Nej |
-| **T1** | **G1/G4: hämta serverkällorna** läsande från STAGING. Funktionsdefinitioner för `store_business_key_*`, `_staging_business_key_required_perm`, `store_read_all_with_hashes`, `work_order_*`, `time_entry_*`, `activity_log_append`, displayNumber-logiken. EF-källor för `invoice-write`, `rondering-pass-write` och de installerade versionerna av `ao-time-write`/`store-key-write`/`work-orders-list`. Samla migrationerna i **ett** repo med fullständig historik. | – | Lucas (läsning av STAGING) | Läsning |
-| **T2** | Lokal PostgreSQL: de 4 befintliga testerna (§3.2) + nya databastester för **nuvarande** regler (baslinje lokalt) | T1 för de nya testerna. De 4 befintliga kräver inte T1. | Behövs inte (lokalt) | Nej |
-| **T3** | Baslinje i STAGING: `c5-read.js`, `authz-read.js`, `authz-mutation.js --torrkorning` och sedan skarpt, samt den nya fullmatrisen (§4) mot nuvarande server. Förväntade avvikelser enligt §4.5. | Testkonton med standardroller (D-26), testverktyget skrivet och lokalt prövat (`VIFT_LOKALT_TESTLAGE=1` mot den simulerade servern) | Lucas: GO för nivå 1 och nivå 2 | Ja, bara testposter |
-| **T4** | Implementation av serverändringarna (§8) i gren. Nya lokala tester gröna. Granskning. Eventuellt Supabase-gren (§3.3). | T0, T1, T2 | Lucas för Supabase-gren | Nej (gren: separat resurs) |
-| **T5** | Installation i STAGING enligt §8, med backup och återställning | T4 grön. GO/NO-GO §9.1. | Lucas, per migration och EF | Ja |
-| **T6** | Efterkontroll i STAGING: alla verktyg från T3 mot målmatrisen + webbläsartest (`e2e-real.js`) per roll + manuell UI-kontroll på mobil för fältrollen | T5 | Lucas: nivå 2 | Ja, bara testposter |
-| **T7** | Bedömning enligt §9.2. LIVE-planen (P1 #1) är ett **separat** beslut. | T6 | Lucas | Nej |
+| T3-0 | **GO** | Inte tillämpligt (läsande jämförelse kräver GO) | Inventering, 104/104 lokala tester, besluten | Rekonstruerade migrationer, replik, testverktyg med felkod och KS |
+| T3-A | **GO** | NO-GO i denna omgång | Matrisen R61, SEC-CACHE | Implementation, Playwright-svit |
+| T3-B | **GO** efter T3-0 | NO-GO i denna omgång | `work_order_patch`-källan, poolutredningen, besluten D-03/D-07/D-24/AP-* | Replik, implementation, samtidighetsprov |
+| T3-C | **GO** efter T3-0 | NO-GO i denna omgång | D-25, D-21, policyöversikt | Lokal invariant med lås, inventering av klientens direkta skrivningar (F18) |
+| T3-D | **GO** efter T3-B lokalt | NO-GO i denna omgång | B4, Ö7, D-12–D-15, D-22 | Ny projektionssignatur, rättad poolregel |
+| T3-E | **GO** lokalt (replik) | **NO-GO** tills T3-A–D är installerade och testkonton är godkända (D-26) | Matrisen §2 | Bekräftelse av K-01/K-02 |
+| T4-A + T4-B | **GO** lokalt efter T3-B/C | NO-GO i denna omgång | D-01, D-05/06, D-09–D-11, D-13, D-17, D-19 | Radvisa RPC:er, sammanslagning, K-03 |
+| T4-C | **GO** lokalt | NO-GO | D-05, D-16, D-23, STAGING v9-källan | Synk av repot, tilldelningsgren |
+| T4-D | **GO** lokalt | NO-GO | Källan till `rondering-pass-write` | Gren per pass |
+| T4-E (M8) | **GO** lokalt | NO-GO | D-20, källan till `invoice-write` | K-05 (klassificering, ingen dataändring krävs för införandet) |
+| T4-F | **GO** lokalt efter T4-A | NO-GO | D-18 | Serverexport, K-04 |
 
-**Ordning mellan B-punkterna** (enligt underlaget, justerad):
-1. F7 (klientens rollreserv), före standardrollerna.
-2. Standardroller och rollregister.
-3. B3 och D-21 (projektion av personal och roller).
-4. B4/Ö7 (logg och uppgifter per post).
-5. F1/F4/F15 (AO- och poolregler).
-6. B1/B2/Ö4 (material och priser).
-7. B5 + P1 #5 (fältvis sammanslagning, samma mekanism för settings).
-8. Sista superadmin och F5.
-9. Export (O1) och cache (F6) på klientsidan.
-
-B1 och B5 ändrar skrivvägar och installeras i samma serveromgång med full regression.
-
----
-
-## 8. Installationssteg för kommande serverändringar (beskrivs, körs inte)
-
-### 8.1 Förväntade ändringar
-
-| Id | Ändring | Typ | Berör |
-|---|---|---|---|
-| M1 | Utökade läsregler: artiklar (`buyPrice`), personal (`permissions`/`role`/`email` utom egen post), roller (egen), offertstubbar (bara kopplade till egen AO), kunder (D-13), `settings.internalHourlyCost` (`cost_view`) | Migration (ersätter `vift_store_full_access`/`vift_store_project`) | RLS + `store-key-write` |
-| M2 | **Urval per post** för `vift_activityLog` och `vift_activities` | Migration + EF | `vift_store_project(key, value, perms)` känner inte anroparens personal-id eller AO-urval. Kräver ny signatur (t.ex. `p_caller_staff_id` + uppsättning synliga AO-id) eller projektion i `store-key-write`. RLS måste neka direkt REST för de här nycklarna för roller utan full åtkomst. |
-| M3 | Fältvis sammanslagning för `propertyObjects`, `recurringOrders`, `settings`. Fältregel för `staff.role`/`active`. Invarianten "≥1 aktiv med `all`" (gäller två nycklar, `vift_staff` + `vift_roles`, så samma lås krävs i båda skrivvägarna, t.ex. `pg_advisory_xact_lock`). | Migration (RPC) + `store-key-write` | B5, P1 #4/#5, F5 |
-| M4 | `ao-time-write`: nya behörigheter, kontroll av egen AO och källstatus vid klarmarkering, radvis materialväg med serverpris och `buyPriceUnknown`, timpris satt av servern, poolregel | EF (+ ev. RPC) | F1, F2, F4, F15, F16 |
-| M5 | `work-orders-list`: poolregel (D-24), projektion av pris (D-06). `time-entries-list`: projektion av `hourRate` (D-11). | EF | |
-| M6 | `get-sensitive-fields`: gren för tilldelad AO med revisionslogg (D-05). Eventuell engångsmigrering av portkoder från blob till tabell (D-16). | EF (+ datamigrering, separat GO) | |
-| M7 | `rondering-pass-write`: `rondering_utfor`, egna pass | EF (källa från T1) | Ö3 |
-| M8 | Faktura: separat `internalNote`, PDF tar bara med kundkommentar | Klient (+ EF om PDF:en genereras på servern) | P1 #3 |
-| M9 | Rollregistret: standardroller i `vift_roles` | **Dataändring** (journal + backup av nyckeln) | P1 #8 |
-| M10 | Klient: rollreserv (F7), rensning vid utloggning (F6), exportregler (O1/F12), uppgiftsregler (F8), materialdialog, gömda priser, tolerans för projicerade fält | Klientpaket (versionshöjning `?v=N`) | |
-
-### 8.2 Före installation
-
-1. **Backup i databasen:** schema `vift_staging_backup_<datum>` med `store`, `op_idempotency` och `function_definitions`. Mönster: `vift-v2/supabase/manual/staging_backup_och_kontroll_2026-11-24.sql`. Körs i SQL Editor av Lucas eller med hans GO.
-2. **Extern kopia:** exportera backupschemat som CSV och verifiera med `tools/staging-backup-export.js --fran-csv=… --provata-lokalt`. Det återställer i en lokal tom databas och avvisar kapade filer. Kopian lagras utanför git.
-3. **EF-backup:** ladda ned den installerade versionen av varje EF som ska bytas till `supabase/backup/ef-installerade-<datum>/<namn>-v<N>/`. Mönster: `store-key-write-v4`, `work-orders-list-v2`, `ao-time-write-v3`.
-4. **Återställnings-SQL** i varje migrations filhuvud (som i `20261125000003`), **prövad lokalt**: installera, återställ, installera igen.
-5. **Kompatibilitet:** varje serverändring ska fungera med **både** gammal och ny klient. En gammal klient finns kvar i Service Worker-cachen tills den laddas om. Exempel:
-   - gammal klient som skickar `buyPrice` → servern ignorerar fältet;
-   - gammal klient som sparar ett objekt utan `doorCode` → fältet bevaras;
-   - projicerad personal utan `permissions` → klienten kraschar inte.
-6. Inga öppna spärrfiler (`OSTADAT-*.lock`). Inga [E2E-TEST]-rester.
-7. Kontrollsummor (§5.3) för alla nycklar sparas före installationen.
-
-### 8.3 Installationsordning i STAGING
-
-Varje punkt sker med separat GO. Efter varje steg körs `c5-read.js` + `authz-read.js`, som är läsande.
-
-1. **M10 del 1, F7** (klientens rollreserv), om klientpaketet tillåter delpublicering. Annars ingår det i steg 6 och M9 väntar.
-2. **M9** rollregistret (dataändring): journal med före- och eftervärde för `vift_roles`. Återställning = skriv tillbaka förevärdet med hash.
-3. **M1 + M2** läsregler (migration + `store-key-write`).
-4. **M3** skrivregler (migration + `store-key-write`). Därefter fullmatrisen §4 för registren.
-5. **M4 + M5 + M6 + M7** EF:er, en i taget, med `authz-mutation`-delarna för AO, tid och pool efter varje.
-6. **M10** klientpaket till STAGING (`staging/gh-pages`-flödet).
-7. **T6** hela efterkontrollen.
-
-### 8.4 Återställning
-
-| Nivå | Utlöses av | Åtgärd |
-|---|---|---|
-| EF | Fel svar eller felaktigt tillåtet i efterkontrollen | Installera föregående version från `supabase/backup/ef-installerade-<datum>/` |
-| Migration | Fel i läs- eller skrivregel | Kör filhuvudets återställnings-SQL (prövad lokalt). Installera sedan föregående EF-version om den beror på migrationen. |
-| Data (M9, M6-migrering) | Fel rollregister eller fel portkodsflytt | Skriv tillbaka nyckelns förevärde från journalen (med hash), eller återställ från backupschemat |
-| Klient | UI-regression | Publicera föregående STAGING-paket |
-| Allt | Kontrollsumma för verkliga poster avviker (kod 4) | Stoppa omgången. Jämför mot backupschemat. Ingen ny installation förrän orsaken är känd. |
-
----
-
-## 9. GO/NO-GO-kriterier
-
-### 9.1 GO för installation i STAGING (T5)
+### 9.2 GO för att installera ett paket i STAGING (senare omgång)
 
 Alla villkor ska vara uppfyllda:
 
-- [ ] Besluten som styr ändringen är fattade och inskrivna i matrisen (T0).
-- [ ] Serverkällorna (G4) finns i repot och stämmer med STAGING (md5-jämförda funktionsdefinitioner).
-- [ ] De **4 PostgreSQL-testerna** visar PASS (inte SKIP) i en dokumenterad lokal miljö.
-- [ ] Alla **nya** lokala databastester för ändringen är gröna, även samtidighetsfallen.
-- [ ] Hela `tests/run-all.sh` är grön utan överhoppade filer (Playwright-delen dokumenteras om den saknas).
-- [ ] Backup gjord. Den externa kopian är verifierad med `--provata-lokalt`. EF-backup finns.
-- [ ] Återställnings-SQL är prövad lokalt (installera → återställ → installera).
-- [ ] Testkonton med exakt standardrollerna finns. Inga öppna spärrfiler.
-- [ ] Baslinjen (T3) är körd, och avvikelserna motsvarar §4.5.
+- [ ] Paketets lokala sviter är gröna i **alla** vägar (R, E, P, S och K/C/X där de gäller). Negativa fall har rätt felkod och orsak och oförändrad KS.
+- [ ] Jämförelsen före/efter visar ingen breddning för någon roll.
+- [ ] Samtidighetsfallen klarar sina upprepningar (20–50).
+- [ ] Den simulerade servern har paritet (SEC-SIM-01) för paketets resurser.
+- [ ] De fyra befintliga PostgreSQL-testerna och `tests/run-all.sh` är gröna utan SKIP.
+- [ ] Rollback är prövad lokalt. Backup och extern kopia är verifierade.
+- [ ] Beroende paket är installerade enligt §6. **Särskilt:**
+  - T3-A före T3-E;
+  - T3-B före T3-D;
+  - T4-A och T4-B tillsammans.
+- [ ] Lucas har gett separat GO för paketet. Testkonton finns först efter godkännande (D-26).
 
-**NO-GO** om något av ovanstående saknas.
+### 9.3 NO-GO
 
-### 9.2 Omgången godkänd i STAGING (T6 → T7)
+Något av följande stoppar paketet:
 
-**GO när:**
-- `c5-read.js`: 0 avvikelser mot den **nya** förväntan (utökad med B1/B3/B4/O2/D-12/D-13).
-- `authz-read.js`: 0 avvikelser.
-- Fullmatrisen (§4):
-  - **0 felaktigt tillåtna** skrivningar eller raderingar;
-  - felaktigt nekade är förklarade och åtgärdade, eller uttryckligen accepterade av Lucas.
-- Alla testfall i `BEHORIGHETSMATRIS.md` med rad markerad P1 eller ⚠ är godkända:
-  - SEC-AO-05/13/14;
-  - SEC-POOL-09/10/11;
-  - SEC-B1-03/07/08/09/13;
-  - SEC-B3-06;
-  - SEC-ROLL-01/05…10 (lokalt);
-  - SEC-B4-02…05;
-  - SEC-TASK-07/08/12;
-  - SEC-B5-01…08;
-  - SEC-FAKT-06;
-  - SEC-EXP-09/10;
-  - SEC-CACHE-01/02.
-- Städning:
-  - utgångskod 0 i alla nivå 2-körningar;
-  - kontrollsummorna (§5.3) för verkliga poster är identiska före och efter;
-  - antalet `appendActivity`-testposter är redovisat.
-- `e2e-real.js` (webbläsare) grönt för admin, arbetsledare, fält och begränsad. Manuell mobilkontroll av fältets flöden:
-  - starta, klarmarkera och ta jobbet;
-  - material utan pris;
-  - utföra rondering;
-  - egna uppgifter.
-- Ingen funktion är borttagen utan Lucas godkännande (CLAUDE.md).
+- ett felaktigt tillåtet anrop eller ett skyddat fält hos fel roll i någon väg;
+- ett negativt test som bara ger ett generiskt fel;
+- en mutation i ett negativt fall;
+- kod 3 eller 4 i städningen;
+- en verklig post som ändrats;
+- ett obligatoriskt test som hoppats över;
+- bristande paritet med den simulerade servern;
+- en samtidighetskontroll som görs före RPC-låset i stället för under det;
+- standardrollen `personal` utan att SÄK-10 är installerad;
+- B4/Ö7 före den rättade poolregeln;
+- B1 utan B5 (eller tvärtom) i samma skrivväg;
+- något från `STAGING-ONLY.md` i ett paket avsett för LIVE.
 
-**NO-GO direkt vid:**
-- ett skyddat fält (inköpspris, intern timkostnad, portkod, nyckelinfo, personnummer, offerttoken, andras behörigheter eller uppgifter) syns för en roll där målmatrisen säger "–";
-- en skrivning eller radering lyckas för en roll som ska nekas;
-- utgångskod 3 eller 4 som inte är löst;
-- ett obligatoriskt test är HOPPAS ÖVER;
-- sista superadmin kan inaktiveras i det lokala testet;
-- `e2e-test-cleanup` eller STAGING-referenser finns i ett paket avsett för LIVE.
+### 9.4 LIVE
 
-### 9.3 LIVE
-
-**Förblir NO-GO** tills:
-- omgången är godkänd i STAGING (§9.2);
-- en separat LIVE-plan (P1 #1) är beslutad med backup, migrationsordning, EF-versioner, klientpaket, återställning och verifiering.
-
-Den här planen innehåller inga steg mot LIVE.
+**NO-GO.** Kräver:
+- att alla T3/T4-paket är installerade och verifierade i STAGING;
+- att SÄK-8 och SÄK-9 (P1 inför LIVE) är stängda;
+- en separat LIVE-plan (P1 #1, `INVENTERING.md` §10) med eget beslut.
