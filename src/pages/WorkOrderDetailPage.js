@@ -68,27 +68,69 @@ const WorkOrderDetailPage = {
     if (state.stampActive && state.stampAoId === ao.id) this._startStampTimer();
   },
 
+  /* ── V3 AO-detalj (2026-11-26) ───────────────────────────────────────
+     Ordning efter hur man arbetar: sidhuvud med EN primär statusåtgärd,
+     några synliga sekundära och en grupperad meny för resten; en kompakt
+     stämplingsrad (Din arbetstid) skild från statusåtgärderna; därefter
+     "Uppdrag & utförande" med checklistan direkt i samma kort, material,
+     arbetstid, bilder och historik. Sidokolumnen: prissättning (bara roller
+     som redan fick se pris), var/när/vem/kund och sist metadata.
+     Ren presentation — samma funktioner, behörigheter och skrivvägar. */
+
+  /* Id i inline-handlare: bara tecken som förekommer i systemets id:n
+     (AO-007, K-002, c1732…). Normala id:n blir oförändrade; allt annat
+     rensas bort så att data aldrig kan bryta sig ur ett onclick-attribut. */
+  _id(v) {
+    return String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9_.:\-]/g, '');
+  },
+
+  /* Tomläge enligt V3-komponentstandarden (§6): .empty med ikon, h3, en
+     mening och en åtgärd om sådan finns — här kompakt inne i kortet. Kortets
+     egen rubrikknapp döljs medan tomläget visas (en åtgärd, inte två). */
+  _empty(icon, title, text, action) {
+    return `<div class="empty aod-empty">${ic(icon,22)}<h3>${esc(title)}</h3><p>${esc(text)}</p>${action || ''}</div>`;
+  },
+
+  /* Timmar med svensk decimal enligt V3-komponentstandarden ("26,5 h"). */
+  _h(min) {
+    const h = Math.round((Number(min) || 0) / 60 * 100) / 100;
+    return h.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' h';
+  },
+
+  /* Utförandestatus i klartext (härledd ur befintlig status — ändrar inget). */
+  _execStatus(ao) {
+    const SUB = {'inväntar_material':'Inväntar material','inväntar_kund':'Inväntar kund','pausad':'Pausad','behöver_återbesök':'Behöver återbesök','blockerad':'Blockerad'};
+    const parts = [];
+    let tone = 'neutral', label = 'Ej påbörjat', icon = 'circle';
+    if (ao.status === 'pågående') { tone = 'warn'; label = 'Pågår'; icon = 'play-circle'; if (ao.substatus) parts.push(esc(SUB[ao.substatus] || ao.substatus)); }
+    else if (ao.status === 'klar') { tone = 'ok'; label = 'Utfört'; icon = 'check-circle'; }
+    else if (ao.status === 'fakturerad') { tone = 'ok'; label = 'Utfört och fakturerat'; icon = 'check-circle'; }
+    else if (ao.status === 'avbruten') { tone = 'neutral'; label = 'Avbrutet'; icon = 'x-circle'; }
+    else if (ao.status === 'pool') { label = 'Ej påbörjat — ligger i arbetspoolen'; }
+    if ((ao.status === 'klar' || ao.status === 'fakturerad') && (ao.completedAt || ao.completedBy)) {
+      parts.push('Klarmarkerad' + (ao.completedAt ? ' ' + esc(fmtDate(ao.completedAt)) : '') + (ao.completedBy ? ' av ' + esc(ao.completedBy) : ''));
+    }
+    return `<div class="aod-exec tone-${tone}" id="ao-exec">${ic(icon,14)}<span class="aod-exec-l">Utförande</span><strong>${label}</strong>${parts.length ? `<span class="aod-exec-x">${parts.join(' · ')}</span>` : ''}</div>`;
+  },
+
   _renderFull(el, ao) {
     const cu     = getCu(ao.customerId);
     const cuName = cu ? CustomerService.displayName(cu) : '—';
     const staffObjs = (ao.staff||[]).map(id => getStaff(id) || { id, firstName: id, lastName: '' });
     const respS  = ao.responsibleStaffId ? getStaff(ao.responsibleStaffId) : null;
     const chkTotal = (ao.checklist||[]).length;
-    /* AO-CHECKLIST-PROGRESS-HOTFIX R1 — badge-HTML från EN delad källa
-       (_checklistBadgeHtml()). */
-    const chkBadge = this._checklistBadgeHtml(ao);
+    const chkK = WorkOrderService.checklistCounts(ao.checklist || []);
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
     const isStampedOnThis = state.stampActive && state.stampAoId === ao.id;
-    const hasChk  = chkTotal > 0;
-    const hasMat  = (ao.materials||[]).length > 0;
-    const hasTime = timeEntries.length > 0;
     const isAkut  = ao.priority === 'akut';
     const canEdit = Auth.can('ao_edit');
     const today = tdy();
+    const aoId = this._id(ao.id);
+    const closed = ['klar','fakturerad','avbruten'].includes(ao.status);
 
     /* ── Rollstyrning: vad som visas beror på behörigheter ── */
-    /* Pris, faktura, TB: syns bara för admin/ledning         */
+    /* Pris, faktura, TB: syns bara för admin/ledning/ekonomi  */
     const canSeePrice         = Auth.canAny(['invoice_view','invoice_create','reports_view']);
     const canSeeProfitability = Auth.canAny(['reports_view','staff_view']);
 
@@ -108,22 +150,28 @@ const WorkOrderDetailPage = {
        för åtgärder som INTE redan finns i åtgärdsraden ovanför. */
     const ns = WorkOrderService.nextStep(ao, today);
     let nsBtn = '';
-    if (ns && ns.action === 'assign' && canEdit) nsBtn = `<button class="btn bs bsm" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">${ic('user-plus',14)} Tilldela</button>`;
+    if (ns && ns.action === 'assign' && canEdit) nsBtn = `<button class="btn bs bsm" onclick="WorkOrderDetailPage.manageStaff('${aoId}')">${ic('user-plus',14)} Tilldela</button>`;
     if (ns && ns.action === 'plan' && canEdit) nsBtn = `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openReschedule()">${ic('calendar',14)} ${ao.scheduledDate ? 'Omplanera' : 'Planera'}</button>`;
     const nsIcon = { danger: 'alert-triangle', warn: 'alert-circle', info: 'info', ok: 'check-circle', neutral: 'info' }[ns ? ns.tone : 'neutral'];
 
     const fact = (label, value, icon) => `<div class="aod-fact"><span class="aod-fact-l">${icon ? ic(icon, 13) : ''}${label}</span><span class="aod-fact-v">${value}</span></div>`;
+    const objLink = ao.objectId ? `<a class="aod-link" onclick="Router.showPage('pg-propobj-detail',{objId:'${this._id(ao.objectId)}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)}</a>` : '';
+    const cuLink = cu ? `<a class="aod-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${this._id(cu.id)}'})">${esc(cuName)}</a>` : '';
+    const showDetailsOpen = typeof window !== 'undefined' && window.innerWidth >= 1200;
+    /* Mobilens plats-/kontaktkort ritas bara när det finns något att visa
+       (en order utan adress och kontakt gav annars ett tomt kort). */
+    const hasField = !!(mapsUrl || ao.phone || fullAddr || (ao.accessCode && Auth.can('objects_sensitive')) || ao.objectId || ao.contactPerson);
 
     el.innerHTML = `
-      ${ao.deleted ? `<div class="nbox aod-banner is-danger">${ic('trash',14)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?fmtDate(ao.deleteAfter):'om 14 dagar'}.</div>` : ''}
+      ${ao.deleted ? `<div class="nbox aod-banner is-danger">${ic('trash',14)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?esc(fmtDate(ao.deleteAfter)):'om 14 dagar'}.</div>` : ''}
       ${ao.archived && !ao.deleted ? `<div class="nbox aod-banner">${ic('archive',14)} Denna arbetsorder är arkiverad och syns inte i ordinarie lista.</div>` : ''}
 
       <div class="aod">
-        <!-- Sidhuvud: tillbaka, nummer, status — rubrik — var/när/vem i en rad — åtgärder -->
+        <!-- Sidhuvud: tillbaka, nummer, status — rubrik — var/när/vem — åtgärder — din arbetstid -->
         <header class="aod-head card">
           <div class="aod-head-top">
             <button class="btn bghost bsm ao-back-btn" onclick="Router.back()" title="Tillbaka">${ic('arrow-left',15)} <span class="ao-back-label">Tillbaka</span></button>
-            <span class="aod-no">${WorkOrderService.displayNumberOrPending(ao)}</span>
+            <span class="aod-no">${esc(WorkOrderService.displayNumberOrPending(ao))}</span>
             <div class="aod-badges">
               ${sbdg(ao.status)}
               ${isAkut ? `<span class="bdg bdg-red ao-akut-badge">${ic('alert-triangle',11)}Akut</span>` : ao.priority && ao.priority!=='normal' ? pbdg(ao.priority) : ''}
@@ -133,12 +181,13 @@ const WorkOrderDetailPage = {
           </div>
           <h2 class="aod-title ao-title-main">${esc(ao.title)}</h2>
           <div class="aod-meta">
-            ${cu ? `<a class="aod-meta-i" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${ic('building-2',14)}<span>${esc(cuName)}</span></a>` : ''}
-            ${fullAddr ? `<a class="aod-meta-i ao-address-link" href="${mapsUrl}" target="_blank" rel="noopener" title="Öppna vägbeskrivning">${ic('map-pin',14)}<span>${esc(fullAddr)}</span></a>` : ''}
+            ${cu ? `<a class="aod-meta-i" onclick="Router.showPage('pg-crm-detail',{customerId:'${this._id(cu.id)}'})">${ic('building-2',14)}<span>${esc(cuName)}</span></a>` : ''}
+            ${fullAddr ? `<a class="aod-meta-i ao-address-link" href="${esc(mapsUrl)}" target="_blank" rel="noopener" title="Öppna vägbeskrivning">${ic('map-pin',14)}<span>${esc(fullAddr)}</span></a>` : ''}
             <span class="aod-meta-i${overdue ? ' is-late' : ''}">${ic('calendar',14)}<span>${when || 'Ej planerad'}</span></span>
             <span class="aod-meta-i">${UiKit.avatarStack(ao.staff, 4)}<span>${staffObjs.length ? esc(staffObjs.map(UiKit.staffName).join(', ')) : '<span class="aod-warn">Ingen tilldelad</span>'}</span></span>
           </div>
-          <div class="aod-actions ao-action-strip">${this._actionBtns(ao)}</div>
+          <div class="aod-actbar" role="toolbar" aria-label="Åtgärder för arbetsordern">${this._actionBtns(ao)}</div>
+          ${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}
         </header>
 
         ${ns ? `<div class="aod-next tone-${ns.tone}" role="status">
@@ -149,120 +198,134 @@ const WorkOrderDetailPage = {
 
         <div class="aod-grid">
           <div class="aod-main">
-            <!-- Vad ska göras -->
-            <section class="card aod-mission ao-mission-card${isAkut?' ao-mission-akut':''}">
-              <div class="card-header"><h3>${ic('align-left',15)} Uppdrag</h3>${isAkut ? `<span class="bdg bdg-red">${ic('alert-triangle',11)}Akut — prioritera</span>` : ''}</div>
+            <!-- Uppdrag & utförande: vad som ska göras, instruktioner, checklista med framsteg, avvikelser -->
+            <section class="card aod-mission ao-mission-card${isAkut?' ao-mission-akut':''}" aria-labelledby="aod-mission-h">
+              <div class="card-header">
+                <h3 id="aod-mission-h">${ic('clipboard-list',15)} Uppdrag &amp; utförande</h3>
+                ${isAkut ? `<span class="bdg bdg-red">${ic('alert-triangle',11)}Akut — prioritera</span>` : ''}
+              </div>
               <div class="card-body ao-mission-body">
-                ${ao.description ? `<p class="ao-mission-text">${esc(ao.description)}</p>` : `<p class="ao-mission-empty">${ic('info',13)} Ingen beskrivning angiven</p>`}
+                ${this._execStatus(ao)}
+                <div class="aod-sub aod-what">
+                  <h4 class="aod-sub-h">Vad ska göras</h4>
+                  ${ao.description ? `<p class="ao-mission-text">${esc(ao.description)}</p>` : `<p class="ao-mission-empty">${ic('info',13)} Ingen beskrivning angiven</p>`}
+                </div>
                 ${ao.internalNote ? `<div class="aod-note">${ic('eye-off',13)}<div><strong>Intern anteckning</strong><br>${esc(ao.internalNote)}</div></div>` : ''}
+                <div class="aod-sub aod-chk-sec" id="ao-chk-sec">
+                  <div class="aod-chk-head">
+                    <h4 class="aod-sub-h">${ic('clipboard-check',14)} Checklista</h4>
+                    ${Auth.can('ao_checklist') ? `<button class="btn bs bsm aod-chk-add" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)} Lägg till punkt</button>` : ''}
+                  </div>
+                  <div id="ao-chk-counter" class="aod-chkp-wrap">${this._checklistBadgeHtml(ao)}</div>
+                  <div class="aod-chk-list" id="ao-checklist">
+                    ${this._renderChecklist(ao)}
+                  </div>
+                  <div id="ao-chk-avv">${this._avvikelseSummary(ao)}</div>
+                </div>
               </div>
             </section>
 
             <!-- Mobil: plats och kontakt i ETT kort (ersätter Var/När/Vem/Kontakt under 768 px;
                  tid och personal står redan i sidhuvudet) -->
-            <section class="card aod-field" aria-label="Plats och kontakt">
+            ${hasField ? `<section class="card aod-field" aria-label="Plats och kontakt">
               <div class="aod-field-acts">
-                ${mapsUrl ? `<a class="btn bs bsm" href="${mapsUrl}" target="_blank" rel="noopener">${ic('navigation',14)} Vägbeskrivning</a>` : ''}
+                ${mapsUrl ? `<a class="btn bs bsm" href="${esc(mapsUrl)}" target="_blank" rel="noopener">${ic('navigation',14)} Vägbeskrivning</a>` : ''}
                 ${ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}">${ic('phone',14)} Ring${ao.contactPerson ? ' ' + esc(String(ao.contactPerson).split(' ')[0]) : ''}</a>` : ''}
               </div>
               <div class="aod-field-rows">
                 ${fullAddr ? `<div class="aod-fr">${ic('map-pin',14)}<span>${esc(fullAddr)}${placeBits.length ? ` <em>· ${placeBits.join(' · ')}</em>` : ''}</span></div>` : ''}
                 ${ao.accessCode && Auth.can('objects_sensitive') ? `<div class="aod-fr">${ic('key',14)}<span>Portkod <b class="aod-code">${esc(ao.accessCode)}</b></span></div>` : ''}
-                ${ao.objectId ? `<div class="aod-fr">${ic('dashboard',14)}<a class="aod-link" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)}</a></div>` : ''}
+                ${ao.objectId ? `<div class="aod-fr">${ic('dashboard',14)}${objLink}</div>` : ''}
                 ${ao.contactPerson || ao.phone ? `<div class="aod-fr">${ic('user',14)}<span>${ao.contactPerson ? esc(ao.contactPerson) : ''}${ao.phone ? ` <span class="aod-muted">${esc(ao.phone)}</span>` : ''}</span></div>` : ''}
               </div>
+            </section>` : ''}
+
+            <!-- Material och kostnader -->
+            <section class="card aod-mat" aria-labelledby="aod-mat-h">
+              <div class="card-header">
+                <h3 id="aod-mat-h">${ic('package',15)} Material och kostnader</h3>
+                <div class="aod-card-acts">
+                  <span id="ao-mat-count">${(ao.materials||[]).length ? `<span class="bdg bdg-grey">${(ao.materials||[]).length} st</span>` : ''}</span>
+                  ${Auth.can('ao_material')?`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)} Lägg till</button>`:''}
+                </div>
+              </div>
+              <div id="ao-materials">${this._renderMaterials(ao)}</div>
+              <div id="ao-mat-totals">${(ao.materials||[]).length?this._matTotals(ao):''}</div>
             </section>
 
-            <!-- Stämpling — V22: kräver ao_time specifikt (payroll_manage räcker inte) -->
-            <div class="aod-stamp${isStampedOnThis ? ' is-active' : ''}">${Auth.can('ao_time') ? this._stampSection(ao, isStampedOnThis) : ''}</div>
-
-            <!-- Checklista -->
-            <details class="card ao-section aod-chk" ${hasChk?'open':''}>
-              <summary class="ao-section-head">
-                <span class="ao-section-title">${ic('clipboard-check',15)} Checklista</span>
-                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-                  <span id="ao-chk-counter">${chkBadge}</span>
-                  ${Auth.can('ao_checklist')?`<button class="btn bs bxs" title="Lägg till punkt" aria-label="Lägg till punkt" onclick="event.stopPropagation();WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)}</button>`:''}
-                  <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
-                </div>
-              </summary>
-              <div class="card-body" style="padding:6px 14px;" id="ao-checklist">
-                ${this._renderChecklist(ao)}
-              </div>
-            </details>
-
-            <!-- Material & kostnader -->
-            <details class="card ao-section aod-mat" ${hasMat?'open':''}>
-              <summary class="ao-section-head">
-                <span class="ao-section-title">${ic('package',15)} Material och kostnader</span>
-                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-                  ${hasMat ? `<span class="bdg bdg-grey">${(ao.materials||[]).length} st</span>` : ''}
-                  ${Auth.can('ao_material')?`<button class="btn bs bxs" title="Lägg till material" aria-label="Lägg till material" onclick="event.stopPropagation();WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)}</button>`:''}
-                  <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
-                </div>
-              </summary>
-              <div id="ao-materials" style="overflow:hidden;">${this._renderMaterials(ao)}</div>
-              <div id="ao-mat-totals">${hasMat?this._matTotals(ao):''}</div>
-            </details>
-
-            <!-- Arbetstid -->
-            <details class="card ao-section aod-time" ${hasTime?'open':''}>
-              <summary class="ao-section-head">
-                <span class="ao-section-title">${ic('clock',15)} Arbetstid</span>
-                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-                  <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>`:''}</span>
-                  ${Auth.canAny(['ao_time','payroll_manage'])?`<button class="btn bs bxs" title="Registrera tid" aria-label="Registrera tid" onclick="event.stopPropagation();WorkOrderDetailPage.openAddTime()">${ic('plus',13)}</button>`:''}
-                  <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
-                </div>
-              </summary>
-              <div id="ao-timeentries" style="overflow:hidden;">${this._renderTimeEntries(ao)}</div>
-            </details>
-
-            <!-- Tid vs plan (admin/ledning) — tom div alltid för uppdateringar -->
-            <div id="ao-time-plan" class="aod-plan">${canSeePrice?this._timePlanBlock(ao):''}</div>
-
-            <!-- Händelselogg (anteckningar, bilder, händelser) -->
-            <section class="card aod-log">
+            <!-- Arbetstid: registrerade tidposter (+ tid mot plan för roller som ser ekonomi) -->
+            <section class="card aod-time" aria-labelledby="aod-time-h">
               <div class="card-header">
-                <h3>${ic('activity',15)} Logg och bilder</h3>
-                <div style="display:flex;gap:6px;">
-                  <button class="btn bxs bs" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',12)} Uppföljning</button>
-                  <button class="btn bxs bp" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',12)} Anteckning</button>
+                <h3 id="aod-time-h">${ic('clock',15)} Arbetstid</h3>
+                <div class="aod-card-acts">
+                  <span id="ao-time-badge">${totalMins>0?`<span class="bdg bdg-sky">${WorkOrderDetailPage._h(totalMins)}</span>`:''}</span>
+                  ${Auth.canAny(['ao_time','payroll_manage'])?`<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)} Registrera tid</button>`:''}
                 </div>
               </div>
-              <div id="ao-timeline" style="overflow:hidden;">
+              <div id="ao-time-plan" class="aod-plan">${canSeePrice?this._timePlanBlock(ao):''}</div>
+              <div id="ao-timeentries">${this._renderTimeEntries(ao)}</div>
+            </section>
+
+            <!-- Bilder (foton från loggen) -->
+            <section class="card aod-photos" aria-labelledby="aod-photos-h">
+              <div class="card-header">
+                <h3 id="aod-photos-h">${ic('camera',15)} Bilder</h3>
+                <div class="aod-card-acts">
+                  <span id="ao-photo-count"></span>
+                  <button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddLog()">${ic('camera',13)} Foto eller anteckning</button>
+                </div>
+              </div>
+              <div id="ao-photos">${this._renderPhotos(ao)}</div>
+            </section>
+
+            <!-- Aktivitetshistorik (anteckningar, bilder, tid, material, statusändringar) -->
+            <section class="card aod-log" aria-labelledby="aod-log-h">
+              <div class="card-header">
+                <h3 id="aod-log-h">${ic('history',15)} Aktivitetshistorik</h3>
+                <div class="aod-card-acts">
+                  <button class="btn bs bsm" onclick="WorkOrderDetailPage.openFollowUp()">${ic('bell',13)} Uppföljning</button>
+                  <button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddLog()">${ic('plus',13)} Anteckning</button>
+                </div>
+              </div>
+              <div id="ao-timeline">
                 ${this._renderTimeline(ao)}
               </div>
             </section>
           </div>
 
           <aside class="aod-side">
+            <!-- Prissättning och fakturering (bara roller som redan fick se pris) -->
+            ${canSeePrice ? this._pricingCard(ao) : ''}
+
+            <!-- Intern lönsamhet (bara admin/ledning med reports/staff-behörighet) -->
+            <div id="ao-lonsam" class="aod-lonsam">${canSeeProfitability?this._renderLonsamhet(ao):''}</div>
+
             <!-- Var -->
             <section class="card aod-box aod-where">
-              <div class="card-header"><h3>${ic('map-pin',15)} Var</h3>${mapsUrl ? `<a class="btn bxs bs" href="${mapsUrl}" target="_blank" rel="noopener">${ic('navigation',12)} Vägbeskrivning</a>` : ''}</div>
+              <div class="card-header"><h3>${ic('map-pin',15)} Var</h3>${mapsUrl ? `<a class="btn bxs bs" href="${esc(mapsUrl)}" target="_blank" rel="noopener">${ic('navigation',12)} Vägbeskrivning</a>` : ''}</div>
               <div class="card-body">
                 ${fullAddr ? `<div class="aod-addr">${esc(fullAddr)}</div>` : '<div class="aod-muted">Ingen adress angiven</div>'}
                 ${placeBits.length ? fact('Plats', placeBits.join(' · '), 'map-pin') : ''}
-                ${ao.objectId ? fact('Objekt', `<a class="aod-link" onclick="Router.showPage('pg-propobj-detail',{objId:'${ao.objectId}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)}</a>`, 'dashboard') : ''}
+                ${ao.objectId ? fact('Objekt', objLink, 'dashboard') : ''}
                 ${ao.accessCode && Auth.can('objects_sensitive') ? fact('Portkod', `<span class="aod-code">${esc(ao.accessCode)}</span>`, 'key') : ''}
               </div>
             </section>
 
             <!-- När -->
             <section class="card aod-box aod-when">
-              <div class="card-header"><h3>${ic('calendar',15)} När</h3>${canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) ? `<button class="btn bxs bghost" onclick="WorkOrderDetailPage.openReschedule()">${ao.scheduledDate ? 'Omplanera' : 'Planera'}</button>` : ''}</div>
+              <div class="card-header"><h3>${ic('calendar',15)} När</h3>${canEdit && !closed ? `<button class="btn bxs bghost" onclick="WorkOrderDetailPage.openReschedule()">${ao.scheduledDate ? 'Omplanera' : 'Planera'}</button>` : ''}</div>
               <div class="card-body">
                 ${ao.scheduledDate
                   ? `<div class="aod-big${overdue ? ' is-late' : ''}">${esc(UiKit.dayLabel(ao.scheduledDate, today))}${ao.scheduledStart ? ` <span>${esc(ao.scheduledStart)}${ao.scheduledEnd ? '–' + esc(ao.scheduledEnd) : ''}</span>` : ''}</div>
                      <div class="aod-muted">${esc(ao.scheduledDate)}${overdue ? ' · försenad' : ''}</div>`
                   : '<div class="aod-muted">Inte planerad ännu</div>'}
-                ${totalMins > 0 ? fact('Registrerad tid', TimeService.fmtDuration(totalMins), 'clock') : ''}
+                ${totalMins > 0 ? fact('Registrerad tid', WorkOrderDetailPage._h(totalMins), 'clock') : ''}
               </div>
             </section>
 
             <!-- Vem -->
             <section class="card aod-box aod-who">
-              <div class="card-header"><h3>${ic('users',15)} Vem</h3>${canEdit ? `<button class="btn bxs bghost" onclick="WorkOrderDetailPage.manageStaff('${ao.id}')">Ändra</button>` : ''}</div>
+              <div class="card-header"><h3>${ic('users',15)} Vem</h3>${canEdit ? `<button class="btn bxs bghost" onclick="WorkOrderDetailPage.manageStaff('${aoId}')">Ändra</button>` : ''}</div>
               <div class="card-body">
                 ${staffObjs.length ? `<ul class="aod-people">${staffObjs.map(st => `<li>${UiKit.avatar(st, 28)}<span>${esc(UiKit.staffName(st))}</span>${respS && respS.id === st.id ? `<span class="bdg bdg-grey">${ic('star',10)} Ansvarig</span>` : ''}</li>`).join('')}</ul>`
                   : `<div class="aod-warn">${ic('user-x',14)} Ingen personal tilldelad</div>`}
@@ -273,39 +336,30 @@ const WorkOrderDetailPage = {
             <section class="card aod-box aod-contact">
               <div class="card-header"><h3>${ic('phone',15)} Kund och kontakt</h3></div>
               <div class="card-body">
-                ${cu ? fact('Kund', `<a class="aod-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}</a>`, 'building-2') : ''}
+                ${cu ? fact('Kund', cuLink, 'building-2') : ''}
                 ${fact('Kontakt', ao.contactPerson ? esc(ao.contactPerson) : '<span class="aod-muted">—</span>', 'user')}
                 ${ao.phone ? `<a class="btn bs bsm aod-call" href="tel:${esc(ao.phone)}">${ic('phone',14)} Ring ${esc(ao.phone)}</a>` : ''}
                 ${ao.contactEmail ? fact('E-post', `<a class="aod-link" href="mailto:${esc(ao.contactEmail)}">${esc(ao.contactEmail)}</a>`, 'mail') : ''}
               </div>
             </section>
 
-            <!-- Detaljer -->
-            <section class="card aod-box aod-details">
-              <div class="card-header"><h3>${ic('info',15)} Detaljer</h3></div>
+            <!-- Detaljer (administrativ metadata) — öppen på bred skärm, hopfälld på mobil/surfplatta -->
+            <details class="card ao-section aod-box aod-details"${showDetailsOpen ? ' open' : ''}>
+              <summary class="ao-section-head">
+                <span class="ao-section-title">${ic('info',15)} Detaljer</span>
+                <span class="aod-sum-hint">Skapad, ändrad, ansvarig</span>
+                <span class="ao-section-chevron">${ic('chevron-down',12)}</span>
+              </summary>
               <div class="card-body">
                 ${ao.category ? fact('Kategori', catBadge(ao.category), 'folder') : ''}
-                ${ao.technicalCategorySlug ? fact('Tekniskt', ao.propertyId ? `<a class="aod-link" onclick="Router.showPage('pg-obj-detail',{propId:'${ao.propertyId}',tab:'tech'})">${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}</a>` : esc(ao.technicalCategoryLabel||ao.technicalCategorySlug), 'settings') : ''}
-                ${chkTotal > 0 ? fact('Checklista', `<span id="ao-chk-badge-meta">${chkBadge}</span>`, 'clipboard-check') : ''}
-                ${canSeePrice ? fact('Pris', `${esc(this._priceLabel(ao))}${this._canEditPricing() ? ` · <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Ändra</a>` : ''}`, 'tag') : ''}
+                ${ao.technicalCategorySlug ? fact('Tekniskt', ao.propertyId ? `<a class="aod-link" onclick="Router.showPage('pg-obj-detail',{propId:'${this._id(ao.propertyId)}',tab:'tech'})">${esc(ao.technicalCategoryLabel||ao.technicalCategorySlug)}</a>` : esc(ao.technicalCategoryLabel||ao.technicalCategorySlug), 'settings') : ''}
+                ${fact('Ansvarig', respS ? esc(UiKit.staffName(respS)) : '<span class="aod-muted">Ingen angiven</span>', 'star')}
+                ${ao.projectId ? fact('Projekt', this._projectRef(ao.projectId), 'briefcase') : ''}
                 ${fact('Skapad', ao.createdAt ? esc(fmtDate(ao.createdAt)) : '—', 'clock')}
+                ${ao.updatedAt ? fact('Senast ändrad', esc(fmtDateTime(ao.updatedAt)), 'edit-3') : ''}
+                ${ao.completedAt ? fact('Klarmarkerad', esc(fmtDate(ao.completedAt)) + (ao.completedBy ? ' · ' + esc(ao.completedBy) : ''), 'check-circle') : ''}
               </div>
-            </section>
-
-            <!-- Fakturaunderlag + offert (bara admin/ledning) -->
-            ${canSeePrice && (ao.invoiceId || ao.offerId || (ao.status==='klar' && Auth.can('invoice_create'))) ? `
-              <section class="card aod-box aod-billing">
-                <div class="card-header"><h3>${ic('receipt',15)} Fakturering</h3></div>
-                <div class="card-body">
-                  ${ao.status==='klar'&&!ao.invoiceId&&Auth.can('invoice_create') ? `<button class="btn bsu bfull" onclick="WorkOrderDetailPage.createInvoice()">${ic('file-plus',15)} Skapa fakturaunderlag</button>` : ''}
-                  ${ao.invoiceId ? `<a class="aod-linkrow" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})">${ic('receipt',14)}<span>Fakturaunderlag ${esc(ao.invoiceId)}</span>${ic('chevron-right',14)}</a>` : ''}
-                  ${ao.offerId ? this._offerUnderlag(ao) : ''}
-                  ${ao.offerId ? `<a class="aod-linkrow" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">${ic('file-text',14)}<span>Skapad från offert ${esc(ao.offerId)}</span>${ic('chevron-right',14)}</a>` : ''}
-                </div>
-              </section>` : ''}
-
-            <!-- Intern lönsamhet (bara admin/ledning med reports/staff-behörighet) -->
-            <div id="ao-lonsam">${canSeeProfitability?this._renderLonsamhet(ao):''}</div>
+            </details>
 
             <!-- Återkommande (bara för användare med ao_edit) -->
             ${canEdit ? (ao.recurringOrderId
@@ -316,17 +370,31 @@ const WorkOrderDetailPage = {
 
         <!-- Mobil: snabbåtgärder fästa ovanför bottenmenyn -->
         <nav class="aod-qbar" aria-label="Snabbåtgärder">
-          ${Auth.can('ao_time') && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.deleted
+          ${Auth.can('ao_time') && ((!closed && !ao.deleted) || isStampedOnThis)
             ? `<button type="button" class="aod-q ${isStampedOnThis ? 'is-out' : 'is-in'}" onclick="WorkOrderDetailPage.toggleStamp()">${ic(isStampedOnThis ? 'stop-circle' : 'play-circle',18)}<span>${isStampedOnThis ? 'Stämpla ut' : 'Stämpla in'}</span></button>` : ''}
-          <button type="button" class="aod-q" onclick="WorkOrderDetailPage._goSection('ao-checklist')">${ic('clipboard-check',18)}<span>Checklista${chkTotal ? ` ${WorkOrderService.checklistCounts(ao.checklist).done + WorkOrderService.checklistCounts(ao.checklist).avv}/${chkTotal}` : ''}</span></button>
+          <button type="button" class="aod-q aod-q-chk" onclick="WorkOrderDetailPage._goSection('ao-chk-sec')">${ic('clipboard-check',18)}<span id="ao-qbar-chk">${this._qbarChkLabel(chkK)}</span></button>
           ${Auth.can('ao_material') ? `<button type="button" class="aod-q" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('package',18)}<span>Material</span></button>` : ''}
           <button type="button" class="aod-q" onclick="WorkOrderDetailPage.openAddLog()">${ic('camera',18)}<span>Foto/anteckn.</span></button>
         </nav>
       </div>
     `;
+    this._afterPhotosRender();
   },
 
-  /* Öppna en hopfällbar sektion och scrolla dit (snabbåtgärdsraden på mobil). */
+  _qbarChkLabel(k) {
+    return 'Checklista' + (k && k.total ? ` ${k.done + k.avv}/${k.total}` : '');
+  },
+
+  /* Projektreferens i Detaljer: länk bara om rollen får öppna projektkortet. */
+  _projectRef(projectId) {
+    const p = (typeof ProjectService !== 'undefined' && ProjectService.getById) ? ProjectService.getById(projectId) : null;
+    const label = esc(projectId) + (p && p.name ? ' – ' + esc(p.name) : '');
+    if (Auth.canViewPage('pg-project-detail')) return `<a class="aod-link" onclick="Router.showPage('pg-project-detail',{projectId:'${this._id(projectId)}'})">${label}</a>`;
+    return label;
+  },
+
+  /* Scrolla till en sektion (snabbåtgärdsraden på mobil). Hopfällbara
+     sektioner öppnas först. */
   _goSection(elementId) {
     this._openSectionOf(elementId);
     const el = document.getElementById(elementId);
@@ -358,81 +426,199 @@ const WorkOrderDetailPage = {
     if (el) { const det = el.closest('details.ao-section'); if (det) det.open = true; }
   },
 
+  /* ── Åtgärdsraden (V3 2026-11-26) ─────────────────────────────────────
+     Tidigare: en lång rad (Starta arbete, Byt status, Kontakt, Ny uppgift,
+     Omplanera, Redigera, Personal, …) som slog runt eller sköts utanför
+     skärmen på smala bredder. Nu: EN primär åtgärd vald ur status (samma
+     funktioner och behörighetsvillkor som förut), några synliga sekundära
+     och resten i en grupperad meny med ikon + text. Varje åtgärd från den
+     tidigare raden finns kvar med samma etikett och samma anrop — se
+     _actionModel(), som är den enda källan för villkoren. */
+  _actionModel(ao) {
+    const canEdit     = Auth.can('ao_edit');
+    const canComplete = Auth.can('ao_complete');
+    const canInvoice  = Auth.can('invoice_create');
+    const canPricing  = this._canEditPricing();
+    const id   = this._id(ao.id);
+    const live = !['klar','fakturerad','avbruten'].includes(ao.status);
+    const A = [];
+    const add = (o) => { A.push(o); return o; };
+    /* Status och huvudsteg (villkor oförändrade från _primaryActionBtns) */
+    if (canEdit && ['nytt','pool','planerad'].includes(ao.status))
+      add({ key:'start', label:'Starta arbete', icon:'play-circle', fn:`WorkOrderDetailPage.setStatus('pågående')`, group:'status', main:true });
+    /* Tilldelad utan ao_edit (t.ex. fältarbetare): samma "Starta" som Mina
+       jobb redan erbjuder samma person för samma order — se _canStartOwn(). */
+    else if (this._canStartOwn(ao))
+      add({ key:'start', label:'Starta arbete', icon:'play-circle', fn:`WorkOrderDetailPage.startOwnJob()`, group:'status', main:true });
+    if (ao.status === 'pågående' && canComplete)
+      add({ key:'complete', label:'Klarmarkera', icon:'check-circle', fn:`WorkOrderDetailPage.markComplete()`, group:'status', main:true });
+    if (ao.status === 'klar' && !ao.invoiceId && canInvoice)
+      add({ key:'invoice', label:'Skapa fakturaunderlag', icon:'receipt', fn:`InvoicesPage.createFromAO('${id}')`, group:'order', main:true });
+    if (canEdit && ao.status === 'avbruten' && !ao.archived && !ao.deleted)
+      add({ key:'reactivate', label:'Återaktivera', icon:'rotate-ccw', fn:`WorkOrderDetailPage.openReactivateModal()`, group:'status', main:true });
+    if (ao.deleted)
+      add({ key:'restore-trash', label:'Återställ', icon:'rotate-ccw', fn:`WorkOrderDetailPage._restoreFromTrash('${id}')`, group:'archive', main:true });
+    if (canEdit && live && !ao.archived && !ao.deleted)
+      add({ key:'status', label:'Byt status', icon:'refresh-cw', fn:`WorkOrderDetailPage.openStatusModal()`, group:'status' });
+    add({ key:'contact', label:'Kontakt', icon:'phone', fn:`WorkOrderDetailPage.openContact()`, group:'order' });
+    /* Övriga (villkor oförändrade från _secondaryActions) */
+    if (Auth.canViewPage('pg-activities'))
+      add({ key:'task', label:'Ny uppgift', icon:'check-square', fn:`ActivitiesPage.openCreate({customerId:'${this._id(ao.customerId)}',propertyId:'${this._id(ao.propertyId)}',relatedType:'workOrder',relatedId:'${id}'})`, group:'order' });
+    if (canEdit && ['nytt','pool'].includes(ao.status))
+      add({ key:'plan', label:'Planera', icon:'calendar', fn:`WorkOrderDetailPage.setStatus('planerad')`, group:'plan' });
+    if (canEdit && ao.status === 'nytt')
+      add({ key:'pool', label:'Till pool', icon:'inbox', fn:`WorkOrderDetailPage.setStatus('pool')`, group:'plan' });
+    if (canEdit && ao.status === 'planerad')
+      add({ key:'reschedule', label:'Omplanera', icon:'calendar', fn:`WorkOrderDetailPage.openReschedule()`, group:'plan' });
+    if (canEdit && ao.status === 'pågående')
+      add({ key:'pause', label:'Pausa', icon:'pause-circle', fn:`WorkOrderDetailPage.setStatus('planerad')`, group:'status' });
+    if (ao.status === 'klar' && ao.invoiceId)
+      add({ key:'view-invoice', label:'Visa fakturaunderlag', icon:'file-text', fn:`Router.showPage('pg-inv-detail',{invoiceId:'${this._id(ao.invoiceId)}'})`, group:'order' });
+    if (canEdit) {
+      add({ key:'edit', label:'Redigera', icon:'pencil', fn:`WorkOrderDetailPage.openEdit()`, group:'order' });
+      add({ key:'staff', label:'Personal', icon:'users', fn:`WorkOrderDetailPage.manageStaff('${id}')`, group:'plan' });
+    }
+    /* AO-PRICING-RECOVERY — "Ändra prissättning" nåbar OAVSETT status
+       (nytt/pågående/klar), gated på samma behörighet som faktiskt kan RÖRA
+       prisfälten (_canEditPricing(): ao_edit eller invoice_create). */
+    if (canPricing)
+      add({ key:'pricing', label:'Ändra prissättning', icon:'tag', fn:`WorkOrderDetailPage.openPricingModal()`, group:'order' });
+    if (canEdit && !ao.archived && !ao.deleted) {
+      add({ key:'archive', label:'Arkivera', icon:'archive', fn:`WorkOrderDetailPage.openArchiveModal()`, group:'archive' });
+      add({ key:'delete', label:'Ta bort', icon:'trash', fn:`WorkOrderDetailPage.openDeleteModal()`, group:'archive', destructive:true });
+    }
+    if (ao.archived && !ao.deleted)
+      add({ key:'restore-archive', label:'Återställ från arkiv', icon:'rotate-ccw', fn:`WorkOrderDetailPage._restoreFromArchive('${id}')`, group:'archive', main:true });
+    if (ao.deleted)
+      add({ key:'perm-delete', label:'Radera permanent', icon:'trash-2', fn:`WorkOrderDetailPage._confirmPermanentDelete('${id}')`, group:'archive', destructive:true });
+
+    /* EN primär åtgärd. Papperskorg/arkiv först (det enda rimliga nästa
+       steget där), annars statusens naturliga nästa steg. */
+    const order = ['restore-trash','restore-archive','start','complete','invoice','reactivate'];
+    let primary = null;
+    for (const k of order) { primary = A.find(a => a.key === k); if (primary) break; }
+    /* Substatus-väljaren (bara när en substatus redan är satt — oförändrat villkor). */
+    const substatus = ao.status === 'pågående' && canEdit && ao.substatus;
+    return { all: A, primary, substatus: !!substatus };
+  },
+
+  /* "Starta" för den som är tilldelad ordern men saknar ao_edit — exakt
+     samma villkor som Mina jobb (MyJobsPage.render(): sidan Mina jobb får
+     visas, ordern är ens egen — staff innehåller en själv —, inte arkiverad
+     eller borttagen, status nytt/pool/planerad). Ingen ny behörighet:
+     fältarbetaren kan redan starta samma order från Mina jobb; här slipper
+     hen byta sida. Servern avgör som förut. */
+  _canStartOwn(ao) {
+    if (!ao || Auth.can('ao_edit')) return false;
+    const me = state.currentUser && state.currentUser.id;
+    return !!me && Auth.canViewPage('pg-myjobs') && (ao.staff || []).includes(me)
+      && !ao.archived && !ao.deleted && ['nytt','pool','planerad'].includes(ao.status);
+  },
+
+  /* Samma anrop och samma besked som MyJobsPage.startJob(): bara status →
+     pågående (serverbekräftat besked), ingen stämpling, ingen tidpost. */
+  startOwnJob() {
+    const ao = getAO(this.aoId);
+    if (!this._canStartOwn(ao)) { showToast('Du saknar behörighet för den åtgärden'); return; }
+    WorkOrderService.setStatus(this.aoId, 'pågående', {
+      onSettled: function (r) {
+        if (r && r.ok) showToast('Status: Pågående');
+        else if (r && r.final) showToast('Statusändringen kunde inte bekräftas av servern — kontrollera din anslutning och försök igen.');
+      }
+    });
+    this.render({ aoId: this.aoId });
+    Sidebar.updateBadges();
+  },
+
+  /* Synliga sekundära åtgärder per läge. Dator: upp till tre bredvid den
+     primära; mobil: bara Kontakt — allt annat i menyn. */
+  _ACT_VISIBLE_DESKTOP: ['status','contact','edit','view-invoice'],
+  _ACT_VISIBLE_MOBILE: ['contact'],
+  _ACT_GROUPS: [
+    { key:'status',  label:'Status' },
+    { key:'plan',    label:'Planering och personal' },
+    { key:'order',   label:'Arbetsorder' },
+    { key:'archive', label:'Arkiv och borttagning' },
+  ],
+
   _actionBtns(ao) {
-    const primary   = this._primaryActionBtns(ao);
-    const secondary = this._secondaryActions(ao);
-
-    // Desktop: visa dessa sekundäråtgärder direkt i knappraden
-    const DESKTOP_INLINE = new Set(['Ny uppgift','Planera','Omplanera','Till pool','Pausa','Redigera','Personal','Visa fakturaunderlag']);
-    const desktopInline = secondary.filter(it => DESKTOP_INLINE.has(it.label));
-    const desktopRest   = secondary.filter(it => !DESKTOP_INLINE.has(it.label)); // Arkivera, Ta bort, etc.
-
-    const _inlineBtn = (it) => {
-      const cls = it.destructive ? 'btn bsm bd' : 'btn bsm bghost';
-      return `<button class="${cls}" onclick="${it.fn}">${ic(it.icon,13)} ${esc(it.label)}</button>`;
+    const m = this._actionModel(ao);
+    const rest = m.all.filter(a => a !== m.primary);
+    const pick = (keys, max) => {
+      const out = [];
+      keys.forEach(k => { const a = rest.find(x => x.key === k); if (a && out.length < max) out.push(a); });
+      return out;
     };
+    const visD = pick(this._ACT_VISIBLE_DESKTOP, 3);
+    const visM = pick(this._ACT_VISIBLE_MOBILE, 1);
+    const menuD = rest.filter(a => !visD.includes(a));
+    const menuM = rest.filter(a => !visM.includes(a));
 
-    /* V52A — "Fler åtgärder" öppnade tidigare en generisk full Modal
-       (mobilbottensheet-stilad, med en stor primärfärgad "Stäng"-knapp)
-       för BÅDA skrivbord och mobil, med gott om tom yta för ett fåtal
-       rader. Ersatt med den redan befintliga, tillgängliga, ankrade
-       overflow-menykomponenten (aoToggleOverflow/aoCloseOverflow,
-       state.js) — samma komponent som redan används av Kunder/Fakturor/
-       Fastigheter/Arbetsorder-listans egna "fler alternativ"-menyer.
-       Ingen ny menyram uppfinns. */
-    const desktopMenu = desktopRest.length
-      ? this._moreActionsMenuHtml(desktopRest, 'ao-more-desktop', false)
-      : '';
-    const mobileMenu = secondary.length
-      ? this._moreActionsMenuHtml(secondary, 'ao-more-mobile', true)
-      : '';
+    const primaryBtn = m.primary
+      ? `<button class="btn bp aod-primary" data-act="${m.primary.key}" onclick="${m.primary.fn}">${ic(m.primary.icon,15)} ${esc(m.primary.label)}</button>` : '';
+    const secBtn = (a) => `<button class="btn bs aod-sec${a.destructive ? ' is-danger' : ''}" data-act="${a.key}" onclick="${a.fn}">${ic(a.icon,14)} <span>${esc(a.label)}</span></button>`;
+    const subSel = m.substatus ? this._substatusSelect(ao) : '';
 
     return `
-      <div class="ao-acts-desktop">
-        ${primary.join('')}
-        ${desktopInline.map(_inlineBtn).join('')}
-        ${desktopMenu}
+      <div class="ao-acts-desktop aod-acts">
+        ${primaryBtn}
+        ${subSel}
+        ${visD.map(secBtn).join('')}
+        ${menuD.length ? this._moreActionsMenuHtml(menuD, 'ao-more-desktop', true) : ''}
       </div>
-      <div class="ao-acts-mobile">
-        ${primary.join('')}
-        ${mobileMenu}
+      <div class="ao-acts-mobile aod-acts">
+        ${primaryBtn}
+        ${subSel}
+        ${visM.map(secBtn).join('')}
+        ${menuM.length ? this._moreActionsMenuHtml(menuM, 'ao-more-mobile', true) : ''}
       </div>`;
   },
 
-  /* V52A — kompakt ankrad meny, ersätter openMoreActions()s Modal.
-     Renderar ALLA skickade items (fixar en tidigare bugg — se
-     _secondaryActions()-kommentaren nedan): ett objekt med `divider:true`
-     infogade tidigare en avdelare men returnerade sedan UTAN att rendera
-     objektet självt, så "Redigera" och "Arkivera" kunde tystna helt ur
-     menyn (LIVE-observationen "endast Ta bort" var denna bugg, inte bara
-     ett visuellt problem). */
+  _substatusSelect(ao) {
+    const subOpts = [
+      {v:'',label:'Inget substatus'},
+      {v:'inväntar_material',label:'Inväntar material'},
+      {v:'inväntar_kund',label:'Inväntar kund'},
+      {v:'pausad',label:'Pausad'},
+      {v:'behöver_återbesök',label:'Behöver återbesök'},
+      {v:'blockerad',label:'Blockerad'},
+    ];
+    return `<select class="aod-subsel" data-act="substatus" aria-label="Substatus" title="Substatus" onchange="WorkOrderDetailPage.setSubstatus(this.value);this.blur();">
+        ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${esc(o.label)}</option>`).join('')}
+      </select>`;
+  },
+
+  /* Grupperad, ankrad meny (samma delade overflow-komponent som Kunder/
+     Fakturor/Fastigheter/AO-listan: aoToggleOverflow/aoCloseOverflow).
+     V52A-buggen (ett objekt med avdelare renderades inte) kan inte uppstå:
+     varje åtgärd renderas, gruppvis i fast ordning. */
   _moreActionsMenuHtml(items, idBase, showLabel) {
     const menuId = idBase + '-menu';
     const btnId  = idBase + '-btn';
     let rows = '';
-    items.forEach((it, idx) => {
-      if (it.divider && idx > 0) rows += '<div class="ao-overflow-divider"></div>';
-      const cls = it.destructive ? 'ao-overflow-menu-item ao-overflow-menu-item--red' : 'ao-overflow-menu-item';
-      rows += `<button class="${cls}" role="menuitem" onclick="aoCloseOverflow();${it.fn}">${ic(it.icon,13)} ${esc(it.label)}</button>`;
+    let first = true;
+    this._ACT_GROUPS.forEach(g => {
+      const its = items.filter(it => (it.group || 'order') === g.key);
+      if (!its.length) return;
+      if (!first) rows += '<div class="ao-overflow-divider" role="separator"></div>';
+      first = false;
+      rows += `<div class="aod-menu-h" role="presentation">${esc(g.label)}</div>`;
+      its.forEach(it => {
+        const cls = it.destructive ? 'ao-overflow-menu-item ao-overflow-menu-item--red' : 'ao-overflow-menu-item';
+        rows += `<button class="${cls}" role="menuitem" data-act="${it.key}" onclick="aoCloseOverflow();${it.fn}">${ic(it.icon,15)}<span>${esc(it.label)}</span></button>`;
+      });
     });
     return `
-      <div class="ao-overflow-wrap">
-        <button class="btn bghost bsm" id="${btnId}" aria-label="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" onclick="WorkOrderDetailPage._toggleActionsMenu('${menuId}',this)">${ic('more-horizontal',13)}${showLabel ? ' Fler åtgärder' : ''}</button>
-        <div class="ao-overflow-menu" id="${menuId}" role="menu">${rows}</div>
+      <div class="ao-overflow-wrap aod-more">
+        <button class="ibtn aod-more-btn" id="${btnId}" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" onclick="WorkOrderDetailPage._toggleActionsMenu('${menuId}',this)">${ic('more-vertical',18)}</button>
+        <div class="ao-overflow-menu aod-menu" id="${menuId}" role="menu" aria-labelledby="${btnId}">${rows}</div>
       </div>`;
   },
 
-  /* Titelkortet (.ao-title-card) har `overflow:hidden` (för att klippa
-     de rundade hörnen kring hero-sektionen) — ett vanligt
-     `position:absolute`-ankrat dropdown (den delade .ao-overflow-menu-
-     modellen som redan används oförändrad på Kunder/Fakturor/Fastigheter/
-     Arbetsorder-listan) skulle klippas bort där. Löst utan att röra den
-     delade komponentens standardbeteende (noll regressionsrisk för de
-     andra fyra sidorna): denna wrapper anropar det delade
-     aoToggleOverflow() (för Escape/klicka-utanför/en-meny-i-taget) men
-     sätter DESSUTOM `position:fixed` med viewport-koordinater beräknade
-     från knappens egen `getBoundingClientRect()` — `position:fixed`
-     begränsas inte av en icke-transformerad förälders `overflow:hidden`. */
+  /* Menyn ritas med position:fixed utifrån knappens läge (kortens
+     overflow ska aldrig klippa den). Höjden begränsas till fönstret och
+     menyn öppnas uppåt om det finns mer plats där — inget hamnar utanför
+     skärmen på 360–1920 px. Rullning eller storleksändring stänger den. */
   _toggleActionsMenu(menuId, btn) {
     const menu = document.getElementById(menuId);
     if (!menu || !btn) return;
@@ -440,126 +626,38 @@ const WorkOrderDetailPage = {
     aoToggleOverflow(menuId, btn);
     if (!wasOpen && menu.classList.contains('open')) {
       const r = btn.getBoundingClientRect();
+      const vh = window.innerHeight, vw = window.innerWidth;
+      const below = vh - r.bottom - 12, above = r.top - 12;
       menu.style.position = 'fixed';
-      menu.style.top   = (r.bottom + 4) + 'px';
       menu.style.left  = 'auto';
-      menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+      menu.style.right = Math.max(8, vw - r.right) + 'px';
+      menu.style.maxWidth = (vw - 16) + 'px';
+      menu.style.overflowY = 'auto';
+      /* Högerjusterad mot knappen; ligger knappen långt till vänster (radbruten
+         åtgärdsrad) vänsterjusteras menyn i stället, så att den aldrig hamnar
+         utanför fönstrets vänsterkant. */
+      const w = menu.offsetWidth;
+      if (r.right - w < 8) {
+        menu.style.right = 'auto';
+        menu.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + 'px';
+      }
+      const natural = menu.scrollHeight;
+      if (natural > below && above > below) {
+        menu.style.top = 'auto';
+        menu.style.bottom = (vh - r.top + 4) + 'px';
+        menu.style.maxHeight = Math.max(160, above) + 'px';
+      } else {
+        menu.style.bottom = 'auto';
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.maxHeight = Math.max(160, below) + 'px';
+      }
+      const close = () => { if (menu.classList.contains('open')) aoCloseOverflow(); };
+      const sc = document.getElementById('content-scroll');
+      if (sc) sc.addEventListener('scroll', close, { once: true, passive: true });
+      window.addEventListener('resize', close, { once: true });
+      const firstItem = menu.querySelector('[role="menuitem"]');
+      if (firstItem && firstItem.focus) { try { firstItem.focus({ preventScroll: true }); } catch (e) {} }
     }
-  },
-
-  _primaryActionBtns(ao) {
-    const canEdit     = Auth.can('ao_edit');
-    const canComplete = Auth.can('ao_complete');
-    const canInvoice  = Auth.can('invoice_create');
-    const btns = [];
-    // Start work
-    if (canEdit && ['nytt','pool','planerad'].includes(ao.status)) {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.setStatus('pågående')">${ic('play-circle',13)} Starta arbete</button>`);
-    }
-    // Mark complete
-    if (ao.status === 'pågående' && canComplete) {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.markComplete()">${ic('check-circle',13)} Klarmarkera</button>`);
-    }
-    // Substatus select (shown inline when active)
-    if (ao.status === 'pågående' && canEdit && ao.substatus) {
-      const subOpts = [
-        {v:'',label:'Inget substatus'},
-        {v:'inväntar_material',label:'Inväntar material'},
-        {v:'inväntar_kund',label:'Inväntar kund'},
-        {v:'pausad',label:'Pausad'},
-        {v:'behöver_återbesök',label:'Behöver återbesök'},
-        {v:'blockerad',label:'Blockerad'},
-      ];
-      btns.push(`<select class="btn bs bsm" style="padding:5px 8px;font-size:11px;" onchange="WorkOrderDetailPage.setSubstatus(this.value);this.blur();" title="Substatus">
-        ${subOpts.map(o=>`<option value="${o.v}"${ao.substatus===o.v?' selected':''}>${esc(o.label)}</option>`).join('')}
-      </select>`);
-    }
-    // Invoice CTA
-    if (ao.status === 'klar' && !ao.invoiceId && canInvoice) {
-      btns.push(`<button class="btn bsu bsm" onclick="InvoicesPage.createFromAO('${ao.id}')">${ic('receipt',13)} Skapa fakturaunderlag</button>`);
-    }
-    // Reactivate
-    if (canEdit && ao.status === 'avbruten' && !ao.archived && !ao.deleted) {
-      btns.push(`<button class="btn bsu bsm" onclick="WorkOrderDetailPage.openReactivateModal()">${ic('rotate-ccw',13)} Återaktivera</button>`);
-    }
-    // Restore from trash
-    if (ao.deleted) {
-      btns.push(`<button class="btn bs bsm" onclick="WorkOrderDetailPage._restoreFromTrash('${ao.id}')">${ic('rotate-ccw',13)} Återställ</button>`);
-    }
-    // Change status
-    if (canEdit && !['klar','fakturerad','avbruten'].includes(ao.status) && !ao.archived && !ao.deleted) {
-      btns.push(`<button class="btn bghost bsm" onclick="WorkOrderDetailPage.openStatusModal()">${ic('refresh-cw',13)} Byt status</button>`);
-    }
-    // Contact
-    btns.push(`<button class="btn bxs bs" onclick="WorkOrderDetailPage.openContact()" style="display:inline-flex;align-items:center;gap:5px;">${ic('phone',13)} Kontakt</button>`);
-    return btns;
-  },
-
-  _secondaryActions(ao) {
-    const canEdit    = Auth.can('ao_edit');
-    const canInvoice = Auth.can('invoice_create');
-    const canPricing = this._canEditPricing();
-    const items = [];
-    /* V53B §5 — kontextuell "Ny uppgift": gated på sidåtkomst till
-       Uppgifter (samma spärr som knappen på Kund-/Fastighetskortet),
-       INTE ao_edit — vem som helst som kan öppna Uppgifter-sidan ska
-       kunna skapa en uppgift kopplad till denna AO. Återanvänder den
-       BEFINTLIGA AO-relationsmekanismen (relatedType/relatedId via
-       ActivitiesPage._openForm/_save) — ingen ny, egen `workOrderId`. */
-    if (Auth.canViewPage('pg-activities')) {
-      items.push({ label:'Ny uppgift', icon:'check-square', fn:`ActivitiesPage.openCreate({customerId:'${ao.customerId||''}',propertyId:'${ao.propertyId||''}',relatedType:'workOrder',relatedId:'${ao.id}'})` });
-    }
-    // Plan / reschedule
-    if (canEdit && ['nytt','pool'].includes(ao.status)) {
-      items.push({ label:'Planera',   icon:'calendar',    fn:`WorkOrderDetailPage.setStatus('planerad')` });
-    }
-    if (canEdit && ao.status === 'nytt') {
-      items.push({ label:'Till pool', icon:'inbox',       fn:`WorkOrderDetailPage.setStatus('pool')` });
-    }
-    if (canEdit && ao.status === 'planerad') {
-      items.push({ label:'Omplanera', icon:'calendar',    fn:`WorkOrderDetailPage.openReschedule()` });
-    }
-    // Pause
-    if (canEdit && ao.status === 'pågående') {
-      items.push({ label:'Pausa',     icon:'pause-circle',fn:`WorkOrderDetailPage.setStatus('planerad')` });
-    }
-    // View invoice
-    if (ao.status === 'klar' && ao.invoiceId) {
-      items.push({ label:'Visa fakturaunderlag', icon:'file-text', fn:`Router.showPage('pg-inv-detail',{invoiceId:'${ao.invoiceId}'})` });
-    }
-    // Edit / staff (separator before)
-    if (canEdit) {
-      items.push({ label:'Redigera',  icon:'pencil',      fn:`WorkOrderDetailPage.openEdit()`,           divider: items.length > 0 });
-      items.push({ label:'Personal',  icon:'users',       fn:`WorkOrderDetailPage.manageStaff('${ao.id}')` });
-    }
-    /* AO-PRICING-RECOVERY — "Ändra prissättning" nåbar OAVSETT status
-       (nytt/pågående/klar). Detta var själva bristen: en "Klar"-AO utan
-       satt prismodell hade INGEN väg tillbaka till prissättning i UI:t —
-       "Redigera" (ovan) rör aldrig prisfälten, och "Byt status" är redan
-       explicit avstängd för 'klar'. Egen, tydlig åtgärd istället för att
-       lasta prisfält på "Redigera order" (som uppdraget bad om), gated på
-       samma behörighet som faktiskt kan RÖRA dessa fält (se
-       _canEditPricing()) — inte bara ao_edit, eftersom en ren
-       faktureringsanvändare (invoice_create utan ao_edit) annars inte
-       kunnat reparera exakt den situation hen själv upptäcker i
-       Att fakturera-kön. */
-    if (canPricing) {
-      items.push({ label:'Ändra prissättning', icon:'tag', fn:`WorkOrderDetailPage.openPricingModal()`, divider: items.length > 0 });
-    }
-    // Archive / delete (separator before)
-    if (canEdit && !ao.archived && !ao.deleted) {
-      items.push({ label:'Arkivera',  icon:'archive',     fn:`WorkOrderDetailPage.openArchiveModal()`,   divider: true });
-      items.push({ label:'Ta bort',   icon:'trash',       fn:`WorkOrderDetailPage.openDeleteModal()`,    destructive: true });
-    }
-    // Restore from archive
-    if (ao.archived && !ao.deleted) {
-      items.push({ label:'Återställ från arkiv', icon:'rotate-ccw', fn:`WorkOrderDetailPage._restoreFromArchive('${ao.id}')` });
-    }
-    // Permanent delete
-    if (ao.deleted) {
-      items.push({ label:'Radera permanent', icon:'trash-2', fn:`WorkOrderDetailPage._confirmPermanentDelete('${ao.id}')`, destructive: true, divider: true });
-    }
-    return items;
   },
 
   openReschedule() {
@@ -690,6 +788,9 @@ const WorkOrderDetailPage = {
     });
   },
 
+  /* Arbetsunderlag från offerten (rader med pris) — visas i Prissättning
+     för roller som ser pris, som tidigare i Fakturering-kortet. V3: ett
+     block i kortet i stället för ett kort i kortet. */
   _offerUnderlag(ao) {
     const off = (state.offers||[]).find(o => o.id === ao.offerId);
     if (!off) return '';
@@ -698,27 +799,141 @@ const WorkOrderDetailPage = {
     const rows = prLines.map(l => {
       const name  = l.templateName || l.description || '—';
       const price = l.exVat || l.total || Math.round((l.qty||1)*(l.unitPrice||0));
-      const qty   = (l.type !== 'service' && l.qty) ? `${l.qty} ${l.unit||'st'} · ` : '';
-      return `<div class="dr">
-        <span class="dk" style="display:flex;align-items:center;gap:4px;">${l.type==='service'?ic('zap',9):ic('minus',9)} ${esc(name)}</span>
-        <span class="dv">${qty}${fmt(price)} kr ex moms</span>
+      const qty   = (l.type !== 'service' && l.qty) ? `${esc(l.qty)} ${esc(l.unit||'st')} · ` : '';
+      return `<div class="aod-offl">
+        <span class="aod-offl-n">${l.type==='service'?ic('zap',11):ic('minus',11)} ${esc(name)}</span>
+        <span class="aod-offl-v">${qty}${fmt(price)} kr exkl. moms</span>
       </div>`;
     }).join('');
     return `
-      <div class="card" style="margin-bottom:2px;">
-        <div class="card-header">
-          <h3>${ic('file-text',14)} Arbetsunderlag (offert ${esc(ao.offerId)})</h3>
-          <button class="btn bghost bxs" onclick="Router.showPage('pg-offer-detail',{offerId:'${ao.offerId}'})">${ic('external-link',12)} Öppna offert</button>
-        </div>
-        <div class="card-body" style="padding:8px 14px;">
-          ${off.scope ? `<p style="font-size:12px;color:var(--mt);line-height:1.5;margin-bottom:8px;border-left:3px solid var(--blue);padding-left:8px;">${esc(off.scope)}</p>` : ''}
-          ${rows}
-          ${off.includes||off.excludes ? `<div style="margin-top:8px;font-size:11px;color:var(--mt);">
-            ${off.includes?`${ic('check-circle',10)} Ingår: ${esc(off.includes)}<br>`:''}
-            ${off.excludes?`${ic('x-circle',10)} Ingår ej: ${esc(off.excludes)}`:''}
-          </div>` : ''}
-        </div>
+      <div class="aod-offer">
+        <div class="aod-psec-h">${ic('file-text',13)} Arbetsunderlag (offert ${esc(ao.offerId)})</div>
+        ${off.scope ? `<p class="aod-offer-scope">${esc(off.scope)}</p>` : ''}
+        ${rows}
+        ${off.includes||off.excludes ? `<div class="aod-offer-inc">
+          ${off.includes?`<div>${ic('check-circle',11)} Ingår: ${esc(off.includes)}</div>`:''}
+          ${off.excludes?`<div>${ic('x-circle',11)} Ingår ej: ${esc(off.excludes)}</div>`:''}
+        </div>` : ''}
       </div>`;
+  },
+
+  /* ── Prissättning (V3 2026-11-26) ─────────────────────────────────────
+     Eget kort högt upp (överst i sidokolumnen på dator) i stället för en
+     rad långt ner i Detaljer. Visar prismodell (fastpris/löpande timpris),
+     prisgrupp och dess timpris, avtalat pris, varifrån priset kommer, länk
+     till offert, material/påslag och fakturering.
+     SÄKERHET: anropas bara när canSeePrice (invoice_view, invoice_create
+     eller reports_view) — exakt samma spärr som prisraden i Detaljer,
+     materialpriserna och Fakturering-kortet hade. Fältarbetare och
+     begränsade roller ser inget av detta. Ändra = _canEditPricing() som förut.
+     Inga priser ändras här — timpriset läses ur prisregistret
+     (state.priceGroups, samma uppslag som _priceLabel()). */
+  _pricingCard(ao) {
+    if (!Auth.canAny(['invoice_view','invoice_create','reports_view'])) return '';
+    const aoId = this._id(ao.id);
+    const pt = ao.priceType === 'prisgrupp' ? 'timpris' : ao.priceType === 'fast' ? 'fastpris' : (ao.priceType || 'ej_satt');
+    const pg = ao.priceGroupId ? (state.priceGroups || []).find(p => p.id === ao.priceGroupId) : null;
+    const canEditP = this._canEditPricing();
+    /* Faktarader enligt sidans mönster (aod-fact, V3-komponentstandarden §6). */
+    const row = (label, value) => `<div class="aod-fact aod-pr"><span class="aod-fact-l">${label}</span><span class="aod-fact-v">${value}</span></div>`;
+    const canOffer = Auth.canViewPage('pg-offer-detail');
+    const offerRef = ao.offerId
+      ? (canOffer ? `<a class="aod-link" onclick="Router.showPage('pg-offer-detail',{offerId:'${this._id(ao.offerId)}'})">Offert ${esc(ao.offerId)}</a>` : `Offert ${esc(ao.offerId)}`)
+      : '';
+    const contractRef = ao.contractId
+      ? (Auth.canViewPage('pg-contracts') ? `<a class="aod-link" onclick="Router.showPage('pg-contracts',{contractId:'${this._id(ao.contractId)}'})">Avtal ${esc(ao.contractId)}</a>` : `Avtal ${esc(ao.contractId)}`)
+      : '';
+
+    let model = '', body = '';
+    if (pt === 'fastpris') {
+      model = `<span class="bdg bdg-purple aod-pmodel">${ic('tag',11)} Fastpris</span>`;
+      body += row('Avtalat pris', `<b class="aod-pr-big">${fmt(ao.fixedPrice)} kr</b> <span class="aod-muted">exkl. moms</span>`);
+      body += row('Priset kommer från', ao.offerId ? `${offerRef} <span class="aod-muted">(offertens summa exkl. moms efter rabatt)</span>` : 'Satt på arbetsordern');
+    } else if (pt === 'timpris') {
+      model = `<span class="bdg bdg-blue aod-pmodel">${ic('clock',11)} Löpande timpris</span>`;
+      if (pg) {
+        body += row('Prisgrupp', esc(pg.name));
+        body += row('Timpris', `<b class="aod-pr-big">${fmt(pg.hourRate)} kr/tim</b> <span class="aod-muted">exkl. moms</span>`);
+        body += row('Priset kommer från', `Prisgruppen i prisregistret, vald på arbetsordern. Tidposter faktureras med sitt sparade timpris.`);
+        if (typeof TimeService !== 'undefined' && TimeService.isValidBillingPriceGroup && !TimeService.isValidBillingPriceGroup(pg)) {
+          body += `<div class="aod-pwarn">${ic('alert-circle',13)}<span>Prisgruppen saknar ett giltigt timpris (&gt; 0 kr) och kan inte användas för kundfakturering.</span></div>`;
+        }
+      } else {
+        body += row('Prisgrupp', ao.priceGroupId ? `<span class="aod-warn">Finns inte längre (${esc(ao.priceGroupId)})</span>` : '<span class="aod-warn">Ingen prisgrupp vald</span>');
+        body += row('Priset kommer från', 'Registrerad tid × timpriset som sparas på varje tidpost');
+      }
+      if (ao.offerId) body += row('Offert', offerRef);
+    } else {
+      model = `<span class="bdg bdg-orange aod-pmodel">${ic('alert-circle',11)} Ej satt</span>`;
+      body += `<div class="aod-pwarn">${ic('alert-circle',13)}<span>Ingen prismodell är satt. Fakturaunderlag kan inte skapas förrän prissättningen är satt.${canEditP && !ao.invoiceId ? ` <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Sätt prissättning</a>` : ''}</span></div>`;
+      if (ao.offerId) body += row('Offert', offerRef);
+    }
+    if (contractRef) body += row('Avtal', contractRef);
+
+    /* Material och påslag — samma summor som materialkortet (_matTotals). */
+    const mats = ao.materials || [];
+    let matHtml = '';
+    if (mats.length) {
+      let sellEx = 0, buyEx = 0;
+      mats.forEach(m => { sellEx += (m.qty||0) * (m.sellPrice||0); buyEx += (m.qty||0) * (m.buyPrice||0); });
+      const markup = sellEx - buyEx;
+      matHtml = `<div class="aod-psec">
+          <div class="aod-psec-h">${ic('package',13)} Material</div>
+          ${row(`${mats.length} rad${mats.length === 1 ? '' : 'er'}, försäljning`, `${fmt(sellEx)} kr <span class="aod-muted">exkl. moms</span>`)}
+          ${buyEx > 0 ? row('Inköp <span class="aod-int-tag">internt</span>', `${fmt(buyEx)} kr <span class="aod-muted">exkl. moms</span>`) + row('Påslag <span class="aod-int-tag">internt</span>', `${fmt(markup)} kr <span class="aod-muted">exkl. moms${sellEx > 0 ? ` (${Math.round(markup / sellEx * 100)} % av försäljning)` : ''}</span>`) : ''}
+        </div>`;
+    }
+
+    /* Registrerad tid och tidposter som saknar prissättning (samma källa
+       som "Ändra prissättning": _brokenTimeEntries → BillingQueueService). */
+    const entries = TimeService.getByAO(ao.id);
+    let timeHtml = '';
+    if (entries.length) {
+      const total = TimeService.totalMinutes(entries);
+      const billMins = TimeService.totalMinutes(entries.filter(t => t.billable !== false));
+      const broken = pt === 'timpris' ? this._brokenTimeEntries(ao.id).length : 0;
+      /* Timpriset sparas på varje tidpost när den registreras (prisgrupp +
+         timpris som ögonblicksbild). Visa vilka priser tidposterna faktiskt
+         bär, så att en skillnad mot arbetsorderns prisgrupp syns. */
+      const snap = {};
+      entries.forEach(t => { if (t.priceGroupName || t.hourRate) { const k = (t.priceGroupName || '') + '|' + (t.hourRate || 0); (snap[k] = snap[k] || { name: t.priceGroupName || 'Utan prisgrupp', rate: t.hourRate || 0, n: 0 }).n++; } });
+      const snaps = Object.values(snap);
+      const differs = pt === 'timpris' && pg && snaps.some(x => Number(x.rate) !== Number(pg.hourRate));
+      timeHtml = `<div class="aod-psec">
+          <div class="aod-psec-h">${ic('clock',13)} Arbetstid</div>
+          ${row('Registrerad tid', `${WorkOrderDetailPage._h(total)}${billMins !== total ? ` <span class="aod-muted">(${WorkOrderDetailPage._h(billMins)} debiterbar)</span>` : ''}`)}
+          ${snaps.length ? row('Tidposternas pris', snaps.map(x => `${esc(x.name)} – ${fmt(x.rate)} kr/tim <span class="aod-muted">exkl. moms (${x.n} st)</span>`).join('<br>')) : ''}
+          ${differs ? `<div class="aod-pnote">${ic('info',13)} Minst en tidpost har ett annat timpris än arbetsorderns prisgrupp. Faktureringen använder tidpostens sparade timpris.</div>` : ''}
+          ${broken ? `<div class="aod-pwarn">${ic('alert-circle',13)}<span>${broken} tidpost${broken === 1 ? '' : 'er'} saknar prissättning.${canEditP && !ao.invoiceId ? ` <a class="aod-link" onclick="WorkOrderDetailPage.openPricingModal()">Åtgärda</a>` : ''}</span></div>` : ''}
+        </div>`;
+    }
+
+    /* Fakturering (tidigare eget kort) — samma villkor. */
+    let billHtml = '';
+    if (ao.invoiceId || ao.offerId || (ao.status === 'klar' && Auth.can('invoice_create'))) {
+      billHtml = `<div class="aod-psec">
+          <div class="aod-psec-h">${ic('receipt',13)} Fakturering</div>
+          ${ao.status==='klar'&&!ao.invoiceId&&Auth.can('invoice_create') ? `<button class="btn bs bfull aod-bill-btn" onclick="WorkOrderDetailPage.createInvoice()">${ic('file-plus',15)} Skapa fakturaunderlag</button>` : ''}
+          ${ao.invoiceId ? `<a class="aod-linkrow" onclick="Router.showPage('pg-inv-detail',{invoiceId:'${this._id(ao.invoiceId)}'})">${ic('receipt',14)}<span>Fakturaunderlag ${esc(ao.invoiceId)}</span>${ic('chevron-right',14)}</a>` : ''}
+          ${ao.offerId ? this._offerUnderlag(ao) : ''}
+          ${ao.offerId ? `<a class="aod-linkrow" onclick="Router.showPage('pg-offer-detail',{offerId:'${this._id(ao.offerId)}'})">${ic('file-text',14)}<span>Skapad från offert ${esc(ao.offerId)}</span>${ic('chevron-right',14)}</a>` : ''}
+        </div>`;
+    }
+
+    return `
+      <section class="card aod-box aod-price" id="ao-price" aria-labelledby="aod-price-h" data-price-type="${esc(pt)}">
+        <div class="card-header">
+          <h3 id="aod-price-h">${ic('tag',15)} Prissättning</h3>
+          ${canEditP ? `<button class="btn bxs bghost" data-act="pricing-card" onclick="WorkOrderDetailPage.openPricingModal()">${ic('pencil',12)} Ändra</button>` : ''}
+        </div>
+        <div class="card-body">
+          <div class="aod-pmodel-row">${model}</div>
+          ${body}
+          ${matHtml}
+          ${timeHtml}
+          ${billHtml}
+        </div>
+      </section>`;
   },
 
   _tbBlock(ao) {
@@ -730,13 +945,13 @@ const WorkOrderDetailPage = {
 
     const tb   = ProfitabilityService.calcTB(ao);
     const vs   = ProfitabilityService.calcVsOffer(ao);
-    const fmtM = m => TimeService.fmtDuration(m);
+    const fmtM = m => WorkOrderDetailPage._h(m);
     const borderColor = tb.tbPct !== null ? tb.color : 'var(--br)';
 
     const vsHtml = vs ? `
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg);">
-        <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${ic('git-compare',10)} Offert vs faktiskt utfall</div>
-        <div class="dr"><span class="dk">Offererat ex moms</span><span class="dv">${fkr(vs.offerExVat)}</span></div>
+        <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:4px;">${ic('git-compare',10)} Offert vs faktiskt utfall</div>
+        <div class="dr"><span class="dk">Offererat exkl. moms</span><span class="dv">${fkr(vs.offerExVat)}</span></div>
         <div class="dr"><span class="dk">${esc(tb.revenue.label)}</span>
           <span class="dv" style="color:${vs.revDiff >= 0 ? 'var(--gr)' : 'var(--rd)'};">
             ${fkr(vs.actualRev)}
@@ -756,20 +971,20 @@ const WorkOrderDetailPage = {
     return `
       <div class="card" style="border-left:3px solid ${borderColor};">
         <div class="card-header">
-          <h3>${ic('trending-up',14)} Lönsamhet <span style="font-size:10px;font-weight:600;color:var(--mt);margin-left:4px;">${ic('eye-off',9)} Intern</span></h3>
+          <h3>${ic('trending-up',14)} Lönsamhet <span style="font-size:10px;font-weight:600;color:var(--mt);margin-left:4px;display:inline-flex;align-items:center;gap:3px;">${ic('eye-off',9)} Intern</span></h3>
           ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
           <div class="dr">
-            <span class="dk">Intäkt ex moms</span>
+            <span class="dk">Intäkt exkl. moms</span>
             <span class="dv">${fkr(tb.revenue.value)} <span style="font-size:10px;color:var(--mt);">${esc(tb.revenue.label)}</span></span>
           </div>
 
           ${hasMat ? `
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
-            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('package',10)} Material</div>
-            <div class="dr"><span class="dk">Försäljning ex moms</span><span class="dv">${fkr(tb.material.sellEx)}</span></div>
-            <div class="dr"><span class="dk">Inköp ex moms</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>
+            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${ic('package',10)} Material</div>
+            <div class="dr"><span class="dk">Försäljning exkl. moms</span><span class="dv">${fkr(tb.material.sellEx)}</span></div>
+            <div class="dr"><span class="dk">Inköp exkl. moms</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>
             <div class="dr"><span class="dk">Materialmarginal</span>
               <span class="dv" style="color:var(--gr);">${fkr(tb.material.margin)}
                 ${tb.material.sellEx > 0 ? `<span style="font-size:10px;font-weight:600;margin-left:4px;">(${Math.round(tb.material.marginPct)} %)</span>` : ''}
@@ -778,16 +993,16 @@ const WorkOrderDetailPage = {
           </div>` : ''}
 
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
-            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${ic('clock',10)} Arbetstid</div>
+            <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${ic('clock',10)} Arbetstid</div>
             <div class="dr"><span class="dk">Registrerad tid</span><span class="dv">${tb.labor.minutes > 0 ? fmtM(tb.labor.minutes) : '<span style="color:var(--mt);">Ingen tid registrerad</span>'}</span></div>
             <div class="dr"><span class="dk">Intern timkostnad</span><span class="dv" style="color:var(--mt);">${fmt(tb.labor.rate)} kr/h</span></div>
             ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)}</span></div>` : ''}
           </div>
 
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br);">
-            <div class="dr"><span class="dk">Total kostnad</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
+            <div class="dr"><span class="dk">Total kostnad exkl. moms</span><span class="dv" style="color:var(--rd);font-weight:700;">${fkr(tb.totalCost)}</span></div>
             <div class="dr" style="font-size:15px;font-weight:800;border-top:2px solid var(--br);padding-top:8px;margin-top:4px;">
-              <span class="dk" style="color:${tb.color};">Täckningsbidrag</span>
+              <span class="dk" style="color:${tb.color};">Täckningsbidrag exkl. moms</span>
               <span class="dv" style="color:${tb.color};">${fkr(tb.tb)}</span>
             </div>
             ${tb.tbPct !== null ? `<div class="dr">
@@ -804,66 +1019,50 @@ const WorkOrderDetailPage = {
       </div>`;
   },
 
+  /* Tid mot plan — V3: ett kompakt block i Arbetstid-kortet (tidigare ett
+     eget kort). Samma beräkning och samma rollspärr (canSeePrice) som förut. */
   _timePlanBlock(ao) {
     const entries    = TimeService.getByAO(ao.id);
     const actualMins = TimeService.totalMinutes(entries);
     const estMins    = Math.round((ao.estimatedHours || 0) * 60);
     if (estMins === 0 && actualMins === 0) return '';
-    const fmt = m => TimeService.fmtDuration(m);
+    const fmt = m => WorkOrderDetailPage._h(m);
     const canEdit = Auth.can('ao_edit');
+    const aoId = this._id(ao.id);
 
     if (estMins > 0) {
       const pct   = Math.round((actualMins / estMins) * 100);
       const diff  = actualMins - estMins;
-      const color = pct <= 100 ? 'var(--gr)' : pct <= 115 ? 'var(--orange)' : 'var(--rd)';
+      const color = pct <= 100 ? 'var(--gr)' : pct <= 115 ? 'var(--warn)' : 'var(--rd)';
       const cls   = pct <= 100 ? 'bdg-green' : pct <= 115 ? 'bdg-orange' : 'bdg-red';
       const lbl   = pct <= 100 ? 'Under/inom plan' : pct <= 115 ? 'Nära gräns' : 'Över plan';
       const diffStr = diff === 0 ? '±0' : diff > 0 ? `+${fmt(diff)}` : `−${fmt(-diff)}`;
       const barW  = Math.min(pct, 100);
-      const overW = pct > 100 ? Math.min(pct - 100, 100) : 0;
 
       return `
-        <div class="card" style="margin-bottom:2px;">
-          <div class="card-header">
-            <h3>${ic('bar-chart-2',14)} Tid vs plan</h3>
-            ${canEdit ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.editEstimatedTime('${ao.id}')">${ic('pencil',13)} Ändra</button>` : ''}
+        <div class="aod-planbox">
+          <div class="aod-planbox-h">
+            <span class="aod-planbox-t">${ic('bar-chart-2',13)} Tid mot plan</span>
+            <span class="bdg ${cls}">${lbl}</span>
+            ${canEdit ? `<button class="btn bghost bxs" onclick="WorkOrderDetailPage.editEstimatedTime('${aoId}')">${ic('pencil',12)} Ändra</button>` : ''}
           </div>
-          <div class="card-body" style="padding:10px 14px;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-bottom:10px;">
-              <div class="dr"><span class="dk">Planerat</span><span class="dv">${fmt(estMins)}</span></div>
-              <div class="dr"><span class="dk">Utfört</span><span class="dv">${actualMins > 0 ? fmt(actualMins) : '<span style="color:var(--mt);">—</span>'}</span></div>
-              <div class="dr"><span class="dk">Differens</span><span class="dv" style="color:${color};font-weight:700;">${diffStr}</span></div>
-              <div class="dr"><span class="dk">Andel av plan</span><span class="dv"><strong>${pct} %</strong></span></div>
-            </div>
-            <div style="height:6px;background:var(--br);border-radius:3px;overflow:hidden;margin-bottom:4px;">
-              <div style="height:100%;width:${barW}%;background:${color};border-radius:3px;"></div>
-            </div>
-            ${overW > 0 ? `<div style="height:4px;background:var(--br);border-radius:3px;overflow:hidden;margin-bottom:6px;">
-              <div style="height:100%;width:${overW}%;background:${color};border-radius:3px;"></div>
-            </div>` : '<div style="margin-bottom:6px;"></div>'}
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
-              <span class="bdg ${cls}">${lbl}</span>
-              ${pct > 100 && ao.status === 'klar' ? `<span style="font-size:11px;color:var(--rd);">${ic('alert-triangle',10)} Faktisk tid överstiger plan med ${fmt(diff)}</span>` : ''}
-            </div>
+          <div class="aod-planbox-kv">
+            <span>Planerat <b>${fmt(estMins)}</b></span>
+            <span>Utfört <b>${actualMins > 0 ? fmt(actualMins) : '—'}</b></span>
+            <span>Differens <b style="color:${color};">${diffStr}</b></span>
+            <span>Andel <b>${pct} %</b></span>
           </div>
+          <div class="aod-planbox-bar" aria-hidden="true"><i style="width:${barW}%;background:${color};"></i></div>
+          ${pct > 100 && ao.status === 'klar' ? `<div class="aod-planbox-warn">${ic('alert-triangle',11)} Faktisk tid överstiger plan med ${fmt(diff)}</div>` : ''}
         </div>`;
     }
 
     return `
-      <div class="card" style="margin-bottom:2px;">
-        <div class="card-header">
-          <h3>${ic('bar-chart-2',14)} Tid vs plan</h3>
-          ${canEdit ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.editEstimatedTime('${ao.id}')">${ic('pencil',13)} Ändra</button>` : ''}
-        </div>
-        <div class="card-body" style="padding:10px 14px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div>
-              <div style="font-size:12px;color:var(--mt);margin-bottom:2px;">${ic('clock',12)} Ingen uppskattad tid satt</div>
-              ${actualMins > 0 ? `<div style="font-size:13px;font-weight:700;">Utfört: ${fmt(actualMins)}</div>` : ''}
-            </div>
-            ${canEdit ? `<button class="btn bp bsm" onclick="WorkOrderDetailPage.editEstimatedTime('${ao.id}')">${ic('plus',12)} Sätt tid</button>` : ''}
-          </div>
+      <div class="aod-planbox">
+        <div class="aod-planbox-h">
+          <span class="aod-planbox-t">${ic('bar-chart-2',13)} Tid mot plan</span>
+          <span class="aod-muted">Ingen uppskattad tid satt${actualMins > 0 ? ` · utfört ${fmt(actualMins)}` : ''}</span>
+          ${canEdit ? `<button class="btn bs bxs" onclick="WorkOrderDetailPage.editEstimatedTime('${aoId}')">${ic('plus',12)} Sätt tid</button>` : ''}
         </div>
       </div>`;
   },
@@ -921,11 +1120,11 @@ const WorkOrderDetailPage = {
   },
 
   _priceLabel(ao) {
-    if (ao.priceType === 'fastpris' || ao.priceType === 'fast') return `Fastpris: ${fmt(ao.fixedPrice)} kr ex moms`;
+    if (ao.priceType === 'fastpris' || ao.priceType === 'fast') return `Fastpris: ${fmt(ao.fixedPrice)} kr exkl. moms`;
     if (ao.priceType === 'timpris' || ao.priceType === 'prisgrupp') {
       if (ao.priceGroupId) {
         const pg = (state.priceGroups||[]).find(p => p.id === ao.priceGroupId);
-        return pg ? `Löpande timpris – ${pg.name} (${fmt(pg.hourRate)} kr/tim ex moms)` : 'Löpande timpris';
+        return pg ? `Löpande timpris – ${pg.name} (${fmt(pg.hourRate)} kr/tim exkl. moms)` : 'Löpande timpris';
       }
       return 'Löpande timpris';
     }
@@ -1000,7 +1199,7 @@ const WorkOrderDetailPage = {
        andra (legacy/interna) syften, men ska aldrig ens vara VALBAR i
        denna kundfaktureringsåterhämtnings-vy. */
     const pgOptions = (state.priceGroups || []).filter(p => TimeService.isValidBillingPriceGroup(p)).map(p =>
-      `<option value="${p.id}" ${p.id === ao.priceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id === ao.priceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     const brokenCount = this._brokenTimeEntries(ao.id).length;
     Modal.open({
@@ -1013,12 +1212,12 @@ const WorkOrderDetailPage = {
             <option value="timpris" ${priceType==='timpris'?'selected':''}>Löpande timpris</option>
           </select></div>
         <div class="fg" id="pr-fixed-wrap" style="display:${priceType==='fastpris'?'block':'none'};">
-          <label>Fastpris (kr, ex moms)</label>
+          <label>Fastpris (kr, exkl. moms)</label>
           <input type="number" id="pr-fixed" min="0" step="1" value="${ao.fixedPrice || ''}"></div>
         <div class="fg" id="pr-pg-wrap" style="display:${priceType==='timpris'?'block':'none'};">
           <label>Prisgrupp</label>
           <select id="pr-pg"><option value="">— Välj prisgrupp —</option>${pgOptions}</select></div>
-        ${brokenCount>0?`<div class="ibox" style="margin-top:10px;">${ic('alert-circle',14)} ${brokenCount} tidpost${brokenCount===1?'':'er'} på denna arbetsorder saknar prissättning. Efter att du sparat får du möjlighet att åtgärda ${brokenCount===1?'den':'dem'}.</div>`:''}
+        ${brokenCount>0?`<div class="ibox" style="margin-top:10px;display:flex;gap:8px;align-items:flex-start;">${ic('alert-circle',14)}<span>${brokenCount} tidpost${brokenCount===1?'':'er'} på denna arbetsorder saknar prissättning. Efter att du sparat får du möjlighet att åtgärda ${brokenCount===1?'den':'dem'}.</span></div>`:''}
       `,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => WorkOrderDetailPage._savePricing() },
@@ -1126,7 +1325,7 @@ const WorkOrderDetailPage = {
     if (broken.length === 0) { this.render({ aoId: this.aoId }); return; }
     /* Blocker C, samma regel som huvudprissättningsmodalen ovan. */
     const pgOptions = (state.priceGroups || []).filter(p => TimeService.isValidBillingPriceGroup(p)).map(p =>
-      `<option value="${p.id}" ${p.id === defaultPriceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id === defaultPriceGroupId ? 'selected' : ''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     const rowsHtml = broken.map(t => {
       const dateStr = t.date || (t.startTs ? fmtDate(t.startTs) : '');
@@ -1221,21 +1420,61 @@ const WorkOrderDetailPage = {
     this.render({ aoId: this.aoId });
   },
 
+  /* ── Din arbetstid (stämpling) — V3 2026-11-26 ───────────────────────
+     Tidigare ett stort kort med en stor grön knapp mitt i sidan. Nu en
+     kompakt rad i sidhuvudet, tydligt knuten till DENNA arbetsorder, med
+     levande tidräknare när man är instämplad. Skild från "Starta arbete"
+     (statusändring) både till etikett och plats — ingen av dem utlöser den
+     andra. Samma toggleStamp()/TimeService-väg som förut (serverbekräftelse,
+     dubbelstämplingsskydd och återhämtning oförändrade).
+     Visas: när ordern inte är avslutad/borttagen, och ALLTID när man är
+     instämplad på just denna order (så att man kan stämpla ut även om
+     ordern hunnit klarmarkeras). */
   _stampSection(ao, isActive) {
-    if (['klar','fakturerad','avbruten'].includes(ao.status)) return '';
+    const closed = ['klar','fakturerad','avbruten'].includes(ao.status) || ao.deleted;
+    if (closed && !isActive) return '';
+    const otherAo = state.stampActive && !isActive ? (state.stampAoId || '') : '';
+    const label = `Din arbetstid · ${esc(WorkOrderService.displayNumberOrPending(ao))}`;
+    let status, btn, cls = '';
+    if (isActive) {
+      cls = ' is-active';
+      status = `<span class="aod-stamp-dot" aria-hidden="true"></span>Instämplad sedan ${esc(this._clockTime(state.stampTimestamp))} · <b class="aod-stamp-clock" id="ao-stamp-clock">${esc(this._fmtElapsed(state.stampTimestamp))}</b>`;
+      btn = `<button class="btn bd ao-stamp-btn" onclick="WorkOrderDetailPage.toggleStamp()">${ic('stop-circle',15)} Stämpla ut</button>`;
+    } else if (state.stampActive) {
+      cls = ' is-other';
+      const other = otherAo ? getAO(otherAo) : null;
+      const otherNo = other ? WorkOrderService.displayNumberOrPending(other) : (otherAo || 'ett annat jobb');
+      status = `Du är instämplad på ${esc(otherNo)} — stämpla ut där först.`;
+      btn = otherAo && other
+        ? `<button class="btn bs aod-stamp-go" onclick="Router.showPage('pg-ao-detail',{aoId:'${this._id(otherAo)}'})">${ic('external-link',14)} Öppna ${esc(otherNo)}</button>`
+        : '';
+    } else {
+      status = 'Inte instämplad';
+      btn = `<button class="btn bs ao-stamp-btn aod-stamp-in" onclick="WorkOrderDetailPage.toggleStamp()">${ic('play-circle',15)} Stämpla in</button>`;
+    }
     return `
-      <div class="card">
-        <div class="card-header"><h3>Stämpling</h3>
-          ${isActive ? `<span class="bdg bdg-green" id="ao-stamp-elapsed">Instämplad ${TimeService.elapsedStr(state.stampTimestamp)}</span>` : ''}
+      <div class="aod-stamp${cls}" role="group" aria-label="Stämpling på denna arbetsorder">
+        <span class="aod-stamp-ico" aria-hidden="true">${ic('clock',16)}</span>
+        <div class="aod-stamp-txt">
+          <span class="aod-stamp-l">${label}</span>
+          <span class="aod-stamp-s" id="ao-stamp-elapsed" aria-live="off">${status}</span>
         </div>
-        <div class="card-body" style="text-align:center;padding:16px;">
-          <button class="btn ${isActive?'bd':'bsu'} bfull ao-stamp-btn"
-            onclick="WorkOrderDetailPage.toggleStamp()">
-            ${isActive ? `${ic('stop-circle',18)} Stämpla ut` : `${ic('play-circle',18)} Stämpla in`}
-          </button>
-          ${state.stampActive && !isActive ? `<div class="nbox" style="margin-top:8px;">Du är inloggad på ett annat jobb. Stämpla ut därifrån först.</div>` : ''}
-        </div>
+        ${btn}
       </div>`;
+  },
+
+  /* "08:12" — instämplingens klockslag (svensk tid). */
+  _clockTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' }); } catch (e) { return ''; }
+  },
+
+  /* Levande tidräknare "0:45:12" (timmar:minuter:sekunder). */
+  _fmtElapsed(ts) {
+    if (!ts) return '0:00:00';
+    const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
   },
 
   /* Checklista — tre statuslägen (2026-11-23): Ej påbörjad / Pågående /
@@ -1263,7 +1502,7 @@ const WorkOrderDetailPage = {
   },
   _renderChecklist(ao) {
     const items = ao.checklist || [];
-    if (!items.length) return `<div class="empty" style="padding:16px 0;gap:4px;">${ic('clipboard-check',24)}<p style="font-size:12px;color:var(--mt);text-align:center;">Ingen checklista.<br>Tryck + för att lägga till checkpunkter.</p></div>`;
+    if (!items.length) return this._empty('clipboard-check', 'Ingen checklista', 'Den här ordern har inga checkpunkter.', Auth.can('ao_checklist') ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddChecklist()">${ic('plus',13)} Lägg till punkt</button>` : '');
     const v2 = WorkOrderService._chkV2 === true;
     if (WorkOrderService._chkV2 === null && !this._chkProbing) {
       this._chkProbing = true;
@@ -1336,93 +1575,71 @@ const WorkOrderDetailPage = {
     });
     const inkl = exMoms + momsAmt;
     return `
-      <div style="padding:10px 14px;border-top:1px solid var(--br);">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);margin-bottom:3px;">
-          <span>Totalt ex moms</span><span>${fmt(exMoms)} kr</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mt);margin-bottom:3px;">
-          <span>Moms</span><span>${fmt(momsAmt)} kr</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;">
-          <span>Totalt inkl moms</span><span>${fmt(inkl)} kr</span>
-        </div>
+      <div class="aod-mat-tot">
+        <div><span>Totalt exkl. moms</span><span>${fmt(exMoms)} kr</span></div>
+        <div><span>Moms</span><span>${fmt(momsAmt)} kr</span></div>
+        <div class="is-sum"><span>Totalt inkl. moms</span><span>${fmt(inkl)} kr</span></div>
       </div>`;
   },
 
+  /* V3: rader i stället för tabell (läsbar på 360 px utan sidledsrullning).
+     Samma uppgifter och samma behörighetsregel för priser (canSeePrice);
+     inköpspris/marginal bara bakom "Intern" som förut. */
   _renderMaterials(ao) {
     const canSeePrice = Auth.canAny(['invoice_view','invoice_create','reports_view']);
     const mats = ao.materials || [];
-    if (!mats.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;font-style:italic;">Inget material registrerat ännu.</p>`;
-    return `<div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead>
-          <tr style="background:var(--bg);border-bottom:2px solid var(--br);">
-            <th style="padding:7px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);">Material</th>
-            <th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Antal</th>
-            ${canSeePrice ? `<th style="padding:7px 6px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">À-pris</th>
-            <th style="padding:7px 14px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mt);white-space:nowrap;">Inkl. moms</th>` : ''}
-            <th style="padding:7px 10px;text-align:right;width:1px;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${mats.map(m => {
-            const qty = m.qty || 0;
-            const sell = m.sellPrice || 0;
-            const buy  = m.buyPrice || 0;
-            const vat  = _matNormVat(m.vatRate);
-            const exMoms  = qty * sell;
-            const momsAmt = exMoms * vat / 100;
-            const inklMoms = exMoms + momsAmt;
-            return `<tr style="border-bottom:1px solid var(--bg);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-              <td style="padding:9px 14px;">
-                <div style="font-weight:700;color:var(--tx);">${esc(m.name)}</div>
-                ${canSeePrice && buy > 0 ? `<div id="mat-int-${m.id}" style="display:none;font-size:10px;color:var(--mt);font-style:italic;margin-top:2px;">Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>
-                <button type="button" onclick="(function(){var e=document.getElementById('mat-int-${m.id}');e.style.display=e.style.display==='none'?'':'none';})()" style="font-size:9px;color:var(--mt);background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;gap:2px;margin-top:2px;">${ic('eye',9)} Intern</button>` : ''}
-              </td>
-              <td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${qty} ${m.unit}</td>
-              ${canSeePrice ? `<td style="padding:9px 6px;text-align:right;white-space:nowrap;color:var(--mt);">${fmt(sell)} kr</td>
-              <td style="padding:9px 14px;text-align:right;font-weight:700;color:var(--navy);white-space:nowrap;">${fmt(inklMoms)} kr</td>` : ''}
-              <td style="padding:9px 10px;text-align:right;white-space:nowrap;">
-                <div style="display:flex;gap:4px;justify-content:flex-end;">
-                  <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditMaterial('${m.id}')">${ic('pencil',11)}</button>
-                  <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteMaterial('${m.id}')">${ic('trash',11)}</button>
-                </div>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>`;
+    if (!mats.length) return this._empty('package', 'Inget material', 'Inget material är registrerat på ordern ännu.', Auth.can('ao_material') ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)} Lägg till material</button>` : '');
+    return `<div class="aod-rows">${mats.map(m => {
+      const mid  = this._id(m.id);
+      const qty  = m.qty || 0;
+      const sell = m.sellPrice || 0;
+      const buy  = m.buyPrice || 0;
+      const vat  = _matNormVat(m.vatRate);
+      const exMoms   = qty * sell;
+      const inklMoms = exMoms + exMoms * vat / 100;
+      return `<div class="aod-row aod-mrow">
+        <div class="aod-row-main">
+          <div class="aod-row-t">${esc(m.name)}</div>
+          <div class="aod-row-s">${fmt(qty)} ${esc(m.unit || '')}${canSeePrice ? ` · ${fmt(sell)} kr/${esc(m.unit || 'st')} exkl. moms` : ''}</div>
+          ${canSeePrice && buy > 0 ? `<button type="button" class="aod-int-btn" aria-expanded="false" onclick="var e=document.getElementById('mat-int-${mid}');var o=e.hidden;e.hidden=!o;this.setAttribute('aria-expanded',o?'true':'false');">${ic('eye',11)} Intern</button>
+            <div id="mat-int-${mid}" class="aod-int" hidden>Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>` : ''}
+        </div>
+        ${canSeePrice ? `<div class="aod-row-sum">${fmt(inklMoms)} kr<small>inkl. moms</small></div>` : ''}
+        <div class="aod-row-acts">
+          <button class="btn bs bxs aod-ibtn" data-id="${esc(m.id)}" title="Redigera material" aria-label="Redigera material" onclick="WorkOrderDetailPage.openEditMaterial(this.dataset.id)">${ic('pencil',13)}</button>
+          <button class="btn bd bxs aod-ibtn" data-id="${esc(m.id)}" title="Ta bort material" aria-label="Ta bort material" onclick="WorkOrderDetailPage.deleteMaterial(this.dataset.id)">${ic('trash',13)}</button>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
   },
 
   _renderTimeEntries(ao) {
     const entries = TimeService.getByAO(ao.id);
-    if (!entries.length) return `<p style="padding:12px 14px;color:var(--mt);font-size:13px;">Ingen tid registrerad</p>`;
+    if (!entries.length) return this._empty('clock', 'Ingen tid registrerad', 'Ingen tid är registrerad på ordern ännu.', Auth.canAny(['ao_time','payroll_manage']) ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddTime()">${ic('plus',13)} Registrera tid</button>` : '');
     /* V21: samma behörighetsprincip som TimePage._renderList() — inte längre
        antagandet att alla som når denna sida får redigera/radera vad som helst. */
     const isSuper    = typeof Auth !== 'undefined' && Auth.can('all');
     const canPayroll  = typeof Auth !== 'undefined' && Auth.can('payroll_manage');
     const canOwnTime  = typeof Auth !== 'undefined' && Auth.can('ao_time');
-    return entries.map(t => {
+    return `<div class="aod-rows">${entries.map(t => {
       const isOwn    = state.currentUser && t.staffId === state.currentUser.id;
       const isLocked = !!t.attested && !isSuper;
       const canEdit  = !isLocked && (isSuper || (isOwn ? (canOwnTime || canPayroll) : canPayroll));
       return `
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--bg);">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${t.staffName} · ${TimeService.fmtDuration(t.minutes)}${t.attested ? ` <span class="bdg bdg-green" style="font-size:9px;">${ic('lock',9)} Attesterad</span>` : ''}</div>
-          <div style="font-size:11px;color:var(--mt);">${t.date} ${t.startStr}–${t.endStr}${t.comment?' · '+esc(t.comment):''}</div>
-          ${t.priceGroupName ? `<div style="font-size:11px;color:var(--sky);">${t.priceGroupName} – ${fmt(t.hourRate)} kr/tim ex moms</div>` : ''}
-          ${t.registeredByName ? `<div style="font-size:10px;color:var(--mt);font-style:italic;">Registrerat av ${t.registeredByName}</div>` : ''}
-          ${!t.billable ? `<span style="font-size:10px;color:var(--mt);font-style:italic;">Ej debiterbar</span>` : ''}
+      <div class="aod-row aod-trow">
+        <div class="aod-row-main">
+          <div class="aod-row-t">${esc(t.staffName)} · ${WorkOrderDetailPage._h(t.minutes)}${t.attested ? ` <span class="bdg bdg-green">${ic('lock',10)} Attesterad</span>` : ''}${!t.billable ? ` <span class="bdg bdg-grey">Ej debiterbar</span>` : ''}</div>
+          <div class="aod-row-s">${esc(t.date)} ${esc(t.startStr)}–${esc(t.endStr)}${t.comment?' · '+esc(t.comment):''}</div>
+          ${t.priceGroupName ? `<div class="aod-row-s is-price">${esc(t.priceGroupName)} – ${fmt(t.hourRate)} kr/tim exkl. moms</div>` : ''}
+          ${t.registeredByName ? `<div class="aod-row-s is-note">Registrerat av ${esc(t.registeredByName)}</div>` : ''}
         </div>
         ${canEdit ? `
-        <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button class="btn bxs bs" onclick="WorkOrderDetailPage.openEditTime('${t.id}')">${ic('pencil',12)}</button>
-          <button class="btn bxs bd" onclick="WorkOrderDetailPage.deleteTime('${t.id}')">${ic('trash',12)}</button>
+        <div class="aod-row-acts">
+          <button class="btn bs bxs aod-ibtn" data-id="${esc(t.id)}" title="Redigera tidpost" aria-label="Redigera tidpost" onclick="WorkOrderDetailPage.openEditTime(this.dataset.id)">${ic('pencil',13)}</button>
+          <button class="btn bd bxs aod-ibtn" data-id="${esc(t.id)}" title="Ta bort tidpost" aria-label="Ta bort tidpost" onclick="WorkOrderDetailPage.deleteTime(this.dataset.id)">${ic('trash',13)}</button>
         </div>` : ''}
       </div>`;
-    }).join('');
+    }).join('')}</div>`;
   },
 
   /* ── Tidslinje/logg ───────────────────────── */
@@ -1430,14 +1647,14 @@ const WorkOrderDetailPage = {
     const events = [];
     (ao.notes||[]).forEach(n => events.push({ type:'note', ts:n.timestamp||'', who:n.staffName||'', text:n.text||'', id:n.id }));
     (ao.log||[]).forEach(l => events.push({ type:l.type||'log', ts:l.timestamp||'', who:l.userName||'', text:l.text||'', imageData:l.imageData||'', imagePath:l.imagePath||'', followUpDate:l.followUpDate||'', id:l.id }));
-    TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${TimeService.fmtDuration(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
+    TimeService.getByAO(ao.id).forEach(t => events.push({ type:'time', ts:t.createdAt||t.date||'', who:t.staffName||'', text:`${WorkOrderDetailPage._h(t.minutes)} registrerad${t.comment?' – '+t.comment:''}` }));
     (ao.materials||[]).forEach(m => { if (m.addedAt) events.push({ type:'material', ts:m.addedAt, who:'', text:`${m.qty} ${m.unit} ${m.name} tillagd` }); });
     ActivityService.getByWorkOrder(ao.id, 50).forEach(a => {
       if (a.type==='status_change'||a.type==='work_order_status'||a.type==='created')
         events.push({ type:a.type, ts:a.timestamp||'', who:'', text:a.description||'' });
     });
 
-    if (!events.length) return `<div style="padding:20px 14px;text-align:center;color:var(--mt);font-size:13px;">Ingen logg ännu</div>`;
+    if (!events.length) return this._empty('history', 'Ingen historik ännu', 'Anteckningar, bilder, tid, material och statusändringar visas här.', '');
     events.sort((a,b) => (b.ts>a.ts?1:b.ts<a.ts?-1:0));
 
     const LIMIT   = 5;
@@ -1494,7 +1711,7 @@ const WorkOrderDetailPage = {
             ${isSafeImageDataUrl(ev.imageData)?`<img src="${ev.imageData}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;object-fit:cover;border:1px solid var(--br);" loading="lazy">`:''}
             ${!ev.imageData&&ev.imagePath?`<img data-imgpath="${esc(ev.imagePath)}" style="max-width:100%;max-width:260px;border-radius:8px;margin-top:6px;max-height:200px;min-height:60px;object-fit:cover;border:1px solid var(--br);background:var(--bg2,#f3f4f6);" loading="lazy" alt="Bild läses in…">`:''}
           </div>
-          ${canDel?`<button class="btn bxs bd" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" onclick="WorkOrderDetailPage.deleteLogEntry('${ev.id}')">${ic('trash',12)}</button>`:''}
+          ${canDel?`<button class="btn bxs bd aod-ibtn" style="flex-shrink:0;align-self:flex-start;margin-top:1px;" data-id="${esc(ev.id)}" title="Ta bort loggpost" aria-label="Ta bort loggpost" onclick="WorkOrderDetailPage.deleteLogEntry(this.dataset.id)">${ic('trash',13)}</button>`:''}
         </div>`;
     }).join('');
 
@@ -1510,7 +1727,7 @@ const WorkOrderDetailPage = {
        anroparen satt in HTML:en — täcker alla renderingsställen utan att
        varje anropsplats behöver komma ihåg det. */
     if (html.indexOf('data-imgpath=') !== -1) {
-      setTimeout(() => this._resolveTimelineImages(document), 0);
+      this._scheduleImgResolve();
     }
     return html;
   },
@@ -1569,6 +1786,63 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const el = document.getElementById('ao-timeline');
     if (ao && el) el.innerHTML = this._renderTimeline(ao);
+    const ph = document.getElementById('ao-photos');
+    if (ao && ph) { ph.innerHTML = this._renderPhotos(ao); this._afterPhotosRender(); }
+  },
+
+  /* ── Bilder (V3 2026-11-26) ──────────────────────────────────────────
+     Foton ur loggen (och äldre anteckningar med inbäddad bild) som
+     miniatyrer. Bilder i Storage (imagePath) får signerade URL:er via samma
+     serverkontrollerade väg som tidslinjen (_resolveTimelineImages). */
+  _photoItems(ao) {
+    const out = [];
+    (ao.log || []).forEach(l => { if (l.imagePath || isSafeImageDataUrl(l.imageData)) out.push({ ts: l.timestamp || '', who: l.userName || '', text: l.text || '', imagePath: l.imagePath || '', imageData: isSafeImageDataUrl(l.imageData) ? l.imageData : '' }); });
+    (ao.notes || []).forEach(n => { if (isSafeImageDataUrl(n.imageData)) out.push({ ts: n.timestamp || '', who: n.staffName || '', text: n.text || '', imagePath: '', imageData: n.imageData }); });
+    out.sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0));
+    return out;
+  },
+
+  _renderPhotos(ao) {
+    const items = this._photoItems(ao);
+    if (!items.length) return this._empty('camera', 'Inga bilder ännu', 'Foton som läggs till i loggen visas här.', `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddLog()">${ic('camera',13)} Foto eller anteckning</button>`);
+    return `<div class="aod-ph-grid">${items.map(p => {
+      const cap = [p.text, p.ts ? fmtDate(p.ts) : '', p.who].filter(Boolean).join(' · ');
+      const img = p.imageData
+        ? `<img src="${p.imageData}" alt="${esc(p.text || 'Bild')}" loading="lazy">`
+        : `<img data-imgpath="${esc(p.imagePath)}" alt="${esc(p.text || 'Bild läses in…')}" loading="lazy">`;
+      return `<button type="button" class="aod-ph" title="${esc(cap)}" onclick="WorkOrderDetailPage._openPhoto(this)">${img}<span class="aod-ph-cap">${esc(cap)}</span></button>`;
+    }).join('')}</div>`;
+  },
+
+  _afterPhotosRender() {
+    const ao = getAO(this.aoId);
+    const cnt = document.getElementById('ao-photo-count');
+    const n = ao ? this._photoItems(ao).length : 0;
+    if (cnt) cnt.innerHTML = n ? `<span class="bdg bdg-grey">${n} st</span>` : '';
+    const ph = document.getElementById('ao-photos');
+    if (ph && ph.querySelector('img[data-imgpath]:not([src])')) this._scheduleImgResolve();
+  },
+
+  /* En hämtning av signerade URL:er per renderingsomgång, även när både
+     tidslinjen och bildkortet innehåller samma bilder. */
+  _scheduleImgResolve() {
+    if (this._imgResolveQueued) return;
+    this._imgResolveQueued = true;
+    setTimeout(() => { this._imgResolveQueued = false; this._resolveTimelineImages(document); }, 0);
+  },
+
+  /* Större visning av en miniatyr (bara redan hämtade bild-URL:er). */
+  _openPhoto(btn) {
+    const img = btn && btn.querySelector('img');
+    const src = img && img.getAttribute('src');
+    if (!src || !/^(https?:|blob:|data:image\/(png|jpe?g|webp|gif);base64,)/i.test(src)) { showToast('Bilden läses fortfarande in'); return; }
+    const cap = btn.querySelector('.aod-ph-cap');
+    Modal.open({
+      title: `${ic('camera',14)} Bild`,
+      wide: true,
+      body: `<img class="aod-ph-full" src="${esc(src)}" alt="${esc(img.getAttribute('alt') || 'Bild')}">${cap && cap.textContent ? `<p class="aod-muted" style="margin-top:8px;">${esc(cap.textContent)}</p>` : ''}`,
+      buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
+    });
   },
 
   /* Ny loggpost. Bild laddas först upp till Storage (work-order-image-upload,
@@ -1776,7 +2050,7 @@ const WorkOrderDetailPage = {
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;">${a.articleNumber ? a.articleNumber+' – ':'' }${esc(a.name)}</div>
-          <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr ex moms</div>
+          <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr exkl. moms</div>
         </div>
         <div id="art-check-${a.id}" style="display:none;color:var(--grn);">${ic('check',14)}</div>
       </div>`).join('') : '<p style="padding:8px;font-size:12px;color:var(--mt);">Inga artiklar i register</p>';
@@ -1810,7 +2084,7 @@ const WorkOrderDetailPage = {
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
         <div class="g2">
-          <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+          <div class="fg"><label>Försäljningspris exkl. moms (kr/enhet)</label>
             <input type="number" id="mat-sell" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Moms</label>
             <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
@@ -1819,9 +2093,9 @@ const WorkOrderDetailPage = {
         </div>
         <input type="hidden" id="mat-article-id" value="">
         <div id="mat-calc" style="display:none;background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">0 kr</span></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span id="mat-vat-lbl" style="color:var(--mt)">Moms 25%</span><span id="mat-moms">0 kr</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">0 kr</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">0 kr</span></div>
         </div>`,
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => this._saveMaterial(null) },
@@ -1939,7 +2213,7 @@ const WorkOrderDetailPage = {
           <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
         </div>
         <div class="g2">
-          <div class="fg"><label>Försäljningspris ex moms (kr/enhet)</label>
+          <div class="fg"><label>Försäljningspris exkl. moms (kr/enhet)</label>
             <input type="number" id="mat-sell" value="${m.sellPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Moms</label>
             <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
@@ -1948,9 +2222,9 @@ const WorkOrderDetailPage = {
         </div>
         <input type="hidden" id="mat-article-id" value="${m.articleId||''}">
         <div id="mat-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Ex moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms ${vat}%</span><span id="mat-moms">${fmt((m.qty||0)*(m.sellPrice||0)*vat/100)} kr</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl moms</span><span id="mat-inkl">${fmt((m.qty||0)*(m.sellPrice||0)*(1+vat/100))} kr</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">${fmt((m.qty||0)*(m.sellPrice||0)*(1+vat/100))} kr</span></div>
         </div>`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => this._saveMaterial(matId) },
@@ -2003,21 +2277,26 @@ const WorkOrderDetailPage = {
     if (!ao) return;
     const timeEntries = TimeService.getByAO(ao.id);
     const totalMins   = TimeService.totalMinutes(timeEntries);
+    const canSeePrice = Auth.canAny(['invoice_view','invoice_create','reports_view']);
 
     const listEl  = document.getElementById('ao-timeentries');
     if (listEl)  listEl.innerHTML  = this._renderTimeEntries(ao);
 
     const badge   = document.getElementById('ao-time-badge');
-    if (badge)   badge.innerHTML   = totalMins > 0 ? `<span class="bdg bdg-sky">${TimeService.fmtDuration(totalMins)}</span>` : '';
+    if (badge)   badge.innerHTML   = totalMins > 0 ? `<span class="bdg bdg-sky">${WorkOrderDetailPage._h(totalMins)}</span>` : '';
 
+    /* Tid mot plan: samma rollspärr som vid full rendering (tidigare
+       ritades blocket om utan spärr efter en tidsändring). */
     const planEl  = document.getElementById('ao-time-plan');
-    if (planEl)  planEl.innerHTML  = this._timePlanBlock(ao);
+    if (planEl)  planEl.innerHTML  = canSeePrice ? this._timePlanBlock(ao) : '';
 
     const timelineEl = document.getElementById('ao-timeline');
     if (timelineEl)  timelineEl.innerHTML = this._renderTimeline(ao);
 
     const lonEl   = document.getElementById('ao-lonsam');
     if (lonEl)   lonEl.innerHTML   = this._renderLonsamhet(ao);
+
+    this._refreshPricingCard(ao);
 
     // Öppna tidssektionen om det finns poster
     if (TimeService.getByAO(ao.id).length > 0) this._openSectionOf('ao-timeentries');
@@ -2035,21 +2314,34 @@ const WorkOrderDetailPage = {
     const totEl   = document.getElementById('ao-mat-totals');
     if (totEl)   totEl.innerHTML   = (ao.materials||[]).length > 0 ? this._matTotals(ao) : '';
 
+    const cntEl   = document.getElementById('ao-mat-count');
+    if (cntEl)   cntEl.innerHTML   = (ao.materials||[]).length ? `<span class="bdg bdg-grey">${(ao.materials||[]).length} st</span>` : '';
+
     const lonEl   = document.getElementById('ao-lonsam');
     if (lonEl)   lonEl.innerHTML   = this._renderLonsamhet(ao);
+
+    this._refreshPricingCard(ao);
 
     // Öppna materialsektionen om det finns material
     if ((ao.materials||[]).length > 0) this._openSectionOf('ao-materials');
   },
 
-  /* ── Stämpling timer ──────────────────── */
+  _refreshPricingCard(ao) {
+    const el = document.getElementById('ao-price');
+    if (!el || !ao) return;
+    const html = this._pricingCard(ao);
+    if (html) el.outerHTML = html;
+  },
+
+  /* ── Stämpling: levande tidräknare (varje sekund, bara medan man är
+     instämplad på just denna order och sidan visar den) ── */
   _startStampTimer() {
     this._stopStampTimer();
     this._stampInterval = setInterval(() => {
-      const el = document.getElementById('ao-stamp-elapsed');
+      const el = document.getElementById('ao-stamp-clock');
       if (!el || !state.stampActive || state.stampAoId !== this.aoId) { this._stopStampTimer(); return; }
-      el.textContent = 'Instämplad ' + TimeService.elapsedStr(state.stampTimestamp);
-    }, 30000);
+      el.textContent = this._fmtElapsed(state.stampTimestamp);
+    }, 1000);
   },
 
   _stopStampTimer() {
@@ -2142,7 +2434,7 @@ const WorkOrderDetailPage = {
       Modal.open({
         title: 'Ofullständig checklista',
         body: `
-          <div class="nbox" style="margin-bottom:12px;">${ic('alert-triangle',16)} ${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade${chkProgCnt ? ` · ${chkProgCnt} pågår fortfarande` : ''}</div>
+          <div class="nbox" style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-start;">${ic('alert-triangle',16)}<span>${chkOkCnt + chkAvvCnt} av ${chkTotal} checkpunkter är hanterade${chkProgCnt ? ` · ${chkProgCnt} pågår fortfarande` : ''}</span></div>
           <p style="font-size:13px;color:var(--mt);">Vill du ändå klarmarkera ordern?</p>`,
         buttons: [
           { label: 'Klarmarkera ändå', cls: 'btn bsu', onClick: () => { Modal.close(); doComplete(); } },
@@ -2311,12 +2603,12 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     Modal.open({
       title: 'Stämpla ut',
       body: `
-        <div class="ibox" style="margin-bottom:12px;">${ic('clock',14)} Tid: ${TimeService.fmtDuration(mins)}</div>
+        <div class="ibox" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">${ic('clock',14)}<span>Tid: ${TimeService.fmtDuration(mins)}</span></div>
         <div class="fg"><label>Prisgrupp</label>
           <select id="co-pg"><option value="">— Ingen —</option>${pgOptions}</select></div>
         <div class="fg"><label>Vad utfördes? <span style="color:var(--rd)">*</span></label>
@@ -2407,14 +2699,40 @@ const WorkOrderDetailPage = {
      (`#ao-chk-counter` OCH det nu tillagda `#ao-chk-badge-meta`) vid
      VARJE mutation. Ingen ny räknare, ingen egen delstat — en enda
      källa, två DOM-speglingar av den, båda uppdaterade tillsammans. */
+  /* V3 2026-11-26: samma enda källa, nu som tydlig framstegsindikator i
+     "Uppdrag & utförande": "2 av 4 klara" (klara = utförda + avvikelse,
+     samma definition som Nästa steg och klarmarkeringens kontroll),
+     stapel med segment per läge och hur många som är kvar. */
   _checklistBadgeHtml(ao) {
     const k = WorkOrderService.checklistCounts(ao.checklist || []);
     if (!k.total) return '';
-    const color = k.done === k.total ? 'green' : k.avv > 0 ? 'orange' : 'blue';
-    const pct = (n) => Math.round((n / k.total) * 100);
-    const label = `${k.done}/${k.total} utförda${k.prog ? ' · ' + k.prog + ' pågår' : ''}${k.avv ? ' · ' + k.avv + ' avv.' : ''}`;
-    return `<span class="bdg bdg-${color} chk-badge" title="Utförda: ${k.done} · Pågående: ${k.prog} · Avvikelse: ${k.avv} · Ej påbörjade: ${k.rest}">`
-      + `<span class="chk-mini-bar" aria-hidden="true"><span class="chk-mini-done" style="width:${pct(k.done)}%"></span><span class="chk-mini-avv" style="width:${pct(k.avv)}%"></span><span class="chk-mini-prog" style="width:${pct(k.prog)}%"></span></span>${label}</span>`;
+    const handled = k.done + k.avv;
+    const left = k.total - handled;
+    const pct = (n) => Math.round((n / k.total) * 1000) / 10;
+    const tone = handled === k.total ? (k.avv ? 'warn' : 'ok') : 'info';
+    const leg = [];
+    if (k.done) leg.push(`<span class="aod-lg lg-done"><i></i>${k.done} utförd${k.done === 1 ? '' : 'a'}</span>`);
+    if (k.prog) leg.push(`<span class="aod-lg lg-prog"><i></i>${k.prog} pågår</span>`);
+    if (k.avv)  leg.push(`<span class="aod-lg lg-avv"><i></i>${k.avv} avvikelse${k.avv === 1 ? '' : 'r'}</span>`);
+    if (k.rest) leg.push(`<span class="aod-lg lg-rest"><i></i>${k.rest} ej påbörjad${k.rest === 1 ? '' : 'e'}</span>`);
+    return `<div class="aod-chkp tone-${tone}" title="Utförda: ${k.done} · Pågående: ${k.prog} · Avvikelse: ${k.avv} · Ej påbörjade: ${k.rest}">
+        <div class="aod-chkp-top"><span class="aod-chkp-n"><b>${handled} av ${k.total}</b> klara</span><span class="aod-chkp-left">${left ? left + ' kvar' : 'Alla punkter hanterade'}</span></div>
+        <div class="aod-chkp-bar" role="progressbar" aria-label="Checklista" aria-valuemin="0" aria-valuemax="${k.total}" aria-valuenow="${handled}" aria-valuetext="${handled} av ${k.total} klara">
+          <i class="seg-done" style="width:${pct(k.done)}%"></i><i class="seg-avv" style="width:${pct(k.avv)}%"></i><i class="seg-prog" style="width:${pct(k.prog)}%"></i>
+        </div>
+        <div class="aod-chkp-leg">${leg.join('')}</div>
+      </div>`;
+  },
+
+  /* Avvikelser i checklistan, samlade under listan (texten finns även på
+     raden) så att arbetsledaren ser dem utan att läsa varje punkt. */
+  _avvikelseSummary(ao) {
+    const avv = (ao.checklist || []).filter(c => WorkOrderService.checklistStatus(c) === 'avvikelse');
+    if (!avv.length) return '';
+    return `<div class="aod-avv" role="note">
+        <div class="aod-avv-h">${ic('alert-triangle',14)} ${avv.length} avvikelse${avv.length === 1 ? '' : 'r'} rapporterad${avv.length === 1 ? '' : 'e'}</div>
+        <ul>${avv.map(c => `<li><strong>${esc(c.text)}</strong>${c.avvikelseComment ? ` — ${esc(c.avvikelseComment)}` : ''}${c.avvikelseBy ? ` <span class="aod-muted">(${esc(c.avvikelseBy)})</span>` : ''}</li>`).join('')}</ul>
+      </div>`;
   },
 
   _updateChecklistCounter(ao) {
@@ -2423,6 +2741,10 @@ const WorkOrderDetailPage = {
     if (sectionEl) sectionEl.innerHTML = html;
     const metaEl = document.getElementById('ao-chk-badge-meta');
     if (metaEl) metaEl.innerHTML = html;
+    const avvEl = document.getElementById('ao-chk-avv');
+    if (avvEl) avvEl.innerHTML = this._avvikelseSummary(ao);
+    const qEl = document.getElementById('ao-qbar-chk');
+    if (qEl) qEl.textContent = this._qbarChkLabel(WorkOrderService.checklistCounts(ao.checklist || []));
   },
 
   /* ── Checklista ────────────────────────── */
@@ -2572,7 +2894,7 @@ const WorkOrderDetailPage = {
     Modal.open({
       title: `${ic('alert-triangle',14)} Markera avvikelse`,
       body: `
-        <div class="nbox" style="margin-bottom:12px;">${ic('clipboard-check',13)} ${esc(c.text)}</div>
+        <div class="nbox" style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-start;">${ic('clipboard-check',13)}<span>${esc(c.text)}</span></div>
         <div class="fg">
           <label>Kommentar <span style="color:var(--rd)">*</span></label>
           <textarea id="avv-comment" rows="3" placeholder="Beskriv avvikelsen – vad som är skadat, var och hur…">${esc(c.avvikelseComment||'')}</textarea>
@@ -2682,7 +3004,7 @@ const WorkOrderDetailPage = {
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     Modal.open({
       title: 'Registrera tid',
@@ -2720,7 +3042,7 @@ const WorkOrderDetailPage = {
     const guard = TimeService._guardMutation(t);
     if (!guard.ok) { showToast(guard.error); return; }
     const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim ex moms</option>`
+      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
     ).join('');
     Modal.open({
       title: 'Redigera tid',
