@@ -618,7 +618,17 @@ module.exports = [
       const noClip = async (step) => { const li = await s.layoutIssues(); t.assert(li.length === 0, step + ': inget klipps / ingen sidledsrullning ' + JSON.stringify(li)); };
       // 1. Öppna jobbet från Mina jobb.
       await s.go('pg-myjobs');
-      await s.page.locator('.page.active .job-card-v2-title', { hasText: 'Fältflöde' }).first().click();
+      /* Mina jobb i V3 (fältsidorna): korten heter .mj-title och ligger under
+         flikarna Idag/Kommande/Arbetspool — leta i den flik där jobbet finns. */
+      const card = s.page.locator('.page.active .mj-title', { hasText: 'Fältflöde' }).first();
+      if (!(await card.isVisible().catch(() => false))) {
+        for (const tab of ['Kommande', 'Arbetspool', 'Idag']) {
+          const b = s.page.locator('.page.active [role=tab], .page.active .ft', { hasText: tab }).first();
+          if (await b.isVisible().catch(() => false)) { await b.click(); await s.settle(250); }
+          if (await card.isVisible().catch(() => false)) break;
+        }
+      }
+      await card.click();
       await s.page.waitForFunction((x) => Router.currentPage === 'pg-ao-detail' && WorkOrderDetailPage.aoId === x, AO, { timeout: 8000 });
       await s.settle(400);
       await noClip('öppna');
