@@ -158,6 +158,9 @@ const WorkOrderDetailPage = {
     const objLink = ao.objectId ? `<a class="aod-link" onclick="Router.showPage('pg-propobj-detail',{objId:'${this._id(ao.objectId)}'})">${esc(ao.objectNumber ? ao.objectNumber+' – ' : '')}${esc(ao.objectName || ao.objectId)}</a>` : '';
     const cuLink = cu ? `<a class="aod-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${this._id(cu.id)}'})">${esc(cuName)}</a>` : '';
     const showDetailsOpen = typeof window !== 'undefined' && window.innerWidth >= 1200;
+    /* Mobilens plats-/kontaktkort ritas bara när det finns något att visa
+       (en order utan adress och kontakt gav annars ett tomt kort). */
+    const hasField = !!(mapsUrl || ao.phone || fullAddr || (ao.accessCode && Auth.can('objects_sensitive')) || ao.objectId || ao.contactPerson);
 
     el.innerHTML = `
       ${ao.deleted ? `<div class="nbox aod-banner is-danger">${ic('trash',14)} Denna arbetsorder finns i papperskorgen och raderas automatiskt ${ao.deleteAfter?esc(fmtDate(ao.deleteAfter)):'om 14 dagar'}.</div>` : ''}
@@ -224,7 +227,7 @@ const WorkOrderDetailPage = {
 
             <!-- Mobil: plats och kontakt i ETT kort (ersätter Var/När/Vem/Kontakt under 768 px;
                  tid och personal står redan i sidhuvudet) -->
-            <section class="card aod-field" aria-label="Plats och kontakt">
+            ${hasField ? `<section class="card aod-field" aria-label="Plats och kontakt">
               <div class="aod-field-acts">
                 ${mapsUrl ? `<a class="btn bs bsm" href="${esc(mapsUrl)}" target="_blank" rel="noopener">${ic('navigation',14)} Vägbeskrivning</a>` : ''}
                 ${ao.phone ? `<a class="btn bs bsm" href="tel:${esc(ao.phone)}">${ic('phone',14)} Ring${ao.contactPerson ? ' ' + esc(String(ao.contactPerson).split(' ')[0]) : ''}</a>` : ''}
@@ -235,7 +238,7 @@ const WorkOrderDetailPage = {
                 ${ao.objectId ? `<div class="aod-fr">${ic('dashboard',14)}${objLink}</div>` : ''}
                 ${ao.contactPerson || ao.phone ? `<div class="aod-fr">${ic('user',14)}<span>${ao.contactPerson ? esc(ao.contactPerson) : ''}${ao.phone ? ` <span class="aod-muted">${esc(ao.phone)}</span>` : ''}</span></div>` : ''}
               </div>
-            </section>
+            </section>` : ''}
 
             <!-- Material och kostnader -->
             <section class="card aod-mat" aria-labelledby="aod-mat-h">
