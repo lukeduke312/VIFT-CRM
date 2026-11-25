@@ -22,7 +22,7 @@ lokal PostgreSQL.
   - 3 triggers,
   - 11 tabeller/sekvenser (kolumner, constraints, index, RLS och ACL),
   - 4 buckets.
-- **28 nya filer i `supabase/migrations/`:**
+- **25 nya filer i `supabase/migrations/`** (rättat 2026-11-28, tidigare stod "28"; se avsnitt 11):
   - 17 återställda ur STAGING:s migrationshistorik, exakta och md5-kontrollerade,
   - 3 kandidater för de tomma migrationerna,
   - 5 rekonstruerade ur STAGING-schemat (varav en med versionsnummer 20261024000001),
@@ -255,6 +255,9 @@ Noteringar:
   av `e2e-test-cleanup` till `staging-only/`, eftersom fake-backenden inte läser
   `supabase/functions/`. Testet har inte ändrats. Föreslagen rättning, ej gjord: modellera
   `e2e-test-cleanup` i fake-backenden.
+  **Åtgärdat 2026-11-28 (T3-0):** `e2e-test-cleanup` modelleras nu i `tests/e2e/fake-backend.js`
+  efter `staging-only/functions/e2e-test-cleanup`: kräver `all`, svarar 403 `not_test_offer`/`not_test_ao`
+  för poster utan `[E2E-TEST]`, och rör bara den egna mappen. Testet är oförändrat och ger 26/0.
 - Siffrorna anges som godkända/fallerade.
 - Två fall i `rekonstruerade_rpc_sql` skrevs först efter ett antagande om beteendet och
   rättades efter driftkoden. `invoice_line_delete` på okänd rad är idempotent och höjer
@@ -288,3 +291,40 @@ Noteringar:
     (20261124145958). En push mot STAGING skulle se dem som nya. Mot en tom LIVE-databas
     fungerar filnamnsordningen (verifierat lokalt). För STAGING behövs en
     `supabase migration repair` eller en mappning, och det kräver beslut.
+
+## 11. Rättelse 2026-11-28 (T3-0): 28 jämfört med 25 nya migrationsfiler
+
+Siffran "28 nya filer i `supabase/migrations/`" i avsnitt 1 och i MASTERPLAN punkt 242 var
+fel. Den motsvarar ingen faktisk filräkning.
+
+Räknat i Git (`git diff --name-status c011aa6 168554b`):
+
+| Mått | Antal |
+|---|---|
+| Filer i `supabase/migrations/` före (c011aa6) / efter (168554b) | 24 / 45 (netto +21) |
+| **Nya filer (A) i `supabase/migrations/`** | **25** = 17 återställda + 3 kandidater + 5 rekonstruerade (R-A–R-E) |
+| Flyttade **ut** ur `supabase/migrations/` (R100) | 4: 3 PROPOSAL-filer till `forslag-ej-applicerade/`, och `20261125000004_e2e_purge_offer_artifacts.sql` till `staging-only/migrations/` |
+| Ny återställd migration **utanför** `migrations/` | 1: `staging-only/migrations/20261117085418_…` (den 18:e återställda filen, STAGING-only) |
+| Nya `.sql`-filer i hela commiten | 27: de 25 ovan, 20261117085418 och `tests/local/supabase-stubbar.sql`, som inte är en migration |
+
+Kontroll: 24 − 4 + 25 = 45.
+
+**Trolig härledning av "28":** de 25 nya filerna plus de 3 PROPOSAL-filerna, som flyttades i
+samma steg och räknades in som "övriga ändringar". Den korrekta formuleringen är:
+- 25 nya filer i `supabase/migrations/` (17 + 3 + 5);
+- 1 ny återställd STAGING-only-migration i `staging-only/migrations/`;
+- 4 filer flyttade ut ur `supabase/migrations/`.
+
+**MIG-1 (2026-11-28).** Mappningen mellan alla 41 STAGING-versioner och repo-filerna finns nu i
+`supabase/MIGRATIONSMAPPNING.md` och `supabase/migrationsmappning.json`. Den verifieras av
+`tests/local/migrationsmappning.js`, med md5 och objektjämförelse i två lokala kedjor.
+Installationsunderlaget finns i `supabase/INSTALLATIONSUNDERLAG-MIGRATIONER.md`.
+
+Den exakta md5-matchningen mot repo-filerna gäller **28 av 38** icke-tomma versioner:
+- 9 med Supabase CLI:s satsdelning;
+- 18 återställda;
+- 1 rå fil.
+
+Det är en annan 28:a än ovan, och de två ska inte blandas ihop. Av de övriga 10 har 9 samma kod
+efter normalisering, och 20261124160425 har samma objekt i en annan form. Inventeringens
+"38/38 md5" avser att de sparade applicerade filerna stämmer mot STAGING, inte mot repo-filerna.

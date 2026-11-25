@@ -1,7 +1,11 @@
 # Auktoritativ källa för server och klient (G1/G4 del 2, 2026-11-27)
 
-Det här är ett förslag tills Lucas Samuelsson har fastställt det. Det ändrar ingenting i
-VIFT-CRM.
+**Fastställt 2026-11-28 (BESLUT-2026-11-28, KÄLLA-1): alternativ A.** `vift-v2/supabase` är den
+enda auktoritativa serverkodbasen. Klientgrenens `supabase/` togs bort i T3-0 och ersattes med en
+hänvisning (`VIFT-CRM/supabase/README.md`), och en kontroll infördes
+(`VIFT-CRM/tests/serverkalla_guard.test.js`). Klienttesterna läser serverkällan via
+`VIFT_SERVER_ROOT` (standard `/home/user/vift-v2/supabase`). Texten nedan beskriver läget före
+beslutet.
 
 ## Uppdelning
 
@@ -19,7 +23,8 @@ PostgreSQL och jämför mot STAGING. Varje ny servermigration ska läggas till i
 - `supabase/migrations/` har **21 filer**. Alla 21 är byte för byte lika med filer i vift-v2,
   men tre av dem (`*_PROPOSAL_*`) har i vift-v2 flyttats till
   `supabase/forslag-ej-applicerade/`, eftersom de aldrig applicerats i STAGING.
-- VIFT-CRM **saknar** 28 filer som vift-v2 nu har:
+- VIFT-CRM **saknar** filer som vift-v2 nu har (talet 28 i tidigare version var fel; se
+  `inventering/G1-G4-DEL2-RESULTAT.md` §11):
   - 17 migrationer som är återställda ur STAGING:s historik,
   - 3 kandidater för de tomma migrationerna,
   - 5 rekonstruerade migrationer,
@@ -46,7 +51,10 @@ läser `supabase/migrations/20261125000001_offer_attachment_patch.sql`):
    sha256 per fil. Ingen handredigering.
 3. Klienttester som läser servermigrationer pekar om till spegeln.
 
-Ingen av varianterna är genomförd. VIFT-CRM har inte ändrats i den här omgången.
+**Genomfört 2026-11-28 (T3-0):** variant A. Alla filer i klientgrenens `supabase/` jämfördes
+först med vift-v2. Ingen unik källa, fixtur eller testberoende fanns: varje fil är identisk med
+vift-v2 eller med en tidigare version i vift-v2:s Git-historik. Detsamma gäller de två
+installations-SQL-filerna i klientroten. Historiken finns kvar i Git.
 
 ## Regler
 

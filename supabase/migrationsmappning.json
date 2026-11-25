@@ -1,0 +1,1834 @@
+{
+ "beskrivning": "MIG-1: mappning STAGING-version ↔ repo-fil. Genererad av tests/local/migrationsmappning.js --skriv; ändra inte för hand.",
+ "stagingSenasteVersion": "20261124211128",
+ "kalla": {
+  "applicerad": "supabase/inventering/staging-2026-11-26/migrations-applicerade/ (STAGING, läst 2026-11-25)",
+  "ordning": "supabase/MIGRATIONSORDNING.txt",
+  "facit": "tests/local/staging-schema-facit-2026-11-25.json"
+ },
+ "sammanfattning": {
+  "installeradeVersioner": 41,
+  "perKlass": {
+   "installerad": 36,
+   "ny": 0,
+   "rekonstruerad": 0,
+   "kandidat": 3,
+   "stagingOnly": 2,
+   "forslag": 0
+  },
+  "exaktMd5": 28,
+  "normaliseradLikaUtanExakt": 9,
+  "tommaIStaging": 3,
+  "objektLikaAB": 41,
+  "repoFilerPerKlass": {
+   "installerad": 37,
+   "ny": 0,
+   "rekonstruerad": 5,
+   "kandidat": 3,
+   "stagingOnly": 2,
+   "forslag": 3
+  },
+  "slutlageAB": {
+   "skillnader": [],
+   "sammaKodAndraKommentarer": [
+    "funktion:project_documents_append(p_new_doc jsonb)",
+    "funktion:project_documents_finalize_delete(p_doc_id text, p_expected_project_id text)",
+    "funktion:project_documents_update_one(p_doc_id text, p_expected_project_id text, p_patch jsonb)",
+    "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[])",
+    "funktion:work_order_checklist_set_state(p_ao_id text, p_item_id text, p_action text, p_text text, p_description text, p_comment text, p_image text, p_actor_name text, p_caller_staff_id text, p_caller_can_view_all boolean, p_caller_can_edit boolean)"
+   ]
+  },
+  "annatFilnamnsnummer": [
+   {
+    "version": "20261116094016",
+    "filer": [
+     "migrations/20260917000001_work_order_checklist_atomic_rpc.sql"
+    ]
+   },
+   {
+    "version": "20261124145455",
+    "filer": [
+     "migrations/20261123000002_work_order_checklist_progress.sql"
+    ]
+   },
+   {
+    "version": "20261124145958",
+    "filer": [
+     "migrations/20261124000001_activity_log_append.sql"
+    ]
+   },
+   {
+    "version": "20261124150357",
+    "filer": [
+     "migrations/20261124000002_work_order_log_ops.sql"
+    ]
+   },
+   {
+    "version": "20261124150650",
+    "filer": [
+     "migrations/20261125000001_offer_attachment_patch.sql"
+    ]
+   },
+   {
+    "version": "20261124151118",
+    "filer": [
+     "migrations/20261124000003_workorder_images_bucket.sql"
+    ]
+   },
+   {
+    "version": "20261124160425",
+    "filer": [
+     "migrations/20260907000001_storage_project_documents.sql",
+     "migrations/20260908000001_project_documents_atomic_rpc.sql",
+     "migrations/20260908000002_project_documents_r2_lastchanged_and_rls.sql"
+    ]
+   },
+   {
+    "version": "20261124201228",
+    "filer": [
+     "migrations/20261125000002_store_lastchanged_bump.sql"
+    ]
+   },
+   {
+    "version": "20261124210432",
+    "filer": [
+     "migrations/20261125000003_store_read_by_role.sql"
+    ]
+   },
+   {
+    "version": "20261124210747",
+    "filer": [
+     "migrations/20261125000003_store_read_by_role.sql"
+    ]
+   },
+   {
+    "version": "20261124211128",
+    "filer": [
+     "staging-only/migrations/20261125000004_e2e_purge_offer_artifacts.sql"
+    ]
+   }
+  ]
+ },
+ "versioner": [
+  {
+   "version": "20260720000000",
+   "appliceratNamn": "create_core_tables",
+   "repoFiler": [
+    "migrations/20260720000000_create_core_tables.sql"
+   ],
+   "md5Applicerad": "bd75a6518ced5021a08dd3fe338be440",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "tabell:public.push_subscriptions",
+     "tabell:public.store"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20260720000001",
+   "appliceratNamn": "rls_store_table",
+   "repoFiler": [
+    "migrations/20260720000001_rls_store_table.sql"
+   ],
+   "md5Applicerad": "e122324b1a6fae6fa4b43e734ec0d37a",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "policy:public.app_users.app_users_own_read",
+     "policy:public.app_users.app_users_service_role",
+     "policy:public.push_subscriptions.push_own_insert",
+     "policy:public.push_subscriptions.push_own_read",
+     "policy:public.push_subscriptions.push_own_update",
+     "policy:public.push_subscriptions.push_service_role_all",
+     "policy:public.store.store_service_role_all",
+     "policy:public.store.store_vift_users_all",
+     "tabell:public.app_users"
+    ],
+    "andrade": [
+     "tabell:public.push_subscriptions",
+     "tabell:public.store"
+    ],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20260720000002",
+   "appliceratNamn": "storage_offer_attachments",
+   "repoFiler": [
+    "migrations/20260720000002_storage_offer_attachments.sql"
+   ],
+   "md5Applicerad": "6832dce9968558427a2f973245abdb49",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "bucket:offer-attachments",
+     "policy:storage.objects.offer-attachments service_role delete",
+     "policy:storage.objects.offer-attachments service_role insert",
+     "policy:storage.objects.offer-attachments service_role select"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20260720000003",
+   "appliceratNamn": "pg_cron_service_monitor",
+   "repoFiler": [
+    "migrations/20260720000003_pg_cron_service_monitor.sql"
+   ],
+   "md5Applicerad": "56d7bf8900bf14e54e33693179a33685",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20260720000004",
+   "appliceratNamn": "property_sensitive_access",
+   "repoFiler": [
+    "migrations/20260720000004_property_sensitive_access.sql"
+   ],
+   "md5Applicerad": "d4ab01e7412e0e58bfaebff5c345ef4f",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "policy:public.property_sensitive_access.psa_service_role_all",
+     "policy:public.store_backup_prop_objects_20260720.backup_objects_service_role_all",
+     "policy:public.store_backup_properties_20260720.backup_props_service_role_all",
+     "tabell:public.property_sensitive_access",
+     "tabell:public.store_backup_prop_objects_20260720",
+     "tabell:public.store_backup_properties_20260720"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20260720000005",
+   "appliceratNamn": "store_key_rls",
+   "repoFiler": [
+    "migrations/20260720000005_store_key_rls.sql"
+   ],
+   "md5Applicerad": "798d35ab555f2698739506f747cdb0c0",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "policy:public.store.store_active_read",
+     "policy:public.store.store_active_write_safe",
+     "policy:public.store.store_admin_write_protected"
+    ],
+    "andrade": [
+     "tabell:public.app_users"
+    ],
+    "borttagna": [
+     "policy:public.store.store_vift_users_all"
+    ]
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20260720000004"
+   ]
+  },
+  {
+   "version": "20260720000006",
+   "appliceratNamn": "app_users_lifecycle",
+   "repoFiler": [
+    "migrations/20260720000006_app_users_lifecycle.sql"
+   ],
+   "md5Applicerad": "25b199b59b7992d01e2aeea3c361dd10",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:check_app_users_health()",
+     "funktion:deactivate_vift_user(p_user_id uuid)",
+     "funktion:provision_vift_user(p_user_id uuid, p_staff_id text, p_role_id text, p_is_admin boolean)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20260720000001"
+   ]
+  },
+  {
+   "version": "20260720000007",
+   "appliceratNamn": "sensitive_access_audit",
+   "repoFiler": [
+    "migrations/20260720000007_sensitive_access_audit.sql"
+   ],
+   "md5Applicerad": "a1be2277b315ac34b680708eb57b34bb",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "policy:public.sensitive_access_audit.audit_own_read",
+     "policy:public.sensitive_access_audit.audit_service_all",
+     "tabell:public.sensitive_access_audit"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000004"
+   ]
+  },
+  {
+   "version": "20260720000008",
+   "appliceratNamn": "strip_passwords_from_store",
+   "repoFiler": [
+    "migrations/20260720000008_strip_passwords_from_store.sql"
+   ],
+   "md5Applicerad": "003c8f8f74a7d20f6d7872822ed09e66",
+   "tomIStaging": false,
+   "exaktMatchning": "Supabase CLI-satsdelning av filen = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20260928000001",
+   "appliceratNamn": "offer_events_atomic_rpc",
+   "repoFiler": [
+    "migrations/20260928000001_offer_events_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "8f34c0ecf3740075e4e9e14f48c207e0",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:offer_events_append(p_event jsonb)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261017000001",
+   "appliceratNamn": "ao_time_atomic_rpc",
+   "repoFiler": [
+    "migrations/20261017000001_ao_time_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "49d5d0add825df196f799d0f3b59341f",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:time_entry_create(p_entry jsonb, p_idempotency_key text, p_client_id text)",
+     "funktion:time_entry_patch(p_entry_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text)",
+     "funktion:time_entry_soft_delete(p_entry_id text, p_idempotency_key text)",
+     "funktion:work_order_create(p_ao jsonb, p_idempotency_key text, p_client_id text)",
+     "funktion:work_order_patch(p_ao_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text)",
+     "funktion:work_order_permanent_delete(p_ao_id text, p_idempotency_key text)",
+     "funktion:work_order_soft_delete(p_ao_id text, p_idempotency_key text)",
+     "tabell:public.op_idempotency"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261018000001",
+   "appliceratNamn": "rondering_pass_atomic_rpc",
+   "repoFiler": [
+    "migrations/20261018000001_rondering_pass_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "cc8564cdde977e85267e84e54714b46e",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:_rondering_recompute_summary(p_categories jsonb)",
+     "funktion:rondering_pass_auto_start(p_pass_id text)",
+     "funktion:rondering_pass_complete(p_pass_id text, p_caller_staff_id text)",
+     "funktion:rondering_pass_create(p_pass_template jsonb)",
+     "funktion:rondering_pass_migrate_legacy(p_pass jsonb)",
+     "funktion:rondering_pass_save_note(p_pass_id text, p_note text)",
+     "funktion:rondering_passes_bulk_create(p_rondering_id text, p_candidates jsonb)",
+     "funktion:rondering_point_patch(p_pass_id text, p_category_id text, p_point_id text, p_status text, p_comment text, p_deviation_id text, p_work_order_id text, p_caller_staff_id text, p_is_reset boolean)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261018000003",
+   "appliceratNamn": "invoice_set_status_atomic_rpc",
+   "repoFiler": [
+    "migrations/20261018000003_invoice_set_status_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "086cd3253529b5098c4f2fbc00ddf90c",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:invoice_set_status(p_invoice_id text, p_status text, p_actor_id text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261018000004",
+   "appliceratNamn": "invoice_lines_and_create_atomic_rpc",
+   "repoFiler": [
+    "migrations/20261018000004_invoice_lines_and_create_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "16d6a9e3acb981168c56a39895b002e7",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:invoice_append_checked(p_invoice jsonb, p_idempotency_key text)",
+     "funktion:invoice_discount_set(p_invoice_id text, p_discount jsonb)",
+     "funktion:invoice_draft_delete(p_invoice_id text)",
+     "funktion:invoice_line_add(p_invoice_id text, p_line jsonb)",
+     "funktion:invoice_line_delete(p_invoice_id text, p_line_id text)",
+     "funktion:invoice_line_update(p_invoice_id text, p_line_id text, p_patch jsonb)",
+     "funktion:invoice_meta_update(p_invoice_id text, p_patch jsonb)",
+     "funktion:invoice_tax_reduction_set(p_invoice_id text, p_tax_reduction jsonb)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001",
+    "20261018000001",
+    "20261018000003"
+   ]
+  },
+  {
+   "version": "20261018000006",
+   "appliceratNamn": "offer_attachment_atomic_rpc",
+   "repoFiler": [
+    "migrations/20261018000006_offer_attachment_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "535945499148c0c79e02d4fd84ec29c6",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:offer_attachment_append(p_attachment jsonb)",
+     "funktion:offer_attachment_soft_delete(p_attachment_id text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20260928000001"
+   ]
+  },
+  {
+   "version": "20261020000001",
+   "appliceratNamn": "ao_display_number",
+   "repoFiler": [
+    "migrations/20261020000001_ao_display_number.sql"
+   ],
+   "md5Applicerad": "790c89b461f54db46dada0dab61fcd64",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "tabell:public.ao_display_number_seq"
+    ],
+    "andrade": [
+     "funktion:work_order_create(p_ao jsonb, p_idempotency_key text, p_client_id text)"
+    ],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001"
+   ]
+  },
+  {
+   "version": "20261106000002",
+   "appliceratNamn": "staging_generic_keys_write_lockdown",
+   "repoFiler": [
+    "migrations/20261106000002_staging_generic_keys_write_lockdown.sql"
+   ],
+   "md5Applicerad": "d41d8cd98f00b204e9800998ecf8427e",
+   "tomIStaging": true,
+   "exaktMatchning": null,
+   "normaliseradLika": null,
+   "klass": "kandidat",
+   "klassKod": "kandidat",
+   "objekt": {
+    "nya": [
+     "funktion:_staging_business_key_required_perm(p_key text)",
+     "funktion:store_business_key_read_with_hash(p_key text)",
+     "funktion:store_business_key_write(p_key text, p_new_value jsonb, p_expected_hash text, p_caller_authorized boolean, p_actor_id text)",
+     "funktion:store_business_keys_read_hashes(p_keys text[])",
+     "funktion:store_read_all_with_hashes(p_business_keys text[])"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "objektIStagingFacit": true,
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261106000003",
+   "appliceratNamn": "staging_generic_keys_enforce_rls",
+   "repoFiler": [
+    "migrations/20261106000003_staging_generic_keys_enforce_rls.sql"
+   ],
+   "md5Applicerad": "d41d8cd98f00b204e9800998ecf8427e",
+   "tomIStaging": true,
+   "exaktMatchning": null,
+   "normaliseradLika": null,
+   "klass": "kandidat",
+   "klassKod": "kandidat",
+   "objekt": {
+    "nya": [
+     "policy:public.store.staging_generic_keys_no_direct_delete",
+     "policy:public.store.staging_generic_keys_no_direct_insert",
+     "policy:public.store.staging_generic_keys_no_direct_update"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "objektIStagingFacit": true,
+   "beroenden": [
+    "20260720000000",
+    "20261106000002"
+   ]
+  },
+  {
+   "version": "20261108000001",
+   "appliceratNamn": "staging_review_fixes",
+   "repoFiler": [
+    "migrations/20261108000001_staging_review_fixes.sql"
+   ],
+   "md5Applicerad": "d41d8cd98f00b204e9800998ecf8427e",
+   "tomIStaging": true,
+   "exaktMatchning": null,
+   "normaliseradLika": null,
+   "klass": "kandidat",
+   "klassKod": "kandidat",
+   "objekt": {
+    "nya": [
+     "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "objektIStagingFacit": true,
+   "beroenden": [
+    "20260720000000",
+    "20261106000002"
+   ]
+  },
+  {
+   "version": "20261116093820",
+   "appliceratNamn": "i5_sensitive_fields_write_atomic_20261116",
+   "repoFiler": [
+    "migrations/20261116093820_i5_sensitive_fields_write_atomic_20261116.sql"
+   ],
+   "md5Applicerad": "a3b81ebee90f2de1446e8458ce701695",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:sensitive_fields_write(p_object_id text, p_property_id text, p_fields jsonb, p_user_id uuid, p_user_email text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000004",
+    "20260720000007"
+   ]
+  },
+  {
+   "version": "20261116094016",
+   "appliceratNamn": "i3_work_order_checklist_atomic_20261116",
+   "repoFiler": [
+    "migrations/20260917000001_work_order_checklist_atomic_rpc.sql"
+   ],
+   "md5Applicerad": "a1c7a43ca13e96b63de870274cb62c64",
+   "tomIStaging": false,
+   "exaktMatchning": "rå fil = applicerad SQL",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:work_order_checklist_resolve(p_ao_id text, p_item_id text, p_avvikelse text, p_avvikelse_comment text, p_actor_name text, p_caller_can_view_all boolean, p_caller_staff_id text, p_avvikelse_image text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261116094236",
+   "appliceratNamn": "j1_invoice_idempotency_strong_identity_20261116",
+   "repoFiler": [
+    "migrations/20261116094236_j1_invoice_idempotency_strong_identity_20261116.sql"
+   ],
+   "md5Applicerad": "e1a98a0090a3f91ed63d8dcb4a7a85c5",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:invoice_draft_delete(p_invoice_id text, p_expected_revision bigint)"
+    ],
+    "andrade": [
+     "funktion:invoice_append_checked(p_invoice jsonb, p_idempotency_key text)"
+    ],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001",
+    "20261018000004",
+    "R-A"
+   ]
+  },
+  {
+   "version": "20261117085418",
+   "appliceratNamn": "vift_staging_preinstall_snapshot_20261117",
+   "repoFiler": [
+    "staging-only/migrations/20261117085418_vift_staging_preinstall_snapshot_20261117.sql"
+   ],
+   "md5Applicerad": "99f50d3665b4f086cd7997d98751db2b",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "staging-only",
+   "klassKod": "stagingOnly",
+   "objekt": {
+    "nya": [
+     "schema:vift_staging_backup_20261117",
+     "tabell:vift_staging_backup_20261117.fingerprints",
+     "tabell:vift_staging_backup_20261117.function_definitions",
+     "tabell:vift_staging_backup_20261117.op_idempotency",
+     "tabell:vift_staging_backup_20261117.store"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001",
+    "20261018000003",
+    "20261018000004",
+    "20261116094236",
+    "R-A"
+   ],
+   "stopKontroll": true
+  },
+  {
+   "version": "20261117085458",
+   "appliceratNamn": "staging_stamp_status_identity_scoped_cas_20261117",
+   "repoFiler": [
+    "migrations/20261117085458_staging_stamp_status_identity_scoped_cas_20261117.sql"
+   ],
+   "md5Applicerad": "6234601436bdc57211cab2f10ec14826",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:store_read_stamp_status(p_auth_user_id uuid)",
+     "funktion:store_write_stamp_status(p_auth_user_id uuid, p_active boolean, p_ts bigint, p_ao_id text, p_expected_revision bigint)",
+     "policy:public.stamp_status.stamp_status_insert_own",
+     "policy:public.stamp_status.stamp_status_select_own",
+     "policy:public.stamp_status.stamp_status_update_own",
+     "tabell:public.stamp_status"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20261117092227",
+   "appliceratNamn": "staging_invoice_n2_tombstone_20261117",
+   "repoFiler": [
+    "migrations/20261117092227_staging_invoice_n2_tombstone_20261117.sql"
+   ],
+   "md5Applicerad": "2ec8d8d64e3b324b23646168ec793938",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [],
+    "andrade": [
+     "funktion:invoice_append_checked(p_invoice jsonb, p_idempotency_key text)",
+     "funktion:invoice_draft_delete(p_invoice_id text, p_expected_revision bigint)"
+    ],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001",
+    "20261018000004",
+    "R-A"
+   ],
+   "stopKontroll": true
+  },
+  {
+   "version": "20261117092236",
+   "appliceratNamn": "staging_invoice_price_approval_a3a_atomic_20261117",
+   "repoFiler": [
+    "migrations/20261117092236_staging_invoice_price_approval_a3a_atomic_20261117.sql"
+   ],
+   "md5Applicerad": "cb2ea2d23074235c2d329dc6fa9ed0f5",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:_invoice_fixed_stale_snapshot(p_invoice jsonb, p_workorders jsonb)",
+     "funktion:invoice_stale_override_approve_commit(p_invoice_id text, p_expected_revision integer, p_entry jsonb)"
+    ],
+    "andrade": [
+     "funktion:invoice_set_status(p_invoice_id text, p_status text, p_expected_revision bigint, p_actor_id text)"
+    ],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001",
+    "20261018000003",
+    "20261018000004",
+    "R-A"
+   ],
+   "stopKontroll": true
+  },
+  {
+   "version": "20261117092246",
+   "appliceratNamn": "staging_a4_notifications_legacy_guard_20261117",
+   "repoFiler": [
+    "migrations/20261117092246_staging_a4_notifications_legacy_guard_20261117.sql"
+   ],
+   "md5Applicerad": "5804e8faf80cec746aeab6e57703bd47",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:_protect_notifications_and_legacy_keys()",
+     "trigger:store.protect_notifications_and_legacy_keys"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261116093820",
+    "20261117085458"
+   ]
+  },
+  {
+   "version": "20261120103758",
+   "appliceratNamn": "vift_crm12_offer_respond_commit_v5_20261120",
+   "repoFiler": [
+    "migrations/20261120103758_vift_crm12_offer_respond_commit_v5_20261120.sql"
+   ],
+   "md5Applicerad": "0e17ae78a75f063ba3b84ed3d0023680",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:offer_respond_commit(p_token text, p_offer_version integer, p_action text, p_name text, p_email text, p_comment text, p_decline_reason text, p_ip text, p_change_category text, p_request_id text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20260928000001",
+    "20261017000001",
+    "20261018000004"
+   ],
+   "stopKontroll": true
+  },
+  {
+   "version": "20261120103824",
+   "appliceratNamn": "vift_crm12_offer_token_open_commit_v1_20261120",
+   "repoFiler": [
+    "migrations/20261120103824_vift_crm12_offer_token_open_commit_v1_20261120.sql"
+   ],
+   "md5Applicerad": "412a2f9022a31453b1f24ea4397a1236",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:offer_token_open_commit(p_token text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261017000001",
+    "20261120103758"
+   ]
+  },
+  {
+   "version": "20261120103829",
+   "appliceratNamn": "vift_crm12_offer_email_prepare_commit_v3_20261120",
+   "repoFiler": [
+    "migrations/20261120103829_vift_crm12_offer_email_prepare_commit_v3_20261120.sql"
+   ],
+   "md5Applicerad": "fef049716410ecba43d854ad02b9f860",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:offer_email_prepare_commit(p_offer_id text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261120103758"
+   ]
+  },
+  {
+   "version": "20261124145455",
+   "appliceratNamn": "work_order_checklist_progress_20261123000002",
+   "repoFiler": [
+    "migrations/20261123000002_work_order_checklist_progress.sql"
+   ],
+   "md5Applicerad": "fa50b612d34ae306ce5f2ee7d354349e",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:work_order_checklist_set_state(p_ao_id text, p_item_id text, p_action text, p_text text, p_description text, p_comment text, p_image text, p_actor_name text, p_caller_staff_id text, p_caller_can_view_all boolean, p_caller_can_edit boolean)"
+    ],
+    "andrade": [
+     "funktion:work_order_checklist_resolve(p_ao_id text, p_item_id text, p_avvikelse text, p_avvikelse_comment text, p_actor_name text, p_caller_can_view_all boolean, p_caller_staff_id text, p_avvikelse_image text)"
+    ],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [
+    "funktion:work_order_checklist_set_state(p_ao_id text, p_item_id text, p_action text, p_text text, p_description text, p_comment text, p_image text, p_actor_name text, p_caller_staff_id text, p_caller_can_view_all boolean, p_caller_can_edit boolean)"
+   ],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261124145958",
+   "appliceratNamn": "activity_log_append_20261124000001",
+   "repoFiler": [
+    "migrations/20261124000001_activity_log_append.sql"
+   ],
+   "md5Applicerad": "36ba229bed12d6b3cc768163c7f949b7",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:activity_log_append(p_entry jsonb, p_max integer)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261124150357",
+   "appliceratNamn": "work_order_log_ops_20261124000002",
+   "repoFiler": [
+    "migrations/20261124000002_work_order_log_ops.sql"
+   ],
+   "md5Applicerad": "bb669b10fab2c7078b0e59a8def0e863",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:work_order_log_append(p_ao_id text, p_entry jsonb, p_caller_staff_id text, p_caller_can_view_all boolean)",
+     "funktion:work_order_log_remove(p_ao_id text, p_entry_id text, p_caller_staff_id text, p_caller_can_view_all boolean, p_caller_can_edit boolean)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261124145455"
+   ]
+  },
+  {
+   "version": "20261124150650",
+   "appliceratNamn": "offer_attachment_patch_20261125000001",
+   "repoFiler": [
+    "migrations/20261125000001_offer_attachment_patch.sql"
+   ],
+   "md5Applicerad": "cd29d57be27a3d6e11e10104d80bca1c",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:offer_attachment_patch(p_attachment_id text, p_patch jsonb)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20261018000006"
+   ]
+  },
+  {
+   "version": "20261124151118",
+   "appliceratNamn": "workorder_images_bucket_20261124000003",
+   "repoFiler": [
+    "migrations/20261124000003_workorder_images_bucket.sql"
+   ],
+   "md5Applicerad": "693c68ee81926990e8a7177bfc0447dc",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "bucket:workorder-images",
+     "policy:storage.objects.wo_images_storage_delete",
+     "policy:storage.objects.wo_images_storage_insert",
+     "policy:storage.objects.wo_images_storage_select"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20261124152842",
+   "appliceratNamn": "vift_branding_bucket_20261124000004",
+   "repoFiler": [
+    "migrations/20261124152842_vift_branding_bucket_20261124000004.sql"
+   ],
+   "md5Applicerad": "ace9484676bf9384a92ef25fdcede786",
+   "tomIStaging": false,
+   "exaktMatchning": "återställd (innehållet efter INNEHÅLL = applicerad SQL)",
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "bucket:vift-branding",
+     "policy:storage.objects.vift_branding_service_insert",
+     "policy:storage.objects.vift_branding_service_select",
+     "policy:storage.objects.vift_branding_service_update"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": []
+  },
+  {
+   "version": "20261124160425",
+   "appliceratNamn": "project_documents_20260907_20260908",
+   "repoFiler": [
+    "migrations/20260907000001_storage_project_documents.sql",
+    "migrations/20260908000001_project_documents_atomic_rpc.sql",
+    "migrations/20260908000002_project_documents_r2_lastchanged_and_rls.sql"
+   ],
+   "md5Applicerad": "6ac621f7c7906bc7f13bf31dac528cd3",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": false,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "bucket:project-documents",
+     "funktion:project_documents_append(p_new_doc jsonb)",
+     "funktion:project_documents_finalize_delete(p_doc_id text, p_expected_project_id text)",
+     "funktion:project_documents_update_one(p_doc_id text, p_expected_project_id text, p_patch jsonb)",
+     "policy:public.store.store_project_documents_no_direct_delete",
+     "policy:public.store.store_project_documents_no_direct_insert",
+     "policy:public.store.store_project_documents_no_direct_update",
+     "policy:storage.objects.project-documents service_role delete",
+     "policy:storage.objects.project-documents service_role insert",
+     "policy:storage.objects.project-documents service_role select"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "jamfordSomGrupp": "20261124160425",
+   "kommentarsskillnad": [
+    "funktion:project_documents_append(p_new_doc jsonb)",
+    "funktion:project_documents_finalize_delete(p_doc_id text, p_expected_project_id text)",
+    "funktion:project_documents_update_one(p_doc_id text, p_expected_project_id text, p_patch jsonb)"
+   ],
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "version": "20261124201228",
+   "appliceratNamn": "store_lastchanged_bump",
+   "repoFiler": [
+    "migrations/20261125000002_store_lastchanged_bump.sql"
+   ],
+   "md5Applicerad": "d1beaf9ab418388d3bcfb87790ed3656",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:_store_bump_lastchanged()",
+     "trigger:store.store_bump_lastchanged"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20260928000001",
+    "20261117092236",
+    "20261120103758",
+    "20261120103824",
+    "20261120103829"
+   ]
+  },
+  {
+   "version": "20261124210432",
+   "appliceratNamn": "store_read_by_role_functions",
+   "repoFiler": [
+    "migrations/20261125000003_store_read_by_role.sql"
+   ],
+   "del": 1,
+   "md5Applicerad": "24d73e506c9b4d5284ff82fe1bc1492e",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "funktion:store_read_all_with_hashes_projected(p_business_keys text[], p_perms text[])",
+     "funktion:vift_caller_perms()",
+     "funktion:vift_store_full_access(p_key text, p_perms text[])",
+     "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[])"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "jamfordSomGrupp": "20261124210432",
+   "kommentarsskillnad": [
+    "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[])"
+   ],
+   "beroenden": [
+    "20260720000000",
+    "20260720000001",
+    "20261106000002"
+   ]
+  },
+  {
+   "version": "20261124210747",
+   "appliceratNamn": "store_read_by_role_policy",
+   "repoFiler": [
+    "migrations/20261125000003_store_read_by_role.sql"
+   ],
+   "del": 2,
+   "md5Applicerad": "6713032fa38e866ed55d148a35f4855f",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad",
+   "objekt": {
+    "nya": [
+     "policy:public.store.store_read_by_role"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "jamfordSomGrupp": "20261124210432",
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000",
+    "20260720000001",
+    "20261106000002",
+    "20261124210432"
+   ]
+  },
+  {
+   "version": "20261124211128",
+   "appliceratNamn": "e2e_purge_offer_artifacts",
+   "repoFiler": [
+    "staging-only/migrations/20261125000004_e2e_purge_offer_artifacts.sql"
+   ],
+   "md5Applicerad": "c4a68fdc92cf19015b95c1e8ccb16e36",
+   "tomIStaging": false,
+   "exaktMatchning": null,
+   "normaliseradLika": true,
+   "klass": "staging-only",
+   "klassKod": "stagingOnly",
+   "objekt": {
+    "nya": [
+     "funktion:e2e_purge_offer_artifacts(p_offer_id text)"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektLikaMedAppliceradSql": true,
+   "kommentarsskillnad": [],
+   "beroenden": [
+    "20260720000000"
+   ]
+  }
+ ],
+ "repoFiler": [
+  {
+   "fil": "migrations/20260720000000_create_core_tables.sql",
+   "md5": "2169dfae44741c216d93213ecf550249",
+   "stagingVersioner": [
+    "20260720000000"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000001_rls_store_table.sql",
+   "md5": "e30bc25900d00b7e43006e8161ef8a3b",
+   "stagingVersioner": [
+    "20260720000001"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000002_storage_offer_attachments.sql",
+   "md5": "12f2f3b131558adeaab0a6406282a454",
+   "stagingVersioner": [
+    "20260720000002"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000003_pg_cron_service_monitor.sql",
+   "md5": "514c84b59a1cbb0f533c3c1220329c74",
+   "stagingVersioner": [
+    "20260720000003"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000004_property_sensitive_access.sql",
+   "md5": "acc3d6d2fcd9ef6be48b662798308cfc",
+   "stagingVersioner": [
+    "20260720000004"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000005_store_key_rls.sql",
+   "md5": "8df6239c65ae8291cc2f21f95ce047ce",
+   "stagingVersioner": [
+    "20260720000005"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000006_app_users_lifecycle.sql",
+   "md5": "94439247a4665d0375ee97567300463e",
+   "stagingVersioner": [
+    "20260720000006"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000007_sensitive_access_audit.sql",
+   "md5": "8401f9f0a67e1abfea54756178b31862",
+   "stagingVersioner": [
+    "20260720000007"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260720000008_strip_passwords_from_store.sql",
+   "md5": "af7d63f0571719978165e39ca338870e",
+   "stagingVersioner": [
+    "20260720000008"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260907000001_storage_project_documents.sql",
+   "md5": "d2c120c031bfaf8c26eea62bf057b51f",
+   "stagingVersioner": [
+    "20261124160425"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260908000001_project_documents_atomic_rpc.sql",
+   "md5": "9c77089390f4f2d3c13b74ba47f3cc28",
+   "stagingVersioner": [
+    "20261124160425"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260908000002_project_documents_r2_lastchanged_and_rls.sql",
+   "md5": "d6854403cf2a001977e1e07cab83a9dc",
+   "stagingVersioner": [
+    "20261124160425"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260917000001_work_order_checklist_atomic_rpc.sql",
+   "md5": "a1c7a43ca13e96b63de870274cb62c64",
+   "stagingVersioner": [
+    "20261116094016"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20260928000001_offer_events_atomic_rpc.sql",
+   "md5": "1ba661d4377af8fe98d3a862c6c424ad",
+   "stagingVersioner": [
+    "20260928000001"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261017000001_ao_time_atomic_rpc.sql",
+   "md5": "dec91be7538c0878c511e23607997ff2",
+   "stagingVersioner": [
+    "20261017000001"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261018000001_rondering_pass_atomic_rpc.sql",
+   "md5": "b681a3d56397e7c2d2682ce991a5aede",
+   "stagingVersioner": [
+    "20261018000001"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261018000003_invoice_set_status_atomic_rpc.sql",
+   "md5": "d65620dfafd1b79e82512be36ac7aabf",
+   "stagingVersioner": [
+    "20261018000003"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261018000004_invoice_lines_and_create_atomic_rpc.sql",
+   "md5": "4a4f25719a0630003581326756035cd2",
+   "stagingVersioner": [
+    "20261018000004"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261018000006_offer_attachment_atomic_rpc.sql",
+   "md5": "a6a408bdf64aa7016f029fec7b7e06da",
+   "stagingVersioner": [
+    "20261018000006"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261020000001_ao_display_number.sql",
+   "md5": "34aa35ccb56306bbdd2b52d436843a98",
+   "stagingVersioner": [
+    "20261020000001"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261024000001_rekonstruerad_faktura_revisionskontroll.sql",
+   "md5": "29e2bb6b1f8261f244014a0869e41541",
+   "stagingVersioner": [],
+   "klass": "rekonstruerad (R-A–R-E) – objekt finns redan i STAGING, får inte köras som ny",
+   "klassKod": "rekonstruerad",
+   "rKod": "R-A",
+   "objekt": {
+    "nya": [
+     "funktion:_invoice_calc_financial(p_inv jsonb)",
+     "funktion:_invoice_financial_check(p_inv jsonb)",
+     "funktion:invoice_discount_set(p_invoice_id text, p_discount jsonb, p_expected_revision bigint)",
+     "funktion:invoice_line_add(p_invoice_id text, p_line jsonb, p_expected_revision bigint)",
+     "funktion:invoice_line_delete(p_invoice_id text, p_line_id text, p_expected_revision bigint)",
+     "funktion:invoice_line_update(p_invoice_id text, p_line_id text, p_patch jsonb, p_expected_revision bigint)",
+     "funktion:invoice_meta_update(p_invoice_id text, p_patch jsonb, p_expected_revision bigint)",
+     "funktion:invoice_set_status(p_invoice_id text, p_status text, p_expected_revision bigint, p_actor_id text)",
+     "funktion:invoice_tax_reduction_set(p_invoice_id text, p_tax_reduction jsonb, p_expected_revision bigint)"
+    ],
+    "andrade": [],
+    "borttagna": [
+     "funktion:invoice_discount_set(p_invoice_id text, p_discount jsonb)",
+     "funktion:invoice_draft_delete(p_invoice_id text)",
+     "funktion:invoice_line_add(p_invoice_id text, p_line jsonb)",
+     "funktion:invoice_line_delete(p_invoice_id text, p_line_id text)",
+     "funktion:invoice_line_update(p_invoice_id text, p_line_id text, p_patch jsonb)",
+     "funktion:invoice_meta_update(p_invoice_id text, p_patch jsonb)",
+     "funktion:invoice_set_status(p_invoice_id text, p_status text, p_actor_id text)",
+     "funktion:invoice_tax_reduction_set(p_invoice_id text, p_tax_reduction jsonb)"
+    ]
+   },
+   "objektIStagingFacit": true,
+   "objektLikaIKedjaB": true,
+   "beroenden": [
+    "20260720000000",
+    "20261018000003",
+    "20261018000004"
+   ]
+  },
+  {
+   "fil": "migrations/20261106000002_staging_generic_keys_write_lockdown.sql",
+   "md5": "d856daeab08fec361744bef75f1c4fec",
+   "stagingVersioner": [
+    "20261106000002"
+   ],
+   "klass": "kandidat",
+   "klassKod": "kandidat"
+  },
+  {
+   "fil": "migrations/20261106000003_staging_generic_keys_enforce_rls.sql",
+   "md5": "e7b876ac0e4e1d167dcec25dbf4f1b86",
+   "stagingVersioner": [
+    "20261106000003"
+   ],
+   "klass": "kandidat",
+   "klassKod": "kandidat"
+  },
+  {
+   "fil": "migrations/20261108000001_staging_review_fixes.sql",
+   "md5": "2ae7bfd0bbe5778d8d33e040ab36639e",
+   "stagingVersioner": [
+    "20261108000001"
+   ],
+   "klass": "kandidat",
+   "klassKod": "kandidat"
+  },
+  {
+   "fil": "migrations/20261116093820_i5_sensitive_fields_write_atomic_20261116.sql",
+   "md5": "8042532ecd89e6247e9602ece8226d71",
+   "stagingVersioner": [
+    "20261116093820"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261116094236_j1_invoice_idempotency_strong_identity_20261116.sql",
+   "md5": "04f9f5344a1f2575fb1232ec1086bbf9",
+   "stagingVersioner": [
+    "20261116094236"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261117085458_staging_stamp_status_identity_scoped_cas_20261117.sql",
+   "md5": "19b8f1985150ed696ee87417af8edf2b",
+   "stagingVersioner": [
+    "20261117085458"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261117092227_staging_invoice_n2_tombstone_20261117.sql",
+   "md5": "2b9af5b8a16143034f1702f39eab1091",
+   "stagingVersioner": [
+    "20261117092227"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261117092236_staging_invoice_price_approval_a3a_atomic_20261117.sql",
+   "md5": "fcd6a4ad81516a92ff283bd65fe3a7fb",
+   "stagingVersioner": [
+    "20261117092236"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261117092246_staging_a4_notifications_legacy_guard_20261117.sql",
+   "md5": "61188e0439855cc3d78612e8159fd586",
+   "stagingVersioner": [
+    "20261117092246"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261120103758_vift_crm12_offer_respond_commit_v5_20261120.sql",
+   "md5": "f037d57ea31c56b8d285cf1816667362",
+   "stagingVersioner": [
+    "20261120103758"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261120103824_vift_crm12_offer_token_open_commit_v1_20261120.sql",
+   "md5": "a41885b6d6b1ebfc5745ff171aabec1a",
+   "stagingVersioner": [
+    "20261120103824"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261120103829_vift_crm12_offer_email_prepare_commit_v3_20261120.sql",
+   "md5": "03de7a007e4e12ade588f9afc882729e",
+   "stagingVersioner": [
+    "20261120103829"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261123000002_work_order_checklist_progress.sql",
+   "md5": "bdebc955295059f3984cbcfa60c691da",
+   "stagingVersioner": [
+    "20261124145455"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261124000001_activity_log_append.sql",
+   "md5": "b1fbaaaee7de6a501d71352cd46ae3ff",
+   "stagingVersioner": [
+    "20261124145958"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261124000002_work_order_log_ops.sql",
+   "md5": "14d4578b1f71ce80500c70eeab81f3b7",
+   "stagingVersioner": [
+    "20261124150357"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261124000003_workorder_images_bucket.sql",
+   "md5": "f5a84958f0eb46527285c75a1da14c9f",
+   "stagingVersioner": [
+    "20261124151118"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261124152842_vift_branding_bucket_20261124000004.sql",
+   "md5": "da2380d5027e7d2c9e8423283668d25c",
+   "stagingVersioner": [
+    "20261124152842"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261125000001_offer_attachment_patch.sql",
+   "md5": "fc9c511fb4bcbbe42a9c2c225107509c",
+   "stagingVersioner": [
+    "20261124150650"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261125000002_store_lastchanged_bump.sql",
+   "md5": "eac57df8f32f782152b2c32d2ba4dd5a",
+   "stagingVersioner": [
+    "20261124201228"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261125000003_store_read_by_role.sql",
+   "md5": "4d7aabc41042ccc9a8d452ae073d977a",
+   "stagingVersioner": [
+    "20261124210432",
+    "20261124210747"
+   ],
+   "klass": "installerad – får ALDRIG köras igen",
+   "klassKod": "installerad"
+  },
+  {
+   "fil": "migrations/20261127000001_rekonstruerad_store_skyddstrigger.sql",
+   "md5": "2a073ca0d0cad33106455c98da1646d4",
+   "stagingVersioner": [],
+   "klass": "rekonstruerad (R-A–R-E) – objekt finns redan i STAGING, får inte köras som ny",
+   "klassKod": "rekonstruerad",
+   "rKod": "R-B",
+   "objekt": {
+    "nya": [
+     "funktion:_protect_critical_store_keys()",
+     "trigger:store.protect_critical_store_keys"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektIStagingFacit": true,
+   "objektLikaIKedjaB": true,
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "fil": "migrations/20261127000002_rekonstruerad_time_entry_rpc.sql",
+   "md5": "80a16d78ab72c6082c658431b7492ebf",
+   "stagingVersioner": [],
+   "klass": "rekonstruerad (R-A–R-E) – objekt finns redan i STAGING, får inte köras som ny",
+   "klassKod": "rekonstruerad",
+   "rKod": "R-C",
+   "objekt": {
+    "nya": [
+     "funktion:time_entry_patch(p_entry_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_can_manage_others boolean)",
+     "funktion:time_entry_set_attested(p_entry_id text, p_attested boolean, p_idempotency_key text, p_caller_staff_id text, p_caller_can_attest boolean)",
+     "funktion:time_entry_soft_delete(p_entry_id text, p_idempotency_key text, p_caller_staff_id text, p_caller_can_manage_others boolean)"
+    ],
+    "andrade": [
+     "funktion:time_entry_create(p_entry jsonb, p_idempotency_key text, p_client_id text)"
+    ],
+    "borttagna": [
+     "funktion:time_entry_patch(p_entry_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text)",
+     "funktion:time_entry_soft_delete(p_entry_id text, p_idempotency_key text)"
+    ]
+   },
+   "objektIStagingFacit": true,
+   "objektLikaIKedjaB": true,
+   "beroenden": [
+    "20260720000000",
+    "20261017000001"
+   ]
+  },
+  {
+   "fil": "migrations/20261127000003_rekonstruerad_store_restrictive_policyer.sql",
+   "md5": "e64cbd7ceae3823fd38faa1a853a04b1",
+   "stagingVersioner": [],
+   "klass": "rekonstruerad (R-A–R-E) – objekt finns redan i STAGING, får inte köras som ny",
+   "klassKod": "rekonstruerad",
+   "rKod": "R-D",
+   "objekt": {
+    "nya": [
+     "policy:public.store.store_ao_time_no_direct_delete",
+     "policy:public.store.store_ao_time_no_direct_insert",
+     "policy:public.store.store_ao_time_no_direct_update",
+     "policy:public.store.store_invoices_no_direct_delete",
+     "policy:public.store.store_invoices_no_direct_insert",
+     "policy:public.store.store_invoices_no_direct_update",
+     "policy:public.store.store_offerattachments_no_direct_delete",
+     "policy:public.store.store_offerattachments_no_direct_insert",
+     "policy:public.store.store_offerattachments_no_direct_update",
+     "policy:public.store.store_ronderingspass_no_direct_delete",
+     "policy:public.store.store_ronderingspass_no_direct_insert",
+     "policy:public.store.store_ronderingspass_no_direct_update",
+     "policy:public.store.store_timeentries_no_direct_select",
+     "policy:public.store.store_workorders_no_direct_select"
+    ],
+    "andrade": [],
+    "borttagna": []
+   },
+   "objektIStagingFacit": true,
+   "objektLikaIKedjaB": true,
+   "beroenden": [
+    "20260720000000"
+   ]
+  },
+  {
+   "fil": "migrations/20261127000004_rekonstruerad_grants_och_store_policy.sql",
+   "md5": "182a0c31933e47b9ff356a422298860d",
+   "stagingVersioner": [],
+   "klass": "rekonstruerad (R-A–R-E) – objekt finns redan i STAGING, får inte köras som ny",
+   "klassKod": "rekonstruerad",
+   "rKod": "R-E",
+   "objekt": {
+    "nya": [],
+    "andrade": [
+     "funktion:check_app_users_health()",
+     "funktion:deactivate_vift_user(p_user_id uuid)",
+     "funktion:provision_vift_user(p_user_id uuid, p_staff_id text, p_role_id text, p_is_admin boolean)",
+     "policy:public.store.store_active_write_safe"
+    ],
+    "borttagna": []
+   },
+   "objektIStagingFacit": true,
+   "objektLikaIKedjaB": true,
+   "beroenden": [
+    "20260720000000",
+    "20260720000001",
+    "20260928000001"
+   ]
+  },
+  {
+   "fil": "staging-only/migrations/20261117085418_vift_staging_preinstall_snapshot_20261117.sql",
+   "md5": "6e1281dd56a5d693cd6ec146feadd5a4",
+   "stagingVersioner": [
+    "20261117085418"
+   ],
+   "klass": "staging-only",
+   "klassKod": "stagingOnly"
+  },
+  {
+   "fil": "staging-only/migrations/20261125000004_e2e_purge_offer_artifacts.sql",
+   "md5": "f595917ee017c8f01206a0a584f00c9f",
+   "stagingVersioner": [
+    "20261124211128"
+   ],
+   "klass": "staging-only",
+   "klassKod": "stagingOnly"
+  },
+  {
+   "fil": "forslag-ej-applicerade/20261120000001_PROPOSAL_push_subscriptions_index.sql",
+   "md5": "d8d9bda8b2454840e5b9c6f07f91d425",
+   "stagingVersioner": [],
+   "klass": "förslag – ej applicerat, ingår inte i kedjan",
+   "klassKod": "forslag"
+  },
+  {
+   "fil": "forslag-ej-applicerade/20261120000002_PROPOSAL_timeentries_read_lockdown.sql",
+   "md5": "a267f89d3d24430e190607271a66cc98",
+   "stagingVersioner": [],
+   "klass": "förslag – ej applicerat, ingår inte i kedjan",
+   "klassKod": "forslag"
+  },
+  {
+   "fil": "forslag-ej-applicerade/20261123000001_PROPOSAL_work_order_log_ops.sql",
+   "md5": "e16b1df1b4939d380414f8adf9b0c18f",
+   "stagingVersioner": [],
+   "klass": "förslag – ej applicerat, ingår inte i kedjan",
+   "klassKod": "forslag"
+  }
+ ]
+}
