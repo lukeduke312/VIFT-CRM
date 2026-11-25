@@ -143,7 +143,7 @@ const WorkOrderService = {
           ao._syncFailed = r.error;
           console.error('[WorkOrderService] Serverskrivning avvisad för', ao.id, ':', r.error);
           if (typeof opts.onSettled !== 'function' && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
-            AOTimeSyncService.reportUnhandledRejection('ao', WorkOrderService.displayNumberOrPending(ao), r.error);
+            AOTimeSyncService.reportUnhandledRejection('ao', WorkOrderService.displayNumberOrPending(ao), WorkOrderService.serverErrorText(r.error, r.reason));
           }
         }
         // else: transient, stannar i outboxen (ao._pendingSync kvarstår true)
@@ -1309,66 +1309,148 @@ const WorkOrderService = {
     Sidebar.updateBadges();
   },
 
+  /* T3-B (AP-FEL-1, AP-G, 2026-11-28): personaldialogen hanterar BARA personal och
+     ansvarig. Status, datum och pool rörs aldrig här (den tidigare rutan "Flytta till
+     arbetspool" var förikryssad för pool-AO och rensade personal och ansvarig vid varje
+     sparning). Får en pool-AO personal sätts poolOpen:false, så att den inte återvänder
+     till öppen pool om personalen senare tas bort (servern gör samma sak). Returnerar
+     {added, removed} — de FAKTISKT ändrade personerna, för notiser efter serverbekräftelse.
+     "Släpp till öppen pool" och "Ta bort datum" är egna åtgärder (releaseToPool,
+     removeSchedule). opts.moveToPool stöds inte längre och ignoreras. */
   updateStaff(aoId, opts = {}, syncOpts) {
     const ao = getAO(aoId);
-    if (!ao) return;
+    if (!ao) return null;
     const user = state.currentUser;
     const by = user ? `${user.firstName} ${user.lastName}`.trim() : 'Okänd';
-    const { staffIds = [], responsibleStaffId = '', moveToPool = false } = opts;
+    const { staffIds = [], responsibleStaffId = '' } = opts;
     const oldStaff = [...(ao.staff || [])];
     const oldResp  = ao.responsibleStaffId || '';
     ao.log = ao.log || [];
-
-    if (moveToPool) {
-      ao.staff = [];
-      ao.status = 'pool';
-      ao.responsibleStaffId = '';
-      ao.log.push({ id: newEntryId('L'), type: 'staff_changed', text: `${by} flyttade ordern till arbetspoolen`, userName: by, timestamp: new Date().toISOString() });
-    } else {
-      const staffName = id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; };
-      const added   = staffIds.filter(id => !oldStaff.includes(id));
-      const removed = oldStaff.filter(id => !staffIds.includes(id));
-      ao.staff = staffIds;
-      ao.responsibleStaffId = responsibleStaffId;
-      if (ao.status === 'pool' && staffIds.length > 0) ao.status = 'planerad';
-      const t = Date.now();
-      if (added.length > 0)
-        ao.log.push({ id: newEntryId('L'),   type: 'staff_added',       text: `${by} lade till: ${added.map(staffName).join(', ')}`,   userName: by, timestamp: new Date().toISOString() });
-      if (removed.length > 0)
-        ao.log.push({ id: newEntryId('L'), type: 'staff_removed',   text: `${by} tog bort: ${removed.map(staffName).join(', ')}`, userName: by, timestamp: new Date().toISOString() });
-      if (responsibleStaffId !== oldResp)
-        ao.log.push({ id: newEntryId('L'), type: 'staff_responsible', text: `${by} satte ansvarig: ${responsibleStaffId ? staffName(responsibleStaffId) : 'Ingen'}`, userName: by, timestamp: new Date().toISOString() });
-    }
+    const staffName = id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; };
+    const added   = staffIds.filter(id => !oldStaff.includes(id));
+    const removed = oldStaff.filter(id => !staffIds.includes(id));
+    ao.staff = staffIds.slice();
+    ao.responsibleStaffId = responsibleStaffId;
+    const patch = { staff: ao.staff, responsibleStaffId: ao.responsibleStaffId };
+    if (ao.status === 'pool' && ao.staff.length > 0 && oldStaff.length === 0) { ao.poolOpen = false; patch.poolOpen = false; }
+    if (added.length > 0)
+      ao.log.push({ id: newEntryId('L'), type: 'staff_added', text: `${by} lade till: ${added.map(staffName).join(', ')}`, userName: by, timestamp: new Date().toISOString() });
+    if (removed.length > 0)
+      ao.log.push({ id: newEntryId('L'), type: 'staff_removed', text: `${by} tog bort: ${removed.map(staffName).join(', ')}`, userName: by, timestamp: new Date().toISOString() });
+    if (responsibleStaffId !== oldResp)
+      ao.log.push({ id: newEntryId('L'), type: 'staff_responsible', text: `${by} satte ansvarig: ${responsibleStaffId ? staffName(responsibleStaffId) : 'Ingen'}`, userName: by, timestamp: new Date().toISOString() });
+    if (added.length || removed.length || responsibleStaffId !== oldResp) patch.log = ao.log;
 
     ao.updatedAt = new Date().toISOString();
-    ActivityService.log('work_order_updated', `Personal ändrad på ${ao.id}`, { workOrderId: aoId, customerId: ao.customerId });
-    this._syncAO(ao, { staff: ao.staff, responsibleStaffId: ao.responsibleStaffId, status: ao.status, log: ao.log, updatedAt: ao.updatedAt }, syncOpts);
+    if (added.length || removed.length) ActivityService.log('work_order_updated', `Personal ändrad på ${ao.id}`, { workOrderId: aoId, customerId: ao.customerId });
+    this._syncAO(ao, patch, syncOpts);
     persist();
     Sidebar.updateBadges();
+    return { added, removed };
   },
 
-  takeFromPool(aoId) {
-    const ao   = getAO(aoId);
+  /* T3-B (AP-G): "Släpp till öppen pool" — uttrycklig arbetsledaråtgärd (ao_edit).
+     Tar bort personal, ansvarig och utförandedatum, sätter status pool och
+     poolOpen:true. Loggar staff_removed och released_to_pool. Ingen notis. */
+  releaseToPool(aoId, syncOpts) {
+    const ao = getAO(aoId);
+    if (!ao) return null;
     const user = state.currentUser;
-    if (!ao || ao.status !== 'pool' || !user) return null;
-    if (!(ao.staff || []).includes(user.id)) {
-      ao.staff = [...(ao.staff || []), user.id];
-    }
-    ao.status    = 'planerad';
-    ao.updatedAt = new Date().toISOString();
-    const staffName = `${user.firstName} ${user.lastName}`.trim();
+    const by = user ? `${user.firstName} ${user.lastName}`.trim() : 'Okänd';
+    const staffName = id => { const s = getStaff(id); return s ? `${s.firstName} ${s.lastName}` : id; };
+    const removed = [...(ao.staff || [])];
     ao.log = ao.log || [];
-    ao.log.push({
-      id: newEntryId('L'), type: 'taken_from_pool',
-      text: `${staffName} tog jobbet från arbetspoolen`,
-      userName: staffName, timestamp: new Date().toISOString()
-    });
-    ActivityService.log('work_order_assigned',
-      `${staffName} tog ${ao.id} från arbetspoolen`,
-      { workOrderId: aoId, customerId: ao.customerId });
-    this._syncAO(ao, { staff: ao.staff, status: ao.status, log: ao.log, updatedAt: ao.updatedAt });
+    const t = new Date().toISOString();
+    if (removed.length) ao.log.push({ id: newEntryId('L'), type: 'staff_removed', text: `${by} tog bort: ${removed.map(staffName).join(', ')}`, userName: by, timestamp: t });
+    ao.log.push({ id: newEntryId('L'), type: 'released_to_pool', text: `${by} släppte ordern till öppen pool`, userName: by, timestamp: t });
+    Object.assign(ao, { staff: [], responsibleStaffId: '', scheduledDate: '', scheduledStart: '', scheduledEnd: '', status: 'pool', poolOpen: true, updatedAt: t });
+    this._syncAO(ao, { staff: [], responsibleStaffId: '', scheduledDate: '', scheduledStart: '', scheduledEnd: '', status: 'pool', poolOpen: true, log: ao.log }, syncOpts);
+    persist();
+    Sidebar.updateBadges();
+    return { removed };
+  },
+
+  /* T3-B (AP-G): "Ta bort datum" — rensar bara utförandedatumet. Personal, ansvarig,
+     status och poolOpen rörs inte. Loggar schedule_removed. Ingen notis. */
+  removeSchedule(aoId, syncOpts) {
+    const ao = getAO(aoId);
+    if (!ao) return null;
+    const user = state.currentUser;
+    const by = user ? `${user.firstName} ${user.lastName}`.trim() : 'Okänd';
+    ao.log = ao.log || [];
+    ao.log.push({ id: newEntryId('L'), type: 'schedule_removed', text: `${by} tog bort datumet${ao.scheduledDate ? ' (' + ao.scheduledDate + ')' : ''}`, userName: by, timestamp: new Date().toISOString() });
+    Object.assign(ao, { scheduledDate: '', scheduledStart: '', scheduledEnd: '', updatedAt: new Date().toISOString() });
+    this._syncAO(ao, { scheduledDate: '', scheduledStart: '', scheduledEnd: '', log: ao.log }, syncOpts);
     persist();
     Sidebar.updateBadges();
     return ao;
+  },
+
+  /* T3-B: AO-behörighet med samma övergångsregel som servern (_vift_ao_eff_perms):
+     en äldre roll (ingen av ao_start_own/ao_complete_own/ao_pool_take) med ao_complete
+     men utan ao_view_all/ao_edit behandlas som om den hade de tre nya. Bara presentation;
+     servern avgör. */
+  NEW_AO_PERMS: ['ao_start_own', 'ao_complete_own', 'ao_pool_take'],
+  aoCan(perm) {
+    if (typeof Auth === 'undefined') return false;
+    if (Auth.can(perm)) return true;
+    if (!this.NEW_AO_PERMS.includes(perm)) return false;
+    if (this.NEW_AO_PERMS.some(p => Auth.can(p))) return false;
+    return Auth.can('ao_complete') && !Auth.can('ao_view_all') && !Auth.can('ao_edit');
+  },
+  /* Öppen pool (AP-A): status pool, poolOpen inte false, ingen personal, inte arkiverad/borttagen. */
+  isOpenPool(ao) {
+    return !!ao && ao.status === 'pool' && ao.poolOpen !== false && !(ao.staff || []).length && !ao.archived && !ao.deleted;
+  },
+
+  /* T3-B: begripliga texter för serverns felkoder (BEHORIGHETSMATRIS §4). */
+  serverErrorText(error, reason) {
+    const R = {
+      not_assigned: 'Du är inte tilldelad arbetsordern.',
+      pool_not_open: 'Arbetsordern ligger inte i den öppna poolen.',
+      invoice_path_required: 'Faktureringsstatus ändras bara via fakturaunderlaget.',
+      field_not_allowed: 'Du får inte ändra de fälten.',
+      not_own_row: 'Du kan bara ändra eller ta bort dina egna materialrader.',
+      invoice_not_linked: 'Fakturaunderlaget hänvisar inte till arbetsordern.',
+    };
+    const E = {
+      already_assigned: 'Jobbet har redan tagits av någon annan.',
+      ao_locked: 'Arbetsordern är fakturerad, avbruten, arkiverad eller borttagen och kan inte ändras.',
+      invalid_source_status: 'Åtgärden går inte i arbetsorderns nuvarande status.',
+      idempotency_key_conflict: 'Ändringen krockade med en tidigare sparning — läs om och försök igen.',
+      forbidden: 'Du saknar behörighet för den åtgärden.',
+      not_found: 'Arbetsordern finns inte längre.',
+      stale_write: 'Arbetsordern har ändrats av någon annan — läs om och försök igen.',
+    };
+    return (reason && R[reason]) || E[error] || error || 'okänt fel';
+  },
+
+  /* T3-B (SÄK-4, AP-F): "Ta jobbet" går till servern (ao-time-write take_from_pool →
+     work_order_pool_take, radlåst). Ingen lokal mutation före serverns svar: först när
+     servern bekräftat ersätts den lokala posten med serverns. Vid 409 already_assigned
+     (någon annan hann först) läses listan om och anroparen får {ok:false, error}. */
+  async takeFromPool(aoId) {
+    const ao   = getAO(aoId);
+    const user = state.currentUser;
+    if (!ao || !user) return { ok: false, error: 'not_found' };
+    if (typeof AOTimeSyncService === 'undefined' || typeof AOTimeSyncService._call !== 'function') return { ok: false, error: 'sync_unavailable' };
+    const r = await AOTimeSyncService._call({ action: 'take_from_pool', aoId: aoId, idempotencyKey: AOTimeSyncService._uuid() });
+    if (!r.ok) {
+      if (typeof WorkOrdersReadService !== 'undefined' && typeof WorkOrdersReadService.fetchAndApply === 'function') {
+        try { await WorkOrdersReadService.fetchAndApply(); } catch (e) {}
+      }
+      return { ok: false, error: r.error, reason: r.reason, text: this.serverErrorText(r.error, r.reason) };
+    }
+    const srv = r.data && r.data.workOrder;
+    if (srv && srv.id === aoId) {
+      const i = (state.workOrders || []).findIndex(a => a.id === aoId);
+      if (i >= 0) state.workOrders[i] = srv;
+      if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
+    }
+    const staffName = `${user.firstName} ${user.lastName}`.trim();
+    ActivityService.log('work_order_assigned', `${staffName} tog ${ao.id} från arbetspoolen`, { workOrderId: aoId, customerId: ao.customerId });
+    persist();
+    Sidebar.updateBadges();
+    return { ok: true, ao: srv || getAO(aoId) };
   }
 };

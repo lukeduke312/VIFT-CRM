@@ -388,7 +388,9 @@ const TimeService = {
         onSettledIntent: { kind: 'clockout_stamp_clear', refId: entryId, ts: startTs, aoId: aoId || null },
         onSettled: function (r) {
           releaseInFlight();
-          if (!r.ok && r.final && r.error === 'id_collision') {
+          /* T3-B: samma pass utstämplat från en annan enhet med annan sluttid ger
+             idempotency_key_conflict (nyckeln binds till innehållet) — samma fall. */
+          if (!r.ok && r.final && (r.error === 'id_collision' || r.error === 'idempotency_key_conflict')) {
             /* Samma pass har redan en tidpost på servern (utstämplat på en
                annan enhet). Inte ett fel för användaren och INTE "fortfarande
                instämplad" — ta bort den lokala dubbletten och läs serverns läge. */

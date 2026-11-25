@@ -31,7 +31,19 @@ done
 T=$(mktemp -d)
 for f in src/data/storage.js src/services/AuthService.js index.html; do
   git show "HEAD:$f" > "$T/cur"; git show "$BASE:$f" > "$T/base"; git -C "$W" show "$DEPLOYED:$f" > "$T/oth"
-  if ! git merge-file -p "$T/cur" "$T/base" "$T/oth" > "$W/$f"; then echo "KONFLIKT i $f — avbryter"; exit 1; fi
+  if ! git merge-file -p "$T/cur" "$T/base" "$T/oth" > "$W/$f"; then
+    # T3-B (2026-11-28): index.html får konflikter som BARA gäller ?v=-numren (den
+    # publicerade versionen byggdes från en annan commit). Paketet innehåller HEAD:s
+    # klientfiler, så HEAD:s ?v=-nummer är de rätta. Allt annat ger fortfarande avbrott.
+    if [ "$f" = index.html ] && node -e '
+      const s = require("fs").readFileSync(process.argv[1], "utf8");
+      const re = /<<<<<<< [^\n]*\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>> [^\n]*\n/g; let m, ok = true, n = 0;
+      const utanV = (x) => x.replace(/\?v=\d+/g, "?v=");
+      while ((m = re.exec(s))) { n++; if (utanV(m[1]) !== utanV(m[2])) ok = false; }
+      process.exit(ok && n > 0 ? 0 : 1);' "$W/$f"; then
+      cp "$T/cur" "$W/$f"; echo "index.html: konflikterna gällde bara ?v= — HEAD:s version används"
+    else echo "KONFLIKT i $f — avbryter"; exit 1; fi
+  fi
 done
 git show HEAD:public-offer.html | sed "s#'https://$LIVE_REF.supabase.co'#'$STG_URL'#" > "$W/public-offer.html"
 rm -rf "$T"

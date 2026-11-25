@@ -561,6 +561,13 @@ const ServiceIntervalService = {
     const p = (state.properties || []).find(prop => prop.id === propId);
     if (!p || typeof WorkOrderService === 'undefined') return null;
     const cat = this.CATEGORIES.find(c => c.key === (si.aoCategory || si.category));
+    /* T3-B (Q1, AP-A, punkt 250): förfallodagen skrivs till dueDate. Med personal skrivs
+       den INTE till scheduledDate (ett tilldelat serviceuppdrag ska inte se bokat ut) och
+       AO:n blir tilldelad pool (poolOpen:false). Utan personal: öppen pool, och dagen står
+       även i scheduledDate som förut (v3.4-kalendern visar pool-AO som "ej schemalagda").
+       Samma regel som service-monitor. source markerar ursprunget även i klientvägen. */
+    const staff = Array.isArray(si.aoStaff) ? si.aoStaff.slice() : [];
+    const due = si.nextDue || '';
     const ao  = WorkOrderService.create({
       title:        si.aoTitle       || si.title,
       description:  si.aoDescription || si.description || '',
@@ -570,9 +577,13 @@ const ServiceIntervalService = {
       address:      p.address        || '',
       category:     cat ? cat.label  : '',
       priority:     si.aoPriority    || 'normal',
-      staff:        si.aoStaff       || [],
+      staff:        staff,
       status:       'pool',
-      scheduledDate: si.nextDue      || ''
+      scheduledDate: staff.length ? '' : due,
+      dueDate:      due,
+      poolOpen:     staff.length ? false : undefined,
+      source:       'service_interval',
+      sourceIntervalId: si.id
     });
     if (ao) {
       const periodKey = si.id + '::' + si.nextDue;

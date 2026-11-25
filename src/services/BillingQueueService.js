@@ -447,30 +447,49 @@ const BillingQueueService = (function () {
      a FINAL rejection — never a silent claim that it was saved.
      `billingPreviousStatus` is cleared on the server as null (a JSON merge
      cannot delete a key), so every check here treats null like "absent". */
+  /* T3-B (2026-11-28, D-07, punkt 269/G9): faktureringsstatus på AO:n (status
+     'fakturerad', invoiceId, billingPreviousStatus) ändras INTE längre via patch_ao —
+     servern avvisar det för alla roller (403 forbidden/invoice_path_required). Den enda
+     vägen är invoice-write åtgärden aoBilling (RPC work_order_billing_set, radlåst):
+       mode 'invoiced' — servern kontrollerar att underlaget finns, inte är makulerat
+                         och hänvisar till AO:n, och sparar billingPreviousStatus;
+       mode 'restore'  — servern backar till SIN sparade billingPreviousStatus (bara
+                         motorsatta markeringar; manuellt/äldre fakturerade rörs aldrig).
+     Vid lyckat svar tas serverns AO över lokalt. Vid avslag eller nätfel backas den
+     lokala ändringen (bara om inget annat ändrat fälten sedan) och användaren får veta
+     det — aldrig ett tyst påstående om att det sparats. */
   function _syncBillingFields(ao, before) {
-    if (typeof WorkOrderService === 'undefined' || typeof WorkOrderService._syncAO !== 'function') return;
+    if (typeof InvoiceService === 'undefined' || typeof InvoiceService._call !== 'function') return;
     var after = { status: ao.status, invoiceId: ao.invoiceId || '', billingPreviousStatus: ao.billingPreviousStatus == null ? null : ao.billingPreviousStatus };
-    var patch = { status: after.status, invoiceId: after.invoiceId, billingPreviousStatus: after.billingPreviousStatus, updatedAt: ao.updatedAt };
-    WorkOrderService._syncAO(ao, patch, {
-      onSettled: function (r) {
-        if (!r || r.ok || !r.final) return;
-        var cur = getAO(ao.id);
-        if (cur !== ao) return; // replaced by a fresh server read: already server truth
-        var untouched = ao.status === after.status && (ao.invoiceId || '') === after.invoiceId &&
-          (ao.billingPreviousStatus == null ? null : ao.billingPreviousStatus) === after.billingPreviousStatus;
-        if (!untouched) return; // someone changed these since — never clobber
-        ao.status = before.status;
-        ao.invoiceId = before.invoiceId;
-        if (before.billingPreviousStatus == null) delete ao.billingPreviousStatus; else ao.billingPreviousStatus = before.billingPreviousStatus;
-        if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
-        if (typeof showToast === 'function') {
-          showToast('Arbetsorder ' + ao.id + ': faktureringsstatusen kunde inte sparas på servern (' + (r.error || 'okänt fel') + ') — visar åter ' + before.status + '. Fakturaunderlaget i sig påverkas inte.', 8000);
+    var mode = after.status === 'fakturerad' ? 'invoiced' : 'restore';
+    var body = mode === 'invoiced' ? { aoId: ao.id, invoiceId: after.invoiceId, mode: mode } : { aoId: ao.id, mode: mode };
+    InvoiceService._call('aoBilling', body).then(function (r) {
+      var cur = getAO(ao.id);
+      if (r && r.ok) {
+        var srv = r.data && r.data.workOrder;
+        if (srv && cur && srv.id === cur.id) {
+          cur.status = srv.status; cur.invoiceId = srv.invoiceId || '';
+          if (srv.billingPreviousStatus == null) delete cur.billingPreviousStatus; else cur.billingPreviousStatus = srv.billingPreviousStatus;
+          cur.updatedAt = srv.updatedAt || cur.updatedAt;
+          if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
         }
-        try {
-          if (typeof WorkOrderDetailPage !== 'undefined' && typeof WorkOrderDetailPage.onSyncStatusChanged === 'function') WorkOrderDetailPage.onSyncStatusChanged(ao.id);
-          if (typeof WorkOrdersPage !== 'undefined' && typeof WorkOrdersPage.onSyncStatusChanged === 'function') WorkOrdersPage.onSyncStatusChanged(ao.id);
-        } catch (e) {}
+        return;
       }
+      if (cur !== ao) return; // ersatt av en färsk serverläsning: redan serverns sanning
+      var untouched = ao.status === after.status && (ao.invoiceId || '') === after.invoiceId &&
+        (ao.billingPreviousStatus == null ? null : ao.billingPreviousStatus) === after.billingPreviousStatus;
+      if (!untouched) return; // någon har ändrat fälten sedan — skriv aldrig över
+      ao.status = before.status;
+      ao.invoiceId = before.invoiceId;
+      if (before.billingPreviousStatus == null) delete ao.billingPreviousStatus; else ao.billingPreviousStatus = before.billingPreviousStatus;
+      if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
+      if (typeof showToast === 'function') {
+        showToast('Arbetsorder ' + ao.id + ': faktureringsstatusen kunde inte sparas på servern (' + ((r && r.error) || 'okänt fel') + ') — visar åter ' + before.status + '. Fakturaunderlaget i sig påverkas inte.', 8000);
+      }
+      try {
+        if (typeof WorkOrderDetailPage !== 'undefined' && typeof WorkOrderDetailPage.onSyncStatusChanged === 'function') WorkOrderDetailPage.onSyncStatusChanged(ao.id);
+        if (typeof WorkOrdersPage !== 'undefined' && typeof WorkOrdersPage.onSyncStatusChanged === 'function') WorkOrdersPage.onSyncStatusChanged(ao.id);
+      } catch (e) {}
     });
   }
 

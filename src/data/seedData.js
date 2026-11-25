@@ -1372,7 +1372,9 @@ const SeedData = {
     {
       id: 'personal', label: 'Tekniker / Personal', isBuiltin: true, active: true,
       description: 'Kan se egna tilldelade arbetsorder och pool. Kan registrera tid och material.',
-      permissions: ['dashboard_view','ao_view_own','ao_time','ao_material','ao_checklist']
+      /* T3-B (D-03, AP-F): de smala fältbehörigheterna som servern nu kontrollerar
+         (standardrollen personal, BEHORIGHETSMATRIS §2). */
+      permissions: ['dashboard_view','ao_view_own','ao_start_own','ao_complete_own','ao_pool_take','ao_time','ao_material','ao_checklist']
     },
     {
       id: 'ekonomi', label: 'Ekonomi', isBuiltin: true, active: true,

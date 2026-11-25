@@ -436,7 +436,11 @@ const WorkOrderDetailPage = {
      _actionModel(), som är den enda källan för villkoren. */
   _actionModel(ao) {
     const canEdit     = Auth.can('ao_edit');
-    const canComplete = Auth.can('ao_complete');
+    /* T3-B (D-03): klarmarkera = ao_complete (arbetsledare) eller ao_complete_own på egen
+       tilldelad AO (övergångsregel: äldre fältroll med ao_complete). Servern avgör. */
+    const meId = state.currentUser && state.currentUser.id;
+    const canComplete = Auth.can('ao_complete') && (Auth.can('ao_view_all') || Auth.can('ao_edit'))
+      || (WorkOrderService.aoCan('ao_complete_own') && !!meId && (ao.staff || []).includes(meId));
     const canInvoice  = Auth.can('invoice_create');
     const canPricing  = this._canEditPricing();
     const id   = this._id(ao.id);
@@ -470,6 +474,11 @@ const WorkOrderDetailPage = {
       add({ key:'pool', label:'Till pool', icon:'inbox', fn:`WorkOrderDetailPage.setStatus('pool')`, group:'plan' });
     if (canEdit && ao.status === 'planerad')
       add({ key:'reschedule', label:'Omplanera', icon:'calendar', fn:`WorkOrderDetailPage.openReschedule()`, group:'plan' });
+    /* T3-B (AP-G): separata, uttryckliga åtgärder i stället för poolrutan i personaldialogen. */
+    if (canEdit && live && !ao.archived && !ao.deleted && ao.scheduledDate)
+      add({ key:'remove-date', label:'Ta bort datum', icon:'calendar', fn:`WorkOrderDetailPage.removeSchedule()`, group:'plan' });
+    if (canEdit && live && !ao.archived && !ao.deleted && ao.status !== 'pågående' && !WorkOrderService.isOpenPool(ao))
+      add({ key:'release-pool', label:'Släpp till öppen pool', icon:'inbox', fn:`WorkOrderDetailPage.releaseToPool()`, group:'plan' });
     if (canEdit && ao.status === 'pågående')
       add({ key:'pause', label:'Pausa', icon:'pause-circle', fn:`WorkOrderDetailPage.setStatus('planerad')`, group:'status' });
     if (ao.status === 'klar' && ao.invoiceId)
@@ -511,7 +520,8 @@ const WorkOrderDetailPage = {
   _canStartOwn(ao) {
     if (!ao || Auth.can('ao_edit')) return false;
     const me = state.currentUser && state.currentUser.id;
-    return !!me && Auth.canViewPage('pg-myjobs') && (ao.staff || []).includes(me)
+    /* T3-B (D-03): kräver ao_start_own (övergångsregel: äldre fältroll med ao_complete). */
+    return !!me && WorkOrderService.aoCan('ao_start_own') && Auth.canViewPage('pg-myjobs') && (ao.staff || []).includes(me)
       && !ao.archived && !ao.deleted && ['nytt','pool','planerad'].includes(ao.status);
   },
 
@@ -2405,7 +2415,8 @@ const WorkOrderDetailPage = {
   },
 
   markComplete() {
-    if (!Auth.require('ao_complete')) return;
+    // T3-B (D-03): ao_complete_own räcker för egen tilldelad AO (servern avgör).
+    if (!WorkOrderService.aoCan('ao_complete_own') && !Auth.require('ao_complete')) return;
     const ao = getAO(this.aoId);
     if (!ao) return;
     const chkTotal = (ao.checklist||[]).length;
@@ -3164,7 +3175,6 @@ const WorkOrderDetailPage = {
     const activeStaff = (state.staff || []).filter(s => s.active);
     const current = ao.staff || [];
     const currentResp = ao.responsibleStaffId || '';
-    const isPool = ao.status === 'pool';
 
     const staffRows = activeStaff.map(s => {
       const role = (state.roles||[]).find(r => r.id === s.role);
@@ -3191,15 +3201,7 @@ const WorkOrderDetailPage = {
         <label>Ansvarig</label>
         <select id="sm-resp">${respOpts}</select>
       </div>
-      <div style="border-top:1px solid var(--br);padding-top:10px;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="sm-pool" ${isPool?'checked':''}>
-          <div>
-            <div style="font-size:13px;font-weight:600;">Flytta till arbetspool</div>
-            <div style="font-size:11px;color:var(--mt);">Rensar personal och sätter status till Pool</div>
-          </div>
-        </label>
-      </div>`;
+      <div style="font-size:11px;color:var(--mt);">Dialogen ändrar bara personal och ansvarig. Datum och status ändras inte — använd ”Ta bort datum” eller ”Släpp till öppen pool” i menyn.</div>`;
 
     Modal.open({
       title: `${ic('users',15)} Hantera personal — ${esc(ao.id)}`,
@@ -3220,38 +3222,66 @@ const WorkOrderDetailPage = {
       .filter(s => { const cb = document.getElementById(`smcb-${s.id}`); return cb && cb.checked; })
       .map(s => s.id);
     const responsibleId = (document.getElementById('sm-resp') || {}).value || '';
-    const moveToPool = !!(document.getElementById('sm-pool') || {}).checked;
 
     // If responsible not in selected staff, add them
     if (responsibleId && !selectedIds.includes(responsibleId)) {
       selectedIds.push(responsibleId);
     }
 
-    const prevStaff = (ao.staff || []).slice();
-    WorkOrderService.updateStaff(aoId, { staffIds: selectedIds, responsibleStaffId: responsibleId, moveToPool }, this._ackOpts('Personal uppdaterad', 'Personaländringen kunde inte sparas'));
-    // Log assignment changes
-    const added = selectedIds.filter(id => !prevStaff.includes(id));
-    if (added.length > 0) {
-      const names = added.map(id => { const s = getStaff(id); return s ? s.firstName + ' ' + s.lastName : id; }).join(', ');
-      ActivityService.log('staff_assigned', `Personal tilldelad ${aoId}: ${names}`, { workOrderId: aoId });
-      // Send notifications to newly added staff
-      if (typeof NotificationsService !== 'undefined') {
-        added.forEach(id => {
-          NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${aoId}: ${ao.title || aoId}`, { aoId });
-        });
+    /* T3-B (AP-FEL-1, AP-D): bara personal och ansvarig sparas. Loggpost, notis och
+       push skickas först när servern bekräftat, och bara för personal som FAKTISKT
+       lades till (aldrig för borttagen eller oförändrad personal, ingen falsk notis). */
+    const self = this;
+    let diff = null;
+    const ack = this._ackOpts('Personal uppdaterad', 'Personaländringen kunde inte sparas');
+    diff = WorkOrderService.updateStaff(aoId, { staffIds: selectedIds, responsibleStaffId: responsibleId }, {
+      onSettled: (r) => {
+        ack.onSettled(r);
+        if (!r || !r.ok || !diff || !diff.added.length) return;
+        const cur = getAO(aoId) || ao;
+        const names = diff.added.map(id => { const s = getStaff(id); return s ? s.firstName + ' ' + s.lastName : id; }).join(', ');
+        ActivityService.log('staff_assigned', `Personal tilldelad ${aoId}: ${names}`, { workOrderId: aoId });
+        if (typeof NotificationsService !== 'undefined') {
+          diff.added.forEach(id => { NotificationsService.push(id, 'ao_assigned', `Du har tilldelats ${aoId}: ${cur.title || aoId}`, { aoId }); });
+        }
+        /* V45: riktig Web Push till faktiskt tillagd personal — fire-and-forget. */
+        if (typeof PushService !== 'undefined') {
+          PushService.notifyStaffAssigned(cur, diff.added).catch(e => console.warn('[WorkOrderDetailPage] notifyStaffAssigned fel:', e));
+        }
+        if (self.aoId === aoId) { try { self.render({ aoId }); } catch (e) {} }
       }
-      /* V45: riktig Web Push till nyligen tillagd personal — fire-and-forget,
-         får ALDRIG blockera/påverka AO-sparningen ovan (redan genomförd).
-         Skickas bara för `added` (aldrig befintlig personal/borttagen
-         personal/pool-flytt) — matchar exakt samma diff som in-app-notisen. */
-      if (typeof PushService !== 'undefined') {
-        PushService.notifyStaffAssigned(ao, added).catch(e => console.warn('[WorkOrderDetailPage] notifyStaffAssigned fel:', e));
-      }
-    }
+    });
     Modal.close();
     WorkOrderDetailPage.render({ aoId });
     showToast('Sparar…');
     Sidebar.updateBadges();
+  },
+
+  /* T3-B (AP-G): "Släpp till öppen pool" — uttrycklig åtgärd med bekräftelse som
+     namnger personalen. Tar bort personal, ansvarig och datum, status pool. */
+  releaseToPool() {
+    if (!Auth.require('ao_edit')) return;
+    const ao = getAO(this.aoId);
+    if (!ao) return;
+    const names = (ao.staff || []).map(id => { const s = getStaff(id); return s ? s.firstName + ' ' + s.lastName : id; });
+    const msg = 'Släpp ' + (ao.displayNumber || ao.id) + ' till öppen pool?' + (names.length ? ' Personal som tas bort: ' + names.join(', ') + '.' : '') + (ao.scheduledDate ? ' Datumet ' + ao.scheduledDate + ' tas bort.' : '') + ' Fältpersonal med behörighet kan sedan ta jobbet.';
+    Modal.confirm(msg, () => {
+      WorkOrderService.releaseToPool(ao.id, this._ackOpts('Släppt till öppen pool', 'Ordern kunde inte släppas till poolen'));
+      this.render({ aoId: ao.id });
+      showToast('Sparar…');
+    });
+  },
+
+  /* T3-B (AP-G): "Ta bort datum" — rensar bara utförandedatumet. */
+  removeSchedule() {
+    if (!Auth.require('ao_edit')) return;
+    const ao = getAO(this.aoId);
+    if (!ao || !ao.scheduledDate) return;
+    Modal.confirm('Ta bort datumet ' + ao.scheduledDate + '? Personal, ansvarig och status ändras inte.', () => {
+      WorkOrderService.removeSchedule(ao.id, this._ackOpts('Datumet borttaget', 'Datumet kunde inte tas bort'));
+      this.render({ aoId: ao.id });
+      showToast('Sparar…');
+    });
   },
 
   /* ── Redigera AO ───────────────────────── */

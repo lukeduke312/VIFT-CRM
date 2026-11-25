@@ -53,7 +53,10 @@ const MyJobsPage = {
     const unscheduled = all.filter(ao => mine(ao) && !ao.scheduledDate && alive(ao) && ao.status !== 'pågående').sort(byPrio);
     const upcoming = all.filter(ao => mine(ao) && ao.scheduledDate > today && alive(ao) && ao.status !== 'pågående')
       .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || byTime(a, b));
-    const pool = all.filter(ao => ao.status === 'pool').sort(byPrio);
+    /* T3-B (AP-A, SÄK-3): bara ÖPPEN pool (status pool, poolOpen ≠ false, ingen personal)
+       och bara med ao_pool_take (övergångsregel: äldre fältroll med ao_complete). Egna
+       pool-AO visas redan under "Tilldelade utan datum" — inga dubbletter. */
+    const pool = WorkOrderService.aoCan('ao_pool_take') ? all.filter(ao => WorkOrderService.isOpenPool(ao) && !mine(ao)).sort(byPrio) : [];
     return { today: today_, overdue, ongoing, unscheduled, upcoming, pool };
   },
 
@@ -287,7 +290,8 @@ const MyJobsPage = {
       actions = `<div class="mj-acts"><button type="button" class="btn bghost bsm" ${aoAttr} onclick="event.stopPropagation();Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">${ic('arrow-right', 13)} Öppna</button></div>`;
     } else {
       const mapsUrl = workAddr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(workAddr) : '';
-      const canStart = ['nytt', 'pool', 'planerad'].includes(ao.status);
+      // T3-B (D-03): Starta kräver ao_start_own (eller ao_edit); servern avgör.
+      const canStart = ['nytt', 'pool', 'planerad'].includes(ao.status) && (Auth.can('ao_edit') || WorkOrderService.aoCan('ao_start_own'));
       let stampBtn = '';
       if (o.canTime && !o.isStamped) {
         stampBtn = `<button type="button" class="btn ${o.hero ? 'bp' : 'bs'}" ${aoAttr} title="Stämpla in – tiden börjar räknas på det här jobbet" onclick="event.stopPropagation();MyJobsPage.clockIn(this.dataset.ao)">${ic('log-in', 15)} Stämpla in</button>`;
@@ -331,7 +335,7 @@ const MyJobsPage = {
     const desc = ao.description ? String(ao.description) : '';
     return `<article class="mj-card is-pool${ao.priority === 'akut' ? ' p-akut' : ao.priority === 'hög' ? ' p-hog' : ''}" ${aoAttr} onclick="Router.showPage('pg-ao-detail',{aoId:this.dataset.ao})">
       <div class="mj-card-top">
-        <div class="mj-card-when">${ic('calendar', 13)}<span>${ao.scheduledDate ? esc(cap(UiKit.dayLabel(ao.scheduledDate))) + (ao.scheduledStart ? ' kl. ' + esc(ao.scheduledStart) : '') : 'Inget datum'}</span></div>
+        <div class="mj-card-when">${ic('calendar', 13)}<span>${(ao.dueDate || ao.scheduledDate) ? 'Förfaller ' + esc(UiKit.dayLabel(ao.dueDate || ao.scheduledDate)) : 'Inget datum'}</span></div>
         <div class="mj-card-badges">${['akut', 'hög', 'låg'].includes(ao.priority) ? pbdg(ao.priority) : ''}</div>
       </div>
       <h3 class="mj-title"><span class="mj-id">${esc(WorkOrderService.displayNumberOrPending(ao))}</span> ${esc(ao.title)}</h3>
@@ -524,11 +528,19 @@ const MyJobsPage = {
     this.render();
   },
 
-  takeFromPool(aoId) {
-    const ao = WorkOrderService.takeFromPool(aoId);
-    if (!ao) { showToast('Kunde inte ta jobbet'); return; }
-    showToast(`Du är nu tilldelad ${ao.id}`);
-    this.render();
-    Sidebar.updateBadges();
+  /* T3-B (SÄK-4): beskedet ges först efter serverns svar. Vid 409 already_assigned
+     har någon annan hunnit först; listan läses om (WorkOrderService.takeFromPool). */
+  async takeFromPool(aoId) {
+    if (this._taking) return;
+    this._taking = true;
+    try {
+      const r = await WorkOrderService.takeFromPool(aoId);
+      if (r && r.ok) showToast(`Du är nu tilldelad ${WorkOrderService.displayNumberOrPending(r.ao) || aoId}`);
+      else showToast(r && r.error === 'already_assigned' ? 'Jobbet har redan tagits av någon annan.' : 'Kunde inte ta jobbet: ' + ((r && r.text) || 'okänt fel'), 6000);
+    } finally {
+      this._taking = false;
+      this.render();
+      Sidebar.updateBadges();
+    }
   }
 };

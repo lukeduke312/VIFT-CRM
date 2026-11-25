@@ -170,7 +170,12 @@ const TimePage = {
     /* Egna jobb idag först, sedan övriga valbara — samma urval som tidigare. */
     const meId = state.currentUser ? state.currentUser.id : null;
     const t = tdy();
-    const list = (state.workOrders||[]).filter(a=>['planerad','pågående','pool','nytt'].includes(a.status));
+    /* T3-B (AP-B, F23): instämpling på en AO kräver tilldelning (servern nekar annars med
+       not_assigned). Listan visar därför bara egna tilldelade, olåsta AO — arbetsledare
+       (ao_edit) ser som förut alla aktiva. Ingen automatisk tagning ur poolen. */
+    const canAll = Auth.can('ao_edit');
+    const list = (state.workOrders||[]).filter(a=>['planerad','pågående','pool','nytt'].includes(a.status)
+      && !a.archived && !a.deleted && !a.invoiceId && (canAll || (a.staff||[]).includes(meId)));
     const rank = a => ((a.staff||[]).includes(meId) && a.scheduledDate === t) ? 0 : (a.staff||[]).includes(meId) ? 1 : 2;
     const sorted = list.slice().sort((a, b) => rank(a) - rank(b) || String(a.scheduledStart||'99').localeCompare(String(b.scheduledStart||'99')));
     const opt = a => `<option value="${esc(a.id)}">${esc(a.id)} – ${esc(a.title)}${a.scheduledDate === t && a.scheduledStart ? ' (kl. ' + esc(a.scheduledStart) + ')' : ''}</option>`;

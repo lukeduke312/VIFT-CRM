@@ -120,6 +120,10 @@ const RecurringOrderService = {
       fixedPrice:    ro.fixedPrice || 0,
       staff:         ro.staff ? [...ro.staff] : [],
       scheduledDate: ro.nextDate || tdy(),
+      /* T3-B (Q1/Q2): tillfällets datum sparas även som förfallodatum (dueDate). Befintliga
+         återkommande ärenden behåller sitt beteende: datumet är fortfarande utförandedatum
+         (scheduledDate). Valet "förfallodatum i pool" byggs i AO-etappen. */
+      dueDate:       ro.nextDate || tdy(),
       checklist:     (ro.checklist || []).map(c => ({
         id:          'c' + Date.now() + Math.random().toString(36).slice(2),
         text:        c.text,

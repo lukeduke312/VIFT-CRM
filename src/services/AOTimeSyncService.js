@@ -183,7 +183,7 @@ const AOTimeSyncService = {
       const res = await Storage._authFetch(base + '/' + fn, { body: JSON.stringify(payload), timeoutMs: Storage.WRITE_TIMEOUT_MS });
       let data = null;
       try { data = await res.json(); } catch (e) {}
-      if (!res.ok) return { ok: false, error: (data && data.error) || ('http_' + res.status), httpStatus: res.status };
+      if (!res.ok) return { ok: false, error: (data && data.error) || ('http_' + res.status), reason: (data && data.reason) || undefined, httpStatus: res.status };
       return { ok: true, data: data || {} };
     } catch (e) {
       return { ok: false, error: e.isAuthExpired ? 'auth_expired' : ('network: ' + (e.message || e)) };
@@ -233,7 +233,13 @@ const AOTimeSyncService = {
        Tidigare valdes då alltid den gamla vägen (patch_ao med hela loggen),
        som köades och nekades efter återanslutning. Nu används det senast
        BEKRÄFTADE svaret i denna webbläsare; aldrig bekräftat = gamla vägen. */
-    return this._rememberedLogOps() === true;
+    /* T3-B (2026-11-28): aldrig bekräftat (t.ex. första sparningen offline i en ny
+       webbläsare). Den gamla vägen (patch_ao med hela loggen) nekas av servern för den
+       som saknar ao_edit (fältet: forbidden/field_not_allowed), så för dem väljs den
+       atomiska vägen; posten köas och skickas till work-order-log-write vid anslutning. */
+    const mem = this._rememberedLogOps();
+    if (mem !== null) return mem;
+    return !(typeof Auth !== 'undefined' && typeof Auth.can === 'function' && Auth.can('ao_edit'));
   },
   _rememberLogOps(v) { try { localStorage.setItem('vift-logops-supported', v ? '1' : '0'); } catch (e) {} },
   _rememberedLogOps() {
@@ -567,7 +573,9 @@ const AOTimeSyncService = {
      hiccups, and retrying them unchanged would spin forever without ever
      succeeding, silently never explaining why to the user. */
   _DEFINITE_REJECTIONS: ['forbidden', 'not_found', 'invalid_json', 'missing_fields', 'unknown_action',
-                         'attested_locked', 'id_collision', 'stale_write'],
+                         'attested_locked', 'id_collision', 'stale_write',
+                         /* T3-B (2026-11-28): serverns regelfel (BEHORIGHETSMATRIS §4) är slutgiltiga. */
+                         'already_assigned', 'ao_locked', 'invalid_source_status', 'idempotency_key_conflict'],
   /* After this many failed attempts at a genuinely TRANSIENT error (network,
      5xx, auth), stop auto-retrying on every resumePending() sweep — avoids
      an unbounded retry storm against a backend that is simply not deployed
@@ -598,7 +606,7 @@ const AOTimeSyncService = {
       // client as a confirmed write, so there is nothing to roll back
       // server-side, only the optimistic local UI state (caller's job).
       this._removeFromOutbox(entry.id);
-      const result = { ok: false, error: r.error, entry, final: true };
+      const result = { ok: false, error: r.error, reason: r.reason, entry, final: true };
       this._fireSettled(entry.id, result);
       this._markIntentSettled(entry.id, result);
       return result;
