@@ -14,7 +14,8 @@
  *           accessInformation, accessCode } — null för fält som saknas.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// I5 fix 2026-11-12: pinned to the exact version already bundled in the deployed v7.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.8'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const CORS = {
@@ -86,11 +87,15 @@ serve(async (req) => {
 
     if (!perms.includes('all') && !perms.includes('objects_sensitive')) {
       // Auditlogg: nekad läsning
-      await supabase.from('sensitive_access_audit').insert({
+      // I5 fix: PostgrestBuilder has no .catch() in supabase-js 2.110.8 — check the result instead.
+      const { error: auditErr } = await supabase.from('sensitive_access_audit').insert({
         user_id: user.id, user_email: userEmail, action: 'read',
         object_id: null, property_id: null, fields: [], status: 'denied',
         detail: 'objects_sensitive saknas'
-      }).catch(() => {});
+      });
+      // Denied path: no value is read or returned, so the answer stays 403 even if this audit
+      // insert fails (a 500 would hide the denial). The failure is logged with a fixed marker.
+      if (auditErr) console.error('[get-sensitive-fields] AUDIT_WRITE_FAILED (denied attempt)', auditErr.message);
       return jsonErr('Forbidden: objects_sensitive required', 403);
     }
 
@@ -124,11 +129,19 @@ serve(async (req) => {
       row.access_information ? 'accessInformation' : null,
       row.access_code        ? 'accessCode'        : null,
     ].filter(Boolean) : [];
-    await supabase.from('sensitive_access_audit').insert({
-      user_id: user.id, user_email: userEmail, action: 'read',
-      object_id: objectId ?? null, property_id: propertyId ?? null,
-      fields: returnedFields, status: 'allowed', detail: null
-    }).catch(() => {});
+    // I5 hardening 2026-11-12: the audit row is mandatory. A read changes no data, so fail-closed
+    // here means: no value leaves this function unless its audit row was committed first.
+    {
+      const { error: auditErr } = await supabase.from('sensitive_access_audit').insert({
+        user_id: user.id, user_email: userEmail, action: 'read',
+        object_id: objectId ?? null, property_id: propertyId ?? null,
+        fields: returnedFields, status: 'allowed', detail: null
+      });
+      if (auditErr) {
+        console.error('[get-sensitive-fields] AUDIT_WRITE_FAILED, values withheld', auditErr.message);
+        return jsonErr('audit_unavailable', 500);
+      }
+    }
 
     return new Response(
       JSON.stringify({

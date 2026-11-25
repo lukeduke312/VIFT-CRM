@@ -1,3 +1,17 @@
+/*
+ * REPO-SYNK 2026-11-27 (G1/G4 del 2): manuell sammanslagning.
+ *   Bas: repots version (V42–V45: Declarative Web Push-payload med absolut navigate och
+ *        aoId, TTL/urgency, testEndpoint-diagnostik, staffIds-tilldelningspush). STAGING v9
+ *        (2026-10-22) saknar allt detta; STAGING:s mottagarlogik (propertyId, userId,
+ *        broadcast) finns oförändrad här.
+ *   Från STAGING v9: STAGING-spärren isProductionEnvironment(). I andra projekt än LIVE görs
+ *        inga mottagaruppslag och inga utskick; svaret är 403 { error: 'blocked_in_staging' }
+ *        precis som i STAGING i dag. Placering som i STAGING: direkt efter checkViftAuth().
+ *   Nytt: notisens absoluta navigate-origin (tidigare hårdkodad till LIVE-domänen) kommer
+ *        från PUBLIC_BASE_URL via ../_shared/public-base-url.ts. Inget reservvärde; saknas
+ *        värdet svarar funktionen 500 config_missing_public_base_url före alla utskick.
+ * Inte verifierat i STAGING. Se supabase/inventering/G1-G4-DEL2-RESULTAT.md.
+ */
 /**
  * send-push — Supabase Edge Function
  *
@@ -43,8 +57,8 @@
  * V43: push-payloaden som skickas till webpush.sendNotification() är nu
  * Declarative Web Push-kompatibel (Apple/WebKit, iOS/iPadOS 18.4+):
  *   { web_push: 8030, notification: { title, body, navigate, silent }, aoId }
- * `notification.navigate` är alltid en ABSOLUT URL på VIFT CRM-produktionsorigin
- * (https://crm.viftfast.se) — byggd från den redan relativpath-validerade `url`,
+ * `notification.navigate` är alltid en ABSOLUT URL på miljöns CRM-origin
+ * (PUBLIC_BASE_URL, se public-base-url.ts) — byggd från den redan relativpath-validerade `url`,
  * aldrig från en extern/klienttillhandahållen origin. Äldre browsers/webkit utan
  * stöd för declarative push hanterar samma JSON i service-worker.js:s push-handler
  * (backward-compat, se där).
@@ -59,6 +73,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @deno-types="npm:@types/web-push@3.6.3"
 import webpush from 'npm:web-push@3.6.7'
 import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
+import { resolvePublicBaseUrl } from '../_shared/public-base-url.ts'
 
 /* ── CORS ─────────────────────────────────────────────────── */
 const CORS = {
@@ -87,11 +102,23 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 }
 
-/* V43: produktionsorigin för `notification.navigate` — ALDRIG klienttillhandahållen.
+/* STAGING-spärr (från STAGING v9): endast känt produktionsprojekt får skicka push. */
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
+const PRODUCTION_SUPABASE_ORIGIN = 'https://hjplzjsbbowiyoyhdghc.supabase.co'
+
+function isProductionEnvironment(): boolean {
+  try {
+    return new URL(SUPABASE_URL).origin === PRODUCTION_SUPABASE_ORIGIN
+  } catch {
+    return false
+  }
+}
+
+/* V43: origin för `notification.navigate` — ALDRIG klienttillhandahållen. Sedan
+ * 2026-11-27 läses den ur PUBLIC_BASE_URL per miljö (CRM_ORIGIN sätts i handlern).
  * `url` (se nedan) är redan validerad till en relativ sökväg (startar med '/' eller
  * tom sträng) innan den når hit, så konkatenering här kan inte producera en extern
  * redirect eller en javascript:-URL. */
-const CRM_ORIGIN = 'https://crm.viftfast.se'
 
 /* V44-HELPERS-START — extraheras ordagrant av testsviten.
  * V44 §4/§7: diagnostikhjälpare för den riktade testvägen. Läser ALDRIG ut
@@ -169,6 +196,20 @@ serve(async (req: Request) => {
     /* Kontrollera aktiv VIFT-användare + personal + roll */
     const auth = await checkViftAuth(supabase, jwt, CORS)
     if (!auth.ok) return auth.response
+
+    /* STAGING/okänt projekt: inga mottagarsökningar eller pushutskick (från STAGING v9). */
+    if (!isProductionEnvironment()) {
+      return json({ error: 'blocked_in_staging' }, 403)
+    }
+
+    /* Miljöspecifik origin för notification.navigate — inget reservvärde. */
+    const baseUrl = resolvePublicBaseUrl(Deno.env.get('PUBLIC_BASE_URL'), SUPABASE_URL)
+    if (!baseUrl.ok) {
+      console.error('[send-push]', baseUrl.error, baseUrl.detail)
+      return json({ error: baseUrl.error, detail: baseUrl.detail }, 500)
+    }
+    const CRM_ORIGIN = baseUrl.url
+
     const { user: caller, userEmail: callerEmail, perms } = auth
 
     /* Läs request body */

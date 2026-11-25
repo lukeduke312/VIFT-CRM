@@ -1,3 +1,4 @@
+// REFERENS (G1/G4 del 2, 2026-11-27): repots tidigare AKTIVA version. ALDRIG LIVE, deployas inte. Se README.md.
 /**
  * vift-admin-storage — TILLFÄLLIG underhållsfunktion (STAGING, 2026-11-24).
  * Bara konton med behörigheten 'all'. Två åtgärder, inget annat:

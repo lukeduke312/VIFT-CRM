@@ -1,0 +1,4 @@
+{
+  "funktion:e2e_purge_offer_artifacts(p_offer_id text)": "STAGING-ONLY (e2e-testverktyg). Ligger i supabase/staging-only/migrations/ och ingår avsiktligt inte i kedjan.",
+  "tabell:_qa_cleanup_journal_20261124": "STAGING-ONLY. QA-journal som skapades manuellt 2026-11-24, ingen migration. Ska aldrig till LIVE."
+}

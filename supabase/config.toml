@@ -25,3 +25,8 @@ verify_jwt = false
 
 [functions.service-monitor]
 verify_jwt = false
+
+# offer-public-pdf — publik PDF via token (STAGING v1 har verify_jwt = false;
+# tillagd 2026-11-27 efter jämförelse mot STAGING, G1/G4 del 2).
+[functions.offer-public-pdf]
+verify_jwt = false

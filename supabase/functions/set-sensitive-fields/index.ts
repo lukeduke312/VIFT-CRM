@@ -23,7 +23,8 @@
  * Output: { ok: true }
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// I5 fix 2026-11-12: pinned to the exact version already bundled in the deployed v7.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.8'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const CORS = {
@@ -93,11 +94,15 @@ serve(async (req) => {
       perms.includes('all') ||
       perms.includes('objects_sensitive');
     if (!canWrite) {
-      await supabase.from('sensitive_access_audit').insert({
+      // I5 fix: PostgrestBuilder has no .catch() in supabase-js 2.110.8 — check the result instead.
+      // Denied path: nothing is read or written, so the answer stays 403 even if this audit
+      // insert fails (a 500 would hide the denial). The failure is logged with a fixed marker.
+      const { error: auditErr } = await supabase.from('sensitive_access_audit').insert({
         user_id: user.id, user_email: userEmail, action: 'write',
         object_id: null, property_id: null, fields: [], status: 'denied',
         detail: 'objects_sensitive saknas'
-      }).catch(() => {});
+      });
+      if (auditErr) console.error('[set-sensitive-fields] AUDIT_WRITE_FAILED (denied attempt)', auditErr.message);
       return jsonErr('Forbidden', 403);
     }
 
@@ -117,61 +122,30 @@ serve(async (req) => {
       return jsonErr('objectId or propertyId required', 400);
     }
 
-    // Bygg update-objekt — utelämnade nycklar uppdateras INTE
-    const record: Record<string, any> = {
-      updated_at: new Date().toISOString(),
-      updated_by: userEmail,
+    // Utelämnade nycklar uppdateras INTE (partial update); "" → null, som tidigare.
+    const sent: Record<string, unknown> = {
+      doorCode, keyInformation, keyReceipt, alarmInformation, accessInformation, accessCode,
     };
-    if (objectId)                       record.object_id          = objectId;
-    if (propertyId)                     record.property_id        = propertyId;
-    if (doorCode          !== undefined) record.door_code          = doorCode          || null;
-    if (keyInformation    !== undefined) record.key_information    = keyInformation    || null;
-    if (keyReceipt        !== undefined) record.key_receipt        = keyReceipt        || null;
-    if (alarmInformation  !== undefined) record.alarm_information  = alarmInformation  || null;
-    if (accessInformation !== undefined) record.access_information = accessInformation || null;
-    if (accessCode        !== undefined) record.access_code        = accessCode        || null;
-
-    // Kontrollera om befintlig rad finns
-    let existingId: string | null = null;
-    if (objectId) {
-      const { data } = await supabase
-        .from('property_sensitive_access')
-        .select('id')
-        .eq('object_id', objectId)
-        .maybeSingle();
-      existingId = data?.id ?? null;
-    } else {
-      const { data } = await supabase
-        .from('property_sensitive_access')
-        .select('id')
-        .eq('property_id', propertyId!)
-        .is('object_id', null)
-        .maybeSingle();
-      existingId = data?.id ?? null;
+    const fields: Record<string, unknown> = {};
+    for (const k of Object.keys(sent)) {
+      if (sent[k] !== undefined) fields[k] = sent[k] || null;
     }
 
-    if (existingId) {
-      const { error } = await supabase
-        .from('property_sensitive_access')
-        .update(record)
-        .eq('id', existingId);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('property_sensitive_access')
-        .insert(record);
-      if (error) throw error;
+    // I5 hardening 2026-11-12: the data write AND its mandatory audit row run in ONE SQL
+    // transaction (public.sensitive_fields_write). Either both commit or neither does.
+    // 200 is returned only after that transaction committed and reported its audit row id.
+    const { data: w, error: wErr } = await supabase.rpc('sensitive_fields_write', {
+      p_object_id: objectId ? String(objectId) : null,
+      p_property_id: propertyId ? String(propertyId) : null,
+      p_fields: fields,
+      p_user_id: user.id,
+      p_user_email: userEmail,
+    });
+    const result = (w ?? null) as { ok?: unknown; audit_id?: unknown } | null;
+    if (wErr || !result || result.ok !== true || !result.audit_id) {
+      console.error('[set-sensitive-fields] write+audit not confirmed', wErr?.message ?? 'unexpected result');
+      return jsonErr('write_not_confirmed', 500);
     }
-
-    // Auditlogg: godkänd skrivning — logga fältnamn, ALDRIG värdena
-    const writtenFields = Object.keys(body as object).filter(k =>
-      ['doorCode','keyInformation','keyReceipt','alarmInformation','accessInformation','accessCode'].includes(k)
-    );
-    await supabase.from('sensitive_access_audit').insert({
-      user_id: user.id, user_email: userEmail, action: 'write',
-      object_id: objectId ?? null, property_id: propertyId ?? null,
-      fields: writtenFields, status: 'allowed', detail: existingId ? 'update' : 'insert'
-    }).catch(() => {});
 
     return new Response(
       JSON.stringify({ ok: true }),

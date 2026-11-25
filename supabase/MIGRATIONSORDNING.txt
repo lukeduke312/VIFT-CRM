@@ -1,0 +1,64 @@
+# Auktoritativ installationsordning för serverns databasmigrationer (vift-v2/supabase).
+# Facit för ordningen: STAGING:s supabase_migrations.schema_migrations (läst 2026-11-25),
+# följd av de migrationer som rekonstruerades 2026-11-27.
+#
+# Format: <STAGING-version eller REKONSTRUKTION>  <sökväg relativ till supabase/>  [kommentar]
+# Rader som börjar med # körs inte. Skriptet tests/local/migrationskedja.sh kör filerna
+# i exakt denna ordning och kontrollerar att varje fil i supabase/migrations/ finns här
+# exakt en gång.
+#
+# Filnamnens versionsnummer i repot är inte alltid STAGING-versionen (t.ex. installerades
+# repo-filen 20261124000001 som 20261124145958). Använd därför DENNA lista, inte enbart
+# filnamnsordningen. Tester: kedjan går också att köra i ren filnamnsordning
+# (`supabase db push`-ordning), se resultatrapporten.
+#
+# STAGING-only (aldrig LIVE) är utkommenterade och ligger i supabase/staging-only/.
+
+20260720000000  migrations/20260720000000_create_core_tables.sql
+20260720000001  migrations/20260720000001_rls_store_table.sql
+20260720000002  migrations/20260720000002_storage_offer_attachments.sql
+20260720000003  migrations/20260720000003_pg_cron_service_monitor.sql
+20260720000004  migrations/20260720000004_property_sensitive_access.sql
+20260720000005  migrations/20260720000005_store_key_rls.sql
+20260720000006  migrations/20260720000006_app_users_lifecycle.sql
+20260720000007  migrations/20260720000007_sensitive_access_audit.sql
+20260720000008  migrations/20260720000008_strip_passwords_from_store.sql
+20260928000001  migrations/20260928000001_offer_events_atomic_rpc.sql
+20261017000001  migrations/20261017000001_ao_time_atomic_rpc.sql
+20261018000001  migrations/20261018000001_rondering_pass_atomic_rpc.sql
+20261018000003  migrations/20261018000003_invoice_set_status_atomic_rpc.sql
+20261018000004  migrations/20261018000004_invoice_lines_and_create_atomic_rpc.sql
+20261018000006  migrations/20261018000006_offer_attachment_atomic_rpc.sql
+20261020000001  migrations/20261020000001_ao_display_number.sql
+REKONSTRUKTION  migrations/20261024000001_rekonstruerad_faktura_revisionskontroll.sql   (oregistrerad i STAGING; måste före J1/A3a)
+20261106000002  migrations/20261106000002_staging_generic_keys_write_lockdown.sql
+20261106000003  migrations/20261106000003_staging_generic_keys_enforce_rls.sql
+20261108000001  migrations/20261108000001_staging_review_fixes.sql
+20261116093820  migrations/20261116093820_i5_sensitive_fields_write_atomic_20261116.sql
+20261116094016  migrations/20260917000001_work_order_checklist_atomic_rpc.sql
+20261116094236  migrations/20261116094236_j1_invoice_idempotency_strong_identity_20261116.sql
+# 20261117085418  staging-only/migrations/20261117085418_vift_staging_preinstall_snapshot_20261117.sql   (STAGING-ONLY: backup av data)
+20261117085458  migrations/20261117085458_staging_stamp_status_identity_scoped_cas_20261117.sql
+20261117092227  migrations/20261117092227_staging_invoice_n2_tombstone_20261117.sql
+20261117092236  migrations/20261117092236_staging_invoice_price_approval_a3a_atomic_20261117.sql
+20261117092246  migrations/20261117092246_staging_a4_notifications_legacy_guard_20261117.sql
+20261120103758  migrations/20261120103758_vift_crm12_offer_respond_commit_v5_20261120.sql
+20261120103824  migrations/20261120103824_vift_crm12_offer_token_open_commit_v1_20261120.sql
+20261120103829  migrations/20261120103829_vift_crm12_offer_email_prepare_commit_v3_20261120.sql
+20261124145455  migrations/20261123000002_work_order_checklist_progress.sql
+20261124145958  migrations/20261124000001_activity_log_append.sql
+20261124150357  migrations/20261124000002_work_order_log_ops.sql
+20261124150650  migrations/20261125000001_offer_attachment_patch.sql
+20261124151118  migrations/20261124000003_workorder_images_bucket.sql
+20261124152842  migrations/20261124152842_vift_branding_bucket_20261124000004.sql
+20261124160425  migrations/20260907000001_storage_project_documents.sql
+20261124160425  migrations/20260908000001_project_documents_atomic_rpc.sql
+20261124160425  migrations/20260908000002_project_documents_r2_lastchanged_and_rls.sql
+20261124201228  migrations/20261125000002_store_lastchanged_bump.sql
+20261124210432  migrations/20261125000003_store_read_by_role.sql
+# 20261124210747  (policydelen av 20261125000003 ovan; i STAGING installerad som egen version)
+# 20261124211128  staging-only/migrations/20261125000004_e2e_purge_offer_artifacts.sql   (STAGING-ONLY: e2e-testverktyg)
+REKONSTRUKTION  migrations/20261127000001_rekonstruerad_store_skyddstrigger.sql
+REKONSTRUKTION  migrations/20261127000002_rekonstruerad_time_entry_rpc.sql
+REKONSTRUKTION  migrations/20261127000003_rekonstruerad_store_restrictive_policyer.sql
+REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.sql

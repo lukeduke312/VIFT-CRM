@@ -1,5 +1,16 @@
+/*
+ * REPO-SYNK 2026-11-27 (G1/G4 del 2): denna fil är STAGING-versionen v11 (installerad
+ * 2026-11-20, källa supabase/inventering/staging-2026-11-26/functions/offer-token-validate/)
+ * plus två beteenden som fanns i repots tidigare version (8ce588b/46ca6b2, V48B5) men
+ * saknades i STAGING. De är märkta "REPO-BEVARAT" nedan:
+ *   1. status 'ersatt' (ersatt av ny version) ger 410 { error: 'replaced' }. Kontrolleras
+ *      före RPC:n (så att öppningen inte räknas) och igen på den låsta posten RPC:n returnerar.
+ *   2. Saknar offerten contactName/contactEmail hämtas kundens primära (annars första)
+ *      kontakt ur vift_customers (endast läsning).
+ * Ändringarna är inte verifierade i STAGING. Se supabase/inventering/G1-G4-DEL2-RESULTAT.md.
+ */
 /**
- * offer-token-validate — Supabase Edge Function (Leverans E, Del E2, v7)
+ * offer-token-validate — Supabase Edge Function (Leverans E, Del E2, v4)
  *
  * Validerar en publik offerttoken och returnerar offertens publika data.
  * Uppdaterar öppningsräknare och openedAt vid första besök.
@@ -9,12 +20,21 @@
  *     openCount, openedAt) hämtas alltid från live-offerten.
  * v3: strikt snapshot — inget nullish-fallback till live-offert för innehållsfält;
  *     bilagor filtreras via snapshot.publicAttachmentIds om tillgängligt (låst vid utskick).
- * v4: (se v3 — samma version, namnbump i produktionskommit)
- * v5: kontaktuppgifter förifylls från vift_customers med korrekt prioritetsordning.
- *     Ingen kunddata utöver contactName/contactEmail exponeras publikt.
- *     contactName: off.contactName → primary contact → contacts[0] → contactPerson
- *       → privat firstName+lastName → ''
- *     contactEmail: off.contactEmail → primary contact → contacts[0] → cust.email → ''
+ *
+ * ÄNDRAT (samtidighetsrättning, FÖRSLAG v1, EJ INSTALLERAT, del av VIFT CRM 12):
+ * Den tidigare direkta läs→validera→ändra→upsert-sekvensen för
+ * öppningsstatistik (openCount/openedAt/updatedAt) hade INGEN låsning och
+ * INGEN kontroll av upsert-anropets felresultat -- se
+ * 001_offer_token_open_commit_v1.sql för den fullständiga analysen och
+ * beviset. Den är ersatt med ETT anrop till den nya, radlåsta
+ * SECURITY DEFINER-funktionen public.offer_token_open_commit(), som gör
+ * HELA läs-lås-omvalidera-ändra-skriv-cykeln atomiskt i en
+ * databastransaktion och returnerar den kompletta, uppdaterade
+ * offertposten. Denna fil mappar bara RPC:ns fel till EXAKT samma
+ * HTTP-status/felkoder som tidigare fanns i denna funktion (404/403/410) --
+ * inga nya felkoder introduceras. Allt nedströms (snapshot-tolkning,
+ * buildPublicOffer, bilagefiltrering, händelseloggning vid första öppning)
+ * är OFÖRÄNDRAT.
  *
  * SÄKERHETSREGLER:
  * - Interna fält exponeras ALDRIG (inköpspris, marginal, TB, internalNote,
@@ -22,7 +42,6 @@
  * - lockedSnapshotJSON parsas säkert — ogiltig JSON faller tillbaka på live-offert
  * - Tokenkontroll, giltighetstid och återkallning kontrolleras server-side
  * - Rate-limit: max 30 req / minut per IP
- * - Inga kundfält utöver contactName/contactEmail returneras publikt
  *
  * Anrop: GET /functions/v1/offer-token-validate?t={token}
  *        ingen Authorization krävs — publik endpoint
@@ -105,65 +124,59 @@ serve(async (req: Request) => {
       auth: { persistSession: false }
     })
 
-    /* Hämta alla offerter och hitta den med matchande token */
-    const { data: storeRow, error: storeErr } = await supabase
-      .from('store')
-      .select('value')
-      .eq('key', 'vift_offers')
-      .maybeSingle()
-
-    if (storeErr) throw new Error('store-läsfel: ' + storeErr.message)
-
-    const offers: Record<string, unknown>[] = Array.isArray(storeRow?.value) ? storeRow.value as Record<string, unknown>[] : []
-    const off = offers.find(o => o.publicToken === token)
-
-    if (!off) {
-      return json({ error: 'not_found' }, 404)
+    /* ÄNDRAT: ett enda atomiskt RPC-anrop ersätter den tidigare
+       olåsta read→validera→ändra→upsert-sekvensen för öppningsstatistik.
+       RPC:n tar radlåset FÖRE all validering, omkontrollerar
+       återkallning/giltighetstid mot den nu LÅSTA raden (starkare garanti
+       än tidigare, som aldrig omkontrollerade efter en eventuell väntan),
+       och returnerar den kompletta, uppdaterade offertposten i samma
+       transaktion som skrivningen -- ett misslyckat skriv kan därför inte
+       längre tystas (se 001_offer_token_open_commit_v1.sql, TEST 8). */
+    /* REPO-BEVARAT (1): en ersatt offert ska inte öppnas eller räknas. Olåst förkontroll;
+       samma kontroll görs igen på den låsta posten efter RPC:n. */
+    {
+      const { data: preRow, error: preErr } = await supabase
+        .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
+      if (preErr) throw new Error('store-läsfel: ' + preErr.message)
+      const preOffers: Record<string, unknown>[] = Array.isArray(preRow?.value) ? preRow.value as Record<string, unknown>[] : []
+      const pre = preOffers.find(o => o.publicToken === token)
+      if (pre && pre.status === 'ersatt') return json({ error: 'replaced' }, 410)
     }
 
-    /* Kontrollera återkallning */
-    if (off.tokenRevokedAt) {
-      return json({ error: 'revoked' }, 403)
-    }
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc('offer_token_open_commit', {
+      p_token: token
+    })
 
-    /* Kontrollera giltighetstid */
-    if (off.tokenExpiresAt) {
-      const exp = new Date(off.tokenExpiresAt as string).getTime()
-      if (Date.now() > exp) {
-        return json({ error: 'expired', expiredAt: off.tokenExpiresAt }, 410)
+    if (rpcErr) {
+      const msg = rpcErr.message || ''
+      if (msg.includes('not_found'))     return json({ error: 'not_found' }, 404)
+      if (msg.includes('revoked'))       return json({ error: 'revoked' }, 403)
+      if (msg.includes('expired')) {
+        /* RÄTTAT vid egen oberoende verifiering (fanns i den levererade filen):
+           msg.split(':')[1] trunkerar vid den FÖRSTA kolonen i själva ISO-
+           tidsstämpeln (t.ex. "expired:2026-11-20T10:30:45.000Z" ->
+           "2026-11-20T10" -- bevisat direkt i Node). substring efter den
+           FÖRSTA kolonen bevarar hela värdet. */
+        const expiredAtPart = msg.substring(msg.indexOf(':') + 1)
+        return json({ error: 'expired', expiredAt: expiredAtPart }, 410)
       }
+      if (msg.includes('invalid_token')) return json({ error: 'not_found' }, 404)
+      throw new Error('offer_token_open_commit-fel: ' + msg)
     }
 
-    /* V48B3B0 (säkerhetshotfix): en ersatt offertversion (status === 'ersatt')
-       ska inte längre vara publikt öppningsbar via sin gamla länk — en nyare
-       version finns redan. Måste stå FÖRE alla sidoeffekter (openCount,
-       openedAt, updatedAt, store-skrivning, 'opened'-event) så att ett
-       avvisat anrop mot en ersatt offert lämnar posten helt orörd. */
-    if (off.status === 'ersatt') {
-      return json({ error: 'replaced' }, 410)
-    }
+    const off          = rpcResult?.offer as Record<string, unknown>
+    const isFirstOpen  = rpcResult?.isFirstOpen === true
 
-    /* Uppdatera öppningsstatistik */
-    const isFirstOpen = !off.openedAt
-    const now = new Date().toISOString()
-    off.openCount = (Number(off.openCount) || 0) + 1
-    if (isFirstOpen) {
-      off.openedAt = now
-    }
-    off.updatedAt = now
+    /* REPO-BEVARAT (1): kontrollen igen mot den låsta, returnerade posten. */
+    if (off && off.status === 'ersatt') return json({ error: 'replaced' }, 410)
 
-    /* Skriv tillbaka offers-blob */
-    await supabase
-      .from('store')
-      .upsert({ key: 'vift_offers', value: offers }, { onConflict: 'key' })
-
-    /* Logga öppningshändelse (bara första gången) */
+    /* Logga öppningshändelse (bara första gången) — OFÖRÄNDRAT */
     if (isFirstOpen) {
       await appendOfferEvent(supabase, {
         offerId: off.id as string,
         offerVersion: Number(off.versionNumber) || 1,
         type: 'opened',
-        ts:   now,
+        ts:   String(off.updatedAt ?? new Date().toISOString()),
         ip
       })
     }
@@ -171,74 +184,10 @@ serve(async (req: Request) => {
     /* Giltigt snapshot är auktoritativt; ogiltigt/ofullständigt snapshot behandlas som legacy */
     const snapshot = parseValidSnapshot(off.lockedSnapshotJSON, String(off.id ?? ''))
 
-    /* Lös kontaktuppgifter för förifyllning av signeringsformuläret.
-       Prioritetsordning contactName:
-         1. off.contactName (manuellt satt på offerten)
-         2. contacts.find(primary)?.name
-         3. contacts[0]?.name
-         4. cust.contactPerson
-         5. privat: firstName + lastName
-         6. '' (tom sträng)
-       Prioritetsordning contactEmail:
-         1. off.contactEmail (manuellt satt på offerten)
-         2. contacts.find(primary)?.email
-         3. contacts[0]?.email
-         4. cust.email
-         5. '' (tom sträng)
-       Inga andra kundfält exponeras publikt. */
-    let resolvedContactName  = String(off.contactName  ?? '')
-    let resolvedContactEmail = String(off.contactEmail ?? '')
-
-    if (!resolvedContactName || !resolvedContactEmail) {
-      try {
-        const { data: custRow, error: custErr } = await supabase
-          .from('store')
-          .select('value')
-          .eq('key', 'vift_customers')
-          .maybeSingle()
-
-        if (custErr) {
-          console.warn('[offer-token-validate] kund-läsfel:', custErr.message)
-        } else {
-          const customers: Record<string, unknown>[] = Array.isArray(custRow?.value)
-            ? custRow.value as Record<string, unknown>[]
-            : []
-          const cust = customers.find(c => c.id === off.customerId) as Record<string, unknown> | undefined
-
-          if (cust) {
-            const contacts: Record<string, unknown>[] = Array.isArray(cust.contacts)
-              ? cust.contacts as Record<string, unknown>[]
-              : []
-            const primaryContact = contacts.find(c => c.primary === true) as Record<string, unknown> | undefined
-            const firstContact   = contacts[0] as Record<string, unknown> | undefined
-
-            if (!resolvedContactName) {
-              resolvedContactName =
-                String(primaryContact?.name ?? '') ||
-                String(firstContact?.name   ?? '') ||
-                String(cust.contactPerson   ?? '')
-              if (!resolvedContactName && cust.type === 'privat') {
-                resolvedContactName = [cust.firstName, cust.lastName]
-                  .filter(Boolean)
-                  .join(' ')
-              }
-            }
-
-            if (!resolvedContactEmail) {
-              resolvedContactEmail =
-                String(primaryContact?.email ?? '') ||
-                String(firstContact?.email   ?? '') ||
-                String(cust.email            ?? '')
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[offer-token-validate] kund-lookup fel:', e)
-      }
-    }
-
     /* Bygg publik offertdata — INGA interna fält */
-    const publicOffer = buildPublicOffer(off, snapshot, resolvedContactName, resolvedContactEmail)
+    /* REPO-BEVARAT (2): kontaktnamn/e-post från kundregistret om offerten saknar dem. */
+    const contact = await resolveContact(supabase, off)
+    const publicOffer = buildPublicOffer(off, snapshot, contact.name, contact.email)
 
     /* Hämta kundsynliga bilagor — filtreras via snapshot.publicAttachmentIds om tillgängligt */
     const { data: attRow } = await supabase
@@ -288,8 +237,8 @@ serve(async (req: Request) => {
 function buildPublicOffer(
   off: Record<string, unknown>,
   snap: Record<string, unknown> | null,
-  resolvedContactName  = String(off.contactName  ?? ''),
-  resolvedContactEmail = String(off.contactEmail ?? '')
+  resolvedContactName: string,
+  resolvedContactEmail: string
 ): Record<string, unknown> {
   /* Giltigt snapshot är strikt auktoritativt för innehållsfält. */
   const s = (key: string): unknown => snap !== null ? snap[key] : off[key]
@@ -298,7 +247,7 @@ function buildPublicOffer(
     id:             off.id,
     /* Innehållsfält — från snapshot om tillgängligt */
     title:          s('title'),
-    versionNumber:  Number(s('versionNumber')) || 1,
+    versionNumber:  s('versionNumber'),
     customerName:   s('customerName')  ?? '',
     lines:          filterPublicLines(s('lines')),
     extras:         filterPublicLines(s('extras')),
@@ -316,7 +265,6 @@ function buildPublicOffer(
     summary:        s('summary')       ?? '',
     generalTerms:   s('generalTerms')  ?? '',
     address:        s('address')       ?? '',
-    sectionOrder:   filterPublicSectionOrder(s('sectionOrder')),
     /* Dynamiska metadata — alltid från live-offerten */
     status:         off.status,
     contactName:    resolvedContactName,
@@ -328,32 +276,43 @@ function buildPublicOffer(
   }
 }
 
-/* Filtrera bort interna fält från rader (inköpspris, marginal, kalkyl) */
-/* V48B5 R1 (blocker-korrigering av Gate C): EXAKT de fyra kanoniska
-   block-ID:na — samma modell som PageShells.OFFER_SECTION_IDS. Ingen
-   migrering av den gamla 8-ID-utvecklingsmodellen behövs (B5 gick
-   aldrig live). Sektions-ID:na mappar ENDAST till fördefinierade
-   render-mallar i public-offer.html/offer-public-pdf — aldrig godtycklig
-   HTML/kod. Okända ID:n kasseras, dubbletter kasseras, saknade ID:n
-   läggs till sist i standardordning; ogiltig/tom indata -> hela
-   standardordningen (= samma fallback-princip som PageShells.
-   _resolveSectionOrder / public-offer.html._poResolveSectionOrder). */
-const PUBLIC_SECTION_IDS = ['description', 'pricing', 'commercialTerms', 'generalTerms']
-function filterPublicSectionOrder(order: unknown): string[] {
-  const fallback = PUBLIC_SECTION_IDS.slice()
-  if (!Array.isArray(order) || order.length === 0) return fallback
-  const seen: Record<string, boolean> = {}
-  const out: string[] = []
-  for (const id of order) {
-    if (typeof id === 'string' && PUBLIC_SECTION_IDS.indexOf(id) !== -1 && !seen[id]) {
-      seen[id] = true
-      out.push(id)
+/* REPO-BEVARAT (2): samma logik som repots tidigare version (V48B5). Läser bara
+   vift_customers; ett läsfel loggas och ger tomma värden, aldrig ett fel till kunden. */
+async function resolveContact(
+  supabase: ReturnType<typeof createClient>,
+  off: Record<string, unknown>
+): Promise<{ name: string; email: string }> {
+  let name  = String(off.contactName ?? '')
+  let email = String(off.contactEmail ?? '')
+  if (name && email) return { name, email }
+  try {
+    const { data: custRow, error: custErr } = await supabase
+      .from('store').select('value').eq('key', 'vift_customers').maybeSingle()
+    if (custErr) {
+      console.warn('[offer-token-validate] kund-läsfel:', custErr.message)
+      return { name, email }
     }
+    const customers: Record<string, unknown>[] = Array.isArray(custRow?.value) ? custRow.value as Record<string, unknown>[] : []
+    const cust = customers.find(c => c.id === off.customerId)
+    if (cust) {
+      const contacts: Record<string, unknown>[] = Array.isArray(cust.contacts) ? cust.contacts as Record<string, unknown>[] : []
+      const primaryContact = contacts.find(c => c.primary === true)
+      const firstContact = contacts[0]
+      if (!name) {
+        name = String(primaryContact?.name ?? '') || String(firstContact?.name ?? '') || String(cust.contactPerson ?? '')
+        if (!name && cust.type === 'privat') name = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
+      }
+      if (!email) {
+        email = String(primaryContact?.email ?? '') || String(firstContact?.email ?? '') || String(cust.email ?? '')
+      }
+    }
+  } catch (e) {
+    console.warn('[offer-token-validate] kund-lookup fel:', e)
   }
-  for (const id of fallback) { if (!seen[id]) { seen[id] = true; out.push(id) } }
-  return out
+  return { name, email }
 }
 
+/* Filtrera bort interna fält från rader (inköpspris, marginal, kalkyl) */
 function filterPublicLines(lines: unknown): unknown[] {
   if (!Array.isArray(lines)) return []
   return lines.map((l: Record<string, unknown>) => {
@@ -361,7 +320,7 @@ function filterPublicLines(lines: unknown): unknown[] {
     const pub: Record<string, unknown> = {}
     const allowed = ['id','type','description','templateName','qty','unit',
                      'unitPrice','discount','total','vatRate','exVat','rutAmount',
-                     'reductionType','reductionBaseExVat','subLines','text','blockTitle']
+                     'subLines','text']
     for (const k of allowed) {
       if (k in l) pub[k] = l[k]
     }
@@ -369,21 +328,16 @@ function filterPublicLines(lines: unknown): unknown[] {
   })
 }
 
-/* Lägg till offerEvent i vift_offerEvents */
+/* Lägg till offerEvent i vift_offerEvents — via offer_events_append() RPC
+   (atomisk, radlåst), istället för osäker read→push→upsert av hela arrayen.
+   'oe-'-prefix bevarat, entropikälla bytt till crypto.randomUUID(). OFÖRÄNDRAT. */
 async function appendOfferEvent(
   supabase: ReturnType<typeof createClient>,
   ev: Partial<{ offerId: string; offerVersion: number; type: string; ts: string; ip: string }>
 ): Promise<void> {
   try {
-    const { data: row } = await supabase
-      .from('store')
-      .select('value')
-      .eq('key', 'vift_offerEvents')
-      .maybeSingle()
-
-    const events: unknown[] = Array.isArray(row?.value) ? row.value as unknown[] : []
-    events.push({
-      id:           'oe-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    const event = {
+      id:           'oe-' + crypto.randomUUID(),
       offerId:      ev.offerId     ?? '',
       offerVersion: ev.offerVersion ?? 1,
       type:         ev.type        ?? '',
@@ -392,13 +346,10 @@ async function appendOfferEvent(
       byCustomer:   '',
       byEmail:      '',
       comment:      ''
-    })
-    /* Håll logg rimlig — max 10 000 händelser */
-    if (events.length > 10_000) events.splice(0, events.length - 10_000)
+    }
 
-    await supabase
-      .from('store')
-      .upsert({ key: 'vift_offerEvents', value: events }, { onConflict: 'key' })
+    const { error } = await supabase.rpc('offer_events_append', { p_event: event })
+    if (error) console.error('[offer-token-validate] appendOfferEvent RPC-fel:', error)
   } catch (e) {
     console.error('[offer-token-validate] appendOfferEvent fel:', e)
   }

@@ -1,5 +1,23 @@
+/*
+ * REPO-SYNK 2026-11-27 (G1/G4 del 2): denna fil är STAGING-versionen v10 (installerad
+ * 2026-11-20, källa supabase/inventering/staging-2026-11-26/functions/offer-respond/index.ts)
+ * plus beteenden från repots tidigare version (8ce588b, V48B3B0) som saknades i STAGING.
+ * De är märkta "REPO-BEVARAT" nedan:
+ *   1. Status 'ersatt' ger 410 { error: 'replaced' } (förkontroll före RPC:n).
+ *   2. Ett giltigt lockedSnapshotJSON krävs (409 snapshot_unavailable), och kundens
+ *      offerVersion jämförs mot snapshotens versionNumber (400 version_mismatch).
+ *   3. In-app-notiser (vift_notifications) till aktiv personal med offer_manage/all när en
+ *      offert godkänns. Skrivs nu med jämför-och-byt på updated_at (max 3 försök) i stället
+ *      för repots ovillkorliga upsert av hela arrayen.
+ * EJ bevarat (kräver ändring i RPC:n offer_respond_commit, alltså en ny migration):
+ *   - approvedByPhone/approvedByPosition i customerApproval (RPC:n sparar dem inte),
+ *   - repots regel att 'ändring-begärd' också räknas som redan besvarad (RPC:n spärrar
+ *     bara 'godkänd'/'nekad'). En förkontroll i EF:n skulle bryta requestId-reprisen.
+ * Förkontrollerna är olåsta läsningar; RPC:n gör sin egen låsta kontroll av allt annat.
+ * Ändringarna är inte verifierade i STAGING. Se supabase/inventering/G1-G4-DEL2-RESULTAT.md.
+ */
 /**
- * offer-respond — Supabase Edge Function (Leverans E, Del E4, v10)
+ * offer-respond — Supabase Edge Function (Leverans E, Del E4)
  *
  * Tar emot kundsvar på digital offert (godkänn / ändring begärd / neka).
  * Validerar token + version, sparar auditlogg, uppdaterar status.
@@ -9,6 +27,58 @@
  * - All validering och statussättning sker server-side här
  * - Inga interna fält returneras till kunden
  * - Rate-limit: max 5 svar / minut per IP (svar är sällsynta)
+ *
+ * ÄNDRAT (samtidighetsrättning, FÖRSLAG v2, EJ INSTALLERAT):
+ * Den tidigare direkta read→upsert av HELA vift_offers-arrayen (ingen
+ * låsning, ingen CAS) är ersatt med ETT anrop till den nya, radlåsta
+ * SECURITY DEFINER-funktionen public.offer_respond_commit() (se
+ * 001_offer_respond_commit_v2.sql). Den funktionen gör HELA
+ * läs-lås-validera-ändra-skriv-OCH-händelselogg-cykeln atomiskt i en
+ * databastransaktion. Denna fil anropar bara RPC:n och mappar dess fel
+ * till exakt samma HTTP-status/felkoder som tidigare. Push-notisen till
+ * personalen rörs INTE av rättningen -- den är redan fire-and-forget,
+ * body/CORS/rate-limit är oförändrade.
+ *
+ * ÄNDRAT IGEN (FÖRSLAG v3, EJ INSTALLERAT -- superseder v2:s fil):
+ * Ett valfritt `requestId`-fält i body skickas nu vidare till RPC:n som
+ * `p_request_id`, om det finns. Detta är en REN TILLÄGGSFUNKTION:
+ * - Skickas inget `requestId` (fältet saknas, är tomt, eller inte en
+ *   sträng) skickas `null` till RPC:n och beteendet är BYTE-FÖR-BYTE
+ *   identiskt med v2 -- ingen ny gren körs någonstans.
+ * - Den REDAN DRIFTSATTA, riktiga `offer-respond/index.ts` skickar INTE
+ *   detta fält idag (bekräftat genom direkt läsning av den riktiga,
+ *   aktuella källfilen, inte en rekonstruktion) -- denna ändring är alltså
+ *   bakåtkompatibel med ALLA klienter som finns i produktion just nu.
+ *   Den publika offertsidan (`public-offer.html`) måste uppdateras separat
+ *   (utanför denna ändrings omfattning, väntar på riktig källa) för att
+ *   faktiskt BÖRJA skicka ett `requestId` och få idempotensskyddet.
+ * - RPC-svaret kan nu innehålla `isReplay: true` om anropet var en
+ *   upprepning av ett redan genomfört svar med samma `requestId` -- denna
+ *   fil mappar det till ett extra `replay: true`-fält i 200-svaret (själva
+ *   statuskoden och övriga fält är oförändrade, så en klient som ignorerar
+ *   fältet fungerar precis som idag).
+ *
+ * ÄNDRAT IGEN (FÖRSLAG v5, EJ INSTALLERAT -- superseder v3:s fil; v4 fick
+ * ALDRIG en egen EF-fil byggd -- se KONSOLIDERAD_SLUTLEVERANS-rättningens
+ * fynd 1, 2026-11-20, för bakgrunden):
+ * - Två NYA fel som 001_offer_respond_commit_v5.sql (och den oförändrade
+ *   logiken i v4) kan kasta mappas nu uttryckligen, istället för att falla
+ *   igenom till den generiska 500 `internal_error`:
+ *     `idempotency_key_conflict` -> 409 (samma requestId återanvänt med
+ *       ANDRA parametrar -- klienten måste skicka ett NYTT requestId för
+ *       detta genuint nya försök, inte samma som senast)
+ *     `invalid_request_id` -> 400 (requestId längre än 128 tecken)
+ * - EF:n gör nu SJÄLV samma 128-teckenskontroll FÖRE RPC-anropet (identisk
+ *   gräns som SQL-funktionens egen, oberoende kontroll -- försvar i två
+ *   lager, samma princip som redan används för övrig indatavalidering i
+ *   denna fil). Det sparar en databasrunda för ett anrop som ändå skulle
+ *   avvisas, och tar bort v3:s egen, nu inkonsekventa `.slice(0, 200)`-
+ *   trunkering (som bara klippte värden längre än 200 tecken -- ett värde
+ *   på 129-200 tecken slank igenom EF:n oförändrat och avvisades ändå av
+ *   SQL-funktionens 128-gräns, men ett värde över 200 tecken hade tystats
+ *   ned till 200 FÖRE SQL-kontrollen ens såg det -- förvirrande, nu rättat
+ *   så att EF:n avvisar exakt samma gräns den SKICKAR vidare, ingen tyst
+ *   trunkering någonstans).
  *
  * Anrop: POST /functions/v1/offer-respond
  * Body: {
@@ -24,11 +94,28 @@
  *   company?: string
  *   position?: string
  *   agreedToTerms?: boolean  — krävs vid approve
+ *   requestId?: string       — valfritt: stabilt klient-ID för att
+ *                              deduplicera nätverksåterförsök av SAMMA
+ *                              inskick. Skickas oförändrat vid en äkta
+ *                              retry av samma försök; ett NYTT, avsiktligt
+ *                              svar ska få ett NYTT requestId (eller inget).
+ *                              Max 128 tecken. OBS (se slutrapportens
+ *                              GO/NO-GO-avsnitt): fältnamnet `requestId` är
+ *                              ett ANTAGANDE baserat på denna kodbas egen
+ *                              camelCase-konvention -- den riktiga publika
+ *                              klienten (`public-offer.html`) har INTE
+ *                              kunnat hämtas (HTTP 401) och skickar enligt
+ *                              bekräftad, oberoende läsning av den gamla
+ *                              LIVE-filen INGET requestId-fält alls idag.
+ *                              Detta fält måste alltså betraktas som EJ
+ *                              VERIFIERAT mot en verklig klient tills
+ *                              public-offer.html kan läsas.
  * }
  *
- * Svar 200: { ok: true, action, offerId, newStatus }
- * Svar 400: { error: 'invalid_action' | 'terms_required' | 'name_required' | 'version_mismatch' }
+ * Svar 200: { ok: true, action, offerId, newStatus, replay?: true }
+ * Svar 400: { error: 'invalid_action' | 'terms_required' | 'name_required' | 'version_mismatch' | 'invalid_request_id' }
  * Svar 403: { error: 'revoked' }
+ * Svar 409: { error: 'idempotency_key_conflict' }
  * Svar 410: { error: 'expired' | 'already_answered' }
  * Svar 429: { error: 'rate_limited' }
  */
@@ -81,12 +168,6 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 const VALID_ACTIONS = ['approve', 'change_request', 'decline'] as const
 type Action = typeof VALID_ACTIONS[number]
 
-const STATUS_FOR_ACTION: Record<Action, string> = {
-  approve:        'godkänd',
-  change_request: 'ändring-begärd',
-  decline:        'nekad'
-}
-
 /* ── Handler ─────────────────────────────────────────────── */
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -116,186 +197,142 @@ serve(async (req: Request) => {
   const comment        = String(body.comment ?? '').trim().slice(0, 2000)
   const changeCategory = String(body.changeCategory ?? '').trim()
   const declineReason  = String(body.declineReason  ?? '').trim()
-  const phone          = String(body.phone    ?? '').trim().slice(0, 30)
-  const position       = String(body.position ?? '').trim().slice(0, 100)
   const agreedToTerms  = body.agreedToTerms === true
 
-  /* Validera input */
+  /* Valfritt idempotensnyckel-fält. Saknas det, eller är det inte en
+     icke-tom sträng, blir det `null` -- och `null` till RPC:n innebär att
+     INGEN idempotenslogik alls körs där (se SQL-filens egen motivering).
+     ÄNDRAT (v5): ingen tyst `.slice()`-trunkering längre -- värdet skickas
+     oförändrat vidare, och avvisas EXPLICIT nedan (och, oberoende, även av
+     SQL-funktionens egen 128-gräns) om det är för långt. Se header-
+     kommentaren för varför v3:s `.slice(0, 200)` var inkonsekvent. */
+  const requestIdRaw = typeof body.requestId === 'string' ? body.requestId.trim() : ''
+  const requestId: string | null = requestIdRaw ? requestIdRaw : null
+
+  /* Validera input — OFÖRÄNDRAT från v2/v3 */
   if (!token || token.length < 32)             return json({ error: 'invalid_token' }, 400)
   if (!VALID_ACTIONS.includes(action as Action)) return json({ error: 'invalid_action' }, 400)
   if (!name)                                   return json({ error: 'name_required' }, 400)
   if (!email || !email.includes('@'))          return json({ error: 'email_required' }, 400)
   if (action === 'approve' && !agreedToTerms)  return json({ error: 'terms_required' }, 400)
+  /* NYTT (v5): samma 128-teckensgräns som SQL-funktionen kontrollerar
+     oberoende själv -- avvisas här FÖRE databasanropet, så ett redan dömt
+     anrop inte ens behöver vänta ut ett eventuellt radlås i onödan. */
+  if (requestId !== null && requestId.length > 128) {
+    return json({ error: 'invalid_request_id' }, 400)
+  }
 
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false }
     })
 
-    /* Hämta offers-blob */
-    const { data: storeRow, error: storeErr } = await supabase
-      .from('store')
-      .select('value')
-      .eq('key', 'vift_offers')
-      .maybeSingle()
-
-    if (storeErr) throw new Error('store-läsfel: ' + storeErr.message)
-
-    const offers: Record<string, unknown>[] = Array.isArray(storeRow?.value)
-      ? storeRow.value as Record<string, unknown>[]
-      : []
-
-    const off = offers.find(o => o.publicToken === token)
-
-    if (!off)                  return json({ error: 'not_found' }, 404)
-    if (off.tokenRevokedAt)    return json({ error: 'revoked' }, 403)
-    if (off.tokenExpiresAt) {
-      const exp = new Date(off.tokenExpiresAt as string).getTime()
-      if (Date.now() > exp)    return json({ error: 'expired' }, 410)
-    }
-    /* V48B3B0 (säkerhetshotfix): en ersatt offertversion (status === 'ersatt')
-       får aldrig ta emot ett kundsvar (approve/change_request/decline) — en
-       nyare version finns redan. Måste stå FÖRE snapshot-/versionsvalidering
-       och FÖRE all mutation, så ett avvisat anrop lämnar posten helt orörd. */
-    if (off.status === 'ersatt') return json({ error: 'replaced' }, 410)
-
-    /* Validera lockedSnapshotJSON och jämför version mot snapshot (inte live-fält).
-       off.versionNumber kan vara undefined på äldre offerter → NaN vid Number() → mismatch.
-       Snapshot-versionering är auktoritativ: kunden svarar på den LÅSTA skickade versionen. */
-    const _snapRaw = off.lockedSnapshotJSON
-    let   _snapObj: Record<string, unknown> | null = null
-    if (_snapRaw) {
-      try {
-        const _parsed = typeof _snapRaw === 'string' ? JSON.parse(_snapRaw) : _snapRaw
-        if (_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) {
-          const _s = _parsed as Record<string, unknown>
-          if (String(_s.id ?? '') === String(off.id ?? '') &&
-              Array.isArray(_s.lines) &&
-              Array.isArray(_s.extras) &&
-              Array.isArray(_s.publicAttachmentIds)) {
-            _snapObj = _s
-          }
-        }
-      } catch (_) { /* ogiltig JSON */ }
-    }
-    if (_snapObj === null) {
-      return json({ error: 'snapshot_unavailable' }, 409)
-    }
-    const lockedVersion    = Number(_snapObj.versionNumber) || 1
-    const submittedVersion = Number(body.offerVersion) || 1
-    if (lockedVersion !== submittedVersion) {
-      return json({
-        error: 'version_mismatch',
-        currentVersion: lockedVersion
-      }, 400)
-    }
-
-    /* Förhindra alla svar efter att offerten redan fått ett slutgiltigt/
-       terminalt svar. V48B3B0 (säkerhetshotfix): utökad med 'ändring-begärd'
-       — kunden har redan skickat ett svar för denna version, ytterligare
-       svar/replay på SAMMA version ska inte accepteras (matchar det
-       publika UI:t, som redan behandlar 'ändring-begärd' som besvarad).
-       'ersatt' blockeras separat och tidigare ovan (error:'replaced'). */
-    const alreadyAnswered = off.status === 'godkänd' || off.status === 'nekad' || off.status === 'ändring-begärd'
-    if (alreadyAnswered) {
-      return json({ error: 'already_answered', status: off.status }, 410)
-    }
-
-    const now = new Date().toISOString()
-    const newStatus = STATUS_FOR_ACTION[action]
-
-    /* Uppdatera offert-status och godkännandedata */
-    off.status    = newStatus
-    off.answeredAt = now
-    off.updatedAt  = now
-
-    if (action === 'approve') {
-      off.customerApproval = {
-        token:              token,
-        approvedAt:         now,
-        approvedByName:     name,
-        approvedByEmail:    email,
-        approvedByPhone:    phone,
-        approvedByPosition: position,
-        ip:                 ip,
-        comment:            comment
+    /* ÄNDRAT (v2): ett enda atomiskt RPC-anrop ersätter den tidigare
+       read→validera→ändra→upsert→(separat)händelselogg-sekvensen.
+       ÄNDRAT IGEN (v3): `p_request_id` skickas med -- `null` om klienten
+       inte angav något, vilket är exakt v2:s beteende. */
+    /* REPO-BEVARAT (1, 2): olåst förkontroll av ersatt offert och låst kundversion. */
+    const { data: preRow, error: preErr } = await supabase
+      .from('store').select('value').eq('key', 'vift_offers').maybeSingle()
+    if (preErr) throw new Error('store-läsfel: ' + preErr.message)
+    const preOffers: Record<string, unknown>[] = Array.isArray(preRow?.value) ? preRow.value as Record<string, unknown>[] : []
+    const pre = preOffers.find(o => o.publicToken === token)
+    let preSnapshot: Record<string, unknown> | null = null
+    if (pre) {
+      if (pre.status === 'ersatt') return json({ error: 'replaced' }, 410)
+      preSnapshot = parseLockedSnapshot(pre.lockedSnapshotJSON, String(pre.id ?? ''))
+      if (preSnapshot === null) return json({ error: 'snapshot_unavailable' }, 409)
+      const lockedVersion = Number(preSnapshot.versionNumber) || 1
+      if (lockedVersion !== (Number(body.offerVersion) || 1)) {
+        return json({ error: 'version_mismatch', currentVersion: lockedVersion }, 400)
       }
     }
 
-    if (action === 'decline') {
-      off.declineReason = declineReason || 'annat'
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc('offer_respond_commit', {
+      p_token:          token,
+      p_offer_version:  offerVersion,
+      p_action:         action,
+      p_name:           name,
+      p_email:          email,
+      p_comment:        comment,
+      p_decline_reason: declineReason,
+      p_ip:             ip,
+      p_change_category: changeCategory,
+      p_request_id:     requestId
+    })
+
+    if (rpcErr) {
+      const msg = rpcErr.message || ''
+      if (msg.includes('not_found'))        return json({ error: 'not_found' }, 404)
+      if (msg.includes('revoked'))          return json({ error: 'revoked' }, 403)
+      if (msg.includes('expired'))          return json({ error: 'expired' }, 410)
+      if (msg.includes('already_answered')) {
+        const statusPart = msg.split(':')[1]
+        return json({ error: 'already_answered', status: statusPart }, 410)
+      }
+      if (msg.includes('version_mismatch')) {
+        const currentVersionPart = msg.split(':')[1]
+        return json({
+          error: 'version_mismatch',
+          currentVersion: currentVersionPart ? Number(currentVersionPart) : undefined
+        }, 400)
+      }
+      if (msg.includes('invalid_action'))   return json({ error: 'invalid_action' }, 400)
+      if (msg.includes('name_required'))    return json({ error: 'name_required' }, 400)
+      if (msg.includes('invalid_token'))    return json({ error: 'invalid_token' }, 400)
+      /* NYTT (v5): de två nya felen från 001_offer_respond_commit_v5.sql
+         (v4:s fingeravtrycks-/längdlogik, oförändrad här). 409 för
+         idempotency_key_conflict: klienten återanvände ett requestId med
+         ANDRA parametrar än originalanropet -- den riktiga orsaken är ett
+         klientfel (fel/återanvänt ID), inte en serverkonflikt med
+         offertens eget tillstånd (det är redan 410 already_answered).
+         400 för invalid_request_id: borde i praktiken aldrig nås här
+         eftersom EF:n redan avvisar samma gräns ovan FÖRE detta anrop --
+         kvar som ett andra skyddslager om SQL-funktionens gräns någon gång
+         ändras utan att EF:ens egen hinner följa med. */
+      if (msg.includes('idempotency_key_conflict')) return json({ error: 'idempotency_key_conflict' }, 409)
+      if (msg.includes('invalid_request_id'))        return json({ error: 'invalid_request_id' }, 400)
+      throw new Error('offer_respond_commit-fel: ' + msg)
     }
 
-    /* Skriv tillbaka */
-    const { error: writeErr } = await supabase
-      .from('store')
-      .upsert({ key: 'vift_offers', value: offers }, { onConflict: 'key' })
+    const offerId    = rpcResult?.offerId as string
+    const newStatus  = rpcResult?.newStatus as string
+    const offerTitle = (rpcResult?.offerTitle as string) || offerId
+    const isReplay   = rpcResult?.isReplay === true
 
-    if (writeErr) throw new Error('store-skrivfel: ' + writeErr.message)
-
-    /* Lös offerttitel och kundnamn från lockedSnapshotJSON → live-offert.
-       Notisen ska beskriva den version kunden faktiskt godkände. */
-    let resolvedCustomerName = ''
-    let resolvedOfferTitle   = ''
-    if (off.lockedSnapshotJSON) {
-      try {
-        const snap = JSON.parse(off.lockedSnapshotJSON as string)
-        resolvedCustomerName = String(snap.customerName || '')
-        resolvedOfferTitle   = String(snap.title        || '')
-      } catch (_) { /* ignore parse error */ }
-    }
-    if (!resolvedCustomerName) resolvedCustomerName = String(off.customerName || '')
-    if (!resolvedOfferTitle)   resolvedOfferTitle   = String(off.title || '') || String(off.id || '')
-
-    /* In-app notiser till VIFT-personal vid godkännande */
-    if (action === 'approve') {
-      await sendInAppNotifications(supabase, {
-        offerId:      off.id as string,
-        offerTitle:   resolvedOfferTitle,
-        customerId:   (off.customerId as string) || '',
-        customerName: resolvedCustomerName,
-        version:      Number(off.versionNumber) || 1,
-        approvedBy:   name,
-        now
+    /* NYTT (v3): vid en äkta repris (samma requestId som redan committats)
+       är statusändringen och händelseloggen redan gjorda sedan tidigare --
+       en ny push-notis till personalen skulle bara vara brus (personalen
+       har redan notifierats en gång för detta svar). Skicka INTE push på
+       en repris. Vid ett genuint nytt svar (isReplay === false, exakt v2:s
+       enda fall när requestId saknas) är detta oförändrat. */
+    if (!isReplay) {
+      await sendPushToVift(supabase, {
+        action,
+        offerId,
+        customerName: name,
+        offerTitle
       })
+      /* REPO-BEVARAT (3): in-app-notis vid godkännande. */
+      if (action === 'approve') {
+        await sendInAppNotifications(supabase, {
+          offerId,
+          offerTitle: String(preSnapshot?.title || '') || offerTitle,
+          customerId: String(pre?.customerId || ''),
+          customerName: String(preSnapshot?.customerName || pre?.customerName || ''),
+          version: Number(rpcResult?.offerVersion) || 1,
+          approvedBy: name,
+          now: String(rpcResult?.answeredAt || new Date().toISOString())
+        })
+      }
     }
-
-    /* Händelselogg */
-    const eventType = action === 'approve' ? 'approved'
-                    : action === 'change_request' ? 'change_requested'
-                    : 'declined'
-    await appendOfferEvent(supabase, {
-      offerId:               off.id as string,
-      offerVersion:          Number(off.versionNumber) || 1,
-      type:                  eventType,
-      ts:                    now,
-      byCustomer:            name,
-      byEmail:               email,
-      ip,
-      comment,
-      changeRequestCategory: changeCategory,
-      declineReason
-    })
-
-    /* Push-notis till VIFT-personal */
-    await sendPushToVift(supabase, {
-      action,
-      offerId:      off.id as string,
-      customerName: name,
-      offerTitle:   (off.title as string) || (off.id as string)
-    })
-
-    /* Uppdatera synknyckel — öppna CRM-klienter triggar DataSync */
-    const { error: lcErr } = await supabase
-      .from('store')
-      .upsert({ key: 'vift_lastChanged', value: now }, { onConflict: 'key' })
-    if (lcErr) console.warn('[offer-respond] vift_lastChanged-skrivfel:', lcErr.message)
 
     return json({
       ok:        true,
       action,
-      offerId:   off.id,
-      newStatus
+      offerId,
+      newStatus,
+      ...(isReplay ? { replay: true } : {})
     })
 
   } catch (err: unknown) {
@@ -304,7 +341,98 @@ serve(async (req: Request) => {
   }
 })
 
-/* ── Pushnotis till VIFT-personal ─────────────────────────── */
+/* REPO-BEVARAT (2): samma snapshotkrav som offer-token-validate/offer-public-pdf. */
+function parseLockedSnapshot(raw: unknown, offerId: string): Record<string, unknown> | null {
+  try {
+    if (!raw) return null
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const snap = parsed as Record<string, unknown>
+    if (String(snap.id ?? '') !== offerId) return null
+    if (!Array.isArray(snap.lines) || !Array.isArray(snap.extras) || !Array.isArray(snap.publicAttachmentIds)) return null
+    return snap
+  } catch { return null }
+}
+
+/* REPO-BEVARAT (3): in-app-notiser till personal med offer_manage/all. Mottagare,
+   meddelandetext och idempotenta notis-id är oförändrade från repots version (V48B3B0).
+   Skrivningen är ändrad till jämför-och-byt på store.updated_at, så att en samtidig
+   skrivning (t.ex. en användare som markerar en notis som läst) inte skrivs över.
+   Fel loggas och stoppar aldrig kundens svar. */
+async function sendInAppNotifications(
+  supabase: ReturnType<typeof createClient>,
+  opts: { offerId: string; offerTitle: string; customerId: string; customerName: string; version: number; approvedBy: string; now: string }
+): Promise<void> {
+  try {
+    const [staffRow, rolesRow, custRow] = await Promise.all([
+      supabase.from('store').select('value').eq('key', 'vift_staff').maybeSingle(),
+      supabase.from('store').select('value').eq('key', 'vift_roles').maybeSingle(),
+      supabase.from('store').select('value').eq('key', 'vift_customers').maybeSingle()
+    ])
+    if (staffRow.error) { console.error('[offer-respond] staff-läsfel:', staffRow.error.message); return }
+    if (rolesRow.error) { console.error('[offer-respond] roles-läsfel:', rolesRow.error.message); return }
+    if (custRow.error) console.warn('[offer-respond] kund-läsfel:', custRow.error.message)
+
+    const staff: Record<string, unknown>[] = Array.isArray(staffRow.data?.value) ? staffRow.data.value as Record<string, unknown>[] : []
+    const roles: Record<string, unknown>[] = Array.isArray(rolesRow.data?.value) ? rolesRow.data.value as Record<string, unknown>[] : []
+    const rolePerms = new Map<string, string[]>()
+    for (const r of roles) if (r.id && Array.isArray(r.permissions)) rolePerms.set(r.id as string, r.permissions as string[])
+    const eligible = staff.filter(s => {
+      if (s.active === false || s.deleted) return false
+      const perms = rolePerms.get(s.role as string) ?? []
+      return perms.includes('offer_manage') || perms.includes('all')
+    })
+    if (eligible.length === 0) return
+
+    let customerName = opts.customerName
+    if (!customerName && opts.customerId) {
+      const customers: Record<string, unknown>[] = Array.isArray(custRow.data?.value) ? custRow.data.value as Record<string, unknown>[] : []
+      const cust = customers.find(c => c.id === opts.customerId)
+      if (cust) {
+        if (cust.type === 'privat') customerName = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
+        if (!customerName) customerName = String(cust.name || '')
+      }
+    }
+    const dateLabel = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Stockholm', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    }).format(new Date(opts.now))
+    const titlePart    = opts.offerTitle !== opts.offerId ? `${opts.offerTitle} (${opts.offerId})` : opts.offerId
+    const customerPart = customerName ? ` – kund: ${customerName}` : ''
+    const message      = `${titlePart} godkänd av ${opts.approvedBy}${customerPart} · ${dateLabel}`
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const { data: notifRow, error: notifErr } = await supabase
+        .from('store').select('value, updated_at').eq('key', 'vift_notifications').maybeSingle()
+      if (notifErr) { console.error('[offer-respond] notif-läsfel — avbryter utan skrivning:', notifErr.message); return }
+      if (notifRow !== null && !Array.isArray(notifRow?.value)) { console.error('[offer-respond] notisdata har ogiltigt format — avbryter utan skrivning'); return }
+      const existing: Record<string, unknown>[] = Array.isArray(notifRow?.value) ? notifRow!.value as Record<string, unknown>[] : []
+      const existingIds = new Set(existing.map(n => n.id as string))
+      const newNotifs: Record<string, unknown>[] = []
+      for (const s of eligible) {
+        const notifId = `N-offer-approved-${opts.offerId}-v${opts.version}-${String(s.id)}`
+        if (existingIds.has(notifId)) continue
+        newNotifs.push({ id: notifId, userId: s.id, type: 'offer_approved', message, aoId: '', offerId: opts.offerId, read: false, createdAt: opts.now })
+      }
+      if (newNotifs.length === 0) return
+      const next = [...newNotifs, ...existing].slice(0, 5_000)
+      if (notifRow === null) {
+        const { error } = await supabase.from('store').insert({ key: 'vift_notifications', value: next })
+        if (!error) return
+      } else {
+        let q = supabase.from('store').update({ value: next, updated_at: new Date().toISOString() }).eq('key', 'vift_notifications')
+        q = notifRow.updated_at === null ? q.is('updated_at', null) : q.eq('updated_at', notifRow.updated_at)
+        const { data, error } = await q.select('key')
+        if (!error && Array.isArray(data) && data.length === 1) return
+        if (error) console.warn('[offer-respond] notisskrivfel, försök', attempt, ':', error.message)
+      }
+    }
+    console.error('[offer-respond] in-app-notis kunde inte sparas efter 3 försök (samtidiga skrivningar)')
+  } catch (e) {
+    console.warn('[offer-respond] sendInAppNotifications fel:', e)
+  }
+}
+
+/* ── Pushnotis till VIFT-personal — OFÖRÄNDRAT ────────────── */
 async function sendPushToVift(
   supabase: ReturnType<typeof createClient>,
   opts: { action: string; offerId: string; customerName: string; offerTitle: string }
@@ -354,194 +482,6 @@ async function sendPushToVift(
     console.warn('[offer-respond] sendPushToVift fel:', e)
   }
 }
-
-/* ── Händelselogg ─────────────────────────────────────────── */
-async function appendOfferEvent(
-  supabase: ReturnType<typeof createClient>,
-  ev: Partial<{
-    offerId: string; offerVersion: number; type: string; ts: string
-    byCustomer: string; byEmail: string; ip: string; comment: string
-    changeRequestCategory: string; declineReason: string
-  }>
-): Promise<void> {
-  try {
-    const { data: row } = await supabase
-      .from('store')
-      .select('value')
-      .eq('key', 'vift_offerEvents')
-      .maybeSingle()
-
-    const events: unknown[] = Array.isArray(row?.value) ? row.value as unknown[] : []
-    events.push({
-      id:                     'oe-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      offerId:                ev.offerId                ?? '',
-      offerVersion:           ev.offerVersion           ?? 1,
-      type:                   ev.type                   ?? '',
-      ts:                     ev.ts                     ?? new Date().toISOString(),
-      byUser:                 '',
-      byCustomer:             ev.byCustomer             ?? '',
-      byEmail:                ev.byEmail                ?? '',
-      ip:                     ev.ip                     ?? '',
-      comment:                ev.comment                ?? '',
-      changeRequestCategory:  ev.changeRequestCategory  ?? '',
-      declineReason:          ev.declineReason          ?? ''
-    })
-    if (events.length > 10_000) events.splice(0, events.length - 10_000)
-
-    await supabase
-      .from('store')
-      .upsert({ key: 'vift_offerEvents', value: events }, { onConflict: 'key' })
-  } catch (e) {
-    console.error('[offer-respond] appendOfferEvent fel:', e)
-  }
-}
-
-/* ── In-app notiser: skapa per eligible staff ─────────────── */
-async function sendInAppNotifications(
-  supabase: ReturnType<typeof createClient>,
-  opts: {
-    offerId: string
-    offerTitle: string
-    customerId: string
-    customerName: string
-    version: number
-    approvedBy: string
-    now: string
-  }
-): Promise<void> {
-  try {
-    /* Läs staff, roles, notiser och kunder parallellt */
-    const [staffRow, rolesRow, notifRow, custRow] = await Promise.all([
-      supabase.from('store').select('value').eq('key', 'vift_staff').maybeSingle(),
-      supabase.from('store').select('value').eq('key', 'vift_roles').maybeSingle(),
-      supabase.from('store').select('value').eq('key', 'vift_notifications').maybeSingle(),
-      supabase.from('store').select('value').eq('key', 'vift_customers').maybeSingle()
-    ])
-
-    /* Felkontroll på läsningar — staff och roles är nödvändiga för att veta vem som ska notifieras */
-    if (staffRow.error) {
-      console.error('[offer-respond] staff-läsfel:', staffRow.error.message)
-      return
-    }
-    if (rolesRow.error) {
-      console.error('[offer-respond] roles-läsfel:', rolesRow.error.message)
-      return
-    }
-    if (notifRow.error) {
-      /* Läsfel på notiser — avbryt utan skrivning för att inte radera notishistoriken */
-      console.error('[offer-respond] notif-läsfel — avbryter för att inte radera notishistorik:', notifRow.error.message)
-      return
-    }
-    /* Om raden finns men value är i oväntat format — avbryt utan skrivning */
-    if (notifRow.data !== null && !Array.isArray(notifRow.data?.value)) {
-      console.error('[offer-respond] notisdata har ogiltigt format — avbryter utan skrivning')
-      return
-    }
-    if (custRow.error) {
-      console.warn('[offer-respond] kund-läsfel:', custRow.error.message)
-    }
-
-    const staff: Record<string, unknown>[] = Array.isArray(staffRow.data?.value)
-      ? staffRow.data.value as Record<string, unknown>[]
-      : []
-    const roles: Record<string, unknown>[] = Array.isArray(rolesRow.data?.value)
-      ? rolesRow.data.value as Record<string, unknown>[]
-      : []
-    /* Här är det säkert att bygga ny array: antingen finns ingen rad alls (null), eller value är en giltig array */
-    const existing: Record<string, unknown>[] = Array.isArray(notifRow.data?.value)
-      ? notifRow.data.value as Record<string, unknown>[]
-      : []
-
-    /* Bygg rollpermission-map: r.id → permissions[]
-       Matchar staff.role (sträng som 'admin', 'chef', 'personal') */
-    const rolePerms = new Map<string, string[]>()
-    for (const r of roles) {
-      if (r.id && Array.isArray(r.permissions)) {
-        rolePerms.set(r.id as string, r.permissions as string[])
-      }
-    }
-
-    /* Filtrera aktiv personal med offer_manage eller all.
-       Schema: staff.active (boolean, default true) — INTE inactive.
-       Schema: staff.role (sträng-ID) — INTE roleId. */
-    const eligible = staff.filter(s => {
-      if (s.active === false || s.deleted) return false
-      const perms = rolePerms.get(s.role as string) ?? []
-      return perms.includes('offer_manage') || perms.includes('all')
-    })
-
-    /* Lös kundnamn: opts.customerName → vift_customers-lookup
-       Schema.customer: name (foretag/brf/fastighetsagare), firstName+lastName (privat).
-       contactPerson är inte kundnamnet — det är en kontaktpersons namn, inte organisationens. */
-    let customerName = opts.customerName
-    if (!customerName && opts.customerId) {
-      const customers: Record<string, unknown>[] = Array.isArray(custRow.data?.value)
-        ? custRow.data.value as Record<string, unknown>[]
-        : []
-      const cust = customers.find(c => c.id === opts.customerId)
-      if (cust) {
-        if (cust.type === 'privat') {
-          customerName = [cust.firstName, cust.lastName].filter(Boolean).join(' ')
-        }
-        if (!customerName) customerName = String(cust.name || '')
-      }
-    }
-
-    /* Meddelandetext med titel, offert-ID, kundnamn, godkännare och tidpunkt.
-       Visar svensk lokal tid — createdAt lagras alltid som ISO/UTC. */
-    const dateLabel = new Intl.DateTimeFormat('sv-SE', {
-      timeZone: 'Europe/Stockholm',
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    }).format(new Date(opts.now))
-    const titlePart    = opts.offerTitle !== opts.offerId
-      ? `${opts.offerTitle} (${opts.offerId})`
-      : opts.offerId
-    const customerPart = customerName ? ` – kund: ${customerName}` : ''
-    const message      = `${titlePart} godkänd av ${opts.approvedBy}${customerPart} · ${dateLabel}`
-
-    /* Idempotent nyckel: offerId + version + staffId
-       Ny version av offert → ny notis; samma godkännandeanrop → inga dubbletter */
-    const existingIds = new Set(existing.map(n => n.id as string))
-
-    /* Bygg nya notiser */
-    const newNotifs: Record<string, unknown>[] = []
-    for (const s of eligible) {
-      const notifId = `N-offer-approved-${opts.offerId}-v${opts.version}-${String(s.id)}`
-      if (existingIds.has(notifId)) continue
-      newNotifs.push({
-        id:        notifId,
-        userId:    s.id,
-        type:      'offer_approved',
-        message,
-        aoId:      '',
-        offerId:   opts.offerId,
-        read:      false,
-        createdAt: opts.now
-      })
-    }
-
-    if (newNotifs.length === 0) return
-
-    /* Lägg nya notiser FÖRST (nyaste överst) — bevara befintliga, trimma från slutet */
-    const combined = [...newNotifs, ...existing]
-    const trimmed  = combined.slice(0, 5_000)
-
-    const { error: notifWriteErr } = await supabase
-      .from('store')
-      .upsert({ key: 'vift_notifications', value: trimmed }, { onConflict: 'key' })
-    if (notifWriteErr) {
-      console.error('[offer-respond] notisskrivfel:', notifWriteErr.message)
-    }
-  } catch (e) {
-    console.warn('[offer-respond] sendInAppNotifications fel:', e)
-  }
-}
-
-/* ── createApprovalActivity borttagen i v9 ──────────────────────────── */
-/* Activities-blob är inte tillräckligt race-safe för server-side skrivningar
-   i nuvarande arkitektur. Godkännandenotisen (sendInAppNotifications) är
-   kvar och fungerar korrekt. Automatisk Att göra implementeras separat när
-   activities-storage kan normaliseras med per-rad RLS. */
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
