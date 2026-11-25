@@ -1,6 +1,12 @@
 {
- "beskrivning": "T3-B (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
+ "beskrivning": "T3-B och T3-C (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
  "objekt": {
+  "funktion:_store_direct_write_guard()": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "33b3da1ed510ccda462d5560ba8a1a70|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "F18: direkt REST-skrivning bara för vitlistan (vift_notifications, vift_lastChanged med servervärde); DELETE nekas; 42501 direct_write_blocked."
+  },
   "funktion:_vift_ao_assigned(p_ao jsonb, p_staff_id text)": {
    "paket": "T3-B",
    "andring": "NY",
@@ -61,6 +67,12 @@
    "md5": "a535f8838d4e443a1c105db8d1acd57b|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Personal och behörigheter för ett auth-id (samma regel som checkViftAuth)."
   },
+  "funktion:_vift_authz_check(p_key text, p_s0 jsonb, p_r0 jsonb, p_s1 jsonb, p_r1 jsonb, p_actor text)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "75ecb1729b86a5070ca3d513609b6467|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Eskaleringsregeln (privilege_escalation, superadmin_required) och invarianten last_superadmin under låset (SÄK-8, D-25)."
+  },
   "funktion:_vift_has(p_perms text[], p_perm text)": {
    "paket": "T3-B",
    "andring": "NY",
@@ -73,6 +85,42 @@
    "md5": "10d2cee1946f1747ed41a9fd374b96f8|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Idempotens bunden till aktör + operation + innehåll (SÄK-12/F17)."
   },
+  "funktion:_vift_identity_perms(p_staff jsonb, p_roles jsonb)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "384c6cefc7ef28e928f624c7581c7cc8|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Behörigheter per aktiv inloggningsidentitet (app_users.active, e-post → första aktiva personalpost → roll)."
+  },
+  "funktion:_vift_perms_beyond(p_new text[], p_old text[], p_caller text[])": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "3bb1e2258fe75e339a575bc184be2506|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: behörigheter utöver tidigare och anroparens."
+  },
+  "funktion:_vift_rec_active(p_rec jsonb)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "a343c1094dccb416b803e7b8c57ab5b3|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: personalpost aktiv (samma tolkning som vift_caller_perms)."
+  },
+  "funktion:_vift_reg_bad_count(p_arr jsonb)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "e6b288082f7411430f88aa66c9b2356b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: element utan id eller med dubbla id i personal-/rollregistret."
+  },
+  "funktion:_vift_reg_get(p_arr jsonb, p_id text)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "95f0b8874ff5d7b12c298d83c441d9dd|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: första elementet med id:t."
+  },
+  "funktion:_vift_role_perms(p_roles jsonb, p_role_id text)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "a2247a4104318a91800e931a6c25a7f5|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Rollens behörigheter: första rollen med id:t, bara om permissions är en lista (som checkViftAuth)."
+  },
   "funktion:_vift_staff_active(p_staff_id text)": {
    "paket": "T3-B",
    "andring": "NY",
@@ -84,6 +132,54 @@
    "andring": "NY",
    "md5": "cca094aecca23385232f3f583d607e1f|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Hjälpfunktion: personalens namn."
+  },
+  "funktion:_vift_superadmin_count(p_staff jsonb, p_roles jsonb)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "5b02b6eb6f1a4f4861ca802b395f9bb0|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Antal aktiva användare med all (invarianten D-25)."
+  },
+  "funktion:_vift_superadmin_lock()": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "1563ec79c6789566a8ca4372dabe47f4|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Gemensamt lås för vift_staff + vift_roles + app_users i fast ordning (rådgivande lås, roles, staff)."
+  },
+  "funktion:deactivate_vift_user(p_user_id uuid)": {
+   "paket": "T3-C",
+   "andring": "ÄNDRAD",
+   "md5": "e5d109df788e1758dead7529a2c2f31c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Gemensamt lås och invarianten minst en aktiv superadmin (409 last_superadmin)."
+  },
+  "funktion:provision_vift_user(p_user_id uuid, p_staff_id text, p_role_id text, p_is_admin boolean)": {
+   "paket": "T3-C",
+   "andring": "ÄNDRAD",
+   "md5": "0ef78dd3b87ef68450e8e6944a0b0705|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Gemensamt lås och invarianten minst en aktiv superadmin."
+  },
+  "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text)": {
+   "paket": "T3-C",
+   "andring": "ÄNDRAD",
+   "md5": "f0a2b14ab404e0e7d0e8f6bd52db55d3|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "vift_staff/vift_roles: gemensamt lås + _vift_authz_check på det sammanslagna värdet (samma signatur)."
+  },
+  "funktion:store_business_key_write(p_key text, p_new_value jsonb, p_expected_hash text, p_caller_authorized boolean, p_actor_id text)": {
+   "paket": "T3-C",
+   "andring": "ÄNDRAD",
+   "md5": "1ba131986ee4660659ae17816a034a56|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "vift_staff/vift_roles: gemensamt lås + _vift_authz_check på slutvärdet (samma signatur)."
+  },
+  "funktion:store_read_all_with_hashes_projected(p_business_keys text[], p_perms text[])": {
+   "paket": "T3-C",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "Ny parameter p_caller_staff_id som skickas till vift_store_project. Den gamla 2-argumentsversionen ersatt."
+  },
+  "funktion:store_read_all_with_hashes_projected(p_business_keys text[], p_perms text[], p_caller_staff_id text)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "46cf4714a3f5720094c6f6c2ac8a04cf|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Ny parameter p_caller_staff_id som skickas till vift_store_project. Den gamla 2-argumentsversionen ersatt."
   },
   "funktion:store_write_stamp_status(p_auth_user_id uuid, p_active boolean, p_ts bigint, p_ao_id text, p_expected_revision bigint)": {
    "paket": "T3-B",
@@ -108,6 +204,24 @@
    "andring": "ÄNDRAD",
    "md5": "ada714897ee6db85fe3c4ed50118162f|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Byte av aoId kräver tilldelning och olåst AO."
+  },
+  "funktion:vift_store_full_access(p_key text, p_perms text[])": {
+   "paket": "T3-C",
+   "andring": "ÄNDRAD",
+   "md5": "d578292e9c8a7c0305553faf41d3ed24|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "vift_staff bara staff_manage/admin_manage, vift_roles bara admin_manage (REST-läsning stängd för övriga, D-21)."
+  },
+  "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[])": {
+   "paket": "T3-C",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "Ny parameter p_caller_staff_id: egen roll ur vift_roles, andras permissions/role bort ur vift_staff (D-21, D-14). Den gamla 3-argumentsversionen ersatt."
+  },
+  "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "c46ec751ad2054788c0c9e92f19ace7e|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Ny parameter p_caller_staff_id: egen roll ur vift_roles, andras permissions/role bort ur vift_staff (D-21, D-14). Den gamla 3-argumentsversionen ersatt."
   },
   "funktion:work_order_billing_set(p_ao_id text, p_invoice_id text, p_mode text, p_actor_id text)": {
    "paket": "T3-B",
@@ -156,6 +270,24 @@
    "andring": "NY",
    "md5": "3d79e243f020a7199b6d6b2edabd7d3d|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Ny: \"Ta jobbet\" atomiskt, exakt en vinner, 409 already_assigned (SÄK-4, AP-F)."
+  },
+  "policy:public.store.store_direct_write_allowlist_insert": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "9355f723aa319681ec2a1290d0648c1d",
+   "beskrivning": "F18: RESTRICTIVE INSERT, vitlista i RLS."
+  },
+  "policy:public.store.store_direct_write_allowlist_update": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "2fa7c7b2cfa9e9c58bdb8e181d3c0e16",
+   "beskrivning": "F18: RESTRICTIVE UPDATE, vitlista i RLS (WITH CHECK)."
+  },
+  "trigger:store.protect_direct_write_allowlist": {
+   "paket": "T3-C",
+   "andring": "NY",
+   "md5": "5c886d3912d5230bfda57d313fcfa54f",
+   "beskrivning": "F18: trigger som verkställer vitlistan för authenticated/anon (BEFORE INSERT/UPDATE/DELETE)."
   }
  }
 }

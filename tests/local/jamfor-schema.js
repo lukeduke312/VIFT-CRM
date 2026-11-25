@@ -67,7 +67,16 @@ const lokal = {
 };
 
 const res = [];
+/* T3-C: även policyer och triggers registreras med md5 (tidigare bara funktioner). */
 const lokalDef = (typ, key) => {
+  if (typ === 'policy') {
+    const p = lokal.policies.find((x) => x.schemaname + '.' + x.tablename + '.' + x.policyname === key);
+    return p ? md5([p.permissive, p.roles, p.cmd, ws(p.qual), ws(p.with_check)].join('|')) : 'saknas';
+  }
+  if (typ === 'trigger') {
+    const t = lokal.triggers.find((x) => x.table + '.' + x.name === key);
+    return t ? md5(t.def + '|' + t.enabled) : 'saknas';
+  }
   if (typ !== 'funktion') return null;
   const f = lokal.functions.find((x) => x.name + '(' + x.args + ')' === key);
   return f ? md5(f.def) + '|' + aclSet(f.acl) : 'saknas';

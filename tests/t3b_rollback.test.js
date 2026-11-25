@@ -30,7 +30,10 @@ const jamfor = (db, ignorera) => {
 };
 const oforklarade = (r) => Number((/(\d+) oförklarade/.exec(r.ut) || [])[1]);
 
-const r = byggReplik({});
+// T3-C (2026-11-28) installeras efter T3-B och rullas tillbaka före den (omvänd ordning, se
+// tests/t3c_rollback.test.js). Här prövas T3-B för sig: kedjan utan T3-C-migrationerna.
+const T3C = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && /_t3c_/.test(p[1] || '')).map((p) => p[1]);
+const r = byggReplik({ utelamna: T3C });
 const db = r.db;
 try {
   const F = r.U.falt.staffId;
@@ -58,7 +61,7 @@ try {
   ok(/efter rollback/.test(x) && val(db, 'vift_workOrders').find((a) => a.id === 'AO-P1').poolOpen === false, 'äldre work_order_patch (4 argument) fungerar på T3-B-data; poolOpen ligger kvar som okänt fält');
 
   // 4. Ny installation ovanpå, med den historiska dubbletten kvar.
-  const nya = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && p[0] > '20261124211128').map((p) => p[1]);
+  const nya = fs.readFileSync(path.join(rot, 'MIGRATIONSORDNING.txt'), 'utf8').split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => /^\d{14}$/.test(p[0]) && p[0] > '20261124211128' && /_t3b_/.test(p[1] || '')).map((p) => p[1]);
   let fel = null;
   try { nya.forEach((rel) => psqlFile(db, path.join(rot, rel))); } catch (e) { fel = e.message; }
   ok(!fel && nya.length === 3, 'ny installation efter rollback: de 3 T3-B-migrationerna går igenom (STOP-kontrollerna godtar STAGING-versionen), trots historisk dubblett AO-001', fel);

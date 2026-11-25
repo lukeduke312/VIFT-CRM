@@ -95,17 +95,19 @@ ok(!/@(?!example\.test)[a-z0-9.-]+\.(se|com|nu)\b/i.test(JSON.stringify(d.store)
 
 r.stang();
 
-// ── T3-B: hela repokedjan (STAGING + nya migrationer) = STAGING-facit + exakt de
+// ── T3-B/T3-C: hela repokedjan (STAGING + nya migrationer) = STAGING-facit + exakt de
 //    registrerade T3-ändringarna (tests/local/t3-andringar.json, md5-kontrollerade). ──
 const t3 = require('./local/t3-andringar.json').objekt;
 const rt = byggReplik({ data: false });
 try {
   const nya = rt.steg.filter((x) => x.ny).map((x) => x.rel);
-  ok(nya.length === 3 && nya.every((x) => /^migrations\/20261128\d{6}_t3b_/.test(x)), 'repokedjan: 3 nya T3-B-migrationer efter STAGING:s senaste version (' + nya.join(', ') + ')');
-  ok(rt.rapport.oforklarade === 0, `repokedjan med T3-B mot STAGING-facit: ${rt.rapport.identiska} identiska, ${rt.rapport.forklarade} förklarade, 0 oförklarade`);
-  const t3Forklarade = (rt.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-B/.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
-  ok(JSON.stringify(t3Forklarade) === JSON.stringify(Object.keys(t3).sort()), `varje T3-B-objekt (${Object.keys(t3).length}) syns i kedjan med registrerad md5, och inga andra avvikelser`, t3Forklarade.length);
-  const t3sec = q(rt.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_%' or p.proname in ('work_order_pool_take','work_order_billing_set')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
-  ok(t3sec.length === 0, 'T3-B: inga nya funktioner körbara för anon eller authenticated (bara service_role)', t3sec);
+  ok(nya.length === 5 && nya.slice(0, 3).every((x) => /^migrations\/20261128\d{6}_t3b_/.test(x)) && nya.slice(3).every((x) => /^migrations\/20261128\d{6}_t3c_/.test(x)),
+    'repokedjan: 3 nya T3-B- och 2 nya T3-C-migrationer efter STAGING:s senaste version, i den ordningen (' + nya.join(', ') + ')');
+  ok(rt.rapport.oforklarade === 0, `repokedjan med T3-B och T3-C mot STAGING-facit: ${rt.rapport.identiska} identiska, ${rt.rapport.forklarade} förklarade, 0 oförklarade`);
+  const t3Forklarade = (rt.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-[BC] /.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
+  ok(JSON.stringify(t3Forklarade) === JSON.stringify(Object.keys(t3).sort()), `varje T3-B/T3-C-objekt (${Object.keys(t3).length}) syns i kedjan med registrerad md5 (funktioner, policyer och triggers), och inga andra avvikelser`, t3Forklarade.length);
+  ok(Object.values(t3).filter((v) => v.paket === 'T3-C').length === 22, 'T3-C: 22 registrerade objekt (19 funktioner varav 2 ersatta signaturer, 2 policyer, 1 trigger)');
+  const t3sec = q(rt.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_%' or p.proname in ('work_order_pool_take','work_order_billing_set','_store_direct_write_guard','vift_store_project','store_read_all_with_hashes_projected','store_business_key_write','store_business_key_merge_write','deactivate_vift_user','provision_vift_user')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
+  ok(t3sec.length === 0, 'T3-B/T3-C: inga nya eller ändrade funktioner körbara för anon eller authenticated (bara service_role)', t3sec);
 } finally { rt.stang(); }
 avsluta();

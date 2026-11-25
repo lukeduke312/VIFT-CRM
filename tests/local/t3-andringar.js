@@ -52,6 +52,30 @@ const BESKRIVNING = {
   store_write_stamp_status: 'Instämpling med aoId kräver tilldelning (eller ao_edit) och olåst AO (F23).',
   work_order_create: 'AO-nummer unikt även vid samtidighet, ingen avkortning, ingen unik index (punkt 245); pool + personal → poolOpen=false.',
 };
+/* T3-C (2026-11-28): roller och superadmin (SÄK-8, D-25, D-21, D-14) och F18 (SÄK-13). */
+const T3C = {
+  _vift_rec_active: 'Hjälpfunktion: personalpost aktiv (samma tolkning som vift_caller_perms).',
+  _vift_role_perms: 'Rollens behörigheter: första rollen med id:t, bara om permissions är en lista (som checkViftAuth).',
+  _vift_identity_perms: 'Behörigheter per aktiv inloggningsidentitet (app_users.active, e-post → första aktiva personalpost → roll).',
+  _vift_superadmin_count: 'Antal aktiva användare med all (invarianten D-25).',
+  _vift_superadmin_lock: 'Gemensamt lås för vift_staff + vift_roles + app_users i fast ordning (rådgivande lås, roles, staff).',
+  _vift_reg_bad_count: 'Hjälpfunktion: element utan id eller med dubbla id i personal-/rollregistret.',
+  _vift_reg_get: 'Hjälpfunktion: första elementet med id:t.',
+  _vift_perms_beyond: 'Hjälpfunktion: behörigheter utöver tidigare och anroparens.',
+  _vift_authz_check: 'Eskaleringsregeln (privilege_escalation, superadmin_required) och invarianten last_superadmin under låset (SÄK-8, D-25).',
+  store_business_key_write: 'vift_staff/vift_roles: gemensamt lås + _vift_authz_check på slutvärdet (samma signatur).',
+  store_business_key_merge_write: 'vift_staff/vift_roles: gemensamt lås + _vift_authz_check på det sammanslagna värdet (samma signatur).',
+  deactivate_vift_user: 'Gemensamt lås och invarianten minst en aktiv superadmin (409 last_superadmin).',
+  provision_vift_user: 'Gemensamt lås och invarianten minst en aktiv superadmin.',
+  vift_store_full_access: 'vift_staff bara staff_manage/admin_manage, vift_roles bara admin_manage (REST-läsning stängd för övriga, D-21).',
+  vift_store_project: 'Ny parameter p_caller_staff_id: egen roll ur vift_roles, andras permissions/role bort ur vift_staff (D-21, D-14). Den gamla 3-argumentsversionen ersatt.',
+  store_read_all_with_hashes_projected: 'Ny parameter p_caller_staff_id som skickas till vift_store_project. Den gamla 2-argumentsversionen ersatt.',
+  _store_direct_write_guard: 'F18: direkt REST-skrivning bara för vitlistan (vift_notifications, vift_lastChanged med servervärde); DELETE nekas; 42501 direct_write_blocked.',
+  'public.store.store_direct_write_allowlist_insert': 'F18: RESTRICTIVE INSERT, vitlista i RLS.',
+  'public.store.store_direct_write_allowlist_update': 'F18: RESTRICTIVE UPDATE, vitlista i RLS (WITH CHECK).',
+  'store.protect_direct_write_allowlist': 'F18: trigger som verkställer vitlistan för authenticated/anon (BEFORE INSERT/UPDATE/DELETE).',
+};
+const ws = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
 
 const r = byggReplik({ data: false, schemakontroll: false });
 try {
@@ -60,21 +84,30 @@ try {
   const rap = JSON.parse(fs.readFileSync(ut, 'utf8')); fs.unlinkSync(ut);
   const lok = q(r.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, pg_get_functiondef(p.oid) as def, coalesce(p.proacl::text,'NULL') as acl
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prokind in ('f','p')`);
+  const pol = q(r.db, `select schemaname, tablename, policyname, permissive, roles::text as roles, cmd, qual, with_check from pg_policies where schemaname in ('public','storage')`);
+  const trg = q(r.db, `select c.relname as "table", t.tgname as name, t.tgenabled as enabled, pg_get_triggerdef(t.oid) as def
+    from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal and n.nspname='public'`);
+  const defMd5 = (typ, key) => {
+    if (typ === 'funktion') { const f = lok.find((y) => y.name + '(' + y.args + ')' === key); return f ? md5(f.def) + '|' + aclSet(f.acl) : 'saknas'; }
+    if (typ === 'policy') { const p = pol.find((y) => y.schemaname + '.' + y.tablename + '.' + y.policyname === key); return p ? md5([p.permissive, p.roles, p.cmd, ws(p.qual), ws(p.with_check)].join('|')) : 'saknas'; }
+    if (typ === 'trigger') { const t = trg.find((y) => y.table + '.' + y.name === key); return t ? md5(t.def + '|' + t.enabled) : 'saknas'; }
+    return null;
+  };
   const objekt = {};
   for (const x of rap.filter((y) => y.kategori === 'OFÖRKLARAD')) {
     const k = x.typ + ':' + x.key;
     const namn = x.key.replace(/\(.*$/, '');
-    const f = lok.find((y) => y.name + '(' + y.args + ')' === x.key);
+    const c = T3C[namn] || T3C[x.key];
     objekt[k] = {
-      paket: 'T3-B',
+      paket: c ? 'T3-C' : 'T3-B',
       andring: x.status === 'EXTRA LOKALT' ? 'NY' : x.status === 'SAKNAS LOKALT' ? 'BORTTAGEN (ersatt av ny signatur)' : 'ÄNDRAD',
-      md5: x.typ === 'funktion' ? (f ? md5(f.def) + '|' + aclSet(f.acl) : 'saknas') : null,
-      beskrivning: BESKRIVNING[namn] || '(beskrivning saknas)',
+      md5: defMd5(x.typ, x.key),
+      beskrivning: c || BESKRIVNING[namn] || '(beskrivning saknas)',
     };
   }
   const sorterat = Object.fromEntries(Object.keys(objekt).sort().map((k) => [k, objekt[k]]));
   if (process.argv.includes('--skriv')) {
-    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T3-B (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
+    fs.writeFileSync(FIL, JSON.stringify({ beskrivning: 'T3-B och T3-C (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.', objekt: sorterat }, null, 1) + '\n');
     console.log('Skrev ' + FIL + ': ' + Object.keys(sorterat).length + ' objekt');
     const utan = Object.entries(sorterat).filter(([, v]) => v.beskrivning === '(beskrivning saknas)');
     if (utan.length) { console.log('FAIL beskrivning saknas: ' + utan.map(([k]) => k).join(', ')); process.exitCode = 1; }

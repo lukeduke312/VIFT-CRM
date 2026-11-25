@@ -15,7 +15,7 @@
  */
 const { byggReplik } = require('./replik');
 const { laddaEf } = require('./ef');
-const { psql, val } = require('./db');
+const { psql, val, asUser, lit, jlit } = require('./db');
 const { data } = require('./data');
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -79,12 +79,65 @@ const SCENARIER = [
   { id: 'BILL-03', sec: 'D-07 (fält)', anv: 'falt', ef: 'invoice-write', body: { action: 'aoBilling', aoId: 'AO-A3', invoiceId: 'INV-R1', mode: 'invoiced' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A3').status },
   { id: 'AUTH-01', sec: 'SEC-CUST-23', anv: 'okandroll', ef: 'work-orders-list', body: {}, utfall: (las, svar) => ((svar.body && svar.body.workOrders) || []).length },
   { id: 'AUTH-02', sec: 'inaktiv personal', anv: 'inaktivpersonal', ef: 'work-orders-list', body: {}, utfall: () => '' },
+  // ── T3-C (2026-11-28): roller och superadmin (SÄK-8, D-25), projektion (D-21, D-14), F18 ──
+  { id: 'ROLL-02a', sec: 'SEC-ROLL-02 (all)', anv: 'personalansvarig', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.falt.staffId, { role: 'admin' }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.falt.staffId).role },
+  { id: 'ROLL-02b', sec: 'SEC-ROLL-02 (utöver anroparen)', anv: 'personalansvarig', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.falt.staffId, { role: 'chef' }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.falt.staffId).role },
+  { id: 'ROLL-02c', sec: 'SEC-CUST-18 (+)', anv: 'personalansvarig', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.falt.staffId, { role: 'tom' }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.falt.staffId).role },
+  { id: 'ROLL-02d', sec: 'SEC-ROLL-02 (inaktivera superadmin)', anv: 'personalansvarig', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.admin.staffId, { active: false }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.admin.staffId).active },
+  { id: 'ROLL-03a', sec: 'SEC-ROLL-03 (all i roll)', anv: 'adminhanterare', ef: 'store-key-write', body: (d) => mergeRole(d, 'tom', ['all']), utfall: (las) => las('vift_roles').find((x) => x.id === 'tom').permissions.join(',') },
+  { id: 'ROLL-03b', sec: 'SEC-ROLL-03 (egen roll)', anv: 'adminhanterare', ef: 'store-key-write', body: (d) => mergeRole(d, 'adminhanterare', ['dashboard_view', 'admin_manage', 'staff_manage']), utfall: (las) => las('vift_roles').find((x) => x.id === 'adminhanterare').permissions.join(',') },
+  { id: 'ROLL-03c', sec: 'SEC-ROLL-03 (utöver anroparen)', anv: 'adminhanterare', ef: 'store-key-write', body: (d) => mergeRole(d, 'tom', ['ao_view_all']), utfall: (las) => las('vift_roles').find((x) => x.id === 'tom').permissions.join(',') },
+  { id: 'ROLL-03d', sec: 'SEC-CUST-19 (+)', anv: 'adminhanterare', ef: 'store-key-write', body: (d) => mergeRole(d, 'tom', ['dashboard_view']), utfall: (las) => las('vift_roles').find((x) => x.id === 'tom').permissions.join(',') },
+  { id: 'ROLL-03e', sec: 'D-25 (admin_manage skriver personal)', anv: 'adminhanterare', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.falt.staffId, { role: 'tom' }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.falt.staffId).role },
+  { id: 'ROLL-04a', sec: 'SEC-ROLL-04 (inaktivera sig själv)', anv: 'admin', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.admin.staffId, { active: false }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.admin.staffId).active },
+  { id: 'ROLL-04b', sec: 'SEC-ROLL-04 (all ur rollen)', anv: 'admin', ef: 'store-key-write', body: (d) => mergeRole(d, 'admin', ['admin_manage']), utfall: (las) => las('vift_roles').find((x) => x.id === 'admin').permissions.join(',') },
+  { id: 'ROLL-04c', sec: 'SEC-ROLL-04 (radera rollen)', anv: 'admin', ef: 'store-key-write', body: (d) => ({ action: 'writeMerge', key: 'vift_roles', upserts: [], removals: [{ id: 'admin', previous: d.store.vift_roles.find((x) => x.id === 'admin') }] }), utfall: (las) => las('vift_roles').length },
+  { id: 'ROLL-07', sec: 'SEC-ROLL-07 (+, superadmin ger roll)', anv: 'admin', ef: 'store-key-write', body: (d) => mergeStaff(d, d.U.falt.staffId, { role: 'chef' }), utfall: (las, svar, d) => las('vift_staff').find((x) => x.id === d.U.falt.staffId).role },
+  { id: 'B3-03', sec: 'SEC-B3-03 (fält)', anv: 'falt', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_staff'] }, utfall: (las, svar, d) => projStaff(svar, d.U.falt.staffId) },
+  { id: 'B3-03e', sec: 'SEC-B3-03 (ekonomi)', anv: 'ekonomi', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_staff'] }, utfall: (las, svar, d) => projStaff(svar, d.U.ekonomi.staffId) },
+  { id: 'B3-03c', sec: 'R40 (staff_view)', anv: 'chef', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_staff'] }, utfall: (las, svar, d) => projStaff(svar, d.U.chef.staffId) },
+  { id: 'B3-05', sec: 'SEC-B3-05 (fält)', anv: 'falt', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_roles'] }, utfall: (las, svar) => rollIds(svar) },
+  { id: 'B3-05c', sec: 'SEC-B3-05 (arbetsledare)', anv: 'chef', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_roles'] }, utfall: (las, svar) => rollIds(svar) },
+  { id: 'B3-05p', sec: 'D-21 (staff_manage: tilldelningsbara roller)', anv: 'personalansvarig', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_roles'] }, utfall: (las, svar) => rollIds(svar) },
+  { id: 'B3-05r', sec: 'SEC-B3-05 (readWithHash)', anv: 'falt', ef: 'store-key-write', body: { action: 'readWithHash', key: 'vift_roles' }, utfall: (las, svar) => ((svar.body && svar.body.value) || []).map((x) => x.id).join(',') },
+  { id: 'B3-06', sec: 'SEC-B3-06 (admin_manage)', anv: 'adminhanterare', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_roles'] }, utfall: (las, svar) => rollIds(svar) },
+  { id: 'CUST-22', sec: 'SEC-CUST-22 (tom roll)', anv: 'tom', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_roles', 'vift_staff'] }, utfall: (las, svar, d) => rollIds(svar) + '|' + projStaff(svar, d.U.tom.staffId) },
+  { id: 'CUST-23', sec: 'SEC-CUST-23 (okänd roll)', anv: 'okandroll', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_roles'] }, utfall: (las, svar) => rollIds(svar) },
+  // BLOCKER-2 (per-nyckel-skrivrätt för generiska nycklar): fake med serverns KEY_PERMISSIONS ur källan.
+  { id: 'KEY-02', sec: 'BLOCKER-2/PERM-03 (fält skriver kunder)', anv: 'falt', ef: 'store-key-write', fakeOpts: () => ({ keyPerms: serverKeyPerms() }), body: (d) => ({ action: 'writeMerge', key: 'vift_customers', upserts: [{ id: d.store.vift_customers[0].id, data: Object.assign({}, d.store.vift_customers[0], { name: 'x' }), previous: d.store.vift_customers[0] }], removals: [] }), utfall: (las, svar, d) => las('vift_customers')[0].name },
+  { id: 'KEY-03', sec: 'BLOCKER-2/PERM-03 (arbetsledare skriver kunder)', anv: 'chef', ef: 'store-key-write', fakeOpts: () => ({ keyPerms: serverKeyPerms() }), body: (d) => ({ action: 'writeMerge', key: 'vift_customers', upserts: [{ id: d.store.vift_customers[0].id, data: Object.assign({}, d.store.vift_customers[0], { name: 'x' }), previous: d.store.vift_customers[0] }], removals: [] }), utfall: (las) => las('vift_customers')[0].name },
+  { id: 'KEY-04', sec: 'BLOCKER-2/PERM-03 (ekonomi skapar säljchans)', anv: 'ekonomi', ef: 'store-key-write', fakeOpts: () => ({ keyPerms: serverKeyPerms() }), body: (d) => ({ action: 'writeMerge', key: 'vift_salesOpps', upserts: [{ id: 'SO-PAR', data: { id: 'SO-PAR', title: 'x' }, previous: null }], removals: [] }), utfall: (las) => (las('vift_salesOpps') || []).length },
+  { id: 'REST-01', sec: 'SEC-REST-01 (affärsnyckel)', anv: 'falt', rest: { key: 'vift_customers', value: [] }, utfall: (las) => las('vift_customers').length },
+  { id: 'REST-01b', sec: 'SEC-REST-01 (personal)', anv: 'admin', rest: { key: 'vift_staff', value: [] }, utfall: (las) => las('vift_staff').length },
+  { id: 'REST-02', sec: 'SEC-REST-02 (okänd nyckel)', anv: 'begransad', rest: { key: 'vift_e2e_paritet', value: { x: 1 } }, utfall: (las) => las('vift_e2e_paritet') === null || las('vift_e2e_paritet') === undefined },
+  { id: 'REST-02b', sec: 'F18 (vift_lastChanged: servervärde)', anv: 'begransad', rest: { key: 'vift_lastChanged', value: '1999-01-01T00:00:00.000Z' }, utfall: (las) => String(las('vift_lastChanged')).startsWith('1999') },
+  { id: 'REST-02c', sec: 'F18 (+ notiser)', anv: 'falt', rest: { key: 'vift_notifications', value: [{ id: 'N-PAR', createdAt: '2026-11-28T08:00:00.000Z', message: 'x', read: false }] }, utfall: (las) => (las('vift_notifications') || []).map((n) => n.id).join(',') },
 ];
+/* KEY_PERMISSIONS ur den faktiska store-key-write-källan (ingen kopia). */
+function serverKeyPerms() {
+  const src = require('fs').readFileSync(require('path').join(process.env.VIFT_SERVER_ROOT || require('path').resolve(__dirname, '..', '..', '..', 'supabase'), 'functions', 'store-key-write', 'index.ts'), 'utf8');
+  const m = /const KEY_PERMISSIONS: Record<string, string> = \{([\s\S]*?)\n\}/.exec(src); const t = {};
+  m[1].replace(/^\s*(vift_\w+)\s*:\s*'([a-z_]+)'/gm, (_, k, v) => { t[k] = v; return ''; });
+  return t;
+}
+/* T3-C-hjälpare: writeMerge som klienten gör (previous = serverns element). */
+function mergeStaff(d, id, patch) { const el = d.store.vift_staff.find((x) => x.id === id); return { action: 'writeMerge', key: 'vift_staff', upserts: [{ id, data: Object.assign({}, el, patch), previous: el }], removals: [] }; }
+function mergeRole(d, id, perms) { const el = d.store.vift_roles.find((x) => x.id === id); return { action: 'writeMerge', key: 'vift_roles', upserts: [{ id, data: Object.assign({}, el, { permissions: perms }), previous: el }], removals: [] }; }
+function rollIds(svar) { return (((svar.body || {}).data || {}).roles || []).map((x) => x.id).sort().join(','); }
+function projStaff(svar, egen) {
+  const l = (((svar.body || {}).data || {}).staff || []);
+  const andra = l.filter((x) => x.id !== egen);
+  return [l.length, 'egen:' + Object.keys(l.find((x) => x.id === egen) || {}).includes('role'), 'andraRole:' + andra.some((x) => 'role' in x), 'andraPerms:' + andra.some((x) => 'permissions' in x)].join('|');
+}
 /* Samma världsinställning som tests/staging_e2e_real.test.js (STAGING-lik simulerad server). */
 const FAKE_STD = { logOps: true, activityAppend: true, activitiesPolicy: true };
 const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write'];
 
 function svarAv(s) { const b = s.body || {}; return { status: s.status, error: b.error === undefined ? null : b.error, reason: b.reason === undefined ? null : b.reason }; }
+/* T3-C: REST-scenarier (POST /rest/v1/store med Prefer: resolution=merge-duplicates, som
+   Storage.setRemoteStrict). Jämförs: status, PostgreSQL-kod och om felet är direct_write_blocked. */
+function restSvarReplik(x) { return x.ok ? { status: 201, error: null, reason: null } : { status: x.status, error: x.code, reason: /direct_write_blocked/.test(x.message) ? 'direct_write_blocked' : null }; }
+function restSvarFake(x) { const b = x.body || {}; if (x.status < 300) return { status: 201, error: null, reason: null }; return { status: x.status, error: b.code || null, reason: /direct_write_blocked/.test(JSON.stringify(b)) ? 'direct_write_blocked' : null }; }
 
 async function korParitet(opts) {
   opts = opts || {};
@@ -102,10 +155,12 @@ async function korParitet(opts) {
       // ── replik ──
       aterstall();
       if (sc.fore) await ef.anropa(sc.ef, { user: d.U[sc.foreAnv || sc.anv], body: sc.fore });
-      const rs = await ef.anropa(sc.ef, { user: d.U[sc.anv], body });
+      const rs = sc.rest
+        ? restSvarReplik(asUser(r.db, d.U[sc.anv], `insert into public.store(key, value) values (${lit(sc.rest.key)}, ${jlit(sc.rest.value)}) on conflict (key) do update set value = excluded.value`))
+        : await ef.anropa(sc.ef, { user: d.U[sc.anv], body });
       const rUtfall = sc.utfall((k) => val(r.db, k), rs, d);
       // ── fake ──
-      const fake = new FakeSupabase(Object.assign({}, FAKE_STD, sc.fakeOpts || {}));
+      const fake = new FakeSupabase(Object.assign({}, FAKE_STD, (typeof sc.fakeOpts === 'function' ? sc.fakeOpts() : sc.fakeOpts) || {}));
       fake.store = new Map(Object.entries(clone(d.store)));
       fake.users = {};
       d.anvandare.forEach((u) => { fake.users[u.email] = { id: u.authId, email: u.email, password: 'replik', alias: u.alias, active: u.appActive }; });
@@ -113,10 +168,12 @@ async function korParitet(opts) {
       const tok = tokFor(sc.anv);
       const anropaFake = async (b, t) => { const x = await fake.handle('POST', 'http://fake.lokal/functions/v1/' + sc.ef, { authorization: 'Bearer ' + (t || tok) }, JSON.stringify(b)); return { status: x.status, body: x.body }; };
       if (sc.fore) await anropaFake(sc.fore, tokFor(sc.foreAnv || sc.anv));
-      const fs_ = await anropaFake(body);
-      let fUtfall; try { fUtfall = sc.utfall((k) => clone(fake.store.get(k)), fs_, d); } catch (e) { fUtfall = 'fel: ' + e.message; }
-      const R = Object.assign(svarAv(rs), { utfall: rUtfall }), F = Object.assign(svarAv(fs_), { utfall: fUtfall });
-      ut.push({ id: sc.id, sec: sc.sec, anv: sc.anv, ef: sc.ef, replik: R, fake: F, lika: JSON.stringify(R) === JSON.stringify(F) });
+      const fs_ = sc.rest
+        ? restSvarFake(await fake.handle('POST', 'http://fake.lokal/rest/v1/store', { authorization: 'Bearer ' + tok, prefer: 'resolution=merge-duplicates' }, JSON.stringify([{ key: sc.rest.key, value: sc.rest.value }])))
+        : await anropaFake(body);
+      let fUtfall; try { fUtfall = sc.utfall((k) => { const v = fake.store.get(k); return v === undefined ? null : clone(v); }, fs_, d); } catch (e) { fUtfall = 'fel: ' + e.message; }
+      const R = Object.assign(sc.rest ? rs : svarAv(rs), { utfall: rUtfall }), F = Object.assign(sc.rest ? fs_ : svarAv(fs_), { utfall: fUtfall });
+      ut.push({ id: sc.id, sec: sc.sec, anv: sc.anv, ef: sc.ef || 'rest/v1/store', replik: R, fake: F, lika: JSON.stringify(R) === JSON.stringify(F) });
     }
   } finally { r.stang(); }
   return ut;
