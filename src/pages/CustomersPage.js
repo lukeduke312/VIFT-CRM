@@ -963,8 +963,9 @@ const CustomerDetailPage = {
     const isLegacyIdOnPrivate = normType === 'privat' && !cu.personnr && !!cu.orgNr;
     const rows = [
       ['Typ',         CustomerService.typeLabel(cu.type)],
-      ['Telefon',     esc(cu.phone   || '—')],
-      ['E-post',      esc(cu.email   || '—')],
+      /* QA 2026-11-26: ring/maila med ett tryck (tel:/mailto:), texten escapas. */
+      ['Telefon',     cu.phone ? `<a class="cu-reach" href="tel:${esc(String(cu.phone).replace(/[^\d+]/g, ''))}">${esc(cu.phone)}</a>` : '—'],
+      ['E-post',      cu.email ? `<a class="cu-reach" href="mailto:${esc(String(cu.email).trim())}">${esc(cu.email)}</a>` : '—'],
       ['Adress',      esc([cu.address, cu.zip, cu.city].filter(Boolean).join(', ') || '—')],
       isLegacyIdOnPrivate
         ? ['Importerat nummer', `${esc(cu.orgNr)} <span style="color:var(--mt);font-weight:500;">(ligger i fältet Org.nr)</span>`]
@@ -995,7 +996,7 @@ const CustomerDetailPage = {
               <div class="crow">
                 <div>
                   <div style="font-size:13px;font-weight:700;">${esc(c.name)}${c.primary?' <span class="bdg bdg-blue" style="font-size:9px;">Primär</span>':''}</div>
-                  <div style="font-size:11px;color:var(--mt);">${esc(c.role||'')}${c.phone?' · '+esc(c.phone):''}${c.email?' · '+esc(c.email):''}</div>
+                  <div style="font-size:11px;color:var(--mt);">${esc(c.role||'')}${c.phone?` · <a class="cu-reach" href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ''))}">${esc(c.phone)}</a>`:''}${c.email?` · <a class="cu-reach" href="mailto:${esc(String(c.email).trim())}">${esc(c.email)}</a>`:''}</div>
                 </div>
                 <div style="display:flex;gap:4px;">
                   ${Auth.can('customer_manage') ? `<button class="btn bxs bs" onclick="CustomerDetailPage.openAddContact(${i})">${ic('pencil',12)}</button>` : ''}

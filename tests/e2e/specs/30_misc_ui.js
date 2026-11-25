@@ -620,6 +620,30 @@ const tests = [
       }
     },
   },
+  {
+    /* QA 2026-11-26 (tillägg 2, mobilflöden efter uppgift): från kundkortet ska
+       man kunna ringa och maila kontakten med ett tryck. Simulerad server. */
+    id: 'MISC-CUS-REACH-01', module: 'Kundregister', kind: 'ui',
+    name: 'Kundkortet på mobil (390 px): telefon och e-post för kunden och kontaktpersoner är tel:/mailto:-länkar, minst 40 px höga; text escapas',
+    async run(t) {
+      const cus = t.fake.get('customers');
+      cus[0].phone = '070-123 45 67'; cus[0].email = 'kund@example.test';
+      cus[0].contacts = [{ id: 'CC-1', name: 'Kontakt <b>Test</b>', role: 'Ordförande', phone: '08-765 43 21', email: 'kontakt@example.test', primary: true }];
+      t.fake.set('customers', cus);
+      const s = await t.world.session({ viewport: 'iphone' });
+      await s.login('admin');
+      await s.go('pg-crm-detail', { customerId: cus[0].id }); await s.settle(500);
+      const r = await s.eval(() => [...document.querySelectorAll('.page.active a.cu-reach')].filter((a) => a.offsetParent).map((a) => ({ href: a.getAttribute('href'), h: Math.round(a.getBoundingClientRect().height) })));
+      const hrefs = r.map((x) => x.href);
+      t.assert(hrefs.includes('tel:0701234567'), 'kundens telefon är tel:-länk (' + hrefs.join(', ') + ')');
+      t.assert(hrefs.includes('mailto:kund@example.test'), 'kundens e-post är mailto:-länk');
+      t.assert(hrefs.includes('tel:087654321') && hrefs.includes('mailto:kontakt@example.test'), 'kontaktpersonens telefon och e-post är länkar (' + hrefs.join(', ') + ')');
+      t.assert(r.every((x) => x.h >= 40), 'tryckytor ≥ 40 px (' + r.map((x) => x.h).join(',') + ')');
+      const txt = await s.eval(() => document.querySelector('.page.active').innerText);
+      t.assert(txt.includes('Kontakt <b>Test</b>'), 'kontaktnamnet visas som text, inte markup');
+      t.assert((await s.layoutIssues()).length === 0, 'inget klipps på 390 px');
+    },
+  },
 ];
 module.exports = tests;
 module.exports.seedMisc = seedMisc;

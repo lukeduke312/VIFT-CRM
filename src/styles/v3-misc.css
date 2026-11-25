@@ -636,3 +636,8 @@ button.rw-step:focus-visible { outline: none; box-shadow: var(--focus); }
 @media (max-width: 767px) {
   .mx-pd-filter select { height: 40px; font-size: 16px; flex: 1 1 140px; }
 }
+
+/* QA 2026-11-26: telefon och e-post på kundkortet är länkar (ring/maila med ett tryck). */
+.cu-reach { color: var(--brand, #1f3a5f); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.cu-reach:hover, .cu-reach:focus-visible { text-decoration: underline; }
+@media (max-width: 600px) { .cu-reach { display: inline-block; min-height: 40px; line-height: 40px; } }
