@@ -2522,8 +2522,23 @@ const DataSync = {
       if (document.body.classList.contains('modal-open')) return;
       if (typeof Sidebar !== 'undefined') Sidebar.updateBadges();
       const page = typeof Router !== 'undefined' ? Router.currentPage : null;
-      if (page) Router.showPage(page, Router.currentParams || {});
+      if (page && !DataSync._editorActive()) Router.showPage(page, Router.currentParams || {});
     } catch (e) { console.warn('[DataSync] omritning efter AO-hämtning misslyckades:', e); }
+  },
+
+  /* QA 2026-11-26: en redigeringsvy (offertguiden, importguiden, ny
+     rondering eller en vy märkt data-unsaved) ritas inte om av synken.
+     Tidigare ritades guiden om var 15:e sekund så fort inget fält hade
+     fokus, och osparade ändringar i en befintlig offert försvann. Datan
+     uppdateras ändå i state; vyn visar den nästa gång användaren byter sida. */
+  _editorActive() {
+    try {
+      const page = typeof Router !== 'undefined' ? Router.currentPage : null;
+      if (page === 'pg-import-wizard' || page === 'pg-rondering-wizard') return true;
+      const act = document.querySelector('.page.active');
+      if (!act) return false;
+      return !!act.querySelector('.offw-steps, [data-unsaved="1"]');
+    } catch (e) { return false; }
   },
 
   async _poll() {
@@ -2684,7 +2699,7 @@ const DataSync = {
 
       /* Rendera om aktuell sida (om ingen modal är öppen) */
       var page = typeof Router !== 'undefined' ? Router.currentPage : null;
-      if (page && typeof Router !== 'undefined') {
+      if (page && typeof Router !== 'undefined' && !DataSync._editorActive()) {
         Router.showPage(page, Router.currentParams || {});
       }
 

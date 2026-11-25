@@ -2044,13 +2044,13 @@ const WorkOrderDetailPage = {
     if (!Auth.require('ao_material')) return;
     const articles = (state.articles||[]).filter(a=>a.active);
     const artListHtml = articles.length ? articles.map(a => `
-      <div class="art-row" data-id="${a.id}" data-name="${esc(a.name)}" data-unit="${a.unit}" data-buy="${a.buyPrice}" data-sell="${a.sellPrice}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${a.category||''}"
+      <div class="art-row" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-unit="${esc(a.unit)}" data-buy="${esc(a.buyPrice)}" data-sell="${esc(a.sellPrice)}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${esc(a.category||'')}"
         onclick="WorkOrderDetailPage._matSelectArticle(this)"
         style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .1s;"
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;font-weight:700;">${a.articleNumber ? a.articleNumber+' – ':'' }${esc(a.name)}</div>
-          <div style="font-size:11px;color:var(--mt);">${a.unit} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr exkl. moms</div>
+          <div style="font-size:12px;font-weight:700;">${a.articleNumber ? esc(a.articleNumber)+' – ':'' }${esc(a.name)}</div>
+          <div style="font-size:11px;color:var(--mt);">${esc(a.unit)} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr exkl. moms</div>
         </div>
         <div id="art-check-${a.id}" style="display:none;color:var(--grn);">${ic('check',14)}</div>
       </div>`).join('') : '<p style="padding:8px;font-size:12px;color:var(--mt);">Inga artiklar i register</p>';
