@@ -1,7 +1,13 @@
 'use strict';
 /*
  * T3-0: BASLINJE-tester. De bevisar verkliga säkerhetsbrister i OFÖRÄNDRAD serverkod
- * (supabase/functions + migrationskedjan) mot den lokala STAGING-replikan. Varje rad märkt
+ * (supabase/functions + migrationskedjan) mot den lokala STAGING-replikan.
+ *
+ * HISTORISK REFERENS sedan T3-B (2026-11-28): testet körs mot serverkällan i commit
+ * BASLINJE_COMMIT (fb71f26, = installerad STAGING-kod, före T3-B), utläst med `git archive`
+ * till en temporär katalog. Den rättade koden prövas i tests/t3b_ao_karna.test.js, där
+ * raderna SÄK-3, -4, -5, -11, -12, -15, -16 är vända till godkända säkerhetstester.
+ * Rader som rättas av senare paket (SÄK-2, -8, -13, GRANTS) bevisas här tills dess. Varje rad märkt
  * "BASLINJE SÄK-n" är GODKÄND när bristen syns (anropet godtas och muterar, eller data
  * lämnas ut, trots att den fastställda regeln i BEHORIGHETSMATRIS säger avslag).
  *
@@ -20,6 +26,19 @@ const { val, q, psql, asUser, rpc, lit, jlit } = require('./local/lib/db');
 const { expectBaslinje, ksTa, ksDiff } = require('./local/lib/kontroll');
 
 const EF = ['ao-time-write', 'work-orders-list', 'store-key-write', 'work-order-checklist-resolve', 'work-order-log-write'];
+
+/* Historisk källa: STAGING-ekvivalent serverkod före T3-B. */
+const BASLINJE_COMMIT = 'fb71f26';
+const { execFileSync } = require('child_process');
+const os = require('os');
+const pathM = require('path');
+const HIST = fs.mkdtempSync(pathM.join(os.tmpdir(), 'vift-baslinje-'));
+process.on('exit', () => { try { fs.rmSync(HIST, { recursive: true, force: true }); } catch (e) { /* ignore */ } });
+try {
+  const tar = execFileSync('git', ['-C', pathM.join(__dirname, '..'), 'archive', BASLINJE_COMMIT, 'supabase'], { maxBuffer: 512 * 1024 * 1024 });
+  execFileSync('tar', ['-x', '-C', HIST], { input: tar });
+} catch (e) { ok(false, 'historisk källa ' + BASLINJE_COMMIT + ' kunde inte läsas ut (git archive): ' + e.message); avsluta(); }
+process.env.VIFT_SERVER_ROOT = pathM.join(HIST, 'supabase');
 const rapport = [];
 const B = (sak, beskrivning, bevisad, fakta, rattas) => {
   rapport.push({ sak, beskrivning, bevisad: !!bevisad, fakta, rattasI: rattas });
@@ -29,8 +48,8 @@ const B = (sak, beskrivning, bevisad, fakta, rattas) => {
 (async () => {
   const r = byggReplik({});
   const { db, U } = r;
-  ok(r.rapport.oforklarade === 0, 'replikan = STAGING-facit (0 oförklarade) — baslinjen gäller den installerade koden');
-  const ef = await laddaEf(db, EF);
+  ok(r.rapport.oforklarade === 0 && !r.steg.some((x) => x.ny), 'replikan (historisk källa ' + BASLINJE_COMMIT + ') = STAGING-facit (0 oförklarade, inga T3-migrationer) — baslinjen gäller den installerade koden');
+  const ef = await laddaEf(db, EF, { root: process.env.VIFT_SERVER_ROOT });
   const aoById = (id) => (val(db, 'vift_workOrders') || []).find((a) => a.id === id);
   const restore = (key, v) => psql(db, `update public.store set value = ${jlit(v)} where key = ${lit(key)}`); // som postgres (testfixtur)
   const KS_AO = { keys: ['vift_workOrders', 'vift_timeEntries'], tables: ['op_idempotency', 'stamp_status'] };
@@ -155,12 +174,12 @@ const B = (sak, beskrivning, bevisad, fakta, rattas) => {
     const anrop = asUser(utanRE.db, null, `select public.provision_vift_user(${lit(U.avstangd.authId)}::uuid, ${lit(U.avstangd.staffId)}, 'admin', true) as r`);
     const ny = q(utanRE.db, `select active, is_admin, role_id from public.app_users where user_id = ${lit(U.avstangd.authId)}`)[0];
     B('GRANTS', 'utan R-E: ANONYM (ingen inloggning) kan återaktivera en avstängd användare som admin via provision_vift_user', anrop.ok && ny.active === true && ny.is_admin === true, [anrop, ny], 'R-E (installeras med T3-paketet)');
-    const efU = await laddaEf(utanRE.db, ['work-orders-list']);
+    const efU = await laddaEf(utanRE.db, ['work-orders-list'], { root: process.env.VIFT_SERVER_ROOT });
     s = await efU.anropa('work-orders-list', { user: U.avstangd });
     B('GRANTS', '… och den avstängda användaren kommer därefter åt AO-listan (200)', s.status === 200, s.status, 'R-E');
   } finally { utanRE.stang(); }
 
-  if (process.env.BASLINJE_RAPPORT) fs.writeFileSync(process.env.BASLINJE_RAPPORT, JSON.stringify({ tid: new Date().toISOString(), kalla: 'lokal replik, oförändrad kod', rader: rapport }, null, 1));
+  if (process.env.BASLINJE_RAPPORT) fs.writeFileSync(process.env.BASLINJE_RAPPORT, JSON.stringify({ tid: new Date().toISOString(), kalla: 'lokal replik, historisk källa ' + BASLINJE_COMMIT + ' (oförändrad STAGING-ekvivalent kod)', rader: rapport }, null, 1));
   console.log('\nBASLINJE-sammanfattning: ' + rapport.filter((x) => x.bevisad).length + '/' + rapport.length + ' brister bevisade (' + Array.from(new Set(rapport.map((x) => x.sak))).join(', ') + ')');
   r.stang();
   avsluta();

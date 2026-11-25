@@ -153,4 +153,28 @@ function newRunId() {
 
 const stable = (v) => JSON.stringify(v === undefined ? null : v);
 
-module.exports = { LIVE_REF, isApprovedStaging, EXIT, arg, refuse, guard, accounts, client, reporter, newRunId, stable };
+/* T3-B: avslag kontrolleras med exakt status, error och reason (BEHORIGHETSMATRIS §4),
+   samma regel som tests/local/lib/kontroll.matchSvar. reason: null kräver att reason saknas.
+   Generiska fel (5xx, write_failed) godkänns aldrig som avslag. Returnerar en lista med fel. */
+function matchSvar(svar, f) {
+  const fel = [];
+  const body = (svar && svar.body) || {};
+  if (f.status !== undefined && svar.status !== f.status) fel.push('status ' + svar.status + ' ≠ ' + f.status);
+  if (f.error !== undefined && body.error !== f.error) fel.push('error ' + JSON.stringify(body.error) + ' ≠ ' + JSON.stringify(f.error));
+  if (f.reason !== undefined) {
+    if (f.reason === null ? body.reason !== undefined : body.reason !== f.reason) fel.push('reason ' + JSON.stringify(body.reason) + ' ≠ ' + JSON.stringify(f.reason));
+  }
+  if (svar.status >= 500 || body.error === 'write_failed') fel.push('generiskt serverfel godkänns aldrig som avslag');
+  return fel;
+}
+
+/* T3-B: effektiva AO-behörigheter med övergångsregeln (samma som servern, _vift_ao_eff_perms). */
+function effAoPerms(perms) {
+  const p = Array.isArray(perms) ? perms.slice() : [];
+  if (p.includes('all')) return p;
+  const nya = ['ao_start_own', 'ao_complete_own', 'ao_pool_take'];
+  if (!nya.some((x) => p.includes(x)) && p.includes('ao_complete') && !p.includes('ao_view_all') && !p.includes('ao_edit')) return p.concat(nya);
+  return p;
+}
+
+module.exports = { LIVE_REF, isApprovedStaging, EXIT, arg, refuse, guard, accounts, client, reporter, newRunId, stable, matchSvar, effAoPerms };

@@ -22,6 +22,13 @@ const OUT = process.argv[3];
 if (!DB) { console.error('användning: node jamfor-schema.js <databas> [rapport.json]'); process.exit(2); }
 const facit = JSON.parse(fs.readFileSync(path.join(__dirname, 'staging-schema-facit-2026-11-25.json'), 'utf8'));
 const kanda = JSON.parse(fs.readFileSync(path.join(__dirname, 'kanda-avvikelser.json'), 'utf8'));
+/* T3-B (2026-11-28): avsiktliga, ännu inte installerade ändringar (klass "ny" i MIG-1).
+   Ett objekt i t3-andringar.json räknas som FÖRKLARAT bara om dess lokala definition har
+   exakt den registrerade md5:n; annars är det OFÖRKLARAT. Generera/verifiera med
+   tests/local/t3-andringar.js. */
+const t3Fil = path.join(__dirname, 't3-andringar.json');
+const t3 = (fs.existsSync(t3Fil) && !process.env.T3_IGNORERA) ? JSON.parse(fs.readFileSync(t3Fil, 'utf8')).objekt : {};
+const md5 = (x) => require('crypto').createHash('md5').update(String(x == null ? '' : x)).digest('hex');
 
 const q = (sql) => JSON.parse(execFileSync('psql', ['-d', DB, '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', `select coalesce(json_agg(t), '[]') from (${sql}) t`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim());
 const ws = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
@@ -60,8 +67,19 @@ const lokal = {
 };
 
 const res = [];
+const lokalDef = (typ, key) => {
+  if (typ !== 'funktion') return null;
+  const f = lokal.functions.find((x) => x.name + '(' + x.args + ')' === key);
+  return f ? md5(f.def) + '|' + aclSet(f.acl) : 'saknas';
+};
 const add = (typ, key, status, detalj) => {
-  const k = kanda[typ + ':' + key];
+  let k = kanda[typ + ':' + key];
+  const t = t3[typ + ':' + key];
+  if (!k && t && status !== 'IDENTISK' && status !== 'SAMMA KOD') {
+    const nu = lokalDef(typ, key);
+    if (t.md5 === nu) k = t.paket + ' (' + t.andring + ', ej installerad i STAGING): ' + t.beskrivning;
+    else detalj = (detalj ? detalj + '; ' : '') + 'registrerad som ' + t.paket + '-ändring men md5/ACL avviker (' + nu + ' ≠ ' + t.md5 + ')';
+  }
   const forklarad = status !== 'IDENTISK' && (!!k || status === 'SAMMA KOD');
   const fx = k || (status === 'SAMMA KOD' ? 'Automatiskt: samma kod (repo-källan har kommentarer som inte följde med när STAGING installerades).' : '');
   res.push({ typ, key, status, detalj: detalj || '', forklaring: forklarad ? fx : '', kategori: status === 'IDENTISK' ? 'IDENTISK' : (forklarad ? 'FÖRKLARAD' : 'OFÖRKLARAD') });
@@ -142,6 +160,8 @@ for (const t of typer) console.log(t.padEnd(10), String(count('IDENTISK', t)).pa
 for (const r of res.filter((x) => x.kategori !== 'IDENTISK')) {
   console.log(`${r.kategori.padEnd(10)} ${r.typ} ${r.key}: ${r.status}${r.detalj ? ' — ' + r.detalj.slice(0, 400) : ''}${r.forklaring ? '\n           förklaring: ' + r.forklaring : ''}`);
 }
+const t3Ej = Object.keys(t3).filter((k) => !res.find((r) => r.typ + ':' + r.key === k && r.kategori === 'FÖRKLARAD'));
+if (t3Ej.length && !process.env.T3_UTAN) console.log('OBS: T3-ändringar som inte syns i databasen (ej installerade här?):', t3Ej.join(', '));
 const ej = Object.keys(kanda).filter((k) => !res.find((r) => r.typ + ':' + r.key === k && r.kategori === 'FÖRKLARAD'));
 if (ej.length) console.log('OBS: förklaringar som inte längre behövs (objektet är identiskt eller finns inte):', ej.join(', '));
 if (OUT) fs.writeFileSync(OUT, JSON.stringify(res, null, 1));

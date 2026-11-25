@@ -17,7 +17,10 @@ const EF = ['ao-time-write', 'work-orders-list', 'store-key-write', 'time-entrie
 
 (async () => {
   const r = byggReplik({});
-  ok(r.rapport.oforklarade === 0 && r.rapport.identiska === 126, 'replikan byggd: 126 identiska, ' + r.rapport.forklarade + ' förklarade, 0 oförklarade mot STAGING-facit');
+  // T3-B: hela repokedjan inklusive de nya migrationerna; deras objekt är förklarade via
+  // tests/local/t3-andringar.json (md5-kontrollerade). STAGING-baslinjen: replica_build.test.js.
+  const t3n = Object.keys(require('./local/t3-andringar.json').objekt).length;
+  ok(r.rapport.oforklarade === 0 && r.rapport.forklarade === 7 + t3n - 1, 'replikan byggd (repokedjan med T3-B): ' + r.rapport.identiska + ' identiska, ' + r.rapport.forklarade + ' förklarade (7 kända + T3-B), 0 oförklarade mot STAGING-facit');
   const U = r.U, db = r.db;
   const ef = await laddaEf(db, EF);
   ok(EF.every((s) => typeof ef.handlers[s] === 'function'), 'alla ' + EF.length + ' EF transpilerade och laddade (riktig källa ur supabase/functions)');

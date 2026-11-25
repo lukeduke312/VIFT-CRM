@@ -7,8 +7,10 @@
  *   20261127000002_rekonstruerad_time_entry_rpc.sql
  *   20261127000003_rekonstruerad_store_restrictive_policyer.sql
  *   20261127000004_rekonstruerad_grants_och_store_policy.sql
- * Databasen byggs med HELA kedjan i supabase/MIGRATIONSORDNING.txt ovanpå
- * tests/local/supabase-stubbar.sql. Inte STAGING, inte LIVE.
+ * Databasen byggs med kedjan i supabase/MIGRATIONSORDNING.txt ovanpå
+ * tests/local/supabase-stubbar.sql, UTAN de nya migrationerna efter STAGING:s senaste
+ * version (T3-B, 20261128*): testet gäller de rekonstruerade STAGING-definitionerna.
+ * T3-B:s ersättare av time_entry_* testas i tests/t3b_ao_karna.test.js. Inte STAGING, inte LIVE.
  * Saknas lokal PostgreSQL hoppas testet över (redovisas, inte godkänt).
  */
 const { execFileSync } = require('child_process');
@@ -26,9 +28,11 @@ process.on('exit', () => { try { psql('postgres', 'drop database if exists ' + D
 execFileSync('psql', ['-d', DB, '-qAt', '-v', 'ON_ERROR_STOP=1', '-f', path.join(ROOT, 'tests/local/supabase-stubbar.sql')], { stdio: ['ignore', 'pipe', 'pipe'] });
 psql('postgres', `alter database ${DB} set search_path = "$user", public, extensions`);
 const order = fs.readFileSync(path.join(ROOT, 'supabase/MIGRATIONSORDNING.txt'), 'utf8').split('\n')
-  .filter((l) => l.trim() && !l.trim().startsWith('#')).map((l) => l.trim().split(/\s+/)[1]);
+  .filter((l) => l.trim() && !l.trim().startsWith('#'))
+  .filter((l) => { const v = l.trim().split(/\s+/)[0]; return !(/^\d{14}$/.test(v) && v > '20261124211128'); })
+  .map((l) => l.trim().split(/\s+/)[1]);
 for (const rel of order) execFileSync('psql', ['-d', DB, '-qAt', '-v', 'ON_ERROR_STOP=1', '-f', path.join(ROOT, 'supabase', rel)], { stdio: ['ignore', 'pipe', 'pipe'] });
-ok(true, `hela kedjan (${order.length} filer) kördes utan fel`);
+ok(true, `STAGING-kedjan (${order.length} filer, utan nya T3-migrationer) kördes utan fel`);
 
 const q = (s) => s == null ? 'null' : "'" + String(s).replace(/'/g, "''") + "'";
 const j = (o) => q(JSON.stringify(o)) + '::jsonb';

@@ -12,7 +12,12 @@
  *   node tests/staging/authz-read.js --jag-har-go --bekrafta-projekt=<ref>
  *
  * Kontroller:
- *   R1 work-orders-list per roll: begränsad roll ser bara egna/pool-AO.
+ *   R1 work-orders-list per roll (T3-B, skärpt 2026-11-28): utan ao_view_all bara egna
+ *      tilldelade AO (inte arkiverade/borttagna) och, med ao_pool_take (övergångsregel:
+ *      äldre roll med ao_complete), ÖPPEN pool (status pool, poolOpen ≠ false, ingen
+ *      personal) i begränsad projektion (K-03). Pool med personal godkänns INTE längre.
+ *   R1b öppen pool-AO lämnas ut utan kontakter, portkod, kund, priser, logg, material,
+ *      checklista (poolProjection === true).
  *   R2 time-entries-list per roll: utan payroll_view bara egna tidposter.
  *   R3 Direkt REST-läsning av vift_workOrders/vift_timeEntries nekas/tom.
  *   R4 store-key-write readWithHash på vift_workOrders nekas.
@@ -59,8 +64,14 @@ const READ_ACTIONS = new Set(['readWithHash', 'readHashes', 'readAllWithHashes']
       if (role === 'admin') adminAoCount = aos.length;
       rep.add('R1 ' + role, null, 'ser ' + aos.length + ' AO (ao_view_all)', { kalla: 'ej i repo (G4) — läsåtgärd enligt kontrakt' });
     } else {
-      const foreign = aos.filter((a) => !((a.staff || []).map(String).includes(me.staffId) || a.status === 'pool'));
-      rep.add('R1 ' + role, foreign.length === 0, foreign.length ? 'ser ' + foreign.length + ' AO som varken är egna eller pool' : 'ser bara egna/pool-AO (' + aos.length + ')', { kalla: 'ej i repo (G4) — läsåtgärd enligt kontrakt' });
+      const eff = L.effAoPerms(me.perms);
+      const egen = (a) => (a.staff || []).map(String).includes(me.staffId) && !a.archived && !a.deleted;
+      const oppen = (a) => a.status === 'pool' && a.poolOpen !== false && !(a.staff || []).length && !a.archived && !a.deleted;
+      const foreign = aos.filter((a) => !(egen(a) || (has(eff, 'ao_pool_take') && oppen(a))));
+      rep.add('R1 ' + role, foreign.length === 0, foreign.length ? 'ser ' + foreign.length + ' AO som varken är egna eller öppen pool (t.ex. pool med annans personal, arkiverad/borttagen): ' + foreign.map((a) => a.id).slice(0, 5).join(',') : 'ser bara egna och ' + (has(eff, 'ao_pool_take') ? 'öppen pool' : 'ingen pool (saknar ao_pool_take)') + ' (' + aos.length + ')', { kalla: 'vift-v2 work-orders-list (T3-B)' });
+      const FORBJUDNA = ['phone', 'contactEmail', 'contactPerson', 'accessCode', 'customerName', 'customerId', 'fixedPrice', 'materials', 'log', 'checklist'];
+      const lackor = aos.filter((a) => !egen(a) && oppen(a)).filter((a) => a.poolProjection !== true || FORBJUDNA.some((f) => f in a && !(Array.isArray(a[f]) && a[f].length === 0)));
+      rep.add('R1b ' + role, lackor.length === 0, lackor.length ? lackor.length + ' öppen pool-AO lämnas ut med skyddat innehåll' : 'öppen pool i begränsad projektion (K-03)', { kalla: 'vift-v2 work-orders-list poolProjection (T3-B)' });
     }
     const tl = await req('/functions/v1/time-entries-list', { method: 'GET', token: tok[role] });
     const tes = (tl.body && tl.body.timeEntries) || [];

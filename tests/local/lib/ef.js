@@ -33,6 +33,7 @@ function skrivOm(src, depth) {
   return src
     .replace(/'https:\/\/deno\.land\/std@[^']*\/http\/server\.ts'/g, `'${up}stubs/server.js'`)
     .replace(/'https:\/\/esm\.sh\/@supabase\/supabase-js@[^']*'/g, `'${up}stubs/supabase.js'`)
+    .replace(/'npm:web-push@[^']*'/g, `'${up}stubs/webpush.js'`)
     .replace(/from '(\.{1,2}\/[^']+)\.ts'/g, "from '$1.js'");
 }
 
@@ -60,7 +61,9 @@ function transpilera(root, slugs) {
   fs.mkdirSync(path.join(src, 'stubs'), { recursive: true });
   fs.writeFileSync(path.join(src, 'stubs', 'server.ts'), 'export function serve(h: any, ..._r: any[]) { (globalThis as any).__viftServe(h) }\n');
   fs.writeFileSync(path.join(src, 'stubs', 'supabase.ts'), 'export function createClient(...a: any[]): any { return (globalThis as any).__viftCreateClient(...a) }\nexport type SupabaseClient = any\n');
-  filer.push(path.join(src, 'stubs', 'server.ts'), path.join(src, 'stubs', 'supabase.ts'));
+  // T3-B: service-monitor importerar npm:web-push; i Node ersätts den av en stubbe (inga utskick).
+  fs.writeFileSync(path.join(src, 'stubs', 'webpush.ts'), 'const w: any = { setVapidDetails(..._a: any[]) {}, async sendNotification(..._a: any[]) { ((globalThis as any).__viftPush = (globalThis as any).__viftPush || []).push(_a); return {} } }\nexport default w\n');
+  filer.push(path.join(src, 'stubs', 'server.ts'), path.join(src, 'stubs', 'supabase.ts'), path.join(src, 'stubs', 'webpush.ts'));
   try {
     execFileSync('tsc', ['--outDir', path.join(ut, 'js'), '--rootDir', src, '--module', 'es2022', '--target', 'es2022', '--moduleResolution', 'bundler',
       '--skipLibCheck', '--lib', 'es2022,dom', '--noEmitOnError', 'false', '--allowImportingTsExtensions', 'false'].concat(filer), { stdio: 'pipe' });
@@ -152,8 +155,10 @@ function skapaKlient(db, h) {
       const r = await psqlAsync(db, full);
       if (!r.ok) return { data: null, error: pgErr(r.error), status: 400 };
       if (!harRader) return { data: null, error: null, status: 204 };
-      const lines = r.out.split('\n').filter((l) => l.startsWith('['));
-      const rows = JSON.parse(lines[lines.length - 1] || '[]');
+      // json_agg skriver radbrytning mellan elementen: läs från första raden som börjar med '['.
+      const alla = r.out.split('\n');
+      const forsta = alla.findIndex((l) => l.startsWith('['));
+      const rows = JSON.parse(forsta < 0 ? '[]' : alla.slice(forsta).join('\n'));
       if (st.enda === 'maybe') return rows.length > 1 ? { data: null, error: { message: 'multiple rows', code: 'PGRST116' } } : { data: rows[0] || null, error: null };
       if (st.enda === 'single') return rows.length !== 1 ? { data: null, error: { message: 'JSON object requested, multiple (or no) rows returned', code: 'PGRST116' } } : { data: rows[0], error: null };
       return { data: rows, error: null };
@@ -174,6 +179,11 @@ function skapaKlient(db, h) {
       return rpcAsync(db, fn, args, { as: 'service_role' });
     },
     auth: {
+      admin: {
+        async listUsers() {
+          return { data: { users: q(db, 'select id::text as id, email from auth.users') }, error: null };
+        },
+      },
       async getUser(jwt) {
         const c = lasJwt(jwt);
         if (!c) return { data: { user: null }, error: { message: 'invalid JWT', status: 401 } };

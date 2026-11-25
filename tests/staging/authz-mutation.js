@@ -140,6 +140,9 @@ function testElement(id) {
   }
   const rl = await req('/rest/v1/store?select=value&key=eq.vift_roles', { method: 'GET', token: tok.admin });
   const roles = (rl.body && rl.body[0] && rl.body[0].value) || [];
+  /* T3-B: effektiva AO-behörigheter per testkonto (övergångsregeln), så att förväntan följer
+     kontots faktiska roll i STAGING och inte rollnamnet. */
+  const effAv = (r) => { const s = staff.find((x) => String(x.id) === ids[r]); const role = s && roles.find((x) => x.id === s.role); return L.effAoPerms((role && role.permissions) || []); };
   if (roles.length) {
     for (const r of G13_ROLES) {
       const s = staff.find((x) => String(x.id) === ids[r]);
@@ -156,7 +159,8 @@ function testElement(id) {
   const plan = [
     'G13 (delvis): ' + arrayKeys.length + ' array-register × ' + G13_ROLES.length + ' roller — ny märkt testpost, tas bort direkt. Prövas INTE: objektformade register (' + KEYS.filter((k) => !arrayKeys.includes(k)).join(', ') + '), per-post-regler, ändring/borttagning av befintliga poster, fältnivå, hel-nyckel-skrivning',
     'Test-AO ' + runId + '-AO skapas (admin), tilldelas fältkontot/-kontona',
-    'G9: ekonomi försöker sätta test-AO:n till "fakturerad"',
+    'G9: ekonomi och admin försöker sätta test-AO:n till "fakturerad" via patch_ao (ska nekas: 403, admin med reason invoice_path_required)',
+    'T3-B: test-AO i öppen pool (admin): tid/logg/checklista/instämpling före tagning nekas (not_assigned), begränsad nekas, fält tar (200), fält2 får 409 already_assigned, start/klar på egen, idempotensnyckel bunden till aktör',
     'G6: två samtidiga create_time med samma idempotensnyckel (fält) på test-AO:n',
     'Checklista: sondering av serverstöd (på test-AO:n) + tre lägen och ägarkontroll om stödet finns' + (emails.falt2 ? '' : ' (ägarkontroll mellan två fältkonton kräver VIFT_USER_FALT2)'),
     'Städning utifrån journalen (alltid) + efterkontroll; befintliga poster jämförs med ögonblicksbilden',
@@ -198,11 +202,26 @@ function testElement(id) {
     if (aoId !== aoIn.id) note({ typ: 'ao', id: aoId, anm: 'servern gav eget id' });
     const getAO = async () => { const r = await req('/functions/v1/work-orders-list', { method: 'GET', token: tok.admin }); if (r.status !== 200) throw new Error('work-orders-list HTTP ' + r.status); return (r.body.workOrders || []).find((a) => a.id === aoId); };
 
-    // ── G9 ──────────────────────────────────────────────────────────
+    /* T3-B (2026-11-28): negativa fall kontrolleras med exakt status, error och reason
+       (BEHORIGHETSMATRIS §4) OCH att test-AO:n är oförändrad (kontrollsumma = hela
+       AO-posten via work-orders-list som admin). Bara märkta test-AO, inga massprov. */
+    const aoJson = async (id) => { const r = await req('/functions/v1/work-orders-list', { method: 'GET', token: tok.admin }); return JSON.stringify(((r.body && r.body.workOrders) || []).find((a) => a.id === id) || null); };
+    const neka = async (namn, anrop, forv, kontrollId) => {
+      const fore = await aoJson(kontrollId);
+      const s = await anrop();
+      const efter = await aoJson(kontrollId);
+      const fel = L.matchSvar(s, forv);
+      if (fore !== efter) fel.push('test-AO ÄNDRAD (mutation trots avslag)');
+      rep.add(namn, fel.length === 0, 'HTTP ' + s.status + ' ' + ((s.body && s.body.error) || 'ok') + (s.body && s.body.reason ? '/' + s.body.reason : '') + (fel.length ? ' — ' + fel.join('; ') : ' (test-AO oförändrad)'));
+      return s;
+    };
+    const AW = (token, body) => req('/functions/v1/ao-time-write', { token, body });
+
+    // ── G9 (D-07, punkt 269): ingen roll sätter faktureringsstatus via patch_ao ──
     const ao0 = await getAO();
-    const g9 = await req('/functions/v1/ao-time-write', { token: tok.ekonomi, body: { action: 'patch_ao', aoId, patch: { status: 'fakturerad' }, expectedUpdatedAt: ao0 ? ao0.updatedAt : null, idempotencyKey: runId + '-g9' } });
+    await neka('G9 ekonomi → fakturerad (test-AO)', () => AW(tok.ekonomi, { action: 'patch_ao', aoId, patch: { status: 'fakturerad' }, expectedUpdatedAt: ao0 ? ao0.updatedAt : null, idempotencyKey: runId + '-g9' }), { status: 403, error: 'forbidden' }, aoId);
+    await neka('G9/SEC-AO-15 admin → fakturerad + invoiceId via patch_ao (test-AO)', () => AW(tok.admin, { action: 'patch_ao', aoId, patch: { status: 'fakturerad', invoiceId: runId + '-INV' }, idempotencyKey: runId + '-g9b' }), { status: 403, error: 'forbidden', reason: 'invoice_path_required' }, aoId);
     const ao1 = await getAO();
-    rep.add('G9 ekonomi → fakturerad (test-AO)', null, 'HTTP ' + g9.status + ' ' + (g9.body.error || 'ok') + '; status efteråt: ' + (ao1 && ao1.status) + ' — underlag för beslut');
 
     // ── G6 ──────────────────────────────────────────────────────────
     const tId = runId + '-T1';
@@ -213,6 +232,51 @@ function testElement(id) {
     if (tl.status !== 200) throw new Error('time-entries-list HTTP ' + tl.status);
     const n = ((tl.body && tl.body.timeEntries) || []).filter((e) => isTest(e, runId)).length;
     rep.add('G6 dubbel create_time samma nyckel', n === 1, 'svar ' + a.status + '/' + b.status + ', tidposter på servern: ' + n);
+
+    // ── T3-B: arbetspoolen, start/klar, tid och stämpling på en märkt test-AO i öppen pool ──
+    const poolIn = { id: runId + '-POOL', title: '[E2E-TEST] pool ' + runId, status: 'pool', priority: 'normal', staff: [], customerId: '', description: 'Automatiskt behörighetsprov — tas bort efter körningen.', log: [], materials: [], checklist: [], createdAt: now, updatedAt: now, e2eTest: runId };
+    note({ typ: 'ao', id: poolIn.id });
+    const cp = await AW(tok.admin, { action: 'create_ao', ao: poolIn, idempotencyKey: runId + '-create-pool' });
+    if (cp.status !== 200 || !cp.body.workOrder) throw new Error('kunde inte skapa test-AO för poolen (HTTP ' + cp.status + ')');
+    const poolId = cp.body.workOrder.id;
+    if (poolId !== poolIn.id) note({ typ: 'ao', id: poolId, anm: 'servern gav eget id' });
+    const pT = runId + '-T2';
+    note({ typ: 'tidpost', id: pT });
+    await neka('SEC-POOL-11 tid på öppen pool före tagning (fält)', () => AW(tok.falt, { action: 'create_time', entry: { id: pT, aoId: poolId, date: now.slice(0, 10), minutes: 15, comment: '[E2E-TEST] ' + runId }, idempotencyKey: runId + '-t2' }), { status: 403, error: 'forbidden', reason: 'not_assigned' }, poolId);
+    await neka('SEC-POOL-11 loggpost på öppen pool före tagning (fält)', () => req('/functions/v1/work-order-log-write', { token: tok.falt, body: { action: 'append_log', aoId: poolId, entry: { id: runId + '-L1', type: 'note', text: '[E2E-TEST]' } } }), { status: 403, error: 'forbidden', reason: 'not_assigned' }, poolId);
+    await neka('SEC-POOL-11 checklista på öppen pool före tagning (fält)', () => req('/functions/v1/work-order-checklist-resolve', { token: tok.falt, body: { aoId: poolId, itemId: '__vift_probe__', action: 'start', avvikelse: 'v2:start' } }), { status: 403, error: 'forbidden', reason: 'not_assigned' }, poolId);
+    const st0 = await req('/functions/v1/store-key-write', { token: tok.falt, body: { action: 'getStampStatus' } });
+    const stamp = await neka('SEC-TID-03 instämpling på öppen pool före tagning (fält)', () => req('/functions/v1/store-key-write', { token: tok.falt, body: { action: 'setStampStatus', active: true, ts: Date.now(), aoId: poolId, expectedRevision: Number((st0.body && st0.body.revision) || 0) } }), { status: 403, error: 'forbidden', reason: 'not_assigned' }, poolId);
+    if (stamp.status === 200 && stamp.body && stamp.body.active) {
+      await req('/functions/v1/store-key-write', { token: tok.falt, body: { action: 'setStampStatus', active: false, expectedRevision: Number(stamp.body.revision || 0) } });
+      rep.add('STÄMPLING ÅTERSTÄLLD', null, 'testkontots stämpling sattes oväntat och har stämplats ut igen');
+    }
+    const kanTa = (r) => { const p = effAv(r); return (p.includes('all') || p.includes('ao_pool_take') || p.includes('ao_edit')) && (p.includes('all') || p.includes('ao_view_own') || p.includes('ao_view_all')); };
+    if (!kanTa('begransad')) await neka('SEC-POOL-10 begränsad tar öppen pool', () => AW(tok.begransad, { action: 'take_from_pool', aoId: poolId, idempotencyKey: runId + '-take-b' }), { status: 403, error: 'forbidden', reason: null }, poolId);
+    else rep.add('SEC-POOL-10', null, 'begränsat konto har ao_pool_take i STAGING-rollen — negativa fallet hoppas över');
+    if (!kanTa('falt')) {
+      await neka('SEC-CUST-09 fältkontot saknar ao_pool_take (även via övergångsregeln) — tagning nekas', () => AW(tok.falt, { action: 'take_from_pool', aoId: poolId, idempotencyKey: runId + '-take-f0' }), { status: 403, error: 'forbidden', reason: null }, poolId);
+      rep.add('T3-B FÄLTFLÖDE', null, 'fältkontots roll saknar ao_pool_take/ao_complete — tagning, start och klarmarkering prövas inte på denna rolluppsättning');
+    }
+    const take = kanTa('falt') ? await AW(tok.falt, { action: 'take_from_pool', aoId: poolId, idempotencyKey: runId + '-take-f' }) : null;
+    if (take) {
+    const efterTag = await aoJson(poolId);
+    const tagen = efterTag !== 'null' ? JSON.parse(efterTag) : null;
+    rep.add('SEC-POOL-05 fält tar öppen pool (test-AO)', take.status === 200 && !!tagen && JSON.stringify(tagen.staff) === JSON.stringify([ids.falt]) && tagen.poolOpen === false && (tagen.log || []).filter((l) => l.type === 'taken_from_pool').length === 1,
+      'HTTP ' + take.status + ' ' + ((take.body && take.body.error) || 'ok') + '; personal ' + (tagen && JSON.stringify(tagen.staff)) + ', poolOpen ' + (tagen && tagen.poolOpen));
+    if (tok.falt2) {
+      await neka('SEC-POOL-06/14 fält2 tar den redan tagna test-AO:n', () => AW(tok.falt2, { action: 'take_from_pool', aoId: poolId, idempotencyKey: runId + '-take-f2' }), { status: 409, error: 'already_assigned', reason: null }, poolId);
+      await neka('SEC-AO-05 fält2 klarmarkerar AO som fält tagit', () => AW(tok.falt2, { action: 'patch_ao', aoId: poolId, patch: { status: 'klar' }, idempotencyKey: runId + '-klar-f2' }), { status: 403, error: 'forbidden', reason: 'not_assigned' }, poolId);
+    } else rep.add('SEC-POOL-06/14', null, 'VIFT_USER_FALT2 saknas — hoppas över');
+    await neka('SÄK-12 samma tagningsnyckel med annan aktör (admin)', () => AW(tok.admin, { action: 'take_from_pool', aoId: poolId, idempotencyKey: runId + '-take-f' }), { status: 409, error: 'idempotency_key_conflict', reason: null }, poolId);
+    const start = await AW(tok.falt, { action: 'patch_ao', aoId: poolId, patch: { status: 'pågående' }, idempotencyKey: runId + '-start' });
+    rep.add('SEC-AO-10 fält startar egen (test-AO)', start.status === 200 && start.body.workOrder && start.body.workOrder.status === 'pågående', 'HTTP ' + start.status + ' ' + ((start.body && start.body.error) || 'ok'));
+    const klar = await AW(tok.falt, { action: 'patch_ao', aoId: poolId, patch: { status: 'klar', completedBy: ids.falt2 || 'annan', completedAt: '2000-01-01T00:00:00.000Z' }, idempotencyKey: runId + '-klar' });
+    const kw = klar.body && klar.body.workOrder;
+    rep.add('SEC-AO-08/09 fält klarmarkerar egen, servern sätter completedBy/At (test-AO)', klar.status === 200 && !!kw && kw.status === 'klar' && kw.completedBy === ids.falt && !String(kw.completedAt).startsWith('2000') && JSON.stringify(klar.body.ignoredFields) === JSON.stringify(['completedAt', 'completedBy']),
+      'HTTP ' + klar.status + '; completedBy ' + (kw && kw.completedBy) + ', ignoredFields ' + JSON.stringify(klar.body && klar.body.ignoredFields));
+    await neka('SEC-AO-12 starta redan klar (test-AO)', () => AW(tok.falt, { action: 'patch_ao', aoId: poolId, patch: { status: 'pågående' }, idempotencyKey: runId + '-start2' }), { status: 409, error: 'invalid_source_status', reason: null }, poolId);
+    }
 
     // ── Checklista: sondering (flyttad hit från nivå 1) + tre lägen ─
     const ck = (token, body) => req('/functions/v1/work-order-checklist-resolve', { token, body: Object.assign({ aoId, avvikelse: 'v2:' + body.action }, body) });

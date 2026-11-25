@@ -2,7 +2,8 @@
 /*
  * T3-0: lokal, reproducerbar STAGING-replik (SAKERHETSPROVNING-TESTPLAN §3.2).
  *
- *   const r = byggReplik({ namn?, utelamna?: [rel...], stagingOnly?: bool, schemakontroll?: bool, data?: bool })
+ *   const r = byggReplik({ namn?, utelamna?: [rel...], stagingOnly?: bool, stagingBaslinje?: bool, schemakontroll?: bool, data?: bool })
+ *   stagingBaslinje: utan de NYA migrationerna (T3-B m.fl., version efter STAGING:s senaste).
  *   r.db, r.U (användare per alias), r.data, r.rapport (schemajämförelse), r.stang()
  *
  * Bygger en egen databas i den lokala PostgreSQL:en:
@@ -20,6 +21,7 @@ const { psql, psqlFile, lit, jlit, createDb, dropDb, assertLocal } = require('./
 const { data } = require('./data');
 
 const REPO = path.resolve(__dirname, '..', '..', '..');
+const STAGING_SENASTE = '20261124211128';
 
 function serverRot() {
   const r = process.env.VIFT_SERVER_ROOT || path.join(REPO, 'supabase');
@@ -35,7 +37,9 @@ function ordning(rot, stagingOnly) {
       const m = /^(#\s*)?(\d{14}|REKONSTRUKTION)\s+(\S+)/.exec(l);
       if (!m) return null;
       if (m[1] && !(stagingOnly && m[3].startsWith('staging-only/'))) return null;
-      return { version: m[2], rel: m[3], stagingOnly: !!m[1] };
+      // T3-B: aktiva rader med version efter STAGING:s senaste (20261124211128) är NYA
+      // ändringar som inte är installerade i STAGING (klass "ny" i MIG-1).
+      return { version: m[2], rel: m[3], stagingOnly: !!m[1], ny: !m[1] && /^\d{14}$/.test(m[2]) && m[2] > STAGING_SENASTE };
     }).filter(Boolean);
 }
 
@@ -43,7 +47,8 @@ function korKedja(db, rot, opts) {
   opts = opts || {};
   psqlFile(db, path.join(REPO, 'tests', 'local', 'supabase-stubbar.sql'));
   psql('postgres', `alter database ${db} set search_path = "$user", public, extensions`);
-  const steg = ordning(rot, opts.stagingOnly).filter((s) => !(opts.utelamna || []).includes(s.rel));
+  // opts.stagingBaslinje: bara det som är installerat i STAGING (utan nya T3-migrationer).
+  const steg = ordning(rot, opts.stagingOnly).filter((s) => !(opts.utelamna || []).includes(s.rel) && !(opts.stagingBaslinje && s.ny));
   for (const s of steg) {
     try { psqlFile(db, path.join(rot, s.rel)); } catch (e) { throw new Error('migrationen ' + s.rel + ' fallerade: ' + e.message); }
   }
@@ -97,4 +102,4 @@ function byggReplik(opts) {
   } catch (e) { stang(); throw e; }
 }
 
-module.exports = { byggReplik, korKedja, ordning, schemakontroll, laddaData, serverRot, REPO };
+module.exports = { byggReplik, korKedja, ordning, schemakontroll, laddaData, serverRot, REPO, STAGING_SENASTE };

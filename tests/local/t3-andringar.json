@@ -1,0 +1,161 @@
+{
+ "beskrivning": "T3-B (2026-11-28): objekt som de nya migrationerna (version efter 20261124211128) lägger till, ändrar eller ersätter. Ej installerade i STAGING. Genereras av tests/local/t3-andringar.js --skriv.",
+ "objekt": {
+  "funktion:_vift_ao_assigned(p_ao jsonb, p_staff_id text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "460c12232d6d852a45253edb3f074012|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: anroparen finns i AO:ns staff."
+  },
+  "funktion:_vift_ao_billing_touched(p_ao jsonb, p_patch jsonb)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "8a5925d9cae565a8d605ec1f1b6f951f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Faktureringsfält i patch_ao (D-07/F21)."
+  },
+  "funktion:_vift_ao_eff_perms(p_perms text[])": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "548e64c4843d22ef963273b4f49d91e0|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Effektiva AO-behörigheter inkl. övergångsregeln (ao_complete utan ao_view_all/ao_edit i en äldre roll = ao_start_own + ao_complete_own + ao_pool_take)."
+  },
+  "funktion:_vift_ao_locked(p_ao jsonb)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "a2a36e184e1c7f099fc731f2cff4a199|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Låst AO (fakturerad/avbruten/arkiverad/borttagen/invoiceId) → 409 ao_locked."
+  },
+  "funktion:_vift_ao_material_merge(p_old jsonb, p_new jsonb, p_me text, p_now_text text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "7233c7c0c10960eaac5fa53d14b4eb37|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Fältets materialpatch: bara egna rader får ändras/tas bort (D-19 delvis)."
+  },
+  "funktion:_vift_ao_number_text(p_n bigint)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "5c61c4b06dd0de102f39dec2c152c58f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "AO-nummer i visningsform, aldrig avkortat (punkt 245)."
+  },
+  "funktion:_vift_ao_open_pool(p_ao jsonb)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "33e5968a998e27ac5c8f1d6bb0bd9342|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Öppen pool (AP-A): status pool, poolOpen ≠ false, ingen personal, inte arkiverad/borttagen."
+  },
+  "funktion:_vift_ao_staff(p_ao jsonb)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "2a1e497557c2dd90a00cf0d2afdde080|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: AO:ns personal som jsonb-array."
+  },
+  "funktion:_vift_ao_take(p_ao jsonb, p_me text, p_entry_id text, p_now_text text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "09f03c032a611bd3c99848a8f5d5b5b4|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Atomisk tagningsregel ur öppen pool (används under radlås)."
+  },
+  "funktion:_vift_auth_staff(p_auth uuid)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "a535f8838d4e443a1c105db8d1acd57b|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Personal och behörigheter för ett auth-id (samma regel som checkViftAuth)."
+  },
+  "funktion:_vift_has(p_perms text[], p_perm text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "82cd97468c972da7a709d0c89bdc2a63|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: behörighet eller all."
+  },
+  "funktion:_vift_idem_lookup(p_fn text, p_key text, p_fp text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "10d2cee1946f1747ed41a9fd374b96f8|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Idempotens bunden till aktör + operation + innehåll (SÄK-12/F17)."
+  },
+  "funktion:_vift_staff_active(p_staff_id text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "cc905f9f53d53bb3c49dc93f66327b72|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: aktiv personalpost."
+  },
+  "funktion:_vift_staff_name(p_staff_id text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "cca094aecca23385232f3f583d607e1f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Hjälpfunktion: personalens namn."
+  },
+  "funktion:store_write_stamp_status(p_auth_user_id uuid, p_active boolean, p_ts bigint, p_ao_id text, p_expected_revision bigint)": {
+   "paket": "T3-B",
+   "andring": "ÄNDRAD",
+   "md5": "bf49af22cddc649a620d40d7f79ca0cd|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Instämpling med aoId kräver tilldelning (eller ao_edit) och olåst AO (F23)."
+  },
+  "funktion:time_entry_create(p_entry jsonb, p_idempotency_key text, p_client_id text)": {
+   "paket": "T3-B",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "Tilldelning under lås, ao_locked, serverpris från prisgrupp, legitim utstämpling, idempotens med fingeravtryck (SÄK-11, AP-B)."
+  },
+  "funktion:time_entry_create(p_entry jsonb, p_idempotency_key text, p_client_id text, p_caller_staff_id text, p_caller_auth_id uuid, p_caller_perms text[])": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "3616f154c1e8e70a4ac84b384ee0c4db|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Tilldelning under lås, ao_locked, serverpris från prisgrupp, legitim utstämpling, idempotens med fingeravtryck (SÄK-11, AP-B)."
+  },
+  "funktion:time_entry_patch(p_entry_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_can_manage_others boolean)": {
+   "paket": "T3-B",
+   "andring": "ÄNDRAD",
+   "md5": "ada714897ee6db85fe3c4ed50118162f|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Byte av aoId kräver tilldelning och olåst AO."
+  },
+  "funktion:work_order_billing_set(p_ao_id text, p_invoice_id text, p_mode text, p_actor_id text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "8f2a614cf3daa8bfa9dd5e0a9fbc75f6|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Ny: enda vägen att sätta/backa AO:s faktureringsstatus (D-07, punkt 269/G9)."
+  },
+  "funktion:work_order_checklist_set_state(p_ao_id text, p_item_id text, p_action text, p_text text, p_description text, p_comment text, p_image text, p_actor_name text, p_caller_staff_id text, p_caller_can_view_all boolean, p_caller_can_edit boolean)": {
+   "paket": "T3-B",
+   "andring": "ÄNDRAD",
+   "md5": "f9a9ea2a1a463ec4b94457f02b3d2fec|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Poolgrenen borttagen (öppen pool ger ingen skrivrätt), not_assigned, ao_locked."
+  },
+  "funktion:work_order_create(p_ao jsonb, p_idempotency_key text, p_client_id text)": {
+   "paket": "T3-B",
+   "andring": "ÄNDRAD",
+   "md5": "b9f72080a1f0f576ee5b5e37108a5aa7|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "AO-nummer unikt även vid samtidighet, ingen avkortning, ingen unik index (punkt 245); pool + personal → poolOpen=false."
+  },
+  "funktion:work_order_log_append(p_ao_id text, p_entry jsonb, p_caller_staff_id text, p_caller_can_view_all boolean)": {
+   "paket": "T3-B",
+   "andring": "ÄNDRAD",
+   "md5": "378c1ade853fae103196daf66247553c|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Poolgrenen borttagen, not_assigned, ao_locked."
+  },
+  "funktion:work_order_log_remove(p_ao_id text, p_entry_id text, p_caller_staff_id text, p_caller_can_view_all boolean, p_caller_can_edit boolean)": {
+   "paket": "T3-B",
+   "andring": "ÄNDRAD",
+   "md5": "d3c30645479a6766bf0e14ba529bde99|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Poolgrenen borttagen, not_assigned, ao_locked."
+  },
+  "funktion:work_order_patch(p_ao_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text)": {
+   "paket": "T3-B",
+   "andring": "BORTTAGEN (ersatt av ny signatur)",
+   "md5": "saknas",
+   "beskrivning": "Regelkontroll per anropare under radlås (SÄK-5, F21, SÄK-12, AP-G, tagning i v3.4-form)."
+  },
+  "funktion:work_order_patch(p_ao_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_perms text[])": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "081821fd2bcdd92be6afb0d9fa1b32c1|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Regelkontroll per anropare under radlås (SÄK-5, F21, SÄK-12, AP-G, tagning i v3.4-form)."
+  },
+  "funktion:work_order_pool_take(p_ao_id text, p_caller_staff_id text, p_caller_perms text[], p_idempotency_key text, p_entry_id text)": {
+   "paket": "T3-B",
+   "andring": "NY",
+   "md5": "3d79e243f020a7199b6d6b2edabd7d3d|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Ny: \"Ta jobbet\" atomiskt, exakt en vinner, 409 already_assigned (SÄK-4, AP-F)."
+  }
+ }
+}

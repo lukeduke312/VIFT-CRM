@@ -19,7 +19,11 @@ const FakeSupabase = F.FakeSupabase || F;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 
-const fake = new FakeSupabase();
+const fake = new FakeSupabase({ logOps: true });
+/* T3-B: fältkontona får en STAGING-lik fältroll (ao_complete, som i tests/local/lib/data.js),
+   så att övergångsregeln ger ao_pool_take/ao_start_own/ao_complete_own och tagning, start
+   och klarmarkering prövas av nivå 2. Demoseedens 'personal' i denna kopia saknar ao_complete. */
+{ const roller = fake.get('roles'); const p = roller.find((x) => x.id === 'personal'); if (p && !p.permissions.includes('ao_complete')) p.permissions.push('ao_complete'); fake.set('roles', roller); }
 let reqCount = 0;
 const server = http.createServer((req, res) => {
   let body = '';
@@ -113,8 +117,13 @@ server.listen(0, '127.0.0.1', async () => {
     ok(JSON.stringify(fake.get('workOrders')) === aosBefore, 'nivå 2: alla befintliga AO oförändrade, inklusive updatedAt (ingen no-op-patch på skarp AO)');
     ok(JSON.stringify(fake.get('timeEntries')) === tesBefore, 'nivå 2: tidposter oförändrade');
     ok(dump() === snap, 'nivå 2: alla register bitidentiska efter städning (bara vift_lastChanged ändrad)');
-    const patchedExisting = fake.calls.filter((c) => /ao-time-write:patch_ao/.test(c.action)).length;
-    ok(patchedExisting === 1, 'nivå 2: exakt en patch_ao (G9 på test-AO:n), ingen mot befintliga AO');
+    // T3-B: fler patch_ao/take_from_pool (G9 skärpt, start/klar, tagning) — alla mot märkta test-AO.
+    const aoCalls = fake.calls.filter((c) => /ao-time-write:(patch_ao|take_from_pool)/.test(c.action));
+    ok(aoCalls.length >= 2 && aoCalls.every((c) => String(c.aoId || '').startsWith('E2E-AUTHZ-')), 'nivå 2: alla patch_ao/take_from_pool (' + aoCalls.length + ') mot märkta test-AO, ingen mot befintliga AO');
+    ok(/OK +G9\/SEC-AO-15 admin → fakturerad \+ invoiceId via patch_ao \(test-AO\) — HTTP 403 forbidden\/invoice_path_required/.test(r.out), 'nivå 2 (T3-B): G9 kontrollerar status, error, reason och oförändrad test-AO');
+    ok(/OK +SEC-POOL-05 fält tar öppen pool/.test(r.out) && /OK +SEC-POOL-06\/14 fält2 tar den redan tagna test-AO:n — HTTP 409 already_assigned/.test(r.out), 'nivå 2 (T3-B): tagning och 409 already_assigned prövade');
+    ok(/OK +SEC-POOL-11 tid på öppen pool före tagning \(fält\) — HTTP 403 forbidden\/not_assigned/.test(r.out) && /OK +SEC-TID-03 instämpling/.test(r.out), 'nivå 2 (T3-B): tid och stämpling utan tilldelning nekas med not_assigned');
+    ok(/OK +SEC-AO-08\/09/.test(r.out) && /OK +SÄK-12 samma tagningsnyckel med annan aktör/.test(r.out), 'nivå 2 (T3-B): servern sätter completedBy, idempotens bunden till aktör');
     ok(/G6 dubbel create_time samma nyckel — svar \d+\/\d+, tidposter på servern: 1/.test(r.out), 'nivå 2: G6 kördes på test-AO:n');
     ok(/CHK återställ annans \(fält2, ao_checklist\)/.test(r.out) && /OK +CHK ao_edit \((chef|admin)\) återställer annans \+ historik/.test(r.out), 'nivå 2: checklistans ägarkontroll prövad');
     const rapport = rid && path.join(ROOT, 'tests/staging/rapport/authz-mutation-' + rid + '.json');

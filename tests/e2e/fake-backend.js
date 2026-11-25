@@ -47,6 +47,47 @@ const PASSWORD = 'e2e-test-password';
 
 const DEFINITE = (status, error, extra) => ({ status, body: Object.assign({ error }, extra || {}) });
 
+/* ── T3-B (2026-11-28): AO- och poolregler — PARITET med den faktiska servern ──
+   Speglar vift-v2 supabase/migrations/20261128000001–03 (work_order_patch,
+   work_order_pool_take, work_order_billing_set, time_entry_create,
+   store_write_stamp_status, checklista/logg) och _shared/vift-auth.ts
+   (canViewWorkOrder, poolProjection). Ändras en regel i servern ska den ändras här
+   i samma ändring (SEC-SIM-01, tests/sim_parity.test.js). */
+const NEW_AO_PERMS = ['ao_start_own', 'ao_complete_own', 'ao_pool_take'];
+function effAoPerms(perms) {
+  const p = Array.isArray(perms) ? perms.slice() : [];
+  if (p.includes('all')) return p;
+  if (!NEW_AO_PERMS.some((x) => p.includes(x)) && p.includes('ao_complete') && !p.includes('ao_view_all') && !p.includes('ao_edit')) return p.concat(NEW_AO_PERMS);
+  return p;
+}
+const isTrue = (v) => v === true || v === 'true';
+const aoStaffOf = (ao) => (ao && Array.isArray(ao.staff) ? ao.staff.map(String) : []);
+const isAssigned = (ao, id) => !!id && aoStaffOf(ao).includes(id);
+const isOpenPool = (ao) => !!ao && ao.status === 'pool' && ao.poolOpen !== false && String(ao.poolOpen) !== 'false' && aoStaffOf(ao).length === 0 && !isTrue(ao.deleted) && !isTrue(ao.archived);
+const isLockedAO = (ao) => !!ao && (isTrue(ao.deleted) || isTrue(ao.archived) || ao.status === 'fakturerad' || ao.status === 'avbruten' || !!ao.invoiceId);
+const POOL_FIELDS = ['id', 'displayNumber', 'title', 'category', 'type', 'priority', 'address', 'zip', 'city', 'estimatedHours', 'status', 'poolOpen', 'createdAt', 'updatedAt'];
+function poolProjection(ao) {
+  const out = {};
+  POOL_FIELDS.forEach((f) => { if (f in ao) out[f] = ao[f]; });
+  const pd = typeof ao.poolDescription === 'string' ? ao.poolDescription.trim() : '';
+  out.description = pd || (typeof ao.description === 'string' ? ao.description : '');
+  out.dueDate = (typeof ao.dueDate === 'string' && ao.dueDate) || (typeof ao.scheduledDate === 'string' ? ao.scheduledDate : '');
+  out.scheduledDate = typeof ao.scheduledDate === 'string' ? ao.scheduledDate : '';
+  Object.assign(out, { staff: [], checklist: [], materials: [], log: [], timeEntries: [], poolProjection: true });
+  return out;
+}
+const norm = (v) => (v === undefined || v === null ? null : v);
+function billingTouched(ao, patch) {
+  const has = (k) => Object.prototype.hasOwnProperty.call(patch, k);
+  return (has('status') && patch.status === 'fakturerad' && ao.status !== 'fakturerad')
+    || (has('status') && ao.status === 'fakturerad' && patch.status !== 'fakturerad')
+    || (has('invoiceId') && String(patch.invoiceId || '') !== String(ao.invoiceId || ''))
+    || (has('invoicedAt') && String(patch.invoicedAt || '') !== String(ao.invoicedAt || ''))
+    || (has('billingPreviousStatus') && JSON.stringify(norm(patch.billingPreviousStatus)) !== JSON.stringify(norm(ao.billingPreviousStatus)));
+}
+const REGEL = (status, error, reason) => DEFINITE(status, error, reason ? { reason } : undefined);
+const nowText = () => new Date().toISOString();
+
 /* Serverns egna TypeScript-moduler (store-key-write) transpileras en gång
    per process och används här — samma regel i E2E som i enhetstesterna. */
 let _edgeMods = null;
@@ -63,7 +104,13 @@ function edgeModules() {
 
 class FakeSupabase {
   constructor(opts) {
-    opts = opts || {};
+    opts = Object.assign({}, opts || {});
+    /* T3-B (2026-11-28): work-order-log-write är installerad i STAGING (20261124150357)
+       och ingår i T3-B-paketet. Utan den kan fältpersonal inte skriva loggposter alls:
+       både den installerade servern och T3-B-servern nekar patch_ao {log} för roller utan
+       ao_edit (T3-B: 403 forbidden/field_not_allowed). Standardvärlden har därför logOps;
+       ett test som uttryckligen anger logOps:false prövar fortfarande den gamla vägen. */
+    if (opts.logOps === undefined) opts.logOps = true;
     this.opts = opts;
     const seed = loadSeed();
     this.store = new Map();
@@ -92,6 +139,7 @@ class FakeSupabase {
     });
     this.tokens = new Map();
     this.idem = new Map();
+    this.idemG = new Map(); // T3-B: nyckel → {fp, res} (aktör + innehåll)
     this.stamp = new Map();
     this.files = new Map();
     this.sensitive = new Map();
@@ -119,12 +167,23 @@ class FakeSupabase {
     return r && Array.isArray(r.permissions) ? r.permissions : [];
   }
   has(perms, p) { return perms.includes('all') || perms.includes(p); }
+  /* T3-B: läsning = ao_view_all, annars ao_view_own och (inte arkiverad/borttagen) och
+     (tilldelad eller (ao_pool_take och öppen pool)). Öppen pool lämnas ut projicerad. */
   canViewAO(ao, perms, staffId) {
     if (!ao) return false;
     if (this.has(perms, 'ao_view_all')) return true;
     if (!this.has(perms, 'ao_view_own') || !staffId) return false;
-    return (Array.isArray(ao.staff) ? ao.staff.map(String) : []).includes(staffId) || ao.status === 'pool';
+    if (isTrue(ao.deleted) || isTrue(ao.archived)) return false;
+    if (isAssigned(ao, staffId)) return true;
+    return this.has(effAoPerms(perms), 'ao_pool_take') && isOpenPool(ao);
   }
+  /* Innehåll (bilder) och skrivning: tilldelad eller ao_view_all. Öppen pool ger inget. */
+  canViewAOContent(ao, perms, staffId) {
+    if (!ao) return false;
+    if (this.has(perms, 'ao_view_all')) return true;
+    return this.has(perms, 'ao_view_own') && !isTrue(ao.deleted) && !isTrue(ao.archived) && isAssigned(ao, staffId);
+  }
+  canWriteAO(ao, perms, staffId) { return !!ao && (this.has(perms, 'ao_view_all') || isAssigned(ao, staffId)); }
   /* Fel-injektion: första matchande regel som har kvarvarande gånger. */
   fault(action) {
     const f = this.faults.find((x) => (typeof x.match === 'function' ? x.match(action) : x.match.test(action)) && (x.times == null || x.times > 0));
@@ -143,7 +202,7 @@ class FakeSupabase {
     const action = p.replace(/^\/(functions|rest|auth)\/v1\//, '') + (body && body.action ? ':' + body.action : '') + (u.searchParams.get('grant_type') ? ':' + u.searchParams.get('grant_type') : '');
     const auth = (headers.authorization || '').replace(/^Bearer /, '');
     const session = this.tokens.get(auth) || null;
-    const call = { t: Date.now(), method, path: p, action, user: session ? session.email : null, key: body && body.key, hasLog: !!(body && body.patch && body.patch.log) };
+    const call = { t: Date.now(), method, path: p, action, user: session ? session.email : null, key: body && body.key, aoId: body && body.aoId, hasLog: !!(body && body.patch && body.patch.log) };
     this.calls.push(call);
     if (method === 'OPTIONS') return { status: 200, body: 'ok' };
     if (this.latencyMs) await new Promise((r) => setTimeout(r, this.latencyMs));
@@ -230,8 +289,16 @@ class FakeSupabase {
       const me = this.staffFor(email);
       switch (fn) {
         case 'store-key-write': return this.storeKeyWrite(body, email, perms, me);
-        case 'ao-time-write': return this.aoTimeWrite(body, perms, me);
-        case 'work-orders-list': return { status: 200, body: { workOrders: (this.get('workOrders') || []).filter((a) => this.canViewAO(a, perms, me.id)) } };
+        case 'ao-time-write': return this.aoTimeWrite(body, perms, me, { email });
+        case 'work-orders-list': {
+          // T3-B: poolregel + poolprojektion (K-03); C-5: accessCode bara med objects_sensitive/ao_edit.
+          const full = this.has(perms, 'ao_view_all');
+          const redact = !(this.has(perms, 'objects_sensitive') || this.has(perms, 'ao_edit'));
+          const list = (this.get('workOrders') || []).filter((a) => this.canViewAO(a, perms, me.id))
+            .map((a) => (!full && !isAssigned(a, me.id) && isOpenPool(a) ? poolProjection(a) : a))
+            .map((a) => { if (redact) delete a.accessCode; return a; });
+          return { status: 200, body: { workOrders: list } };
+        }
         case 'time-entries-list': {
           const all = this.get('timeEntries') || [];
           return { status: 200, body: { timeEntries: this.has(perms, 'payroll_view') ? all : all.filter((t) => t.staffId === me.id) } };
@@ -386,8 +453,16 @@ class FakeSupabase {
         return { status: 200, body: s ? { hasRow: true, active: s.active, ts: s.ts, aoId: s.aoId, revision: s.revision } : { hasRow: false, active: false, ts: null, aoId: null, revision: 0 } };
       }
       case 'setStampStatus': {
+        if (!this.has(perms, 'ao_time')) return DEFINITE(403, 'forbidden');
         const s = this.stamp.get(email) || { active: false, ts: null, aoId: null, revision: 0 };
         if (body.expectedRevision !== s.revision) return { status: 200, body: { stale: true, active: s.active, ts: s.ts, aoId: s.aoId, revision: s.revision } };
+        // T3-B (AP-B, F23): instämpling med aoId kräver tilldelning (eller ao_edit) och olåst AO.
+        if (body.active && body.aoId) {
+          const ao = (this.get('workOrders') || []).find((a) => a.id === body.aoId);
+          if (!ao) return DEFINITE(404, 'not_found');
+          if (!(isAssigned(ao, me && me.id) || this.has(effAoPerms(perms), 'ao_edit'))) return REGEL(403, 'forbidden', 'not_assigned');
+          if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+        }
         const n = { active: !!body.active, ts: body.active ? body.ts : null, aoId: body.active ? (body.aoId || null) : null, revision: s.revision + 1 };
         this.stamp.set(email, n);
         return { status: 200, body: n };
@@ -396,38 +471,136 @@ class FakeSupabase {
     }
   }
 
-  /* ── ao-time-write (MODELL; källan saknas i repot) ────────── */
-  aoTimeWrite(body, perms, me) {
+  /* ── ao-time-write (efter vift-v2 supabase/functions/ao-time-write + T3-B-RPC:erna) ──
+     T3-B: idempotens för patch_ao, take_from_pool och create_time är bunden till aktör och
+     innehåll (samma nyckel + annat innehåll eller annan aktör → 409 idempotency_key_conflict,
+     som work_order_patch/_vift_idem_lookup). Övriga åtgärder återspelas per användare. */
+  aoTimeWrite(body, perms, me, ctx) {
     if (body.action === '__probe__') return DEFINITE(400, 'unknown_action');
     const key = body.idempotencyKey;
+    const BUNDEN = ['patch_ao', 'take_from_pool', 'create_time'];
+    if (key && BUNDEN.includes(body.action)) {
+      const rest = Object.assign({}, body); delete rest.idempotencyKey;
+      const fp = JSON.stringify([body.action, me.id, rest]);
+      const g = this.idemG.get(body.action + '|' + key);
+      if (g) return g.fp === fp ? clone(g.res) : DEFINITE(409, 'idempotency_key_conflict');
+      const res = this._aoTime(body, perms, me, ctx || {});
+      if (res.status === 200) this.idemG.set(body.action + '|' + key, { fp, res: clone(res) });
+      return res;
+    }
     if (key && this.idem.has(me.id + '|' + key)) return clone(this.idem.get(me.id + '|' + key));
-    const res = this._aoTime(body, perms, me);
+    const res = this._aoTime(body, perms, me, ctx || {});
     if (key && res.status === 200) this.idem.set(me.id + '|' + key, clone(res));
     return res;
   }
-  _aoTime(b, perms, me) {
+  /* Tagning ur öppen pool (work_order_pool_take/_vift_ao_take). Returnerar AO eller ett avslag. */
+  _take(ao, me, entryId) {
+    if (isTrue(ao.deleted) || isTrue(ao.archived)) return REGEL(403, 'forbidden', 'pool_not_open');
+    if (aoStaffOf(ao).length > 0) return REGEL(409, 'already_assigned');
+    if (!isOpenPool(ao)) return REGEL(403, 'forbidden', 'pool_not_open');
+    const name = [me.firstName, me.lastName].filter(Boolean).join(' ') || me.id;
+    const log = Array.isArray(ao.log) ? ao.log : [];
+    const id = entryId && !log.some((l) => l.id === entryId) ? entryId : 'L-TAKE-' + crypto.randomBytes(6).toString('hex');
+    const t = nowText();
+    Object.assign(ao, { staff: [me.id], poolOpen: false, status: 'planerad', updatedAt: t,
+      log: log.concat([{ id, type: 'taken_from_pool', text: name + ' tog jobbet från arbetspoolen', userName: name, staffId: me.id, timestamp: t }]) });
+    return null;
+  }
+  /* Fältets materialrader (_vift_ao_material_merge): bara egna rader får ändras/tas bort. */
+  _materialMerge(old, neu, meId) {
+    old = Array.isArray(old) ? old : []; neu = Array.isArray(neu) ? neu : [];
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    for (const o of old) {
+      if (o && o.addedBy === meId) continue;
+      if (o && o.id) { const n = neu.find((x) => x && x.id === o.id); if (!n || !same(n, o)) return null; }
+      else if (!neu.some((x) => same(x, o))) return null;
+    }
+    const oldIds = old.filter((o) => o && o.id).map((o) => o.id);
+    return neu.map((n) => ((n && n.id && oldIds.includes(n.id)) || (!(n && n.id) && old.some((x) => same(x, n))) ? n : Object.assign({}, n, { addedBy: meId, addedAt: nowText() })));
+  }
+  _aoTime(b, perms, me, ctx) {
     const aos = this.get('workOrders') || [];
     const tes = this.get('timeEntries') || [];
     const now = new Date().toISOString();
     const save = () => { this.set('workOrders', aos); this.set('timeEntries', tes); this.touch(); };
-    const aoMut = ['ao_edit', 'ao_checklist', 'ao_time', 'ao_material', 'ao_complete', 'ao_create'].some((p) => this.has(perms, p));
+    const eff = effAoPerms(perms);
     switch (b.action) {
       case 'create_ao': {
         if (!this.has(perms, 'ao_create')) return DEFINITE(403, 'forbidden');
         const ao = clone(b.ao);
         if (ao.id && aos.some((a) => a.id === ao.id)) return DEFINITE(409, 'id_collision');
         if (!ao.id) ao.id = 'AO-' + (++this.aoSeq);
-        ao.displayNumber = ao.displayNumber || 'AO-' + (++this.aoSeq);
-        ao.updatedAt = now; aos.push(ao); save();
+        // T3-B punkt 245: nästa nummer = max(befintliga AO-nummer) + 1, aldrig avkortat.
+        const nums = aos.flatMap((a) => [a.displayNumber, a.id]).map((x) => /^AO-(\d{1,18})$/.exec(String(x || ''))).filter(Boolean).map((m) => Number(m[1]));
+        let n = Math.max(this.aoSeq, nums.length ? Math.max(...nums) : 0) + 1;
+        const fmt = (k) => 'AO-' + (String(k).length >= 3 ? String(k) : String(k).padStart(3, '0'));
+        while (aos.some((a) => a.displayNumber === fmt(n) || a.id === fmt(n))) n++;
+        this.aoSeq = n; ao.displayNumber = fmt(n);
+        if (ao.status === 'pool' && aoStaffOf(ao).length > 0) ao.poolOpen = false;
+        ao.createdAt = now; ao.updatedAt = now; aos.push(ao); save();
         return { status: 200, body: { workOrder: ao } };
       }
       case 'patch_ao': {
+        if (!['ao_edit', 'ao_complete', 'ao_material', 'ao_start_own', 'ao_complete_own', 'ao_pool_take'].some((x) => this.has(eff, x))) return DEFINITE(403, 'forbidden');
+        if (!b.aoId || !b.patch || typeof b.patch !== 'object' || Array.isArray(b.patch)) return DEFINITE(400, 'missing_fields');
         const i = aos.findIndex((a) => a.id === b.aoId);
         if (i < 0) return DEFINITE(404, 'not_found');
-        if (!aoMut || !this.canViewAO(aos[i], perms, me.id)) return DEFINITE(403, 'forbidden');
-        if (b.expectedUpdatedAt && aos[i].updatedAt && b.expectedUpdatedAt !== aos[i].updatedAt) return DEFINITE(409, 'stale_write');
-        Object.assign(aos[i], clone(b.patch)); save();
-        return { status: 200, body: { workOrder: aos[i] } };
+        const ao = aos[i];
+        if (b.expectedUpdatedAt && ao.updatedAt && b.expectedUpdatedAt !== ao.updatedAt) return DEFINITE(409, 'stale_write');
+        const pt = clone(b.patch); ['id', 'createdAt', 'updatedAt', 'deleted', 'deletedAt'].forEach((k) => delete pt[k]);
+        const keys = Object.keys(pt);
+        const only = (arr) => keys.every((k) => arr.includes(k));
+        let ignored = [];
+        if (this.has(eff, 'ao_edit')) {
+          if (billingTouched(ao, pt)) return REGEL(403, 'forbidden', 'invoice_path_required');
+          const hadStaff = aoStaffOf(ao).length > 0;
+          Object.assign(ao, pt);
+          if ('staff' in pt && !('poolOpen' in pt) && ao.status === 'pool' && aoStaffOf(ao).length > 0 && !hadStaff) ao.poolOpen = false;
+        } else if (keys.length === 1 && keys[0] === 'materials') {
+          if (!this.has(eff, 'ao_material')) return DEFINITE(403, 'forbidden');
+          if (!(isAssigned(ao, me.id) || this.has(eff, 'ao_view_all'))) return REGEL(403, 'forbidden', 'not_assigned');
+          if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+          if (!Array.isArray(pt.materials) || pt.materials.length > 500) return DEFINITE(400, 'missing_fields');
+          const merged = this._materialMerge(ao.materials, pt.materials, me.id);
+          if (!merged) return REGEL(403, 'forbidden', 'not_own_row');
+          ao.materials = merged;
+        } else if (pt.status === 'pågående' && only(['status'])) {
+          if (!this.has(eff, 'ao_start_own')) return DEFINITE(403, 'forbidden');
+          if (!isAssigned(ao, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
+          if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+          if (!['nytt', 'planerad', 'pool'].includes(ao.status)) return REGEL(409, 'invalid_source_status');
+          Object.assign(ao, { status: 'pågående', startedAt: ao.startedAt || now, startedBy: ao.startedBy || me.id });
+        } else if (pt.status === 'klar' && only(['status', 'completedAt', 'completedBy'])) {
+          if (this.has(eff, 'ao_complete') && this.has(eff, 'ao_view_all')) { /* valfri synlig */ }
+          else if (this.has(eff, 'ao_complete_own')) { if (!isAssigned(ao, me.id)) return REGEL(403, 'forbidden', 'not_assigned'); }
+          else return DEFINITE(403, 'forbidden');
+          if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+          if (!['nytt', 'planerad', 'pool', 'pågående'].includes(ao.status)) return REGEL(409, 'invalid_source_status');
+          ignored = ['completedAt', 'completedBy'].filter((k) => k in pt);
+          Object.assign(ao, { status: 'klar', completedAt: now, completedBy: me.id });
+        } else if (pt.status === 'planerad' && 'staff' in pt && only(['staff', 'status', 'log'])) {
+          // "Ta jobbet" i v3.4-klientens form: samma atomiska regel som take_from_pool.
+          if (!this.has(eff, 'ao_pool_take')) return DEFINITE(403, 'forbidden');
+          const exp = aoStaffOf(ao).concat([me.id]);
+          if (JSON.stringify((pt.staff || []).map(String)) !== JSON.stringify(exp)) return aoStaffOf(ao).length ? REGEL(409, 'already_assigned') : REGEL(403, 'forbidden', 'field_not_allowed');
+          const oldIds = (ao.log || []).map((l) => l.id);
+          const added = (Array.isArray(pt.log) ? pt.log : []).find((l) => l && l.type === 'taken_from_pool' && !oldIds.includes(l.id));
+          const rej = this._take(ao, me, added && added.id); if (rej) return rej;
+        } else {
+          return REGEL(403, 'forbidden', 'field_not_allowed');
+        }
+        ao.updatedAt = now; save();
+        return { status: 200, body: Object.assign({ workOrder: ao }, ignored.length ? { ignoredFields: ignored } : {}) };
+      }
+      case 'take_from_pool': {
+        if (!(this.has(eff, 'ao_pool_take') || this.has(eff, 'ao_edit')) || !(this.has(eff, 'ao_view_own') || this.has(eff, 'ao_view_all'))) return DEFINITE(403, 'forbidden');
+        if (!b.aoId) return DEFINITE(400, 'missing_fields');
+        const ao = aos.find((a) => a.id === b.aoId);
+        if (!ao) return DEFINITE(404, 'not_found');
+        const rej = this._take(ao, me, typeof b.entryId === 'string' ? b.entryId : ''); if (rej) return rej;
+        save();
+        const ignored = Object.keys(b).filter((k) => !['action', 'aoId', 'idempotencyKey', 'entryId'].includes(k));
+        return { status: 200, body: Object.assign({ action: 'take_from_pool', workOrder: ao, takenBy: me.id }, ignored.length ? { ignoredFields: ignored } : {}) };
       }
       /* G5-förslaget (docs/G5-APPEND-LOG.md). Finns bara när världen skapas
          med { backend: { logOps: true } } — STAGING saknar åtgärden i dag,
@@ -453,12 +626,36 @@ class FakeSupabase {
         save(); return { status: 200, body: { ok: true } };
       }
       case 'create_time': {
-        const e = clone(b.entry);
+        const e = clone(b.entry || {});
+        ['attested', 'attestedAt', 'attestedBy'].forEach((k) => delete e[k]);
         const forOther = e.staffId && e.staffId !== me.id;
         if (forOther ? !this.has(perms, 'payroll_manage') : !(this.has(perms, 'ao_time') || this.has(perms, 'payroll_manage'))) return DEFINITE(403, 'forbidden');
+        if (!forOther) e.staffId = me.id;
+        // T3-B (AP-B): tilldelning, låst AO och legitim utstämpling (time_entry_create).
+        let ao = null;
+        if (e.aoId) {
+          ao = aos.find((a) => a.id === e.aoId) || null;
+          const st = this.stamp.get(ctx.email || '');
+          const stampOk = !forOther && st && st.active && st.aoId === e.aoId && Number(st.ts) === Number(e.startTs);
+          if (!stampOk) {
+            if (!ao) return DEFINITE(404, 'not_found');
+            if (!(forOther || isAssigned(ao, me.id) || this.has(perms, 'ao_edit'))) return REGEL(403, 'forbidden', 'not_assigned');
+            if (isLockedAO(ao)) return REGEL(409, 'ao_locked');
+          }
+        }
         if (tes.some((t) => t.id === e.id)) return DEFINITE(409, 'id_collision');
-        tes.unshift(e); save();
-        return { status: 200, body: { entry: e } };
+        // D-11: timpriset sätts av servern från prisgruppen.
+        const pg = e.priceGroupId ? (this.get('priceGroups') || []).find((x) => x.id === e.priceGroupId) : null;
+        const rate = pg && Number.isFinite(Number(pg.hourRate)) ? Number(pg.hourRate) : 0;
+        const ignored = [];
+        if ('hourRate' in e && Number(e.hourRate) !== rate) ignored.push('hourRate');
+        e.hourRate = rate;
+        if (pg) { if ('priceGroupName' in e && e.priceGroupName !== (pg.name || '')) ignored.push('priceGroupName'); e.priceGroupName = pg.name || ''; }
+        e.createdAt = now;
+        tes.unshift(e);
+        if (ao && !(ao.timeEntries || []).includes(e.id)) ao.timeEntries = (ao.timeEntries || []).concat([e.id]);
+        save();
+        return { status: 200, body: Object.assign({ timeEntry: e, entry: e }, ignored.length ? { ignoredFields: ignored } : {}) };
       }
       case 'patch_time': case 'delete_time': {
         const i = tes.findIndex((t) => t.id === b.entryId);
@@ -466,14 +663,27 @@ class FakeSupabase {
         const own = tes[i].staffId === me.id;
         if (!(this.has(perms, 'payroll_manage') || (own && this.has(perms, 'ao_time')))) return DEFINITE(403, 'forbidden');
         if (tes[i].attested && !this.has(perms, 'all')) return DEFINITE(409, 'attested_locked');
-        if (b.action === 'delete_time') tes.splice(i, 1); else Object.assign(tes[i], clone(b.patch));
-        save(); return { status: 200, body: { ok: true } };
+        if (b.action === 'delete_time') { tes.splice(i, 1); save(); return { status: 200, body: { ok: true } }; }
+        const pt = clone(b.patch || {});
+        const ignored = [];
+        if (!(this.has(perms, 'payroll_manage') || this.has(perms, 'invoice_create') || this.has(perms, 'ao_edit'))) {
+          ['hourRate', 'priceGroupName'].forEach((k) => { if (k in pt) { ignored.push(k); delete pt[k]; } });
+          if (pt.priceGroupId) { const pg = (this.get('priceGroups') || []).find((x) => x.id === pt.priceGroupId); pt.hourRate = pg && Number.isFinite(Number(pg.hourRate)) ? Number(pg.hourRate) : 0; if (pg) pt.priceGroupName = pg.name || ''; }
+        }
+        if (pt.aoId && pt.aoId !== tes[i].aoId) {
+          const nyAo = aos.find((a) => a.id === pt.aoId);
+          if (!nyAo) return DEFINITE(404, 'not_found');
+          if (!this.has(perms, 'payroll_manage') && !isAssigned(nyAo, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
+          if (isLockedAO(nyAo)) return REGEL(409, 'ao_locked');
+        }
+        Object.assign(tes[i], pt); tes[i].updatedAt = now;
+        save(); return { status: 200, body: Object.assign({ ok: true, timeEntry: tes[i] }, ignored.length ? { ignoredFields: ignored } : {}) };
       }
       case 'attest_time': {
         if (!this.has(perms, 'payroll_manage')) return DEFINITE(403, 'forbidden');
         const t = tes.find((x) => x.id === b.entryId); if (!t) return DEFINITE(404, 'not_found');
         t.attested = !!b.attested; t.attestedAt = b.attested ? now : ''; t.attestedBy = b.attested ? me.id : '';
-        save(); return { status: 200, body: { entry: t } };
+        save(); return { status: 200, body: { action: 'attest_time', timeEntry: t } }; // som riktiga ao-time-write (time_entry_set_attested → { timeEntry, serverSignature })
       }
       default: return DEFINITE(400, 'unknown_action');
     }
@@ -486,6 +696,31 @@ class FakeSupabase {
     const save = () => { this.set('invoices', invs); this.touch(); };
     const ACTIVE = ['utkast', 'skickad', 'betald', 'förfallen'];
     const find = () => invs.find((i) => i.id === b.invoiceId);
+    /* T3-B (D-07): den enda vägen att sätta/backa AO:s faktureringsstatus (work_order_billing_set). */
+    if (b.action === 'aoBilling') {
+      if (!b.aoId || !['invoiced', 'restore'].includes(b.mode) || (b.mode === 'invoiced' && !b.invoiceId)) return DEFINITE(400, 'missing_fields');
+      const aos = this.get('workOrders') || [];
+      const ao = aos.find((a) => a.id === b.aoId); if (!ao) return DEFINITE(404, 'not_found');
+      const t = nowText();
+      if (b.mode === 'invoiced') {
+        const inv = find();
+        if (!inv || isTrue(inv.deleted)) return DEFINITE(404, 'not_found');
+        if (inv.status === 'makulerad') return DEFINITE(409, 'invalid_transition');
+        const linked = (inv.workOrderIds || []).includes(b.aoId) || inv.workOrderId === b.aoId ||
+          (inv.lines || []).some((l) => l.sourceId === b.aoId || (l.sourceRefs || []).some((r) => r.workOrderId === b.aoId));
+        if (!linked) return REGEL(403, 'forbidden', 'invoice_not_linked');
+        if (isTrue(ao.deleted)) return REGEL(409, 'ao_locked');
+        if (ao.status === 'fakturerad' && ao.invoiceId === b.invoiceId) return { status: 200, body: { workOrder: ao, noop: true } };
+        if (ao.invoiceId && ao.invoiceId !== b.invoiceId) return REGEL(409, 'ao_locked');
+        if ((ao.billingPreviousStatus === undefined || ao.billingPreviousStatus === null) && ao.status !== 'fakturerad') ao.billingPreviousStatus = ao.status || 'klar';
+        Object.assign(ao, { status: 'fakturerad', invoiceId: b.invoiceId, updatedAt: t });
+      } else {
+        if (ao.status !== 'fakturerad' || ao.billingPreviousStatus === undefined || ao.billingPreviousStatus === null) return { status: 200, body: { workOrder: ao, noop: true } };
+        Object.assign(ao, { status: ao.billingPreviousStatus, invoiceId: '', billingPreviousStatus: null, updatedAt: t });
+      }
+      this.set('workOrders', aos); this.touch();
+      return { status: 200, body: { workOrder: ao, noop: false } };
+    }
     if (b.action === 'appendChecked') {
       const inv = clone(b.invoice);
       const claimed = new Set();
@@ -597,7 +832,9 @@ class FakeSupabase {
     const comment = String(b.avvikelseComment || '').trim();
     if (action === 'avvikelse' && !comment) return DEFINITE(400, 'comment_required');
     if (!ao) return DEFINITE(404, 'not_found');
-    if (!this.canViewAO(ao, perms, me.id)) return DEFINITE(403, 'forbidden');
+    // T3-B: skrivrätt = tilldelad eller ao_view_all; öppen pool ger ingen; låst AO för icke-ledare.
+    if (!this.canWriteAO(ao, perms, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
+    if (!this.has(perms, 'ao_view_all') && isLockedAO(ao)) return REGEL(409, 'ao_locked');
     ao.checklist = ao.checklist || [];
     const now = new Date().toISOString();
     const name = [me.firstName, me.lastName].filter(Boolean).join(' ') || 'Okänd användare';
@@ -611,7 +848,8 @@ class FakeSupabase {
       if (action === 'done') Object.assign(item, { avvikelse: 'ok', done: true, avvikelseComment: '', avvikelseAt: '', avvikelseBy: '' });
       else if (action === 'avvikelse') Object.assign(item, { avvikelse: 'avvikelse', done: false, avvikelseComment: comment, avvikelseAt: now, avvikelseBy: name }, b.avvikelseImage ? { avvikelseImage: b.avvikelseImage } : {});
       else Object.assign(item, { avvikelse: null, done: false, avvikelseComment: '', avvikelseAt: '', avvikelseBy: '' });
-      if (action !== 'reset' && ['nytt', 'pool', 'planerad'].includes(ao.status)) ao.status = 'pågående';
+      // T3-B (SÄK-17, CHK-LEGACY): ingen autostart av AO:n — den installerade
+      // work_order_checklist_set_state rör aldrig AO:ns status, inte heller i det äldre kontraktet.
       return reply(false);
     }
 
@@ -659,7 +897,9 @@ class FakeSupabase {
     const aos = this.get('workOrders') || [];
     const i = aos.findIndex((a) => a.id === b.aoId);
     if (i < 0) return DEFINITE(404, 'not_found');
-    if (!this.canViewAO(aos[i], perms, me.id)) return DEFINITE(403, 'forbidden');
+    // T3-B (Q3): öppen pool ger varken logg eller skrivrätt; låst AO för icke-ledare.
+    if (!this.canWriteAO(aos[i], perms, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
+    if (!this.has(perms, 'ao_view_all') && isLockedAO(aos[i])) return REGEL(409, 'ao_locked');
     const log = Array.isArray(aos[i].log) ? aos[i].log : [];
     if (b.action === 'append_log') {
       const entry = Object.assign({}, clone(b.entry), { staffId: me.id });
@@ -682,7 +922,8 @@ class FakeSupabase {
     // Multipart tolkas av testlagret (page.route) till { aoId, fileBytes, contentType }.
     if (!this.has(perms, 'ao_checklist') && !this.has(perms, 'ao_edit')) return DEFINITE(403, 'forbidden');
     const ao = (this.get('workOrders') || []).find((a) => a.id === b.aoId); if (!ao) return DEFINITE(404, 'not_found');
-    if (!this.canViewAO(ao, perms, me.id)) return DEFINITE(403, 'forbidden');
+    if (!this.canWriteAO(ao, perms, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
+    if (!this.has(perms, 'ao_view_all') && isLockedAO(ao)) return REGEL(409, 'ao_locked');
     const bytes = Buffer.from(b.fileBase64 || '', 'base64');
     const sniff = bytes[0] === 0xFF && bytes[1] === 0xD8 ? 'image/jpeg' : (bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : (bytes.slice(0, 4).toString() === 'RIFF' ? 'image/webp' : null));
     if (!sniff) return DEFINITE(400, 'invalid_file_type');
@@ -692,7 +933,7 @@ class FakeSupabase {
   }
   imageUrl(b, perms, me) {
     const ao = (this.get('workOrders') || []).find((a) => a.id === b.aoId); if (!ao) return DEFINITE(404, 'not_found');
-    if (!this.canViewAO(ao, perms, me.id)) return DEFINITE(403, 'forbidden');
+    if (!this.canViewAOContent(ao, perms, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
     if ((b.paths || []).some((x) => !String(x).startsWith(b.aoId + '/'))) return DEFINITE(400, 'invalid_path');
     const urls = {};
     (b.paths || []).forEach((x) => { if (this.files.has(x)) urls[x] = 'https://e2e-storage.invalid/' + encodeURIComponent(x); });
@@ -701,7 +942,8 @@ class FakeSupabase {
   imageDelete(b, perms, me) {
     if (!this.has(perms, 'ao_checklist') && !this.has(perms, 'ao_edit')) return DEFINITE(403, 'forbidden');
     const ao = (this.get('workOrders') || []).find((a) => a.id === b.aoId); if (!ao) return DEFINITE(404, 'not_found');
-    if (!this.canViewAO(ao, perms, me.id)) return DEFINITE(403, 'forbidden');
+    if (!this.canWriteAO(ao, perms, me.id)) return REGEL(403, 'forbidden', 'not_assigned');
+    if (!this.has(perms, 'ao_view_all') && isLockedAO(ao)) return REGEL(409, 'ao_locked');
     if (!String(b.path).startsWith(b.aoId + '/')) return DEFINITE(400, 'invalid_path');
     this.files.delete(b.path);
     return { status: 200, body: { ok: true } };

@@ -18,9 +18,11 @@ const { q, val, asUser } = require('./local/lib/db');
 const facit = require('./local/staging-schema-facit-2026-11-25.json');
 const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
 
-const r = byggReplik({});
+// STAGING-baslinjen: kedjan utan de nya (ej installerade) T3-migrationerna. Hela repokedjan
+// med T3-B kontrolleras sist i filen mot tests/local/t3-andringar.json.
+const r = byggReplik({ stagingBaslinje: true });
 const db = r.db;
-ok(r.steg.length === 45, 'kedjan i MIGRATIONSORDNING.txt: 45 filer körda utan fel');
+ok(r.steg.length === 45, 'STAGING-kedjan i MIGRATIONSORDNING.txt: 45 filer körda utan fel (utan nya T3-migrationer)');
 ok(r.rapport.kod === 0 && r.rapport.oforklarade === 0, `schemajämförelse mot STAGING-facit: ${r.rapport.identiska} identiska, ${r.rapport.forklarade} förklarade, ${r.rapport.oforklarade} oförklarade`);
 
 // Funktioner: md5 per definition mot facit
@@ -40,7 +42,7 @@ ok(exakt === 58 && sammaKod.length === 5 && saknas.length === 1 && saknas[0] ===
 ok(lok.length === 63 && lok.every((f) => facit.functions.some((x) => x.name === f.name && x.args === f.args)), 'inga extra funktioner lokalt (63 = 64 − STAGING-only)');
 
 // Variant med STAGING-only-migrationerna på sin plats: 64/64
-const rs = byggReplik({ stagingOnly: true, data: false });
+const rs = byggReplik({ stagingOnly: true, stagingBaslinje: true, data: false });
 const lok2 = q(rs.db, `select p.proname as name, pg_get_function_identity_arguments(p.oid) as args, md5(pg_get_functiondef(p.oid)) as md5 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind in ('f','p') and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')`);
 const e2e = facit.functions.find((f) => f.name === 'e2e_purge_offer_artifacts');
 ok(rs.steg.length === 47 && lok2.length === 64 && lok2.some((f) => f.name === e2e.name && f.md5 === md5(e2e.def)), 'STAGING-variant (med 2 STAGING-only-migrationer, 47 steg): 64 funktioner, e2e_purge_offer_artifacts md5-exakt');
@@ -92,4 +94,18 @@ ok(!/hjplzjsbbowiyoyhdghc\.supabase\.co|yyzljlqyzzcbxmcdbual\.supabase\.co|stagi
 ok(!/@(?!example\.test)[a-z0-9.-]+\.(se|com|nu)\b/i.test(JSON.stringify(d.store)), 'syntetiska data använder bara @example.test-adresser');
 
 r.stang();
+
+// ── T3-B: hela repokedjan (STAGING + nya migrationer) = STAGING-facit + exakt de
+//    registrerade T3-ändringarna (tests/local/t3-andringar.json, md5-kontrollerade). ──
+const t3 = require('./local/t3-andringar.json').objekt;
+const rt = byggReplik({ data: false });
+try {
+  const nya = rt.steg.filter((x) => x.ny).map((x) => x.rel);
+  ok(nya.length === 3 && nya.every((x) => /^migrations\/20261128\d{6}_t3b_/.test(x)), 'repokedjan: 3 nya T3-B-migrationer efter STAGING:s senaste version (' + nya.join(', ') + ')');
+  ok(rt.rapport.oforklarade === 0, `repokedjan med T3-B mot STAGING-facit: ${rt.rapport.identiska} identiska, ${rt.rapport.forklarade} förklarade, 0 oförklarade`);
+  const t3Forklarade = (rt.rapport.rapport || []).filter((x) => x.kategori === 'FÖRKLARAD' && /^T3-B/.test(x.forklaring)).map((x) => x.typ + ':' + x.key).sort();
+  ok(JSON.stringify(t3Forklarade) === JSON.stringify(Object.keys(t3).sort()), `varje T3-B-objekt (${Object.keys(t3).length}) syns i kedjan med registrerad md5, och inga andra avvikelser`, t3Forklarade.length);
+  const t3sec = q(rt.db, `select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and (p.proname like '\\_vift\\_%' or p.proname in ('work_order_pool_take','work_order_billing_set')) and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))`);
+  ok(t3sec.length === 0, 'T3-B: inga nya funktioner körbara för anon eller authenticated (bara service_role)', t3sec);
+} finally { rt.stang(); }
 avsluta();

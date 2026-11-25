@@ -70,6 +70,9 @@ function lasOrdning() {
     const komm = !!m[1];
     if (komm && m[3].startsWith('(policydelen')) { steg.push({ version: m[2], rel: forra.rel, del: 2, aktiv: false }); continue; }
     if (komm && !m[3].startsWith('staging-only/')) continue;
+    // T3-B: nya migrationer (version efter STAGING:s senaste) är inte installerade i STAGING
+    // och ingår inte i MIG-1-mappningen; deras filer klassas som "ny" nedan.
+    if (!komm && /^\d{14}$/.test(m[2]) && m[2] > STAGING_SENASTE) continue;
     const s = { version: m[2] === 'REKONSTRUKTION' ? null : m[2], rel: m[3], aktiv: !komm };
     steg.push(s); if (!komm) forra = s;
   }

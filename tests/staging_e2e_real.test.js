@@ -2,7 +2,7 @@
 /*
  * Lokal provning av tests/staging/e2e-real.js (webbläsartest för riktig
  * STAGING). Verktyget körs som process i lokalt testläge: sidan kommer från
- * publiceringspaketet (VIFT_E2E_PAKET, standard /home/user/staging-release),
+ * publiceringspaketet (VIFT_E2E_PAKET, standard T3-B-klientpaketet, se t3bPaket()),
  * och Supabase-anropen vidarebefordras till en simulerad server bakom en
  * lokal HTTP-server — ingen trafik lämnar maskinen. Bevisar verktygets
  * flöden, städning och spärrar, INTE den riktiga serverns beteende.
@@ -16,7 +16,28 @@ const F = require('./e2e/fake-backend.js');
 const FakeSupabase = F.FakeSupabase || F;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
-const PAKET = process.env.VIFT_E2E_PAKET || '/home/user/staging-release';
+/* T3-B (2026-11-28): standardpaketet är T3-B-KLIENTPAKETET, byggt med
+   tools/build-staging-package.sh (klientrepots HEAD + STAGING-överlägget) ovanpå det
+   installerade STAGING-paketet (/home/user/staging-release). Det installerade paketet
+   (byggt 2026-11-24) skriver fältets loggposter via patch_ao, vilket både den
+   installerade servern och T3-B-servern nekar för fältroller (forbidden/field_not_allowed);
+   med den rättade simulerade servern gav det F3/F5 AVVIK. T3-B installeras därför
+   tillsammans med nytt klientpaket (T3-RESULTAT.md, T3-B, installationsplan).
+   VIFT_E2E_PAKET=<katalog> provar ett annat paket, t.ex. det installerade. */
+function t3bPaket() {
+  const BAS = '/home/user/staging-release';
+  const KLIENT = (process.env.VIFT_KLIENT_ROOT || '/home/user/VIFT-CRM');
+  const verktyg = path.join(KLIENT, 'tools', 'build-staging-package.sh');
+  if (!fs.existsSync(path.join(BAS, 'index.html')) || !fs.existsSync(verktyg)) return null;
+  const { execFileSync } = require('child_process');
+  const ut = fs.mkdtempSync(path.join(require('os').tmpdir(), 'vift-t3b-paket-'));
+  process.on('exit', () => { try { fs.rmSync(ut, { recursive: true, force: true }); } catch (e) { /* ignore */ } });
+  execFileSync('git', ['clone', '-q', BAS, ut], { stdio: 'pipe' });
+  const bas = execFileSync('git', ['-C', BAS, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  execFileSync('bash', [verktyg, ut, bas], { cwd: KLIENT, stdio: 'pipe' });
+  return ut;
+}
+const PAKET = process.env.VIFT_E2E_PAKET || t3bPaket() || '/home/user/staging-release';
 if (!fs.existsSync(path.join(PAKET, 'index.html'))) { console.log('RESULT: 0 passed, 0 failed (HOPPAS ÖVER — publiceringspaketet saknas; INTE godkänt, inte kört)'); process.exit(0); }
 try { require.resolve('playwright'); } catch (e) { console.log('RESULT: 0 passed, 0 failed (HOPPAS ÖVER — Playwright saknas; INTE godkänt, inte kört)'); process.exit(0); }
 

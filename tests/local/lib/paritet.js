@@ -51,6 +51,32 @@ const SCENARIER = [
   { id: 'IDEM-01', sec: 'SEC-AO-20 (SÄK-12)', anv: 'chef', ef: 'ao-time-write', fore: { action: 'patch_ao', aoId: 'AO-A1', idempotencyKey: 'par-idem', patch: { title: 'Första' } }, body: { action: 'patch_ao', aoId: 'AO-A1', idempotencyKey: 'par-idem', patch: { title: 'Annan' } }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A1').title },
   { id: 'FAKT-01', sec: 'SEC-FAKT (stale)', anv: 'chef', ef: 'invoice-write', body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 5, line: { id: 'PL1', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } }, utfall: (las) => las('vift_invoices').find((i) => i.id === 'INV-R2').lines.length },
   { id: 'FAKT-02', sec: 'SEC-CUST-04', anv: 'chef_utan_faktura', ef: 'invoice-write', body: { action: 'lineAdd', invoiceId: 'INV-R2', expectedRevision: 0, line: { id: 'PL2', description: 'x', qty: 1, unitPrice: 1, vatRate: 25 } }, utfall: (las) => las('vift_invoices').find((i) => i.id === 'INV-R2').lines.length },
+  // ── T3-B (2026-11-28): nya regler, samma utfall krävs i replik och fake ──
+  { id: 'POOL-T1', sec: 'SEC-POOL-05 (take_from_pool)', anv: 'falt', ef: 'ao-time-write', body: { action: 'take_from_pool', aoId: 'AO-P1', idempotencyKey: 'par-t1' }, utfall: (las) => { const a = las('vift_workOrders').find((x) => x.id === 'AO-P1'); return [a.staff.join(','), a.status, a.poolOpen, a.log.filter((l) => l.type === 'taken_from_pool').length].join('|'); } },
+  { id: 'POOL-T2', sec: 'SEC-POOL-06 (take_from_pool)', anv: 'falt', ef: 'ao-time-write', body: { action: 'take_from_pool', aoId: 'AO-P2', idempotencyKey: 'par-t2' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-P2').staff.join(',') },
+  { id: 'POOL-T3', sec: 'SEC-POOL-07 (N2)', anv: 'falt', ef: 'ao-time-write', body: { action: 'take_from_pool', aoId: 'AO-N2', idempotencyKey: 'par-t3' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-N2').staff.join(',') },
+  { id: 'POOL-T4', sec: 'SEC-POOL-07 (P5 arkiverad)', anv: 'falt', ef: 'ao-time-write', body: { action: 'take_from_pool', aoId: 'AO-P5', idempotencyKey: 'par-t4' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-P5').staff.join(',') },
+  { id: 'POOL-T5', sec: 'SEC-POOL-10 (begränsad)', anv: 'begransad', ef: 'ao-time-write', body: { action: 'take_from_pool', aoId: 'AO-P1', idempotencyKey: 'par-t5' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-P1').staff.join(',') },
+  { id: 'POOL-PROJ', sec: 'SEC-POOL-04 (K-03)', anv: 'falt', ef: 'work-orders-list', body: {}, utfall: (las, svar) => { const a = ((svar.body && svar.body.workOrders) || []).find((x) => x.id === 'AO-P1') || {}; return Object.keys(a).sort().join(',') + '|' + a.dueDate; } },
+  { id: 'AO-07', sec: 'SEC-AO-07 (avbruten)', anv: 'falt', ef: 'ao-time-write', body: { action: 'patch_ao', aoId: 'AO-A5', idempotencyKey: 'par-ao07', patch: { status: 'klar' } }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A5').status },
+  { id: 'AO-08', sec: 'SEC-AO-08/09', anv: 'falt', ef: 'ao-time-write', body: { action: 'patch_ao', aoId: 'AO-A2', idempotencyKey: 'par-ao08', patch: { status: 'klar', completedBy: 'ST-R05', completedAt: '2000-01-01T00:00:00.000Z' } }, utfall: (las, svar) => { const a = las('vift_workOrders').find((x) => x.id === 'AO-A2'); return [a.status, a.completedBy, String(a.completedAt).slice(0, 2), JSON.stringify((svar.body || {}).ignoredFields)].join('|'); } },
+  { id: 'AO-12', sec: 'SEC-AO-12', anv: 'falt', ef: 'ao-time-write', body: { action: 'patch_ao', aoId: 'AO-A3', idempotencyKey: 'par-ao12', patch: { status: 'pågående' } }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A3').status },
+  { id: 'AO-15b', sec: 'SEC-AO-15 (backa fakturerad)', anv: 'admin', ef: 'ao-time-write', body: { action: 'patch_ao', aoId: 'AO-A9', idempotencyKey: 'par-ao15b', patch: { status: 'klar' } }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A9').status },
+  { id: 'MAT-01', sec: 'SEC-B1-05 (annans rad)', anv: 'falt', ef: 'ao-time-write', body: (d) => ({ action: 'patch_ao', aoId: 'AO-A1', idempotencyKey: 'par-mat1', patch: { materials: [Object.assign({}, d.store.vift_workOrders.find((a) => a.id === 'AO-A1').materials[0], { qty: 9 })] } }), utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A1').materials[0].qty },
+  { id: 'MAT-02', sec: 'SEC-B1-01 (egen rad)', anv: 'falt', ef: 'ao-time-write', body: (d) => ({ action: 'patch_ao', aoId: 'AO-A1', idempotencyKey: 'par-mat2', patch: { materials: d.store.vift_workOrders.find((a) => a.id === 'AO-A1').materials.concat([{ id: 'M-PAR', name: 'x', qty: 1 }]) } }), utfall: (las) => { const m = las('vift_workOrders').find((a) => a.id === 'AO-A1').materials.find((x) => x.id === 'M-PAR'); return m ? m.addedBy : null; } },
+  { id: 'TID-03', sec: 'SEC-TID (ao_locked)', anv: 'falt', ef: 'ao-time-write', body: { action: 'create_time', idempotencyKey: 'par-t03', entry: { id: 'TE-PAR-3', aoId: 'AO-A9', date: '2026-11-24', minutes: 60 } }, utfall: (las) => !!las('vift_timeEntries').find((t) => t.id === 'TE-PAR-3') },
+  { id: 'TID-04', sec: 'SEC-TID-02 (påhittat aoId)', anv: 'falt', ef: 'ao-time-write', body: { action: 'create_time', idempotencyKey: 'par-t04', entry: { id: 'TE-PAR-4', aoId: 'AO-FINNS-INTE', date: '2026-11-24', minutes: 60 } }, utfall: (las) => !!las('vift_timeEntries').find((t) => t.id === 'TE-PAR-4') },
+  { id: 'TID-05', sec: 'SEC-B2-03 (hourRate)', anv: 'falt', ef: 'ao-time-write', body: { action: 'create_time', idempotencyKey: 'par-t05', entry: { id: 'TE-PAR-5', aoId: 'AO-A1', date: '2026-11-24', minutes: 60, hourRate: 9999 } }, utfall: (las, svar) => { const t = las('vift_timeEntries').find((x) => x.id === 'TE-PAR-5'); return [t && t.hourRate, JSON.stringify((svar.body || {}).ignoredFields), las('vift_workOrders').find((a) => a.id === 'AO-A1').timeEntries.includes('TE-PAR-5')].join('|'); } },
+  { id: 'STAMP-02', sec: 'SEC-TID-03 (aoId finns inte)', anv: 'falt', ef: 'store-key-write', body: { action: 'setStampStatus', active: true, ts: 1764000000000, aoId: 'AO-FINNS-INTE', expectedRevision: 0 }, utfall: () => '' },
+  { id: 'STAMP-03', sec: 'stämpling på egen låst AO', anv: 'falt', ef: 'store-key-write', body: { action: 'setStampStatus', active: true, ts: 1764000000000, aoId: 'AO-A9', expectedRevision: 0 }, utfall: () => '' },
+  { id: 'STAMP-04', sec: 'stämpling på egen AO', anv: 'falt', ef: 'store-key-write', body: { action: 'setStampStatus', active: true, ts: 1764000000000, aoId: 'AO-A1', expectedRevision: 0 }, utfall: (las, svar) => [svar.body && svar.body.active, svar.body && svar.body.aoId].join('|') },
+  { id: 'CHK-P2', sec: 'SEC-POOL-12 checklista', anv: 'falt', ef: 'work-order-checklist-resolve', body: { aoId: 'AO-P2', itemId: 'AO-P2-C1', action: 'done' }, utfall: (las) => !!las('vift_workOrders').find((a) => a.id === 'AO-P2').checklist[0].done },
+  { id: 'CHK-A9', sec: 'checklista på egen låst AO', anv: 'falt', ef: 'work-order-checklist-resolve', body: { aoId: 'AO-A9', itemId: 'AO-A9-C1', action: 'done' }, utfall: (las) => !!las('vift_workOrders').find((a) => a.id === 'AO-A9').checklist[0].done },
+  { id: 'LOG-A9', sec: 'logg på egen låst AO', anv: 'falt', ef: 'work-order-log-write', body: { action: 'append_log', aoId: 'AO-A9', entry: { id: 'PAR-LOG-9', type: 'note', text: 'x' } }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A9').log.length },
+  { id: 'IDEM-02', sec: 'SÄK-12 (annan aktör)', anv: 'admin', ef: 'ao-time-write', foreAnv: 'chef', fore: { action: 'patch_ao', aoId: 'AO-A1', idempotencyKey: 'par-idem2', patch: { title: 'Första' } }, body: { action: 'patch_ao', aoId: 'AO-A1', idempotencyKey: 'par-idem2', patch: { title: 'Första' } }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A1').title },
+  { id: 'BILL-01', sec: 'D-07 (underlag hänvisar inte till AO)', anv: 'chef', ef: 'invoice-write', body: { action: 'aoBilling', aoId: 'AO-A1', invoiceId: 'INV-R1', mode: 'invoiced' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A1').status },
+  { id: 'BILL-02', sec: 'D-07 (restore av äldre fakturerad)', anv: 'chef', ef: 'invoice-write', body: { action: 'aoBilling', aoId: 'AO-A9', mode: 'restore' }, utfall: (las, svar) => las('vift_workOrders').find((a) => a.id === 'AO-A9').status + '|' + (svar.body && svar.body.noop) },
+  { id: 'BILL-03', sec: 'D-07 (fält)', anv: 'falt', ef: 'invoice-write', body: { action: 'aoBilling', aoId: 'AO-A3', invoiceId: 'INV-R1', mode: 'invoiced' }, utfall: (las) => las('vift_workOrders').find((a) => a.id === 'AO-A3').status },
   { id: 'AUTH-01', sec: 'SEC-CUST-23', anv: 'okandroll', ef: 'work-orders-list', body: {}, utfall: (las, svar) => ((svar.body && svar.body.workOrders) || []).length },
   { id: 'AUTH-02', sec: 'inaktiv personal', anv: 'inaktivpersonal', ef: 'work-orders-list', body: {}, utfall: () => '' },
 ];
@@ -75,7 +101,7 @@ async function korParitet(opts) {
       const body = typeof sc.body === 'function' ? sc.body(d) : sc.body;
       // ── replik ──
       aterstall();
-      if (sc.fore) await ef.anropa(sc.ef, { user: d.U[sc.anv], body: sc.fore });
+      if (sc.fore) await ef.anropa(sc.ef, { user: d.U[sc.foreAnv || sc.anv], body: sc.fore });
       const rs = await ef.anropa(sc.ef, { user: d.U[sc.anv], body });
       const rUtfall = sc.utfall((k) => val(r.db, k), rs, d);
       // ── fake ──
@@ -83,9 +109,10 @@ async function korParitet(opts) {
       fake.store = new Map(Object.entries(clone(d.store)));
       fake.users = {};
       d.anvandare.forEach((u) => { fake.users[u.email] = { id: u.authId, email: u.email, password: 'replik', alias: u.alias, active: u.appActive }; });
-      const tok = fake.issue(fake.users[d.U[sc.anv].email]).access_token;
-      const anropaFake = async (b) => { const x = await fake.handle('POST', 'http://fake.lokal/functions/v1/' + sc.ef, { authorization: 'Bearer ' + tok }, JSON.stringify(b)); return { status: x.status, body: x.body }; };
-      if (sc.fore) await anropaFake(sc.fore);
+      const tokFor = (alias) => fake.issue(fake.users[d.U[alias].email]).access_token;
+      const tok = tokFor(sc.anv);
+      const anropaFake = async (b, t) => { const x = await fake.handle('POST', 'http://fake.lokal/functions/v1/' + sc.ef, { authorization: 'Bearer ' + (t || tok) }, JSON.stringify(b)); return { status: x.status, body: x.body }; };
+      if (sc.fore) await anropaFake(sc.fore, tokFor(sc.foreAnv || sc.anv));
       const fs_ = await anropaFake(body);
       let fUtfall; try { fUtfall = sc.utfall((k) => clone(fake.store.get(k)), fs_, d); } catch (e) { fUtfall = 'fel: ' + e.message; }
       const R = Object.assign(svarAv(rs), { utfall: rUtfall }), F = Object.assign(svarAv(fs_), { utfall: fUtfall });
