@@ -181,6 +181,7 @@ module.exports = [
       const p = s.page.locator('#off-lines .off-money-input').nth(0); await p.fill('10000'); await p.dispatchEvent('change');
       await s.eval(() => { const l = OffersPage._editLines[0]; l.reductionType = 'rut'; l.reductionBaseExVat = 10000; l.rutAmount = OffersPage._calcLineRutAmount(l); OffersPage._discount = { type: 'percent', value: 70 }; OffersPage._refreshTotals(); });
       await s.page.locator('button:visible', { hasText: /Nästa: Villkor/ }).click();
+      await s.page.locator('button:visible', { hasText: /Nästa: Granska/ }).click(); // QA 2026-11-26: granskningssteg före Spara
       await s.page.locator('button:visible', { hasText: /Spara offert/ }).click();
       await s.settle(1200);
       t.assert((await s.toasts()).some((m) => /RUT\/ROT-avdraget .* större än/.test(m)), 'tydligt besked');

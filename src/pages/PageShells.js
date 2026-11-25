@@ -469,6 +469,48 @@ function _offerCalcTotals(off) {
 }
 
 /**
+ * QA 2026-11-26 (offerter): moms uppdelad per momssats — ENDAST presentation.
+ * Ingen ny ekonomiregel: underlaget är exakt OfferCalc:s egen per-rad-moms
+ * (round(lineExVat × sats) per engångsrad/committat tillval, samma urval som
+ * OfferCalc.rawVat) grupperad per sats och skalad med samma rabattkvot som
+ * OfferCalc.totals(). Avrundningsresten fördelas (största rest) så att
+ * summan av raderna ALLTID är exakt totals.vatAmount — aldrig en egen total.
+ * Returnerar [{ rate, vat }] sorterat på sats (högst först); tom lista när
+ * offerten saknar engångsbelopp.
+ */
+function _offVatBreakdown(off) {
+  const t = _offerCalcTotals(off);
+  const nv = (v) => (typeof OfferCalc !== 'undefined' ? OfferCalc.normVat(v) : _normVat(v));
+  const exOf = (e) => (typeof OfferCalc !== 'undefined' ? OfferCalc.extraExVat(e) : Math.round((+(e.qty || 1)) * (+(e.unitPrice || 0))));
+  const raw = {};
+  (off.lines || []).filter(l => l.type !== 'text' && l.billingType !== 'recurring' && l.billingType !== 'rate').forEach(l => {
+    const ex = _lineExVat(l); if (!ex) return;
+    const r = nv(l.vatRate); raw[r] = (raw[r] || 0) + Math.round(ex * r / 100);
+  });
+  (off.extras || []).filter(_extraIncludedInTotal).forEach(e => {
+    const ex = exOf(e); if (!ex) return;
+    const r = nv(e.vatRate); raw[r] = (raw[r] || 0) + Math.round(ex * r / 100);
+  });
+  const rates = Object.keys(raw).map(Number).sort((a, b) => b - a);
+  if (!rates.length) return [];
+  const ratio = t.rawExVat > 0 ? (t.exVatAfterDiscount / t.rawExVat) : 1;
+  const rows = rates.map(r => { const exact = raw[r] * ratio; return { rate: r, vat: Math.floor(exact), frac: exact - Math.floor(exact) }; });
+  let rest = t.vatAmount - rows.reduce((s, x) => s + x.vat, 0);
+  const order = rows.slice().sort((a, b) => b.frac - a.frac);
+  for (let i = 0; rest > 0 && order.length; i = (i + 1) % order.length) { order[i].vat += 1; rest--; }
+  for (let i = 0; rest < 0 && order.length; i = (i + 1) % order.length) { order[i].vat -= 1; rest++; }
+  return rows.map(x => ({ rate: x.rate, vat: x.vat }));
+}
+
+/* QA 2026-11-26 (offerter): procentformat för momssatser ("25 %", "12,5 %"). */
+function _offPct(r) { return String(r).replace('.', ',') + ' %'; }
+
+/* QA 2026-11-26 (offerter): id som får ligga i en inline-händelse ('…').
+   Endast [A-Za-z0-9_-] släpps igenom — annars tom sträng (inget anrop
+   med data som kan bryta sig ut ur JS-strängen). */
+function _offSafeId(v) { const s = String(v == null ? '' : v); return /^[A-Za-z0-9_-]+$/.test(s) ? s : ''; }
+
+/**
  * OFFER CORE R1.1 — BLOCKER 2 (motbevis-granskad): kanonisk, KONCIS
  * primär-prisetikett för en offert, använd av VARJE kompakt/sammanfattande
  * yta (offertlistans kort, wizardens mobila sticky-totalrad, detaljvyns
@@ -1361,10 +1403,11 @@ const OffersPage = {
           ? `<span style="font-size:10px;color:var(--rd);font-weight:700;">${ic('alert-circle',9)} Uppföljning försenad: ${dateStr}</span>`
           : `<span style="font-size:10px;color:var(--gr);">${ic('calendar-check',9)} Uppföljning: ${dateStr}</span>`;
       })();
-      return `<div class="list-item off-offer-card" data-status-accent="${accentClass}" onclick="Router.showPage('pg-offer-detail',{offerId:'${o.id}'})">
+      /* QA 2026-11-26: titeln (fritext) escapas — tidigare lagrad XSS i offertlistan. */
+      return `<div class="list-item off-offer-card" data-status-accent="${accentClass}" onclick="Router.showPage('pg-offer-detail',{offerId:'${_offSafeId(o.id)}'})">
   <div class="off-offer-card-top">
     <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
-      <span class="off-offer-card-id">${o.id}</span>
+      <span class="off-offer-card-id">${esc(o.id)}</span>
       ${sbdg(o.status)}
     </div>
     <div style="display:flex;align-items:baseline;gap:5px;flex-shrink:0;margin-left:8px;">
@@ -1372,7 +1415,7 @@ const OffersPage = {
       <span style="font-size:11px;color:var(--mt);">${priceDisp.secondary}</span>
     </div>
   </div>
-  <div class="off-offer-card-title">${disp}</div>
+  <div class="off-offer-card-title">${esc(disp)}</div>
   <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:6px;flex-wrap:wrap;">
     <div>
       ${cu
@@ -1527,6 +1570,7 @@ const OffersPage = {
     this._createOnCreated = (opts && typeof opts.onCreated === 'function') ? opts.onCreated : null;
     this._saveInFlight = false;
     this._wizardStep   = 1;
+    this._stepMsg      = '';
     this._activeSvcId  = null;
     this._svcFields    = {};
     this._svcEditIdx   = null;
@@ -1561,6 +1605,7 @@ const OffersPage = {
     this._createOnCreated = null; /* V47: aldrig callback vid redigering av befintlig offert */
     this._saveInFlight = false;
     this._wizardStep   = 1;
+    this._stepMsg      = '';
     this._activeSvcId  = null;
     this._svcFields    = {};
     this._svcEditIdx   = null;
@@ -1639,7 +1684,8 @@ const OffersPage = {
     if (!Array.isArray(d.lines)) { this._draftRemove(); return null; }
     if (!Array.isArray(d.extras)) { this._draftRemove(); return null; }
     if (!d.discount || typeof d.discount !== 'object') { this._draftRemove(); return null; }
-    if (d.wizardStep !== 1 && d.wizardStep !== 2 && d.wizardStep !== 3) { this._draftRemove(); return null; }
+    /* QA 2026-11-26: guiden har fyra steg (steg 4 = Granska & spara). */
+    if (![1, 2, 3, 4].includes(d.wizardStep)) { this._draftRemove(); return null; }
     const stamp = Date.parse(envelope.updatedAt || envelope.createdAt || '');
     if (!isFinite(stamp)) { this._draftRemove(); return null; }
     if (Date.now() - stamp > this._DRAFT_TTL_MS) { this._draftRemove(); return null; }
@@ -1849,7 +1895,8 @@ const OffersPage = {
     this._editOfferId  = null;
     this._createOnCreated = null;
     this._saveInFlight = false;
-    this._wizardStep   = (d.wizardStep === 2 || d.wizardStep === 3) ? d.wizardStep : 1;
+    this._wizardStep   = (d.wizardStep >= 2 && d.wizardStep <= 4) ? d.wizardStep : 1;
+    this._stepMsg      = '';
     this._activeSvcId  = null;
     this._svcFields    = {};
     this._svcEditIdx   = null;
@@ -1893,7 +1940,13 @@ const OffersPage = {
     // the full scroll-ownership trace.
     con.style.cssText = 'padding-top:0;padding-left:0;padding-right:0;gap:0;display:block;box-sizing:border-box;max-width:none;width:100%;margin-left:0;margin-right:0;';
     con.innerHTML = '<div id="off-wizard"></div>';
-    document.getElementById('off-wizard').innerHTML = this._wizardHtml();
+    const wizEl = document.getElementById('off-wizard');
+    wizEl.innerHTML = this._wizardHtml();
+    /* QA 2026-11-26: livesummeringen följer ALLA fält i steg 2 (även
+       benämningar, som inte anropar _refreshTotals) — delegerad lyssnare
+       på #off-wizard, som lever lika länge som guiden. */
+    wizEl.addEventListener('input', () => { if (this._wizardStep === 2) this._scheduleSummaryRefresh(); });
+    wizEl.addEventListener('change', () => { if (this._wizardStep === 2) this._scheduleSummaryRefresh(); });
     const scroll = document.getElementById('content-scroll');
     if (scroll) scroll.scrollTop = 0;
     this._syncWizardFloor();
@@ -2030,128 +2083,85 @@ const OffersPage = {
     this._syncWizardFloor();
   },
 
+  /* QA 2026-11-26 (offerter) — GUIDEN I FYRA STEG. Samma data, radtyper,
+     prismodell, utkast och sparning som tidigare; nytt är tydligare
+     stegindelning (klickbar stegvisare med validering per steg), en
+     livesummering med moms per sats och ett granskningssteg som visar
+     exakt det som sparas (samma rendering som offertdetaljen). */
+  _WIZ_STEPS: [
+    { n: 1, label: 'Kund & uppdrag' },
+    { n: 2, label: 'Tjänster & priser' },
+    { n: 3, label: 'Villkor' },
+    { n: 4, label: 'Granska & spara' }
+  ],
+  _stepMsg: '',
+
+  _stepperHtml(variant) {
+    const step = this._wizardStep;
+    return `<ol class="offw-steps offw-steps--${variant}" aria-label="Steg i offertguiden">` + this._WIZ_STEPS.map(s => {
+      const st = s.n < step ? ' is-done' : (s.n === step ? ' is-current' : '');
+      return `<li><button type="button" class="offw-step${st}" onclick="OffersPage._goStep(${s.n})"${s.n === step ? ' aria-current="step"' : ''} title="Steg ${s.n}: ${s.label}">
+          <span class="offw-step-n">${s.n < step ? ic('check', 13) : s.n}</span><span class="offw-step-l">${s.label}</span>
+        </button></li>`;
+    }).join('') + `</ol>`;
+  },
+
   _wizardHtml() {
     const step = this._wizardStep;
     const isEdit = !!this._editOfferId;
-    const labels = ['Kund & info', 'Tjänster & rader', 'Villkor & spara'];
+    const S = this._WIZ_STEPS;
+    const cur = S[step - 1] || S[0];
 
-    /* V48B3A: två renderingar av samma stegstatus — samma "rendera båda,
-       CSS växlar" mönster som redan etablerats (V48B1 tabs, V48B2
-       meny/chips). Desktop behåller cirkel+etikett-indikatorn oförändrad;
-       mobil/tablet visar en kompakt "Steg X av 3 — Etikett"-rad istället. */
-    const stepIndDesktop = labels.map((lbl, i) => {
-      const n = i + 1;
-      const done   = n < step;
-      const active = n === step;
-      const circ = `<div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;
-        background:${done?'#22c55e':active?'var(--navy)':'#d1d5db'};color:${done||active?'#fff':'#9ca3af'};">
-        ${done ? ic('check',11) : n}</div>`;
-      const bar = i < labels.length - 1 ? `<div style="width:20px;height:2px;background:${done?'#22c55e':'#d1d5db'};margin:0 4px;margin-bottom:14px;flex-shrink:0;"></div>` : '';
-      return `<div style="display:flex;align-items:center;">${
-        `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-          ${circ}
-          <div style="font-size:9px;font-weight:${active?'700':'500'};color:${active?'var(--navy)':'#9ca3af'};white-space:nowrap;">${lbl}</div>
-        </div>`
-      }${bar}</div>`;
-    }).join('');
-
-    const stepIndMobile = `
-      <div class="off-wiz-mobile-step-txt">Steg ${step} av ${labels.length} — ${labels[step-1]}</div>
-      <div class="off-wiz-mobile-step-bar"><div class="off-wiz-mobile-step-bar-fill" style="width:${Math.round(step/labels.length*100)}%;"></div></div>`;
-
-    // Header sticks to top of #content-scroll (no fixed overlay — wizard lives inside the page)
-    const hdr = `<div class="off-wiz-hdr">
-      <button type="button" onclick="OffersPage._requestWizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--mobile">${ic('arrow-left',16)}</button>
+    // Header: sticky; stegvisaren i huvudet på dator, under huvudet på mobil.
+    const hdr = `<div class="off-wiz-hdr offw-hdr">
+      <button type="button" onclick="OffersPage._requestWizardClose()" title="Stäng" aria-label="Stäng offertguiden" class="off-wiz-hdr-close off-wiz-hdr-close--mobile">${ic('arrow-left',16)}</button>
       <div class="off-wiz-hdr-titlebox">
-        <div class="off-wiz-hdr-title">${isEdit ? 'Redigera offert' : 'Ny offert'}</div>
-        ${!isEdit ? `<div id="off-draft-status" class="off-wiz-draft-status" style="font-size:11px;color:var(--mt);display:${this._draftStatusText?'':'none'};">${esc(this._draftStatusText||'')}</div>` : ''}
-        <div class="off-wiz-hdr-steps-mobile">${stepIndMobile}</div>
+        <div class="off-wiz-hdr-title">${isEdit ? 'Redigera offert ' + esc(this._editOfferId) : 'Ny offert'}</div>
+        <div class="offw-hdr-step">Steg ${step} av ${S.length} · ${cur.label}</div>
+        ${!isEdit ? `<div id="off-draft-status" class="off-wiz-draft-status" style="display:${this._draftStatusText?'':'none'};">${esc(this._draftStatusText||'')}</div>` : ''}
       </div>
-      <div class="off-wiz-hdr-steps-desktop">${stepIndDesktop}</div>
-      <button type="button" onclick="OffersPage._requestWizardClose()" title="Stäng" class="off-wiz-hdr-close off-wiz-hdr-close--desktop">${ic('x',15)}</button>
+      ${this._stepperHtml('hdr')}
+      <button type="button" onclick="OffersPage._requestWizardClose()" title="Stäng" aria-label="Stäng offertguiden" class="off-wiz-hdr-close off-wiz-hdr-close--desktop">${ic('x',15)}</button>
     </div>`;
 
-    let ftr;
-    if (step === 1) {
-      ftr = `<div class="off-wiz-ftr">
-        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._requestWizardClose()">Avbryt</button>
-        <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">${ic('arrow-right',12)} Nästa: Tjänster</button>
-      </div>`;
-    } else if (step === 2) {
-      /* OFFER CORE R1.6.6 — ITEM 2: the totals toggle moved out of the
-         footer into normal document flow (see mobileTotalsFlowHtml
-         below, rendered as the last thing inside the step-2 content) —
-         the footer here is now just the plain single-row button bar,
-         identical in shape to steps 1/3. */
-      ftr = `<div class="off-wiz-ftr">
-        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
-        <button type="button" class="btn bp bsm off-wiz-ftr-primary" onclick="OffersPage._nextStep()">Nästa: Villkor ${ic('arrow-right',12)}</button>
-      </div>`;
-    } else {
-      ftr = `<div class="off-wiz-ftr">
-        <button type="button" class="btn bs bsm off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',12)} Tillbaka</button>
-        <button type="button" class="btn bp off-wiz-ftr-primary off-wiz-ftr-primary--full" onclick="OffersPage._save()">${ic('save',13)} ${isEdit ? 'Spara ändringar' : 'Spara offert'}</button>
-      </div>`;
-    }
+    const nextLbl = { 1: 'Nästa: Tjänster', 2: 'Nästa: Villkor', 3: 'Nästa: Granska' }[step];
+    const ftr = `<div class="off-wiz-ftr offw-ftr">
+      <div id="offw-msg" class="offw-msg" role="alert"${this._stepMsg ? '' : ' hidden'}>${this._stepMsg ? ic('alert-circle',15) + '<span>' + esc(this._stepMsg) + '</span>' : ''}</div>
+      <div class="offw-ftr-btns">
+        ${step === 1
+          ? `<button type="button" class="btn bs off-wiz-ftr-secondary" onclick="OffersPage._requestWizardClose()">Avbryt</button>`
+          : `<button type="button" class="btn bs off-wiz-ftr-secondary" onclick="OffersPage._prevStep()">${ic('arrow-left',14)} Tillbaka</button>`}
+        <span class="offw-ftr-pos">Steg ${step} av ${S.length}</span>
+        ${step < S.length
+          ? `<button type="button" class="btn bp off-wiz-ftr-primary" onclick="OffersPage._nextStep()">${nextLbl} ${ic('arrow-right',14)}</button>`
+          : `<button type="button" id="offw-save-btn" class="btn bp off-wiz-ftr-primary" onclick="OffersPage._save()">${ic('save',14)} <span>${isEdit ? 'Spara ändringar' : 'Spara offert'}</span></button>`}
+      </div>
+    </div>`;
 
-    /* OFFER CORE R1.6.6 — ITEM 1+2: the wizard action bar is now in
-       NORMAL DOCUMENT FLOW on every step — no position:sticky/fixed
-       (see components.css .off-wiz-ftr) — so the R1.6.5 dynamic
-       footer-height spacer (_syncWizFooterSpacer/--off-wiz-ftr-h) is no
-       longer needed and has been removed entirely (not left as dead
-       code): nothing overlays content anymore, so nothing needs
-       reserved clearance. The step-2 cost summary is placed as the
-       last element of the scrollable content, immediately before the
-       (now in-flow) footer — same _mobileTotalsHtml()/_toggleMobileTotals()
-       markup and canonical _offerCalcTotals() chain as before, just
-       relocated; still collapsible. */
+    /* Mobil livesummering (steg 2): kompakt rad som ligger kvar nederst
+       medan man arbetar med raderna (sticky), samma _offerCalcTotals-kedja. */
     const mobileTotalsFlowHtml = step === 2
-      ? `<div class="off-wiz-mobile-totals off-wiz-mobile-totals--flow" id="off-mobile-totals">${this._mobileTotalsHtml()}</div>`
+      ? `<div class="off-wiz-mobile-totals off-wiz-mobile-totals--flow offw-mbar" id="off-mobile-totals">${this._mobileTotalsHtml()}</div>`
       : '';
-
-    const innerCls = this._wizardStep === 3 ? 'off-wiz-inner' : 'off-wiz-inner-wide';
-    return hdr + `<div class="${innerCls}">${this._stepHtml()}${mobileTotalsFlowHtml}</div>` + ftr;
+    return hdr + `<div class="off-wiz-inner-wide offw-inner offw-step-${step}">${this._stepperHtml('inline')}${this._stepHtml()}${mobileTotalsFlowHtml}</div>` + ftr;
   },
 
-  /* V48B3A: kompakt sticky totalsrad för mobil/tablet i steg 2 — bygger på
-     EXAKT samma kanoniska _offerCalcTotals()-kedja som _totalsBarHtml(),
-     ingen ny ekonomilogik. Uppdateras av _refreshTotals() precis som
-     desktop-sidopanelens totalsbar. */
-  /* OFFER CORE R1.6.6 — ITEM 2 (found via this round's own evidence
-     screenshot, same pattern R1.6.1 fixed in _totalsBarHtml() and R1.6.5
-     fixed in OfferDetailPage's off-detail-sum — this mobile-only totals
-     toggle had NEVER been updated and still showed a dominant, unconditional
-     "Engångsbelopp exkl./inkl. moms: 0 kr" block for a pure-recurring
-     offer, visible the moment the summary is expanded on mobile. Same
-     hasOneTimeLines = rawExVat > 0 predicate as the other two fixes,
-     applied here too — no calculation changed. */
+  /* Mobilens summeringsrad: huvudbelopp alltid med "exkl./inkl. moms";
+     utfälld visar den samma summering som datorns sidopanel. */
   _mobileTotalsHtml() {
-    const off    = { lines: this._editLines, extras: this._editExtras, discount: this._discount };
-    const _tot   = _offerCalcTotals(off);
-    const rawExVat = _tot.rawExVat;
-    const exVat  = _tot.exVatAfterDiscount;
-    const vat    = _tot.vatAmount;
-    const incVat = _tot.totalInclVat;
-    const rutAmt = _tot.rutRotAmount;
-    const cust   = _tot.customerPays;
-    const priceDisp = _offPrimaryDisplay(off);
+    const off  = { lines: this._editLines, extras: this._editExtras, discount: this._discount };
+    const T    = _offerCalcTotals(off);
     const expanded = !!this._mobileTotalsExpanded;
-    const hasOneTimeLinesMobile = rawExVat > 0;
-    const hasRecurringMobile = !!_tot.recurringMonthlyExVat;
-    return `<button type="button" class="off-wiz-mobile-totals-toggle" onclick="OffersPage._toggleMobileTotals()">
-        <span class="off-wiz-mobile-totals-lbl">${priceDisp.isRecurring ? 'Fast kostnad' : (rutAmt?'Kund betalar':'Totalt inkl. moms')}</span>
-        <span class="off-wiz-mobile-totals-val">${priceDisp.compact}</span>
-        <span class="off-wiz-mobile-totals-chevron">${ic(expanded?'chevron-down':'chevron-up',13)}</span>
+    let lbl, val;
+    if (T.rawExVat > 0) { lbl = T.rutRotAmount ? 'Kund betalar inkl. moms' : (T.recurringMonthlyExVat ? 'Engångsbelopp inkl. moms' : 'Totalt inkl. moms'); val = fmt(T.rutRotAmount ? T.customerPays : T.totalInclVat) + ' kr'; }
+    else if (T.recurringMonthlyExVat) { lbl = 'Fast kostnad per månad exkl. moms'; val = fmt(T.recurringMonthlyExVat) + ' kr'; }
+    else { lbl = 'Summering'; val = '—'; }
+    return `<button type="button" class="off-wiz-mobile-totals-toggle" aria-expanded="${expanded}" onclick="OffersPage._toggleMobileTotals()">
+        <span class="off-wiz-mobile-totals-lbl">${lbl}</span>
+        <span class="off-wiz-mobile-totals-val">${val}</span>
+        <span class="off-wiz-mobile-totals-chevron">${ic(expanded?'chevron-down':'chevron-up',14)}</span>
       </button>
-      ${expanded ? `<div class="off-wiz-mobile-totals-detail">
-        ${hasRecurringMobile ? `<div class="off-wiz-mobile-totals-row"><span>Fast kostnad per månad</span><span>${fmt(_tot.recurringMonthlyExVat)} kr</span></div>
-        <div class="off-wiz-mobile-totals-row"><span>Fast kostnad per år (härledd)</span><span>${fmt(_tot.recurringAnnualExVat)} kr</span></div>` : ''}
-        ${hasOneTimeLinesMobile ? `<div class="off-wiz-mobile-totals-row"><span>${hasRecurringMobile?'Engångsbelopp exkl. moms':'Exkl. moms'}</span><span>${fmt(exVat)} kr</span></div>
-        <div class="off-wiz-mobile-totals-row"><span>Moms</span><span>${fmt(vat)} kr</span></div>
-        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>${hasRecurringMobile?'Engångsbelopp inkl. moms':'Totalt inkl. moms'}</span><span>${fmt(incVat)} kr</span></div>
-        ${rutAmt ? `<div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--rut"><span>RUT/ROT-avdrag</span><span>−${fmt(rutAmt)} kr</span></div>
-        <div class="off-wiz-mobile-totals-row off-wiz-mobile-totals-row--total"><span>Kund betalar</span><span>${fmt(cust)} kr</span></div>` : ''}` : ''}
-      </div>` : ''}`;
+      ${expanded ? `<div class="off-wiz-mobile-totals-detail">${OfferDetailPage._totalsRowsHtml(off, { compact: true })}</div>` : ''}`;
   },
 
   _toggleMobileTotals() {
@@ -2195,6 +2205,10 @@ const OffersPage = {
         <span class="off-addwork-option-icon">${ic('align-left',18)}</span>
         <span class="off-addwork-option-txt"><span class="off-addwork-option-title">Fritext</span><span class="off-addwork-option-sub">Information utan pris</span></span>
       </button>
+      <button type="button" class="off-addwork-option" onclick="OffersPage._closeAddWorkSheet();OffersPage._addExtraAndShow()">
+        <span class="off-addwork-option-icon">${ic('plus-circle',18)}</span>
+        <span class="off-addwork-option-txt"><span class="off-addwork-option-title">Tillval</span><span class="off-addwork-option-sub">Valfri extratjänst, i eller utanför summan</span></span>
+      </button>
     </div>`;
     if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => sh.classList.add('open'));
     else sh.classList.add('open');
@@ -2218,82 +2232,95 @@ const OffersPage = {
   _stepHtml() {
     if (this._wizardStep === 1) return this._step1Html();
     if (this._wizardStep === 2) return this._step2Html();
-    return this._step3Html();
+    if (this._wizardStep === 3) return this._step3Html();
+    return this._step4Html();
   },
 
-  /* ── Step 1: Kund & info ─── */
+  /* ── Steg 1: Kund & uppdrag ─── */
   _step1Html() {
     const d   = this._wizardData;
     const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return `
-      <div class="off-s1-grid">
-        <div class="off-s1-col">
-          <div class="fg">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
-              <label style="margin-bottom:0;">Kund <span style="color:var(--rd)">*</span></label>
-              <button type="button" class="off-new-cu-btn" onclick="OffersPage._quickNewCustomer()">
-                ${ic('user-plus',11)} Ny kund
-              </button>
+      <div class="offw-s1">
+        <section class="card offw-card offw-s1-cu">
+          <div class="card-header"><h3>${ic('user',15)} Kund</h3>
+            <button type="button" class="btn bghost bsm off-new-cu-btn" onclick="OffersPage._quickNewCustomer()">${ic('user-plus',14)} Ny kund</button>
+          </div>
+          <div class="card-body">
+            <div class="fg">
+              <label for="off-cu">Kund <span class="offw-req" aria-hidden="true">*</span></label>
+              ${CustomerPicker.render('off-cu',{value:d.customerId||'',placeholder:'— Välj kund —',onchange:"OffersPage._customerChanged(this.value)",searchProperties:true})}
             </div>
-            ${CustomerPicker.render('off-cu',{value:d.customerId||'',placeholder:'— Välj kund —',onchange:"OffersPage._customerChanged(this.value)",searchProperties:true})}
+            <div id="offw-cu-info">${this._customerInfoHtml()}</div>
+            <div class="fg" id="off-property-wrap">${this._propertyFieldHtml()}</div>
           </div>
-          <div class="fg" id="off-property-wrap">${this._propertyFieldHtml()}</div>
-          <div class="fg">
-            <label>Rubrik / titel</label>
-            <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Serviceavtal 2025 – Solvägen 3"
-              oninput="OffersPage._wizardData.title=this.value">
-            <div style="font-size:10px;color:var(--mt);margin-top:3px;">T.ex. 'Stentvätt Solvägen 3' eller 'Serviceavtal 2025'</div>
+        </section>
+        <section class="card offw-card offw-s1-off">
+          <div class="card-header"><h3>${ic('file-text',15)} Offert</h3></div>
+          <div class="card-body">
+            <div class="fg">
+              <label for="off-title">Rubrik</label>
+              <input id="off-title" value="${esc(d.title)}" placeholder="T.ex. Stentvätt Solvägen 3"
+                oninput="OffersPage._wizardData.title=this.value">
+              <div class="offw-help">Visas för kunden överst på offerten.</div>
+            </div>
+            <div class="g2">
+              <div class="fg"><label for="off-date">Offertdatum</label>
+                <input type="date" id="off-date" value="${esc(d.date)}"
+                  oninput="OffersPage._wizardData.date=this.value"></div>
+              <div class="fg"><label for="off-valid">Giltig till</label>
+                <input type="date" id="off-valid" value="${esc(d.validUntil)}"
+                  oninput="OffersPage._wizardData.validUntil=this.value"></div>
+            </div>
           </div>
-          <div class="g2">
-            <div class="fg"><label>Datum</label>
-              <input type="date" id="off-date" value="${esc(d.date)}"
-                oninput="OffersPage._wizardData.date=this.value"></div>
-            <div class="fg"><label>Giltig till</label>
-              <input type="date" id="off-valid" value="${esc(d.validUntil)}"
-                oninput="OffersPage._wizardData.validUntil=this.value"></div>
-          </div>
-          <details class="off-wiz-collapse-plain">
-            <summary>
-              ${ic('zap',11)} Lägg till uppdragsbeskrivning
-            </summary>
-            <summary style="display:none;"></summary>
-            <div class="off-wiz-collapse-plain-body">
-              <div class="fg">
-                <label>Kort sammanfattning</label>
-                <textarea id="off-summary" rows="3" placeholder="T.ex. Stentvätt av marksten, ca 120 m², med algbehandling…"
-                  oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
-                <button type="button" class="off-gen-btn" onclick="OffersPage._genTextSuggestion()">
-                  ${ic('zap',11)} Generera textförslag
-                </button>
-                ${d._lastGenFrom ? `<div style="font-size:10px;color:var(--mt);margin-top:4px;display:flex;align-items:center;gap:4px;">${ic('check',9)}<span>Senast: <em>${d._lastGenFrom}</em></span></div>` : ''}
+        </section>
+        <section class="card offw-card offw-s1-desc">
+          <div class="card-header"><h3>${ic('align-left',15)} Uppdragsbeskrivning</h3><span class="offw-opt">Valfritt</span></div>
+          <div class="card-body">
+            <div class="fg">
+              <label for="off-summary">Kort sammanfattning</label>
+              <textarea id="off-summary" rows="3" placeholder="T.ex. Stentvätt av marksten, ca 120 m², med algbehandling…"
+                oninput="OffersPage._wizardData.summary=this.value">${esc(d.summary)}</textarea>
+              <div class="offw-gen-row">
+                <button type="button" class="btn bghost bsm off-gen-btn" onclick="OffersPage._genTextSuggestion()">${ic('zap',13)} Generera textförslag</button>
+                ${d._lastGenFrom ? `<span class="offw-help">${ic('check',12)} Senast: ${esc(d._lastGenFrom)}</span>` : `<span class="offw-help">Fyller omfattning, ingår och ingår ej utifrån sammanfattningen.</span>`}
               </div>
             </div>
-          </details>
-        </div>
-        <div class="off-s1-col">
-          <details class="off-wiz-collapse-boxed off-wiz-collapse-boxed--s1" ${d.scope||d.includes||d.excludes?'open':''}>
-            <summary>
-              ${ic('align-left',12)} Uppdragsbeskrivning (valfritt)
-            </summary>
-            <div class="off-wiz-collapse-boxed-body">
-              <div class="fg">
-                <label>Uppdragets omfattning</label>
-                ${this._toolbarHtml('off-scope','scope')}
-                <textarea id="off-scope" rows="4" placeholder="Beskriv vad uppdraget innebär…"
-                  oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea>
-              </div>
-              <div class="g2">
-                <div class="fg"><label>Vad ingår</label>
-                  <textarea id="off-includes" rows="3" placeholder="- Rengöring&#10;- Material…"
-                    oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
-                <div class="fg"><label>Vad ingår ej</label>
-                  <textarea id="off-excludes" rows="3" placeholder="- Målning&#10;- Elektriker…"
-                    oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
-              </div>
+            <div class="fg">
+              <label for="off-scope">Uppdragets omfattning</label>
+              ${this._toolbarHtml('off-scope','scope')}
+              <textarea id="off-scope" rows="4" placeholder="Beskriv vad uppdraget innebär…"
+                oninput="OffersPage._wizardData.scope=this.value">${esc(d.scope)}</textarea>
             </div>
-          </details>
-        </div>
+            <div class="g2">
+              <div class="fg"><label for="off-includes">Vad ingår</label>
+                <textarea id="off-includes" rows="3" placeholder="- Rengöring&#10;- Material…"
+                  oninput="OffersPage._wizardData.includes=this.value">${esc(d.includes)}</textarea></div>
+              <div class="fg"><label for="off-excludes">Vad ingår ej</label>
+                <textarea id="off-excludes" rows="3" placeholder="- Målning&#10;- Elektriker…"
+                  oninput="OffersPage._wizardData.excludes=this.value">${esc(d.excludes)}</textarea></div>
+            </div>
+          </div>
+        </section>
       </div>`;
+  },
+
+  /* Vald kund: typ (BRF/Fastighetsägare/Företag/Privatperson) och kontakt —
+     så att rätt mottagare och förutsättningar syns innan rader läggs till. */
+  _customerInfoHtml() {
+    const cu = getCu(this._wizardData.customerId);
+    if (!cu) return `<div class="offw-help offw-cu-empty">${ic('info',13)}<span>Sök på namn, adress, org.nr eller fastighet. Saknas kunden — välj "Ny kund".</span></div>`;
+    const norm = (CustomerService.normalizeType ? CustomerService.normalizeType(cu.type) : cu.type) || '';
+    const addr = [cu.address, [cu.zip, cu.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    return `<div class="offw-cu">
+      <div class="offw-cu-top"><strong>${esc(CustomerService.displayName(cu))}</strong><span class="offd-cutype">${esc(CustomerService.typeLabel(cu.type))}</span></div>
+      <div class="offw-cu-meta">
+        ${cu.email ? `<span>${ic('mail',13)}<span>${esc(cu.email)}</span></span>` : `<span class="offd-warn">${ic('mail',13)}<span>Ingen e-post — behövs för att skicka offerten</span></span>`}
+        ${cu.phone ? `<span>${ic('phone',13)}<span>${esc(cu.phone)}</span></span>` : ''}
+        ${addr ? `<span>${ic('map-pin',13)}<span>${esc(addr)}</span></span>` : ''}
+      </div>
+      ${norm === 'privat' ? `<div class="offw-help">Privatperson — RUT/ROT kan anges per rad i nästa steg om kunden har rätt till avdraget.</div>` : ''}
+    </div>`;
   },
 
   /* OFFER CORE R1 — PART B: återanvänder den REDAN etablerade
@@ -2337,6 +2364,9 @@ const OffersPage = {
     }
     const wrap = document.getElementById('off-property-wrap');
     if (wrap) wrap.innerHTML = this._propertyFieldHtml();
+    const info = document.getElementById('offw-cu-info');
+    if (info) info.innerHTML = this._customerInfoHtml();
+    if (customerId && this._stepMsg) { this._stepMsg = ''; this._renderStepMsg(); }
     this._flushDraftNow();
   },
 
@@ -2430,53 +2460,46 @@ const OffersPage = {
           </div>` : `<div class="off-discount-ctrl-hint" style="font-size:11px;color:var(--mt);margin-top:8px;">Ingen rabatt-kontroll visas — offerten har inget engångsbelopp att rabattera på (rabatt gäller endast engångsbelopp, ej återkommande/rörliga priser).</div>`;
   },
 
-  /* ── Step 2: Tjänster & rader ─── */
+  /* ── Steg 2: Tjänster & priser ─── */
   _step2Html() {
-    /* OFFER CORE R1.1 — BLOCKER 7 (motbevis-granskad): rabatten är, och
-       förblir i denna release, ENDAST en rabatt på det klassiska
-       engångsbeloppet (_offDiscountAmount räknar alltid mot rawExVat,
-       som exkluderar recurring/rate — se _offRawExVat). Innan denna
-       fix presenterades kontrollen som en generisk "Rabatt" oavsett om
-       offerten var helt/delvis återkommande, vilket riskerade att ge
-       intrycket av en rabatt på HELA offerten (inkl. månadsbeloppet)
-       trots att den matematiskt ALDRIG påverkar det. Minimal, entydig
-       regel: relabel:a explicit när recurring finns, och DÖLJ
-       kontrollen helt när det inte finns någon engångskomponent att
-       rabattera på (annars en rabatt-kontroll utan effekt). Ingen ny
-       "återkommande rabatt"-motor i denna release — se
-       RAPPORT §Blocker 7 för dokumentation av begränsningen. */
+    /* OFFER CORE R1.1 — BLOCKER 7: rabatten gäller endast engångsbeloppet
+       (_discountAreaHtml döljer kontrollen när inget engångsbelopp finns). */
     return `
       <div class="off-wiz-s2">
         <div class="off-wiz-s2-lines">
-          <div class="off-action-cards off-action-cards--desktop">
+          <div class="offw-sec-h"><h3>Lägg till på offerten</h3><span class="offw-help">Alla priser anges exkl. moms</span></div>
+          <div class="off-action-cards off-action-cards--desktop offw-add">
             <button type="button" class="off-action-card" onclick="OffersPage._openSvcCalc(null)">
-              <span class="off-action-card-icon">${ic('zap',14)}</span>
+              <span class="off-action-card-icon">${ic('zap',16)}</span>
               <div><div class="off-action-card-title">Tjänst / kalkyl</div><div class="off-action-card-sub">VIFT:s prismodell</div></div>
             </button>
             <button type="button" class="off-action-card" onclick="OffersPage._addFixedLine()">
-              <span class="off-action-card-icon">${ic('tag',14)}</span>
+              <span class="off-action-card-icon">${ic('tag',16)}</span>
               <div><div class="off-action-card-title">Fastpris</div><div class="off-action-card-sub">Eget fast pris</div></div>
             </button>
             <button type="button" class="off-action-card" onclick="OffersPage._addManualLine()">
-              <span class="off-action-card-icon">${ic('plus',14)}</span>
+              <span class="off-action-card-icon">${ic('plus',16)}</span>
               <div><div class="off-action-card-title">Löpande rad</div><div class="off-action-card-sub">Antal × à-pris</div></div>
             </button>
             <button type="button" class="off-action-card" onclick="OffersPage._addTextBlock()">
-              <span class="off-action-card-icon">${ic('align-left',14)}</span>
+              <span class="off-action-card-icon">${ic('align-left',16)}</span>
               <div><div class="off-action-card-title">Fritext</div><div class="off-action-card-sub">Info utan pris</div></div>
+            </button>
+            <button type="button" class="off-action-card" onclick="OffersPage._addExtraAndShow()">
+              <span class="off-action-card-icon">${ic('plus-circle',16)}</span>
+              <div><div class="off-action-card-title">Tillval</div><div class="off-action-card-sub">Valfri extratjänst</div></div>
             </button>
           </div>
           <button type="button" class="off-add-work-btn" onclick="OffersPage._openAddWorkSheet()">
             ${ic('plus',16)} Lägg till arbete
           </button>
+          <div class="offw-sec-h"><h3>Offertrader</h3><span class="offw-help">Ordningen här är ordningen på offerten</span></div>
           <div id="off-lines">${this._linesHtml()}</div>
-          <details class="off-wiz-collapse-tillval">
-            <summary>${ic('plus',11)} Tillval (valfria extratjänster)</summary>
-            <div class="off-wiz-collapse-tillval-body">
-              <div id="off-extras">${this._extrasInnerHtml()}</div>
-              <button type="button" class="btn bs bxs" style="margin-top:5px;" onclick="OffersPage._addExtra()">${ic('plus',10)} Lägg till tillval</button>
-            </div>
-          </details>
+          <section class="offw-extras" id="offw-extras">
+            <div class="offw-sec-h"><h3>${ic('plus-circle',15)} Tillval</h3><span class="offw-help">Valfria extratjänster. Avmarkera "I totalsumman" om kunden väljer själv.</span></div>
+            <div id="off-extras">${this._extrasInnerHtml()}</div>
+            <button type="button" class="btn bs bsm offw-add-extra" onclick="OffersPage._addExtra()">${ic('plus',13)} Lägg till tillval</button>
+          </section>
         </div>
         <div class="off-wiz-s2-summ">
           <div id="off-totals-bar">${this._totalsBarHtml()}</div>
@@ -2485,152 +2508,217 @@ const OffersPage = {
       </div>`;
   },
 
-  /* ── Step 3: Villkor & spara ─── */
+  /* Lägg till ett tillval och visa tillvalssektionen (ingång från korten). */
+  _addExtraAndShow() {
+    this._addExtra();
+    const sec = document.getElementById('offw-extras');
+    if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'nearest' });
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('#off-extras .off-extra-desc');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    }, 30);
+  },
+
+  /* ── Steg 3: Villkor ─── */
   _step3Html() {
     const d   = this._wizardData;
     const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const prLines = this._editLines.filter(l => l.type !== 'text').length;
-    const txtLines = this._editLines.filter(l => l.type === 'text').length;
     return `
-      <div class="off-wiz-summary-card">
-        <div class="off-wiz-summary-card-hd">
-          <div class="off-wiz-summary-card-hd-txt">Offertsummering</div>
-        </div>
-        <div class="off-wiz-summary-card-body">
-          ${this._totalsBarHtml().replace('<div class="off-totals-card">','<div class="off-totals-card off-totals-card--bare">').replace('<div class="off-totals-card-hd">Sammanfattning</div>','')}
-        </div>
-        <div class="off-wiz-summary-card-ft">
-          ${prLines} ${prLines===1?'prisrad':'prisrader'} · ${txtLines} textblock
-        </div>
-      </div>
-      <div class="g2">
-        <div class="fg"><label>Betalningsvillkor</label>
-          <input id="off-payment" value="${esc(d.paymentTerms)}" placeholder="T.ex. 30 dagar netto"
-            oninput="OffersPage._wizardData.paymentTerms=this.value"></div>
-        <div class="fg"><label>Offertens giltighetstid</label>
-          <input id="off-validity" value="${esc(d.validityText)}" placeholder="T.ex. 30 dagar"
-            oninput="OffersPage._wizardData.validityText=this.value"></div>
-      </div>
-      <div class="fg">
-        <label>Allmänna villkor</label>
-        <textarea id="off-terms" rows="4" placeholder="Allmänna villkor…"
-          oninput="OffersPage._wizardData.generalTerms=this.value">${esc(d.generalTerms)}</textarea>
-      </div>
-      <details class="off-wiz-collapse-boxed off-wiz-collapse-boxed--s3" ${d.internalNote?'open':''}>
-        <summary>
-          ${ic('lock',11)} Intern anteckning (valfritt, visas ej för kund)
-        </summary>
-        <div class="off-wiz-collapse-boxed-body">
-          <textarea id="off-note" rows="2" placeholder="Intern anteckning…"
-            oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
-        </div>
-      </details>
-      ${this._sectionOrderHtml()}`;
+      <div class="offw-s3">
+        <section class="card offw-card">
+          <div class="card-header"><h3>${ic('receipt',15)} Offertvillkor</h3></div>
+          <div class="card-body">
+            <div class="g2">
+              <div class="fg"><label for="off-payment">Betalningsvillkor</label>
+                <input id="off-payment" value="${esc(d.paymentTerms)}" placeholder="T.ex. 30 dagar netto"
+                  oninput="OffersPage._wizardData.paymentTerms=this.value"></div>
+              <div class="fg"><label for="off-validity">Offertens giltighetstid</label>
+                <input id="off-validity" value="${esc(d.validityText)}" placeholder="T.ex. 30 dagar"
+                  oninput="OffersPage._wizardData.validityText=this.value"></div>
+            </div>
+            <div class="fg">
+              <label for="off-terms">Allmänna villkor</label>
+              <textarea id="off-terms" rows="7" placeholder="Allmänna villkor…"
+                oninput="OffersPage._wizardData.generalTerms=this.value">${esc(d.generalTerms)}</textarea>
+            </div>
+          </div>
+        </section>
+        <section class="card offw-card">
+          <div class="card-header"><h3>${ic('lock',15)} Intern anteckning</h3><span class="offw-opt">Visas inte för kunden</span></div>
+          <div class="card-body">
+            <textarea id="off-note" rows="3" placeholder="T.ex. kontaktperson, nyckelhämtning…" aria-label="Intern anteckning"
+              oninput="OffersPage._wizardData.internalNote=this.value">${esc(d.internalNote)}</textarea>
+          </div>
+        </section>
+        <section class="card offw-card">
+          <div class="card-body">${this._sectionOrderHtml()}</div>
+        </section>
+      </div>`;
   },
 
-  _totalsBarHtml() {
-    /* V38 §4: kanonisk beräkning istället för lokal * 0.25 — respekterar
-       varje rads/tilläggs egen vatRate. RUT/ROT-summeringen (_calcRutAmt)
-       är oförändrad. */
-    const _tot     = _offerCalcTotals({ lines: this._editLines, extras: this._editExtras, discount: this._discount });
-    const rawExVat = _tot.rawExVat;
-    const discAmt  = _tot.discountAmount;
-    const vat      = _tot.vatAmount;
-    const incVat   = _tot.totalInclVat;
-    const rutAmt   = _tot.rutRotAmount;
-    const cust     = _tot.customerPays;
-    /* OFFER CORE R1 — ADDITIV återkommande-summering (aldrig blandad med
-       ovanstående engångsbelopp, se _offRawExVat/_offerCalcTotals). Visas
-       bara om offerten faktiskt har återkommande rader — en offert utan
-       sådana (dvs. VARJE befintlig offert) ser exakt samma kort som
-       innan denna leverans. */
-    const rateOptLines = _offRateAndOptionLines({ lines: this._editLines });
-    /* OFFER CORE R1.1 — BLOCKER 1: valfria (ej committade) extras visas
-       tillsammans med rate-raderna i samma "ingår ej ovan"-sektion —
-       ETT ställe som listar allt som INTE räknas in i totalsumman,
-       oavsett om det är en rate-rad eller en explicit valfri extra. */
-    const optionalExtras = _offOptionalExtras({ extras: this._editExtras });
-
-    /* OFFER CORE R1.6.1 — ITEM 1 + 4 (LIVE hotfix): LIVE-verifiering
-       visade en dominant "Kundpris inkl. moms: 0 kr" för en RENT
-       återkommande offert (Södra Heden: 8000/mån, 0 engångsbelopp) —
-       0 avsåg bara engångshinken men lästes som "hela offerten kostar
-       0 kr". Samma missvisande 0-kr-block uppstår för en ren rate-
-       offert (inga rader alls i engångshinken). Ingen ändring av
-       SJÄLVA beräkningarna (_offerCalcTotals oförändrad) — bara vilket
-       block som visas primärt/döljs, styrt av om det FAKTISKT finns
-       några engångsrader (rawExVat > 0, samma predikat _offerCalcTotals
-       redan använder internt — INTE detsamma som "belopp efter rabatt
-       > 0", som en 100%-rabatterad offert medvetet redan hanterar
-       oförändrat, se R1.4). */
-    const hasOneTimeLines = rawExVat > 0;
-    const hasRecurring     = !!_tot.recurringMonthlyExVat;
-    const hasRateOrOptional = rateOptLines.length > 0 || optionalExtras.length > 0;
-
-    /* OFFER CORE R1.6.2 — ITEM 5 (UI polish, LIVE-verified narrow sidebar
-       caused "8 000 kr/mån ex moms" to wrap badly as one long row-label
-       string): replaced the verbose per-row-label layout with a
-       typographic eyebrow/figure hierarchy — same two numbers
-       (recurringMonthlyExVat/recurringAnnualExVat), just no longer
-       concatenated into one long string per row. Presentation only —
-       _offerCalcTotals/_offRecurringMonthlyExVat etc. untouched. */
-    const recurringBlockHtml = hasRecurring ? `
-        <div class="off-totals-recurring${hasOneTimeLines ? '' : ' off-totals-recurring--primary'}">
-          <div class="off-totals-eyebrow">Fast kostnad</div>
-          <div class="off-totals-figure-primary">${fmt(_tot.recurringMonthlyExVat)} kr/mån</div>
-          <div class="off-totals-figure-secondary">${fmt(_tot.recurringAnnualExVat)} kr/år</div>
-          <div class="off-totals-figure-vatnote">exkl. moms</div>
-          ${!hasOneTimeLines ? `<div class="off-totals-row off-totals-row--sub off-totals-row--muted"><span>Varav moms per månad</span><span>${fmt(_tot.recurringMonthlyVat)} kr</span></div>
-          <div class="off-totals-row off-totals-row--sub off-totals-row--muted"><span>Inkl. moms per månad</span><span>${fmt(_tot.recurringMonthlyInclVat)} kr</span></div>` : ''}
+  /* ── Steg 4: Granska & spara ─── */
+  /* Visar EXAKT det som sparas: samma rensning av tomma rader som _save()
+     (_cleanLines/_linesForSave) och samma rendering som offertdetaljen
+     (OfferDetailPage._linesTableHtml/_totalsRowsHtml) — alla belopp ur
+     OfferCalc. Varje del har "Ändra" som hoppar till rätt steg. */
+  _step4Html() {
+    const off = this._draftOfferObject();
+    const d = this._wizardData;
+    const cu = getCu(d.customerId);
+    const issues = this._reviewIssues(off, cu);
+    const edit = (n) => `<button type="button" class="btn bghost bsm offw-edit" onclick="OffersPage._goStep(${n})">${ic('pencil',13)} Ändra</button>`;
+    const kv = (k, v) => (v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : '');
+    const prop = d.propertyId ? (state.properties || []).find(p => p.id === d.propertyId) : null;
+    const propTxt = prop ? ([prop.name, prop.address].filter(Boolean).join(' — ') || prop.id) : '';
+    const rt = (v) => OfferDetailPage._renderText(v);
+    const nPriced = off.lines.filter(l => l.type !== 'text').length;
+    const nText = off.lines.length - nPriced;
+    const order = _resolveSectionOrder(this._editSectionOrder).map(k => this._sectionLabels[k] || k);
+    return `
+      <div class="offw-review">
+        <div class="offw-rv-intro">
+          <h3>Granska offerten innan du sparar</h3>
+          <p>Så här blir offerten. Beloppen är exakt de som sparas och visas för kunden.</p>
         </div>
-        <div class="off-totals-divider"></div>` : '';
+        ${issues.length ? `<div class="offw-issues">${issues.map(i => `<div class="offd-hint is-${i.tone}">${ic(i.tone === 'danger' ? 'alert-circle' : (i.tone === 'warn' ? 'alert-triangle' : 'info'), 14)}<span>${esc(i.text)}</span></div>`).join('')}</div>` : ''}
+        <section class="card offd-card">
+          <div class="card-header"><h3>${ic('user',15)} Kund och uppdrag</h3>${edit(1)}</div>
+          <div class="card-body">
+            <dl class="offd-facts offw-rv-facts">
+              ${kv('Kund', cu ? esc(CustomerService.displayName(cu)) + ' <span class="offd-cutype">' + esc(CustomerService.typeLabel(cu.type)) + '</span>' : '<span class="offd-warn">Ingen kund vald</span>')}
+              ${kv('Fastighet', esc(propTxt))}
+              ${kv('Rubrik', d.title ? esc(d.title) : '<span class="offd-warn">Ingen rubrik</span>')}
+              ${kv('Offertdatum', d.date ? fmtDate(d.date) : '')}
+              ${kv('Giltig till', d.validUntil ? fmtDate(d.validUntil) : '')}
+            </dl>
+            ${(d.summary || d.scope || d.includes || d.excludes) ? `<div class="offd-desc offw-rv-desc">
+              ${d.summary ? `<div class="offd-field"><div class="offd-field-l">Sammanfattning</div><div class="offd-field-v off-rt">${rt(d.summary)}</div></div>` : ''}
+              ${d.scope ? `<div class="offd-field"><div class="offd-field-l">Uppdragets omfattning</div><div class="offd-field-v off-rt">${rt(d.scope)}</div></div>` : ''}
+              ${(d.includes || d.excludes) ? `<div class="offd-incl">
+                ${d.includes ? `<div class="offd-incl-col is-in"><div class="offd-field-l">${ic('check',13)} Ingår</div><div class="offd-field-v off-rt">${rt(d.includes)}</div></div>` : ''}
+                ${d.excludes ? `<div class="offd-incl-col is-out"><div class="offd-field-l">${ic('x',13)} Ingår ej</div><div class="offd-field-v off-rt">${rt(d.excludes)}</div></div>` : ''}
+              </div>` : ''}
+            </div>` : `<p class="offd-muted offw-rv-none">Ingen uppdragsbeskrivning.</p>`}
+          </div>
+        </section>
+        <section class="card offd-card offd-content offw-rv-content">
+          <div class="card-header"><h3>${ic('file-text',15)} Offertinnehåll <span class="bdg bdg-grey">${nPriced} ${nPriced === 1 ? 'prisrad' : 'prisrader'}${nText ? ' · ' + nText + ' textblock' : ''}${off.extras.length ? ' · ' + off.extras.length + ' tillval' : ''}</span></h3>${edit(2)}</div>
+          ${OfferDetailPage._linesTableHtml(off, { idp: 'rv' })}
+          ${OfferDetailPage._totalsRowsHtml(off)}
+        </section>
+        <section class="card offd-card">
+          <div class="card-header"><h3>${ic('receipt',15)} Villkor</h3>${edit(3)}</div>
+          <div class="card-body">
+            <dl class="offd-facts offw-rv-facts">
+              ${kv('Betalningsvillkor', esc(d.paymentTerms))}
+              ${kv('Giltighetstid', esc(d.validityText))}
+              ${kv('Ordning på offerten', esc(order.join(' → ')))}
+            </dl>
+            ${d.generalTerms ? `<div class="offd-field offw-rv-terms"><div class="offd-field-l">Allmänna villkor</div><p class="offd-terms">${esc(d.generalTerms)}</p></div>` : ''}
+            ${d.internalNote ? `<div class="offd-note">${ic('lock',14)}<div><strong>Intern anteckning (visas inte för kunden)</strong><span>${esc(d.internalNote)}</span></div></div>` : ''}
+          </div>
+        </section>
+      </div>`;
+  },
 
-    const oneTimeBlockHtml = hasOneTimeLines ? `
-        <div class="off-totals-row"><span>${hasRecurring ? 'Engångsbelopp ex. moms' : 'Summa ex. moms'}</span><strong>${fmt(rawExVat)} kr</strong></div>
-        ${discAmt ? `<div class="off-totals-rut off-totals-rut--discount"><span>${hasRecurring?'Rabatt på engångsbelopp':'Rabatt'}</span><span>−${fmt(discAmt)} kr</span></div>` : ''}
-        <div class="off-totals-row"><span>Moms</span><strong>${fmt(vat)} kr</strong></div>
-        <div class="off-totals-divider"></div>
-        <div class="off-totals-total"><span>${hasRecurring ? 'Engångsbelopp inkl. moms' : 'Totalt inkl. moms'}</span><span>${fmt(incVat)} kr</span></div>
-        ${rutAmt ? `
-        <div class="off-totals-divider"></div>
-        <div class="off-totals-rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>` : ''}
-        <div class="off-totals-cust">
-          <span class="off-totals-cust-lbl">Kundpris inkl. moms</span>
-          <span class="off-totals-cust-val">${fmt(cust)} kr</span>
-        </div>` : (!hasRecurring && hasRateOrOptional ? `
-        <div class="off-totals-row off-totals-row--primary"><span>Prismodell</span><strong>Rörliga priser</strong></div>` : (!hasRecurring && !hasRateOrOptional ? `
-        <div class="off-totals-row off-totals-row--sub"><span>Inga prisrader tillagda ännu</span><span></span></div>` : ''));
+  /* Kontroller i granskningssteget. "danger" = sparning nekas (samma regel
+     som _save(): kund, minst en prisrad, OfferCalc.validate). "warn"/"info"
+     = information, påverkar inte sparningen. Inga nya affärsregler. */
+  _reviewIssues(off, cu) {
+    const out = [];
+    const d = this._wizardData;
+    if (!cu) out.push({ tone: 'danger', text: 'Ingen kund är vald — välj kund i steg 1.' });
+    if (!off.lines.some(l => l.type !== 'text')) out.push({ tone: 'danger', text: 'Offerten saknar prisrader — lägg till minst en i steg 2.' });
+    if (typeof OfferCalc !== 'undefined' && OfferCalc.validate) {
+      const v = OfferCalc.validate(off);
+      v.issues.forEach(i => out.push({ tone: 'danger', text: i.message }));
+    }
+    if (!d.title) out.push({ tone: 'warn', text: 'Offerten saknar rubrik — kunden ser då bara offertnumret.' });
+    if (cu && !cu.email) out.push({ tone: 'warn', text: 'Kunden saknar e-postadress. Lägg till den på kundkortet innan offerten skickas via e-post.' });
+    if (d.validUntil && d.date && d.validUntil < d.date) out.push({ tone: 'warn', text: '"Giltig till" ligger före offertdatum.' });
+    const T = _offerCalcTotals(off);
+    if (cu && T.rutRotAmount > 0) {
+      const norm = (CustomerService.normalizeType ? CustomerService.normalizeType(cu.type) : cu.type) || '';
+      if (norm && norm !== 'privat') out.push({ tone: 'warn', text: 'Offerten har RUT/ROT-avdrag men kunden är registrerad som ' + CustomerService.typeLabel(cu.type) + '. Avdraget förutsätter att köparen har rätt till skattereduktion — kontrollera.' });
+    }
+    const dec = _offAOConversionDecision(off);
+    if (!dec.allowed && (dec.reason === 'mixed-vat' || dec.reason === 'non-25-vat')) {
+      const rates = (typeof OfferCalc !== 'undefined' ? OfferCalc.vatRatesInTotal(off) : []).map(r => _offPct(r)).join(' / ');
+      out.push({ tone: 'info', text: 'Offerten har ' + (dec.reason === 'mixed-vat' ? 'blandade momssatser (' + rates + ')' : 'momssatsen ' + rates) + '. Den kan sparas och skickas, men kan inte göras om till arbetsorder automatiskt när den godkänts.' });
+    }
+    return out;
+  },
 
-    return `<div class="off-totals-card">
-      <div class="off-totals-card-hd">Sammanfattning</div>
-      <div class="off-totals-card-body">
-        ${recurringBlockHtml}
-        ${oneTimeBlockHtml}
-        ${(rateOptLines.length || optionalExtras.length) ? `
-        <div class="off-totals-divider"></div>
-        <div class="off-totals-rateopt-hd" title="Ingår ej i offertens totalsumma">Rörliga priser</div>
-        ${rateOptLines.map(l => `<div class="off-totals-row off-totals-row--sub"><span>${esc(l.description)||'Rörligt pris'}</span><span>${this._billingPriceLabelHtml(l, 0)}</span></div>`).join('')}
-        ${optionalExtras.map(e => `<div class="off-totals-row off-totals-row--sub"><span>${esc(e.description)||'Tillval'}</span><span>${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr${e.unit?'/'+esc(e.unit):''}</span></div>`).join('')}` : ''}
+  /* Rader som sparas: samma rensning som _save() alltid gjort (tomma
+     fastpris/löpande rader och tomma textblock tas bort). */
+  _cleanLines() {
+    return this._editLines.filter(l => {
+      if (l.type==='text')    return (l.blockTitle||'').trim()||(l.text||'').trim();
+      if (l.type==='service') return true;
+      return (l.description||'').trim()||(l.unitPrice||0)>0;
+    });
+  },
+  _cleanExtras() {
+    return this._editExtras.filter(e=>(e.description||'').trim()||(e.unitPrice||0)>0);
+  },
+  /* OFFER CORE R1: kanonisk _lineExVat() som sparat `total` (se _save()). */
+  _linesForSave(cleanLines) {
+    return cleanLines.map(l => (l.type==='service'||l.type==='text') ? {...l} : {...l, total: _lineExVat(l)});
+  },
+  _draftOfferObject() {
+    const d = this._wizardData;
+    return {
+      id: this._editOfferId || 'NY', customerId: d.customerId || '', propertyId: d.propertyId || '', title: d.title || '',
+      summary: d.summary || '', scope: d.scope || '', includes: d.includes || '', excludes: d.excludes || '',
+      lines: this._linesForSave(this._cleanLines()), extras: this._cleanExtras(),
+      discount: this._discount || { type: 'percent', value: 0 },
+      validUntil: d.validUntil || '', paymentTerms: d.paymentTerms || '', validityText: d.validityText || '',
+      generalTerms: d.generalTerms || '', internalNote: d.internalNote || '',
+      sectionOrder: _resolveSectionOrder(this._editSectionOrder)
+    };
+  },
+
+  /* Livesummering (steg 2): priserade rader i offertens ordning + samma
+     summering som detaljvyn (exkl. moms, rabatt, moms per sats, inkl. moms,
+     RUT/ROT). Uppdateras direkt vid varje ändring (_refreshTotals och den
+     delegerade input-lyssnaren i _showWizard). */
+  _totalsBarHtml() {
+    const off = { lines: this._editLines, extras: this._editExtras, discount: this._discount };
+    const priced = this._editLines.filter(l => l.type !== 'text');
+    const nEx = this._editExtras.length;
+    const items = priced.map(l => {
+      const bt = l.billingType || 'onetime';
+      const name = l.type === 'service' ? (l.templateName || 'Tjänst') : (l.description || (l.type === 'fixed' ? 'Fastpris' : 'Löpande rad'));
+      const amount = bt === 'rate' ? this._billingPriceLabelHtml(l, 0) : (this._billingPriceLabelHtml(l, _lineExVat(l)));
+      return `<li class="offw-sum-li${bt !== 'onetime' ? ' is-' + bt : ''}"><span class="offw-sum-ln">${esc(name)}</span><span class="offw-sum-la">${amount}</span></li>`;
+    }).join('');
+    return `<div class="off-totals-card offw-sum">
+      <div class="off-totals-card-hd offw-sum-hd"><span>Sammanfattning</span><span class="offw-sum-n">${priced.length} ${priced.length === 1 ? 'prisrad' : 'prisrader'}${nEx ? ' · ' + nEx + ' tillval' : ''}</span></div>
+      <div class="off-totals-card-body offw-sum-body">
+        ${items ? `<ul class="offw-sum-lines" aria-label="Prisrader, exkl. moms">${items}</ul>` : ''}
+        ${OfferDetailPage._totalsRowsHtml(off, { compact: true })}
       </div>
     </div>`;
   },
 
-  /* ── Step navigation ─── */
-  _nextStep() {
-    if (this._wizardStep === 1) {
-      const cuId = document.getElementById('off-cu')?.value || this._wizardData.customerId;
-      if (!cuId) { showToast('Välj en kund'); return; }
-      this._wizardData.customerId = cuId;
-    }
-    if (this._wizardStep === 2) {
-      if (!this._editLines.some(l => l.type !== 'text')) {
-        showToast('Lägg till minst en rad eller tjänst'); return;
-      }
-    }
-    if (this._wizardStep < 3) { this._wizardStep++; this._rerender(); this._flushDraftNow(); }
+  _refreshSummaryOnly() {
+    const bar = document.getElementById('off-totals-bar');
+    if (bar) bar.innerHTML = this._totalsBarHtml();
+    const mobileBar = document.getElementById('off-mobile-totals');
+    if (mobileBar) mobileBar.innerHTML = this._mobileTotalsHtml();
   },
 
-  _prevStep() {
+  _scheduleSummaryRefresh() {
+    clearTimeout(this._sumTimer);
+    this._sumTimer = setTimeout(() => this._refreshSummaryOnly(), 120);
+  },
+
+  /* ── Stegnavigering ─── */
+  _captureStepFields() {
+    if (this._wizardStep === 1) {
+      const v = document.getElementById('off-cu')?.value;
+      if (v) this._wizardData.customerId = v;
+    }
     if (this._wizardStep === 3) {
       const map = {'off-payment':'paymentTerms','off-validity':'validityText','off-terms':'generalTerms','off-note':'internalNote'};
       Object.entries(map).forEach(([id,key]) => {
@@ -2638,8 +2726,48 @@ const OffersPage = {
         if (el) this._wizardData[key] = el.value;
       });
     }
-    if (this._wizardStep > 1) { this._wizardStep--; this._rerender(); this._flushDraftNow(); }
   },
+
+  /* Valideringen per steg — samma krav som tidigare: kund (steg 1) och
+     minst en prisrad (steg 2). */
+  _stepError(n) {
+    if (n === 1 && !this._wizardData.customerId) return 'Välj en kund för att gå vidare.';
+    if (n === 2 && !this._editLines.some(l => l.type !== 'text')) return 'Lägg till minst en prisrad (tjänst, fastpris eller löpande rad) för att gå vidare.';
+    return '';
+  },
+
+  _renderStepMsg() {
+    const el = document.getElementById('offw-msg');
+    if (!el) return;
+    el.innerHTML = this._stepMsg ? ic('alert-circle',15) + '<span>' + esc(this._stepMsg) + '</span>' : '';
+    el.hidden = !this._stepMsg;
+  },
+
+  _goStep(n) {
+    const max = this._WIZ_STEPS.length;
+    n = Math.max(1, Math.min(max, Number(n) || 1));
+    const cur = this._wizardStep;
+    if (n === cur) return;
+    this._captureStepFields();
+    if (n > cur) {
+      for (let s = cur; s < n; s++) {
+        const err = this._stepError(s);
+        if (err) {
+          this._stepMsg = err;
+          if (s !== cur) { this._wizardStep = s; this._rerender(); } else this._renderStepMsg();
+          showToast(err);
+          return;
+        }
+      }
+    }
+    this._wizardStep = n;
+    this._stepMsg = '';
+    this._rerender();
+    this._flushDraftNow();
+  },
+
+  _nextStep() { this._goStep(this._wizardStep + 1); },
+  _prevStep() { this._goStep(this._wizardStep - 1); },
 
   /* ── Line card HTML ─── */
   _linesHtml() {
@@ -2717,15 +2845,15 @@ const OffersPage = {
     return `<div class="off-svc-card">
       <div class="off-svc-card-hd">
         <div class="off-svc-card-hd-main">
-          <div class="off-svc-card-title">${l.templateName||'Tjänst'}</div>
+          <div class="off-svc-card-title">${esc(l.templateName||'Tjänst')}</div>
           <div class="off-svc-card-meta">${ic('zap',9)} Tjänst</div>
-          ${l.calculationNote ? `<div class="off-svc-card-sub off-svc-card-sub--tight">Prisnivå: ${l.calculationNote.replace('Prisnivå: ','')}</div>` : ''}
-          ${(l.subLines||[]).map(sl=>`<div class="off-svc-card-sub">${sl.desc} · ${sl.qty} ${sl.unit} × ${fmt(sl.price)} = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
+          ${l.calculationNote ? `<div class="off-svc-card-sub off-svc-card-sub--tight">Prisnivå: ${esc(String(l.calculationNote).replace('Prisnivå: ',''))}</div>` : ''}
+          ${(l.subLines||[]).map(sl=>`<div class="off-svc-card-sub">${esc(sl.desc)} · ${esc(sl.qty)} ${esc(sl.unit)} × ${fmt(sl.price)} = <strong>${fmt(Math.round(sl.qty*sl.price))} kr</strong></div>`).join('')}
         </div>
         <div class="off-svc-card-hd-price">
           <div class="off-svc-card-price">${fmt(exVat)} kr</div>
-          <div class="off-svc-card-price-sub">ex. moms · Moms ${_normVat(l.vatRate)}%</div>
-          ${rutAmt ? `<div class="off-svc-card-rut">Kund: ${fmt(cust)} kr inkl.</div>` : ''}
+          <div class="off-svc-card-price-sub">exkl. moms · moms ${_normVat(l.vatRate)} %</div>
+          ${rutAmt ? `<div class="off-svc-card-rut">Kund betalar ${fmt(cust)} kr inkl. moms</div>` : ''}
         </div>
       </div>
       ${l.description ? `<div class="off-svc-card-desc-preview">${esc(l.description)}</div>` : ''}
@@ -2784,7 +2912,7 @@ const OffersPage = {
         <div class="off-wiz-line-summary-icon">${ic('minus',14)}</div>
         <div class="off-wiz-line-summary-body">
           <div class="off-wiz-line-summary-title">${hasRealDesc ? esc(l.description) : this._billingTypeRowLabel(l, 'Löpande rad')}</div>
-          <div class="off-wiz-line-summary-meta">${hasRealDesc ? this._billingTypeBadgeHtml(l) + ' · ' : ''}${metaText}${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
+          <div class="off-wiz-line-summary-meta">${hasRealDesc && this._billingTypeBadgeHtml(l) ? this._billingTypeBadgeHtml(l) + ' · ' : ''}${metaText}${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
         </div>
         <div class="off-wiz-line-summary-price">${this._billingPriceLabelHtml(l, total)}</div>
       </div>
@@ -2815,7 +2943,7 @@ const OffersPage = {
           <select onchange="OffersPage._editLines[${i}].unit=this.value;OffersPage._refreshTotals();document.getElementById('off-lines').innerHTML=OffersPage._linesHtml();">
             ${units.map(u=>`<option${(l.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
           </select></div>
-        <div><label class="off-wiz-line-field-label">À-pris ex. moms (kr)</label>
+        <div><label class="off-wiz-line-field-label">À-pris exkl. moms (kr)</label>
           <input type="text" inputmode="decimal" class="off-money-input" value="${_formatMoneyInput(l.unitPrice||0)}"
             oninput="OffersPage._editLines[${i}].unitPrice=_parseMoneyInput(this.value);OffersPage._refreshTotals()"
             onblur="this.value=_formatMoneyInput(OffersPage._editLines[${i}].unitPrice||0)"></div>
@@ -2890,7 +3018,10 @@ const OffersPage = {
   /* ── Extras ─── */
   _extrasInnerHtml() {
     const units = ['st','tim','m','m²','kg','paket'];
-    if (!this._editExtras.length) return `<p style="font-size:12px;color:var(--mt);margin:0 0 4px;">Inga tillval ännu.</p>`;
+    if (!this._editExtras.length) return `<p class="offw-help" style="margin:0 0 4px;">Inga tillval ännu.</p>`;
+    /* QA 2026-11-26: samma fält och samma inline-logik som tidigare, men
+       varje fält har en synlig etikett (tidigare bara platshållare) och
+       raden har en egen layout med plats för "I totalsumman". */
     return this._editExtras.map((e, i) => {
       /* OFFER CORE R1.1 — BLOCKER 1: e.includedInTotal===false betyder
          "Tillval, ej i totalsumman" — frånvarande fält (all extras-data
@@ -2898,25 +3029,25 @@ const OffersPage = {
          _extraIncludedInTotal i PageShells-toppen). */
       const included = e.includedInTotal !== false;
       return `
-      <div class="off-extra-row">
-        <input class="off-extra-desc" value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="Tillval"
-          oninput="OffersPage._editExtras[${i}].description=this.value">
-        <input class="off-extra-qty" type="number" value="${e.qty||1}" min="0" step="0.5"
-          oninput="OffersPage._editExtras[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()">
-        <select class="off-extra-unit" onchange="OffersPage._editExtras[${i}].unit=this.value">
+      <div class="off-extra-row offw-extra-row">
+        <label class="offw-xc offw-xc-desc"><span>Tillval</span><input class="off-extra-desc" value="${(e.description||'').replace(/"/g,'&quot;')}" placeholder="T.ex. Impregnering"
+          oninput="OffersPage._editExtras[${i}].description=this.value"></label>
+        <label class="offw-xc offw-xc-qty"><span>Antal</span><input class="off-extra-qty" type="number" value="${e.qty||1}" min="0" step="0.5"
+          oninput="OffersPage._editExtras[${i}].qty=parseFloat(this.value)||0;OffersPage._refreshTotals()"></label>
+        <label class="offw-xc offw-xc-unit"><span>Enhet</span><select class="off-extra-unit" onchange="OffersPage._editExtras[${i}].unit=this.value">
           ${units.map(u=>`<option${(e.unit||'st')===u?' selected':''}>` + u + `</option>`).join('')}
-        </select>
-        <input class="off-extra-price" type="number" value="${e.unitPrice||0}" min="0" step="1" placeholder="À-pris"
-          oninput="OffersPage._editExtras[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()">
-        <select class="off-extra-vat" title="Moms" onchange="OffersPage._editExtras[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
+        </select></label>
+        <label class="offw-xc offw-xc-price"><span>À-pris exkl. moms</span><input class="off-extra-price" type="number" value="${e.unitPrice||0}" min="0" step="1" placeholder="0"
+          oninput="OffersPage._editExtras[${i}].unitPrice=parseFloat(this.value)||0;OffersPage._refreshTotals()"></label>
+        <label class="offw-xc offw-xc-vat"><span>Moms</span><select class="off-extra-vat" onchange="OffersPage._editExtras[${i}].vatRate=Number(this.value);OffersPage._refreshTotals()">
           ${this._vatOptionsHtml(_normVat(e.vatRate))}
-        </select>
-        <label class="off-extra-included" title="Avmarkerad = visas men ingår ej i totalsumman">
+        </select></label>
+        <label class="off-extra-included offw-xc-inc" title="Avmarkerad = visas men ingår ej i totalsumman">
           <input type="checkbox" ${included?'checked':''}
             onchange="OffersPage._editExtras[${i}].includedInTotal=this.checked;OffersPage._refreshTotals();document.getElementById('off-extras').innerHTML=OffersPage._extrasInnerHtml();OffersPage._flushDraftNow();">
           <span>I totalsumman</span>
         </label>
-        <button type="button" class="off-extra-remove btn bd bxs" onclick="OffersPage._removeExtra(${i})">${ic('x',10)}</button>
+        <button type="button" class="off-extra-remove btn bs bsm offw-xc-rm" aria-label="Ta bort tillval" title="Ta bort tillval" onclick="OffersPage._removeExtra(${i})">${ic('trash-2',14)}</button>
       </div>`;
     }).join('');
   },
@@ -3212,7 +3343,7 @@ const OffersPage = {
         <div class="off-wiz-line-summary-icon">${ic('tag',14)}</div>
         <div class="off-wiz-line-summary-body">
           <div class="off-wiz-line-summary-title">${esc(l.description) ? esc(l.description) : this._billingTypeRowLabel(l, 'Fastpris')}</div>
-          <div class="off-wiz-line-summary-meta">${esc(l.description) ? this._billingTypeBadgeHtml(l) + ' · ' : ''}Moms ${_normVat(l.vatRate)}%${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
+          <div class="off-wiz-line-summary-meta">${esc(l.description) && this._billingTypeBadgeHtml(l) ? this._billingTypeBadgeHtml(l) + ' · ' : ''}Fastpris · moms ${_normVat(l.vatRate)} %${rutAmt?` · ${curRed==='rot'?'ROT':'RUT'}-avdrag`:''}</div>
         </div>
         <div class="off-wiz-line-summary-price">${this._billingPriceLabelHtml(l, tot)}</div>
       </div>
@@ -3234,11 +3365,11 @@ const OffersPage = {
         </div>
         <div class="off-svc-card-hd-price">
           <div class="off-svc-card-price" id="off-lt-${i}">${this._billingPriceLabelHtml(l, tot)}</div>
-          <div class="off-svc-card-price-sub" id="off-lsub-${i}">ex. moms · ${fmt(incVat)} kr inkl.</div>
+          <div class="off-svc-card-price-sub" id="off-lsub-${i}">exkl. moms · ${fmt(incVat)} kr inkl. moms</div>
         </div>
       </div>
       <div class="off-wiz-line-controls-grid">
-        <div><label class="off-wiz-line-field-label">Pris ex moms (kr)</label>
+        <div><label class="off-wiz-line-field-label">Pris exkl. moms (kr)</label>
           <input type="text" inputmode="decimal" class="off-money-input" value="${_formatMoneyInput(l.unitPrice||0)}"
             oninput="OffersPage._editLines[${i}].unitPrice=_parseMoneyInput(this.value);OffersPage._refreshTotals()"
             onblur="this.value=_formatMoneyInput(OffersPage._editLines[${i}].unitPrice||0)"></div>
@@ -3655,7 +3786,7 @@ const OffersPage = {
         const incVat = displayExVat + Math.round(displayExVat * _normVat(l.vatRate) / 100);
         if (l.type === 'fixed') {
           const subEl = document.getElementById('off-lsub-' + i);
-          if (subEl) subEl.textContent = 'ex. moms · ' + fmt(incVat) + ' kr inkl.';
+          if (subEl) subEl.textContent = 'exkl. moms · ' + fmt(incVat) + ' kr inkl. moms';
         }
         /* V48B5 R1 §4 / R3 §11: arbetskostnadsfältets (om klampat) värde
            måste hänga med live — annars kan fältet visa ett tal högre än
@@ -4233,6 +4364,11 @@ const OffersPage = {
   async _save() {
     if (this._saveInFlight) return;
     this._saveInFlight = true;
+    /* V3-standard: knappen visar "Sparar…" tills servern svarat. */
+    const saveBtn = document.getElementById('offw-save-btn');
+    const saveBtnHtml = saveBtn ? saveBtn.innerHTML : '';
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = ic('loader',14) + ' <span>Sparar…</span>'; }
+    const fail = (msg, ms) => { this._stepMsg = msg; this._renderStepMsg(); showToast(msg, ms); };
     try {
       if (this._wizardStep === 3) {
         const map = {'off-payment':'paymentTerms','off-validity':'validityText','off-terms':'generalTerms','off-note':'internalNote'};
@@ -4242,18 +4378,14 @@ const OffersPage = {
         });
       }
       const d = this._wizardData;
-      if (!d.customerId) { showToast('Välj en kund'); return; }
-      const cleanLines = this._editLines.filter(l => {
-        if (l.type==='text')    return (l.blockTitle||'').trim()||(l.text||'').trim();
-        if (l.type==='service') return true;
-        return (l.description||'').trim()||(l.unitPrice||0)>0;
-      });
-      if (!cleanLines.some(l=>l.type!=='text')) { showToast('Lägg till minst en offertrad eller tjänst'); return; }
-      const cleanExtras = this._editExtras.filter(e=>(e.description||'').trim()||(e.unitPrice||0)>0);
+      if (!d.customerId) { fail('Välj en kund'); return; }
+      const cleanLines = this._cleanLines();
+      if (!cleanLines.some(l=>l.type!=='text')) { fail('Lägg till minst en offertrad eller tjänst'); return; }
+      const cleanExtras = this._cleanExtras();
       /* G8: samma regel som fakturan — avdraget får inte överstiga totalen. */
       if (typeof OfferCalc !== 'undefined' && OfferCalc.validate) {
         const v = OfferCalc.validate({ lines: cleanLines, extras: cleanExtras, discount: this._discount });
-        if (!v.ok) { showToast(v.issues[0].message, 7000); return; }
+        if (!v.ok) { fail(v.issues[0].message, 7000); return; }
       }
       const now  = new Date().toISOString();
       const data = {
@@ -4264,6 +4396,7 @@ const OffersPage = {
         includes:     d.includes     || '',
         excludes:     d.excludes     || '',
         lines:        cleanLines.map(l=>{
+          /* (samma mappning som _linesForSave(), som granskningssteget använder) */
           if(l.type==='service'||l.type==='text') return {...l};
           /* OFFER CORE R1: återanvänder den KANONISKA _lineExVat() istället
              för en egen, naiv qty*unitPrice-omräkning — annars skulle
@@ -4492,6 +4625,7 @@ const OffersPage = {
       }
     } finally {
       this._saveInFlight = false;
+      if (saveBtn && document.body.contains(saveBtn)) { saveBtn.disabled = false; saveBtn.innerHTML = saveBtnHtml; }
     }
   }
 };
@@ -4501,415 +4635,538 @@ const OffersPage = {
 const OfferDetailPage = {
   offerId: null,
 
+  /* QA 2026-11-26 (offerter) — OFFERTDETALJ V3. En sammanhållen vy i samma
+     mönster som arbetsorderdetaljen (aod-*): huvud med identitet (nummer,
+     titel, version), kund, fastighet, giltighet och status; beloppsrad med
+     exkl./inkl. moms (alltid utskrivet, siffrorna direkt ur
+     _offerCalcTotals()/OfferCalc); EN primär åtgärd per status plus ett fåtal
+     sekundära och resten i "⋮"-menyn (_actionModel). Därunder en lägesrad
+     (vad händer nu?) och ett tvåkolumnsrutnät: offertens innehåll (i
+     off.sectionOrder-ordning, som kunden ser det) till vänster; kundens
+     svar, arbetsorder, digital länk, kund, intern anteckning, bilagor och
+     säljtips till höger; historik sist. Inga nya statusövergångar eller
+     affärsregler — varje knapp anropar exakt samma funktion som tidigare. */
   render(params) {
     const el = document.getElementById('pg-offer-detail-content');
     if (!el) return;
     const id = params && params.offerId;
     this.offerId = id;
     const off = id ? getOff(id) : null;
-    if (!off) { el.innerHTML = `<div class="empty">${ic('file-text',32)}<h3>Offert hittades inte</h3></div>`; return; }
+    if (typeof aoCloseOverflow === 'function') aoCloseOverflow();
+    if (!off) { el.innerHTML = `<div class="empty">${ic('file-text',32)}<h3>Offert hittades inte</h3><p>Offerten kan ha raderats eller så saknar du behörighet.</p></div>`; return; }
 
-    const cu       = getCu(off.customerId);
-    const allLines = off.lines || [];
-    /* V48B5 R4: `prLines` behålls (för antal-badge/minimidebitering-
-       kontroll) men styr INTE längre radernas renderingsordning —
-       linesHtml (nedan) itererar allLines direkt så textblock hamnar på
-       sin exakta array-position mellan prissatta rader. */
-    const prLines  = allLines.filter(l => l.type !== 'text');
-    const extras   = off.extras || [];
-
-    /* Diagnostik: logga raddata i konsolen för felsökning */
-    console.log('[OfferDetail] off.id=', off.id, 'lines=', JSON.stringify(off.lines||[]), 'rawExVat=', _offRawExVat(off));
-
-    /* V38 §4: kanonisk beräkning — respekterar varje rads/tilläggs egen
-       vatRate istället för ett generellt * 0.25 på den rabatterade
-       summan. RUT/ROT-summeringen (l.rutAmount på service-rader) och
-       rabattformeln är oförändrade. */
-    const _tot     = _offerCalcTotals(off);
-    const rawExVat = _tot.rawExVat;
-    const _disc    = off.discount || {type:'percent', value:0};
-    const discAmt  = _tot.discountAmount;
-    const exVat    = _tot.exVatAfterDiscount;
-    const vat      = _tot.vatAmount;
-    const incVat   = _tot.totalInclVat;
-    const rutAmt   = _tot.rutRotAmount;
-    const cust     = _tot.customerPays;
-    /* OFFER CORE R1.1 — BLOCKER 2: kanonisk koncis prisetikett, se
-       _offPrimaryDisplay(). Används av hero-prisområdet och den mobila
-       snabbinfo-raden nedan så en ren återkommande offert (t.ex. Södra
-       Heden) aldrig visar "0 kr" som sitt huvudbelopp. */
-    const priceDisp = _offPrimaryDisplay(off);
-    /* OFFER CORE R1.6.5 — ITEM 2: Offer Detail's "off-detail-sum" block
-       had the SAME bug the wizard's own summary already had fixed in
-       R1.6.1 (_totalsBarHtml) — a pure-recurring or rate-only offer
-       still rendered a dominant, misleading "Engångsbelopp inkl. moms:
-       0 kr" block, because the one-time bucket was shown unconditionally
-       regardless of whether any one-time lines actually exist. Same
-       predicate as the wizard (rawExVat > 0, the pre-discount one-time
-       sum) — NOT exVatAfterDiscount>0, so a legitimately 100%-discounted
-       one-time offer (R1.4, unchanged) still shows its own summary as
-       before. No change to any calculation — presentation only. */
-    const hasOneTimeLinesDetail = rawExVat > 0;
-    const hasRecurringDetail = !!_tot.recurringMonthlyExVat;
-    const rateOptLinesDetail = _offRateAndOptionLines(off);
-    const hasRateOrOptionalDetail = rateOptLinesDetail.length > 0 || _offOptionalExtras(off).length > 0;
-
+    const sid = _offSafeId;
+    const cu = getCu(off.customerId);
     const cuName = cu ? CustomerService.displayName(cu) : '—';
-    const now2 = Date.now();
-    const validDate = off.validUntil ? new Date(off.validUntil).getTime() : null;
-    const daysLeft  = validDate ? Math.round((validDate - now2) / 86400000) : null;
-    const expiring  = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+    const T = _offerCalcTotals(off);
+    const vatRows = _offVatBreakdown(off);
+    const hasOneTime = T.rawExVat > 0;
+    const hasRecurring = !!T.recurringMonthlyExVat;
+    const closed = !!(off.archived || off.deleted);
+    const activeStatuses = ['utkast', 'skickad', 'påmind', 'väntar', 'ändring-begärd'];
+    const daysLeft = off.validUntil ? Math.ceil((new Date(String(off.validUntil).slice(0, 10) + 'T23:59:59').getTime() - Date.now()) / 86400000) : null;
+    const validCls = (activeStatuses.includes(off.status) && daysLeft !== null) ? (daysLeft < 0 ? ' is-late' : (daysLeft <= 7 ? ' is-warn' : '')) : '';
+    const ver = Number(off.versionNumber) || 1;
+    const propText = _offPropertyDisplayText(off);
+    const parentId = sid(off.parentOfferId);
 
-    // ── Primary CTA based on status ──
-    const primaryCta = (() => {
-      const st = off.status;
-      if (st === 'utkast')
-        return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.showSendModal('${off.id}')">${ic('send',14)} Skicka offert till kund</button>`;
-      if (st === 'skickad' || st === 'påmind' || st === 'väntar')
-        return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--or" onclick="OfferDetailPage._quickAction('${off.id}','followup')">${ic('bell',14)} Logga uppföljning</button>`;
-      if (st === 'godkänd' && !off.workOrderId && !off.archived && !off.deleted) {
-        /* OFFER CORE R1.5 — FINAL BLOCKER (motbevis-granskad): added
-           `&& !off.archived && !off.deleted` — this branch previously
-           had NO lifecycle check at all, so an approved-but-archived/
-           deleted offer (a perfectly normal, reachable data state —
-           archiving never changes `status`) could still render an
-           active "Skapa arbetsorder" primary CTA, while the SECONDARY
-           button row already correctly excluded archived/deleted (a
-           proven, pre-existing UI inconsistency, see motbevis). For
-           such an offer this whole branch is now skipped — no primary
-           CTA is shown at all, exactly like any other status this
-           function doesn't have a CTA for (falls through to the final
-           `return ''`). The existing restore-offer UI remains the only
-           way back to an active, convertible state — no new UI is
-           introduced here. */
-        /* OFFER CORE R1.4 — BLOCKER 4: CTA text/title now derived from
-           _offAOBlockedCtaText(_offAOConversionDecision(off).reason) —
-           no duplicated reason-logic here, and the text is no longer
-           wrong for the rate-only/optional-only/discounted-to-zero
-           cases (which are NOT "återkommande"). */
-        const aoDecisionCta = _offAOConversionDecision(off);
-        if (!aoDecisionCta.allowed) {
-          const ctaText = _offAOBlockedCtaText(aoDecisionCta.reason, aoDecisionCta.vatRate);
-          return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(ctaText.title)}">${ic('alert-triangle',14)} ${esc(ctaText.label)}</button>`;
-        }
-        return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--gr" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',14)} Skapa arbetsorder</button>`;
+    // ── Beloppsrad (samma siffror som summeringen nedan och OfferCalc) ──
+    const amt = (label, value, sub, cls) => `<div class="offd-amt${cls ? ' ' + cls : ''}"><dt>${label}</dt><dd>${value}</dd>${sub ? `<span class="offd-amt-sub">${sub}</span>` : ''}</div>`;
+    const amounts = [];
+    if (hasRecurring) amounts.push(amt('Fast kostnad per månad', fmt(T.recurringMonthlyExVat) + ' kr', 'exkl. moms · ' + fmt(T.recurringAnnualExVat) + ' kr/år', hasOneTime ? '' : 'is-main'));
+    if (hasOneTime) {
+      amounts.push(amt(hasRecurring ? 'Engångsbelopp exkl. moms' : 'Exkl. moms', fmt(T.exVatAfterDiscount) + ' kr', T.discountAmount ? 'efter rabatt −' + fmt(T.discountAmount) + ' kr' : ''));
+      amounts.push(amt('Moms', fmt(T.vatAmount) + ' kr', vatRows.map(r => _offPct(r.rate)).join(' / ')));
+      if (T.rutRotAmount) {
+        amounts.push(amt(hasRecurring ? 'Engångsbelopp inkl. moms' : 'Totalt inkl. moms', fmt(T.totalInclVat) + ' kr', ''));
+        amounts.push(amt('Kund betalar inkl. moms', fmt(T.customerPays) + ' kr', 'efter RUT/ROT −' + fmt(T.rutRotAmount) + ' kr', 'is-main'));
+      } else {
+        amounts.push(amt(hasRecurring ? 'Engångsbelopp inkl. moms' : 'Totalt inkl. moms', fmt(T.totalInclVat) + ' kr', '', 'is-main'));
       }
-      if (st === 'nekad')
-        return `<button type="button" class="off-hero-cta-btn" onclick="OfferDetailPage.createNewVersion('${off.id}')">${ic('git-branch',14)} Ny version</button>`;
-      if (st === 'utgången')
-        return `<button type="button" class="off-hero-cta-btn off-hero-cta-btn--or" onclick="OfferDetailPage.duplicate('${off.id}')">${ic('refresh-cw',14)} Förnya offert</button>`;
-      return '';
-    })();
+    }
+    if (!hasOneTime && !hasRecurring) {
+      const variable = _offRateAndOptionLines(off).length || _offOptionalExtras(off).length;
+      amounts.push(amt('Prismodell', variable ? 'Rörliga priser' : 'Inga prisrader', variable ? 'ingår inte i någon totalsumma' : '', 'is-main'));
+    }
 
-    // ── Quick facts strip ──
-    /* QA-P0-3: alla anrop skickar ren text — värdet escapas här. */
-    const _fa = (icon, col, lbl, val, warn) =>
-      `<div class="off-detail-fact${warn?' off-detail-fact--warn':''}">` +
-      `<span class="off-detail-fact-icon" style="color:${col};">${ic(icon,12)}</span>` +
-      `<div><span class="off-detail-fact-lbl">${lbl}</span><span class="off-detail-fact-val">${esc(val)}</span></div>` +
-      `</div>`;
-    /* V48B5 R1 §14/§18: paymentTerms/validityText hörde tidigare hemma i
-       den här FASTA faktarutan — nu ett eget flyttbart "commercialTerms"-
-       block (se sectionRenderers nedan) eftersom sectionOrder måste
-       styra dem på riktigt, inte bara metadata som kund/offert-ID/
-       version/datum (vilka FÅR förbli fast enligt kravet). */
-    const factItems = [
-      cu && cu.email   ? _fa('mail','var(--blue)','E-post', cu.email) : '',
-      cu && cu.phone   ? _fa('phone','var(--blue)','Telefon', cu.phone) : '',
-      cu && (cu.address||cu.zip||cu.city) ? _fa('building-2','var(--mt)','Adress', [cu.address,cu.zip,cu.city].filter(Boolean).join(', ')) : '',
-      off.createdAt    ? _fa('calendar','var(--mt)','Datum', fmtDate(off.createdAt)) : '',
-      /* V3 slutpolering: "Giltig till" visas inte här längre — huvudet
-         visar redan "Giltig t.o.m." med dagar kvar när den snart går ut. */
-    ].filter(Boolean).join('');
+    // ── Åtgärdsrad: en primär, några sekundära, resten i "⋮"-menyn ──
+    const A = this._actionModel(off);
+    const btn = (a, cls) => `<button type="button" class="btn ${cls} bsm${a.tone ? ' offd-btn--' + a.tone : ''}" onclick="${a.fn}"${a.title ? ` title="${esc(a.title)}"` : ''}>${ic(a.icon, 14)}<span>${esc(a.label)}</span></button>`;
+    const menuRows = A.menu.map((it, i) => (it.divider && i > 0 ? '<div class="ao-overflow-divider" role="separator"></div>' : '') +
+      (it.group ? `<div class="offd-menu-group">${esc(it.group)}</div>` : '') +
+      `<button type="button" class="ao-overflow-menu-item${it.destructive ? ' ao-overflow-menu-item--red' : ''}" role="menuitem" onclick="aoCloseOverflow();${it.fn}">${ic(it.icon, 14)}<span>${esc(it.label)}</span></button>`).join('');
+    const actionsHtml = `<div class="offd-actions" role="group" aria-label="Åtgärder">
+        ${A.primary ? btn(A.primary, A.primary.variant || 'bp') : ''}
+        ${A.inline.map(a => btn(a, 'bs')).join('')}
+        ${A.menu.length ? `<div class="ao-overflow-wrap offd-more">
+          <button type="button" class="ibtn offd-more-btn" id="offd-more-btn" aria-label="Fler åtgärder" title="Fler åtgärder" aria-haspopup="menu" aria-expanded="false" onclick="OfferDetailPage._toggleMenu('offd-more-menu',this)">${ic('more-vertical', 18)}</button>
+          <div class="ao-overflow-menu offd-menu" id="offd-more-menu" role="menu" aria-label="Fler åtgärder">${menuRows}</div>
+        </div>` : ''}
+      </div>`;
 
-    // ── Offer line rows (customer-facing, kalkyl hidden by default) ──
-    /* V48B5 R4 §3: raderna (inkl. textblock) MÅSTE renderas i EXAKT
-       off.lines-arrayordning — INTE grupperat efter typ. Iterera
-       `allLines` (inte den type-filtrerade `prLines`) så att ett
-       textblock hamnar precis där användaren placerade det, mellan
-       prissatta rader. */
-    const linesHtml = allLines.length === 0
-      ? `<p style="padding:12px 14px;font-size:12px;color:var(--mt);">Inga offertrader</p>`
-      : allLines.map((l, idx) => {
-          if (l.type === 'text') {
-            if (!l.blockTitle && !l.text) return '';
-            return `<div class="off-line-row off-line-row--text">` +
-              (l.blockTitle ? `<div class="off-line-row-header"><div class="off-line-row-name">${ic('align-left',11)} ${esc(l.blockTitle)}</div></div>` : '') +
-              (l.text ? `<div class="off-line-desc" style="white-space:pre-wrap;">${esc(l.text)}</div>` : '') +
-            `</div>`;
-          }
-          if (l.type === 'service') {
-            const lExVat  = l.exVat || 0;
-            const lVat    = Math.round(lExVat * _normVat(l.vatRate) / 100);
-            const lIncVat = lExVat + lVat;
-            const lRut    = l.rutAmount || 0;
-            const lCust   = lIncVat - lRut;
-            const kId     = `kalk-${off.id}-${idx}`;
-            return `<div class="off-line-row off-line-row--svc">` +
-              `<div class="off-line-row-header">` +
-                `<div class="off-line-row-name">${ic('zap',11)} ${esc(l.templateName||'Tjänst')}</div>` +
-                `<div class="off-line-row-price">` +
-                  (lRut ? `<span class="off-line-rut-badge">RUT/ROT</span>` : '') +
-                  `<span class="off-line-kundpris">${fmt(lRut ? lCust : lIncVat)} kr</span>` +
-                `</div>` +
-              `</div>` +
-              (l.description ? `<div class="off-line-desc">${esc(l.description)}</div>` : '') +
-              (lRut > 0 ? `<div class="off-line-rut-row">${ic('info',10)} Kundpris efter RUT/ROT-avdrag — totalt inkl. moms ${fmt(lIncVat)} kr, avdrag −${fmt(lRut)} kr</div>` : '') +
-              `<button class="off-line-kalk-btn" onclick="OfferDetailPage._toggleKalk('${kId}')">Visa beräkning</button>` +
-              `<div id="${kId}" style="display:none;" class="off-line-kalk">` +
-                (l.calculationNote ? `<div style="font-size:11px;color:var(--mt);margin-bottom:4px;">${esc(l.calculationNote)}</div>` : '') +
-                `<div style="font-size:11px;color:var(--mt);">Ex. moms: ${fmt(lExVat)} kr · Moms ${_normVat(l.vatRate)}%: ${fmt(lVat)} kr · Inkl. moms: ${fmt(lIncVat)} kr</div>` +
-              `</div>` +
-            `</div>`;
-          }
-          /* OFFER CORE R1: kanonisk _lineExVat(l) istället för den
-             tidigare `l.total || qty*unitPrice`-fallbacken — den
-             fallbacken tolkade felaktigt en sparad `total:0` (t.ex. en
-             'rate'/'option'-rad, som MEDVETET sparas med total=0) som
-             "inget värde satt" och räknade då fram ett FELAKTIGT,
-             ickenoll belopp igen via qty*unitPrice. */
-          const bt2    = l.billingType || 'onetime';
-          const tot    = _lineExVat(l);
-          const totInc = tot + Math.round(tot * _normVat(l.vatRate) / 100);
-          const lRut2  = _effectiveRutAmount(l);
-          const lCust2 = totInc - lRut2;
-          const priceCellHtml = (bt2==='rate')
-            ? `<span class="off-line-kundpris">${OffersPage._billingPriceLabelHtml(l, 0)}</span>`
-            : `<span class="off-line-kundpris">${fmt(lRut2 ? lCust2 : totInc)} kr${bt2==='recurring'?('/' + esc(l.unit||'mån')):''}</span><span style="font-size:10px;opacity:.6;margin-left:3px;">inkl. moms</span>`;
-          return `<div class="off-line-row">` +
-            `<div class="off-line-row-header">` +
-              `<div class="off-line-row-name">${esc(l.description||'—')} ${OffersPage._billingTypeBadgeHtml(l)}</div>` +
-              `<div class="off-line-row-price">` +
-                (lRut2 ? `<span class="off-line-rut-badge">${l.reductionType==='rot'?'ROT':'RUT'}</span>` : '') +
-                priceCellHtml +
-              `</div>` +
-            `</div>` +
-            ((bt2==='rate') ? '' : `<div class="off-line-desc">${l.qty||1} ${l.unit||'st'} × ${fmt(l.unitPrice||0)} kr ex. moms</div>`) +
-            (lRut2 > 0 ? `<div class="off-line-rut-row">${ic('info',10)} Kundpris efter ${l.reductionType==='rot'?'ROT':'RUT'}-avdrag — totalt inkl. moms ${fmt(totInc)} kr, avdrag −${fmt(lRut2)} kr</div>` : '') +
-          `</div>`;
-        }).join('');
+    // ── Innehåll i kundens ordning (off.sectionOrder) ──
+    const rt = (v) => OfferDetailPage._renderText(v);
+    const fieldBlock = (label, html) => `<div class="offd-field"><div class="offd-field-l">${label}</div><div class="offd-field-v off-rt">${html}</div></div>`;
+    const descriptionHtml = (off.summary || off.scope || off.includes || off.excludes) ? `
+      <section class="card offd-card">
+        <div class="card-header"><h3>${ic('align-left', 15)} Uppdragsbeskrivning</h3></div>
+        <div class="card-body offd-desc">
+          ${off.summary ? fieldBlock('Sammanfattning', rt(off.summary)) : ''}
+          ${off.scope ? fieldBlock('Uppdragets omfattning', rt(off.scope)) : ''}
+          ${(off.includes || off.excludes) ? `<div class="offd-incl">
+            ${off.includes ? `<div class="offd-incl-col is-in"><div class="offd-field-l">${ic('check', 13)} Ingår</div><div class="offd-field-v off-rt">${rt(off.includes)}</div></div>` : ''}
+            ${off.excludes ? `<div class="offd-incl-col is-out"><div class="offd-field-l">${ic('x', 13)} Ingår ej</div><div class="offd-field-v off-rt">${rt(off.excludes)}</div></div>` : ''}
+          </div>` : ''}
+        </div>
+      </section>` : '';
+    const nPriced = (off.lines || []).filter(l => l.type !== 'text').length;
+    const pricingHtml = `
+      <section class="card offd-card offd-content">
+        <div class="card-header"><h3>${ic('file-text', 15)} Offertinnehåll</h3><span class="bdg bdg-grey">${nPriced} ${nPriced === 1 ? 'prisrad' : 'prisrader'}${(off.extras || []).length ? ' · ' + off.extras.length + ' tillval' : ''}</span></div>
+        ${this._linesTableHtml(off, { idp: sid(off.id) })}
+        ${this._totalsRowsHtml(off)}
+      </section>`;
+    const commercialTermsHtml = (off.paymentTerms || off.validityText) ? `
+      <section class="card offd-card">
+        <div class="card-header"><h3>${ic('receipt', 15)} Offertvillkor</h3></div>
+        <div class="card-body"><dl class="offd-facts">
+          ${off.paymentTerms ? `<div><dt>Betalningsvillkor</dt><dd class="off-rt">${rt(off.paymentTerms)}</dd></div>` : ''}
+          ${off.validityText ? `<div><dt>Giltighetstid</dt><dd class="off-rt">${rt(off.validityText)}</dd></div>` : ''}
+        </dl></div>
+      </section>` : '';
+    /* Säkerhet: allmänna villkor är fritext från guiden — escapas (renderades
+       tidigare oescapat). Radbrytningar behålls. */
+    const generalTermsHtml = off.generalTerms ? `
+      <section class="card offd-card">
+        <div class="card-header"><h3>${ic('file-text', 15)} Allmänna villkor</h3></div>
+        <div class="card-body"><p class="offd-terms">${esc(off.generalTerms)}</p></div>
+      </section>` : '';
+    const renderers = { description: descriptionHtml, pricing: pricingHtml, commercialTerms: commercialTermsHtml, generalTerms: generalTermsHtml };
+    const mainHtml = _resolveSectionOrder(off.sectionOrder).map(k => renderers[k] || '').join('');
+
+    const sideHtml = [
+      this._responseHtml(off),
+      this._aoCardHtml(off),
+      this._digitalLinkPanel(off),
+      this._customerCardHtml(off, cu),
+      off.internalNote ? `<div class="offd-note">${ic('lock', 14)}<div><strong>Intern anteckning</strong><span>${esc(off.internalNote)}</span></div></div>` : '',
+      this._attachmentsPanel(off),
+      this._salesAssistantHtml(off)
+    ].join('');
 
     el.innerHTML = `
-      <div class="off-detail-hero">
-        <div class="off-detail-hero-nav">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button type="button" class="off-hero-btn" onclick="Router.back()">${ic('arrow-left',12)} Tillbaka</button>
-            <div>
-              <div class="off-detail-hero-id" style="margin-bottom:0;">${off.id}${(off.versionNumber||1) > 1 ? ` <span class="bdg bdg-purple" style="font-size:10px;">v${off.versionNumber}</span>` : ''}${off.parentOfferId ? ` <span style="font-size:10px;opacity:.7;"> ← ${off.parentOfferId}</span>` : ''}</div>
-              <div style="font-size:20px;font-weight:700;line-height:1.25;">${esc(off.title||'Offert')}</div>
-            </div>
+      <div class="offd">
+        ${off.deleted ? `<div class="nbox offd-banner is-danger">${ic('trash', 14)} Offerten ligger i papperskorgen. Återställ den för att kunna arbeta vidare.</div>` : ''}
+        ${off.archived && !off.deleted ? `<div class="nbox offd-banner">${ic('archive', 14)} Offerten är arkiverad och syns inte i standardlistorna.</div>` : ''}
+        <header class="card offd-head">
+          <div class="offd-head-top">
+            <button type="button" class="btn bghost bsm offd-back" onclick="Router.back()" title="Tillbaka">${ic('arrow-left', 15)}<span class="offd-back-l">Tillbaka</span></button>
+            <span class="offd-no">${esc(off.id)}</span>
+            ${(ver > 1 || parentId) ? `<span class="bdg bdg-purple offd-ver">Version ${ver}</span>` : ''}
+            <div class="offd-status">${this._statusMenuHtml(off)}</div>
           </div>
-          <div class="off-hero-brand-status">
-            <img src="${BrandingService.logoDark()}" class="off-hero-logo" alt="VIFT"
-              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div class="off-hero-vift-badge" style="display:none;">VIFT<span>Fastighetsservice</span></div>
-            ${OfferDetailPage._statusMenuHtml(off)}
+          <h2 class="offd-title">${esc(off.title || 'Offert utan rubrik')}</h2>
+          <div class="offd-meta">
+            ${cu ? `<span class="offd-meta-i offd-meta-cu"><a class="offd-cu-link" role="link" tabindex="0" onclick="Router.showPage('pg-crm-detail',{customerId:'${sid(cu.id)}'})" onkeydown="if(event.key==='Enter')this.click()">${ic('building-2', 14)}<span>${esc(cuName)}</span></a><span class="offd-cutype">${esc(CustomerService.typeLabel(cu.type))}</span></span>` : `<span class="offd-meta-i">${ic('building-2', 14)}<span>Ingen kund</span></span>`}
+            ${propText ? `<span class="offd-meta-i">${ic('map-pin', 14)}<span>${esc(propText)}</span></span>` : ''}
+            ${off.validUntil ? `<span class="offd-meta-i${validCls}">${ic('calendar', 14)}<span>Giltig t.o.m. ${fmtDate(off.validUntil)}${validCls === ' is-warn' ? ` (${daysLeft} ${daysLeft === 1 ? 'dag' : 'dagar'} kvar)` : ''}${validCls === ' is-late' ? ' (passerad)' : ''}</span></span>` : ''}
+            ${off.createdAt ? `<span class="offd-meta-i">${ic('clock', 14)}<span>Skapad ${fmtDate(off.createdAt)}</span></span>` : ''}
+            ${parentId ? `<a class="offd-meta-i is-link" role="link" tabindex="0" onclick="Router.showPage('pg-offer-detail',{offerId:'${parentId}'})" onkeydown="if(event.key==='Enter')this.click()">${ic('git-branch', 14)}<span>Ersätter ${esc(parentId)}</span></a>` : ''}
           </div>
+          <dl class="offd-amounts">${amounts.join('')}</dl>
+          ${actionsHtml}
+        </header>
+        ${this._statusStripHtml(off)}
+        <div class="offd-grid">
+          <div class="offd-main">
+            ${mainHtml}
+            ${this._timelineHtml(off)}
+          </div>
+          <aside class="offd-side" aria-label="Kund, svar och länk">${sideHtml}</aside>
         </div>
+      </div>`;
+  },
 
-        <div class="off-detail-customer-validity-row">
-          ${cu
-            ? `<button type="button" class="off-detail-customer-link" onclick="Router.showPage('pg-crm-detail',{customerId:'${cu.id}'})">${esc(cuName)}${ic('chevron-right',12)}</button>`
-            : `<span class="off-detail-customer-link">${esc(cuName)}</span>`}
-          ${off.validUntil?`<span class="off-detail-validity">${ic('calendar',11)} Giltig t.o.m. ${fmtDate(off.validUntil)}${expiring?` <span style="color:var(--warn);font-weight:800;">(${daysLeft}d kvar)</span>`:''}</span>`:''}
+  /* Åtgärdsmodell per status — ENDAST befintliga funktioner och övergångar.
+     Inventering av den tidigare vyn (alla finns kvar):
+       huvud-CTA: utkast→showSendModal · skickad/påmind/väntar→_quickAction
+         ('followup') · godkänd utan AO→createAO (spärrtext från
+         _offAOBlockedCtaText vid momsspärr m.m.) · nekad→createNewVersion ·
+         utgången→duplicate ("Förnya");
+       knapprad: showReminderModal (skickad/påmind/väntar) · "Skapa AO"
+         (dubblett av CTA, tas bort) · AO-länk · restoreOffer (arkiverad/
+         borttagen) · openFlerAtgarder;
+       Fler åtgärder: openEdit · printPdf · createNewVersion · duplicate ·
+         archiveOffer · deleteOffer · permanentDeleteOffer;
+       statusmeny: openApprovalModal · setStatus(nekad|väntar|utgången);
+       paneler: digital länk (generera/återkalla/förläng/kopiera), bilagor,
+         säljtips, historik (snabbloggning, kommentar, uppföljningar).
+     Statusmenyns övergångar finns kvar i statusmärket och upprepas i
+     "⋮"-menyn under rubriken Status så att de går att hitta. */
+  _actionModel(off) {
+    const id = _offSafeId(off.id);
+    const A = (label, icon, fn, extra) => Object.assign({ label, icon, fn }, extra || {});
+    const st = off.status;
+    const closed = !!(off.archived || off.deleted);
+    const sentLike = st === 'skickad' || st === 'påmind' || st === 'väntar';
+    const fEdit = `OffersPage.openEdit('${id}')`;
+    const fVer = `OfferDetailPage.createNewVersion('${id}')`;
+    const fDup = `OfferDetailPage.duplicate('${id}')`;
+    const fAppr = `OfferDetailPage.openApprovalModal('${id}')`;
+    let primary = null;
+    const inline = [];
+    if (closed) {
+      primary = A('Återställ offert', 'rotate-ccw', `OfferDetailPage.restoreOffer('${id}')`);
+    } else if (st === 'utkast') {
+      primary = A('Skicka offert', 'send', `OfferDetailPage.showSendModal('${id}')`);
+      if (!this._hasActiveDigitalLink(off)) inline.push(A('Generera länk', 'link', `OfferDetailPage.generateDigitalLink('${id}')`));
+      inline.push(A('Redigera', 'pencil', fEdit));
+    } else if (sentLike) {
+      primary = A('Boka uppföljning', 'bell', `OfferDetailPage._quickAction('${id}','followup')`);
+      inline.push(A('Skicka påminnelse', 'send', `OfferDetailPage.showReminderModal('${id}')`));
+      inline.push(A('Registrera godkännande', 'check-circle', fAppr));
+    } else if (st === 'ändring-begärd') {
+      primary = A('Skapa ny version', 'git-branch', fVer);
+      inline.push(A('Redigera', 'pencil', fEdit));
+    } else if (st === 'godkänd') {
+      if (off.workOrderId) {
+        primary = A('Öppna arbetsorder', 'clipboard-list', `Router.showPage('pg-ao-detail',{aoId:'${_offSafeId(off.workOrderId)}'})`);
+      } else {
+        const dec = _offAOConversionDecision(off);
+        if (!dec.allowed) {
+          const t = _offAOBlockedCtaText(dec.reason, dec.vatRate);
+          primary = A(t.label, 'alert-triangle', 'OfferDetailPage.createAO()', { title: t.title, variant: 'bs', tone: 'blocked' });
+        } else {
+          primary = A('Skapa arbetsorder', 'clipboard-list', 'OfferDetailPage.createAO()');
+        }
+      }
+    } else if (st === 'nekad') {
+      primary = A('Skapa ny version', 'git-branch', fVer);
+      inline.push(A('Registrera godkännande', 'check-circle', fAppr));
+    } else if (st === 'utgången') {
+      primary = A('Förnya offert', 'refresh-cw', fDup);
+      inline.push(A('Återöppna offert', 'rotate-ccw', `OfferDetailPage.setStatus('väntar')`));
+    }
+    const shown = (fn) => [primary].concat(inline).some(a => a && a.fn === fn);
+    const menu = [];
+    if (!closed && !shown(fEdit)) menu.push(A('Redigera offert', 'pencil', fEdit));
+    menu.push(A('Skriv ut / PDF', 'printer', `OfferDetailPage.printPdf('${id}')`));
+    if (!off.deleted && !shown(fVer)) menu.push(A('Skapa ny version', 'git-branch', fVer));
+    if (!off.deleted && !shown(fDup)) menu.push(A('Duplicera', 'copy', fDup));
+    const statusActs = this._statusMenuActions(off).filter(a => !shown(a.onClick));
+    statusActs.forEach((a, i) => menu.push(A(a.label, a.icon, a.onClick, i === 0 ? { divider: true, group: 'Status' } : null)));
+    if (!closed) {
+      menu.push(A('Arkivera', 'archive', `OfferDetailPage.archiveOffer('${id}')`, { divider: true }));
+      menu.push(A('Flytta till papperskorgen', 'trash', `OfferDetailPage.deleteOffer('${id}')`, { destructive: true }));
+    }
+    if (off.deleted) menu.push(A('Radera permanent', 'trash-2', `OfferDetailPage.permanentDeleteOffer('${id}')`, { destructive: true, divider: true }));
+    return { primary, inline, menu };
+  },
+
+  /* "⋮"-menyn: delade aoToggleOverflow (Escape/klick utanför/en meny i
+     taget) + position:fixed så att menyn aldrig klipps av kortets kant —
+     samma lösning som arbetsorderdetaljen (_toggleActionsMenu). */
+  _toggleMenu(menuId, btn) {
+    const menu = document.getElementById(menuId);
+    if (!menu || !btn) return;
+    const wasOpen = menu.classList.contains('open');
+    aoToggleOverflow(menuId, btn);
+    if (!wasOpen && menu.classList.contains('open')) {
+      const r = btn.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      /* Högerkant mot knappen, men alltid helt inom skärmen (knappen kan
+         ligga till vänster när åtgärdsraden bryts på mobil). */
+      const mw = menu.offsetWidth || 240;
+      const left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+      menu.style.right = 'auto';
+      menu.style.left = left + 'px';
+      const below = window.innerHeight - r.bottom - 12;
+      if (below < 260 && r.top > below) {
+        menu.style.top = 'auto';
+        menu.style.bottom = Math.max(8, window.innerHeight - r.top + 4) + 'px';
+        menu.style.maxHeight = Math.max(160, r.top - 16) + 'px';
+      } else {
+        menu.style.bottom = 'auto';
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.maxHeight = Math.max(160, below) + 'px';
+      }
+      const first = menu.querySelector('button');
+      if (first) setTimeout(() => first.focus(), 0);
+    }
+  },
+
+  /* Lägesrad: "vad gäller nu?" — en mening per status, plus länköppningar,
+     påminnelse och nästa inbokade uppföljning. Ren presentation. */
+  _statusStripHtml(off) {
+    const st = off.status;
+    const now = Date.now();
+    const ago = (iso) => { if (!iso) return null; const d = Math.floor((now - new Date(iso).getTime()) / 86400000); return d < 0 ? 0 : d; };
+    const dagar = (n) => n + ' ' + (n === 1 ? 'dag' : 'dagar');
+    let tone = 'neutral', icon = 'info', text = '';
+    const subs = [];
+    if (off.deleted) { tone = 'danger'; icon = 'trash'; text = 'I papperskorgen — återställ offerten för att arbeta vidare.'; }
+    else if (off.archived) { icon = 'archive'; text = 'Arkiverad (' + statusLabel(st) + ').'; }
+    else if (st === 'utkast') { text = 'Utkast — offerten är inte skickad till kunden ännu.'; }
+    else if (st === 'skickad' || st === 'påmind' || st === 'väntar') {
+      tone = 'info'; icon = 'send';
+      const d = ago(off.sentAt);
+      text = (off.sentAt ? 'Skickad ' + fmtDate(off.sentAt) : statusLabel(st)) + (d !== null ? ' · väntar på svar sedan ' + dagar(d) : '');
+      const vl = off.validUntil ? Math.ceil((new Date(String(off.validUntil).slice(0, 10) + 'T23:59:59').getTime() - now) / 86400000) : null;
+      if (vl !== null && vl < 0) { tone = 'warn'; subs.push('Giltighetstiden har passerat'); }
+      else if (vl !== null && vl <= 7) { tone = 'warn'; subs.push(dagar(vl) + ' kvar av giltighetstiden'); }
+      if (off.reminderSentAt) subs.push('Påminnelse skickad ' + fmtDate(off.reminderSentAt));
+    }
+    else if (st === 'ändring-begärd') { tone = 'warn'; icon = 'edit-3'; text = 'Kunden har begärt ändringar — skapa en ny version.'; }
+    else if (st === 'godkänd') {
+      tone = 'ok'; icon = 'check-circle';
+      if (off.workOrderId) text = 'Godkänd — arbetsorder ' + off.workOrderId + ' är skapad.';
+      else {
+        const dec = _offAOConversionDecision(off);
+        text = dec.allowed ? 'Godkänd — nästa steg är att skapa arbetsorder.' : 'Godkänd — kan inte bli arbetsorder automatiskt (se Arbetsorder).';
+      }
+    }
+    else if (st === 'nekad') { tone = 'danger'; icon = 'x-circle'; text = 'Nekad' + (off.answeredAt ? ' ' + fmtDate(off.answeredAt) : '') + ' — skapa en ny version om kunden vill ha ett nytt förslag.'; }
+    else if (st === 'utgången') { tone = 'warn'; icon = 'alert-circle'; text = 'Offerten har gått ut — förnya den för att skicka samma innehåll igen.'; }
+    else if (st === 'ersatt') {
+      const next = (state.offers || []).find(o => o.parentOfferId === off.id);
+      text = 'Ersatt av en nyare version' + (next ? ' (' + next.id + ').' : '.');
+    }
+    else { text = statusLabel(st); }
+    if (!closed(off) && off.publicToken && !off.tokenRevokedAt && ['skickad', 'påmind', 'väntar', 'utkast'].includes(st)) {
+      subs.push(off.openedAt ? 'Kunden har öppnat länken ' + (off.openCount || 1) + ' ' + ((off.openCount || 1) === 1 ? 'gång' : 'gånger') : 'Länken är inte öppnad ännu');
+    }
+    if (!closed(off) && typeof ActivitiesService !== 'undefined') {
+      const next = ActivitiesService.getByRelated('offer', off.id).filter(a => a.status === 'open' && a.dueDate).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+      if (next) subs.push((next.dueDate < tdy() ? 'Försenad uppföljning ' : 'Nästa uppföljning ') + fmtDate(next.dueDate));
+    }
+    function closed(o) { return !!(o.archived || o.deleted); }
+    return `<div class="offd-next tone-${tone}" role="status">
+      <span class="offd-next-ico">${ic(icon, 16)}</span>
+      <div class="offd-next-txt"><span class="offd-next-t">${esc(text)}</span>${subs.length ? `<span class="offd-next-s">${subs.map(esc).join(' · ')}</span>` : ''}</div>
+    </div>`;
+  },
+
+  /* Offertrader som tabell (dator) / kort per rad (mobil), i exakt
+     off.lines-ordning (textblock på sin plats). Alla belopp exkl. moms och
+     ur _lineExVat — samma underlag som summeringen. Används av detaljvyn
+     OCH guidens granskningssteg (samma rendering = samma innehåll). */
+  _linesTableHtml(off, opts) {
+    opts = opts || {};
+    const lines = off.lines || [];
+    const extras = off.extras || [];
+    if (!lines.length && !extras.length) return `<div class="offd-empty">${ic('file-text', 18)}<span>Inga offertrader</span></div>`;
+    const kr = (n) => fmt(n) + ' kr';
+    const qtyTxt = (q) => String(q).replace('.', ',');
+    const idp = opts.idp || 'x';
+    const rows = lines.map((l, idx) => {
+      if (l.type === 'text') {
+        if (!l.blockTitle && !l.text) return '';
+        return `<tr class="offd-lt-text"><td colspan="5">
+          ${l.blockTitle ? `<div class="offd-lt-texth">${ic('align-left', 13)}<span>${esc(l.blockTitle)}</span></div>` : ''}
+          ${l.text ? `<div class="offd-lt-textb">${esc(l.text)}</div>` : ''}
+        </td></tr>`;
+      }
+      const bt = l.billingType || 'onetime';
+      const isSvc = l.type === 'service';
+      const isFixed = l.type === 'fixed';
+      const ex = _lineExVat(l);
+      const rut = _effectiveRutAmount(l);
+      const vatTxt = _offPct(_normVat(l.vatRate));
+      const name = isSvc ? (l.templateName || 'Tjänst') : (l.description || (isFixed ? 'Fastpris' : 'Rad'));
+      const typeLbl = isSvc ? 'Tjänst' : (bt === 'rate' ? '' : (isFixed ? 'Fastpris' : 'Löpande'));
+      const unit = (l.unit || '').trim();
+      let qty, price, sum;
+      if (isSvc) { qty = 'Kalkyl'; price = '—'; sum = kr(ex); }
+      else if (bt === 'rate') { qty = '—'; price = kr(+(l.unitPrice || l.price || 0)) + (unit ? '/' + esc(unit) : ''); sum = 'Ingår ej'; }
+      else if (isFixed) { qty = 'Fast pris'; price = kr(+(l.unitPrice || 0)); sum = kr(ex); }
+      else { const q = (l.qty != null && l.qty !== '') ? l.qty : 1; qty = qtyTxt(q) + ' ' + esc(unit || 'st'); price = kr(+(l.unitPrice || l.price || 0)); sum = kr(ex); }
+      if (bt === 'recurring') sum += '/' + (unit ? esc(unit) : 'mån');
+      const badges = [
+        typeLbl ? `<span class="offd-lt-type">${typeLbl}</span>` : '',
+        bt === 'recurring' ? `<span class="bdg bdg-blue">Återkommande</span>` : '',
+        bt === 'rate' ? `<span class="bdg bdg-orange">Rörligt à-pris</span>` : '',
+        rut ? `<span class="bdg bdg-green">${l.reductionType === 'rot' ? 'ROT' : (l.reductionType === 'rut' ? 'RUT' : 'RUT/ROT')} −${kr(rut)}</span>` : ''
+      ].join('');
+      const meta = isSvc ? `Beräknad kalkyl · moms ${vatTxt}`
+        : bt === 'rate' ? `À-pris ${price} exkl. moms · ingår inte i summan · moms ${vatTxt}`
+        : isFixed ? `Fast pris · moms ${vatTxt}` : `${qty} × ${price} · moms ${vatTxt}`;
+      const sub = (l.subLines || []);
+      const kId = 'kalk-' + idp + '-' + idx;
+      const kalk = (isSvc && opts.interactive !== false && (sub.length || l.calculationNote)) ? `
+          <button type="button" class="off-line-kalk-btn" onclick="OfferDetailPage._toggleKalk('${kId}')">Visa beräkning</button>
+          <div id="${kId}" style="display:none;" class="off-line-kalk">
+            ${l.calculationNote ? `<div>${esc(l.calculationNote)}</div>` : ''}
+            ${sub.map(s => `<div>${esc(s.desc)} · ${qtyTxt(s.qty)} ${esc(s.unit)} × ${fmt(s.price)} kr = ${fmt(Math.round((+s.qty || 0) * (+s.price || 0)))} kr exkl. moms</div>`).join('')}
+          </div>` : '';
+      return `<tr class="offd-lt-row${bt !== 'onetime' ? ' is-' + bt : ''}">
+        <td class="offd-lt-main">
+          <div class="offd-lt-name">${esc(name)}</div>
+          <div class="offd-lt-badges">${badges}</div>
+          ${isSvc && l.description ? `<div class="offd-lt-desc">${esc(l.description)}</div>` : ''}
+          <div class="offd-lt-meta">${meta}</div>
+          ${kalk}
+        </td>
+        <td class="offd-lt-num offd-lt-qty">${qty}</td>
+        <td class="offd-lt-num offd-lt-price">${price}</td>
+        <td class="offd-lt-num offd-lt-vat">${vatTxt}</td>
+        <td class="offd-lt-num offd-lt-sum">${sum}</td>
+      </tr>`;
+    }).join('');
+    const exRows = extras.map(e => {
+      const inc = _extraIncludedInTotal(e);
+      const exv = (typeof OfferCalc !== 'undefined') ? OfferCalc.extraExVat(e) : Math.round((+(e.qty || 1)) * (+(e.unitPrice || 0)));
+      const vatTxt = _offPct(_normVat(e.vatRate));
+      const qty = qtyTxt(e.qty || 1) + ' ' + esc(e.unit || 'st');
+      return `<tr class="offd-lt-row is-extra${inc ? '' : ' is-optional'}">
+        <td class="offd-lt-main">
+          <div class="offd-lt-name">${esc(e.description || 'Tillval')}</div>
+          <div class="offd-lt-badges"><span class="offd-lt-type">Tillval</span>${inc ? '<span class="bdg bdg-grey">Ingår i summan</span>' : '<span class="bdg bdg-purple">Ingår ej i summan</span>'}</div>
+          <div class="offd-lt-meta">${qty} × ${fmt(e.unitPrice || 0)} kr · moms ${vatTxt}</div>
+        </td>
+        <td class="offd-lt-num offd-lt-qty">${qty}</td>
+        <td class="offd-lt-num offd-lt-price">${fmt(e.unitPrice || 0)} kr</td>
+        <td class="offd-lt-num offd-lt-vat">${vatTxt}</td>
+        <td class="offd-lt-num offd-lt-sum">${fmt(exv)} kr</td>
+      </tr>`;
+    }).join('');
+    const minNote = lines.some(l => l.type !== 'text' && String(l.description || '').includes('minimidebitering'))
+      ? `<div class="offd-hint">${ic('info', 13)}<span><strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</span></div>` : '';
+    return `<div class="offd-lt-cap">Belopp per rad exkl. moms</div><div class="offd-lt-wrap"><table class="offd-lt">
+      <thead><tr><th scope="col">Beskrivning</th><th scope="col" class="offd-lt-num">Antal</th><th scope="col" class="offd-lt-num">À-pris exkl. moms</th><th scope="col" class="offd-lt-num">Moms</th><th scope="col" class="offd-lt-num">Belopp exkl. moms</th></tr></thead>
+      <tbody>${rows}</tbody>
+      ${exRows ? `<tbody class="offd-lt-extras"><tr class="offd-lt-sec"><th colspan="5" scope="rowgroup">${ic('plus', 13)} Tillval</th></tr>${exRows}</tbody>` : ''}
+    </table></div>${minNote}`;
+  },
+
+  /* Summering — gemensam för detaljvyn, guidens livesummering och
+     granskningssteget. Varje belopp är ett fält ur _offerCalcTotals()
+     (OfferCalc.totals) eller _offVatBreakdown() (vars rader summerar exakt
+     till vatAmount). Etiketter alltid med "exkl. moms"/"inkl. moms". */
+  _totalsRowsHtml(off, opts) {
+    opts = opts || {};
+    const T = _offerCalcTotals(off);
+    const vatRows = _offVatBreakdown(off);
+    const hasOne = T.rawExVat > 0;
+    const hasRec = !!T.recurringMonthlyExVat;
+    const variable = _offRateAndOptionLines(off).length + _offOptionalExtras(off).length;
+    const kr = (n) => fmt(n) + ' kr';
+    const row = (l, v, cls) => `<div class="offd-tr${cls ? ' ' + cls : ''}"><span class="offd-tr-l">${l}</span><span class="offd-tr-v">${v}</span></div>`;
+    const note = (t) => `<div class="offd-tr-note">${t}</div>`;
+    let h = '';
+    if (hasRec) {
+      h += `<div class="offd-tg"><div class="offd-tg-h">Fast kostnad (återkommande)</div>` +
+        row('Per månad exkl. moms', kr(T.recurringMonthlyExVat), 'is-strong') +
+        row('Moms per månad', kr(T.recurringMonthlyVat)) +
+        row('Per månad inkl. moms', kr(T.recurringMonthlyInclVat)) +
+        row('Per år exkl. moms (härledd)', kr(T.recurringAnnualExVat), 'is-muted') + `</div>`;
+    }
+    if (hasOne) {
+      const d = off.discount || {};
+      h += `<div class="offd-tg">` + (hasRec ? `<div class="offd-tg-h">Engångsbelopp</div>` : '') +
+        row('Summa exkl. moms', kr(T.rawExVat)) +
+        (T.discountAmount ? row('Rabatt', '−' + kr(T.discountAmount), 'is-disc') +
+          note(d.type === 'percent' ? _offPct(Math.min(+d.value || 0, 100)) + ' på engångsbeloppet' : 'Fast rabatt på engångsbeloppet') +
+          row('Summa efter rabatt, exkl. moms', kr(T.exVatAfterDiscount)) : '') +
+        row('Moms', kr(T.vatAmount)) +
+        (vatRows.length > 1 ? vatRows.map(r => row('varav moms ' + _offPct(r.rate), kr(r.vat), 'is-sub')).join('')
+          : (vatRows.length === 1 ? note('Momssats ' + _offPct(vatRows[0].rate)) : '')) +
+        row('Totalt inkl. moms', kr(T.totalInclVat), T.rutRotAmount ? 'is-strong' : 'is-total') +
+        (T.rutRotAmount ? row('RUT/ROT-avdrag (preliminärt)', '−' + kr(T.rutRotAmount), 'is-rut') +
+          row('Kund betalar inkl. moms', kr(T.customerPays), 'is-total') +
+          note('Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.') : '') +
+        `</div>`;
+    } else if (!hasRec) {
+      h += variable ? row('Prismodell', 'Rörliga priser', 'is-strong') : row('Inga prisrader ännu', '—', 'is-muted');
+    }
+    if (variable) h += note(hasOne || hasRec ? 'Rörliga à-priser och tillval som inte ingår i summan räknas inte in ovan.' : 'Rörliga à-priser och tillval utanför summan ingår inte i någon totalsumma.');
+    return `<div class="offd-totals${opts.compact ? ' is-compact' : ''}">${h}</div>`;
+  },
+
+  /* Kundens svar: digitalt godkännande (customerApproval), manuellt
+     registrerat godkännande (manualApproval) eller kundens nekande/
+     ändringsbegäran (offerEvents från offer-respond). Läser bara. */
+  _responseHtml(off) {
+    const st = off.status;
+    const evOf = (type) => (state.offerEvents || []).filter(e => e.offerId === off.id && e.type === type).sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')))[0];
+    const kv = (k, v) => (v ? `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>` : '');
+    const card = (tone, icon, title, body) => `<section class="card offd-card offd-resp tone-${tone}">
+      <div class="card-header"><h3>${ic(icon, 15)} ${title}</h3></div>
+      <div class="card-body"><dl class="offd-facts is-compact">${body}</dl></div>
+    </section>`;
+    if (st === 'godkänd' && off.manualApproval) {
+      const m = off.manualApproval;
+      return card('ok', 'check-circle', 'Godkännande registrerat', kv('Via', m.method) + kv('Registrerat av', m.registeredBy) + kv('Datum', m.registeredAt ? fmtDateTime(m.registeredAt) : '') + kv('Kommentar', m.comment));
+    }
+    const ca = off.customerApproval || {};
+    if (st === 'godkänd' && (ca.approvedAt || ca.approvedByName)) {
+      return card('ok', 'check-circle', 'Godkänd av kunden', kv('Namn', ca.approvedByName) + kv('E-post', ca.approvedByEmail) + kv('Telefon', ca.approvedByPhone) + kv('Befattning', ca.approvedByPosition) + kv('Datum', ca.approvedAt ? fmtDateTime(ca.approvedAt) : '') + kv('Kommentar', ca.comment || ca.approvedByComment));
+    }
+    if (st === 'godkänd') return card('ok', 'check-circle', 'Godkänd', kv('Datum', off.answeredAt ? fmtDate(off.answeredAt) : '—'));
+    if (st === 'nekad') {
+      const e = evOf('declined');
+      return card('danger', 'x-circle', e ? 'Kunden nekade offerten' : 'Nekad', kv('Orsak', off.declineReason) + (e ? kv('Namn', e.byCustomer) + kv('E-post', e.byEmail) + kv('Kommentar', e.comment) : '') + kv('Datum', (e && e.ts) ? fmtDateTime(e.ts) : (off.answeredAt ? fmtDate(off.answeredAt) : '')));
+    }
+    if (st === 'ändring-begärd') {
+      const e = evOf('change_requested');
+      return card('warn', 'edit-3', 'Kunden vill ha ändringar', e ? kv('Namn', e.byCustomer) + kv('E-post', e.byEmail) + kv('Önskemål', e.comment) + kv('Datum', e.ts ? fmtDateTime(e.ts) : '') : kv('Datum', off.answeredAt ? fmtDate(off.answeredAt) : '—'));
+    }
+    return '';
+  },
+
+  /* Koppling till arbetsorder: länk när AO finns; förklaring när en
+     godkänd offert inte kan konverteras automatiskt (samma
+     _offAOConversionDecision/_offAOBlockedCtaText som createAO()). */
+  _aoCardHtml(off) {
+    if (off.workOrderId) {
+      const ao = (state.workOrders || []).find(a => a.id === off.workOrderId);
+      const no = (ao && typeof WorkOrderService !== 'undefined' && WorkOrderService.displayNumberOrPending) ? WorkOrderService.displayNumberOrPending(ao) : off.workOrderId;
+      return `<section class="card offd-card offd-ao">
+        <div class="card-header"><h3>${ic('clipboard-list', 15)} Arbetsorder</h3>${ao ? sbdg(ao.status) : ''}</div>
+        <div class="card-body">
+          <a class="offd-linkrow" role="link" tabindex="0" onclick="Router.showPage('pg-ao-detail',{aoId:'${_offSafeId(off.workOrderId)}'})" onkeydown="if(event.key==='Enter')this.click()">
+            ${ic('clipboard-list', 15)}<span><strong>${esc(no)}</strong>${ao && ao.title ? ' · ' + esc(ao.title) : ''}</span>${ic('chevron-right', 14)}
+          </a>
         </div>
-        ${_offPropertyDisplayText(off) ? `<div class="off-detail-property-row" style="font-size:13px;color:var(--muted);margin-top:2px;">${ic('map-pin',11)} Fastighet: ${esc(_offPropertyDisplayText(off))}</div>` : ''}
+      </section>`;
+    }
+    if (off.status === 'godkänd' && !off.archived && !off.deleted) {
+      const dec = _offAOConversionDecision(off);
+      if (!dec.allowed) {
+        const t = _offAOBlockedCtaText(dec.reason, dec.vatRate);
+        return `<section class="card offd-card offd-resp offd-ao tone-warn">
+          <div class="card-header"><h3>${ic('alert-triangle', 15)} Arbetsorder</h3></div>
+          <div class="card-body"><p class="offd-muted">${esc(t.title)}</p></div>
+        </section>`;
+      }
+    }
+    return '';
+  },
 
-        ${_tot.recurringMonthlyExVat ? `
-        <div class="off-hero-price-grid off-hero-price-grid--recurring">
-          <div>
-            <div class="off-hero-pg-lbl">Fast kostnad per månad</div>
-            <div class="off-hero-pg-val off-hero-pg-val--big">${fmt(_tot.recurringMonthlyExVat)} kr</div>
-            <div class="off-hero-pg-sub">ex. moms</div>
-          </div>
-          <div>
-            <div class="off-hero-pg-lbl">Per år (härledd)</div>
-            <div class="off-hero-pg-val">${fmt(_tot.recurringAnnualExVat)} kr</div>
-            <div class="off-hero-pg-sub">ex. moms</div>
-          </div>
-        </div>` : ''}
-        ${rawExVat > 0 ? `
-        <div class="off-hero-price-grid">
-          <div>
-            <div class="off-hero-pg-lbl">${_tot.recurringMonthlyExVat?'Engångsbelopp ex. moms':'Ex. moms'}</div>
-            <div class="off-hero-pg-val">${fmt(exVat)} kr</div>
-            ${discAmt?`<div class="off-hero-pg-sub" style="color:var(--warn);">Rabatt −${fmt(discAmt)} kr</div>`:`<div class="off-hero-pg-sub">+${fmt(vat)} kr moms</div>`}
-          </div>
-          <div>
-            <div class="off-hero-pg-lbl">${rutAmt?'Kundpris inkl. moms':(_tot.recurringMonthlyExVat?'Engångsbelopp inkl. moms':'Totalt inkl. moms')}</div>
-            <div class="off-hero-pg-val${_tot.recurringMonthlyExVat?'':' off-hero-pg-val--big'}">${fmt(cust)} kr</div>
-            ${rutAmt?`<div class="off-hero-pg-sub" style="color:var(--ok);">RUT/ROT −${fmt(rutAmt)} kr</div>`:`<div class="off-hero-pg-sub">inkl. moms</div>`}
-          </div>
-        </div>` : ''}
+  _customerCardHtml(off, cu) {
+    if (!cu) return '';
+    const addr = [cu.address, [cu.zip, cu.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const tel = String(cu.phone || '').replace(/[^\d+]/g, '');
+    return `<section class="card offd-card">
+      <div class="card-header"><h3>${ic('user', 15)} Kund</h3><span class="offd-cutype">${esc(CustomerService.typeLabel(cu.type))}</span></div>
+      <div class="card-body"><dl class="offd-facts is-compact">
+        <div><dt>Namn</dt><dd><a class="offd-link" role="link" tabindex="0" onclick="Router.showPage('pg-crm-detail',{customerId:'${_offSafeId(cu.id)}'})" onkeydown="if(event.key==='Enter')this.click()">${esc(CustomerService.displayName(cu))}</a></dd></div>
+        ${cu.email ? `<div><dt>E-post</dt><dd><a class="offd-link" href="mailto:${esc(cu.email)}">${esc(cu.email)}</a></dd></div>` : `<div><dt>E-post</dt><dd class="offd-warn">Saknas — behövs för att skicka offerten</dd></div>`}
+        ${cu.phone ? `<div><dt>Telefon</dt><dd>${tel ? `<a class="offd-link" href="tel:${esc(tel)}">${esc(cu.phone)}</a>` : esc(cu.phone)}</dd></div>` : ''}
+        ${addr ? `<div><dt>Adress</dt><dd>${esc(addr)}</dd></div>` : ''}
+      </dl></div>
+    </section>`;
+  },
 
-        ${primaryCta ? `<div class="off-hero-cta">${primaryCta}</div>` : ''}
-
-        <div class="off-detail-hero-actions">
-          <!-- V48A: Godkänd/Nekad/Registrera godkännande/Markera-actions ligger i
-               statusmenyn i hero-headern (_statusMenuHtml) — statusrelaterade
-               åtgärder samlade på ett ställe. R3 §2: "Skicka påminnelse" är en
-               kommunikationsåtgärd, inte en statusåtgärd — flyttad tillbaka hit,
-               samma villkor/funktion som innan V48A. -->
-          ${(!off.archived&&!off.deleted)&&(off.status==='skickad'||off.status==='påmind'||off.status==='väntar')?`<button type="button" class="off-hero-btn" onclick="OfferDetailPage.showReminderModal('${off.id}')">${ic('bell',12)} Skicka påminnelse</button>`:''}
-          ${off.status==='godkänd'&&!off.workOrderId&&!off.archived&&!off.deleted?(OffersPage._offBlocksAOConversion(off)
-            ? `<button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.createAO()" title="${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason, _offAOConversionDecision(off).vatRate).title)}">${ic('alert-triangle',12)} ${esc(_offAOBlockedCtaText(_offAOConversionDecision(off).reason, _offAOConversionDecision(off).vatRate).label)}</button>`
-            : `<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.createAO()">${ic('clipboard-list',12)} Skapa AO</button>`):''}
-          ${off.workOrderId?`<button type="button" class="off-hero-btn" onclick="Router.showPage('pg-ao-detail',{aoId:'${off.workOrderId}'})">${ic('clipboard-list',12)} AO: ${off.workOrderId}</button>`:''}
-          ${(off.archived||off.deleted)?`<button type="button" class="off-hero-btn off-hero-btn--green" onclick="OfferDetailPage.restoreOffer('${off.id}')">${ic('rotate-ccw',12)} Återställ</button>`:''}
-          <!-- Fler åtgärder (Redigera, PDF, Ny version, Duplicera, Arkivera, Ta bort) -->
-          <button type="button" class="off-hero-btn off-hero-btn--dim" onclick="OfferDetailPage.openFlerAtgarder('${off.id}')">${ic('more-horizontal',12)} Fler åtgärder</button>
-        </div>
-      </div>
-
-      <!-- V3 slutpolering: mobilens snabbinforad (kund, status, belopp) är
-           borttagen — huvudet ovanför visar redan samma tre uppgifter. -->
-
-      ${off.status === 'godkänd' && off.manualApproval ? `
-      <div class="card" style="border-left:3px solid var(--gr);background:color-mix(in srgb,var(--gr) 6%,var(--bg));">
-        <div class="card-body" style="padding:12px 16px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;color:var(--gr);font-weight:600;font-size:13px;">${ic('check-circle',14)} Godkännande registrerat</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;font-size:12px;">
-            <div><span style="color:var(--mt);">Via&nbsp;</span><strong>${esc(off.manualApproval.method||'—')}</strong></div>
-            <div><span style="color:var(--mt);">Registrerat av&nbsp;</span><strong>${esc(off.manualApproval.registeredBy||'—')}</strong></div>
-            ${off.manualApproval.registeredAt?`<div><span style="color:var(--mt);">Datum&nbsp;</span><strong>${fmtDateTime(off.manualApproval.registeredAt)}</strong></div>`:''}
-          </div>
-          ${off.manualApproval.comment?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.manualApproval.comment)}</div>`:''}
-        </div>
-      </div>` : (off.status === 'godkänd' && off.customerApproval ? `
-      <div class="card" style="border-left:3px solid var(--gr);background:color-mix(in srgb,var(--gr) 6%,var(--bg));">
-        <div class="card-body" style="padding:12px 16px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;color:var(--gr);font-weight:600;font-size:13px;">${ic('check-circle',14)} Offert godkänd av kund</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;font-size:12px;">
-            <div><span style="color:var(--mt);">Namn&nbsp;</span><strong>${esc(off.customerApproval.approvedByName||'—')}</strong></div>
-            <div><span style="color:var(--mt);">E-post&nbsp;</span><strong>${esc(off.customerApproval.approvedByEmail||'—')}</strong></div>
-            ${off.customerApproval.approvedAt?`<div><span style="color:var(--mt);">Datum&nbsp;</span><strong>${fmtDateTime(off.customerApproval.approvedAt)}</strong></div>`:''}
-            ${off.customerApproval.approvedByPhone?`<div><span style="color:var(--mt);">Telefon&nbsp;</span><strong>${esc(off.customerApproval.approvedByPhone)}</strong></div>`:''}
-            ${off.customerApproval.approvedByPosition?`<div><span style="color:var(--mt);">Befattning&nbsp;</span><strong>${esc(off.customerApproval.approvedByPosition)}</strong></div>`:''}
-          </div>
-          ${(off.customerApproval.comment||off.customerApproval.approvedByComment)?`<div style="margin-top:8px;font-size:12px;"><span style="color:var(--mt);">Kommentar&nbsp;</span>${esc(off.customerApproval.comment||off.customerApproval.approvedByComment)}</div>`:''}
-        </div>
-      </div>` : '')}
-
-      ${factItems ? `<div class="off-detail-facts" style="flex-wrap:wrap;">${factItems}</div>` : ''}
-
-      ${(() => {
-        /* V48B5 R1 (blocker-korrigering): EXAKT FYRA fysiskt flyttbara
-           block — description/pricing/commercialTerms/generalTerms —
-           ritas i off.sectionOrder-ordning. Ingen gruppning/undantag
-           längre: varje kanoniskt ID mappar 1:1 mot en renderare.
-           Saknas off.sectionOrder -> _resolveSectionOrder() returnerar
-           standardordningen (samma som innan denna korrigering fanns,
-           eftersom B5 aldrig gått live — se motivering vid
-           OFFER_SECTION_IDS). */
-        const descriptionHtml = (off.summary||off.scope||off.includes||off.excludes) ? `
-          <div class="card">
-            <div class="card-header"><h3>${ic('align-left',13)} Uppdragsbeskrivning</h3></div>
-            <div class="card-body">
-              ${off.summary?`<div class="off-field-stack"><div class="off-field-label">Sammanfattning</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.summary)}</div></div>`:''}
-              ${off.scope?`<div class="off-field-stack"><div class="off-field-label">Uppdragets omfattning</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.scope)}</div></div>`:''}
-              ${off.includes||off.excludes?`<div class="off-incl-excl">
-                ${off.includes?`<div class="off-incl-col"><div class="off-incl-hd">${ic('check',11)} Ingår</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.includes)}</div></div>`:''}
-                ${off.excludes?`<div class="off-excl-col"><div class="off-excl-hd">${ic('x',11)} Ingår ej</div><div class="off-field-content off-rt" style="color:var(--mt);">${OfferDetailPage._renderText(off.excludes)}</div></div>`:''}
-              </div>`:''}
-            </div>
-          </div>`:'';
-
-        const linesCardHtml = `<div class="card">
-          <div class="card-header">
-            <h3>${ic('file-text',13)} Offertrader</h3>
-            ${prLines.length>0?`<span class="bdg bdg-grey">${prLines.length} rad${prLines.length===1?'':'er'}</span>`:''}
-          </div>
-          ${linesHtml}
-          <div class="off-detail-sum" style="margin:0;border-radius:0 0 var(--rs) var(--rs);border-left:none;border-right:none;border-bottom:none;">
-            ${hasRecurringDetail ? `
-            <div class="off-detail-sum-row"><span class="dk">Fast kostnad per månad</span><strong>${fmt(_tot.recurringMonthlyExVat)} kr</strong></div>
-            <div class="off-detail-sum-row"><span class="dk">Fast kostnad per år (härledd)</span><span>${fmt(_tot.recurringAnnualExVat)} kr</span></div>` : ''}
-            ${hasOneTimeLinesDetail ? `
-            <div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp ex. moms':'Summa ex. moms'}</span><strong>${fmt(rawExVat)} kr</strong></div>
-            ${discAmt?`<div class="off-detail-sum-row disc"><span class="dk">${hasRecurringDetail?"Rabatt på engångsbelopp (":"Rabatt ("}${_disc.type==='percent'?_disc.value+'%':fmt(_disc.value)+' kr'})</span><span>−${fmt(discAmt)} kr</span></div>`:''}
-            <div class="off-detail-sum-row"><span class="dk">Moms</span><span>${fmt(vat)} kr</span></div>
-            ${rutAmt?`<div class="off-detail-sum-row"><span class="dk">${hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms'}</span><strong>${fmt(incVat)} kr</strong></div>`:'' /* utan avdrag är raden identisk med slutraden nedan */}
-            ${rutAmt?`<div class="off-detail-sum-row rut"><span>RUT/ROT-reduktion</span><span>−${fmt(rutAmt)} kr</span></div>`:''}
-            <div class="off-detail-sum-final">
-              <span class="off-detail-sum-final-lbl">${rutAmt?'Kundpris inkl. moms':(hasRecurringDetail?'Engångsbelopp inkl. moms':'Totalt inkl. moms')}</span>
-              <span class="off-detail-sum-final-val">${fmt(cust)} kr</span>
-            </div>
-            ${rutAmt?`<div style="font-size:10px;color:var(--mt);margin-top:6px;">* Avdraget är preliminärt och förutsätter att kunden har rätt till skattereduktion.</div>`:''}` : (!hasRecurringDetail && hasRateOrOptionalDetail ? `
-            <div class="off-detail-sum-row"><span class="dk">Prismodell</span><strong>Rörliga priser</strong></div>` : '')}
-            ${prLines.some(l=>(l.description||'').includes('minimidebitering'))?`<div style="font-size:10px;color:var(--mt);margin-top:6px;padding:7px 9px;background:#fffbeb;border-left:3px solid #d97706;border-radius:0 4px 4px 0;">${ic('info',10)} <strong>Minimidebitering:</strong> Tjänsten har ett lägsta debiteringsbelopp som täcker etablering, utrustning och grundarbete.</div>`:''}
-          </div>
-        </div>`;
-
-        /* V48B5 R4: textblocken (type:'text'-rader) renderas nu INLINE i
-           linesHtml (se ovan) på sin exakta array-position — inte längre
-           som egna kort samlade efter Tillval. Tillval ligger kvar som
-           ett eget kort, EFTER hela den interfolierade offertrads-listan
-           (extras interfolieras inte i denna release, per kontraktet). */
-        /* OFFER CORE R1.1 — BLOCKER 1: en extra med e.includedInTotal===false
-           är EXPLICIT ej committad — visas med en tydlig "ingår ej i
-           totalsumman"-badge, till skillnad från en committad extra (all
-           historisk data, och nya extras som inte markerats som tillval)
-           som räknas in i Summa ex. moms ovan precis som innan R1.1. */
-        const extrasCardHtml = extras.length?`<div class="card">
-          <div class="card-header"><h3>${ic('plus',13)} Tillval</h3></div>
-          ${extras.map(e=>{
-            const included = _extraIncludedInTotal(e);
-            return `<div class="off-line-row">
-            <div class="off-line-row-header">
-              <div class="off-line-row-name">${esc(e.description||'—')}${!included?` <span class="bdg bdg-purple off-billing-badge">Ingår ej i totalsumman</span>`:''}</div>
-              <div class="off-line-row-price"><span class="off-line-kundpris">${fmt(Math.round((e.qty||1)*(e.unitPrice||0)))} kr</span><span style="font-size:10px;opacity:.6;margin-left:3px;">ex. moms</span></div>
-            </div>
-            <div class="off-line-desc">${e.qty||1} ${e.unit||'st'} × ${fmt(e.unitPrice||0)} kr</div>
-          </div>`;
-          }).join('')}
-        </div>`:'';
-
-        const pricingHtml = linesCardHtml + extrasCardHtml;
-
-        const commercialTermsHtml = (off.paymentTerms||off.validityText) ? `<div class="card">
-          <div class="card-header"><h3>${ic('receipt',13)} Offertvillkor</h3></div>
-          <div class="card-body">
-            ${off.paymentTerms?`<div class="off-field-stack"><div class="off-field-label">Betalningsvillkor</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.paymentTerms)}</div></div>`:''}
-            ${off.validityText?`<div class="off-field-stack"><div class="off-field-label">Giltighetstid</div><div class="off-field-content off-rt">${OfferDetailPage._renderText(off.validityText)}</div></div>`:''}
-          </div>
-        </div>`:'';
-
-        const generalTermsCardHtml = off.generalTerms?`<div class="card">
-          <div class="card-header"><h3>${ic('file-text',13)} Allmänna villkor</h3></div>
-          <div class="card-body"><p style="font-size:12px;color:var(--mt);white-space:pre-wrap;line-height:1.6;">${off.generalTerms}</p></div>
-        </div>`:'';
-
-        const renderers = {
-          description: descriptionHtml,
-          pricing: pricingHtml,
-          commercialTerms: commercialTermsHtml,
-          generalTerms: generalTermsCardHtml
-        };
-        return _resolveSectionOrder(off.sectionOrder).map(id => renderers[id] || '').join('');
-      })()}
-
-      ${off.internalNote?`<div class="nbox">${ic('lock',12)} <strong>Intern:</strong> ${esc(off.internalNote)}</div>`:''}
-
-      ${(() => {
-        const attCount = (state.offerAttachments || []).filter(a => a.offerId === off.id && a.active !== false).length;
-        const histCount = (off.timeline || []).length + (state.offerEvents || []).filter(e => e.offerId === off.id).length;
-        /* R3 §10: default open/closed beräknas av faktisk data, inte alltid
-           stängd. "Aktiv digital länk" = samma definition som
-           _digitalLinkPanel redan använder internt (publicToken satt,
-           inte återkallad). */
-        /* R4 §3: "aktiv" ska matcha samma faktiska semantik som
-           _digitalLinkPanel() redan använder internt (hasToken/revoked/
-           expired) — en utgången token räknas INTE som aktiv för
-           default-open-syftet, bara en riktigt aktiv länk gör. */
-        const tokenExpired = !!off.tokenExpiresAt && new Date(off.tokenExpiresAt).getTime() < Date.now();
-        const digitalLinkActive = !!off.publicToken && !off.tokenRevokedAt && !tokenExpired;
-        return [
-          this._sectionWrap(off.id, 'digitalLink',    'Digital länk', null,     this._digitalLinkPanel(off),   digitalLinkActive),
-          this._sectionWrap(off.id, 'attachments',    'Bilagor',      attCount, this._attachmentsPanel(off),   attCount > 0),
-          this._sectionWrap(off.id, 'salesAssistant', 'Säljtips',     null,     this._salesAssistantHtml(off), false),
-          this._sectionWrap(off.id, 'timeline',       'Historik',     histCount,this._timelineHtml(off),       false)
-        ].join('');
-      })()}`;
+  /* Hopfällbart kortsidhuvud (Bilagor, Säljtips, Historik): rubriken är
+     knappen. Öppet/stängt följer samma _detailSections-minne som förut. */
+  _cardHead(off, key, defaultOpen, icon, title, count, actionsHtml) {
+    const open = this._sectionIsOpen(off.id, key, defaultOpen);
+    return { open, html: `<div class="card-header offd-ch">
+      <button type="button" class="offd-ch-toggle" aria-expanded="${open}" onclick="OfferDetailPage._toggleSection('${_offSafeId(off.id)}','${key}',${!!defaultOpen})">
+        ${ic(icon, 15)}<span>${esc(title)}</span>${count !== null && count !== undefined ? `<span class="offd-count">${count}</span>` : ''}<span class="offd-ch-chev">${ic(open ? 'chevron-up' : 'chevron-down', 15)}</span>
+      </button>
+      ${open && actionsHtml ? `<div class="offd-ch-acts">${actionsHtml}</div>` : ''}
+    </div>` };
   },
 
   /* V48A §9 / R3 §10: progressiv disclosure — Digital länk/Bilagor/Säljtips/
@@ -4967,29 +5224,21 @@ const OfferDetailPage = {
     setTimeout(fn, 0);
   },
 
+  /* QA 2026-11-26: den modala åtgärdslistan finns kvar (anropbar) men visar
+     nu exakt samma poster som "⋮"-menyn i huvudet (_actionModel) — en
+     källa för vilka åtgärder som finns. Varje post stänger först listan
+     och kör sedan åtgärden (se _flerAtgarderThen). */
   openFlerAtgarder(offerId) {
     const off = getOff(offerId);
     if (!off) return;
-    const btns = [];
-    if (!off.archived && !off.deleted)
-      btns.push(`<button class="action-sheet-btn" onclick="OffersPage.openEdit('${off.id}');Modal.close()">${ic('pencil',16)} Redigera offert</button>`);
-    btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.printPdf('${off.id}');Modal.close()">${ic('printer',16)} Skriv ut / PDF</button>`);
-    if (!off.deleted)
-      btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.createNewVersion('${off.id}'))">${ic('git-branch',16)} Skapa ny version</button>`);
-    if (!off.deleted)
-      btns.push(`<button class="action-sheet-btn" onclick="OfferDetailPage.duplicate('${off.id}');Modal.close()">${ic('copy',16)} Duplicera</button>`);
-    if (!off.archived && !off.deleted) {
-      btns.push(`<hr style="border:none;border-top:1px solid var(--br);margin:6px 0;">`);
-      btns.push(`<button class="action-sheet-btn action-sheet-btn--warn" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.archiveOffer('${off.id}'))">${ic('archive',16)} Arkivera</button>`);
-      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.deleteOffer('${off.id}'))">${ic('trash',16)} Flytta till papperskorgen</button>`);
-    }
-    if (off.deleted)
-      btns.push(`<button class="action-sheet-btn action-sheet-btn--red" onclick="OfferDetailPage._flerAtgarderThen(()=>OfferDetailPage.permanentDeleteOffer('${off.id}'))">${ic('trash-2',16)} Radera permanent</button>`);
+    const model = this._actionModel(off);
+    const items = [model.primary].concat(model.inline).filter(Boolean).concat(model.menu);
+    const btns = items.map((it, i) => (it.divider && i > 0 ? '<hr style="border:none;border-top:1px solid var(--br);margin:6px 0;">' : '') +
+      `<button type="button" class="action-sheet-btn${it.destructive ? ' action-sheet-btn--red' : ''}" onclick="OfferDetailPage._flerAtgarderThen(()=>{${it.fn}})">${ic(it.icon,16)} <span>${esc(it.label)}</span></button>`);
     Modal.open({
       /* R6 §4: ren textrubrik utan ikon — .modal-title är inte byggd som
          en icon+text-flexrad, så ikonen kunde hamna på egen rad ovanför
-         texten. Hero-knappen som öppnar modalen visar fortfarande sin
-         egen ikon. */
+         texten. */
       title: 'Fler åtgärder',
       body: `<div class="action-sheet-list">${btns.join('')}</div>`,
       buttons: [{ label: 'Stäng', cls: 'btn bs', onClick: () => Modal.close() }]
@@ -5683,12 +5932,14 @@ const OfferDetailPage = {
       opened:'eye', approved:'check-circle', change_requested:'edit-3', declined:'x-circle', revoked:'x-circle', renewed:'refresh-cw', email_sent:'send' };
     const typeColor = {create:'var(--navy)', edit:'var(--mt)', status:'var(--or)', send:'var(--blue)', pdf:'#6366f1', comment:'#0891b2', ao:'var(--grn)', ring:'var(--sky)', email:'var(--blue)', followup:'var(--or)', reminder:'var(--yl)', price:'#b45309', change:'var(--pu)', verbal:'var(--gr)', reason:'var(--mt)', tip:'var(--mt)',
       opened:'var(--sky)', approved:'var(--gr)', change_requested:'var(--or)', declined:'var(--rd)', revoked:'var(--rd)', renewed:'var(--blue)', email_sent:'var(--blue)' };
-    const id = off.id;
+    const id = _offSafeId(off.id);
     const isSent = off.status === 'skickad' || off.status === 'påmind' || off.status === 'väntar';
-    return `<div class="card" style="margin-top:8px;">
-      <div class="card-header">
-        <h3 style="display:flex;align-items:center;gap:6px;">${ic('activity',13)} Säljarbete & tidslinje</h3>
-      </div>
+    /* QA 2026-11-26: hopfällbart kort (rubriken är knappen), stängt som
+       standard precis som tidigare "Historik"-sektionen. */
+    const head = this._cardHead(off, 'timeline', false, 'activity', 'Historik och säljarbete', tl.length);
+    if (!head.open) return `<section class="card offd-card offd-tl">${head.html}</section>`;
+    return `<section class="card offd-card offd-tl">
+      ${head.html}
       <div class="off-tl-action-bar">
         <span style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.4px;align-self:center;white-space:nowrap;">Åtgärd:</span>
         <button type="button" class="off-tl-action-btn" onclick="OfferDetailPage._quickAction('${id}','ring')">${ic('phone',11)} Ring kund</button>
@@ -5737,16 +5988,16 @@ const OfferDetailPage = {
           : tl.map(e => `<div class="off-tl-item">
               <span class="off-tl-dot" style="color:${typeColor[e.type]||'var(--mt)'};">${ic(typeIcon[e.type]||'circle',10)}</span>
               <div class="off-tl-body">
-                <div class="off-tl-text">${esc(e.text||'')}</div>
-                <div class="off-tl-meta">${fmtDateTime(e.ts)} · ${e.user||''}</div>
+                <div class="off-tl-text">${e.text||''}</div>
+                <div class="off-tl-meta">${e.ts ? fmtDateTime(e.ts) : ''} · ${e.user||''}</div>
               </div>
             </div>`).join('')}
         <div class="off-tl-comment">
-          <input id="off-tl-inp" placeholder="Lägg till intern kommentar…" style="flex:1;">
-          <button class="btn bs bxs" onclick="OfferDetailPage._addComment('${off.id}')">${ic('send',11)} Spara</button>
+          <input id="off-tl-inp" placeholder="Lägg till intern kommentar…" aria-label="Intern kommentar" style="flex:1;">
+          <button type="button" class="btn bs bsm" onclick="OfferDetailPage._addComment('${id}')">${ic('send',13)} Spara</button>
         </div>
       </div>
-    </div>`;
+    </section>`;
   },
 
   _quickAction(offerId, type) {
@@ -6006,21 +6257,22 @@ const OfferDetailPage = {
 
     if (!tips.length) return '';
 
-    return `<div class="card" style="border-left:3px solid var(--sky);margin-top:0;">
-      <div class="card-header">
-        <h3 style="display:flex;align-items:center;gap:6px;">${ic('zap',13)} Säljassistent</h3>
-      </div>
+    /* QA 2026-11-26: hopfällbart kort, stängt som standard (som tidigare). */
+    const head = this._cardHead(off, 'salesAssistant', false, 'zap', 'Säljtips', tips.length);
+    if (!head.open) return `<section class="card offd-card offd-tips">${head.html}</section>`;
+    return `<section class="card offd-card offd-tips">
+      ${head.html}
       <div class="card-body" style="padding:6px 14px 10px;display:flex;flex-direction:column;gap:8px;">
         ${tips.map(t=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--bg);border-radius:var(--rs);">
           <span style="color:${t.color};flex-shrink:0;margin-top:1px;">${ic(t.icon,14)}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px;">${esc(t.title)}</div>
             <div style="font-size:11px;color:var(--mt);line-height:1.4;">${esc(t.body)}</div>
-            ${t.cta?`<button type="button" class="btn bs bxs" style="margin-top:6px;font-size:10px;" onclick="${t.ctaFn}">${t.cta}</button>`:''}
+            ${t.cta?`<button type="button" class="btn bs bsm" style="margin-top:6px;" onclick="${t.ctaFn}">${esc(t.cta)}</button>`:''}
           </div>
         </div>`).join('')}
       </div>
-    </div>`;
+    </section>`;
   },
 
   /* ── PDF/Print ─── */
@@ -6974,59 +7226,51 @@ ${hasRut?`<div class="rut">
   /* ── Digital offertlänk — panel ────────────────────────── */
   _digitalLinkPanel(off) {
     if (off.archived || off.deleted) return '';
+    /* QA 2026-11-26: alltid synligt kort i sidokolumnen (tidigare hopfällt).
+       Samma funktioner: generateDigitalLink / revokeDigitalLink /
+       extendDigitalLink / _copyLink. Länkens utgång heter "Länken gäller
+       till" så den inte förväxlas med offertens giltighet. */
+    const id = _offSafeId(off.id);
     const hasToken = !!off.publicToken;
     const revoked  = !!off.tokenRevokedAt;
     const expired  = off.tokenExpiresAt && new Date(off.tokenExpiresAt).getTime() < Date.now();
 
     if (!hasToken) {
-      /* Visa knapp för att generera länk om offert är skickad eller klare */
-      const canSend = !off.archived && !off.deleted;
-      if (!canSend) return '';
-      return `<div class="card" style="margin-top:8px;">
-        <div class="card-header"><h3 style="display:flex;align-items:center;gap:6px;">${ic('link',13)} Digital offertlänk</h3></div>
-        <div class="card-body" style="padding:14px 16px;">
-          <p style="font-size:12px;color:var(--mt);margin:0 0 10px;">Generera en säker länk som kunden kan öppna för att godkänna, begära ändring eller neka offerten.</p>
-          <button type="button" class="btn bp" style="font-size:12px;" onclick="OfferDetailPage.generateDigitalLink('${esc(off.id)}')">${ic('link',12)} Generera digital länk</button>
+      return `<section class="card offd-card offd-link">
+        <div class="card-header"><h3>${ic('link',15)} Digital offertlänk</h3><span class="offd-pill">Ingen länk</span></div>
+        <div class="card-body">
+          <p class="offd-muted">Kunden kan läsa, godkänna, begära ändring eller neka offerten via en säker länk — utan inloggning.</p>
+          <button type="button" class="btn bs bsm" onclick="OfferDetailPage.generateDigitalLink('${id}')">${ic('link',14)} Generera digital länk</button>
         </div>
-      </div>`;
+      </section>`;
     }
 
     const host    = window.location.origin;
     const linkUrl = `${host}/public-offer.html?t=${off.publicToken}`;
-    const expiryLabel = off.tokenExpiresAt
-      ? 'Giltig till ' + (typeof fmtDate === 'function' ? fmtDate(off.tokenExpiresAt.slice(0,10)) : off.tokenExpiresAt.slice(0,10))
-      : 'Ingen utgångsdatum';
-
-    const statusDot = revoked ? `<span style="color:var(--rd);">● Återkallad</span>`
-                    : expired ? `<span style="color:var(--or);">● Utgången</span>`
-                    : `<span style="color:var(--gr);">● Aktiv</span>`;
-
+    const expiryLabel = off.tokenExpiresAt ? 'Länken gäller till ' + fmtDate(off.tokenExpiresAt.slice(0,10)) : 'Inget slutdatum för länken';
+    const pill = revoked ? `<span class="offd-pill is-danger">Återkallad</span>`
+               : expired ? `<span class="offd-pill is-warn">Utgången</span>`
+               : `<span class="offd-pill is-ok">Aktiv</span>`;
     const openInfo = off.openedAt
-      ? `Öppnad ${off.openCount || 1} gång${(off.openCount||1)===1?'':'er'}, första: ${typeof fmtDate==='function' ? fmtDate(off.openedAt.slice(0,10)) : off.openedAt.slice(0,10)}`
-      : 'Ej öppnad ännu';
+      ? `Öppnad ${off.openCount || 1} ${(off.openCount||1)===1?'gång':'gånger'}, första ${fmtDate(off.openedAt.slice(0,10))}`
+      : 'Inte öppnad ännu';
 
-    return `<div class="card" style="margin-top:8px;">
-      <div class="card-header">
-        <h3 style="display:flex;align-items:center;gap:6px;">${ic('link',13)} Digital offertlänk</h3>
-        <span style="font-size:11px;">${statusDot}</span>
-      </div>
-      <div class="card-body" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          <input id="off-pub-link" readonly value="${esc(linkUrl)}" style="flex:1;font-size:11px;padding:6px 8px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);font-family:monospace;">
-          <button type="button" class="btn bs" style="font-size:11px;white-space:nowrap;" onclick="OfferDetailPage._copyLink('${esc(linkUrl)}')">${ic('copy',11)} Kopiera</button>
+    return `<section class="card offd-card offd-link">
+      <div class="card-header"><h3>${ic('link',15)} Digital offertlänk</h3>${pill}</div>
+      <div class="card-body">
+        <div class="offd-link-row">
+          <input id="off-pub-link" readonly value="${esc(linkUrl)}" aria-label="Offertlänk" onfocus="this.select()">
+          <button type="button" class="btn bs bsm" onclick="OfferDetailPage._copyLink(document.getElementById('off-pub-link').value)">${ic('copy',14)} Kopiera</button>
         </div>
-        <div style="font-size:11px;color:var(--mt);display:flex;gap:16px;flex-wrap:wrap;">
-          <span>${ic('calendar',10)} ${esc(expiryLabel)}</span>
-          <span>${ic('eye',10)} ${esc(openInfo)}</span>
-        </div>
-        ${revoked ? `<div style="background:var(--rd-bg,#fef2f2);border:1px solid var(--rd,#dc2626);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--rd,#dc2626);">${ic('alert-circle',10)} Länken är återkallad — kunden kan inte längre öppna den.</div>` : ''}
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${!revoked ? `<button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.revokeDigitalLink('${esc(off.id)}')">${ic('x-circle',11)} Återkalla länk</button>` : ''}
-          <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.extendDigitalLink('${esc(off.id)}')">${ic('clock',11)} Förläng giltighetstid</button>
-          <button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage.generateDigitalLink('${esc(off.id)}')">${ic('refresh-cw',11)} Ny länk (ogiltigförklarar gammal)</button>
+        <div class="offd-link-info"><span>${ic('calendar',13)} ${esc(expiryLabel)}</span><span>${ic('eye',13)} ${esc(openInfo)}</span></div>
+        ${revoked ? `<div class="offd-hint is-danger">${ic('alert-circle',13)}<span>Länken är återkallad — kunden kan inte längre öppna den.</span></div>` : ''}
+        <div class="offd-link-acts">
+          ${!revoked ? `<button type="button" class="btn bs bsm" onclick="OfferDetailPage.revokeDigitalLink('${id}')">${ic('x-circle',14)} Återkalla länk</button>` : ''}
+          <button type="button" class="btn bs bsm" onclick="OfferDetailPage.extendDigitalLink('${id}')">${ic('clock',14)} Förläng giltighetstid</button>
+          <button type="button" class="btn bghost bsm" onclick="OfferDetailPage.generateDigitalLink('${id}')">${ic('refresh-cw',14)} Ny länk (ogiltigförklarar gammal)</button>
         </div>
       </div>
-    </div>`;
+    </section>`;
   },
 
   _copyLink(url) {
@@ -7070,7 +7314,7 @@ ${hasRut?`<div class="rut">
             <div class="att-row-icon">${_attIcon(a.mimeType)}</div>
             <div style="flex:1;min-width:0;">
               <div class="att-row-name" title="${esc(displayName)}">${esc(displayName)}</div>
-              <div class="att-row-meta">${metaParts.join(' · ')}</div>
+              <div class="att-row-meta">${esc(metaParts.join(' · '))}</div>
             </div>
             <div class="att-row-actions">
               <button type="button" class="btn bs bsm" title="Visa" onclick="OfferDetailPage._viewAttachment('${esc(a.id)}')">${ic('eye',12)} Visa</button>
@@ -7083,32 +7327,35 @@ ${hasRut?`<div class="rut">
 
     const lockedNotice = locked ? `<div style="font-size:11px;color:var(--or);display:flex;align-items:center;gap:4px;margin-bottom:8px;">${ic('lock',11)} Bilagor som laddades upp innan digital länk genererades är versionslåsta.</div>` : '';
 
-    return `<div class="card" style="margin-top:8px;">
-      <div class="card-header">
-        <h3 style="display:flex;align-items:center;gap:6px;">${ic('paperclip',13)} Bilagor (${atts.length})</h3>
-        <div style="display:flex;gap:6px;">
-          ${atts.length > 0 ? `<button type="button" class="btn bs" style="font-size:11px;" onclick="OfferDetailPage._generateCombinedPdf('${esc(off.id)}')">${ic('file-text',11)} Samlad PDF</button>` : ''}
-          <button type="button" class="btn bp" style="font-size:11px;" onclick="OfferDetailPage._openUploadDialog('${esc(off.id)}','${esc(off.id)}')">${ic('upload',11)} Ladda upp</button>
-        </div>
-      </div>
-      <div class="card-body" style="padding:14px 16px;">
+    /* QA 2026-11-26: hopfällbart kort (rubriken är knappen); öppet som
+       standard när bilagor finns — samma regel som tidigare sektion.
+       Uppladdning/Samlad PDF/Visa/Ladda ned/Redigera/Ta bort oförändrade. */
+    const oid = _offSafeId(off.id);
+    const head = this._cardHead(off, 'attachments', atts.length > 0, 'paperclip', 'Bilagor', atts.length,
+      (atts.length > 0 ? `<button type="button" class="btn bs bsm" onclick="OfferDetailPage._generateCombinedPdf('${oid}')">${ic('file-text',14)} Samlad PDF</button>` : '') +
+      `<button type="button" class="btn bs bsm" onclick="OfferDetailPage._openUploadDialog('${oid}','${oid}')">${ic('upload',14)} Ladda upp</button>`);
+    if (!head.open) return `<section class="card offd-card offd-att">${head.html}</section>`;
+    return `<section class="card offd-card offd-att">
+      ${head.html}
+      <div class="card-body">
         ${lockedNotice}
-        <div class="att-dropzone" id="att-drop-${esc(off.id)}"
+        <div class="att-dropzone" id="att-drop-${oid}" role="button" tabindex="0"
           ondragover="event.preventDefault();this.classList.add('att-dropzone-over')"
           ondragleave="this.classList.remove('att-dropzone-over')"
-          ondrop="event.preventDefault();this.classList.remove('att-dropzone-over');OfferDetailPage._handleFileDrop(event,'${esc(off.id)}','${esc(off.id)}')"
-          onclick="OfferDetailPage._openUploadDialog('${esc(off.id)}','${esc(off.id)}')"
+          ondrop="event.preventDefault();this.classList.remove('att-dropzone-over');OfferDetailPage._handleFileDrop(event,'${oid}','${oid}')"
+          onclick="OfferDetailPage._openUploadDialog('${oid}','${oid}')"
+          onkeydown="if(event.key==='Enter')this.click()"
         >
-          ${ic('upload-cloud',18)} Dra hit filer eller klicka för att välja
+          ${ic('upload-cloud',18)} <span>Dra hit filer eller klicka för att välja</span>
         </div>
-        <input type="file" id="att-file-${esc(off.id)}" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.svg,.tiff,.docx,.xlsx,.pptx,.doc,.xls,.txt,.csv,.zip,.dwg" style="display:none;"
-          onchange="OfferDetailPage._handleFileSelect(event,'${esc(off.id)}','${esc(off.id)}')">
-        <div id="att-upload-progress-${esc(off.id)}" style="margin-top:6px;font-size:11px;color:var(--mt);"></div>
-        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+        <input type="file" id="att-file-${oid}" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.svg,.tiff,.docx,.xlsx,.pptx,.doc,.xls,.txt,.csv,.zip,.dwg" style="display:none;"
+          onchange="OfferDetailPage._handleFileSelect(event,'${oid}','${oid}')">
+        <div id="att-upload-progress-${oid}" style="margin-top:6px;font-size:11px;color:var(--mt);"></div>
+        <div class="offd-att-list">
           ${attRows}
         </div>
       </div>
-    </div>`;
+    </section>`;
   },
 
   _handleFileDrop(ev, offerId, versionId) {
