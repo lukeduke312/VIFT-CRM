@@ -1,440 +1,533 @@
 # Arbetspool, tilldelning och planering: utredning
 
-2026-11-26. Underlaget bygger bara på läsning av kod. Ingen kod, ingen data och ingen server har ändrats. Inga nätverksanrop är gjorda.
+**Version 2, 2026-11-27.** Uppdaterad efter de fastställda besluten D-24 och AP-A–AP-G (`docs/qa-2026-11-27/BESLUT-2026-11-27.md`, som är auktoritativ) och efter serverinventeringen av STAGING 2026-11-26.
 
-**Kodbaser som lästs**
+Underlaget bygger bara på läsning av kod. Ingen kod, ingen data och ingen server har ändrats. Inga nätverksanrop är gjorda.
 
-- Klient: `/home/user/VIFT-CRM`, gren `claude/vift-v3-major-redesign` (publicerad STAGING v3.4).
-- Server: `/home/user/vift-v2/supabase/functions` (work-orders-list, ao-time-write, _shared, service-monitor) och migreringarna i `/home/user/vift-v2/supabase/migrations`. `_shared/vift-auth.ts` är identisk i båda repona.
-- Simulerad server: `/home/user/VIFT-CRM/tests/e2e/fake-backend.js`.
+**Källor.** Förkortningen `INV/` betyder `/home/user/vift-v2/supabase/inventering/staging-2026-11-26/`. Det är den installerade källan i STAGING och gäller före repokopiorna.
 
-**Förbehåll.** SQL-källan till `work_order_patch` och `work_order_create` finns inte i något av repona (G4, se `supabase/migrations/20261123000001_PROPOSAL_work_order_log_ops.sql:4`). Hur servern slår ihop en patch och hur den jämför `p_expected_updated_at` är därför antaget utifrån kommentarerna i ao-time-write, inte verifierat.
+| Källa | Sökväg |
+|---|---|
+| Installerade Edge Functions | `INV/functions/<namn>/<namn>/index.ts` och `INV/functions/<namn>/_shared/vift-auth.ts` |
+| Installerade SQL-funktioner | `INV/schema/functions.sql` |
+| Klient (STAGING v3.4) | `/home/user/VIFT-CRM`, gren `claude/vift-v3-major-redesign` |
+| Simulerad server | `/home/user/VIFT-CRM/tests/e2e/fake-backend.js` |
+
+**Rättat sedan version 1.** Antagandena om `work_order_patch` är nu verifierade (avsnitt 3.3). Den installerade `ao-time-write` är version 5 och har samma logik som repokopian men andra radnummer; nedan anges installerade rader. `work-orders-list` har samma regel i installerad version och i repot.
 
 ---
 
 ## 0. Kort svar
 
-1. **Det rapporterade felet beror på att rutan "Flytta till arbetspool" redan är ikryssad när ordern har status `pool`.** Om man väljer personal och sparar körs grenen som tömmer `staff` och `responsibleStaffId` (`WorkOrderDetailPage.js:3167`, `:3196`, `:3223`; `WorkOrderService.js:1322-1326`). På en pool-AO går det alltså inte att tilldela personal i dialogen utan att först kryssa ur rutan. Dessutom loggar dialogen "Personal tilldelad" och skickar notis och push till personalen, trots att personalen just rensats (`WorkOrderDetailPage.js:3233-3249`).
-2. **Ja, dagens poolregel läcker.** `work-orders-list` lämnar ut varje AO med `status === 'pool'` till alla med `ao_view_own`, oavsett vem som är tilldelad (`work-orders-list/index.ts:88-91`). Samma regel finns i `canViewWorkOrder` (`_shared/vift-auth.ts:121-131`), i tre SQL-funktioner och i fake-backend (`fake-backend.js:122-127`). Kombinationen status `pool` med personal skapas dessutom regelbundet av systemet självt: serviceintervall, guiden i pool-läge med personal, "Till pool" och statusbyte.
-3. **"Ta jobbet" nekas inte när AO:n redan har personal.** Kontrollen i `ao-time-write` kräver bara `status === 'pool'` och att anroparen läggs till (`ao-time-write/index.ts:241-257`). En fältanvändare med `ao_complete` kan alltså lägga till sig på någon annans pool-AO. Kontrollen läser dessutom AO:n utanför RPC-låset, och klienten skickar inget `expectedUpdatedAt` (`WorkOrderService.js:1369`). Två samtidiga "Ta jobbet" kan därför båda godkännas, och den sista skrivningen vinner.
-4. **Dimensionerna är inte separata i dag.** Vy och behörighet styrs av statusvärdet `pool`, inte av personal och datum. Det ger flera felaktigheter:
-   - "Planerad" kan sakna datum (`takeFromPool`, `updateStaff` och knappen "Planera").
-   - En pool-AO kan ha datum. Kalendern visar den ändå som "ej schemalagd", och Mina jobb visar den dubbelt.
-   - En tilldelad AO utan datum med status `planerad` eller `nytt` syns inte alls i kalendern.
-   - Räknarna för "Otilldelade" skiljer sig mellan AO-listan och dashboard/Dagens drift.
-5. **Rekommendation:** gör en serverfix först. Poolgrenen ska kräva tom `staff`, och "Ta jobbet" ska nekas om personal redan finns. Rätta sedan dialogen och notiserna. Inför därefter en gemensam härledd poolkategori (öppen pool, tilldelad pool, planerad) från `staff` och `scheduledDate` i alla vyer. Lagrad data ändras inte: status `pool` tolkas vid läsning.
+1. **Det rapporterade felet (AP-FEL-1):** rutan "Flytta till arbetspool" är redan ikryssad när ordern har status `pool`, och då tömmer sparningen personal och ansvarig (`WorkOrderDetailPage.js:3167`, `:3196`, `:3223`; `WorkOrderService.js:1322-1326`). Notiser och historikposten "Personal tilldelad" skickas ändå (`WorkOrderDetailPage.js:3233-3249`).
+2. **Läckan (SÄK-3) är verifierad i installerad källa.** `work-orders-list` lämnar ut varje AO med `status === 'pool'` till alla med `ao_view_own` (`INV/functions/work-orders-list/work-orders-list/index.ts:71`). Det gäller även tilldelade, arkiverade och borttagna AO.
+3. **Utlämningen kan rättas utan att breddas.** Den nya regeln är strikt snävare än dagens för varje AO och användare (bevis i avsnitt 5.4). Ingen historisk AO behöver skrivas om.
+4. **Öppen pool ger i dag skrivrätt.** Utan tilldelning kan man skriva material, ladda upp och radera bilder, ändra checklista och skriva i AO-loggen. Tidposter och stämpling kontrolleras inte alls mot AO:n. Därtill kan den som har `ao_complete` klarmarkera vilken AO som helst (SÄK-5). Se avsnitt 8.
+5. **"Ta jobbet" (SÄK-4) måste flyttas in i en RPC med radlås.** `work_order_patch` jämför `expectedUpdatedAt` under låset (`INV/schema/functions.sql:4806`, `:4831-4833`). Klientens lokala `updatedAt` stämmer dock aldrig med serverns värde, så `expectedUpdatedAt` från klienten räcker inte (avsnitt 3.3). En egen `work_order_pool_take` med kontrollen under `FOR UPDATE` ger exakt en vinnare.
 
 ---
 
-## 1. Datamodell och statusmodell i dag
+## 1. Nuläge
 
-### 1.1 Fält
+### 1.1 Fält och statusmodell
 
 | Fält | Källa | Betydelse i dag |
 |---|---|---|
-| `status` | `schema.js:184` (`nytt \| pool \| planerad \| pågående \| klar \| fakturerad \| avbruten`) | Blandar tre saker: arbetsläge, "ligger i poolen" och "har ett datum". `pool` är ett **statusvärde**. Det finns inget separat poolfält. |
-| `staff` | string[] med personal-id | Vilka som är tilldelade. Tom lista betyder otilldelad. |
-| `responsibleStaffId` | string | Ansvarig. Dialogen lägger alltid till ansvarig i `staff` (`WorkOrderDetailPage.js:3226-3229`). |
-| `scheduledDate`, `scheduledStart`, `scheduledEnd` | ISO-datum och tider | Planering. Saknas ofta trots status `planerad`. |
-| `log[]` | Poster i AO:n (`staff_changed`, `staff_added`, `staff_removed`, `staff_responsible`, `taken_from_pool` …) | AO-historik. |
-| `updatedAt` | Sätts av klient och server | Kan användas för konfliktkontroll (`expectedUpdatedAt`), men görs inte i tilldelningsflödena. |
+| `status` | `src/data/schema.js:184` (`nytt \| pool \| planerad \| pågående \| klar \| fakturerad \| avbruten`) | Blandar arbetsläge, "släppt till poolen" och "har datum". `pool` är ett statusvärde. Något separat poolfält finns inte. |
+| `staff[]`, `responsibleStaffId` | `schema.js:192` | Tilldelning. |
+| `scheduledDate`, `scheduledStart`, `scheduledEnd` | `schema.js:193-195` | Används både som utförandedatum och som förfallodatum (avsnitt 1.4). |
+| `log[]`, `updatedAt` | | Historik och versionsfält. |
 
-Statusetiketten `pool` visas som "Arbetspool" (`state.js:2385`).
+AO har inget fält för förfallodatum. `dueDate` finns bara på fakturor och uppgifter (`schema.js:305`, `:480`).
 
-### 1.2 Var status `pool` sätts, med eller utan personal och datum
+### 1.2 Var kombinationerna uppstår
 
 | Väg | Kod | Personal | Datum |
 |---|---|---|---|
-| Ny AO-guide, "Arbetspool" | `WorkOrdersPage.js:2252` sätter status `pool` och rensar datum. "Personal (valfritt)" visas i båda lägena (`:1728-1736`) och sparas (`:2497`). | **Kan vara satt** | Tomt |
-| Serviceintervall, klient | `ServiceIntervalService.js:564-576`: `status:'pool'`, `staff: si.aoStaff`, `scheduledDate: si.nextDue` | **Kan vara satt** | **Satt** |
-| Serviceintervall, server (cron) | `service-monitor/index.ts:483-490`, samma fält | **Kan vara satt** | **Satt** |
-| "Till pool" i AO-detaljen (bara från `nytt`) | `WorkOrderDetailPage.js:469-470` → `WorkOrderService.setStatus` (`:619-660`) ändrar **bara** status | Behålls | Behålls |
-| Statusbyte i dialogen (alla aktiva statusar) | `WorkOrderDetailPage.js:2449-2459` | Behålls | Behålls |
-| Massändring av status | `WorkOrdersPage.js:2642`, `:2785-2787` | Behålls | Behålls |
-| Dialogen "Hantera personal" med poolrutan ikryssad | `WorkOrderService.js:1322-1326` | **Rensas** | Behålls |
-| "Omplanera" eller "Planera" på en pool-AO | `WorkOrderDetailPage.js:316`, `:663-697` (`update({scheduledDate…})`, status orörd) | Behålls | **Sätts**, status förblir `pool` |
-| CSV/XLSX-import | `ImportExportConfigs.js:588` tar emot `pool` | Godtyckligt | Godtyckligt |
+| Ny AO-guide, "Arbetspool" | `WorkOrdersPage.js:2252` (status `pool`, datum rensas). Personal kan väljas i båda lägena (`:1728-1736`, sparas `:2497`). | Kan vara satt | Tomt |
+| Serviceintervall, klient | `ServiceIntervalService.js:564-576`: `status:'pool'`, `staff: si.aoStaff`, `scheduledDate: si.nextDue`. Ingen `source`-markering. | Kan vara satt | Förfallodag |
+| Serviceintervall, server (cron) | `INV/functions/service-monitor/service-monitor/index.ts:483-493`: samma fält, plus `source:'service_interval'` och `sourceIntervalId` | Kan vara satt | Förfallodag |
+| Återkommande | `RecurringOrderService.js:121-122`, `:130`: `staff: ro.staff`, `scheduledDate: ro.nextDate \|\| tdy()`, `recurringOrderId`. Status saknas, så standardvärdet `nytt` gäller. | Kan vara satt | Tillfällets datum |
+| "Till pool", statusbyte, massändring av status | `WorkOrderDetailPage.js:469-470`, `:2449-2459`; `WorkOrdersPage.js:2785-2787`. Bara status ändras. | Behålls | Behålls |
+| Personaldialogen med poolrutan ikryssad | `WorkOrderService.js:1322-1326` | Rensas | Behålls |
+| Planering av en pool-AO | `WorkOrderDetailPage.js:316`, `:663-697`. Status förblir `pool`. | Behålls | Sätts |
+| "Ta jobbet" | `WorkOrderService.js:1350-1374` (`pool` blir `planerad`) | Anroparen läggs till | Behålls |
+| Tilldelning i dialogen eller via massändring | `WorkOrderService.js:1333`; `WorkOrdersPage.js:2939` (`pool` blir `planerad`) | Sätts | Behålls |
+| "Planera"-knappen | `WorkOrderDetailPage.js:467-468` (`planerad` utan datum) | Behålls | Behålls |
+| Import | `ImportExportConfigs.js:588` tar emot alla statusar | Godtyckligt | Godtyckligt |
+| Server, `work_order_create` | `INV/schema/functions.sql:4596-4689`. Klientens AO slås ihop i sin helhet (`:4668`) utan kontroll av status eller personal. | Godtyckligt | Godtyckligt |
 
-Status lämnar `pool` på tre sätt:
+Datum kan inte tas bort i dag, eftersom "Omplanera" kräver ett datum (`WorkOrderDetailPage.js:689`).
 
-- `updateStaff` utan poolruta men med personal ger `planerad` (`WorkOrderService.js:1333`).
-- `takeFromPool` ger `planerad` (`:1350-1374`).
-- `_bulkAddStaff` ger `planerad` (`WorkOrdersPage.js:2939`).
+### 1.3 Orsaken till AP-FEL-1
 
-Inget av dessa sätter datum. **Status `planerad` utan datum är därmed normalt.** Knappen "Planera" (`WorkOrderDetailPage.js:467-468`) sätter också `planerad` utan att fråga efter datum.
+Se kort svar punkt 1. Därutöver gäller:
 
-Datum kan inte tas bort via "Omplanera", eftersom ett tomt datum avvisas med "Välj datum" (`WorkOrderDetailPage.js:689`). Det enda sättet att "avplanera" i dag är att flytta ordern till poolen. Det behåller datumet men rensar personalen, alltså raka motsatsen till affärsregeln.
+- `added` räknas från de valda id:na, inte från resultatet (`WorkOrderDetailPage.js:3233`). Därför loggas `staff_assigned` (`:3236`), och in-app-notis (`:3240`) och push (`:3248`) skickas även när personalen rensats.
+- Poolflytten loggar inte vilka som togs bort (`WorkOrderService.js:1326`).
+- Ingen konfliktkontroll görs (`:1345` anropar `_syncAO` utan `expectedUpdatedAt`).
 
-### 1.3 Exakt orsak till det rapporterade felet
+### 1.4 Blandar `scheduledDate` utförandedatum och förfallodatum?
 
-`WorkOrderDetailPage.manageStaff()` (`WorkOrderDetailPage.js:3159-3212`):
+**Ja.**
 
-```js
-const isPool = ao.status === 'pool';                                   // :3167
-<input type="checkbox" id="sm-pool" ${isPool?'checked':''}>            // :3196
-"Rensar personal och sätter status till Pool"                          // :3199
-```
-
-`_saveStaff()` (`:3214-3256`) läser rutan och skickar `moveToPool` (`:3223`, `:3231`). `WorkOrderService.updateStaff()` (`WorkOrderService.js:1312-1348`):
-
-```js
-if (moveToPool) {
-  ao.staff = [];                 // :1323  vald personal ignoreras helt
-  ao.status = 'pool';            // :1324
-  ao.responsibleStaffId = '';    // :1325
-  ao.log.push({ type:'staff_changed', text:`${by} flyttade ordern till arbetspoolen` }); // :1326
-}
-```
-
-Följdfel i samma flöde:
-
-- **Falsk historik och falska notiser.** `_saveStaff` räknar `added` från de **valda** id:na, inte från resultatet (`:3233`). Därför körs `ActivityService.log('staff_assigned', …)` (`:3236`), `NotificationsService.push(id, 'ao_assigned', …)` (`:3240`) och `PushService.notifyStaffAssigned(ao, added)` (`:3248`) fast personalen just rensats.
-- **Historik saknas.** Vid poolflytten loggas inte vilka som togs bort och inte att ansvarig nollställdes. Det skrivs bara en generisk post (`:1326`).
-- **Ingen konfliktkontroll.** Hela `staff`-listan skrivs utan `expectedUpdatedAt` (`WorkOrderService.js:1345` → `_syncAO` → `AOTimeSyncService.patchAO(…, expected=null)`). En samtidig ändring från någon annan skrivs över tyst.
-- **Status ändras som sidoeffekt.** `pool` blir `planerad` vid tilldelning även utan datum (`:1333`).
+- **Serviceintervall** skriver förfallodagen (`si.nextDue`) i `scheduledDate`, i klienten (`ServiceIntervalService.js:575`) och i cron (`service-monitor/index.ts` i `buildWorkOrder`, fältet `scheduledDate: si.nextDue`). Intervallets egen terminologi är "förfaller" (`ServiceIntervalService.js:130-143`, `:485-495`). AO:n får status `pool`, och just därför visar kalendern den inte som bokad och `isOverdue` räknar den inte som försenad (`CalendarPage.js:340`, `WorkOrderService.js:918`). Systemet behandlar alltså redan i dag `scheduledDate` på en pool-AO som "inte bokat".
+- **Återkommande** skriver tillfällets datum i `scheduledDate` med status `nytt`. Kalendern visar det som bokat. Datumet används också för att undvika dubbletter av samma tillfälle (`RecurringOrderService.js:80`). Om det är ett utförandedatum eller ett förfallodatum framgår inte av koden (se öppen fråga Q2).
+- Klientskapade AO från serviceintervall saknar markering. Bara cron-vägen sätter `source:'service_interval'`.
 
 ---
 
-## 2. Servern: vilka AO en fältanvändare ser (`work-orders-list`)
+## 2. Servern: utlämning till fältanvändare i dag
 
-### 2.1 Regeln
-
-`/home/user/vift-v2/supabase/functions/work-orders-list/index.ts`:
-
-```ts
-if (hasPerm(perms, 'ao_view_all') || hasPerm(perms, 'all')) return json({ workOrders: redact(all, perms) })  // :78-80
-if (!hasPerm(perms, 'ao_view_own')) return json({ workOrders: [] })                                         // :82-84
-const filtered = all.filter(ao => {
-  const staff = Array.isArray(ao.staff) ? ao.staff : []
-  return staff.includes(myStaffId) || ao.status === 'pool'                                                  // :88-91
-})
-```
-
-### 2.2 Svar på den kritiska frågan
-
-**Ja.** Varje AO med `status === 'pool'` lämnas ut till **alla** användare med `ao_view_own`, även när `staff` innehåller andra medarbetare och även när ordern har datum. Personal och datum ingår inte i villkoret. Svaret innehåller hela AO-posten utom `accessCode` för roller utan `objects_sensitive`/`ao_edit` (`:46-55`), alltså kund, adress, beskrivning, checklista, material, anteckningar, logg och personal-id.
-
-Läckan är inte teoretisk. Kombinationen `pool` + personal uppstår i normal drift (avsnitt 1.2): serviceintervall med `aoStaff`, guiden i pool-läge med vald personal, "Till pool" och statusbyte på en tilldelad order.
-
-### 2.3 Samma regel på andra ställen
-
-Ändras regeln måste den ändras på alla dessa ställen samtidigt:
-
-| Ställe | Fil:rad | Effekt för någon annans tilldelade pool-AO |
+| Ställe | Installerad källa | Regel |
 |---|---|---|
-| `canViewWorkOrder` | `_shared/vift-auth.ts:121-131` | Används av `work-order-image-url`, `-upload` och `-delete` (`work-order-image-delete/index.ts:90`) samt ao-time-write (materialgrenen `:210`, "Ta jobbet" `:256`). Andra kan se, ladda upp och radera bilder och lägga till material. |
-| `work_order_checklist_resolve` | `migrations/20260917000001_…sql:145-149` | Andra kan bocka av och markera avvikelse i checklistan. |
-| Checklistans framsteg | `migrations/20261123000002_…sql:107-112` | Samma. |
-| `work_order_log_append` och `_remove` | `migrations/20261124000002_work_order_log_ops.sql:38-42`, `:74-78` | Andra kan skriva i AO-loggen. |
-| Fake-backend `canViewAO` | `tests/e2e/fake-backend.js:122-127` (används i `:234`, `:424`, `:597`, `:659`, `:682`, `:692`, `:701`) | Den simulerade servern har samma läcka. |
-| Klientspeglar | `WorkOrdersPage.js:419`, `:2618`; `Dashboard.js:381`; `WorkOrderDetailPage.js:59-62` | Bara visning. Skyddar inget. |
+| `work-orders-list` | `INV/functions/work-orders-list/work-orders-list/index.ts:59-71` | `ao_view_all`/`all`: allt. `ao_view_own`: `staff.includes(me) \|\| ao.status === 'pool'`. Ingen kontroll av `deleted` eller `archived`. |
+| `canViewWorkOrder` | `INV/functions/ao-time-write/_shared/vift-auth.ts:32-38`, samma i bild-funktionerna | Samma regel. |
+| `work_order_checklist_set_state`, som anropas av `work_order_checklist_resolve` och `work-order-checklist-resolve` | `INV/schema/functions.sql:4457` | `staff ? me` eller `status = 'pool'`, under `FOR UPDATE` (`:4442`). |
+| `work_order_log_append` och `work_order_log_remove` | `functions.sql:4714`, `:4755` | Samma regel, under `FOR UPDATE` (`:4708`, `:4749`). |
+| Fake-backend `canViewAO` | `fake-backend.js:122-127`, används på `:234`, `:424`, `:438`, `:597`, `:659`, `:682`, `:692`, `:701` | Samma regel. |
 
-`time-entries-list` filtrerar på egen `staffId` (`time-entries-list/index.ts:127`) och berörs inte. Tillägget `create_time` i ao-time-write kontrollerar inte att anroparen får se AO:n (`:304-…`). En fältanvändare kan alltså stämpla in på vilken AO som helst som finns i hens lista, inklusive pool-AO tilldelade andra. Instämplingslistan tar med alla statusar `pool`, `nytt`, `planerad` och `pågående` (`TimePage.js:173`).
-
-### 2.4 Befintliga tester bekräftar den gamla regeln
-
-- `tests/e2e/specs/14_permissions.js:57-60` och `tests/e2e/specs/04_workorders.js:384-389` godkänner allt som är "eget eller `status === 'pool'`".
-- `tests/staging/authz-read.js:62-63` (riktig STAGING) godkänner samma villkor.
-
-Testerna kan alltså inte upptäcka läckan och måste skärpas.
+**Svar:** ja. Andras tilldelade-men-oplanerade AO med status `pool` lämnas ut till alla fältanvändare, liksom arkiverade och borttagna AO med status `pool`.
 
 ---
 
-## 3. `ao-time-write`: "Ta jobbet" och statusövergångar
+## 3. "Ta jobbet", statusövergångar och samtidighet
 
-### 3.1 Gren för fältroll utan `ao_edit` (`ao-time-write/index.ts:162-273`)
+### 3.1 Installerad gren (`INV/functions/ao-time-write/ao-time-write/index.ts`)
 
-- Utan `ao_edit` och utan `ao_complete` nekas allt utom en ren materialpatch (`:214-215`). **Begränsad** (bara `ao_view_own`) ser poolen och knappen "Ta jobbet" i Mina jobb (`MyJobsPage.js:347`), men servern svarar 403.
-- Gren A, "Starta" (`:236-240`): bara `{status:'pågående'}`. Anroparen måste finnas i `staff`, och status måste vara `nytt`, `planerad` eller `pool`.
-- Gren B, "Ta från poolen" (`:241-257`):
+- `patch_ao` kräver `ao_edit`, `ao_complete`, `ao_material` eller `all` (`:97`). Utan `ao_edit` och `ao_complete` tillåts bara ren materialpatch (`:121`).
+- **Gren A, "Starta"** (`:131-134`): bara `{status:'pågående'}`. Anroparen måste finnas i `staff`, och status måste vara `nytt`, `planerad` eller `pool`.
+- **Gren B, "Ta jobbet"** (`:135-151`): ny `staff` = befintlig + anroparen (`:137`). Status måste vara `pool` och `canViewWorkOrder` gälla (`:149-150`). **Kontroll av att `staff` är tom saknas.** Grenen kräver `ao_complete`, eftersom `:121` stoppar alla andra.
+- **Endast `ao_complete`** (`:153-160`): fälten `status:'klar'`, `completedAt`, `completedBy` och `updatedAt` tillåts **utan kontroll av synlighet, tilldelning eller status**. Det är SÄK-5.
+- **`ao_edit` och `all`**: ingen fältbegränsning. Hela patchen går till `work_order_patch` (`:162-165`).
 
-```ts
-const expStaff = curStaff.includes(callerStaffId) ? curStaff : curStaff.concat([callerStaffId])   // :243
-const okB = keys.every(k => k === 'staff' || k === 'status' || k === 'log') &&
-  target.status === 'pool' && sameStaff && logOk && canViewWorkOrder(target, perms, callerStaffId)  // :255-256
+### 3.2 Läsning utanför låset
+
+Gren B och materialgrenen läser `vift_workOrders` med en vanlig `select` (`:113`, `:124`), innan RPC:n tar sitt lås. Behörighetsbeslutet fattas alltså på en ögonblicksbild som kan ha ändrats när skrivningen sker.
+
+### 3.3 `work_order_patch`, verifierat (`INV/schema/functions.sql:4779-4849`)
+
+- Raden låses med `SELECT … FOR UPDATE` (`:4806`).
+- `p_expected_updated_at` jämförs med AO:ns lagrade `updatedAt` under låset och ger `stale_write` (`:4831-4833`).
+- Sammanslagningen är grund: `v_ao || p_patch` (`:4835`). `staff` och `log` ersätts därför i sin helhet.
+- Servern sätter alltid ett eget `updatedAt` (`:4835`).
+
+**Följd för samtidig tagning.** Klienten skickar inget `expectedUpdatedAt` från `takeFromPool` (`WorkOrderService.js:1369` → `_syncAO` `:132-134`). Två fältanvändare kan då båda passera kontrollen i `:149-150` med samma ögonblicksbild. Den andra skrivningen ersätter den förstas `staff` och `log`.
+
+**Följd för `expectedUpdatedAt` i klienten.** Klienten sätter sitt eget lokala `updatedAt` (`WorkOrderService.js:638`, `:1359`, `:458`) och tar aldrig över serverns värde efter bekräftelse; `AOTimeSyncService` läser inte `workOrder.updatedAt` ur svaret. Ett `expectedUpdatedAt` hämtat från klientens lokala objekt ger därför falsk `stale_write` efter varje egen ändring, tills nästa avläsning från `work-orders-list`. **Tagning och tilldelning ska därför avgöras under radlåset, inte genom `expectedUpdatedAt` från klienten.**
+
+### 3.4 Övriga verifierade fakta
+
+- `work_order_checklist_set_state` startar inte AO:n automatiskt (ingen statusändring i `functions.sql:4404-4594`). Fake-backend gör det (`fake-backend.js:611`). Det är en avvikelse i den simulerade servern.
+- Fake-backendens `patch_ao` (`:421-427`) saknar fältbegränsningen i `ao-time-write`: vem som helst med någon AO-behörighet som ser AO:n kan patcha vad som helst. Kommentaren "källan saknas i repot" (`:395`) är inaktuell.
+
+---
+
+## 4. Klienten i dag
+
+Oförändrat från version 1. Kortfattat:
+
+- **Mina jobb:** fliken Arbetspool visar `status === 'pool'` oavsett personal (`MyJobsPage.js:56`). Det ger dubbletter för egna pool-AO och knappen "Ta jobbet" för andras. Beskedet visas före serverns svar (`:527-533`).
+- **AO-lista:** statusfliken "Pool" (`WorkOrdersPage.js:253-256`). Snabbfiltret "Otilldelade" är `!staff.length` och tar därmed med pool och avslutade i fliken "Aktiva" (`:182`, `:599-600`, `:853`).
+- **Kalender:** pool-AO visas bara i rutan "ej schemalagda" (`CalendarPage.js:160`, `:293-296`, `:340`). Tilldelade AO utan datum med annan status än `pool` syns inte alls.
+- **Dashboard och Dagens drift:** "Otilldelade" utesluter pool (`Dashboard.js:289`, `:1166`; `OperationsPage.js:48`; `Sidebar.js:341`). AO-listan, dit de länkar, tar med pool.
+- **AO-detalj:** `nextStep` säger "väntar på att någon tar uppdraget" även när personal finns (`WorkOrderService.js:938`).
+
+Avsnitt 6 har den fullständiga räknarlistan.
+
+---
+
+## 5. Gemensam kategoridefinition (AP-A, AP-G, D-24)
+
+### 5.1 Grundbegrepp (härledda, inget skrivs om)
+
+```
+avslutad(ao)       = ao.deleted || ao.archived || status ∈ {klar, fakturerad, avbruten}
+ejPåbörjad(ao)     = status ∈ {nytt, pool, planerad}
+harPersonal(ao)    = (staff ?? []).length > 0
+
+tillgängliggjord(ao) = status == 'pool' && ao.poolOpen !== false
+      -- Status `pool` ÄR i dag den uttryckliga markeringen "släppt till poolen".
+      -- `poolOpen` är ett NYTT valfritt fält. Det sätts bara av nya skrivningar
+      -- (false vid tilldelning, true vid "Släpp till öppen pool"). Saknas fältet
+      -- gäller dagens tolkning.
+
+utförandedatum(ao) = status == 'pool' ? '' : (scheduledDate || '')
+      -- På en pool-AO har scheduledDate aldrig betytt en bokning
+      -- (CalendarPage.js:340, WorkOrderService.js:918).
+förfallodatum(ao)  = ao.dueDate || (status == 'pool' ? scheduledDate : '') || ''
+      -- `dueDate` är ett NYTT fält för serviceintervall och, enligt fråga Q2,
+      -- återkommande ärenden.
 ```
 
-**Om AO:n redan har personal** godkänns tagningen ändå. Ny `staff` blir befintlig plus anroparen, och status blir `planerad`. Det finns ingen kontroll av att `curStaff` är tom. Den som är tilldelad behåller sin plats, men en annan fältanvändare kan alltså "ta" en tilldelad-men-oplanerad order, vilket bryter mot affärsregeln. Klienten lägger till på samma sätt (`WorkOrderService.js:1354-1356`). Datum kontrolleras inte heller.
+### 5.2 Kategorier
 
-- **`ao_edit`-innehavare** (arbetsledare, admin) har ingen begränsning alls. Hela patchen går rakt in i `work_order_patch` (`:268-272`).
+Kategorierna är ömsesidigt uteslutande och prövas i ordning.
 
-### 3.2 Samtidighet
-
-- Gren B läser `vift_workOrders` **utanför** RPC-låset (`:230`) och anropar `work_order_patch` först efteråt. Två fältanvändare som trycker "Ta jobbet" samtidigt kan båda passera `target.status === 'pool'`.
-- Klienten skickar inget `expectedUpdatedAt`. `takeFromPool` anropar `_syncAO` utan opts (`WorkOrderService.js:1369`), och `_syncAO` skickar `null` (`:132-134`).
-- Patchen innehåller hela `staff` och hela `log`. Den andra skrivningen ersätter då sannolikt den förstas `staff` (`[A]` blir `[B]`) och `taken_from_pool`-posten. Båda klienterna har redan visat "Du är nu tilldelad" (`MyJobsPage.js:527-533`), utan att vänta på serverns svar.
-- Samma sak gäller arbetsledare som ändrar personal samtidigt i `updateStaff`: sista skrivningen vinner, utan varning.
-- Fake-backend stöder `expectedUpdatedAt` (`fake-backend.js:425`), men dess `patch_ao` (`:421-427`) saknar **hela** fältbegränsningen. Vem som helst med någon AO-behörighet som ser AO:n kan patcha vad som helst, även `staff`. Den simulerade servern kan därför inte testa "Ta jobbet"-reglerna i dag. Kommentaren "källan saknas i repot" (`:395`) är inaktuell: källan finns nu i `vift-v2`.
-
----
-
-## 4. Klienten, vy för vy
-
-| Vy | Kod | Hur pool, tilldelning och datum avgörs | Problem |
+| # | Kategori | Villkor | Var den visas |
 |---|---|---|---|
-| **Mina jobb**, grupper | `MyJobsPage.js:43-58` | Egna: `staff.includes(me)`, delade på datum: idag, försenade, utan datum ("Tilldelade utan datum", `:192`), kommande. **Pool: `status === 'pool'`**, oavsett personal och datum (`:56`). | Andras tilldelade pool-AO visas i fliken Arbetspool med "Ta jobbet". En pool-AO tilldelad mig visas **dubbelt**, både under Idag/Kommande och i Arbetspool. Försenade (`:50`) tar med `pool`, men `isOverdue` utesluter `pool`. Det är inkonsekvent. Tom-text: "kan tas av vem som helst i teamet" (`:219`). |
-| Mina jobb, "Ta jobbet" | `MyJobsPage.js:347`, `:527-533` | Visas för alla pool-AO. | Visas även för egen eller annans tilldelade AO och för roller som servern nekar. Lyckat-besked ges före serverns svar. |
-| **AO-lista**, statusflik "Pool" | `WorkOrdersPage.js:253-256`, `:577-583` | `status === 'pool'` | Blandar öppen och tilldelad pool. Tilldelade AO med status `planerad`/`nytt` utan datum hamnar inte här. |
-| AO-lista, snabbfilter "Otilldelade" | `WorkOrdersPage.js:182`, `:599-600` | `!staff.length`, **inklusive pool** | Dashboardens ruta "Otilldelade" (`Dashboard.js:289`, utan pool) och Dagens drift (`OperationsPage.js:48`, utan pool) länkar hit med `filter:'unassigned'` (`Dashboard.js:358`, `OperationsPage.js:23`). Siffran på rutan stämmer då inte med listan man landar i. |
-| AO-lista, behörighetsfilter | `WorkOrdersPage.js:414-421` (`_permittedList`), `:2612-2621` (`_canAccessAo`, används av massändring och export) | Eget eller `status==='pool'` | Följer serverns läcka. Fältet kan exportera andras pool-AO. |
-| **AO-detalj** | `WorkOrderDetailPage.js:59-62` (åtkomst), `:109` (utförandetext), `:447-472` (åtgärder), `WorkOrderService.nextStep` `:938` | Status `pool` ger "väntar på att någon tar uppdraget" (`action:'take'`) | Gäller även när personal finns. "Till pool" och statusbyte behåller personal, så resultatet blir "pool + personal". "Planera" ger `planerad` utan datum. "Omplanera" kan inte ta bort datum (`:689`). |
-| **Kalender** | `CalendarPage.js:159-160`, `:191-194` (vecka), `:293-296`, `:316-323` (agenda), `:340` (händelser) | Status `pool` ritas bara i rutan "Arbetspool (N ej schemalagda)". Övriga AO bara på `scheduledDate`. | En pool-AO **med datum** visas inte på sin dag utan som "ej schemalagd". En tilldelad AO **utan datum** och status `planerad`/`nytt` syns **ingenstans**. Poolrutan filtreras inte på personalfiltret (`f.staffId`). Pool-chips går inte att dra till en dag (`_poolChip` `:538-544` saknar drag). |
-| **Dagens drift** | `OperationsPage.js:38-51`, `:118` | Försenade utesluter `pool`, och "Otilldelade" utesluter `pool`. Grupp "pool": "ingen har tagit jobbet". | Texten stämmer inte för pool + personal. Personalvyn (`:144-153`) räknar pool-AO som "mina" men inte som försenade. |
-| **Dashboard** | `_scopeWorkOrdersForCurrentUser` `Dashboard.js:371-384`, widget Arbetspool `:1891-1926`, dagens tavla `:274-292`, karta `:1296-1306`, `Sidebar.js:333-343` | Poolwidgeten visar `status === 'pool'` med texten "jobb väntar på att tilldelas" (`:1910`). Kommentaren `:247-248` **antar** att pool betyder "ingen tilldelad resurs", men koden kontrollerar det inte. | Tilldelade pool-AO räknas som "väntar på att tilldelas". För fältanvändare tar KPI, hero och "Kräver åtgärd" med alla pool-AO (`includeSharedPool:true`, `:277`, `:1203`, `:2273`, `:2314`), även andras. |
-| **Notiser** | `WorkOrderDetailPage.js:3233-3249`; `PushService.notifyStaffAssigned` `PushService.js:588-628`; massändring `WorkOrdersPage.js:2925-2950`; guiden `WorkOrderService.create` → `notifyNewAO` (`:317-325`, riktad till fastighet eller broadcast) | Tilldelningsnotis bara från dialogen och massändringen. | Falsk notis vid poolflytt (avsnitt 1.3). Ingen tilldelningsnotis när AO skapas med personal (guide, serviceintervall, återkommande) eller vid "Ta jobbet" (ingen notis till arbetsledaren). Typen `ao_pool` finns i ikonmappningen (`NotificationsService.js:79`) men skickas ingenstans. |
-| **Historik** | `ao.log` (`WorkOrderService.js:1326-1340`, `:1361-1365`); `ActivityService.log` (`:1344`, `:1366-1368`; `WorkOrderDetailPage.js:3236`) | `staff_added`, `staff_removed`, `staff_responsible`, `staff_changed` och `taken_from_pool` | Poolflytten loggar inte vilka som togs bort. `staff_assigned` loggas felaktigt. `ActivityService` loggar "Personal ändrad" även när inget ändrats. |
-| **Samtidiga ändringar** | `WorkOrderService.update` `:445-458` (medvetet utan `expectedUpdatedAt`); `_syncAO` `:123-160` | Ingen tilldelningsväg skickar `expectedUpdatedAt`. | Sista skrivningen vinner, utan varning (avsnitt 3.2). |
+| 1 | **Avslutade** | `avslutad(ao)` (arkiv och papperskorg är egna lägen inom kategorin) | Statusflikarna Klar, Fakturerad, Arkiv, Papperskorg |
+| 2 | **Öppen pool** | `!avslutad && tillgängliggjord && !harPersonal` | Mina jobb, fliken "Öppen pool" (vid `ao_pool_take`). Arbetsledarens poolvy. Kalenderns ruta "Öppen pool". Ett eventuellt förfallodatum visas som "Förfaller …". |
+| 3 | **Planerad** | `!avslutad && ejPåbörjad && utförandedatum != ''` (med eller utan personal) | Kalenderns dag, Idag, Kommande, Försenade, Dagens drift |
+| 4 | **Tilldelad pool** | `!avslutad && ejPåbörjad && harPersonal && utförandedatum == ''` | Mina jobb, "Tilldelade utan datum" för de tilldelade. Arbetsledarens vy "Tilldelade, oplanerade". Kalenderns ruta "Tilldelade, oplanerade". Ett eventuellt förfallodatum visas. |
+| 5 | **Övriga aktiva** | Allt annat som inte är avslutat: `pågående`, okända statusvärden, samt ej påbörjade utan personal och utan utförandedatum som inte är tillgängliggjorda. Den sista gruppen är t.ex. en ny AO med status `nytt`, eller en pool-AO med `poolOpen === false`. | AO-listan. För arbetsledare markerade "Otilldelad, ej i pool" när personal saknas. |
 
----
+Följder:
 
-## 5. Rekommenderad lösning
+- En ny AO utan personal och datum med status `nytt` hamnar i kategori 5. Den exponeras alltså **inte** automatiskt, enligt AP-A.
+- Att tilldela personal ändrar aldrig `utförandedatum`, och att ta bort datum ändrar aldrig `staff`. Dimensionerna är separata, enligt D-24.
 
-### 5.1 Princip: härled kategorin, rensa ingen data
+### 5.3 Klassning av alla befintliga kombinationer
 
-En enda delad funktion, samma logik i klient, Edge Functions, SQL och fake-backend:
+Inga poster skrivs om. Kolumnen "Fält ser i dag" gäller en fältanvändare (`ao_view_own`) som **inte** är tilldelad. Den tilldelade ser sina egna AO i alla rader, både i dag och efter rättningen.
+
+| # | Status | Personal | `scheduledDate` | `deleted`/`archived` | Kategori | Fält ser i dag | Fält ser efter |
+|---|---|---|---|---|---|---|---|
+| 1 | nytt | – | – | nej | Övriga aktiva (otilldelad, ej i pool) | Nej | Nej |
+| 2 | nytt | – | ✓ | nej | Planerad, otilldelad | Nej | Nej |
+| 3 | nytt | ✓ | – | nej | Tilldelad pool | Nej | Nej |
+| 4 | nytt | ✓ | ✓ | nej | Planerad | Nej | Nej |
+| 5 | pool | – | – | nej | **Öppen pool** | Ja | Ja, med `ao_pool_take` (5.5) |
+| 6 | pool | – | ✓ (förfallodag, t.ex. serviceintervall) | nej | **Öppen pool** med förfallodatum | Ja | Ja, med `ao_pool_take` |
+| 7 | pool | ✓ | – | nej | **Tilldelad pool** | **Ja (läcka)** | **Nej** |
+| 8 | pool | ✓ | ✓ (förfallodag) | nej | **Tilldelad pool** med förfallodatum | **Ja (läcka)** | **Nej** |
+| 9 | planerad | – | – | nej | Övriga aktiva (otilldelad, ej i pool) | Nej | Nej |
+| 10 | planerad | – | ✓ | nej | Planerad, otilldelad | Nej | Nej |
+| 11 | planerad | ✓ | – | nej | Tilldelad pool | Nej | Nej |
+| 12 | planerad | ✓ | ✓ | nej | Planerad | Nej | Nej |
+| 13 | pågående | alla | alla | nej | Övriga aktiva | Nej | Nej |
+| 14 | klar, fakturerad, avbruten | alla | alla | nej | Avslutade | Nej | Nej |
+| 15 | pool | alla | alla | **ja** | Avslutade (arkiv/papperskorg) | **Ja (läcka)** | **Nej** |
+| 16 | övriga statusar | alla | alla | ja | Avslutade | Nej | Nej |
+| 17 | okänt eller tomt statusvärde (import, äldre data) | alla | alla | nej | Övriga aktiva | Nej | Nej |
+| 18 | pool, med det nya `poolOpen:false` | – | alla | nej | Övriga aktiva (otilldelad, ej i pool) | (finns inte i dag) | Nej |
+
+Rad 6 och 8: om en pool-AO har fått datumet genom "Omplanera" och alltså var avsedd som bokning, klassas den ändå som förfallodatum. Kalendern visar den redan i dag som "ej schemalagd", så klassningen ändrar inget synligt. Om den ska ses som planerad avgörs i fråga Q1.
+
+### 5.4 Bevis: ingen fältanvändare ser fler AO än i dag
 
 ```
-aktiv(ao)        = !deleted && !archived && status ∉ {klar, fakturerad, avbruten}
-harPersonal(ao)  = (staff ?? []).length > 0
-harDatum(ao)     = !!scheduledDate
-
-poolKategori(ao) =
-  !aktiv(ao) || status == 'pågående'   → null            (inte pool; pågående visas som pågående)
-  !harPersonal && !harDatum            → 'oppen_pool'
-   harPersonal && !harDatum            → 'tilldelad_pool' (visas även i Mina jobb för de tilldelade)
-   harDatum                            → 'planerad'       (planeringsvyer; utan personal = "planerad, otilldelad")
+I dag:  V_idag(ao, me)  = me ∈ staff  ∨  status = 'pool'
+Efter:  V_efter(ao, me) = me ∈ staff  ∨  (status = 'pool' ∧ poolOpen ≠ false ∧ staff = ∅
+                                          ∧ ¬deleted ∧ ¬archived ∧ har(ao_pool_take))
 ```
 
-Statusdimensionen (hur långt ordern har kommit) tolkas så att `nytt`, `pool` och `planerad` alla betyder **"Ej påbörjad"**. Etiketten under kategorin visar sedan *var* ordern ligger. Lagrade statusvärden ändras inte.
+Varje led i `V_efter` medför motsvarande led i `V_idag`. Det första ledet är identiskt, och det andra innehåller `status = 'pool'` som en av sina konjunkter. Alltså gäller `V_efter ⊆ V_idag` för varje AO och varje användare. Ingen bredning är möjlig, oavsett vilka data som finns.
 
-**Läsregel för befintliga AO, utan migrering:**
+Det håller också över tid:
 
-| Lagrat | Tolkas som |
+- Klassningen kräver `status = 'pool'` så länge statusvärdet finns kvar (AP-G).
+- Det nya fältet `poolOpen` kan bara **ta bort** en AO ur öppen pool, aldrig lägga till.
+- "Släpp till öppen pool" sätter status `pool`, alltså samma markering som i dag.
+
+Samma begränsning ska gälla `canViewWorkOrder`, de tre SQL-funktionerna och fake-backend. Där ska poolgrenen dessutom bara ge **läsrätt** (avsnitt 8).
+
+### 5.5 Behörighet för att se öppen pool
+
+D-04 anger att begränsad roll som standard inte ska se öppen pool. Dagens regel ger dock alla med `ao_view_own` poolen. Eftersom behörigheter inte får hårdkodas på rollnamn knyts synligheten till behörigheten **`ao_pool_take`** (AP-F). Den som inte får ta jobb har ingen anledning att se poolen.
+
+Följder:
+
+- Detta snävar in synligheten ytterligare och bryter alltså inte mot 5.4.
+- När regeln införs måste fältrollerna få `ao_pool_take` i samma omgång, annars förlorar fältet poolen.
+- D-13 kräver att öppna pooljobb bara innehåller begränsad information. Det innebär en projektion av öppen-pool-AO för icke tilldelade, som snävar in ytterligare.
+
+### 5.6 Nya skrivningar under övergången (AP-G)
+
+| Åtgärd | Skrivning |
 |---|---|
-| `pool`, ingen personal, inget datum | Öppen pool |
-| `pool`, personal, inget datum | **Tilldelad pool** (inte öppen, och kan inte tas av andra) |
-| `pool`, personal, datum | Planerad (tilldelad) |
-| `pool`, ingen personal, datum | Se beslut A nedan |
-| `planerad` eller `nytt`, personal, inget datum | Tilldelad pool |
-| `planerad` eller `nytt`, ingen personal, inget datum | Se beslut A nedan |
-
-### 5.2 Server (först, säkerhetsfix)
-
-1. **`work-orders-list`** (`index.ts:88-91`), **`canViewWorkOrder`** (`vift-auth.ts:130`) och **fake-backend `canViewAO`** (`:126`) ändras till:
-
-   ```
-   staff.includes(me) || (ao.status === 'pool' && staff.length === 0)
-   ```
-
-   Konsekvens: öppen pool syns för `ao_view_own`. Tilldelad pool syns bara för de tilldelade och för `ao_view_all`. Detta är den minsta ändring som stänger läckan och behåller dagens beteende för öppen pool. Se beslut A om `nytt` utan personal och datum ska räknas in.
-
-2. **SQL-funktionerna** med samma villkor behöver en ny migrering som kör `CREATE OR REPLACE`, med enbart det ändrade villkoret `and jsonb_array_length(coalesce(v_ao->'staff','[]')) = 0`:
-   - `work_order_checklist_resolve`
-   - checklistans framsteg
-   - `work_order_log_append` och `work_order_log_remove`
-
-   Gör ingen annan ändring där. Kör i STAGING först. LIVE kräver Lucas godkännande.
-
-3. **`ao-time-write`, gren B** (`:241-257`):
-   - **Neka** när `curStaff.length > 0`. Använd en egen felkod, t.ex. `already_assigned` (409), så att klienten kan säga "Jobbet har redan tagits av …".
-   - Kräv också öppen pool enligt den nya regeln, så att den stämmer med punkt 1.
-   - Arbetsledare och admin (`ao_edit`) påverkas inte. De tilldelar via dialogen.
-   - Låt `staff` vara oförändrad och lägg bara till anroparen. Ändra inte status (se 5.4), eller behåll `planerad` en övergångsperiod för kompatibilitet. Grenens krav på `status:'planerad'` (`:216`) måste i så fall breddas till "staff + log, status utelämnad eller oförändrad".
-   - **Samtidighet:** kräv `expectedUpdatedAt` i gren B, och flytta helst kontrollen "staff tom" in i RPC:n under radlåset. Tills det är gjort minskar `expectedUpdatedAt` fönstret, förutsatt att `work_order_patch` jämför under låset (G4, källan saknas och det måste verifieras).
-
-4. **`create_time`**: beslut B. Ska stämpling på AO kräva att anroparen får se AO:n enligt den nya regeln?
-
-### 5.3 Klient
-
-1. **Dialogen "Hantera personal"** (`WorkOrderDetailPage.js:3159-3256`, `WorkOrderService.updateStaff` `:1312-1348`):
-   - Ta bort poolrutan ur personaldialogen. Dialogen ska bara ändra `staff` och `responsibleStaffId` och logga `staff_added`, `staff_removed` och `staff_responsible`. Status och datum rörs inte.
-   - Om rutan behålls under en övergång: aldrig förikryssad, och den får aldrig rensa vald personal. Betydelsen blir "ta bort datum" (avplanera) och inget annat.
-   - Beräkna `added` från **resultatet** (`ao.staff` efter sparning minus före). Skicka notis, push och `staff_assigned` bara då, och helst först efter serverns bekräftelse.
-   - Skicka `expectedUpdatedAt` (värdet *före* den lokala ändringen). Vid `stale_write`: ladda om AO:n och visa "Någon annan ändrade personalen. Kontrollera och spara igen."
-2. **"Ta bort datum"**: egen åtgärd i rutan "När" och i "Omplanera". Tillåt tomt datum (`:689`) och rensa `scheduledDate`, `scheduledStart` och `scheduledEnd`. Personal och status behålls. Logga posten `schedule_removed`. Det ersätter dagens "flytta till pool".
-3. **"Släpp till öppen pool"** (för arbetsledare och admin): kräver uttrycklig bekräftelse som namnger vilka som tas bort. Ta bort personal **och** datum, och logga en `staff_removed`-post per person plus `released_to_pool`. Det här är det enda sättet personal får rensas i poolsammanhang.
-4. **"Till pool"**, statusbyte och massändring av status: ett statusbyte ändrar bara status, som i dag. Inför en varning när `pool` väljs på en tilldelad AO, eller ta bort `pool` som valbar status när kategorin är härledd (se 5.4).
-5. **"Planera"** (`:467-468`): öppna datumvalet (`openReschedule`) i stället för att sätta `planerad` utan datum.
-6. **Mina jobb**:
-   - Fliken Arbetspool visar bara `oppen_pool` ("Lediga jobb").
-   - "Tilldelade utan datum" finns redan (`:53`, `:192`) och täcker tilldelad pool för den inloggade.
-   - Ta bort dubbletterna.
-   - Visa "Ta jobbet" bara när servern skulle godkänna, och visa beskedet först efter serverns svar.
-7. **AO-lista**: snabbfilter enligt kategori: "Öppen pool", "Tilldelad, oplanerad" och "Otilldelade". En gemensam definition av "Otilldelade" gäller överallt: utan personal och aktiv, med eller utan öppen pool enligt beslut C. Statusfliken "Pool" ersätts av eller kompletteras med kategorierna.
-8. **Kalender**: AO med datum ritas på sin dag oavsett status. Under veckan visas två rutor, "Öppen pool" och "Tilldelade, oplanerade" (den sista filtreras av personalfiltret). Gör chipsen dragbara till en dag; drag sätter bara datum.
-9. **Dagens drift och dashboard**:
-   - Använd samma `poolKategori`.
-   - Poolwidgeten räknar bara öppen pool ("väntar på att tas"). En ny eller utökad ruta visar "Tilldelade, oplanerade" för arbetsledare.
-   - Fältanvändare får `includeSharedPool` = bara öppen pool.
-   - Rätta texten i `Dashboard.js:247-248` och `:1910`.
-10. **AO-detalj**: `nextStep` ska bygga på kategorin. Tilldelad pool ger "Tilldelad – välj datum", öppen pool ger "Ligger i öppen pool". Texten i `_execStatus` (`:109`) ska visa kategorin.
-11. **Notiser**:
-    - Tilldelningsnotis vid alla vägar som *lägger till* personal: dialogen, massändringen, AO som skapas med personal i guide och serviceintervall, och arbetsledare som tilldelar en pool-AO.
-    - Vid "Ta jobbet" en valfri notis till ansvarig eller arbetsledare.
-    - Ingen notis vid avplanering.
-    - Typen `ao_pool` kan användas för "ny AO i öppen pool" om det önskas (beslut D).
-12. **Historik**: varje ändring loggas per dimension: personal (`staff_added`/`staff_removed`/`staff_responsible`), planering (`schedule_set`/`schedule_removed`) och status (`work_order_status`). Inget skrivs om och inget tas bort.
-
-### 5.4 Status `pool` på sikt
-
-- **Fas 1:** Behåll lagrade värden. Sluta skapa `pool` + personal:
-  - Guiden i pool-läge med personal sparar status `nytt` eller behåller `pool`. Det spelar ingen roll när läsregeln gäller, men undvik det nya.
-  - Serviceintervall med `aoStaff`: samma sak.
-- **Fas 2:** Om kategorin är härledd överallt kan `pool` lämnas som ett legacyvärde som betyder "Ej påbörjad, släppt till poolen", utan att ändra gamla poster. Nya AO får `nytt` och placeras av `staff`/datum. Detta förutsätter beslut A.
-
-### 5.5 Vad som inte ändras
-
-- Ingen migrering av `vift_workOrders`. Ingen historisk post skrivs om.
-- Stämpling, alltså tidsposter (`TimeService`/`create_time`), är en separat dimension och berörs inte, utom eventuellt beslut B.
-- `ao_view_all` och `all` ser allt som i dag.
+| Personaldialogen | Bara `staff`, `responsibleStaffId` och loggposterna `staff_added`/`staff_removed`/`staff_responsible`. Rör inte status eller datum. Om AO:n har status `pool` och personal läggs till sätts `poolOpen:false`, så att den inte återvänder till öppen pool om personalen senare tas bort. |
+| "Ta bort datum" | Rensar `scheduledDate`, `scheduledStart` och `scheduledEnd`. Loggposten `schedule_removed`. Rör inte personal, ansvarig, status eller `poolOpen`. |
+| "Släpp till öppen pool" (arbetsledare) | Kräver bekräftelse som namnger personalen. Tar bort personal (loggposten `staff_removed` per person) och utförandedatum. Sätter status `pool` och `poolOpen:true`. Loggposten `released_to_pool`. |
+| "Ta jobbet" | Se avsnitt 9. Lägger till anroparen och sätter `poolOpen:false`. Behåller övergången `pool` → `planerad` under övergången, för kompatibilitet med v3.4-klienter som fortfarande är i bruk. Klassningen ger "tilldelad pool" oavsett. |
+| Guiden "Arbetspool" | Utan personal: status `pool`, alltså öppen pool. Med personal: status `nytt`, alltså tilldelad pool, inte `pool` med personal. |
+| Serviceintervall (klient och cron) | Förfallodagen skrivs till **`dueDate`**. Under övergången skrivs den också till `scheduledDate`, för gamla klienter. Status `pool` sätts bara om `aoStaff` är tom; annars `nytt`. Lägg till `source:'service_interval'` även i klientvägen. |
 
 ---
 
-## 6. Beroenden mot behörighetsarbetet och ordning
+## 6. Räknare och vyer (AP-C)
+
+**Definition:**
+
+- "Otilldelade" = aktiva (`!avslutad`) utan personal = kategorierna 2 + 5 utan personal + "Planerad, otilldelad". Öppen pool är en delmängd.
+- Om en räknare utesluter öppen pool ska etiketten säga det, t.ex. "Otilldelade (utom öppen pool)".
+
+| Räknare eller vy | Fil:rad | Räknar i dag | Ska räkna | Etikett |
+|---|---|---|---|---|
+| AO-lista, snabbfilter "Otilldelade", antal | `WorkOrdersPage.js:182`, chip `:192` | `!staff` i aktuell flik, inklusive pool och, i fliken "Aktiva", även klar och avbruten | Aktiva utan personal | "Otilldelade" |
+| AO-lista, filtret "Otilldelade" | `WorkOrdersPage.js:599-600` | `!staff` | Samma som ovan | – |
+| AO-lista, filterpanelens antal | `WorkOrdersPage.js:853`, `:859` | `!staff` | Samma som ovan | – |
+| AO-lista, statusflik "Pool" | `WorkOrdersPage.js:253-256`, antal `:171` | `status === 'pool'` | Ersätts av kategorifiltren "Öppen pool" och "Tilldelade, oplanerade". Statusfliken kan finnas kvar som en ren statusvy. | "Öppen pool" och "Tilldelade, oplanerade" |
+| Dashboard, dagens tavla "Otilldelade" | `Dashboard.js:289`, ruta `:358` | Utan personal, utom pool | Aktiva utan personal, eller utan öppen pool | "Otilldelade", eller "Otilldelade (utom öppen pool)" |
+| Dashboard, driftwidget "Sakn. personal" | `Dashboard.js:1166`, `:1186` | Utan personal, utom pool och avbruten | Samma val som ovan | "Otilldelade" eller "Otilldelade (utom öppen pool)" |
+| Dagens drift, fokus "Otilldelade" | `OperationsPage.js:23`, `:48` | Utan personal, utom pool och avbruten. Länkar till AO-listans `unassigned`, som räknar annorlunda. | Samma definition som målet för länken | Samma etikett som AO-listan |
+| Sidomenyns larmbricka för driften | `Sidebar.js:339-341` | Utan personal, utom pool | Samma som Dagens drift | – |
+| Dashboard, widget "Arbetspool" | `Dashboard.js:1897`, text `:1910` | `status === 'pool'`. Texten "väntar på att tilldelas". | Öppen pool. För arbetsledare även en separat siffra för "Tilldelade, oplanerade". | "Öppen pool – väntar på att tas" |
+| Dashboard, delad pool i fältets KPI, hero och "Kräver åtgärd" | `Dashboard.js:277`, `:381`, `:1203`, `:2273`, `:2314` | Egna AO plus alla med status `pool` | Egna AO plus öppen pool (vid `ao_pool_take`) | – |
+| Dashboard, aktiva ordrar | `Dashboard.js:2275` | Status `nytt`, `pool`, `planerad` och `pågående` | Oförändrat (aktiva) | – |
+| Mina jobb, fliken Arbetspool | `MyJobsPage.js:56`, `:102` | `status === 'pool'` | Öppen pool | "Öppen pool" |
+| Mina jobb, "Tilldelade utan datum" | `MyJobsPage.js:53`, `:192` | Egna utan datum, inte pågående | Egna i tilldelad pool | Oförändrad |
+| Mina jobb, "Försenade" | `MyJobsPage.js:50` | Egna med datum före idag, inklusive pool | Egna planerade med utförandedatum före idag | – |
+| Kalender, poolrutor | `CalendarPage.js:160`, `:192`; agendan `:293-296`, `:317` | `status === 'pool'`, "ej schemalagda" | Två rutor: "Öppen pool" och "Tilldelade, oplanerade". Den senare följer personalfiltret. | Enligt kategori |
+| Kalender, händelser per dag | `CalendarPage.js:340` | Utesluter status `pool` | `utförandedatum == dag` | – |
+| Dagens drift, gruppen "pool" | `OperationsPage.js:118` | Status `pool`, "ingen har tagit jobbet" | Öppen pool | "Öppen pool" |
+| Försenad | `WorkOrderService.js:918`; `OperationsPage.js:46`, `:149`; `Dashboard.js:1164`; `Sidebar.js:339` | Datum före idag, inte pool | Utförandedatum före idag. Samma resultat för befintlig data. | – |
+| Förfallna (ny) | – | – | Aktiva med förfallodatum före idag och utan utförandedatum | "Förfallna, ej planerade" |
+| AO-detalj, nästa steg | `WorkOrderService.js:938`, `:946-948` | Status `pool` ger "väntar på att någon tar uppdraget" | Enligt kategori. Tilldelad pool ger "Tilldelad – välj datum". | – |
+| Rapporter, statusdiagram | `ReportsPage.js:392` | Status | Oförändrat. Det är statusdimensionen. | – |
+| Simulerade testförväntningar | `tests/e2e/specs/33_falt_pages.js:312-314` | Som Dagens drift | Följer den nya definitionen | – |
+
+---
+
+## 7. Stämpling kräver tilldelning (AP-B)
+
+**Server, alla tre ställena saknar kontroll i dag:**
+
+| Ställe | Installerad källa | Ändring |
+|---|---|---|
+| Instämpling med AO | `INV/functions/store-key-write/store-key-write/stamp-status.ts:23-38`: `aoId` tas emot okontrollerat (`:33`) och skrivs av `store_write_stamp_status` (`functions.sql:3642-3714`) | Om `active && aoId`: kräv att AO:n finns, inte är avslutad och har anroparen i `staff`. Annars `forbidden` med orsaken `not_assigned`. Instämpling utan AO ("Utan arbetsorder") fungerar som i dag. |
+| `create_time` (stämpla ut, registrera tid) | `INV/functions/ao-time-write/ao-time-write/index.ts:188-224` (ingen kontroll av `aoId`); `time_entry_create`, `functions.sql:3789-3809`, lägger tidpostens id i **vilken AO som helst** | Kontrollen görs i `time_entry_create` under AO-låset (`FOR UPDATE`, `:3795`). En post för egen räkning med `aoId` kräver att anroparen finns i AO:ns `staff`, att AO:n inte är avslutad och att den inte är fakturerad. Registrering åt annan (`payroll_manage`) undantas. Fel: `not_assigned`, ingen mutation. |
+| `patch_time` | `ao-time-write/index.ts:226-242` | Om patchen byter `aoId` gäller samma kontroll för den nya AO:n. |
+
+**Klient:**
+
+- Instämplingslistan visar i dag alla AO med status `pool`, `nytt`, `planerad` och `pågående` (`TimePage.js:173`). Den ska bara visa egna tilldelade.
+- Stämpelknappen i AO-detaljen (`WorkOrderDetailPage.js:190`, `:373`) och "Registrera tid" (`:262`, `:1618`) ska bara visas när anroparen är tilldelad, eller har `payroll_manage` för registrering åt andra.
+- Mina jobb visar redan bara stämpling på egna jobbkort (`MyJobsPage.js:293`). Poolkorten saknar stämpling (`:347`) och ska fortsatt göra det.
+- Ingen automatisk tagning vid stämpling (AP-B).
+
+---
+
+## 8. Öppen pool ger ingen skrivrätt
+
+Alla ställen där poolregeln eller `canViewWorkOrder` i dag ger **skrivrätt** utan tilldelning:
+
+| Ställe | Installerad källa | Ger i dag | Ändring |
+|---|---|---|---|
+| `ao-time-write`, materialgrenen | `ao-time-write/index.ts:108-120`; synlighet `:117` | Ersätter hela materiallistan på öppen pool-AO | Kräv `me ∈ staff` (eller `ao_view_all` + `ao_edit`). Radvisa operationer enligt D-19 i en senare etapp. |
+| `ao-time-write`, gren B (ta) | `:135-151`, `:150` | Tagning även när personal finns | Ersätts av `work_order_pool_take` (avsnitt 9). |
+| `ao-time-write`, endast `ao_complete` | `:153-160` | Klarmarkering av **vilken AO som helst**, även fakturerad (SÄK-5) | `ao_complete_own`: `me ∈ staff`, status `pågående` (eller enligt D-03), inte fakturerad, avbruten, arkiverad eller borttagen. Kontrolleras under lås, med en smal RPC eller kontrollen i en `work_order_patch`-variant. |
+| `work-order-image-upload` | `INV/functions/work-order-image-upload/work-order-image-upload/index.ts:83`, `:96`, `:107`, `:137` | Uppladdning till AO:ns lagringsyta | Kräv `me ∈ staff` (eller `ao_view_all`). |
+| `work-order-image-delete` | `INV/functions/work-order-image-delete/work-order-image-delete/index.ts:78`, `:83`, `:90`, `:94` | Radering av bilder på öppen pool-AO | Kräv `me ∈ staff`. Radering av andras bilder kräver `ao_edit`. |
+| `work_order_checklist_set_state`, via `work-order-checklist-resolve` (`…/index.ts:81`, `:137`) | `functions.sql:4457` | Bocka av, markera avvikelse, återställa | Byt villkoret till `staff ? me`, under det befintliga låset (`:4442`). Poolgrenen tas bort för skrivning. |
+| `work_order_log_append` | `functions.sql:4714`; EF `INV/functions/work-order-log-write/work-order-log-write/index.ts:58`, `:74` | Loggposter, anteckningar och bildreferenser | Samma ändring. |
+| `work_order_log_remove` | `functions.sql:4755`; EF `:78` | Borttagning av egna loggposter | Samma ändring. |
+| `create_time` och `time_entry_create` | Avsnitt 7 | Tid på vilken AO som helst | Avsnitt 7. |
+| Stämpling | Avsnitt 7 | Instämpling på vilken AO som helst | Avsnitt 7. |
+| Fake-backend | `fake-backend.js:424` (`patch_ao`), `:438` (logg), `:597` och `:611` (checklista, startar dessutom AO:n), `:659` (`logWrite`), `:682` (bilduppladdning), `:701` (bildradering) | Samma som servern, och `patch_ao` utan fältbegränsning | Spegla installerad källa: separera `canViewAO` (läsning) från `isAssigned` (skrivning), lägg in ao-time-writes fältregler och `work_order_pool_take`, ta bort autostarten i checklistan. |
+
+**Läsning** på öppen pool-AO (`work-orders-list`, `work-order-image-url` `INV/…/work-order-image-url/index.ts:93`) är tillåten, men begränsad enligt D-13 (projektion i en senare etapp).
+
+Gemensam hjälpfunktion: `canWriteWorkOrderContent(ao, perms, me) = hasPerm('all') || (hasPerm('ao_view_all') && <skrivbehörighet>) || me ∈ staff`. I SQL ska motsvarande kontroll ligga under radlåset (beslutets regel om transaktionslås).
+
+---
+
+## 9. "Ta jobbet" med `ao_pool_take` (AP-F)
+
+**Ny RPC: `work_order_pool_take(p_ao_id, p_caller_staff_id, p_entry_id, p_idempotency_key)`**, med `SECURITY DEFINER` och körbar bara av `service_role`.
+
+1. Idempotens via `op_idempotency` med `fn_name = 'work_order_pool_take'` (samma mönster som `functions.sql:4800-4804` och `:4844-4845`). Samma nyckel ger samma svar.
+2. `SELECT value … WHERE key = 'vift_workOrders' FOR UPDATE`. Därefter sker alla kontroller på den låsta raden:
+   - AO saknas: `not_found` (404).
+   - `deleted`, `archived` eller avslutad: `not_available` (409).
+   - Inte öppen pool (`status <> 'pool'`, `poolOpen = false` eller `staff` inte tom): **`already_assigned`** (409) om `staff` inte är tom, annars `not_in_pool` (409).
+   - Anroparen finns inte i `vift_staff` eller är inaktiv: `forbidden` (403).
+3. Skriv: `staff = [anroparen]`, `poolOpen = false`, status `planerad` (övergångsregeln i 5.6) och loggposten `{id: p_entry_id, type:'taken_from_pool', staffId, at}` **tillagd** sist i `log`, inte ersatt. `updatedAt` sätts av servern.
+4. Returnera `{workOrder, takenBy}`.
+
+**Edge Function** (en ny gren eller ny `ao-time-write`-åtgärd `take_from_pool`):
+
+- Kräv `ao_pool_take` (eller `all`) och `ao_view_own`/`ao_view_all`. Kopplas inte till `ao_complete` eller `ao_time`.
+- Identiteten tas från `checkViftAuth`. Klienten skickar bara `aoId` och idempotensnyckel.
+- Ta bort gren B (`ao-time-write/index.ts:123`, `:135-151`), så att det inte finns två vägar.
+
+**Samtidighet:** två anrop serialiseras av radlåset. Det första får 200. Det andra ser `staff` som inte är tom och får 409 `already_assigned` utan att något ändras. Dagens `expectedUpdatedAt` behövs inte här (avsnitt 3.3).
+
+**Klient** (`WorkOrderService.takeFromPool`, `:1350-1374`; `MyJobsPage.takeFromPool`, `:527-533`):
+
+- Ingen lokal mutation före serverns svar.
+- Vid 409 `already_assigned` visas "Jobbet har redan tagits", och listan uppdateras.
+- Knappen visas bara med `ao_pool_take` och bara för öppen pool.
+
+---
+
+## 10. Notiser (AP-D)
+
+| Krav | Lösning |
+|---|---|
+| Efter bekräftad serverändring | Notiser skapas av **servern** i samma transaktion som ändringen, som en utkorg: en ny post i en egen tabell eller nyckel med `{event, aoId, staffId, dedupeKey, createdAt}`. Push skickas därifrån, eller av klienten efter bekräftelse med samma `dedupeKey`. Klientens lokala `NotificationsService.push` (`NotificationsService.js:7-22`) skriver i dag en delad lista direkt och räknas inte som bekräftad. |
+| Utlösare: personal tilldelad | Alla vägar som faktiskt **lägger till** id i `staff`: personaldialogen, massändring, AO skapad med personal (guide, serviceintervall, återkommande, offert till AO, import om det önskas) och `work_order_pool_take` (själv-tilldelning ger ingen notis till sig själv). Diffen beräknas på servern mellan låst före-värde och efter-värde. |
+| Dubblettskydd | `dedupeKey = aoId \| staffId \| 'assigned' \| <id för loggposten som lade till personen>`, unik. Upprepade försök med samma idempotensnyckel skapar ingen ny notis. |
+| Notis till arbetsledare när ett jobb tas | Händelsen `pool_taken`. Mottagare enligt konfiguration: ansvarig på AO:n, eller personal med en ny notisbehörighet. Den hårdkodas inte på rollnamn. |
+| Nytt öppet pooljobb | Konfigurerbar och av som standard: en inställning per organisation eller användare ("notis om nya pooljobb"). Mottagare bara bland de som har `ao_pool_take`. Händelsen `pool_released` från "Släpp till öppen pool" och från guiden. |
+| Ingen falsk notis vid avplanering | "Ta bort datum" skapar ingen tilldelningshändelse. Personaldialogen skapar händelser bara för faktiskt tillagda personer (rättar `WorkOrderDetailPage.js:3233-3249`). |
+
+---
+
+## 11. Egen planering med `ao_plan_own` (AP-E, senare etapp)
+
+**Serverfunktion `work_order_plan_own(p_ao_id, p_caller_staff_id, p_date, p_start, p_end, p_mode, p_idempotency_key)`**, med radlås:
+
+- Kräver `ao_plan_own` och `me ∈ staff`. AO:n får inte vara avslutad eller pågående; bara `nytt`, `pool` eller `planerad`.
+- **Får bara ändra** `scheduledDate`, `scheduledStart` och `scheduledEnd`, plus loggposten `schedule_set_own`. Personal, ansvarig, status, `poolOpen`, ekonomiska fält och `dueDate` rörs aldrig.
+- Oplanerad AO (tilldelad pool): tillåten för alla tilldelade.
+- Redan planerad AO: ändring kräver ett eget beslut. Förslag: en separat behörighet `ao_replan_own`, eller att datumet sattes av anroparen själv (loggens senaste `schedule_set*` är anroparens).
+- **Flerpersonsuppdrag**, förslag:
+  - Om `responsibleStaffId` är satt får bara ansvarig planera.
+  - Annars får första planeringen göras av vilken tilldelad som helst. En senare ändring kräver ansvarig eller arbetsledare.
+  - Varje ändring loggas och ger en notis (`schedule_changed`) till de andra tilldelade.
+- **Konflikt:** valfritt `p_expected_schedule` (förra datumet och tiden) jämförs under låset och ger `schedule_conflict` (409).
+
+---
+
+## 12. Beroenden och ordning
 
 | Arbete | Beroende |
 |---|---|
-| **B4, urval i aktivitetsloggen** (`BEHORIGHETER-BESLUTSUNDERLAG.md:55-63`) | B4 föreslår "samma urval som `work-orders-list`". Byggs B4 på dagens regel får fältet även andras pool-AO-händelser. **Poolregeln ska alltså rättas före eller samtidigt med B4**, och B4 ska använda samma delade funktion (`canViewWorkOrder`). Grundprincip 3 i underlaget ("egna och delade pool-AO") behöver formuleras om till "egna och öppen pool". |
-| **Ö7, uppgifter** (`vift_activities`) | Samma urval som B4, och därmed samma beroende. |
-| **Ö2, fältets klarmarkering och `ao_complete`** | "Ta jobbet" kräver i dag `ao_complete` (`ao-time-write/index.ts:214-216`). Beslut behövs om tagning ska följa `ao_complete` eller en egen behörighet (t.ex. `ao_take_pool`), eller räcka med `ao_view_own` + `ao_time`. Begränsad ser i dag poolen men kan inte ta något. |
-| **Ö1, "Starta arbete" för tilldelad** | Gren A tillåter start från `pool` när anroparen är tilldelad, och det stämmer med den nya modellen. Ingen konflikt. |
-| **"Tilldelad personal kan planera enligt behörighet"** | Fältrollen saknar `ao_edit`, så planering (datum) är spärrad både i klient och på server. Om fältet ska få sätta datum på sin egen tilldelade AO behövs en smal servergren i `patch_ao`: `{scheduledDate, scheduledStart, scheduledEnd}` på en AO där anroparen finns i `staff` (beslut E). |
-| **G4** (källa till `work_order_patch` saknas) | Måste lösas för att verifiera konfliktkontrollen i 3.2. |
-| **B5 och fältvis sammanslagning** | Inget direkt beroende. |
+| **SÄK-3** (läcka) | Avsnitt 5.4 och 8. Måste ändras samtidigt i `work-orders-list`, `canViewWorkOrder` (alla EF-buntar som har `_shared/vift-auth.ts`), tre SQL-funktioner och fake-backend. |
+| **SÄK-4** ("Ta jobbet") | Avsnitt 9. Kräver behörigheten `ao_pool_take` i rollregistret och klientändringen samtidigt. |
+| **SÄK-5** (`ao_complete`) | Avsnitt 8. Hör ihop med D-03 (`ao_complete_own`). Samma serveromgång. |
+| **D-03 `ao_start_own`, `ao_complete_own`, `ao_pool_take`** | De nya behörigheterna måste finnas i standardrollerna (D-02, D-26) innan den gamla grenen tas bort. Annars förlorar fältet start, klarmarkering och tagning. |
+| **B4 (aktivitetslogg) och Ö7 (uppgifter)** | Enligt beslutet rättas poolregeln **före eller samtidigt**. B4:s urval för fältet = AO där `me ∈ staff`, plus öppen pool om det beslutas (förslag: inte för loggen, eftersom öppen pool ska ha begränsad information enligt D-13). Testplanens ordning (B4/Ö7 före F1/F4/F15) ska rättas. |
+| **D-22** | Notisutkorg och loggposter skrivs med serversatt aktör och tid. Samma mönster som för B4. |
+| **D-19** (radvisa materialrader) | Skrivregeln i avsnitt 8 (`me ∈ staff`) är förutsättning. |
+| **AP-E** | Senare etapp, efter avsnitt 5 och 9. |
+| **AP-G** | Avvecklingen av `pool` först när import, serviceintervall, kalender, behörigheter och notiser är verifierade med kategorierna. |
 
 **Ordning:**
 
-1. Serverfix: läsregel (`work-orders-list`, `canViewWorkOrder`, fake-backend) och gren B, inklusive SQL-funktionerna, i STAGING.
-2. Klientfix: dialogen, notiserna och `expectedUpdatedAt`.
-3. B4 och Ö7 på den rättade regeln.
-4. `poolKategori` i alla vyer.
-5. Valfritt: fältets egen planering (beslut E) och avveckling av status `pool` (fas 2).
+1. Server, en omgång i STAGING efter separat godkännande:
+   - läsregeln enligt 5.4;
+   - skrivregeln enligt 8 (EF och SQL);
+   - `work_order_pool_take`;
+   - SÄK-5;
+   - `create_time` och stämplingskontroll;
+   - fake-backend speglas i samma ändring;
+   - behörigheterna `ao_pool_take`, `ao_start_own` och `ao_complete_own` i rollerna.
+2. Klient:
+   - personaldialogen (AP-FEL-1, AP-G);
+   - "Ta bort datum" och "Släpp till öppen pool";
+   - "Ta jobbet" som väntar på serverns svar;
+   - stämplingsurvalet.
+3. B4 och Ö7 på den rättade regeln. Får göras samtidigt med steg 1.
+4. `poolKategori` och räknarna (avsnitt 5 och 6) i alla vyer. `dueDate` för serviceintervall.
+5. Notisutkorgen (avsnitt 10).
+6. AP-E (`ao_plan_own`).
+7. AP-G: avveckling av status `pool` för nya AO.
 
 ---
 
-## 7. Testfall
+## 13. Testfall
 
-Alla STAGING-tester använder bara poster märkta `[E2E-TEST]`, skapade och borttagna av testet (mönster: `tests/staging/authz-mutation.js:100-101`, borttagning via `e2e-test-cleanup`). Fake-backend måste först få samma regler som den riktiga servern: poolregeln och fältbegränsningen i `patch_ao` från `ao-time-write`.
+**Gemensamma krav:**
 
-### 7.1 Server: `work-orders-list` per roll och kategori
+- Varje negativt fall kontrollerar **felorsaken** (HTTP-status och `error`-kod) **och** att ingen mutation skett. Läs posten före och efter: samma `updatedAt`, `staff` och `log`, och inga nya tidposter, filer eller notiser.
+- STAGING-tester använder bara poster märkta `[E2E-TEST]`. De skrivande STAGING-testerna körs inte i omgången T0–T2.
 
-Testdata (för den simulerade servern och som `[E2E-TEST]` i STAGING): P1 = `pool`, ingen personal, inget datum. P2 = `pool`, [F2], inget datum. P3 = `pool`, [F2], datum. P4 = `pool`, ingen personal, datum. N1 = `planerad`, [F1], inget datum. N2 = `nytt`, ingen personal, inget datum. F1 och F2 är fältanvändare. L = arbetsledare (`ao_view_all`). B = Begränsad.
+**Roller:**
 
-| # | Roll | Förväntat | Typ |
-|---|---|---|---|
-| S1 | F1 | Ser P1, och P4 om beslut A tillåter det, samt N1. Ser **inte** P2 eller P3. | Negativ (läcka) |
-| S2 | F2 | Ser P1, P2, P3 (egna) och P4 enligt beslut A. | Positiv |
-| S3 | L och admin | Ser allt. | Positiv |
-| S4 | B | Samma som F1. | Negativ |
-| S5 | F1 | Bild-URL, bilduppladdning, checklista, loggpost och material på P2 ger 403. | Negativ |
-| S6 | F1 | N2 enligt beslut A (syns inte med rekommendationen). | Beslut |
+| Kod | Behörigheter |
+|---|---|
+| FA, FB | Fält: `ao_view_own`, `ao_pool_take`, `ao_time`, `ao_checklist`, `ao_material`, `ao_start_own`, `ao_complete_own` |
+| BG | Begränsad: `ao_view_own` |
+| AL | Arbetsledare: `ao_view_all`, `ao_edit` |
+| EGEN | Anpassad roll som saknar en enskild behörighet (D-26) |
 
-### 7.2 Server: "Ta jobbet" (gren B)
+**Data:** rad 1–18 i avsnitt 5.3. FB är tilldelad i de rader som har personal.
 
-| # | Fall | Förväntat |
-|---|---|---|
-| T1 | F1 tar P1 | 200. `staff=[F1]`, loggposten `taken_from_pool` finns. |
-| T2 | F1 tar P2 (tilldelad F2) | **409 `already_assigned`**. Ingen ändring på servern. |
-| T3 | F2 tar P2 (redan tilldelad sig själv) | 409, eller 200 utan ändring (definiera). |
-| T4 | B tar P1 | 403 (ingen `ao_complete`), eller enligt beslut Ö2. |
-| T5 | F1 och F2 tar P1 samtidigt (två parallella anrop med olika nycklar) | Exakt en får 200. Den andra får `already_assigned` eller `stale_write`. Slutläget är `staff` med exakt en person och en enda `taken_from_pool`-post. |
-| T6 | F1 tar P1 med inaktuellt `expectedUpdatedAt` | 409 `stale_write`. |
-| T7 | F1 skickar `staff` med en annan person än sig själv | 403. |
-| T8 | F1 "Starta" på P2 | 403. F2 "Starta" på P2 ger 200 (gren A oförändrad). |
-
-### 7.3 Server: arbetsledarens tilldelning och samtidighet
+### 13.1 Läsning (`work-orders-list` och `work-order-image-url`)
 
 | # | Fall | Förväntat |
 |---|---|---|
-| A1 | L1 och L2 ändrar personal på samma AO samtidigt med `expectedUpdatedAt` | En får 200, den andra `stale_write`. Ingen tyst överskrivning. |
-| A2 | L avplanerar en tilldelad AO | `staff`, `responsibleStaffId`, `status` och `log` är oförändrade. Datumet är tomt. |
+| L1 | FA listar | Rad 5 och 6 (öppen pool) och inga andra än egna. **Inte** rad 7, 8 eller 15. |
+| L2 | FB listar | Egna rader (3, 4, 7, 8, 11, 12) samt 5 och 6. |
+| L3 | BG listar | Bara egna. Ingen öppen pool (D-04). |
+| L4 | EGEN utan `ao_pool_take` | Ingen öppen pool. |
+| L5 | AL listar | Allt. |
+| L6 | Delmängdsbevis | För varje roll och testdatamängd: antal och id efter ⊆ före (jämför med dagens regel i en simulerad körning). |
+| L7 | FA hämtar bild-URL på rad 7 | 403 `forbidden`. |
 
-### 7.4 Klient (simulerad server och riktig STAGING)
+### 13.2 Skrivning utan tilldelning (FA på rad 5, öppen pool)
+
+| # | Åtgärd | Förväntat |
+|---|---|---|
+| W1 | Materialpatch | 403. Ingen ändring. |
+| W2 | Bilduppladdning | 403. Ingen fil skapad. |
+| W3 | Bildradering | 403. Filen finns kvar. |
+| W4 | Checklistpunkt | 403 `forbidden`. Checklistan oförändrad. |
+| W5 | Loggpost, tillägg och borttagning | 403. |
+| W6 | `create_time` med `aoId` | 403 `not_assigned`. Ingen tidpost och inget nytt id i `ao.timeEntries`. |
+| W7 | Instämpling med `aoId` | 403 `not_assigned`. Stämpelraden oförändrad. |
+| W8 | Klarmarkering (SÄK-5) av rad 5, rad 12 med annan tilldelad, och en fakturerad AO | 403. Status oförändrad. |
+| W9 | FB (tilldelad) gör W1–W7 på sin egen AO | 200. Positivt fall. |
+
+### 13.3 Tagning (`work_order_pool_take`)
 
 | # | Fall | Förväntat |
 |---|---|---|
-| K1 | **Det rapporterade felet:** öppna "Hantera personal" på en pool-AO, välj F1 och spara | `staff=[F1]`. Ingen poolruta, eller en oikryssad ruta som inte rensar. Notis bara till F1. |
-| K2 | Ta bort en person i dialogen | `staff_removed` loggas. Ingen notis. Status och datum oförändrade. |
-| K3 | "Ta bort datum" på en tilldelad AO | Personal kvar. AO:n syns i Mina jobb under "Tilldelade utan datum" för den tilldelade och i kalenderns ruta "Tilldelade, oplanerade". |
-| K4 | Mina jobb för F1 | Fliken Arbetspool visar bara öppen pool. P2 syns inte. Inga dubbletter mellan flikarna. Siffrorna i flikarna stämmer med korten. |
-| K5 | Mina jobb, "Ta jobbet" när servern svarar 409 | Felbesked. AO:n ligger kvar, eller försvinner efter uppdatering, med rätt ägare. |
-| K6 | Räknare | Dashboardens "Otilldelade" = Dagens drift "Otilldelade" = antal rader i AO-listan med filtret "unassigned". Poolwidgeten = antal i öppen pool. |
-| K7 | Kalender | P3 visas på sitt datum. P1 visas i rutan "Öppen pool". N1 visas i "Tilldelade, oplanerade". Personalfiltret påverkar rutan. |
-| K8 | AO-detalj för P2 sedd av L | `nextStep` visar "Tilldelad – välj datum", inte "väntar på att någon tar uppdraget". |
-| K9 | Bakåtkompatibilitet: ladda testdata med alla kombinationer i avsnitt 8 | Ingen post ändras vid laddning, polling eller rendering. Diffen mot servern är tom. |
-| K10 | Notiser | Inga in-app-notiser eller push när personal rensas eller vid avplanering. Notis när personal läggs till på alla vägar som beslutats (beslut D). |
+| T1 | FA tar rad 5 | 200. `staff=[FA]`, `poolOpen:false`, en enda `taken_from_pool`-post tillagd. Övriga loggposter oförändrade. |
+| T2 | FA tar rad 7 (tilldelad FB) | 409 `already_assigned`. Ingen mutation. |
+| T3 | FA tar rad 3 eller rad 1 (inte tillgängliggjord) | 409 `not_in_pool`. Ingen mutation. |
+| T4 | FA tar en borttagen eller arkiverad pool-AO | 409 `not_available`. |
+| T5 | BG eller EGEN utan `ao_pool_take` tar | 403 `forbidden`. |
+| T6 | En roll med `ao_complete` men utan `ao_pool_take` tar | 403 (ingen koppling till `ao_complete`). |
+| T7 | FA och FB tar rad 5 samtidigt (N=2 och N=10 parallella anrop) | Exakt en 200. Övriga får 409 `already_assigned`. `staff` har längd 1, och det finns exakt en `taken_from_pool`-post. |
+| T8 | Samma anrop upprepas med samma idempotensnyckel | Samma svar. Ingen dubbel loggpost och ingen dubbel notis. |
+| T9 | FA skickar `staff` eller `status` i kroppen | Ignoreras eller ger 400. Servern sätter allt själv. |
 
-Befintliga tester som måste uppdateras till den nya regeln:
+### 13.4 Arbetsledare och dialog
 
-- `tests/e2e/specs/14_permissions.js:57-60`
-- `tests/e2e/specs/04_workorders.js:384-389`
-- `tests/staging/authz-read.js:62-63`
-- `tests/v3_ui_logic.test.js:78` (`nextStep` för pool)
-- `tests/e2e/specs/33_falt_pages.js:159-195` (pooldata har `staff: []`, så testet bör hålla, men uppdatera dess urval)
+| # | Fall | Förväntat |
+|---|---|---|
+| A1 | **AP-FEL-1:** AL öppnar "Hantera personal" på rad 5, väljer FA och sparar | `staff=[FA]`, ansvarig enligt val, status och datum oförändrade, `poolOpen:false`. Exakt en tilldelningsnotis till FA efter serverns bekräftelse. |
+| A2 | AL tar bort FA | `staff_removed`. AO:n går **inte** tillbaka till öppen pool (rad 18). Ingen notis. |
+| A3 | "Ta bort datum" på rad 12 | Bara datumfälten rensas. Kategorin blir tilldelad pool. Ingen notis. |
+| A4 | "Släpp till öppen pool" på rad 12 | Bekräftelse krävs. `staff_removed` per person och `released_to_pool`. Status `pool` och `poolOpen:true`. |
+| A5 | AL1 och AL2 ändrar personal samtidigt | Ingen tyst förlust. Antingen `stale_write` via ett serverlevererat versionsvärde, eller en radvis operation under lås. |
+
+### 13.5 Klient, räknare och vyer
+
+| # | Fall | Förväntat |
+|---|---|---|
+| K1 | Mina jobb för FA | Fliken "Öppen pool" = rad 5 och 6. Inga dubbletter. Tilldelad pool under "Tilldelade utan datum". |
+| K2 | Räknare | Dashboard "Otilldelade" = Dagens drift "Otilldelade" = AO-listans `unassigned` = aktiva utan personal, eller samma tal med etiketten "(utom öppen pool)" på alla ställen. |
+| K3 | Kalender | Rad 4, 10 och 12 på sin dag. Rad 5 och 6 i "Öppen pool". Rad 3, 7, 8 och 11 i "Tilldelade, oplanerade" och följer personalfiltret. |
+| K4 | Instämplingslistan | Bara egna tilldelade AO. |
+| K5 | Bakåtkompatibilitet | Laddning, polling och rendering av alla 18 rader ändrar ingen post (diff mot servern är tom). |
+
+### 13.6 Befintliga tester som ska skärpas
+
+| Test | Fil:rad | Ändring |
+|---|---|---|
+| Behörighetstest, simulerat | `tests/e2e/specs/14_permissions.js:57-60` | Godkänner i dag "`status === 'pool'`". Ska kräva öppen pool. Lägg till rad 7, 8 och 15 som negativa fall. |
+| Begränsad användare | `tests/e2e/specs/04_workorders.js:384-389` | Samma. Begränsad ska inte se öppen pool (D-04). |
+| STAGING-läsning (läsande) | `tests/staging/authz-read.js:62-63` | Samma. |
+| Nästa steg | `tests/v3_ui_logic.test.js:78` | `nextStep` per kategori. |
+| Mina jobb | `tests/e2e/specs/33_falt_pages.js:159-195`, `:312-314` | Tagning via ny åtgärd. Pooldefinition och räknare enligt avsnitt 6. |
+| AO-detalj | `tests/e2e/specs/27_aodetail.js:203-217`, `:326` | Ny åtgärd för "Ta bort datum" och "Släpp till öppen pool". Personaldialogen utan poolruta. |
+| Fake-backend | `tests/e2e/fake-backend.js:122-127`, `:395-427`, `:597-611` | Spegla installerad källa (avsnitt 8). |
 
 ---
 
-## 8. Kompatibilitet med befintliga AO
+## 14. Öppna frågor
 
-Ingen riktig data är läst. Avsnittet beskriver bara vilka kombinationer koden kan ha skapat.
+Detta är inte nya affärsbeslut, utan förtydliganden inom AP-A–AP-G.
 
-**Dimensioner:**
-
-- Status, 7 värden.
-- Personal: tom eller satt.
-- Datum: tomt eller satt.
-- Dessutom `responsibleStaffId`, `archived` och `deleted`.
-
-För aktiva AO med status `nytt`, `pool` eller `planerad` ger det **3 × 2 × 2 = 12 kombinationer**. Alla 12 kan uppstå via koden:
-
-| Status | Personal | Datum | Kan uppstå via |
-|---|---|---|---|
-| pool | – | – | Guiden i pool-läge, poolflytt på odaterad AO, "Till pool" |
-| pool | – | ✓ | Poolflytt på daterad AO (datumet behålls), serviceintervall utan `aoStaff`, "Omplanera" på pool-AO, import |
-| pool | ✓ | – | Guiden i pool-läge med personal, "Till pool" eller statusbyte på tilldelad AO, import |
-| pool | ✓ | ✓ | **Serviceintervall med `aoStaff`** (klient och cron), statusbyte på planerad AO, import |
-| planerad | ✓ | – | **"Ta jobbet"**, tilldelning av pool-AO via dialogen eller massändring, "Planera"-knappen |
-| planerad | – | – | "Planera" på otilldelad AO, eller borttagen personal efter planering |
-| planerad | ✓/– | ✓ | Normal planering |
-| nytt | ✓/– | ✓/– | Fastighetens direktskapande (`PropertyDetailPage.js:1795-1806`), rondering (`RonderingService.js:386`), offert till AO (`PageShells.js:5805`), återkommande (alltid datum, status från schemats standard `nytt`), import |
-
-Dessutom kan `pågående`, `klar`, `fakturerad` och `avbruten` förekomma med alla kombinationer av personal och datum. Kategorin för dem är `null`.
-
-**Läsregeln i 5.1 tar hand om alla kombinationer utan att skriva till någon post.** För historiska AO kan klientens och serverns resultat skilja sig på tre punkter:
-
-- **Fältanvändare ser färre AO än i dag:** andras pool-AO med personal. Det är den avsedda säkerhetsrättningen.
-- **`planerad` utan datum** syns nu som "tilldelad, oplanerad" i kalender och dashboard, där de tidigare var osynliga.
-- **`pool` + datum** syns på sitt datum i kalendern, i stället för som "ej schemalagd".
-
-Gamla loggposter (`staff_changed` "flyttade ordern till arbetspoolen", `taken_from_pool`) behålls och visas som i dag.
-
-Före införandet: gör en läsande räkning per kombination i STAGING (endast `SELECT`, ingen ändring). Gör samma räkning i LIVE bara med Lucas godkännande. Syftet är att veta hur många fältanvändare som förlorar synlighet till andras pool-AO.
-
----
-
-## 9. Kräver affärsbeslut
-
-| Nr | Fråga | Rekommendation |
+| Nr | Fråga | Förslag |
 |---|---|---|
-| **A** | Räknas en otilldelad, odaterad AO med status `nytt` (eller `planerad`) som **öppen pool** och syns för all fältpersonal? Och en otilldelad `pool`-AO **med datum**, t.ex. serviceintervall med förfallodag: öppen pool eller "planerad, otilldelad"? | För fält: öppen pool = `status 'pool'` **och** ingen personal (datum ignoreras, så att serviceintervall utan personal fortfarande kan tas). `nytt` utan personal visas bara för arbetsledare som "Otilldelade". Det breddar inte serverns utlämning. |
-| **B** | Får fältet stämpla in på en AO som hen inte är tilldelad, t.ex. en öppen pool-AO, utan att först ta den? | Nej. Kräv tilldelning, alternativt gör "Ta jobbet" automatiskt vid instämpling. |
-| **C** | Ska räknaren "Otilldelade" inkludera öppen pool? | Nej. "Otilldelade" = utan personal och inte i öppen pool. Samma definition överallt. |
-| **D** | Notiser: tilldelningsnotis även när AO skapas med personal (guide, serviceintervall, återkommande)? Notis till arbetsledare när någon tar ett jobb? Notis "nytt i poolen"? | Ja, ja och valfritt. |
-| **E** | Får tilldelad fältpersonal själv sätta eller ändra datum på sin egen AO ("planera enligt behörighet")? | Om ja: ny smal servergren eller behörighet (`ao_plan_own`). Annars bara arbetsledare. |
-| **F** | Vilken behörighet krävs för "Ta jobbet": `ao_complete` som i dag, `ao_time` eller en ny? | Koppla till Ö2. Föreslås: `ao_view_own` + `ao_time`. |
-| **G** | Ska status `pool` avvecklas för nya AO (fas 2)? | Ja, när den härledda kategorin används överallt. Gamla värden lämnas orörda. |
+| Q1 | En pool-AO som fått ett datum via "Omplanera" (rad 6 och 8) klassas som förfallodatum, inte som planerad. Det är så kalendern redan visar den. Godtas det, eller ska en sådan AO räknas som planerad? | Godta. Det ändrar ingen visning jämfört med i dag och breddar inte utlämningen. |
+| Q2 | Är återkommande ärendens datum ett utförandedatum (som i dag) eller ett förfallodatum? AP-A nämner återkommande ärenden. | Behåll utförandedatum för befintliga. Inför ett val per återkommande ärende för nya AO ("planera på datum" eller "förfaller datum, lägg i pool"). |
+| Q3 | Ska fältets logg- och historikurval (B4) innehålla öppna pool-AO? | Nej. Öppen pool har begränsad information (D-13). |
+| Q4 | Vem får planera om ett flerpersonsuppdrag med `ao_plan_own`? | Se avsnitt 11: ansvarig, annars den som planerade först. |
 
 ---
 
 ## Sammanfattning och rekommendation
 
-Felet i "Hantera personal" beror på en förikryssad poolruta som tömmer personalen. Det är dock ett symptom på ett större problem: tilldelning, planering och status är sammanflätade i statusvärdet `pool`. Allvarligast är att servern (`work-orders-list` och `canViewWorkOrder` med tre SQL-funktioner) lämnar ut **varje** AO med status `pool` till all fältpersonal, även när andra är tilldelade. Systemet skapar sådana AO självt, särskilt via serviceintervall. "Ta jobbet" kan dessutom lägga till sig på en redan tilldelad AO och saknar skydd mot samtidiga tagningar.
-
-**Rekommendation, i ordning:**
-
-1. Serverregeln blir "eget eller (`pool` och ingen personal)", överallt inklusive fake-backend. "Ta jobbet" nekas när personal finns och kräver `expectedUpdatedAt`.
-2. Personaldialogen rör bara personal. "Ta bort datum" och "Släpp till öppen pool" blir egna, loggade åtgärder. Notiser bygger på faktiskt resultat.
-3. En gemensam `poolKategori` (öppen pool, tilldelad pool, planerad) från personal och datum används i Mina jobb, AO-listan, kalendern, Dagens drift och dashboarden.
-4. B4 och Ö7 byggs på den rättade regeln.
-
-Ingen historisk data ändras. Status `pool` tolkas vid läsning. Beslut A–G (främst A, E och F) behövs innan steg 3 kan slutföras. Steg 1 och 2 kan göras utan beslut.
+- **Kategorier:** Avslutade, Öppen pool, Planerad, Tilldelad pool och Övriga aktiva. De härleds ur personal, utförandedatum, status och den uttryckliga markeringen "tillgängliggjord" (status `pool` och `poolOpen ≠ false`). En ny AO utan personal och datum exponeras inte.
+- **Datum:** förfallodatum skiljs från utförandedatum med ett nytt fält `dueDate`. På befintliga pool-AO tolkas `scheduledDate` som förfallodatum, vilket redan är hur kalendern och försenad-regeln behandlar dem.
+- **Utlämning:** säkerhetsrättningen är bevisligen en delmängd av dagens utlämning. Den stänger läckan för tilldelade, arkiverade och borttagna pool-AO, kräver `ao_pool_take` för att se öppen pool, och tar bort all skrivrätt via poolgrenen.
+- **Tagning:** "Ta jobbet" flyttas till en RPC med radlås och 409 `already_assigned`.
+- **Stämpling:** kräver tilldelning, kontrollerad i `time_entry_create` och i stämplingsvägen.
+- **Omgångar:** serverrättningen (SÄK-3, SÄK-4, SÄK-5 och skrivreglerna) görs i en omgång, före eller samtidigt med B4 och Ö7. Därefter klienten och sedan kategorierna i alla vyer.
+- **Historik:** ingen historisk AO skrivs om.
