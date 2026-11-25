@@ -1,0 +1,14 @@
+{
+  "slug": "offer-respond",
+  "version": 10,
+  "verify_jwt": false,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_af6af94c-7414-440d-83b5-f24dc45a27a6_10/source/index.ts",
+  "ezbr_sha256": "433a827e85d78cc5f5cebf5ac0d3ea7e94ebec679cedf69844bfc886c1771c91",
+  "created_at": 1784731112853,
+  "updated_at": 1795171172162,
+  "import_map": false,
+  "files": [
+    "index.ts"
+  ]
+}

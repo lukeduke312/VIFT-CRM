@@ -1,0 +1,15 @@
+{
+  "slug": "project-document-upload",
+  "version": 1,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_eab084d1-0473-4923-976f-f74a966e6d67_1/source/functions/project-document-upload/index.ts",
+  "ezbr_sha256": "231e0e61bee2b3c479821e111c2bc11c63f8edb144262242f86af13437bcacf7",
+  "created_at": 1795536483546,
+  "updated_at": 1795536483546,
+  "import_map": false,
+  "files": [
+    "functions/project-document-upload/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

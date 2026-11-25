@@ -1,0 +1,15 @@
+{
+  "slug": "offer-pdf",
+  "version": 10,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_f27dbc55-1a05-4162-8ba2-14c90001fa1a_8/source/supabase/functions/offer-pdf/index.ts",
+  "ezbr_sha256": "a9677e519662855fd093f9707b7395189df45df2e7bda09c48f8a4afa70becdc",
+  "created_at": 1784731111284,
+  "updated_at": 1785664365456,
+  "import_map": false,
+  "files": [
+    "functions/offer-pdf/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

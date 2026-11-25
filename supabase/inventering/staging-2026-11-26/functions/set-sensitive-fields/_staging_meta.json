@@ -1,0 +1,14 @@
+{
+  "slug": "set-sensitive-fields",
+  "version": 9,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_6a6b0bc7-31c4-4bf9-8d76-d5e39a9aec3e_9/source/index.ts",
+  "ezbr_sha256": "d815a160959a4c5ecd6df64242de8d15ba9d37d7db95b462af947cf8da9042a5",
+  "created_at": 1784731104923,
+  "updated_at": 1794821959762,
+  "import_map": false,
+  "files": [
+    "index.ts"
+  ]
+}

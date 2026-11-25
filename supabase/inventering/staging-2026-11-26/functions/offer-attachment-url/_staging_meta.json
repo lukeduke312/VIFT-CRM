@@ -1,0 +1,15 @@
+{
+  "slug": "offer-attachment-url",
+  "version": 11,
+  "verify_jwt": false,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_0d917beb-3d9d-4c58-9bcc-16fd15e00fc9_8/source/supabase/functions/offer-attachment-url/index.ts",
+  "ezbr_sha256": "8565b7264b9f58586c091af1464bef0a916a91b3f9750d1dead445836c8905c0",
+  "created_at": 1784731108376,
+  "updated_at": 1785571255923,
+  "import_map": false,
+  "files": [
+    "functions/offer-attachment-url/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

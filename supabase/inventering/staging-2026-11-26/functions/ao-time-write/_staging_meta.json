@@ -1,0 +1,15 @@
+{
+  "slug": "ao-time-write",
+  "version": 5,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_83eb0b4e-2793-46db-bed5-aef10905ca39_5/source/ao-time-write/index.ts",
+  "ezbr_sha256": "7ac6e4906e89e4c36815f3da0f474465d962e043298c2788b38cebb4a3b644ed",
+  "created_at": 1792430169447,
+  "updated_at": 1795547603960,
+  "import_map": false,
+  "files": [
+    "ao-time-write/index.ts",
+    "_shared/vift-auth.ts"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "rondering-pass-write",
+  "version": 3,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_0b6bf37f-51da-4d01-8e33-8b2c00d1beb2_2/source/supabase/functions/rondering-pass-write/index.ts",
+  "ezbr_sha256": "6738df43987f33ae5d99c6b1c2ec3f9b144c43a7fd08d8db3d9dff98019014db",
+  "created_at": 1792430173450,
+  "updated_at": 1793347357066,
+  "import_map": false,
+  "files": [
+    "functions/rondering-pass-write/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

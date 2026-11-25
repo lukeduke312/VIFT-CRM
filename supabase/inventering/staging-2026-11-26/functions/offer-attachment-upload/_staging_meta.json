@@ -1,0 +1,15 @@
+{
+  "slug": "offer-attachment-upload",
+  "version": 13,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_061981d6-039f-43e0-8b4f-b5d13d325269_13/source/functions/offer-attachment-upload/index.ts",
+  "ezbr_sha256": "0523451bcf6d1e862c9adc0540620a2142adf5d85bf886be368251c74650a667",
+  "created_at": 1784731106641,
+  "updated_at": 1795532905669,
+  "import_map": false,
+  "files": [
+    "functions/offer-attachment-upload/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "slug": "store-key-write",
+  "version": 5,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_e4720eb0-7b51-4dc9-9922-64e292fff1c1_5/source/store-key-write/index.ts",
+  "ezbr_sha256": "4d721b07ccace16f3b09198477e622c695f5d2c1eaaf38c023c7ffdebc99a884",
+  "created_at": 1794404921780,
+  "updated_at": 1795554373092,
+  "import_map": false,
+  "files": [
+    "store-key-write/index.ts",
+    "store-key-write/stamp-status.ts",
+    "_shared/vift-auth.ts",
+    "store-key-write/activities-policy.ts",
+    "store-key-write/activity-log.ts"
+  ]
+}

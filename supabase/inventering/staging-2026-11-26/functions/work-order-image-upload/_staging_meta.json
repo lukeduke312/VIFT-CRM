@@ -1,0 +1,15 @@
+{
+  "slug": "work-order-image-upload",
+  "version": 1,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_d8ddfb86-4be4-4049-91d1-19fdcbd8a611_1/source/functions/work-order-image-upload/index.ts",
+  "ezbr_sha256": "be890df0efa0e38e496ded779c851aa54665ad11ebbd294682057c46fab68adb",
+  "created_at": 1795533192975,
+  "updated_at": 1795533192975,
+  "import_map": false,
+  "files": [
+    "functions/work-order-image-upload/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

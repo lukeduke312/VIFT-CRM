@@ -1,0 +1,14 @@
+{
+  "slug": "offer-token-validate",
+  "version": 11,
+  "verify_jwt": false,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_391e6263-9cb4-428d-a33e-65f307397838_11/source/index.ts",
+  "ezbr_sha256": "33fec1aeedb49d46e012c1a472f4e92aa593699719e7c641b36bca81bda954a2",
+  "created_at": 1784731114652,
+  "updated_at": 1795171186083,
+  "import_map": false,
+  "files": [
+    "index.ts"
+  ]
+}

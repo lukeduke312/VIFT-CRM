@@ -1,0 +1,15 @@
+{
+  "slug": "send-push",
+  "version": 9,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_de8a9df8-74a6-406f-8e0f-951b75386020_8/source/index.ts",
+  "ezbr_sha256": "c361289d24ee1a01948c594acdcad27f77288e5b9ce5ac17d2e13e0d23e6d461",
+  "created_at": 1784731947619,
+  "updated_at": 1792652610260,
+  "import_map": false,
+  "files": [
+    "user_fn_yyzljlqyzzcbxmcdbual_de8a9df8-74a6-406f-8e0f-951b75386020_8/source/index.ts",
+    "user_fn_yyzljlqyzzcbxmcdbual_de8a9df8-74a6-406f-8e0f-951b75386020_8/_shared/vift-auth.ts"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "send-offer-email",
+  "version": 11,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_981bac0c-461e-4637-accb-c45c484f962a_11/source/source/index.ts",
+  "ezbr_sha256": "63d3fda5a61eae8290644eb18937aa2af64061b667fc616a01700e7924605328",
+  "created_at": 1785267462355,
+  "updated_at": 1795171209193,
+  "import_map": false,
+  "files": [
+    "source/index.ts",
+    "_shared/vift-auth.ts"
+  ]
+}

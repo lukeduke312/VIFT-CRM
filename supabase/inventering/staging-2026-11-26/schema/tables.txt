@@ -1,0 +1,194 @@
+# STAGING (yyzljlqyzzcbxmcdbual) schema-ögonblicksbild 2026-11-25, endast läsning (SELECT). Ingen verksamhetsdata.
+# Tabeller/sekvenser i public samt STAGING-backupscheman (endast struktur, inga rader lästa).
+# relkind: r=tabell, S=sekvens
+
+public._qa_cleanup_journal_20261124  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    key text
+    element jsonb
+    removed_at timestamp with time zone DEFAULT now()
+
+public.ao_display_number_seq  (relkind=S, RLS=False, FORCE RLS=False)
+  kolumner:
+    last_value bigint NOT NULL
+    log_cnt bigint NOT NULL
+    is_called boolean NOT NULL
+
+public.app_users  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    user_id uuid NOT NULL
+    staff_id text
+    active boolean NOT NULL DEFAULT true
+    role_id text
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+    disabled_at timestamp with time zone
+    is_admin boolean NOT NULL DEFAULT false
+  constraints:
+    PRIMARY KEY (user_id) [app_users_pkey]
+    FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE [app_users_user_id_fkey]
+  index:
+    CREATE UNIQUE INDEX app_users_pkey ON public.app_users USING btree (user_id)
+
+public.op_idempotency  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    fn_name text NOT NULL
+    idem_key text NOT NULL
+    result jsonb NOT NULL
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+  constraints:
+    PRIMARY KEY (fn_name, idem_key) [op_idempotency_pkey]
+  index:
+    CREATE UNIQUE INDEX op_idempotency_pkey ON public.op_idempotency USING btree (fn_name, idem_key)
+
+public.property_sensitive_access  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    id uuid NOT NULL DEFAULT gen_random_uuid()
+    property_id text
+    object_id text
+    door_code text
+    key_information text
+    key_receipt text
+    alarm_information text
+    access_information text
+    access_code text
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+    updated_by text
+  constraints:
+    PRIMARY KEY (id) [property_sensitive_access_pkey]
+    CHECK (((property_id IS NOT NULL) OR (object_id IS NOT NULL))) [psa_at_least_one_id]
+  index:
+    CREATE UNIQUE INDEX property_sensitive_access_pkey ON public.property_sensitive_access USING btree (id)
+    CREATE INDEX idx_psa_object_id ON public.property_sensitive_access USING btree (object_id) WHERE (object_id IS NOT NULL)
+    CREATE INDEX idx_psa_property_id ON public.property_sensitive_access USING btree (property_id) WHERE (property_id IS NOT NULL)
+
+public.push_subscriptions  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    id uuid NOT NULL DEFAULT gen_random_uuid()
+    user_id uuid NOT NULL
+    endpoint text NOT NULL
+    p256dh text NOT NULL
+    auth_key text NOT NULL
+    platform text
+    browser text
+    device_label text DEFAULT 'Min enhet'::text
+    created_at timestamp with time zone DEFAULT now()
+    last_seen_at timestamp with time zone DEFAULT now()
+    revoked_at timestamp with time zone
+  constraints:
+    UNIQUE (endpoint) [push_subscriptions_endpoint_key]
+    PRIMARY KEY (id) [push_subscriptions_pkey]
+    FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE [push_subscriptions_user_id_fkey]
+  index:
+    CREATE UNIQUE INDEX push_subscriptions_pkey ON public.push_subscriptions USING btree (id)
+    CREATE UNIQUE INDEX push_subscriptions_endpoint_key ON public.push_subscriptions USING btree (endpoint)
+
+public.sensitive_access_audit  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    id uuid NOT NULL DEFAULT gen_random_uuid()
+    ts timestamp with time zone NOT NULL DEFAULT now()
+    user_id uuid
+    user_email text
+    action text NOT NULL
+    object_id text
+    property_id text
+    fields text[]
+    status text NOT NULL
+    detail text
+  constraints:
+    CHECK ((action = ANY (ARRAY['read'::text, 'write'::text]))) [sensitive_access_audit_action_check]
+    PRIMARY KEY (id) [sensitive_access_audit_pkey]
+    CHECK ((status = ANY (ARRAY['allowed'::text, 'denied'::text]))) [sensitive_access_audit_status_check]
+  index:
+    CREATE UNIQUE INDEX sensitive_access_audit_pkey ON public.sensitive_access_audit USING btree (id)
+    CREATE INDEX idx_audit_ts ON public.sensitive_access_audit USING btree (ts DESC)
+    CREATE INDEX idx_audit_user_id ON public.sensitive_access_audit USING btree (user_id)
+    CREATE INDEX idx_audit_object_id ON public.sensitive_access_audit USING btree (object_id) WHERE (object_id IS NOT NULL)
+
+public.stamp_status  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    user_id uuid NOT NULL
+    active boolean NOT NULL DEFAULT false
+    ts bigint
+    ao_id text
+    revision bigint NOT NULL DEFAULT 0
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+  constraints:
+    PRIMARY KEY (user_id) [stamp_status_pkey]
+    FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE [stamp_status_user_id_fkey]
+  index:
+    CREATE UNIQUE INDEX stamp_status_pkey ON public.stamp_status USING btree (user_id)
+
+public.store  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    key text NOT NULL
+    value jsonb NOT NULL DEFAULT 'null'::jsonb
+    updated_at timestamp with time zone DEFAULT now()
+  constraints:
+    PRIMARY KEY (key) [store_pkey]
+  index:
+    CREATE UNIQUE INDEX store_pkey ON public.store USING btree (key)
+
+public.store_backup_prop_objects_20260720  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    key text
+    value jsonb
+    backed_up_at timestamp with time zone
+
+public.store_backup_properties_20260720  (relkind=r, RLS=True, FORCE RLS=False)
+  kolumner:
+    key text
+    value jsonb
+    backed_up_at timestamp with time zone
+
+vift_staging_backup_20261117.fingerprints  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    item text
+    row_count bigint
+    fingerprint text
+
+vift_staging_backup_20261117.function_definitions  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    proname name
+    args text
+    definition text
+    fingerprint text
+
+vift_staging_backup_20261117.op_idempotency  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    fn_name text
+    idem_key text
+    result jsonb
+    created_at timestamp with time zone
+
+vift_staging_backup_20261117.store  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    key text
+    value jsonb
+    updated_at timestamp with time zone
+
+vift_staging_backup_20261124.fingerprints  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    key text
+    md5 text
+    characters integer
+    updated_at timestamp with time zone
+
+vift_staging_backup_20261124.function_definitions  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    proname name
+    args text
+    definition text
+
+vift_staging_backup_20261124.op_idempotency  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    fn_name text
+    idem_key text
+    result jsonb
+    created_at timestamp with time zone
+
+vift_staging_backup_20261124.store  (relkind=r, RLS=False, FORCE RLS=False)
+  kolumner:
+    key text
+    value jsonb
+    updated_at timestamp with time zone
+

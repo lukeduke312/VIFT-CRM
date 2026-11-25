@@ -1,0 +1,14 @@
+{
+  "slug": "vift-admin-storage",
+  "version": 8,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_1f625b29-338f-417f-a84d-5811bb5cf679_8/source/vift-admin-storage/index.ts",
+  "ezbr_sha256": "9d320164f49be521add7238caa1f051913e884c12090638ec3f4e8c76b5e56a2",
+  "created_at": 1795535894970,
+  "updated_at": 1795555417342,
+  "import_map": false,
+  "files": [
+    "vift-admin-storage/index.ts"
+  ]
+}

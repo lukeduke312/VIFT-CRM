@@ -1,0 +1,16 @@
+{
+  "slug": "invoice-write",
+  "version": 9,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_729c46a7-cb94-4e5f-b17f-348a09e97945_9/source/functions/invoice-write/index.ts",
+  "ezbr_sha256": "7de55e71bc261ff4e1467670cbc43598e1434dfbb66971d6790cc77657c5702e",
+  "created_at": 1792430177411,
+  "updated_at": 1794907387498,
+  "import_map": false,
+  "files": [
+    "functions/invoice-write/index.ts",
+    "functions/_shared/vift-auth.ts",
+    "functions/invoice-write/stale-override.ts"
+  ]
+}

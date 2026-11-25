@@ -1,0 +1,15 @@
+{
+  "slug": "work-orders-list",
+  "version": 3,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_e735eff1-8fbc-40b6-94e5-454fe93d089b_3/source/work-orders-list/index.ts",
+  "ezbr_sha256": "b098ec621f45a0458e25dec64435e5b4e809e6499ed03bf3c711e991b827167c",
+  "created_at": 1793605583072,
+  "updated_at": 1795554977641,
+  "import_map": false,
+  "files": [
+    "work-orders-list/index.ts",
+    "_shared/vift-auth.ts"
+  ]
+}

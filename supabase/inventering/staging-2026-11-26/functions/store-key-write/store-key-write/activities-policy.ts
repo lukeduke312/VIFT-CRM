@@ -1,0 +1,50 @@
+export const ASSIGNEE_FIELDS = ['status', 'completedAt', 'completedBy', 'dueDate', 'dueTime', 'updatedAt']
+const IMMUTABLE_FIELDS = ['id', 'createdBy', 'createdAt']
+
+type Obj = Record<string, unknown>
+const has = (perms: string[], p: string) => perms.includes('all') || perms.includes(p)
+const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
+const same = (a: unknown, b: unknown) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b)
+
+export function activitiesFullAccess(perms: string[]): boolean {
+  return has(perms, 'admin_manage') || (has(perms, 'ao_edit') && has(perms, 'ao_view_all'))
+}
+
+export function activitiesWriteAllowed(
+  upserts: unknown[], removals: unknown[], perms: string[], callerStaffId: string
+): { ok: boolean; reason?: string } {
+  if (activitiesFullAccess(perms)) return { ok: true }
+  const me = String(callerStaffId || '')
+  if (!me) return { ok: false, reason: 'no_identity' }
+  if (!Array.isArray(upserts) || !Array.isArray(removals)) return { ok: false, reason: 'invalid' }
+
+  for (const u of upserts) {
+    if (!isObj(u)) return { ok: false, reason: 'invalid' }
+    const id = String(u.id ?? '')
+    const data = u.data
+    const prev = u.previous === undefined ? null : u.previous
+    if (!id || !isObj(data) || String(data.id ?? '') !== id) return { ok: false, reason: 'invalid_element' }
+    if (prev === null) {
+      if (data.createdBy !== me || data.assignedTo !== me) return { ok: false, reason: 'new_not_own' }
+      continue
+    }
+    if (!isObj(prev)) return { ok: false, reason: 'invalid_previous' }
+    for (const f of IMMUTABLE_FIELDS) if (!same(prev[f], data[f])) return { ok: false, reason: 'immutable_' + f }
+    if (prev.createdBy === me) {
+      if (data.assignedTo !== me) return { ok: false, reason: 'assign_other' }
+      continue
+    }
+    if (prev.assignedTo === me) {
+      const keys = new Set([...Object.keys(prev), ...Object.keys(data)])
+      for (const k of keys) if (!ASSIGNEE_FIELDS.includes(k) && !same(prev[k], data[k])) return { ok: false, reason: 'field_' + k }
+      if (data.completedBy != null && data.completedBy !== me) return { ok: false, reason: 'completed_by_other' }
+      continue
+    }
+    return { ok: false, reason: 'not_own' }
+  }
+  for (const r of removals) {
+    if (!isObj(r) || !isObj(r.previous)) return { ok: false, reason: 'invalid_removal' }
+    if (r.previous.createdBy !== me || r.previous.assignedTo !== me) return { ok: false, reason: 'remove_not_own' }
+  }
+  return { ok: true }
+}

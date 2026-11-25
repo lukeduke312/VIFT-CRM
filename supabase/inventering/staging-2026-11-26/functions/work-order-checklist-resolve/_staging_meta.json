@@ -1,0 +1,15 @@
+{
+  "slug": "work-order-checklist-resolve",
+  "version": 2,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_c956f26e-f537-4398-aa70-11fd20ab08be_2/source/functions/work-order-checklist-resolve/index.ts",
+  "ezbr_sha256": "4ec8c6b822329423683d9ab5e58652ec9603701aabfb7c5ddde109d91ccb8ce2",
+  "created_at": 1794822048758,
+  "updated_at": 1795532158601,
+  "import_map": false,
+  "files": [
+    "functions/work-order-checklist-resolve/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

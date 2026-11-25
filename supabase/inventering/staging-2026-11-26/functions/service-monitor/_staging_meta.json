@@ -1,0 +1,14 @@
+{
+  "slug": "service-monitor",
+  "version": 15,
+  "verify_jwt": false,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_29c33fe3-16b9-4dc6-8033-42ceb18363c0_14/source/supabase/functions/service-monitor/index.ts",
+  "ezbr_sha256": "af339150e611a7ee9488cd7af55c09ab2175385ec25adb9758b4db82188b2f21",
+  "created_at": 1784652682613,
+  "updated_at": 1793350214346,
+  "import_map": false,
+  "files": [
+    "service-monitor/index.ts"
+  ]
+}

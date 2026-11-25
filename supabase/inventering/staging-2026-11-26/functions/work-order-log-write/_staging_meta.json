@@ -1,0 +1,15 @@
+{
+  "slug": "work-order-log-write",
+  "version": 1,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_43c440d2-cd5c-49f7-bd23-c8df3f982fdb_1/source/functions/work-order-log-write/index.ts",
+  "ezbr_sha256": "6010ec9e6637e683d0f9e14dd34b6c621609040368b66452a1ddf8caf15b00c1",
+  "created_at": 1795532678570,
+  "updated_at": 1795532678570,
+  "import_map": false,
+  "files": [
+    "functions/work-order-log-write/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

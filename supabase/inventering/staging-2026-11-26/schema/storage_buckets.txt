@@ -1,0 +1,11 @@
+# STAGING (yyzljlqyzzcbxmcdbual) schema-ögonblicksbild 2026-11-25, endast läsning (SELECT). Ingen verksamhetsdata.
+# storage.buckets (storage.objects-policyer finns i policies.sql)
+
+offer-attachments  public=false  file_size_limit=52428800
+  allowed_mime_types=application/pdf,image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-excel,text/plain,text/csv,application/zip,application/x-dwg,image/vnd.dwg,application/octet-stream
+project-documents  public=false  file_size_limit=52428800
+  allowed_mime_types=application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+vift-branding  public=false  file_size_limit=524288
+  allowed_mime_types=image/png
+workorder-images  public=false  file_size_limit=10485760
+  allowed_mime_types=image/jpeg,image/jpg,image/png,image/webp

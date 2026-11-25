@@ -1,0 +1,14 @@
+{
+  "slug": "offer-public-pdf",
+  "version": 1,
+  "verify_jwt": false,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_876357b8-8eaa-4fae-9f74-2cf5bbd40faa_1/source/functions/offer-public-pdf/index.ts",
+  "ezbr_sha256": "ab2d72130d0d03db5ba52927d59604d0959dbc066cddf33eef133658cd03337b",
+  "created_at": 1795536119991,
+  "updated_at": 1795536119991,
+  "import_map": false,
+  "files": [
+    "offer-public-pdf/index.ts"
+  ]
+}

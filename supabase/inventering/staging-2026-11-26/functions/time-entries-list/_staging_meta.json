@@ -1,0 +1,15 @@
+{
+  "slug": "time-entries-list",
+  "version": 3,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_d71d133e-23fa-407f-9fb0-cba15f7faeb8_2/source/supabase/functions/time-entries-list/index.ts",
+  "ezbr_sha256": "b130b128432d008e19176a8dd2b852359a4819e5355b525baccd251247fba2ee",
+  "created_at": 1792430182198,
+  "updated_at": 1793347352417,
+  "import_map": false,
+  "files": [
+    "functions/time-entries-list/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

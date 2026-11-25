@@ -1,0 +1,15 @@
+{
+  "slug": "project-document-url",
+  "version": 1,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_724d4efc-dae0-4647-bd4b-65dfa9d66ae6_1/source/functions/project-document-url/index.ts",
+  "ezbr_sha256": "bed0e5a91567101cb84b81d295aac1a7b79621804509cb0b16e6ebb8782d0b4c",
+  "created_at": 1795536314763,
+  "updated_at": 1795536314763,
+  "import_map": false,
+  "files": [
+    "functions/project-document-url/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}

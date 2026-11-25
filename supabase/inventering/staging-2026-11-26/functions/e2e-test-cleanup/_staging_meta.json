@@ -1,0 +1,15 @@
+{
+  "slug": "e2e-test-cleanup",
+  "version": 1,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_50752682-0845-4e28-9c43-5ff95d8836f5_1/source/e2e-test-cleanup/index.ts",
+  "ezbr_sha256": "e653116d61959dca7d4eb9694911611e0e15084d5a0804790619af556efada81",
+  "created_at": 1795554689820,
+  "updated_at": 1795554689820,
+  "import_map": false,
+  "files": [
+    "e2e-test-cleanup/index.ts",
+    "_shared/vift-auth.ts"
+  ]
+}

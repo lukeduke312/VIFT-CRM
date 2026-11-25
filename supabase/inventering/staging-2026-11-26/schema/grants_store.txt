@@ -1,0 +1,21 @@
+# STAGING (yyzljlqyzzcbxmcdbual) schema-ögonblicksbild 2026-11-25, endast läsning (SELECT). Ingen verksamhetsdata.
+# information_schema.role_table_grants för public.store (anon saknar helt grants)
+
+authenticated  DELETE     grantable=NO
+authenticated  INSERT     grantable=NO
+authenticated  SELECT     grantable=NO
+authenticated  UPDATE     grantable=NO
+postgres       DELETE     grantable=YES
+postgres       INSERT     grantable=YES
+postgres       REFERENCES grantable=YES
+postgres       SELECT     grantable=YES
+postgres       TRIGGER    grantable=YES
+postgres       TRUNCATE   grantable=YES
+postgres       UPDATE     grantable=YES
+service_role   DELETE     grantable=NO
+service_role   INSERT     grantable=NO
+service_role   REFERENCES grantable=NO
+service_role   SELECT     grantable=NO
+service_role   TRIGGER    grantable=NO
+service_role   TRUNCATE   grantable=NO
+service_role   UPDATE     grantable=NO

@@ -1,0 +1,21 @@
+# STAGING (yyzljlqyzzcbxmcdbual) schema-ögonblicksbild 2026-11-25, endast läsning (SELECT). Ingen verksamhetsdata.
+# cron.job. Kommandot är maskerat för headers/nycklar (regex) — i STAGING hämtas X-Monitor-Secret ur Vault (vault.decrypted_secrets, namn SERVICE_MONITOR_SECRET); inget hemligt värde finns i kommandot.
+
+jobid=1 jobname=vift-service-monitor-daily schedule="0 6 * * *" active=false
+command:
+
+  SELECT net.http_post(
+    url := 'https://yyzljlqyzzcbxmcdbual.supabase.co/functions/v1/service-monitor',
+    body := '{}'::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'X-Monitor-Secret', (
+        SELECT decrypted_secret
+        FROM vault.decrypted_secrets
+        WHERE name = 'SERVICE_MONITOR_SECRET'
+      )
+    ),
+    timeout_milliseconds := 10000
+  );
+  
+

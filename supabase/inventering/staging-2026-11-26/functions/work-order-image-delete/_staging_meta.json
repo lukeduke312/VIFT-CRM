@@ -1,0 +1,15 @@
+{
+  "slug": "work-order-image-delete",
+  "version": 1,
+  "verify_jwt": true,
+  "status": "ACTIVE",
+  "entrypoint_path": "/tmp/user_fn_yyzljlqyzzcbxmcdbual_1ec00b06-b8eb-491d-8466-19bfa788a8b2_1/source/functions/work-order-image-delete/index.ts",
+  "ezbr_sha256": "68ca452c846a5978b6917016068f39ca5f80a03044f64dd3fcd04733ca162f73",
+  "created_at": 1795533226786,
+  "updated_at": 1795533226786,
+  "import_map": false,
+  "files": [
+    "functions/work-order-image-delete/index.ts",
+    "functions/_shared/vift-auth.ts"
+  ]
+}
