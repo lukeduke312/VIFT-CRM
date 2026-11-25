@@ -114,7 +114,7 @@ Ingenting rensas tyst. När en flik saknar giltig session köas ingenting nytt; 
 |---|---|
 | `4b43ee9` | Klientkoden och `?v=` |
 | `63e94a4` | Testerna |
-| (docs-commit) | Detta avsnitt och statusraderna |
+| `77b8e1a` | Detta avsnitt, statusraderna och e2e-rapporten |
 
 Inga commits i `vift-v2`.
 
