@@ -9,6 +9,8 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
   - `docs/PROJECT_STATUS.md` är fortsatt källan till R9B- och BLOCKER-historiken (se R9B-pekaren i Leverans G).
 - **Ny återkoppling registreras i backloggen** (avsnitten "Beslut 2026-11-26", "Backlog – senare UX-etapp" och "Säkerhetsomgången") och hanteras i rätt fas. Den utlöser inte automatiskt nya utvecklingsuppdrag.
 - **Nästa tekniska huvuduppgift är G1/G4: serverkällkod i repot (punkt 242).** Därefter kommer **säkerhetsomgången** (eget avsnitt).
+  - **Uppdatering 2026-11-27:** G1/G4 är byggt och lokalt verifierat (punkt 242), och de fyra PostgreSQL-testerna är gröna lokalt (punkt 244). Säkerhetsomgången genomförs nu som paketen T3-0–T4-F i den **fastställda arbetsordningen** (avsnittet "Fastställd arbetsordning T3/T4"). Nästa paket är **T3-0**.
+- *(2026-11-27: ordningen inom säkerhetsomgången är nu fastställd, se "Fastställd arbetsordning T3/T4". Ordningen nedan efter säkerhetsomgången är fortfarande ett förslag.)*
 - Ordningen efter säkerhetsomgången är **föreslagen, inte beslutad**. Underlag finns i `docs/MASTERPLAN-STATUS-2026-11-26.md` §6. Förslaget:
   1. AO-etappen (nummergenerator 245, arbetspoolens affärsregel AP);
   2. funktionell STAGING-verifiering av de moduler som bara är simulerat testade;
@@ -17,6 +19,11 @@ Spårar all planerad och genomförd utveckling. Status uppdateras per commit.
   5. UX-etappen;
   6. framtida moduler.
 - **LIVE är NO-GO** tills en separat LIVE-plan (punkt 241) är godkänd av Lucas Samuelsson.
+- **Fastställda beslut 2026-11-27:** D-01–D-26 och AP-A–AP-G har sin auktoritativa ordalydelse i `docs/qa-2026-11-27/BESLUT-2026-11-27.md`. Masterplanen sammanfattar och hänvisar; vid avvikelse gäller beslutsdokumentet. Behörighetsmatrisen (`docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`) och testplanen (`docs/qa-2026-11-26/SAKERHETSPROVNING-TESTPLAN.md`) är fastställda.
+- **Auktoritativ källa** (`vift-v2/supabase/AUKTORITATIV-KALLA.md`):
+  - **server** = arbetskopian `vift-v2`, gren `claude/vift-system-restructure-8fUme`, katalogen `supabase/` (`migrations/` med `MIGRATIONSORDNING.txt`, `functions/`, `config.toml`, `staging-only/`, `manual/`);
+  - **klient** = VIFT-CRM, gren `claude/vift-v3-major-redesign`.
+  - VIFT-CRM:s `supabase/` är en **inaktuell spegel** (21 migrationer, saknar 28 filer och flera EF:er). Ingen deploy eller `db push` därifrån. Hur spegeln ska hanteras (alternativ A eller B) kräver beslut: KÄLLA-1.
 
 ## Statusförklaring (från 2026-11-26)
 
@@ -26,6 +33,7 @@ Varje punkt anges med den **högsta uppnådda nivån**:
 |---|---|
 | **Byggd** | Koden eller leveransen finns. Inget automatiskt test av kärnfunktionen har hittats, eller funktionen är installerad men inte prövad. |
 | **Simulerat testad** | Ett automatiskt test är grönt: Chromium mot simulerad server, enhetstest eller SQL mot lokal PostgreSQL. Inte prövat mot riktig STAGING. |
+| **Lokalt verifierad** | (Från 2026-11-27.) Samma nivå som Simulerat testad, men prövat mot lokal PostgreSQL med STAGING:s faktiska schema och källa (inventering eller migrationskedja). "Byggd + lokalt verifierad" används för en leverans där även källan jämförts mot STAGING. Inte prövat mot riktig STAGING. |
 | **Verifierad i STAGING** | Kärnfunktionen är prövad mot riktig STAGING (`yyzljlqyzzcbxmcdbual`, `staging-crm.viftfast.se`) med belägg. |
 | **Verifierad i LIVE** | Prövad i produktion (`crm.viftfast.se`). **Ingen punkt har denna nivå i dag.** |
 
@@ -46,9 +54,29 @@ För det som inte är fullt byggt används kompletterande lägen:
 - [T] = automatiskt test;
 - [D] = dokument eller kodgranskning.
 
-Källorna är QA-rapporterna 2026-11-24–26 (`docs/qa-2026-11-24/`, `docs/qa-2026-11-25/`, `docs/qa-2026-11-26/`) och `INSTALLATIONSPLAN-STAGING-2026-11-22.md` §6.6–§6.10 (i `vift-v2`). Statusgranskningen 2026-11-26 körde inga nya tester.
+Källorna är QA-rapporterna 2026-11-24–26 (`docs/qa-2026-11-24/`, `docs/qa-2026-11-25/`, `docs/qa-2026-11-26/`) och `INSTALLATIONSPLAN-STAGING-2026-11-22.md` §6.6–§6.10 (i `vift-v2`). Statusgranskningen 2026-11-26 körde inga nya tester. Uppdateringen 2026-11-27 bygger på `BESLUT-2026-11-27.md`, `BEHORIGHETSMATRIS.md`, `SAKERHETSPROVNING-TESTPLAN.md`, `ARBETSPOOL-UTREDNING.md` version 2, `vift-v2/supabase/inventering/G1-G4-DEL2-RESULTAT.md` och `vift-v2/supabase/AUKTORITATIV-KALLA.md` (omgången T0–T2: bara repo och lokal testning, inget i STAGING eller LIVE).
 
 **LIVE** har **inget** av arbetet efter 2026-11-22. Det gäller både klient (v2, V3–V3.4) och serverändringar: C-5, `ao-time-write` v5, lastChanged-triggern, GO-5–GO-8, `time-entries-list` med flera. Fas 0–2 finns i LIVE:s äldre klient (`2b01cea` enligt brief), men vilken version av varje punkt LIVE har är inte inventerat.
+
+**Statusräkning (uppdaterad 2026-11-27)** (numrerade punkter 1–271 och E2b-1–E2b-6):
+
+| Nivå/läge | Antal |
+|---|---|
+| Verifierad i LIVE | 0 |
+| Verifierad i STAGING | 109 |
+| Lokalt verifierad | 2 |
+| Simulerat testad | 69 |
+| Byggd | 51 |
+| Delvis byggd | 10 |
+| Ej påbörjad | 34 |
+| Uppskjuten | 2 |
+| **Summa** | **277** |
+
+"Lokalt verifierad" omfattar 242 (Byggd + lokalt verifierad) och 244. Jämfört med 2026-11-26 har 242 flyttats från Delvis byggd och 244 från Byggd.
+
+**Id utanför nummerserien (2026-11-27):** 49 beslut med status Beslutad, ej byggd (D-01–D-26, AP-A–AP-G, B1–B5, Ö1–Ö10, B-FAKT-1); 17 säkerhetsfynd SÄK-1–SÄK-17 (Registrerad, ej påbörjad; 11 av dem P1, varav SÄK-8 och SÄK-9 P1 inför LIVE); 14 öppna frågor (Beslut krävs); 12 paket T3-0–T4-F (lokal GO, STAGING NO-GO, LIVE NO-GO).
+
+<details><summary>Statusräkning 2026-11-26 (historik)</summary>
 
 **Statusräkning 2026-11-26** (numrerade punkter 1–271 och E2b-1–E2b-6):
 
@@ -63,7 +91,9 @@ Källorna är QA-rapporterna 2026-11-24–26 (`docs/qa-2026-11-24/`, `docs/qa-20
 | Uppskjuten | 2 |
 | **Summa** | **277** |
 
-Till detta kommer F4-delarna (avsnittet Leverans F4), blockerarna A1–C2 och de egna id:na B1–B5, Ö1–Ö10 och B-FAKT-1 (status per id), AP-1–AP-6 (Beslutad), AP-FEL-1, UX-1–UX-8 och SÄK-1–SÄK-10 (Registrerad, ej påbörjad) samt AP-A–AP-G (Beslut krävs). Den tidigare statusgranskningen (`MASTERPLAN-STATUS-2026-11-26.md`) räknade bara punkt 1–210 och E2b, med fyra andra kategorier. Siffrorna är inte direkt jämförbara.
+</details>
+
+Till detta kommer F4-delarna (avsnittet Leverans F4), blockerarna A1–C2 och de egna id:na B1–B5, Ö1–Ö10 och B-FAKT-1 (status per id), AP-1–AP-6 (Beslutad), AP-FEL-1, UX-1–UX-8 och SÄK-1–SÄK-17 (Registrerad, ej påbörjad), D-01–D-26 och AP-A–AP-G (Beslutad, ej byggd, 2026-11-27) samt de öppna frågorna K-01–K-06, Q1–Q4, OR-1, OR-2, MIG-1 och KÄLLA-1 (Beslut krävs). Den tidigare statusgranskningen (`MASTERPLAN-STATUS-2026-11-26.md`) räknade bara punkt 1–210 och E2b, med fyra andra kategorier. Siffrorna är inte direkt jämförbara.
 
 
 **Äldre legend (före 2026-11-26; behålls som historik för statusarna märkta "tidigare"). Gällande statusförklaring finns ovan.**
@@ -79,6 +109,8 @@ Till detta kommer F4-delarna (avsnittet Leverans F4), blockerarna A1–C2 och de
 **Totalt antal punkter: 153** *(historisk uppgift — se uppdateringen nedan)* (punkt 92 förekommer i Fas 4 = den enda definitionen; punkterna 132-133 är platshållare utan nummer-"gap" — se avsnittet om dem; 140–153 tillkom 2026-11-23, se Leverans H)
 
 **Uppdatering 2026-11-26:** de numrerade punkterna är nu **1–271 plus E2b-1–E2b-6 (277)**. 154–210 tillkom 2026-11-23–25 (Leverans I–J), 211–240 är genomfört arbete 2026-11-24–26 (Leverans K) och 241–271 är riskregister och kvarstående arbete (Leverans L). Beslut och backlog har egna id: B1–B5, Ö1–Ö10 (numrering enligt `docs/qa-2026-11-26/BEHORIGHETER-BESLUTSUNDERLAG.md`), B-FAKT-1, AP-1–AP-6, AP-FEL-1, UX-1–UX-8, SÄK-1–SÄK-10 och AP-A–AP-G. Inget punktnummer har tagits bort eller återanvänts.
+
+**Uppdatering 2026-11-27:** inga nya numrerade punkter. Nya id: D-01–D-26, SÄK-11–SÄK-17, paketen T3-0–T4-F och V1–V11, samt de öppna frågorna K-01–K-06, Q1–Q4, OR-1, OR-2, MIG-1 och KÄLLA-1.
 
 **OBS — avstämning mot `docs/PROJECT_STATUS.md` (2026-11-20):** `PROJECT_STATUS.md`:s EGEN "Modulstatus"-tabell (dess översta sektion, punkt 1–92) är en ENGÅNGS-ögonblicksbild som aldrig uppdaterats sedan filen skapades — den säger t.ex. "EJ BYGGD" för punkt 12/13/40–42/62–64/67/72, trots att denna masterplan (uppdaterad iterativt över flera senare commits) och en direkt läsning av den faktiska källkoden DENNA session (`WorkOrdersPage.js`, `supabase/functions/service-monitor/index.ts`) bekräftar att dessa punkter FAKTISKT är byggda. **Denna masterplans tabeller nedan är auktoritativa för modulstatus — inte `PROJECT_STATUS.md`:s översta tabell.** `PROJECT_STATUS.md`:s EGET värde ligger i dess SENARE, additiva sektioner (R9B-fakturaarkitektur, BLOCKER-1/BLOCKER-2-säkerhetsfynd, cross-tab-auth-rättelser rond 1–4, LIVE/STAGING-paritetsfynd) — innehåll som INTE finns någonstans i denna fil. Se ny punkt `R9B-POINTER` nedan.
 
@@ -742,11 +774,11 @@ Inget här är byggt om inte annat anges.
 
 | # | Funktion / kvarstående | Status | Beroenden | Källa |
 |---|---|---|---|---|
-| 241 | **LIVE-plan.** Innehåll: fil-diff mellan LIVE och STAGING, backup och återställning per steg, kontroll av RPC-ägarrollen i LIVE. Ordning: grunden först (R9B/Oct18-migrationer och `invoice-write`, `ao-time-write`, RPC:er, RESTRICTIVE-policyer), sedan C-5, lastChanged, GO-5–GO-8 och `time-entries-list`, sist klient v3.x via FTP (Lucas). `e2e-test-cleanup` följer aldrig med. Ställningstagande till G7 (152) på grund av LIVE:s IO-problem. `PLAN-LIVE-RELEASE.md` ("levererad separat 2026-10-25") finns inte i repot: Källa saknas. | **Ej påbörjad** | 242, 243, 244, 245, 250; beslut B1–B5, Ö1–Ö10 och B-FAKT-1; godkännande av Lucas | `PROJECT_STATUS.md` LIVE-releaseplan; installationsplan §7 |
-| 242 | **G1/G4 – serverkällkod i repot.** Saknas: `work_order_create` och displayNumber-migrationen (`20261020000001`), `invoice-write` (v9) och `rondering-pass-write` (v3). Dessutom ska `20261125000002`–`03`, `ao-time-write` och `work-orders-list` synkas till denna arbetskopia: V3-grenen har 21 migrationer, `vift-v2` har 24. CLAUDE.md påstår att katalogen saknas. **Nästa tekniska huvuduppgift.** | **Delvis byggd** · `ao-time-write`, `store-key-write` och `work-orders-list` finns i `vift-v2` | Nedladdning av deployade källor kräver Supabase-åtkomst (Lucas/GO) | installationsplan §5; `AO-LISTA.md` §4 |
-| 243 | **PERM-03/BLOCKER-2, utökad täckning:** objektformade nycklar (`vift_settings`), ändring och borttagning av befintliga poster, skrivning av hel nyckel, fältnivå | **Delvis byggd** · [S] skapa ny post 36/36 (9 register × 4 roller); [T] PERM-03 blockerad i simulatorn | 242; säkerhetsomgången | installationsplan §6.7 |
-| 244 | **De fyra PostgreSQL-testerna** körs gröna: `checklist_progress_sql`, `server_rpcs_sql`, `staging_backup_export`, `offer_attachment_upload` del 2–3 | **Byggd** · överhoppade 2026-11-26 (ingen lokal PostgreSQL); tidigare gröna enligt 186, 195 och 196 | Miljö med PostgreSQL; säkerhetsomgången | `SLUTRAPPORT-NATTKORNING.md` §4.1 |
-| 245 | **AO-nummergenerator:** unik constraint på `display_number`, serie över högsta nummer, kontroll mot id-nummer. Befintliga nummer ändras inte. STAGING-paret "AO-001" visas redan åtskilt. | **Ej påbörjad** | 242; AO-etappen; ska ingå i 241 | `AO-LISTA.md` §4 |
+| 241 | **LIVE-plan.** Innehåll: fil-diff mellan LIVE och STAGING, backup och återställning per steg, kontroll av RPC-ägarrollen i LIVE. Ordning: grunden först (R9B/Oct18-migrationer och `invoice-write`, `ao-time-write`, RPC:er, RESTRICTIVE-policyer), sedan C-5, lastChanged, GO-5–GO-8 och `time-entries-list`, sist klient v3.x via FTP (Lucas). `e2e-test-cleanup` följer aldrig med. Ställningstagande till G7 (152) på grund av LIVE:s IO-problem. `PLAN-LIVE-RELEASE.md` ("levererad separat 2026-10-25") finns inte i repot: Källa saknas. | **Ej påbörjad** | 242, 243, 244, 245, 250; beslut B1–B5, Ö1–Ö10 och B-FAKT-1; godkännande av Lucas. **2026-11-27:** dessutom alla T3/T4-paket installerade och verifierade i STAGING, SÄK-8 och SÄK-9 stängda (testplanen §9.4), samt hindren i `G1-G4-DEL2-RESULTAT.md` §10: installation i ordningen i `MIGRATIONSORDNING.txt` (R-D-policyerna först när klienten använder EF-vägarna), körning på PG17, `migration repair`/mappning (MIG-1), Vault, secrets och cron per miljö, logotypen i `vift-branding` som separat data | `PROJECT_STATUS.md` LIVE-releaseplan; installationsplan §7 |
+| 242 | **G1/G4 – serverkällkod i repot.** Saknas: `work_order_create` och displayNumber-migrationen (`20261020000001`), `invoice-write` (v9) och `rondering-pass-write` (v3). Dessutom ska `20261125000002`–`03`, `ao-time-write` och `work-orders-list` synkas till denna arbetskopia: V3-grenen har 21 migrationer, `vift-v2` har 24. CLAUDE.md påstår att katalogen saknas. **Nästa tekniska huvuduppgift.** *(2026-11-27: allt som räknas upp finns nu i `vift-v2/supabase/`; se status.)* | **Byggd + lokalt verifierad** (2026-11-27; inte STAGING-verifierad) · [T] Källan exakt mot STAGING: 38/38 md5. 28 nya filer i `supabase/migrations/`: 17 exakta ur STAGING:s migrationshistorik, 3 kandidater för de tomma migrationerna, 5 rekonstruerade (R-A–R-E), resten flyttade eller märkta (3 PROPOSAL-filer till `forslag-ej-applicerade/`, 1 STAGING-only-migration till `staging-only/`). Migrationskedjan lokalt på PostgreSQL 16.15, både i STAGING-ordning och filnamnsordning: 126 identiska objekt, 7 förklarade avvikelser, 0 oförklarade. `invoice-write` och `rondering-pass-write` återställda. EF-synken (fem funktioner där STAGING var nyare) och den manuella sammanslagningen av `send-push` är **bara syntaxkontrollerade**. `PUBLIC_BASE_URL` har inget reservvärde. STAGING-only separerat i `supabase/staging-only/`. **Säkerhetsfynd:** EXECUTE för `anon`/`authenticated` på `provision_vift_user` (och `deactivate_vift_user`, `check_app_users_health`) återkallades i STAGING utanför migrationerna; en ny installation hade gett rättigheterna. R-E rättar det i källan. · *tidigare: **Delvis byggd** · `ao-time-write`, `store-key-write` och `work-orders-list` finns i `vift-v2`* | Kvarstående hinder enligt `G1-G4-DEL2-RESULTAT.md` §10: beslut om auktoritativ källa (KÄLLA-1); kandidaterna för de tre tomma migrationerna är inte bevisat historiska; rekonstruerad SQL är inte historisk; EF-ändringarna är otestade i Deno och STAGING; `offer-respond` kräver ny RPC-version (OR-1, OR-2); körning på PG17; Vault, secrets och cron per miljö; off-by-one i AO-nummerseriens backfill (245); logotypen i Storage; `migration repair`/mappning (MIG-1). *Tidigare: Nedladdning av deployade källor kräver Supabase-åtkomst (Lucas/GO)* | installationsplan §5; `AO-LISTA.md` §4; `vift-v2/supabase/inventering/G1-G4-DEL2-RESULTAT.md`; `vift-v2/supabase/AUKTORITATIV-KALLA.md` |
+| 243 | **PERM-03/BLOCKER-2, utökad täckning:** objektformade nycklar (`vift_settings`), ändring och borttagning av befintliga poster, skrivning av hel nyckel, fältnivå | **Delvis byggd** · [S] skapa ny post 36/36 (9 register × 4 roller); [T] PERM-03 blockerad i simulatorn | 242; säkerhetsomgången; 2026-11-27: lokala sviter i T3-C (`roles_superadmin`, F18) och felkod/kontrollsumma i testverktygen (T3-0); STAGING-delen bara märkta poster efter separat GO | installationsplan §6.7 |
+| 244 | **De fyra PostgreSQL-testerna** körs gröna: `checklist_progress_sql`, `server_rpcs_sql`, `staging_backup_export`, `offer_attachment_upload` del 2–3 | **Lokalt verifierad** (2026-11-27, PostgreSQL 16.15) · [T] `checklist_progress_sql` 32/0, `server_rpcs_sql` 17/0, `offer_attachment_upload` 43/0 (alla tre delarna), `staging_backup_export` 12/0. Nya: `rekonstruerade_rpc_sql` 40/0, `public_base_url` 16/0, `edge_functions_syntax` 32/0, `migrationskedja` 2/0. `vift-v2` `run-all` (SKIP_BROWSER=1): 19/20 testfiler gröna; `staging_e2e_real` fallerar likadant före ändringarna, eftersom fake-backend saknar `e2e-test-cleanup` (SÄK-17). Playwright hoppades över och räknas inte som godkänt. STAGING kör PostgreSQL 17.6; körning på PG17 återstår före LIVE. · *tidigare: **Byggd** · överhoppade 2026-11-26 (ingen lokal PostgreSQL); tidigare gröna enligt 186, 195 och 196* | Körning på PG17 före LIVE; Playwright-miljö för webbläsartesterna; `e2e-test-cleanup` modelleras i fake-backend. *Tidigare: Miljö med PostgreSQL; säkerhetsomgången* | `SLUTRAPPORT-NATTKORNING.md` §4.1 |
+| 245 | **AO-nummergenerator:** unik constraint på `display_number`, serie över högsta nummer, kontroll mot id-nummer. Befintliga nummer ändras inte. STAGING-paret "AO-001" visas redan åtskilt. | **Ej påbörjad** | 242; AO-etappen; ska ingå i 241; 2026-11-27: källan finns nu (242). Off-by-one-felet i backfill-steget i `20261020000001` ligger kvar som historisk SQL och är inte rättat för LIVE (`G1-G4-DEL2-RESULTAT.md` §10.8) | `AO-LISTA.md` §4 |
 | 246 | **G11:** DataSync pausar medan fokus står i ett sökfält | **Ej påbörjad** (från 172) | Beslut om pollning | E2E-rapport §6 |
 | 247 | **G12-rester:** Personal Inaktivera sparar utan serverbekräftelse; Prisgrupper aktivera/inaktivera likaså; "Ta jobbet" visar beskedet före servern | **Ej påbörjad** | `WorkOrderService.takeFromPool`; 175; Ö5 | `REGISTER.md` §8, `FALTSIDOR.md` |
 | 248 | **`vift_settings` skrivs som helhet** (`BrandingService.update`): samtidiga administratörer kan skriva över varandra. Per-nyckel-skydd behövs. | **Ej påbörjad** | Server/`state.js`; säkerhetsomgången | `ADMIN-RAPPORTER-LON.md` §6.4 |
@@ -792,8 +824,8 @@ Detta är beslutade ambitioner och kända gap som riskerar att tappas. Varje rad
 | R-10 | Uppskjutet | 79, 82 | Uppskjuten | – |
 | R-11 | `service-monitor` | 40–43, 250 | Byggd (ej aktiverad) | Tester enligt §3, beslut |
 | R-12 | G11 | 246 | Ej påbörjad | Beslut |
-| R-13 | G1/G4 | 242 | Delvis byggd | Supabase-åtkomst |
-| R-14 | LIVE-plan/R9B i LIVE | 241 | Ej påbörjad | 242–245, beslut |
+| R-13 | G1/G4 | 242 | Byggd + lokalt verifierad *(tidigare: Delvis byggd)* | KÄLLA-1, MIG-1, PG17, STAGING-test av synkade EF:er efter GO *(tidigare: Supabase-åtkomst)* |
+| R-14 | LIVE-plan/R9B i LIVE | 241 | Ej påbörjad | 242–245, beslut; alla T3/T4-paket verifierade i STAGING; SÄK-8/SÄK-9 stängda |
 | R-15 | Funktioner som saknas helt | 251–259 | Ej påbörjad | Produktbeslut |
 | R-16 | UI-rester | 184, 260 | Delvis byggd / Ej påbörjad | UX-etappen |
 | R-17 | Sommartid vid stämpling | 261 | Ej påbörjad | – |
@@ -801,33 +833,120 @@ Detta är beslutade ambitioner och kända gap som riskerar att tappas. Varje rad
 
 ## Säkerhetsomgången (nästa efter G1/G4, punkt 242)
 
+**Uppdatering 2026-11-27:** G1/G4 är lokalt klart. Säkerhetsomgången genomförs som paketen T3-0–T4-F enligt avsnittet "Fastställd arbetsordning T3/T4" nedan. SÄK-klassningen följer `SAKERHETSPROVNING-TESTPLAN.md` §2.1, fastställd 2026-11-27: SÄK-8 och SÄK-9 är P1 inför LIVE, informationsläckaget i SÄK-7 är P1, och SÄK-10 blockerar standardrollen `personal`. Fynden F1–F23 finns i `BEHORIGHETSMATRIS.md` §7.
+
 **Omfattning:**
 - 243 (PERM-03 utökad) och 244 (PostgreSQL-testerna);
-- genomförande av besluten B1–B5, Ö1–Ö7 och B-FAKT-1 samt C-5:s avvägningar (se 215);
+- genomförande av besluten B1–B5, Ö1–Ö7 och B-FAKT-1 samt C-5:s avvägningar (se 215); *(2026-11-27: även D-01–D-26 och AP-B/AP-F i den del som tillhör T3/T4)*;
 - 248 (`vift_settings`) och 265 (C-7);
 - SÄK-3 och SÄK-4 (arbetspoolens synlighet och "Ta jobbet"), som ska rättas innan B4 och Ö7 byggs;
 - observationerna nedan.
 
-Varje serverändring görs i STAGING med backup, test per roll och återställning, enligt mönstret från GO-5–GO-8.
+Varje serverändring görs i STAGING med backup, test per roll och återställning, enligt mönstret från GO-5–GO-8. *(2026-11-27: först lokalt; installation i STAGING kräver separat GO per paket, se testplanen §8–§9.)*
 
 **Nya säkerhetsobservationer (backlog, registrerade 2026-11-26):**
 
 | Id | Observation | Status | Relation |
 |---|---|---|---|
-| SÄK-1 | Exportcentret visar Personnummer som förvalt markerat fält, trots att känsliga fält ska vara avstängda som standard (F4-7, CLAUDE.md). Undersöks. | **Registrerad, ej påbörjad** (undersöks) | 54, F4-7, 215 |
-| SÄK-2 | Fältrollens uppgiftssida visar uppgifter kopplade till andra användare | **Registrerad, ej påbörjad** (undersöks) | 7, 194 (per-post-regeln gäller skrivning), Ö7 |
-| SÄK-3 | `work-orders-list` lämnar ut varje AO med status `pool` till alla med `ao_view_own`, oavsett tilldelning och datum (`vift-v2` `work-orders-list/index.ts:88-91`). Samma regel finns i `canViewWorkOrder` (`_shared/vift-auth.ts:121-131`), i SQL-funktionerna för checklista, framsteg och logg samt i fake-backend. Följd: fältpersonal ser andras tilldelade men oplanerade AO. | **Registrerad, ej påbörjad** | AP-2, AP-5; B4 och Ö7 ärver felet om de byggs före rättningen; 137, 242. Källa: `ARBETSPOOL-UTREDNING.md` §2 |
-| SÄK-4 | "Ta jobbet" (`ao-time-write` `patch_ao`, `index.ts:241-257`) kräver bara status `pool`, så en fältanvändare kan lägga till sig på en AO som redan har personal. Kontrollen görs utan lås och utan `expectedUpdatedAt`; två samtidiga tagningar kan båda godkännas. Fake-backend saknar fältbegränsningen och kan inte testa detta. | **Registrerad, ej påbörjad** | 212, AP-5, beslut F, Ö2; åtgärd enligt AP-ordningen steg 1 (409 `already_assigned`). Källa: `docs/qa-2026-11-26/ARBETSPOOL-UTREDNING.md` §3 |
-| SÄK-5 | **P1.** `ao-time-write` `patch_ao`: grenen för `ao_complete` utan `ao_edit` (`index.ts:258-264`) slår inte upp AO:n. Den kontrollerar varken tilldelning eller nuvarande status. Fält med `ao_complete` kan sätta `klar` på vilken AO som helst vars id är känt, även `fakturerad`. **Bekräftat i återskapad källkod 2026-11-26:** `work_order_patch` kontrollerar bara att posten finns, idempotensen och att posten inte ändrats sedan den lästes, inte tilldelning eller status (`vift-v2/supabase/inventering/staging-2026-11-26/schema/functions.sql`). Inte prövat mot STAGING, eftersom det skulle ändra data. | **Registrerad, ej påbörjad**. Högsta prioritet i säkerhetsomgången. | Ö1, Ö2, 242. Källa: `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md` F1 |
-| SÄK-6 | Materialvägen ersätter hela `materials` och tar priser från klienten. Okänt inköpspris sparas som 0 kr, och artikelväljaren visar inköpspris även för fält. | **Registrerad, ej påbörjad** | B1, D-09/D-10. Källa: BEHORIGHETSMATRIS F2 |
-| SÄK-7 | `get-sensitive-fields` kräver `objects_sensitive` och har ingen väg för tilldelad AO. Portkoder ligger dubbelt: i store-bloben och i tabellen `property_sensitive_access`. | **Registrerad, ej påbörjad** | B5, D-05/D-16. Källa: BEHORIGHETSMATRIS F3 |
-| SÄK-8 | En användare med `staff_manage` kan ge sig själv rollen `admin`. Det finns inget skydd för sista superadmin. | **Registrerad, ej påbörjad** | Ö5, D-25. Källa: BEHORIGHETSMATRIS F5 |
-| SÄK-9 | Utloggning rensar bara tidposter och AO ur localStorage. Övriga cachade nycklar ligger kvar och används vid nätfel, vilket är en risk på delade enheter. | **Registrerad, ej påbörjad** | Källa: BEHORIGHETSMATRIS F6 |
-| SÄK-10 | Klientens reservroll `role:'personal'` (`AuthService.js:379`) måste ändras innan rollen `personal` definieras. Annars får okända inloggningar fältbehörighet. | **Registrerad, ej påbörjad** | Ö2, D-02. Källa: BEHORIGHETSMATRIS F7 |
+| SÄK-1 | Exportcentret visar Personnummer som förvalt markerat fält, trots att känsliga fält ska vara avstängda som standard (F4-7, CLAUDE.md). Undersöks. | **Registrerad, ej påbörjad** (undersöks) · Klassning 2026-11-27: P2 · paket T4-F | 54, F4-7, 215 |
+| SÄK-2 | Fältrollens uppgiftssida visar uppgifter kopplade till andra användare | **Registrerad, ej påbörjad** (undersöks) · Klassning 2026-11-27: **P1** · paket T3-D | 7, 194 (per-post-regeln gäller skrivning), Ö7 |
+| SÄK-3 | `work-orders-list` lämnar ut varje AO med status `pool` till alla med `ao_view_own`, oavsett tilldelning och datum (`vift-v2` `work-orders-list/index.ts:88-91`). Samma regel finns i `canViewWorkOrder` (`_shared/vift-auth.ts:121-131`), i SQL-funktionerna för checklista, framsteg och logg samt i fake-backend. Följd: fältpersonal ser andras tilldelade men oplanerade AO. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **P1** · paket T3-B | AP-2, AP-5; B4 och Ö7 ärver felet om de byggs före rättningen; 137, 242. Källa: `ARBETSPOOL-UTREDNING.md` §2 |
+| SÄK-4 | "Ta jobbet" (`ao-time-write` `patch_ao`, `index.ts:241-257`) kräver bara status `pool`, så en fältanvändare kan lägga till sig på en AO som redan har personal. Kontrollen görs utan lås och utan `expectedUpdatedAt`; två samtidiga tagningar kan båda godkännas. Fake-backend saknar fältbegränsningen och kan inte testa detta. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **P1** · paket T3-B | 212, AP-5, beslut F, Ö2; åtgärd enligt AP-ordningen steg 1 (409 `already_assigned`). Källa: `docs/qa-2026-11-26/ARBETSPOOL-UTREDNING.md` §3 |
+| SÄK-5 | **P1.** `ao-time-write` `patch_ao`: grenen för `ao_complete` utan `ao_edit` (`index.ts:258-264`) slår inte upp AO:n. Den kontrollerar varken tilldelning eller nuvarande status. Fält med `ao_complete` kan sätta `klar` på vilken AO som helst vars id är känt, även `fakturerad`. **Bekräftat i återskapad källkod 2026-11-26:** `work_order_patch` kontrollerar bara att posten finns, idempotensen och att posten inte ändrats sedan den lästes, inte tilldelning eller status (`vift-v2/supabase/inventering/staging-2026-11-26/schema/functions.sql`). Inte prövat mot STAGING, eftersom det skulle ändra data. | **Registrerad, ej påbörjad**. Högsta prioritet i säkerhetsomgången. · Klassning 2026-11-27: **P1** · paket T3-B | Ö1, Ö2, 242. Källa: `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md` F1 |
+| SÄK-6 | Materialvägen ersätter hela `materials` och tar priser från klienten. Okänt inköpspris sparas som 0 kr, och artikelväljaren visar inköpspris även för fält. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **P1** · paket T4-B | B1, D-09/D-10. Källa: BEHORIGHETSMATRIS F2 |
+| SÄK-7 | `get-sensitive-fields` kräver `objects_sensitive` och har ingen väg för tilldelad AO. Portkoder ligger dubbelt: i store-bloben och i tabellen `property_sensitive_access`. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **P1** för informationsläckaget (T4-A), P2 för den saknade tilldelningsvägen (T4-C) | B5, D-05/D-16. Källa: BEHORIGHETSMATRIS F3 |
+| SÄK-8 | En användare med `staff_manage` kan ge sig själv rollen `admin`. Det finns inget skydd för sista superadmin. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **P1 inför LIVE** · paket T3-C | Ö5, D-25. Källa: BEHORIGHETSMATRIS F5 |
+| SÄK-9 | Utloggning rensar bara tidposter och AO ur localStorage. Övriga cachade nycklar ligger kvar och används vid nätfel, vilket är en risk på delade enheter. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **P1 inför LIVE** · paket T3-A | Källa: BEHORIGHETSMATRIS F6 |
+| SÄK-10 | Klientens reservroll `role:'personal'` (`AuthService.js:379`) måste ändras innan rollen `personal` definieras. Annars får okända inloggningar fältbehörighet. | **Registrerad, ej påbörjad** · Klassning 2026-11-27: **Blockerar standardrollen `personal`**; rättas före standardrollerna · paket T3-A (före T3-E) | Ö2, D-02. Källa: BEHORIGHETSMATRIS F7 |
+| SÄK-11 | **F16/F23:** tid och stämpling kontrolleras inte mot AO-tilldelning. `time_entry_create` kontrollerar inte tilldelning, tar `hourRate` från klienten och skriver tidpostens id i målets `timeEntries`; stämplingen (`store-key-write/stamp-status.ts:56-70`) kräver bara `ao_time`. | **Registrerad, ej påbörjad** · **P1** · paket T3-B (tilldelning), T4-B (pris) | AP-B, D-11, 18, 142. Källa: BEHORIGHETSMATRIS F16, F23 |
+| SÄK-12 | **F17:** `work_order_patch` returnerar sparat resultat vid återanvänd idempotensnyckel, oavsett payload (en annan patch med samma nyckel godkänns tyst). | **Registrerad, ej påbörjad** · P3 · paket T3-B | 242. Källa: BEHORIGHETSMATRIS F17 |
+| SÄK-13 | **F18:** direkt REST-skrivning av nycklar utan affärsregel (`vift_lastChanged` och okända nycklar) är tillåten för alla aktiva (`store_active_write_safe`; spärrarna `staging_generic_keys_no_direct_*` gäller bara affärsnycklar). | **Registrerad, ej påbörjad** · P2 · paket T3-C | 243, A2. Källa: BEHORIGHETSMATRIS F18 |
+| SÄK-14 | **F19:** `rondering-pass-write` kräver `ao_view_all` för allt och kontrollerar inte per pass. | **Registrerad, ej påbörjad** · P2 · paket T4-D | Ö3, `rondering_utfor`, 28. Källa: BEHORIGHETSMATRIS F19 |
+| SÄK-15 | **F21:** `ao_edit` kan sätta `status:'fakturerad'` och `invoiceId` via `patch_ao` (ingen fältbegränsning för `callerHasEdit`), vilket kringgår fakturaintegriteten. | **Registrerad, ej påbörjad** · **P1** (D-07) · paket T3-B | D-07, 269, 17. Källa: BEHORIGHETSMATRIS F21 |
+| SÄK-16 | **`work-orders-list` filtrerar inte `deleted`/`archived` i poolgrenen** (installerad källa `index.ts:71`): även arkiverade och borttagna pool-AO lämnas ut till alla med `ao_view_own`. | **Registrerad, ej påbörjad** · **P1** (del av poolläckan) · paket T3-B | SÄK-3, AP-A. Källa: `ARBETSPOOL-UTREDNING.md` v2 §0 och §1 |
+| SÄK-17 | **Fake-backend avviker från STAGING:** checklistan startar AO:n (`fake-backend.js:611`; STAGING:s `work_order_checklist_set_state` gör det inte), `patch_ao` saknar fältbegränsningen, poolläckan finns även där, och `e2e-test-cleanup` saknas. Simulerade tester kan därför ge fel utfall. | **Registrerad, ej påbörjad** · klass ej fastställd; paritet med den simulerade servern (SEC-SIM-01) krävs för GO · paket T3-0/T3-B (`sim_parity`) | 244, SÄK-3, SÄK-4. Källa: `ARBETSPOOL-UTREDNING.md` v2 §1 och §8; `G1-G4-DEL2-RESULTAT.md` §9 |
 
-## Beslut 2026-11-26
+## Fastställd arbetsordning T3/T4 (2026-11-27)
+
+**Källa:** `docs/qa-2026-11-26/SAKERHETSPROVNING-TESTPLAN.md` §6–§9 (korrigerad och fastställd 2026-11-27), byggd på `BESLUT-2026-11-27.md` och `BEHORIGHETSMATRIS.md`. Detta är den fastställda arbetsordningen för nästa omgångar.
+
+**Status för samtliga paket:**
+- lokal utveckling och test: **GO, i tur och ordning**;
+- installation i STAGING: **NO-GO** tills Lucas ger separat godkännande per paket (villkor i testplanen §9.2);
+- LIVE: **NO-GO** (testplanen §9.4, punkt 241).
+
+**Ordning:** T3-0 → T3-A → T3-B → T3-C → T3-D → T3-E → T4-A + T4-B (samordnat) → T4-C → T4-D → T4-E → T4-F. Därefter verifiering V1–V11 i STAGING. T3-A är bara klient och kan utvecklas parallellt med T3-B, men installeras först.
+
+| Paket | Innehåll | SÄK / beslut | Beroenden | Status |
+|---|---|---|---|---|
+| T3-0 | Grund: versionerade migrationer för de 13 funktionerna och cutover-policyerna, EF-synk, lokal STAGING-replik, testverktyg som kontrollerar felkod, `reason` och kontrollsumma | 242, 244, SÄK-17 | Inventeringen (klar) | Lokal GO (nästa paket) |
+| T3-A | Klientskydd: reservrollen fail-closed, rensning av alla `vift_*`-nycklar vid utloggning | SÄK-10, SÄK-9, 265 | Inga; installeras före T3-E | Lokal GO |
+| T3-B | AO-kärna och arbetspool: regelkontroll i `work_order_patch` under lås, poolregeln, "Ta jobbet" atomiskt (409 `already_assigned`), tid och stämpling mot tilldelning, nya AO-behörigheter | SÄK-5, SÄK-3, SÄK-4, SÄK-15 (F21), SÄK-11 (F16/F23), SÄK-12 (F17), SÄK-16; D-03, D-07, D-24, AP-A, AP-B, AP-F, AP-G | T3-0 | Lokal GO efter T3-0 |
+| T3-C | Superadmin, roller och direkta vägar: eskaleringsregel, invarianten "≥1 aktiv `all`" under lås | SÄK-8, SÄK-13 (F18), 243; D-25, D-21; Ö5 | T3-0 (T3-B rekommenderas först) | Lokal GO efter T3-0 |
+| T3-D | Urval per post: aktivitetslogg, uppgifter, offertreferens, kunder/fastigheter per uppdrag, personal | SÄK-2; B4, Ö7, D-12–D-15, D-22 | **T3-B installerat först** | Lokal GO efter T3-B |
+| T3-E | Standardroller (M9) | D-02, D-26, Ö2 | **T3-A installerat**; T3-B–D; K-01, K-02 | Lokal GO (replik); STAGING NO-GO tills T3-A–D installerade och testkonton godkända |
+| T4-A + T4-B | Samordnat B1 + B5: skyddade fält med fältvis sammanslagning, `cost_view`; material, priser och tid radvis, okänt ≠ 0, `cost_edit`, `time_view_all` | SÄK-7 (läckage), SÄK-6, SÄK-11 (pris); B1, B5, D-01, D-05, D-06, D-09–D-11, D-13, D-17, D-19 | T3-B, T3-C, T3-E; K-03 | Lokal GO efter T3-B/C |
+| T4-C | Åtkomstinformation till tilldelad personal (`objects_access_assigned`), förberedelse för D-16, D-23 | SÄK-7 (vägen) | T3-B, T4-A, T4-D för rondering | Lokal GO |
+| T4-D | Rondering per pass (`rondering_utfor`) | SÄK-14 (F19); Ö3 | T3-E, T3-D | Lokal GO |
+| T4-E | **M8:** faktura-PDF och kommentarer (`internalNote`/`customerNote`) | B-FAKT-1, D-20; K-05 | T3-0 (kan tidigareläggas) | Lokal GO |
+| T4-F | Export (`export_data`, `export_personal_data`, serverexport) | SÄK-1 (F12); D-18; K-04 | T3-E, T4-A | Lokal GO efter T4-A |
+
+**Verifiering i STAGING efter installation** (senare omgång, separat GO per paket; testplanen §7):
+
+| Steg | Efter paket | Verifiering |
+|---|---|---|
+| V1 | T3-A | SEC-CACHE-01..03, SEC-ROLL-10 |
+| V2 | T3-B | T3-B:s STAGING-lista, därefter `c5-read.js` och `authz-read.js` med ny förväntan |
+| V3 | T3-C | SEC-B3-03/05, SEC-REST-03 (läsande) |
+| V4 | T3-D | SEC-B4-01..03, SEC-TASK-01..06, SEC-OFF-01, SEC-KUND-01/02 |
+| V5 | T3-E | Ny förväntan per standardroll; testkonton enligt D-26 efter GO |
+| V6 | T4-A + T4-B | Listorna i testplanen §6, full regression `e2e-real.js`, manuell mobilkontroll av materialflödet |
+| V7 | T4-C | SEC-B5-06/08/09 |
+| V8 | T4-D | SEC-ROND-01/02/04 |
+| **V9** | **T4-E (M8)** | **SEC-FAKT-06/07:** kund-PDF utan intern kommentar, äldre `note` inte med |
+| V10 | T4-F | SEC-EXP-03..05 |
+| V11 | Alla | Slutregression: `tests/run-all.sh`, lokala sviter mot replikan, `e2e-real.js`, kontrollsummor och städning med kod 0 |
+
+**Utanför T3/T4 (AO-etappen):** `ao_plan_own` (AP-E), räknare (AP-C), notiser utöver "inga falska tilldelningsnotiser" (AP-D), avveckling av status `pool` (AP-G), kategorierna i alla vyer, AO-nummergeneratorn (245) och UX-etappen.
+
+## Beslut 2026-11-26 (fastställda 2026-11-27)
 
 **Status för samtliga:** Beslutad, ej byggd. Besluten ersätter inte tidigare punkter; de anger hur öppna frågor ska lösas.
+
+**Uppdatering 2026-11-27:** Lucas Samuelsson fastställde D-01–D-26 och AP-A–AP-G. Den auktoritativa ordalydelsen finns i `docs/qa-2026-11-27/BESLUT-2026-11-27.md`; tabellerna här är sammanfattningar. B1–B5, Ö1–Ö10 och B-FAKT-1 har status **Beslutad, ej byggd** och verkställs genom D-besluten i paketen T3/T4. **Grundprincip:** standardrollerna är utgångspunkter; behörigheter ska kunna anpassas individuellt eller genom egna roller och hårdkodas inte efter rollens namn.
+
+### D-01–D-26 (fastställda 2026-11-27)
+
+**Status för samtliga:** Beslutad, ej byggd. Kort sammanfattning. Ordalydelsen i `docs/qa-2026-11-27/BESLUT-2026-11-27.md` gäller; genomslaget i matrisen står i `BEHORIGHETSMATRIS.md` §6.
+
+| Id | Sammanfattning | Status | Paket |
+|---|---|---|---|
+| D-01 | Intern ekonomi: `cost_view`/`cost_edit` standard för admin, arbetsledare och ekonomi, kan tas bort; ger inte löneuppgifter; fält och externa ser inte intern ekonomi | **Beslutad, ej byggd** | T4-A/T4-B |
+| D-02 | Roll-id: behåll `chef` (etikett Arbetsledare), `admin`, `personal`, `ekonomi`; inför `begransad`; ingen onödig migrering | **Beslutad, ej byggd** | T3-E |
+| D-03 | Fältets AO: `ao_start_own`, `ao_complete_own`, `ao_pool_take`; bara egen tilldelad giltig AO; låsta statusar; servern sätter identitet och tid | **Beslutad, ej byggd** | T3-B |
+| D-04 | Begränsad/extern: bara egna tilldelade AO, ingen öppen pool, ingen ekonomi; tillägg tilldelas separat | **Beslutad, ej byggd** | T3-E |
+| D-05 | Portkoder: `objects_sensitive` standard för arbetsledare (kan tas bort); fält får åtkomstinformation för egna tilldelade aktiva uppdrag via smal loggad serverväg, även vid rondering | **Beslutad, ej byggd** | T4-A, T4-C |
+| D-06 | AO-ekonomi: inga fastpriser, marginaler eller inköpspriser till fält; omfattning och debiteringskategori utan belopp | **Beslutad, ej byggd** | T4-A |
+| D-07 | Fakturaunderlag: arbetsledare läser och skapar; bara via atomisk faktureringsväg; ingen kan sätta `fakturerad` via generell AO-patch | **Beslutad, ej byggd** | T3-B (SÄK-15) |
+| D-08 | Tid och lön: ekonomi och admin får löneunderlag och attest; arbetsledare följer tid utan löneåtkomst (`time_view_all`) | **Beslutad, ej byggd** | T4-B; K-01 |
+| D-09 | Materialets försäljningspris döljs för fält; servern sätter priset | **Beslutad, ej byggd** | T4-B |
+| D-10 | Fritextmaterial; okänt pris markeras okänt, aldrig 0 kr; saknat försäljningspris stoppar eller flaggar fakturering; fastpris utan dubbeldebitering | **Beslutad, ej byggd** | T4-B |
+| D-11 | Timpriser: fält ser inte belopp, bara gruppnamn; servern validerar och sätter priset; historiska priser oförändrade | **Beslutad, ej byggd** | T4-B |
+| D-12 | Offerter för fält: bara minsta referensinformation för tilldelad AO | **Beslutad, ej byggd** | T3-D |
+| D-13 | Kunder och fastigheter per behörigt uppdrag; begränsad poolinformation; personnummer bara med `personal_data_view` | **Beslutad, ej byggd** | T3-D, T4-A; K-02, K-03 |
+| D-14 | Personalens kontaktuppgifter: namn, titel, arbetskontakt; egen identitet fungerar; andras behörigheter och skyddade uppgifter exponeras inte | **Beslutad, ej byggd** | T3-D |
+| D-15 | Uppgifter: `ao_view_all` räcker inte för att ändra andras; samma regel i server och klient | **Beslutad, ej byggd** | T3-D |
+| D-16 | `property_sensitive_access` blir sanningskälla för portkoder; bara förberedelse nu, ingen migrering | **Beslutad, ej byggd** | T4-C |
+| D-17 | Bankgiro: interna roller läser, ändring kräver `bankgiro_edit`; konfliktsäkra inställningar | **Beslutad, ej byggd** | T4-A; 248 |
+| D-18 | Export: `export_data`, `export_personal_data`; samma regel i snabbexport och Exportcenter; känsliga fält av som standard; serverkontrollerad och loggad export av skyddade uppgifter | **Beslutad, ej byggd** | T4-F; K-04 |
+| D-19 | Materialrader: fält ändrar egna rader på tilldelad redigerbar AO; radvisa serveroperationer | **Beslutad, ej byggd** | T4-B |
+| D-20 | Intern kommentar aldrig på kundens faktura eller kund-PDF; separata fält; gamla `inv.note` klassas inte automatiskt som kundsynliga; ingen historisk dataändring | **Beslutad, ej byggd** | T4-E (M8); K-05 |
+| D-21 | Rollregister: egen effektiv behörighet; andras listor kräver särskild rättighet | **Beslutad, ej byggd** | T3-C, T3-D |
+| D-22 | Aktivitetslogg: typer och referenser per behörighet; servern sätter identitet och tid; klientrapporterat är inte revisionshistorik | **Beslutad, ej byggd** | T3-D |
+| D-23 | Radering och känsliga uppgifter: atomiskt med överordnad post; revision utan portkod; skilj arkivering, mjuk och permanent radering | **Beslutad, ej byggd** | T4-C |
+| D-24 | Arbetspool: följ AP-A–AP-G; tilldelad men oplanerad AO är giltig i poolen | **Beslutad, ej byggd** | T3-B, AO-etappen |
+| D-25 | Superadmin: `admin_manage` är inte superadmin; bara superadmin hanterar `all`; atomisk invariant "minst en aktiv superadmin" | **Beslutad, ej byggd** | T3-C |
+| D-26 | Testkonton motsvarar standardrollerna, plus negativa fall för egna roller; skapas i STAGING först efter separat godkännande | **Beslutad, ej byggd** | T3-E; 262 |
 
 ### Behörigheter
 
@@ -835,31 +954,42 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 
 | Id | Beslut | Status | Genomförs i / beroenden |
 |---|---|---|---|
-| B1 | Inköpspriser, marginaler och intern ekonomi visas bara för särskilt behöriga roller. Fältpersonal kan registrera material utan att se inköpspriser. Fritextmaterial ska vara möjligt. Okänt inköpspris ska inte behandlas som en verklig kostnad på 0 kr och ska kunna kompletteras av behörig personal. | **Beslutad, ej byggd** | Säkerhetsomgången. Projektion av `vift_articles` för roller utan `article_manage`/`invoice_*`/`reports_view`; materialformulär utan `buyPrice`; relation 22, 264 |
-| B2 | Behåll försäljningspriser där de behövs operativt. B2 samordnas med Ö4 (timpris i fältets tidposter), så att reglerna för försäljningspris, timpris och intern personalkostnad inte motsäger varandra. | **Beslutad, ej byggd** | Säkerhetsomgången; Ö4; 23, 266 |
-| B3 | Fältpersonal ser namn, titel och nödvändiga kontaktuppgifter, men inte andras behörighetslistor eller skyddade personaluppgifter. | **Beslutad, ej byggd** | Projektion av `vift_staff`; lön aldrig i `vift_staff` (266); 21 |
-| B4 | Fältpersonal ser bara händelser för egna och tilldelade uppdrag. Inga ovidkommande offerter, fakturor eller ekonomiska uppgifter. | **Beslutad, ej byggd** | Radprojektion av `vift_activityLog`, motsvarande `work-orders-list`; 6, 195 |
-| B5 | Portkoder och nyckelinformation skyddas på servernivå. Fältvis sammanslagning får aldrig låta en användare skriva över ett skyddat fält som användaren saknar rätt att ändra. | **Beslutad, ej byggd** | Fältvis sammanslagning i `store-key-write`; konsekvensanalys, backup och rollback; 72, 215 |
-| Ö1 | **Underlag:** "Starta arbete" i AO-detaljen för tilldelad fältarbetare. **Beslut** (gemensamt med Ö2): tilldelad fältpersonal får starta och klarmarkera egna tilldelade AO, men inte attestera, fakturera eller ändra skyddade ekonomiska fält. | **Beslutad, ej byggd** | Serverregel i `ao-time-write` (242); Ö2; besvarar `AO-DETALJ.md` fråga 1; 212 |
-| Ö2 | **Underlag:** fältrollen och `ao_complete`; standardrollen `personal` saknas i STAGING:s rollregister. **Beslut:** klarmarkering av egna tilldelade AO enligt Ö1; standardrollerna definieras korrekt. | **Beslutad, ej byggd** | Rolldefinitioner; Ö1, Ö3, B1–B4; besvarar `AO-DETALJ.md` fråga 2; 24 |
-| Ö3 | **Underlag:** fältrollen och rondering (ronderingssidorna kräver `ao_view_all`). **Beslut:** en separat smal behörighet för att utföra tilldelade ronderingar, `rondering_utfor`, inte `ao_view_all`. | **Beslutad, ej byggd** | Ny permission i `AuthService` och `rondering-pass-write` (242); 27–29; UX-3 |
-| Ö4 | **Underlag:** timpris i fältets egna tidposter och i stämpla-ut-dialogen (fältet ser det). **Beslut:** samordnas med B2, så att reglerna för försäljningspris, timpris och intern personalkostnad inte motsäger varandra. | **Beslutad att samordnas med B2**; synlighetsregeln är inte fastställd | Säkerhetsomgången. Underlagets förslag: dölj i klienten och projicera bort `hourRate` i `time-entries-list` för fält. |
-| Ö5 | **Underlag:** personal kan inaktivera sig själv eller sista superadmin. **Beslut:** sista superadministratören kan inte inaktiveras eller fråntas sin behörighet. | **Beslutad, ej byggd** | Serverregel: neka om resultatet blir 0 aktiva med `all`; `StaffPage`/`AdminPage`; 21, 247 |
-| Ö6 | **Underlag:** PERM-03/BLOCKER-2, skrivbehörighet per nyckel för generiska nycklar. | **Delvis byggd** · [S] skapa ny post 36/36; fortsätter i punkt 243 | Säkerhetsomgången; 242, 243 |
-| Ö7 | **Underlag:** uppgifter (`vift_activities`) läses av alla. **Beslut:** uppgifter filtreras på servern efter behörighet och tilldelning (samma urval som B4: fält ser egna och tilldelade). | **Beslutad, ej byggd** | Projektion i `store-key-write`; B4; SÄK-2; 7 |
-| Ö8 | **Underlag:** Admin, "Rensa lokal cache" och push-diagnostik kräver `admin_manage`, varnar för osynkade ändringar och visar inga nycklar. | **Simulerat testad** (klar, punkt 238); inget beslut behövs | 238 |
-| Ö9 | **Underlag:** E2E-konton och testroller (`e2e_*`, `v7_sakerhetstest`, `qa_p2_avgransad`). Avvecklas när testuppdraget är slut; får aldrig följa med till LIVE. | **Ej påbörjad** (punkt 262) | 262, 241 |
-| Ö10 | **Underlag:** inget av skydden ovan finns i LIVE. | **Ej påbörjad** (del av LIVE-planen, punkt 241) | 241 |
-| B-FAKT-1 | Intern kommentar visas aldrig på kundens faktura-PDF. Kundsynlig kommentar är ett separat fält. (Inget Ö-nummer; motsvarar punkt 3 i `docs/qa-2026-11-26/KVARSTAENDE-PROBLEM.md`.) | **Beslutad, ej byggd** | `_buildPrintHTML`, datamodell för fakturaunderlag; 17 |
+| B1 | Inköpspriser, marginaler och intern ekonomi visas bara för särskilt behöriga roller. Fältpersonal kan registrera material utan att se inköpspriser. Fritextmaterial ska vara möjligt. Okänt inköpspris ska inte behandlas som en verklig kostnad på 0 kr och ska kunna kompletteras av behörig personal. | **Beslutad, ej byggd** | Säkerhetsomgången. Projektion av `vift_articles` för roller utan `article_manage`/`invoice_*`/`reports_view`; materialformulär utan `buyPrice`; relation 22, 264. **2026-11-27:** D-01, D-09, D-10; T4-A/T4-B |
+| B2 | Behåll försäljningspriser där de behövs operativt. B2 samordnas med Ö4 (timpris i fältets tidposter), så att reglerna för försäljningspris, timpris och intern personalkostnad inte motsäger varandra. | **Beslutad, ej byggd** | Säkerhetsomgången; Ö4; 23, 266. **2026-11-27:** D-11 (gruppnamn utan belopp; ersätter samordningsfrågan med Ö4); T4-B |
+| B3 | Fältpersonal ser namn, titel och nödvändiga kontaktuppgifter, men inte andras behörighetslistor eller skyddade personaluppgifter. | **Beslutad, ej byggd** | Projektion av `vift_staff`; lön aldrig i `vift_staff` (266); 21. **2026-11-27:** D-14, D-21; T3-D |
+| B4 | Fältpersonal ser bara händelser för egna och tilldelade uppdrag. Inga ovidkommande offerter, fakturor eller ekonomiska uppgifter. | **Beslutad, ej byggd** | Radprojektion av `vift_activityLog`, motsvarande `work-orders-list`; 6, 195. **2026-11-27:** D-22, D-12–D-15; T3-D efter T3-B |
+| B5 | Portkoder och nyckelinformation skyddas på servernivå. Fältvis sammanslagning får aldrig låta en användare skriva över ett skyddat fält som användaren saknar rätt att ändra. | **Beslutad, ej byggd** | Fältvis sammanslagning i `store-key-write`; konsekvensanalys, backup och rollback; 72, 215. **2026-11-27:** D-05, D-16, D-23; T4-A och T4-C |
+| Ö1 | **Underlag:** "Starta arbete" i AO-detaljen för tilldelad fältarbetare. **Beslut** (gemensamt med Ö2): tilldelad fältpersonal får starta och klarmarkera egna tilldelade AO, men inte attestera, fakturera eller ändra skyddade ekonomiska fält. | **Beslutad, ej byggd** | Serverregel i `ao-time-write` (242); Ö2; besvarar `AO-DETALJ.md` fråga 1; 212. **2026-11-27:** D-03 (`ao_start_own`, `ao_complete_own`); T3-B |
+| Ö2 | **Underlag:** fältrollen och `ao_complete`; standardrollen `personal` saknas i STAGING:s rollregister. **Beslut:** klarmarkering av egna tilldelade AO enligt Ö1; standardrollerna definieras korrekt. | **Beslutad, ej byggd** | Rolldefinitioner; Ö1, Ö3, B1–B4; besvarar `AO-DETALJ.md` fråga 2; 24. **2026-11-27:** D-02, D-03; T3-B, T3-E |
+| Ö3 | **Underlag:** fältrollen och rondering (ronderingssidorna kräver `ao_view_all`). **Beslut:** en separat smal behörighet för att utföra tilldelade ronderingar, `rondering_utfor`, inte `ao_view_all`. | **Beslutad, ej byggd** | Ny permission i `AuthService` och `rondering-pass-write` (242); 27–29; UX-3. **2026-11-27:** D-04, `rondering_utfor`; T4-D |
+| Ö4 | **Underlag:** timpris i fältets egna tidposter och i stämpla-ut-dialogen (fältet ser det). **Beslut:** samordnas med B2, så att reglerna för försäljningspris, timpris och intern personalkostnad inte motsäger varandra. | **Beslutad, ej byggd** (D-11: fältet ser prisgruppens namn utan belopp; servern sätter priset) · T4-B · *tidigare: **Beslutad att samordnas med B2**; synlighetsregeln är inte fastställd* | Säkerhetsomgången. Underlagets förslag: dölj i klienten och projicera bort `hourRate` i `time-entries-list` för fält. |
+| Ö5 | **Underlag:** personal kan inaktivera sig själv eller sista superadmin. **Beslut:** sista superadministratören kan inte inaktiveras eller fråntas sin behörighet. | **Beslutad, ej byggd** | Serverregel: neka om resultatet blir 0 aktiva med `all`; `StaffPage`/`AdminPage`; 21, 247. **2026-11-27:** D-25; T3-C |
+| Ö6 | **Underlag:** PERM-03/BLOCKER-2, skrivbehörighet per nyckel för generiska nycklar. | **Beslutad, ej byggd** (verkställs i T3-C och den utökade täckningen i 243) · *tidigare: **Delvis byggd** · [S] skapa ny post 36/36; fortsätter i punkt 243* | Säkerhetsomgången; 242, 243 |
+| Ö7 | **Underlag:** uppgifter (`vift_activities`) läses av alla. **Beslut:** uppgifter filtreras på servern efter behörighet och tilldelning (samma urval som B4: fält ser egna och tilldelade). | **Beslutad, ej byggd** | Projektion i `store-key-write`; B4; SÄK-2; 7. **2026-11-27:** D-15; T3-D |
+| Ö8 | **Underlag:** Admin, "Rensa lokal cache" och push-diagnostik kräver `admin_manage`, varnar för osynkade ändringar och visar inga nycklar. | **Beslutad, ej byggd** som beslutspunkt; själva åtgärden är redan genomförd i 238 (Simulerat testad), inget nytt att bygga · *tidigare: **Simulerat testad** (klar, punkt 238); inget beslut behövs* | 238 |
+| Ö9 | **Underlag:** E2E-konton och testroller (`e2e_*`, `v7_sakerhetstest`, `qa_p2_avgransad`). Avvecklas när testuppdraget är slut; får aldrig följa med till LIVE. | **Beslutad, ej byggd** (D-26: testkonton motsvarar standardrollerna, skapas i STAGING först efter separat godkännande; avveckling i 262) · *tidigare: **Ej påbörjad** (punkt 262)* | 262, 241 |
+| Ö10 | **Underlag:** inget av skydden ovan finns i LIVE. | **Beslutad, ej byggd** (del av LIVE-planen, punkt 241) · *tidigare: **Ej påbörjad** (del av LIVE-planen, punkt 241)* | 241 |
+| B-FAKT-1 | Intern kommentar visas aldrig på kundens faktura-PDF. Kundsynlig kommentar är ett separat fält. (Inget Ö-nummer; motsvarar punkt 3 i `docs/qa-2026-11-26/KVARSTAENDE-PROBLEM.md`.) | **Beslutad, ej byggd** | `_buildPrintHTML`, datamodell för fakturaunderlag; 17. **2026-11-27:** D-20; T4-E (M8), verifiering V9; K-05 |
 
 ### Affärsregel: arbetspool, tilldelning och planering
 
 **Status:** Beslutad. Utredning pågår, implementeras inte nu (AO-etappen).
 
+**Uppdatering 2026-11-27:** fastställt genom D-24 och AP-A–AP-G (`BESLUT-2026-11-27.md`). Serverregeln för poolen byggs i T3-B; kategorierna i vyerna, räknarna (AP-C), notiserna (AP-D), `ao_plan_own` (AP-E) och avvecklingen av `pool` (AP-G) hör till AO-etappen.
+
+**Kategoridefinition** (`ARBETSPOOL-UTREDNING.md` version 2, §5; härledd vid läsning, inget lagrat skrivs om). Kategorierna är ömsesidigt uteslutande och prövas i ordning:
+1. **Avslutade:** borttagen, arkiverad eller status `klar`/`fakturerad`/`avbruten`.
+2. **Öppen pool:** ej avslutad, uttryckligen tillgängliggjord (status `pool` och nytt fält `poolOpen ≠ false`) och utan personal.
+3. **Planerad:** ej avslutad, ej påbörjad och med utförandedatum (med eller utan personal).
+4. **Tilldelad pool:** ej avslutad, ej påbörjad, med personal men utan utförandedatum.
+5. **Övriga aktiva:** allt annat, t.ex. `pågående` eller en ny AO utan personal och datum som inte är tillgängliggjord. En sådan AO exponeras alltså inte automatiskt.
+
+Förfallodatum skiljs från utförandedatum med ett nytt fält `dueDate`; på befintliga pool-AO tolkas `scheduledDate` som förfallodatum.
+
 | Id | Regel |
 |---|---|
 | AP-1 | Tre separata dimensioner: tilldelning (vem), planering (när) och status (hur långt). |
-| AP-2 | Utan personal och utan datum ligger AO:n i den öppna arbetspoolen. Med personal men utan datum ligger den i den tilldelade arbetspoolen och syns även under Mina jobb för de tilldelade. Med datum syns den som planerad. |
+| AP-2 | Utan personal och utan datum ligger AO:n i den öppna arbetspoolen. Med personal men utan datum ligger den i den tilldelade arbetspoolen och syns även under Mina jobb för de tilldelade. Med datum syns den som planerad. *(Ändrat 2026-11-27 genom AP-A: öppen pool är bara uttryckligen tillgängliggjorda, aktiva och otilldelade uppdrag. En ny AO utan personal och datum exponeras **inte** automatiskt för all fältpersonal.)* |
 | AP-3 | Tilldelning kräver inte datum. |
 | AP-4 | Att ta bort datum, flytta till poolen eller ändra tilldelning får inte rensa personal, ansvarig, datum, status eller historik. Arbetsstatus och faktisk arbetstid hanteras separat. |
 | AP-5 | Tilldelade men oplanerade AO kan inte tas av annan fältpersonal. Arbetsledare och admin ser och hanterar båda kategorierna. |
@@ -875,17 +1005,21 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 
 **Status för samtliga:** Beslut krävs. Källa: `docs/qa-2026-11-26/ARBETSPOOL-UTREDNING.md` §9, där även utredningens rekommendation per fråga finns.
 
+**Uppdatering 2026-11-27:** alla sju är fastställda, status **Beslutad, ej byggd**. Ordalydelse i `BESLUT-2026-11-27.md`.
+
 | Id | Fråga | Status |
 |---|---|---|
-| AP-A | Räknas en otilldelad, odaterad AO med status `nytt` (eller `planerad`) som öppen pool? Är en otilldelad pool-AO med datum öppen pool eller planerad? | **Beslut krävs** |
-| AP-B | Får fält stämpla på en AO de inte är tilldelade? | **Beslut krävs** |
-| AP-C | Ska "Otilldelade" omfatta öppen pool? | **Beslut krävs** |
-| AP-D | Vilka vägar ger notis (skapande med personal, när någon tar ett jobb, nytt i poolen)? | **Beslut krävs** |
-| AP-E | Får tilldelad fältpersonal sätta datum själv? | **Beslut krävs** |
-| AP-F | Vilken behörighet krävs för "Ta jobbet"? Hänger ihop med Ö2. | **Beslut krävs** |
-| AP-G | Ska status `pool` avvecklas för nya AO på sikt? | **Beslut krävs** |
+| AP-A | Räknas en otilldelad, odaterad AO med status `nytt` (eller `planerad`) som öppen pool? Är en otilldelad pool-AO med datum öppen pool eller planerad? | **Beslutad, ej byggd** (2026-11-27): Öppen pool = uttryckligen tillgängliggjorda, aktiva, otilldelade uppdrag; tilldelad pool = personal utan planerat datum; planerad = faktiskt utförandedatum. Förfallodatum gör inte en AO schemalagd. Ingen breddning av utlämningen. · T3-B (serverregel), AO-etappen (vyer) · *tidigare: **Beslut krävs*** |
+| AP-B | Får fält stämpla på en AO de inte är tilldelade? | **Beslutad, ej byggd** (2026-11-27): Fält måste vara tilldelad AO innan tid och instämpling; öppet pooljobb tas först; ingen automatisk tilldelning via stämpling. · T3-B (SÄK-11) · *tidigare: **Beslut krävs*** |
+| AP-C | Ska "Otilldelade" omfatta öppen pool? | **Beslutad, ej byggd** (2026-11-27): "Otilldelade" = aktiva AO utan personal; öppen pool är en delmängd; samma definitioner i alla vyer. · AO-etappen · *tidigare: **Beslut krävs*** |
+| AP-D | Vilka vägar ger notis (skapande med personal, när någon tar ett jobb, nytt i poolen)? | **Beslutad, ej byggd** (2026-11-27): Tilldelningsnotis när personal faktiskt tilldelats, först efter serverbekräftelse och utan dubbletter; arbetsledare kan få notis när någon tar ett jobb; notis om nytt pooljobb är konfigurerbar; ingen falsk notis vid avplanering. · AO-etappen (inga falska notiser i T3-B) · *tidigare: **Beslut krävs*** |
+| AP-E | Får tilldelad fältpersonal sätta datum själv? | **Beslutad, ej byggd** (2026-11-27): Tilldelad fältpersonal får planera egna oplanerade uppdrag med `ao_plan_own`; tydliga regler vid flera personer; ändrar inte andras tilldelning, ekonomi eller status. · **AO-etappen**, inte T3/T4; K-06, Q4 · *tidigare: **Beslut krävs*** |
+| AP-F | Vilken behörighet krävs för "Ta jobbet"? Hänger ihop med Ö2. | **Beslutad, ej byggd** (2026-11-27): Separat behörighet `ao_pool_take`, inte kopplad till `ao_complete` eller `ao_time`; atomisk tagning, exakt en lyckas. · T3-B (SÄK-4) · *tidigare: **Beslut krävs*** |
+| AP-G | Ska status `pool` avvecklas för nya AO på sikt? | **Beslutad, ej byggd** (2026-11-27): `pool` avvecklas inte förrän import, serviceintervall, kalender, behörigheter och notiser är verifierade; ingen omskrivning av historik; personaldialogen hanterar bara personal och ansvarig, "Ta bort datum" och "Släpp till öppen pool" är separata åtgärder. · AO-etappen (AP-FEL-1) · *tidigare: **Beslut krävs*** |
 
 #### Rekommenderad ordning för arbetspoolen (förslag, ej beslutad)
+
+*(2026-11-27: ersatt av den fastställda arbetsordningen. Steg 1 ingår i T3-B; steg 2–3 i AO-etappen; steg 4 är T3-D efter T3-B.)*
 
 1. Serverregeln "eget eller (`pool` och ingen personal)" överallt (`work-orders-list`, `canViewWorkOrder`, SQL-funktionerna och fake-backend), plus 409 `already_assigned` när "Ta jobbet" träffar en AO som redan har personal. Rättar SÄK-3 och SÄK-4.
 2. Personaldialogen ändrar bara personal. Rättar AP-FEL-1.
@@ -893,6 +1027,27 @@ Varje serverändring görs i STAGING med backup, test per roll och återställni
 4. B4 och Ö7 byggs på den rättade regeln.
 
 Steg 1 och 2 kräver inga affärsbeslut. Beslut AP-A, AP-E och AP-F krävs innan vyerna i steg 3.
+
+### Öppna frågor och förtydliganden (registrerade 2026-11-27)
+
+**Status för samtliga:** Beslut krävs. Inga är motsägelser; de ska bekräftas före respektive paket.
+
+| Id | Fråga | Förslag i underlaget | Före paket | Källa |
+|---|---|---|---|---|
+| K-01 | `time_view_all`: all personal, eller ett framtida teamurval? | All personal (teamurval finns inte i datamodellen) | T4-B, T3-E | `BEHORIGHETSMATRIS.md` §6 |
+| K-02 | Ska arbetsledaren ha `personal_data_view` som standard för offerter med ROT/RUT? | Inte standard; läggs till per roll vid behov | T3-E | Matrisen §6 |
+| K-03 | Exakt fältlista för poolprojektionen (D-13) | Titel, beskrivning, kategori, prioritet, gatuadress och ort, förfallodatum, uppskattad tid; inte kontaktuppgifter, portkod, logg, material, checklista, bilder eller pris | T3-B/T4-A | Matrisen §6 |
+| K-04 | Portkod i export (D-18) | Bara via serverexport med `objects_sensitive` + `export_data`, aktivt val och logg | T4-F | Matrisen §6 |
+| K-05 | Klassificering av gamla `inv.note` (D-20) | Separat genomgång; tills dess aldrig med i ny kund-PDF | T4-E | Matrisen §6 |
+| K-06 | Konfliktregler för `ao_plan_own` vid flerpersonsuppdrag (AP-E) | Avgörs i AO-etappen | AO-etappen | Matrisen §6 |
+| Q1 | Pool-AO som fått datum via "Omplanera": förfallodatum eller planerad? | Godta förfallodatum (ändrar ingen visning, breddar inte) | AO-etappen | `ARBETSPOOL-UTREDNING.md` v2 |
+| Q2 | Återkommande ärendens datum: utförandedatum eller förfallodatum? | Behåll utförandedatum för befintliga; val per återkommande ärende för nya AO | AO-etappen | Arbetspoolsutredningen v2 |
+| Q3 | Ska fältets logg- och historikurval (B4) innehålla öppna pool-AO? | Nej | T3-D | Arbetspoolsutredningen v2 |
+| Q4 | Vem får planera om ett flerpersonsuppdrag med `ao_plan_own`? | Ansvarig, annars den som planerade först | AO-etappen | Arbetspoolsutredningen v2 §11 |
+| OR-1 | `offer_respond_commit` sparar inte `approvedByPhone`/`approvedByPosition` (telefon och befattning) | Kräver ny RPC-migration; beslut om den ska göras | Före STAGING-test av `offer-respond` | `G1-G4-DEL2-RESULTAT.md` §5, §10.5 |
+| OR-2 | Repots regel att `ändring-begärd` räknas som besvarad saknas i `offer_respond_commit`; en EF-förkontroll skulle bryta requestId-reprisen | Kräver ny RPC-migration; beslut | Som OR-1 | Som OR-1 |
+| MIG-1 | 13 migrationer har andra versionsnummer i repot än i STAGING (t.ex. `20261124000001` mot `20261124145958`). En `supabase db push` mot STAGING skulle se dem som nya. | `supabase migration repair` eller en mappning; mot tom LIVE fungerar filnamnsordningen (verifierat lokalt) | Före varje push mot STAGING; 241 | `G1-G4-DEL2-RESULTAT.md` §10.10 |
+| KÄLLA-1 | Hantering av VIFT-CRM:s inaktuella `supabase/`-spegel | A: ta bort katalogen ur klientgrenen (eller ersätt med README) och lägg till en kontroll som fallerar om den fylls; B: döp om till `supabase-spegel/` och synka bara med skript och sha256 | Före T3-0 avslutas | `vift-v2/supabase/AUKTORITATIV-KALLA.md` |
 
 ## Backlog – senare UX-etapp
 
