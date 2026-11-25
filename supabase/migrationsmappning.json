@@ -22,7 +22,7 @@
   "objektLikaAB": 41,
   "repoFilerPerKlass": {
    "installerad": 37,
-   "ny": 5,
+   "ny": 7,
    "rekonstruerad": 5,
    "kandidat": 3,
    "stagingOnly": 2,
@@ -1826,6 +1826,22 @@
   {
    "fil": "migrations/20261128000005_t3c_direkt_rest_vitlista.sql",
    "md5": "de7afa01674e86dad9cd92c806726956",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000006_t3d_urval_per_post.sql",
+   "md5": "f5003e1bb5f5f79c4d18e1db635b0846",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000007_t3d_aktivitetslogg.sql",
+   "md5": "c3aaac912d586fb4999845e9b8ce1ac4",
    "stagingVersioner": [],
    "klass": "ny – ej installerad i STAGING",
    "klassKod": "ny",

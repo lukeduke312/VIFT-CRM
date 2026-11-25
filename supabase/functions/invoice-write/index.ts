@@ -109,6 +109,19 @@ function mapRpcError(error: { message?: string } | null): Response | null {
   return json({ error: 'update_failed' }, 500)
 }
 
+/* T3-D (2026-11-28, B4): aktivitetsloggen i svaret projiceras med samma regel som
+   store-key-write:s läsningar (vift_store_project). Standardrollerna med invoice_create har
+   ao_view_all och får hela loggen; en egen roll med bara invoice_create får urvalet per post.
+   Misslyckas projektionen lämnas loggen bort (null; klienten läser då om), aldrig oprojicerad.
+   approveStaleOverride kräver admin_manage (skrivrätt till loggen = hela loggen). */
+// deno-lint-ignore no-explicit-any
+async function projectActivityLog(supabase: any, log: unknown, perms: string[], callerStaffId: string): Promise<unknown> {
+  if (!Array.isArray(log)) return log ?? null
+  const r = await supabase.rpc('vift_store_project', { p_key: 'vift_activityLog', p_value: log, p_perms: perms, p_caller_staff_id: callerStaffId })
+  if (r.error) { console.error('[invoice-write] projektion av activityLog:', r.error.message); return null }
+  return r.data ?? null
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -146,7 +159,7 @@ serve(async (req: Request) => {
     })
     const err = mapRpcError(error); if (err) return err
     const r = (data || {}) as Record<string, unknown>
-    return json({ invoice: r.invoice, prevStatus: r.prevStatus, changed: r.changed, activityLog: r.activityLog, serverSignature: r.serverSignature })
+    return json({ invoice: r.invoice, prevStatus: r.prevStatus, changed: r.changed, activityLog: await projectActivityLog(supabase, r.activityLog, perms, callerStaffId), serverSignature: r.serverSignature })
   }
 
   if (action === 'approveStaleOverride') {
@@ -209,7 +222,7 @@ serve(async (req: Request) => {
       p_invoice_id: invoiceId, p_expected_revision: expectedRevision
     })
     const err = mapRpcError(error); if (err) return err
-    return json({ deletedInvoice: (data || {}).deletedInvoice, activityLog: (data || {}).activityLog, serverSignature: (data || {}).serverSignature })
+    return json({ deletedInvoice: (data || {}).deletedInvoice, activityLog: await projectActivityLog(supabase, (data || {}).activityLog, perms, callerStaffId), serverSignature: (data || {}).serverSignature })
   }
 
   if (action === 'discountSet') {

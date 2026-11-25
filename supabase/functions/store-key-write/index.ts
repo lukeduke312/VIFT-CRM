@@ -42,6 +42,13 @@
  *   409 {error:'last_superadmin'}. Läsningarna skickar p_caller_staff_id så att
  *   vift_roles/vift_staff projiceras per anropare (egen roll; andras role/permissions bort).
  *
+ * T3-D (2026-11-28, SÄK-2, B4, Ö7, D-12–D-15, D-22): urval per post sker i
+ *   vift_store_project (läsningar). Svaren från writeMerge projiceras med samma regel
+ *   (`current` och konflikternas `serverValue`), så att en skrivning aldrig lämnar ut mer än
+ *   en läsning. appendActivity: typ och referenser per behörighet (403 forbidden/
+ *   type_not_allowed | ref_not_visible), kontrollerade i RPC:n. vift_activities: avslag från
+ *   per-post-regeln ger 403 {error:'forbidden', reason:'not_own'|'field_<fält>'|…}.
+ *
  * POST /functions/v1/store-key-write
  * body: { action: 'write', key, value, expectedHash } |
  *       { action: 'writeMerge', key, upserts, removals } |
@@ -54,8 +61,8 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleGetStampStatus, handleSetStampStatus } from './stamp-status.ts'
 import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
-import { activitiesWriteAllowed } from './activities-policy.ts'
-import { buildActivityEntry, MAX_ENTRIES, rateLimited } from './activity-log.ts'
+import { activitiesWriteAllowed, activitiesRefusal } from './activities-policy.ts'
+import { buildActivityEntry, MAX_ENTRIES, rateLimited, typeAllowed } from './activity-log.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -158,6 +165,32 @@ function mapRpcError(error: { message?: string } | null): Response | null {
   return json({ error: 'write_failed' }, 500)
 }
 
+/* T3-D: projicera ett skrivsvar med samma regel som läsningarna. Misslyckas projektionen
+   lämnas `current` och konflikternas serverValue bort (klienten läser då om), aldrig oprojicerat. */
+// deno-lint-ignore no-explicit-any
+async function projectWriteResult(supabase: any, key: string, data: Record<string, unknown>, perms: string[], callerStaffId: string): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...data }
+  const proj = async (value: unknown) => {
+    const r = await supabase.rpc('vift_store_project', { p_key: key, p_value: value, p_perms: perms, p_caller_staff_id: callerStaffId })
+    if (r.error) { console.error('[store-key-write] projektion av skrivsvar:', r.error.message); return { ok: false, value: null } }
+    return { ok: true, value: r.data }
+  }
+  if ('current' in out && out.current !== null && out.current !== undefined) {
+    const p = await proj(out.current)
+    if (p.ok) out.current = p.value; else delete out.current
+  }
+  if (Array.isArray(out.conflicts) && out.conflicts.length) {
+    const conflicts = out.conflicts as Record<string, unknown>[]
+    const values = conflicts.map((c) => c && c.serverValue).filter((v) => v && typeof v === 'object' && !Array.isArray(v))
+    const p = values.length ? await proj(values) : { ok: true, value: [] }
+    const byId = new Map<string, unknown>()
+    if (p.ok && Array.isArray(p.value)) for (const e of p.value as Record<string, unknown>[]) if (e && e.id != null) byId.set(String(e.id), e)
+    out.conflicts = conflicts.map((c) => (c && c.serverValue !== null && c.serverValue !== undefined)
+      ? { ...c, serverValue: byId.has(String(c.id)) ? byId.get(String(c.id)) : null } : c)
+  }
+  return out
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -221,8 +254,20 @@ serve(async (req: Request) => {
     if (rateLimited(callerStaffId, Date.now())) return json({ error: 'rate_limited' }, 429)
     const built = buildActivityEntry(body.entry, callerStaffId, new Date().toISOString())
     if (!built.ok) return json({ error: built.error }, 400)
-    const { data, error } = await supabase.rpc('activity_log_append', { p_entry: built.entry, p_max: MAX_ENTRIES })
-    if (error) { console.error('[store-key-write] activity_log_append:', error.message); return json({ error: 'append_failed' }, 500) }
+    /* T3-D (D-22): typen per behörighet — första lager; RPC:n kontrollerar typ och referenser. */
+    if (!typeAllowed(String(built.entry.type), perms)) return json({ error: 'forbidden', reason: 'type_not_allowed' }, 403)
+    const { data, error } = await supabase.rpc('activity_log_append', {
+      p_entry: built.entry, p_max: MAX_ENTRIES, p_caller_staff_id: callerStaffId, p_caller_perms: perms,
+    })
+    if (error) {
+      const msg = String(error.message || '')
+      const regel = /\bforbidden:([a-z_]+)/.exec(msg)
+      if (regel) return json({ error: 'forbidden', reason: regel[1] }, 403)
+      if (msg.includes('forbidden')) return json({ error: 'forbidden' }, 403)
+      if (msg.includes('invalid_entry')) return json({ error: 'invalid_entry' }, 400)
+      console.error('[store-key-write] activity_log_append:', msg)
+      return json({ error: 'append_failed' }, 500)
+    }
     return json(data || { ok: true, id: built.entry.id })
   }
 
@@ -273,8 +318,16 @@ serve(async (req: Request) => {
     /* TASK-01 (2026-11-24): per-post-regel för uppgifter — se
        activities-policy.ts. Bedöms på `previous`, som RPC:n verifierar mot
        serverns aktuella element under radlås. */
-    const authorized = hasPerm(perms, requiredPerm)
-      || (key === 'vift_activities' && activitiesWriteAllowed(upserts as unknown[], removals, perms, callerStaffId).ok)
+    let authorized = hasPerm(perms, requiredPerm)
+    if (!authorized && key === 'vift_activities') {
+      const pol = activitiesWriteAllowed(upserts as unknown[], removals, perms, callerStaffId)
+      if (pol.ok) authorized = true
+      else {
+        /* T3-D (D-15, SEC-TASK-02/03/05): orsaken returneras enligt felkodskatalogen. */
+        const reason = activitiesRefusal(pol.reason)
+        if (reason) return json({ error: 'forbidden', reason }, 403)
+      }
+    }
 
     const { data, error } = await supabase.rpc('store_business_key_merge_write', {
       p_key: key,
@@ -285,7 +338,8 @@ serve(async (req: Request) => {
     })
     const err = mapRpcError(error)
     if (err) return err
-    return json(data || {})
+    /* T3-D: svaret (current, konflikter) projiceras som en läsning — aldrig mer än urvalet. */
+    return json(await projectWriteResult(supabase, key, (data || {}) as Record<string, unknown>, perms, callerStaffId))
   }
 
   if (action === 'readAllWithHashes') {

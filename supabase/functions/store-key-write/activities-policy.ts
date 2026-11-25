@@ -74,3 +74,16 @@ export function activitiesWriteAllowed(
   }
   return { ok: true }
 }
+
+/* T3-D (2026-11-28, D-15, BEHORIGHETSMATRIS §4): avslagsorsaken som returneras till klienten.
+   En uppgift som varken är egen eller tilldelad (även en ny uppgift åt någon annan, att lämna
+   bort sin egen uppgift och att radera någon annans) → 'not_own'. Fältregler behåller sin orsak
+   (t.ex. 'field_title', SEC-TASK-03). Ogiltig indata och saknad identitet ger ingen orsak
+   (RPC:n nekar med 403 forbidden utan reason). */
+const NOT_OWN = ['not_own', 'new_not_own', 'assign_other', 'remove_not_own']
+export function activitiesRefusal(reason?: string): string | null {
+  const r = String(reason || '')
+  if (NOT_OWN.includes(r)) return 'not_own'
+  if (r.startsWith('field_') || r.startsWith('immutable_') || r === 'completed_by_other') return r
+  return null
+}

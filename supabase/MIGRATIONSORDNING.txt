@@ -71,3 +71,7 @@ REKONSTRUKTION  migrations/20261127000004_rekonstruerad_grants_och_store_policy.
 # Installeras i STAGING först efter separat GO, en i taget, med STOP-kontroll (se docs T3-RESULTAT.md, T3-C).
 20261128000004  migrations/20261128000004_t3c_roller_och_superadmin.sql
 20261128000005  migrations/20261128000005_t3c_direkt_rest_vitlista.sql
+# ── T3-D (2026-11-28): NYA – EJ INSTALLERADE I STAGING (klass "ny" i MIG-1). Installeras efter T3-C (rollback i omvänd ordning).
+# Installeras i STAGING först efter separat GO, en i taget, med STOP-kontroll (se docs T3-RESULTAT.md, T3-D).
+20261128000006  migrations/20261128000006_t3d_urval_per_post.sql
+20261128000007  migrations/20261128000007_t3d_aktivitetslogg.sql
