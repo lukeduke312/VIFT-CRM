@@ -51,9 +51,11 @@ Pilknapparna är riktiga knappar (`aria-expanded`, `aria-label`, `title`, fokus 
 
 | Kandidater | Kompakt rendering (median) | Välj alla / avmarkera | Visa alla rader |
 |---|---|---|---|
-| 10 (27) | 2 ms | 15 / 8 ms | 17 ms (27 rader) |
-| 100 (117) | 3,9 ms | 14 / 4 ms | 26 ms (117 rader) |
-| 1000 (1017) | 10 ms | 31 / 4 ms | 54 ms (282 rader, 30 kunder) |
+| 10 (27) | 1,5 ms | 11 / 2 ms | 9 ms (27 rader) |
+| 100 (117) | 4,7 ms | 14 / 4 ms | 31 ms (117 rader) |
+| 1000 (1017) | 9,9 ms | 17 / 4 ms | 54 ms (282 rader, 30 kunder) |
+
+  (Värden från den sista hela körningen; maskinen hade samtidigt last ~10–13 från andra körningar.)
 
   Budget i testet: kompakt ≤ 400 ms, markering/utfällning ≤ 1 500 ms vid 1 000 kandidater.
   Granskat visuellt med 100 och 1 000 kandidater (`efter-ko-100-kandidater-*`,
@@ -204,7 +206,22 @@ BILL-10 mobilflöde 390 px; BILL-11 alla statusar, lista, långa namn och tom k�
 - `20_v3_mobil.js` ECO-V3-02: samma kontroller (rader i sin AO, indrag kund < AO < rad, etiketter,
   tre lägen, Välj alla/avmarkera) mot de nya klasserna efter "Visa alla rader".
 
-Resultat: se "Körningar" nedan.
+## Körningar (simulerad backend, 2026-11-25/26)
+- **Hela E2E-sviten** (`node tests/e2e/run.js`, en gång efter sista kodändringen):
+  **130 godkända, 0 misslyckade, 1 blockerad (PERM-03), 1 känt fel (AO-07)** av 132 (952 s).
+  Där ingår BILL-01…BILL-11, VAT-01, RENDER-01, XSS-01, BRAND-01, FLOW-01, ECO-01, ECO-V3-01/02,
+  G10-01 och INV-01/02 — alla godkända.
+- Radbelopp mot summor (BILL-05, BILL-09): radbeloppen är märkta och beräknade exkl. moms och
+  summerar (+ visad öresavrundning) till Summa exkl. moms = `calcSummary().exVat`; moms per sats =
+  satsen × underlaget; totalt inkl. moms = exkl. + moms. Exempel ur körningen: rader 1 521,28 +
+  öresavrundning 0,01 = 1 521,29 exkl., moms 367,32, totalt 1 888,61 kr; 1 tim × 430 kr visas som
+  430,00 kr exkl. moms (inte 537,50 utan etikett).
+- `bash tests/run-all.sh`: 15/19 gröna, 0 misslyckade, 4 överhoppade (kräver lokal PostgreSQL —
+  samma som före ändringen; inte godkända, inte körda).
+- RENDER-01 tog 86,6 s i hela körningen (gräns 90 s). Uppmätt under samma last: 88,5 s på
+  baslinjen (utan dessa ändringar) och 90,9 s med dem — kön har tre nya chips som testet klickar.
+  Testet ligger alltså nära sin tidsgräns redan utan den här ändringen när maskinen är belastad;
+  föreslår att RENDER-01 delas upp eller får längre tidsgräns (inte ändrat här).
 
 ## Komponentstandard (docs/V3-KOMPONENTSTANDARD.md) — hur den följs
 §1 ingen egen sidrubrik, innehållsbredd max 1 440 px; en primär åtgärd per sektion ("Skapa
