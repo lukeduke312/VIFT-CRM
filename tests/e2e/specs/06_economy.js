@@ -45,17 +45,19 @@ async function createOfferViaWizard(s, { title, customerId, lines, discountPct, 
     await d.dispatchEvent('input');
     await s.settle(300);
   }
-  // Sammanfattningskortet: "Summa ex. moms" är före rabatt, "Rabatt" visas som −belopp.
+  // Sammanfattningskortet: "Summa exkl. moms" är före rabatt, "Rabatt" visas som −belopp.
+  // (QA 2026-11-26: etiketten heter nu "exkl. moms" och guiden har ett granskningssteg före Spara.)
   const pairs = await s.eval(() => {
     const lines = (document.getElementById('off-totals-bar') || document.body).innerText.split('\n').map((x) => x.trim()).filter(Boolean);
     const out = {};
-    for (let i = 0; i < lines.length - 1; i++) if (/^(Summa ex\. moms|Rabatt|Moms|Totalt inkl\. moms)$/.test(lines[i]) && !(lines[i] in out)) out[lines[i]] = lines[i + 1];
+    for (let i = 0; i < lines.length - 1; i++) if (/^(Summa exkl\. moms|Rabatt|Moms|Totalt inkl\. moms)$/.test(lines[i]) && !(lines[i] in out)) out[lines[i]] = lines[i + 1];
     return out;
   });
   await s.page.locator('button:visible', { hasText: /Nästa: Villkor/ }).click();
+  await s.page.locator('button:visible', { hasText: /Nästa: Granska/ }).click();
   await s.page.locator('button:visible', { hasText: /Spara offert/ }).click();
   await s.waitToast(/skapad/i, 8000);
-  const exAfter = num(pairs['Summa ex. moms']) + (pairs.Rabatt ? -Math.abs(num(pairs.Rabatt)) : 0);
+  const exAfter = num(pairs['Summa exkl. moms']) + (pairs.Rabatt ? -Math.abs(num(pairs.Rabatt)) : 0);
   return [exAfter, num(pairs.Moms), num(pairs['Totalt inkl. moms'])];
 }
 
