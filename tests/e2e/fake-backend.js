@@ -470,7 +470,7 @@ class FakeSupabase {
         if (!this.has(perms, 'payroll_manage')) return DEFINITE(403, 'forbidden');
         const t = tes.find((x) => x.id === b.entryId); if (!t) return DEFINITE(404, 'not_found');
         t.attested = !!b.attested; t.attestedAt = b.attested ? now : ''; t.attestedBy = b.attested ? me.id : '';
-        save(); return { status: 200, body: { entry: t } };
+        save(); return { status: 200, body: { action: 'attest_time', timeEntry: t } }; // som riktiga ao-time-write (time_entry_set_attested → { timeEntry, serverSignature })
       }
       default: return DEFINITE(400, 'unknown_action');
     }
