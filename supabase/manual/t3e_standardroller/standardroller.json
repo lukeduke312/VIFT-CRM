@@ -1,0 +1,33 @@
+{
+ "beskrivning": "T3-E (M9, D-02): de fem standardrollerna enligt BEHORIGHETSMATRIS §2 (fastställd 2026-11-27, K-01/K-02 fastställda 2026-11-28). Installeras bara med det manuella skriptet B_installera.sql efter separat GO; läggs aldrig in automatiskt och skriver aldrig över befintliga roller. Behörigheter i ejVerkstallda ger ingen åtkomst förrän deras serverkontroller finns (T4/AO-etappen); listan speglas i _vift_ej_verkstallda() (20261128000008).",
+ "version": "t3e-2026-11-28",
+ "ejVerkstallda": {
+  "ao_plan_own": "AO-etappen (AP-E)",
+  "cost_view": "T4-A/T4-B",
+  "cost_edit": "T4-A/T4-B",
+  "time_view_all": "T4-B (K-01)",
+  "bankgiro_edit": "T4-A (D-17)",
+  "personal_data_view": "T4-A (D-13, K-02)",
+  "objects_access_assigned": "T4-C (D-05)",
+  "rondering_utfor": "T4-D (Ö3)",
+  "export_data": "T4-F (D-18)",
+  "export_personal_data": "T4-F (D-18)"
+ },
+ "roller": [
+  { "id": "admin", "label": "Admin", "isBuiltin": true, "active": true,
+    "description": "Superadministratör: alla behörigheter.",
+    "permissions": ["all"] },
+  { "id": "chef", "label": "Arbetsledare", "isBuiltin": true, "active": true,
+    "description": "Arbetsledare: arbetsorder, planering, kunder, offerter, fakturaunderlag, intern ekonomi och personalens arbetstid (utan lön och personnummer).",
+    "permissions": ["dashboard_view", "ao_view_all", "ao_view_own", "ao_pool_take", "ao_start_own", "ao_complete_own", "ao_plan_own", "ao_create", "ao_edit", "ao_complete", "ao_time", "ao_material", "ao_checklist", "rondering_utfor", "objects_sensitive", "customer_manage", "offer_manage", "sales_manage", "recurring_manage", "invoice_view", "invoice_create", "cost_view", "cost_edit", "time_view_all", "staff_view", "export_data"] },
+  { "id": "ekonomi", "label": "Ekonomi", "isBuiltin": true, "active": true,
+    "description": "Ekonomi: fakturaunderlag, rapporter, löneunderlag och attest, intern ekonomi och personnummer för ROT/RUT.",
+    "permissions": ["dashboard_view", "ao_view_all", "customer_view", "personal_data_view", "invoice_view", "invoice_create", "reports_view", "cost_view", "cost_edit", "payroll_view", "payroll_manage", "export_data"] },
+  { "id": "personal", "label": "Personal", "isBuiltin": true, "active": true,
+    "description": "Fältpersonal: egna tilldelade arbetsorder, öppen pool, start och klarmarkering av egna, tid, material och checklista.",
+    "permissions": ["dashboard_view", "ao_view_own", "ao_pool_take", "ao_start_own", "ao_complete_own", "ao_plan_own", "ao_time", "ao_material", "ao_checklist", "rondering_utfor", "objects_access_assigned"] },
+  { "id": "begransad", "label": "Begränsad", "isBuiltin": true, "active": true,
+    "description": "Begränsad/extern: bara egna tilldelade arbetsorder, ingen öppen pool och inga ekonomiska uppgifter. Tid, checklista, start, klarmarkering, rondering och åtkomstinformation kan läggas till separat (D-04).",
+    "permissions": ["dashboard_view", "ao_view_own"] }
+ ]
+}
