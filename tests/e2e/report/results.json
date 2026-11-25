@@ -1,14 +1,14 @@
 {
   "summary": {
-    "when": "2026-11-24T16:51:57.502Z",
+    "when": "2026-11-25T08:19:28.578Z",
     "target": "simulerad backend (FakeSupabase)",
     "browser": "Chromium (Playwright)",
-    "total": 117,
-    "passed": 115,
+    "total": 218,
+    "passed": 216,
     "failed": 0,
     "blocked": 1,
     "known": 1,
-    "durationMs": 653397
+    "durationMs": 1588338
   },
   "results": [
     {
@@ -18,12 +18,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1039,
+      "ms": 942,
       "notes": [
         "Laddade 15 AO och 7 kunder"
       ],
       "metrics": {
-        "inloggning → app laddad (ms)": 980
+        "inloggning → app laddad (ms)": 892
       },
       "consoleErrors": [],
       "netErrors": [],
@@ -38,7 +38,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 528,
+      "ms": 383,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -56,7 +56,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1020,
+      "ms": 858,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -72,7 +72,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1536,
+      "ms": 1486,
       "notes": [
         "ekonomi såg 6 poster, fältarbetaren 3"
       ],
@@ -90,7 +90,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1216,
+      "ms": 1138,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -106,7 +106,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1087,
+      "ms": 923,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -122,14 +122,14 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14503,
+      "ms": 14490,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid per sida (ms)": 362,
-        "långsammaste sida (ms)": 382
+        "medel renderingstid per sida (ms)": 364,
+        "långsammaste sida (ms)": 391
       },
       "consoleErrors": [],
       "netErrors": [
@@ -147,7 +147,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8795,
+      "ms": 8723,
       "notes": [
         "23 menyval klickade"
       ],
@@ -167,13 +167,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14660,
+      "ms": 14618,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (desktop, ms)": 362
+        "medel renderingstid (desktop, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
@@ -191,13 +191,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14680,
+      "ms": 14556,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (laptop, ms)": 361
+        "medel renderingstid (laptop, ms)": 363
       },
       "consoleErrors": [],
       "netErrors": [
@@ -215,13 +215,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14586,
+      "ms": 14580,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (tablet, ms)": 362
+        "medel renderingstid (tablet, ms)": 364
       },
       "consoleErrors": [],
       "netErrors": [
@@ -239,7 +239,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14634,
+      "ms": 14505,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
@@ -263,13 +263,13 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 14698,
+      "ms": 14508,
       "notes": [
         "pg-project-detail: ingen testdata (projectId) — tomt läge",
         "pg-propobj-detail: ingen testdata (objId) — tomt läge"
       ],
       "metrics": {
-        "medel renderingstid (android, ms)": 362
+        "medel renderingstid (android, ms)": 363
       },
       "consoleErrors": [],
       "netErrors": [
@@ -287,12 +287,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3657,
+      "ms": 3452,
       "notes": [
         "besked: Kund skapad"
       ],
       "metrics": {
-        "spara ny kund → bekräftelse (ms)": 392
+        "spara ny kund → bekräftelse (ms)": 340
       },
       "consoleErrors": [],
       "netErrors": [
@@ -310,7 +310,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2242,
+      "ms": 2140,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -326,7 +326,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2709,
+      "ms": 2482,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -344,7 +344,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2738,
+      "ms": 2439,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -360,7 +360,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1776,
+      "ms": 1753,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -376,7 +376,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2617,
+      "ms": 2516,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -394,18 +394,19 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3097,
+      "ms": 2972,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
       "netErrors": [
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
         "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
       ],
       "unmodeled": [
         "GET /rest/v1/property_images"
       ],
       "screenshots": [],
-      "requests": 7
+      "requests": 9
     },
     {
       "id": "OBJ-01",
@@ -414,7 +415,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2925,
+      "ms": 2792,
       "notes": [
         "objektformulär: new-obj-type, new-obj-num, new-obj-name, new-obj-entrance, new-obj-stairwell, new-obj-floor, new-obj-area, new-obj-status, new-obj-access"
       ],
@@ -437,7 +438,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2795,
+      "ms": 2656,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -453,7 +454,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9226,
+      "ms": 8712,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -473,7 +474,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5243,
+      "ms": 4989,
       "notes": [
         "serverkontrollen är modellerad — måste upprepas mot riktig STAGING"
       ],
@@ -496,12 +497,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2325,
+      "ms": 2219,
       "notes": [
         "besked: AO-(sparas…) skapad"
       ],
       "metrics": {
-        "skapa AO → serverbekräftad (ms)": 1359
+        "skapa AO → serverbekräftad (ms)": 1369
       },
       "consoleErrors": [],
       "netErrors": [
@@ -518,7 +519,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4282,
+      "ms": 4137,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -537,7 +538,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2900,
+      "ms": 2919,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -557,7 +558,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1876,
+      "ms": 1609,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -580,7 +581,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3567,
+      "ms": 3338,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -606,7 +607,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4185,
+      "ms": 4170,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -626,7 +627,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2904,
+      "ms": 2781,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -646,7 +647,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5964,
+      "ms": 5978,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -667,7 +668,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3176,
+      "ms": 3156,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -687,7 +688,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2876,
+      "ms": 2830,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -707,7 +708,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1605,
+      "ms": 1678,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -727,7 +728,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1770,
+      "ms": 1717,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -750,7 +751,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3433,
+      "ms": 3250,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -770,7 +771,7 @@
       "kind": "ui",
       "status": "known",
       "error": "Kontroll misslyckades: båda loggposterna borde finnas kvar — loggen skickas som hel array (G5)",
-      "ms": 5372,
+      "ms": 5156,
       "notes": [
         "A kvar: false, B kvar: true"
       ],
@@ -795,7 +796,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4275,
+      "ms": 3862,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -816,9 +817,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3476,
+      "ms": 3119,
       "notes": [
-        "id: LOG-1795000000000-7c41a782, LOG-1795000000000-434b3d0f"
+        "id: LOG-1795000000000-567f9fd1, LOG-1795000000000-06973456"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -839,7 +840,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3558,
+      "ms": 3388,
       "notes": [],
       "metrics": {
         "patch_ao per loggpost": 1
@@ -861,7 +862,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2424,
+      "ms": 2212,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -881,7 +882,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1850,
+      "ms": 1768,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -901,7 +902,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3348,
+      "ms": 2969,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -924,7 +925,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1034,
+      "ms": 850,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -942,7 +943,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 3036,
+      "ms": 2966,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -962,7 +963,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2750,
+      "ms": 2611,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -983,7 +984,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5258,
+      "ms": 5118,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1004,11 +1005,11 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2399,
+      "ms": 2387,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
-        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-a8dde450-3f94-4e57-8804-3b00250feb0e : forbidden"
+        "[TimeService] Manuellt tidsskapande avvisades av servern för TID-9cbf75ee-1408-407e-8b37-2ef10fe57ba6 : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1025,7 +1026,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1381,
+      "ms": 1343,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1043,7 +1044,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9019,
+      "ms": 9016,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1063,7 +1064,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 973,
+      "ms": 870,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1079,7 +1080,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2937,
+      "ms": 2739,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1091,22 +1092,42 @@
       "requests": 8
     },
     {
+      "id": "TIME-08",
+      "module": "Tidregistrering och instämpling",
+      "name": "Stämpling på annan enhet: Tid & stämpla (pg-tid) ritas om och visar \"Instämplad\" efter synk",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4487,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 23
+    },
+    {
       "id": "FLOW-01",
       "module": "Offertmodulen",
       "name": "Arbetsflöde kund → fakturaunderlag: samma belopp i offertguide, kundlänk, AO, fakturakö och fakturautkast",
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 18240,
+      "ms": 18574,
       "notes": [
         "offertguide: 3952 / 988 / 4940 kr; OfferCalc: 3952 / 988 / 4940",
         "AO prismodell fast, fast pris 3952",
-        "underlag: [{\"id\":\"fixed:AO-dc77dca1-a5fc-47a0-a267-f0c6a4089adb\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"fixed:AO-0613bde7-48dc-46e7-9a9a-1ed7269dac2d\",\"type\":\"fixed\",\"amount\":3952,\"sel\":true,\"issues\":[]}]",
         "faktura: ex 3952, moms 988, totalt 4940"
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-dc77dca1-a5fc-47a0-a267-f0c6a4089adb : forbidden"
+        "[WorkOrderService] Serverskrivning avvisad för AO-0613bde7-48dc-46e7-9a9a-1ed7269dac2d : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1127,7 +1148,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3703,
+      "ms": 3617,
       "notes": [
         "guide 1890 / 473 / 2363; OfferCalc 2100 − 210 = 1890, moms 473, totalt 2363"
       ],
@@ -1147,7 +1168,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10995,
+      "ms": 10893,
       "notes": [
         "toasts vid serverfel: Sparar… / Länken är INTE återkallad — servern bekräftade inte ändringen och kunden kan fortfarande öppna den — ändringen ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1160,7 +1181,7 @@
       "netErrors": [
         "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
         "POST /functions/v1/store-key-write → 503 {\"error\":\"http_503\"}",
-        "GET /functions/v1/offer-token-validate?t=2a4395aa11a0707516fcc7fd4b0a53c20461c921937cff9aa8165ea606f1708b → 403 {\"error\":\"revoked\"}"
+        "GET /functions/v1/offer-token-validate?t=5168101ce1063950a25aca8db2cb3e93a34dde242a2c0db4541178901a43e69a → 403 {\"error\":\"revoked\"}"
       ],
       "unmodeled": [],
       "screenshots": [],
@@ -1173,7 +1194,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1041,
+      "ms": 976,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1192,7 +1213,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1394,
+      "ms": 1263,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1210,7 +1231,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 977,
+      "ms": 864,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1228,7 +1249,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 9342,
+      "ms": 9358,
       "notes": [
         "5 offerter kontrollerade"
       ],
@@ -1248,17 +1269,17 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11458,
+      "ms": 11296,
       "notes": [
-        "underlag: [{\"id\":\"time:TID-cdac50e4-5dbf-4385-b08a-801f1df60ef8\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-0b569dcb-39fb-4f6e-a245-94ed37c22c87:M1795538749235\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
+        "underlag: [{\"id\":\"time:TID-df67edbf-9003-40dd-9646-696e0eea974d\",\"type\":\"time\",\"q\":1.33,\"p\":595,\"a\":791.35,\"sel\":true,\"issues\":[]},{\"id\":\"material:AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc:M1795593462037\",\"type\":\"material\",\"q\":3,\"p\":33.33,\"a\":99.99,\"sel\":true,\"issues\":[]}]",
         "ROT auto i fakturan: 297 kr; offertens regel: 297 kr",
-        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-0b569dcb-39fb-4f6e-a245-94ed37c22c87: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
+        "toasts efter ROT: FU-9001 skapat. / Arbetsorder AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc: faktureringsstatusen kunde inte sparas på servern (forbidden) — visar åter klar. Fakturaunderlaget i sig påverkas inte. | anrop: invoice-write:appendChecked=200,invoice-write:taxReductionSet=200",
         "faktura: ex 891.34, moms 222.84, totalt 1114.18, ROT 297, kunden betalar 817.1800000000001",
         "OBS (verifieras mot STAGING): ekonomirollen (invoice_create utan AO-behörighet) fick AO-statusen \"fakturerad\" nekad av ao-time-write i den simulerade modellen — klienten rullar tillbaka och säger det. Fakturan påverkas inte; dubbelfakturering förhindras av köns anspråk."
       ],
       "metrics": {},
       "consoleErrors": [
-        "[WorkOrderService] Serverskrivning avvisad för AO-0b569dcb-39fb-4f6e-a245-94ed37c22c87 : forbidden"
+        "[WorkOrderService] Serverskrivning avvisad för AO-afe58c34-a91f-4d3a-ba78-fcc7838a87dc : forbidden"
       ],
       "netErrors": [
         "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
@@ -1278,7 +1299,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 11972,
+      "ms": 11979,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1297,7 +1318,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6920,
+      "ms": 6872,
       "notes": [
         "toasts: Sparar… / Utförandet kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1322,7 +1343,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6051,
+      "ms": 6199,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1340,7 +1361,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5741,
+      "ms": 5494,
       "notes": [
         "toasts: Sparar… / Rollen \"Tekniker / Personal\" kunde inte sparas — behörigheterna är OFÖRÄNDRADE — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1365,7 +1386,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4897,
+      "ms": 4814,
       "notes": [
         "toasts: Sparar… / Ändringen för Sofia Lindgren kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1390,7 +1411,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7086,
+      "ms": 7051,
       "notes": [
         "toasts: Sparat / Varning: servern bekräftade inte den senaste ändringen (artiklar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1415,7 +1436,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 12476,
+      "ms": 12336,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1437,7 +1458,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4361,
+      "ms": 4240,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1457,7 +1478,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5396,
+      "ms": 5246,
       "notes": [
         "toasts: Sparar… / Varning: servern bekräftade inte den senaste ändringen (ronderingar). Den kan vara osparad — kontrollera och försök igen. / Ronderingen kunde inte skapas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1494,9 +1515,9 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 8628,
+      "ms": 8766,
       "notes": [
-        "AO för tillfället: AO-75ab08da-0eaf-4de0-aa71-5e9df21d5d20 2026-11-24"
+        "AO för tillfället: AO-72ad6ced-dfa7-4e24-85db-ba09c7bd2833 2026-11-25"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -1516,7 +1537,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6785,
+      "ms": 6828,
       "notes": [
         "toasts: Sparar… / Ändringen kunde inte sparas — den ligger kvar som osparad; välj Återuppta eller Kasta i meddelandet överst."
       ],
@@ -1552,7 +1573,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 6702,
+      "ms": 6694,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1571,7 +1592,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8638,
+      "ms": 8671,
       "notes": [
         "serverns per-nyckel-behörighet för activities kan inte verifieras i simulerad backend (G4) — upprepa mot STAGING"
       ],
@@ -1592,7 +1613,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7219,
+      "ms": 7086,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1612,7 +1633,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 6538,
+      "ms": 6552,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1630,7 +1651,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7138,
+      "ms": 7155,
       "notes": [
         "toasts: Varning: servern bekräftade inte den senaste ändringen (kunder, importloggar). Den kan vara osparad — kontrollera och försök igen."
       ],
@@ -1662,7 +1683,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4601,
+      "ms": 4592,
       "notes": [
         "property: ﻿Namn;Fastighetsbeteckning;Adress;Postnummer;Ort;Objektnummer;Fastighetstyp;Byggnadsår;Antal lägenheter;Total yta (m²);Förvaltningsform;Driftområde;Status;Antec",
         "propertyObject: ﻿Namn;Objektnummer;Typ (lagenhet/lokal/etc.);Adress;Postnummer;Ort;Port/Entré;Trapphus;Våning;Yta (m²);Status;Beskrivning\r",
@@ -1679,13 +1700,33 @@
       "requests": 11
     },
     {
+      "id": "IMP-03",
+      "module": "Import och export",
+      "name": "AO-import när ett AO med UUID-id finns: varje importerad AO får ett eget, giltigt id (inga dubbletter)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3893,
+      "notes": [
+        "skapade: AO-e32f2582-464c-4685-b40d-8616776223a5, AO-11f42f59-0f70-425a-a4d2-eb08ff14814e, AO-50998cc1-254b-418c-b2f5-aac08dfef4bc"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
       "id": "REP-01",
       "module": "Rapporter och statistik",
       "name": "Ekonomirapporten: \"Fakturerat\" = summan av utställda fakturor exkl. moms (samma beräkning som fakturavyn); tidrapporten kopplar tid till AO",
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4076,
+      "ms": 4109,
       "notes": [
         "förväntat fakturerat (exkl. moms): 17975"
       ],
@@ -1705,7 +1746,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 7718,
+      "ms": 7583,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1725,7 +1766,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3043,
+      "ms": 3006,
       "notes": [
         "simulerade push-utskick: 0 (inga riktiga utskick — send-push registreras bara)"
       ],
@@ -1743,7 +1784,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3567,
+      "ms": 3574,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1769,7 +1810,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5630,
+      "ms": 5491,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1791,12 +1832,12 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 10645,
+      "ms": 10659,
       "notes": [
-        "besked efter 9323 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
+        "besked efter 9321 ms: Kunde inte spara kunden. Ändringen ligger kvar som osparad — välj Återuppta eller Kasta i meddelandet överst."
       ],
       "metrics": {
-        "feedback_ms": 9322
+        "feedback_ms": 9319
       },
       "consoleErrors": [
         "[persist] merge-skrivning avvisad för vift_customers: network_error",
@@ -1818,7 +1859,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8636,
+      "ms": 8505,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -1841,7 +1882,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1676,
+      "ms": 1466,
       "notes": [
         "offline-start: {\"hasLogin\":true,\"hasApp\":true,\"router\":true}"
       ],
@@ -1850,7 +1891,7 @@
       "netErrors": [],
       "unmodeled": [],
       "screenshots": [],
-      "requests": 7
+      "requests": 8
     },
     {
       "id": "PERM-01",
@@ -1859,7 +1900,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 904,
+      "ms": 867,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1881,7 +1922,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2717,
+      "ms": 2529,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1910,7 +1951,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 16091,
+      "ms": 15827,
       "notes": [
         "admin: 26 tillåtna, 0 nekade",
         "chef: 20 tillåtna, 6 nekade",
@@ -1939,26 +1980,26 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 39464,
+      "ms": 39923,
       "notes": [
         "observation: pollningen var pausad så länge sökfältet hade fokus",
-        "mätvärden: {\"inloggning_till_klar_ms\":1247,\"anrop_vid_start\":5,\"ao_lista_ms\":237,\"ao_rader\":151,\"ao_detalj_ms\":31,\"kundlista_ms\":406,\"dashboard_ms\":322,\"rapport_tid_ms\":108,\"loneunderlag_ms\":627,\"kalender_ms\":163}"
+        "mätvärden: {\"inloggning_till_klar_ms\":932,\"anrop_vid_start\":5,\"ao_lista_ms\":168,\"ao_rader\":151,\"ao_detalj_ms\":32,\"kundlista_ms\":775,\"dashboard_ms\":146,\"rapport_tid_ms\":83,\"loneunderlag_ms\":1083,\"kalender_ms\":231}"
       ],
       "metrics": {
-        "inloggning_till_klar_ms": 1247,
+        "inloggning_till_klar_ms": 932,
         "anrop_vid_start": 5,
-        "ao_lista_ms": 237,
+        "ao_lista_ms": 168,
         "ao_rader": 151,
-        "ao_detalj_ms": 31,
-        "kundlista_ms": 406,
-        "dashboard_ms": 322,
-        "rapport_tid_ms": 108,
-        "loneunderlag_ms": 627,
-        "kalender_ms": 163,
-        "kundsokning_ms": 132,
-        "sparning_kund_till_ack_ms": 38,
+        "ao_detalj_ms": 32,
+        "kundlista_ms": 775,
+        "dashboard_ms": 146,
+        "rapport_tid_ms": 83,
+        "loneunderlag_ms": 1083,
+        "kalender_ms": 231,
+        "kundsokning_ms": 258,
+        "sparning_kund_till_ack_ms": 37,
         "anrop_i_vila_35s": 5,
-        "js_heap_mb": 16
+        "js_heap_mb": 17
       },
       "consoleErrors": [],
       "netErrors": [
@@ -1975,7 +2016,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4168,
+      "ms": 4028,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -1993,7 +2034,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2656,
+      "ms": 2436,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2011,7 +2052,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 21552,
+      "ms": 21685,
       "notes": [],
       "metrics": {},
       "consoleErrors": [
@@ -2046,7 +2087,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2831,
+      "ms": 2821,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2062,7 +2103,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 5660,
+      "ms": 6062,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2081,7 +2122,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 4776,
+      "ms": 4863,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2099,9 +2140,9 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2049,
+      "ms": 2068,
       "notes": [
-        "räknare: 13 aktiva jobb · 2 platser på kartan · 10 kunde inte placeras"
+        "räknare: 13 aktiva jobb · 2 platser på kartan · 10 saknar koordinater"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -2117,7 +2158,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 1641,
+      "ms": 1731,
       "notes": [
         "händelser: 4"
       ],
@@ -2135,7 +2176,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3346,
+      "ms": 3322,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2149,14 +2190,14 @@
     {
       "id": "UI-PROP-01",
       "module": "Designstandard",
-      "name": "Fastighetskortets åtgärdsrad: namnet visas på dator; på mobil kapas ingen rubrik (bara numret visas, namnet står redan i kortet)",
+      "name": "Fastighetskortets huvud: namnet är rubrik och kapas inte på dator eller mobil, numret syns, och namnet upprepas inte i sidan",
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3114,
+      "ms": 3111,
       "notes": [
-        "laptop: {\"nameShown\":true,\"clipped\":false,\"text\":\"Solgläntan Hus A OBJ-001\"}",
-        "iphone: {\"nameShown\":false,\"clipped\":false,\"text\":\"OBJ-001\"}"
+        "laptop: {\"text\":\"Solgläntan Hus A\",\"name\":\"Solgläntan Hus A\",\"num\":\"OBJ-001\",\"sub\":\"OBJ-001\\n·\\nFlerbostadshus\",\"clipped\":false,\"nameCount\":1}",
+        "iphone: {\"text\":\"Solgläntan Hus A\",\"name\":\"Solgläntan Hus A\",\"num\":\"OBJ-001\",\"sub\":\"OBJ-001·Flerbostadshus\",\"clipped\":false,\"nameCount\":1}"
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -2172,7 +2213,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3254,
+      "ms": 3357,
       "notes": [
         "laptop: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}",
         "iphone: {\"cls\":\"bdg bdg-blue ao-ready-inv\",\"lum\":240}"
@@ -2193,9 +2234,9 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2899,
+      "ms": 2813,
       "notes": [
-        "badge: 2/4 utförda"
+        "badge: \n        2 av 4 klara2 kvar\n        \n          \n        \n        2 utförda2 ej påbörjade\n      "
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -2213,9 +2254,9 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4160,
+      "ms": 4055,
       "notes": [
-        "badge A: 1/4 utförda · 2 pågår"
+        "badge A: \n        1 av 4 klara3 kvar\n        \n          \n        \n        1 utförd2 pågår1 ej påbörjad\n      "
       ],
       "metrics": {},
       "consoleErrors": [],
@@ -2236,7 +2277,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 4466,
+      "ms": 4031,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2259,7 +2300,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 1496,
+      "ms": 1409,
       "notes": [
         "efter synk: utford (servern: utförd)"
       ],
@@ -2280,7 +2321,7 @@
       "kind": "contract",
       "status": "passed",
       "error": null,
-      "ms": 2100,
+      "ms": 2140,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2299,7 +2340,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2682,
+      "ms": 2550,
       "notes": [
         "iphone: {\"scroll\":false,\"minBtn\":36,\"below\":true,\"right\":false,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}",
         "laptop: {\"scroll\":false,\"minBtn\":24,\"below\":false,\"right\":true,\"states\":\"ej_paborjad,pagaende,utford,avvikelse\"}"
@@ -2321,7 +2362,7 @@
       "kind": "workflow",
       "status": "passed",
       "error": null,
-      "ms": 2460,
+      "ms": 2535,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2339,7 +2380,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 22477,
+      "ms": 22651,
       "notes": [
         "aktivitetslogg-skrivningar nekade av servern: 3; toasts: [\"\",\"\",\"\"]"
       ],
@@ -2376,7 +2417,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3425,
+      "ms": 3304,
       "notes": [
         "direktanrop: {\"complete_other\":403,\"forge_new\":403,\"delete_other\":403,\"full_write\":403}"
       ],
@@ -2400,7 +2441,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 5212,
+      "ms": 5151,
       "notes": [
         "poster: [[\"time_entry_created\",\"ST-004\",\"klientrapport\"],[\"work_order_updated\",\"ST-004\",\"klientrapport\"]]"
       ],
@@ -2424,7 +2465,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 2151,
+      "ms": 2181,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2444,7 +2485,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8441,
+      "ms": 8493,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2468,7 +2509,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 8865,
+      "ms": 8828,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2489,7 +2530,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3250,
+      "ms": 3639,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2507,7 +2548,7 @@
       "kind": "ui",
       "status": "passed",
       "error": null,
-      "ms": 3725,
+      "ms": 3663,
       "notes": [],
       "metrics": {},
       "consoleErrors": [],
@@ -2517,6 +2558,2079 @@
       "unmodeled": [],
       "screenshots": [],
       "requests": 11
+    },
+    {
+      "id": "XSS-01",
+      "module": "Säkerhet",
+      "name": "Lagrad XSS: inget skript körs när fritextfält innehåller HTML — alla sidor och detaljsidor för admin, arbetsledare (falt2 som fält), ekonomi",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 32235,
+      "notes": [
+        "admin: 48 sidvisningar",
+        "falt: 18 sidvisningar",
+        "ekonomi: 28 sidvisningar"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 23
+    },
+    {
+      "id": "VAT-01",
+      "module": "Offerter",
+      "name": "Momsspärr offert→AO: 25 % konverteras med rätt fastpris; 12 %, 0 % och blandad moms nekas med förklaring och skapar ingen AO",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7599,
+      "notes": [
+        "OFF-VAT25: AO skapad",
+        "OFF-VAT12: nekad med förklaring",
+        "OFF-VAT0: nekad med förklaring",
+        "OFF-VATMIX: nekad med förklaring"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "RENDER-01",
+      "module": "Säkerhet",
+      "name": "Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 45620,
+      "notes": [
+        "admin: 49 sidvisningar"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-002&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-002&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "RENDER-01-CHEF",
+      "module": "Säkerhet",
+      "name": "Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (arbetsledare)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 38904,
+      "notes": [
+        "chef: 43 sidvisningar"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-002&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-002&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "RENDER-01-EKONOMI",
+      "module": "Säkerhet",
+      "name": "Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (ekonomi)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 20738,
+      "notes": [
+        "ekonomi: 29 sidvisningar"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "RENDER-01-FALT",
+      "module": "Säkerhet",
+      "name": "Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (fält)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 13769,
+      "notes": [
+        "falt: 19 sidvisningar"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "BRAND-01",
+      "module": "Administration",
+      "name": "Färgväljaren: drag (input) skriver inget till servern, valt värde (change) sparas exakt en gång, oförändrat värde sparas inte",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4768,
+      "notes": [
+        "skrivningar: drag 0, efter change 1, efter oförändrad change 1; förhandsvisning #aabbcc; sparat #aabbcc"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "DASH-E-01",
+      "module": "Dashboard",
+      "name": "Anpassa: separat läge med sticky verktygsrad (Spara primär, Avbryt, Återställ standard), Flytta-handtag, storlek Liten/Halv/Hel, Dölj och Dolda widgets; inget sparas under redigering; Avbryt återställer exakt",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3287,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "DASH-E-02",
+      "module": "Dashboard",
+      "name": "Dra och släpp (dator) med släppmarkering + \"lägg sist\"; storleksändring; Spara → samma layout efter omladdning",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5921,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
+      "id": "DASH-E-03",
+      "module": "Dashboard",
+      "name": "Dölj och visa dold widget; Återställ standard frågar först, ändrar bara utkastet och sparas vid Spara (rollstandard med sektionsrubriker tillbaka)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4235,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "DASH-E-04",
+      "module": "Dashboard",
+      "name": "Personlig layout per användare och enhet: admins layout påverkar inte arbetsledarens (samma webbläsare); ny enhet = standard; ett osparat utkast följer aldrig med till nästa användare",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7722,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 23
+    },
+    {
+      "id": "DASH-E-05",
+      "module": "Dashboard",
+      "name": "Bakåtkompatibilitet: äldre sparad layout (v1 med size-strängar, okänd widget) visas; ¾-bredd behålls som \"Bred\" och bevaras vid Spara; v1-nyckeln skrivs aldrig över",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3938,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "DASH-E-06",
+      "module": "Dashboard (mobil)",
+      "name": "Mobil 390: Flytta upp/Flytta ned med tryck (inget dra-handtag, inget storleksval), tryckytor ≥ 40 px, inget sidledes överspill; sparas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3137,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "DASH-E-07",
+      "module": "Dashboard",
+      "name": "Inget sidledes överspill eller knappar utanför skärmen: dashboard, Anpassa-läget och listan \"jobb utan plats\" vid 360/390/768/1024/1366/1920",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 16780,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 30
+    },
+    {
+      "id": "DASH-E-08",
+      "module": "Dashboard",
+      "name": "Kartan — kartfel skiljs från geokodning och adress: Mapbox GL blockerat → \"Kartan kunde inte laddas\" med alla tal; GL laddat men geokodningen svarar 403 → \"geokodning misslyckades\" + admintext om kartnyckeln; kartbakgrunden nekas → rad ovanpå kartan, markörer kvar",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6373,
+      "notes": [
+        "A (GL blockerat): 10 aktiva jobb · 0 med koordinater · 10 saknar koordinater | Kartan kunde inte laddas Kartbiblioteket (Mapbox GL) gick inte att nå. Det beror inte på jobbens adresser — listan fungerar som vanligt. 0 av 10 jobb har koordinater. Visa jobb utan plats (10) | 10 av 10 aktiva jobb visas inte på kartan Geokodning saknas: 4 inte geokodade ännu Adressen behöver kompletteras: 6 adress saknar ort/postnummer Visa vilka",
+        "B (GL ok, geokodning 403): Inga av de 10 aktiva jobben har koordinater 2 inte geokodade ännu · 2 geokodning misslyckades · 6 adress saknar ort/postnummer. Adresserna behöver geokodas. Visa jobb utan plats (10) | sökningar: 1",
+        "C (bakgrund nekas): Kartbakgrunden kunde inte laddas — kartnyckeln nekas för den här domänen. | 11 aktiva jobb · 1 på kartan · 10 saknar koordinater"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "DASH-E-10",
+      "module": "Dashboard",
+      "name": "Kartan — geokodningen svarar med träffar: över 20 jobb utan koordinater → högst 20 sökningar per visning, resten \"inte geokodade ännu\"; adress som inte hittas, adress utan ort och jobb utan adress redovisas var för sig; koordinater som text placeras",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2542,
+      "notes": [
+        "status: {\"nocity\":7,\"notfound\":1,\"geocoded\":40,\"skipped\":5,\"noaddr\":1,\"coords\":1} sökningar: 40 | 55 aktiva jobb · 40 platser på kartan · 14 saknar koordinater | 14 av 55 aktiva jobb visas inte på kartan Geokodning saknas: 5 inte geokodade ännu Adressen behöver kompletteras: 7 adress saknar ort/postnummer 1 saknar adress 1 adressen hittades inte Visa vilka"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "DASH-E-09",
+      "module": "Dashboard",
+      "name": "Widgetar: Försenade aktiviteter visar de äldsta med dagar sen och leder till listan; Arbetspool sorterar akut först och visar väntetid; Kräver åtgärd utan dubblerad rubrik, raderna är knappar",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3567,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "DASH-E-11",
+      "module": "Dashboard",
+      "name": "Realistiskt innehåll (V3-standard §12): 40 försenade aktiviteter, 30 jobb i poolen, 150 aktiva jobb och långa titlar → korten visar de viktigaste först och \"Visa …\", titlar kortas av, inget sidledes överspill vid 390/1366; tomlägen utan NaN/undefined",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6409,
+      "notes": [
+        "d25_390: {\"odRows\":3,\"odCount\":\"40\",\"odH\":274,\"odGo\":true,\"poolVis\":3,\"poolFirst\":\"Akut\",\"poolMore\":true,\"poolCount\":\"33 väntar\",\"mapRows\":25,\"mapMore\":\"Visa alla 190 aktiva jobb \",\"wrapped\":0,\"truncated\":7,\"bad\":false}",
+        "d25_1366: {\"odRows\":3,\"odCount\":\"40\",\"odH\":241,\"odGo\":true,\"poolVis\":4,\"poolFirst\":\"Akut\",\"poolMore\":true,\"poolCount\":\"33 väntar\",\"mapRows\":25,\"mapMore\":\"Visa alla 190 aktiva jobb \",\"wrapped\":0,\"truncated\":23,\"bad\":false}",
+        "begränsad: tomlägen [\"Inga öppna uppgifter\"]"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "AOL-01",
+      "module": "Arbetsordrar",
+      "name": "Begränsad lista: antal i rubrik och sidfot (\"Visar 150 av 800\"), Visa 300 till och Visa alla når varje AO; Välj alla gäller de som visas, Markera alla N som matchar gäller hela urvalet",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5040,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "AOL-02",
+      "module": "Arbetsordrar",
+      "name": "Filterhierarki: Status och Snabbval är skilda kontroller; status + snabbval + sökning ger rätt antal, varje filter kan tas bort i sammanfattningen och Rensa filter återställer allt",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4225,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "AOL-03",
+      "module": "Arbetsordrar",
+      "name": "Massändring: markerade som filtret döljer ingår aldrig — bulk-baren och dialogerna räknar upp dem, bekräftelsen säger exakt hur många som ändras och servern får bara de synliga",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 8932,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "AOL-04",
+      "module": "Arbetsordrar",
+      "name": "Sortering: kolumnrubrikerna sorterar och vänder ordningen med synlig pil och aria-sort; sorteringsväljaren följer med; utan datum hamnar sist i båda riktningarna",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3412,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "AOL-05",
+      "module": "Arbetsordrar",
+      "name": "Dubblerade AO-nummer: två olika AO med samma synliga nummer (som AO-001 i STAGING) skiljs åt med kort id i lista, kort och mobil — inget lagrat nummer ändras",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4071,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
+    },
+    {
+      "id": "AOL-06",
+      "module": "Arbetsordrar",
+      "name": "Prestanda 10/100/1000 AO: första rendering, statusbyte, snabbval, sökning (med väntan på paus i skrivandet) och Visa alla — budget vid 1000: rendering < 1500 ms, sökning < 300 ms",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4463,
+      "notes": [
+        "mätvärden (ms, lokal headless Chromium, simulerad server): {\"10\":{\"rendering_ms\":23,\"rader\":9,\"statusbyte_ms\":8,\"statusbyte_tillbaka_ms\":23,\"snabbval_ms\":12,\"snabbval_av_ms\":22,\"sokning_ms\":142,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":16,\"visa_alla_ms\":16,\"rader_visa_alla\":9},\"100\":{\"rendering_ms\":65,\"rader\":84,\"statusbyte_ms\":17,\"statusbyte_tillbaka_ms\":42,\"snabbval_ms\":19,\"snabbval_av_ms\":63,\"sokning_ms\":145,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":23,\"visa_alla_ms\":47,\"rader_visa_alla\":84},\"1000\":{\"rendering_ms\":86,\"rader\":150,\"statusbyte_ms\":81,\"statusbyte_tillbaka_ms\":107,\"snabbval_ms\":78,\"snabbval_av_ms\":75,\"sokning_ms\":187,\"sokning_renderingar\":1,\"sokning_enbart_rendering_ms\":73,\"visa_alla_ms\":402,\"rader_visa_alla\":834}}"
+      ],
+      "metrics": {
+        "10 AO: rendering_ms": 23,
+        "10 AO: rader": 9,
+        "10 AO: statusbyte_ms": 8,
+        "10 AO: statusbyte_tillbaka_ms": 23,
+        "10 AO: snabbval_ms": 12,
+        "10 AO: snabbval_av_ms": 22,
+        "10 AO: sokning_ms": 142,
+        "10 AO: sokning_renderingar": 1,
+        "10 AO: sokning_enbart_rendering_ms": 16,
+        "10 AO: visa_alla_ms": 16,
+        "10 AO: rader_visa_alla": 9,
+        "100 AO: rendering_ms": 65,
+        "100 AO: rader": 84,
+        "100 AO: statusbyte_ms": 17,
+        "100 AO: statusbyte_tillbaka_ms": 42,
+        "100 AO: snabbval_ms": 19,
+        "100 AO: snabbval_av_ms": 63,
+        "100 AO: sokning_ms": 145,
+        "100 AO: sokning_renderingar": 1,
+        "100 AO: sokning_enbart_rendering_ms": 23,
+        "100 AO: visa_alla_ms": 47,
+        "100 AO: rader_visa_alla": 84,
+        "1000 AO: rendering_ms": 86,
+        "1000 AO: rader": 150,
+        "1000 AO: statusbyte_ms": 81,
+        "1000 AO: statusbyte_tillbaka_ms": 107,
+        "1000 AO: snabbval_ms": 78,
+        "1000 AO: snabbval_av_ms": 75,
+        "1000 AO: sokning_ms": 187,
+        "1000 AO: sokning_renderingar": 1,
+        "1000 AO: sokning_enbart_rendering_ms": 73,
+        "1000 AO: visa_alla_ms": 402,
+        "1000 AO: rader_visa_alla": 834
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "AOL-07",
+      "module": "Arbetsordrar",
+      "name": "Layout 360–1920: ingen sidledsrullning i lista, kortvy, med filter och i markeringsläge; vy-växlaren syns överallt; avatarer överlappar inte (F-22); mobilens kryssrutor ≥ 40 px",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 34033,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 36
+    },
+    {
+      "id": "AOL-08",
+      "module": "Arbetsordrar",
+      "name": "Snabb öppning från listan: klick och Enter öppnar AO-detaljen direkt; mellanslag markerar raden; Tillbaka ger samma filter och sökning",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2706,
+      "notes": [],
+      "metrics": {
+        "klick → AO-detalj (ms)": 62
+      },
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "AOL-09",
+      "module": "Arbetsordrar",
+      "name": "Mobil 390/360 med 100 realistiska AO: hitta sitt jobb (Mina + sök), filtrera (statusväljare + snabbval), öppna AO, massval och massändring — inget klipps och inget hamnar utanför skärmen",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 13147,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 20
+    },
+    {
+      "id": "AOD-01",
+      "module": "Arbetsordrar",
+      "name": "AO-detalj: EN primär åtgärd per status och roll (planerad → Starta arbete, pågående → Klarmarkera, klar → Skapa fakturaunderlag) med befintlig funktion och behörighet; Starta arbete skapar ingen tidpost",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 11903,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 35
+    },
+    {
+      "id": "AOD-02",
+      "module": "Arbetsordrar",
+      "name": "AO-detalj: ingen förlorad åtgärd — varje åtgärd i den tidigare raden (samma etikett och anrop) nås i nya raden eller menyn, på dator och mobil, i alla lägen (nytt, pool, planerad, pågående+substatus, klar, klar+faktura, avbruten, arkiverad, papperskorg) och roller",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 23887,
+      "notes": [
+        "155 tidigare åtgärder kontrollerade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 45
+    },
+    {
+      "id": "AOD-03",
+      "module": "Arbetsorderchecklistor",
+      "name": "AO-detalj: checklistan ligger i Uppdrag & utförande (aldrig hopfälld) med \"N av M klara\", stapel, kvar och avvikelser; tre lägen och återställningsregler fungerar som förut",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 2348,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden_other\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 10
+    },
+    {
+      "id": "AOD-04",
+      "module": "Tidregistrering och instämpling",
+      "name": "AO-detalj: Starta arbete (status) och Stämpla in (tid) är skilda; stämpling via den kompakta raden ger levande tidräknare och exakt EN tidpost; ingen dubbelstämpling på annan AO",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 7693,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 21
+    },
+    {
+      "id": "AOD-05",
+      "module": "Användarroller och behörigheter",
+      "name": "AO-detalj: prissättningskortet syns för admin/arbetsledare/ekonomi med rätt modell (fastpris / löpande timpris + prisgrupp och timpris) och placering; fält och begränsad ser inget pris, inköp eller påslag",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 11570,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 49
+    },
+    {
+      "id": "AOD-06",
+      "module": "Arbetsordrar",
+      "name": "AO-detalj: ingen horisontell överbredd eller knapp utanför skärmen 360–1920 px (admin, arbetsledare med substatus, fält), menyn ryms i fönstret",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 30301,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 108
+    },
+    {
+      "id": "AOD-07",
+      "module": "Arbetsordrar",
+      "name": "AO-detalj med realistiskt innehåll, mobil 390 px: alla statusar (ny, planerad, pågår, pausad, klar, fakturerad, avbruten) + saknade fält × fält, arbetsledare, ekonomi, admin — rätt primär åtgärd, 22 checkpunkter, material, tid, bilder, pris per roll, inget klipps",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 22243,
+      "notes": [
+        "iphone: 4 roller × 8 ordrar granskade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 34
+    },
+    {
+      "id": "AOD-08",
+      "module": "Arbetsordrar",
+      "name": "AO-detalj med realistiskt innehåll, dator 1366 px: alla statusar + saknade fält × fält, arbetsledare, ekonomi, admin (samma kontroller som AOD-07)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 22227,
+      "notes": [
+        "laptop: 4 roller × 8 ordrar granskade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 403 {\"error\":\"forbidden\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 34
+    },
+    {
+      "id": "AOD-09",
+      "module": "Arbetsordrar",
+      "name": "Fältflöde på mobil 390 px utan att något klipps: öppna jobbet från Mina jobb → Starta arbete → Stämpla in → bocka av checklista → lägg till material och bild → Stämpla ut → (med ao_complete i rollen) Klarmarkera",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 6566,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 32
+    },
+    {
+      "id": "BILL-01",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Fakturakön (kompakt): kundgruppernas antal och belopp = BillingQueueService; Tid+Material+Fastpris = totalen; filtrerad summa märkt och skild från köns total",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2492,
+      "notes": [
+        "kö: 19 kandidater, 2 kräver åtgärd, total 61937.5 kr exkl. moms"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "BILL-02",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Fakturakön: kryssruta med tre lägen och \"x av y valda\"; Välj alla gäller uttryckligen de N som matchar filtret; valda som döljs av filtret sägs ut och kan avmarkeras; tangentbord fäller ut",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4822,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "BILL-03",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Kräver åtgärd: ett klick filtrerar; exakt de ej valbara kandidaterna med orsak och förklaring; direkta åtgärder följer behörighet (admin: Ändra materialpris öppnar AO:ns materialdialog)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4032,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
+    },
+    {
+      "id": "BILL-04",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Delvis urval → fakturautkast: summeringen (exkl. moms/moms/inkl.) = skapade utkast, exakt de valda raderna, de försvinner ur kön och kan inte faktureras igen",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 4989,
+      "notes": [
+        "valt: 3 underlag valda · 2 kunder → 2 fakturautkast EXKL. MOMS 5 850,00 kr MOMS 1 462,50 kr INKL. MOMS 7 312,50 kr Avmarkera Skapa fakturautkast"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
+    },
+    {
+      "id": "BILL-05",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Fakturaunderlagets detalj: rader visas exkl. moms med momssats i egen kolumn och stämmer mot summa exkl. moms, moms per sats och totalt inkl. moms (blandad 25/12/0 %, med och utan rabatt); statushjälp",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4890,
+      "notes": [
+        "INV-QA-MIX (laptop): rader 1660 = ex 1660, moms 275 (25%:215, 12%:60, 0%:0), totalt 1935",
+        "INV-QA-DISC: rader 1660 − rabatt 166 = 1494, moms 247.5, totalt 1741.5",
+        "INV-QA-MIX (android): rader 1660 = ex 1660, moms 275 (25%:215, 12%:60, 0%:0), totalt 1935"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "BILL-06",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Fakturakön: renderingstid för 10/100/1000 simulerade kandidater (kompakt vy, Välj alla, Visa alla rader) inom budget; progressiv rendering",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5281,
+      "notes": [
+        "10: {\"cands\":27,\"median\":1.1,\"groups\":7,\"more\":false,\"selMs\":11,\"deselMs\":3,\"selected\":27,\"expMs\":11,\"rowsShown\":27,\"after\":0}",
+        "100: {\"cands\":117,\"median\":3.9,\"groups\":25,\"more\":false,\"selMs\":17,\"deselMs\":4,\"selected\":117,\"expMs\":29,\"rowsShown\":117,\"after\":0}",
+        "1000: {\"cands\":1017,\"median\":9.1,\"groups\":30,\"more\":true,\"selMs\":23,\"deselMs\":5,\"selected\":1017,\"expMs\":65,\"rowsShown\":282,\"after\":0}"
+      ],
+      "metrics": {
+        "10 kandidater: kompakt rendering (median ms)": 1.1,
+        "10 kandidater: Välj alla / avmarkera (ms)": "11 / 3",
+        "10 kandidater: Visa alla rader (ms, 27 rader)": 11,
+        "100 kandidater: kompakt rendering (median ms)": 3.9,
+        "100 kandidater: Välj alla / avmarkera (ms)": "17 / 4",
+        "100 kandidater: Visa alla rader (ms, 117 rader)": 29,
+        "1000 kandidater: kompakt rendering (median ms)": 9.1,
+        "1000 kandidater: Välj alla / avmarkera (ms)": "23 / 5",
+        "1000 kandidater: Visa alla rader (ms, 282 rader)": 65
+      },
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 0
+    },
+    {
+      "id": "BILL-07",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Fakturakön och fakturadetaljen utan horisontell överbredd 360–1920 px; klistrad summering ovanför bottenmenyn på mobil; mål ≥ 40 px",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 18728,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 18
+    },
+    {
+      "id": "BILL-08",
+      "module": "Säkerhet",
+      "name": "Fakturakön utfälld och Kräver åtgärd samt fakturadetaljen: HTML i kund-, AO-, material-, tid- och radtexter körs aldrig och visas som text",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3608,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "BILL-09",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Radbelopp mot summor med decimaler och avrundning: radbeloppen (exkl. moms, som rubriken säger) + ev. öresavrundning = Summa exkl. moms; moms = satsen på raderna; totalt = exkl. + moms; 1 tim × 430 kr = 430,00 kr exkl. (537,50 inkl.)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4983,
+      "notes": [
+        "laptop INV-QA-DEC: rader 1521.28 + avrundning 0.01 = 1521.29, moms 367.32, totalt 1888.61",
+        "laptop INV-QA-DEC25: rader 1421.28 + avrundning 0.01 = 1421.29, moms 355.32, totalt 1776.61",
+        "iphone INV-QA-DEC: rader 1521.28 + avrundning 0.01 = 1521.29, moms 367.32, totalt 1888.61"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "BILL-10",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Mobil 390 px: välj underlag per fastighet, se vald summa, skapa underlag, läs raderna utan sidscroll och byt status",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 3939,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [
+        "[WorkOrderService] Serverskrivning avvisad för AO-012 : forbidden",
+        "[WorkOrderService] Serverskrivning avvisad för AO-007 : forbidden"
+      ],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/ao-time-write → 403 {\"error\":\"forbidden\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "BILL-11",
+      "module": "Fakturering och fakturaunderlag",
+      "name": "Statusar och innehåll: underlag i utkast/skickad/betald/förfallen/makulerad visar rätt hjälptext och låsning; listan med alla statusar, tom kö och långa namn utan överbredd på 360 px",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7173,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "ARP-01",
+      "module": "Inställningar och administration",
+      "name": "Admin: alla elva avsnitt nås på 360, 390 och 1366 — grupperad meny på dator, rullista på mobil, inget avsnitt dolt utanför skärmen; Teknik & underhåll ligger sist",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 9191,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "ARP-02",
+      "module": "Inställningar och administration",
+      "name": "Färgkedjan: förval, egen HEX och Standard förhandsvisas utan skrivning, sparas exakt en gång per ändring, övriga inställningar orörda, samma färg i sidomeny/knappar/märken efter omladdning, ny inloggning och på en annan enhet",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 10440,
+      "notes": [
+        "skrivningar av vift_settings: 3 för 3 sparade ändringar"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 25
+    },
+    {
+      "id": "ARP-03",
+      "module": "Rapporter och statistik",
+      "name": "Rapporter: vald period syns (kontrast ≥ 4,5:1, aria-pressed), svensk periodetikett, läsbara statusnamn, enhetliga nyckeltal och svenska tal; flikarna nås via rullista på mobil",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4811,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
+    },
+    {
+      "id": "ARP-04",
+      "module": "Rapporter och statistik",
+      "name": "Tabeller ryms i sina kort på 360 och 390 med realistiskt löneunderlag (Rapporter → Offerter, Löneunderlag: fem personer, fyra veckor, långa namn) och har rubrikrad, cellutfyllnad, zebra och fast rubrik på dator",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5802,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "ARP-05",
+      "module": "Tidregistrering och instämpling",
+      "name": "Löneunderlag låser nuvarande beräkning: \"Debiterbart värde\" = timmar × tidpostens prisgruppspris (inte lönekostnad), \"Intern kostnad (uppskattad)\" = timmar × internalHourlyCost och döljs när värdet saknas; timmar i svensk form; attestering via kryssruta och \"Attestera alla\" går till servern",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2961,
+      "notes": [
+        "nyckeltal: {\"Totalt\":\"108,42 h\",\"Debiterbart värde\":\"54 995 kr\",\"Intern kostnad (uppskattad)\":\"27 104 kr\",\"Tidposter\":\"27\",\"Attesterat\":\"33,67 h\"}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 15
+    },
+    {
+      "id": "ARP-06",
+      "module": "Säkerhet",
+      "name": "Admin, Rapporter och Löneunderlag: inget sidöverflöd och inget utanför fönstret 360–1920; ingen markup (t.ex. \"<svg\") eller undefined/NaN som text i någon flik; push-diagnostiken ligger i Teknik & underhåll",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 16330,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "ARP-07",
+      "module": "Inställningar och administration",
+      "name": "\"Rensa lokal cache på den här enheten\": tydlig text (servern påverkas inte, du förblir inloggad), osparade ändringar kräver två bekräftelser med antal, rensning behåller inloggning och logotyper och rör inte serverns data; bara admin",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2713,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "MISC-IMP-01",
+      "module": "Import och export",
+      "name": "Importera (F-03/F-11): guiden ryms i 360/390/1366 utan att klippas, stegen syns, inaktiv Nästa ser ut som en knapp och aktiveras när fil valts",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5320,
+      "notes": [
+        "mx360 {\"w\":340,\"right\":350,\"vw\":360,\"stepsRight\":350,\"nSteps\":1,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":44,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}",
+        "mx390 {\"w\":370,\"right\":380,\"vw\":390,\"stepsRight\":380,\"nSteps\":1,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":44,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}",
+        "mx1366 {\"w\":920,\"right\":1263,\"vw\":1366,\"stepsRight\":1263,\"nSteps\":6,\"disabled\":true,\"bg\":\"rgb(15, 55, 99)\",\"border\":\"1px\",\"nextH\":36,\"op\":0.5,\"hint\":\"Välj en fil för att fortsätta\"}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "MISC-PROP-01",
+      "module": "Fastighetsregister",
+      "name": "Fastighetskortet (F-06): alla flikar syns och nås på 360/390/1366/1920, aktiv flik markeras, varje flik visar sitt innehåll; äldre flikgrupper fungerar",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 10161,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 31
+    },
+    {
+      "id": "MISC-PROP-02",
+      "module": "Fastighetsregister",
+      "name": "Fastighetskortet: ingen markup/attribut som text i någon flik (sökfältets placeholder var trasig), placeholder utan \"<\"; sökning tappar inte fokus",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 8050,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "MISC-PROP-03",
+      "module": "Fastighetsregister",
+      "name": "Fastighetskortet: portkod/nyckelinfo visas för admin (objects_sensitive), aldrig för arbetsledare utan behörighet; fältarbetare nekas sidan",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5288,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 19
+    },
+    {
+      "id": "MISC-HEAD-01",
+      "module": "Designstandard",
+      "name": "Detaljhuvuden (F-10) på 390: tillbaka + rubrik på en rad, låg höjd, primär åtgärd synlig, övriga i ⋮-menyn som öppnas — Fastighetskort, Objekt, Kundkort, Projektkort",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7802,
+      "notes": [
+        "mx390 pg-obj-detail {\"h\":118}",
+        "mx390 pg-propobj-detail {\"h\":108}",
+        "mx390 pg-crm-detail {\"h\":108}",
+        "mx390 pg-project-detail {\"h\":108}",
+        "mx1366 pg-obj-detail {\"h\":68}",
+        "mx1366 pg-propobj-detail {\"h\":68}",
+        "mx1366 pg-crm-detail {\"h\":68}",
+        "mx1366 pg-project-detail {\"h\":68}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "MISC-CAL-01",
+      "module": "Kalender",
+      "name": "Kalender veckovy (F-08): på 360/390 en läsbar dagslista (7 dagar, titlar inte bokstav för bokstav, vyväljaren på en rad, långtryck flyttar AO); på dator oförändrat rutnät",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6960,
+      "notes": [
+        "mx360 {\"days\":7,\"n\":5,\"minW\":228}",
+        "mx390 {\"days\":7,\"n\":5,\"minW\":258}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "MISC-RON-01",
+      "module": "Rondering",
+      "name": "Rondering (F-09): stegetiketter, statusrad, punktstatus (Godkänd/Anmärkning/Ej aktuell) och \"Klar\" har kontrast ≥ 4,5:1 beräknat från faktiska färger; stegetiketterna kapas inte",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6358,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "MISC-ICON-01",
+      "module": "Designstandard",
+      "name": "Ikoner på samma rad som texten (F-02) i blockets sidor: Projekt, Projektkort, Kontrakt, Importera, Importlogg, Exportcenter, Fastighetskort, Objekt, Kundkort, Kalender, Rondering",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 17747,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "GET /rest/v1/property_images?property_id=eq.OBJ-001&order=created_at.asc → 501 {\"error\":\"not_modeled_in_fake_backend\"}"
+      ],
+      "unmodeled": [
+        "GET /rest/v1/property_images"
+      ],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "MISC-DATA-01",
+      "module": "Projekt",
+      "name": "Projekt med 120 projekt: statuschips filtrerar och räknar rätt, sök behåller fokus och visar \"Visar X av Y\", Rensa filter; ingen sidscroll 360–1920 och rader högst ~1320 px breda på 1920",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 8874,
+      "notes": [
+        "mx360 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":340}",
+        "mx390 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":370}",
+        "mx1366 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":1062}",
+        "mx1920 {\"rows\":113,\"count\":\"Visar 113 av 113 projekt\",\"w\":1240}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 23
+    },
+    {
+      "id": "MISC-DATA-02",
+      "module": "Kundregister",
+      "name": "Kontrakt (114 avtal) och Importlogg (15 importer): tabell på dator, kort per rad på 360/390, statuschip filtrerar med rätt antal, ingen sidscroll, begränsad bredd på 1920",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 11173,
+      "notes": [
+        "mx360 {\"rows\":114,\"rowDisplay\":\"grid\",\"headShown\":false,\"w\":340,\"count\":\"Visar 114 av 114 avtal\"}",
+        "mx390 {\"rows\":114,\"rowDisplay\":\"grid\",\"headShown\":false,\"w\":370,\"count\":\"Visar 114 av 114 avtal\"}",
+        "mx1366 {\"rows\":114,\"rowDisplay\":\"table-row\",\"headShown\":true,\"w\":1062,\"count\":\"Visar 114 av 114 avtal\"}",
+        "mx1920 {\"rows\":114,\"rowDisplay\":\"table-row\",\"headShown\":true,\"w\":1240,\"count\":\"Visar 114 av 114 avtal\"}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 23
+    },
+    {
+      "id": "MISC-TASK-01",
+      "module": "Projekt",
+      "name": "Projektkort på 360/390 (uppgifter): status och ekonomi syns, AO under projektet, Ladda upp dokument nås och öppnar dialogen; inga åtgärder avklippta",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4906,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 11
+    },
+    {
+      "id": "MISC-TASK-02",
+      "module": "Kalender",
+      "name": "Kalender på 360/390 med nio jobb samma dag: dagens och veckans jobb syns läsbart, ett jobb öppnas, Skapa AO öppnar formuläret",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7387,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
+    },
+    {
+      "id": "MISC-TASK-03",
+      "module": "Fastighetsregister",
+      "name": "Fastighetskort på 360/390 (uppgifter): adress, portkod (admin), Ny AO, Lägg till objekt och serviceintervall nås utan avklippta knappar; långt namn kapas inte bort",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7145,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "MISC-CUS-REACH-01",
+      "module": "Kundregister",
+      "name": "Kundkortet på mobil (390 px): telefon och e-post för kunden och kontaktpersoner är tel:/mailto:-länkar, minst 40 px höga; text escapas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1852,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "SVC-UI-01",
+      "module": "Serviceintervall",
+      "name": "Serviceintervall: sökfältet renderas korrekt (ingen markup/attribut som text), sökning behåller fokus och filtrerar, statusfilter räknar rätt, åtgärder med text, läsbart även i mörkt OS-läge, mobil utan överflöd",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 8313,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 24
+    },
+    {
+      "id": "OFFW-01",
+      "module": "Offertmodulen",
+      "name": "Offertguiden (BRF): stegvalidering, alla radtyper via guiden (tjänst/kalkyl, fastpris, löpande, fritext, tillval i/utanför summan), blandad moms — livesummering, granskning och sparad offert = OfferCalc; detaljvyn visar samma innehåll och belopp",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 5828,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "OFFW-02",
+      "module": "Offertmodulen",
+      "name": "Offertguiden på mobil (390 px, privatkund): tjänst med RUT, fastpris, löpande, fritext och tillval via \"Lägg till arbete\" — inget klipps eller scrollar i sidled i något steg; summering med RUT = OfferCalc; sparad offert öppnas i detaljvyn",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 5514,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "OFFD-01",
+      "module": "Offertmodulen",
+      "name": "Offertdetalj per status (utkast, skickad, ändring begärd, godkänd, godkänd med AO, nekad, utgången, arkiverad, borttagen): rätt primär åtgärd (en enda), alla tidigare åtgärder går att nå (knapp, \"⋮\"-meny eller statusmeny); menyn öppnas, är inom skärmen och stängs med Escape",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 25249,
+      "notes": [
+        "utkast: Skicka offert + 5 menyposter",
+        "skickad: Boka uppföljning + 9 menyposter",
+        "ändring-begärd: Skapa ny version + 4 menyposter",
+        "godkänd: Skapa arbetsorder + 6 menyposter",
+        "godkänd (AO finns): Öppna arbetsorder + 6 menyposter",
+        "nekad: Skapa ny version + 6 menyposter",
+        "utgången: Förnya offert + 5 menyposter",
+        "arkiverad: Återställ offert + 3 menyposter",
+        "borttagen: Återställ offert + 2 menyposter"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "OFFD-02",
+      "module": "Offertmodulen",
+      "name": "Offertdetalj: belopp i huvud, rader och summering = OfferCalc för alla offerter (seed + realistiska fixturer: blandad moms, RUT/ROT, rabatt, återkommande och rörliga rader, tillval i/utanför summan); moms per sats summerar till momsen; alltid \"exkl./inkl. moms\"; ingen markup som text; historikens text visas oförändrad (ingen dubbel escapning)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 10306,
+      "notes": [
+        "15 offerter kontrollerade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "OFFD-03",
+      "module": "Digitala offertlänkar och kundsvar",
+      "name": "Offertdetalj: generera länk via bekräftelsedialog (utkast), registrera godkännande via statusmenyn, momsspärr vid blandad moms (ingen AO), Skapa arbetsorder skapar exakt en AO och primärknappen blir \"Öppna arbetsorder\"; kundens svar (nekad/ändring) visas",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 8700,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-checklist-resolve → 404 {\"error\":\"item_not_found\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "OFFD-04",
+      "module": "Säkerhet",
+      "name": "Offerter: HTML i titel, beskrivningar, rader, tillval, villkor, intern anteckning, kundsvar och bilagenamn körs aldrig (detalj, guidens fyra steg, granskning) och visas som text",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3815,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "OFFD-05",
+      "module": "Offertmodulen",
+      "name": "Offertdetalj och guidens steg utan sidscroll eller klippta knappar på 360, 390, 768, 1024, 1366 och 1920 px; ingen betrodd markup som text i någon status",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 37672,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 36
+    },
+    {
+      "id": "OFFW-03",
+      "module": "Offertmodulen",
+      "name": "Offertguiden: utkast återställs i rätt steg (även steg 4), granskningen varnar för RUT/ROT på BRF-kund och kund utan e-post, och sparknappen visar \"Sparar…\" tills servern svarat",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5704,
+      "notes": [
+        "under sparning: {\"t\":\"Sparar…\",\"d\":true}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 7
+    },
+    {
+      "id": "FALT-01",
+      "module": "Mina jobb",
+      "name": "Mina jobb med många jobb: Idag (nästa jobb, försenade, resten av dagen, utan datum), Kommande per dag och Arbetspool — rätt gruppering, inga dubbletter, bara egna jobb; Ta jobbet tilldelar på servern",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 1904,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "FALT-02",
+      "module": "Tidregistrering och instämpling",
+      "name": "Mina jobb: Stämpla in → exakt en aktiv markering och en Stämpla ut, statusen oförändrad; Stämpla ut → exakt en tidpost på servern och markeringen borta",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 2072,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "FALT-03",
+      "module": "Mina jobb",
+      "name": "\"Starta jobb\" ändrar bara status (pågående på servern) — ingen tidpost och ingen stämpling skapas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 1202,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "FALT-04",
+      "module": "Tidregistrering och instämpling",
+      "name": "Manuell tid: fel visas vid fälten och i en sammanfattning, inget skickas; giltigt pass visar svensk sammanfattning, Sparar… tills servern svarat, och hamnar under rätt dag; redigering med sluttid före starttid nekas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3865,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "FALT-05",
+      "module": "Dashboard",
+      "name": "Dagens drift (arbetsledare, många jobb): nyckeltalen = underliggande data, och varje ruta visar exakt så många rader; personal idag visar vem som arbetar med vad",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3100,
+      "notes": [
+        "väntat {\"today\":21,\"ongoing\":5,\"overdue\":4,\"urgent\":4,\"noStaff\":4,\"bill\":4,\"notes\":1} visat {\"today\":21,\"ongoing\":5,\"overdue\":4,\"urgent\":4,\"noStaff\":4,\"bill\":4}"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "FALT-06",
+      "module": "Återkommande AO",
+      "name": "Återkommande: \"Om 1 dag\"/\"Om 2 dagar\"/\"Förfallen sedan 2 dagar\" (F-12), sök behåller fokus, snabbval och statusfilter räknar rätt, pausa/aktivera bekräftas av servern och redigering återaktiverar inte ett pausat ärende",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 5024,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 9
+    },
+    {
+      "id": "FALT-07",
+      "module": "Mina jobb",
+      "name": "Svenska format på fältsidorna: datum (\"24 nov. 2026\"), klockslag 08:00, timmar med decimalkomma — inga ISO-datum, AM/PM, m/d/y eller engelska dag-/månadsnamn i det som visas",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 5418,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "FALT-08",
+      "module": "Mina jobb",
+      "name": "Fältsidorna 360–1920 px med många jobb, långa adresser och pågående stämpling: ingen sidledsrullning, inga knappar utanför skärmen eller avklippta, tryckytor >= 40 px på mobil",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 27240,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 66
+    },
+    {
+      "id": "FALT-09",
+      "module": "Säkerhet",
+      "name": "Fältsidorna: ingen betrodd markup visas som text (RENDER-01-kontrollen) i alla vyer, filter och dialoger — med realistiskt innehåll",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 8034,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 17
+    },
+    {
+      "id": "FALT-10",
+      "module": "Mina jobb",
+      "name": "Fältpersonalens dag på 360 px: dagens jobb syns direkt med nästa jobb överst, Karta öppnar vägbeskrivning, stämpla in och ut utan att något klipps",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 1770,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/store-key-write → 400 {\"error\":\"unknown_action\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 16
+    },
+    {
+      "id": "REG-UI-01",
+      "module": "Register (V3)",
+      "name": "Kunder: 150 kunder — sök och typfilter räknar rätt (\"Visar X av Y\"), status är egen flikgrupp, Rensa filter, sökfältet behåller fokus, ⋮ har Importera/Exportera, \"Ny kund\" öppnar formuläret",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3824,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "REG-UI-02",
+      "module": "Register (V3)",
+      "name": "Fastigheter: 120+ fastigheter — sök på adress räknar rätt, Arkiverade, kolumner adress/kund/objekt, tangentbord (Enter) öppnar fastighetskortet, \"Ny fastighet\" öppnar formuläret",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4777,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "REG-UI-03",
+      "module": "Register (V3)",
+      "name": "Artiklar: 130+ artiklar — status (Alla/Aktiva/Inaktiva) och kategori kombineras, sök på art.nr, pris visas exkl. moms (aldrig \"inkl\"), rad och \"Ny artikel\" öppnar formuläret",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 3486,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 6
+    },
+    {
+      "id": "REG-UI-04",
+      "module": "Register (V3)",
+      "name": "Personal (F-19): ingen \"Inaktivera\"-knapp i raderna; Inaktivera/Aktivera nås via radens ⋮ (med bekräftelse) och sparas på servern; namn bryts inte på 390 px; arbetsledare (staff_view) får ingen meny eller primär åtgärd och nekas direktanrop",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7547,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 13
+    },
+    {
+      "id": "REG-UI-05",
+      "module": "Register (V3)",
+      "name": "Prisgrupper: flikarna Prisgrupper/Prisprofiler (.ftabs), primär åtgärd följer fliken, sök räknar rätt, timpris exkl. moms, profilrad öppnar redigering, ⋮ (Importera/Exportera) bara för prisgrupper",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 2622,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 5
+    },
+    {
+      "id": "REG-UI-06",
+      "module": "Register (V3)",
+      "name": "Offerttjänster (F-20): en ⋮ per rad på mobil i stället för fyra ikonknappar; Testkalkyl/Duplicera/Inaktivera nås i menyn (Inaktivera med bekräftelse); sök behåller fokus och räknar rätt",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 4282,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 8
+    },
+    {
+      "id": "REG-UI-07",
+      "module": "Register (V3)",
+      "name": "Uppgifter: ingen upprepad rubrik, V3-chips (inte mörka piller) i två grupper räknar rätt, sök + Rensa filter; per-post-regeln: fältarbetaren kan klarmarkera sin egen men inte annans uppgift",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 6205,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 13
+    },
+    {
+      "id": "REG-UI-08",
+      "module": "Register (V3)",
+      "name": "Registerlayout 360/390/768 px med 100+ poster: ingen sidrullning i sidled, ingen avklippt text, knappar inom skärmen, ikonknappar har namn, inga ikoner på egen rad, ingen markup som text, kort per rad på mobil, radmenyer syns helt",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 15059,
+      "notes": [
+        "360 px: 7 sidor kontrollerade",
+        "390 px: 7 sidor kontrollerade",
+        "768 px: 7 sidor kontrollerade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 18
+    },
+    {
+      "id": "REG-UI-09",
+      "module": "Register (V3)",
+      "name": "Registerlayout 1024/1366/1920 px med 100+ poster: samma kontroller som REG-UI-08, tabellrader på dator och innehållsbredd högst 1 440 px på 1920 (F-23)",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 15476,
+      "notes": [
+        "1024 px: 7 sidor kontrollerade",
+        "1366 px: 7 sidor kontrollerade",
+        "1920 px: 7 sidor kontrollerade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 18
+    },
+    {
+      "id": "REG-UI-10",
+      "module": "Register (V3)",
+      "name": "Mobil (390 px) utifrån uppgifter: hitta kunden i registret och öppna kundkortet, hitta fastigheten och se adress, portkod (endast med behörighet), \"Ny AO\", objekt och serviceintervall — inga dolda flikar eller avklippta åtgärder",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 7527,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "REG-UI-11",
+      "module": "Register (V3)",
+      "name": "Varje flik- och filterläge i registren (390 och 1366 px, 100+ poster): ingen markup som text, ingen avklippt text, inga ikoner på egen rad, ingen sidrullning i sidled",
+      "kind": "ui",
+      "status": "passed",
+      "error": null,
+      "ms": 15741,
+      "notes": [
+        "66 flik-/filterlägen kontrollerade"
+      ],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}",
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 12
+    },
+    {
+      "id": "SYNC-ED-01",
+      "module": "Offertmodulen",
+      "name": "Synken ritar inte om offertguiden: osparad ändring i en befintlig offert finns kvar efter en serverändring när inget fält har fokus; andra sidor uppdateras som förut",
+      "kind": "workflow",
+      "status": "passed",
+      "error": null,
+      "ms": 4622,
+      "notes": [],
+      "metrics": {},
+      "consoleErrors": [],
+      "netErrors": [
+        "POST /functions/v1/work-order-log-write → 404 {\"error\":\"NOT_FOUND\"}"
+      ],
+      "unmodeled": [],
+      "screenshots": [],
+      "requests": 14
     }
   ]
 }
