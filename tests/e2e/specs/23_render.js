@@ -30,12 +30,14 @@ async function check(s, where, hits) {
   if (r.length) hits.push(where + ' → ' + r.join(' | '));
 }
 
-module.exports = [{
-  id: 'RENDER-01', module: 'Säkerhet', kind: 'ui',
-  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin, arbetsledare, ekonomi, fält)',
-  async run(t) {
+/* QA 2026-11-26 (fältsidorna): samma kontroll som tidigare, men uppdelad på
+   två test med två roller var. Fältsidorna fick flikar och chips som testet
+   klickar igenom, och hela körningen (fyra roller) gick över 90 s-gränsen per
+   test på en belastad maskin (87 s före, 93 s efter). Inga kontroller är
+   borttagna: samma roller, sidor, flikar, admin-flikar och dialoger. */
+async function runRoles(t, roles) {
     const hits = [];
-    for (const [role, vp] of [['admin', 'laptop'], ['chef', 'laptop'], ['ekonomi', 'laptop'], ['falt', 'iphone']]) {
+    for (const [role, vp] of roles) {
       const s = await t.world.session({ viewport: vp });
       await s.login(role);
       const pages = await s.eval(() => Object.keys(Auth.PAGE_PERMISSIONS || {}).filter((p) => Auth.canViewPage(p)));
@@ -78,5 +80,14 @@ module.exports = [{
       await s.context.close();
     }
     t.assert(hits.length === 0, 'markup visas som text: ' + hits.join(' ;; '));
-  }
+}
+
+module.exports = [{
+  id: 'RENDER-01', module: 'Säkerhet', kind: 'ui',
+  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, admin-flikar, detaljsidor och vanliga dialoger (admin, arbetsledare)',
+  run: (t) => runRoles(t, [['admin', 'laptop'], ['chef', 'laptop']]),
+}, {
+  id: 'RENDER-01B', module: 'Säkerhet', kind: 'ui',
+  name: 'Ingen betrodd markup visas som text efter XSS-escaping: alla sidor, detaljsidor och vanliga dialoger (ekonomi, fält)',
+  run: (t) => runRoles(t, [['ekonomi', 'laptop'], ['falt', 'iphone']]),
 }];
