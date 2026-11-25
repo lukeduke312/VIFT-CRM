@@ -49,16 +49,18 @@ module.exports = [
       await f.settle(1500);
       const mine = t.fake.get('activities').find((x) => x.id === 'ACT-E2E-MINE');
       t.assert(mine.status === 'done' && mine.completedBy === 'ST-004', 'egen tilldelad uppgift klarmarkerad på servern');
-      const res = await f.eval(async () => {
+      /* T3-D (2026-11-28, SÄK-2): annans uppgift lämnas inte längre ut till fältets klient, så
+         direktanropen använder serverns faktiska post (som en angripare som känner värdet). */
+      t.assert(!(await f.eval(() => state.activities.some((a) => a.id === 'ACT-E2E-OTHER'))), 'T3-D: annans uppgift finns inte i fältets klient (urval per post)');
+      const res = await f.eval(async (other) => {
         const call = (body) => fetch(SUPABASE_URL + '/functions/v1/store-key-write', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.status);
-        const other = state.activities.find((a) => a.id === 'ACT-E2E-OTHER');
         return {
           complete_other: await call({ action: 'writeMerge', key: 'vift_activities', upserts: [{ id: other.id, previous: other, data: Object.assign({}, other, { status: 'done', completedBy: 'ST-004' }) }], removals: [] }),
           forge_new: await call({ action: 'writeMerge', key: 'vift_activities', upserts: [{ id: 'ACT-E2E-FORGED', previous: null, data: { id: 'ACT-E2E-FORGED', title: 'X', assignedTo: 'ST-002', createdBy: 'ST-004', status: 'open' } }], removals: [] }),
           delete_other: await call({ action: 'writeMerge', key: 'vift_activities', upserts: [], removals: [{ id: other.id, previous: other }] }),
           full_write: await call({ action: 'write', key: 'vift_activities', value: [], expectedHash: null }),
         };
-      });
+      }, t.fake.get('activities').find((x) => x.id === 'ACT-E2E-OTHER'));
       t.note('direktanrop: ' + JSON.stringify(res));
       t.assert(Object.values(res).every((x) => x === 403), 'servern nekar alla fyra direktanrop (403)');
       const other = t.fake.get('activities').find((x) => x.id === 'ACT-E2E-OTHER');

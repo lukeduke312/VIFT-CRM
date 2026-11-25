@@ -187,6 +187,48 @@ function projectStaffRoles(key, value, perms, me, staffNow) {
   }
   return value;
 }
+/* ── T3-D (2026-11-28): urval per post — PARITET med den faktiska servern ──
+   Speglar vift-v2 supabase/migrations/20261128000006 (vift_store_full_access, vift_store_project,
+   _vift_post_refs m.fl.) och 20261128000007 (activity_log_append: typ och referens per behörighet).
+   Gäller nycklarna som T3-C/T3-D projicerar (personal, roller, aktivitetslogg, uppgifter, offerter,
+   kunder, fastigheter, objekt, kontakter). Övriga nycklar lämnas som tidigare (C-5 för t.ex.
+   inställningar och fakturor är inte modellerat i den simulerade servern). Ändras en regel i
+   servern ska den ändras här i samma ändring (SEC-SIM-01, tests/sim_parity.test.js). */
+const T3D_KUND = ['customer_manage', 'invoice_view', 'invoice_create', 'offer_manage', 'sales_manage', 'ao_view_all'];
+const T3D_KUND_LAS = T3D_KUND.concat(['ao_create', 'recurring_manage', 'reports_view']);
+const T3D_OFFER_INTERN = ['customer_manage', 'sales_manage', 'invoice_view', 'invoice_create', 'reports_view', 'ao_view_all', 'ao_edit', 'ao_create'];
+const T3D_SENS = ['doorCode', 'keyInformation', 'accessInformation', 'keyReceipt', 'alarmInformation', 'accessCode', 'keyInfo'];
+const T3D_STAFF_FIELDS = ['id', 'firstName', 'lastName', 'name', 'title', 'active', 'color', 'initials'];
+const T3D_OFFER_REF = ['id', 'title', 'status', 'workOrderId'];
+const T3D_EXTERN_OK = ['dashboard_view', 'ao_view_own', 'ao_time', 'ao_checklist', 'ao_start_own', 'ao_complete_own', 'objects_access_assigned', 'rondering_utfor'];
+const T3D_AO_LOG = ['work_order_created', 'work_order_updated', 'work_order_status', 'work_order_assigned', 'work_order_archived', 'work_order_restored',
+  'work_order_deleted', 'work_order_permanent_delete', 'staff_assigned', 'material_added', 'material_removed', 'time_entry_created', 'note'];
+const T3D_KEYS = ['vift_staff', 'vift_roles', 'vift_activityLog', 'vift_activities', 'vift_offers', 'vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts'];
+const anyOf = (p, list) => list.some((x) => p.includes(x));
+const pick = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => keys.includes(k)));
+const omit = (e, keys) => Object.fromEntries(Object.entries(e).filter(([k]) => !keys.includes(k)));
+const taskAo = (t) => (t && t.relatedType === 'workOrder' && t.relatedId ? String(t.relatedId) : (t && t.workOrderId ? String(t.workOrderId) : ''));
+/* vift_store_full_access (T3-C + T3-D). keyPerms = serverns KEY_PERMISSIONS (skrivrätt = hela värdet). */
+function t3dFull(key, perms, keyPerms) {
+  const p = Array.isArray(perms) ? perms : [];
+  if (p.includes('all')) return true;
+  const wp = keyPerms[key]; if (wp && p.includes(wp)) return true;
+  switch (key) {
+    case 'vift_offers': case 'vift_offerEvents': case 'vift_offerAttachments': return p.includes('offer_manage');
+    case 'vift_invoices': return anyOf(p, ['invoice_view', 'invoice_create', 'reports_view', 'ao_view_all', 'ao_edit']);
+    case 'vift_salesOpps': return anyOf(p, ['sales_manage', 'reports_view']);
+    case 'vift_contracts': return anyOf(p, ['customer_manage', 'invoice_view', 'invoice_create', 'reports_view']);
+    case 'vift_customers': return anyOf(p, T3D_KUND) && p.includes('objects_sensitive');
+    case 'vift_propertyObjects': case 'vift_recurringOrders': return p.includes('objects_sensitive');
+    case 'vift_staff': return anyOf(p, ['staff_manage', 'admin_manage']);
+    case 'vift_roles': return false;
+    case 'vift_activityLog': return p.includes('ao_view_all');
+    case 'vift_activities': return p.includes('ao_edit') && p.includes('ao_view_all');
+    case 'vift_properties': return p.includes('objects_sensitive') && anyOf(p, T3D_KUND);
+    case 'vift_propertyContacts': return anyOf(p, T3D_KUND);
+    default: return true;
+  }
+}
 const REST_ALLOW = ['vift_notifications', 'vift_lastChanged'];
 const directBlocked = (key) => DEFINITE(403, 'direct_write_blocked', { code: '42501', message: 'direct_write_blocked', key });
 
@@ -201,6 +243,10 @@ function edgeModules() {
   const src = require('../lib/serverkalla').serverPath('functions', 'store-key-write'); // KÄLLA-1: vift-v2/supabase
   execFileSync('tsc', ['--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', path.join(src, 'activities-policy.ts'), path.join(src, 'activity-log.ts')], { stdio: 'pipe' });
   _edgeMods = { policy: require(path.join(out, 'activities-policy.js')), activityLog: require(path.join(out, 'activity-log.js')) };
+  /* T3-D: serverns KEY_PERMISSIONS (skrivrätt = hela värdet i projektionen), utläst ur källan. */
+  const m = /const KEY_PERMISSIONS: Record<string, string> = \{([\s\S]*?)\n\}/.exec(fs.readFileSync(path.join(src, 'index.ts'), 'utf8'));
+  _edgeMods.keyPerms = {};
+  if (m) m[1].replace(/^\s*(vift_\w+)\s*:\s*'([a-z_]+)'/gm, (_, k, v) => { _edgeMods.keyPerms[k] = v; return ''; });
   return _edgeMods;
 }
 
@@ -286,6 +332,82 @@ class FakeSupabase {
     return this.has(perms, 'ao_view_own') && !isTrue(ao.deleted) && !isTrue(ao.archived) && isAssigned(ao, staffId);
   }
   canWriteAO(ao, perms, staffId) { return !!ao && (this.has(perms, 'ao_view_all') || isAssigned(ao, staffId)); }
+  /* T3-D: _vift_post_refs — AO som anroparen ser med innehåll (inte öppen pool, Q3) och vad de refererar. */
+  t3dRefs(perms, staffId) {
+    const aos = (this.get('workOrders') || []).filter((a) => a && a.id && this.canViewAOContent(a, perms, staffId));
+    const uniq = (l) => [...new Set(l.filter((x) => x != null && String(x) !== '').map(String))];
+    const aoIds = uniq(aos.map((a) => a.id));
+    return {
+      ao: aoIds,
+      customers: uniq(aos.map((a) => a.customerId)), properties: uniq(aos.map((a) => a.propertyId)), objects: uniq(aos.map((a) => a.objectId)),
+      offers: uniq(aos.map((a) => a.offerId).concat((this.get('offers') || []).filter((o) => o && o.id && aoIds.includes(String(o.workOrderId || ''))).map((o) => o.id))),
+      staff: uniq(aos.flatMap((a) => aoStaffOf(a).concat([a.responsibleStaffId]))),
+    };
+  }
+  /* T3-D: vift_store_project för nycklarna i T3D_KEYS (T3-C:s regel för roller oförändrad). */
+  t3dProject(key, value, perms, me) {
+    const p = Array.isArray(perms) ? perms : [];
+    if (value === null || value === undefined || !T3D_KEYS.includes(key)) return value;
+    if (key === 'vift_roles') return projectStaffRoles(key, value, perms, me, this.get('staff'));
+    if (t3dFull(key, p, edgeModules().keyPerms)) return value;
+    if (!Array.isArray(value)) return value;
+    const id = me && me.id ? String(me.id) : '';
+    const obj = (e) => e && typeof e === 'object' && !Array.isArray(e);
+    const refs = () => this.t3dRefs(p, id);
+    if (key === 'vift_staff') {
+      const ext = !p.some((x) => !T3D_EXTERN_OK.includes(x));
+      const sv = p.includes('staff_view');
+      const r = ext && !sv ? refs() : { staff: [] };
+      return value.filter((e) => obj(e) && (String(e.id) === id || !ext || sv || r.staff.includes(String(e.id))))
+        .map((e) => (String(e.id) === id ? e : pick(e, T3D_STAFF_FIELDS.concat(sv ? ['role'] : [], ext ? [] : ['phone', 'email']))));
+    }
+    if (!id) return [];
+    if (key === 'vift_offers') {
+      if (anyOf(p, T3D_OFFER_INTERN)) return value; // C-5:s interna projektion är inte modellerad (oförändrat)
+      const r = refs();
+      return value.filter((e) => obj(e) && r.offers.includes(String(e.id || ''))).map((e) => pick(e, T3D_OFFER_REF));
+    }
+    if (['vift_customers', 'vift_properties', 'vift_propertyObjects', 'vift_propertyContacts'].includes(key)) {
+      const las = anyOf(p, T3D_KUND_LAS);
+      const r = las ? null : refs();
+      const syns = (e) => !r || (key === 'vift_customers' ? r.customers.includes(String(e.id || ''))
+        : key === 'vift_properties' ? r.properties.includes(String(e.id || ''))
+          : key === 'vift_propertyObjects' ? r.objects.includes(String(e.id || ''))
+            : r.properties.includes(String(e.propertyId || '')) && (!e.objectId || r.objects.includes(String(e.objectId))));
+      return value.filter((e) => obj(e) && syns(e)).map((e) => {
+        if (key !== 'vift_customers') return omit(e, T3D_SENS);
+        if (anyOf(p, T3D_KUND)) return omit(e, T3D_SENS);
+        return omit(e, T3D_SENS.concat(['personnr'], ['privat', 'private', 'privatperson'].includes(String(e.type || '').toLowerCase()) ? ['orgNr'] : []));
+      });
+    }
+    if (key === 'vift_activityLog') {
+      const r = refs();
+      return value.filter((e) => obj(e) && T3D_AO_LOG.includes(e.type) && r.ao.includes(String(e.workOrderId || '')) && !e.offerId && !e.invoiceId && !e.salesOpportunityId);
+    }
+    if (key === 'vift_activities') {
+      const r = (p.includes('ao_view_own') || p.includes('ao_view_all')) ? this.t3dRefs(['ao_view_own'], id) : { ao: [] };
+      return value.filter((e) => obj(e) && (String(e.createdBy || '') === id || String(e.assignedTo || '') === id || r.ao.includes(taskAo(e))));
+    }
+    return value;
+  }
+  /* T3-D: _vift_ref_visible (appendActivity, D-22). */
+  t3dRefVisible(field, refId, perms, r) {
+    const p = Array.isArray(perms) ? perms : [];
+    if (p.includes('all')) return true;
+    const kp = edgeModules().keyPerms;
+    switch (field) {
+      case 'workOrderId': return p.includes('ao_view_all') || r.ao.includes(refId);
+      case 'customerId': return anyOf(p, T3D_KUND_LAS) || r.customers.includes(refId);
+      case 'propertyId': return anyOf(p, T3D_KUND_LAS) || r.properties.includes(refId);
+      case 'offerId': return anyOf(p, ['offer_manage'].concat(T3D_OFFER_INTERN)) || r.offers.includes(refId);
+      case 'invoiceId': return t3dFull('vift_invoices', p, kp);
+      case 'salesOpportunityId': return t3dFull('vift_salesOpps', p, kp);
+      case 'inspectionId': return t3dFull('vift_inspections', p, kp);
+      case 'ronderingId': return t3dFull('vift_ronderingar', p, kp);
+      case 'deviationId': return t3dFull('vift_avvikelser', p, kp);
+      default: return false;
+    }
+  }
   /* Fel-injektion: första matchande regel som har kvarvarande gånger. */
   fault(action) {
     const f = this.faults.find((x) => (typeof x.match === 'function' ? x.match(action) : x.match.test(action)) && (x.times == null || x.times > 0));
@@ -366,7 +488,9 @@ class FakeSupabase {
         const LOCKED = ['vift_workOrders', 'vift_timeEntries'];
         /* T3-C (D-21): vift_staff bara för staff_manage/admin_manage, vift_roles bara för admin_manage (RLS store_read_by_role). */
         const rp = this.permsFor(session.email);
-        const restHidden = (k) => LOCKED.includes(k) || (k === 'vift_staff' && !(this.has(rp, 'staff_manage') || this.has(rp, 'admin_manage'))) || (k === 'vift_roles' && !this.has(rp, 'admin_manage'));
+        /* T3-D: även aktivitetslogg, uppgifter, offerter, kunder, fastigheter, objekt och kontakter
+           döljs för roller utan full åtkomst (store_read_by_role → vift_store_full_access). */
+        const restHidden = (k) => LOCKED.includes(k) || (T3D_KEYS.includes(k) && !t3dFull(k, rp, edgeModules().keyPerms));
         if (key) return { status: 200, body: restHidden(key) || !this.store.has(key) ? [] : [{ value: clone(this.store.get(key)) }] };
         return { status: 200, body: [...this.store.entries()].filter(([k]) => !restHidden(k)).map(([k, v]) => ({ key: k, value: clone(v) })) };
       }
@@ -503,13 +627,13 @@ class FakeSupabase {
         (body.keys || []).concat(['vift_lastChanged']).forEach((fk) => {
           if (READ_LOCKED.includes(fk) || !this.store.has(fk)) return;
           const v = clone(this.store.get(fk));
-          data[fk.replace(/^vift_/, '')] = projectStaffRoles(fk, v, perms, me, this.get('staff')); hashes[fk] = sha(v);
+          data[fk.replace(/^vift_/, '')] = this.t3dProject(fk, v, perms, me); hashes[fk] = sha(v);
         });
         return { status: 200, body: { data, hashes } };
       }
       case 'readWithHash': {
         if (READ_LOCKED.includes(body.key)) return DEFINITE(403, 'forbidden');
-        const v = clone(this.store.get(body.key)); return { status: 200, body: { value: projectStaffRoles(body.key, v, perms, me, this.get('staff')), hash: sha(v) } };
+        const v = clone(this.store.get(body.key)); return { status: 200, body: { value: this.t3dProject(body.key, v, perms, me), hash: sha(v) } };
       }
       case 'readHashes': {
         const hashes = {}; (body.keys || []).forEach((fk) => { if (!READ_LOCKED.includes(fk)) hashes[fk] = sha(this.store.get(fk)); });
@@ -533,6 +657,14 @@ class FakeSupabase {
         if (!this.opts.activityAppend) return DEFINITE(400, 'unknown_action');
         const built = edgeModules().activityLog.buildActivityEntry(body.entry, me.id, new Date().toISOString());
         if (!built.ok) return DEFINITE(400, built.error);
+        /* T3-D (D-22): typen per behörighet och referenserna mot det anroparen får se. */
+        if (!edgeModules().activityLog.typeAllowed(built.entry.type, perms)) return REGEL(403, 'forbidden', 'type_not_allowed');
+        {
+          const r = this.t3dRefs(perms, me.id);
+          for (const f of edgeModules().activityLog.REF_FIELDS) {
+            if (built.entry[f] && !this.t3dRefVisible(f, String(built.entry[f]), perms, r)) return REGEL(403, 'forbidden', 'ref_not_visible');
+          }
+        }
         const log = this.get('activityLog') || [];
         if (!log.some((e) => e && e.id === built.entry.id)) { log.unshift(built.entry); this.set('activityLog', log.slice(0, 500)); this.touch(); }
         return { status: 200, body: { ok: true, id: built.entry.id } };
@@ -540,9 +672,14 @@ class FakeSupabase {
       case 'writeMerge': {
         if (!this.isBusinessKey(body.key)) return DEFINITE(403, 'key_not_allowed');
         if (this.opts.activityAppend && body.key === 'vift_activityLog') return DEFINITE(403, 'append_only');
-        const policyOk = this.opts.activitiesPolicy && body.key === 'vift_activities'
-          && edgeModules().policy.activitiesWriteAllowed(body.upserts || [], body.removals || [], perms.includes('all') ? ['all'] : perms, me.id).ok;
-        if (!policyOk && !this.canWriteKey(body.key, perms)) return DEFINITE(403, 'forbidden');
+        const pol = this.opts.activitiesPolicy && body.key === 'vift_activities'
+          ? edgeModules().policy.activitiesWriteAllowed(body.upserts || [], body.removals || [], perms.includes('all') ? ['all'] : perms, me.id) : null;
+        const policyOk = !!(pol && pol.ok);
+        if (!policyOk && !this.canWriteKey(body.key, perms)) {
+          /* T3-D (D-15): orsaken enligt felkodskatalogen (not_own, field_<fält> …). */
+          const reason = pol ? edgeModules().policy.activitiesRefusal(pol.reason) : null;
+          return reason ? REGEL(403, 'forbidden', reason) : DEFINITE(403, 'forbidden');
+        }
         const arr = clone(this.store.get(body.key)) || [];
         const ids = arr.map((e) => e && e.id).filter((x) => x != null);
         if (new Set(ids).size !== ids.length) return DEFINITE(409, 'duplicate_id_in_store');
@@ -566,7 +703,12 @@ class FakeSupabase {
           if (deny) return deny;
         }
         this.store.set(body.key, arr); this.touch();
-        return { status: 200, body: { current: clone(arr), conflicts, hash: sha(arr) } };
+        /* T3-D: svaret projiceras som en läsning; en konflikt mot en post som anroparen inte får se
+           lämnar inte ut serverns värde. */
+        const synliga = this.t3dProject(body.key, clone(arr), perms, me);
+        const synligaId = new Map((Array.isArray(synliga) ? synliga : []).filter((e) => e && e.id != null).map((e) => [String(e.id), e]));
+        const konf = conflicts.map((c) => (c.current == null ? c : Object.assign({}, c, { current: synligaId.has(String(c.id)) ? synligaId.get(String(c.id)) : null })));
+        return { status: 200, body: { current: synliga, conflicts: konf, hash: sha(arr) } };
       }
       case 'getStampStatus': {
         const s = this.stamp.get(email);
@@ -862,11 +1004,11 @@ class FakeSupabase {
       case 'taxReductionSet': { const tr = b.taxReduction || b; inv.taxReduction = { type: tr.type, amount: tr.amount, basis: tr.basis, note: tr.note }; break; }
       case 'metaUpdate': Object.assign(inv, clone(b.patch)); break;
       case 'setStatus': inv.status = b.status; break;
-      case 'draftDelete': { const i = invs.indexOf(inv); invs.splice(i, 1); save(); return { status: 200, body: { ok: true, activityLog: this.get('activityLog') } }; }
+      case 'draftDelete': { const i = invs.indexOf(inv); invs.splice(i, 1); save(); return { status: 200, body: { ok: true, activityLog: this.t3dProject('vift_activityLog', this.get('activityLog'), perms, me) } }; }
       default: return DEFINITE(400, 'unknown_action');
     }
     bump(); save();
-    return { status: 200, body: { invoice: inv, activityLog: this.get('activityLog'), changed: true } };
+    return { status: 200, body: { invoice: inv, activityLog: this.t3dProject('vift_activityLog', this.get('activityLog'), perms, me), changed: true } };
   }
 
   /* ── rondering-pass-write (MODELL) ───────────────────────────

@@ -432,17 +432,17 @@ module.exports = [
       const f = await t.world.session({ viewport: 'iphone' });
       await f.login('falt');
       await f.go('pg-activities');
-      const ids = await f.eval(() => {
-        const open = state.activities.filter((a) => a.status === 'open');
-        return { mine: open.find((a) => a.assignedTo === 'ST-002').id, other: open.find((a) => a.assignedTo === 'ST-003').id };
-      });
+      /* T3-D (2026-11-28, SÄK-2/D-15): annans uppgift lämnas inte längre ut till fältet (urval per
+         post), så den visas inte alls — skärpt jämfört med tidigare (inaktiverad rad). Uppgifter
+         som syns via egen AO men tillhör någon annan prövas i T3D-01 (läsbara, inte klarmarkerbara). */
+      const ids = { mine: (t.fake.get('activities') || []).find((a) => a.status === 'open' && a.assignedTo === 'ST-002').id,
+        other: (t.fake.get('activities') || []).find((a) => a.status === 'open' && a.assignedTo === 'ST-003').id };
       const st = await f.eval((x) => {
         const btn = (id) => [...document.querySelectorAll('#act-list tr.rg-row')].map((tr) => tr.querySelector('.rg-check')).find((b) => b && (b.getAttribute('onclick') || '').includes('("' + id + '")'));
-        const other = [...document.querySelectorAll('#act-list .rg-check:disabled')];
-        return { mine: !!btn(x.mine) && !btn(x.mine).disabled, disabled: other.length };
+        return { mine: !!btn(x.mine) && !btn(x.mine).disabled, otherRow: !!btn(x.other), otherInState: state.activities.some((a) => a.id === x.other) };
       }, ids);
-      t.assert(st.mine && st.disabled > 0, 'egen uppgift klickbar, andras inaktiverade: ' + JSON.stringify(st));
-      await f.page.locator('#act-list .rg-check:disabled').first().click({ force: true }).catch(() => {});
+      t.assert(st.mine && !st.otherRow && !st.otherInState, 'egen uppgift klickbar; annans uppgift varken i klientens tillstånd eller i listan (T3-D): ' + JSON.stringify(st));
+      await f.eval((id) => ActivitiesPage.toggleComplete(id), ids.other);
       await f.settle(500);
       t.assert(t.fake.get('activities').find((a) => a.id === ids.other).status === 'open', 'annans uppgift orörd');
       await f.page.locator('#act-list .rg-check[onclick*=\'("' + ids.mine + '")\']').click();

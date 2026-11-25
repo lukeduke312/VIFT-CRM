@@ -99,15 +99,20 @@ module.exports = [
       t.fake.set('activities', acts);
       const NYCKLAR = ['offers', 'customers', 'activities', 'salesOpps', 'settings', 'articles'];
       const ks = () => JSON.stringify(NYCKLAR.map((k) => t.fake.get(k)));
-      const direkt = (s) => s.eval(async () => {
+      /* T3-D (2026-11-28): fält och ekonomi får inte längre andras uppgifter eller offerter i
+         läsningen (urval per post), så direktanropen använder serverns faktiska poster — som en
+         angripare som känner värdet. Nekandet prövas alltså lika hårt som förut. */
+      const srv = () => ({ offers: (t.fake.get('offers') || [])[0], customers: (t.fake.get('customers') || [])[0], salesOpps: (t.fake.get('salesOpps') || [])[0],
+        articles: (t.fake.get('articles') || [])[0], annan: (t.fake.get('activities') || []).find((a) => a.id === 'ACT-PERM03') });
+      const direkt = (s) => s.eval(async (SRV) => {
         const call = async (body) => {
           const r = await fetch(SUPABASE_URL + '/functions/v1/store-key-write', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           let d = {}; try { d = await r.json(); } catch (e) {}
           return { status: r.status, error: d.error, reason: d.reason };
         };
         const las = async (key) => { const r = await fetch(SUPABASE_URL + '/functions/v1/store-key-write', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.getAccessToken(), apikey: SUPABASE_AKEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'readWithHash', key }) }); return r.json(); };
-        const merge = async (key, patch) => { const cur = (await las(key)).value || []; const el = cur[0]; return call({ action: 'writeMerge', key, upserts: [{ id: el.id, previous: el, data: Object.assign({}, el, patch) }], removals: [] }); };
-        const annan = ((await las('vift_activities')).value || []).find((a) => a.id === 'ACT-PERM03');
+        const merge = async (key, patch) => { const el = SRV[key.slice(5)]; return call({ action: 'writeMerge', key, upserts: [{ id: el.id, previous: el, data: Object.assign({}, el, patch) }], removals: [] }); };
+        const annan = SRV.annan;
         const inst = await las('vift_settings');
         return {
           offers_price: await merge('vift_offers', { total: 1, lines: [] }),
@@ -117,7 +122,7 @@ module.exports = [
           settings_write: await call({ action: 'write', key: 'vift_settings', value: Object.assign({}, inst.value, { companyName: 'Kapat AB' }), expectedHash: inst.hash }),
           articles: await merge('vift_articles', { sellPrice: 1 }),
         };
-      });
+      }, srv());
       const NEKAT = (r) => r.status === 403 && r.error === 'forbidden' && r.reason === undefined;
       // Fältarbetare (personal): saknar alla nycklarnas skrivbehörighet.
       const f = await t.world.session({ viewport: 'laptop' });
@@ -125,14 +130,19 @@ module.exports = [
       let fore = ks();
       let res = await direkt(f);
       t.note('fält: ' + JSON.stringify(res));
-      t.assert(Object.values(res).every(NEKAT), 'fält: alla sex direktanrop nekas med exakt 403 forbidden (ingen reason), som serverns hasPerm/KEY_PERMISSIONS: ' + JSON.stringify(res));
+      /* T3-D (D-15, felkodskatalogen): annans uppgift nekas nu med orsaken not_own; övriga nycklar
+         saknar behörighet helt (403 forbidden utan reason). */
+      const NOT_OWN = (r) => r.status === 403 && r.error === 'forbidden' && r.reason === 'not_own';
+      const nekadeUtomUppgift = (r) => Object.entries(r).every(([k, v]) => (k === 'activities_other' ? NOT_OWN(v) : NEKAT(v)));
+      t.assert(nekadeUtomUppgift(res), 'fält: alla sex direktanrop nekas med exakt 403 forbidden (utan reason; annans uppgift med reason not_own, T3-D), som serverns hasPerm/KEY_PERMISSIONS och activities-policy.ts: ' + JSON.stringify(res));
       t.assert(ks() === fore, 'fält: offerter, kunder, uppgifter, säljchanser, inställningar och artiklar är oförändrade (kontrollsumma)');
+      t.assert(!(await f.eval(() => (state.activities || []).some((a) => a.id === 'ACT-PERM03'))), 'T3-D (SÄK-2): fältets klient har inte fått annans uppgift (urval per post)');
       // Ekonomi: inte customer_manage/offer_manage/sales_manage/admin_manage/article_manage.
       const e = await t.world.session({ viewport: 'laptop' });
       await e.login('ekonomi');
       fore = ks();
       res = await direkt(e);
-      t.assert(Object.values(res).every(NEKAT) && ks() === fore, 'ekonomi: samma sex direktanrop nekas med 403 forbidden, ingen mutation: ' + JSON.stringify(res));
+      t.assert(nekadeUtomUppgift(res) && ks() === fore, 'ekonomi: samma sex direktanrop nekas med 403 forbidden (annans uppgift: not_own, D-15/SEC-CUST-21), ingen mutation: ' + JSON.stringify(res));
       // Arbetsledare (chef): customer_manage, offer_manage, sales_manage men inte admin_manage/article_manage.
       const c = await t.world.session({ viewport: 'laptop' });
       await c.login('chef');
