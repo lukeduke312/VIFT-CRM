@@ -22,7 +22,7 @@ Läget gäller STAGING med v3.4. LIVE saknar alla serverändringar sedan 2026-11
 | 4 | **Inget skydd mot att inaktivera sig själv eller sista superadministratören.** | Utelåsning, återställning kräver databasingrepp. | Serverregel i skrivvägen för personal och roller: neka om 0 aktiva med `all` blir kvar. Klientvarning. | S–M | – |
 | 5 | **`vift_settings` skrivs som en helhet.** | Två administratörer som ändrar samtidigt skriver över varandra, till exempel färg och bankgiro. | Fältvis sammanslagning eller hash-kontroll för settings i `store-key-write`, samma mekanism som B5. | M | B5 |
 | 6 | **Behörighetsbeslut B1–B5** och Ö1–Ö7 (se `BEHORIGHETER-BESLUTSUNDERLAG.md`). | Inköpspriser, aktivitetslogg och portkoder för vissa roller är läsbara. | Beslut, sedan en serveromgång. | M–L | Beslut |
-| 7 | **PERM-03/BLOCKER-2**: skrivbehörighet per nyckel för generiska nycklar är inte verifierad per roll. **4 databastester (PostgreSQL) har aldrig körts** i testmiljön. | Okänd skrivrätt. Databasregler är bara testade indirekt. | Riktigt rolltest mot STAGING (skriv och återställ per nyckel och roll). Kör PostgreSQL-testerna i en miljö med Postgres, eller mot en STAGING-gren. | M | – |
+| 7 | **PERM-03/BLOCKER-2**: bara "skapa ny post" är prövat mot riktig STAGING (36/36: 9 register × 4 roller). Ändring och borttagning, hel nyckel, fältnivå och `vift_settings` är inte prövade. **4 databastester (PostgreSQL) har aldrig körts** i testmiljön. | Okänd skrivrätt. Databasregler är bara testade indirekt. | Riktigt rolltest mot STAGING (skriv och återställ per nyckel och roll). Kör PostgreSQL-testerna i en miljö med Postgres, eller mot en STAGING-gren. | M | – |
 | 8 | **Standardrollerna saknas i STAGING:s rollregister.** Nya personalposter får rollen `personal`, som inte finns där. | Nya användare får inga behörigheter (felet stänger åtkomsten i stället för att öppna den). Skiljer sig troligen från LIVE. | Definiera rollerna personal, arbetsledare och ekonomi i STAGING och jämför med LIVE (läsning kräver ditt OK). | S | – |
 
 ## P2 – påverkar vardagen
@@ -54,7 +54,7 @@ Läget gäller STAGING med v3.4. LIVE saknar alla serverändringar sedan 2026-11
 | 26 | Dashboardlayouten är per enhet, inte per konto | Produktbeslut: synk via server |
 | 27 | Datum- och tidsfält på riktig svensk telefon (F-24) | Manuell kontroll |
 | 28 | Testverktyg: RENDER-01 är långsam. Ögonblicksbilden i `e2e-real` kan läsa "ä" fel (falsklarm 2026-11-25). Proxyn i testmiljön tappar ibland enstaka filer. | Dela upp eller cacha, rätta UTF-8-avkodningen i ögonblicksbilden, upprepa hämtningar |
-| 29 | `supabase/migrations/` finns inte i VIFT-CRM-repot, och serverkällor (t.ex. `work_order_create`, `invoice-write`) saknas | Samla serverkoden i ett repo med fullständig migrationshistorik |
+| 29 | Serverkällor saknas i båda repona: `work_order_create`, displayNumber-migrationen, `invoice-write` och `rondering-pass-write` (G1/G4). Migrationerna finns (21 filer här, 24 i `vift-v2`; 20261125000002–04 bara i `vift-v2`). | Hämta källorna från installerade STAGING (läsning) och samla allt i ett repo med fullständig migrationshistorik. Det är en förutsättning för #2. |
 | 30 | Testdata: QA-LOAD med flera (cirka 1 000 poster av okänt ursprung), E2E-konton | Beslut om verifierad rensning. Avveckla E2E-konton när uppdraget är klart. |
 | 31 | Materialrad med 0 kr (C-6), inte reproducerad | Bevaka |
 | 32 | AO-07 (G5) i den simulerade servermodellen. Riktig STAGING är grön (F4). | Uppdatera den simulerade modellen |
