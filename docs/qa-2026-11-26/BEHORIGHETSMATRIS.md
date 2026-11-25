@@ -29,6 +29,7 @@ Testplan och paketordning: `SAKERHETSPROVNING-TESTPLAN.md`.
      - `DashboardConfig.js:334`, `Dashboard.js:56/558/664` (layoutförval);
      - `ImportExportConfigs.js:520-522` (importmappning);
      - `PageShells.js:9184/9303` (reservlista i personaldialogen).
+   - **T3-E (lokalt verifierad):** `VIFT-CRM/tests/rollnamn_guard.test.js` och `vift-v2/tests/t3e_standard_roles.test.js` underkänner varje jämförelse eller nytt förval med ett standardroll-id i klienten, Edge Functions och T3-migrationerna; bara förvalen ovan (och `schema.js` förvald roll för ny personal) är tillåtna, och ingen av dem står på en rad med en behörighetskontroll.
    - Serverpolicyn `store_admin_write_protected` använder flaggan `app_users.is_admin`, inte ett rollnamn. Den är PERMISSIVE och ändrar inte de RESTRICTIVE affärsnyckelreglerna.
 3. **Servern bestämmer.** Klientkontroller är presentation och räknas aldrig som skydd. Varje regel nedan har ett angivet verkställande lager.
 4. **Kontroller som påverkas av samtidighet görs i RPC:n under radlås** (`SELECT … FOR UPDATE` på berörd `store`-rad, eller `pg_advisory_xact_lock` när flera nycklar berörs). En kontroll i Edge Function före RPC-anropet räcker inte. Det gäller till exempel tilldelning och status i `work_order_patch`, "Ta jobbet", stämpling och tid på tilldelad AO, materialrader, superadmininvarianten och fältvis sammanslagning.
@@ -82,6 +83,8 @@ Testplan och paketordning: `SAKERHETSPROVNING-TESTPLAN.md`.
 | `bankgiro_edit` | Ändra bankgiro och betalningsuppgifter i `vift_settings` | D-17 | `store-key-write` + RPC (fältvis sammanslagning av settings) | admin* |
 
 \* admin har `all`.
+
+**Nuläge 2026-11-28 (T3-E, lokalt verifierad):** `ao_start_own`, `ao_complete_own` och `ao_pool_take` verkställs (T3-B). Övriga tio nya behörigheter (`ao_plan_own`, `cost_view`, `cost_edit`, `time_view_all`, `bankgiro_edit`, `personal_data_view`, `objects_access_assigned`, `rondering_utfor`, `export_data`, `export_personal_data`) finns i katalogen och i standardrollerna men är **verkningslösa** tills respektive paket (AO-etappen, T4-A–T4-F) har sin serverkontroll: de står i serverns register `_vift_ej_verkstallda()` (vift-v2 `20261128000008`) och räknas inte i någon regel; en roll som får dem får exakt samma åtkomst som utan dem (bevisat i `vift-v2/tests/t3e_standard_roles.test.js` och e2e T3E-06). Rolleditorn märker dem "verkställs i <paket>". Ett T4-paket som verkställer en behörighet tar bort den ur registret i sin migration.
 
 **Superadmin (D-25):**
 - Superadmin = aktiv personal vars roll innehåller `all`.
@@ -156,6 +159,8 @@ Id: `admin`, `chef` (etikett "Arbetsledare"), `ekonomi`, `personal`, `begransad`
 | `export_personal_data` | ✔ | | | | |
 
 "(separat)" betyder att behörigheten **inte** ingår som standard men kan läggas till för en enskild person eller en egen roll (D-04).
+
+**Nuläge 2026-11-28 (T3-E, lokalt verifierad):** tabellen finns som installerbar definition `vift-v2/supabase/manual/t3e_standardroller/standardroller.json` (testet `VIFT-CRM/tests/rollnamn_guard.test.js` jämför den med tabellen ovan, bara ✔). Installationen är ett manuellt skript (A läsande plan, B installera, C rollback med expectedHash, D övergångsregeln) som bara lägger till saknade roller, aldrig skriver över eller tar bort roller och aldrig ändrar personalposter. Inget är installerat i STAGING. Klientens demoroller och den simulerade serverns seed är samma fem roller.
 
 ---
 
@@ -593,29 +598,29 @@ Varje rad är en **egen roll** = standardroll minus en enskild behörighet, elle
 
 | ID | Egen roll | Prövas | Förväntat |
 |---|---|---|---|
-| SEC-CUST-01 | `chef` − `cost_view` | Inköpspris och TB i EF, UI och export | Saknas (SEC-B1-12) |
-| SEC-CUST-02 | `chef` − `cost_edit` | Komplettera inköpspris | 403 `field_protected` |
-| SEC-CUST-03 | `chef` − `objects_sensitive` | Portkod i register, AO, export och som skrivare | Saknas (SEC-B5-01..03) |
-| SEC-CUST-04 | `chef` − `invoice_create` | `invoice-write` | 403 `forbidden` |
-| SEC-CUST-05 | `chef` − `time_view_all` | `time-entries-list` | Bara egna |
-| SEC-CUST-06 | `chef` − `export_data` | All export | SEC-EXP-01 |
-| SEC-CUST-07 | `ekonomi` − `payroll_manage` | `attest_time` | 403 `forbidden` |
-| SEC-CUST-08 | `ekonomi` − `personal_data_view` | Personnummer | Saknas |
-| SEC-CUST-09 | `personal` − `ao_pool_take` | Poolprojektion, tagning | Ingen pool. 403 `forbidden`. |
-| SEC-CUST-10 | `personal` − `ao_complete_own` | Klarmarkera egen | 403 `forbidden` |
-| SEC-CUST-11 | `personal` − `ao_start_own` | Starta egen | 403 `forbidden` |
-| SEC-CUST-12 | `personal` − `ao_time` | `create_time`, stämpling | 403 `forbidden` |
-| SEC-CUST-13 | `personal` − `ao_material` | Materialrad | 403 `forbidden` |
-| SEC-CUST-14 | `personal` − `objects_access_assigned` | `get-sensitive-fields` för egen AO | 403 + `denied`-rad |
-| SEC-CUST-15 | `personal` − `rondering_utfor` | Eget pass | 403 `forbidden` |
-| SEC-CUST-16 | `begransad` + `ao_time` | Tid på egen AO / på öppen pool | 200 / 403 `not_assigned` |
-| SEC-CUST-17 | `begransad` + `objects_access_assigned` | Åtkomstinformation för egen AO | 200 + `allowed`-rad |
-| SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 **Lokalt grön (T3-C).** |
-| SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 **Lokalt grön (T3-C)** för `all` och `bankgiro_edit` som tillägg i en roll; SEC-INST-03 är T4. |
-| SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) |
-| SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) **Lokalt grön (T3-D: ekonomi och egen roll säljare, E och S).** |
-| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. **Lokalt grön (T3-C):** store-key-write, work-orders-list, time-entries-list, ao-time-write, invoice-write. |
-| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). **Lokalt grön (T3-C)** i samma EF:er; klienten sedan T3-A. |
+| SEC-CUST-01 | `chef` − `cost_view` | Inköpspris och TB i EF, UI och export | Saknas (SEC-B1-12) **T3-E: verkningslös nu (lokalt bevisat), verkställs i T4-A/B.** |
+| SEC-CUST-02 | `chef` − `cost_edit` | Komplettera inköpspris | 403 `field_protected` **T3-E: verkningslös nu (lokalt bevisat), verkställs i T4-A/B.** |
+| SEC-CUST-03 | `chef` − `objects_sensitive` | Portkod i register, AO, export och som skrivare | Saknas (SEC-B5-01..03) **T3-E: lokalt grön för get-sensitive-fields (403 + denied-rad) och läsprojektionen; skrivaren (`customer_manage`) får fortfarande portkoden i registret — T4-A (SÄK-7).** |
+| SEC-CUST-04 | `chef` − `invoice_create` | `invoice-write` | 403 `forbidden` **Lokalt grön (T3-E, standardroll − behörighet).** |
+| SEC-CUST-05 | `chef` − `time_view_all` | `time-entries-list` | Bara egna **T3-E: verkningslös nu (chef ser bara egna med och utan `time_view_all`), verkställs i T4-B (K-01).** |
+| SEC-CUST-06 | `chef` − `export_data` | All export | SEC-EXP-01 **T3-E: verkningslös nu på servern (ingen serverexport); klientexporten följer inte `export_data` förrän T4-F.** |
+| SEC-CUST-07 | `ekonomi` − `payroll_manage` | `attest_time` | 403 `forbidden` **Lokalt grön (T3-E).** |
+| SEC-CUST-08 | `ekonomi` − `personal_data_view` | Personnummer | Saknas **T3-E: verkningslös nu (lokalt bevisat), verkställs i T4-A.** |
+| SEC-CUST-09 | `personal` − `ao_pool_take` | Poolprojektion, tagning | Ingen pool. 403 `forbidden`. **Lokalt grön (T3-B, T3-E).** |
+| SEC-CUST-10 | `personal` − `ao_complete_own` | Klarmarkera egen | 403 `forbidden` **Lokalt grön (T3-B, T3-E).** |
+| SEC-CUST-11 | `personal` − `ao_start_own` | Starta egen | 403 `forbidden` **Lokalt grön (T3-B, T3-E).** |
+| SEC-CUST-12 | `personal` − `ao_time` | `create_time`, stämpling | 403 `forbidden` **Lokalt grön (T3-E: tid och stämpling).** |
+| SEC-CUST-13 | `personal` − `ao_material` | Materialrad | 403 `forbidden` **Lokalt grön (T3-E: 403 `forbidden`).** |
+| SEC-CUST-14 | `personal` − `objects_access_assigned` | `get-sensitive-fields` för egen AO | 403 + `denied`-rad **T3-E: verkningslös nu (403 + denied-rad med och utan), verkställs i T4-C.** |
+| SEC-CUST-15 | `personal` − `rondering_utfor` | Eget pass | 403 `forbidden` **T3-E: verkningslös nu, verkställs i T4-D.** |
+| SEC-CUST-16 | `begransad` + `ao_time` | Tid på egen AO / på öppen pool | 200 / 403 `not_assigned` **Lokalt grön (T3-B, T3-E).** |
+| SEC-CUST-17 | `begransad` + `objects_access_assigned` | Åtkomstinformation för egen AO | 200 + `allowed`-rad **T3-E: verkningslös nu (ingen åtkomstinformation, inga kollegors kontaktuppgifter), verkställs i T4-C.** |
+| SEC-CUST-18 | Endast `staff_manage` | Eskalering | SEC-ROLL-01/02 **Lokalt grön (T3-C).** **T3-E: grön även med standardrollerna.** |
+| SEC-CUST-19 | Endast `admin_manage` | `all`, `bankgiro_edit` | SEC-ROLL-03, SEC-INST-03 **Lokalt grön (T3-C)** för `all` och `bankgiro_edit` som tillägg i en roll; SEC-INST-03 är T4. **T3-E: grön även med standardrollerna.** |
+| SEC-CUST-20 | `ao_view_all` + `sales_manage` (utan `personal_data_view`) | Personnummer | Saknas (SEC-KUND-03) **T3-E: verkningslös nu; personnumret lämnas i dag ut till kundregistrets läsare (C-5) — T4-A.** |
+| SEC-CUST-21 | `ao_view_all` utan `ao_edit` | Ändra annans uppgift | 403 `not_own` (D-15) **Lokalt grön (T3-D: ekonomi och egen roll säljare, E och S).** **T3-E: grön även med standardrollerna.** |
+| SEC-CUST-22 | Tom behörighetslista | Alla EF | 200 med tomma listor, eller 403. Ingen data. **Lokalt grön (T3-C):** store-key-write, work-orders-list, time-entries-list, ao-time-write, invoice-write. **T3-E: grön även med standardrollerna.** |
+| SEC-CUST-23 | Roll som saknas i registret (personalpost med okänt roll-id) | Alla EF och klienten | Inga behörigheter (fail-closed). Klienten: lokalt grön (T3-A). **Lokalt grön (T3-C)** i samma EF:er; klienten sedan T3-A. **T3-E: grön även med standardrollerna.** |
 
 ---
 
@@ -626,7 +631,7 @@ Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i 
 | Beslut | Status | Genomslag i matrisen |
 |---|---|---|
 | D-01 | **Fastställt** | `cost_view`/`cost_edit` standard för admin, chef och ekonomi, och kan tas bort. Ger inte löneuppgifter. R16, R17, R25. |
-| D-02 | **Fastställt** | Id `admin`/`chef`/`ekonomi`/`personal`/`begransad`, ingen migrering av personal. §2. |
+| D-02 | **Fastställt** · lokalt verifierad (T3-E) | Id `admin`/`chef`/`ekonomi`/`personal`/`begransad`, ingen migrering av personal. §2. |
 | D-03 | **Fastställt** | `ao_start_own`/`ao_complete_own`/`ao_pool_take`. Låsta statusar. Servern sätter identitet och tid. R07, R08, R04. |
 | D-04 | **Fastställt** | Begränsad: egna AO. Tilläggsbehörigheter separat. §2, SEC-CUST-16/17. |
 | D-05 | **Fastställt** | `objects_sensitive` standard för chef, kan tas bort. `objects_access_assigned` för fält, även vid rondering. R48, R49. |
@@ -650,7 +655,7 @@ Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i 
 | D-23 | **Fastställt** | Atomisk borttagning vid permanent radering. Revision utan värde. R51. |
 | D-24 | **Fastställt** | AP-A–AP-G. Tilldelad pool är giltig. §3.1. |
 | D-25 | **Fastställt** | Superadmin = `all`. Eskaleringsregel. Atomisk invariant. R43. |
-| D-26 | **Fastställt** | Testkonton = standardroller, plus egna roller (§5.13). Skapas i STAGING först efter separat godkännande. |
+| D-26 | **Fastställt** · lokalt verifierad (T3-E) | Testkonton = standardroller, plus egna roller (§5.13). Skapas i STAGING först efter separat godkännande. |
 | AP-A | **Fastställt** | Kategoridefinitioner §3.1. Ingen breddning. |
 | AP-B | **Fastställt** | Tid och stämpling bara på tilldelad AO. R06, R26. |
 | AP-C | **Fastställt** | Gemensamma räknardefinitioner (AO-etappen, inte säkerhetsomgången) |
@@ -675,8 +680,8 @@ Ordalydelse: `BESLUT-2026-11-27.md`. Kolumnen visar hur beslutet slår igenom i 
 
 | Nr | Fråga | Förslag i matrisen |
 |---|---|---|
-| K-01 | `time_view_all`: all personal, eller ett framtida teamurval? | All personal, eftersom inget teamurval finns i datamodellen |
-| K-02 | Behöver arbetsledaren `personal_data_view` som standard för offerter med ROT/RUT? D-13 nämner ROT/RUT som exempel på verkligt behov, och arbetsledaren skapar offerter. | Inte standard. Läggs till per roll vid behov. Utan behörigheten kan arbetsledaren inte se eller ändra personnummer i offert och kund. |
+| K-01 | `time_view_all`: all personal, eller ett framtida teamurval? | **Fastställt 2026-11-28:** all personal. Verkställs i T4-B. |
+| K-02 | Behöver arbetsledaren `personal_data_view` som standard för offerter med ROT/RUT? D-13 nämner ROT/RUT som exempel på verkligt behov, och arbetsledaren skapar offerter. | **Fastställt 2026-11-28:** inte standard; tilldelas separat. `chef` saknar den (T3-E). Verkställs i T4-A. |
 | K-03 | Exakt fältlista för poolprojektionen (D-13: "begränsad information för att bedöma om jobbet kan tas") | Titel, beskrivning, kategori, prioritet, gatuadress och ort, förfallodatum, uppskattad tid. Inte kundens kontaktuppgifter, portkod, logg, material, checklista, bilder eller pris. |
 | K-04 | Portkod i export (D-18: "ingår inte i normal export") | Bara via serverexport med `objects_sensitive` + `export_data`, aktivt val och logg |
 | K-05 | Klassificering av gamla `inv.note` (D-20) | Separat genomgång. Tills dess tas `note` aldrig med i ny kund-PDF. |

@@ -1595,4 +1595,265 @@ Data som skapats efter installationen (aktivitetsposter med servermärkning, upp
 
 ## T3-E – standardroller
 
-*(Fylls i av T3-E.)*
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, Edge Functions körda i Node mot den
+lokala STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat
+eller verifierat i STAGING. Rollregistret i STAGING är inte ändrat. LIVE är inte kontaktad.
+En läsande SELECT mot STAGING gjordes (antal aktiv personal per roll-id, inga personuppgifter) för
+införandeplanen.
+
+### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Standardrollerna som data (D-02, M9) | `vift-v2/supabase/manual/t3e_standardroller/standardroller.json`: `admin` [`all`], `chef` (Arbetsledare), `ekonomi`, `personal`, `begransad`, exakt matrisen §2 (bara ✔; K-02: `chef` utan `personal_data_view`). Testet `VIFT-CRM/tests/rollnamn_guard.test.js` jämför definitionen med matristabellen. |
+| Installationsskript (inte en migration) | Fyra manuella skript i `supabase/manual/t3e_standardroller/`, genererade ur definitionen (`tests/local/t3e-skript.js`): **A** läsande plan (hash, plan per standardroll, antal per roll-id, roller som beror på övergångsregeln, journal), **B** installera, **C** rollback av en journalrad med expectedHash, **D** övergångsregeln uttrycklig för en roll. Körs aldrig av kedjan (`db push`). |
+| STOP och journal | B lägger **bara till** saknade roller. STOP (inget ändras, ingen journalrad) vid platshållare eller fel hash, id-krock (även `admin` med andra behörigheter, och egen roll `chef`), dubbla id, aktiv personal som redan har ett roll-id som skulle läggas till, eller ändrat antal superadministratörer. Journal `vift_t3e_journal.rollregister` med förevärde, eftervärde och båda hasharna. Idempotent: en andra körning ändrar ingenting. |
+| Rollback | C återställer förevärdet för en journalrad bara om rollregistrets hash är journalens eftervärde (expectedHash) — nyare ändringar skrivs aldrig över; STOP om personal har tilldelats en tillagd roll eller raden redan är återställd. Installera → rollback → installera prövat. |
+| Ej verkställda behörigheter (tillägget) | Tio behörigheter vars serverkontroller hör till T4/AO-etappen är **verkningslösa**: servern har registret `_vift_ej_verkstallda()` (ny migration `20261128000008`), ingen regel läser dem. **Fynd i T3-D-koden (bevisat som BASLINJE):** `_vift_staff_external` gjorde en extern användare intern av vilken behörighet som helst, så `begransad` + t.ex. `cost_view` fick alla kollegors arbetstelefon och arbets-e-post. Rättat: de ej verkställda räknas inte. Bevisat: samma användare får exakt samma effektiva åtkomst med och utan varje sådan behörighet (tom roll, `begransad`, `personal`, `chef`, `ekonomi`). |
+| Klientens rolleditor | Katalogen (`PageShells.js`) har alla behörigheter i matrisen med beskrivningar; de tio ej verkställda är märkta "verkställs i <paket>". **Klientfynd rättat:** behörigheter som inte fanns i katalogen (t.ex. `customer_view`) tappades tyst när en roll sparades; de visas nu i en egen grupp och sparas. Ingen vy eller knapp använder en ej verkställd behörighet (grep-test). `?v=` höjt. |
+| Övergångsregeln (§4.6, T3-B) | **Kvar.** Exakt två STAGING-roller beror på den: `e2e_falt` (2 aktiva) och `v7_sakerhetstest` (1 aktiv). Införandeplan: steg 1 (B) → steg 2 (D per roll) → regeln verkningslös för alla roller (SQL och TS) → steg 3 regeln tas bort i ett senare serverpaket. Effektiv åtkomst identisk för alla sju STAGING-roller efter varje steg (och efter simulerad borttagning). |
+| Inga beslut på rollnamn | Grep-test över klient (src/) och server (Edge Functions, T3-migrationerna och alla SQL-funktioner i repliken): inga jämförelser med standardrollernas id; bara uttryckligt tillåtna förval (dashboardlayout, ny personal, import; matrisen §0.2). |
+| `standard_roles` | `vift-v2/tests/t3e_standard_roles.test.js`: hela SEC-CUST-01..23 och SEC-* per standardroll mot repliken med standardrollerna installerade av B, ett syntetiskt konto per standardroll (D-26) och 23 egna roller. Negativa fall med `expectReject` (status, error, reason, KS). SEC-CUST-rader vars behörighet verkställs i T4 prövas som "verkningslös nu" (med = utan), inte som godkänd målregel. |
+| Fake-backend och e2e | Seedens roller = standardrollerna (seedData), ej verkställda verkningslösa även i fake (paritet 147 scenarier, 145 lika, 2 kända). Nya e2e T3E-01..07 per standardroll: meny, sidor, flöden, ej verkställda, indragen behörighet i två flikar och cache. |
+
+### 1. Inventering före ändringen
+
+**STAGING:s rollregister** (läst med SELECT 2026-11-28, uppgifter i uppdraget) och **aktiv personal per roll-id** (läst med en läsande SELECT 2026-11-28, bara antal): `admin` 2, `e2e_arbetsledare` 1, `e2e_begransad` 1, `e2e_ekonomi` 1, `e2e_falt` 2, `qa_p2_avgransad` 1, `v7_sakerhetstest` 1; 0 inaktiva; ingen personal har `chef`, `ekonomi`, `personal` eller `begransad`. Repliken i testerna har exakt samma register och samma antal (syntetiska konton).
+
+**Var de nya behörigheterna läses i dag:**
+- Servern: `ao_start_own`, `ao_complete_own`, `ao_pool_take` (T3-B: `work_order_patch`, `work_order_pool_take`, `vift-auth.ts`, `work-orders-list`). `objects_access_assigned` och `rondering_utfor` bara i T3-D:s `_vift_staff_external` (D-04:s tilläggslista). Inga andra nya behörigheter läses av någon EF eller SQL-funktion.
+- Klienten: bara de tre T3-B-behörigheterna (`WorkOrderService.aoCan`, Mina jobb, AO-detaljen). Ingen ej verkställd behörighet används.
+- **Fynd 1 (server, T3-D):** `_vift_staff_external` räknade varje behörighet utöver D-04-listan som "intern". En ej verkställd behörighet (t.ex. `cost_view`, `export_data`, `ao_plan_own`) gav därför en extern roll kollegornas kontaktuppgifter — bredare åtkomst. Bevisat som BASLINJE mot kedjan utan `20261128000008`; rättat.
+- **Fynd 2 (klient):** rolleditorn sparade bara katalogens kryssrutor, så behörigheter utanför katalogen (i STAGING `customer_view` på `v7_sakerhetstest`) försvann tyst när en roll sparades. Rättat (egen grupp, sparas). e2e T3E-01.
+- **Fynd 3 (testverktyg):** EF-adaptern (`tests/local/lib/ef.js`) skrev en tom JS-lista till en `text[]`-kolumn som `''`, så `get-sensitive-fields` nekade läsningar fick ingen revisionsrad i repliken. Rättat i adaptern (bara testverktyg; EF:en oförändrad).
+
+### 2. Standardrollerna som data och installationsskripten (vift-v2)
+
+| Fil | Innehåll |
+|---|---|
+| `supabase/manual/t3e_standardroller/standardroller.json` | Definitionen (5 roller) och listan `ejVerkstallda` med paket. |
+| `A_las_och_plan.sql` | Läsande: A1 projekt, A2 rollregistrets hash (samma som `store-key-write` `readWithHash`), A3 roller, A4 plan per standardroll (LAGGS_TILL / IDENTISK / KROCK), A5 personal per roll-id (bara antal), A6 roller som beror på övergångsregeln, A7 journal. |
+| `B_installera.sql` | Rad 1: hash från A2. Rådgivande lås + `FOR UPDATE` i samma ordning som T3-C (roller → personal). Lägger bara till saknade standardroller sist i registret; befintliga element orörda byte för byte. STOP-fallen i sammanfattningen. Flyttar `vift_lastChanged` (som RPC:erna). Journalrad. |
+| `C_rollback.sql` | Rad 1: journalradens id. expectedHash = journalens `efter_hash`. STOP-fallen i sammanfattningen. Återställer förevärdet, journalför rollbacken. |
+| `D_overgangsregel_uttrycklig.sql` | Rad 1: roll-id, rad 2: hash. Bara om övergångsregeln gäller rollen (`ao_complete` utan `ao_view_all`/`ao_edit`/`all` och utan de tre nya): lägger till exakt `ao_start_own`, `ao_complete_own`, `ao_pool_take`. Journalrad. |
+| `tests/local/t3e-skript.js` | Genererar A–D ur definitionen; testet kontrollerar att filerna är aktuella. |
+
+Skripten körs i SQL Editor som `postgres` efter separat GO. De går därför förbi `store-key-write`:s eskaleringsregel, men de lägger bara till roller som ingen har, ändrar aldrig personal och kontrollerar att antalet superadministratörer är oförändrat (`_vift_superadmin_count`).
+
+### 3. Ej verkställda behörigheter
+
+Gemensamt för alla tio: de står i `_vift_ej_verkstallda()` och räknas inte när servern avgör intern/extern (enda stället där en okänd behörighet kunde verka). Ingen EF och ingen annan SQL-funktion läser dem (test). Klienten använder dem bara i rolleditorns katalog och i demorollerna (test). T3-C:s eskaleringsregel gäller dem som alla andra: bara den som själv har behörigheten (eller `all`) kan tilldela den.
+
+| Behörighet | Serverkontroll i dag | Klientkontroll i dag | Verkställs i | Om den tilldelas nu (lokalt bevisat) |
+|---|---|---|---|---|
+| `ao_plan_own` | Ingen; `work_order_patch` godtar från fältet bara start, klar, egna materialrader och tagning, allt annat ger 403 `field_not_allowed` som förut | Ingen | AO-etappen (AP-E) | Ingen effekt |
+| `cost_view` | Ingen; inköpspris/TB följer i dag `work-orders-list`/C-5 (`ao_view_all`, `ao_edit` m.fl.) | Ingen (priser visas efter befintliga regler) | T4-A/T4-B | Ingen effekt (SEC-CUST-01: chef med = utan) |
+| `cost_edit` | Ingen; artiklar kräver `article_manage` | Ingen | T4-A/T4-B | Ingen effekt (SEC-CUST-02) |
+| `time_view_all` | Ingen; `time-entries-list` ger alla bara med `payroll_view` | Ingen | T4-B (K-01) | Ingen effekt; chef ser bara egna tidposter (SEC-CUST-05, SEC-TID-06) |
+| `bankgiro_edit` | Ingen; `vift_settings` skrivs med `admin_manage` (hela nyckeln) | Ingen | T4-A (D-17) | Ingen effekt |
+| `personal_data_view` | Ingen; personnummer följer C-5:s kundläsare | Ingen | T4-A (D-13, K-02) | Ingen effekt (SEC-CUST-08/20) |
+| `objects_access_assigned` | `get-sensitive-fields` kräver `objects_sensitive` (403 + `denied`-rad) | Ingen | T4-C (D-05) | Ingen effekt: 403 + en `denied`-rad som utan (SEC-CUST-14/17) |
+| `rondering_utfor` | `rondering-pass-write` kräver `ao_view_all` | Ronderingssidorna kräver `ao_view_all` | T4-D (Ö3) | Ingen effekt (SEC-CUST-15) |
+| `export_data` | Ingen serverexport finns | Exportcenter/snabbexport följer läsrättigheterna, inte `export_data` | T4-F (D-18) | Ingen effekt (SEC-CUST-06, T3E-06: ingen ny meny eller knapp) |
+| `export_personal_data` | Ingen serverexport finns | Ingen | T4-F | Ingen effekt |
+
+Bevis: `t3e_standard_roles.test.js` jämför **profiler** (samma provkonto, rollens behörigheter bytta): `work-orders-list`, `time-entries-list`, `readAllWithHashes` för 25 nycklar, REST-läsning av 25 nycklar och 23 skrivande anrop (tagning, start, klar, redigering, material, radering, ny AO, tid, attest, stämpling, checklista, logg, kund, artikelns inköpspris, bankgiro, fakturarad, egen och annans uppgift, händelse, portkod, ny roll) med status, error, reason och vilka resurser som ändrats. Varje ej verkställd behörighet för sig på en tom roll och på `begransad`, alla tio tillsammans på tom roll, `begransad` och `personal`, och `chef`/`ekonomi`/`personal` med och utan dem: **0 skillnader**. Samma i webbläsaren (T3E-06) och i fake-backend (paritet E-B3/E-KUND/E-WOL).
+
+### 4. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000008_t3e_ej_verkstallda_behorigheter.sql` | `_vift_ej_verkstallda()` (ny) och `_vift_staff_external` (samma signatur) som räknar bort dem. STOP: redan installerad, T3-D saknas, eller `_vift_staff_external` avviker från T3-D-versionen (md5). Bara `service_role`. Rör inga data. |
+| `rollback/T3-E/rollback_t3e.sql` | Genererad av `tests/local/t3e-rollback.js` ur kedjan utan T3-E: T3-D-definitionen exakt, registret bort. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | 0008 som klass "ny" efter T3-D; kommentar om att det manuella skriptet inte är en migration. |
+| `manual/t3e_standardroller/` | Se §2. |
+
+Ingen Edge Function är ändrad.
+
+### 5. Klientändringar (VIFT-CRM)
+
+- `src/pages/PageShells.js` (rolleditorn): hela katalogen med beskrivningar enligt matrisen §1.1 (`customer_view`, `ao_plan_own`, `rondering_utfor`, `objects_access_assigned`, `personal_data_view`, `cost_view`, `cost_edit`, `time_view_all`, `bankgiro_edit`, `export_data`, `export_personal_data`; nya grupper "Intern ekonomi" och "Tid & Löner"), `_PERM_EJ_VERKSTALLD` med märkningen "verkställs i <paket>", behörigheter utanför katalogen i en egen grupp (sparas), etiketter escapade. Ingen redesign.
+- `src/data/seedData.js`: demorollerna = de fem standardrollerna (därmed fake-backendens seed).
+- `index.html`: `PageShells.js?v=196`, `seedData.js?v=28`.
+
+### 6. Fake-backend och paritet
+
+- `tests/e2e/fake-backend.js` (båda repona, synkade): `T3E_EJ_VERKSTALLDA` (= serverns register) räknas inte i intern/extern; seedens `begransad` läggs bara till om seeden saknar den (vift-v2:s äldre klientkopia).
+- `vift-v2/tests/local/lib/paritet.js`: 6 nya T3-E-scenarier (begransad och tom roll med alla tio: personal, kunder/fastigheter/objekt, work-orders-list), alla lika. `sim_parity` 148/0: 147 scenarier, 145 lika, 2 kända (KEY-01, AUTH-02, oförändrade).
+
+### 7. Övergångsregeln och införandeplanen per STAGING-roll
+
+Övergångsregeln (§4.6) tas **inte** bort nu. Den gäller i dag (efter T3-B) för exakt två roller.
+
+| STAGING-roll | Aktiva | Övergångsregeln i dag | Steg 1: B (standardroller) | Steg 2: D (separat GO per roll) | Steg 3: regeln bort | Steg 4 (valfritt, D-26, separat GO) |
+|---|---|---|---|---|---|---|
+| `admin` | 2 | Gäller inte (`all`) | IDENTISK, orörd | – | Ingen påverkan | Redan standardrollen |
+| `e2e_arbetsledare` | 1 | Gäller inte (`ao_view_all`/`ao_edit`) | Orörd | – | Ingen påverkan | → `chef`: beslutade nya behörigheter, se nedan |
+| `e2e_ekonomi` | 1 | Gäller inte (ingen `ao_complete`) | Orörd | – | Ingen påverkan | → `ekonomi`: beslutade nya behörigheter, se nedan |
+| `e2e_falt` | 2 | **Gäller** (`ao_complete` + `ao_view_own`) | Orörd | + `ao_start_own`, `ao_complete_own`, `ao_pool_take` (samma effektiva åtkomst) | Ingen påverkan efter steg 2 | → `personal`: identisk |
+| `e2e_begransad` | 1 | Gäller inte | Orörd | – | Ingen påverkan | → `begransad`: identisk |
+| `qa_p2_avgransad` | 1 | Gäller inte | Orörd | – | Ingen påverkan | Ingen standardmotsvarighet; avvecklas (punkt 262) |
+| `v7_sakerhetstest` | 1 | **Gäller** (`ao_complete` + `ao_view_own`) | Orörd | + de tre (samma effektiva åtkomst) | Ingen påverkan efter steg 2 | Ingen standardmotsvarighet; avvecklas (punkt 262) |
+
+**Ordning:**
+0. Läsande: A (hash, plan, antal per roll-id, A6). Förväntat i STAGING: admin IDENTISK, fyra LAGGS_TILL, A6 = `e2e_falt` och `v7_sakerhetstest`.
+1. Efter att T3-A–T3-D och T3-E:s migration (0008) och klientpaket är installerade, och efter separat GO: B med hashen från A. Ingen användare påverkas (ingen har standardrollernas id; B stoppar annars).
+2. Separat GO per roll: D för `e2e_falt`, sedan (ny hash från A) D för `v7_sakerhetstest`. Två respektive en användare berörs; deras effektiva åtkomst är oförändrad. Alternativ utan att ändra egna roller: hoppa över steg 2 och låt regeln stå kvar tills rollerna avvecklats (punkt 262).
+3. När A6 är tom i STAGING **och** samma läsande kontroll är gjord mot LIVE:s rollregister (inför LIVE): ett senare serverpaket tar bort regeln (`_vift_ao_eff_perms`, `effectiveAoPerms` i `_shared/vift-auth.ts`, `WorkOrderService.aoCan`, `effAoPerms` i fake-backend och STAGING-verktygen). Lokalt bevisat att regeln då är verkningslös för alla roller i SQL och TS, och att en simulerad borttagning i SQL inte ändrar någon rolls åtkomst.
+4. Valfritt, separat GO (D-26): testkontona flyttas till standardrollerna (personalposter för testkonton), därefter avveckling av e2e-rollerna (punkt 262).
+
+**Rollback:** C per journalrad i omvänd ordning (D-raderna, sedan B-raden). Varje steg kräver att rollregistrets hash är journalradens eftervärde (expectedHash); annars STOP och ingenting skrivs över. Personalregistret rörs aldrig.
+
+**Jämförelsetest** (`t3e_installation.test.js`): effektiv åtkomst (samma profil som i §3, 23 skrivande anrop) per STAGING-roll före och efter steg 1, efter steg 2, efter simulerat steg 3 och efter rollback: **identisk för alla sju roller i alla lägen**. Steg 4 jämfört mot e2e-rollen — varje skillnad är en beslutad ny behörighet, ingen oavsiktlig breddning:
+- `e2e_arbetsledare` → `chef`: `rest/las vift_recurringOrders` och `get-sensitive-fields` 200 (`objects_sensitive`, D-05); fakturarad 200 (`invoice_create`, D-07). Övriga skillnader: inga (de ej verkställda är verkningslösa).
+- `e2e_ekonomi` → `ekonomi`: alla tidposter (`payroll_view`, D-08), attest 200 (`payroll_manage`, D-08); tid på egen/pool-AO är fortfarande 403 men med orsaken `not_assigned` (lönehandläggaren passerar behörighetssteget; tilldelningen nekar) — ingen breddning.
+- `e2e_falt` → `personal`, `e2e_begransad` → `begransad`, `admin` → `admin`: identisk.
+
+### 8. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1): 34/34 testfiler gröna, 1 403 godkända kontroller, 0 fel.**
+Webbläsartesterna i `browser/` hoppades över med SKIP_BROWSER=1, som i T3-0–T3-D. De räknas inte som godkända. `staging_e2e_real` kör Playwright och ingår.
+
+Nya:
+- `t3e_standard_roles` **94/0** (testgruppen `standard_roles`):
+  - BASLINJE mot kedjan utan `20261128000008`: `begransad` + `cost_view` får 13 kollegors kontaktuppgifter (0 utan);
+  - ej verkställda behörigheter verkningslösa: profiler (EF-läsningar av 25 nycklar, `work-orders-list`, `time-entries-list`, REST, 23 skrivande anrop) med och utan varje behörighet — 0 skillnader; ingen EF och ingen annan SQL-funktion läser dem;
+  - standardrollerna installerade med B; ett syntetiskt konto per standardroll; 23 egna roller;
+  - SEC-CUST-01..23: enforced rader med exakt status/error/reason och KS (03, 04, 07, 09–13, 16, 18, 19, 21, 22, 23); T4-rader som "verkningslös nu" (01, 02, 05, 06, 08, 14, 15, 17, 20) och SEC-CUST-03:s skrivardel och SEC-CUST-20:s personnummer dokumenterade som T4-A, inte godkända som målregel; SEC-CUST-22/23 med de kända C-5-nycklarna (inställningar utan bankgiro, återkommande ärenden utan accessCode, prisgrupper) redovisade;
+  - SEC-* per standardroll: SEC-AO-01/02/04/05/09/10/11/15/17, SEC-POOL-03/05/10, SEC-TID-01/02/04/06/07/09, SEC-FAKT-01/02/03, SEC-B3-03/05/06, R40, SEC-B4-01/02, SEC-KUND-01/02, SEC-OFF-01, SEC-REST-03/04, SEC-B5-09, begransad och admin över alla 23 anrop;
+  - inga beslut på rollnamn i EF, T3-migrationerna eller någon SQL-funktion.
+- `t3e_installation` **59/0**: skripten aktuella; STAGING-likt register och antal per roll-id; A; B:s STOP-fall (platshållare, fel hash, id-krock `admin` och `chef`, dubbla id, aktiv personal med `personal`) utan mutation och utan journalrad; B lägger bara till fyra roller, orörda befintliga, personal orörd, journal, `vift_lastChanged`; idempotens; D med STOP-fall; övergångsregeln verkningslös efter steg 2 (SQL och TS); effektiv åtkomst identisk för alla sju STAGING-roller efter steg 1, 2, simulerat steg 3 och rollback; C:s STOP-fall (nyare ändring via rolleditorn, personal på tillagd roll, dubbel rollback); installera → rollback → installera = samma hash; steg 4 med bara beslutade skillnader.
+- `t3e_rollback` **15/0**: migrationen installera → rollback (T3-D-läget, ingen data ändrad, T3-D:s beteende tillbaka) → installera; STOP vid omkörning och vid avvikande T3-D-funktion; T3-E + T3-D + T3-C + T3-B = STAGING-facit.
+
+Ändrade och gröna: `replica_build` 33/0 (8 nya migrationer, 2 T3-E-objekt), `t3b_rollback` 12/0, `t3c_rollback` 19/0, `t3d_rollback` 19/0 (kedjorna utan T3-D utesluter även T3-E; omvänd ordning börjar med T3-E), `migrationskedja` 2/0 (112 identiska, 65 förklarade, 0 oförklarade), `migrationsmappning` 18/0, `paritet_fake_kopia` 148/0, `staging_e2e_real` 26/0, `staging_tools` 44/0, `ef_smoke` 39/0. Oförändrat gröna: `t3b_ao_karna` 171/0, `t3c_roller` 145/0, `t3d_informationsatkomst` 111/0, `baslinje_sakerhet` 38/0 (historisk källa).
+
+Under arbetet: första körningen av `paritet_fake_kopia`, `staging_e2e_real` och `staging_tools` föll eftersom vift-v2:s kopia av fake-backend hade skrivits över med VIFT-CRM:s (som läser serverkällan via `tests/lib/serverkalla`, en sökväg som inte finns i vift-v2). Kopians egen rad återställdes; testerna är oförändrade.
+
+**VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 643 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade.
+- ny `rollnamn_guard` 17/0;
+- `sim_parity` 148/0 (147 scenarier, 145 lika, 2 kända: KEY-01, AUTH-02);
+- `staging_e2e_real` 26/0.
+
+**E2E (Playwright mot den simulerade servern):**
+- Nya T3E-01..07 (`tests/e2e/specs/40_t3e_standardroller.js`): 7/0 (under arbetet föll T3E-05 på testets förväntan — begransad har fler egna AO i seeden — och rättades i testet).
+- Första hela körningen med de nya demorollerna: 247 godkända, 7 fel av 254. Alla sju var äldre förväntningar som byggde på demorollerna före matrisen: arbetsledaren saknade `objects_sensitive` (PROP-01, PERM-02, MISC-PROP-03, REG-UI-10) och `ao_time` (AOD-01), ekonomi saknade `customer_view` (ROLE-01), och etiketten "Tekniker / Personal" (ROLE-02). De negativa fallen "arbetsledare utan portkod" prövas nu med en egen roll `chef` − `objects_sensitive` (D-26, SEC-CUST-03), alltså lika hårt; de beslutade nya behörigheterna förväntas nu. Efter ändringen: 7/0.
+- **Hela e2e-sviten en gång, efter alla ändringar: 254 godkända, 0 fel, 0 blockerade, 0 kända fel, av 254 (1 746 s)**. Baslinjen efter T3-D var 247 av 247; skillnaden är de 7 nya T3E-01–07. Rapporten committas separat (`tests/e2e/report/`).
+
+Inga negativa tester har försvagats.
+
+### 9. Baslinjefynd
+
+| Fynd | Bevis i oförändrad kod | Efter T3-E |
+|---|---|---|
+| Ej verkställd behörighet breddade en extern roll (T3-D `_vift_staff_external`) | `t3e_standard_roles`: BASLINJE mot kedjan utan 0008 — `begransad` + `cost_view` får 13 kollegors arbetstelefon och arbets-e-post (0 utan) | Rättat: profilerna med och utan är identiska; T3-D:s beteende kommer tillbaka efter rollback (`t3e_rollback`) |
+| Rolleditorn tappade behörigheter utanför katalogen | Koden (`_saveEditRole` samlade bara katalogens kryssrutor) | Rättat; e2e T3E-01 |
+
+Inga tidigare baslinjefynd ändrade (`baslinje_sakerhet` mot fb71f26 oförändrad).
+
+### 10. SÄK och D efter T3-E
+
+- **Lokalt åtgärdade:** D-02, D-26, Ö2 (standardrollerna definierade), M9; K-01 och K-02 fastställda och genomförda i definitionen (`time_view_all` i `chef`, `personal_data_view` inte i `chef`); tillägget "inga nya behörigheter aktiveras före T4" (verkningslösa, bevisat); "inga säkerhetsbeslut på rollnamn" (grep-test); indragen behörighet med standardrollerna (T3E-07, utöver T3-A/T3C-06); SÄK-17 för T3-E.
+- **Delvis:** D-04 (standarddelen och tilläggen tid/checklista/start/klar; rondering och åtkomstinformation i T4-C/T4-D).
+- **SÄK-10:** lokalt åtgärdad sedan T3-A; spärren för `personal` gäller fortfarande i STAGING (B körs först när T3-A är installerad, steg 1 ovan).
+- **Öppna (T4):** verkställandet av de tio behörigheterna; SEC-CUST-01/02/05/06/08/14/15/17/20 är i dag "verkningslös nu", inte godkända målregler; SEC-CUST-03:s skrivardel (SÄK-7, T4-A).
+
+### 11. Installationsplan och rollback (STAGING-paketet T3-E, beskrivs, körs inte)
+
+**Förutsättningar:** separat GO; T3-A, T3-B, T3-C och T3-D installerade (SÄK-10 före `personal`); testkonton i STAGING först efter separat godkännande (D-26).
+
+**Backup:** backupschemat (testplanen §8) med `_vift_staff_external`; JSON-kopia med sha256 av `vift_roles` och `vift_staff` (testplanen T3-E); journalen i `vift_t3e_journal` är dessutom en före/efter-kopia per steg.
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | `schema_migrations` = mappningen + T3-B–T3-D. md5 av `_vift_staff_external` = T3-D-versionen (samma värde som STOP-kontrollen). A (plan och antal) sparas. |
+| 2. Databas | `20261128000008` i egen transaktion. Ingen `db push`, ingen `migration repair`. |
+| 3. Edge Functions | Inga. |
+| 4. Klient | `tools/build-staging-package.sh` från HEAD (T3-A–T3-E). `?v=` höjt för `PageShells.js` och `seedData.js`. Service Worker är network-first; nya filer hämtas vid nästa laddning. Klientpaketet installeras **före** steg 5, så att ingen administratör redigerar standardrollerna i en v3.4-rolleditor (se nedan). |
+| 5. Data (separat GO) | B med hashen från A. Därefter A igen (ny hash, plan IDENTISK för alla fem). Steg 2 i införandeplanen (D) med separat GO per roll. |
+| 6. Storage | Ingen ändring. |
+| 7. Efterkontroll (läsande, V5) | A: journalen, planen och A6. `authz-read.js`/`c5-read.js` med befintliga testkonton (oförändrad förväntan, eftersom ingen har standardrollerna). Förväntan per standardroll (V5) först när testkonton finns (D-26). |
+
+**Fönster:** migrationen ändrar bara en hjälpfunktion; inget API ändras. Mellan steg 2 och 4 gäller den nya regeln med den gamla klienten (ingen effekt, eftersom ingen har en ej verkställd behörighet ännu).
+
+**v3.4-klient (Service Worker-cache) mot ny server och nytt rollregister:**
+
+| Åtgärd i v3.4 | Följd |
+|---|---|
+| Inloggning, meny, `Auth.can` | Oförändrat. v3.4 känner inte de nya behörigheterna och ignorerar dem; ingen ny meny eller knapp. |
+| Rolleditorn (admin) på en standardroll | **Risk:** v3.4:s katalog saknar bl.a. `customer_view`, `cost_view` och de övriga nya; v3.4 sparar bara katalogens kryssrutor och skulle **tappa** dem (servern tillåter borttagning). Därför klientpaketet före B, och ingen rollredigering i en flik som inte laddats om. Nyare klient tappar inget (T3E-01). |
+| Personaldialogen | Standardrollerna visas som valbara (enligt T3-C:s regel); val av en standardroll prövas av servern. |
+| Fält med `e2e_falt` efter steg 2 | v3.4 läser `ao_complete` som förut; servern ger samma rätt (övergångsregeln eller de uttryckliga behörigheterna). |
+| Felkoder | Inga nya felkoder i T3-E. |
+
+**Rollback (data skrivs aldrig över):**
+1. Rollregistret: C per journalrad i omvänd ordning (bara om hashen är journalradens eftervärde; annars STOP). Inget annat data rörs.
+2. Databas: `supabase/rollback/T3-E/rollback_t3e.sql` (T3-D-definitionen, registret bort; rör inga data). Därefter vid behov T3-D-, T3-C- och T3-B-rollbacken (omvänd ordning, prövat lokalt = exakt STAGING-facit).
+3. Klient: föregående klientpaket.
+4. Storage: ingen ändring.
+
+Roller och personaländringar som gjorts efter installationen ligger kvar; C stoppar i stället för att skriva över dem.
+
+### 12. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | §8 (`standard_roles`, installationen, rollback, paritet, e2e) |
+| Negativa tester ger rätt felkod och ingen mutation | Ja | `expectReject` (status, error, reason, KS) i alla negativa EF-fall; skript-STOP med KS för `vift_roles`, `vift_staff`, `app_users` och oförändrad journal |
+| Inga nya oförklarade säkerhetsavvikelser | Ja | Schemat 0 oförklarade (2 T3-E-objekt md5-registrerade); paritet 145/147, 2 kända utanför T3 |
+| Samtidighetskritiska kontroller under transaktionslås | Ja | Skripten tar T3-C:s rådgivande lås och radlås (roller → personal) och kontrollerar hash, krockar och superadministratörer under låset |
+| Berörda affärsflöden fungerar | Ja | Rolleditorn, personalsidan, Mina jobb, tid, fakturaunderlag, attest; run-all och hela e2e-sviten |
+| Avgränsade commits och rollback | Ja | Två commits per repo plus dokument och e2e-rapport; rollback (migration och data) prövad lokalt |
+| Masterplanen visar faktisk nivå | Ja | D-02, D-04, D-26, Ö2, K-01, K-02, SÄK-10, SÄK-17, T3-E (M9), punkt 262 |
+
+### 13. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno (releasevillkor).
+- Skripten körs som `postgres` och går förbi `store-key-write`:s kontroller; de lägger bara till roller, ändrar aldrig personal och kontrollerar superadministratörerna, men en manuell redigering av skriptet skulle inte fångas av servern. Därför STOP-kontroller, journal och separat GO.
+- `state.js` faller tillbaka på demorollerna om rollregistret helt saknas i svaret (som tidigare; servern avgör ändå).
+- Tom behörighetslista och okänd roll (SEC-CUST-22/23) får fortfarande C-5:s projicerade inställningar (utan bankgiro och intern timkostnad), prisgrupper (med timpris, SEC-B2-01, T4-B) och återkommande ärenden (utan `accessCode`, inget urval per post sedan T3-D). Oförändrat av T3-E; redovisat i testet, inte godkänt som målregel.
+- LIVE:s rollregister är inte läst; införandeplanen gäller STAGING. Innan övergångsregeln tas bort ska samma läsande A-kontroll göras mot LIVE (med separat GO).
+- Profilerna i testerna tar ca 9 s per användare; `t3e_standard_roles` och `t3e_installation` tar därför flera minuter.
+
+**Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
+1. Standardrollerna innehåller redan nu de tio ej verkställda behörigheterna (exakt matrisen §2), verkningslösa tills T4 tar bort dem ur `_vift_ej_verkstallda()`. Då får rollerna åtkomsten utan ny dataändring. (Godta; alternativet är att lägga till dem i rollerna först i T4.)
+2. B stoppar om aktiv personal redan har ett roll-id som skulle läggas till (rollen skulle ge dem åtkomst direkt). I STAGING finns ingen sådan personal i dag. (Godta.)
+3. Steg 2 (D) ändrar två egna testroller i STAGING genom att lägga till exakt deras effektiva behörigheter. (Godta med separat GO per roll, eller hoppa över och låt regeln stå tills rollerna avvecklats i punkt 262.)
+4. T3-D:s förslag `staff_contacts_view` införs inte (inget beslut). T3-E löser den konkreta breddningen genom att ej verkställda behörigheter inte räknas. (Avgör i T4 om "intern kollega" ska bli en uttrycklig behörighet.)
+5. T3-D:s förslag att smala av aktivitetsloggen för egna roller med `ao_view_all` (t.ex. säljare) införs inte; standardrollerna påverkas inte (admin, chef och ekonomi ska se hela loggen). (Separat beslut.)
+6. Matrisen ger inte `chef` `reports_view`; demorollen "Chef / Projektledare" hade den, så arbetsledaren i demo/fake ser inte längre Rapporter. STAGING:s `e2e_arbetsledare` saknar den också. (Godta matrisen, eller ändra matrisen om arbetsledaren ska se rapporter.)
+7. Rolleditorn visar behörigheter utanför katalogen i en egen grupp och bevarar dem vid Spara (tidigare tappades de). (Godta.)
+8. Övergångsregeln tas bort först när A6 är tom i STAGING och LIVE. (Godta.)
+
+### Ändrade filer
+
+**vift-v2** (gren `claude/vift-system-restructure-8fUme`):
+- nya:
+  - `supabase/migrations/20261128000008_t3e_ej_verkstallda_behorigheter.sql`;
+  - `supabase/rollback/T3-E/rollback_t3e.sql`;
+  - `supabase/manual/t3e_standardroller/{standardroller.json, A_las_och_plan.sql, B_installera.sql, C_rollback.sql, D_overgangsregel_uttrycklig.sql}`;
+  - `tests/t3e_installation.test.js`, `tests/t3e_standard_roles.test.js`, `tests/t3e_rollback.test.js`;
+  - `tests/local/lib/t3e.js`, `tests/local/t3e-rollback.js`, `tests/local/t3e-skript.js`;
+- ändrade:
+  - `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`;
+  - `tests/local/{t3-andringar.js, t3-andringar.json, jamfor-schema.js, t3d-rollback.js, lib/ef.js, lib/paritet.js}`;
+  - `tests/{replica_build, t3b_rollback, t3c_rollback, t3d_rollback}.test.js`;
+  - `tests/e2e/fake-backend.js` (synkad).
+
+**VIFT-CRM** (gren `claude/vift-v3-major-redesign`):
+- ändrade:
+  - `index.html`, `src/pages/PageShells.js`, `src/data/seedData.js`;
+  - `tests/e2e/fake-backend.js`, `tests/e2e/specs/03_registers.js` (PROP-01 med egen roll chef − objects_sensitive; ROLE-01 ekonomi ser kunder enligt matrisen);
+  - detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`;
+- nya: `tests/rollnamn_guard.test.js`, `tests/e2e/specs/40_t3e_standardroller.js`.
+
+### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `11ce9de` T3-E server: standardrollerna som manuellt skript (A–D, STOP, journal, rollback med expectedHash) och ej verkställda behörigheter verkningslösa (20261128000008)
+- `bd9553e` T3-E tester: standard_roles (SEC-CUST-01..23, SEC-* per standardroll), ej verkställda behörigheter verkningslösa, installationsskriptet och införandeplanen per STAGING-roll, rollback, T3-facit, paritet och fake-backend
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `823d086` T3-E klient: rolleditorns katalog och demorollerna = de fem standardrollerna
+- `90f5f8f` T3-E tester: rollnamn_guard, fake-backend med standardrollerna, nya T3E-01–07, sju e2e-förväntningar anpassade till matrisen §2
+- dokumentcommit och e2e-rapport: se `git log` efter `90f5f8f`
