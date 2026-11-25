@@ -130,6 +130,16 @@ class World {
     return s;
   }
 
+  /* T3-A: ytterligare flik i SAMMA webbläsarkontext som `base` (delad
+     localStorage, storage-händelser och BroadcastChannel mellan flikarna). */
+  async tab(base) {
+    const page = await base.context.newPage();
+    const s = new Session(this, base.context, page, base.opts);
+    this.sessions.push(s);
+    await s._wire();
+    return s;
+  }
+
   async close() {
     for (const s of this.sessions) await s.context.close().catch(() => {});
   }
