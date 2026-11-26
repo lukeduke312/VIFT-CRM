@@ -134,7 +134,7 @@ Bevisade i oförändrad kod (T3-E, `bd9553e`, utläst med `git archive`) på sam
 
 - **Lokalt åtgärdade:** SÄK-7 läckaget (P1) — skrivare och AO-vägar; B5 (fältvis sammanslagning, under radlås); B1 projektionsdelen; D-01 (`cost_view`/`cost_edit` för skyddade fält); D-06; D-13 (slutförd, export T4-F); D-17; T3-D 2/6 och T3-E 4/5 och T3-E:s beslut om äldre klienters rollskrivning; punkt 7: okända/tomma/inaktiverade roller, åtkomst per post (återkommande, projekt, avvikelser, inspektioner), ägarkontroll vid bildradering; SÄK-17 för T4-A:s nycklar; punkt 243 fältnivå och objektformad nyckel lokalt (inställningar fält för fält).
 - **Delvis:** D-05 (skrivare och register stängda; tilldelningsvägen T4-C); B1 (fältmaterial utan pris och okänt ≠ 0: T4-B); SÄK-17 (fakturor, offerter internt, prisgrupper m.fl. fortfarande inte fullt modellerade i fake; inga T4-A-scenarier berörs).
-- **Öppna:** SÄK-1 (T4-F), SÄK-6 (T4-B), SÄK-7 tilldelningsvägen (T4-C), SÄK-14 (T4-D); notisernas säkra skrivväg (§9).
+- **Öppna:** SÄK-1 (T4-F), SÄK-6 (T4-B), SÄK-7 tilldelningsvägen (T4-C), SÄK-14 (T4-D). Notisernas säkra skrivväg (§9) är lokalt genomförd i tilläggsdelen nedan ("T4-A, tilläggsdel: notiser").
 
 ### 8. Införandeplan: `staff_contacts_view`, `activity_log_view_all` och övriga T4-A-effekter per STAGING-roll
 
@@ -161,7 +161,7 @@ Läsande analys i `t4a_skyddade_falt.test.js` (STAGING:s sju roller ur T3-E:s l�
 | Åtkomst per post: återkommande, avvikelser, inspektioner, projekt | **Stängd lokalt** (kundregistrets läsare alla; övriga per AO) | Rondering (pass, mallar): T4-D |
 | C-5 i den simulerade servern (SÄK-17) | **Modellerad** för T4-A:s nycklar; 25 paritetsscenarier | Fakturor, offerternas interna projektion, prisgrupper: respektive paket (T4-B prisgrupper, T4-E fakturor) |
 | Äldre cachade klienter | **Stängd lokalt** för rollskrivning (katalogmarkör) och skyddade fält (fältvis sammanslagning, oberoende av klient) | §12 |
-| Notiser: åt andra användare utan kontroll av aktör, mottagare och referens; dessutom läser varje inloggad hela `vift_notifications` (REST och EF), även andras notiser (AO-titlar m.m.) | **Bedömd, inte byggd.** Läs- och skrivvägen hänger ihop: klientens `persistNotifs` läser hela listan via REST och skriver tillbaka den (REST-vitlistan, T3-C). Att projicera listan per mottagare utan ny skrivväg bryter både v3.4 och T4-klienten. Säker väg: EF-åtgärderna `appendNotification` (servern sätter avsändare och tid, mottagaren måste vara aktiv personal, referensen prövas med `_vift_ref_visible`, typ per behörighet) och `markNotificationsRead` (bara egna), RPC under radlås, projektion per mottagare (`userId`), därefter REST-läsning och -skrivning av `vift_notifications` stängd och `vift_lastChanged` bort från vitlistan (punkt 275). | **Placering:** eget litet serverpaket **"T4-N Notiser"** direkt efter T4-F (före STAGING-verifieringen V1–V11), samordnat med AP-D (AO-etappen). **Verifiering:** lokalt `notifications_write` (aktör, mottagare, referens, egna markeringar, ×20 samtidighet), paritet och e2e NOTIF; STAGING V3. **Releasevillkor:** före LIVE (P2-klassning föreslås; läckan av andras notiser kan vara P1 om notiserna innehåller kunduppgifter — beslut behövs). |
+| Notiser: åt andra användare utan kontroll av aktör, mottagare och referens; dessutom läser varje inloggad hela `vift_notifications` (REST och EF), även andras notiser (AO-titlar m.m.) | **Stängd lokalt (tilläggsdel notiser, 2026-11-28)** i befintligt paket T4-A (beslutets punkt 7: "placeras i befintliga paket"; det tidigare förslaget om ett eget paket "T4-N" är ersatt). `appendNotification`/`markNotificationsRead` → RPC `notification_append`/`notifications_mark_read` under radlås (servern sätter avsändare och tid, mottagaren aktiv personal, referensen prövas för avsändaren med `_vift_ref_visible`, typ per behörighet, tilldelad mottagare, bara egna markeras), projektion per mottagare i alla läsvägar, REST-läsning och -skrivning av `vift_notifications` stängd och `vift_lastChanged` borta från vitlistan (punkt 275). Migration `20261128000010`. Se "T4-A, tilläggsdel: notiser". | **Verifiering:** lokalt `t4a_notiser` (testgruppen `notifications_write`), paritet (22 N-scenarier) och e2e NOTIF-02–06; STAGING V6 (installeras med T4-A + T4-B). **Releasevillkor:** före LIVE; klassning P2 (läsläckan P1 om notiserna innehåller kunduppgifter) — beslut 7 nedan. |
 
 ### 10. Gränssnitt till T4-B
 
@@ -233,7 +233,7 @@ Läsande analys i `t4a_skyddade_falt.test.js` (STAGING:s sju roller ur T3-E:s l�
 - Ett tomt skyddat fält mot ett tomt lagrat godtas även för en anropare som inte får läsa fältet (behövs för klientens scheman); det avslöjar bara att fältet är tomt, aldrig ett värde.
 - Bildraderingen i Storage är inte transaktionell med store.
 - Fake-backend modellerar fortfarande inte C-5 för fakturor, offerternas interna fält och prisgrupper (T4-B/T4-E).
-- Notisernas säkra väg är inte byggd (§9).
+- Notisernas säkra väg: lokalt genomförd i tilläggsdelen (se "T4-A, tilläggsdel: notiser", §11 där).
 
 **Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
 1. Övergångsregel för T4:s två nya behörigheter (roll utan båda = T3-E:s härledning) tills alla aktiva roller i STAGING och LIVE har fått dem uttryckligen. (Godta; alternativet — införa dem som data i STAGING:s roller vid installationen — kräver GO per roll.)
@@ -242,7 +242,7 @@ Läsande analys i `t4a_skyddade_falt.test.js` (STAGING:s sju roller ur T3-E:s l�
 4. AO-ekonomi (`fixedPrice`) läses av `ao_edit`, `ao_view_all`, `invoice_*` och `cost_view`; fält får debiteringskategorin. (Godta; D-06.)
 5. Inaktiverad roll ger inga behörigheter (tidigare ignorerades `active`), även för superadmininvarianten. (Godta; A-kontroll före installation.)
 6. En kunds typbyte från privatperson med lagrat org.nr nekas utan `personal_data_view` (annars skulle numret bli läsbart). (Godta.)
-7. Notiserna: eget serverpaket "T4-N" efter T4-F, före STAGING-verifieringen; klassning P1 eller P2. (Ditt beslut.)
+7. Notiserna: **genomfört lokalt i befintligt paket T4-A** (tilläggsdel, migration `20261128000010`, installeras i samma serveromgång som T4-A + T4-B) i stället för ett eget paket "T4-N". Klassning: P2, med läsläckan som P1 om notiserna innehåller kunduppgifter (offertnotiserna innehåller kundnamn). (Godta placeringen; ditt beslut om klassningen. Se tilläggsdelens "Beslut som behövs".)
 8. Inspektioner (ingen AO-koppling) bara för kundregistrets läsare. (Godta.)
 
 ### Ändrade filer
@@ -268,3 +268,205 @@ Läsande analys i `t4a_skyddade_falt.test.js` (STAGING:s sju roller ur T3-E:s l�
 - `351939d` T4-A tester (fake-backend, e2e T4A-01–07, T3E-01/02, rollnamn_guard)
 - `e0af8b8` e2e-rapport (261/0/0)
 - dokumentcommit: se `git log` efter `e0af8b8`
+
+---
+
+### T4-A, tilläggsdel: notiser
+
+Verifieringsnivå: **lokalt verifierad** (PostgreSQL 16.15, `store-key-write` körd i Node mot den lokala
+STAGING-replikan, webbläsartester mot den simulerade servern). Ingenting är installerat eller verifierat
+i STAGING. LIVE är inte kontaktad. Inga läsningar mot STAGING behövdes. Tilläggsdelen hör till T4-A
+(beslutets punkt 7: luckorna placeras i **befintliga** paket) och installeras i **samma serveromgång som
+T4-A + T4-B**, direkt efter `20261128000009`. Inget nytt paket.
+
+#### Sammanfattning
+
+| Del | Resultat |
+|---|---|
+| Skrivning (punkt 7: aktör, mottagare, referens) | `store-key-write` `appendNotification` → RPC `notification_append` (SECURITY DEFINER, bara service_role). Anroparen omläses i transaktionen (`_vift_t4a_aktor_perms`; utan giltig behörighet 403 `forbidden`). **Servern sätter** avsändare (`createdBy`), tid (`createdAt`), id, `read:false` och `source:'server'`; klientens värden för dessa (och `offerId`) ignoreras. **Typ per behörighet** (`_vift_notis_kategori`): `ao_assigned` kräver `ao_edit`; egna påminnelser (`service_done`, `service_overdue`, `service_approaching`) bara till en själv; alla andra typer (även `offer_approved`, som bara `offer-respond` skapar med service_role) → 403 `type_not_allowed`. **Mottagaren** måste vara aktiv personal → annars 403 `recipient_not_allowed`. **Referensen** (`aoId`) prövas för **avsändaren** med T3-D:s `_vift_ref_visible` på AO-raden under `FOR SHARE` → 403 `ref_not_visible`; för `ao_assigned` måste mottagaren vara tilldelad AO:n → 403 `recipient_not_assigned` (AP-D: ingen falsk tilldelningsnotis). Texten för `ao_assigned` byggs av servern ur AO:n. **Idempotens bunden till innehåll** (`op_idempotency`, anropare + `requestId`, fingeravtryck av mottagare, typ, AO och text; annat innehåll → 409 `idempotency_key_conflict`) och **dubblettskydd** (ingen ny oläst tilldelningsnotis för samma mottagare och AO). **Storleksgräns:** text 1–500 tecken, `requestId` ≤ 100, listan kapas vid 5 000 (de äldsta tas bort, aldrig den nya). |
+| Egen markering | `markNotificationsRead` (`ids` ≤ 500, eller `all:true`) → RPC `notifications_mark_read` under `FOR UPDATE`: bara poster med `userId` = anroparen markeras (`read:true`, `readAt`); andras och okända id räknas lika som `ignored` (inget orakel). Inga ändringar → ingen skrivning. |
+| Läsning | `vift_store_full_access('vift_notifications')` är falskt för **alla** (även `all`): direkt REST-läsning ger 0 rader. `vift_store_project` → `_vift_notis_projicera`: bara poster vars `userId` är en sträng lika med anroparens personal-id. Gäller `readAllWithHashes` (`store_read_all_with_hashes_projected`) och skrivsvar; `readWithHash` nekar nyckeln som tidigare (400 `key_not_allowlisted`). Utan giltig behörighet: inga notiser (T4-A punkt 7). |
+| Historiska notiser | Skrivs inte om (ingen datamigrering). Poster **utan mottagarfält** (eller med `userId` som inte är en sträng) lämnas inte ut till någon — restriktivt och dokumenterat; de ligger kvar i lagret och kapas bort när listan når 5 000. |
+| REST-vitlistan (punkt 275, T3-C beslut 1) | **Avvecklad.** `_store_direct_write_guard` nekar all direkt skrivning från authenticated/anon (42501 `direct_write_blocked`, även `vift_notifications` och `vift_lastChanged`); `store_direct_write_allowlist_insert/_update` har `WITH CHECK (false)`. Klienten gör inga direkta REST-skrivningar längre. **Kvar (inte en del av punkt 275):** direkt REST-**läsning** av `vift_lastChanged` (klientens pollsignal, `DataSync._poll`), som bara innehåller en tidsstämpel; den kan ersättas av en EF-läsning i ett senare paket om man vill stänga REST helt. |
+| Klient | `NotificationsService.push` → `Storage.appendNotification` (samma `requestId` vid omförsök); en egen notis läggs in först när servern bekräftat den, ingen lokal notis åt andra. `markRead`/`markAllRead` → `Storage.markNotificationsRead` (bara egna). `persistNotifs` (REST-läsning av hela listan + upsert med `vift_lastChanged`) är borttagen. Bulkåtgärden "Lägg till personal" skickar notis och push först efter `bulkPatch` → `succeeded` (tidigare direkt, före serverbekräftelsen). `?v=` höjt. |
+| Fake-backend och paritet | Fake följer reglerna (båda repona, synkade). 22 nya paritetsscenarier (N-*), alla lika; totalt 194 scenarier, 192 lika, 2 kända (KEY-01, AUTH-02, oförändrade). |
+| Rollback | `supabase/rollback/T4-A-notiser/rollback_t4a_notiser.sql` (genererad ur kedjan utan `20261128000010`). Installera → rollback → installera prövat; notiser + T4-A + T3-E + T3-D + T3-C + T3-B i omvänd ordning = exakt STAGING-facit. Ingen data ändras. |
+
+#### 1. Inventering före ändringen
+
+- **Skrivare av `vift_notifications`:** klientens `persistNotifs` (v3.4, T3 och T4-A) läste hela listan via REST och skrev tillbaka den i **en** upsert tillsammans med `vift_lastChanged` (T3-C-vitlistan). `NotificationsService.push` anropades för `ao_assigned` åt andra (AO-detaljens personaldialog efter serverbekräftelse, bulkåtgärden **före** serverbekräftelse) och för egna påminnelser (`ServiceIntervalService`: `service_done` och `runDailyCheck` `service_overdue`/`service_approaching`). På servern skriver bara `offer-respond` (service_role, villkorad uppdatering på `updated_at`) `offer_approved` till personal med `offer_manage`/`all`. Inga andra EF:er eller RPC:er skriver nyckeln.
+- **Läsare:** `initState`/`DataSync._poll` via `readAllWithHashes` (nyckeln står i `VIFT_READONLY_EXTRA_KEYS`/`READONLY_EXTRA_KEYS`), `persistNotifs` via REST. `vift_store_full_access` gav `else true` → hela listan till alla med giltig roll, och REST-raden till alla.
+- **Skydd:** triggern `_protect_notifications_and_legacy_keys` (2026-11-17) skyddade bara befintliga posters innehåll (utom `read`) och förbjöd radering under 5 000 poster; nya poster var fria ("pre-existing, accepted application behavior").
+- **`vift_lastChanged`:** skrevs direkt bara av `persistNotifs`; alla RPC:er sätter den själva och `store_bump_lastchanged` sätter den för offerter och fakturor.
+
+#### 2. Serverändringar (vift-v2, `supabase/`)
+
+| Fil | Innehåll |
+|---|---|
+| `migrations/20261128000010_t4a_notiser.sql` | Nya: `_vift_notis_kategori`, `_vift_notis_projicera`, `notification_append(text,jsonb,text,integer)`, `notifications_mark_read(text,jsonb,boolean)` (bara service_role). Ändrade med samma signatur: `vift_store_full_access` (nyckeln falsk för alla), `vift_store_project` (projektion per mottagare), `_store_direct_write_guard` (vitlistan avvecklad). Policyer: `store_direct_write_allowlist_insert/_update` `WITH CHECK (false)`. **STOP:** T4-A installerad, notisdelen inte installerad, md5 för de tre ersatta funktionerna = T4-A-/T3-C-versionen, T3-C:s vitlistepolicyer finns. Rör inga data. |
+| `functions/store-key-write/index.ts` | Åtgärderna `appendNotification` (bara `userId`, `type`, `aoId`, `message` vidare till RPC:n; indatakontroll) och `markNotificationsRead`; felmappning `mapNotisError` (403 `forbidden`+`reason`, 403 `forbidden`, 400 `invalid_entry`, 409 `idempotency_key_conflict`). |
+| `rollback/T4-A-notiser/rollback_t4a_notiser.sql` | Genererad av `tests/local/t4a-notiser-rollback.js`. |
+| `MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json` | `20261128000010` som klass "ny – ej installerad i STAGING" efter T4-A (MIG-1: installerad 37, ny 10). |
+
+**Låsordning** (samma som T3-D:s `activity_log_append`): `vift_workOrders` `FOR SHARE` (bara när en AO-referens prövas) → `vift_notifications` `FOR UPDATE` → `vift_lastChanged` sist. Ingen väg tar `vift_notifications` före `vift_workOrders`. `offer-respond` gör en villkorad uppdatering på `updated_at` och läser om vid konflikt; RPC:erna sätter `updated_at`, så inget går förlorat. Kontroller av mottagare och referens görs efter låsen, i samma transaktion som skrivningen.
+
+**Felkoder** (BEHORIGHETSMATRIS §4, nya `reason`): 403 `forbidden`/`recipient_not_allowed`, 403 `forbidden`/`recipient_not_assigned`; återanvända 403 `type_not_allowed`, `ref_not_visible`, 400 `invalid_entry`, 409 `idempotency_key_conflict`; inaktiv användare 403 `Forbidden` (`checkViftAuth`, oförändrat).
+
+#### 3. Klientändringar (VIFT-CRM)
+
+- `storage.js` (`?v=26`): `appendNotification`, `markNotificationsRead` (EF `store-key-write`).
+- `NotificationsService.js` (`?v=8`): `push` via servern med `requestId` och omförsök vid nätverks-/5xx-fel; egen notis in i tillståndet efter bekräftelse; `markRead`/`markAllRead` bara egna, via servern. Ett avslag loggas och påverkar inget annat flöde.
+- `state.js` (`?v=83`): `persistNotifs`/`_doNotifPersist` borttagna (inga direkta REST-skrivningar kvar; `Storage.setRemoteStrict`/`getRemoteStrict` anropas inte längre).
+- `WorkOrdersPage.js` (`?v=76`): bulkåtgärdens notis och push först efter serverbekräftelse, bara för bekräftade AO.
+- `WorkOrderDetailPage.js` och `ServiceIntervalService.js` oförändrade (anropar `NotificationsService.push` som förut). Ingen redesign.
+
+#### 4. Fake-backend och paritet
+
+- `tests/e2e/fake-backend.js` (båda repona; skiljer bara i källsökvägen): `notisAppend`/`notisMarkera` med samma ordning som RPC:n, projektion per mottagare i `t3dProject`, REST GET döljer `vift_notifications`, `REST_ALLOW = []`.
+- `vift-v2/tests/local/lib/paritet.js`: 22 nya scenarier (läsning per mottagare E och R, även `all`; REST-skrivning av notiser och `vift_lastChanged`; tilldelningsnotis; dubblett; fält åt annan; fel typ; inaktiv mottagare; ej tilldelad mottagare; referens som avsändaren inte ser; egen påminnelse till sig själv och åt annan; tom roll; för lång text; idempotens; egen markering, andras id, markera alla). Alla lika. REST-02b/02c (T3-C) ger nu 403 i båda.
+
+#### 5. Tester (lokalt, PGHOST=/var/tmp/vift-localpg, PostgreSQL 16.15)
+
+**Ny testfil `vift-v2/tests/t4a_notiser.test.js` (testgruppen `notifications_write`): 93/0.** Innehåll:
+- BASLINJE mot T4-A-koden (`0d8cea9`, `git archive`) på samma data: fältet läser andras notiser via `readAllWithHashes`; begränsad läser hela listan via REST; fältet (utan `ao_edit`) skapar via REST en notis åt FÄ2 med typ `offer_approved`, valfri text, påhittad avsändare och tid; `vift_lastChanged` står på vitlistan.
+- Projektion per mottagare för 12 användare (alla standardroller, egna roller, superadmin), REST 0 rader för alla, poster utan mottagare till ingen, historiska poster orörda.
+- Tilldelningsnotis: servern sätter avsändare, tid, id, källa och text; mottagaren ser den, avsändaren inte; idempotens (samma innehåll → samma svar, KS oförändrad; annat innehåll → 409); dubblettskydd; superadmin; egna påminnelser.
+- 23 negativa fall med exakt status, `error`, `reason` och oförändrad KS (`vift_notifications`, `vift_workOrders`, `vift_staff`, `vift_activityLog`, `vift_lastChanged`, `op_idempotency`): `type_not_allowed` (fält, begränsad, `offer_approved`, okänd typ, `ao_pool` även för `all`), `recipient_not_allowed` (inaktiv, okänd, egen påminnelse åt annan även för `all`), `recipient_not_assigned`, `ref_not_visible` (egen roll med `ao_edit` utan `ao_view_all`, okänd AO, egen påminnelse med osynlig AO), 403 `forbidden` (tom roll, okänd roll), 403 `Forbidden` (avstängd), 400 `invalid_entry` (text > 500, tom text, saknat/för långt `requestId`, `userId` som tal, `ao_assigned` utan AO); klientens id/avsändare/tid/läsläge ignoreras.
+- Markering: egen → 200; andras, poster utan mottagare och okända id → 200 `marked:0`, `ignored:4`, KS oförändrad; superadmin kan inte markera andras; "alla" bara egna; indatagränser; tom roll 403; inget att markera → ingen skrivning.
+- REST: v3.4/T3/T4-A-upserten, superadmin, `vift_lastChanged` ensam, DELETE och okänd nyckel → 403 42501 med oförändrad KS; UPDATE av notiser → 0 rader (dold rad); policyerna `WITH CHECK (false)`.
+- Gammal klient: REST-läsning 0 rader, upserten nekas utan dataförlust (alla 7 poster kvar), `readAllWithHashes` bara egna, tilldelning (`patch_ao`), uppgifter (`writeMerge`) och aktivitetslogg (`appendActivity`) fungerar, därefter skapar den nya klientens väg notisen.
+- Installationsfönstret: T4-A:s `store-key-write` mot den nya databasen ger redan projicerade notiser; `appendNotification` → 400 `unknown_action` utan skrivning.
+- Storleksgräns 5 000 (den äldsta tas bort, aldrig den nya).
+- **Samtidighet** (EF med barriär, varje RPC i egen anslutning): ×20 samma `requestId` två samtidiga → exakt en post; ×20 två avsändare samma mottagare och AO → exakt en oläst; 20 samtidiga anslutningar med olika notiser → alla 20 sparas; ×20 ny notis samtidigt som mottagaren markerar alla → båda effekterna består; ×10 tilldelning + notis + aktivitetslogg + markering samtidigt → alla 200, inga deadlocks.
+- **Ingen breddning:** för 12 användare och för STAGING:s sex roller utöver admin (läsande, provkonto byter roll) är **alla nycklar utom notiserna identiska** före (T4-A-koden) och efter, via EF och REST; notiserna är en delmängd = de egna; REST-skrivningen av notiser gick före (201 för alla roller med giltig behörighet) och nekas efter (403 för alla).
+- Affärsflöden: tilldelning → notis; offert → AO med personal → notis med serverns text; uppgifter; AO-listan.
+- Grants (bara service_role; authenticated 42501), RPC utan identitet → `forbidden`.
+- Rollback: installera → rollback (schemat = T4-A-läget med `T4_LAGE=T4-A`, 0 oförklarade; data oförändrade; T4-A-klientens REST-väg fungerar igen) → installera (0 oförklarade) → STOP vid andra körning; STOP utan T4-A; omvänd ordning hela vägen = STAGING-facit utan dataändring.
+
+**Ändrade äldre tester (varje ändring förklarad; inget negativt fall borttaget):**
+
+| Test | Ändring | Skäl |
+|---|---|---|
+| `t3c_roller` (F18-blocket) | Lägesmedvetet: utan notisdelen prövas T3-C:s vitlista som förut; med den (hela kedjan) samma fall med strängare utfall — `vift_lastChanged` UPDATE och "smuggeldata" → 42501, `persistNotifs`-upserten → 42501 utan ändring, nyckelbyte och innehållsändring av notiser → 0 rader (dold rad); nyckelbyte prövas dessutom på den synliga raden `vift_lastChanged` → 42501 | Vitlistan avvecklas avsiktligt (punkt 275) |
+| `t4a_skyddade_falt` (rollbackdelen) | Notisdelens rollback körs före T4-A:s; ominstallationen kör 0009 och 0010; omvänd ordning börjar med notisdelen | Omvänd installationsordning |
+| `replica_build` | 10 nya migrationer; notisdelens 9 registrerade objekt (2 med `md5_t4a`); grants även för notisfunktionerna | Ny migration |
+| `tests/local/t4-andringar.js`, `jamfor-schema.js` | Registret byggs ur två kedjor (med och utan 0010) och får paketet `T4-A-notiser`, md5 även för policyer och triggers, och `md5_t4a` för objekt som T4-A och notisdelen ändrar; `T4_LAGE=T4-A` godtar T4-A-versionen (som `T3_LAGE`) | Samma mönster som T3-registret |
+| VIFT-CRM e2e NOTIF-01 | Fältet skapar en egen påminnelse (`service_done`) i stället för `ao_assigned` åt sig själv | `ao_assigned` kräver `ao_edit` och verklig tilldelning (prövas i NOTIF-02) |
+| VIFT-CRM e2e T3C-07 | Notisvägen: REST-upserten nekas 42501 och en notis åt annan med okänd typ nekas (`type_not_allowed`), inget sparas | Tidigare påstods "notisvägen via vitlistan fungerar" — det är exakt den väg som stängts |
+| `paritet.js` REST-02b/02c | Oförändrade scenarier; utfallet är nu 403 i både replik och fake | Vitlistan avvecklad |
+
+**Resultat:** se §5.1 nedan.
+
+#### 5.1 Resultat
+
+**vift-v2 `tests/run-all.sh` (SKIP_BROWSER=1), slutkörning efter commit `2060b8f`: 36/36 testfiler gröna, 1 688 godkända kontroller, 0 fel.** Webbläsartesterna i `browser/` hoppades över (SKIP_BROWSER=1) och räknas inte som godkända; `staging_e2e_real` kör Playwright och ingår (26/0). En första körning före rättningarna gav 32/36: de fyra felen var förväntade och förklarade — `migrationsmappning` (MIG-1 inte omgenererad), `paritet_fake_kopia` REST-02b/02c (kördes mot den gamla fake-kopian), `replica_build` (räknade 9 nya migrationer) och `t3c_roller` (T3-C:s vitlista, se tabellen ovan); alla rättade och omkörda.
+
+Nya: `t4a_notiser` **93/0**. Ändrade och gröna: `t3c_roller` 145/0, `t4a_skyddade_falt` 138/0, `replica_build` 40/0, `paritet_fake_kopia` 195/0 (194 scenarier, 192 lika, 2 kända: KEY-01, AUTH-02), `migrationsmappning` 18/0, `migrationskedja` (111 identiska, 90 förklarade, 0 oförklarade). Registret: `t4-andringar.js` PASS (36 objekt), `t4a-notiser-rollback.js` PASS, `t4a-rollback.js` PASS.
+
+**VIFT-CRM `tests/run-all.sh`: 23/23 testfiler gröna** (22 Node-testfiler med 690 godkända kontroller och 0 fel, plus `browser/offer_total_parity.js` med 120 offerter och 0 avvikelser). Inga överhoppade. `sim_parity` 195/0, `rollnamn_guard` 17/0, `service_intervals` 38/0.
+
+**E2E (Playwright mot den simulerade servern):** nya NOTIF-02–06 (`tests/e2e/specs/42_t4a_notiser.js`) och ändrade NOTIF-01, T3C-07 samt T3B-01 i riktad körning: 8/8. **Hela e2e-sviten en gång efter alla ändringar: 266 godkända, 0 fel, 0 blockerade, 0 kända fel av 266 (1 716 s).** Baslinjen efter T4-A var 261 av 261; skillnaden är de fem nya NOTIF-02–06. Rapporten är committad separat (`tests/e2e/report/`, `e66e8a0`).
+
+Inga negativa tester har försvagats eller tagits bort.
+
+#### 6. Baslinjefynd, vända
+
+| Baslinje (T4-A-koden, `0d8cea9`) | Godkänt säkerhetstest (tilläggsdelen) |
+|---|---|
+| Fältet läser andras notiser (FÄ2:s tilldelning med kunduppgifter, chefens offertnotis) via `readAllWithHashes` | Projektion per mottagare för 12 användare (E), N-LAS-* (S), NOTIF-05 (K) |
+| Begränsad läser hela `vift_notifications` via REST | REST 0 rader för alla, även `all` (R, S N-REST-LAS*) |
+| Fältet (utan `ao_edit`) skapar via REST en notis åt FÄ2 med valfri typ, text, avsändare och tid | 403 `type_not_allowed`/`recipient_not_*`/`ref_not_visible` (E), REST 42501 (R), NOTIF-04 (K); servern sätter avsändare och tid |
+| `vift_lastChanged` står kvar på REST-vitlistan (punkt 275) | 42501 för alla (R, S N-REST-LC, K T3C-07) |
+
+#### 7. SÄK och D efter tilläggsdelen
+
+- **Lokalt åtgärdade:** beslutets punkt 7 "Notiser som kan skapas åt andra användare utan korrekt kontroll av aktör, mottagare och referens" (även läsläckan); punkt 275 (REST-vitlistan avvecklad); SÄK-13:s kvarstående avvikelse (`vift_lastChanged` på vitlistan); AP-D:s del "ingen falsk tilldelningsnotis" även på servern och i bulkåtgärden; SÄK-17 för notiserna (22 scenarier).
+- **Kvar:** REST-läsning av `vift_lastChanged` (pollsignal, inte en del av punkt 275); AP-D:s övriga notiser (när någon tar ett jobb, nytt pooljobb) i AO-etappen; push-notiserna (`send-push`, `offer-respond`) är oförändrade och ingår inte (ingen ny lucka hittad: `send-push` kräver inloggning och skickar till angivna personal-id — granskas i AO-etappen tillsammans med AP-D).
+
+#### 8. Gammal klient (Service Worker-cache) mot ny server
+
+| Åtgärd | v3.4-klient | T3- och T4-A-klient | Följd |
+|---|---|---|---|
+| Läsa notiser (`readAllWithHashes`) | Bara egna | Samma | Kan aldrig läsa andras notiser |
+| `persistNotifs`: REST-läsning | 0 rader (`found:false`) | Samma | – |
+| `persistNotifs`: upsert av `[notiser, lastChanged]` (ny notis åt kollega, egen påminnelse eller lästmarkering) | 403 42501, loggas som varning i konsolen | Samma; 403 utlöser dessutom `Auth.onServerForbidden` → omläsning av personal och roller (oförändrad behörighet → ingen åtgärd) | **Inga notiser åt andra skapas**; ingen dataförlust (upserten är atomisk och nekas helt, den lokala listan ersätter aldrig serverns); andra flöden påverkas inte (notisskrivningen ligger i en egen kö efter tilldelningen) |
+| Tilldelning, uppgifter, AO, offert, fakturering | Fungerar (andra EF-vägar) | Samma | Prövat i `t4a_notiser` och e2e NOTIF-06 |
+| Lästmarkering | Visas läst lokalt, återställs vid nästa synk | Samma | Presentationsfel tills omladdning |
+| Tilldelningsnotis till kollega | Uteblir | Uteblir | Accepterad följd tills omladdning; Service Workern är network-first och `?v=` är höjt, så en omladdning ger den nya klienten. Push (`send-push`) går fortfarande ut. Skyddet är serverns, inte omladdningen |
+| Nya felkoder | Visas inte (bara konsollogg) | Samma | – |
+
+#### 9. Kontrollpunkter (BESLUT-2026-11-28)
+
+| Kontrollpunkt | Uppfylld | Belägg |
+|---|---|---|
+| Obligatoriska tester godkända | Ja | §5.1 |
+| Negativa tester: rätt felkod och ingen mutation | Ja | `expectReject` (status, error, reason, KS) i alla negativa EF-fall; REST-fall med kod och KS |
+| Atomiska samtidighetskontroller | Ja | Kontrollerna i RPC:n under `FOR UPDATE`/`FOR SHARE`; ×20 med egna anslutningar och barriär (exakt en vinner där det ska, inga förlorade uppdateringar) |
+| Ingen oavsiktligt utökad informationsåtkomst | Ja | Alla nycklar utom notiserna identiska före/efter för 12 användare och STAGING:s sex roller; notiserna en delmängd |
+| Verksamhetskritiska flöden | Ja | Tilldelning (dialog och bulk), uppgifter, AO, offert → AO, aktivitetslogg; run-all och hela e2e-sviten (§5.1) |
+| Avgränsade commits | Ja | Server, tester, klient, tester/e2e, dokument, e2e-rapport |
+| Prövad rollback | Ja | Installera → rollback → installera, STOP, omvänd ordning = STAGING-facit |
+| Faktisk verifieringsnivå i masterplanen | Ja | Punkt 275, SÄK-13, SÄK-17, AP-D, T4-raden, V6: "lokalt verifierad"/"lokalt genomförd" |
+| PG17 och Deno | Nej (miljön) | Kvarstår som releasevillkor |
+
+#### 10. Installationsplan och rollback (komplement till T4-A §11; beskrivs, körs inte)
+
+**Förutsättningar:** som T4-A §11; notisdelen installeras i **samma omgång** som T4-A + T4-B och klientpaketet med den nya klienten (`NotificationsService` v8 m.fl.).
+
+**Backup (tillägg):** JSON-kopia med sha256 av `vift_notifications` och `vift_lastChanged`; `pg_policies` för `store`; definitionerna av `vift_store_full_access`, `vift_store_project` och `_store_direct_write_guard` (md5 = STOP-värdena).
+
+| Steg | Innehåll |
+|---|---|
+| 1. Läsande förkontroll | Som T4-A, plus: md5 av de tre funktionerna = STOP-värdena (T4-A-/T3-C-versionen); vitlistepolicyerna finns; antal notiser och antal poster utan sträng-`userId` (bara antal, inget innehåll) |
+| 2. Databas | Efter `20261128000009` (och före eller efter T4-B:s migrationer, de rör inte samma objekt): `20261128000010` i egen transaktion. Ingen `db push`, ingen `migration repair` |
+| 3. Edge Functions, direkt efter steg 2 | `store-key-write` (samma bunt som T4-A:s EF:er) |
+| 4. Klient | Samma klientpaket som T4-A + T4-B (`tools/build-staging-package.sh` från HEAD; `?v=` höjt) |
+| 5. Storage | Ingen ändring |
+| 6. Efterkontroll (V6) | md5 av de nya/ändrade funktionerna = `tests/local/t4-andringar.json`; läsande per testkonto: SEC-NOTIF-01 (bara egna notiser via `readAllWithHashes`, REST 0 rader); en REST-skrivning av `vift_lastChanged` (SEC-NOTIF-08, nekas, ändrar inget); skrivande SEC-NOTIF-02/03 bara med märkta testposter efter separat GO |
+
+**Fönstret mellan steg 2 och 4:** T4-A:s `store-key-write` mot den nya databasen ger redan projicerade notiser (regeln ligger i RPC:n) men känner inte `appendNotification` (400 `unknown_action`); gamla klienter får 42501 på notisskrivningen (§8). Inga data förloras; under fönstret skapas inga tilldelningsnotiser. Fönstret ska vara minuter.
+
+**Rollback (ingen data skrivs över):** 1) T4-B:s rollback; 2) föregående `store-key-write` och föregående klientpaket (med `persistNotifs`) — samtidigt med steg 3 så att den gamla klienten får tillbaka sin REST-väg; 3) `supabase/rollback/T4-A-notiser/rollback_t4a_notiser.sql` (återställer de tre funktionerna och policyerna exakt, tar bort de fyra nya funktionerna; rör ingen tabell och ingen rad); 4) T4-A:s rollback (§11) osv. Notiser som skapats via den nya vägen (med `createdBy`, `source`, `readAt`) är giltiga för den äldre koden: triggern `_protect_notifications_and_legacy_keys` godtar listan och den gamla klienten läser fälten den känner. JSON-kopian återläses bara vid ett separat beslut om ett datafel.
+
+#### 11. Kända begränsningar och beslut som behövs
+
+**Begränsningar:**
+- PG16 och Node i stället för PG17 och Deno (releasevillkor).
+- Gamla klienter (v3.4/T3/T4-A i cachen) skapar inga notiser åt andra och kan inte markera lästa förrän omladdning (§8). Skyddet är serverns.
+- `readAllWithHashes` ger hash av hela listan (som C-5/T4-A): en användare kan se *att* någon fått en notis, inte vilken.
+- Äldre poster utan mottagarfält visas inte för någon (restriktivt; ingen migrering).
+- REST-läsningen av `vift_lastChanged` finns kvar (pollsignal).
+- `offer-respond` skriver fortfarande `offer_approved` direkt med service_role (utanför RPC:n, villkorad uppdatering); mottagarna är personal med `offer_manage`/`all` och posterna har `userId`, så de projiceras korrekt. Att flytta den till `notification_append`-mönstret är inte nödvändigt för punkt 7.
+- Ingen hastighetsgräns per avsändare: flödet begränsas av typregeln (åt andra bara `ao_assigned` med verklig tilldelning), dubblettskyddet och listans tak.
+
+**Beslut som behövs (förslag i parentes; det mest restriktiva valet som inte bryter ett flöde är genomfört):**
+1. Placering i befintligt paket T4-A (tilläggsdel, migration `20261128000010`) i stället för ett eget paket "T4-N". (Godta; följer punkt 7 "befintliga paket".)
+2. Klassning: P2; läsläckan P1 eftersom offertnotiserna innehåller kundnamn. (Ditt beslut; åtgärdat lokalt oavsett.)
+3. Åt andra får en klient bara skapa `ao_assigned`, och bara när mottagaren är tilldelad AO:n; texten sätts av servern. (Godta; AP-D.)
+4. Egna påminnelser bara till sig själv, för alla med giltig roll. (Godta.)
+5. Superadmin (`all`) läser bara egna notiser. (Godta; notiser är personliga.)
+6. Poster utan mottagarfält lämnas inte ut till någon. (Godta; ingen migrering.)
+7. Gamla klienter tappar notisskrivningen utan dataförlust. (Godta; servern skyddar, omladdning ger den nya vägen.)
+8. REST-läsningen av `vift_lastChanged` får finnas kvar. (Godta; flytta till EF i ett senare paket om REST ska stängas helt.)
+
+#### Ändrade filer
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`):
+- nya: `supabase/migrations/20261128000010_t4a_notiser.sql`; `supabase/rollback/T4-A-notiser/rollback_t4a_notiser.sql`; `tests/t4a_notiser.test.js`; `tests/local/t4a-notiser-rollback.js`;
+- ändrade: `supabase/functions/store-key-write/index.ts`; `supabase/MIGRATIONSORDNING.txt`, `MIGRATIONSMAPPNING.md`, `migrationsmappning.json`; `tests/local/{t4-andringar.js, t4-andringar.json, jamfor-schema.js, lib/paritet.js}`; `tests/e2e/fake-backend.js`; `tests/{replica_build, t3c_roller, t4a_skyddade_falt}.test.js`.
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`):
+- ändrade: `index.html`, `src/data/{storage,state}.js`, `src/services/NotificationsService.js`, `src/pages/WorkOrdersPage.js`; `tests/e2e/fake-backend.js`, `tests/e2e/specs/{12_reports_dashboard,38_t3c_roller}.js`; detta dokument, `docs/MASTERPLAN.md`, `docs/qa-2026-11-26/BEHORIGHETSMATRIS.md`;
+- nya: `tests/e2e/specs/42_t4a_notiser.js`.
+
+#### Commits
+
+**vift-v2** (`claude/vift-system-restructure-8fUme`, inte pushad):
+- `e732555` T4-A tilläggsdel notiser, server (migration `20261128000010`, `store-key-write`, rollback, MIGRATIONSORDNING, MIG-1)
+- `2060b8f` T4-A tilläggsdel notiser, tester (`t4a_notiser`, registret, paritet, fake-kopia, anpassade T3-C/T4-A-tester)
+
+**VIFT-CRM** (`claude/vift-v3-major-redesign`, inte pushad):
+- `d00ad5e` klient (storage, NotificationsService, state, WorkOrdersPage, `?v=`)
+- `aed7285` tester (fake-backend, e2e NOTIF-02–06, NOTIF-01, T3C-07)
+- `e66e8a0` e2e-rapport (266/0/0)
+- dokumentcommit: se `git log` efter `e66e8a0`
