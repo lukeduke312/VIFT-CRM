@@ -379,25 +379,48 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
   ok(!rr.ok && rr.status === 403 && rr.code === '42501' && ksDiff(k2, ksTa(db, { keys: [runId] })).length === 0, 'SEC-REST-02 / SÄK-13 vänt: begränsad raderar en okänd nyckel (synlig rad) → 403 42501, raden finns kvar', rr);
   rr = asUser(db, U.begransad, `update public.store set value = '{"x":2}'::jsonb where key = ${lit(runId)}`);
   ok(!rr.ok && rr.status === 403 && rr.code === '42501' && ksDiff(k2, ksTa(db, { keys: [runId] })).length === 0, 'F18: UPDATE av okänd nyckel (synlig rad) → 403 42501 direct_write_blocked (uttryckligt fel, inte 0 rader)', rr);
-  rr = asUser(db, U.begransad, `update public.store set key = 'vift_notifications_x' where key = 'vift_notifications'`);
-  ok(!rr.ok && rr.status === 403 && rr.code === '42501', 'F18: nyckelbyte via REST → 42501', rr);
-  const lcFore = val(db, 'vift_lastChanged');
-  rr = asUser(db, U.begransad, `update public.store set value = '"1999-01-01T00:00:00.000Z"'::jsonb where key = 'vift_lastChanged'`);
-  const lcEfter = val(db, 'vift_lastChanged');
-  ok(rr.ok && rr.count === 1 && lcEfter !== '1999-01-01T00:00:00.000Z' && lcEfter > lcFore && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(lcEfter),
-    'SEC-REST-02 / F18 (vitlista, se Beslut som behövs): UPDATE av vift_lastChanged godtas men VÄRDET SÄTTS AV SERVERN — klientens 1999-värde sparas aldrig, signalen kan inte vridas bakåt', [lcFore, lcEfter]);
-  rr = asUser(db, U.begransad, `update public.store set value = '{"smuggel":"data"}'::jsonb where key = 'vift_lastChanged'`);
-  ok(rr.ok && typeof val(db, 'vift_lastChanged') === 'string', 'F18: inget data kan lagras i vift_lastChanged (servervärdet ersätter alltid)');
-  rr = asUser(db, U.begransad, `delete from public.store where key = 'vift_lastChanged'`);
-  ok(!rr.ok && rr.status === 403 && rr.code === '42501' && val(db, 'vift_lastChanged') !== null, 'F18: DELETE av vift_lastChanged → 403 42501', rr);
-  // Klientens faktiska väg (persistNotifs) fungerar.
+  /* T4-A, tilläggsdel notiser (20261128000010, punkt 275) avvecklar vitlistan avsiktligt. Med den
+     installerad (hela repokedjan) prövas samma fall med de strängare utfallen; utan den (T3-C-läget)
+     som tidigare. Inget negativt fall tas bort. Den säkra notisvägen prövas i t4a_notiser.test.js. */
+  const NOTISDEL = q(db, `select to_regprocedure('public.notification_append(text,jsonb,text,integer)') is not null as x`)[0].x;
   const notis = { id: 'N-T3C-1', createdAt: '2026-11-28T08:00:00.000Z', type: 'info', message: 'Syntetisk notis', userId: U.falt2.staffId, read: false };
-  rr = asUser(db, U.falt, `insert into public.store(key, value) values ('vift_notifications', ${jlit([notis])}), ('vift_lastChanged', '"2026-11-28T08:00:00.000Z"'::jsonb) on conflict (key) do update set value = excluded.value`);
-  ok(rr.ok && val(db, 'vift_notifications').some((n) => n.id === 'N-T3C-1'), 'F18 (+): klientens persistNotifs-upsert (notiser + lastChanged i ett anrop) fungerar som tidigare', rr);
-  rr = asUser(db, U.falt2, `update public.store set value = ${jlit([Object.assign({}, notis, { read: true })])} where key = 'vift_notifications'`);
-  ok(rr.ok && val(db, 'vift_notifications')[0].read === true, 'F18 (+): lästmarkering av notis fungerar');
-  rr = asUser(db, U.falt2, `update public.store set value = ${jlit([Object.assign({}, notis, { message: 'ändrad' })])} where key = 'vift_notifications'`);
-  ok(!rr.ok && rr.code === '42501' && val(db, 'vift_notifications')[0].message === 'Syntetisk notis', 'befintligt innehållsskydd för notiser gäller fortfarande (meddelandet kan inte ändras)', rr);
+  if (!NOTISDEL) {
+    rr = asUser(db, U.begransad, `update public.store set key = 'vift_notifications_x' where key = 'vift_notifications'`);
+    ok(!rr.ok && rr.status === 403 && rr.code === '42501', 'F18: nyckelbyte via REST → 42501', rr);
+    const lcFore = val(db, 'vift_lastChanged');
+    rr = asUser(db, U.begransad, `update public.store set value = '"1999-01-01T00:00:00.000Z"'::jsonb where key = 'vift_lastChanged'`);
+    const lcEfter = val(db, 'vift_lastChanged');
+    ok(rr.ok && rr.count === 1 && lcEfter !== '1999-01-01T00:00:00.000Z' && lcEfter > lcFore && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(lcEfter),
+      'SEC-REST-02 / F18 (vitlista, se Beslut som behövs): UPDATE av vift_lastChanged godtas men VÄRDET SÄTTS AV SERVERN — klientens 1999-värde sparas aldrig, signalen kan inte vridas bakåt', [lcFore, lcEfter]);
+    rr = asUser(db, U.begransad, `update public.store set value = '{"smuggel":"data"}'::jsonb where key = 'vift_lastChanged'`);
+    ok(rr.ok && typeof val(db, 'vift_lastChanged') === 'string', 'F18: inget data kan lagras i vift_lastChanged (servervärdet ersätter alltid)');
+    rr = asUser(db, U.begransad, `delete from public.store where key = 'vift_lastChanged'`);
+    ok(!rr.ok && rr.status === 403 && rr.code === '42501' && val(db, 'vift_lastChanged') !== null, 'F18: DELETE av vift_lastChanged → 403 42501', rr);
+    // Klientens faktiska väg (persistNotifs) fungerar.
+    rr = asUser(db, U.falt, `insert into public.store(key, value) values ('vift_notifications', ${jlit([notis])}), ('vift_lastChanged', '"2026-11-28T08:00:00.000Z"'::jsonb) on conflict (key) do update set value = excluded.value`);
+    ok(rr.ok && val(db, 'vift_notifications').some((n) => n.id === 'N-T3C-1'), 'F18 (+): klientens persistNotifs-upsert (notiser + lastChanged i ett anrop) fungerar som tidigare', rr);
+    rr = asUser(db, U.falt2, `update public.store set value = ${jlit([Object.assign({}, notis, { read: true })])} where key = 'vift_notifications'`);
+    ok(rr.ok && val(db, 'vift_notifications')[0].read === true, 'F18 (+): lästmarkering av notis fungerar');
+    rr = asUser(db, U.falt2, `update public.store set value = ${jlit([Object.assign({}, notis, { message: 'ändrad' })])} where key = 'vift_notifications'`);
+    ok(!rr.ok && rr.code === '42501' && val(db, 'vift_notifications')[0].message === 'Syntetisk notis', 'befintligt innehållsskydd för notiser gäller fortfarande (meddelandet kan inte ändras)', rr);
+  } else {
+    const kN = ksTa(db, { keys: ['vift_notifications'] });
+    rr = asUser(db, U.begransad, `update public.store set key = 'vift_notifications_x' where key = 'vift_notifications'`);
+    ok(rr.ok && rr.count === 0 && ksDiff(kN, ksTa(db, { keys: ['vift_notifications'] })).length === 0, 'F18 + notisdelen: nyckelbyte av vift_notifications via REST → 0 rader (raden är dold för REST), inget ändrat', rr);
+    rr = asUser(db, U.begransad, `update public.store set key = 'vift_lastChanged_x' where key = 'vift_lastChanged'`);
+    ok(!rr.ok && rr.status === 403 && rr.code === '42501', 'F18: nyckelbyte via REST (synlig rad vift_lastChanged) → 42501', rr);
+    const lcFore = val(db, 'vift_lastChanged');
+    rr = asUser(db, U.begransad, `update public.store set value = '"1999-01-01T00:00:00.000Z"'::jsonb where key = 'vift_lastChanged'`);
+    ok(!rr.ok && rr.status === 403 && rr.code === '42501' && val(db, 'vift_lastChanged') === lcFore, 'SEC-REST-02 / F18 + punkt 275: UPDATE av vift_lastChanged → 403 42501 (vitlistan avvecklad), värdet oförändrat', rr);
+    rr = asUser(db, U.begransad, `update public.store set value = '{"smuggel":"data"}'::jsonb where key = 'vift_lastChanged'`);
+    ok(!rr.ok && rr.code === '42501' && val(db, 'vift_lastChanged') === lcFore, 'F18 + punkt 275: inget data kan lagras i vift_lastChanged (42501)', rr);
+    rr = asUser(db, U.begransad, `delete from public.store where key = 'vift_lastChanged'`);
+    ok(!rr.ok && rr.status === 403 && rr.code === '42501' && val(db, 'vift_lastChanged') !== null, 'F18: DELETE av vift_lastChanged → 403 42501', rr);
+    rr = asUser(db, U.falt, `insert into public.store(key, value) values ('vift_notifications', ${jlit([notis])}), ('vift_lastChanged', '"2026-11-28T08:00:00.000Z"'::jsonb) on conflict (key) do update set value = excluded.value`);
+    ok(!rr.ok && rr.status === 403 && rr.code === '42501' && ksDiff(kN, ksTa(db, { keys: ['vift_notifications'] })).length === 0, 'F18 + punkt 275: v3.4/T3/T4-A-klientens persistNotifs-upsert (notiser + lastChanged) → 403 42501, inget ändrat (notiser via appendNotification)', rr);
+    rr = asUser(db, U.falt2, `update public.store set value = ${jlit([Object.assign({}, notis, { message: 'ändrad' })])} where key = 'vift_notifications'`);
+    ok(rr.ok && rr.count === 0 && ksDiff(kN, ksTa(db, { keys: ['vift_notifications'] })).length === 0, 'F18 + notisdelen: direkt ändring av notiser → 0 rader (dold), inget ändrat', rr);
+  }
   rr = asUser(db, U.admin, `insert into public.store(key, value) values ('vift_staff', '[]'::jsonb) on conflict (key) do update set value = excluded.value`);
   ok(!rr.ok && rr.code === '42501' && st(A), 'F18: även superadmin (app_users.is_admin) nekas direkt REST-skrivning av vift_staff (store_admin_write_protected kan inte längre användas)', rr);
   rr = asUser(db, null, `insert into public.store(key, value) values ('vift_lastChanged', '"x"'::jsonb) on conflict (key) do update set value = excluded.value`);

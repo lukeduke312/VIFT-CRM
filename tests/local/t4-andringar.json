@@ -1,6 +1,12 @@
 {
- "beskrivning": "T4-A (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E. Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
+ "beskrivning": "T4-A (2026-11-28): objekt som T4:s nya migrationer (version efter 20261128000008) lägger till, ändrar eller ersätter, relativt läget efter T3-E (paket T4-A och T4-A-notiser; md5_t4a = T4-A-versionen av ett objekt som notisdelen ändrar igen). Ej installerade i STAGING. Genereras av tests/local/t4-andringar.js --skriv.",
  "objekt": {
+  "funktion:_store_direct_write_guard()": {
+   "paket": "T4-A-notiser",
+   "andring": "ÄNDRAD (efter T3-C)",
+   "md5": "5661bcc49f0ddc0736104856d890fd42|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-C + notiser (punkt 275): REST-vitlistan avvecklad — all direkt skrivning från authenticated/anon nekas (42501 direct_write_blocked)."
+  },
   "funktion:_vift_auth_staff(p_auth uuid)": {
    "paket": "T4-A",
    "andring": "ÄNDRAD (efter T3-B)",
@@ -12,6 +18,18 @@
    "andring": "ÄNDRAD (efter T3-E)",
    "md5": "50337ef7aa350da1ee341681ddbeddd0|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "T3-E + T4-A: cost_view, cost_edit, personal_data_view, bankgiro_edit verkställda och borttagna ur registret."
+  },
+  "funktion:_vift_notis_kategori(p_type text)": {
+   "paket": "T4-A-notiser",
+   "andring": "NY",
+   "md5": "e6302141f7d28f8b8d64ff91984fea73|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Notiser: typ per behörighet (ao_assigned kräver ao_edit; egna påminnelser bara till sig själv; övriga typer nekas)."
+  },
+  "funktion:_vift_notis_projicera(p_value jsonb, p_staff_id text)": {
+   "paket": "T4-A-notiser",
+   "andring": "NY",
+   "md5": "ccbbb6b8c63ad4e204422ed2d0597ffe|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Notiser: projektion per mottagare (userId = anroparen); poster utan mottagarfält lämnas inte ut."
   },
   "funktion:_vift_role_perms(p_roles jsonb, p_role_id text)": {
    "paket": "T4-A",
@@ -127,6 +145,18 @@
    "md5": "78ab59db85b0b00a3826de8c97ee1a75|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "Hjälpfunktion: tomt värde (null eller tom sträng)."
   },
+  "funktion:notification_append(p_caller_staff_id text, p_entry jsonb, p_request_id text, p_max integer)": {
+   "paket": "T4-A-notiser",
+   "andring": "NY",
+   "md5": "2eda6a3652d8500f8e525270e6262ec1|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Notiser: säker skrivväg under radlås — servern sätter avsändare/tid/id, mottagaren aktiv personal, referensen prövas för avsändaren (_vift_ref_visible), tilldelad mottagare, idempotens bunden till innehåll, storleksgräns."
+  },
+  "funktion:notifications_mark_read(p_caller_staff_id text, p_ids jsonb, p_all boolean)": {
+   "paket": "T4-A-notiser",
+   "andring": "NY",
+   "md5": "faf0dd14e63bf066586131697522e4fa|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "Notiser: markera bara egna notiser lästa under radlås (inget orakel för andras id)."
+  },
   "funktion:store_business_key_merge_write(p_key text, p_upserts jsonb, p_removals jsonb, p_caller_authorized boolean, p_actor_id text)": {
    "paket": "T4-A",
    "andring": "BORTTAGEN (ersatt av ny signatur)",
@@ -158,22 +188,36 @@
    "beskrivning": "T4-A: inaktiverad roll ger inga behörigheter (RLS)."
   },
   "funktion:vift_store_full_access(p_key text, p_perms text[])": {
-   "paket": "T4-A",
-   "andring": "ÄNDRAD (efter T3-D)",
-   "md5": "429030d2146ea1997687c83213598ca4|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-D + T4-A: hela värdet bara med läsrätt till alla skyddade fält (även skrivare), giltig behörighet, activity_log_view_all, urval per post för återkommande/projekt/avvikelser/inspektioner."
+   "paket": "T4-A-notiser",
+   "andring": "ÄNDRAD (efter T4-A)",
+   "md5": "bf9535f6b86f248b89daddcd8f9d50fe|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A + notiser: hela värdet bara med läsrätt till alla skyddade fält (även skrivare), giltig behörighet, activity_log_view_all, urval per post för återkommande/projekt/avvikelser/inspektioner; vift_notifications aldrig hela listan (REST-läsning stängd).",
+   "md5_t4a": "429030d2146ea1997687c83213598ca4|authenticated=X/postgres,postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:vift_store_project(p_key text, p_value jsonb, p_perms text[], p_caller_staff_id text)": {
-   "paket": "T4-A",
-   "andring": "ÄNDRAD (efter T3-D)",
-   "md5": "654d0db82ba49f00d7dabba5720c2342|postgres=X/postgres,service_role=X/postgres",
-   "beskrivning": "T3-D + T4-A: skyddade fält projiceras även för skrivare; staff_contacts_view; aktivitetslogg utan activity_log_view_all; urval per post för återkommande/projekt/avvikelser/inspektioner; inga data utan giltig behörighet."
+   "paket": "T4-A-notiser",
+   "andring": "ÄNDRAD (efter T4-A)",
+   "md5": "20543c3d087e2c8679d3c5fb51932438|postgres=X/postgres,service_role=X/postgres",
+   "beskrivning": "T3-D + T4-A + notiser: skyddade fält projiceras även för skrivare; staff_contacts_view; aktivitetslogg utan activity_log_view_all; urval per post; inga data utan giltig behörighet; vift_notifications per mottagare.",
+   "md5_t4a": "654d0db82ba49f00d7dabba5720c2342|postgres=X/postgres,service_role=X/postgres"
   },
   "funktion:work_order_patch(p_ao_id text, p_patch jsonb, p_idempotency_key text, p_expected_updated_at text, p_caller_staff_id text, p_caller_perms text[])": {
    "paket": "T4-A",
    "andring": "ÄNDRAD (efter T3-B)",
    "md5": "52a5e9a4e5995f9929f04743d6e866b6|postgres=X/postgres,service_role=X/postgres",
    "beskrivning": "T3-B + T4-A: accessCode och materials[].buyPrice prövas fältvis under radlåset (field_protected, ignoredFields)."
+  },
+  "policy:public.store.store_direct_write_allowlist_insert": {
+   "paket": "T4-A-notiser",
+   "andring": "ÄNDRAD (efter T3-C)",
+   "md5": "9f7ca1ff376d468091233311e9c83173",
+   "beskrivning": "T3-C + notiser (punkt 275): RESTRICTIVE INSERT med WITH CHECK (false) — vitlistan tom."
+  },
+  "policy:public.store.store_direct_write_allowlist_update": {
+   "paket": "T4-A-notiser",
+   "andring": "ÄNDRAD (efter T3-C)",
+   "md5": "64169b318cbf2c49f2c03ef25af6ff41",
+   "beskrivning": "T3-C + notiser (punkt 275): RESTRICTIVE UPDATE med WITH CHECK (false) — vitlistan tom."
   }
  }
 }

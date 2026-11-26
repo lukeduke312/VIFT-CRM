@@ -221,6 +221,49 @@ const T4A_SCEN = [
 ];
 SCENARIER.push(...T4A_SCEN);
 
+/* ── T4-A, tilläggsdel notiser (20261128000010): projektion per mottagare, säker skrivväg och
+   avvecklad REST-vitlista. Id:n skapas olika (md5/sha) och jämförs därför inte. ── */
+const T4N_T0 = '2026-11-01T08:00:00.000Z';
+const t4nVarld = (store, d) => {
+  const F = d.U.falt.staffId, F2 = d.U.falt2.staffId, C = d.U.chef.staffId;
+  store.vift_notifications = [
+    { id: 'N-F-1', userId: F, type: 'ao_assigned', message: 'Du har tilldelats AO-A1', aoId: 'AO-A1', offerId: '', read: false, createdAt: T4N_T0 },
+    { id: 'N-F2-1', userId: F2, type: 'ao_assigned', message: 'Du har tilldelats AO-A8 (Kalle Kund)', aoId: 'AO-A8', offerId: '', read: false, createdAt: T4N_T0 },
+    { id: 'N-C-1', userId: C, type: 'offer_approved', message: 'Offert godkänd', aoId: '', offerId: 'OFF-R1', read: false, createdAt: T4N_T0 },
+    { id: 'N-OLD-1', type: 'info', message: 'Äldre utan mottagare', read: false, createdAt: T4N_T0 },
+  ];
+  return store;
+};
+const t4nRefVarld = (store, d) => { t4nVarld(store, d); store.vift_roles = store.vift_roles.map((x) => (x.id === 'begransad' ? Object.assign({}, x, { permissions: x.permissions.concat(['ao_edit']) }) : x)); return store; };
+const notisIds = (svar) => ((((svar.body || {}).data || {}).notifications) || []).map((n) => n.id).sort().join(',');
+const notisUt = (las, fn) => (las('vift_notifications') || []).filter(fn).map((n) => [n.userId, n.type, n.aoId, n.message, n.read, n.createdBy || '', n.source || ''].join('/')).sort().join(';');
+const NA = (notification, requestId) => ({ action: 'appendNotification', requestId: requestId || 'par-n', notification });
+const T4N_SCEN = [
+  { id: 'N-LAS-falt', sec: 'punkt 7 (läsning per mottagare, fält)', anv: 'falt', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_notifications'] }, utfall: (las, svar) => notisIds(svar) },
+  { id: 'N-LAS-admin', sec: "punkt 7 (läsning per mottagare, 'all')", anv: 'admin', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_notifications'] }, utfall: (las, svar) => notisIds(svar) },
+  { id: 'N-LAS-chef', sec: 'punkt 7 (läsning per mottagare, chef)', anv: 'chef', ef: 'store-key-write', body: { action: 'readAllWithHashes', keys: ['vift_notifications'] }, utfall: (las, svar) => notisIds(svar) },
+  { id: 'N-REST-LAS', sec: 'punkt 7 (R, notiser)', anv: 'falt', restLas: 'vift_notifications', utfall: (las, svar) => svar.rader },
+  { id: 'N-REST-LAS-admin', sec: "punkt 7 (R, notiser, 'all')", anv: 'admin', restLas: 'vift_notifications', utfall: (las, svar) => svar.rader },
+  { id: 'N-REST-SKRIV', sec: 'punkt 275 (REST-skrivning av notiser)', anv: 'falt', rest: { key: 'vift_notifications', value: [{ id: 'N-PAR', userId: 'ST-R05', createdAt: T4N_T0, message: 'x', read: false }] }, utfall: (las) => (las('vift_notifications') || []).map((n) => n.id).join(',') },
+  { id: 'N-REST-LC', sec: 'punkt 275 (vift_lastChanged)', anv: 'begransad', rest: { key: 'vift_lastChanged', value: '1999-01-01T00:00:00.000Z' }, utfall: (las) => String(las('vift_lastChanged')).startsWith('1999') },
+  { id: 'N-APP-chef', sec: 'tilldelningsnotis (chef → FÄ2, AO-A8)', anv: 'chef', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt2.staffId, type: 'ao_assigned', aoId: 'AO-A8', message: 'klienttext' }), utfall: (las, svar, d) => notisUt(las, (n) => n.createdBy === d.U.chef.staffId) },
+  { id: 'N-APP-dup', sec: 'AP-D (oläst tilldelningsnotis finns)', anv: 'chef', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt.staffId, type: 'ao_assigned', aoId: 'AO-A1' }), utfall: (las, svar) => [(las('vift_notifications') || []).length, (svar.body || {}).duplicate, (svar.body || {}).id].join('|') },
+  { id: 'N-APP-falt', sec: 'punkt 7 (fält åt annan)', anv: 'falt', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt2.staffId, type: 'ao_assigned', aoId: 'AO-A1' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-typ', sec: 'punkt 7 (typ offer_approved)', anv: 'chef', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt.staffId, type: 'offer_approved', message: 'x' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-inaktiv', sec: 'punkt 7 (inaktiv mottagare)', anv: 'chef', ef: 'store-key-write', body: NA({ userId: 'ST-R13', type: 'ao_assigned', aoId: 'AO-A1' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-ejtilld', sec: 'AP-D (mottagaren inte tilldelad)', anv: 'chef', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt2.staffId, type: 'ao_assigned', aoId: 'AO-A1' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-ref', sec: 'punkt 7 (referens avsändaren inte ser)', anv: 'begransad', ef: 'store-key-write', varld: t4nRefVarld, body: (d) => NA({ userId: d.U.falt2.staffId, type: 'ao_assigned', aoId: 'AO-A8' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-egen', sec: 'egen påminnelse till sig själv', anv: 'falt', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt.staffId, type: 'service_overdue', message: 'Hiss förfallen' }), utfall: (las, svar, d) => notisUt(las, (n) => n.createdBy === d.U.falt.staffId) + '|' + !!(svar.body || {}).notification },
+  { id: 'N-APP-egen-annan', sec: 'egen påminnelse åt annan', anv: 'falt', ef: 'store-key-write', body: (d) => NA({ userId: d.U.falt2.staffId, type: 'service_overdue', message: 'x' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-tom', sec: 'punkt 7 (tom roll)', anv: 'tom', ef: 'store-key-write', body: (d) => NA({ userId: d.U.tom.staffId, type: 'service_done', message: 'x' }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-lang', sec: 'storleksgräns (text > 500)', anv: 'chef', ef: 'store-key-write', body: (d) => NA({ userId: d.U.chef.staffId, type: 'service_done', message: 'x'.repeat(501) }), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-APP-idem', sec: 'idempotens bunden till innehåll', anv: 'chef', ef: 'store-key-write', fore: NA({ userId: 'ST-R04', type: 'service_done', message: 'x' }, 'par-idem-n'), body: NA({ userId: 'ST-R02', type: 'service_done', message: 'y' }, 'par-idem-n'), utfall: (las) => (las('vift_notifications') || []).length },
+  { id: 'N-MARK-egen', sec: 'egen markering', anv: 'falt', ef: 'store-key-write', body: { action: 'markNotificationsRead', ids: ['N-F-1'] }, utfall: (las, svar) => (las('vift_notifications') || []).map((n) => n.id + ':' + n.read + ':' + (typeof n.readAt === 'string')).join(',') + '|' + (svar.body || {}).marked + '|' + (svar.body || {}).ignored },
+  { id: 'N-MARK-annan', sec: 'markering av annans notis', anv: 'falt', ef: 'store-key-write', body: { action: 'markNotificationsRead', ids: ['N-F2-1', 'N-C-1', 'N-OLD-1', 'N-X'] }, utfall: (las, svar) => (las('vift_notifications') || []).map((n) => n.id + ':' + n.read).join(',') + '|' + (svar.body || {}).marked + '|' + (svar.body || {}).ignored },
+  { id: 'N-MARK-alla', sec: 'markera alla (bara egna)', anv: 'falt2', ef: 'store-key-write', body: { action: 'markNotificationsRead', all: true }, utfall: (las, svar) => (las('vift_notifications') || []).map((n) => n.id + ':' + n.read).join(',') + '|' + (svar.body || {}).marked },
+].map((sc) => Object.assign({ varld: t4nVarld, fakeOpts: T3D_OPTS }, sc));
+SCENARIER.push(...T4N_SCEN);
+
 /* Samma världsinställning som tests/staging_e2e_real.test.js (STAGING-lik simulerad server). */
 const FAKE_STD = { logOps: true, activityAppend: true, activitiesPolicy: true };
 const EF_LISTA = ['work-orders-list', 'ao-time-write', 'work-order-checklist-resolve', 'work-order-log-write', 'time-entries-list', 'store-key-write', 'invoice-write'];

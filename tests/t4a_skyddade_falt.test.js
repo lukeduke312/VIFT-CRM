@@ -541,25 +541,27 @@ function laddaVarld(db, U) {
     const fore = ksTa(rb.db, KS);
     const jamfor = (env) => { try { return execFileSync('node', [path.join(__dirname, 'local', 'jamfor-schema.js'), rb.db], { encoding: 'utf8', env: Object.assign({}, process.env, env || {}) }); } catch (e) { return String(e.stdout || ''); } };
     const ofo = (t) => Number((/(\d+) oförklarade/.exec(t) || [])[1]);
+    /* Notisdelen (20261128000010) installeras efter T4-A och rullas därför tillbaka först (t4a_notiser.test.js prövar den). */
+    psqlFile(rb.db, path.join(serverRot(), 'rollback', 'T4-A-notiser', 'rollback_t4a_notiser.sql'));
     psqlFile(rb.db, path.join(serverRot(), 'rollback', 'T4-A', 'rollback_t4a.sql'));
     let ut = jamfor();
-    ok(ofo(ut) === 0 && /OBS: T4-ändringar som inte syns/.test(ut), 'rollback T4-A: schemat = läget efter T3-E (0 oförklarade; T4-A:s objekt borta)', ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
+    ok(ofo(ut) === 0 && /OBS: T4-ändringar som inte syns/.test(ut), 'rollback notiser + T4-A: schemat = läget efter T3-E (0 oförklarade; T4-A:s och notisdelens objekt borta)', ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
     ok(q(rb.db, `select 1 from pg_proc where proname like '\\_vift\\_t4a\\_%'`).length === 0 && q(rb.db, `select 1 from pg_proc where oid = to_regprocedure('public.store_business_key_write(text,jsonb,text,boolean,text)')`).length === 1,
       'rollback T4-A: hjälpfunktionerna borta, store_business_key_write med 5 parametrar tillbaka');
     ok(ksDiff(fore, ksTa(rb.db, KS)).length === 0, 'rollback T4-A: INGEN data ändrad (data skapad efter installationen finns kvar)');
     x = rpc(rb.db, 'store_business_key_merge_write', { p_key: 'vift_customers', p_upserts: [], p_removals: [], p_caller_authorized: true, p_actor_id: rb.U.admin.staffId });
     ok(!x.error, 'äldre RPC (5 parametrar) fungerar på T4-A-data efter rollback', x.error);
     let fel = null;
-    try { psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000009_t4a_skyddade_falt.sql')); } catch (e) { fel = e.message; }
+    try { psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000009_t4a_skyddade_falt.sql')); psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000010_t4a_notiser.sql')); } catch (e) { fel = e.message; }
     ut = jamfor();
-    ok(!fel && ofo(ut) === 0 && !/OBS: T4-ändringar som inte syns/.test(ut), 'ny installation efter rollback: STOP-kontrollen godtar T3-E-versionerna; schemat = alla registrerade ändringar', fel);
+    ok(!fel && ofo(ut) === 0 && !/OBS: T4-ändringar som inte syns/.test(ut), 'ny installation efter rollback (0009, därefter notisdelen 0010): STOP-kontrollen godtar T3-E-versionerna; schemat = alla registrerade ändringar', fel);
     let stop = null;
     try { psqlFile(rb.db, path.join(serverRot(), 'migrations', '20261128000009_t4a_skyddade_falt.sql')); } catch (e) { stop = e.message; }
     ok(stop && /T4-A STOP/.test(stop), 'STOP-kontroll: en andra körning av 20261128000009 avbryts', stop);
     const fore2 = ksTa(rb.db, KS);
-    for (const p of ['T4-A/rollback_t4a.sql', 'T3-E/rollback_t3e.sql', 'T3-D/rollback_t3d.sql', 'T3-C/rollback_t3c.sql', 'T3-B/rollback_t3b.sql']) psqlFile(rb.db, path.join(serverRot(), 'rollback', p));
+    for (const p of ['T4-A-notiser/rollback_t4a_notiser.sql', 'T4-A/rollback_t4a.sql', 'T3-E/rollback_t3e.sql', 'T3-D/rollback_t3d.sql', 'T3-C/rollback_t3c.sql', 'T3-B/rollback_t3b.sql']) psqlFile(rb.db, path.join(serverRot(), 'rollback', p));
     ut = jamfor({ T3_IGNORERA: '1' });
-    ok(ofo(ut) === 0, 'rollback T4-A + T3-E + T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit', ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
+    ok(ofo(ut) === 0, 'rollback notiser + T4-A + T3-E + T3-D + T3-C + T3-B (omvänd installationsordning): schemat = STAGING-facit', ut.split('\n').filter((l) => /OFÖRKLARAD/.test(l)).slice(0, 5));
     ok(ksDiff(fore2, ksTa(rb.db, KS)).length === 0, 'rollback hela vägen: ingen data ändrad');
     rb.stang(); }
 

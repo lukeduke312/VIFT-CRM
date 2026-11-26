@@ -243,7 +243,9 @@ function t3dFull(key, perms, keyPerms) {
     default: return true;
   }
 }
-const REST_ALLOW = ['vift_notifications', 'vift_lastChanged'];
+/* T4-A, tilläggsdel notiser (punkt 275, vift-v2 20261128000010): REST-vitlistan är avvecklad —
+   ingen nyckel kan skrivas direkt via REST (tidigare vift_notifications och vift_lastChanged). */
+const REST_ALLOW = [];
 const directBlocked = (key) => DEFINITE(403, 'direct_write_blocked', { code: '42501', message: 'direct_write_blocked', key });
 
 /* Serverns egna TypeScript-moduler (store-key-write) transpileras en gång
@@ -370,6 +372,12 @@ class FakeSupabase {
     if (!p.includes('all') && !T4A.giltig(p) && key !== 'vift_staff' && key !== 'vift_roles' && key.startsWith('vift_')) {
       return Array.isArray(value) ? [] : (value && typeof value === 'object' ? {} : null);
     }
+    /* T4-A notiser: bara anroparens egna notiser (userId = personal-id som sträng); poster utan
+       mottagarfält lämnas inte ut (_vift_notis_projicera). */
+    if (key === 'vift_notifications') {
+      const mid = me && me.id ? String(me.id) : '';
+      return Array.isArray(value) && mid ? value.filter((e) => e && typeof e === 'object' && !Array.isArray(e) && typeof e.userId === 'string' && e.userId === mid) : [];
+    }
     if (!T3D_KEYS.includes(key)) return value;
     if (key === 'vift_roles') return projectStaffRoles(key, value, perms, me, this.get('staff'));
     if (t3dFull(key, p, edgeModules().keyPerms)) return value;
@@ -425,6 +433,70 @@ class FakeSupabase {
       return value.filter((e) => obj(e) && (String(e.createdBy || '') === id || String(e.assignedTo || '') === id || r.ao.includes(taskAo(e))));
     }
     return value;
+  }
+  /* T4-A, tilläggsdel notiser: = store-key-write appendNotification + RPC notification_append
+     (vift-v2 20261128000010). Samma ordning: indata → giltig behörighet → typ → idempotens →
+     mottagare → referens för AVSÄNDAREN → dubblettskydd → servern sätter id, avsändare och tid. */
+  notisAppend(body, perms, me) {
+    const n = body && body.notification;
+    const rid = body && typeof body.requestId === 'string' ? body.requestId : '';
+    const str = (v) => v === undefined || v === null || typeof v === 'string';
+    if (!n || typeof n !== 'object' || Array.isArray(n) || !rid || rid.length > 100) return DEFINITE(400, 'invalid_entry');
+    if (typeof n.userId !== 'string' || typeof n.type !== 'string' || !str(n.aoId) || !str(n.message)) return DEFINITE(400, 'invalid_entry');
+    const mott = n.userId, typ = n.type, aoId = n.aoId || '';
+    let msg = String(n.message || '').trim();
+    if (!mott || mott.length > 100 || typ.length > 50 || aoId.length > 100) return DEFINITE(400, 'invalid_entry');
+    const meId = me && me.id ? String(me.id) : '';
+    if (!meId || !T4A.giltig(perms)) return DEFINITE(403, 'forbidden');
+    const kat = typ === 'ao_assigned' ? 'tilldelning' : ['service_done', 'service_overdue', 'service_approaching'].includes(typ) ? 'egen' : null;
+    if (!kat || (kat === 'tilldelning' && !this.has(effAoPerms(perms), 'ao_edit'))) return REGEL(403, 'forbidden', 'type_not_allowed');
+    if (kat === 'tilldelning' && !aoId) return DEFINITE(400, 'invalid_entry');
+    if (kat === 'egen' && (!msg || msg.length > 500)) return DEFINITE(400, 'invalid_entry');
+    if (!this.notisIdem) this.notisIdem = new Map();
+    const ikey = meId + ':' + rid, fp = sha(['notification_append', meId, mott, typ, aoId, msg]);
+    const tidigare = this.notisIdem.get(ikey);
+    if (tidigare) return tidigare.fp !== fp ? DEFINITE(409, 'idempotency_key_conflict') : { status: 200, body: Object.assign({}, tidigare.res, { replay: true }) };
+    const aktiv = (this.get('staff') || []).some((x) => x && x.id === mott && x.active && !['false', '0', ''].includes(String(x.active)));
+    if (!aktiv || (kat === 'egen' && mott !== meId)) return REGEL(403, 'forbidden', 'recipient_not_allowed');
+    if (aoId) {
+      if (!this.t3dRefVisible('workOrderId', aoId, perms, this.t3dRefs(perms, meId))) return REGEL(403, 'forbidden', 'ref_not_visible');
+      const ao = (this.get('workOrders') || []).find((a) => a && a.id === aoId);
+      if (!ao) return REGEL(403, 'forbidden', 'ref_not_visible');
+      if (kat === 'tilldelning') {
+        if (!isAssigned(ao, mott)) return REGEL(403, 'forbidden', 'recipient_not_assigned');
+        msg = 'Du har tilldelats ' + aoId + ': ' + (String(ao.title || '').trim() || aoId);
+      }
+    }
+    const list = this.get('notifications') || [];
+    const dup = list.find((e) => e && e.userId === mott && e.type === typ && String(e.read) !== 'true' && (kat === 'tilldelning' ? String(e.aoId || '') === aoId : String(e.message || '') === msg));
+    if (dup) { const res = { ok: true, id: dup.id, duplicate: true }; this.notisIdem.set(ikey, { fp, res }); return { status: 200, body: res }; }
+    const now = new Date().toISOString();
+    const entry = { id: 'N-' + sha(ikey + '|' + fp).slice(0, 24), userId: mott, type: typ, message: msg, aoId, offerId: '', read: false, createdAt: now, createdBy: meId, source: 'server' };
+    list.unshift(entry);
+    while (list.length > 5000) {
+      let j = 1; for (let k = 2; k < list.length; k++) if (String(list[k].createdAt || '') <= String(list[j].createdAt || '')) j = k;
+      list.splice(j, 1);
+    }
+    this.set('notifications', list); this.touch();
+    const res = Object.assign({ ok: true, id: entry.id, duplicate: false, serverSignature: now }, mott === meId ? { notification: entry } : {});
+    this.notisIdem.set(ikey, { fp, res });
+    return { status: 200, body: res };
+  }
+  /* T4-A notiser: = RPC notifications_mark_read — bara egna; andras och okända id räknas lika. */
+  notisMarkera(body, perms, me) {
+    const all = !!body && body.all === true, ids = body && body.ids;
+    if (!all && (!Array.isArray(ids) || !ids.length || ids.length > 500 || ids.some((x) => typeof x !== 'string' || !x || x.length > 100))) return DEFINITE(400, 'invalid_entry');
+    const meId = me && me.id ? String(me.id) : '';
+    if (!meId || !T4A.giltig(perms)) return DEFINITE(403, 'forbidden');
+    const list = this.get('notifications') || [];
+    const uniq = all ? [] : [...new Set(ids)];
+    const egen = (e) => e && typeof e === 'object' && typeof e.userId === 'string' && e.userId === meId;
+    const now = new Date().toISOString();
+    let marked = 0;
+    const ny = list.map((e) => { if (egen(e) && String(e.read) !== 'true' && (all || uniq.includes(e.id))) { marked++; return Object.assign({}, e, { read: true, readAt: now }); } return e; });
+    const ignored = uniq.filter((i) => !list.some((e) => egen(e) && e.id === i)).length;
+    if (marked) { this.set('notifications', ny); this.touch(); }
+    return { status: 200, body: Object.assign({ ok: true, marked, ignored }, marked ? { serverSignature: now } : {}) };
   }
   /* T3-D: _vift_ref_visible (appendActivity, D-22). */
   t3dRefVisible(field, refId, perms, r) {
@@ -533,13 +605,15 @@ class FakeSupabase {
         const rp = this.permsFor(session.email);
         /* T3-D: även aktivitetslogg, uppgifter, offerter, kunder, fastigheter, objekt och kontakter
            döljs för roller utan full åtkomst (store_read_by_role → vift_store_full_access). */
-        const restHidden = (k) => LOCKED.includes(k) || (T3D_KEYS.includes(k) && !t3dFull(k, rp, edgeModules().keyPerms));
+        /* T4-A notiser: vift_notifications läses aldrig via REST (vift_store_full_access falskt för alla). */
+        const restHidden = (k) => LOCKED.includes(k) || k === 'vift_notifications' || (T3D_KEYS.includes(k) && !t3dFull(k, rp, edgeModules().keyPerms));
         if (key) return { status: 200, body: restHidden(key) || !this.store.has(key) ? [] : [{ value: clone(this.store.get(key)) }] };
         return { status: 200, body: [...this.store.entries()].filter(([k]) => !restHidden(k)).map(([k, v]) => ({ key: k, value: clone(v) })) };
       }
-      /* Direkt skrivning (Storage.setRemoteStrict m.fl.). T3-C (F18): bara vitlistan
-         vift_notifications och vift_lastChanged (värdet sätts av servern); DELETE och allt
-         annat nekas med 42501 direct_write_blocked (vift-v2 20261128000005). */
+      /* Direkt skrivning (Storage.setRemoteStrict m.fl.). T3-C (F18) + T4-A notiser (punkt 275):
+         vitlistan är tom — all direkt skrivning, även vift_notifications och vift_lastChanged som
+         v3.4/T3/T4-A-klientens persistNotifs skickar, nekas med 42501 direct_write_blocked
+         (vift-v2 20261128000005 + 20261128000010). */
       if (method === 'DELETE') return directBlocked((u.searchParams.get('key') || '').replace(/^eq\./, ''));
       const rows = Array.isArray(body) ? body : [body];
       const blocked = rows.filter((r) => !r || !REST_ALLOW.includes(r.key));
@@ -705,6 +779,8 @@ class FakeSupabase {
         this.store.set(body.key, clone(value)); this.touch();
         return { status: 200, body: { ok: true, hash: sha(value), current: this.t3dProject(body.key, clone(value), perms, me) } };
       }
+      case 'appendNotification': return this.notisAppend(body, perms, me);
+      case 'markNotificationsRead': return this.notisMarkera(body, perms, me);
       case 'appendActivity': {
         if (!this.opts.activityAppend) return DEFINITE(400, 'unknown_action');
         const built = edgeModules().activityLog.buildActivityEntry(body.entry, me.id, new Date().toISOString());
