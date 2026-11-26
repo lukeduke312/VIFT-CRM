@@ -214,9 +214,7 @@ const TimePage = {
     const aoId = state.stampAoId;
     const ao = aoId ? getAO(aoId) : null;
     const cu = ao ? getCu(ao.customerId) : null;
-    const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${esc(p.id)}">${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
-    ).join('');
+    const pgOptions = TimeService.priceGroupOptions(ao ? (ao.priceGroupId || '') : '', aoId); // T4-B (D-11)
     const since = state.stampTimestamp ? new Date(state.stampTimestamp).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '';
     Modal.open({
       title: `<span class="fm-mt">${ic('log-out', 18)}<span>Stämpla ut</span></span>`,
@@ -346,9 +344,7 @@ const TimePage = {
       <div class="fg"><label for="mt-pg">Prisgrupp / typ</label>
         <select id="mt-pg">
           <option value="">— Välj —</option>
-          ${(state.priceGroups||[]).filter(p=>p.active).map(p=>
-            `<option value="${esc(p.id)}">${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
-          ).join('')}
+          ${TimeService.priceGroupOptions('', '')}
         </select>
       </div>
       <div class="fg"><label for="mt-comment">Kommentar – vad utfördes</label>
@@ -645,9 +641,7 @@ const TimePage = {
   openEditEntry(id) {
     const t = (state.timeEntries||[]).find(x=>x.id===id);
     if (!t) return;
-    const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${esc(p.id)}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
-    ).join('');
+    const pgOptions = TimeService.priceGroupOptions(t.priceGroupId, t.aoId); // T4-B (D-11)
     const cuOptions = (state.customers||[]).map(c =>
       `<option value="${esc(c.id)}" ${t.customerId===c.id?'selected':''}>${esc(CustomerService.displayName(c))}</option>`
     ).join('');

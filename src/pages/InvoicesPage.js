@@ -32,6 +32,8 @@ const InvoicesPage = {
   /* Belopp med öre — fakturering visar alltid två decimaler så att delsummor
      och totaler går att stämma av (fkr() avrundar till hela kronor). */
   _kr(n) {
+    /* T4-B (D-10, F13): ett okänt pris (null) visas som saknat, aldrig som 0 kr. */
+    if (n === null) return 'Pris saknas';
     const v = Number(n);
     return (Number.isFinite(v) ? v : 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr';
   },
@@ -1373,6 +1375,7 @@ const InvoiceDetailPage = {
           ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
+          ${tb.incomplete ? `<div class="dr" style="color:var(--yl);font-size:12px;">Ofullständig — ${esc(tb.saknas.join(', '))} saknas</div>` : ''}
           <div class="dr"><span class="dk">Fakturerat exkl. moms</span><span class="dv">${fkr(tb.revenue.value)}</span></div>
           ${tb.material.buyEx > 0 ? `<div class="dr"><span class="dk">Material inköp</span><span class="dv" style="color:var(--rd);">${fkr(tb.material.buyEx)}</span></div>` : ''}
           ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)} <span style="font-size:10px;color:var(--mt);">(${TimeService.fmtDuration(tb.labor.minutes)} × ${fmt(tb.labor.rate)} kr/h)</span></span></div>` : ''}

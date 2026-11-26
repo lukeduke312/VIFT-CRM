@@ -1084,20 +1084,74 @@ const WorkOrderService = {
   },
 
   /* Material */
-  /* G12: valfritt sista argument { onSettled } — anroparen visar besked
-     först när servern bekräftat (samma kontrakt som update()). */
+  /* T4-B (2026-11-28, D-09, D-10, D-19, SÄK-6): materialrader skrivs RADVIS (ao-time-write
+     add_material / update_material / remove_material). Servern sätter id, addedBy, addedAt,
+     utförandedatum och pris (artikel → ögonblicksbild; fritext → okänt pris, aldrig 0). Klienten
+     skickar bara de fält användaren får påverka: priser bara med prissättningsrätt (D-09/D-10).
+     Den lokala ändringen är preliminär; serverns svar (projicerat för rollen) ersätter AO:ns
+     materialrader, och vid ett slutgiltigt avslag backas den lokala ändringen.
+     G12: valfritt sista argument { onSettled } — besked först när servern bekräftat. */
+  canReadPrices() {
+    return typeof Auth !== 'undefined' && Auth.canAny(['ao_edit', 'ao_view_all', 'invoice_view', 'invoice_create', 'cost_view', 'article_manage', 'offer_manage']);
+  },
+  canSetSalePrice() {
+    return this.canReadPrices() && Auth.canAny(['invoice_create', 'cost_edit']);
+  },
+  canSetBuyPrice() {
+    return typeof Auth !== 'undefined' && Auth.can('cost_view') && Auth.can('cost_edit');
+  },
+  /* Fältet som klienten får skicka i en materialrad (servern prövar ändå). */
+  _materialPayload(mat, isNew) {
+    const out = {};
+    ['articleId', 'name', 'qty', 'unit', 'note', 'performedDate'].forEach((k) => { if (mat[k] !== undefined && mat[k] !== null && (k !== 'articleId' || mat[k])) out[k] = mat[k]; });
+    if (this.canSetSalePrice()) {
+      if (mat.sellPrice !== undefined && mat.sellPrice !== null) out.sellPrice = mat.sellPrice;
+      if (mat.vatRate !== undefined && mat.vatRate !== null) out.vatRate = mat.vatRate;
+    }
+    if (this.canSetBuyPrice() && mat.buyPrice !== undefined && mat.buyPrice !== null) out.buyPrice = mat.buyPrice;
+    if (Auth.canAny(['ao_edit', 'invoice_create']) && typeof mat.extra === 'boolean') out.extra = mat.extra;
+    if (!isNew) delete out.articleId;
+    return out;
+  },
+  _materialSettled(ao, undo, syncOpts) {
+    const self = this;
+    return function (r) {
+      const cur = getAO(ao.id);
+      if (r && r.ok && r.data && r.data.workOrder && cur) {
+        cur.materials = Array.isArray(r.data.workOrder.materials) ? r.data.workOrder.materials : cur.materials;
+        if (Array.isArray(r.data.workOrder.log)) cur.log = r.data.workOrder.log;
+        cur.updatedAt = r.data.workOrder.updatedAt || cur.updatedAt;
+        if (typeof Storage !== 'undefined' && typeof Storage.setLocal === 'function') Storage.setLocal('workOrders', state.workOrders);
+      } else if (r && r.final && cur) {
+        undo(cur);
+        console.error('[WorkOrderService] Materialraden avvisades av servern för', ao.id, ':', r.error, r.reason || '');
+        if (!(syncOpts && typeof syncOpts.onSettled === 'function') && typeof AOTimeSyncService !== 'undefined' && typeof AOTimeSyncService.reportUnhandledRejection === 'function') {
+          AOTimeSyncService.reportUnhandledRejection('ao', self.displayNumberOrPending(ao), self.serverErrorText(r.error, r.reason));
+        }
+      }
+      try {
+        if (typeof WorkOrderDetailPage !== 'undefined' && typeof WorkOrderDetailPage.onSyncStatusChanged === 'function') WorkOrderDetailPage.onSyncStatusChanged(ao.id);
+      } catch (e) {}
+      if (syncOpts && typeof syncOpts.onSettled === 'function') {
+        try { syncOpts.onSettled(Object.assign({}, r, { ao: getAO(ao.id) })); } catch (e) { console.error('[WorkOrderService] onSettled (material):', e); }
+      }
+    };
+  },
   addMaterial(aoId, mat, syncOpts) {
     const ao = getAO(aoId);
     if (!ao) return;
     ao.materials = ao.materials || [];
-    const entry = Object.assign({ id: 'M' + Date.now() }, mat);
+    const payload = this._materialPayload(mat, true);
+    const entry = Object.assign({ id: 'pending-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), _pending: true,
+      addedBy: state.currentUser ? state.currentUser.id : '' }, payload);
     ao.materials.push(entry);
-    ao.updatedAt = new Date().toISOString();
     ActivityService.log('material_added',
       `Material tillagt på ${ao.id}: ${mat.name}`,
       { workOrderId: aoId, customerId: ao.customerId });
-    this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt }, syncOpts);
-    persist();
+    if (typeof AOTimeSyncService === 'undefined') { this._syncAO(ao, {}, syncOpts); return entry; }
+    AOTimeSyncService.addMaterial(aoId, payload, { onSettled: this._materialSettled(ao, (cur) => {
+      cur.materials = (cur.materials || []).filter((m) => m !== entry && m.id !== entry.id);
+    }, syncOpts) });
     return entry;
   },
 
@@ -1105,23 +1159,34 @@ const WorkOrderService = {
     const ao = getAO(aoId);
     if (!ao) return;
     const mat = (ao.materials || []).find(m => m.id === matId);
-    if (mat) {
-      Object.assign(mat, data);
-      ao.updatedAt = new Date().toISOString();
-      this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt }, syncOpts);
-      persist();
+    if (!mat) return;
+    const fore = JSON.parse(JSON.stringify(mat));
+    const all = this._materialPayload(data, false);
+    const patch = {};
+    Object.keys(all).forEach((k) => { if (JSON.stringify(all[k]) !== JSON.stringify(mat[k])) patch[k] = all[k]; });
+    if (!Object.keys(patch).length) {
+      if (syncOpts && typeof syncOpts.onSettled === 'function') syncOpts.onSettled({ ok: true, ao: ao, noop: true });
+      return;
     }
+    Object.assign(mat, patch);
+    AOTimeSyncService.updateMaterial(aoId, matId, patch, fore.updatedAt || fore.addedAt || null, { onSettled: this._materialSettled(ao, (cur) => {
+      const i = (cur.materials || []).findIndex((m) => m.id === matId);
+      if (i >= 0) cur.materials[i] = fore;
+    }, syncOpts) });
   },
 
-  deleteMaterial(aoId, matId) {
+  deleteMaterial(aoId, matId, syncOpts) {
     const ao = getAO(aoId);
     if (!ao) return;
-    ao.materials = (ao.materials || []).filter(m => m.id !== matId);
-    ao.updatedAt = new Date().toISOString();
+    const i = (ao.materials || []).findIndex(m => m.id === matId);
+    if (i < 0) return;
+    const fore = ao.materials[i];
+    ao.materials = ao.materials.filter(m => m.id !== matId);
     ActivityService.log('material_removed', `Material borttaget från ${ao.id}`,
       { workOrderId: aoId, customerId: ao.customerId });
-    this._syncAO(ao, { materials: ao.materials, updatedAt: ao.updatedAt });
-    persist();
+    AOTimeSyncService.removeMaterial(aoId, matId, fore.updatedAt || fore.addedAt || null, { onSettled: this._materialSettled(ao, (cur) => {
+      if (!(cur.materials || []).some((m) => m.id === matId)) cur.materials = (cur.materials || []).slice(0, i).concat([fore], (cur.materials || []).slice(i));
+    }, syncOpts) });
   },
 
   /* Anteckningar */
@@ -1144,8 +1209,12 @@ const WorkOrderService = {
   },
 
   /* Materialprissummering */
+  /* T4-B (D-10): bara rader med känt försäljningspris räknas; okänt pris är inte 0 kr. */
   materialTotal(ao) {
-    return (ao.materials || []).reduce((s, m) => s + (m.qty || 0) * (m.sellPrice || 0), 0);
+    return (ao.materials || []).reduce((s, m) => (m && m.sellPriceUnknown !== true && typeof m.sellPrice === 'number' ? s + (Number(m.qty) || 0) * m.sellPrice : s), 0);
+  },
+  materialHasUnknownPrice(ao) {
+    return (ao.materials || []).some((m) => m && (m.sellPriceUnknown === true || typeof m.sellPrice !== 'number'));
   },
 
   /* Klara denna månad */

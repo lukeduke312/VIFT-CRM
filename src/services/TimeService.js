@@ -929,6 +929,19 @@ const TimeService = {
      hämtas alltid från den AKTUELLA, validerade PriceGroup-posten
      (Blocker B: `isValidBillingPriceGroup()` — en aktiv men 0-kr-grupp
      kan aldrig användas här, oavsett vad anroparen skickar in). */
+  /* T4-B (D-11, R22, F13): prisgruppsval i tidsdialogerna. Fältroller (utan ao_edit/invoice_create/
+     payroll_manage) får bara aktiva grupper och, när AO:n har en prisgrupp, bara den (servern nekar
+     annars med price_group_not_allowed). Timpriset visas bara med prisläsrätt — servern lämnar inte
+     ut det till fältet. */
+  priceGroupOptions(selectedId, aoId) {
+    const kontor = typeof Auth !== 'undefined' && Auth.canAny(['ao_edit', 'invoice_create', 'payroll_manage']);
+    const visaPris = typeof WorkOrderService !== 'undefined' && WorkOrderService.canReadPrices();
+    const ao = aoId ? getAO(aoId) : null;
+    let lista = (state.priceGroups || []).filter((p) => p && p.active !== false);
+    if (!kontor && ao && ao.priceGroupId) lista = lista.filter((p) => p.id === ao.priceGroupId);
+    return lista.map((p) => `<option value="${esc(p.id)}" ${p.id === selectedId ? 'selected' : ''}>${esc(p.name)}${visaPris && typeof p.hourRate === 'number' ? ' – ' + fmt(p.hourRate) + ' kr/tim exkl. moms' : ''}</option>`).join('');
+  },
+
   repairMissingPricingSnapshot(aoId, entryId, priceGroupId) {
     const authorized = typeof Auth !== 'undefined' && Auth.canAny(['ao_edit', 'invoice_create']);
     if (!authorized) return { ok: false, error: 'Du saknar behörighet att reparera prissättning.' };

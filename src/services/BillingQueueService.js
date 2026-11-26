@@ -54,7 +54,9 @@ const BillingQueueService = (function () {
        persist()-vägen (nu borttagen för vift_workOrders, se state.js) för
        att faktiskt spara det server-sidigt. Speglar nu varje faktiskt
        ÄNDRAD AO:s materials-array via den atomiska patch-RPC:n. */
-    if (touchedAOs.length > 0 && typeof AOTimeSyncService !== 'undefined') {
+    /* T4-B (D-19): bara arbetsledaren (ao_edit) får skriva hela materiallistan; för övriga skrivs
+       inget (servern nekar fältets hela lista med row_path_required). Nya rader får alltid id av servern. */
+    if (touchedAOs.length > 0 && typeof AOTimeSyncService !== 'undefined' && typeof Auth !== 'undefined' && Auth.can('ao_edit')) {
       AOTimeSyncService.bulkPatch('ao', touchedAOs.map(function (ao) {
         return { id: ao.id, patch: { materials: ao.materials } };
       })).catch(function (e) { console.warn('[BillingQueueService] _ensureMaterialIds sync-fel:', e); });
@@ -212,7 +214,8 @@ const BillingQueueService = (function () {
       var customerId = ao ? ao.customerId : (t.customerId || '');
       var customer = customerId ? getCu(customerId) : null;
       if (ao && !ao.customerId) issues.push('AO saknar kund');
-      var rate = t.hourRate || 0;
+      /* T4-B (D-10, F13): okänt timpris (null/hourRateUnknown) är inte 0 kr — kräver åtgärd. */
+      var rate = (t.hourRateUnknown !== true && typeof t.hourRate === 'number') ? t.hourRate : null;
       if (!(rate > 0)) issues.push('Saknar timpris');
       var hours = (t.minutes || 0) / 60;
       /* Fakturaraden byggs av quantity × unitPrice (se createFromSources),
@@ -221,7 +224,7 @@ const BillingQueueService = (function () {
          faktureras (tidigare: 50 min à 650 kr visades 541,67 men
          fakturerades 539,50). */
       var qtyHours = Math.round(hours * 100) / 100;
-      var amount = Math.round(qtyHours * rate * 100) / 100;
+      var amount = rate === null ? null : Math.round(qtyHours * rate * 100) / 100;
       if (issues.length === 0 && !(amount > 0)) issues.push('Ogiltigt belopp');
 
       var property = ao && ao.propertyId ? getObj(ao.propertyId) : null;
@@ -245,17 +248,23 @@ const BillingQueueService = (function () {
     (state.workOrders || []).forEach(function (ao) {
       if (ao.deleted) return;
       if (legacyExcluded.has(ao.id)) return;
+      /* T4-B (D-10, R21): på en fastpris-AO ingår materialet i fastpriset om det inte uttryckligen
+         markerats som tillägg (extra) — då är det ingen egen fakturakälla (ingen dubbeldebitering). */
+      var fastpris = _billingModeForAo(ao) === 'fixed';
       (ao.materials || []).forEach(function (m) {
+        if (!m || (m.id && String(m.id).indexOf('pending-') === 0)) return;
+        if (fastpris && m.extra !== true) return;
         var sourceKey = 'material:' + ao.id + ':' + m.id;
         if (claimed.has(sourceKey)) return;
         var issues = [];
         var _pendingAoForMat = _pendingSyncIssue('ao', ao.id);
         if (_pendingAoForMat) issues.push(_pendingAoForMat);
         if (!ao.customerId) issues.push('AO saknar kund');
-        var price = m.sellPrice || 0;
+        /* T4-B (D-10, F13): okänt försäljningspris (sellPriceUnknown/null) är inte 0 kr. */
+        var price = (m.sellPriceUnknown !== true && typeof m.sellPrice === 'number') ? m.sellPrice : null;
         if (!(price > 0)) issues.push('Saknar försäljningspris');
-        var qty = m.qty || 0;
-        var amount = Math.round(qty * price * 100) / 100;
+        var qty = Number(m.qty) || 0;
+        var amount = price === null ? null : Math.round(qty * price * 100) / 100;
         if (issues.length === 0 && !(amount > 0)) issues.push('Ogiltigt belopp');
         /* V33 §1 / V35 §4 / V36 §2: kanonisk moms — samma fält som
            WorkOrderDetailPage redan använder, INTE ett hårdkodat 25 som

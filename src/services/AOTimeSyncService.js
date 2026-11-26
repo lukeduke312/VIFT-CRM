@@ -708,7 +708,9 @@ const AOTimeSyncService = {
   _DEFINITE_REJECTIONS: ['forbidden', 'not_found', 'invalid_json', 'missing_fields', 'unknown_action',
                          'attested_locked', 'id_collision', 'stale_write',
                          /* T3-B (2026-11-28): serverns regelfel (BEHORIGHETSMATRIS §4) är slutgiltiga. */
-                         'already_assigned', 'ao_locked', 'invalid_source_status', 'idempotency_key_conflict'],
+                         'already_assigned', 'ao_locked', 'invalid_source_status', 'idempotency_key_conflict',
+                         /* T4-B (2026-11-28): fakturerad källrad, ogiltig rad/referens, orsak saknas. */
+                         'invoiced_locked', 'invalid_row', 'invalid_reference', 'reason_required'],
   /* After this many failed attempts at a genuinely TRANSIENT error (network,
      5xx, auth), stop auto-retrying on every resumePending() sweep — avoids
      an unbounded retry storm against a backend that is simply not deployed
@@ -862,6 +864,16 @@ const AOTimeSyncService = {
   },
   deleteAO(aoId, opts) {
     return this.enqueue('ao', aoId, { action: 'delete_ao', aoId: aoId }, opts);
+  },
+  /* T4-B (D-19): radvisa materialåtgärder. Servern sätter id, addedBy och pris (fritext = okänt pris). */
+  addMaterial(aoId, row, opts) {
+    return this.enqueue('ao', aoId, { action: 'add_material', aoId: aoId, row: row }, opts);
+  },
+  updateMaterial(aoId, rowId, patch, expectedUpdatedAt, opts) {
+    return this.enqueue('ao', aoId, { action: 'update_material', aoId: aoId, rowId: rowId, patch: patch, expectedUpdatedAt: expectedUpdatedAt || null }, opts);
+  },
+  removeMaterial(aoId, rowId, expectedUpdatedAt, opts) {
+    return this.enqueue('ao', aoId, { action: 'remove_material', aoId: aoId, rowId: rowId, expectedUpdatedAt: expectedUpdatedAt || null }, opts);
   },
   deleteAOPermanent(aoId, opts) {
     return this.enqueue('ao', aoId, { action: 'permanent_delete_ao', aoId: aoId }, opts);

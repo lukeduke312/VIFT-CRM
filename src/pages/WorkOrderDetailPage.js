@@ -985,6 +985,7 @@ const WorkOrderDetailPage = {
           ${tb.tbPct !== null ? `<span class="bdg ${tb.badge}">${Math.round(tb.tbPct)} % TB</span>` : ''}
         </div>
         <div class="card-body" style="padding:10px 14px;">
+          ${tb.incomplete ? `<div class="aod-warn" style="margin-bottom:6px;">Ofullständig — ${esc(tb.saknas.join(', '))} saknas</div>` : ''}
           <div class="dr">
             <span class="dk">Intäkt exkl. moms</span>
             <span class="dv">${fkr(tb.revenue.value)} <span style="font-size:10px;color:var(--mt);">${esc(tb.revenue.label)}</span></span>
@@ -1005,7 +1006,7 @@ const WorkOrderDetailPage = {
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bg);">
             <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:4px;">${ic('clock',10)} Arbetstid</div>
             <div class="dr"><span class="dk">Registrerad tid</span><span class="dv">${tb.labor.minutes > 0 ? fmtM(tb.labor.minutes) : '<span style="color:var(--mt);">Ingen tid registrerad</span>'}</span></div>
-            <div class="dr"><span class="dk">Intern timkostnad</span><span class="dv" style="color:var(--mt);">${fmt(tb.labor.rate)} kr/h</span></div>
+            <div class="dr"><span class="dk">Intern timkostnad</span><span class="dv" style="color:var(--mt);">${tb.labor.rate === null ? 'Saknas' : fmt(tb.labor.rate) + ' kr/h'}</span></div>
             ${tb.labor.cost > 0 ? `<div class="dr"><span class="dk">Intern arbetskostnad</span><span class="dv" style="color:var(--rd);">${fkr(tb.labor.cost)}</span></div>` : ''}
           </div>
 
@@ -1577,15 +1578,19 @@ const WorkOrderDetailPage = {
     const mats = ao.materials || [];
     if (!mats.length) return '';
     let exMoms = 0, momsAmt = 0;
+    /* T4-B (D-10): bara rader med känt försäljningspris summeras — okänt pris är inte 0 kr. */
+    let okanda = 0;
     mats.forEach(m => {
-      const ex = (m.qty||0) * (m.sellPrice||0);
+      if (m.sellPriceUnknown === true || typeof m.sellPrice !== 'number') { okanda++; return; }
+      const ex = (Number(m.qty) || 0) * m.sellPrice;
       const vat = _matNormVat(m.vatRate);
       exMoms  += ex;
       momsAmt += ex * vat / 100;
     });
     const inkl = exMoms + momsAmt;
     return `
-      <div class="aod-mat-tot">
+      <div class="aod-mat-tot">${okanda ? `
+        <div class="aod-warn">${okanda} rad${okanda === 1 ? '' : 'er'} saknar försäljningspris (räknas inte in)</div>` : ''}
         <div><span>Totalt exkl. moms</span><span>${fmt(exMoms)} kr</span></div>
         <div><span>Moms</span><span>${fmt(momsAmt)} kr</span></div>
         <div class="is-sum"><span>Totalt inkl. moms</span><span>${fmt(inkl)} kr</span></div>
@@ -1599,26 +1604,33 @@ const WorkOrderDetailPage = {
     const canSeePrice = Auth.canAny(['invoice_view','invoice_create','reports_view']);
     const mats = ao.materials || [];
     if (!mats.length) return this._empty('package', 'Inget material', 'Inget material är registrerat på ordern ännu.', Auth.can('ao_material') ? `<button class="btn bs bsm" onclick="WorkOrderDetailPage.openAddMaterial()">${ic('plus',13)} Lägg till material</button>` : '');
+    /* T4-B (D-09, D-10, D-19, F13): belopp bara med prisläsrätt (servern lämnar inte ut dem till
+       fältet); okänt pris visas som "pris saknas", aldrig 0 kr. Fältet ändrar bara egna rader. */
+    const prisRatt = canSeePrice && WorkOrderService.canReadPrices();
+    const meId = state.currentUser ? state.currentUser.id : '';
+    const allaRader = Auth.can('ao_edit');
     return `<div class="aod-rows">${mats.map(m => {
       const mid  = this._id(m.id);
-      const qty  = m.qty || 0;
-      const sell = m.sellPrice || 0;
-      const buy  = m.buyPrice || 0;
+      const qty  = Number(m.qty) || 0;
+      const kant = m.sellPriceUnknown !== true && typeof m.sellPrice === 'number';
+      const sell = kant ? m.sellPrice : null;
+      const buy  = m.buyPriceUnknown !== true && typeof m.buyPrice === 'number' ? m.buyPrice : null;
       const vat  = _matNormVat(m.vatRate);
-      const exMoms   = qty * sell;
-      const inklMoms = exMoms + exMoms * vat / 100;
+      const exMoms   = kant ? qty * sell : null;
+      const inklMoms = kant ? exMoms + exMoms * vat / 100 : null;
+      const egen = allaRader || (meId && m.addedBy === meId) || m._pending;
       return `<div class="aod-row aod-mrow">
         <div class="aod-row-main">
-          <div class="aod-row-t">${esc(m.name)}</div>
-          <div class="aod-row-s">${fmt(qty)} ${esc(m.unit || '')}${canSeePrice ? ` · ${fmt(sell)} kr/${esc(m.unit || 'st')} exkl. moms` : ''}</div>
-          ${canSeePrice && buy > 0 ? `<button type="button" class="aod-int-btn" aria-expanded="false" onclick="var e=document.getElementById('mat-int-${mid}');var o=e.hidden;e.hidden=!o;this.setAttribute('aria-expanded',o?'true':'false');">${ic('eye',11)} Intern</button>
+          <div class="aod-row-t">${esc(m.name)}${m.extra === true ? ' <span class="bdg bdg-grey">Tillägg</span>' : ''}</div>
+          <div class="aod-row-s">${fmt(qty)} ${esc(m.unit || '')}${prisRatt ? (kant ? ` · ${fmt(sell)} kr/${esc(m.unit || 'st')} exkl. moms` : ' · <span class="aod-warn">Pris saknas</span>') : ''}${m.note ? ' · ' + esc(m.note) : ''}</div>
+          ${prisRatt && kant && buy !== null && buy > 0 ? `<button type="button" class="aod-int-btn" aria-expanded="false" onclick="var e=document.getElementById('mat-int-${mid}');var o=e.hidden;e.hidden=!o;this.setAttribute('aria-expanded',o?'true':'false');">${ic('eye',11)} Intern</button>
             <div id="mat-int-${mid}" class="aod-int" hidden>Ink: ${fmt(buy)} kr · Marginal: ${fmt(Math.max(0,sell-buy))} kr/st</div>` : ''}
         </div>
-        ${canSeePrice ? `<div class="aod-row-sum">${fmt(inklMoms)} kr<small>inkl. moms</small></div>` : ''}
-        <div class="aod-row-acts">
+        ${prisRatt && kant ? `<div class="aod-row-sum">${fmt(inklMoms)} kr<small>inkl. moms</small></div>` : ''}
+        ${egen ? `<div class="aod-row-acts">
           <button class="btn bs bxs aod-ibtn" data-id="${esc(m.id)}" title="Redigera material" aria-label="Redigera material" onclick="WorkOrderDetailPage.openEditMaterial(this.dataset.id)">${ic('pencil',13)}</button>
           <button class="btn bd bxs aod-ibtn" data-id="${esc(m.id)}" title="Ta bort material" aria-label="Ta bort material" onclick="WorkOrderDetailPage.deleteMaterial(this.dataset.id)">${ic('trash',13)}</button>
-        </div>
+        </div>` : ''}
       </div>`;
     }).join('')}</div>`;
   },
@@ -1640,7 +1652,7 @@ const WorkOrderDetailPage = {
         <div class="aod-row-main">
           <div class="aod-row-t">${esc(t.staffName)} · ${WorkOrderDetailPage._h(t.minutes)}${t.attested ? ` <span class="bdg bdg-green">${ic('lock',10)} Attesterad</span>` : ''}${!t.billable ? ` <span class="bdg bdg-grey">Ej debiterbar</span>` : ''}</div>
           <div class="aod-row-s">${esc(t.date)} ${esc(t.startStr)}–${esc(t.endStr)}${t.comment?' · '+esc(t.comment):''}</div>
-          ${t.priceGroupName ? `<div class="aod-row-s is-price">${esc(t.priceGroupName)} – ${fmt(t.hourRate)} kr/tim exkl. moms</div>` : ''}
+          ${t.priceGroupName ? `<div class="aod-row-s is-price">${esc(t.priceGroupName)}${WorkOrderService.canReadPrices() && typeof t.hourRate === 'number' ? ` – ${fmt(t.hourRate)} kr/tim exkl. moms` : ''}</div>` : ''}
           ${t.registeredByName ? `<div class="aod-row-s is-note">Registrerat av ${esc(t.registeredByName)}</div>` : ''}
         </div>
         ${canEdit ? `
@@ -1867,6 +1879,16 @@ const WorkOrderDetailPage = {
      först vid serverns ACK, tydligt fel vid definitivt avslag (då har
      WorkOrderService/AOTimeSync redan markerat AO:n och omläsning sker).
      Transienta fel (nät) ligger kvar i kön och ger inget besked här. */
+  /* T4-B: materialrad — serverns (projicerade) rader ersätter de lokala; sektionen ritas om. */
+  _matAck(okMsg, failMsg) {
+    const base = this._ackOpts(okMsg, failMsg);
+    const aoId = this.aoId;
+    return { onSettled: (r) => {
+      base.onSettled(r);
+      if (r && r.ok && this.aoId === aoId) { try { this._refreshMaterialSection(); } catch (e) {} }
+    } };
+  },
+
   _ackOpts(okMsg, failMsg) {
     const aoId = this.aoId;
     return { onSettled: (r) => {
@@ -2053,17 +2075,23 @@ const WorkOrderDetailPage = {
   },
 
   /* ── Material-modal ───────────────────────── */
+  /* T4-B (D-09, D-10, D-19, F13): artikelväljaren och formuläret visar belopp bara med prisläsrätt
+     och priser kan bara anges av en roll med prissättningsrätt. En artikelrad prissätts alltid av
+     servern; en fritextrad utan pris får okänt pris (aldrig 0). Dokumentation (anteckning) för alla. */
   openAddMaterial() {
     if (!Auth.require('ao_material')) return;
+    const pr = WorkOrderService.canReadPrices(), ps = WorkOrderService.canSetSalePrice(), pb = WorkOrderService.canSetBuyPrice();
+    const kv = Auth.can('cost_view');
     const articles = (state.articles||[]).filter(a=>a.active);
+    const prisText = (a) => pr ? ` · ${kv && typeof a.buyPrice === 'number' ? 'Ink: ' + fmt(a.buyPrice) + ' kr · ' : ''}Pris: ${typeof a.sellPrice === 'number' && a.sellPrice > 0 ? fmt(a.sellPrice) + ' kr exkl. moms' : 'saknas'}` : '';
     const artListHtml = articles.length ? articles.map(a => `
-      <div class="art-row" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-unit="${esc(a.unit)}" data-buy="${esc(a.buyPrice)}" data-sell="${esc(a.sellPrice)}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${esc(a.category||'')}"
+      <div class="art-row" data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-unit="${esc(a.unit)}" data-buy="${pb && typeof a.buyPrice === 'number' ? esc(a.buyPrice) : ''}" data-sell="${ps && typeof a.sellPrice === 'number' ? esc(a.sellPrice) : ''}" data-vat="${_matNormVat(a.vatRate)}" data-cat="${esc(a.category||'')}"
         onclick="WorkOrderDetailPage._matSelectArticle(this)"
         style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:8px;transition:background .1s;"
         onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;">${a.articleNumber ? esc(a.articleNumber)+' – ':'' }${esc(a.name)}</div>
-          <div style="font-size:11px;color:var(--mt);">${esc(a.unit)} · Ink: ${fmt(a.buyPrice)} kr · Pris: ${fmt(a.sellPrice)} kr exkl. moms</div>
+          <div style="font-size:11px;color:var(--mt);">${esc(a.unit)}${prisText(a)}</div>
         </div>
         <div id="art-check-${a.id}" style="display:none;color:var(--grn);">${ic('check',14)}</div>
       </div>`).join('') : '<p style="padding:8px;font-size:12px;color:var(--mt);">Inga artiklar i register</p>';
@@ -2094,22 +2122,23 @@ const WorkOrderDetailPage = {
             <select id="mat-unit" onchange="WorkOrderDetailPage._matUnitChanged(this.value)">
               ${unitsHtml('st')}
             </select></div>
-          <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          ${pb ? `<div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" placeholder="Okänt" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>` : ''}
         </div>
-        <div class="g2">
+        ${ps ? `<div class="g2">
           <div class="fg"><label>Försäljningspris exkl. moms (kr/enhet)</label>
-            <input type="number" id="mat-sell" placeholder="0" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+            <input type="number" id="mat-sell" placeholder="Okänt (kompletteras)" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Moms</label>
             <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
               ${_matVatOptionsHtml(25)}
             </select></div>
-        </div>
+        </div>` : ''}
+        <div class="fg"><label>Dokumentation</label><textarea id="mat-note" rows="2" placeholder="T.ex. var materialet använts"></textarea></div>
         <input type="hidden" id="mat-article-id" value="">
-        <div id="mat-calc" style="display:none;background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
+        ${ps ? `<div id="mat-calc" style="display:none;background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">0 kr</span></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span id="mat-vat-lbl" style="color:var(--mt)">Moms 25%</span><span id="mat-moms">0 kr</span></div>
           <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">0 kr</span></div>
-        </div>`,
+        </div>` : ''}`,
       buttons: [
         { label: 'Lägg till', cls: 'btn bp', onClick: () => this._saveMaterial(null) },
         { label: 'Avbryt',   cls: 'btn bs', onClick: () => Modal.close() }
@@ -2157,7 +2186,8 @@ const WorkOrderDetailPage = {
       // Deselect: clear fields
       document.getElementById('mat-article-id').value = '';
       document.getElementById('mat-name').value = '';
-      document.getElementById('mat-vat').value = '25';
+      const vatEl0 = document.getElementById('mat-vat'); if (vatEl0) vatEl0.value = '25';
+      ['mat-buy', 'mat-sell'].forEach((id) => { const x = document.getElementById(id); if (x) { x.disabled = false; x.value = ''; } });
       return;
     }
     el.classList.add('selected');
@@ -2167,12 +2197,14 @@ const WorkOrderDetailPage = {
 
     document.getElementById('mat-article-id').value = el.dataset.id;
     document.getElementById('mat-name').value = el.dataset.name || '';
-    document.getElementById('mat-vat').value  = el.dataset.vat || '25';
+    const vatEl = document.getElementById('mat-vat');
+    if (vatEl) vatEl.value = el.dataset.vat || '25';
     const buyEl  = document.getElementById('mat-buy');
     const sellEl = document.getElementById('mat-sell');
     const unitEl = document.getElementById('mat-unit');
-    if (buyEl)  buyEl.value  = el.dataset.buy  || '0';
-    if (sellEl) sellEl.value = el.dataset.sell || '0';
+    /* T4-B: artikelns pris visas bara som information; servern sätter radens pris från artikeln. */
+    if (buyEl)  { buyEl.value  = el.dataset.buy  || ''; buyEl.disabled = true; }
+    if (sellEl) { sellEl.value = el.dataset.sell || ''; sellEl.disabled = true; }
     if (unitEl) {
       for (let i = 0; i < unitEl.options.length; i++) {
         if (unitEl.options[i].value === el.dataset.unit) { unitEl.selectedIndex = i; break; }
@@ -2189,11 +2221,14 @@ const WorkOrderDetailPage = {
   },
 
   _matUpdateCalc() {
-    const qty  = parseFloat(document.getElementById('mat-qty')?.value) || 0;
-    const sell = parseFloat(document.getElementById('mat-sell')?.value) || 0;
-    const vat  = _matNormVat(document.getElementById('mat-vat')?.value);
     const calc = document.getElementById('mat-calc');
     if (!calc) return;
+    /* T4-B (F13): ingen "|| 0" — ett tomt pris är okänt och ger ingen beräkning. */
+    const qtyV  = parseFloat(document.getElementById('mat-qty')?.value);
+    const sellV = parseFloat(document.getElementById('mat-sell')?.value);
+    if (!Number.isFinite(qtyV) || !Number.isFinite(sellV)) { calc.style.display = 'none'; return; }
+    const qty = qtyV, sell = sellV;
+    const vat  = _matNormVat(document.getElementById('mat-vat')?.value);
     const exV = qty * sell;
     const momsV = exV * vat / 100;
     const vatLbl = document.getElementById('mat-vat-lbl');
@@ -2213,32 +2248,38 @@ const WorkOrderDetailPage = {
     const m  = (ao.materials||[]).find(x=>x.id===matId);
     if (!m) return;
     const vat = _matNormVat(m.vatRate);
+    /* T4-B (F13): prisfälten bara med prissättningsrätt; okänt pris visas tomt ("Okänt"), aldrig 0. */
+    const ps = WorkOrderService.canSetSalePrice(), pb = WorkOrderService.canSetBuyPrice();
+    const sellV = m.sellPriceUnknown !== true && typeof m.sellPrice === 'number' ? m.sellPrice : '';
+    const buyV  = m.buyPriceUnknown !== true && typeof m.buyPrice === 'number' ? m.buyPrice : '';
+    const sum = (f) => (sellV === '' ? '–' : fmt((Number(m.qty) || 0) * sellV * f) + ' kr');
     Modal.open({
       title: 'Redigera material',
       body: `
         <div class="fg"><label>Benämning</label><input id="mat-name" value="${esc(m.name)}"></div>
         <div class="g3">
-          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${m.qty}" min="${unitStep(m.unit||'st')}" step="${unitStep(m.unit||'st')}" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          <div class="fg"><label>Antal</label><input type="number" id="mat-qty" value="${esc(m.qty)}" min="${unitStep(m.unit||'st')}" step="${unitStep(m.unit||'st')}" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Enhet</label>
             <select id="mat-unit" onchange="WorkOrderDetailPage._matUnitChanged(this.value)">
               ${unitsHtml(m.unit||'st')}
             </select></div>
-          <div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${m.buyPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+          ${pb ? `<div class="fg"><label>Ink-pris (kr)</label><input type="number" id="mat-buy" value="${esc(buyV)}" placeholder="Okänt" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>` : ''}
         </div>
-        <div class="g2">
+        ${ps ? `<div class="g2">
           <div class="fg"><label>Försäljningspris exkl. moms (kr/enhet)</label>
-            <input type="number" id="mat-sell" value="${m.sellPrice}" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
+            <input type="number" id="mat-sell" value="${esc(sellV)}" placeholder="Okänt (kompletteras)" min="0" oninput="WorkOrderDetailPage._matUpdateCalc()"></div>
           <div class="fg"><label>Moms</label>
             <select id="mat-vat" onchange="WorkOrderDetailPage._matUpdateCalc()">
               ${_matVatOptionsHtml(vat)}
             </select></div>
-        </div>
-        <input type="hidden" id="mat-article-id" value="${m.articleId||''}">
-        <div id="mat-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">${fmt((m.qty||0)*(m.sellPrice||0))} kr</span></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms ${vat}%</span><span id="mat-moms">${fmt((m.qty||0)*(m.sellPrice||0)*vat/100)} kr</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">${fmt((m.qty||0)*(m.sellPrice||0)*(1+vat/100))} kr</span></div>
-        </div>`,
+        </div>` : ''}
+        <div class="fg"><label>Dokumentation</label><textarea id="mat-note" rows="2">${esc(m.note || '')}</textarea></div>
+        <input type="hidden" id="mat-article-id" value="${esc(m.articleId||'')}">
+        ${ps ? `<div id="mat-calc" style="background:var(--bg);border-radius:9px;padding:10px 12px;margin-top:6px;font-size:12px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Exkl. moms</span><span id="mat-ex">${sum(1)}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:var(--mt)">Moms ${vat}%</span><span id="mat-moms">${sum(vat/100)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;"><span>Inkl. moms</span><span id="mat-inkl">${sum(1+vat/100)}</span></div>
+        </div>` : ''}`,
       buttons: [
         { label: 'Spara', cls: 'btn bp', onClick: () => this._saveMaterial(matId) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
@@ -2252,24 +2293,32 @@ const WorkOrderDetailPage = {
     /* V39 §2: strikt write-validering. Saknat/tomt -> fallback 25 (som
        innan). Ett satt men ogiltigt värde blockerar hela sparningen —
        ingen tyst "reparation" till 25 %. */
-    const vatCheck = _matStrictVat(document.getElementById('mat-vat')?.value);
+    const vatEl = document.getElementById('mat-vat');
+    const vatCheck = vatEl ? _matStrictVat(vatEl.value) : { ok: true, value: null };
     if (!vatCheck.ok) { showToast(vatCheck.error); return; }
+    /* T4-B (F13, D-10): inga påhittade standardvärden — ett tomt pris är okänt (skickas inte),
+       antal måste anges. Priser skickas bara av en roll med prissättningsrätt (fälten finns bara då). */
+    const tal = (id) => { const el = document.getElementById(id); if (!el || el.disabled) return undefined; const v = String(el.value || '').trim(); if (v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : NaN; };
+    const qty = tal('mat-qty');
+    if (!(qty > 0)) { showToast('Ange antal'); return; }
+    const sp = tal('mat-sell'), bp = tal('mat-buy');
+    if (Number.isNaN(sp) || Number.isNaN(bp)) { showToast('Ogiltigt pris'); return; }
     const data = {
       name,
-      qty:      parseFloat(document.getElementById('mat-qty')?.value) || 1,
+      qty,
       unit:     document.getElementById('mat-unit')?.value || 'st',
-      buyPrice: parseFloat(document.getElementById('mat-buy')?.value)  || 0,
-      sellPrice:parseFloat(document.getElementById('mat-sell')?.value) || 0,
-      vatRate:  vatCheck.value !== null ? vatCheck.value : 25,
-      articleId:document.getElementById('mat-article-id')?.value || '',
-      addedAt:  existingId ? undefined : new Date().toISOString()
+      note:     document.getElementById('mat-note')?.value || '',
+      articleId:document.getElementById('mat-article-id')?.value || ''
     };
+    if (sp !== undefined && sp !== null) data.sellPrice = sp;
+    if (bp !== undefined && bp !== null) data.buyPrice = bp;
+    if (vatEl && vatCheck.value !== null) data.vatRate = vatCheck.value;
     /* G12: besked först när servern bekräftat. */
     showToast('Sparar…');
     if (existingId) {
-      WorkOrderService.updateMaterial(this.aoId, existingId, data, this._ackOpts('Material uppdaterat', 'Materialraden kunde inte sparas'));
+      WorkOrderService.updateMaterial(this.aoId, existingId, data, this._matAck('Material uppdaterat', 'Materialraden kunde inte sparas'));
     } else {
-      WorkOrderService.addMaterial(this.aoId, data, this._ackOpts('Material tillagt', 'Materialraden kunde inte sparas'));
+      WorkOrderService.addMaterial(this.aoId, data, this._matAck('Material tillagt', 'Materialraden kunde inte sparas'));
     }
     Modal.close();
     this._refreshMaterialSection();
@@ -2277,9 +2326,8 @@ const WorkOrderDetailPage = {
 
   deleteMaterial(matId) {
     Modal.confirm('Ta bort material?', () => {
-      WorkOrderService.deleteMaterial(this.aoId, matId);
+      WorkOrderService.deleteMaterial(this.aoId, matId, this._matAck('Borttaget', 'Materialraden kunde inte tas bort'));
       this._refreshMaterialSection();
-      showToast('Borttaget');
     });
   },
 
@@ -2616,9 +2664,7 @@ const WorkOrderDetailPage = {
     const mins = Math.round((Date.now() - state.stampTimestamp) / 60000);
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
-    const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
-    ).join('');
+    const pgOptions = TimeService.priceGroupOptions(aoPgId, this.aoId); // T4-B (D-11)
     Modal.open({
       title: 'Stämpla ut',
       body: `
@@ -3017,9 +3063,7 @@ const WorkOrderDetailPage = {
     if (!Auth.canAny(['ao_time','payroll_manage'])) { showToast('Du saknar behörighet för den åtgärden'); return; }
     const ao = getAO(this.aoId);
     const aoPgId = ao ? (ao.priceGroupId || '') : '';
-    const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${p.id===aoPgId?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
-    ).join('');
+    const pgOptions = TimeService.priceGroupOptions(aoPgId, this.aoId); // T4-B (D-11)
     Modal.open({
       title: 'Registrera tid',
       body: `
@@ -3055,9 +3099,7 @@ const WorkOrderDetailPage = {
     if (!t) return;
     const guard = TimeService._guardMutation(t);
     if (!guard.ok) { showToast(guard.error); return; }
-    const pgOptions = (state.priceGroups||[]).filter(p=>p.active).map(p =>
-      `<option value="${p.id}" ${t.priceGroupId===p.id?'selected':''}>${esc(p.name)} – ${fmt(p.hourRate)} kr/tim exkl. moms</option>`
-    ).join('');
+    const pgOptions = TimeService.priceGroupOptions(t.priceGroupId, t.aoId); // T4-B (D-11)
     Modal.open({
       title: 'Redigera tid',
       body: `

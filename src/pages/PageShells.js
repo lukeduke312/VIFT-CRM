@@ -8955,7 +8955,10 @@ const PriceGroupsPage = {
       body: this._formHtml(pg),
       buttons: [
         { label: pg.active ? `${ic('eye-off',13)} Inaktivera` : `${ic('eye',13)} Aktivera`, cls: 'btn bw',
-          onClick: () => { const idx=(state.priceGroups||[]).findIndex(x=>x.id===pgId); if(idx<0)return; state.priceGroups[idx].active=!state.priceGroups[idx].active; persist();Modal.close();PriceGroupsPage.render();showToast(state.priceGroups[idx].active?'Aktiverad':'Inaktiverad'); }},
+          /* T4-B (punkt 247, G12): aktivering/inaktivering visar besked först när servern bekräftat;
+             vid avslag återställs prisgruppen till serverns värde (confirmPersist). */
+          onClick: () => { const idx=(state.priceGroups||[]).findIndex(x=>x.id===pgId); if(idx<0)return; const blir = !state.priceGroups[idx].active; state.priceGroups[idx].active = blir; Modal.close(); PriceGroupsPage.render();
+            confirmPersist('priceGroups', pgId, { ok: blir ? 'Aktiverad' : 'Inaktiverad', fail: blir ? 'Prisgruppen kunde inte aktiveras' : 'Prisgruppen kunde inte inaktiveras', onChange: () => PriceGroupsPage.render() }); }},
         { label: 'Spara', cls: 'btn bp', onClick: () => PriceGroupsPage._save(pgId) },
         { label: 'Avbryt', cls: 'btn bs', onClick: () => Modal.close() }
       ]
@@ -11750,7 +11753,6 @@ const AdminPage = {
      (vift-v2 20261128000009); cost_edit:s materialradsdel och prisflödet är T4-B. */
   _PERM_EJ_VERKSTALLD: {
     'ao_plan_own':             'AO-etappen',
-    'time_view_all':           'T4-B',
     'objects_access_assigned': 'T4-C',
     'rondering_utfor':         'T4-D',
     'export_data':             'T4-F',
