@@ -20,7 +20,9 @@
  * or permission claim. Everything security-relevant is derived
  * server-side from the verified JWT via the shared `checkViftAuth()`:
  *   - `perms`       -> payroll_view (or `all`) sees every entry;
- *                      everyone else sees ONLY their own.
+ *                      T4-B: time_view_all sees every entry without payroll
+ *                      fields (projectTimeEntry); everyone else sees ONLY
+ *                      their own. hourRate only with canReadPrices (D-11).
  *   - `staffMember` -> supplies the caller's OWN id for the "own
  *                      entries" filter — never read from the request.
  *
@@ -38,7 +40,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, projectTimeEntry } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -121,10 +123,15 @@ serve(async (req: Request) => {
        den FAKTISKA, auktoritativa kontrollen: ingen tidpost för någon
        annan än den anropande personen lämnar servern alls, om inte
        payroll_view (eller 'all') är beviljad. */
-    const canViewAll = hasPerm(perms, 'payroll_view') || hasPerm(perms, 'all')
-    const timeEntries = canViewAll
+    /* T4-B (K-01, D-08, D-11): time_view_all ger ALL personals arbetade och registrerade tid, men
+       inga löneuppgifter — en annans post lämnas bara ut med fälten i TIME_VIEW_ALL_FIELDS (ingen
+       attest eller lön); payroll_view krävs för lön/belopp per person. Timpriset (hourRate) bara
+       med prisläsrätt (canReadPrices) — aldrig till fältroller, inte heller för egna poster. */
+    const canViewAll = hasPerm(perms, 'payroll_view') || hasPerm(perms, 'time_view_all') || hasPerm(perms, 'all')
+    const timeEntries = (canViewAll
       ? allEntries
-      : allEntries.filter((e) => String(e.staffId ?? '') === callerStaffId)
+      : allEntries.filter((e) => String(e.staffId ?? '') === callerStaffId))
+      .map((e) => projectTimeEntry(e, perms, callerStaffId))
 
     return json({ timeEntries })
   } catch (e: unknown) {

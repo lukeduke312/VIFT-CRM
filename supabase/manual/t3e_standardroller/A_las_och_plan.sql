@@ -1,6 +1,6 @@
 -- =====================================================================
 -- VIFT CRM — T3-E standardroller (M9, D-02): A. Läsande kontroll och plan (ändrar ingenting)
--- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4a-2026-11-28). Ändra inte för hand.
+-- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4b-2026-11-28). Ändra inte för hand.
 -- Körs i Supabase SQL Editor för STAGING (yyzljlqyzzcbxmcdbual) FÖRST efter separat GO.
 -- ALDRIG mot LIVE utan en egen LIVE-plan. Ingår INTE i migrationskedjan (inte db push).
 -- Kör hela filen. Spara resultatet (hash, plan, antal per roll-id). Hashen från A2 fylls i B eller D.

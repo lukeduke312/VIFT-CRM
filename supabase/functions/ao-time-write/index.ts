@@ -39,9 +39,18 @@
  * inköpspris i befintlig materialrad bevaras). create_ao: portkod kräver objects_sensitive (403
  * field_protected); inköpspris i nya materialrader utan cost_edit ignoreras (ignoredFields).
  *
+ * T4-B (2026-11-28, D-09, D-10, D-11, D-19, SÄK-6, T3-B beslut 1–2): radvisa materialåtgärder
+ * add_material / update_material / remove_material (RPC work_order_material_*, under radlås; servern
+ * sätter id, addedBy och pris — fritext = okänt pris, aldrig 0). Fältets hela materiallista i
+ * patch_ao nekas (403 forbidden/row_path_required). correct_time (RPC time_entry_correct):
+ * behörig (payroll_manage), loggad rättning/komplettering av tid på klar AO med orsak. Tidposter i
+ * alla svar projiceras (projectTimeEntry: timpris bara med prisläsrätt). create_ao: försäljningspris i
+ * nya materialrader bara från en roll som får sätta pris; annars okänt (sellPriceUnknown).
+ *
  * POST /functions/v1/ao-time-write
  * body: { action: 'create_ao'|'patch_ao'|'take_from_pool'|'delete_ao'
- *               |'create_time'|'patch_time'|'delete_time',
+ *               |'create_time'|'patch_time'|'delete_time'|'attest_time'|'correct_time'
+ *               |'add_material'|'update_material'|'remove_material',
  *         idempotencyKey: string (required, client-generated UUID),
  *         ...action-specific fields, see per-branch validation below }
  * 200: { ...RPC result fields, action echoed back }
@@ -50,7 +59,7 @@
 
 import { serve }        from 'https://deno.land/std@0.208.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkViftAuth, hasPerm, effectiveAoPerms, aoRuleError, projectWorkOrder, AO_SENS_FIELDS } from '../_shared/vift-auth.ts'
+import { checkViftAuth, hasPerm, effectiveAoPerms, aoRuleError, projectWorkOrder, projectTimeEntry, canReadPrices, AO_SENS_FIELDS } from '../_shared/vift-auth.ts'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')              ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -93,11 +102,21 @@ function stripFields(obj: Record<string, unknown>, fields: string[]): Record<str
   return out
 }
 
-/* T4-A: AO i ett skrivsvar projiceras som en läsning. */
-function projectResult(data: unknown, perms: string[]): Record<string, unknown> {
+/* T4-A: AO i ett skrivsvar projiceras som en läsning. T4-B: även materialraden och tidposten. */
+function projectResult(data: unknown, perms: string[], callerStaffId = ''): Record<string, unknown> {
   const d = (data && typeof data === 'object' ? { ...(data as Record<string, unknown>) } : {}) as Record<string, unknown>
   if (d.workOrder && typeof d.workOrder === 'object') d.workOrder = projectWorkOrder(d.workOrder as Record<string, unknown>, perms)
+  if (d.row && typeof d.row === 'object') {
+    const p = projectWorkOrder({ materials: [d.row] } as Record<string, unknown>, perms) as Record<string, unknown>
+    d.row = Array.isArray(p.materials) ? (p.materials as unknown[])[0] : d.row
+  }
+  if (d.timeEntry && typeof d.timeEntry === 'object') d.timeEntry = projectTimeEntry(d.timeEntry as Record<string, unknown>, perms, callerStaffId)
   return d
+}
+
+/* T4-B: får sätta försäljningspris (samma regel som _vift_t4b_pris_satta). */
+function canSetSalePrice(perms: string[]): boolean {
+  return canReadPrices(perms) && (hasPerm(perms, 'invoice_create') || hasPerm(perms, 'cost_edit'))
 }
 
 serve(async (req: Request) => {
@@ -152,6 +171,10 @@ serve(async (req: Request) => {
     if (msg.includes('missing_fields'))   return json({ error: 'missing_fields' }, 400)
     if (msg.includes('idempotency_key_conflict')) return json({ error: 'idempotency_key_conflict' }, 409)
     if (msg.includes('staff_not_found'))  return json({ error: 'staff_not_found' }, 400)
+    /* T4-B: radvisa material och tidsrättning. */
+    if (msg.includes('invalid_row'))       return json({ error: 'invalid_row' }, 400)
+    if (msg.includes('invalid_reference')) return json({ error: 'invalid_reference' }, 400)
+    if (msg.includes('reason_required'))   return json({ error: 'reason_required' }, 400)
     console.error('[ao-time-write] RPC fel (' + action + '):', msg)
     return json({ error: 'write_failed' }, 500)
   }
@@ -182,6 +205,25 @@ serve(async (req: Request) => {
           if (!m || typeof m !== 'object' || Array.isArray(m)) return m
           const r = { ...(m as Record<string, unknown>) }
           if (r.buyPrice !== undefined && r.buyPrice !== null && r.buyPrice !== '') { delete r.buyPrice; if (!ignoredCreate.length) ignoredCreate.push('materials[].buyPrice') }
+          return r
+        })
+      }
+      /* T4-B (D-09, D-10, SÄK-6): försäljningspris i nya materialrader bara från en roll som får sätta
+         pris, och bara > 0; annars är priset OKÄNT (sellPriceUnknown) — aldrig 0 kr. */
+      if (Array.isArray(safeAo.materials)) {
+        const satta = canSetSalePrice(perms)
+        safeAo.materials = (safeAo.materials as unknown[]).map((m) => {
+          if (!m || typeof m !== 'object' || Array.isArray(m)) return m
+          const r = { ...(m as Record<string, unknown>) }
+          const sp = Number(r.sellPrice)
+          const given = r.sellPrice !== undefined && r.sellPrice !== null && r.sellPrice !== ''
+          if (satta && given && Number.isFinite(sp) && sp > 0) {
+            r.sellPrice = sp; r.sellPriceUnknown = false; if (!r.priceSource) r.priceSource = 'manual'
+          } else {
+            if (given && !ignoredCreate.includes('materials[].sellPrice')) ignoredCreate.push('materials[].sellPrice')
+            r.sellPrice = null; r.sellPriceUnknown = true; r.priceSource = 'unknown'
+          }
+          if (r.buyPrice === undefined || r.buyPrice === null || r.buyPrice === '' || !(Number(r.buyPrice) > 0)) { delete r.buyPrice; r.buyPriceUnknown = true }
           return r
         })
       }
@@ -319,7 +361,7 @@ serve(async (req: Request) => {
         if (String(error.message || '').includes('id_collision')) return json({ error: 'id_collision' }, 409)
         return rpcErrorToResponse(error)
       }
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms, callerStaffId) })
     }
 
     case 'patch_time': {
@@ -340,8 +382,19 @@ serve(async (req: Request) => {
           const { data: pgRow } = await supabase.from('store').select('value').eq('key', 'vift_priceGroups').maybeSingle()
           const pgs = Array.isArray(pgRow?.value) ? pgRow!.value as Record<string, unknown>[] : []
           const pg = pgs.find((x) => x && x.id === safePatch.priceGroupId)
-          safePatch.hourRate = pg && Number.isFinite(Number(pg.hourRate)) ? Number(pg.hourRate) : 0
-          if (pg) safePatch.priceGroupName = String(pg.name ?? '')
+          /* T4-B (D-11, R22): fältet får bara byta till en aktiv grupp, och till AO:ns grupp när AO:n
+             har en (samma regel som time_entry_create). Okänt timpris = null, aldrig 0. */
+          const { data: teRow } = await supabase.from('store').select('value').eq('key', 'vift_timeEntries').maybeSingle()
+          const te = (Array.isArray(teRow?.value) ? teRow!.value as Record<string, unknown>[] : []).find((x) => x && x.id === entryId)
+          const { data: woRow } = await supabase.from('store').select('value').eq('key', 'vift_workOrders').maybeSingle()
+          const aoIdForTime = String((safePatch.aoId as string) || (te && te.aoId) || '')
+          const ao = (Array.isArray(woRow?.value) ? woRow!.value as Record<string, unknown>[] : []).find((x) => x && x.id === aoIdForTime)
+          const inaktiv = pg && (pg.active === false || pg.active === 'false' || pg.active === 0 || pg.active === '0')
+          if (!pg || inaktiv || (ao && ao.priceGroupId && ao.priceGroupId !== safePatch.priceGroupId)) return json({ error: 'forbidden', reason: 'price_group_not_allowed' }, 403)
+          const rate = Number(pg.hourRate)
+          safePatch.hourRate = pg.hourRate !== null && pg.hourRate !== '' && Number.isFinite(rate) && rate >= 0 ? rate : null
+          safePatch.hourRateUnknown = safePatch.hourRate === null
+          safePatch.priceGroupName = String(pg.name ?? '')
         }
       }
       const touchesOwnership = TIME_OWNERSHIP_FIELDS.some(f => Object.prototype.hasOwnProperty.call(safePatch, f))
@@ -361,7 +414,7 @@ serve(async (req: Request) => {
         p_caller_staff_id: callerStaffId, p_caller_can_manage_others: canPayroll
       })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>), ...(ignoredTime.length ? { ignoredFields: ignoredTime } : {}) })
+      return json({ action, ...projectResult(data, perms, callerStaffId), ...(ignoredTime.length ? { ignoredFields: ignoredTime } : {}) })
     }
 
     case 'delete_time': {
@@ -375,7 +428,7 @@ serve(async (req: Request) => {
         p_caller_staff_id: callerStaffId, p_caller_can_manage_others: canPayroll
       })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms, callerStaffId) })
     }
 
     /* SÄKERHETSBLOCKER-FIX (2026-10-28, bekräftad brist 4 + det
@@ -394,7 +447,51 @@ serve(async (req: Request) => {
         p_caller_staff_id: callerStaffId, p_caller_can_attest: canPayroll
       })
       if (error) return rpcErrorToResponse(error)
-      return json({ action, ...(data as Record<string, unknown>) })
+      return json({ action, ...projectResult(data, perms, callerStaffId) })
+    }
+
+    /* T4-B (T3-B beslut 1, punkt 276): behörig, loggad rättning eller komplettering av tid på en
+       klar AO (normal tidregistrering är låst där). Kräver payroll_manage och en orsak; servern
+       sätter timpris, revisionsrad och AO-logg under lås (time_entry_correct). Fakturerade och
+       attesterade poster ändras inte (invoiced_locked, attested_locked). */
+    case 'correct_time': {
+      if (!canPayroll) return json({ error: 'forbidden' }, 403)
+      const entry = body.entry
+      const reason = typeof body.reason === 'string' ? body.reason : ''
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return json({ error: 'missing_fields' }, 400)
+      const entryId = typeof body.entryId === 'string' && body.entryId.trim() ? body.entryId.trim() : null
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : null
+      const { data, error } = await supabase.rpc('time_entry_correct', {
+        p_entry_id: entryId, p_entry: entry, p_reason: reason, p_idempotency_key: idempotencyKey,
+        p_expected_updated_at: expectedUpdatedAt, p_caller_staff_id: callerStaffId, p_caller_perms: perms
+      })
+      if (error) return rpcErrorToResponse(error)
+      return json({ action, ...projectResult(data, perms, callerStaffId) })
+    }
+
+    /* T4-B (D-19, R13–R15, SEC-B1-01..08): radvisa materialoperationer. Behörighet ao_material
+       (egen rad på tilldelad AO) eller ao_edit (alla rader); allt prövas i RPC:n under radlås. */
+    case 'add_material': case 'update_material': case 'remove_material': {
+      const eff = effectiveAoPerms(perms)
+      if (!hasPerm(eff, 'ao_material') && !hasPerm(eff, 'ao_edit')) return json({ error: 'forbidden' }, 403)
+      const aoId = String(body.aoId ?? '').trim()
+      const rowId = String(body.rowId ?? '').trim()
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : null
+      let res
+      if (action === 'add_material') {
+        const row = body.row
+        if (!aoId || !row || typeof row !== 'object' || Array.isArray(row)) return json({ error: 'missing_fields' }, 400)
+        res = await supabase.rpc('work_order_material_add', { p_ao_id: aoId, p_row: row, p_idempotency_key: idempotencyKey, p_caller_staff_id: callerStaffId, p_caller_perms: perms })
+      } else if (action === 'update_material') {
+        const patch = body.patch
+        if (!aoId || !rowId || !patch || typeof patch !== 'object' || Array.isArray(patch)) return json({ error: 'missing_fields' }, 400)
+        res = await supabase.rpc('work_order_material_update', { p_ao_id: aoId, p_row_id: rowId, p_patch: patch, p_expected_updated_at: expectedUpdatedAt, p_idempotency_key: idempotencyKey, p_caller_staff_id: callerStaffId, p_caller_perms: perms })
+      } else {
+        if (!aoId || !rowId) return json({ error: 'missing_fields' }, 400)
+        res = await supabase.rpc('work_order_material_remove', { p_ao_id: aoId, p_row_id: rowId, p_expected_updated_at: expectedUpdatedAt, p_idempotency_key: idempotencyKey, p_caller_staff_id: callerStaffId, p_caller_perms: perms })
+      }
+      if (res.error) return rpcErrorToResponse(res.error)
+      return json({ action, ...projectResult(res.data, perms, callerStaffId) })
     }
 
     default:

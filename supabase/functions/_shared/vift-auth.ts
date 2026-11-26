@@ -230,7 +230,7 @@ export function aoRuleError(message: string | undefined | null): { status: numbe
   const msg = String(message || '')
   const m = /\bforbidden:([a-z_]+)/.exec(msg)
   if (m) return { status: 403, body: { error: 'forbidden', reason: m[1] } }
-  for (const code of ['already_assigned', 'ao_locked', 'invalid_source_status', 'idempotency_key_conflict']) {
+  for (const code of ['already_assigned', 'ao_locked', 'invalid_source_status', 'idempotency_key_conflict', 'invoiced_locked']) {
     if (msg.includes(code)) return { status: 409, body: { error: code } }
   }
   return null
@@ -256,7 +256,7 @@ export function isPathUnderAo(path: string, aoId: string): boolean {
      materials[].buyPrice              cost_view
      AO-ekonomi (fixedPrice, amount)   D-06: bara roller som hanterar AO, fakturerar eller har cost_view;
                                        fältet får debiteringskategorin (priceType, priceGroupId) utan belopp.
-   materials[].sellPrice och prisgruppernas timpris för fältet hör till T4-B (serverpris). */
+   T4-B: materials[].sellPrice (och framtida insatser[].unitPrice) bara med prisläsrätt (canReadPrices, D-09). */
 export const AO_SENS_FIELDS = ['doorCode', 'keyInformation', 'accessInformation', 'keyReceipt', 'alarmInformation', 'accessCode', 'keyInfo']
 export const AO_ECONOMY_FIELDS = ['fixedPrice', 'amount']
 export const AO_ECONOMY_PERMS = ['ao_edit', 'ao_view_all', 'invoice_view', 'invoice_create', 'cost_view']
@@ -266,13 +266,54 @@ export function projectWorkOrder(ao: Record<string, unknown>, perms: string[]): 
   const out: Record<string, unknown> = { ...ao }
   if (!hasPerm(perms, 'objects_sensitive')) for (const f of AO_SENS_FIELDS) delete out[f]
   if (!AO_ECONOMY_PERMS.some((p) => hasPerm(perms, p))) for (const f of AO_ECONOMY_FIELDS) delete out[f]
-  if (!hasPerm(perms, 'cost_view') && Array.isArray(out.materials)) {
+  const prices = canReadPrices(perms)
+  if ((!hasPerm(perms, 'cost_view') || !prices) && Array.isArray(out.materials)) {
     out.materials = (out.materials as unknown[]).map((m) => {
       if (!m || typeof m !== 'object' || Array.isArray(m)) return m
       const r = { ...(m as Record<string, unknown>) }
-      delete r.buyPrice
+      if (!hasPerm(perms, 'cost_view')) delete r.buyPrice
+      if (!prices) delete r.sellPrice
       return r
     })
   }
+  /* T4-B (VK-1, framtida insatser): à-priset följer samma regel som materialets försäljningspris. */
+  if (!prices && Array.isArray(out.insatser)) {
+    out.insatser = (out.insatser as unknown[]).map((m) => {
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return m
+      const r = { ...(m as Record<string, unknown>) }
+      delete r.unitPrice
+      return r
+    })
+  }
+  return out
+}
+
+/* ── T4-B (2026-11-28): priser och tid (D-08, D-09, D-11, K-01) ─────────────────────────
+   Samma regler som _vift_t4b_pris_las i supabase/migrations/20261128000011_t4b_material_priser_tid.sql
+   (och tests/e2e/t4b-regler.js). Försäljningspris (materials[].sellPrice, articles.sellPrice) och
+   timpris (timeEntries.hourRate, priceGroups.hourRate) läses bara av roller som hanterar AO,
+   fakturerar, har kostnadsrätt, sköter artiklar/prisgrupper eller offerter — aldrig av fältroller. */
+export const PRICE_READ_PERMS = ['ao_edit', 'ao_view_all', 'invoice_view', 'invoice_create', 'cost_view', 'article_manage', 'offer_manage']
+export function canReadPrices(perms: string[]): boolean {
+  return hasPerm(perms, 'all') || PRICE_READ_PERMS.some((p) => (perms || []).includes(p))
+}
+
+/* Fält i en ANNAN persons tidpost som lämnas ut med time_view_all utan payroll_view (K-01, D-08):
+   arbetad och registrerad tid — inga löneuppgifter (attest, lön, belopp per person). */
+export const TIME_VIEW_ALL_FIELDS = ['id', 'aoId', 'staffId', 'staffName', 'date', 'startStr', 'endStr', 'minutes', 'hours', 'comment',
+  'priceGroupId', 'priceGroupName', 'billable', 'internal', 'deleted', 'createdAt', 'updatedAt', 'startTs']
+
+/** Tidpost för anroparen: hourRate (och hourRateUnknown-flaggan är ofarlig) bara med prisläsrätt;
+ *  en annans post via time_view_all (utan payroll_view) bara med fälten ovan. */
+export function projectTimeEntry(e: Record<string, unknown>, perms: string[], callerStaffId: string): Record<string, unknown> {
+  if (!e || typeof e !== 'object' || Array.isArray(e) || hasPerm(perms, 'all')) return e
+  let out: Record<string, unknown> = { ...e }
+  const own = String(e.staffId ?? '') === callerStaffId
+  if (!own && !hasPerm(perms, 'payroll_view')) {
+    out = {}
+    for (const f of TIME_VIEW_ALL_FIELDS) if (f in e) out[f] = e[f]
+    if (canReadPrices(perms) && 'hourRate' in e) out.hourRate = e.hourRate
+  }
+  if (!canReadPrices(perms)) delete out.hourRate
   return out
 }

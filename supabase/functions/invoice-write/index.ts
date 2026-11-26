@@ -79,6 +79,14 @@ function mapRpcError(error: { message?: string } | null): Response | null {
   if (msg.includes('invalid_status'))      return json({ error: 'invalid_status' }, 400)
   if (msg.includes('invalid_transition'))  return json({ error: 'invalid_transition' }, 409)
   if (msg.includes('source_collision'))    return json({ error: 'source_collision' }, 409)
+  /* T4-B (D-10, R20, R21, SÄK-6, VK-1): källraderna prövas mot sina källor i invoice_append_checked
+     och okänt pris stoppar utskick i invoice_set_status. */
+  if (msg.includes('price_unknown'))           return json({ error: 'price_unknown' }, 409)
+  if (msg.includes('price_mismatch'))          return json({ error: 'price_mismatch' }, 409)
+  if (msg.includes('included_in_fixed_price')) return json({ error: 'included_in_fixed_price' }, 409)
+  if (msg.includes('source_not_billable'))     return json({ error: 'source_not_billable' }, 409)
+  if (msg.includes('performed_date_required')) return json({ error: 'performed_date_required' }, 409)
+  if (msg.includes('source_not_found'))        return json({ error: 'source_not_found' }, 409)
   if (msg.includes('not_draft'))           return json({ error: 'not_draft' }, 409)
   if (msg.includes('line_not_found'))      return json({ error: 'line_not_found' }, 404)
   if (msg.includes('not_found'))           return json({ error: 'not_found' }, 404)

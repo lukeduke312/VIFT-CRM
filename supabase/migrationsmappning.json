@@ -22,7 +22,7 @@
   "objektLikaAB": 41,
   "repoFilerPerKlass": {
    "installerad": 37,
-   "ny": 10,
+   "ny": 11,
    "rekonstruerad": 5,
    "kandidat": 3,
    "stagingOnly": 2,
@@ -1866,6 +1866,14 @@
   {
    "fil": "migrations/20261128000010_t4a_notiser.sql",
    "md5": "2e51275323477a38c662637616b9e2c9",
+   "stagingVersioner": [],
+   "klass": "ny – ej installerad i STAGING",
+   "klassKod": "ny",
+   "versionEfterStaging": true
+  },
+  {
+   "fil": "migrations/20261128000011_t4b_material_priser_tid.sql",
+   "md5": "83cc5ad0a0fc3a665c5661d9f8521672",
    "stagingVersioner": [],
    "klass": "ny – ej installerad i STAGING",
    "klassKod": "ny",

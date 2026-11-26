@@ -1,6 +1,6 @@
 -- =====================================================================
 -- VIFT CRM — T3-E standardroller (M9, D-02): B. Installera de standardroller som saknas (KRÄVER GO)
--- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4a-2026-11-28). Ändra inte för hand.
+-- Genererad av vift-v2 tests/local/t3e-skript.js ur standardroller.json (t4b-2026-11-28). Ändra inte för hand.
 -- Körs i Supabase SQL Editor för STAGING (yyzljlqyzzcbxmcdbual) FÖRST efter separat GO.
 -- ALDRIG mot LIVE utan en egen LIVE-plan. Ingår INTE i migrationskedjan (inte db push).
 -- Lägger BARA till standardroller som saknas. Skriver aldrig över eller tar bort befintliga roller.
@@ -116,7 +116,7 @@ begin
   );
   revoke all on table vift_t3e_journal.rollregister from public, anon, authenticated;
   insert into vift_t3e_journal.rollregister(steg, fore_hash, efter_hash, fore_varde, efter_varde, tillagda_roller, identiska_roller, personal_hash, kommentar)
-  values ('installera', v_hash, encode(sha256(convert_to(v_new::text, 'UTF8')), 'hex'), v_roles, v_new, v_tillagda, v_identiska, v_staff_hash, 't4a-2026-11-28')
+  values ('installera', v_hash, encode(sha256(convert_to(v_new::text, 'UTF8')), 'hex'), v_roles, v_new, v_tillagda, v_identiska, v_staff_hash, 't4b-2026-11-28')
   returning id into v_jid;
   raise notice 'T3-E: journalrad % — tillagda roller: %; identiska (orörda): %; ny hash %', v_jid, array_to_string(v_tillagda, ', '), array_to_string(v_identiska, ', '), encode(sha256(convert_to(v_new::text, 'UTF8')), 'hex');
 end $$;
